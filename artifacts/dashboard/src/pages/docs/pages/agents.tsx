@@ -5,15 +5,24 @@ export default function AgentsPage() {
   return (
     <div>
       <PageHeader
-        breadcrumb="Product guides"
+        breadcrumb="Build agents"
         title="Agents & builder"
-        description="Create the voice persona in the dashboard, then drive it from your app with the Agents API."
+        description="Create the voice persona in Vibe or the classic builder, then drive it from your app with the Agents API."
       />
+
+      <Callout variant="tip" title="Recommended">
+        New agents: start in <Link href="/docs/vibe">Vibe</Link>. This page is the full builder
+        checklist (also the Agent tab inside Vibe).
+      </Callout>
 
       <h2 id="dashboard">Build in the dashboard</h2>
       <ol>
         <li>
           Open{" "}
+          <a href="https://app.snapserve.ai/app/vibe" target="_blank" rel="noreferrer">
+            Vibe
+          </a>{" "}
+          or{" "}
           <a href="https://app.snapserve.ai/app/agents" target="_blank" rel="noreferrer">
             Agents
           </a>{" "}

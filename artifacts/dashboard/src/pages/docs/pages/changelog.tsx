@@ -9,6 +9,20 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-18-docs">2026-08-18 — Docs coverage for the live product</h2>
+      <ul>
+        <li>
+          New guides: <strong>Vibe builder</strong>, <strong>WhatsApp</strong> (text, calling,
+          Meta rules), <strong>Connections</strong>, <strong>Test an agent</strong>,{" "}
+          <strong>Team workspace</strong>, <strong>Compliance</strong>.
+        </li>
+        <li>Sidebar grouped by job (build, connect, calls, account) with prev/next and search.</li>
+        <li>
+          Vibe builder chat uses managed <code>sarvam-105b</code> with high reasoning; live agents
+          still default to <code>sarvam-105b-conversations</code>.
+        </li>
+      </ul>
+
       <h2 id="2026-08-10-webhook-names">2026-08-10 — Rename the four “webhook” surfaces</h2>
       <ul>
         <li>

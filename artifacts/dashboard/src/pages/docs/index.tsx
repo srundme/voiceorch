@@ -6,9 +6,13 @@ import WhatYouCanBuildPage from "./pages/what-you-can-build";
 import PlatformConceptsPage from "./pages/platform-concepts";
 import QuickStartPage from "./pages/quick-start";
 import AuthenticationPage from "./pages/authentication";
+import VibePage from "./pages/vibe";
 import AgentsPage from "./pages/agents";
 import VariablesPage from "./pages/variables";
 import KnowledgeBasePage from "./pages/knowledge-base";
+import TestingPage from "./pages/testing";
+import ConnectionsPage from "./pages/connections";
+import WhatsAppDocsPage from "./pages/whatsapp-docs";
 import CalendarPage from "./pages/calendar";
 import MeetingsPage from "./pages/meetings";
 import OutboundCallsPage from "./pages/outbound-calls";
@@ -16,6 +20,8 @@ import CampaignsPage from "./pages/campaigns";
 import WebhooksPage from "./pages/webhooks";
 import PhoneNumbersPage from "./pages/phone-numbers";
 import WalletPage from "./pages/wallet";
+import TeamPage from "./pages/team";
+import CompliancePage from "./pages/compliance";
 import SdksPage from "./pages/sdks";
 import ClaudeSkillPage from "./pages/claude-skill";
 import ErrorsPage from "./pages/errors";
@@ -46,6 +52,8 @@ const LEGACY_REDIRECTS: Record<string, string> = {
   "managing-leads": "campaigns",
   "scheduling": "calendar",
   "google-calendar": "calendar",
+  "channels": "connections",
+  "email": "connections",
 };
 
 export default function DocsPage() {
@@ -82,6 +90,9 @@ export default function DocsPage() {
     case "authentication":
       Content = AuthenticationPage;
       break;
+    case "vibe":
+      Content = VibePage;
+      break;
     case "agents":
       Content = AgentsPage;
       break;
@@ -90,6 +101,15 @@ export default function DocsPage() {
       break;
     case "knowledge-base":
       Content = KnowledgeBasePage;
+      break;
+    case "testing":
+      Content = TestingPage;
+      break;
+    case "connections":
+      Content = ConnectionsPage;
+      break;
+    case "whatsapp":
+      Content = WhatsAppDocsPage;
       break;
     case "calendar":
       Content = CalendarPage;
@@ -111,6 +131,12 @@ export default function DocsPage() {
       break;
     case "wallet":
       Content = WalletPage;
+      break;
+    case "team":
+      Content = TeamPage;
+      break;
+    case "compliance":
+      Content = CompliancePage;
       break;
     case "sdks":
       Content = SdksPage;

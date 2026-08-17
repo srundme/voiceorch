@@ -4,6 +4,44 @@ import { PageHeader } from "../DocsUi";
 
 const FAQS: { q: string; a: ReactNode }[] = [
   {
+    q: "Where do I start a first agent?",
+    a: (
+      <>
+        Direct SnapServe: <Link href="/docs/vibe">Vibe</Link> (Chat → Agent → Connect → Test).
+        Partner-managed workspaces use the classic <Link href="/docs/agents">Agents builder</Link>.
+      </>
+    ),
+  },
+  {
+    q: "I assigned a call number — why isn’t WhatsApp working?",
+    a: (
+      <>
+        A voice DID is not WhatsApp until you connect it on Connections → WhatsApp (path 2). Personal
+        WhatsApp cannot share that number. Guide: <Link href="/docs/whatsapp">WhatsApp</Link>.
+      </>
+    ),
+  },
+  {
+    q: "Will Meta block the WhatsApp chatbot?",
+    a: (
+      <>
+        Not for a business answering its own customers on the official API. Meta blocks
+        general-purpose ChatGPT-style bots and spam (blocks/reports). Stay inside the 24-hour
+        window, use templates to start new threads, honour STOP.{" "}
+        <Link href="/docs/whatsapp">WhatsApp</Link> · <Link href="/docs/compliance">Compliance</Link>.
+      </>
+    ),
+  },
+  {
+    q: "Do I create the Vobiz channel in the Vobiz console?",
+    a: (
+      <>
+        No. SnapServe creates it when you finish the WhatsApp wizard. Paste a Vobiz channel ID only
+        if you already have one. <Link href="/docs/whatsapp">WhatsApp</Link>.
+      </>
+    ),
+  },
+  {
     q: "Why did my outbound call fail with 401?",
     a: (
       <>

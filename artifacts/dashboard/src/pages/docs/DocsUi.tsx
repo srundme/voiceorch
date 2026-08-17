@@ -10,11 +10,13 @@ export function PageHeader({
   title,
   description,
   copyText,
+  updated,
 }: {
   breadcrumb?: string;
   title: string;
   description?: ReactNode;
   copyText?: string;
+  updated?: string;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -51,6 +53,9 @@ export function PageHeader({
         <p className="mt-4 text-base leading-relaxed text-muted-foreground max-w-2xl">
           {description}
         </p>
+      ) : null}
+      {updated ? (
+        <p className="mt-3 text-xs text-slate-500">Last updated {updated}</p>
       ) : null}
     </div>
   );
@@ -95,13 +100,12 @@ export function DocCard({
   return (
     <Link
       href={href}
-      className="group relative flex flex-col items-center text-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-6 hover:border-sky-300 hover:bg-white transition-all overflow-hidden"
+      className="group flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 hover:border-sky-300 hover:bg-sky-50/40 transition-colors"
     >
-      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,0.08),transparent_60%)]" />
-      <div className="relative text-sky-700 [&_svg]:h-6 [&_svg]:w-6">{icon}</div>
-      <div className="relative">
+      <div className="mt-0.5 text-sky-700 [&_svg]:h-5 [&_svg]:w-5 shrink-0">{icon}</div>
+      <div className="min-w-0">
         <p className="font-semibold text-slate-900 group-hover:text-sky-800 transition-colors">{title}</p>
-        <p className="mt-1.5 text-sm text-muted-foreground leading-snug">{description}</p>
+        <p className="mt-1 text-sm text-slate-600 leading-snug">{description}</p>
       </div>
     </Link>
   );

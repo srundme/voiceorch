@@ -21,7 +21,8 @@ export default function PlatformConceptsPage() {
         A voice persona: system prompt, greeting, language, ASR/LLM/TTS (or BYOP), tools, knowledge
         base, phone number, variables, <strong>Outcomes / dispositions</strong>,{" "}
         <strong>after-call WhatsApp &amp; email rules</strong>, and optional{" "}
-        <Link href="/docs/meetings">meeting</Link> settings. Configure in{" "}
+        <Link href="/docs/meetings">meeting</Link> settings. Create in{" "}
+        <Link href="/docs/vibe">Vibe</Link> or configure in{" "}
         <a href="https://app.snapserve.ai/app/agents" target="_blank" rel="noreferrer">
           Agents
         </a>
@@ -40,11 +41,9 @@ export default function PlatformConceptsPage() {
       <h2 id="connections">Connections</h2>
       <p>
         Hub for wires used by agents and campaigns: WhatsApp, Email (Brevo), Google Sheets, Website
-        form, Meta Lead Ads, Calendar &amp; booking, and Meetings entry. Open{" "}
-        <a href="https://app.snapserve.ai/app/connections" target="_blank" rel="noreferrer">
-          Connections
-        </a>
-        .
+        form, Meta Lead Ads, Calendar &amp; booking, and Meetings entry.{" "}
+        <Link href="/docs/connections">Connections guide</Link> ·{" "}
+        <Link href="/docs/whatsapp">WhatsApp</Link>.
       </p>
 
       <h2 id="disposition">Disposition / Outcomes</h2>

@@ -1,5 +1,12 @@
 import { Link } from "wouter";
-import { BookOpen, Calendar, Code2, MessageSquare, PhoneCall, Rocket, Variable } from "lucide-react";
+import {
+  BookOpen,
+  Code2,
+  MessageCircle,
+  Plug,
+  Rocket,
+  Sparkles,
+} from "lucide-react";
 import { Callout, DocCard, PageHeader } from "../DocsUi";
 import { CodeBlock } from "../CodeBlock";
 
@@ -8,55 +15,74 @@ export default function IntroductionPage() {
     <div>
       <PageHeader
         breadcrumb="Get started"
-        title="SnapServe Documentation"
-        description={
-          <>
-            SnapServe is an <strong className="text-slate-800">AI voice agent platform</strong> —
-            build agents in the dashboard, connect calendars and tools, then call the REST API from
-            your own app.
-          </>
-        }
+        title="SnapServe documentation"
+        updated="18 Aug 2026"
+        description="Build Indic-first AI voice agents for phone, WhatsApp, webcall, and meetings. Configure in the dashboard, then drive calls from your own product with the REST API."
       />
 
-      <div className="not-prose grid grid-cols-1 sm:grid-cols-2 gap-3 my-8">
+      <p>
+        SnapServe runs the live conversation (speech in, LLM, speech out, tools). You own the UI,
+        leads, CRM, and business logic. These docs cover the dashboard product and the public API
+        on <code>https://app.snapserve.ai/api</code>.
+      </p>
+
+      <h2 id="start">Start here</h2>
+      <div className="not-prose grid grid-cols-1 sm:grid-cols-2 gap-3 my-6">
+        <DocCard
+          href="/docs/vibe"
+          title="Create an agent in Vibe"
+          description="Chat, edit, connect, and test on one page"
+          icon={<Sparkles />}
+        />
         <DocCard
           href="/docs/what-you-can-build"
           title="What you can build"
-          description="Inbound, outbound, booking, and apps on the API"
+          description="Inbound, outbound, WhatsApp, meetings, campaigns"
           icon={<Rocket />}
         />
         <DocCard
-          href="/docs/agents"
-          title="Agents & builder"
-          description="Prompts, voice, tools, publish — dashboard walkthrough"
-          icon={<BookOpen />}
+          href="/docs/connections"
+          title="Connections"
+          description="WhatsApp, email, calendar, forms, and ads"
+          icon={<Plug />}
         />
         <DocCard
-          href="/docs/calendar"
-          title="Bookings calendar"
-          description="Connect Google Calendar and book on calls"
-          icon={<Calendar />}
+          href="/docs/whatsapp"
+          title="WhatsApp"
+          description="Text chatbot, templates, and WhatsApp calling"
+          icon={<MessageCircle />}
+        />
+        <DocCard
+          href="/docs/quick-start"
+          title="Quick Start (API)"
+          description="Bearer sk_live_… and your first outbound call"
+          icon={<Code2 />}
         />
         <DocCard
           href="/docs/api-reference"
           title="API Reference"
-          description="Create agents, place calls, get transcripts"
-          icon={<Code2 />}
-        />
-        <DocCard
-          href="/docs/claude-skill"
-          title="Claude skill & MCP"
-          description="Operate SnapServe from Claude Desktop / Claude Code"
-          icon={<MessageSquare />}
+          description="Agents, calls, transcripts, phones, wallet"
+          icon={<BookOpen />}
         />
       </div>
 
       <Callout variant="info" title="Two tracks">
-        <strong>Learn the product</strong> (sidebar → Product guides) for dashboard features.{" "}
-        <strong>Build an integration</strong> with{" "}
-        <Link href="/docs/quick-start">Quick Start</Link> and the curated{" "}
-        <Link href="/docs/api-reference">API Reference</Link> (campaigns/admin noise removed).
+        <strong>Learn the product</strong> in the sidebar (Vibe, agents, WhatsApp, campaigns).{" "}
+        <strong>Integrate</strong> with <Link href="/docs/quick-start">Quick Start</Link> and the{" "}
+        <Link href="/docs/api-reference">API Reference</Link>. Dashboard login uses a session
+        cookie; servers use API keys — do not mix them.
       </Callout>
+
+      <h2 id="how-a-call-works">How a call works</h2>
+      <ol>
+        <li>Caller speaks → STT (Sarvam, Deepgram, …)</li>
+        <li>LLM decides what to say and which tools to run</li>
+        <li>TTS speaks (Cartesia, Sarvam Bulbul, …)</li>
+        <li>Telephony (Vobiz / Twilio / Plivo), webcall, or a meeting bot plays audio</li>
+      </ol>
+      <p>
+        Full building blocks: <Link href="/docs/platform-concepts">Platform concepts</Link>.
+      </p>
 
       <h2 id="base-url">API base URL</h2>
       <CodeBlock language="text" code={`https://app.snapserve.ai/api`} />
@@ -65,38 +91,38 @@ export default function IntroductionPage() {
         <Link href="/docs/authentication">Authentication</Link>.
       </p>
 
-      <h2 id="learn-more">Popular guides</h2>
+      <h2 id="guides">Popular guides</h2>
       <ul>
         <li>
-          <Link href="/docs/variables">Variables</Link> — <code>{"{{customer_name}}"}</code> in
-          prompts
+          <Link href="/docs/vibe">Vibe builder</Link> — recommended first agent
         </li>
         <li>
-          <Link href="/docs/outbound-calls">Calls &amp; history</Link> — transcript &amp; summary
+          <Link href="/docs/whatsapp">WhatsApp</Link> — chatbot vs calling vs templates
         </li>
         <li>
-          <Link href="/docs/webhooks">Event subscriptions</Link> — push call results to your backend
+          <Link href="/docs/calendar">Bookings calendar</Link> — Google Calendar on the call
         </li>
         <li>
-          <Link href="/docs/claude-skill">Claude skill &amp; MCP</Link> — agents &amp; campaigns from
-          chat
+          <Link href="/docs/outbound-calls">Calls &amp; history</Link> — transcript and summary
+        </li>
+        <li>
+          <Link href="/docs/webhooks">Event subscriptions</Link> — push results to your backend
+        </li>
+        <li>
+          <Link href="/docs/compliance">Compliance</Link> — TRAI, IRDAI, WhatsApp Business
         </li>
         <li>
           <Link href="/docs/faq">FAQ</Link>
         </li>
       </ul>
 
-      <div className="not-prose mt-8 flex flex-wrap gap-4 text-sm">
-        <Link href="/docs/platform-concepts" className="text-sky-700 hover:text-sky-800">
-          Platform concepts →
-        </Link>
-        <Link href="/docs/variables" className="inline-flex items-center gap-1 text-sky-700 hover:text-sky-800">
-          <Variable className="h-4 w-4" /> Variables
-        </Link>
-        <Link href="/docs/outbound-calls" className="inline-flex items-center gap-1 text-sky-700 hover:text-sky-800">
-          <PhoneCall className="h-4 w-4" /> Calls
-        </Link>
-      </div>
+      <p className="not-prose mt-8 text-sm text-slate-500">
+        Something missing? Email{" "}
+        <a className="text-sky-700 hover:text-sky-800" href="mailto:support@snapserve.ai">
+          support@snapserve.ai
+        </a>
+        .
+      </p>
     </div>
   );
 }
