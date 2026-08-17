@@ -64,14 +64,14 @@ const BASE_CARDS: ConnCard[] = [
     setupId: "whatsapp",
     brand: "whatsapp",
     title: "WhatsApp",
-    blurb: "Buy a Vobiz number, connect Meta, or bring your BSP — messages & WhatsApp calls.",
+    blurb: "One path: existing WABA, same number as your calls, buy a Vobiz WhatsApp DID, or webhook-only to another BSP.",
   },
   {
     id: "email",
     setupId: "email",
     brand: "brevo",
     title: "Email (Brevo)",
-    blurb: "From address + API key. Agents use this for email.",
+    blurb: "Email only — not WhatsApp. Paste a Brevo API key and a verified From address, then turn on Send Email on the agent.",
   },
   {
     id: "website",
@@ -315,7 +315,7 @@ export function ConnectionsHub({ embedded = false }: { embedded?: boolean }) {
     return (
       <StripePage
         title="Email (Brevo)"
-        description="Three steps: from address, API key, test. Template is optional. Use the back link to return where you came from."
+        description="Email only — not WhatsApp. Paste Brevo API key, add a verified From, test. Then enable Send Email on the agent."
         back={setupBackFromReturn ?? { href: hubHref, label: embedded ? "Vibe" : "Connections" }}
       >
         <div className="max-w-lg">
