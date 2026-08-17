@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import { logger } from "../lib/logger.js";
 
 const VOBIZ_PARTNER_BASE = "https://api.vobiz.ai/api/v1/partner";
@@ -23,13 +24,43 @@ export interface VobizPartnerCustomerAccount {
   currency?: string;
 }
 
+export function snapserveCarrierEmail(clerkId: string): string {
+  const safe = clerkId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 40) || "user";
+  return `kyc.${safe}@users.snapserve.ai`;
+}
+
+export function syntheticKycPhone(clerkId: string): string {
+  const n = createHash("sha256").update(`vobiz-phone:${clerkId}`).digest("hex");
+  const nine = (BigInt(`0x${n.slice(0, 12)}`) % 1_000_000_000n).toString().padStart(9, "0");
+  return `+919${nine}`;
+}
+
+function parseAccountFromBody(bodyText: string): VobizPartnerCustomerAccount | null {
+  try {
+    const data = JSON.parse(bodyText) as VobizPartnerCustomerAccount & {
+      account?: VobizPartnerCustomerAccount;
+      error?: { details?: { auth_id?: string } };
+    };
+    if (data.auth_id) return data;
+    if (data.account?.auth_id) return data.account;
+    const nestedId = data.error?.details?.auth_id;
+    if (nestedId) return { auth_id: nestedId, auth_token: "" };
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 /**
- * 1. Provision a new customer sub-account under master partner account
+ * Provision a partner customer. Email is unique across all of VoBiz, not just
+ * our reseller book — a 409/422 often means the Gmail already belongs to
+ * another VoBiz account we cannot see.
  */
 export async function provisionPartnerCustomerAccount(
   name: string,
   email: string,
   country: string = "IN",
+  phone?: string,
 ): Promise<VobizPartnerCustomerAccount | null> {
   const authId = process.env["VOBIZ_AUTH_ID"];
   const authToken = process.env["VOBIZ_AUTH_TOKEN"];
@@ -38,18 +69,20 @@ export async function provisionPartnerCustomerAccount(
     return null;
   }
 
-  const password = Math.random().toString(36).slice(-8) + "A1!";
+  const password = `${randomBytes(12).toString("hex")}A1!`;
+  const payload: Record<string, string> = {
+    name: name || email,
+    email,
+    password,
+    country,
+  };
+  if (phone) payload.phone = phone;
 
   try {
     const resp = await fetch(`${VOBIZ_PARTNER_BASE}/accounts`, {
       method: "POST",
       headers: getPartnerHeaders(),
-      body: JSON.stringify({
-        name: name || email,
-        email,
-        password,
-        country,
-      }),
+      body: JSON.stringify(payload),
     });
 
     const bodyText = await resp.text();
@@ -59,12 +92,15 @@ export async function provisionPartnerCustomerAccount(
     );
 
     if (resp.ok) {
-      const data = JSON.parse(bodyText) as VobizPartnerCustomerAccount;
-      if (data.auth_id && data.auth_token) return data;
+      const data = parseAccountFromBody(bodyText);
+      if (data?.auth_id && data.auth_token) return data;
     }
 
-    if (resp.status === 409) {
-      // Account exists — attempt lookup
+    if (resp.status === 409 || resp.status === 422) {
+      const fromBody = parseAccountFromBody(bodyText);
+      if (fromBody?.auth_id) {
+        return (await fetchPartnerCustomerByAuthId(fromBody.auth_id)) ?? fromBody;
+      }
       return await lookupPartnerCustomerByEmail(email);
     }
   } catch (err) {
@@ -72,6 +108,27 @@ export async function provisionPartnerCustomerAccount(
   }
 
   return null;
+}
+
+/** Own-book lookup first; if the Gmail is taken globally, open a SnapServe-owned carrier email. */
+export async function provisionKycCarrierAccount(
+  clerkId: string,
+  name: string,
+  userEmail: string,
+): Promise<VobizPartnerCustomerAccount | null> {
+  const phone = syntheticKycPhone(clerkId);
+  const existing = await lookupPartnerCustomerByEmail(userEmail);
+  if (existing?.auth_id) return existing;
+
+  const primary = await provisionPartnerCustomerAccount(name, userEmail, "IN", phone);
+  if (primary?.auth_id) return primary;
+
+  const alias = snapserveCarrierEmail(clerkId);
+  const aliased = await lookupPartnerCustomerByEmail(alias);
+  if (aliased?.auth_id) return aliased;
+
+  logger.info({ clerkId, alias }, "User email is taken on VoBiz globally — provisioning SnapServe carrier alias");
+  return provisionPartnerCustomerAccount(name, alias, "IN", phone);
 }
 
 /**

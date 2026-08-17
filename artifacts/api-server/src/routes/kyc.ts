@@ -183,7 +183,7 @@ async function createVobizSubAccount(
     headers: partnerHeaders(),
     body:    JSON.stringify({ name: name || email, email, password, country: "IN" }),
   });
-  if (resp.status === 409) {
+  if (resp.status === 409 || resp.status === 422) {
     throw new VobizAccountExistsError(email);
   }
   if (!resp.ok) {
@@ -195,6 +195,7 @@ async function createVobizSubAccount(
 
 import {
   provisionPartnerCustomerAccount,
+  provisionKycCarrierAccount,
   transferMasterBalanceToSubAccount,
   lookupPartnerCustomerByEmail,
   type VobizPartnerCustomerAccount,
@@ -246,7 +247,7 @@ export async function ensureVobizSubAccount(
   let vobizAccount: VobizPartnerCustomerAccount | VobizCreateAccountResponse | null = null;
 
   try {
-    vobizAccount = await provisionPartnerCustomerAccount(targetName, targetEmail);
+    vobizAccount = await provisionKycCarrierAccount(clerkId, targetName, targetEmail);
   } catch { /* ignore error and fall back */ }
 
   if (!vobizAccount?.auth_id) {
@@ -505,15 +506,16 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
     .from(vobizAccountsTable)
     .where(eq(vobizAccountsTable.userId, clerkId));
 
-  if (!account) {
-    req.log.warn({ clerkId, email }, "No local VoBiz row after provision — looking up carrier account by email");
+  if (!account || !account.vobizAuthId) {
+    req.log.warn({ clerkId, email }, "No local VoBiz row after provision — looking up or creating a carrier account");
     const existing =
       (await lookupPartnerCustomerByEmail(email)) ??
-      (await fetchVobizSubAccountByEmail(email));
+      (await fetchVobizSubAccountByEmail(email)) ??
+      (await provisionKycCarrierAccount(clerkId, user.name ?? email, email));
     if (!existing?.auth_id) {
-      req.log.error({ clerkId, email }, "VoBiz account exists or provision failed; could not re-link by email");
-      res.status(409).json({
-        error: "A verification account for this email already exists on the carrier but could not be re-linked. Please contact support.",
+      req.log.error({ clerkId, email }, "Could not provision or re-link a VoBiz KYC account");
+      res.status(502).json({
+        error: "Could not start verification. Please try again in a minute.",
       });
       return;
     }
@@ -535,7 +537,7 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
       })
       .returning();
 
-    req.log.info({ clerkId, vobizAuthId: existing.auth_id }, "Re-linked existing VoBiz account by email");
+    req.log.info({ clerkId, vobizAuthId: existing.auth_id }, "Linked VoBiz KYC account");
     await audit("account_provisioned", {
       userId: clerkId,
       eventData: { vobizAuthId: existing.auth_id, recovered: true },
