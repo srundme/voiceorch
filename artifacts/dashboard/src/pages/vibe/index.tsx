@@ -12,7 +12,7 @@ import {
   PhoneForwarded, Voicemail, Calendar, ShieldCheck,
   Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
   PlusCircle, History, PhoneIncoming, Info, PhoneOutgoing, Star, Rocket, X,
-  PanelRightOpen, PanelRightClose, ArrowLeft,
+  PanelRightOpen, PanelRightClose, ArrowLeft, Headphones, UtensilsCrossed,
 } from "lucide-react";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { OutboundCallDialog } from "@/components/outbound-call-dialog";
@@ -286,7 +286,6 @@ async function previewVoice(voiceId: string, setPlaying: (id: string | null) => 
 function VibeAmbientBg() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {/* Dark mode: SnapServe brand — pure black / zinc silk (no purple) */}
       <div className="absolute inset-0 hidden dark:block">
         <SilkAurora
           interactive={false}
@@ -300,24 +299,40 @@ function VibeAmbientBg() {
           accentColor="#e4e4e7"
           className="absolute inset-0 h-full min-h-0 w-full items-stretch bg-[#0a0a0a]"
         />
-        {/* Keep text readable — soft zinc scrim, brand-neutral */}
-        <div className="absolute inset-0 bg-[#0a0a0a]/50" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_65%_55%_at_50%_42%,rgba(10,10,10,0.5),transparent_72%)]" />
+        <div className="absolute inset-0 bg-[#0a0a0a]/45" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_0%,rgba(255,255,255,0.07),transparent_58%)]" />
+        <div className="absolute -top-24 left-1/2 h-[42vh] w-[70vw] max-w-[720px] -translate-x-1/2 rounded-full bg-teal-400/[0.06] blur-[120px]" />
       </div>
 
-      {/* Light mode: soft zinc wash matching app chrome */}
-      <div className="absolute inset-0 block dark:hidden bg-[hsl(220_20%_96%)]">
-        <DottedSurface className="opacity-50" />
+      <div className="absolute inset-0 block dark:hidden bg-[hsl(220_18%_97%)]">
+        <DottedSurface className="opacity-40" />
         <div
           aria-hidden
           className={cn(
             "absolute -top-10 left-1/2 size-full -translate-x-1/2 rounded-full",
-            "bg-[radial-gradient(ellipse_at_center,hsl(var(--foreground)/0.05),transparent_55%)]",
+            "bg-[radial-gradient(ellipse_at_center,hsl(var(--foreground)/0.04),transparent_55%)]",
             "blur-[40px]",
           )}
         />
-        <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 h-[55vh] w-[85vw] max-w-[900px] rounded-full bg-zinc-400/[0.06] blur-[110px]" />
-        <div className="absolute bottom-[-10%] right-[-6%] h-[40vh] w-[50vw] max-w-[600px] rounded-full bg-zinc-500/[0.05] blur-[90px]" />
+        <div className="absolute top-[-18%] left-1/2 -translate-x-1/2 h-[50vh] w-[80vw] max-w-[880px] rounded-full bg-teal-500/[0.07] blur-[110px]" />
+        <div className="absolute bottom-[-8%] right-[-8%] h-[38vh] w-[48vw] max-w-[560px] rounded-full bg-orange-400/[0.06] blur-[100px]" />
+      </div>
+    </div>
+  );
+}
+
+function VibeHeroMark() {
+  return (
+    <div className="relative mx-auto h-16 w-16">
+      <div className="absolute inset-0 rounded-[1.15rem] bg-foreground/10 blur-2xl" />
+      <div className="relative flex h-16 w-16 items-end justify-center gap-[3px] rounded-[1.15rem] border border-border/50 bg-card/80 pb-[1.15rem] shadow-[0_8px_32px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:bg-card/50">
+        {[10, 16, 22, 14, 18].map((h, i) => (
+          <span
+            key={i}
+            className="voice-bar w-[3px] rounded-full bg-foreground/85"
+            style={{ height: h, animationDelay: `${i * 0.12}s` }}
+          />
+        ))}
       </div>
     </div>
   );
@@ -1476,9 +1491,10 @@ export default function VibePage() {
     );
 
     if (isLanding) {
+      const attachDisabled = phase === "building" || phase === "thinking" || phase === "streaming" || isThinking;
       return (
         <div className="relative w-full group vibe-input-glow rounded-[26px]">
-          <div className="relative rounded-[26px] border border-border/30 bg-card/60 dark:bg-card/50 backdrop-blur-2xl shadow-[0_8px_40px_rgba(0,0,0,0.2)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.45)] transition-all group-focus-within:border-border/50">
+          <div className="relative rounded-[26px] border border-border/40 bg-card/70 dark:bg-card/55 backdrop-blur-2xl shadow-[0_12px_48px_rgba(0,0,0,0.12)] dark:shadow-[0_12px_48px_rgba(0,0,0,0.45)] transition-all group-focus-within:border-border/70">
             <Textarea
               ref={chatInputRef}
               value={input}
@@ -1493,21 +1509,44 @@ export default function VibePage() {
               }
               disabled={phase === "building" || phase === "thinking" || phase === "streaming"}
               rows={3}
-              className="resize-none border-0 bg-transparent text-[15px] leading-relaxed rounded-[26px] rounded-b-none px-5 pt-5 pb-2 min-h-[88px] placeholder:text-muted-foreground/45 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+              className="resize-none border-0 bg-transparent text-[15px] leading-relaxed rounded-[26px] rounded-b-none px-5 pt-5 pb-2 min-h-[96px] placeholder:text-muted-foreground/45 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
             />
-            <div className="flex items-center justify-between gap-4 border-t border-border/25 px-4 pt-3 pb-3.5">
-              <p className="text-[12px] text-muted-foreground pl-1 min-w-0 truncate">
-                Tip: write like you&apos;re texting a friend
-              </p>
+            <div className="flex items-center justify-between gap-3 border-t border-border/25 px-3 pt-2.5 pb-3">
+              <div className="flex items-center gap-0.5 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => { setUrlInputOpen(v => !v); setUrlInputValue(""); }}
+                  disabled={attachDisabled}
+                  title="Add a website for the knowledge base"
+                  className={cn(
+                    "flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground disabled:opacity-30",
+                    urlInputOpen && "bg-muted text-foreground",
+                  )}
+                >
+                  <Globe className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={attachDisabled}
+                  title="Upload a document for the knowledge base"
+                  className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground disabled:opacity-30"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </button>
+                <p className="hidden sm:block text-[12px] text-muted-foreground pl-1.5 min-w-0 truncate">
+                  Tip: write like you&apos;re briefing a colleague
+                </p>
+              </div>
               <Button
                 size="icon"
                 onClick={() => send()}
                 disabled={!canSend}
                 aria-label="Start building"
                 className={cn(
-                  "h-10 w-10 rounded-full transition-all duration-200 shrink-0",
+                  "h-10 w-10 rounded-full transition-all duration-200 shrink-0 cursor-pointer",
                   canSend
-                    ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:scale-105"
+                    ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:scale-[1.03]"
                     : "bg-muted text-muted-foreground",
                 )}
               >
@@ -1622,7 +1661,7 @@ export default function VibePage() {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   onClick={() => void loadHistorySession(sessions[0]!.id)}
-                  className="mb-8 w-full text-left rounded-2xl border border-border/60 bg-card/50 backdrop-blur-md px-4 py-3.5 hover:bg-card/80 hover:border-border transition-colors"
+                  className="mb-8 w-full cursor-pointer text-left rounded-2xl border border-border/60 bg-card/60 backdrop-blur-md px-4 py-3.5 hover:bg-card hover:border-border hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition-all"
                 >
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Continue where you left off
@@ -1641,31 +1680,29 @@ export default function VibePage() {
               )}
 
               <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
+                initial={{ opacity: 0, scale: 0.92 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.45 }}
-                className="mb-6"
+                transition={{ duration: 0.4 }}
+                className="mb-7"
               >
-                <div className="h-14 w-14 rounded-2xl border border-border/40 bg-card/50 backdrop-blur-xl flex items-center justify-center mx-auto">
-                  <Sparkles className="h-6 w-6 text-foreground/80" />
-                </div>
+                <VibeHeroMark />
               </motion.div>
 
               <motion.h1
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.45, delay: 0.05 }}
-                className="font-display text-3xl sm:text-4xl md:text-[2.75rem] font-semibold tracking-tight leading-[1.15] text-foreground"
+                className="font-display text-[2rem] sm:text-4xl md:text-[2.85rem] font-semibold tracking-tight leading-[1.12] text-foreground"
               >
                 {welcomeName ? (
                   <>
-                    <span className="block text-muted-foreground font-normal text-xl sm:text-2xl mb-1">
+                    <span className="block text-muted-foreground font-medium text-lg sm:text-xl mb-1.5">
                       Hi {welcomeName.split(" ")[0]}
                     </span>
-                    Create your calling agent
+                    Describe the agent. We&apos;ll build it.
                   </>
                 ) : (
-                  <>Create your calling agent</>
+                  <>Describe the agent. We&apos;ll build it.</>
                 )}
               </motion.h1>
 
@@ -1675,7 +1712,7 @@ export default function VibePage() {
                 transition={{ duration: 0.4, delay: 0.1 }}
                 className="mt-3 text-[15px] text-muted-foreground leading-relaxed max-w-md"
               >
-                Just describe what you need in plain words. We&apos;ll set up the voice, language, and script for you.
+                Voice, language, and call script — in a few sentences, not a settings form.
               </motion.p>
 
               <motion.div
@@ -1693,27 +1730,34 @@ export default function VibePage() {
                 transition={{ duration: 0.4, delay: 0.25 }}
                 className="mt-8 w-full"
               >
-                <p className="text-[11px] text-muted-foreground/70 mb-3">
-                  Or tap an example to start
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80 mb-3">
+                  Start from an example
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left">
                   {[
-                    { title: "Answer customer calls", desc: "Support & FAQs", msg: QUICK_SUGGESTIONS[0]!.message },
-                    { title: "Book appointments", desc: "Clinic or salon", msg: QUICK_SUGGESTIONS[2]!.message },
-                    { title: "Follow up sales leads", desc: "Calls people who enquired", msg: QUICK_SUGGESTIONS[1]!.message },
-                    { title: "Take restaurant bookings", desc: "Tables & timings", msg: QUICK_SUGGESTIONS[4]!.message },
+                    { title: "Answer customer calls", desc: "Support & FAQs", icon: Headphones, msg: QUICK_SUGGESTIONS[0]!.message },
+                    { title: "Book appointments", desc: "Clinic or salon", icon: Calendar, msg: QUICK_SUGGESTIONS[2]!.message },
+                    { title: "Follow up sales leads", desc: "Calls people who enquired", icon: PhoneOutgoing, msg: QUICK_SUGGESTIONS[1]!.message },
+                    { title: "Take restaurant bookings", desc: "Tables & timings", icon: UtensilsCrossed, msg: QUICK_SUGGESTIONS[4]!.message },
                   ].map((ex, i) => (
                     <motion.button
                       key={ex.title}
                       type="button"
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.28 + i * 0.04 }}
+                      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ delay: 0.28 + i * 0.05, duration: 0.35 }}
                       onClick={() => send(ex.msg)}
-                      className="rounded-2xl border border-border/40 bg-card/30 backdrop-blur-md px-4 py-3.5 hover:border-border/70 hover:bg-card/50 transition-all text-left active:scale-[0.99]"
+                      className="group cursor-pointer rounded-2xl border border-border/50 bg-card/50 backdrop-blur-md px-4 py-3.5 text-left transition-all hover:border-border hover:bg-card/80 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] active:scale-[0.99]"
                     >
-                      <p className="text-[13px] font-semibold text-foreground">{ex.title}</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">{ex.desc}</p>
+                      <div className="flex items-start gap-3">
+                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/40 bg-background/70 text-muted-foreground transition-colors group-hover:text-foreground">
+                          <ex.icon className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0">
+                          <p className="text-[13px] font-semibold text-foreground">{ex.title}</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">{ex.desc}</p>
+                        </span>
+                      </div>
                     </motion.button>
                   ))}
                 </div>
@@ -1753,15 +1797,21 @@ export default function VibePage() {
                   )}
                 </div>
                 {phase !== "done" && (
-                  <div className="mt-2 flex items-center gap-2.5 min-w-0">
-                    <div className="flex-1 h-1 rounded-full bg-muted/60 overflow-hidden max-w-[180px]">
-                      <div
-                        className="h-full rounded-full bg-foreground/80 transition-all duration-500"
-                        style={{ width: `${Math.round((vibeProgress.doneCount / vibeProgress.steps.length) * 100)}%` }}
-                      />
+                  <div className="mt-2.5 flex items-center gap-2.5 min-w-0">
+                    <div className="flex items-center gap-1 min-w-0" aria-hidden>
+                      {vibeProgress.steps.map((s) => (
+                        <span
+                          key={s.id}
+                          title={s.label}
+                          className={cn(
+                            "h-1.5 w-4 sm:w-5 rounded-full transition-colors duration-300",
+                            s.done ? "bg-primary" : "bg-muted-foreground/25",
+                          )}
+                        />
+                      ))}
                     </div>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      {vibeProgress.doneCount}/{vibeProgress.steps.length} · {vibeProgress.currentLabel}
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      {vibeProgress.currentLabel}
                     </p>
                   </div>
                 )}
@@ -1907,9 +1957,9 @@ export default function VibePage() {
           )}>
 
             {/* Header */}
-            <div className="flex items-center justify-between px-6 h-14 shrink-0 border-b border-white/10 dark:border-white/10">
-              <div className="flex items-center gap-2.5">
-                <div className="h-7 w-7 rounded-lg bg-white/10 dark:bg-white/10 border border-white/10 flex items-center justify-center backdrop-blur-sm">
+            <div className="flex items-center justify-between px-5 h-14 shrink-0 border-b border-border/40">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="h-8 w-8 rounded-lg bg-muted/70 border border-border/40 flex items-center justify-center">
                   <Zap className="h-3.5 w-3.5 text-foreground/80" />
                 </div>
                 <div>
@@ -2281,8 +2331,8 @@ function MessageBubble({ msg, thinkingLabel = "Thinking…", selectedVoice, play
   if (!isAi) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-3xl rounded-br-md bg-foreground/[0.06] dark:bg-foreground/[0.08] px-4 py-3">
-          <p className="text-[15px] leading-relaxed text-foreground whitespace-pre-wrap">{msg.content}</p>
+        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-3 shadow-sm">
+          <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{msg.content}</p>
         </div>
       </div>
     );
@@ -2291,7 +2341,7 @@ function MessageBubble({ msg, thinkingLabel = "Thinking…", selectedVoice, play
   return (
     <div className="space-y-3">
       <div className="flex gap-3 items-start">
-        <div className="h-8 w-8 rounded-xl bg-card/60 border border-border/30 flex items-center justify-center shrink-0 overflow-hidden p-1.5">
+        <div className="h-8 w-8 rounded-xl bg-card border border-border/50 flex items-center justify-center shrink-0 overflow-hidden p-1.5 shadow-sm">
           <img src="/snapserve-icon.png" alt="" className="h-full w-full object-contain" />
         </div>
         <div className="flex-1 min-w-0 pt-0.5">
@@ -2601,15 +2651,15 @@ function Section({ title, badge, badgeVariant = "neutral", children }: {
 function FieldCard({ field }: { field: AgentField }) {
   const IconComp = FIELD_ICONS[field.icon] ?? Sparkles;
   return (
-    <div className="flex items-center gap-2.5 rounded-xl border vibe-glass-card px-3 py-2.5 animate-in fade-in duration-300">
-      <div className="h-6 w-6 rounded-md bg-white/10 dark:bg-white/10 flex items-center justify-center shrink-0">
-        <IconComp className="h-3 w-3 text-muted-foreground" />
+    <div className="flex items-center gap-2.5 rounded-xl border border-border/50 bg-card/60 px-3 py-2.5 animate-in fade-in duration-300">
+      <div className="h-7 w-7 rounded-lg bg-muted/70 flex items-center justify-center shrink-0">
+        <IconComp className="h-3.5 w-3.5 text-foreground/70" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{field.label}</p>
-        <p className="text-xs font-medium truncate mt-0.5">{field.value}</p>
+        <p className="text-[10px] text-muted-foreground font-medium">{field.label}</p>
+        <p className="text-xs font-semibold truncate mt-0.5">{field.value}</p>
       </div>
-      <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
     </div>
   );
 }
@@ -2677,33 +2727,29 @@ function DispositionRow({ d, i }: { d: DispositionCard; i: number }) {
 
 function EmptyState() {
   const items = [
-    "Name & company",
-    "Language & voice",
-    "What the agent says",
-    "Extra tools (optional)",
-    "Ready to call",
+    { label: "Name & company", icon: Building2 },
+    { label: "Language & voice", icon: Mic },
+    { label: "What the agent says", icon: FileText },
+    { label: "Extra tools (optional)", icon: Sparkles },
+    { label: "Ready to call", icon: Phone },
   ];
   return (
-    <div className="flex flex-col items-center justify-center min-h-full py-16 text-center gap-8">
-      <div className="relative">
-        <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-zinc-400/15 via-zinc-500/8 to-transparent blur-2xl scale-150" />
-        <div className="relative h-20 w-20 rounded-3xl border border-border/30 bg-card/30 backdrop-blur-xl flex items-center justify-center p-3">
-          <Sparkles className="h-8 w-8 text-muted-foreground/60" />
-        </div>
-      </div>
+    <div className="flex flex-col items-center justify-center min-h-full py-16 text-center gap-8 px-4">
+      <VibeHeroMark />
       <div className="max-w-xs">
-        <p className="font-display font-semibold text-lg">Your agent appears here</p>
+        <p className="font-display font-semibold text-lg tracking-tight">Your agent takes shape here</p>
         <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-          Just answer in the chat — no technical setup needed. We'll fill this side as you go.
+          Answer in the chat. We fill this panel as we go — no setup form.
         </p>
       </div>
       <div className="w-full max-w-xs space-y-2 text-left">
         {items.map((item, i) => (
-          <div key={item} className="flex items-center gap-2.5 text-xs text-muted-foreground">
-            <span className="h-5 w-5 rounded-full border border-border/50 flex items-center justify-center text-[10px] tabular-nums shrink-0">
-              {i + 1}
+          <div key={item.label} className="flex items-center gap-2.5 rounded-xl border border-border/40 bg-card/40 px-3 py-2 text-xs text-muted-foreground">
+            <span className="h-6 w-6 rounded-lg bg-muted/60 flex items-center justify-center shrink-0">
+              <item.icon className="h-3.5 w-3.5" />
             </span>
-            {item}
+            <span className="font-medium text-foreground/80">{item.label}</span>
+            <span className="ml-auto text-[10px] tabular-nums text-muted-foreground/70">{i + 1}</span>
           </div>
         ))}
       </div>
