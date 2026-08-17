@@ -42,6 +42,16 @@ const FAQS: { q: string; a: ReactNode }[] = [
     ),
   },
   {
+    q: "Can I pass {{customer_name}} on POST /calls/outbound?",
+    a: (
+      <>
+        No. That endpoint only accepts <code>agentId</code> and <code>toNumber</code>. Map columns
+        in a <Link href="/docs/campaigns">campaign</Link>, or put stable copy in the prompt.{" "}
+        <Link href="/docs/quick-start">Quick Start</Link>.
+      </>
+    ),
+  },
+  {
     q: "Why did my outbound call fail with 401?",
     a: (
       <>

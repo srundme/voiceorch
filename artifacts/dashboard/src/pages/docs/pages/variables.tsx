@@ -41,12 +41,12 @@ export default function VariablesPage() {
         code={`curl https://app.snapserve.ai/api/agents/36/variables \\
   -H "Authorization: Bearer $SNAPSERVE_API_KEY"`}
       />
-      <p>
-        When placing an outbound call, pass runtime values in the call metadata / lead payload
-        your integration uses (campaign field mappings or your own pre-call setup). For custom
-        apps, keep the mapping layer in your backend and use the SnapServe agent that already
-        expects those names.
-      </p>
+      <Callout variant="warn" title="Outbound API does not take runtime values">
+        <code>POST /calls/outbound</code> accepts <code>agentId</code> and <code>toNumber</code>{" "}
+        only. A <code>variables</code> object in that JSON is ignored. To personalize each dial,
+        map CSV/Sheets columns in a <Link href="/docs/campaigns">campaign</Link>, or bake stable
+        facts into the prompt.
+      </Callout>
 
       <h2 id="next">Next</h2>
       <p>

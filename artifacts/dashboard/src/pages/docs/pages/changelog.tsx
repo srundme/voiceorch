@@ -21,6 +21,11 @@ export default function ChangelogPage() {
           Vibe builder chat uses managed <code>sarvam-105b</code> with high reasoning; live agents
           still default to <code>sarvam-105b-conversations</code>.
         </li>
+        <li>
+          Deepened <strong>Quick Start</strong>, <strong>Campaigns</strong>, and{" "}
+          <strong>Pricing</strong> — WhatsApp paise rate card, campaign sources/pacing, and honest
+          outbound API body (no <code>variables</code> field).
+        </li>
       </ul>
 
       <h2 id="2026-08-10-webhook-names">2026-08-10 — Rename the four “webhook” surfaces</h2>

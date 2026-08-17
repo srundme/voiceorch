@@ -31,6 +31,12 @@ const call = await snapserve.calls.createOutbound({
   toNumber: "+919812345678",
 });`}
       />
+      <Callout variant="info">
+        Public <code>POST /calls/outbound</code> does not accept a <code>variables</code> map — extra
+        fields are dropped. Copy-paste wrappers below that still show <code>variables</code> will
+        not personalize the prompt. Use campaign field mappings or a prompt that already contains
+        the facts. Full recipe: <Link href="/docs/quick-start">Quick Start</Link>.
+      </Callout>
 
       <h2 id="mcp">MCP Server — use SnapServe from Claude, Cursor &amp; other AI tools</h2>
       <p>

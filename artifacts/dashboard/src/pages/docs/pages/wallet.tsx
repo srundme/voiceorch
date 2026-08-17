@@ -14,8 +14,10 @@ GET https://app.snapserve.ai/api/wallet/transactions?limit=50`}
       />
 
       <Callout variant="info">
-        Platform fee is flat <strong>₹5 / minute</strong>. Top-ups are card-only (+18% GST) in the
-        dashboard — most apps only read balance.
+        Platform voice fee is flat <strong>₹5 / minute</strong> (₹1/min off with your own
+        telephony). WhatsApp on an own Vobiz channel is billed separately —{" "}
+        <Link href="/docs/pricing">Pricing</Link>. Top-ups are card-only (+18% GST) in the dashboard
+        — most apps only read balance.
       </Callout>
 
       <Endpoint id="get" method="get" path="/wallet" title="Get balance" opId="getWallet">

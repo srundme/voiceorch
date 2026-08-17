@@ -70,7 +70,7 @@ export const DOCS_NAV: DocsNavGroup[] = [
         title: "Quick Start (API)",
         slug: "quick-start",
         icon: Rocket,
-        search: "sk_live list agents POST outbound curl node python",
+        search: "sk_live list agents POST outbound curl node python wallet 402 get call",
         description: "Authenticate and place your first outbound call.",
       },
       {
@@ -186,7 +186,7 @@ export const DOCS_NAV: DocsNavGroup[] = [
         title: "Campaigns",
         slug: "campaigns",
         icon: PhoneCall,
-        search: "batch dial CSV leads dashboard Sheets Meta website retries DNC",
+        search: "batch dial CSV leads dashboard Sheets Meta website retries DNC concurrent AMD transfer",
         description: "Batch outbound from CSV, Sheets, forms, and ads.",
       },
       {
@@ -254,7 +254,7 @@ export const DOCS_NAV: DocsNavGroup[] = [
         title: "Pricing",
         slug: "pricing",
         icon: CreditCard,
-        search: "₹5 minute welcome credit phone GST wallet",
+        search: "₹5 minute welcome credit phone GST wallet WhatsApp template freeform calling paise",
         description: "Per-minute voice, numbers, and WhatsApp.",
       },
       {

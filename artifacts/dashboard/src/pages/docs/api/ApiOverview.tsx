@@ -45,9 +45,10 @@ export function ApiOverview() {
 
       <Section id="introduction" title="Introduction">
         <p>
-          Every endpoint accepts and returns JSON. Requests are made over HTTPS to the base URL
-          above. Use the sidebar to browse endpoints by resource, or jump straight to a specific
-          operation to see its parameters, request body, responses and a ready-to-run cURL example.
+          Every endpoint accepts and returns JSON over HTTPS. Follow the{" "}
+          <Link href="/docs/quick-start">Quick Start</Link> for a full list-agents → outbound → get
+          call recipe (cURL, Node, Python). Use the sidebar for schemas and ready-to-run cURL per
+          operation. Campaigns are dashboard-only and are not listed here.
         </p>
       </Section>
 
