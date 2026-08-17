@@ -22,11 +22,13 @@ export interface VobizPartnerCustomerAccount {
   status?: string;
   balance?: number;
   currency?: string;
+  kyc_status?: string;
+  is_verified?: boolean;
 }
 
 export function snapserveCarrierEmail(clerkId: string): string {
   const safe = clerkId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 40) || "user";
-  return `kyc.${safe}@users.snapserve.ai`;
+  return `${safe}.kyc@snapserve.ai`;
 }
 
 export function syntheticKycPhone(clerkId: string): string {
@@ -37,14 +39,21 @@ export function syntheticKycPhone(clerkId: string): string {
 
 function parseAccountFromBody(bodyText: string): VobizPartnerCustomerAccount | null {
   try {
-    const data = JSON.parse(bodyText) as VobizPartnerCustomerAccount & {
-      account?: VobizPartnerCustomerAccount;
-      error?: { details?: { auth_id?: string } };
-    };
-    if (data.auth_id) return data;
-    if (data.account?.auth_id) return data.account;
-    const nestedId = data.error?.details?.auth_id;
-    if (nestedId) return { auth_id: nestedId, auth_token: "" };
+    const data = JSON.parse(bodyText) as Record<string, unknown>;
+    const candidates: unknown[] = [
+      data,
+      data["account"],
+      data["customer"],
+      data["object"],
+      data["data"],
+    ];
+    for (const c of candidates) {
+      if (!c || typeof c !== "object") continue;
+      const row = c as VobizPartnerCustomerAccount;
+      if (typeof row.auth_id === "string" && row.auth_id) return row;
+    }
+    const details = (data["error"] as { details?: { auth_id?: string } } | undefined)?.details;
+    if (details?.auth_id) return { auth_id: details.auth_id, auth_token: "" };
   } catch {
     /* ignore */
   }
@@ -75,6 +84,9 @@ export async function provisionPartnerCustomerAccount(
     email,
     password,
     country,
+    company: "SnapServe",
+    timezone: "Asia/Kolkata",
+    description: "SnapServe customer KYC",
   };
   if (phone) payload.phone = phone;
 
@@ -93,7 +105,10 @@ export async function provisionPartnerCustomerAccount(
 
     if (resp.ok) {
       const data = parseAccountFromBody(bodyText);
-      if (data?.auth_id && data.auth_token) return data;
+      if (data?.auth_id) {
+        if (data.auth_token) return data;
+        return (await fetchPartnerCustomerByAuthId(data.auth_id)) ?? data;
+      }
     }
 
     if (resp.status === 409 || resp.status === 422) {

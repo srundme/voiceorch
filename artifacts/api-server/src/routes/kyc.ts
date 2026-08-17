@@ -194,28 +194,50 @@ async function createVobizSubAccount(
 }
 
 import {
-  provisionPartnerCustomerAccount,
   provisionKycCarrierAccount,
   transferMasterBalanceToSubAccount,
   lookupPartnerCustomerByEmail,
   type VobizPartnerCustomerAccount,
 } from "../services/vobiz-partner-service.js";
 
-async function findCompletedKycSession(accountAuthId: string): Promise<boolean> {
-  if (!accountAuthId) return false;
+async function listKycSessions(accountAuthId: string): Promise<Array<Record<string, unknown>>> {
+  if (!accountAuthId) return [];
   try {
     const resp = await fetch(
       `${VOBIZ_PARTNER_BASE}/kyc-sessions?account_auth_id=${encodeURIComponent(accountAuthId)}&page=1&size=20`,
       { method: "GET", headers: partnerHeaders() },
     );
-    if (!resp.ok) return false;
-    const body = (await resp.json()) as { sessions?: Array<{ status?: string }> };
-    const sessions = Array.isArray(body.sessions) ? body.sessions : [];
-    return sessions.some((s) => s.status === "kyc_completed");
+    if (!resp.ok) return [];
+    const body = (await resp.json()) as { sessions?: Array<Record<string, unknown>> };
+    return Array.isArray(body.sessions) ? body.sessions : [];
   } catch (err) {
-    logger.warn({ err, accountAuthId }, "findCompletedKycSession failed");
-    return false;
+    logger.warn({ err, accountAuthId }, "listKycSessions failed");
+    return [];
   }
+}
+
+async function findCompletedKycSession(accountAuthId: string): Promise<boolean> {
+  const sessions = await listKycSessions(accountAuthId);
+  return sessions.some((s) => s["status"] === "kyc_completed");
+}
+
+async function findOpenKycSession(accountAuthId: string): Promise<VobizKycSessionResponse | null> {
+  const sessions = await listKycSessions(accountAuthId);
+  const open = sessions.find((s) => {
+    const status = typeof s["status"] === "string" ? s["status"] : "";
+    const widget = typeof s["widget_url"] === "string" ? s["widget_url"] : "";
+    return widget && !["kyc_completed", "revoked", "expired"].includes(status);
+  });
+  if (!open) return null;
+  const id = (typeof open["session_id"] === "string" ? open["session_id"] : null)
+    ?? (typeof open["id"] === "string" ? open["id"] : null);
+  const widget = typeof open["widget_url"] === "string" ? open["widget_url"] : null;
+  if (!id) return null;
+  return {
+    session_id: id,
+    status: typeof open["status"] === "string" ? open["status"] : "link_ready",
+    widget_url: widget,
+  };
 }
 
 export async function ensureVobizSubAccount(
@@ -492,61 +514,65 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-  // 1. Get or create VoBiz sub-account. Re-link if the email already exists
-  // on the carrier (DB wipe, retry, or a previous SnapServe signup).
   const email = user.email ?? `${clerkId}@snapserve.ai`;
-  try {
-    await ensureVobizSubAccount(clerkId, user.name, email);
-  } catch (err) {
-    req.log.error({ err, clerkId }, "ensureVobizSubAccount threw during KYC start");
-  }
+  req.log.info(
+    { clerkId, email, commit: (process.env["RAILWAY_GIT_COMMIT_SHA"] ?? "").slice(0, 12) || null },
+    "KYC start",
+  );
+
+  const persistCarrier = async (partner: VobizPartnerCustomerAccount) => {
+    const verified = partner.kyc_status === "completed"
+      || partner.kyc_status === "verified"
+      || partner.is_verified === true;
+    const [row] = await db
+      .insert(vobizAccountsTable)
+      .values({
+        userId: clerkId,
+        vobizAuthId: partner.auth_id,
+        vobizAuthTokenEncrypted: encryptKey(partner.auth_token ?? ""),
+        kycStatus: verified ? "completed" : "pending",
+      })
+      .onConflictDoUpdate({
+        target: vobizAccountsTable.userId,
+        set: {
+          vobizAuthId: partner.auth_id,
+          vobizAuthTokenEncrypted: encryptKey(partner.auth_token ?? ""),
+          ...(verified ? { kycStatus: "completed" as const } : {}),
+        },
+      })
+      .returning();
+    return row;
+  };
 
   let [account] = await db
     .select()
     .from(vobizAccountsTable)
     .where(eq(vobizAccountsTable.userId, clerkId));
 
-  if (!account || !account.vobizAuthId) {
-    req.log.warn({ clerkId, email }, "No local VoBiz row after provision — looking up or creating a carrier account");
-    const existing =
-      (await lookupPartnerCustomerByEmail(email)) ??
-      (await fetchVobizSubAccountByEmail(email)) ??
-      (await provisionKycCarrierAccount(clerkId, user.name ?? email, email));
-    if (!existing?.auth_id) {
-      req.log.error({ clerkId, email }, "Could not provision or re-link a VoBiz KYC account");
+  if (!account?.vobizAuthId) {
+    const partner = await provisionKycCarrierAccount(clerkId, user.name ?? email, email);
+    if (!partner?.auth_id) {
+      req.log.error({ clerkId, email }, "Could not provision a VoBiz KYC account");
       res.status(502).json({
         error: "Could not start verification. Please try again in a minute.",
+        code: "KYC_PROVISION_FAILED",
       });
       return;
     }
-
-    [account] = await db
-      .insert(vobizAccountsTable)
-      .values({
-        userId: clerkId,
-        vobizAuthId: existing.auth_id,
-        vobizAuthTokenEncrypted: encryptKey(existing.auth_token ?? ""),
-        kycStatus: "pending",
-      })
-      .onConflictDoUpdate({
-        target: vobizAccountsTable.userId,
-        set: {
-          vobizAuthId: existing.auth_id,
-          vobizAuthTokenEncrypted: encryptKey(existing.auth_token ?? ""),
-        },
-      })
-      .returning();
-
-    req.log.info({ clerkId, vobizAuthId: existing.auth_id }, "Linked VoBiz KYC account");
+    account = await persistCarrier(partner);
+    req.log.info({ clerkId, vobizAuthId: partner.auth_id, carrierEmail: partner.email }, "Linked VoBiz KYC account");
     await audit("account_provisioned", {
       userId: clerkId,
-      eventData: { vobizAuthId: existing.auth_id, recovered: true },
+      eventData: { vobizAuthId: partner.auth_id, carrierEmail: partner.email ?? null },
       ip,
     });
   }
 
-  if (!account || !account.vobizAuthId) {
-    res.status(502).json({ error: "Failed to provision verification account. Please try again." });
+  if (!account?.vobizAuthId) {
+    res.status(502).json({
+      error: "Could not start verification. Please try again in a minute.",
+      code: "KYC_PROVISION_FAILED",
+    });
     return;
   }
 
@@ -559,7 +585,6 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
     req.log.info({ clerkId, vobizAuthId: account.vobizAuthId }, "Synced already-completed carrier KYC");
   }
 
-  // Already completed — return early
   if (account.kycStatus === "completed") {
     const [session] = await db
       .select()
@@ -576,26 +601,40 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // 2. Create redirect-flow KYC session
-  // Generate a per-session secret token that will be appended to the webhook URL.
-  // VoBiz sends the webhook to this URL, so only legitimate VoBiz requests will
-  // carry the correct token — forged webhook calls cannot know it.
   const webhookToken = randomBytes(32).toString("hex");
-
   const base        = publicBaseUrl();
   const redirectUrl = `${base}/api/kyc/callback`;
   const webhookUrl  = `${base}/api/kyc/webhook?wh_token=${webhookToken}`;
 
-  let kycSession: VobizKycSessionResponse;
-  try {
-    kycSession = await createVobizKycSession(account.vobizAuthId, redirectUrl, webhookUrl, user.email ?? "");
-  } catch (err: any) {
-    req.log.error({ err, clerkId }, "Failed to create Vobiz KYC session");
-    res.status(502).json({ error: "Failed to start KYC session. Please try again." });
+  const startSession = async (authId: string): Promise<VobizKycSessionResponse | null> => {
+    try {
+      return await createVobizKycSession(authId, redirectUrl, webhookUrl, user.email ?? "");
+    } catch (err) {
+      req.log.warn({ err, clerkId, authId }, "KYC session create failed — checking for an open session");
+      return findOpenKycSession(authId);
+    }
+  };
+
+  let kycSession = await startSession(account.vobizAuthId);
+
+  if (!kycSession?.session_id) {
+    req.log.warn({ clerkId, authId: account.vobizAuthId }, "Stored carrier account cannot start KYC — reprovisioning");
+    const partner = await provisionKycCarrierAccount(clerkId, user.name ?? email, email);
+    if (partner?.auth_id && partner.auth_id !== account.vobizAuthId) {
+      account = await persistCarrier(partner);
+      kycSession = await startSession(partner.auth_id);
+    }
+  }
+
+  if (!kycSession?.session_id) {
+    req.log.error({ clerkId }, "Failed to create Vobiz KYC session after reprovision");
+    res.status(502).json({
+      error: "Could not open the verification page. Please try again in a minute.",
+      code: "KYC_SESSION_FAILED",
+    });
     return;
   }
 
-  // 3. Persist session (including the webhook token for later verification)
   await db.insert(vobizKycSessionsTable).values({
     userId:             clerkId,
     vobizSessionId:     kycSession.session_id,
@@ -605,6 +644,13 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
     widgetUrl:          kycSession.widget_url ?? null,
     redirectUrl,
     webhookToken,
+  }).onConflictDoUpdate({
+    target: vobizKycSessionsTable.vobizSessionId,
+    set: {
+      status: kycSession.status,
+      widgetUrl: kycSession.widget_url ?? null,
+      webhookToken,
+    },
   });
 
   await audit("session_created", {

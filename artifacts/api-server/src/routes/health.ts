@@ -9,7 +9,10 @@ const router: IRouter = Router();
 
 router.get("/healthz", async (_req, res) => {
   const data = HealthCheckResponse.parse({ status: "ok" });
-  res.json(data);
+  res.json({
+    ...data,
+    commit: (process.env["RAILWAY_GIT_COMMIT_SHA"] ?? "").slice(0, 12) || null,
+  });
 });
 
 async function checkDb(): Promise<{ status: string; detail?: string }> {
