@@ -218,6 +218,10 @@ function CustomDomainDnsCard({
         )}
         <li>Cloudflare: Proxy status must be DNS only (grey cloud), not Proxied.</li>
         <li>TTL can stay Auto or 300. Wait a few minutes, then click Verify DNS.</li>
+        <li>
+          Verify means this hostname has an address on the public internet — not only that a CNAME/TXT row exists.
+          If the browser still says NXDOMAIN, the target <span className="font-mono text-foreground">{cnameTarget}</span> is not live yet.
+        </li>
       </ul>
       <div className="flex flex-wrap gap-2 pt-1">
         <Button

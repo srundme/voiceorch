@@ -6,7 +6,7 @@
  *                       verified via TXT record snapserve-verify={token}
  */
 import { createHash, randomBytes } from "node:crypto";
-import { resolveCname, resolveTxt } from "node:dns/promises";
+import { resolve4, resolve6, resolveCname, resolveTxt } from "node:dns/promises";
 import { and, eq, or } from "drizzle-orm";
 import { db, partnersTable } from "@workspace/db";
 import { logger } from "../lib/logger.js";
@@ -234,19 +234,46 @@ export async function verifyCustomDomainDns(opts: {
   const expected = `snapserve-verify=${opts.verifyToken}`;
   const txtOk = txt.some((t) => t.trim() === expected || t.includes(opts.verifyToken));
 
-  if (cnameOk || txtOk) return { ok: true, cname, txt };
   const guide = customDomainDnsGuide({ domain, cnameTarget: target, verifyToken: opts.verifyToken });
   const cnameRow = guide.records.find((r) => r.type === "CNAME");
   const txtRow = guide.records.find((r) => r.type === "TXT");
-  const hint = cnameRow
-    ? `In the ${guide.zone} DNS panel add CNAME Host=${cnameRow.host} Value=${cnameRow.value}`
-    : `In the ${guide.zone} DNS panel add TXT Host=${txtRow?.host ?? "_snapserve-verify"} Value=${expected}`;
-  return {
-    ok: false,
-    reason: `DNS not ready. ${hint}` + (txtRow && cnameRow ? ` (or TXT Host=${txtRow.host} Value=${txtRow.value})` : "") + ".",
-    cname,
-    txt,
-  };
+
+  if (!(cnameOk || txtOk)) {
+    const hint = cnameRow
+      ? `In the ${guide.zone} DNS panel add CNAME Host=${cnameRow.host} Value=${cnameRow.value}`
+      : `In the ${guide.zone} DNS panel add TXT Host=${txtRow?.host ?? "_snapserve-verify"} Value=${expected}`;
+    return {
+      ok: false,
+      reason: `DNS not ready. ${hint}` + (txtRow && cnameRow ? ` (or TXT Host=${txtRow.host} Value=${txtRow.value})` : "") + ".",
+      cname,
+      txt,
+    };
+  }
+
+  // CNAME/TXT can exist while the target host is NXDOMAIN — browsers then fail
+  // with DNS_PROBE_FINISHED_NXDOMAIN even though "Verify" used to pass.
+  if (!(await hostnameHasAddress(domain))) {
+    return {
+      ok: false,
+      reason: cnameOk
+        ? `Your CNAME is correct, but ${target} does not resolve to an IP, so browsers show NXDOMAIN. Add DNS for ${target} on the SnapServe zone (same target as app.snapserve.ai).`
+        : `Ownership TXT is present, but ${domain} has no address yet. Add CNAME Host=${cnameRow?.host ?? guide.host} Value=${target}.`,
+      cname,
+      txt,
+    };
+  }
+
+  return { ok: true, cname, txt };
+}
+
+async function hostnameHasAddress(hostname: string): Promise<boolean> {
+  try {
+    if ((await resolve4(hostname)).length > 0) return true;
+  } catch { /* try v6 */ }
+  try {
+    if ((await resolve6(hostname)).length > 0) return true;
+  } catch { /* none */ }
+  return false;
 }
 
 export function hashDomainToken(token: string): string {
