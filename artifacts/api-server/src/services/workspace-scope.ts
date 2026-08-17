@@ -2,7 +2,7 @@
  * Shared workspace scope for Team invites.
  *
  * Agents are stored under the creator's userId. Inviting a teammate used to
- * write a team_members row and email /app/join?teamId=… but listing still
+ * write a team_members row and email /app/join?token=… but listing still
  * filtered `agents.userId = me`, so the teammate saw an empty Agents page.
  * Resolve the owner + every active member so they share one agent list.
  */
@@ -37,10 +37,13 @@ export async function ensureTeamMembersTable(): Promise<void> {
         name TEXT,
         role TEXT NOT NULL DEFAULT 'member',
         status TEXT NOT NULL DEFAULT 'pending',
+        token TEXT,
         invited_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         joined_at TIMESTAMPTZ
       );
     `);
+    await db.execute(sql`ALTER TABLE team_members ADD COLUMN IF NOT EXISTS token TEXT`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS team_members_token_unique ON team_members (token)`);
     tableEnsured = true;
   } catch (err) {
     logger.warn({ err }, "Failed to ensure team_members table");

@@ -1,11 +1,10 @@
 /**
- * Standalone platform auth (sign-in with Google).
+ * Standalone platform auth.
  *
- * Replaces Clerk. The API server owns the Google OAuth app and issues a signed
- * session token (HS256 JWT). On the OAuth callback the server redirects back to
- * the dashboard with the token in the URL fragment (#session=<jwt>); we capture
- * it on load, store it in localStorage, and expose a Clerk-compatible surface
- * (useAuth / SignedIn / SignedOut) so the rest of the app keeps working.
+ * The API issues an HS256 JWT and stores it in an HttpOnly cookie (`vo_session`).
+ * Identity is loaded from GET /api/auth/me. A leftover localStorage JWT (or a
+ * one-time #session= fragment on cross-origin OAuth) is migrated via
+ * POST /api/auth/session then deleted from JS-accessible storage.
  */
 import {
   createContext,
@@ -24,13 +23,6 @@ export interface SessionUser {
   id: string;
   email: string | null;
   name: string | null;
-}
-
-interface DecodedToken {
-  sub: string;
-  email: string | null;
-  name: string | null;
-  exp: number;
 }
 
 interface AuthState {
@@ -52,103 +44,125 @@ export type SignOutReason = "revoked";
 
 const SIGNOUT_REASON_KEY = "voiceorch:signoutReason";
 
-function decode(token: string): DecodedToken | null {
-  try {
-    const body = token.split(".")[1];
-    if (!body) return null;
-    const json = JSON.parse(
-      atob(body.replace(/-/g, "+").replace(/_/g, "/")),
-    ) as Partial<DecodedToken>;
-    if (typeof json.sub !== "string" || !json.sub) return null;
-    if (typeof json.exp !== "number" || json.exp * 1000 < Date.now()) return null;
-    return {
-      sub: json.sub,
-      email: json.email ?? null,
-      name: json.name ?? null,
-      exp: json.exp,
-    };
-  } catch {
-    return null;
-  }
+function userFromMe(data: { id?: string; sub?: string; email?: string | null; name?: string | null }): SessionUser | null {
+  const id = data.id || data.sub;
+  if (!id) return null;
+  return { id, email: data.email ?? null, name: data.name ?? null };
+}
+
+async function fetchMe(): Promise<SessionUser | null> {
+  const res = await fetch("/api/auth/me", { credentials: "include" });
+  if (!res.ok) return null;
+  return userFromMe(await res.json());
+}
+
+async function adoptToken(token: string): Promise<SessionUser | null> {
+  const res = await fetch("/api/auth/session", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  if (!res.ok) return null;
+  return userFromMe(await res.json());
 }
 
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    // 1) Capture a token delivered via the OAuth callback fragment (#session=...)
-    let captured: string | null = null;
-    const match = window.location.hash.match(/session=([^&]+)/);
-    if (match && match[1]) {
-      captured = decodeURIComponent(match[1]);
-    }
-    // Server sets `new_user=1` on the redirect ONLY when the Google callback
-    // just inserted a brand-new users row (see routes/auth.ts) — an existing
-    // user signing back in via Google never carries this flag.
-    const isNewGoogleUser = /(?:^|[#&])new_user=1(?:&|$)/.test(window.location.hash);
+    let cancelled = false;
 
-    if (captured && decode(captured)) {
-      localStorage.setItem(TOKEN_KEY, captured);
-      // Strip the fragment so the token doesn't linger in the URL / history.
-      window.history.replaceState(
-        null,
-        "",
-        window.location.pathname + window.location.search,
-      );
-      setToken(captured);
-      // This branch only runs immediately after the Google OAuth callback
-      // redirect delivers a fresh token via the URL fragment — never on a
-      // returning-session page reload (that's the `stored` branch below) and
-      // never for email/password login (that flow calls signIn() directly,
-      // not this effect). Gated on the server's new_user flag so it fires
-      // only for a genuinely new account, never an existing-user login.
-      // TEMPORARY diagnostic logging — remove once production firing is
-      // confirmed. Shows whether this effect ever sees a captured token and
-      // whether the server's new_user flag was set for it.
-      // eslint-disable-next-line no-console
-      console.log("Google OAuth callback token capture", {
-        hasCapturedToken: true,
-        isNewGoogleUser,
-        hash: window.location.hash,
-      });
-      if (isNewGoogleUser) {
-        void trackCompleteRegistration("Google", captured);
+    (async () => {
+      let captured: string | null = null;
+      const match = window.location.hash.match(/session=([^&]+)/);
+      if (match && match[1]) {
+        captured = decodeURIComponent(match[1]);
       }
-    } else {
-      const stored = localStorage.getItem(TOKEN_KEY);
-      if (stored && decode(stored)) {
-        setToken(stored);
-      } else if (stored) {
-        localStorage.removeItem(TOKEN_KEY);
+      const isNewGoogleUser =
+        /(?:^|[?&#])new_user=1(?:&|$)/.test(window.location.hash)
+        || new URLSearchParams(window.location.search).get("new_user") === "1";
+
+      if (captured) {
+        window.history.replaceState(
+          null,
+          "",
+          window.location.pathname + window.location.search.replace(/([?&])new_user=1(&|$)/, "$1").replace(/[?&]$/, ""),
+        );
+        const adopted = await adoptToken(captured);
+        try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+        if (!cancelled && adopted) {
+          setUser(adopted);
+          if (isNewGoogleUser) {
+            void trackCompleteRegistration("Google", adopted.id);
+          }
+          setIsLoaded(true);
+          return;
+        }
       }
-    }
-    setIsLoaded(true);
+
+      try {
+        const stored = localStorage.getItem(TOKEN_KEY);
+        if (stored) {
+          const adopted = await adoptToken(stored);
+          localStorage.removeItem(TOKEN_KEY);
+          if (!cancelled && adopted) {
+            setUser(adopted);
+            setIsLoaded(true);
+            return;
+          }
+        }
+      } catch { /* ignore */ }
+
+      const me = await fetchMe();
+      if (!cancelled) {
+        setUser(me);
+        if (isNewGoogleUser && me) {
+          void trackCompleteRegistration("Google", me.id);
+          const params = new URLSearchParams(window.location.search);
+          if (params.get("new_user") === "1") {
+            params.delete("new_user");
+            const qs = params.toString();
+            window.history.replaceState(null, "", window.location.pathname + (qs ? `?${qs}` : ""));
+          }
+        }
+        setIsLoaded(true);
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, []);
 
   const getToken = useCallback(async (): Promise<string | null> => {
-    // Always read from localStorage — stable reference (no [token] dep).
-    // This prevents AuthTokenSync from clearing _authTokenGetter on each login,
-    // which would cause onboarding-status fetches to fire unauthenticated.
-    const t = localStorage.getItem(TOKEN_KEY);
-    if (t && decode(t)) return t;
+    // Cookie carries the session; customFetch sends credentials: "include".
     return null;
   }, []);
 
   const signIn = useCallback((token?: string) => {
-    if (token && decode(token)) {
-      localStorage.setItem(TOKEN_KEY, token);
-      setToken(token);
-    } else {
-      window.location.href = `${basePath}/sign-in`;
-    }
+    void (async () => {
+      if (token) {
+        const adopted = await adoptToken(token);
+        try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+        if (adopted) {
+          setUser(adopted);
+          return;
+        }
+        window.location.href = `${basePath}/sign-in`;
+        return;
+      }
+      const me = await fetchMe();
+      if (me) setUser(me);
+      else window.location.href = `${basePath}/sign-in`;
+    })();
   }, []);
 
   const signOut = useCallback((reason?: SignOutReason) => {
-    localStorage.removeItem(TOKEN_KEY);
-    setToken(null);
+    try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+    setUser(null);
+    void fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
     if (reason) {
       sessionStorage.setItem(SIGNOUT_REASON_KEY, reason);
       window.location.href = `${basePath}/sign-in`;
@@ -157,12 +171,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const decoded = token ? decode(token) : null;
   const value: AuthState = {
     isLoaded,
-    isSignedIn: !!decoded,
-    userId: decoded?.sub ?? null,
-    user: decoded ? { id: decoded.sub, email: decoded.email, name: decoded.name } : null,
+    isSignedIn: !!user,
+    userId: user?.id ?? null,
+    user,
     getToken,
     signIn,
     signOut,

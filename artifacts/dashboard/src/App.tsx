@@ -196,6 +196,7 @@ function SignInPage() {
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim(),
@@ -203,8 +204,8 @@ function SignInPage() {
           host: window.location.host,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { token?: string; error?: string };
-      if (!res.ok || !data.token) {
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; token?: string; error?: string };
+      if (!res.ok) {
         setError(data.error || "Sign in failed. Please try again.");
         return;
       }

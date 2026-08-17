@@ -30,10 +30,6 @@ interface InvoiceRow {
   createdAt: string;
 }
 
-function sessionToken(): string | null {
-  try { return localStorage.getItem("voiceorch:session"); } catch { return null; }
-}
-
 function loadRazorpay(): Promise<void> {
   return new Promise((resolve) => {
     if (window.Razorpay) { resolve(); return; }
@@ -103,10 +99,7 @@ export default function WalletPage() {
 
   const loadInvoices = useCallback(async () => {
     try {
-      const token = sessionToken();
-      const r = await fetch("/api/wallet/invoices?limit=100", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const r = await fetch("/api/wallet/invoices?limit=100", { credentials: "include" });
       if (r.ok) setInvoices((await r.json()) as InvoiceRow[]);
     } catch {
       /* non-fatal */
@@ -142,10 +135,7 @@ export default function WalletPage() {
   const downloadInvoice = useCallback(async (inv: InvoiceRow) => {
     setDownloadingId(inv.id);
     try {
-      const token = sessionToken();
-      const r = await fetch(`/api/wallet/invoices/${inv.id}/pdf`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const r = await fetch(`/api/wallet/invoices/${inv.id}/pdf`, { credentials: "include" });
       if (!r.ok) throw new Error("failed");
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);

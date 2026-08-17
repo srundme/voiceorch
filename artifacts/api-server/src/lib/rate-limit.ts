@@ -189,8 +189,13 @@ export const voiceathonJudgeRateLimit = rateLimit({
 
 export const exemptPaths = [
   "/api/healthz",
-  "/api/campaign-webhook",
-  "/api/webhooks",
+  // Telephony + WhatsApp provider callbacks are HMAC/token gated and bursty;
+  // the global 100/min IP cap would drop live calls. Public lead intake is
+  // NOT exempt — it sits on the IP limiter.
+  "/api/webhooks/twilio",
+  "/api/webhooks/plivo",
+  "/api/webhooks/vobiz",
+  "/api/webhooks/whatsapp",
   "/api/webcall-notify",
   "/api/admin",
   "/api/meet-calendar/recall-webhooks",

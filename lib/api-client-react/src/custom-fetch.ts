@@ -479,7 +479,13 @@ export async function customFetch<T = unknown>(
         : timeoutController.signal;
 
   try {
-    const response = await fetch(input, { ...init, method, headers, signal: signal ?? undefined });
+    const response = await fetch(input, {
+      ...init,
+      method,
+      headers,
+      signal: signal ?? undefined,
+      credentials: init.credentials ?? "include",
+    });
 
     if (!response.ok) {
       const errorData = await parseErrorBody(response, method);

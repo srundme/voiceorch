@@ -7,13 +7,45 @@ import { logger } from "../lib/logger.js";
 import { sendBrevoEmail } from "../services/brevo.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { ensureTeamMembersTable, claimPendingTeamInvites } from "../services/workspace-scope.js";
+import { randomBytes } from "node:crypto";
 
 const router: IRouter = Router();
+
+function newTeamInviteToken(): string {
+  return randomBytes(24).toString("hex");
+}
+
+async function ensureInviteToken(row: { id: number; token: string | null }): Promise<string> {
+  if (row.token && row.token.length >= 24) return row.token;
+  const token = newTeamInviteToken();
+  await db.update(teamMembersTable).set({ token }).where(eq(teamMembersTable.id, row.id));
+  return token;
+}
+
+async function findInvite(opts: { token?: string; teamId?: number }) {
+  const token = (opts.token ?? "").trim();
+  if (token.length >= 24) {
+    const [byToken] = await db
+      .select()
+      .from(teamMembersTable)
+      .where(eq(teamMembersTable.token, token));
+    if (byToken) return byToken;
+  }
+  const teamId = opts.teamId;
+  if (typeof teamId === "number" && Number.isFinite(teamId) && teamId > 0) {
+    const [byId] = await db
+      .select()
+      .from(teamMembersTable)
+      .where(eq(teamMembersTable.id, teamId));
+    return byId ?? null;
+  }
+  return null;
+}
 
 async function dispatchInviteEmail(
   email: string,
   ownerUserId: string,
-  teamMemberId: number,
+  inviteToken: string,
   role: string,
 ): Promise<void> {
   const [inviter] = await db
@@ -23,7 +55,7 @@ async function dispatchInviteEmail(
 
   const inviterName = inviter?.name || inviter?.email?.split("@")[0] || "A colleague";
   const appBase = process.env["APP_BASE_URL"]?.replace(/\/$/, "") || getSelfBaseUrl();
-  const inviteUrl = `${appBase}/app/join?teamId=${teamMemberId}`;
+  const inviteUrl = `${appBase}/app/join?token=${inviteToken}`;
   const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
 
   const htmlContent = `
@@ -71,7 +103,7 @@ async function dispatchInviteEmail(
     undefined,
     { emailType: "team_invite" },
   );
-  logger.info({ email, ownerUserId, teamMemberId }, "Team invite email dispatched via Brevo");
+  logger.info({ email, ownerUserId }, "Team invite email dispatched via Brevo");
 }
 
 /**
@@ -181,8 +213,9 @@ router.post("/team/invite", requireAuth, async (req, res): Promise<void> => {
         .where(eq(teamMembersTable.id, existing.id))
         .returning();
 
+      const inviteToken = await ensureInviteToken(existing);
       try {
-        await dispatchInviteEmail(cleanEmail, ownerUserId, existing.id, memberRole);
+        await dispatchInviteEmail(cleanEmail, ownerUserId, inviteToken, memberRole);
       } catch (emailErr) {
         logger.warn({ emailErr, cleanEmail }, "Failed to re-send team invite email via Brevo");
       }
@@ -207,12 +240,13 @@ router.post("/team/invite", requireAuth, async (req, res): Promise<void> => {
         role: memberRole,
         status: existingUser ? "active" : "pending",
         joinedAt: existingUser ? new Date() : null,
+        token: newTeamInviteToken(),
       })
       .returning();
 
     // Dispatch email invitation
     try {
-      await dispatchInviteEmail(cleanEmail, ownerUserId, created!.id, memberRole);
+      await dispatchInviteEmail(cleanEmail, ownerUserId, created!.token || newTeamInviteToken(), memberRole);
     } catch (emailErr) {
       logger.warn({ emailErr, cleanEmail }, "Failed to send team invite email via Brevo");
     }
@@ -260,7 +294,8 @@ router.post("/team/members/:id/resend", requireAuth, async (req, res): Promise<v
       .set({ invitedAt: new Date() })
       .where(eq(teamMembersTable.id, memberId));
 
-    await dispatchInviteEmail(member.email, userId, member.id, member.role);
+    const inviteToken = await ensureInviteToken(member);
+    await dispatchInviteEmail(member.email, userId, inviteToken, member.role);
     res.json({ success: true, email: member.email });
   } catch (err) {
     logger.error({ err }, "Failed to resend team invite email");
@@ -305,7 +340,7 @@ router.delete("/team/members/:id", requireAuth, async (req, res): Promise<void> 
 });
 
 /**
- * GET /api/team/invite-preview?teamId=
+ * GET /api/team/invite-preview?token=  (legacy: ?teamId=)
  * Details for the /app/join page. Auth required so we can check email match.
  */
 router.get("/team/invite-preview", requireAuth, async (req, res): Promise<void> => {
@@ -317,16 +352,12 @@ router.get("/team/invite-preview", requireAuth, async (req, res): Promise<void> 
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
+    const token = String(req.query["token"] ?? "").trim();
     const teamId = parseInt(String(req.query["teamId"] ?? ""), 10);
-    if (!Number.isFinite(teamId) || teamId <= 0) {
-      res.status(400).json({ error: "Invalid invitation" });
-      return;
-    }
-
-    const [invite] = await db
-      .select()
-      .from(teamMembersTable)
-      .where(eq(teamMembersTable.id, teamId));
+    const invite = await findInvite({
+      token,
+      teamId: Number.isFinite(teamId) ? teamId : undefined,
+    });
     if (!invite) {
       res.status(404).json({ error: "Invitation not found" });
       return;
@@ -360,7 +391,7 @@ router.get("/team/invite-preview", requireAuth, async (req, res): Promise<void> 
 });
 
 /**
- * POST /api/team/join { teamId }
+ * POST /api/team/join { token }  (legacy: { teamId })
  * Accept the emailed invite and bind this login to the owner's workspace.
  */
 router.post("/team/join", requireAuth, async (req, res): Promise<void> => {
@@ -373,16 +404,13 @@ router.post("/team/join", requireAuth, async (req, res): Promise<void> => {
       return;
     }
 
-    const teamId = parseInt(String((req.body as { teamId?: unknown })?.teamId ?? ""), 10);
-    if (!Number.isFinite(teamId) || teamId <= 0) {
-      res.status(400).json({ error: "Invalid invitation" });
-      return;
-    }
-
-    const [invite] = await db
-      .select()
-      .from(teamMembersTable)
-      .where(eq(teamMembersTable.id, teamId));
+    const body = (req.body ?? {}) as { token?: unknown; teamId?: unknown };
+    const token = typeof body.token === "string" ? body.token.trim() : "";
+    const teamId = parseInt(String(body.teamId ?? ""), 10);
+    const invite = await findInvite({
+      token,
+      teamId: Number.isFinite(teamId) ? teamId : undefined,
+    });
     if (!invite) {
       res.status(404).json({ error: "Invitation not found" });
       return;

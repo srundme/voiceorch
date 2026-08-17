@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Users, CheckCircle2, AlertCircle } from "lucide-react";
@@ -17,21 +16,27 @@ interface InvitePreview {
 }
 
 export default function TeamJoinPage() {
-  const { getToken } = useAuth();
   const { toast } = useToast();
   const [, navigate] = useLocation();
-  const [teamId] = useState(() => new URLSearchParams(window.location.search).get("teamId") ?? "");
+  const [inviteKey] = useState(() => {
+    const q = new URLSearchParams(window.location.search);
+    return {
+      token: q.get("token") ?? "",
+      teamId: q.get("teamId") ?? "",
+    };
+  });
   const [joined, setJoined] = useState(false);
+  const hasInvite = !!inviteKey.token || !!inviteKey.teamId;
+  const previewQs = inviteKey.token
+    ? `token=${encodeURIComponent(inviteKey.token)}`
+    : `teamId=${encodeURIComponent(inviteKey.teamId)}`;
 
   const { data: preview, isLoading, error } = useQuery<InvitePreview>({
-    queryKey: ["team-invite-preview", teamId],
-    enabled: !!teamId,
+    queryKey: ["team-invite-preview", inviteKey.token, inviteKey.teamId],
+    enabled: hasInvite,
     retry: false,
     queryFn: async () => {
-      const token = await getToken();
-      const res = await fetch(`/api/team/invite-preview?teamId=${encodeURIComponent(teamId)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`/api/team/invite-preview?${previewQs}`, { credentials: "include" });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Invitation not found");
@@ -42,14 +47,15 @@ export default function TeamJoinPage() {
 
   const joinMutation = useMutation({
     mutationFn: async () => {
-      const token = await getToken();
       const res = await fetch("/api/team/join", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ teamId: Number(teamId) }),
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          inviteKey.token
+            ? { token: inviteKey.token }
+            : { teamId: Number(inviteKey.teamId) },
+        ),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -70,7 +76,7 @@ export default function TeamJoinPage() {
   return (
     <div className="flex items-center justify-center min-h-[70vh] px-4">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8">
-        {!teamId ? (
+        {!hasInvite ? (
           <CenteredMessage
             icon={<AlertCircle className="w-8 h-8 text-amber-400" />}
             title="Missing invitation"

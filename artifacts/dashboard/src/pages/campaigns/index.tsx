@@ -130,8 +130,7 @@ type DashboardData = {
 };
 
 async function apiFetchDash<T>(url: string): Promise<T> {
-  const token = localStorage.getItem("voiceorch:session");
-  const r = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const r = await fetch(url, { credentials: "include" });
   if (!r.ok) throw new Error(await r.text());
   return r.json() as Promise<T>;
 }
@@ -1502,8 +1501,7 @@ export default function CampaignsPage() {
   const hasCampaigns = campaigns.length > 0;
 
   function connectZoho() {
-    const token = localStorage.getItem("voiceorch:session") ?? "";
-    const url = `${BASE}/api/crm/connect/zoho?returnOrigin=${encodeURIComponent(window.location.origin)}${token ? `&token=${encodeURIComponent(token)}` : ""}`;
+    const url = `${BASE}/api/crm/connect/zoho?returnOrigin=${encodeURIComponent(window.location.origin)}`;
     window.location.href = url;
   }
 
@@ -1642,8 +1640,7 @@ export default function CampaignsPage() {
                   variant="outline"
                   className="h-9 gap-1.5 rounded-lg text-xs"
                   onClick={() => {
-                    const token = localStorage.getItem("voiceorch:session");
-                    const url = `${BASE}/api/campaigns/export.csv${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+                    const url = `${BASE}/api/campaigns/export.csv`;
                     window.open(url, "_blank");
                   }}
                 >

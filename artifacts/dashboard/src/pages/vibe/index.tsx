@@ -79,8 +79,8 @@ const FEATURE_ICONS: Record<string, React.ElementType> = {
 };
 
 /* ── auth ──────────────────────────────────────────────────────────────────── */
-function getToken(): string | null {
-  try { return localStorage.getItem("voiceorch:session"); } catch { return null; }
+function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  return fetch(input, { ...init, credentials: "include" });
 }
 function uid() { return Math.random().toString(36).slice(2); }
 
@@ -263,7 +263,7 @@ const QUICK_SUGGESTIONS: QuickSuggestion[] = [
 async function previewVoice(voiceId: string, setPlaying: (id: string | null) => void) {
   setPlaying(voiceId);
   try {
-    const resp = await fetch("/api/voices/preview", {
+    const resp = await apiFetch("/api/voices/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ voice: voiceId, model: "sonic-3.5" }),
@@ -462,8 +462,6 @@ export default function VibePage() {
     // Check whether there is anything to poll before starting the loop
     if (!vibeKbSources.some(s => NON_TERMINAL.has(s.status))) return;
 
-    const token = localStorage.getItem("voiceorch:session");
-    const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
     let active = true;
     let tid: ReturnType<typeof setTimeout>;
 
@@ -478,7 +476,7 @@ export default function VibePage() {
         const fetched = await Promise.all(
           pending.map(async s => {
             try {
-              const r = await fetch(`/api/knowledge-sources/${s.id}`, { headers: authHeaders });
+              const r = await apiFetch(`/api/knowledge-sources/${s.id}`);
               if (r.ok) return (await r.json()) as { id: number; status: string };
             } catch { /* transient network error — retry next tick */ }
             return null;
@@ -503,8 +501,8 @@ export default function VibePage() {
             void Promise.all(
               updates
                 .filter(u => TERMINAL_OK.has(u.status))
-                .map(u => fetch(`/api/knowledge-sources/${u.id}/attach-agent/${agentId}`, {
-                  method: "POST", headers: authHeaders,
+                .map(u => apiFetch(`/api/knowledge-sources/${u.id}/attach-agent/${agentId}`, {
+                  method: "POST",
                 }).catch(() => {}))
             );
           }
@@ -528,11 +526,9 @@ export default function VibePage() {
     const TERMINAL_OK = new Set(["active", "ready", "partial"]);
     const terminal = vibeKbSourcesRef.current.filter(s => TERMINAL_OK.has(s.status));
     if (!terminal.length) return;
-    const token = localStorage.getItem("voiceorch:session");
-    const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
     void Promise.all(
-      terminal.map(s => fetch(`/api/knowledge-sources/${s.id}/attach-agent/${createdId}`, {
-        method: "POST", headers: authHeaders,
+      terminal.map(s => apiFetch(`/api/knowledge-sources/${s.id}/attach-agent/${createdId}`, {
+        method: "POST",
       }).catch(() => {}))
     );
   }, [createdId]);
@@ -540,10 +536,7 @@ export default function VibePage() {
   // ── Load draft sessions for new builds (refine loads its own filtered list)
   useEffect(() => {
     if (refineId) return;
-    const token = getToken();
-    fetch("/api/vibe/sessions", {
-      headers: { Authorization: `Bearer ${token ?? ""}` },
-    })
+    apiFetch("/api/vibe/sessions")
       .then(r => r.ok ? r.json() : [])
       .then((list: SessionSummary[]) => {
         if (Array.isArray(list) && list.length > 0) setSessions(list);
@@ -555,21 +548,12 @@ export default function VibePage() {
   useEffect(() => {
     if (!refineId) return;
     setRefineLoading(true);
-    const token = getToken();
 
     Promise.all([
-      fetch(`/api/agents/${refineId}`, {
-        headers: { Authorization: `Bearer ${token ?? ""}` },
-      }).then(r => r.ok ? r.json() : null),
-      fetch(`/api/disposition/config/${refineId}`, {
-        headers: { Authorization: `Bearer ${token ?? ""}` },
-      }).then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch(`/api/vibe/sessions?agentId=${refineId}`, {
-        headers: { Authorization: `Bearer ${token ?? ""}` },
-      }).then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch(`/api/phone-numbers`, {
-        headers: { Authorization: `Bearer ${token ?? ""}` },
-      }).then(r => r.ok ? r.json() : null).catch(() => null),
+      apiFetch(`/api/agents/${refineId}`).then(r => r.ok ? r.json() : null),
+      apiFetch(`/api/disposition/config/${refineId}`).then(r => r.ok ? r.json() : null).catch(() => null),
+      apiFetch(`/api/vibe/sessions?agentId=${refineId}`).then(r => r.ok ? r.json() : []).catch(() => []),
+      apiFetch(`/api/phone-numbers`).then(r => r.ok ? r.json() : null).catch(() => null),
     ])
       .then(([agent, dispositionsData, sessionList, phoneNumbersData]: [Record<string, unknown> | null, unknown, SessionSummary[], unknown]) => {
         if (Array.isArray(sessionList) && sessionList.length > 0) {
@@ -869,14 +853,13 @@ export default function VibePage() {
     setPhase("thinking");
 
     const history = [...historyRef.current, { role: "user" as const, content: text }];
-    const token   = getToken();
 
     // Create a new session on the first message of a new conversation
     if (activeSessionIdRef.current === null) {
       try {
-        const sResp = await fetch("/api/vibe/sessions", {
+        const sResp = await apiFetch("/api/vibe/sessions", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token ?? ""}` },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ agentId: refineId ?? null, title: text.slice(0, 70) }),
         });
         if (sResp.ok) {
@@ -904,9 +887,9 @@ export default function VibePage() {
       streamHadError = false;
       let wantRetry = false;
 
-      const resp = await fetch("/api/agents/vibe-chat", {
+      const resp = await apiFetch("/api/agents/vibe-chat", {
         method:  "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token ?? ""}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages:        history,
           voicesShown:     voicesRef.current.shown,
@@ -1081,17 +1064,15 @@ export default function VibePage() {
               queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
               // Link the active session to the newly created agent (covers both new-agent and refine)
               if (activeSessionIdRef.current !== null) {
-                fetch(`/api/vibe/sessions/${activeSessionIdRef.current}`, {
+                apiFetch(`/api/vibe/sessions/${activeSessionIdRef.current}`, {
                   method: "PATCH",
-                  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${getToken() ?? ""}` },
+                  headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ agentId: evt.agentId }),
                 }).catch(() => {});
               }
               if (refineId != null) {
                 // Refine mode: fetch fresh state, sync preview + ref, then re-enable input.
-                fetch(`/api/agents/${evt.agentId as number}`, {
-                  headers: { Authorization: `Bearer ${getToken() ?? ""}` },
-                })
+                apiFetch(`/api/agents/${evt.agentId as number}`)
                   .then(r => r.ok ? r.json() : null)
                   .then((fresh: Record<string, unknown> | null) => {
                     if (!fresh || !refineBaseRef.current) return;
@@ -1134,9 +1115,7 @@ export default function VibePage() {
                   const path = window.location.pathname;
                   window.history.replaceState({}, "", `${path}?refine=${newId}`);
                 } catch { /* ignore */ }
-                fetch(`/api/agents/${newId}`, {
-                  headers: { Authorization: `Bearer ${getToken() ?? ""}` },
-                })
+                apiFetch(`/api/agents/${newId}`)
                   .then(r => r.ok ? r.json() : null)
                   .then((a: Record<string, unknown> | null) => {
                     if (!a) return;
@@ -1239,9 +1218,9 @@ export default function VibePage() {
       // Fire-and-forget: save the completed user+assistant turn to the session
       const sid = activeSessionIdRef.current;
       if (sid !== null && aiReply) {
-        fetch(`/api/vibe/sessions/${sid}/messages`, {
+        apiFetch(`/api/vibe/sessions/${sid}/messages`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token ?? ""}` },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ messages: [
             { role: "user",      content: text },
             { role: "assistant", content: aiReply },
@@ -1278,14 +1257,10 @@ export default function VibePage() {
     const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
     setUrlInputOpen(false);
     setUrlInputValue("");
-    const token = localStorage.getItem("voiceorch:session");
-    const authHeaders: Record<string, string> = {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
+    const authHeaders: Record<string, string> = { "Content-Type": "application/json" };
     let sourceId: number | null = null;
     try {
-      const r = await fetch("/api/knowledge-sources", {
+      const r = await apiFetch("/api/knowledge-sources", {
         method: "POST",
         headers: authHeaders,
         body: JSON.stringify({ type: "website", name: url, url }),
@@ -1322,9 +1297,6 @@ export default function VibePage() {
       return;
     }
 
-    const token = localStorage.getItem("voiceorch:session");
-    const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-
     // Show a pending card immediately while uploading
     const tempId = Date.now(); // safe: DB IDs are small integers
     setVibeKbSources(prev => [...prev, { id: tempId, name: file.name, type: "file", status: "processing" }]);
@@ -1333,9 +1305,8 @@ export default function VibePage() {
       const form = new FormData();
       form.append("file", file);
       form.append("name", file.name);
-      const r = await fetch("/api/knowledge-sources/upload", {
+      const r = await apiFetch("/api/knowledge-sources/upload", {
         method: "POST",
-        headers: authHeaders,
         body: form,
       });
       if (r.ok) {
@@ -1362,11 +1333,8 @@ export default function VibePage() {
   }, [send]);
 
   const loadHistorySession = useCallback(async (id: number) => {
-    const token = getToken();
     try {
-      const resp = await fetch(`/api/vibe/sessions/${id}/messages`, {
-        headers: { Authorization: `Bearer ${token ?? ""}` },
-      });
+      const resp = await apiFetch(`/api/vibe/sessions/${id}/messages`);
       if (!resp.ok) return;
       const msgs = await resp.json() as { id: number; role: string; content: string; createdAt: string }[];
       const chatMsgs: ChatMsg[] = msgs.map(m => ({
@@ -1463,10 +1431,9 @@ export default function VibePage() {
     setDraftTitle(title);
     const sid = activeSessionIdRef.current;
     if (sid == null) return;
-    const token = getToken();
-    fetch(`/api/vibe/sessions/${sid}`, {
+    apiFetch(`/api/vibe/sessions/${sid}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title }),
     }).catch(() => {});
     setSessions(prev => prev.map(s => s.id === sid ? { ...s, title } : s));
