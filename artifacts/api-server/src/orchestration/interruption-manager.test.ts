@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
+import { FILLER_SEQUENCE_ID, InterruptionManager, bargeInMinChars } from "./interruption-manager.js";
 
 describe("InterruptionManager", () => {
   afterEach(() => {
@@ -106,5 +106,25 @@ describe("InterruptionManager", () => {
     expect(m.isCalleeSpeaking()).toBe(true);
     m.onUserSpeechEnd();
     expect(m.isCalleeSpeaking()).toBe(false);
+  });
+});
+
+describe("bargeInMinChars", () => {
+  it("keeps the 4-grapheme floor for English", () => {
+    expect(bargeInMinChars("en-IN")).toBe(4);
+    expect(bargeInMinChars("en")).toBe(4);
+    expect(bargeInMinChars(null)).toBe(4);
+  });
+
+  it("raises the floor for Hindi and other Indic langs so short talk-over cannot cut TTS", () => {
+    expect(bargeInMinChars("hi-IN")).toBe(10);
+    expect(bargeInMinChars("ta-IN")).toBe(10);
+    expect(bargeInMinChars("te")).toBe(10);
+    // Call 10544 scraps that must stay under the floor
+    expect([..."दरअसल"].length).toBeLessThan(bargeInMinChars("hi-IN"));
+    expect([..."Okay"].length).toBeLessThan(bargeInMinChars("hi-IN"));
+    expect([..."यू नो।"].length).toBeLessThan(bargeInMinChars("hi-IN"));
+    // A real Hindi question still clears it
+    expect([..."आप कौन हो?"].length).toBeGreaterThanOrEqual(bargeInMinChars("hi-IN"));
   });
 });
