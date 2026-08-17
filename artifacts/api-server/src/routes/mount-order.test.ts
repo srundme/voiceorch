@@ -51,6 +51,7 @@ describe("routes/index.ts mount order", () => {
     ["kycRouter", "/api/kyc/callback"],
     ["sheetsRouter", "/api/sheets/google/callback"],
     ["schedulingRouter", "/api/scheduling/google/callback"],
+    ["partnerPublicRouter", "/api/public/partner-branding"],
   ])("mounts %s before any blanket-auth router so %s stays reachable", (identifier) => {
     const index = mountOrder.indexOf(identifier);
     expect(index).toBeGreaterThan(-1);

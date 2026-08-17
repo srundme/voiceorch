@@ -160,7 +160,7 @@ function SignInPage() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const isSignup = location.startsWith("/sign-up");
-  const isPartnerGateway = !!branding;
+  const isPartnerGateway = !isDirectSnapServeHost();
 
   useEffect(() => {
     const reason = consumeSignOutReason();
@@ -217,14 +217,16 @@ function SignInPage() {
   }
 
   const title = isPartnerGateway
-    ? (branding.loginTitle?.trim() || `Sign in to ${branding.companyName}`)
+    ? (branding?.loginTitle?.trim() || (branding?.companyName ? `Sign in to ${branding.companyName}` : "Sign in"))
     : isSignup
       ? "Create your account"
       : "Sign in to SnapServe";
 
   const subtitle = isPartnerGateway
-    ? (branding.loginSubtitle?.trim()
-      || `Use the email and password provided by ${branding.companyName}.`)
+    ? (branding?.loginSubtitle?.trim()
+      || (branding?.companyName
+        ? `Use the email and password provided by ${branding.companyName}.`
+        : "Use the email and password provided by your company."))
     : isSignup
       ? "Get started with your voice agents."
       : "Sign in to manage your voice agents.";
@@ -252,7 +254,7 @@ function SignInPage() {
       />
       <div className="relative z-[2] w-full max-w-[400px] mx-4 flex flex-col items-center text-center rounded-2xl border border-white/[0.08] bg-[#0f0f12]/90 backdrop-blur-xl p-8 shadow-[0_24px_80px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-500">
         <div className="flex flex-col items-center gap-4 mb-6">
-          {isPartnerGateway && branding.logoUrl ? (
+          {isPartnerGateway && branding?.logoUrl ? (
             <img
               src={branding.logoUrl}
               alt={branding.companyName}
@@ -260,7 +262,7 @@ function SignInPage() {
             />
           ) : isPartnerGateway ? (
             <div className="h-12 w-12 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-lg font-semibold">
-              {branding.companyName.charAt(0).toUpperCase()}
+              {(branding?.companyName || "W").charAt(0).toUpperCase()}
             </div>
           ) : (
             <div className="flex flex-col gap-[6px] w-[46px]">
@@ -275,7 +277,7 @@ function SignInPage() {
                 className="leading-none text-[15px] text-white font-semibold"
                 style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
               >
-                {branding.companyName}
+                {branding?.companyName || "Workspace"}
               </span>
             ) : (
               <span
@@ -341,7 +343,7 @@ function SignInPage() {
               {submitting ? "Signing in…" : "Sign in"}
             </button>
             <p className="text-[0.72rem] text-white/35 text-center leading-relaxed pt-1">
-              Need an account? Ask {branding.companyName} to create one for you.
+              Need an account? Ask {branding?.companyName || "your company"} to create one for you.
             </p>
           </form>
         ) : (
@@ -375,12 +377,14 @@ function SignInPage() {
 
         <p className="mt-4 text-[0.72rem] text-white/35 leading-relaxed">
           By continuing, you agree to our{" "}
-          {isPartnerGateway && branding.termsUrl ? (
+          {isPartnerGateway && branding?.termsUrl ? (
             <a href={branding.termsUrl} target="_blank" rel="noopener noreferrer" className="text-white/55 hover:text-white/80">Terms of Service</a>
+          ) : isPartnerGateway ? (
+            <span>Terms of Service</span>
           ) : (
             <Link href="/terms" className="text-white/55 hover:text-white/80">Terms of Service</Link>
           )}{" "}and{" "}
-          {isPartnerGateway && branding.privacyUrl ? (
+          {isPartnerGateway && branding?.privacyUrl ? (
             <a href={branding.privacyUrl} target="_blank" rel="noopener noreferrer" className="text-white/55 hover:text-white/80">Privacy Policy</a>
           ) : isPartnerGateway ? (
             <span>Privacy Policy</span>
