@@ -792,6 +792,20 @@
       "when": 1791600012000,
       "tag": "0112_whatsapp_calling",
       "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1791600013000,
+      "tag": "0113_partner_mail_domain",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1791600014000,
+      "tag": "0114_partner_white_label",
+      "breakpoints": true
     }
   ]
 }

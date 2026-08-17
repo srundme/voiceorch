@@ -14,7 +14,8 @@
  *  - PUT/DELETE  /partner/domain/slug         → subdomain {slug}.snapserve.ai
  *  - PUT/DELETE  /partner/domain/custom       → custom domain + DNS verify
  *  - POST        /partner/domain/custom/verify
- *  - GET  /public/partner-branding?host=      → public branding by Host (pre-login)
+ *  - GET  /public/partner-branding?host=      → public branding (partner-public.ts)
+ *  - GET  /public/partner-logos/:token        → public logo (partner-public.ts)
  *  - GET  /partner/clients                    → clients with balance/rate/month usage
  *  - POST /partner/clients                    → provision client (email + password)
  *  - PATCH /partner/clients/:clerkId          → set per-client rate and/or allowAgentEdit
@@ -27,7 +28,6 @@
  *  - GET  /partner/invites/preview?token=     → invite details for the accept page
  *  - POST /partner/invites/accept             → link the signed-in user to the partner
  *  - GET  /partner/earnings                   → spread earnings + transfer history
- *  - GET  /public/partner-logos/:token        → public logo (unguessable token)
  */
 
 import { Router } from "express";
@@ -45,17 +45,22 @@ import {
 } from "@workspace/db";
 import { and, desc, eq, gte, inArray, isNull, ne, sql, count } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { sendBrevoEmail } from "../services/brevo.js";
+import {
+  provisionPartnerMailDomain,
+  verifyPartnerMailDomain,
+  mailDomainFromEmail,
+  sendPartnerEmail,
+} from "../services/partner-mail.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { hashPassword } from "../lib/password.js";
 import {
+  customDomainDnsGuide,
   getPartnerCnameTarget,
   getPartnerSubdomainRoot,
   invalidatePartnerHostCache,
   newDomainVerifyToken,
   normalizeDomain,
   normalizeSlug,
-  resolvePartnerByHost,
   subdomainHostForSlug,
   validateDomain,
   validateSlug,
@@ -126,6 +131,30 @@ function partnerLoginBaseUrl(partner: {
   return (process.env["APP_BASE_URL"]?.replace(/\/$/, "") || getSelfBaseUrl());
 }
 
+function optionalHttpsUrl(raw: unknown, label: string): string | null | { error: string } {
+  if (raw === null || String(raw).trim() === "") return null;
+  const s = String(raw).trim();
+  if (s.length > 300) return { error: `${label} is too long` };
+  try {
+    const u = new URL(s);
+    if (u.protocol !== "https:" && u.protocol !== "http:") {
+      return { error: `${label} must be an http(s) URL` };
+    }
+    return s;
+  } catch {
+    return { error: `${label} must be a valid URL` };
+  }
+}
+
+function optionalSupportEmail(raw: unknown): string | null | { error: string } {
+  if (raw === null || String(raw).trim() === "") return null;
+  const s = String(raw).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) || s.length > 200) {
+    return { error: "Enter a valid support email" };
+  }
+  return s;
+}
+
 /** Require the signed-in user to be an ACTIVE partner; 403 otherwise. */
 async function requireActivePartner(req: any, res: any) {
   const partner = await getPartnerForUser(clerkIdOf(req));
@@ -193,18 +222,39 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
 
     const ownPartner = await getPartnerForUser(clerkId);
 
-    let branding: { companyName: string; logoUrl: string | null } | null = null;
+    let branding: {
+      companyName: string;
+      logoUrl: string | null;
+      supportEmail: string | null;
+      supportUrl: string | null;
+      docsUrl: string | null;
+      termsUrl: string | null;
+      privacyUrl: string | null;
+    } | null = null;
     if (me?.partnerId) {
       const [p] = await db
         .select({
           companyName: partnersTable.companyName,
           logoToken: partnersTable.logoToken,
           status: partnersTable.status,
+          supportEmail: partnersTable.supportEmail,
+          supportUrl: partnersTable.supportUrl,
+          docsUrl: partnersTable.docsUrl,
+          termsUrl: partnersTable.termsUrl,
+          privacyUrl: partnersTable.privacyUrl,
         })
         .from(partnersTable)
         .where(eq(partnersTable.id, me.partnerId));
       if (p && p.status === "active") {
-        branding = { companyName: p.companyName, logoUrl: logoPathFor(p) };
+        branding = {
+          companyName: p.companyName,
+          logoUrl: logoPathFor(p),
+          supportEmail: p.supportEmail ?? null,
+          supportUrl: p.supportUrl ?? null,
+          docsUrl: p.docsUrl ?? null,
+          termsUrl: p.termsUrl ?? null,
+          privacyUrl: p.privacyUrl ?? null,
+        };
       }
     }
 
@@ -298,6 +348,22 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       customDomainStatus: partner.customDomainStatus ?? "none",
       domainVerifyToken: partner.domainVerifyToken ?? null,
       cnameTarget: getPartnerCnameTarget(),
+      customDns: partner.customDomain
+        ? customDomainDnsGuide({
+            domain: partner.customDomain,
+            cnameTarget: getPartnerCnameTarget(),
+            verifyToken: partner.domainVerifyToken,
+          })
+        : null,
+      mailFromName: partner.mailFromName ?? null,
+      mailFromEmail: partner.mailFromEmail ?? null,
+      mailDomainStatus: partner.mailDomainStatus ?? "none",
+      mailDnsRecords: partner.mailDnsRecords ?? [],
+      supportEmail: partner.supportEmail ?? null,
+      supportUrl: partner.supportUrl ?? null,
+      docsUrl: partner.docsUrl ?? null,
+      termsUrl: partner.termsUrl ?? null,
+      privacyUrl: partner.privacyUrl ?? null,
       walletBalanceCents: partnerUser?.walletBalanceCents ?? 0,
       clientCount: Number(clientCountRow?.n ?? 0),
       pendingInvites: Number(pendingInvitesRow?.n ?? 0),
@@ -316,11 +382,19 @@ router.patch("/partner/me", requireAuth, async (req, res): Promise<void> => {
     const partner = await requireActivePartner(req, res);
     if (!partner) return;
 
-    const { companyName, defaultClientRateCentsPerMin, loginTitle, loginSubtitle } = (req.body ?? {}) as {
+    const {
+      companyName, defaultClientRateCentsPerMin, loginTitle, loginSubtitle,
+      supportEmail, supportUrl, docsUrl, termsUrl, privacyUrl,
+    } = (req.body ?? {}) as {
       companyName?: string;
       defaultClientRateCentsPerMin?: number;
       loginTitle?: string | null;
       loginSubtitle?: string | null;
+      supportEmail?: string | null;
+      supportUrl?: string | null;
+      docsUrl?: string | null;
+      termsUrl?: string | null;
+      privacyUrl?: string | null;
     };
 
     const set: Record<string, unknown> = {};
@@ -356,6 +430,22 @@ router.patch("/partner/me", requireAuth, async (req, res): Promise<void> => {
         set["loginSubtitle"] = String(loginSubtitle).trim().slice(0, 280);
       }
     }
+    if (supportEmail !== undefined) {
+      const v = optionalSupportEmail(supportEmail);
+      if (v && typeof v === "object" && "error" in v) { res.status(400).json(v); return; }
+      set["supportEmail"] = v;
+    }
+    for (const [key, raw, label] of [
+      ["supportUrl", supportUrl, "Support URL"],
+      ["docsUrl", docsUrl, "Docs URL"],
+      ["termsUrl", termsUrl, "Terms URL"],
+      ["privacyUrl", privacyUrl, "Privacy URL"],
+    ] as const) {
+      if (raw === undefined) continue;
+      const v = optionalHttpsUrl(raw, label);
+      if (v && typeof v === "object" && "error" in v) { res.status(400).json(v); return; }
+      set[key] = v;
+    }
     if (Object.keys(set).length === 0) {
       res.status(400).json({ error: "Nothing to update" });
       return;
@@ -371,9 +461,108 @@ router.patch("/partner/me", requireAuth, async (req, res): Promise<void> => {
       defaultClientRateCentsPerMin: updated!.defaultClientRateCentsPerMin,
       loginTitle: updated!.loginTitle ?? null,
       loginSubtitle: updated!.loginSubtitle ?? null,
+      supportEmail: updated!.supportEmail ?? null,
+      supportUrl: updated!.supportUrl ?? null,
+      docsUrl: updated!.docsUrl ?? null,
+      termsUrl: updated!.termsUrl ?? null,
+      privacyUrl: updated!.privacyUrl ?? null,
     });
   } catch (err) {
     req.log.error({ err }, "partner/me PATCH failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/* ─── Client email From domain (white-label) ───────────────────────────────── */
+
+router.put("/partner/mail", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+
+    const fromName = String((req.body as { fromName?: string })?.fromName ?? partner.companyName).trim().slice(0, 80);
+    const fromEmailRaw = String((req.body as { fromEmail?: string })?.fromEmail ?? "").trim();
+    if (!fromEmailRaw) {
+      res.status(400).json({ error: "From email is required, e.g. noreply@yourcompany.com" });
+      return;
+    }
+
+    const provisioned = await provisionPartnerMailDomain(fromName || partner.companyName, fromEmailRaw);
+    const [updated] = await db
+      .update(partnersTable)
+      .set({
+        mailFromName: fromName || partner.companyName,
+        mailFromEmail: provisioned.email,
+        mailDomainStatus: provisioned.status,
+        mailDnsRecords: provisioned.dnsRecords,
+        mailDomainVerifiedAt: provisioned.status === "verified" ? new Date() : null,
+      })
+      .where(eq(partnersTable.id, partner.id))
+      .returning();
+
+    res.json({
+      mailFromName: updated!.mailFromName,
+      mailFromEmail: updated!.mailFromEmail,
+      mailDomainStatus: updated!.mailDomainStatus,
+      mailDnsRecords: updated!.mailDnsRecords ?? [],
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not save sending domain";
+    req.log.warn({ err }, "partner/mail PUT failed");
+    res.status(400).json({ error: message });
+  }
+});
+
+router.post("/partner/mail/verify", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+    const domain = mailDomainFromEmail(partner.mailFromEmail ?? "");
+    if (!domain) {
+      res.status(400).json({ error: "Save a From address on your domain first" });
+      return;
+    }
+
+    const result = await verifyPartnerMailDomain(domain);
+    const [updated] = await db
+      .update(partnersTable)
+      .set({
+        mailDomainStatus: result.status,
+        mailDnsRecords: result.dnsRecords,
+        mailDomainVerifiedAt: result.status === "verified" ? new Date() : partner.mailDomainVerifiedAt,
+      })
+      .where(eq(partnersTable.id, partner.id))
+      .returning();
+
+    res.json({
+      mailFromName: updated!.mailFromName,
+      mailFromEmail: updated!.mailFromEmail,
+      mailDomainStatus: updated!.mailDomainStatus,
+      mailDnsRecords: updated!.mailDnsRecords ?? [],
+    });
+  } catch (err) {
+    req.log.error({ err }, "partner/mail verify failed");
+    res.status(500).json({ error: "Could not check DNS yet. Wait a minute and try again." });
+  }
+});
+
+router.delete("/partner/mail", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+    await db
+      .update(partnersTable)
+      .set({
+        mailFromName: null,
+        mailFromEmail: null,
+        mailDomainStatus: "none",
+        mailDnsRecords: null,
+        mailDomainVerifiedAt: null,
+      })
+      .where(eq(partnersTable.id, partner.id));
+    res.sendStatus(204);
+  } catch (err) {
+    req.log.error({ err }, "partner/mail DELETE failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -427,57 +616,6 @@ router.delete("/partner/logo", requireAuth, async (req, res): Promise<void> => {
     res.sendStatus(204);
   } catch (err) {
     req.log.error({ err }, "partner/logo DELETE failed");
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-/** Public: clients' dashboards load the partner logo from this URL. */
-router.get("/public/partner-logos/:token", async (req, res): Promise<void> => {
-  try {
-    const token = String((req.params as any).token ?? "");
-    if (!TOKEN_RE.test(token)) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    const [partner] = await db
-      .select({ logoData: partnersTable.logoData, logoMime: partnersTable.logoMime })
-      .from(partnersTable)
-      .where(eq(partnersTable.logoToken, token));
-    if (!partner?.logoData || !partner.logoMime) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    res.setHeader("Content-Type", partner.logoMime);
-    res.setHeader("Content-Disposition", "inline");
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Cache-Control", "public, max-age=3600");
-    res.send(partner.logoData);
-  } catch (err) {
-    req.log.error({ err }, "public partner logo failed");
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-/** Public: resolve partner branding from the browser Host (login / pre-auth). */
-router.get("/public/partner-branding", async (req, res): Promise<void> => {
-  try {
-    const hostRaw =
-      (typeof req.query["host"] === "string" && req.query["host"]) ||
-      (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() ||
-      req.hostname;
-    const brand = await resolvePartnerByHost(String(hostRaw ?? ""));
-    if (!brand) {
-      res.json({ branding: null, subdomainRoot: getPartnerSubdomainRoot(), cnameTarget: getPartnerCnameTarget() });
-      return;
-    }
-    res.setHeader("Cache-Control", "public, max-age=60");
-    res.json({
-      branding: brand,
-      subdomainRoot: getPartnerSubdomainRoot(),
-      cnameTarget: getPartnerCnameTarget(),
-    });
-  } catch (err) {
-    req.log.error({ err }, "public partner branding failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -561,16 +699,25 @@ router.put("/partner/domain/custom", requireAuth, async (req, res): Promise<void
       .returning();
 
     invalidatePartnerHostCache();
+    const dns = customDomainDnsGuide({
+      domain,
+      cnameTarget: getPartnerCnameTarget(),
+      verifyToken: token,
+    });
     res.json({
       customDomain: updated!.customDomain,
       customDomainStatus: updated!.customDomainStatus,
       domainVerifyToken: updated!.domainVerifyToken,
       cnameTarget: getPartnerCnameTarget(),
-      txtHost: `_snapserve-verify.${domain}`,
+      customDns: dns,
+      txtHost: dns.records.find((r) => r.type === "TXT")?.host ?? `_snapserve-verify.${dns.host}`,
       txtValue: `snapserve-verify=${token}`,
       instructions: {
-        cname: `Point a CNAME from ${domain} to ${getPartnerCnameTarget()}`,
-        txt: `Or add TXT at _snapserve-verify.${domain} = snapserve-verify=${token}`,
+        zone: dns.zone,
+        cname: dns.isApex
+          ? `Apex domains cannot use a CNAME. Add TXT Host=_snapserve-verify Value=snapserve-verify=${token}, then an ALIAS/ANAME to ${getPartnerCnameTarget()}`
+          : `In the ${dns.zone} DNS panel, add CNAME Host=${dns.host} Value=${getPartnerCnameTarget()}`,
+        txt: `Optional TXT Host=${dns.records.find((r) => r.type === "TXT")?.host ?? "_snapserve-verify"} Value=snapserve-verify=${token}`,
       },
     });
   } catch (err) {
@@ -779,7 +926,7 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
           partnerAllowAgentEdit: true,
           walletBalanceCents: 0,
           freeCreditsGranted: true,
-          onboardingCompleted: false,
+          onboardingCompleted: true,
         })
         .where(eq(usersTable.id, existing.id))
         .returning();
@@ -798,6 +945,7 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
           partnerId: partner.id,
           partnerRateCentsPerMin: rate,
           partnerAllowAgentEdit: true,
+          onboardingCompleted: true,
         })
         .returning();
     }
@@ -806,7 +954,8 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
     let emailSent = false;
     if (sendCredentials !== false) {
       try {
-        await sendBrevoEmail(
+        await sendPartnerEmail(
+          partner,
           cleanEmail,
           `Your ${partner.companyName} account is ready`,
           clientWelcomeEmailHtml({
@@ -816,7 +965,6 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
             password: pwd,
             loginUrl,
           }),
-          undefined,
           { emailType: "partner_client_credentials", toUserId: sub, toName: displayName },
         );
         emailSent = true;
@@ -1385,8 +1533,8 @@ function inviteEmailHtml(companyName: string, inviteUrl: string): string {
     <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px;">
       <h1 style="font-size:20px;margin:0 0 12px;">${companyName} invited you to their AI voice-agent platform</h1>
       <p style="color:#444;line-height:1.6;">
-        ${companyName} uses SnapServe AI to run AI voice agents and has invited you to join as a client.
-        You'll get your own account with agents, call logs and a prepaid wallet — managed in partnership with ${companyName}.
+        ${companyName} invited you to join their AI voice-agent workspace.
+        You'll get your own account with agents, call logs and a prepaid wallet — managed by ${companyName}.
       </p>
       <p style="margin:28px 0;">
         <a href="${inviteUrl}" style="background:#4f46e5;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;display:inline-block;">
@@ -1489,11 +1637,11 @@ router.post("/partner/invites", requireAuth, async (req, res): Promise<void> => 
     const inviteUrl = `${appBase}/app/partner-join?token=${token}`;
     let emailSent = true;
     try {
-      await sendBrevoEmail(
+      await sendPartnerEmail(
+        partner,
         cleanEmail,
-        `${partner.companyName} invited you to SnapServe AI`,
+        `${partner.companyName} invited you to join`,
         inviteEmailHtml(partner.companyName, inviteUrl),
-        undefined,
         { emailType: "partner_invite" },
       );
     } catch (emailErr) {
@@ -1659,6 +1807,7 @@ router.post("/partner/invites/accept", requireAuth, async (req, res): Promise<vo
           partnerId: partner.id,
           partnerRateCentsPerMin: rate,
           partnerAllowAgentEdit: true,
+          onboardingCompleted: true,
         })
         .where(and(eq(usersTable.id, me.id), isNull(usersTable.partnerId)))
         .returning({ id: usersTable.id });

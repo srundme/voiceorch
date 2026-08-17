@@ -58,7 +58,7 @@ import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, i
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { getCachedFillerPcm, setCachedFillerPcm } from "./fillerPcmCache.js";
-import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
+import { FILLER_SEQUENCE_ID, InterruptionManager, bargeInMinChars } from "./interruption-manager.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
@@ -982,6 +982,11 @@ export class OrchestrationPipeline implements VoiceSession {
   // by its own returning echo, even at a 1-word interruption threshold. Expires
   // before the first listen, so it can never block a real caller barge-in later.
   private greetingEchoHoldUntil = 0;
+  // True while greet() is still playing. Energy barge-in is muted for the whole
+  // opening (the 3s echo-hold cap is too short for a Hindi pitch — call 10544
+  // cut the greeting on streaming_energy). Word-count / semantic interrupts
+  // still work after greetingEchoHoldUntil so a real "wait" can cut in.
+  private greetingPlaybackActive = false;
   // Self-calibrating echo floor (RMS) for the streaming-STT energy barge-in path.
   // A rolling EMA of the inbound frame RMS measured WHILE the agent is playing but
   // NOT (yet) accumulating a barge-in — i.e. it tracks the carrier's returning-echo
@@ -2716,9 +2721,7 @@ export class OrchestrationPipeline implements VoiceSession {
                 const threshold = (planNumWords && planNumWords > 0)
                   ? planNumWords
                   : this.interruptionMgr.getWordsForInterruption();
-                const langPrefix = (this.currentLang || this.agent.language || "en").split(/[-_]/)[0]?.toLowerCase();
-                const isIndic = ["ta", "hi", "te", "kn", "ml", "mr", "bn", "gu"].includes(langPrefix ?? "");
-                const minChars = 4;
+                const minChars = bargeInMinChars(this.currentLang || this.agent.language);
                 // Energy corroboration (mirrors the final-transcript guard): on
                 // carrier legs our own TTS echoes back as a *garbled* interim that
                 // can carry enough words to trip word_count before any final lands
@@ -2995,11 +2998,11 @@ export class OrchestrationPipeline implements VoiceSession {
         // for the carrier echo of a multi-second opening line (call 772).
         logger.info({ callId: this.config.callId }, "Streaming STT: barge-in suppressed during echo grace");
       } else {
-        // Accumulate word count across streaming callbacks for this user turn and
-        // only fire barge-in once the wordsForInterruption threshold is reached,
-        // matching the behaviour of the energy-based path in batch STT mode.
+        // Peak word count across streaming callbacks for this user turn — do NOT
+        // add successive finals (call 10544: leftover "Okay"/"दरअसल" scraps summed
+        // past the threshold and cut the pitch). Match the interim Math.max path.
         const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
-        this.streamingBargeInWordCount += wordCount;
+        this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
         // Prefer the configured Stop Speaking Plan Min Words (UI-exposed) over the
         // non-UI wordsForInterruption default so lowering/raising Min Words actually
         // drives streaming-STT barge-in. Fall back to wordsForInterruption when no
@@ -3012,9 +3015,7 @@ export class OrchestrationPipeline implements VoiceSession {
         // whitespace tokens, so a single short word ("இங்கிலீஷ்ல", call 4834) must
         // not cut the agent — background speakers routinely produce these.
         const charCount = [...transcript.trim()].length;
-        const langPrefix = (this.currentLang || this.agent.language || "en").split(/[-_]/)[0]?.toLowerCase();
-        const isIndic = ["ta", "hi", "te", "kn", "ml", "mr", "bn", "gu"].includes(langPrefix ?? "");
-        const minChars = 4;
+        const minChars = bargeInMinChars(this.currentLang || this.agent.language);
         if (this.streamingBargeInWordCount >= threshold && charCount >= minChars) {
           this.triggerBargeIn("word_count", transcript, { speculative: true });
           logger.info(
@@ -3729,6 +3730,10 @@ export class OrchestrationPipeline implements VoiceSession {
     // Never energy-barge system recovery / identity lines — word_count was doing
     // that via interim; energy would recreate the call-2626 cascade.
     if (this.systemPlaybackActive) return;
+    // Opening greeting on carrier legs: energy self-echo / a second talker in
+    // the room must not kill the pitch (call 10544 streaming_energy at +3s).
+    // Semantic + word-count barge-in still apply after greetingEchoHoldUntil.
+    if (this.greetingPlaybackActive) return;
 
     // Streaming-STT carrier path (webcall has AEC; the batch path keeps its own
     // extended-hold protection). Only here do we measure RMS / self-calibrate.
@@ -4926,6 +4931,7 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       this._currentTurnPlayedSentences = [];
       this.isPlaying = true;
+      this.greetingPlaybackActive = true;
       const bootLatencyMs = Date.now() - (this.config.sessionCreatedAtMs ?? Date.now());
       logger.info(
         { callId: this.config.callId, bootLatencyMs, greetingLen: greeting.length },
@@ -4938,6 +4944,7 @@ export class OrchestrationPipeline implements VoiceSession {
       try {
         await this.playTextAsSentences(greeting, greetingEmotions);
       } finally {
+        this.greetingPlaybackActive = false;
         this.isPlaying = false;
         this.armTailEchoGrace();
       }
@@ -7856,7 +7863,8 @@ export class OrchestrationPipeline implements VoiceSession {
           `[INTERRUPTED — DO NOT RESTART] Your previous reply was cut mid-delivery. ` +
           `The caller already heard (possibly partial): "${heard}". ` +
           `Do NOT restart recording consent, greeting, self-intro, welcome, or sales pitch from the top. ` +
-          `Continue from the interrupted step, OR ask ONE short clarifying question about what they just said. ` +
+          `Do NOT say your name or company again. Do NOT re-ask a discovery question you already asked. ` +
+          `Answer what they just said, then continue from the interrupted step. ` +
           `Never ask "can you hear me" / "கேக்குதா" unless the caller explicitly said nothing at all.`;
         historyForLlm = [
           ...historyForLlm.slice(0, -1),

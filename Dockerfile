@@ -1,4 +1,4 @@
-# Redeploy trigger: hosted MCP OAuth + Dockerfile workspace deps for @snapserveai/mcp.
+# Redeploy trigger: KYC carrier alias + healthz commit (2026-08-17).
 FROM node:24-slim AS builder
 WORKDIR /workspace
 

@@ -54,6 +54,7 @@ const LLM_PRICING: Record<string, number> = {
   "cohere/command-r":      0.0030,
   "sarvam/sarvam-30b":  0.0020,
   "sarvam/sarvam-105b": 0.0040,
+  "sarvam/sarvam-105b-conversations": 0.0040,
   // Sarvam open-source /v2 pricing (approx blend from published ₹/1M rates).
   "sarvam/gemma4":      0.0035,
   "sarvam/glm5.2":      0.0120,

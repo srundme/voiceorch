@@ -5,23 +5,27 @@ description: External-API behavior for Sarvam's OpenAI-compatible chat endpoint 
 
 # Sarvam LLM (Chat Completions) API quirks
 
-Endpoint: `POST https://api.sarvam.ai/v1/chat/completions`, auth header
-`api-subscription-key` (also accepts `Authorization: Bearer`). OpenAI-compatible
-wire format. Current models: `sarvam-30b` (64K ctx, lower latency — best for
-voice) and `sarvam-105b` (128K ctx, higher quality). `sarvam-m` (24B) is
-deprecated/removed.
+Endpoint: `POST https://api.sarvam.ai/v1/chat/completions`. Auth: send both
+`api-subscription-key` and `Authorization: Bearer <key>` (docs list both).
+OpenAI-compatible wire format.
+
+**/v1 serves only** `sarvam-105b` (reasoning / agentic) and
+`sarvam-105b-conversations` (voice / dialogue). Open-source hosts (`gemma4`,
+`glm5.2`) use `POST /v2/chat/completions`.
 
 ## Hybrid Thinking mode is ON by default
-- Default `reasoning_effort` is `"low"` — thinking is enabled unless you turn it off.
+- Default `reasoning_effort` is **`"medium"`** (API reference 2026-08) — thinking
+  is enabled unless you turn it off. Older docs said `"low"`; treat medium as current.
 - When on, the model streams `delta.reasoning_content` (thinking) BEFORE
   `delta.content` (reply). Reasoning tokens are billed as completion tokens and
   add latency before the first spoken word.
 - **Trap:** with thinking on, a low `max_tokens` can be fully consumed by
   reasoning → `finish_reason:"length"` with empty `content`.
-- **For voice, disable it:** send `reasoning_effort: null` in the JSON body
-  (documented way; `null` is accepted, low 422 risk). String values
-  `low|medium|high` keep it on. Omitting the field leaves it ON.
-- **Why:** VoiceOrch is latency-sensitive; thinking chains hurt TTFT and cost.
+- **For voice (no tools), disable it:** send `reasoning_effort: null` in the JSON
+  body (documented way; `null` is accepted). String values `low|medium|high` keep
+  it on. **Omitting the field leaves it ON at medium.**
+- **For voice WITH tools:** bump to at least `"low"` — with effort null, Sarvam
+  ignores tools and stays conversational.
 - Never forward `reasoning_content` to TTS even if it appears — only speak `delta.content`.
 
 ## Usage is in the final streaming chunk
@@ -42,18 +46,20 @@ deprecated/removed.
   buffer itself.)
 
 ## Generation params — send only-when-defined
-- Documented body fields: `temperature` (0–2), `top_p` (0–1), `max_tokens`
-  (default 2048), `presence_penalty`/`frequency_penalty` (−2..2, default 0),
-  `seed` (int), `stop` (string or ≤4 strings), `wiki_grounding` (bool RAG),
-  `reasoning_effort` (low|medium|high|null), `messages`.
+- Documented body fields: `temperature` (0–2, default **0.2**), `top_p` (0–1,
+  default 1), `max_tokens` (default **2048**), `presence_penalty`/
+  `frequency_penalty` (−2..2, default 0), `seed` (int), `stop` (string or ≤4
+  strings), `wiki_grounding` (bool RAG), `reasoning_effort` (low|medium|high|
+  null — default **medium**), `messages`, `tools`, `tool_choice`,
+  `response_format`.
 - **Rule:** omit any param the agent hasn't explicitly set so Sarvam applies its
   own default. In particular, build `temperature` from the RAW DB value, NOT a
   coerced `?? 0.5` fallback, or you silently override Sarvam's 0.2 default.
 - **Why:** the orchestration `AgentConfig.temperature` is `?? 0.5`-coerced for
   legacy callers; reusing it for the request body changes model behavior for
   every agent that never picked a temperature.
-- `reasoning_effort` is the one field always sent (defaults to `null` for voice);
-  see the Hybrid Thinking section above.
+- `reasoning_effort` is the one field always sent on native /v1 models (defaults
+  to `null` for voice); see the Hybrid Thinking section above.
 - The adapter carries these via a nested `llmGenerationParams` on AgentConfig and
   is the ONLY adapter that consumes them; other providers ignore the 5th
   `createLLMAdapter` arg.
@@ -65,7 +71,8 @@ deprecated/removed.
 | low | ✅ sometimes | ✅ still confirms | Engages with tools but summarises + asks "is that ok?" before calling |
 | medium | ✅ more reliable | ⚠️ partially | Better instruction-following; still not 100% — open problem |
 
-Current code: auto-bump `null`→`medium` when `hasTools`, inject [TOOL USE — MANDATORY] numbered rules.
+Current code: auto-bump `null`→`low` when `hasTools` (both `sarvam-105b` and
+`sarvam-105b-conversations`), inject [TOOL GUIDANCE] numbered rules.
 Gemini/OpenAI unaffected (no thinking mode, tool_choice:auto works fine).
 **TODO: explore `tool_choice:"required"` or a post-response forced-call pattern for cases where medium still confirms.**
 
@@ -117,4 +124,4 @@ tool call one of three ways across calls:
 ## Other
 - Strict user/assistant alternation starting with a user turn — merge consecutive
   same-role turns and drop leading assistant turns before sending.
-- `temperature` defaults to 0.2 when reasoning disabled, 0.5 when enabled (range 0–2).
+- `temperature` defaults to 0.2 (API); older notes said 0.5 when reasoning enabled.

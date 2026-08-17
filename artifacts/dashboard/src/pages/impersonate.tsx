@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
-import { SnapServeLoader } from "@/components/logo";
+import { AppLoader } from "@/components/logo";
 
 export default function ImpersonatePage() {
   const { signIn } = useAuth();
@@ -43,5 +43,5 @@ export default function ImpersonatePage() {
     }
   }, []);
 
-  return <SnapServeLoader />;
+  return <AppLoader />;
 }

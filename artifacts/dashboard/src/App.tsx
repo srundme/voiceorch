@@ -13,7 +13,8 @@ import { ThemeSync } from "@/components/theme-sync";
 
 import { Layout } from "@/components/layout";
 import { recordInAppNavigation } from "@/lib/nav-history";
-import { SnapServeLoader } from "@/components/logo";
+import { AppLoader } from "@/components/logo";
+import { isDirectSnapServeHost, loadHostBrand, type HostBrand } from "@/lib/white-label";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 
 // ── Page imports ─────────────────────────────────────────────────────────────
@@ -92,6 +93,8 @@ import TeamPage             from "@/pages/team";
 import ImpersonatePage      from "@/pages/impersonate";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { initMetaPixel } from "@/lib/meta-pixel";
+import { usePartnerContext, usePartnerManagedWorkspace } from "@/hooks/use-partner";
+import { isBlockedForManagedClient } from "@/lib/managed-client-surface";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -145,14 +148,7 @@ function QueryClientCacheInvalidator() {
   return null;
 }
 
-interface PartnerLoginBrand {
-  partnerId: number;
-  companyName: string;
-  logoUrl: string | null;
-  loginTitle: string | null;
-  loginSubtitle: string | null;
-  authMode: "password";
-}
+type PartnerLoginBrand = HostBrand & { authMode?: "password" };
 
 function SignInPage() {
   const [location, navigate] = useLocation();
@@ -164,7 +160,7 @@ function SignInPage() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const isSignup = location.startsWith("/sign-up");
-  const isPartnerGateway = !!branding;
+  const isPartnerGateway = !isDirectSnapServeHost();
 
   useEffect(() => {
     const reason = consumeSignOutReason();
@@ -176,16 +172,10 @@ function SignInPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const host = window.location.host;
-        const res = await fetch(`/api/public/partner-branding?host=${encodeURIComponent(host)}`);
-        if (!res.ok) throw new Error("branding fetch failed");
-        const data = (await res.json()) as { branding: PartnerLoginBrand | null };
-        if (!cancelled) setBranding(data.branding ?? null);
-      } catch {
-        if (!cancelled) setBranding(null);
-      } finally {
-        if (!cancelled) setBrandingLoaded(true);
+      const brand = await loadHostBrand();
+      if (!cancelled) {
+        setBranding(brand);
+        setBrandingLoaded(true);
       }
     })();
     return () => { cancelled = true; };
@@ -227,14 +217,16 @@ function SignInPage() {
   }
 
   const title = isPartnerGateway
-    ? (branding.loginTitle?.trim() || `Sign in to ${branding.companyName}`)
+    ? (branding?.loginTitle?.trim() || (branding?.companyName ? `Sign in to ${branding.companyName}` : "Sign in"))
     : isSignup
       ? "Create your account"
       : "Sign in to SnapServe";
 
   const subtitle = isPartnerGateway
-    ? (branding.loginSubtitle?.trim()
-      || `Use the email and password provided by ${branding.companyName}.`)
+    ? (branding?.loginSubtitle?.trim()
+      || (branding?.companyName
+        ? `Use the email and password provided by ${branding.companyName}.`
+        : "Use the email and password provided by your company."))
     : isSignup
       ? "Get started with your voice agents."
       : "Sign in to manage your voice agents.";
@@ -242,7 +234,7 @@ function SignInPage() {
   if (!brandingLoaded) {
     return (
       <div className="min-h-[100dvh] w-full flex items-center justify-center bg-black">
-        <SnapServeLoader />
+        <AppLoader />
       </div>
     );
   }
@@ -262,12 +254,16 @@ function SignInPage() {
       />
       <div className="relative z-[2] w-full max-w-[400px] mx-4 flex flex-col items-center text-center rounded-2xl border border-white/[0.08] bg-[#0f0f12]/90 backdrop-blur-xl p-8 shadow-[0_24px_80px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-500">
         <div className="flex flex-col items-center gap-4 mb-6">
-          {isPartnerGateway && branding.logoUrl ? (
+          {isPartnerGateway && branding?.logoUrl ? (
             <img
               src={branding.logoUrl}
               alt={branding.companyName}
               className="h-12 w-12 rounded-xl object-contain bg-white/5 border border-white/10 p-1.5"
             />
+          ) : isPartnerGateway ? (
+            <div className="h-12 w-12 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-lg font-semibold">
+              {(branding?.companyName || "W").charAt(0).toUpperCase()}
+            </div>
           ) : (
             <div className="flex flex-col gap-[6px] w-[46px]">
               <div className="h-[10px] w-full rounded-full bg-white" />
@@ -281,7 +277,7 @@ function SignInPage() {
                 className="leading-none text-[15px] text-white font-semibold"
                 style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
               >
-                {branding.companyName}
+                {branding?.companyName || "Workspace"}
               </span>
             ) : (
               <span
@@ -347,7 +343,7 @@ function SignInPage() {
               {submitting ? "Signing in…" : "Sign in"}
             </button>
             <p className="text-[0.72rem] text-white/35 text-center leading-relaxed pt-1">
-              Need an account? Ask {branding.companyName} to create one for you.
+              Need an account? Ask {branding?.companyName || "your company"} to create one for you.
             </p>
           </form>
         ) : (
@@ -381,8 +377,20 @@ function SignInPage() {
 
         <p className="mt-4 text-[0.72rem] text-white/35 leading-relaxed">
           By continuing, you agree to our{" "}
-          <Link href="/terms" className="text-white/55 hover:text-white/80">Terms of Service</Link> and{" "}
-          <Link href="/privacy" className="text-white/55 hover:text-white/80">Privacy Policy</Link>.
+          {isPartnerGateway && branding?.termsUrl ? (
+            <a href={branding.termsUrl} target="_blank" rel="noopener noreferrer" className="text-white/55 hover:text-white/80">Terms of Service</a>
+          ) : isPartnerGateway ? (
+            <span>Terms of Service</span>
+          ) : (
+            <Link href="/terms" className="text-white/55 hover:text-white/80">Terms of Service</Link>
+          )}{" "}and{" "}
+          {isPartnerGateway && branding?.privacyUrl ? (
+            <a href={branding.privacyUrl} target="_blank" rel="noopener noreferrer" className="text-white/55 hover:text-white/80">Privacy Policy</a>
+          ) : isPartnerGateway ? (
+            <span>Privacy Policy</span>
+          ) : (
+            <Link href="/privacy" className="text-white/55 hover:text-white/80">Privacy Policy</Link>
+          )}.
         </p>
       </div>
     </div>
@@ -391,14 +399,14 @@ function SignInPage() {
 
 function HomeRedirect() {
   const { isLoaded, isSignedIn } = useAuth();
-  if (!isLoaded) return <SnapServeLoader />;
+  if (!isLoaded) return <AppLoader />;
   if (isSignedIn) return <Redirect to="/app" />;
   return <SignInPage />;
 }
 
 function AppRoot() {
   const { data: agents, isLoading } = useListAgents({});
-  if (isLoading) return <SnapServeLoader />;
+  if (isLoading) return <AppLoader />;
   const list = Array.isArray(agents) ? agents : (agents as any)?.agents ?? [];
   // Accounts with no agents land in the builder, not Vibe. Vibe stays available
   // from the "Build with AI" entry points, but it is opt-in rather than the
@@ -417,6 +425,8 @@ function TabRedirect({ to }: { to: string }) {
 function AppRoutes() {
   const [location] = useLocation();
   const { data: onboardingStatus, isLoading: onboardingLoading } = useGetOnboardingStatus();
+  const { data: partnerCtx, isLoading: partnerLoading } = usePartnerContext();
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
 
   // Restore a partner invite link stashed while the visitor was signed out.
   useEffect(() => {
@@ -431,14 +441,18 @@ function AppRoutes() {
     } catch { /* sessionStorage unavailable */ }
   }, []);
 
-  if (onboardingLoading) return <SnapServeLoader />;
+  if (onboardingLoading || partnerLoading) return <AppLoader />;
 
   const onOnboardingPage = location.startsWith("/app/onboarding");
   // Partner invite acceptance must survive the onboarding gate — a fresh
   // signup can accept the invite first, then complete onboarding.
   const onPartnerJoinPage = location.startsWith("/app/partner-join");
-  if (onboardingStatus?.completed === false && !onOnboardingPage && !onPartnerJoinPage) {
+  const skipOnboarding = partnerCtx?.isManagedClient === true;
+  if (!skipOnboarding && onboardingStatus?.completed === false && !onOnboardingPage && !onPartnerJoinPage) {
     return <Redirect to="/app/onboarding" />;
+  }
+  if (isManagedWorkspace && isBlockedForManagedClient(location)) {
+    return <Redirect to="/app/home" />;
   }
 
   return (
@@ -605,9 +619,15 @@ function SignedOutRedirect() {
   return <Redirect to="/" />;
 }
 
+function VibeRoute() {
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
+  if (isManagedWorkspace) return <Redirect to="/app/agents?create=1" />;
+  return <VibePage />;
+}
+
 function ProtectedApp() {
   const { isLoaded } = useAuth();
-  if (!isLoaded) return <SnapServeLoader />;
+  if (!isLoaded) return <AppLoader />;
   return (
     <>
       <ImpersonationBanner />
@@ -615,7 +635,7 @@ function ProtectedApp() {
         <Switch>
           {/* Full-screen pages — no sidebar layout */}
           <Route path="/app/onboarding" component={OnboardingPage} />
-          <Route path="/app/vibe" component={VibePage} />
+          <Route path="/app/vibe" component={VibeRoute} />
           {/* All other /app/* routes go through the onboarding gate + Layout */}
           <Route path="/app/*?" component={AppRoutes} />
         </Switch>
@@ -638,6 +658,27 @@ function NavHistoryTracker() {
     recordInAppNavigation();
   }, [location]);
   return null;
+}
+
+function SnapServeOnlyDocs() {
+  const { data: partnerCtx } = usePartnerContext();
+  if (!isDirectSnapServeHost() || partnerCtx?.isManagedClient) return <Redirect to="/" />;
+  return <DocsPage />;
+}
+
+function SnapServeOnlyLegal({ kind }: { kind: "terms" | "privacy" }) {
+  const [, navigate] = useLocation();
+  const Page = kind === "terms" ? TermsPage : PrivacyPage;
+  useEffect(() => {
+    if (isDirectSnapServeHost()) return;
+    void loadHostBrand().then((brand) => {
+      const dest = kind === "terms" ? brand?.termsUrl : brand?.privacyUrl;
+      if (dest) window.location.replace(dest);
+      else navigate("/", { replace: true });
+    });
+  }, [kind, navigate]);
+  if (!isDirectSnapServeHost()) return <AppLoader />;
+  return <Page />;
 }
 
 function Router() {
@@ -663,11 +704,11 @@ function Router() {
           <Route path="/events/judge/:token" component={JudgePortalPage} />
           <Route path="/events/certificates/:code/verify" component={CertificateVerifyPage} />
           <Route path="/events/:slug" component={PublicEventPage} />
-          <Route path="/docs" component={DocsPage} />
-          <Route path="/docs/api-reference/:op" component={DocsPage} />
-          <Route path="/docs/:section" component={DocsPage} />
-          <Route path="/privacy" component={PrivacyPage} />
-          <Route path="/terms" component={TermsPage} />
+          <Route path="/docs" component={SnapServeOnlyDocs} />
+          <Route path="/docs/api-reference/:op" component={SnapServeOnlyDocs} />
+          <Route path="/docs/:section" component={SnapServeOnlyDocs} />
+          <Route path="/privacy">{() => <SnapServeOnlyLegal kind="privacy" />}</Route>
+          <Route path="/terms">{() => <SnapServeOnlyLegal kind="terms" />}</Route>
           <Route component={NotFound} />
         </Switch>
       </QueryClientProvider>

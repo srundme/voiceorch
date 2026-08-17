@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Tex Gyre Heros";
+        src: local("Tex Gyre Heros"), local("TeXGyreHeros"), local("Helvetica Neue"), local("Helvetica");
+        font-weight: 400 700;
+        font-style: normal;
+      }
+
+      :root {
+        --bg: #050505;
+        --char: #18181b;
+        --ti: #d4d4d8;
+        --white: #ffffff;
+      }
+
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+
+      html, body {
+        width: 1080px;
+        height: 1080px;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--white);
+      }
+
+      body {
+        font-family: "Inter", sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .brand { font-family: "Tex Gyre Heros", "Inter", sans-serif; }
+
+      #root {
+        position: relative;
+        width: 1080px;
+        height: 1080px;
+        overflow: hidden;
+        isolation: isolate;
+        background: var(--bg);
+      }
+
+      .spot {
+        position: absolute;
+        left: 120px;
+        top: 60px;
+        width: 840px;
+        height: 840px;
+        z-index: -5;
+        pointer-events: none;
+        background: radial-gradient(circle, rgba(255,255,255,0.09) 0%, transparent 64%);
+      }
+
+      .grid {
+        position: absolute;
+        inset: 0;
+        z-index: -4;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+        background-size: 48px 48px;
+      }
+
+      .grain {
+        position: absolute;
+        inset: 0;
+        z-index: 70;
+        pointer-events: none;
+        opacity: 0.14;
+        background-image: radial-gradient(circle, rgba(255,255,255,0.3) 0.55px, transparent 0.7px);
+        background-size: 3px 3px;
+      }
+
+      .vignette {
+        position: absolute;
+        inset: 0;
+        z-index: 80;
+        box-shadow: inset 0 0 160px 48px #000;
+        pointer-events: none;
+      }
+
+      section.clip, #world.clip { position: absolute; inset: 0; }
+      .scene-inner, .stack { position: absolute; inset: 0; }
+
+      .glass {
+        background: linear-gradient(180deg, #2a2a2e 0%, #18181b 100%);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 28px 70px rgba(0, 0, 0, 0.55);
+      }
+
+      #iso {
+        position: absolute;
+        inset: 0;
+        perspective: 1600px;
+        perspective-origin: 50% 42%;
+      }
+      #iso-rig {
+        position: absolute;
+        left: 90px;
+        top: 250px;
+        width: 900px;
+        height: 420px;
+        transform-style: preserve-3d;
+      }
+      .tile {
+        position: absolute;
+        width: 240px;
+        height: 280px;
+        border-radius: 32px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+      }
+      .tile img { width: 88px; height: 88px; display: block; }
+      .tile .name {
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        color: var(--ti);
+      }
+      #tile-meet { left: 20px; top: 50px; }
+      #tile-zoom { left: 330px; top: 0; }
+      #tile-teams { left: 640px; top: 60px; }
+
+      #core {
+        position: absolute;
+        left: 360px;
+        top: 300px;
+        width: 360px;
+        height: 360px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 38% 32%, #3f3f46 0%, #18181b 68%);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        box-shadow: 0 0 90px rgba(161, 161, 170, 0.28);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #core img { width: 168px; height: 168px; display: block; }
+
+      #toast {
+        position: absolute;
+        left: 560px;
+        top: 56px;
+        width: 460px;
+        height: 72px;
+        border-radius: 18px;
+        display: flex;
+        align-items: center;
+        padding: 0 22px;
+        gap: 14px;
+        font-size: 20px;
+        font-weight: 650;
+      }
+      #toast img { width: 28px; height: 28px; display: block; }
+
+      .line {
+        position: absolute;
+        left: 56px;
+        width: 968px;
+        text-align: center;
+        font-size: 40px;
+        font-weight: 800;
+        letter-spacing: -1px;
+        line-height: 1.15;
+      }
+      #k1, #k2 { top: 120px; }
+      #k3, #k4, #k5 { top: 820px; }
+      .line .hi { color: #ffffff; }
+      .line .lo { color: var(--ti); }
+
+      #deck {
+        position: absolute;
+        left: 80px;
+        top: 180px;
+        width: 920px;
+        height: 560px;
+        border-radius: 32px;
+        overflow: hidden;
+      }
+      .slide {
+        position: absolute;
+        left: 40px;
+        top: 36px;
+        width: 840px;
+        height: 400px;
+        border-radius: 24px;
+        background: #101012;
+        border: 1px solid rgba(255,255,255,0.08);
+        box-shadow: 0 18px 40px rgba(0,0,0,0.45);
+        padding: 36px 40px;
+      }
+      .slide .kicker {
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        color: var(--ti);
+      }
+      .slide .num {
+        margin-top: 12px;
+        font-size: 96px;
+        font-weight: 800;
+        letter-spacing: -3px;
+        line-height: 1;
+      }
+      .bar {
+        margin-top: 18px;
+        height: 16px;
+        border-radius: 8px;
+        background: #3f3f46;
+      }
+      .bar.w2 { width: 74%; }
+      .bar.w3 { width: 58%; }
+      .bar.w4 { width: 86%; }
+
+      #eq {
+        position: absolute;
+        left: 70px;
+        top: 250px;
+        width: 420px;
+        height: 420px;
+        border-radius: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      #eq b, #end-wave b {
+        display: block;
+        width: 10px;
+        height: 24px;
+        border-radius: 5px;
+        background: #d4d4d8;
+        transform-origin: center center;
+      }
+
+      #live {
+        position: absolute;
+        left: 530px;
+        top: 230px;
+        width: 480px;
+        height: 460px;
+        border-radius: 32px;
+        overflow: hidden;
+      }
+      #live .slide {
+        left: 24px;
+        top: 24px;
+        width: 432px;
+        height: 412px;
+        padding: 28px 28px;
+      }
+      #live .num { font-size: 72px; }
+
+      .end-mark {
+        position: absolute;
+        left: 410px;
+        top: 210px;
+        width: 260px;
+        height: 260px;
+      }
+      .end-mark img { width: 100%; height: 100%; display: block; }
+      .end-word {
+        position: absolute;
+        left: 0;
+        top: 500px;
+        width: 1080px;
+        text-align: center;
+        font-size: 58px;
+        letter-spacing: -1.5px;
+      }
+      .end-word b { font-weight: 700; }
+      .end-word span { font-weight: 400; }
+      .end-word i {
+        font-style: normal;
+        font-family: "Inter", sans-serif;
+        font-weight: 650;
+      }
+      .end-tag {
+        position: absolute;
+        left: 70px;
+        top: 590px;
+        width: 940px;
+        text-align: center;
+        font-size: 26px;
+        font-weight: 600;
+        color: var(--ti);
+      }
+
+      #end-wave {
+        position: absolute;
+        left: 80px;
+        top: 240px;
+        width: 920px;
+        height: 150px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="25" data-width="1080" data-height="1080">
+      <div class="spot" data-layout-allow-overflow></div>
+      <div class="grid"></div>
+
+      <audio id="music" class="clip" data-start="0" data-duration="25" data-track-index="0" data-volume="0.18" src="assets/music/happy-beats-business-moves-vol-12-by-ende-dot-app.mp3"></audio>
+      <audio id="sfx-in" class="clip" data-start="0.2" data-duration="0.4" data-track-index="8" data-volume="0.24" src="assets/sfx/card-slide-1.ogg"></audio>
+      <audio id="sfx-merge" class="clip" data-start="5.15" data-duration="0.12" data-track-index="9" data-volume="0.28" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="sfx-toast" class="clip" data-start="6.2" data-duration="0.18" data-track-index="10" data-volume="0.26" src="assets/sfx/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx-flip" class="clip" data-start="12.35" data-duration="0.5" data-track-index="11" data-volume="0.26" src="assets/sfx/switch_004.ogg"></audio>
+      <audio id="sfx-end" class="clip" data-start="20.2" data-duration="1.48" data-track-index="12" data-volume="0.28" src="assets/sfx/impactBell_heavy_000.ogg"></audio>
+
+      <div id="world" class="clip" data-start="0" data-duration="25" data-track-index="2"></div>
+
+      <section id="film" class="clip" data-start="0" data-duration="25" data-track-index="1">
+        <div id="stage" class="scene-inner">
+          <div id="iso" data-layout-allow-overflow>
+            <div id="iso-rig" data-layout-allow-overflow>
+              <div id="tile-meet" class="tile glass" data-layout-allow-overflow>
+                <img src="assets/brand/meet-mono.svg" alt="" />
+                <div class="name">MEET</div>
+              </div>
+              <div id="tile-zoom" class="tile glass" data-layout-allow-overflow>
+                <img src="assets/brand/zoom-mono.svg" alt="" />
+                <div class="name">ZOOM</div>
+              </div>
+              <div id="tile-teams" class="tile glass" data-layout-allow-overflow>
+                <img src="assets/brand/teams-mono.svg" alt="" />
+                <div class="name">TEAMS</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="core"><img src="assets/brand/snapserve-agent-icon-core.svg" alt="" /></div>
+          <div id="toast" class="glass">
+            <img src="assets/brand/snapserve-mark-chrome.svg" alt="" />
+            SnapServe AI joined the call.
+          </div>
+
+          <div id="k1" class="line"><span class="hi">Stuck presenting</span> <span class="lo">manually?</span></div>
+          <div id="k2" class="line"><span class="hi">3 Platforms.</span> <span class="lo">One AI Solution.</span></div>
+          <div id="k3" class="line"><span class="hi">SnapServe AI</span> <span class="lo">joins GMeet, Zoom &amp; Teams.</span></div>
+          <div id="k4" class="line"><span class="hi">Presents</span> <span class="lo">slide decks &amp; documents live.</span></div>
+          <div id="k5" class="line"><span class="hi">Speaks naturally</span> <span class="lo">&amp; answers questions live.</span></div>
+
+          <div id="deck" class="glass">
+            <div id="slide-a" class="slide" data-layout-allow-overlap>
+              <div class="kicker">DECK</div>
+              <div class="num">03</div>
+              <div class="bar w2"></div>
+              <div class="bar w3"></div>
+              <div class="bar w4"></div>
+            </div>
+            <div id="slide-b" class="slide" data-layout-allow-overlap>
+              <div class="kicker">DECK</div>
+              <div class="num">04</div>
+              <div class="bar w4"></div>
+              <div class="bar w2"></div>
+              <div class="bar w3"></div>
+            </div>
+          </div>
+
+          <div id="eq" class="glass" data-layout-allow-overlap>
+            <b class="qb"></b><b class="qb"></b><b class="qb"></b><b class="qb"></b>
+            <b class="qb"></b><b class="qb"></b><b class="qb"></b><b class="qb"></b>
+            <b class="qb"></b><b class="qb"></b><b class="qb"></b><b class="qb"></b>
+            <b class="qb"></b><b class="qb"></b><b class="qb"></b><b class="qb"></b>
+          </div>
+          <div id="live" class="glass">
+            <div id="slide-c" class="slide">
+              <div class="kicker">LIVE</div>
+              <div class="num">05</div>
+              <div class="bar w3"></div>
+              <div class="bar w4"></div>
+              <div class="bar w2"></div>
+            </div>
+          </div>
+
+          <div id="end-wave" data-layout-allow-overlap>
+            <b class="ew"></b><b class="ew"></b><b class="ew"></b><b class="ew"></b><b class="ew"></b>
+            <b class="ew"></b><b class="ew"></b><b class="ew"></b><b class="ew"></b><b class="ew"></b>
+            <b class="ew"></b><b class="ew"></b><b class="ew"></b><b class="ew"></b><b class="ew"></b>
+            <b class="ew"></b><b class="ew"></b><b class="ew"></b><b class="ew"></b><b class="ew"></b>
+          </div>
+          <div id="end-mark" class="end-mark" data-layout-allow-overlap><img src="assets/brand/snapserve-mark-end.svg" alt="" /></div>
+          <div id="end-word" class="end-word brand"><b>Snap</b><span>Serve</span> <i>AI</i></div>
+          <div id="end-tag" class="end-tag">Your Autonomous AI Presenter | Try SnapServe AI</div>
+        </div>
+      </section>
+
+      <div class="grain"></div>
+      <div class="vignette"></div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      gsap.set("#iso-rig", { rotationX: 56, rotationZ: -30, y: 10 });
+      gsap.set(["#tile-meet", "#tile-zoom", "#tile-teams"], { opacity: 0, scale: 0.82 });
+      gsap.set("#core", { opacity: 0, scale: 0.28 });
+      gsap.set("#toast", { opacity: 0, x: 36 });
+      gsap.set(["#k1", "#k2", "#k3", "#k4", "#k5"], { opacity: 0, y: 12 });
+      gsap.set("#deck", { opacity: 0, scale: 0.86, y: 24 });
+      gsap.set("#slide-b", { opacity: 0, x: 48 });
+      gsap.set(["#eq", "#live"], { opacity: 0, scale: 0.88, y: 16 });
+      gsap.set(["#end-wave", "#end-mark", "#end-word", "#end-tag"], { opacity: 0 });
+
+      tl.from(".spot", { opacity: 0, duration: 0.8, ease: "power2.out" }, 0);
+      tl.from(".grid", { opacity: 0, duration: 0.7, ease: "power2.out" }, 0.06);
+      tl.to("#tile-meet", { opacity: 1, scale: 1, duration: 0.5, ease: "power3.out" }, 0.22);
+      tl.to("#tile-zoom", { opacity: 1, scale: 1, duration: 0.5, ease: "power3.out" }, 0.34);
+      tl.to("#tile-teams", { opacity: 1, scale: 1, duration: 0.5, ease: "power3.out" }, 0.46);
+      tl.to("#iso-rig", { x: 70, rotationZ: -22, duration: 4.6, ease: "sine.inOut" }, 0.3);
+      tl.to("#k1", { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 0.55);
+      tl.to("#k1", { opacity: 0, y: -12, duration: 0.24, ease: "power2.in" }, 2.35);
+      tl.set("#k1", { opacity: 0 }, 2.6);
+      tl.to("#k2", { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 2.58);
+
+      tl.to("#k2", { opacity: 0, y: -10, duration: 0.2, ease: "power2.in" }, 4.85);
+      tl.set("#k2", { opacity: 0 }, 5.08);
+      tl.to("#tile-meet", { x: 310, y: -40, scale: 0.28, opacity: 0, duration: 0.55, ease: "power3.in" }, 5.05);
+      tl.to("#tile-zoom", { scale: 0.22, opacity: 0, duration: 0.5, ease: "power3.in" }, 5.1);
+      tl.to("#tile-teams", { x: -310, y: -50, scale: 0.28, opacity: 0, duration: 0.55, ease: "power3.in" }, 5.05);
+      tl.set(["#tile-meet", "#tile-zoom", "#tile-teams", "#iso"], { opacity: 0 }, 5.62);
+      tl.to("#core", { opacity: 1, scale: 1, duration: 0.55, ease: "back.out(1.45)" }, 5.28);
+      tl.to("#core", { scale: 1.06, duration: 0.7, yoyo: true, repeat: 3, ease: "sine.inOut" }, 5.9);
+      tl.to("#toast", { opacity: 1, x: 0, duration: 0.38, ease: "power3.out" }, 6.15);
+      tl.to("#k3", { opacity: 1, y: 0, duration: 0.36, ease: "power3.out" }, 6.35);
+
+      tl.to("#toast", { opacity: 0, y: -8, duration: 0.2, ease: "power2.in" }, 9.55);
+      tl.to("#k3", { opacity: 0, y: -10, duration: 0.2, ease: "power2.in" }, 9.55);
+      tl.to("#core", { scale: 1.7, opacity: 0, duration: 0.38, ease: "power2.in", overwrite: "auto" }, 9.6);
+      tl.set(["#core", "#toast", "#k3"], { opacity: 0 }, 10.0);
+
+      tl.to("#deck", { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: "power3.out" }, 10.02);
+      tl.to("#k4", { opacity: 1, y: 0, duration: 0.34, ease: "power3.out" }, 10.35);
+      tl.to("#slide-a", { x: -36, opacity: 0, duration: 0.28, ease: "power2.in" }, 12.32);
+      tl.to("#slide-b", { x: 0, opacity: 1, duration: 0.32, ease: "power3.out" }, 12.36);
+
+      tl.to("#deck", { opacity: 0, scale: 0.92, y: -18, duration: 0.26, ease: "power2.in" }, 14.7);
+      tl.to("#k4", { opacity: 0, y: -8, duration: 0.2, ease: "power2.in" }, 14.7);
+      tl.set(["#deck", "#k4"], { opacity: 0 }, 14.98);
+
+      tl.to("#eq", { opacity: 1, scale: 1, y: 0, duration: 0.42, ease: "power3.out" }, 15.02);
+      tl.to("#live", { opacity: 1, scale: 1, y: 0, duration: 0.42, ease: "power3.out" }, 15.16);
+      tl.to("#k5", { opacity: 1, y: 0, duration: 0.32, ease: "power3.out" }, 15.35);
+      document.querySelectorAll(".qb").forEach((bar, i) => {
+        const h = 28 + ((i * 37) % 110);
+        gsap.set(bar, { height: h });
+        tl.to(bar, { scaleY: 0.35 + ((i * 17) % 60) / 100, duration: 0.22, yoyo: true, repeat: 16, ease: "sine.inOut" }, 15.1 + (i % 5) * 0.03);
+      });
+
+      tl.to(["#eq", "#live", "#k5"], { opacity: 0, scale: 0.9, y: -14, duration: 0.26, ease: "power2.in" }, 19.72);
+      tl.set(["#eq", "#live", "#k5"], { opacity: 0 }, 20.0);
+
+      tl.to("#end-wave", { opacity: 1, duration: 0.3 }, 20.08);
+      document.querySelectorAll(".ew").forEach((bar, i) => {
+        const h = 22 + ((i * 41) % 96);
+        gsap.set(bar, { height: h });
+        tl.to(bar, { scaleY: 0.35 + ((i * 13) % 60) / 100, duration: 0.22, yoyo: true, repeat: 16, ease: "sine.inOut" }, 20.1 + (i % 6) * 0.03);
+      });
+      tl.fromTo("#end-mark", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.35)" }, 20.28);
+      tl.fromTo("#end-word", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.32, ease: "power3.out" }, 20.62);
+      tl.fromTo("#end-tag", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" }, 20.88);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

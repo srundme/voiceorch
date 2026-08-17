@@ -41,6 +41,9 @@ import AmbientSoundsPage from "@/pages/ambient-sounds";
 import AuditLogsPage from "@/pages/audit-logs";
 import DeploymentsPage from "@/pages/deployments";
 import EmailsPage from "@/pages/emails";
+import AnalyticsHub from "@/pages/hubs/analytics";
+import MoneyHub from "@/pages/hubs/money";
+import ControlHub from "@/pages/hubs/control";
 
 import UsageOverviewPage from "@/pages/usage/overview";
 import ServicePage from "@/pages/usage/service";
@@ -90,6 +93,9 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <ProtectedRoute path="/" component={Overview} />
+      <ProtectedRoute path="/analytics" component={AnalyticsHub} />
+      <ProtectedRoute path="/money" component={MoneyHub} />
+      <ProtectedRoute path="/control" component={ControlHub} />
       <ProtectedRoute path="/call-analytics" component={CallAnalyticsPage} />
       <ProtectedRoute path="/users" component={UsersList} />
       <ProtectedRoute path="/partners" component={PartnersPage} />

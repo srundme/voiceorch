@@ -13,7 +13,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Handshake, Users, UserPlus, Wallet, TrendingUp, Clock, Mail,
-  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2, Globe, Link2, CheckCircle2,
+  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2, Globe, Link2, CheckCircle2, Copy, LifeBuoy,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -35,6 +35,21 @@ interface PartnerMe {
   customDomainStatus: "none" | "pending" | "active" | "failed";
   domainVerifyToken: string | null;
   cnameTarget: string;
+  customDns?: {
+    zone: string;
+    host: string;
+    isApex: boolean;
+    records: Array<{ type: "CNAME" | "TXT"; host: string; value: string; required: boolean; purpose: string }>;
+  } | null;
+  mailFromName: string | null;
+  mailFromEmail: string | null;
+  mailDomainStatus: "none" | "pending" | "verified" | "failed";
+  mailDnsRecords: Array<{ key: string; host: string; type: string; value: string; ok: boolean }>;
+  supportEmail: string | null;
+  supportUrl: string | null;
+  docsUrl: string | null;
+  termsUrl: string | null;
+  privacyUrl: string | null;
   walletBalanceCents: number;
   clientCount: number;
   pendingInvites: number;
@@ -87,6 +102,151 @@ function parseRupees(text: string): number | null {
   const v = Number.parseFloat(text);
   if (!Number.isFinite(v) || v < 0) return null;
   return Math.round(v * 100);
+}
+
+/** DNS panels want Host relative to the zone, not the full hostname. */
+function splitCustomDomain(fqdn: string): { host: string; zone: string } {
+  const parts = fqdn.toLowerCase().replace(/\.$/, "").split(".").filter(Boolean);
+  if (parts.length <= 2) return { host: "@", zone: fqdn };
+  return { host: parts.slice(0, -2).join("."), zone: parts.slice(-2).join(".") };
+}
+
+function DnsCopyCell({ value }: { value: string }) {
+  const { toast } = useToast();
+  return (
+    <button
+      type="button"
+      className="inline-flex items-start gap-1 text-left font-mono break-all hover:underline"
+      onClick={() => {
+        void navigator.clipboard.writeText(value);
+        toast({ title: "Copied" });
+      }}
+    >
+      <Copy className="h-3 w-3 mt-0.5 shrink-0" />
+      {value}
+    </button>
+  );
+}
+
+function CustomDomainDnsCard({
+  domain,
+  cnameTarget,
+  verifyToken,
+  dns,
+  status,
+  verifying,
+  removing,
+  onVerify,
+  onRemove,
+}: {
+  domain: string;
+  cnameTarget: string;
+  verifyToken: string | null;
+  dns: PartnerMe["customDns"];
+  status: PartnerMe["customDomainStatus"];
+  verifying: boolean;
+  removing: boolean;
+  onVerify: () => void;
+  onRemove: () => void;
+}) {
+  const split = splitCustomDomain(domain);
+  const zone = dns?.zone ?? split.zone;
+  const host = dns?.host ?? split.host;
+  const isApex = dns?.isApex ?? host === "@";
+  const records = dns?.records ?? [
+    ...(!isApex
+      ? [{ type: "CNAME" as const, host, value: cnameTarget, required: true, purpose: "Sends visitors to your branded login" }]
+      : []),
+    ...(verifyToken
+      ? [{
+          type: "TXT" as const,
+          host: isApex ? "_snapserve-verify" : `_snapserve-verify.${host}`,
+          value: `snapserve-verify=${verifyToken}`,
+          required: isApex,
+          purpose: isApex ? "Proves you own the domain" : "Optional if the CNAME is already live",
+        }]
+      : []),
+  ];
+
+  return (
+    <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-3 text-[11px] text-muted-foreground">
+      <div className="space-y-1">
+        <p className="font-medium text-foreground">Add these records in DNS for <span className="font-mono">{zone}</span></p>
+        <p>
+          Open your domain registrar (GoDaddy, Cloudflare, Namecheap, Google Domains, etc.) and edit DNS for{" "}
+          <span className="font-mono text-foreground">{zone}</span>. Put only the Host column in the Host/Name field — not the full website address.
+        </p>
+      </div>
+      <div className="overflow-x-auto rounded-md border border-border bg-background">
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr className="text-left text-muted-foreground border-b border-border">
+              <th className="px-2 py-1.5 font-medium">Type</th>
+              <th className="px-2 py-1.5 font-medium">Host</th>
+              <th className="px-2 py-1.5 font-medium">Value / Points to</th>
+              <th className="px-2 py-1.5 font-medium">Need this?</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((rec) => (
+              <tr key={`${rec.type}-${rec.host}`} className="border-b border-border/60 last:border-0 align-top">
+                <td className="px-2 py-1.5 font-mono text-foreground">{rec.type}</td>
+                <td className="px-2 py-1.5 text-foreground"><DnsCopyCell value={rec.host} /></td>
+                <td className="px-2 py-1.5 text-foreground"><DnsCopyCell value={rec.value} /></td>
+                <td className="px-2 py-1.5">
+                  {rec.required ? <span className="text-foreground font-medium">Required</span> : "Optional"}
+                  <span className="block text-[10px] leading-snug mt-0.5">{rec.purpose}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <ul className="list-disc pl-4 space-y-1 leading-relaxed">
+        <li>
+          Host is <span className="font-mono text-foreground">{host}</span>
+          {host !== "@" && <> — never <span className="font-mono">{domain}</span></>}.
+        </li>
+        {!isApex && (
+          <li>Delete any A or AAAA record on that same Host first. A CNAME cannot share the name.</li>
+        )}
+        {isApex && (
+          <li>
+            Root domains cannot use a CNAME. Add the TXT row, then an ALIAS / ANAME / flattened CNAME to{" "}
+            <span className="font-mono text-foreground">{cnameTarget}</span> if your DNS host supports it.
+          </li>
+        )}
+        <li>Cloudflare: Proxy status must be DNS only (grey cloud), not Proxied.</li>
+        <li>TTL can stay Auto or 300. Wait a few minutes, then click Verify DNS.</li>
+        <li>
+          Verify means this hostname has an address on the public internet — not only that a CNAME/TXT row exists.
+          If the browser still says NXDOMAIN, the target <span className="font-mono text-foreground">{cnameTarget}</span> is not live yet.
+        </li>
+      </ul>
+      <div className="flex flex-wrap gap-2 pt-1">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs gap-1"
+          disabled={verifying || status === "active"}
+          onClick={onVerify}
+        >
+          {status === "active"
+            ? <><CheckCircle2 className="h-3 w-3" /> Verified</>
+            : verifying ? "Checking DNS…" : "Verify DNS"}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 text-xs text-muted-foreground"
+          disabled={removing}
+          onClick={onRemove}
+        >
+          Remove
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function StatCard({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
@@ -669,6 +829,13 @@ function SettingsTab({ me }: { me: PartnerMe }) {
   const [uploading, setUploading] = useState(false);
   const [slugDraft, setSlugDraft] = useState(me.slug ?? "");
   const [customDraft, setCustomDraft] = useState(me.customDomain ?? "");
+  const [mailName, setMailName] = useState(me.mailFromName ?? me.companyName);
+  const [mailEmail, setMailEmail] = useState(me.mailFromEmail ?? "");
+  const [supportEmail, setSupportEmail] = useState(me.supportEmail ?? "");
+  const [supportUrl, setSupportUrl] = useState(me.supportUrl ?? "");
+  const [docsUrl, setDocsUrl] = useState(me.docsUrl ?? "");
+  const [termsUrl, setTermsUrl] = useState(me.termsUrl ?? "");
+  const [privacyUrl, setPrivacyUrl] = useState(me.privacyUrl ?? "");
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["partner-me"] });
@@ -684,6 +851,11 @@ function SettingsTab({ me }: { me: PartnerMe }) {
           companyName: companyName.trim(),
           loginTitle: loginTitle.trim() || null,
           loginSubtitle: loginSubtitle.trim() || null,
+          supportEmail: supportEmail.trim() || null,
+          supportUrl: supportUrl.trim() || null,
+          docsUrl: docsUrl.trim() || null,
+          termsUrl: termsUrl.trim() || null,
+          privacyUrl: privacyUrl.trim() || null,
           ...(paise !== null ? { defaultClientRateCentsPerMin: paise } : {}),
         }),
       });
@@ -743,6 +915,44 @@ function SettingsTab({ me }: { me: PartnerMe }) {
     mutationFn: () => partnerFetch(getToken, "/api/partner/domain/custom", { method: "DELETE" }),
     onSuccess: () => { toast({ title: "Custom domain removed" }); setCustomDraft(""); invalidate(); },
     onError: (err: Error) => toast({ title: "Could not remove domain", description: err.message, variant: "destructive" }),
+  });
+
+  const saveMailMutation = useMutation({
+    mutationFn: () =>
+      partnerFetch(getToken, "/api/partner/mail", {
+        method: "PUT",
+        body: JSON.stringify({ fromName: mailName.trim(), fromEmail: mailEmail.trim() }),
+      }),
+    onSuccess: () => {
+      toast({ title: "Sending domain saved", description: "Add the DNS records below, then click Check DNS." });
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not save mail domain", description: err.message, variant: "destructive" }),
+  });
+
+  const verifyMailMutation = useMutation({
+    mutationFn: () =>
+      partnerFetch<{ mailDomainStatus: string }>(getToken, "/api/partner/mail/verify", { method: "POST" }),
+    onSuccess: (data) => {
+      toast({
+        title: data.mailDomainStatus === "verified" ? "Mail domain verified" : "DNS not complete yet",
+        description: data.mailDomainStatus === "verified"
+          ? "Client emails will send from your address."
+          : "Wait a few minutes after adding the records, then check again.",
+      });
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not verify mail domain", description: err.message, variant: "destructive" }),
+  });
+
+  const clearMailMutation = useMutation({
+    mutationFn: () => partnerFetch(getToken, "/api/partner/mail", { method: "DELETE" }),
+    onSuccess: () => {
+      setMailEmail("");
+      toast({ title: "Sending domain removed" });
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not remove mail domain", description: err.message, variant: "destructive" }),
   });
 
   async function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -937,39 +1147,150 @@ function SettingsTab({ me }: { me: PartnerMe }) {
             </Button>
           </div>
           {(me.customDomainStatus === "pending" || me.customDomainStatus === "failed" || me.customDomainStatus === "active") && me.customDomain && (
-            <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2 text-[11px] text-muted-foreground">
-              <p className="font-medium text-foreground/80">DNS setup</p>
-              <p>1. CNAME <code className="text-foreground">{me.customDomain}</code> → <code className="text-foreground">{me.cnameTarget}</code></p>
-              {me.domainVerifyToken && (
-                <p>
-                  2. Or TXT <code className="text-foreground">_snapserve-verify.{me.customDomain}</code> ={" "}
-                  <code className="text-foreground">snapserve-verify={me.domainVerifyToken}</code>
-                </p>
-              )}
-              <div className="flex flex-wrap gap-2 pt-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs gap-1"
-                  disabled={verifyMutation.isPending || me.customDomainStatus === "active"}
-                  onClick={() => verifyMutation.mutate()}
-                >
-                  {me.customDomainStatus === "active"
-                    ? <><CheckCircle2 className="h-3 w-3" /> Verified</>
-                    : verifyMutation.isPending ? "Checking DNS…" : "Verify DNS"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs text-muted-foreground"
-                  disabled={clearCustomMutation.isPending}
-                  onClick={() => clearCustomMutation.mutate()}
-                >
-                  Remove
-                </Button>
-              </div>
-            </div>
+            <CustomDomainDnsCard
+              domain={me.customDomain}
+              cnameTarget={me.cnameTarget}
+              verifyToken={me.domainVerifyToken}
+              dns={me.customDns}
+              status={me.customDomainStatus}
+              verifying={verifyMutation.isPending}
+              removing={clearCustomMutation.isPending}
+              onVerify={() => verifyMutation.mutate()}
+              onRemove={() => clearCustomMutation.mutate()}
+            />
           )}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Mail className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium">Client emails</h2>
+          {me.mailDomainStatus === "verified" && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+              Sending from your domain
+            </span>
+          )}
+          {me.mailDomainStatus === "pending" && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-amber-500/10 text-amber-600 border-amber-500/20">
+              Add DNS
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground -mt-1">
+          Invites, passwords, and reset codes should come from your company — not SnapServe.
+          Use an address on a domain you control (for example noreply@yourcompany.com), then add the DNS records.
+        </p>
+        <div className="space-y-1.5">
+          <Label htmlFor="mail-name">From name</Label>
+          <Input id="mail-name" value={mailName} onChange={e => setMailName(e.target.value)} placeholder={companyName.trim() || "Acme"} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="mail-email">From email</Label>
+          <Input
+            id="mail-email"
+            type="email"
+            value={mailEmail}
+            onChange={e => setMailEmail(e.target.value)}
+            placeholder="noreply@yourcompany.com"
+            className="font-mono text-sm"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            disabled={saveMailMutation.isPending || !mailEmail.includes("@")}
+            onClick={() => saveMailMutation.mutate()}
+          >
+            {saveMailMutation.isPending ? "Saving…" : "Save sending domain"}
+          </Button>
+          {me.mailFromEmail && me.mailDomainStatus !== "verified" && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={verifyMailMutation.isPending}
+              onClick={() => verifyMailMutation.mutate()}
+            >
+              {verifyMailMutation.isPending ? "Checking…" : "Check DNS"}
+            </Button>
+          )}
+          {me.mailFromEmail && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-muted-foreground"
+              disabled={clearMailMutation.isPending}
+              onClick={() => clearMailMutation.mutate()}
+            >
+              Remove
+            </Button>
+          )}
+        </div>
+        {(me.mailDnsRecords?.length ?? 0) > 0 && me.mailDomainStatus !== "verified" && (
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b border-border">
+                  <th className="px-2 py-1.5 font-medium">Type</th>
+                  <th className="px-2 py-1.5 font-medium">Host</th>
+                  <th className="px-2 py-1.5 font-medium">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {me.mailDnsRecords.map((rec) => (
+                  <tr key={rec.key} className="border-b border-border/60 last:border-0 align-top">
+                    <td className="px-2 py-1.5 font-mono">{rec.type}</td>
+                    <td className="px-2 py-1.5 font-mono break-all">{rec.host}</td>
+                    <td className="px-2 py-1.5 font-mono break-all">
+                      <button
+                        type="button"
+                        className="inline-flex items-start gap-1 text-left hover:underline"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(rec.value);
+                          toast({ title: "Copied DNS value" });
+                        }}
+                      >
+                        <Copy className="h-3 w-3 mt-0.5 shrink-0" />
+                        {rec.value}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <LifeBuoy className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium">Help &amp; legal for clients</h2>
+        </div>
+        <p className="text-[11px] text-muted-foreground -mt-1">
+          Clients never see SnapServe support or docs. Point them at your own help desk, docs, terms, and privacy pages.
+        </p>
+        <div className="space-y-1.5">
+          <Label htmlFor="support-email">Support email</Label>
+          <Input id="support-email" type="email" value={supportEmail} onChange={e => setSupportEmail(e.target.value)} placeholder="help@yourcompany.com" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="support-url">Support URL</Label>
+          <Input id="support-url" value={supportUrl} onChange={e => setSupportUrl(e.target.value)} placeholder="https://yourcompany.com/support" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="docs-url">Documentation URL</Label>
+          <Input id="docs-url" value={docsUrl} onChange={e => setDocsUrl(e.target.value)} placeholder="https://docs.yourcompany.com" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="terms-url">Terms URL</Label>
+            <Input id="terms-url" value={termsUrl} onChange={e => setTermsUrl(e.target.value)} placeholder="https://yourcompany.com/terms" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="privacy-url">Privacy URL</Label>
+            <Input id="privacy-url" value={privacyUrl} onChange={e => setPrivacyUrl(e.target.value)} placeholder="https://yourcompany.com/privacy" />
+          </div>
         </div>
       </div>
 

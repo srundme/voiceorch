@@ -30,6 +30,7 @@ import {
 } from "./edit.schema";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SnapServeAgentIcon } from "@/components/logo";
+import { isDirectSnapServeHost } from "@/lib/white-label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -438,7 +439,7 @@ export default function AgentEdit() {
     resolver: zodResolver(agentFormSchema) as any,
     defaultValues: {
       name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
-      llmProvider: "sarvam", llmModel: "gemma4", ttsProvider: "sarvam",
+      llmProvider: "sarvam", llmModel: "sarvam-105b-conversations", ttsProvider: "sarvam",
       ttsVoice: "priya", ttsModel: "bulbul:v3", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
       firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
@@ -689,7 +690,7 @@ export default function AgentEdit() {
     // Gemini Live keeps provider=google internally (voice stack path).
     const migratedLlm =
       !liveOnLoad && (agent.llmProvider === "google" || agent.llmProvider === "gemini")
-        ? { llmProvider: "sarvam", llmModel: "gemma4" }
+        ? { llmProvider: "sarvam", llmModel: "sarvam-105b-conversations" }
         : { llmProvider: agent.llmProvider, llmModel: agent.llmModel ?? "" };
     form.reset({
       name:              agent.name,
@@ -2484,7 +2485,7 @@ export default function AgentEdit() {
             </CardContent>
           </Card>
 
-          {/* ── SnapServe Integration ── */}
+          {isDirectSnapServeHost() && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -2508,6 +2509,7 @@ export default function AgentEdit() {
               )} />
             </CardContent>
           </Card>
+          )}
 
           <div className="fixed bottom-0 left-0 md:left-64 right-0 p-4 bg-background/80 backdrop-blur-sm border-t border-border flex justify-end z-10">
             <div className="max-w-5xl mx-auto w-full flex justify-end gap-4">

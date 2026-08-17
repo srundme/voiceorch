@@ -28,6 +28,7 @@ import adminWhatsappRouter from "./admin-whatsapp.js";
 import whatsappNativeRouter from "./whatsapp-native.js";
 import whatsappExtrasRouter from "./whatsapp-extras.js";
 import partnerRouter from "./partner.js";
+import partnerPublicRouter from "./partner-public.js";
 import adminEmailsRouter from "./admin-emails.js";
 import adminFinanceAnalyticsRouter from "./admin-finance-analytics.js";
 import adminBoardAnalyticsRouter from "./admin-board-analytics.js";
@@ -176,6 +177,11 @@ router.use(kycRouter);
 // carry their own per-route requireAuth and read identity from attachSession.
 router.use(sheetsRouter);
 router.use(schedulingRouter);
+
+// Partner login branding + logos — unauthenticated. Must sit before campaign
+// routers (blanket requireAuth) or custom-domain /sign-in fetches 401 and the
+// page falls back to SnapServe chrome.
+router.use(partnerPublicRouter);
 
 router.use(storageRouter);
 router.use(provisionUser);

@@ -47,8 +47,9 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
   groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
   sarvam: [
-    { value: "gemma4", label: "Gemma 4 31B (recommended — default)" },
-    { value: "sarvam-105b", label: "Sarvam 105B (Indian languages)" },
+    { value: "sarvam-105b-conversations", label: "Sarvam 105B Conversations (recommended — voice)" },
+    { value: "gemma4", label: "Gemma 4 31B" },
+    { value: "sarvam-105b", label: "Sarvam 105B (reasoning / agentic)" },
     { value: "glm5.2", label: "GLM-5.2 (512K context)" },
   ],
   together: [
@@ -529,22 +530,22 @@ export function defaultGeminiModel(): string {
   return defaultSarvamModel();
 }
 
-/** Default Sarvam LLM — Gemma 4 on Sarvam /v2. */
+/** Default Sarvam LLM — conversational 105B for voice (/v1). */
 export function defaultSarvamModel(): string {
-  return LLM_MODELS.sarvam?.[0]?.value ?? "gemma4";
+  return LLM_MODELS.sarvam?.[0]?.value ?? "sarvam-105b-conversations";
 }
 
 /** Canonical LLM defaults for the VoiceOrch auto-selection rule.
- *  All languages → Sarvam Gemma 4 on the classic STT→LLM→TTS stack.
+ *  All languages → Sarvam 105B Conversations on the classic STT→LLM→TTS stack.
  *  Live remains an explicit voice-stack pick only. */
 export const DEFAULT_TAMIL_LLM_PROVIDER = "sarvam" as const;
-export const DEFAULT_TAMIL_LLM_MODEL    = "gemma4" as const;
+export const DEFAULT_TAMIL_LLM_MODEL    = "sarvam-105b-conversations" as const;
 export const DEFAULT_NONTAMIL_LLM_PROVIDER = "sarvam" as const;
-export const DEFAULT_NONTAMIL_LLM_MODEL    = "gemma4" as const;
+export const DEFAULT_NONTAMIL_LLM_MODEL    = "sarvam-105b-conversations" as const;
 
 /**
  * Returns the canonical llmProvider + llmModel for the given language selection.
- * All languages → Sarvam Gemma 4 on the classic voice stack.
+ * All languages → Sarvam 105B Conversations on the classic voice stack.
  * Never returns the Gemini Live model — Live must be chosen explicitly.
  */
 export function defaultLlmForLanguages(

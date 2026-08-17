@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="100" viewBox="0 0 420 100" fill="none" role="img" aria-label="SnapServe">
+  <title>SnapServe</title>
+
+  <!-- Three-bar brand mark (matches SnapServeIcon) -->
+  <g>
+    <rect x="6"  y="14" width="88" height="20" rx="10" fill="#FFFFFF" opacity="1"    />
+    <rect x="14" y="42" width="72" height="20" rx="10" fill="#FFFFFF" opacity="0.60" />
+    <rect x="22" y="70" width="56" height="20" rx="10" fill="#FFFFFF" opacity="0.36" />
+  </g>
+
+  <!-- Wordmark: "Snap" bold + "Serve" regular -->
+  <text x="122" y="66"
+        font-family="'Tex Gyre Heros', Helvetica, Arial, sans-serif"
+        font-size="54"
+        letter-spacing="-1.5"
+        fill="#FFFFFF">
+    <tspan font-weight="700">Snap</tspan><tspan font-weight="400">Serve</tspan>
+  </text>
+</svg>

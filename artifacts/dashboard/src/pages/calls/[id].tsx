@@ -1650,7 +1650,7 @@ export function CallDetailContent({
                     ) : summarizationEnabled ? (
                       <p className="text-sm text-muted-foreground">No summary available for this call.</p>
                     ) : (
-                      <p className="text-sm text-muted-foreground">Auto Summarization is disabled for this agent.</p>
+                      <p className="text-sm text-muted-foreground">Auto Summarization is off for this agent. Turn it on under Agents → Tools → After the call, then new calls will get a summary.</p>
                     )}
                   </CardContent>
                 </Card>

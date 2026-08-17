@@ -16,6 +16,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { canGoBackInApp } from "@/lib/nav-history";
+import { EmptyState } from "@/components/empty-state";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
 import { GeminiLiveVoicePicker } from "@/components/gemini-live-voice-picker";
@@ -92,6 +93,8 @@ import {
   type StoredDomainField,
 } from "@/lib/disposition-fields";
 import { SnapServeAgentIcon } from "@/components/logo";
+import { hostProductName } from "@/lib/white-label";
+import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
@@ -415,7 +418,7 @@ function AgentCostSummary({
   const totalPerMin = platformCents / 100; // paise → INR (map already reflects account-level partner rates)
 
   const segments = [
-    { key: "platform", label: "Platform", provider: "SnapServe", cost: totalPerMin, color: "#059669" },
+    { key: "platform", label: "Platform", provider: "Platform", cost: totalPerMin, color: "#059669" },
   ];
   const breakdown = segments.filter(s => s.cost > 0);
   const barTotal = Math.max(breakdown.reduce((s, x) => s + x.cost, 0), 0.0001);
@@ -477,7 +480,7 @@ function AgentCostSummary({
               <div key={seg.key} className="flex items-center justify-between gap-3">
                 <span className="font-medium">
                   {seg.label}
-                  {seg.provider && seg.provider !== "SnapServe" && (
+                  {seg.provider && seg.provider !== "Platform" && (
                     <span className="text-muted-foreground ml-1 capitalize">({seg.provider})</span>
                   )}
                 </span>
@@ -1235,7 +1238,7 @@ function OverviewTab({
                   </div>
                   {ttsProvider === "sarvam" && (
                     <p className="text-[10px] text-muted-foreground/90 leading-relaxed">
-                      Default SnapServe stack
+                      Default stack
                     </p>
                   )}
                   {ttsVoiceOpts.length > 0 && (
@@ -2050,7 +2053,7 @@ function VoiceTab({ form }: { form: any }) {
                   </div>
                   {ttsProvider === "sarvam" && (
                     <p className="text-[10px] text-muted-foreground leading-relaxed -mt-0.5 mb-1">
-                      Default SnapServe stack
+                      Default stack
                     </p>
                   )}
                   <Select
@@ -2443,6 +2446,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
   const voiceMemoryEnabled = form.watch("voiceMemoryEnabled") ?? false;
   const recordingEnabled = form.watch("recordingEnabled") ?? true;
+  const summarizationEnabled = form.watch("summarizationEnabled") ?? false;
   const watchedTools  = (form.watch("tools") ?? []) as any[];
   const { toast } = useToast();
 
@@ -3132,6 +3136,36 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
               <Switch
                 checked={recordingEnabled}
                 onCheckedChange={(v) => form.setValue("recordingEnabled", v, { shouldDirty: true })}
+                onClick={e => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        </div>
+
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">After the call</p>
+        <div className={cn("rounded-xl border transition-all duration-150", summarizationEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={(e) => { if (!e.nativeEvent.isTrusted) return; form.setValue("summarizationEnabled", !summarizationEnabled, { shouldDirty: true }); }}
+            onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("summarizationEnabled", !summarizationEnabled, { shouldDirty: true }); } }}
+            className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
+          >
+            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+              <Sparkles className={cn("h-4 w-4", summarizationEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-semibold text-foreground/80">Auto Summarization</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                After each completed call, write a short AI summary on the History → Summary tab.
+              </p>
+            </div>
+            <div className="shrink-0 mt-1">
+              <Switch
+                checked={summarizationEnabled}
+                onCheckedChange={(v) => form.setValue("summarizationEnabled", v, { shouldDirty: true })}
                 onClick={e => e.stopPropagation()}
               />
             </div>
@@ -4044,6 +4078,7 @@ function AgentListPanel({ selectedId, onSelect, className }: {
 }) {
   const [search, setSearch] = useState("");
   const [, navigate] = useLocation();
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
   const { toast } = useToast();
   const { data: agents, isLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
   const { teamByAgentId } = useAgentTeamMap();
@@ -4108,14 +4143,38 @@ function AgentListPanel({ selectedId, onSelect, className }: {
           <div key={i} className="px-2 py-2"><Skeleton className="mb-1.5 h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>
         ))}
         {!isLoading && filtered.length === 0 && (
-          <div className="px-2 py-8 text-center">
-            <p className="text-xs font-medium">{search ? "No matches" : "No agents yet"}</p>
-            {!search && (
-              <Button size="sm" className="mt-3 h-8 gap-1 text-xs" onClick={() => navigate("/app/vibe")}>
-                <Sparkles className="size-3" /> Build with AI
-              </Button>
-            )}
-          </div>
+          <EmptyState
+            variant="inline"
+            icon={<Bot />}
+            title={search ? "No matches" : "No agents yet"}
+            description={
+              search
+                ? "Try a different name or clear the search."
+                : "Build the voice agent first, then attach it to a campaign."
+            }
+            action={
+              search
+                ? undefined
+                : isManagedWorkspace
+                  ? {
+                      label: "New agent",
+                      onClick: () => navigate("/app/agents?create=1"),
+                    }
+                  : {
+                    label: "Build with AI",
+                    icon: <Sparkles className="size-3" />,
+                    onClick: () => navigate("/app/vibe"),
+                  }
+            }
+            secondaryAction={
+              search || isManagedWorkspace
+                ? undefined
+                : {
+                    label: "Configure manually",
+                    onClick: () => navigate("/app/agents?create=1"),
+                  }
+            }
+          />
         )}
         {filtered.map((agent) => {
           const isSelected = agent.id === selectedId;
@@ -4164,6 +4223,7 @@ function AgentListPanel({ selectedId, onSelect, className }: {
           );
         })}
       </div>
+      {!isManagedWorkspace && (
       <div className="border-t border-border/70 p-2">
         <button
           type="button"
@@ -4174,6 +4234,7 @@ function AgentListPanel({ selectedId, onSelect, className }: {
           Create with Vibe
         </button>
       </div>
+      )}
     </div>
   );
 }
@@ -5201,7 +5262,7 @@ const COMPARE_SECTIONS: Array<{ label: string; keys: string[] }> = [
   { label: "LLM",           keys: ["llmProvider", "llmModel", "temperature"] },
   { label: "TTS / Voice",   keys: ["ttsProvider", "ttsVoice", "ttsModel"] },
   { label: "Telephony",     keys: ["telephonyProvider"] },
-  { label: "Call Settings", keys: ["maxDuration", "silenceTimeoutSeconds", "language", "webhookUrl", "noiseCancellationEnabled", "backchannelingEnabled"] },
+  { label: "Call Settings", keys: ["maxDuration", "silenceTimeoutSeconds", "language", "webhookUrl", "noiseCancellationEnabled", "backchannelingEnabled", "recordingEnabled", "summarizationEnabled"] },
   { label: "Tools",         keys: ["tools"] },
   { label: "Knowledge Base", keys: ["knowledgeSourceIds"] },
   { label: "Scheduling",    keys: ["schedulingCalendarId", "schedulingEventTypeId"] },
@@ -5233,6 +5294,8 @@ const FIELD_LABELS: Record<string, string> = {
   webhookUrl: "Post-call notify URL",
   noiseCancellationEnabled: "Noise Cancellation",
   backchannelingEnabled: "Backchannel",
+  recordingEnabled: "Call Recording",
+  summarizationEnabled: "Auto Summarization",
   tools: "Tools",
   knowledgeSourceIds: "Knowledge Sources",
   schedulingCalendarId: "Scheduling Calendar",
@@ -6545,6 +6608,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
 
 function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAgents?: () => void }) {
   const [, navigate] = useLocation();
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
   const search = useSearch();
   const [activeTab, setActiveTab] = useState<TabId>(() => sectionFromSearch(search));
   const tabContentRef = useRef<HTMLDivElement>(null);
@@ -6600,7 +6664,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
       name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
-      llmProvider: "sarvam", llmModel: "gemma4", ttsProvider: "cartesia",
+      llmProvider: "sarvam", llmModel: "sarvam-105b-conversations", ttsProvider: "cartesia",
       ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478", ttsModel: "sonic-3.5", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 480,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
@@ -6882,6 +6946,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         timezone:                 "prompt",
         autoRedialEnabled:        "settings",
         autoRedialMaxAttempts:    "settings",
+        summarizationEnabled:     "tools",
         machineDetectionMode:     "voicemail",
         voicemailAction:          "voicemail",
         voicemailMessage:         "voicemail",
@@ -6978,9 +7043,10 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
   const watchedName = form.watch("name") as string | undefined;
   useEffect(() => {
     const label = (watchedName ?? agent?.name)?.trim();
-    document.title = label ? `${label} · Agent · SnapServe` : "Agent · SnapServe";
+    const product = hostProductName();
+    document.title = label ? `${label} · Agent · ${product}` : `Agent · ${product}`;
     return () => {
-      document.title = "SnapServe";
+      document.title = product;
     };
   }, [watchedName, agent?.name]);
 
@@ -7112,12 +7178,16 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               <DropdownMenuItem onClick={() => setPublishModalOpen(true)}>
                 <Upload className="mr-2 size-3.5" /> Publish version
               </DropdownMenuItem>
+              {!isManagedWorkspace && (
               <DropdownMenuItem onClick={() => navigate(`/app/vibe?refine=${agentId}`)}>
                 <Sparkles className="mr-2 size-3.5" /> Refine with AI
               </DropdownMenuItem>
+              )}
+              {!isManagedWorkspace && (
               <DropdownMenuItem onClick={() => navigate("/app/providers")}>
                 <Star className="mr-2 size-3.5" /> API keys
               </DropdownMenuItem>
+              )}
               <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
                 <Trash2 className="mr-2 size-3.5" /> Delete agent
               </DropdownMenuItem>
@@ -7543,6 +7613,7 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
 
 function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [, navigate] = useLocation();
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [step, setStep] = useState<"compose" | "surfaces" | "name">("compose");
@@ -7570,7 +7641,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
       { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
     ],
     llmProvider: "sarvam",
-    llmModel: "gemma4",
+    llmModel: "sarvam-105b-conversations",
     ttsProvider: "cartesia",
     ttsModel: "sonic-3.5",
     ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478",
@@ -7764,6 +7835,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                 <p className="text-xs text-muted-foreground mt-0.5">Create two agents that hand off mid-call</p>
               </div>
             </button>
+            {!isManagedWorkspace && (
             <button
               type="button"
               onClick={() => { handleClose(); navigate("/app/vibe"); }}
@@ -7772,6 +7844,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
               <Sparkles className="h-3.5 w-3.5" />
               Or build with AI (guided)
             </button>
+            )}
           </div>
         )}
 
@@ -7926,6 +7999,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
 
 function StudioEmptyCanvas({ onCreate }: { onCreate: () => void }) {
   const [, navigate] = useLocation();
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
   return (
     <div className="flex-1 flex items-center justify-center p-8 bg-background">
       <div className="text-center max-w-sm space-y-4">
@@ -7942,9 +8016,11 @@ function StudioEmptyCanvas({ onCreate }: { onCreate: () => void }) {
           <Button className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={onCreate}>
             <Plus className="h-3.5 w-3.5" /> New agent
           </Button>
+          {!isManagedWorkspace && (
           <Button variant="outline" className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={() => navigate("/app/vibe")}>
             <Sparkles className="h-3.5 w-3.5" /> Build with AI
           </Button>
+          )}
         </div>
       </div>
     </div>

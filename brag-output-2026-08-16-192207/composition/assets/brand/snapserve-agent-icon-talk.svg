@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" role="img" aria-label="SnapServe agent">
+  <mask id="ss-agent-face" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+    <rect width="24" height="24" fill="black"/>
+    <rect x="4.3" y="3.2" width="15.4" height="14" rx="6" fill="white"/>
+    <circle cx="9.3" cy="9" r="1.9" fill="black"/>
+    <circle cx="14.7" cy="9" r="1.9" fill="black"/>
+    <path d="M9.9 12.8c.945 1.68 3.255 1.68 4.2 0" stroke="black" stroke-width="1.35" stroke-linecap="round" fill="none"/>
+  </mask>
+  <rect x="1.1" y="7.9" width="3" height="6.4" rx="1.5" fill="#FFFFFF" opacity="0.55"/>
+  <rect x="19.9" y="7.9" width="3" height="6.4" rx="1.5" fill="#FFFFFF" opacity="0.55"/>
+  <rect width="24" height="24" fill="#FFFFFF" mask="url(#ss-agent-face)"/>
+  <rect x="5.4" y="19.2" width="13.2" height="3" rx="1.5" fill="#FFFFFF" opacity="0.55"/>
+</svg>

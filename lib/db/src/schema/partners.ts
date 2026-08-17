@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, index, customType } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, index, jsonb, customType } from "drizzle-orm/pg-core";
 
 /** Raw binary column (PostgreSQL `bytea`) stored/returned as a Node Buffer. */
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
@@ -50,6 +50,27 @@ export const partnersTable = pgTable("partners", {
   /** TXT / verify token for custom-domain DNS proof. */
   domainVerifyToken: text("domain_verify_token"),
   customDomainVerifiedAt: timestamp("custom_domain_verified_at", { withTimezone: true }),
+  /** Display name on client emails, e.g. "Acme". */
+  mailFromName: text("mail_from_name"),
+  /** From address on client emails, e.g. noreply@acme.com. Domain must be DKIM-authenticated. */
+  mailFromEmail: text("mail_from_email"),
+  /** none | pending | verified | failed */
+  mailDomainStatus: text("mail_domain_status").notNull().default("none"),
+  /** Brevo DNS records the partner must add (brevo_code / DKIM / DMARC). */
+  mailDnsRecords: jsonb("mail_dns_records").$type<Array<{
+    key: string;
+    host: string;
+    type: string;
+    value: string;
+    ok: boolean;
+  }>>(),
+  mailDomainVerifiedAt: timestamp("mail_domain_verified_at", { withTimezone: true }),
+  /** Shown to managed clients instead of support@snapserve.ai */
+  supportEmail: text("support_email"),
+  supportUrl: text("support_url"),
+  docsUrl: text("docs_url"),
+  termsUrl: text("terms_url"),
+  privacyUrl: text("privacy_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

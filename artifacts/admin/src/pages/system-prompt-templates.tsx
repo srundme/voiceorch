@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { adminFetch, BASE, formatAdminError } from "@/lib/api";
+import { SectionSubNav } from "@/components/section-subnav";
+import { PROMPT_TABS } from "@/lib/nav-config";
 import {
   Upload,
   FileText,
@@ -609,6 +611,7 @@ export default function SystemPromptTemplatesPage() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={PROMPT_TABS} />
       <div>
         <h1 className="text-3xl font-bold tracking-tight">System Prompt Templates</h1>
         <p className="text-muted-foreground mt-1">

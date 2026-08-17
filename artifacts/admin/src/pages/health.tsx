@@ -32,6 +32,8 @@ import {
   Shield,
 } from "lucide-react";
 import { useState } from "react";
+import { SectionSubNav } from "@/components/section-subnav";
+import { OPS_TABS } from "@/lib/nav-config";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1115,6 +1117,7 @@ export default function HealthChecklistPage() {
 
   return (
     <div className="space-y-8">
+      <SectionSubNav tabs={OPS_TABS} />
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>

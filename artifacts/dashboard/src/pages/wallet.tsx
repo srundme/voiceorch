@@ -498,6 +498,7 @@ export default function WalletPage() {
           </div>
           )}
 
+          {!isManagedWorkspace && (
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="px-5 py-4 border-b border-border flex items-center gap-2">
               <FileText className="w-4 h-4 text-muted-foreground" />
@@ -534,6 +535,7 @@ export default function WalletPage() {
               </div>
             )}
           </div>
+          )}
 
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="px-5 py-4 border-b border-border">

@@ -44,6 +44,7 @@ import {
   getListPhoneNumbersQueryKey,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import { StripePage } from "@/components/stripe-page";
 import { StatusDot } from "@/components/workspace/workspace";
 import { MetricCard, MetricStrip } from "@/components/metric-strip";
@@ -253,11 +254,12 @@ export default function HomePage() {
               Build the voice agent first, then create a campaign to dial leads.
             </p>
           </div>
-          <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
+          <div className={`grid gap-px overflow-hidden rounded-lg border border-border bg-border ${isManagedWorkspace ? "" : "sm:grid-cols-2"}`}>
+            {!isManagedWorkspace && (
             <button
               type="button"
               onClick={() => navigate("/app/vibe")}
-              className="group bg-background p-5 text-left transition-colors hover:bg-muted/45"
+              className="group cursor-pointer bg-background p-5 text-left transition-colors duration-200 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
             >
               <Sparkles className="mb-7 size-4 text-muted-foreground group-hover:text-foreground" />
               <p className="text-sm font-medium">Build with AI</p>
@@ -268,10 +270,11 @@ export default function HomePage() {
                 Start building <ArrowRight className="size-3" />
               </span>
             </button>
+            )}
             <button
               type="button"
               onClick={() => navigate("/app/agents?create=1")}
-              className="group bg-background p-5 text-left transition-colors hover:bg-muted/45"
+              className="group cursor-pointer bg-background p-5 text-left transition-colors duration-200 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
             >
               <Plus className="mb-7 size-4 text-muted-foreground group-hover:text-foreground" />
               <p className="text-sm font-medium">Configure manually</p>
@@ -373,7 +376,7 @@ export default function HomePage() {
                 </div>
                 <Link
                   href="/app/analytics"
-                  className="text-[11px] text-muted-foreground hover:text-foreground shrink-0"
+                  className="text-[11px] text-muted-foreground hover:text-foreground shrink-0 rounded-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   View analytics
                 </Link>
@@ -463,38 +466,22 @@ export default function HomePage() {
                 </Link>
               </div>
               {recentReach.length === 0 ? (
-                <div className="px-3.5 py-8">
-                  <div className="mx-auto max-w-md text-center">
-                    <div className="mx-auto mb-3 flex size-9 items-center justify-center rounded-lg border border-border bg-muted/40">
-                      <PhoneCall className="size-4 text-muted-foreground" />
-                    </div>
-                    <p className="text-[13px] font-medium text-foreground">Nothing in the queue yet</p>
-                    <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                      Create a campaign, upload leads, and start dialing — your volume chart updates live.
-                    </p>
-                    <div className="mt-4 flex flex-wrap justify-center gap-2">
-                      <Button
-                        size="sm"
-                        className="h-8 gap-1.5 text-xs"
-                        onClick={() => navigate("/app/campaigns")}
-                      >
-                        <Plus className="size-3.5" />
-                        New campaign
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 gap-1.5 text-xs"
-                        onClick={() =>
-                          navigate(firstAgentId != null ? `/app/agents/${firstAgentId}` : "/app/agents")
-                        }
-                      >
-                        <Bot className="size-3.5" />
-                        Open agent
-                      </Button>
-                    </div>
-                  </div>
-                </div>
+                <EmptyState
+                  variant="inline"
+                  icon={<PhoneCall />}
+                  title="Nothing in the queue yet"
+                  description="Create a campaign, upload leads, and start dialing — your volume chart updates live."
+                  action={{
+                    label: "New campaign",
+                    icon: <Plus className="size-3.5" />,
+                    onClick: () => navigate("/app/campaigns"),
+                  }}
+                  secondaryAction={{
+                    label: "Open agent",
+                    onClick: () =>
+                      navigate(firstAgentId != null ? `/app/agents/${firstAgentId}` : "/app/agents"),
+                  }}
+                />
               ) : (
                 <div className="divide-y divide-border/70">
                   {recentReach.map((item) => {
@@ -503,7 +490,7 @@ export default function HomePage() {
                       <Link
                         key={item.id}
                         href={item.href}
-                        className="flex min-h-12 items-center gap-2.5 px-3.5 hover:bg-muted/35"
+                        className="flex min-h-12 cursor-pointer items-center gap-2.5 px-3.5 transition-colors duration-200 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                       >
                         <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background">
                           <Icon className="size-3.5 text-muted-foreground" />
@@ -534,7 +521,7 @@ export default function HomePage() {
                   <Link
                     key={agent.id}
                     href={`/app/agents/${agent.id}`}
-                    className="group grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-3.5 transition-colors hover:bg-muted/35"
+                    className="group grid min-h-12 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-3.5 transition-colors duration-200 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   >
                     <div className="flex min-w-0 items-center gap-3">
                       <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background">
@@ -564,7 +551,7 @@ export default function HomePage() {
                     <Link
                       key={item.label}
                       href={item.href}
-                      className="flex min-h-9 items-center gap-2 rounded-md px-2 text-[11px] transition-colors hover:bg-muted/40"
+                      className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-[11px] transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                     >
                       <span
                         className={cn(
@@ -596,7 +583,7 @@ export default function HomePage() {
                     <Link
                       key={issue.title}
                       href={issue.href}
-                      className="flex min-h-11 items-start gap-2 px-3.5 py-2.5 hover:bg-muted/35"
+                      className="flex min-h-11 cursor-pointer items-start gap-2 px-3.5 py-2.5 transition-colors duration-200 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                     >
                       <CircleAlert
                         className={cn(
@@ -617,7 +604,7 @@ export default function HomePage() {
             {balanceCents != null && (
               <Link
                 href="/app/wallet"
-                className="flex items-center gap-2.5 rounded-lg border border-border px-3.5 py-3 hover:bg-muted/35"
+                className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border px-3.5 py-3 transition-colors duration-200 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Wallet className="size-3.5 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
@@ -645,7 +632,7 @@ export default function HomePage() {
                     <Link
                       key={call.id}
                       href={`/app/history/${call.id}`}
-                      className="flex min-h-10 items-center gap-2 px-3.5 hover:bg-muted/35"
+                      className="flex min-h-10 cursor-pointer items-center gap-2 px-3.5 transition-colors duration-200 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                     >
                       <Phone className="size-3 shrink-0 text-muted-foreground" />
                       <div className="min-w-0 flex-1">

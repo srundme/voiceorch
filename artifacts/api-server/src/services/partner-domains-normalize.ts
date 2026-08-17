@@ -74,3 +74,60 @@ export function validateDomain(domain: string): string | null {
 export function subdomainHostForSlug(slug: string): string {
   return `${slug}.${getPartnerSubdomainRoot()}`;
 }
+
+/**
+ * DNS panels want Host relative to the zone, not the FQDN.
+ * `app.gopikrish.in` → host `app`, zone `gopikrish.in`.
+ * Apex `gopikrish.in` → host `@`, zone `gopikrish.in`.
+ */
+export function splitDnsHostZone(fqdn: string): { host: string; zone: string } {
+  const domain = normalizeDomain(fqdn);
+  const parts = domain.split(".").filter(Boolean);
+  if (parts.length <= 2) return { host: "@", zone: domain };
+  return { host: parts.slice(0, -2).join("."), zone: parts.slice(-2).join(".") };
+}
+
+export type CustomDomainDnsRecord = {
+  type: "CNAME" | "TXT";
+  host: string;
+  value: string;
+  required: boolean;
+  purpose: string;
+};
+
+export function customDomainDnsGuide(opts: {
+  domain: string;
+  cnameTarget: string;
+  verifyToken?: string | null;
+}): {
+  zone: string;
+  host: string;
+  isApex: boolean;
+  records: CustomDomainDnsRecord[];
+} {
+  const domain = normalizeDomain(opts.domain);
+  const { host, zone } = splitDnsHostZone(domain);
+  const isApex = host === "@";
+  const records: CustomDomainDnsRecord[] = [];
+  if (!isApex) {
+    records.push({
+      type: "CNAME",
+      host,
+      value: opts.cnameTarget,
+      required: true,
+      purpose: "Sends visitors on this hostname to your branded login",
+    });
+  }
+  if (opts.verifyToken) {
+    records.push({
+      type: "TXT",
+      host: isApex ? "_snapserve-verify" : `_snapserve-verify.${host}`,
+      value: `snapserve-verify=${opts.verifyToken}`,
+      required: isApex,
+      purpose: isApex
+        ? "Proves you own the domain (apex names cannot use a CNAME)"
+        : "Optional if the CNAME is already live — used to verify ownership",
+    });
+  }
+  return { zone, host, isApex, records };
+}

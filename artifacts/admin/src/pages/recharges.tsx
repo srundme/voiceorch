@@ -16,6 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { IndianRupee, RefreshCw, Search } from "lucide-react";
+import { SectionSubNav } from "@/components/section-subnav";
+import { MONEY_TABS } from "@/lib/nav-config";
 
 type Recharge = {
   id: number;
@@ -66,6 +68,7 @@ export default function Recharges() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={MONEY_TABS} />
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">

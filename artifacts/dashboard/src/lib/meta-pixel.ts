@@ -22,6 +22,8 @@
  * this app) — instead uses a small typed accessor over `window as unknown`.
  */
 
+import { isDirectSnapServeHost } from "@/lib/white-label";
+
 const META_PIXEL_ID = "985387470976266";
 const FIRED_KEY_PREFIX = "voiceorch:fbq_cr_fired:";
 
@@ -87,8 +89,9 @@ function loadPixelScript(): Promise<void> {
 
 let initialized = false;
 
-/** Call once at app startup. Idempotent. */
+/** Call once at app startup. Idempotent. Never runs on partner white-label hosts. */
 export async function initMetaPixel(): Promise<void> {
+  if (!isDirectSnapServeHost()) return;
   if (initialized) return;
   initialized = true;
   await loadPixelScript();
@@ -120,6 +123,7 @@ export async function trackCompleteRegistration(
   method: CompleteRegistrationMethod,
   dedupeKey: string,
 ): Promise<void> {
+  if (!isDirectSnapServeHost()) return;
   if (typeof window === "undefined" || !dedupeKey) return;
   const key = `${FIRED_KEY_PREFIX}${method}:${dedupeKey.slice(-32)}`;
   try {

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { SectionSubNav } from "@/components/section-subnav";
+import { ANALYTICS_TABS } from "@/lib/nav-config";
 import {
   useGrowthFunnelV2,
   useGrowthCohorts,
@@ -453,6 +455,7 @@ function EventsTab() {
 export default function Growth() {
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={ANALYTICS_TABS} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Growth & Adoption</h1>

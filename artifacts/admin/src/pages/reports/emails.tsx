@@ -9,6 +9,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Mail, AlertTriangle } from "lucide-react";
+import { SectionSubNav } from "@/components/section-subnav";
+import { EMAIL_TABS } from "@/lib/nav-config";
 
 const DAY_OPTIONS = [7, 30, 90] as const;
 
@@ -45,6 +47,7 @@ export default function EmailsReportPage() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={EMAIL_TABS} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Mail className="h-6 w-6 text-muted-foreground" />

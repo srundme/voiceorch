@@ -49,6 +49,9 @@ export interface BrevoEmailMeta {
    * Default false — every Brevo send is logged for the email report.
    */
   skipLog?: boolean;
+  /** Override platform From (used for white-label partner mail). */
+  sender?: { name: string; email: string };
+  replyTo?: { name?: string; email: string };
 }
 
 async function logPlatformEmail(row: {
@@ -114,7 +117,8 @@ export async function sendBrevoEmail(
   const emailType = meta?.emailType ?? "transactional";
   const sentBy = meta?.sentBy ?? "system";
   const shouldLog = !meta?.skipLog;
-  const sender = brevoSender();
+  const sender = meta?.sender ?? brevoSender();
+  const replyTo = meta?.replyTo;
   // Never persist OTP / password-reset HTML (contains one-time codes).
   const logBody =
     emailType === "password_reset"
@@ -133,6 +137,7 @@ export async function sendBrevoEmail(
       },
       body: JSON.stringify({
         sender,
+        ...(replyTo?.email ? { replyTo: { email: replyTo.email, name: replyTo.name || sender.name } } : {}),
         to:      [{ email: to }],
         subject,
         htmlContent: htmlBody,

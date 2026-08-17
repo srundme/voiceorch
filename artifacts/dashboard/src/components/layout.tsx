@@ -35,8 +35,9 @@ import {
   WalletIcon,
   SettingsIcon,
 } from "@workspace/brand-icons";
-import { usePartnerContext } from "@/hooks/use-partner";
+import { usePartnerContext, usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { loadActingAs, stopActingAs } from "@/lib/acting-as";
 
@@ -144,6 +145,33 @@ const NAV_SETTINGS: NavItem[] = [
   { name: "Providers",  href: "/app/providers", icon: ProvidersIcon },
   { name: "Developers", href: "/app/api-keys",  icon: DevelopersIcon },
   { name: "Billing",    href: "/app/wallet",    icon: BillingIcon },
+];
+
+/** Partner clients: daily product only — no platform/docs/BYOP/developer pages. */
+const MANAGED_NAV_GROUPS: NavGroup[] = [
+  {
+    items: [
+      { name: "Home",          href: "/app/home",           icon: HomeIcon },
+      { name: "Campaigns",     href: "/app/campaigns",      icon: CampaignsIcon },
+      { name: "Agents",        href: "/app/agents",         icon: AgentIcon },
+      { name: "Phone numbers", href: "/app/phone-numbers",  icon: PhoneIcon },
+      { name: "Connections",   href: "/app/connections",    icon: ConnectionsIcon },
+      { name: "History",       href: "/app/history",        icon: HistoryIcon, callbackBadge: true },
+      { name: "Analytics",     href: "/app/analytics",      icon: AnalyticsIcon },
+    ],
+  },
+  {
+    group: "MORE",
+    items: [
+      { name: "Knowledge", href: "/app/knowledge-bases", icon: KnowledgeIcon },
+      { name: "Bookings",  href: "/app/scheduling",      icon: BookingsIcon },
+    ],
+  },
+];
+
+const MANAGED_NAV_SETTINGS: NavItem[] = [
+  { name: "Workspace", href: "/app/settings", icon: WorkspaceIcon },
+  { name: "Billing",   href: "/app/wallet",   icon: BillingIcon },
 ];
 
 const SETTINGS_HREFS = NAV_SETTINGS.map(s => s.href);
@@ -350,10 +378,15 @@ function NavItemEl({
   const isActive = navItemIsActive(location, item.href);
 
   return (
-    <Link href={item.href} onClick={onClick}>
+    <Link
+      href={item.href}
+      onClick={onClick}
+      aria-current={isActive ? "page" : undefined}
+      className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    >
       <div
         className={[
-          "relative flex h-9 items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-100 cursor-pointer select-none",
+          "relative flex h-9 items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-200 cursor-pointer select-none",
           indent ? "pl-2" : "",
           isActive
             ? "bg-foreground/[0.08] text-foreground font-medium"
@@ -417,19 +450,18 @@ function SidebarContent({
   };
 
   // Partner hub nav (gated) + white-label branding for partner-managed clients.
-  // Managed clients get the full workspace nav (same as real users); phones stay
-  // partner-owned via the phone-numbers page + server denyManagedClient.
   const { data: partnerCtx } = usePartnerContext();
   const actingAsClient = loadActingAs();
-  const navGroups: NavGroup[] = actingAsClient
-    ? NAV_GROUPS
+  const clientSurface = partnerCtx?.isManagedClient === true || !!actingAsClient;
+  const navGroups: NavGroup[] = clientSurface
+    ? MANAGED_NAV_GROUPS
     : partnerCtx?.isPartner
       ? [
           ...NAV_GROUPS,
           { group: "PARTNER", items: [{ name: "Partner Hub", href: "/app/partner", icon: PartnerIcon }] },
         ]
       : NAV_GROUPS;
-  const settingsItems: NavItem[] = NAV_SETTINGS;
+  const settingsItems: NavItem[] = clientSurface ? MANAGED_NAV_SETTINGS : NAV_SETTINGS;
 
   return (
     <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar">
@@ -609,14 +641,16 @@ function SidebarContent({
           </div>
         )}
         <div className="pb-0.5">
-          <Link
-            href="/docs"
-            onClick={onNavClick}
-            className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
-          >
-            <KnowledgeIcon className="size-4 shrink-0 text-muted-foreground" />
-            {!collapsed && <span>Documentation</span>}
-          </Link>
+          {!clientSurface && (
+            <Link
+              href="/docs"
+              onClick={onNavClick}
+              className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
+            >
+              <KnowledgeIcon className="size-4 shrink-0 text-muted-foreground" />
+              {!collapsed && <span>Documentation</span>}
+            </Link>
+          )}
         </div>
 
         {/* Wallet chip */}
@@ -683,12 +717,27 @@ function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
 /* ─── New-agent choice modal ─────────────────────────────────────────────── */
 function NewAgentModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [, navigate] = useLocation();
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
+
+  const goManual = () => { onClose(); navigate("/app/agents?create=1"); };
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="text-base">Create a new agent</DialogTitle>
         </DialogHeader>
+        {isManagedWorkspace ? (
+          <>
+            <p className="text-[13px] text-muted-foreground -mt-1">
+              Open the builder to configure your agent.
+            </p>
+            <Button className="w-full mt-1" onClick={goManual}>
+              <Wrench className="w-4 h-4 mr-2" /> Open builder
+            </Button>
+          </>
+        ) : (
+        <>
         <p className="text-[13px] text-muted-foreground -mt-1">
           Choose how you'd like to build your agent.
         </p>
@@ -710,7 +759,7 @@ function NewAgentModal({ open, onClose }: { open: boolean; onClose: () => void }
           {/* Manual Build */}
           <button
             type="button"
-            onClick={() => { onClose(); navigate("/app/agents?create=1"); }}
+            onClick={goManual}
             className="flex flex-col items-start gap-3 p-4 rounded-xl border border-border bg-card hover:border-primary/50 hover:bg-primary/5 transition-colors text-left group"
           >
             <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center group-hover:bg-muted/80 transition-colors">
@@ -722,6 +771,8 @@ function NewAgentModal({ open, onClose }: { open: boolean; onClose: () => void }
             </div>
           </button>
         </div>
+        </>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -12,6 +12,25 @@ export type AudioSendStatus = "SEND" | "BLOCK" | "WAIT";
 
 export const FILLER_SEQUENCE_ID = -1;
 
+/** Indic scripts pack a turn into few whitespace tokens — a 4-grapheme floor
+ *  lets "Okay" / "दरअसल" / "यू नो" cut the agent (call 10544: 14 barge-ins). */
+const INDIC_LANG_PREFIXES = new Set([
+  "ta", "hi", "te", "kn", "ml", "mr", "bn", "gu", "pa", "or", "ur",
+]);
+
+/** Latin / English: keep the historic 4-char floor. Indic: require a real clause. */
+const BARGE_IN_MIN_CHARS_DEFAULT = 4;
+const BARGE_IN_MIN_CHARS_INDIC = 10;
+
+/**
+ * Minimum grapheme count on the *current* transcript before word-count barge-in
+ * may fire. Background talk-over and Devanagari one-word scraps sit under this.
+ */
+export function bargeInMinChars(lang?: string | null): number {
+  const prefix = (lang ?? "").split(/[-_]/)[0]?.toLowerCase() ?? "";
+  return INDIC_LANG_PREFIXES.has(prefix) ? BARGE_IN_MIN_CHARS_INDIC : BARGE_IN_MIN_CHARS_DEFAULT;
+}
+
 export interface InterruptionManagerOptions {
   /** Post-utterance grace before agent audio (Bolna incremental_delay). */
   incrementalDelayMs?: number;
@@ -36,7 +55,7 @@ export class InterruptionManager {
     this.incrementalDelayMs = opts.incrementalDelayMs ?? 500;
     this.wordsForInterruption = opts.wordsForInterruption ?? 3;
     this.accidentalInterruptionPhrases = new Set(
-      (opts.accidentalInterruptionPhrases ?? ["stop", "wait", "hold on", "hang up", "cancel", "pause", "shut up", "listen", "hello", "hey", "வேண்டாம்", "நிறுத்து", "இருங்க", "இல்ல", "ஹலோ", "சொல்லுங்க", "ரூக்", "ரुक", "रुको", "बस", "सुनो", "अरे", "सुनिए", "एक मिनट"])
+      (opts.accidentalInterruptionPhrases ?? ["stop", "wait", "hold on", "hang up", "cancel", "pause", "shut up", "listen", "hello", "hey", "வேண்டாம்", "நிறுத்து", "இருங்க", "இல்ல", "ஹலோ", "சொல்லுங்க", "ரூக்", "ரुक", "रुक", "रुको", "बस", "सुनो", "अरे", "सुनिए", "एक मिनट"])
         .map((p) => p.trim().toLowerCase()),
     );
   }

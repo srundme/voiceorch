@@ -5,6 +5,9 @@
    SnapServeLoader — full-screen splash with animated bars
    ─────────────────────────────────────────────────────────────────────────*/
 
+import { useEffect, useState } from "react";
+import { isDirectSnapServeHost, loadHostBrand, type HostBrand } from "@/lib/white-label";
+
 const FONT = "'Tex Gyre Heros', Helvetica, Arial, sans-serif";
 
 /* ── BrandMark (image-based lockup, mirrors admin) ----------------------- */
@@ -112,7 +115,55 @@ export function SnapServeLogo({
   );
 }
 
+/* ── White-label host mark (booking / public pages) ----------------------- */
+
+export function HostBrandMark({
+  iconSize = 26,
+  wordmarkHeight = 20,
+}: {
+  iconSize?: number;
+  wordmarkHeight?: number;
+}) {
+  const [brand, setBrand] = useState<HostBrand | null>(null);
+  useEffect(() => {
+    void loadHostBrand().then(setBrand);
+  }, []);
+
+  if (isDirectSnapServeHost()) {
+    return <BrandMark iconSize={iconSize} wordmarkHeight={wordmarkHeight} />;
+  }
+  if (brand?.logoUrl) {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <img src={brand.logoUrl} alt="" className="rounded object-contain" style={{ height: iconSize, width: iconSize }} />
+        <span className="text-sm font-semibold tracking-tight">{brand.companyName}</span>
+      </span>
+    );
+  }
+  if (brand) {
+    return <span className="text-sm font-semibold tracking-tight">{brand.companyName}</span>;
+  }
+  return <span className="inline-block h-6 w-24 rounded bg-muted animate-pulse" aria-hidden />;
+}
+
 /* ── Loader --------------------------------------------------------------- */
+
+export function NeutralLoader() {
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ background: "#000" }}>
+      <div
+        className="h-8 w-8 rounded-full border-2 border-white/15 border-t-white/80 animate-spin"
+        aria-label="Loading"
+      />
+    </div>
+  );
+}
+
+/** Splash used before paint: SnapServe wordmark only on SnapServe's own hosts. */
+export function AppLoader() {
+  if (isDirectSnapServeHost()) return <SnapServeLoader />;
+  return <NeutralLoader />;
+}
 
 export function SnapServeLoader() {
   return (

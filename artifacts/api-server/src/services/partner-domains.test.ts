@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  customDomainDnsGuide,
   normalizeDomain,
   normalizeSlug,
+  splitDnsHostZone,
   subdomainHostForSlug,
   validateDomain,
   validateSlug,
@@ -27,5 +29,37 @@ describe("partner-domains helpers", () => {
     expect(validateDomain("app.acme.com")).toBeNull();
     expect(validateDomain("acme.snapserve.ai")).toBeTruthy();
     expect(validateDomain("not a domain")).toBeTruthy();
+  });
+
+  it("splits DNS Host vs zone the way registrars expect", () => {
+    expect(splitDnsHostZone("app.gopikrish.in")).toEqual({ host: "app", zone: "gopikrish.in" });
+    expect(splitDnsHostZone("gopikrish.in")).toEqual({ host: "@", zone: "gopikrish.in" });
+    expect(splitDnsHostZone("login.app.brand.com")).toEqual({ host: "login.app", zone: "brand.com" });
+  });
+
+  it("builds copy-paste CNAME + TXT rows for a subdomain", () => {
+    const guide = customDomainDnsGuide({
+      domain: "app.gopikrish.in",
+      cnameTarget: "partners.snapserve.ai",
+      verifyToken: "abc123",
+    });
+    expect(guide.zone).toBe("gopikrish.in");
+    expect(guide.isApex).toBe(false);
+    expect(guide.records).toEqual([
+      {
+        type: "CNAME",
+        host: "app",
+        value: "partners.snapserve.ai",
+        required: true,
+        purpose: "Sends visitors on this hostname to your branded login",
+      },
+      {
+        type: "TXT",
+        host: "_snapserve-verify.app",
+        value: "snapserve-verify=abc123",
+        required: false,
+        purpose: "Optional if the CNAME is already live — used to verify ownership",
+      },
+    ]);
   });
 });

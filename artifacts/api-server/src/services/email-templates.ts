@@ -57,6 +57,45 @@ function p(text: string): string {
   return '<p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.7">' + text + "</p>";
 }
 
+export type EmailBrand = { companyName: string; loginUrl?: string };
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function partnerShell(brand: EmailBrand, body: string): string {
+  const year = new Date().getFullYear();
+  const name = escapeHtml(brand.companyName);
+  const login = brand.loginUrl ? escapeHtml(brand.loginUrl) : "";
+  return (
+    "<!DOCTYPE html>" +
+    '<html lang="en">' +
+    "<head>" +
+    '<meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    "<title>" + name + "</title>" +
+    "</head>" +
+    '<body style="margin:0;padding:0;background:#f4f4f6;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif">' +
+    '<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f4f4f6;padding:40px 16px">' +
+    "<tr><td align=\"center\">" +
+    '<table width="560" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px;width:100%">' +
+    '<tr><td style="background:#09090b;border-radius:12px 12px 0 0;padding:22px 32px">' +
+    '<span style="font-size:1.2rem;font-weight:700;color:#ffffff;letter-spacing:-0.02em">' + name + "</span>" +
+    "</td></tr>" +
+    '<tr><td style="background:#ffffff;padding:36px 32px;border-radius:0 0 12px 12px">' +
+    body +
+    '<div style="margin-top:36px;padding-top:24px;border-top:1px solid #f0f0f0">' +
+    '<p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.7">' +
+    "You received this from " + name +
+    (login ? " &nbsp;&middot;&nbsp;<a href=\"" + login + "\" style=\"color:#6b7280;text-decoration:none\">" + login.replace(/^https?:\/\//, "") + "</a>" : "") +
+    "<br>&copy; " + year + " " + name + "." +
+    "</p></div>" +
+    "</td></tr>" +
+    "</table></td></tr></table>" +
+    "</body></html>"
+  );
+}
+
 function chip(label: string, value: string): string {
   return (
     '<div style="margin-bottom:8px;padding:12px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px">' +
@@ -99,31 +138,32 @@ export function welcomeBackEmail(name: string): string {
 
 // ── Password Reset OTP ────────────────────────────────────────────────────────
 
-export function passwordResetOtpEmail(otp: string): string {
-  return shell(
+export function passwordResetOtpEmail(otp: string, brand?: EmailBrand | null): string {
+  const inner =
     h1("Reset your password") +
-    p("Use the code below to reset your SnapServe password. It expires in <strong>10 minutes</strong>.") +
+    p("Use the code below to reset your password. It expires in <strong>10 minutes</strong>.") +
     '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:28px 24px;text-align:center;margin:24px 0">' +
     '<span style="font-size:2.4rem;font-weight:700;letter-spacing:0.3em;color:#09090b;font-variant-numeric:tabular-nums">' + otp + "</span>" +
     "</div>" +
-    p('<span style="font-size:13px;color:#9ca3af">If you did not request a password reset, you can safely ignore this email. Your account is secure.</span>')
-  );
+    p('<span style="font-size:13px;color:#9ca3af">If you did not request a password reset, you can safely ignore this email. Your account is secure.</span>');
+  return brand ? partnerShell(brand, inner) : shell(inner);
 }
 
 // ── Password Changed ──────────────────────────────────────────────────────────
 
-export function passwordChangedEmail(name: string): string {
-  return shell(
+export function passwordChangedEmail(name: string, brand?: EmailBrand | null): string {
+  const login = brand?.loginUrl || "https://app.snapserve.ai";
+  const inner =
     h1("Your password was changed") +
-    p("Hi " + name + ", this is a confirmation that your SnapServe password was successfully updated.") +
+    p("Hi " + name + ", this is a confirmation that your password was successfully updated.") +
     '<div style="background:#fefce8;border:1px solid #fde68a;border-radius:10px;padding:16px 20px;margin:20px 0">' +
     '<p style="margin:0;font-size:14px;color:#92400e">' +
     "(!) If you did not make this change, please " +
-    '<a href="https://app.snapserve.ai/forgot-password" style="color:#b45309;font-weight:600">reset your password immediately</a>' +
+    '<a href="' + login + '" style="color:#b45309;font-weight:600">reset your password immediately</a>' +
     " and contact us." +
     "</p></div>" +
-    '<div style="margin:24px 0">' + btn("Sign in to SnapServe", "https://app.snapserve.ai") + "</div>"
-  );
+    '<div style="margin:24px 0">' + btn("Sign in", login) + "</div>";
+  return brand ? partnerShell(brand, inner) : shell(inner);
 }
 
 // ── Wallet Top-Up Receipt ─────────────────────────────────────────────────────

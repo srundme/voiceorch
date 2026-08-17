@@ -1,0 +1,8 @@
+LinkedIn
+--------
+Your agent just sat down in the meeting.
+
+SnapServe agents now join Google Meet, Zoom and Teams — on camera, answering
+live, and presenting the deck themselves.
+
+app.snapserve.ai

@@ -5,7 +5,15 @@ import { loadActingAs } from "@/lib/acting-as";
 /** Cheap flags for the dashboard shell: partner nav gating + client branding. */
 export interface PartnerContext {
   isPartner: boolean;
-  branding: { companyName: string; logoUrl: string | null } | null;
+  branding: {
+    companyName: string;
+    logoUrl: string | null;
+    supportEmail?: string | null;
+    supportUrl?: string | null;
+    docsUrl?: string | null;
+    termsUrl?: string | null;
+    privacyUrl?: string | null;
+  } | null;
   /**
    * True when this account is linked to an ACTIVE partner. Clients get a full
    * workspace; partner owns ₹/min rate, wallet funding, and phone numbers.

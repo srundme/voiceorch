@@ -1,0 +1,15 @@
+---
+description: SnapServe UI work uses UI UX Pro Max with locked brand tokens
+globs: artifacts/dashboard/**/*.{tsx,css}
+alwaysApply: false
+---
+
+# SnapServe UI
+
+When designing, reviewing, or polishing dashboard / landing / docs UI:
+
+1. Read `design-system/snapserve/MASTER.md` first.
+2. Use `.cursor/skills/ui-ux-pro-max` for style, UX, chart, icon, and stack searches.
+3. Never invent a new palette or font pairing. Tokens live in `artifacts/dashboard/src/index.css`.
+4. Official mark is the three-bar logo + Tex Gyre Heros wordmark. Inter is UI type.
+5. Do not use this skill to restyle Hyperframes films.

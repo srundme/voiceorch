@@ -10,11 +10,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatApiError } from "@/lib/format-api-error";
-import { BrandMark } from "@/components/logo";
+import { HostBrandMark } from "@/components/logo";
 
 const BrandHeader = () => (
   <div className="flex flex-col items-center gap-1 mb-8">
-    <BrandMark iconSize={26} wordmarkHeight={20} />
+    <HostBrandMark iconSize={26} wordmarkHeight={20} />
   </div>
 );
 

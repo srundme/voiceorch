@@ -1049,7 +1049,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
     const isTamil     = cfg.hasTamil || langInfo.gemini ||
                         (cfg.multilingualLanguages ?? []).includes("ta-IN");
     const llmProvider = "sarvam";
-    const llmModel    = "gemma4";
+    const llmModel    = "sarvam-105b-conversations";
     const langCode    = cfg.languageMode === "multi" ? "en-IN" : langInfo.code;
     const langDisplay = cfg.languageMode === "multi" ? "Multi-language" : langInfo.label;
 

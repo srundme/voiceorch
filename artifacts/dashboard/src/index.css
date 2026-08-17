@@ -218,6 +218,18 @@
 @layer base {
   * { @apply border-border; box-sizing: border-box; }
   html, body, #root { height: 100%; min-height: 100%; }
+  html { scroll-padding-top: 4.5rem; }
+
+  button:not(:disabled),
+  [role="button"],
+  a[href] {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
 
   body {
     background-color: hsl(var(--background));
