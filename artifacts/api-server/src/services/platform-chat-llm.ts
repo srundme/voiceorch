@@ -1,7 +1,8 @@
 /**
  * Platform-wide text LLM for builders / planners / drafts.
  * Default: Sarvam-hosted Gemma 4 (`gemma4` on /v2) — fast, no thinking.
- * Quality-sensitive callers (Vibe) pass `sarvam-105b` + reasoningEffort.
+ * Quality-sensitive callers (Vibe) pass `sarvam-105b` with thinking off so
+ * JSON land in `content`. High reasoning + json_object empties the answer.
  * Gemini is not used here.
  */
 import OpenAI from "openai";
@@ -65,6 +66,8 @@ export async function platformChatText(opts: {
     apiKey: key,
     baseURL: baseUrlForModel(model),
     timeout: opts.timeoutMs ?? 90_000,
+    // Sarvam requires both headers; Bearer-only often 401s on /v1 (105b).
+    defaultHeaders: { "api-subscription-key": key },
   });
 
   const response = await client.chat.completions.create({
@@ -90,10 +93,19 @@ export async function platformChatText(opts: {
         } as object)),
   });
 
-  const msg = response.choices[0]?.message as
+  const choice = response.choices[0];
+  const msg = choice?.message as
     | { content?: string | null; reasoning_content?: string | null }
     | undefined;
-  const content = (msg?.content ?? msg?.reasoning_content ?? "").trim();
-  if (!content) throw new Error("platform_chat_empty");
-  return content;
+  // JSON / user-facing text lives in content. reasoning_content is the hidden
+  // think trace — using it as the answer (especially with json:true) is why
+  // Vibe showed "AI is busy" after high-reasoning 105B ate the token budget.
+  const content = (msg?.content ?? "").trim();
+  if (content) return content;
+  if (!opts.json) {
+    const reasoning = (msg?.reasoning_content ?? "").trim();
+    if (reasoning) return reasoning;
+  }
+  const finish = choice?.finish_reason ?? "unknown";
+  throw new Error(`platform_chat_empty finish=${finish} model=${model}`);
 }
