@@ -1,4 +1,5 @@
 import {
+  Brain,
   BookOpen,
   Bot,
   Calendar,
@@ -120,6 +121,13 @@ export const DOCS_NAV: DocsNavGroup[] = [
         icon: Database,
         search: "RAG documents attach agent upload FAQ website",
         description: "Ground answers on your files, FAQs, and sites.",
+      },
+      {
+        title: "Caller memory",
+        slug: "caller-memory",
+        icon: Brain,
+        search: "caller memory facts operator CRM update campaign lead follow-up context note order_status",
+        description: "Push request-status updates so the agent answers follow-ups.",
       },
       {
         title: "Test an agent",

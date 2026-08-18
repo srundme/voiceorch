@@ -19,6 +19,9 @@ import {
   agentsTable,
 } from "@workspace/db";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
+import { logger } from "../lib/logger.js";
+import { applyCampaignLeadMemoryUpdate } from "../services/lead-caller-memory.js";
+import { parseExternalMemoryBody } from "../orchestration/callerMemory.js";
 
 const router: IRouter = Router();
 
@@ -319,7 +322,59 @@ router.post("/campaigns/:id/leads/:leadId/notes", async (req, res): Promise<void
     leadId, campaignId, eventType: "note_added", data: { noteId: note!.id, preview: body.trim().slice(0, 100) },
   });
 
+  const phone = lead.normalizedPhone || lead.phone;
+  void applyCampaignLeadMemoryUpdate({
+    agentId: campaign.agentId,
+    leadId,
+    phone,
+    currentLeadData: lead.leadData,
+    update: { note: body.trim() },
+  }).catch((err) => logger.warn({ err, leadId }, "note → caller memory sync failed"));
+
   res.status(201).json({ note: { id: note!.id, body: note!.body, createdBy: note!.createdBy, createdAt: note!.createdAt.toISOString() } });
+});
+
+// POST /campaigns/:id/leads/:leadId/memory — operator/CRM update for this lead's caller
+router.post("/campaigns/:id/leads/:leadId/memory", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const leadId     = parseInt(req.params["leadId"]!, 10);
+
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const lead = await requireLead(leadId, campaignId);
+  if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
+
+  if (!campaign.agentId) {
+    res.status(400).json({ error: "Campaign has no agent — assign an agent before writing caller memory" });
+    return;
+  }
+
+  const parsed = parseExternalMemoryBody(req.body);
+  if ("error" in parsed) { res.status(400).json({ error: parsed.error }); return; }
+
+  const phone = lead.normalizedPhone || lead.phone;
+  const result = await applyCampaignLeadMemoryUpdate({
+    agentId: campaign.agentId,
+    leadId,
+    phone,
+    currentLeadData: lead.leadData,
+    update: parsed.update,
+  });
+
+  if (result.written.length === 0 && !parsed.update.note && !parsed.update.facts && !parsed.update.context) {
+    res.status(400).json({ error: "No valid facts to write" });
+    return;
+  }
+
+  res.status(201).json({
+    phoneNumber: result.phoneNumber,
+    written: result.written,
+    leadData: result.leadData,
+  });
 });
 
 router.delete("/campaigns/:id/leads/:leadId/notes/:noteId", async (req, res): Promise<void> => {

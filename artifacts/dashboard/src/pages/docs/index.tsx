@@ -10,6 +10,7 @@ import VibePage from "./pages/vibe";
 import AgentsPage from "./pages/agents";
 import VariablesPage from "./pages/variables";
 import KnowledgeBasePage from "./pages/knowledge-base";
+import CallerMemoryPage from "./pages/caller-memory";
 import TestingPage from "./pages/testing";
 import ConnectionsPage from "./pages/connections";
 import WhatsAppDocsPage from "./pages/whatsapp-docs";
@@ -101,6 +102,9 @@ export default function DocsPage() {
       break;
     case "knowledge-base":
       Content = KnowledgeBasePage;
+      break;
+    case "caller-memory":
+      Content = CallerMemoryPage;
       break;
     case "testing":
       Content = TestingPage;

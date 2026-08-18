@@ -24,6 +24,17 @@ describe("buildLeadContextBlock", () => {
   it("returns empty when only internal fields are present", () => {
     expect(buildLeadContextBlock({ __sheet_pipeline_id: "x" })).toBe("");
   });
+
+  it("surfaces operator_update and request fields for campaign follow-ups", () => {
+    const block = buildLeadContextBlock({
+      name: "Priya",
+      operator_update: "Refund of 1200 approved",
+      order_status: "shipped",
+    });
+    expect(block).toContain("Operator Update: Refund of 1200 approved");
+    expect(block).toContain("Order Status: shipped");
+    expect(block).toMatch(/Do NOT ask for their name/i);
+  });
 });
 
 describe("resolvePromptVariables", () => {

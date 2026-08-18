@@ -44,8 +44,8 @@ export default function VariablesPage() {
       <Callout variant="warn" title="Outbound API does not take runtime values">
         <code>POST /calls/outbound</code> accepts <code>agentId</code> and <code>toNumber</code>{" "}
         only. A <code>variables</code> object in that JSON is ignored. To personalize each dial,
-        map CSV/Sheets columns in a <Link href="/docs/campaigns">campaign</Link>, or bake stable
-        facts into the prompt.
+        map CSV/Sheets columns in a <Link href="/docs/campaigns">campaign</Link>, or push live
+        request status with <Link href="/docs/caller-memory">caller memory updates</Link>.
       </Callout>
 
       <h2 id="next">Next</h2>

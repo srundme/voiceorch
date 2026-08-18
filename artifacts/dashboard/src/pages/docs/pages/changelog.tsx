@@ -9,6 +9,24 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-18-caller-memory">2026-08-18 — Caller memory updates (API + campaigns)</h2>
+      <ul>
+        <li>
+          <code>POST /agents/&#123;id&#125;/caller-memory/&#123;phone&#125;/facts</code> writes
+          operator/CRM facts (<code>note</code>, <code>context</code>, <code>facts</code>) that the
+          agent injects as ground truth on the next call.
+        </li>
+        <li>
+          Campaigns: lead Notes sync to the same memory;{" "}
+          <code>POST /campaigns/&#123;id&#125;/leads/&#123;leadId&#125;/memory</code> also merges
+          fields into lead data for the next auto-dial.
+        </li>
+        <li>
+          Guide: <a href="/docs/caller-memory">Caller memory updates</a>.{" "}
+          <code>POST /calls/outbound</code> still has no <code>variables</code> body field.
+        </li>
+      </ul>
+
       <h2 id="2026-08-18-docs">2026-08-18 — Docs coverage for the live product</h2>
       <ul>
         <li>

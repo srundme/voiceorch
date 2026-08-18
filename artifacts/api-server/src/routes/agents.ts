@@ -815,8 +815,10 @@ router.get("/agents/:id/caller-memory", requireAuth, clientContext, async (req, 
 router.get("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
-  const phoneNumber = decodeURIComponent(String(req.params["phone"] ?? ""));
-  if (isNaN(agentId) || !phoneNumber) { res.status(400).json({ error: "Invalid params" }); return; }
+  const rawPhone = decodeURIComponent(String(req.params["phone"] ?? ""));
+  if (isNaN(agentId) || !rawPhone) { res.status(400).json({ error: "Invalid params" }); return; }
+  const { canonicalizeCallerKey } = await import("../orchestration/callerMemory.js");
+  const phoneNumber = canonicalizeCallerKey(rawPhone) ?? rawPhone;
 
   const [agent] = await db.select({ id: agentsTable.id })
     .from(agentsTable)
@@ -926,6 +928,46 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async
   }));
 
   res.json({ facts: currentFacts, episodes });
+});
+
+// Write operator / CRM facts so the next call uses them as ground truth.
+router.post("/agents/:id/caller-memory/:phone/facts", requireAuth, clientContext, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  if (rejectReadOnly(res, (await workspaceOwned(clerkId)).scope.canWrite)) return;
+
+  const agentId = parseInt(String(req.params["id"] ?? ""), 10);
+  const rawPhone = decodeURIComponent(String(req.params["phone"] ?? ""));
+  if (isNaN(agentId) || !rawPhone) { res.status(400).json({ error: "Invalid params" }); return; }
+
+  const [agent] = await db.select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), (await workspaceOwned(clerkId)).owned));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  const { parseExternalMemoryBody, upsertExternalCallerFacts } = await import("../orchestration/callerMemory.js");
+  const parsed = parseExternalMemoryBody(req.body);
+  if ("error" in parsed) { res.status(400).json({ error: parsed.error }); return; }
+
+  try {
+    const result = await upsertExternalCallerFacts({
+      agentId,
+      phoneNumber: rawPhone,
+      update: parsed.update,
+    });
+    if (result.written.length === 0) {
+      res.status(400).json({ error: "No valid facts to write" });
+      return;
+    }
+    res.status(201).json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to update caller memory";
+    if (message === "Invalid phone number") {
+      res.status(400).json({ error: message });
+      return;
+    }
+    req.log.warn({ err, agentId }, "upsert caller memory facts failed");
+    res.status(500).json({ error: "Failed to update caller memory" });
+  }
 });
 
 // Delete an entire fact key (current + entire supersession chain) for a caller

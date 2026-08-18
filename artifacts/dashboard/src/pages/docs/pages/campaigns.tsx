@@ -107,6 +107,14 @@ export default function CampaignsPage() {
         <Link href="/docs/whatsapp">WhatsApp</Link> is connected.
       </Callout>
 
+      <h2 id="caller-memory">Caller memory on the next dial</h2>
+      <p>
+        After a request changes (refund, shipment, reschedule), write the new status onto the lead
+        so the agent answers follow-ups from current ground truth — not last week’s transcript.
+        Campaign lead <strong>Notes</strong> sync automatically. Structured fields:{" "}
+        <Link href="/docs/caller-memory">Caller memory updates</Link>.
+      </p>
+
       <h2 id="transfer">Lead transfer</h2>
       <p>
         Configuration tab: when the AI disposition matches (for example Interested), POST the lead

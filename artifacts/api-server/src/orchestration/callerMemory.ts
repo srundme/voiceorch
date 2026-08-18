@@ -133,6 +133,105 @@ export interface CallerContext {
 // not reused. Never shown to the LLM — filtered out of the facts list on load.
 export const PERSONA_HASH_FACT_KEY = "__agent_persona_hash";
 
+/** Freeform operator / CRM note written via API or campaign lead notes. */
+export const OPERATOR_UPDATE_FACT_KEY = "operator_update";
+/** Prefix for structured CRM/request fields written via the caller-memory update API. */
+export const EXTERNAL_FACT_PREFIX = "ext_";
+const OPERATOR_FACT_VALUE_MAX = 2000;
+
+export function isOperatorFactKey(key: string): boolean {
+  return key === OPERATOR_UPDATE_FACT_KEY || key.startsWith(EXTERNAL_FACT_PREFIX);
+}
+
+/**
+ * Canonical key for an operator/CRM fact. Identity keys stay durable (name, email, …);
+ * request-status fields are namespaced `ext_*` so they always inject even though they
+ * are not durable identity facts.
+ */
+export function sanitizeExternalFactKey(raw: string): string | null {
+  const original = raw.trim();
+  if (!original || original.startsWith("__")) return null;
+  const slug = original
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!slug) return null;
+  if (slug === OPERATOR_UPDATE_FACT_KEY) return OPERATOR_UPDATE_FACT_KEY;
+  if (slug.startsWith(EXTERNAL_FACT_PREFIX)) {
+    const rest = slug.slice(EXTERNAL_FACT_PREFIX.length).replace(/^_+/, "");
+    if (!rest) return null;
+    return `${EXTERNAL_FACT_PREFIX}${rest}`.slice(0, 48);
+  }
+  return `${EXTERNAL_FACT_PREFIX}${slug}`.slice(0, 48);
+}
+
+/** Lead-sheet / campaign variable key (no `ext_` prefix so `{{order_status}}` still works). */
+export function sanitizeLeadContextKey(raw: string): string | null {
+  const original = raw.trim();
+  if (!original || original.startsWith("__")) return null;
+  let slug = original
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40);
+  if (!slug) return null;
+  if (slug.startsWith(EXTERNAL_FACT_PREFIX) && slug.length > EXTERNAL_FACT_PREFIX.length) {
+    slug = slug.slice(EXTERNAL_FACT_PREFIX.length);
+  }
+  return slug || null;
+}
+
+export interface ExternalMemoryUpdate {
+  note?: string;
+  facts?: Array<{ key: string; value: string }>;
+  context?: Record<string, string>;
+}
+
+export function parseExternalMemoryBody(body: unknown): { error: string } | { update: ExternalMemoryUpdate } {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { error: "JSON object required" };
+  }
+  const raw = body as Record<string, unknown>;
+  const update: ExternalMemoryUpdate = {};
+
+  if (raw["note"] != null) {
+    if (typeof raw["note"] !== "string") return { error: "note must be a string" };
+    const note = raw["note"].trim();
+    if (note) update.note = note.slice(0, OPERATOR_FACT_VALUE_MAX);
+  }
+
+  if (raw["facts"] != null) {
+    if (!Array.isArray(raw["facts"])) return { error: "facts must be an array" };
+    const facts: Array<{ key: string; value: string }> = [];
+    for (const item of raw["facts"]) {
+      if (!item || typeof item !== "object") continue;
+      const rec = item as Record<string, unknown>;
+      const key = typeof rec["key"] === "string" ? rec["key"].trim() : "";
+      const value = rec["value"] == null ? "" : String(rec["value"]).trim();
+      if (key && value) facts.push({ key, value: value.slice(0, OPERATOR_FACT_VALUE_MAX) });
+    }
+    if (facts.length) update.facts = facts;
+  }
+
+  if (raw["context"] != null) {
+    if (typeof raw["context"] !== "object" || Array.isArray(raw["context"])) {
+      return { error: "context must be an object of string values" };
+    }
+    const context: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw["context"] as Record<string, unknown>)) {
+      if (v == null) continue;
+      const value = String(v).trim();
+      if (k.trim() && value) context[k.trim()] = value.slice(0, OPERATOR_FACT_VALUE_MAX);
+    }
+    if (Object.keys(context).length) update.context = context;
+  }
+
+  if (!update.note && !update.facts && !update.context) {
+    return { error: "Provide note, facts, and/or context" };
+  }
+  return { update };
+}
+
 /** Keep only caller/agent speech — tool JSON must never feed extraction or L2 archive. */
 export function speakerTurns(history: ConversationTurn[]): ConversationTurn[] {
   return history.filter((t) => {
@@ -670,6 +769,24 @@ export function injectEnhancedMemory(
     }
   }
 
+  // Operator / CRM updates are ground truth for this request. Always inject —
+  // even when durable domain memory is suppressed (persona change / unresumable
+  // drop) — so follow-up questions about the live request stay accurate.
+  const operatorFacts = facts.filter((f) => isOperatorFactKey(f.key) && f.confidence >= 0.5 && f.value.trim());
+  if (operatorFacts.length > 0) {
+    lines.push("");
+    lines.push(
+      "OPERATOR / CRM UPDATES (current ground truth for this request — use to answer follow-ups; do not re-ask):",
+    );
+    for (const f of operatorFacts) {
+      const label =
+        f.key === OPERATOR_UPDATE_FACT_KEY
+          ? "Latest update"
+          : f.key.replace(new RegExp(`^${EXTERNAL_FACT_PREFIX}`), "").replace(/_/g, " ");
+      lines.push(`• ${label}: ${f.value}`);
+    }
+  }
+
   // ── Resume thread: tail of the abruptly-ended prior conversation (L2) ──────
   const hasResumeTail = resumeDrop && !!abruptEndTail && abruptEndTail.length > 0;
   if (hasResumeTail) {
@@ -738,6 +855,14 @@ export function injectEnhancedMemory(
       "genuinely missing from the memory above.",
     );
   }
+  if (operatorFacts.length > 0) {
+    lines.push(
+      "⚠️ OPERATOR UPDATES ARE GROUND TRUTH: The OPERATOR / CRM UPDATES block above was written " +
+      "by the team or CRM after the last conversation. Treat it as the current status of this " +
+      "caller's request. Answer follow-up questions from it. Do not contradict it or re-ask for " +
+      "details already stated there.",
+    );
+  }
 
   lines.push("=====================================");
 
@@ -775,21 +900,87 @@ export async function rememberCallerFact(opts: {
   });
 }
 
+export interface WrittenCallerFact {
+  key: string;
+  value: string;
+  id: number | null;
+}
+
+/**
+ * Write operator/CRM facts for a caller so the next call (inbound, outbound, or
+ * campaign) injects them as ground truth. Creates a stub caller_profiles row when
+ * this number has never called, so it appears in Memory.
+ */
+export async function upsertExternalCallerFacts(opts: {
+  agentId: number;
+  phoneNumber: string;
+  update: ExternalMemoryUpdate;
+}): Promise<{ phoneNumber: string; written: WrittenCallerFact[] }> {
+  const phoneNumber = canonicalizeCallerKey(opts.phoneNumber);
+  if (!phoneNumber) {
+    throw new Error("Invalid phone number");
+  }
+
+  await db.insert(callerProfilesTable)
+    .values({ agentId: opts.agentId, phoneNumber })
+    .onConflictDoNothing();
+
+  const written: WrittenCallerFact[] = [];
+  const pairs: Array<{ key: string; value: string }> = [];
+
+  if (opts.update.note?.trim()) {
+    pairs.push({ key: OPERATOR_UPDATE_FACT_KEY, value: opts.update.note.trim() });
+  }
+  for (const f of opts.update.facts ?? []) {
+    pairs.push(f);
+  }
+  if (opts.update.context) {
+    for (const [k, v] of Object.entries(opts.update.context)) {
+      pairs.push({ key: k, value: v });
+    }
+  }
+
+  for (const pair of pairs) {
+    const value = pair.value.trim();
+    if (!value) continue;
+    const key = pair.key === OPERATOR_UPDATE_FACT_KEY
+      ? OPERATOR_UPDATE_FACT_KEY
+      : sanitizeExternalFactKey(pair.key);
+    if (!key) continue;
+    const id = await supersedeFact({
+      agentId: opts.agentId,
+      phoneNumber,
+      key,
+      value,
+      confidence: 1,
+      sourceCallId: null,
+      respectConfidenceGate: false,
+      valueMaxLen: OPERATOR_FACT_VALUE_MAX,
+    });
+    written.push({ key, value: value.slice(0, OPERATOR_FACT_VALUE_MAX), id });
+  }
+
+  return { phoneNumber, written };
+}
+
 async function supersedeFact(opts: {
   agentId: number;
   phoneNumber: string;
   key: string;
   value: string;
   confidence: number;
-  sourceCallId: number;
+  /** Null for operator/CRM writes that are not tied to a call. */
+  sourceCallId: number | null;
   sourceSentenceIds?: number[];
   /** When false, skip confidence gate (persona marker / explicit language). Default true for caller facts. */
   respectConfidenceGate?: boolean;
+  valueMaxLen?: number;
 }): Promise<number | null> {
   const {
     agentId, phoneNumber, key, value, confidence, sourceCallId,
     sourceSentenceIds = [],
     respectConfidenceGate = true,
+    valueMaxLen = 512,
   } = opts;
 
   try {
@@ -847,7 +1038,7 @@ async function supersedeFact(opts: {
           agentId,
           phoneNumber,
           key,
-          value:        value.slice(0, 512),
+          value:        value.slice(0, valueMaxLen),
           confidence:   Math.min(1, Math.max(0, confidence)),
           sourceCallId,
         })

@@ -478,21 +478,35 @@ function NotesTab({ campaignId, leadId, initialNotes, onRefresh }: {
 }) {
   const [notes, setNotes] = useState<NoteItem[]>(initialNotes);
   const [body, setBody] = useState("");
+  const [factKey, setFactKey] = useState("");
+  const [factValue, setFactValue] = useState("");
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
   async function addNote() {
-    if (!body.trim()) return;
+    if (!body.trim() && !(factKey.trim() && factValue.trim())) return;
     setSaving(true);
     try {
-      const res = await apiFetch<{ note: NoteItem }>(
-        `${BASE}/api/campaigns/${campaignId}/leads/${leadId}/notes`,
-        { method: "POST", body: JSON.stringify({ body: body.trim() }) }
-      );
-      setNotes(prev => [res.note, ...prev]);
-      setBody("");
+      if (body.trim()) {
+        const res = await apiFetch<{ note: NoteItem }>(
+          `${BASE}/api/campaigns/${campaignId}/leads/${leadId}/notes`,
+          { method: "POST", body: JSON.stringify({ body: body.trim() }) }
+        );
+        if (res.note) setNotes(prev => [res.note, ...prev]);
+        else onRefresh();
+        setBody("");
+      }
+      if (factKey.trim() && factValue.trim()) {
+        await apiFetch(`${BASE}/api/campaigns/${campaignId}/leads/${leadId}/memory`, {
+          method: "POST",
+          body: JSON.stringify({ context: { [factKey.trim()]: factValue.trim() } }),
+        });
+        setFactKey("");
+        setFactValue("");
+      }
       onRefresh();
-    } catch { toast({ title: "Failed to save note", variant: "destructive" }); }
+      toast({ title: "Saved for next call", description: "The agent will use this on the next campaign dial or inbound follow-up." });
+    } catch { toast({ title: "Failed to save", variant: "destructive" }); }
     finally { setSaving(false); }
   }
 
@@ -510,15 +524,32 @@ function NotesTab({ campaignId, leadId, initialNotes, onRefresh }: {
       <div className="rounded-xl border border-border/40 bg-card p-4 space-y-2.5">
         <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40">Add Note</p>
         <Textarea
-          placeholder="Type a note about this lead…"
+          placeholder="Type a note about this lead… the agent will use it on the next call."
           value={body}
           onChange={e => setBody(e.target.value)}
           className="min-h-[80px] text-sm resize-none"
           onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void addNote(); }}
         />
-        <div className="flex justify-end">
-          <Button size="sm" className="h-7 text-xs gap-1.5" disabled={!body.trim() || saving} onClick={() => void addNote()}>
-            <Plus className="h-3 w-3" /> {saving ? "Saving…" : "Add Note"}
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-2">
+          <Input
+            placeholder="Field (e.g. order_status)"
+            value={factKey}
+            onChange={e => setFactKey(e.target.value)}
+            className="h-8 text-sm"
+          />
+          <Input
+            placeholder="Value (e.g. shipped)"
+            value={factValue}
+            onChange={e => setFactValue(e.target.value)}
+            className="h-8 text-sm"
+          />
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] text-muted-foreground/70 leading-snug">
+            Notes and fields sync to the agent’s caller memory so campaign follow-ups and inbound calls use the latest status.
+          </p>
+          <Button size="sm" className="h-7 text-xs gap-1.5 shrink-0" disabled={(!body.trim() && !(factKey.trim() && factValue.trim())) || saving} onClick={() => void addNote()}>
+            <Plus className="h-3 w-3" /> {saving ? "Saving…" : "Save for next call"}
           </Button>
         </div>
       </div>
