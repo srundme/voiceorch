@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { StripePage } from "@/components/stripe-page";
 import { EmptyState } from "@/components/empty-state";
+import { UpdateCallerMemoryForm } from "@/components/update-caller-memory-form";
 import {
   useListAgentMemorySummaries, getListAgentMemorySummariesQueryKey,
   getListAgentMemoryFactsQueryKey,
@@ -40,7 +41,6 @@ import {
   useResetCallerMemory,
   useListAgentCallers, getListAgentCallersQueryKey,
   useGetCallerDetail, getGetCallerDetailQueryKey,
-  customFetch,
 } from "@workspace/api-client-react";
 import type {
   AgentMemorySummary, AgentMemoryEpisode, Agent, Call,
@@ -352,82 +352,6 @@ function FactsGrid({
   return (
     <div className={cls}>
       {facts.map(f => <FactCard key={f.id} fact={f} agentId={agentId} onDeleted={onDeleted} />)}
-    </div>
-  );
-}
-
-function AddMemoryUpdateForm({
-  agentId, phone, onSaved,
-}: {
-  agentId: number;
-  phone: string;
-  onSaved: () => void;
-}) {
-  const { toast } = useToast();
-  const [note, setNote] = useState("");
-  const [factKey, setFactKey] = useState("");
-  const [factValue, setFactValue] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function save() {
-    const trimmedNote = note.trim();
-    const key = factKey.trim();
-    const value = factValue.trim();
-    if (!trimmedNote && !(key && value)) return;
-    setSaving(true);
-    try {
-      const body: { note?: string; context?: Record<string, string> } = {};
-      if (trimmedNote) body.note = trimmedNote;
-      if (key && value) body.context = { [key]: value };
-      await customFetch(`/api/agents/${agentId}/caller-memory/${encodeURIComponent(phone)}/facts`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-      setNote("");
-      setFactKey("");
-      setFactValue("");
-      toast({ title: "Saved for next call", description: "The agent will use this update on the next conversation with this caller." });
-      onSaved();
-    } catch {
-      toast({ title: "Could not save update", description: "Please try again.", variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const canSave = !!(note.trim() || (factKey.trim() && factValue.trim()));
-
-  return (
-    <div className="space-y-2.5">
-      <Textarea
-        placeholder="Latest update for this request (refund approved, order shipped, appointment moved…)"
-        value={note}
-        onChange={e => setNote(e.target.value)}
-        className="min-h-[72px] text-[13px] resize-none"
-      />
-      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-2">
-        <Input
-          placeholder="Field (e.g. order_status)"
-          value={factKey}
-          onChange={e => setFactKey(e.target.value)}
-          className="h-8 text-[13px]"
-        />
-        <Input
-          placeholder="Value (e.g. shipped)"
-          value={factValue}
-          onChange={e => setFactValue(e.target.value)}
-          className="h-8 text-[13px]"
-        />
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-muted-foreground/70 leading-snug">
-          Saved to this caller’s memory. The agent uses it automatically on the next call — including campaign dials.
-        </p>
-        <Button size="sm" className="h-7 text-xs gap-1.5 shrink-0" disabled={!canSave || saving} onClick={() => void save()}>
-          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-          {saving ? "Saving…" : "Save for next call"}
-        </Button>
-      </div>
     </div>
   );
 }
@@ -1039,9 +963,8 @@ function CallerDetailView({
               {/* Overview: Memory Summary up top, then previews that deep-link into the tabs */}
               <TabsContent value="overview" className="mt-0 space-y-5">
                 <SectionCard icon={Pencil} title="Update for next call" accent="bg-muted/50 text-muted-foreground border-border/50">
-                  <AddMemoryUpdateForm
-                    agentId={agentId}
-                    phone={contact.phoneNumber}
+                  <UpdateCallerMemoryForm
+                    target={{ kind: "agent", agentId, phone: contact.phoneNumber }}
                     onSaved={invalidateCallerDetail}
                   />
                 </SectionCard>
@@ -1118,9 +1041,8 @@ function CallerDetailView({
               {/* Facts */}
               <TabsContent value="facts" className="mt-0 space-y-5">
                 <SectionCard icon={Pencil} title="Update for next call" accent="bg-muted/50 text-muted-foreground border-border/50">
-                  <AddMemoryUpdateForm
-                    agentId={agentId}
-                    phone={contact.phoneNumber}
+                  <UpdateCallerMemoryForm
+                    target={{ kind: "agent", agentId, phone: contact.phoneNumber }}
                     onSaved={invalidateCallerDetail}
                   />
                 </SectionCard>

@@ -31,6 +31,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
+import { UpdateCallerMemoryForm } from "@/components/update-caller-memory-form";
 import { uiTypeFromStored, type StoredDomainField } from "@/lib/disposition-fields";
 import {
   getDispositionConfidence,
@@ -1935,7 +1936,7 @@ export function CallDetailContent({
             </Card>
 
             {/* Caller Memory (caller-scoped CRM) */}
-            {callerMemory && (callerMemory.factCount > 0 || callerMemory.episodeCount > 0 || callerMemory.summary || callerMemory.name) && (
+            {agentId != null && callerMemory?.phoneNumber && (
               <Card>
                 <CardHeader className="py-3 border-b">
                   <div className="flex items-center justify-between">
@@ -1943,18 +1944,16 @@ export function CallDetailContent({
                       <BookOpen className="h-4 w-4 text-primary/70" />
                       Caller Memory
                     </CardTitle>
-                    {agentId != null && callerMemory.phoneNumber && (
-                      <Link
-                        href={`/app/memory?agentId=${agentId}&caller=${encodeURIComponent(callerMemory.phoneNumber)}`}
-                      >
-                        <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs px-2">
-                          View in CRM <ArrowRight className="h-3 w-3" />
-                        </Button>
-                      </Link>
-                    )}
+                    <Link
+                      href={`/app/memory?agentId=${agentId}&caller=${encodeURIComponent(callerMemory.phoneNumber)}`}
+                    >
+                      <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs px-2">
+                        View in CRM <ArrowRight className="h-3 w-3" />
+                      </Button>
+                    </Link>
                   </div>
                   <CardDescription className="text-[10px] mt-1">
-                    What this agent remembers about this caller across calls
+                    What this agent remembers — and updates you save for the next call
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-3 space-y-3">
@@ -2005,6 +2004,18 @@ export function CallDetailContent({
                       {callerMemory.episodeCount} {callerMemory.episodeCount === 1 ? "episode" : "episodes"} remembered
                     </div>
                   )}
+
+                  <div className="pt-1 border-t border-border">
+                    <p className="text-[10px] text-muted-foreground/50 uppercase tracking-wider mb-2">
+                      Update for next call
+                    </p>
+                    <UpdateCallerMemoryForm
+                      target={{ kind: "agent", agentId, phone: callerMemory.phoneNumber }}
+                      onSaved={() => {
+                        queryClient.invalidateQueries({ queryKey: getGetCallCallerMemoryQueryKey(id) });
+                      }}
+                    />
+                  </div>
                 </CardContent>
               </Card>
             )}

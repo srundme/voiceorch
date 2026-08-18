@@ -97,11 +97,15 @@ export default function CallerMemoryPage() {
       <h2 id="dashboard">In the dashboard</h2>
       <ol>
         <li>
+          <strong>Campaigns</strong> → open a lead → Overview or the <strong>Memory</strong> tab →
+          Save for next call.
+        </li>
+        <li>
           <strong>Memory</strong> → pick an agent and caller → <em>Update for next call</em>.
         </li>
         <li>
-          <strong>Campaigns</strong> → lead workspace → Notes. Notes and field/value rows sync to
-          the same caller memory.
+          <strong>Calls</strong> → open a call → Caller Memory sidebar → update for the next
+          conversation.
         </li>
       </ol>
 
