@@ -111,8 +111,8 @@ export default function CampaignsPage() {
       <p>
         After a request changes (refund, shipment, reschedule), write the new status onto the lead
         so the agent answers follow-ups from current ground truth — not last week’s transcript.
-        Campaign lead <strong>Notes</strong> sync automatically. Structured fields:{" "}
-        <Link href="/docs/caller-memory">Caller memory updates</Link>.
+        Use the lead <strong>Memory</strong> tab (or Overview). Notes also sync automatically.
+        Guide: <Link href="/docs/caller-memory">Caller memory updates</Link>.
       </p>
 
       <h2 id="transfer">Lead transfer</h2>

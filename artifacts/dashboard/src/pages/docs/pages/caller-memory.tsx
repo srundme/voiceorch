@@ -15,7 +15,7 @@ export default function CallerMemoryPage() {
       <p>
         SnapServe already remembers durable identity (name, location, language) from past calls.
         Request status — refund approved, order shipped, appointment moved — used to live only in
-        your CRM. Use the endpoints below (or Memory / campaign lead Notes in the dashboard) to
+        your CRM. Use the endpoints below, or Memory / campaign lead Memory in the dashboard, to
         write that status onto the caller so the next conversation uses it automatically.
       </p>
 
@@ -85,7 +85,7 @@ export default function CallerMemoryPage() {
       <p>
         That writes caller memory for the campaign’s agent <em>and</em> updates{" "}
         <code>leadData</code>, so the next auto-dial already has the new status. Dashboard: open
-        the lead → Notes → Save for next call.
+        the lead → Overview or Memory → Save for next call.
       </p>
       <p>
         <Link href="/docs/api-reference/upsertCampaignLeadMemory">
