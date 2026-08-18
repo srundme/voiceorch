@@ -23,7 +23,8 @@ export default function ChangelogPage() {
         </li>
         <li>
           Guide: <a href="/docs/caller-memory">Caller memory updates</a>.{" "}
-          <code>POST /calls/outbound</code> still has no <code>variables</code> body field.
+          <code>POST /calls/outbound</code> still has no <code>variables</code> body field. Public API
+          Reference: <a href="/docs/api-reference/upsertCallerMemoryFacts">upsertCallerMemoryFacts</a>.
         </li>
       </ul>
 

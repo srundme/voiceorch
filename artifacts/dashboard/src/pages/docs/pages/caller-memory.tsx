@@ -63,11 +63,15 @@ export default function CallerMemoryPage() {
   }'`}
       />
       <p>
-        Full schema:{" "}
+        Full schema in the API Reference:{" "}
         <Link href="/docs/api-reference/upsertCallerMemoryFacts">
           POST /agents/&#123;id&#125;/caller-memory/&#123;phone&#125;/facts
         </Link>
-        .
+        {" "}·{" "}
+        <Link href="/docs/api-reference/getCallerDetail">
+          GET /agents/&#123;id&#125;/caller-memory/&#123;phone&#125;
+        </Link>
+        {" "}to read back. Auth: same <code>sk_live_…</code> Bearer key as outbound calls.
       </p>
 
       <h2 id="campaigns">Campaigns</h2>
@@ -85,13 +89,9 @@ export default function CallerMemoryPage() {
       <p>
         That writes caller memory for the campaign’s agent <em>and</em> updates{" "}
         <code>leadData</code>, so the next auto-dial already has the new status. Dashboard: open
-        the lead → Overview or Memory → Save for next call.
-      </p>
-      <p>
-        <Link href="/docs/api-reference/upsertCampaignLeadMemory">
-          POST /campaigns/&#123;id&#125;/leads/&#123;leadId&#125;/memory
-        </Link>
-        .
+        the lead → Overview or Memory → Save for next call. Same <code>sk_live_…</code> auth as
+        the public agent endpoint above; this campaign path is for lead-scoped writes and is not
+        listed in the curated API Reference.
       </p>
 
       <h2 id="dashboard">In the dashboard</h2>

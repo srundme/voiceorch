@@ -31,6 +31,8 @@ export const PUBLIC_OPERATION_IDS = new Set<string>([
   "updateAgent",
   "toggleAgent",
   "deleteAgent",
+  "getCallerDetail",
+  "upsertCallerMemoryFacts",
 
   // Calls — transcript / summary / disposition on getCall
   "initiateOutboundCall",
