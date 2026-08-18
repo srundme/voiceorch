@@ -71,7 +71,7 @@ export function Callout({
   children: ReactNode;
 }) {
   const styles = {
-    info: "border-sky-200 bg-sky-50 text-sky-900",
+    info: "border-slate-200 bg-slate-50 text-slate-800",
     warn: "border-amber-200 bg-amber-50 text-amber-900",
     tip: "border-emerald-200 bg-emerald-50 text-emerald-900",
   }[variant];
@@ -100,11 +100,11 @@ export function DocCard({
   return (
     <Link
       href={href}
-      className="group flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 hover:border-sky-300 hover:bg-sky-50/40 transition-colors"
+      className="group flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-400 hover:bg-slate-50 transition-colors"
     >
-      <div className="mt-0.5 text-sky-700 [&_svg]:h-5 [&_svg]:w-5 shrink-0">{icon}</div>
+      <div className="mt-0.5 text-slate-700 [&_svg]:h-5 [&_svg]:w-5 shrink-0">{icon}</div>
       <div className="min-w-0">
-        <p className="font-semibold text-slate-900 group-hover:text-sky-800 transition-colors">{title}</p>
+        <p className="font-semibold text-slate-900">{title}</p>
         <p className="mt-1 text-sm text-slate-600 leading-snug">{description}</p>
       </div>
     </Link>
@@ -130,7 +130,7 @@ export function ParamsTable({
           {rows.map((row) => (
             <tr key={row.name} className="border-b border-slate-100 last:border-0">
               <td className="px-4 py-3 align-top">
-                <code className="text-xs text-sky-700">{row.name}</code>
+                <code className="text-xs text-slate-800">{row.name}</code>
                 {row.required ? (
                   <span className="ml-2 text-[10px] uppercase text-rose-600">required</span>
                 ) : null}
@@ -181,7 +181,7 @@ export function Endpoint({
         {opId ? (
           <Link
             href={`/docs/api-reference/${opId}`}
-            className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-sky-700 transition-colors"
+            className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-slate-900 transition-colors"
           >
             Full schema <ChevronRight className="h-3 w-3" />
           </Link>

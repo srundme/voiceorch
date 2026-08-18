@@ -118,7 +118,7 @@ export default function IntroductionPage() {
 
       <p className="not-prose mt-8 text-sm text-slate-500">
         Something missing? Email{" "}
-        <a className="text-sky-700 hover:text-sky-800" href="mailto:support@snapserve.ai">
+        <a className="text-slate-900 underline underline-offset-2 hover:text-slate-700" href="mailto:support@snapserve.ai">
           support@snapserve.ai
         </a>
         .

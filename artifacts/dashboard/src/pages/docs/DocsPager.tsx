@@ -19,7 +19,7 @@ export function DocsPager({ slug }: { slug: string }) {
           <span className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-slate-500">
             <ArrowLeft className="h-3 w-3" /> Previous
           </span>
-          <span className="mt-1 text-sm font-semibold text-slate-900 group-hover:text-sky-800">
+          <span className="mt-1 text-sm font-semibold text-slate-900 group-hover:text-slate-700">
             {prev.title}
           </span>
         </Link>
@@ -34,7 +34,7 @@ export function DocsPager({ slug }: { slug: string }) {
           <span className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-slate-500">
             Next <ArrowRight className="h-3 w-3" />
           </span>
-          <span className="mt-1 text-sm font-semibold text-slate-900 group-hover:text-sky-800">
+          <span className="mt-1 text-sm font-semibold text-slate-900 group-hover:text-slate-700">
             {next.title}
           </span>
         </Link>

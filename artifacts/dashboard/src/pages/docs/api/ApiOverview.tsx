@@ -56,14 +56,14 @@ export function ApiOverview() {
         <p>
           Use a developer API key from{" "}
           <Link href="/docs/authentication">Authentication</Link> in the{" "}
-          <code className="text-sky-700">Authorization</code> header:
+          <code className="text-slate-800">Authorization</code> header:
         </p>
         <pre className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[13px] font-mono text-slate-800 overflow-x-auto">
           <code>Authorization: Bearer sk_live_…</code>
         </pre>
         <p>
           Dashboard session JWTs work for the browser app only. Prefer{" "}
-          <code className="text-sky-700">sk_live_</code> keys from your backend.
+          <code className="text-slate-800">sk_live_</code> keys from your backend.
         </p>
       </Section>
 

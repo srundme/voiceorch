@@ -36,7 +36,7 @@ export default function ErrorsPage() {
               ["5xx", "Server / upstream provider error — retry with jitter"],
             ].map(([s, m]) => (
               <tr key={s} className="border-b border-slate-100 last:border-0">
-                <td className="px-4 py-3 font-mono text-xs text-sky-700">{s}</td>
+                <td className="px-4 py-3 font-mono text-xs text-slate-800">{s}</td>
                 <td className="px-4 py-3 text-muted-foreground">{m}</td>
               </tr>
             ))}

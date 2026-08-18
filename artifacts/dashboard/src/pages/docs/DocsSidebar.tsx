@@ -26,12 +26,12 @@ export function DocsSidebar({ activeSection }: { activeSection: string }) {
                     href={hrefForSlug(item.slug)}
                     className={`relative flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors ${
                       isActive
-                        ? "text-sky-800 bg-sky-50"
+                        ? "text-slate-900 bg-slate-100"
                         : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                     }`}
                   >
                     {isActive ? (
-                      <span className="absolute -left-[13px] top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-sky-500" />
+                      <span className="absolute -left-[13px] top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-slate-900" />
                     ) : null}
                     {ItemIcon ? <ItemIcon className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden /> : null}
                     <span className="truncate">{item.title}</span>

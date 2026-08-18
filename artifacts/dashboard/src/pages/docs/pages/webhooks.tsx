@@ -53,7 +53,7 @@ Events: call.completed, call.failed`}
               ["call.ended", "Legacy alias — still matched when we send call.completed"],
             ].map(([e, w]) => (
               <tr key={e} className="border-b border-slate-100 last:border-0">
-                <td className="px-4 py-3 font-mono text-xs text-sky-700">{e}</td>
+                <td className="px-4 py-3 font-mono text-xs text-slate-800">{e}</td>
                 <td className="px-4 py-3 text-muted-foreground">{w}</td>
               </tr>
             ))}

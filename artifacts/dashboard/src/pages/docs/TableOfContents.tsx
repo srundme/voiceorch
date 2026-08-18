@@ -59,7 +59,7 @@ export function TableOfContents() {
               heading.level === 3 ? "pl-3" : ""
             } ${
               activeId === heading.id
-                ? "text-sky-700 font-medium"
+                ? "text-slate-900 font-medium"
                 : "text-slate-500 hover:text-slate-800"
             }`}
           >

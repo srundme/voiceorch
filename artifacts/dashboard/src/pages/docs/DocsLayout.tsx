@@ -32,7 +32,7 @@ function TopTabs() {
           >
             {tab.label}
             {active ? (
-              <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-sky-500" />
+              <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-slate-900" />
             ) : null}
           </Link>
         );
@@ -62,7 +62,7 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
   }, []);
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-sky-400/25">
+    <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-slate-900/10">
       <header className="sticky top-0 z-40 hidden lg:block border-b border-slate-200 bg-white/90 backdrop-blur-xl">
         <div className="max-w-[1600px] mx-auto px-6 flex items-center h-14 gap-8">
           <Link href="/docs" className="flex items-center gap-2 shrink-0 hover:opacity-90 transition-opacity">
@@ -79,7 +79,7 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
             </a>
             <a
               href="https://app.snapserve.ai/app/api-keys"
-              className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 transition-colors"
+              className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 transition-colors"
             >
               Get API key
             </a>
@@ -131,7 +131,7 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
         <main className="flex-1 min-w-0 py-10 lg:py-12 px-0 lg:px-12 flex justify-center relative">
           <div
             key={section}
-            className="relative w-full max-w-[760px] prose prose-slate prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-slate-900 prose-p:text-slate-600 prose-li:text-slate-600 prose-strong:text-slate-900 prose-a:text-sky-700 hover:prose-a:text-sky-800 prose-code:text-sky-700 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200"
+            className="relative w-full max-w-[760px] prose prose-slate prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-slate-900 prose-p:text-slate-600 prose-li:text-slate-600 prose-strong:text-slate-900 prose-a:text-slate-900 prose-a:underline prose-a:underline-offset-2 hover:prose-a:text-slate-700 prose-code:text-slate-800 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200"
           >
             {children}
             <DocsPager slug={section} />

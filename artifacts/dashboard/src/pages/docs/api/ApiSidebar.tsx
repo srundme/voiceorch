@@ -58,7 +58,7 @@ function TagSection({
                 href={`/docs/api-reference/${op.id}`}
                 className={`group flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors ${
                   isActive
-                    ? "bg-sky-50 text-sky-700"
+                    ? "bg-slate-100 text-slate-900"
                     : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                 }`}
               >
