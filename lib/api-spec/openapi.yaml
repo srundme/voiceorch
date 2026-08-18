@@ -8191,7 +8191,8 @@ components:
           type: object
           additionalProperties:
             type: string
-          description: Map of request fields, e.g. { "order_status": "shipped", "tracking_id": "TRK-1" }
+          description: >-
+            Map of request fields, e.g. `{ "order_status": "shipped", "tracking_id": "TRK-1" }`
           example:
             order_status: shipped
             tracking_id: TRK-1
