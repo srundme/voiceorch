@@ -10,12 +10,16 @@ import { isDirectSnapServeHost, loadHostBrand, type HostBrand } from "@/lib/whit
 
 const FONT = "'Tex Gyre Heros', Helvetica, Arial, sans-serif";
 
-/* ── BrandMark (image-based lockup, mirrors admin) ----------------------- */
+/* ── BrandMark (theme-proof lockup) ---------------------------------------
+   Raster *-light.png files are white/grey art for dark chrome. On the Vibe
+   landing (and any light surface) "Snap" and the palest bar vanish, leaving
+   two bars + "Serve". Sidebar already uses currentColor SVG + text; do that
+   here so light and dark both stay readable. */
 
 interface BrandMarkProps {
   /** Pixel size of the icon (height & width). */
   iconSize?: number;
-  /** Pixel height of the wordmark image. */
+  /** Pixel height of the wordmark text. */
   wordmarkHeight?: number;
   /** Tailwind gap class between icon and wordmark. */
   gapClass?: string;
@@ -29,22 +33,16 @@ export function BrandMark({
   className = "",
 }: BrandMarkProps) {
   return (
-    <span className={`inline-flex items-center select-none ${gapClass} ${className}`}>
-      <img
-        src={`${import.meta.env.BASE_URL}snapserve-icon-light.png`}
-        alt=""
-        aria-hidden
-        width={iconSize}
-        height={iconSize}
-        style={{ width: iconSize, height: iconSize }}
-        className="shrink-0"
-      />
-      <img
-        src={`${import.meta.env.BASE_URL}snapserve-wordmark-light.png`}
-        alt="SnapServe"
-        style={{ height: wordmarkHeight }}
-        className="shrink-0"
-      />
+    <span className={`inline-flex items-center select-none text-foreground ${gapClass} ${className}`}>
+      <SnapServeIcon size={iconSize} className="shrink-0" />
+      <span
+        className="leading-none"
+        style={{ fontFamily: FONT, fontSize: wordmarkHeight, letterSpacing: "-0.02em" }}
+        aria-label="SnapServe"
+      >
+        <span style={{ fontWeight: 700 }}>Snap</span>
+        <span style={{ fontWeight: 400, opacity: 0.72 }}>Serve</span>
+      </span>
     </span>
   );
 }
