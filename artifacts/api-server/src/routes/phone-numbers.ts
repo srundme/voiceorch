@@ -32,6 +32,7 @@ import {
   ReleasePhoneNumberParams,
 } from "@workspace/api-zod";
 import { releasePhoneNumberRecord } from "../services/phone-number-release.js";
+import { resolveWorkspaceScope } from "../services/workspace-scope.js";
 
 const router: IRouter = Router();
 
@@ -584,11 +585,12 @@ router.get("/phone-numbers", requireAuth, clientContext, async (req, res): Promi
   // Backfill for users whose Plivo key predates BYO-number import: cheap
   // DB-only reconciliation (only hits the Plivo API when a row changes).
   await syncByoPlivoNumbers(clerkId);
+  const scope = await resolveWorkspaceScope(clerkId);
   const rows = await db
     .select()
     .from(phoneNumbersTable)
     .where(and(
-      eq(phoneNumbersTable.userId, clerkId),
+      inArray(phoneNumbersTable.userId, scope.userIds),
       eq(phoneNumbersTable.status, "active"),
       // WhatsApp-capable numbers are managed on the WhatsApp page, not here.
       ne(phoneNumbersTable.service, "whatsapp"),
@@ -617,9 +619,16 @@ router.get("/phone-numbers", requireAuth, clientContext, async (req, res): Promi
 
   const enrichedOwn = await Promise.all(rows.map(enrichNumber));
   const enrichedPartner = await Promise.all(partnerRows.map(enrichNumber));
+  const seen = new Set(enrichedOwn.map((r) => r.id));
   const enriched = [
-    ...enrichedOwn.map((r) => ({ ...r, partnerAssigned: false })),
-    ...enrichedPartner.map((r) => ({ ...r, partnerAssigned: true })),
+    ...enrichedOwn.map((r) => ({
+      ...r,
+      partnerAssigned: false,
+      workspaceShared: r.userId !== clerkId,
+    })),
+    ...enrichedPartner
+      .filter((r) => !seen.has(r.id))
+      .map((r) => ({ ...r, partnerAssigned: true, workspaceShared: false })),
   ];
   res.json(ListPhoneNumbersResponse.parse(enriched));
 });
@@ -1299,6 +1308,7 @@ router.patch("/phone-numbers/:id/assign", requireAuth, clientContext, async (req
 
   const managingPartner = await getManagingPartner(clerkId);
   const isManagedClient = !!(managingPartner && managingPartner.partnerUserId !== clerkId);
+  const scope = await resolveWorkspaceScope(clerkId);
 
   // Prefer numbers owned by the caller.
   let [target] = await db
@@ -1316,6 +1326,8 @@ router.patch("/phone-numbers/:id/assign", requireAuth, clientContext, async (req
   let numberOwnerId = clerkId;
   /** Client may only move numbers already on their agents. */
   let clientScopedReassign = false;
+  /** Teammate assigning an owner-purchased number onto a shared agent. */
+  let workspaceScopedAssign = false;
 
   if (!target && isManagedClient && managingPartner) {
     const clientAgentRows = await db
@@ -1347,6 +1359,28 @@ router.patch("/phone-numbers/:id/assign", requireAuth, clientContext, async (req
     }
   }
 
+  if (!target && scope.canWrite && scope.userIds.some((id) => id !== clerkId)) {
+    const [wsNum] = await db
+      .select({
+        id: phoneNumbersTable.id,
+        service: phoneNumbersTable.service,
+        provider: phoneNumbersTable.provider,
+        userId: phoneNumbersTable.userId,
+        agentId: phoneNumbersTable.agentId,
+      })
+      .from(phoneNumbersTable)
+      .where(and(
+        eq(phoneNumbersTable.id, params.data.id),
+        inArray(phoneNumbersTable.userId, scope.userIds),
+        eq(phoneNumbersTable.status, "active"),
+      ));
+    if (wsNum) {
+      target = wsNum;
+      numberOwnerId = wsNum.userId;
+      workspaceScopedAssign = true;
+    }
+  }
+
   if (!target) { res.status(404).json({ error: "Phone number not found" }); return; }
   if (target.service === "whatsapp") {
     res.status(400).json({ error: "This is a WhatsApp number — it can't take voice agents. Manage it on the WhatsApp page." });
@@ -1366,6 +1400,11 @@ router.patch("/phone-numbers/:id/assign", requireAuth, clientContext, async (req
     if (clientScopedReassign) {
       if (agent.userId !== clerkId) {
         res.status(403).json({ error: "You can only assign this number to your own agents" });
+        return;
+      }
+    } else if (workspaceScopedAssign) {
+      if (!agent.userId || !scope.userIds.includes(agent.userId)) {
+        res.status(403).json({ error: "You can only assign this number to a workspace agent" });
         return;
       }
     } else if (agent.userId !== clerkId) {
@@ -1397,18 +1436,21 @@ router.patch("/phone-numbers/:id/assign", requireAuth, clientContext, async (req
       holders.map(h => h.userId).filter((u): u is string => !!u && u !== clerkId),
     )];
     if (otherOwners.length) {
-      const links = await db
-        .select({ clerkId: usersTable.clerkId })
-        .from(usersTable)
-        .innerJoin(partnersTable, eq(usersTable.partnerId, partnersTable.id))
-        .where(and(
-          inArray(usersTable.clerkId, otherOwners),
-          eq(partnersTable.userId, clerkId),
-          eq(partnersTable.status, "active"),
-        ));
-      if (links.length !== otherOwners.length) {
-        res.status(403).json({ error: "This number is connected to a client agent. Your partner account must be active to change it." });
-        return;
+      const allInWorkspace = otherOwners.every((u) => scope.userIds.includes(u)) && scope.canWrite;
+      if (!allInWorkspace) {
+        const links = await db
+          .select({ clerkId: usersTable.clerkId })
+          .from(usersTable)
+          .innerJoin(partnersTable, eq(usersTable.partnerId, partnersTable.id))
+          .where(and(
+            inArray(usersTable.clerkId, otherOwners),
+            eq(partnersTable.userId, clerkId),
+            eq(partnersTable.status, "active"),
+          ));
+        if (links.length !== otherOwners.length) {
+          res.status(403).json({ error: "This number is connected to a client agent. Your partner account must be active to change it." });
+          return;
+        }
       }
     }
   }

@@ -102,6 +102,27 @@ const FAQS: { q: string; a: ReactNode }[] = [
     ),
   },
   {
+    q: "How long until a purchased number can receive calls?",
+    a: (
+      <>
+        It shows in the dashboard immediately after payment. The carrier can still treat it as a
+        wrong number for <strong>5–30 minutes</strong> (rarely up to an hour) while routing
+        updates. Assign it to the agent and dial <code>+91…</code>. If it is still unreachable,
+        re-assign the number on Phone Numbers so inbound routing is linked again.
+      </>
+    ),
+  },
+  {
+    q: "Why don’t teammates see the number I bought?",
+    a: (
+      <>
+        They should — the workspace now lists the owner&apos;s numbers on shared agents. Teammates
+        must not buy a second number. If they still see a purchase prompt, refresh or re-open the
+        agent. See <Link href="/docs/team">Team workspace</Link>.
+      </>
+    ),
+  },
+  {
     q: "Why can’t I buy a phone number?",
     a: (
       <>

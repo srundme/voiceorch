@@ -19,6 +19,7 @@ import { buildPatternSystemPrompt } from "./vibe-system-prompt-pattern.js";
 import { filterVoicesByAgentGender } from "./vibe-agent-gender.js";
 import { getSarvamManagedKey, platformChatText } from "../services/platform-chat-llm.js";
 import { SARVAM_FLAGSHIP_MODEL } from "../orchestration/adapters/llm/sarvam.js";
+import { resolveWorkspaceScope } from "../services/workspace-scope.js";
 
 const router = Router();
 
@@ -610,13 +611,14 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
       return;
     }
 
-    // User's purchased (active) phone numbers — used for the phone_number phase
+    // Workspace numbers (owner + teammates) — used for the phone_number phase
     // context, the inline picker emit, and save-time assignment validation.
-    let userNumbers: Array<{ id: number; number: string; region: string | null; agentId: number | null }> = [];
+    const scope = await resolveWorkspaceScope(clerkId);
+    let userNumbers: Array<{ id: number; number: string; region: string | null; agentId: number | null; userId: string | null }> = [];
     try {
       const numRows = await db.select().from(phoneNumbersTable)
-        .where(and(eq(phoneNumbersTable.userId, clerkId), eq(phoneNumbersTable.status, "active")));
-      userNumbers = numRows.map(n => ({ id: n.id, number: n.number, region: n.region, agentId: n.agentId }));
+        .where(and(inArray(phoneNumbersTable.userId, scope.userIds), eq(phoneNumbersTable.status, "active")));
+      userNumbers = numRows.map(n => ({ id: n.id, number: n.number, region: n.region, agentId: n.agentId, userId: n.userId }));
     } catch (err) {
       logger.warn({ err }, "vibe-chat: failed to fetch user phone numbers");
     }
@@ -634,7 +636,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
     if (isRefine) {
       try {
         const [agentRow] = await db.select().from(agentsTable)
-          .where(and(eq(agentsTable.id, refineAgentId!), eq(agentsTable.userId, clerkId)));
+          .where(and(eq(agentsTable.id, refineAgentId!), inArray(agentsTable.userId, scope.userIds)));
         if (agentRow) {
           existingAgentRow = agentRow as unknown as Record<string, unknown>;
           const acfg = (agentRow.agentConfig ?? {}) as Record<string, unknown>;
@@ -1569,9 +1571,9 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
             agentConfig:              agentConfigToSave as any,
             tools:                    toolsToSave as any,
           })
-          .where(and(eq(agentsTable.id, refineAgentId), eq(agentsTable.userId, clerkId)))
+          .where(and(eq(agentsTable.id, refineAgentId), inArray(agentsTable.userId, scope.userIds)))
           .returning();
-        if (!row) throw new Error(`Agent ${refineAgentId} not found or not owned by user`);
+        if (!row) throw new Error(`Agent ${refineAgentId} not found or not in this workspace`);
         insertedAgent = row;
       } else {
         // NEW agents get Bolna Call Engine safe defaults (same as POST /agents).
@@ -1652,17 +1654,18 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
 
     // Inbound phone-number assignment (vibe phone_number phase) — mirrors
     // PATCH /phone-numbers/:id/assign. Non-fatal: agent creation already succeeded.
-    // pickedNumberRow is validated against the user's own active numbers above.
+    // pickedNumberRow is validated against workspace-owned active numbers above.
     if (pickedNumberRow && pickedNumberRow.agentId !== insertedAgent.id) {
       try {
+        const numberOwnerId = pickedNumberRow.userId ?? clerkId;
         const [numRow] = await db.update(phoneNumbersTable)
           .set({ agentId: insertedAgent.id })
-          .where(and(eq(phoneNumbersTable.id, pickedNumberRow.id), eq(phoneNumbersTable.userId, clerkId)))
+          .where(and(eq(phoneNumbersTable.id, pickedNumberRow.id), eq(phoneNumbersTable.userId, numberOwnerId)))
           .returning();
         if (numRow) {
           await db.update(agentsTable)
             .set({ inboundPhoneNumberId: numRow.id, outboundPhoneNumberId: numRow.id })
-            .where(and(eq(agentsTable.id, insertedAgent.id), eq(agentsTable.userId, clerkId)));
+            .where(eq(agentsTable.id, insertedAgent.id));
           await logActivity({
             userId:       clerkId,
             eventType:    "phone_number.assigned",

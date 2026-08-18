@@ -13,9 +13,11 @@ export default function TeamPage() {
 
       <h2 id="share">What is shared</h2>
       <p>
-        A team invite shares <strong>agents</strong> with people who accept. Campaigns, wallet, and
-        numbers stay on the owner account unless you explicitly work in that workspace. Sign-in uses
-        an HttpOnly session cookie — do not put API keys in frontend JavaScript.
+        A team invite shares <strong>agents</strong> and any <strong>phone numbers</strong> already
+        on that workspace. Teammates can see and assign those numbers; they cannot buy or release
+        them — purchase and billing stay on the owner account. Campaigns and wallet stay on the
+        owner unless you explicitly work in that workspace. Sign-in uses an HttpOnly session cookie
+        — do not put API keys in frontend JavaScript.
       </p>
 
       <h2 id="invite">Invites</h2>
