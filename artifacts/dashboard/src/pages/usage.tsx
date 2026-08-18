@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { BarChart3, TrendingUp, PhoneCall, Clock, Calculator, Mic, MessageSquare, Volume2, PhoneOutgoing, Receipt, ChevronDown, ChevronRight } from "lucide-react";
+import { BarChart3, TrendingUp, PhoneCall, Clock, Calculator, Mic, MessageSquare, Volume2, Receipt, ChevronDown, ChevronRight } from "lucide-react";
 import { useGetMyUsage } from "@workspace/api-client-react";
 import { format, parseISO } from "date-fns";
 
@@ -37,10 +37,10 @@ function SummaryCard({
         <div className="h-9 w-9 rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0">
           <Icon className="w-4 h-4 text-muted-foreground/60" />
         </div>
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">{label}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
       </div>
       <p className="text-2xl font-bold text-foreground tabular-nums">{value}</p>
-      {sub && <p className="text-xs text-muted-foreground/50 mt-1">{sub}</p>}
+      {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
     </div>
   );
 }
@@ -63,6 +63,11 @@ function ProviderBadge({ service, provider, model }: { service: string; provider
   );
 }
 
+function platformFeeHint(description: string | null | undefined): string {
+  const match = description?.match(/@\s*(₹[\d.]+\/min\s*\([^)]+\))/);
+  return match ? `Billed at ${match[1]}` : "Per-minute platform charge";
+}
+
 function LineItem({
   icon: Icon,
   label,
@@ -71,7 +76,7 @@ function LineItem({
   model,
   usageLabel,
   costMicros,
-  available = true,
+  included = false,
 }: {
   icon: React.ElementType;
   label: string;
@@ -80,7 +85,7 @@ function LineItem({
   model?: string | null;
   usageLabel: string | null;
   costMicros: number | null | undefined;
-  available?: boolean;
+  included?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2.5 border-b border-border/40 last:border-0">
@@ -92,15 +97,15 @@ function LineItem({
           <p className="text-xs font-medium text-foreground/80">{label}</p>
           <div className="flex items-center gap-1.5 mt-0.5">
             {service && <ProviderBadge service={service} provider={provider} model={model} />}
-            {usageLabel && <span className="text-[11px] text-muted-foreground/50">{usageLabel}</span>}
+            {usageLabel && <span className="text-[11px] text-muted-foreground">{usageLabel}</span>}
           </div>
         </div>
       </div>
       <span className="text-xs font-semibold text-foreground tabular-nums shrink-0">
-        {!available ? (
-          <span className="text-muted-foreground/40 font-normal italic">Not Available</span>
+        {included || costMicros === 0 ? (
+          <span className="text-muted-foreground font-normal">Included</span>
         ) : costMicros == null ? (
-          <span className="text-muted-foreground/40 font-normal italic">Pending</span>
+          <span className="text-muted-foreground font-normal italic">Pending</span>
         ) : (
           microsToInr(costMicros)
         )}
@@ -150,47 +155,46 @@ function CallChargeRowItem({ c }: { c: any }) {
         <tr className="border-b border-border/40 last:border-0 bg-elevated/20">
           <td colSpan={4} className="px-4 py-3">
             <div className="max-w-xl">
-              <LineItem
-                icon={Mic}
-                label="Speech-to-Text"
-                service="stt"
-                provider={stt?.provider}
-                model={stt?.model}
-                usageLabel={sttUsage}
-                costMicros={c.sttCostMicros}
-                available={!!stt || (c.sttCostMicros ?? 0) > 0}
-              />
-              <LineItem
-                icon={MessageSquare}
-                label="Language Model"
-                service="llm"
-                provider={llm?.provider}
-                model={llm?.model}
-                usageLabel={llmUsage}
-                costMicros={c.llmCostMicros}
-                available={!!llm || (c.llmCostMicros ?? 0) > 0}
-              />
-              <LineItem
-                icon={Volume2}
-                label="Text-to-Speech"
-                service="tts"
-                provider={tts?.provider}
-                model={tts?.model}
-                usageLabel={ttsUsage}
-                costMicros={c.ttsCostMicros}
-                available={!!tts || (c.ttsCostMicros ?? 0) > 0}
-              />
-              <LineItem
-                icon={PhoneOutgoing}
-                label="Telephony"
-                usageLabel={null}
-                costMicros={null}
-                available={false}
-              />
+              {(stt || (c.sttCostMicros ?? 0) > 0) && (
+                <LineItem
+                  icon={Mic}
+                  label="Speech-to-Text"
+                  service="stt"
+                  provider={stt?.provider}
+                  model={stt?.model}
+                  usageLabel={sttUsage}
+                  costMicros={c.sttCostMicros}
+                  included={(c.sttCostMicros ?? 0) === 0}
+                />
+              )}
+              {(llm || (c.llmCostMicros ?? 0) > 0) && (
+                <LineItem
+                  icon={MessageSquare}
+                  label="Language Model"
+                  service="llm"
+                  provider={llm?.provider}
+                  model={llm?.model}
+                  usageLabel={llmUsage}
+                  costMicros={c.llmCostMicros}
+                  included={(c.llmCostMicros ?? 0) === 0}
+                />
+              )}
+              {(tts || (c.ttsCostMicros ?? 0) > 0) && (
+                <LineItem
+                  icon={Volume2}
+                  label="Text-to-Speech"
+                  service="tts"
+                  provider={tts?.provider}
+                  model={tts?.model}
+                  usageLabel={ttsUsage}
+                  costMicros={c.ttsCostMicros}
+                  included={(c.ttsCostMicros ?? 0) === 0}
+                />
+              )}
               <LineItem
                 icon={Receipt}
                 label="Platform Fee"
-                usageLabel={null}
+                usageLabel={platformFeeHint(c.description)}
                 costMicros={Math.abs(c.amountCents) * 10_000}
               />
               <div className="flex items-center justify-between gap-3 py-2.5 border-b border-border/40">
@@ -221,7 +225,7 @@ export default function UsagePage() {
   return (
     <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
       {/* Parent StripeTabPage owns the Billing / Usage title */}
-      <p className="text-sm text-muted-foreground/60">{currentMonth} · Your billing and cost breakdown</p>
+      <p className="text-sm text-muted-foreground">{currentMonth} · Billed calls and cost breakdown</p>
 
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
@@ -245,39 +249,47 @@ export default function UsagePage() {
               icon={PhoneCall}
               label="Total Calls"
               value={String(data.totalCalls ?? 0)}
-              sub="This month"
+              sub="Billed this month"
             />
             <SummaryCard
               icon={Clock}
               label="Total Minutes"
               value={formatMinutes(data.totalMinutes ?? 0)}
-              sub="Talk time"
+              sub="Billed talk time"
             />
             <SummaryCard
               icon={Calculator}
               label="Avg Cost / Call"
               value={microsToInrShort(data.avgCostPerCallMicros ?? 0)}
-              sub="This month"
+              sub="Per billed call"
             />
           </div>
 
           {/* Call charges */}
           <div>
-            <h2 className="text-sm font-semibold text-foreground mb-3">Call Charges</h2>
+            <div className="flex items-baseline justify-between gap-3 mb-3">
+              <h2 className="text-sm font-semibold text-foreground">Call Charges</h2>
+              <p className="text-xs text-muted-foreground">Wallet charges this month</p>
+            </div>
             {data.callCharges.recentCharges.length === 0 ? (
               <div className="bg-card border border-border rounded-2xl p-6 text-center">
-                <p className="text-sm text-muted-foreground/60">No call charges yet.</p>
+                <p className="text-sm text-muted-foreground">No billed calls this month.</p>
               </div>
             ) : (
               <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                {data.callCharges.callCount > data.callCharges.recentCharges.length && (
+                  <p className="px-4 py-2.5 text-xs text-muted-foreground border-b border-border">
+                    Showing latest {data.callCharges.recentCharges.length} of {data.callCharges.callCount} billed calls
+                  </p>
+                )}
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border">
                         <th className="w-8 py-2.5 pl-4"></th>
-                        <th className="text-left py-2.5 pr-3 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Time</th>
-                        <th className="text-left py-2.5 pr-3 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Description</th>
-                        <th className="text-right py-2.5 pr-4 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Charged</th>
+                        <th className="text-left py-2.5 pr-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Time</th>
+                        <th className="text-left py-2.5 pr-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Description</th>
+                        <th className="text-right py-2.5 pr-4 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Charged</th>
                       </tr>
                     </thead>
                     <tbody>

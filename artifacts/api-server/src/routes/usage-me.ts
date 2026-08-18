@@ -24,7 +24,7 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
     // Step 1: run all queries in parallel.
     // workspaceRows fetches distinct workspaceIds across ALL the user's events
     // (not just this month) so we can resolve workspace-specific allocations.
-    const [perServiceRows, recentEvents, workspaceRows, callChargeAgg, recentCallCharges, callsThisMonthAgg] = await Promise.all([
+    const [perServiceRows, recentEvents, workspaceRows, callChargeAgg, recentCallCharges, billedDurationAgg] = await Promise.all([
       db
         .select({
           service: usageEventsTable.service,
@@ -78,7 +78,7 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
             )
         : Promise.resolve([{ totalCents: "0", callCount: "0" }]),
 
-      // Recent call charge rows (last 20)
+      // This-month billed call rows (same population as the summary cards)
       dbUser
         ? db
             .select({
@@ -93,20 +93,31 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
               and(
                 eq(walletTransactionsTable.userId, dbUser.id),
                 eq(walletTransactionsTable.type, "call_debit"),
+                gte(walletTransactionsTable.createdAt, monthStart),
               ),
             )
             .orderBy(desc(walletTransactionsTable.createdAt))
-            .limit(20)
+            .limit(200)
         : Promise.resolve([]),
 
-      // Calls placed by this user this month (for Total Calls / Total Minutes)
-      db
-        .select({
-          callCount: sql<string>`count(*)`,
-          totalDurationSeconds: sql<string>`coalesce(sum(${callsTable.durationSeconds}), 0)`,
-        })
-        .from(callsTable)
-        .where(and(eq(callsTable.userId, userId), gte(callsTable.createdAt, monthStart))),
+      // Talk time of billed calls this month — join ledger → calls so
+      // Total Minutes matches the Call Charges table (not every row in `calls`,
+      // which includes no-pickup / busy / failed / unbilled webcalls).
+      dbUser
+        ? db
+            .select({
+              billedDurationSeconds: sql<string>`coalesce(sum(${callsTable.durationSeconds}), 0)`,
+            })
+            .from(walletTransactionsTable)
+            .innerJoin(callsTable, eq(callsTable.id, walletTransactionsTable.callId))
+            .where(
+              and(
+                eq(walletTransactionsTable.userId, dbUser.id),
+                eq(walletTransactionsTable.type, "call_debit"),
+                gte(walletTransactionsTable.createdAt, monthStart),
+              ),
+            )
+        : Promise.resolve([{ billedDurationSeconds: "0" }]),
     ]);
 
     // Step 2: Resolve allocations — global + any workspace-specific ones.
@@ -183,9 +194,10 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
     const callChargeTotalMicros = callChargeTotalCents * 10_000; // 1 cent = 10,000 micros
     const totalSpendMicros = totalUsedMicros + callChargeTotalMicros;
 
-    const callsAgg = callsThisMonthAgg[0] ?? { callCount: "0", totalDurationSeconds: "0" };
-    const totalCalls = Number(callsAgg.callCount);
-    const totalMinutes = Number(callsAgg.totalDurationSeconds) / 60;
+    const billedCallCount = Number(chargeAgg.callCount);
+    const billedDurationSeconds = Number(billedDurationAgg[0]?.billedDurationSeconds ?? 0);
+    const totalCalls = billedCallCount;
+    const totalMinutes = billedDurationSeconds / 60;
     const avgCostPerCallMicros = totalCalls > 0 ? Math.round(totalSpendMicros / totalCalls) : 0;
 
     // Step 5: Per-call cost breakdown — join recent call-charge rows to their
