@@ -201,7 +201,7 @@ export const DOCS_NAV: DocsNavGroup[] = [
         title: "Event subscriptions",
         slug: "webhooks",
         icon: Webhook,
-        search: "HMAC signature call.completed event subscriptions post-call notify form intake lead transfer",
+        search: "HMAC signature call.completed event subscriptions post-call notify payload template JSON custom form intake lead transfer",
         description: "Push call events to your backend.",
       },
       {

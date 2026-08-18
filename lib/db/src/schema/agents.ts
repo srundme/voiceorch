@@ -94,6 +94,8 @@ export type AgentConfig = {
   promptVariables?: Array<{ key: string; defaultValue: string; description?: string }>;
   // P1-C: Webhook HMAC secret
   webhookSecret?: string;
+  /** Optional JSON template for Agent Builder → Post-call notify. Blank/null = default payload. */
+  webhookPayloadTemplate?: string | null;
   // P1-D: VAD / Barge-in tuning (defaults: 250ms silence, enabled, 1200 energy, 4 frames, 600ms echo grace)
   vadSilenceMs?: number;
   bargeInEnabled?: boolean;

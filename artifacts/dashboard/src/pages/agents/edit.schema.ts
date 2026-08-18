@@ -36,6 +36,7 @@ export const agentFormSchema = z.object({
     { message: "Webhook URL must start with https://" }
   ),
   webhookSecret:            z.string().optional(),
+  webhookPayloadTemplate:   z.string().max(32000, "Payload template is too large").optional(),
   noiseCancellationEnabled: z.boolean().optional(),
   ambientNoiseEnabled:      z.boolean().optional(),
   ambientNoiseTrack:        z.string().optional(),
@@ -265,3 +266,10 @@ export function clampInterruptWords(value: number | null | undefined): number {
   if (v <= 0) return 3;
   return Math.max(1, Math.min(6, Math.round(v)));
 }
+
+export const WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER = `{
+  "id": "{{callId}}",
+  "status": "{{status}}",
+  "transcript": "{{transcript}}",
+  "data": "{{dispositionResult}}"
+}`;

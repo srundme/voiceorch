@@ -40,7 +40,7 @@ import type { AgentVersion } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, clampInterruptWords, voiceSecondsFromInterruptWords } from "./edit.schema";
+import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, clampInterruptWords, voiceSecondsFromInterruptWords, WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER } from "./edit.schema";
 import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
@@ -3499,10 +3499,10 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
 
   // Surface webhook validation errors on the Integrations sub-tab
   useEffect(() => {
-    if (form.formState.errors?.webhookUrl || form.formState.errors?.webhookSecret) {
+    if (form.formState.errors?.webhookUrl || form.formState.errors?.webhookSecret || form.formState.errors?.webhookPayloadTemplate) {
       setSection("integrations");
     }
-  }, [form.formState.errors?.webhookUrl, form.formState.errors?.webhookSecret]);
+  }, [form.formState.errors?.webhookUrl, form.formState.errors?.webhookSecret, form.formState.errors?.webhookPayloadTemplate]);
 
   const bargeIn = form.watch("bargeInEnabled");
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
@@ -4051,8 +4051,31 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                     />
                   </FormControl>
                   <FormDescription className="text-[10px]">
-                    Sent as <code className="font-mono bg-muted px-0.5 rounded">X-Webhook-Signature</code> header so you can verify the payload wasn't tampered with.
+                    Sent as <code className="font-mono bg-muted px-0.5 rounded">X-SnapServe-Signature</code> so you can verify the body we actually POST.
                   </FormDescription>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="webhookPayloadTemplate" render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">JSON body template (optional)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder={WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER}
+                      className="min-h-[140px] text-[11px] font-mono bg-background/50 resize-y"
+                      spellCheck={false}
+                      {...field}
+                      value={field.value ?? ""}
+                    />
+                  </FormControl>
+                  <FormDescription className="text-[10px] leading-relaxed">
+                    Leave blank to send the default SnapServe payload. Use <code className="font-mono bg-muted px-0.5 rounded">{"{{callId}}"}</code>,{" "}
+                    <code className="font-mono bg-muted px-0.5 rounded">{"{{status}}"}</code>,{" "}
+                    <code className="font-mono bg-muted px-0.5 rounded">{"{{transcript}}"}</code>,{" "}
+                    <code className="font-mono bg-muted px-0.5 rounded">{"{{dispositionResult}}"}</code> (quoted placeholders keep JSON types).
+                    Applies only to this URL — not Developers event subscriptions. Invalid JSON falls back to the default body.
+                    Header <code className="font-mono bg-muted px-0.5 rounded">X-SnapServe-Payload</code> is <code className="font-mono">custom</code> or <code className="font-mono">default</code>.
+                  </FormDescription>
+                  <FormMessage />
                 </FormItem>
               )} />
             </div>
@@ -5292,6 +5315,7 @@ const FIELD_LABELS: Record<string, string> = {
   silenceTimeoutSeconds: "Silence Timeout (s)",
   language: "Language",
   webhookUrl: "Post-call notify URL",
+  webhookPayloadTemplate: "Post-call JSON template",
   noiseCancellationEnabled: "Noise Cancellation",
   backchannelingEnabled: "Backchannel",
   recordingEnabled: "Call Recording",
@@ -6670,7 +6694,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true,
       backchannelingFrequency: 0.5, webhookUrl: "",
-      webhookSecret: "", noiseCancellationEnabled: true,
+      webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: true,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0, promptVariables: [],
       vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1800,
       bargeInMinFrames: 4, micSensitivity: "low", timezone: "", machineDetectionMode: "disabled",
@@ -6786,6 +6810,9 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
       webhookUrl:               (agent.webhookUrl && agent.webhookUrl.startsWith("https://")) ? agent.webhookUrl : "",
       webhookSecret:            (agent as any).agentConfig?.webhookSecret ?? "",
+      webhookPayloadTemplate:   typeof (agent as any).agentConfig?.webhookPayloadTemplate === "string"
+        ? (agent as any).agentConfig.webhookPayloadTemplate
+        : "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
       ambientNoiseEnabled:      (agent as any).agentConfig?.ambientNoiseEnabled ?? false,
       ambientNoiseTrack:        (agent as any).agentConfig?.ambientNoiseTrack ?? "",
@@ -6923,6 +6950,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       const fieldTabMap: Record<string, TabId> = {
         webhookUrl:               "settings",
         webhookSecret:            "settings",
+        webhookPayloadTemplate:   "settings",
         schedulingCalendarId:     "tools",
         schedulingEventTypeId:    "tools",
         noiseCancellationEnabled: "voice",

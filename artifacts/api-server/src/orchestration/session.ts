@@ -1,4 +1,4 @@
-import { createHmac, createHash, randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, leadNotesTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, eventTypesTable, scheduledCallbacksTable, campaignsTable, executionLogsTable, squadsTable, squadRunsTable, phoneNumbersTable } from "@workspace/db";
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
@@ -58,6 +58,11 @@ import {
   dispatchWebhooks,
   flatDispositionFromTaxonomy,
 } from "../routes/webhook-endpoints.js";
+import {
+  buildAgentNotifyHeaders,
+  readWebhookPayloadTemplate,
+  serializeAgentWebhookBody,
+} from "../lib/webhook-payload-template.js";
 import { computeOperationalOutcome, setOperationalOutcome } from "../services/operational-outcome.js";
 import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
@@ -3694,16 +3699,20 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             metadata: freshCall?.metadata ?? call.metadata ?? null,
           });
 
-          // 4. Agent webhook URL (Settings → Analytics) — full enriched payload
+          // 4. Agent webhook URL (Settings → Post-call notify) — default or custom JSON
           if (ag.webhookUrl) {
-            const bodyStr = JSON.stringify(webhookPayload);
-            const headers: Record<string, string> = { "Content-Type": "application/json" };
-            if (webhookSecret) {
-              headers["X-VoiceOrch-Signature"] =
-                "sha256=" + createHmac("sha256", webhookSecret).update(bodyStr, "utf8").digest("hex");
-              headers["X-SnapServe-Signature"] = headers["X-VoiceOrch-Signature"];
+            const serialized = serializeAgentWebhookBody(
+              readWebhookPayloadTemplate(agCfgForWebhook),
+              webhookPayload,
+            );
+            if (serialized.error) {
+              logger.warn(
+                { sessionId, error: serialized.error },
+                "Post-call notify template invalid — sending default payload",
+              );
             }
-            fetch(ag.webhookUrl, { method: "POST", headers, body: bodyStr }).catch((err) => {
+            const headers = buildAgentNotifyHeaders(serialized.bodyStr, serialized.mode, webhookSecret);
+            fetch(ag.webhookUrl, { method: "POST", headers, body: serialized.bodyStr }).catch((err) => {
               logger.error({ sessionId, webhookUrl: ag.webhookUrl, err }, "Webhook delivery failed");
             });
           }

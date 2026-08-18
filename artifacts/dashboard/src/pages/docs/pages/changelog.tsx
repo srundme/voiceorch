@@ -9,6 +9,19 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-18-webhook-template">2026-08-18 — Custom post-call notify JSON</h2>
+      <ul>
+        <li>
+          Agent Builder → Settings → Post-call notify accepts an optional JSON template so your backend
+          can consume the call result without transforming the payload.
+        </li>
+        <li>
+          Leave the template blank for the default SnapServe body. Workspace{" "}
+          <a href="/docs/webhooks">event subscriptions</a> are unchanged. HMAC signs the body actually POSTed.
+          Invalid JSON falls back to the default payload (<code>X-SnapServe-Payload: default</code>).
+        </li>
+      </ul>
+
       <h2 id="2026-08-18-caller-memory">2026-08-18 — Caller memory updates (API + campaigns)</h2>
       <ul>
         <li>

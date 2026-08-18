@@ -26,6 +26,7 @@ import {
   clampSarvamIncompleteHoldMs,
   clampInterruptWords,
   voiceSecondsFromInterruptWords,
+  WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER,
   type AgentFormValues,
 } from "./edit.schema";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -94,7 +95,7 @@ export type { AgentFormValues } from "./edit.schema";
 
 export function buildUpdateAgentPayload(data: AgentFormValues) {
   const {
-    webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, micSensitivity,
+    webhookSecret, webhookPayloadTemplate, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, micSensitivity,
     timezone, autoSwitchToEnglish, languageAutoDetect, multilingualLanguages, sarvamIndicNumbers, machineDetectionMode, voicemailAction, voicemailMessage, voicemailLeadInSeconds, genderDetectionEnabled, voiceMemoryEnabled, recordingEnabled,
     startSpeakingWaitSecs, startSpeakingOnPunctuationSecs, startSpeakingOnNoPunctuationSecs, startSpeakingOnNumberSecs,
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
@@ -124,6 +125,9 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   } = data;
   const agentConfig: Record<string, unknown> = {};
   if (webhookSecret) agentConfig["webhookSecret"] = webhookSecret;
+  // Always set so clearing the textarea actually drops the stored template (agentConfig is merged).
+  const trimmedTemplate = (webhookPayloadTemplate ?? "").trim();
+  agentConfig["webhookPayloadTemplate"] = trimmedTemplate || null;
   if (promptVariables?.length) agentConfig["promptVariables"] = promptVariables;
   if (vadSilenceMs != null && vadSilenceMs !== 350) agentConfig["vadSilenceMs"] = vadSilenceMs;
   if (bargeInEnabled === false) agentConfig["bargeInEnabled"] = false;
@@ -444,7 +448,7 @@ export default function AgentEdit() {
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
       firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
-      webhookUrl: "", webhookSecret: "", noiseCancellationEnabled: true,
+      webhookUrl: "", webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: true,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0,
       promptVariables: [], vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1800, bargeInMinFrames: 4, micSensitivity: "low",
       timezone: "",
@@ -715,6 +719,9 @@ export default function AgentEdit() {
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
       webhookUrl:               (agent.webhookUrl && agent.webhookUrl.startsWith("https://")) ? agent.webhookUrl : "",
       webhookSecret:            ((agent as any).agentConfig?.webhookSecret as string | undefined) ?? "",
+      webhookPayloadTemplate:   typeof (agent as any).agentConfig?.webhookPayloadTemplate === "string"
+        ? (agent as any).agentConfig.webhookPayloadTemplate
+        : "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
       ambientNoiseEnabled:      ((agent as any).agentConfig?.ambientNoiseEnabled as boolean | undefined) ?? false,
       ambientNoiseTrack:        ((agent as any).agentConfig?.ambientNoiseTrack as string | undefined) ?? "",
@@ -1250,7 +1257,26 @@ export default function AgentEdit() {
                           <Input type="password" placeholder="Optional — enables HMAC signature header" autoComplete="new-password" {...field} />
                         </FormControl>
                         <FormDescription>
-                          When set, each webhook request includes an <code>X-SnapServe-Signature: sha256=…</code> header.
+                          When set, each webhook request includes an <code>X-SnapServe-Signature: sha256=…</code> header over the body we actually POST.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="webhookPayloadTemplate" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>JSON body template (optional)</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder={WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER}
+                            className="min-h-[140px] font-mono text-xs"
+                            spellCheck={false}
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Leave blank for the default SnapServe payload. Quoted <code>{"{{callId}}"}</code> / <code>{"{{dispositionResult}}"}</code> keep JSON types.
+                          This agent’s Post-call notify only — not workspace event subscriptions. Invalid JSON falls back to the default body.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
