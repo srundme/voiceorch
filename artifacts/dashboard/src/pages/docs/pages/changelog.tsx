@@ -9,6 +9,20 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-20-builder-panels">2026-08-20 — Agent Builder: every tab is panels</h2>
+      <ul>
+        <li>
+          Script, Sound, Actions, After the call, and Settings use the same filled panel:
+          title inside the box, not floating above it. Welcome and Talk sit in one shape each;
+          Fast / Balanced / Patient are equal cards; Actions groups (booking, messaging, recording)
+          are stacked rows inside a panel instead of loose uppercase labels.
+        </li>
+        <li>
+          The editor column sits on a muted page with a bordered sheet. At a glance is a
+          checklist block, not three separate chips.
+        </li>
+      </ul>
+
       <h2 id="2026-08-20-builder-ux">2026-08-20 — Agent Builder: one column, aligned layout</h2>
       <ul>
         <li>

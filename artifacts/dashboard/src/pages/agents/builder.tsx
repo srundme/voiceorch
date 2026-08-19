@@ -168,7 +168,7 @@ function BuilderTabHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
       <div className="min-w-0 max-w-[68ch]">
         <h2 className="text-[17px] font-semibold tracking-[-0.03em] text-foreground">{title}</h2>
         {description ? (
@@ -277,40 +277,50 @@ function resolveVoiceLabel(
   return voiceId;
 }
 
-/** Filled section box — title lives inside the shape, not floating above it. */
-function OverviewPanel({
+/**
+ * Filled section box used by every builder tab — the title lives inside the
+ * shape so sections read as panels instead of floating labels.
+ */
+function BuilderPanel({
   title,
+  description,
   icon,
   hint,
   action,
   children,
+  bodyClassName,
   className,
 }: {
   title: string;
+  description?: React.ReactNode;
   icon?: React.ReactNode;
   hint?: React.ReactNode;
   action?: React.ReactNode;
   children: React.ReactNode;
+  bodyClassName?: string;
   className?: string;
 }) {
   return (
     <section
       className={cn(
-        "flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_0_hsl(var(--border)/0.6)]",
+        "flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm",
         className,
       )}
     >
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/80 bg-muted/25 px-4 py-2.5">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-border bg-muted/40 px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
           {icon ? <span className="shrink-0 text-muted-foreground [&_svg]:size-3.5">{icon}</span> : null}
           <h3 className="truncate text-[13px] font-semibold tracking-[-0.02em] text-foreground">{title}</h3>
+          {description ? (
+            <span className="hidden truncate text-[12px] text-muted-foreground sm:inline">— {description}</span>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {hint}
           {action}
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col p-4">{children}</div>
+      <div className={cn("flex min-h-0 flex-1 flex-col p-4", bodyClassName)}>{children}</div>
     </section>
   );
 }
@@ -925,7 +935,7 @@ function OverviewTab({
             }
           />
 
-          <OverviewPanel
+          <BuilderPanel
             title="How it talks"
             icon={<AudioLines />}
             hint={<AgentCostSummary form={form} rateMap={rateMap} variant="line" />}
@@ -956,11 +966,11 @@ function OverviewTab({
                 onClick={() => openPipelineDialog("voice")}
               />
             </div>
-          </OverviewPanel>
+          </BuilderPanel>
 
           <section className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
             {agent?.id != null && (
-              <OverviewPanel
+              <BuilderPanel
                 title="Phone"
                 icon={<PhoneForwarded />}
                 hint={phoneReady ? (
@@ -980,9 +990,9 @@ function OverviewTab({
                   telephonyProvider={form.watch("telephonyProvider")}
                   bare
                 />
-              </OverviewPanel>
+              </BuilderPanel>
             )}
-            <OverviewPanel
+            <BuilderPanel
               title="Knowledge"
               icon={<BookOpen />}
               hint={
@@ -1012,13 +1022,13 @@ function OverviewTab({
                   Empty is fine. Attach a source only if this agent should look things up on the call.
                 </p>
               ) : null}
-            </OverviewPanel>
+            </BuilderPanel>
           </section>
 
           {agent?.id != null && (
-            <OverviewPanel title="Team" icon={<Users />}>
+            <BuilderPanel title="Team" icon={<Users />}>
               <AgentTeamStrip agentId={agent.id} compact />
-            </OverviewPanel>
+            </BuilderPanel>
           )}
 
           {/* ── Transcriber / Language dialog ── */}
@@ -1534,13 +1544,11 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
       />
 
       {team && team.members.length >= 2 && (
-        <section className="space-y-2 rounded-xl border border-border/60 bg-muted/15 px-3.5 py-3">
-          <div className="space-y-0.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Team prompts</p>
-            <p className="text-[12px] text-muted-foreground leading-snug">
-              Each teammate has their own prompt. Handoffs use the specialist&apos;s prompt.
-            </p>
-          </div>
+        <BuilderPanel
+          title="Team prompts"
+          icon={<Users />}
+          description="Handoffs use the specialist's prompt"
+        >
           <div className="flex flex-wrap gap-1.5">
             {team.members.map((m) => {
               const active = m.agentId === agentId;
@@ -1564,115 +1572,101 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
               );
             })}
           </div>
-        </section>
+        </BuilderPanel>
       )}
 
-      <section className="space-y-3">
-        <div className="space-y-0.5">
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Welcome</h3>
-          <p className="text-[12px] text-muted-foreground">
-            What callers hear at the start of the call.
-          </p>
-        </div>
-        <div className="space-y-3 overflow-hidden rounded-lg border border-border bg-card p-3.5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Label className="text-[12px] font-medium text-foreground/90">Who speaks first</Label>
-            <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
-              <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
-                <SelectTrigger className="h-8 w-48 shrink-0 border-border/50 text-[12px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  <SelectItem value="assistant" className="text-[13px]">Assistant speaks first</SelectItem>
-                  <SelectItem value="user" className="text-[13px]">User speaks first</SelectItem>
-                </SelectContent>
-              </Select>
-            )} />
-          </div>
-          <FormField control={form.control} name="greetingMessage" render={({ field }) => (
-            <FormItem className="space-y-0">
-              <FormControl>
-                <Textarea
-                  className="min-h-[72px] max-h-[120px] resize-none rounded-lg border-border/40 bg-background/50 px-3.5 py-2.5 text-[13px] leading-relaxed shadow-none focus-visible:border-foreground/20 focus-visible:ring-0"
-                  placeholder="Hello, how can I help?"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage className="text-[10px]" />
-            </FormItem>
+      <BuilderPanel
+        title="Welcome"
+        icon={<MessageCircle />}
+        description="What callers hear first"
+        bodyClassName="gap-3"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Label className="text-[12px] font-medium text-foreground/90">Who speaks first</Label>
+          <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
+            <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
+              <SelectTrigger className="h-8 w-48 shrink-0 text-[12px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectItem value="assistant" className="text-[13px]">Assistant speaks first</SelectItem>
+                <SelectItem value="user" className="text-[13px]">User speaks first</SelectItem>
+              </SelectContent>
+            </Select>
           )} />
         </div>
-      </section>
+        <FormField control={form.control} name="greetingMessage" render={({ field }) => (
+          <FormItem className="space-y-0">
+            <FormControl>
+              <Textarea
+                className="min-h-[72px] max-h-[120px] resize-none rounded-lg border-border bg-background px-3.5 py-2.5 text-[13px] leading-relaxed shadow-none focus-visible:border-foreground/20 focus-visible:ring-0"
+                placeholder="Hello, how can I help?"
+                {...field}
+              />
+            </FormControl>
+            <FormMessage className="text-[10px]" />
+          </FormItem>
+        )} />
+      </BuilderPanel>
 
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Talk</h3>
+      <BuilderPanel
+        title="Talk"
+        icon={<FileText />}
+        description={canAttendMeetings ? "Phone calls and meetings" : "Instructions for phone calls"}
+        hint={
+          <>
             <Badge variant="secondary" className="h-5 rounded-md px-1.5 py-0 text-[10px] font-medium">
               {langLabel}
             </Badge>
-          </div>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">
-            {canAttendMeetings
-              ? "Instructions for phone calls and for when this agent joins Meet."
-              : "Instructions for phone calls."}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="hidden text-[10px] tabular-nums text-muted-foreground sm:inline">
-            {promptLen.toLocaleString()} chars
-          </span>
-          {promptSurface === "calls" && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-[11px]"
-              onClick={() => setGenerateOpen(true)}
-            >
-              <Sparkles className="size-3.5" />
-              Generate
-            </Button>
-          )}
-        </div>
-      </div>
-
+            <span className="hidden text-[10px] tabular-nums text-muted-foreground sm:inline">
+              {promptLen.toLocaleString()} chars
+            </span>
+          </>
+        }
+        action={promptSurface === "calls" ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 text-[11px]"
+            onClick={() => setGenerateOpen(true)}
+          >
+            <Sparkles className="size-3.5" />
+            Generate
+          </Button>
+        ) : undefined}
+        bodyClassName="p-0"
+      >
       {canAttendMeetings ? (
         <Tabs value={promptSurface} onValueChange={(v) => setPromptSurface(v as "calls" | "meetings")} className="w-full">
-          <TabsList className="h-9 w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
-            <TabsTrigger value="calls" className="gap-1.5 text-xs">
-              <Phone className="h-3.5 w-3.5" />
-              On calls
-            </TabsTrigger>
-            <TabsTrigger value="meetings" className="gap-1.5 text-xs">
-              <Video className="h-3.5 w-3.5" />
-              In meetings
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="calls" className="mt-3">
+          <div className="border-b border-border px-4 py-2.5">
+            <TabsList className="h-9 w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
+              <TabsTrigger value="calls" className="gap-1.5 text-xs">
+                <Phone className="h-3.5 w-3.5" />
+                On calls
+              </TabsTrigger>
+              <TabsTrigger value="meetings" className="gap-1.5 text-xs">
+                <Video className="h-3.5 w-3.5" />
+                In meetings
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="calls" className="mt-0">
             <FormField control={form.control} name="systemPrompt" render={({ field }) => (
               <FormItem className="space-y-0">
                 <FormControl>
-                  <div className="overflow-hidden rounded-lg border border-border bg-card">
-                    <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
-                      <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                        Call prompt
-                      </span>
-                      <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
-                    </div>
-                    <Textarea
-                      className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                      placeholder="You are a helpful voice assistant on phone calls…"
-                      {...field}
-                    />
-                  </div>
+                  <Textarea
+                    className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-4 py-4 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                    placeholder="You are a helpful voice assistant on phone calls…"
+                    {...field}
+                  />
                 </FormControl>
-                <FormMessage className="mt-2" />
+                <FormMessage className="px-4 pb-3" />
               </FormItem>
             )} />
           </TabsContent>
-          <TabsContent value="meetings" className="mt-3 space-y-3">
-            <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
+          <TabsContent value="meetings" className="mt-0">
+            <div className="border-b border-border bg-muted/25 px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
               <p className="font-medium text-foreground/90">Meeting ≠ phone call</p>
               <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
                 <li>People may ask you to wait 2–3 minutes for others — stay quiet after one acknowledgment.</li>
@@ -1689,30 +1683,22 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
             <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
               <FormItem className="space-y-0">
                 <FormControl>
-                  <div className="overflow-hidden rounded-lg border border-border bg-card">
-                    <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
-                      <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                        Meeting prompt
-                      </span>
-                      <span className="font-mono text-[10px] text-muted-foreground/70">blank = use call prompt</span>
-                    </div>
-                    <Textarea
-                      className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                      placeholder={"You are a participant in a live video meeting…\nIf asked to wait for others, acknowledge once and stay quiet.\nAddress people by name when speaker tags appear."}
-                      {...field}
-                      value={field.value ?? ""}
-                    />
-                  </div>
+                  <Textarea
+                    className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-4 py-4 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                    placeholder={"You are a participant in a live video meeting…\nIf asked to wait for others, acknowledge once and stay quiet.\nAddress people by name when speaker tags appear."}
+                    {...field}
+                    value={field.value ?? ""}
+                  />
                 </FormControl>
-                <FormMessage className="mt-2" />
+                <FormMessage className="px-4" />
               </FormItem>
             )} />
-            <p className="text-[11px] text-muted-foreground">
-              Phone + meetings agents can join Meet/Zoom/Teams from{" "}
+            <p className="border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
+              Blank uses the call prompt. Join links, wait time, and deck live on{" "}
               <Link href={agentId ? `/app/meet?agentId=${agentId}` : "/app/meet"} className="underline underline-offset-2">
                 Meeting bots
-              </Link>{" "}
-              (paste link) or from a booking. Configure wait time, max length, and deck there — not under Tools.
+              </Link>
+              .
             </p>
           </TabsContent>
         </Tabs>
@@ -1720,30 +1706,20 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
         <FormField control={form.control} name="systemPrompt" render={({ field }) => (
           <FormItem className="space-y-0">
             <FormControl>
-              <div className="overflow-hidden rounded-lg border border-border bg-card">
-                <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
-                  <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                    Call prompt
-                  </span>
-                  <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
-                </div>
-                <Textarea
-                  className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                  placeholder="You are a helpful voice assistant on phone calls…"
-                  {...field}
-                />
-              </div>
+              <Textarea
+                className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-4 py-4 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                placeholder="You are a helpful voice assistant on phone calls…"
+                {...field}
+              />
             </FormControl>
-            <FormMessage className="mt-2" />
+            <FormMessage className="px-4 pb-3" />
           </FormItem>
         )} />
       )}
+      </BuilderPanel>
 
-      <section className="overflow-hidden rounded-lg border border-border bg-card">
-        <div className="border-b border-border/70 px-3.5 py-2.5">
-          <h3 className="text-[11px] font-semibold">Call behaviour</h3>
-        </div>
-        <div className="px-3.5">
+      <BuilderPanel title="Call behaviour" icon={<Settings />} bodyClassName="p-0 px-4">
+        <div>
           <PropertyRow
             label="Timezone"
             description="Injected as current-time context"
@@ -1772,33 +1748,34 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
             )} />
           </PropertyRow>
         </div>
-      </section>
+      </BuilderPanel>
 
-      <section className="overflow-hidden rounded-lg border border-border bg-card">
-        <div className="flex h-10 items-center justify-between border-b border-border/70 px-3.5">
-          <div>
-            <h3 className="text-[11px] font-semibold">Prompt variables</h3>
-            <p className="text-[10px] text-muted-foreground">Use {"{{variable}}"} in the prompt</p>
-          </div>
+      <BuilderPanel
+        title="Prompt variables"
+        icon={<Layers />}
+        description={`Use ${"{{variable}}"} in the prompt`}
+        action={
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="h-7 gap-1 px-2 text-[11px]"
+            className="h-7 gap-1 px-2.5 text-[11px]"
             onClick={() => pvAppend({ key: "", defaultValue: "", description: "" })}
           >
             <Plus className="size-3" />
             Add
           </Button>
-        </div>
+        }
+        bodyClassName="p-0"
+      >
         {pvFields.length === 0 ? (
-          <p className="px-3.5 py-5 text-[11px] text-muted-foreground">
+          <p className="px-4 py-5 text-[12px] text-muted-foreground">
             No variables yet.
           </p>
         ) : (
-          <div className="divide-y divide-border/70">
+          <div className="divide-y divide-border">
             {pvFields.map((f, i) => (
-              <div key={f.id} className="grid grid-cols-[1fr_1fr_minmax(0,1.4fr)_28px] items-center gap-2 px-3.5 py-2.5">
+              <div key={f.id} className="grid grid-cols-[1fr_1fr_minmax(0,1.4fr)_28px] items-center gap-2 px-4 py-2.5">
                 <FormField control={form.control} name={`promptVariables.${i}.key`} render={({ field: ff }) => (
                   <FormItem className="space-y-0">
                     <FormControl><Input placeholder="key" className="h-8 text-xs" {...ff} /></FormControl>
@@ -1828,7 +1805,7 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
             ))}
           </div>
         )}
-      </section>
+      </BuilderPanel>
     </div>
   );
 }
@@ -2143,21 +2120,19 @@ function VoiceTab({ form }: { form: any }) {
   );
 
   return (
-    <div className={cn("relative flex min-h-full flex-col gap-8", BUILDER_TAB_PAD)}>
+    <div className={cn("relative flex min-h-full flex-col gap-6", BUILDER_TAB_PAD)}>
       <BuilderTabHeader
         title="Sound"
         description="Voice, language, and how quickly the agent takes a turn after the caller pauses."
       />
 
-      {/* ── SPEAKING ── */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Speaking</h3>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">
-            How the agent sounds on the call — provider, voice, speed, and model.
-          </p>
-        </div>
-        <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
+      <BuilderPanel
+        title="Speaking"
+        icon={<Volume2 />}
+        description="Provider, voice, speed, and model"
+        bodyClassName="gap-3"
+      >
+        <div className="space-y-3">
           <FormField control={form.control} name="voiceStack" render={({ field }) => (
             <FormItem className="space-y-1">
               <FormLabel className="text-xs text-muted-foreground">Voice stack</FormLabel>
@@ -2416,17 +2391,14 @@ function VoiceTab({ form }: { form: any }) {
           </>
           )}
         </div>
-      </section>
+      </BuilderPanel>
 
-      {/* ── LISTEN ── */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Listening</h3>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">
-            How the agent hears the caller — noise cancel, backchannels, and ambient bed.
-          </p>
-        </div>
-        <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
+      <BuilderPanel
+        title="Listening"
+        icon={<Mic />}
+        description="Noise cancel, backchannels, and ambient bed"
+      >
+        <div className="space-y-3">
           <FormField control={form.control} name="noiseCancellationEnabled" render={({ field }) => (
             <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
               <div>
@@ -2514,7 +2486,7 @@ function VoiceTab({ form }: { form: any }) {
             </div>
           )}
         </div>
-      </section>
+      </BuilderPanel>
 
       {/* ── CALL FEEL (same fields as Advanced → Engine presets) ── */}
       <VoiceCallFeelPresets form={form} />
@@ -2598,56 +2570,48 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
   const { preset: activePreset, tweaked, applyPreset } = useCallEnginePreset(form);
 
   return (
-    <section className="space-y-3">
-      <div>
-        <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Phone feel</h3>
-        <p className="mt-0.5 text-[12px] text-muted-foreground">
-          How quickly the agent starts talking after the caller pauses.
-        </p>
-        {realtime && (
-          <p className="text-[11px] text-muted-foreground mt-1">
-            Fast replies quickly. Patient waits if the caller thinks mid-sentence.
-          </p>
-        )}
-        {asrProviderVal === "sarvam" && !realtime && (
-          <p className="text-[11px] text-muted-foreground mt-1">
-            This agent is on a legacy transcriber. Switch it to Saaras v3 in Transcriber.
-          </p>
-        )}
-      </div>
-      <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
-        <div className="flex flex-wrap gap-2">
-          {([
-            { id: "fast" as const, label: "Fast", hint: "Snappy barge / short silence" },
-            { id: "balanced" as const, label: "Balanced", hint: "Default natural pace" },
-            { id: "patient" as const, label: "Patient", hint: "Lets callers pause longer" },
-          ]).map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => applyPreset(p.id)}
-              title={p.hint}
-              className={cn(
-                "px-3 py-1.5 rounded-lg text-[11.5px] font-medium border transition-all",
-                activePreset === p.id
-                  ? "bg-primary/15 text-primary border-primary/40"
-                  : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/40",
-              )}
-            >
+    <BuilderPanel
+      title="Phone feel"
+      icon={<Timer />}
+      description="How soon the agent replies after a pause"
+      hint={tweaked ? (
+        <span className="text-[10px] text-muted-foreground">edited — saves as set</span>
+      ) : undefined}
+      bodyClassName="gap-3"
+    >
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {([
+          { id: "fast" as const, label: "Fast", hint: "Replies quickly, cuts in sooner" },
+          { id: "balanced" as const, label: "Balanced", hint: "Default natural pace" },
+          { id: "patient" as const, label: "Patient", hint: "Waits if the caller thinks mid-sentence" },
+        ]).map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => applyPreset(p.id)}
+            className={cn(
+              "rounded-lg border px-3 py-2.5 text-left transition-all",
+              activePreset === p.id
+                ? "border-primary/40 bg-primary/10 ring-1 ring-primary/20"
+                : "border-border bg-background hover:border-foreground/20 hover:bg-muted/30",
+            )}
+          >
+            <span className={cn(
+              "block text-[12.5px] font-semibold",
+              activePreset === p.id ? "text-primary" : "text-foreground",
+            )}>
               {p.label}
-            </button>
-          ))}
-          {tweaked && (
-            <span className="px-2 py-1.5 text-[11px] text-muted-foreground/70 self-center">
-              edited — saves as set
             </span>
-          )}
-        </div>
-        <p className="text-[10px] text-muted-foreground leading-relaxed">
-          Fast replies quickly. Patient waits if the caller thinks mid-sentence.
-        </p>
+            <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{p.hint}</span>
+          </button>
+        ))}
       </div>
-    </section>
+      {asrProviderVal === "sarvam" && !realtime && (
+        <p className="text-[11px] text-muted-foreground">
+          This agent is on a legacy transcriber. Switch it to Saaras v3 in Transcriber.
+        </p>
+      )}
+    </BuilderPanel>
   );
 }
 
@@ -2935,28 +2899,29 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           description="Turn on an action, then pick the calendar, WhatsApp template, or email already connected. Plug-in itself is under Connections."
         />
 
-        <div className="mt-5 space-y-2">
+        <div className="mt-5 space-y-4">
 
         {/* ── Booking suite (one switch → all five tools) ── */}
-        <p className="mb-1.5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Scheduling & Bookings</p>
-        <div className={cn(
-          "rounded-xl border transition-all duration-150",
-          bookingEnabled || bookingPartial ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20",
-        )}>
+        <BuilderPanel
+          title="Scheduling & bookings"
+          icon={<Calendar />}
+          hint={bookingPartial ? (
+            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
+              Incomplete
+            </span>
+          ) : undefined}
+          bodyClassName="p-0"
+        >
+        <div>
           <div className="flex items-start gap-3 p-4">
-            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/30">
-              <Calendar className={cn("h-4 w-4", bookingEnabled || bookingPartial ? "text-foreground/70" : "text-muted-foreground/35")} />
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+              <Calendar className={cn("h-4 w-4", bookingEnabled || bookingPartial ? "text-foreground" : "text-muted-foreground/50")} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="mb-0.5 flex items-center gap-2">
-                <span className="text-xs font-semibold text-foreground/80">Booking</span>
-                {bookingPartial && (
-                  <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
-                    Incomplete
-                  </span>
-                )}
+                <span className="text-[12.5px] font-semibold text-foreground">Booking</span>
               </div>
-              <p className="text-[11px] leading-relaxed text-muted-foreground/60">
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
                 One switch enables the full booking flow: check availability, book, list, reschedule, and cancel.
               </p>
               {(bookingEnabled || bookingPartial) && (
@@ -2987,19 +2952,19 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           </div>
 
           {(bookingEnabled || bookingPartial) && (
-            <div className="space-y-3 border-t border-border/30 px-4 pb-4 pt-3">
+            <div className="space-y-3 border-t border-border bg-muted/20 px-4 pb-4 pt-3">
               <div className="flex flex-wrap gap-1.5">
                 {BOOKING_TOOL_LABELS.map((tool) => (
                   <span
                     key={tool.type}
-                    className="rounded-md border border-border/60 bg-background/40 px-2 py-0.5 font-mono text-[10px] text-muted-foreground"
+                    className="rounded-md border border-border bg-background px-2 py-0.5 font-mono text-[10px] text-muted-foreground"
                   >
                     {tool.fnName}
                   </span>
                 ))}
               </div>
 
-              <div className="flex items-center gap-3 rounded-lg border border-border/40 bg-background/30 px-3 py-2.5">
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-2.5">
                 <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-[11px] text-muted-foreground/70">
@@ -3176,53 +3141,54 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
           )}
         </div>
+        </BuilderPanel>
 
         {/* Meeting bots — join actions live on /app/meet; Tools only explains capability. */}
         {canAttendMeetings && (
-          <>
-            <p className="mb-1.5 mt-5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              Meeting bots
-            </p>
-            <div className="rounded-xl border border-border/70 bg-card/40 p-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/30">
-                  <Video className="h-4 w-4 text-foreground/70" />
-                </div>
-                <div className="min-w-0 flex-1 space-y-2">
-                  <p className="text-xs font-semibold text-foreground/80">Can join Meet / Zoom / Teams</p>
-                  <p className="text-[11px] leading-relaxed text-muted-foreground/60">
-                    Join now, calendar Join toggles, and bot settings (waiting room, slides) live on the Meeting bots page — not here.
-                    Booking a calendar slot is separate (switch above).
-                  </p>
-                  {agentId ? (
-                    <Button asChild type="button" variant="outline" size="sm" className="h-7 text-[11px]">
-                      <Link href={`/app/meet?agentId=${agentId}`}>Open Meeting bots</Link>
-                    </Button>
-                  ) : (
-                    <p className="text-[11px] text-amber-400/80">Save the agent first, then open Meeting bots.</p>
-                  )}
-                </div>
+          <BuilderPanel title="Meeting bots" icon={<Video />}>
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+                <Video className="h-4 w-4 text-foreground" />
+              </div>
+              <div className="min-w-0 flex-1 space-y-2">
+                <p className="text-[12.5px] font-semibold text-foreground">Can join Meet / Zoom / Teams</p>
+                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                  Join now, calendar Join toggles, and bot settings (waiting room, slides) live on the Meeting bots page — not here.
+                  Booking a calendar slot is separate (switch above).
+                </p>
+                {agentId ? (
+                  <Button asChild type="button" variant="outline" size="sm" className="h-7 text-[11px]">
+                    <Link href={`/app/meet?agentId=${agentId}`}>Open Meeting bots</Link>
+                  </Button>
+                ) : (
+                  <p className="text-[11px] text-amber-400/80">Save the agent first, then open Meeting bots.</p>
+                )}
               </div>
             </div>
-          </>
+          </BuilderPanel>
         )}
 
-        <p className="mb-1.5 mt-5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Messaging</p>
+        <BuilderPanel
+          title="Messaging"
+          icon={<MessageCircle />}
+          description="Send mid-call — templates come from Connections"
+          bodyClassName="p-0 divide-y divide-border"
+        >
         {CALL_CONTROL_TOOLS.filter((t) => t.type === "send_email" || t.type === "send_whatsapp").map(({ type, icon, label, description }) => {
           const isOn = hasNativeTool(type);
           return (
-            <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-              <div className="w-full text-left p-4 flex items-start gap-3">
-                <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-                  <span className={cn(isOn ? "text-foreground/70" : "text-muted-foreground/35")}>{icon}</span>
+            <div key={type}>
+              <div className="flex w-full items-start gap-3 p-4 text-left">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+                  <span className={cn(isOn ? "text-foreground" : "text-muted-foreground/50")}>{icon}</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-xs font-semibold text-foreground/80">{label}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="mb-0.5 flex items-center gap-2">
+                    <span className="text-[12.5px] font-semibold text-foreground">{label}</span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
+                  <p className="text-[11.5px] leading-relaxed text-muted-foreground">{description}</p>
                 </div>
-                <div className="shrink-0 mt-1">
+                <div className="mt-1 shrink-0">
                   <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} />
                 </div>
               </div>
@@ -3231,23 +3197,28 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
           );
         })}
+        </BuilderPanel>
 
-        <p className="mb-1.5 mt-5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Call Control</p>
+        <BuilderPanel
+          title="Call control"
+          icon={<PhoneOff />}
+          bodyClassName="p-0 divide-y divide-border"
+        >
         {CALL_CONTROL_TOOLS.filter((t) => t.type === "end_call").map(({ type, icon, label, description }) => {
           const isOn = hasNativeTool(type);
           return (
-            <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-              <div className="w-full text-left p-4 flex items-start gap-3">
-                <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-                  <span className={cn(isOn ? "text-foreground/70" : "text-muted-foreground/35")}>{icon}</span>
+            <div key={type}>
+              <div className="flex w-full items-start gap-3 p-4 text-left">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+                  <span className={cn(isOn ? "text-foreground" : "text-muted-foreground/50")}>{icon}</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-xs font-semibold text-foreground/80">{label}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="mb-0.5 flex items-center gap-2">
+                    <span className="text-[12.5px] font-semibold text-foreground">{label}</span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
+                  <p className="text-[11.5px] leading-relaxed text-muted-foreground">{description}</p>
                 </div>
-                <div className="shrink-0 mt-1">
+                <div className="mt-1 shrink-0">
                   <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} />
                 </div>
               </div>
@@ -3256,25 +3227,25 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         })}
 
         {/* Call Transfer — platform tool (not under Custom Tools) */}
-        <div className={cn("rounded-xl border transition-all duration-150", transferOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-          <div className="w-full text-left p-4 flex items-start gap-3">
-            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-              <PhoneForwarded className={cn("h-4 w-4", transferOn ? "text-foreground/70" : "text-muted-foreground/35")} />
+        <div>
+          <div className="flex w-full items-start gap-3 p-4 text-left">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+              <PhoneForwarded className={cn("h-4 w-4", transferOn ? "text-foreground" : "text-muted-foreground/50")} />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-semibold text-foreground/80">Call Transfer</span>
+            <div className="min-w-0 flex-1">
+              <div className="mb-0.5 flex items-center gap-2">
+                <span className="text-[12.5px] font-semibold text-foreground">Call Transfer</span>
               </div>
-              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
                 Warm or cold transfer to a human number when the caller asks or the agent can’t resolve the issue.
               </p>
             </div>
-            <div className="shrink-0 mt-1">
+            <div className="mt-1 shrink-0">
               <Switch checked={transferOn} onCheckedChange={(v) => toggleCallTransfer(v)} />
             </div>
           </div>
           {transferOn && transferIdx >= 0 && (
-            <div className="space-y-3 border-t border-border/30 px-4 pb-4 pt-3">
+            <div className="space-y-3 border-t border-border bg-muted/20 px-4 pb-4 pt-3">
               <div className="grid grid-cols-2 gap-3">
                 <FormField control={form.control} name={`tools.${transferIdx}.name`} render={({ field: f }) => (
                   <FormItem className="space-y-1">
@@ -3326,29 +3297,34 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
           )}
         </div>
+        </BuilderPanel>
 
-        <p className="mb-1.5 mt-5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Recording</p>
+        <BuilderPanel
+          title="Recording & summaries"
+          icon={<AudioLines />}
+          bodyClassName="p-0 divide-y divide-border"
+        >
         {/* Call Recording card */}
-        <div className={cn("rounded-xl border transition-all duration-150", recordingEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+        <div>
           <div
             role="button"
             tabIndex={0}
             onClick={(e) => { if (!e.nativeEvent.isTrusted) return; form.setValue("recordingEnabled", !recordingEnabled, { shouldDirty: true }); }}
             onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("recordingEnabled", !recordingEnabled, { shouldDirty: true }); } }}
-            className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
+            className="flex w-full cursor-pointer items-start gap-3 p-4 text-left"
           >
-            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-              <Mic className={cn("h-4 w-4", recordingEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+              <Mic className={cn("h-4 w-4", recordingEnabled ? "text-foreground" : "text-muted-foreground/50")} />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-semibold text-foreground/80">Call Recording</span>
+            <div className="min-w-0 flex-1">
+              <div className="mb-0.5 flex items-center gap-2">
+                <span className="text-[12.5px] font-semibold text-foreground">Call Recording</span>
               </div>
-              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
-                Records the full audio of each call (caller and agent) and stores it on the call. When enabled, recordings appear in the Call Recording tab on the call's detail page for playback and download.
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                Records the full audio of each call and stores it on the call, so you can play it back from the call detail page.
               </p>
             </div>
-            <div className="shrink-0 mt-1">
+            <div className="mt-1 shrink-0">
               <Switch
                 checked={recordingEnabled}
                 onCheckedChange={(v) => form.setValue("recordingEnabled", v, { shouldDirty: true })}
@@ -3358,27 +3334,26 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           </div>
         </div>
 
-        <p className="mb-1.5 mt-5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Call summaries</p>
-        <div className={cn("rounded-xl border transition-all duration-150", summarizationEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+        <div>
           <div
             role="button"
             tabIndex={0}
             onClick={(e) => { if (!e.nativeEvent.isTrusted) return; form.setValue("summarizationEnabled", !summarizationEnabled, { shouldDirty: true }); }}
             onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("summarizationEnabled", !summarizationEnabled, { shouldDirty: true }); } }}
-            className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
+            className="flex w-full cursor-pointer items-start gap-3 p-4 text-left"
           >
-            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-              <Sparkles className={cn("h-4 w-4", summarizationEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+              <Sparkles className={cn("h-4 w-4", summarizationEnabled ? "text-foreground" : "text-muted-foreground/50")} />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-semibold text-foreground/80">Auto Summarization</span>
+            <div className="min-w-0 flex-1">
+              <div className="mb-0.5 flex items-center gap-2">
+                <span className="text-[12.5px] font-semibold text-foreground">Auto Summarization</span>
               </div>
-              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
                 After each completed call, write a short AI summary on the History → Summary tab.
               </p>
             </div>
-            <div className="shrink-0 mt-1">
+            <div className="mt-1 shrink-0">
               <Switch
                 checked={summarizationEnabled}
                 onCheckedChange={(v) => form.setValue("summarizationEnabled", v, { shouldDirty: true })}
@@ -3387,26 +3362,31 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
           </div>
         </div>
+        </BuilderPanel>
 
-        <p className="mb-1.5 mt-5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Caller Intelligence</p>
+        <BuilderPanel
+          title="Caller intelligence"
+          icon={<Users />}
+          bodyClassName="p-0 divide-y divide-border"
+        >
         {/* Gender Identification card */}
-        <div className={cn("rounded-xl border transition-all duration-150", genderEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+        <div>
           <div
             role="button"
             tabIndex={0}
             onClick={(e) => { if (!e.nativeEvent.isTrusted) return; form.setValue("genderDetectionEnabled", !genderEnabled, { shouldDirty: true }); }}
             onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("genderDetectionEnabled", !genderEnabled, { shouldDirty: true }); } }}
-            className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
+            className="flex w-full cursor-pointer items-start gap-3 p-4 text-left"
           >
-            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-              <User2 className={cn("h-4 w-4", genderEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+              <User2 className={cn("h-4 w-4", genderEnabled ? "text-foreground" : "text-muted-foreground/50")} />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-semibold text-foreground/80">Gender Identification</span>
-                <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">Beta</span>
+            <div className="min-w-0 flex-1">
+              <div className="mb-0.5 flex items-center gap-2">
+                <span className="text-[12.5px] font-semibold text-foreground">Gender Identification</span>
+                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400">Beta</span>
               </div>
-              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
                 Detects caller gender from voice at the start of the call. When enabled, the agent uses gender-appropriate salutations — "Sir", "Ma'am", or a neutral fallback.
               </p>
               {genderEnabled && (
@@ -3426,23 +3406,23 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         </div>
 
         {/* Voice Memory card */}
-        <div className={cn("rounded-xl border transition-all duration-150", voiceMemoryEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+        <div>
           <div
             role="button"
             tabIndex={0}
             onClick={(e) => { if (!e.nativeEvent.isTrusted) return; form.setValue("voiceMemoryEnabled", !voiceMemoryEnabled, { shouldDirty: true }); }}
             onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("voiceMemoryEnabled", !voiceMemoryEnabled, { shouldDirty: true }); } }}
-            className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
+            className="flex w-full cursor-pointer items-start gap-3 p-4 text-left"
           >
-            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-              <AudioLines className={cn("h-4 w-4", voiceMemoryEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+              <AudioLines className={cn("h-4 w-4", voiceMemoryEnabled ? "text-foreground" : "text-muted-foreground/50")} />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-semibold text-foreground/80">Voice Memory</span>
-                <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">Beta</span>
+            <div className="min-w-0 flex-1">
+              <div className="mb-0.5 flex items-center gap-2">
+                <span className="text-[12.5px] font-semibold text-foreground">Voice Memory</span>
+                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400">Beta</span>
               </div>
-              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
                 Remembers the caller&apos;s voiceprint. Detects mid-call handoffs (phone given to someone else) and can link the same voice across different phone numbers. Phone-number memory stays primary.
               </p>
               {voiceMemoryEnabled && (
@@ -3460,38 +3440,39 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
           </div>
         </div>
+        </BuilderPanel>
 
       </div>
       </div>
 
       {/* ── Custom Tools (webhooks only — Call Transfer lives under Platform Tools) ─── */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-sm font-semibold mb-0.5">Custom Tools</h3>
-            <p className="text-xs text-muted-foreground">
-              Mid-call HTTP to your API (while talking). Not the same as post-call notify or Developers event subscriptions.
+      <BuilderPanel
+        title="Custom tools"
+        icon={<Webhook />}
+        description="Mid-call HTTP to your own API"
+        action={
+          <Button type="button" variant="outline" size="sm" className="h-7 gap-1 px-2.5 text-[11px]"
+            onClick={() => append({ type: "webhook", name: "custom_action", description: "Invoke when caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment…", parameters: [] })}>
+            <Plus className="size-3" /> Add
+          </Button>
+        }
+        bodyClassName="p-0"
+      >
+        {(form.watch("tools") ?? []).filter((t: { type: string }) => t.type === "webhook").length === 0 ? (
+          <div className="px-4 py-8 text-center">
+            <Wrench className="mx-auto mb-2 h-6 w-6 text-muted-foreground/30" />
+            <p className="text-[12.5px] font-medium text-muted-foreground">No mid-call HTTP tools</p>
+            <p className="mt-0.5 text-[11.5px] text-muted-foreground/70">
+              These call your API while the agent is talking — not the same as post-call notify.
             </p>
           </div>
-          <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
-            onClick={() => append({ type: "webhook", name: "custom_action", description: "Invoke when caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment…", parameters: [] })}>
-            <Webhook className="h-3.5 w-3.5 mr-1" /> Mid-call HTTP
-          </Button>
-        </div>
-
-        {(form.watch("tools") ?? []).filter((t: { type: string }) => t.type === "webhook").length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
-            <Wrench className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
-            <p className="text-sm font-medium text-muted-foreground/50">No mid-call HTTP tools</p>
-            <p className="text-xs text-muted-foreground/30 mt-0.5">Add Mid-call HTTP above</p>
-          </div>
         ) : (
-          <div className="space-y-3">
+          <div className="divide-y divide-border">
             {fields.flatMap((field, index) => {
               const toolType = form.watch(`tools.${index}.type`);
               if (toolType !== "webhook") return [];
               return (
-                <div key={field.id} className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3">
+                <div key={field.id} className="space-y-3 p-4">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                       <Webhook className="h-3 w-3" />Mid-call HTTP
@@ -3558,7 +3539,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             })}
           </div>
         )}
-      </div>
+      </BuilderPanel>
     </div>
   );
 }
@@ -3569,16 +3550,13 @@ function VoicemailTab({ form, embedded = false }: { form: any; embedded?: boolea
   const mode   = form.watch("machineDetectionMode");
   const action = form.watch("voicemailAction");
   return (
-    <div className={cn(
-      "relative w-full space-y-5",
-      embedded ? "px-0 py-0" : BUILDER_TAB_PAD,
-    )}>
-      <div>
-        <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Voicemail</h3>
-        <p className="mt-1 text-[12px] text-muted-foreground">
-          Outbound only — detect answering machines and take action.
-        </p>
-      </div>
+    <BuilderPanel
+      title="Voicemail"
+      icon={<MicOff />}
+      description="Outbound only — detect answering machines"
+      className={embedded ? undefined : "mx-5 my-6 sm:mx-8"}
+      bodyClassName="gap-4"
+    >
       <FormField control={form.control} name="machineDetectionMode" render={({ field }) => (
         <FormItem>
           <FormLabel className="text-xs">Detection Mode</FormLabel>
@@ -3635,7 +3613,7 @@ function VoicemailTab({ form, embedded = false }: { form: any; embedded?: boolea
           )}
         </>
       )}
-    </div>
+    </BuilderPanel>
   );
 }
 
@@ -3739,17 +3717,17 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
         title="Settings"
         description="Call limits, barge-in, hang-up, post-call notify URL, and compliance. How fast the agent replies is on Sound."
       />
-      <div className="flex flex-wrap items-center gap-1">
+      <div className="inline-flex flex-wrap items-center gap-1 self-start rounded-lg border border-border bg-card p-1">
         {nav.map(n => (
           <button
             key={n.id}
             type="button"
             onClick={() => setSection(n.id)}
             className={cn(
-              "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-[11.5px] font-medium transition-all",
+              "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-[11.5px] font-medium transition-all",
               section === n.id
-                ? "border border-primary/30 bg-primary/15 text-primary"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
             {n.icon}
@@ -3762,15 +3740,12 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
 
         {/* ── ENGINE ── */}
         {section === "engine" && (
-          <>
-            <div>
-              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Engine</h3>
-              <p className="mt-0.5 text-[12px] text-muted-foreground">
-                Whether the caller can interrupt, an extra pause before the agent speaks, and hang-up if nobody talks. Fast / Balanced / Patient lives on Sound — not here.
-              </p>
-            </div>
-
-            <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
+          <BuilderPanel
+            title="Call Engine"
+            icon={<Timer />}
+            description="Barge-in, extra pause, and silence hang-up"
+          >
+            <div className="space-y-5">
               <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
                 <FormItem className="flex items-center justify-between space-y-0 pb-1">
                   <div>
@@ -3876,20 +3851,19 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 );
               }} />
             </div>
-          </>
+          </BuilderPanel>
         )}
 
         {/* ── LIMITS ── */}
         {section === "limits" && (
-          <>
+          <div className="flex flex-col gap-4">
             {/* ── Auto-Redial on Drop ── */}
-            <div>
-              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Auto-Redial on Drop</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                When a call ends unexpectedly (network drop, accidental hang-up), automatically schedule a callback to the same number.
-              </p>
-            </div>
-            <div className="space-y-4 rounded-xl border border-border/50 bg-card/40 p-4">
+            <BuilderPanel
+              title="Auto-Redial on Drop"
+              icon={<PhoneForwarded />}
+              description="Call back after an unexpected disconnect"
+            >
+            <div className="space-y-4">
               <FormField control={form.control} name="autoRedialEnabled" render={({ field }) => (
                 <FormItem className="flex items-center justify-between space-y-0">
                   <div>
@@ -3929,14 +3903,14 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 );
               }} />
             </div>
+            </BuilderPanel>
 
-            <div>
-              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Limits</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Hard cut-off for call duration. Silence check-in lives on Engine.
-              </p>
-            </div>
-            <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
+            <BuilderPanel
+              title="Call Limits"
+              icon={<Gauge />}
+              description="Hard cut-off for call duration"
+            >
+            <div className="space-y-5">
               <FormField control={form.control} name="maxDuration" render={({ field }) => {
                 const val = field.value ?? 300;
                 const mins = Math.floor(val / 60);
@@ -3980,19 +3954,18 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 </FormItem>
               )} />
             </div>
-          </>
+            </BuilderPanel>
+          </div>
         )}
 
         {/* ── COMPLIANCE ── */}
         {section === "compliance" && (
-          <>
-            <div>
-              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Compliance Frameworks</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Regulatory disclosures injected into the system prompt at runtime. Enable the frameworks that apply to your use-case.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+          <BuilderPanel
+            title="Compliance frameworks"
+            icon={<ShieldCheck />}
+            description="Disclosures injected into the prompt at runtime"
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {([
                 { name: "complianceIrdai", label: "IRDAI",    badge: "Insurance",   desc: "Insurance Regulatory and Development Authority of India — for insurance advisory calls"         },
                 { name: "complianceDpdp",  label: "DPDP Act", badge: "Data Privacy", desc: "Digital Personal Data Protection Act 2023 — when collecting personal data from callers"       },
@@ -4139,20 +4112,17 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
             </AlertDialog>
 
             <IrdaiComplianceBanner enabled={!!form.watch("complianceIrdai")} agent={agent} />
-          </>
+          </BuilderPanel>
         )}
 
         {/* ── INTEGRATIONS ── */}
         {section === "integrations" && (
-          <>
-            <div>
-              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Post-call notify</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                After <em>this</em> agent finishes a call, POST JSON to your CRM or Zap. Leave blank if unused.
-                Workspace-wide event subscriptions live under Developers → Event subscriptions.
-              </p>
-            </div>
-            <div className="space-y-3 rounded-xl border border-border/50 bg-card/40 p-4">
+          <BuilderPanel
+            title="Post-call notify"
+            icon={<Webhook />}
+            description="POST JSON to your CRM after each call"
+          >
+            <div className="space-y-3">
               <FormField control={form.control} name="webhookUrl" render={({ field }) => {
                 const val = field.value ?? "";
                 const isEmail = val.includes("@") && !val.startsWith("http");
@@ -4228,11 +4198,11 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 </FormItem>
               )} />
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="mt-3 text-[11px] text-muted-foreground">
               Outcome labels and after-call WhatsApp / email live on{" "}
               <span className="text-foreground/80">After the call</span>.
             </p>
-          </>
+          </BuilderPanel>
         )}
 
       </div>
@@ -4752,31 +4722,16 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
 
   if (agentId <= 0) {
     return (
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <Tag className="h-4 w-4 text-amber-400" />
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">What happened</h3>
-        </div>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
+      <BuilderPanel title="What happened" icon={<Tag />}>
+        <p className="text-[12px] leading-relaxed text-muted-foreground">
           Save the agent first to define outcomes and data fields.
         </p>
-      </div>
+      </BuilderPanel>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <Tag className="h-4 w-4 text-amber-400" />
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">What happened</h3>
-        </div>
-        <p className="text-[12px] leading-relaxed text-muted-foreground">
-          After each call, AI reads the transcript, picks one of <em>your</em> outcome labels
-          (using the business definitions you write), and extracts data fields as structured values.
-        </p>
-      </div>
-
+    <div className="flex flex-col gap-6">
       {dispLoading ? (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-xl bg-muted/20 animate-pulse" />)}
@@ -4784,18 +4739,16 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       ) : (
         <>
           {/* ── Outcomes ─────────────────────────────────────────────── */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h4 className="text-xs font-semibold text-foreground">Outcome labels</h4>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Add labels, then define what each means for your business — that text is what the AI uses.
-                </p>
-              </div>
-              <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addCategory}>
-                <Plus className="h-3.5 w-3.5" /> Add category
+          <BuilderPanel
+            title="Outcome labels"
+            icon={<Tag />}
+            description="AI picks one of these after each call"
+            action={
+              <Button type="button" variant="outline" size="sm" className="h-7 gap-1 px-2.5 text-[11px]" onClick={addCategory}>
+                <Plus className="size-3" /> Add category
               </Button>
-            </div>
+            }
+          >
             <div className="flex flex-wrap gap-1.5 mb-3">
               {OUTCOME_PRESETS.map((p) => (
                 <Button
@@ -4811,14 +4764,14 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
               ))}
             </div>
             {categories.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border/50 p-6 text-center">
-                <p className="text-sm font-medium text-muted-foreground/60">No outcomes yet</p>
-                <p className="text-xs text-muted-foreground/40 mt-0.5">Pick a preset or add a category</p>
+              <div className="rounded-lg border border-dashed border-border p-6 text-center">
+                <p className="text-[12.5px] font-medium text-muted-foreground">No outcomes yet</p>
+                <p className="mt-0.5 text-[11.5px] text-muted-foreground/70">Pick a preset or add a category</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {categories.map((cat) => (
-                  <div key={cat.id} className="rounded-xl border border-border/60 bg-card/20 p-4">
+                  <div key={cat.id} className="rounded-lg border border-border bg-background p-4">
                     <div className="flex items-start gap-3">
                       <div className="flex-1 grid grid-cols-2 gap-3">
                         <div className="space-y-1">
@@ -4856,21 +4809,22 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                 ))}
               </div>
             )}
-          </div>
+          </BuilderPanel>
 
           {/* ── Per-outcome business definitions ─────────────────────── */}
           {outcomeGuideKeys.length > 0 && (
-            <div>
-              <div className="mb-2">
-                <h4 className="text-xs font-semibold text-foreground">What each label means</h4>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Your definitions — not a sales funnel. Example for <span className="font-mono">interested</span>:
-                  “Asked for pricing, budget confirmed, or agreed to a site visit this week.”
-                </p>
-              </div>
+            <BuilderPanel
+              title="What each label means"
+              icon={<BookOpen />}
+              description="Your definitions are what the AI reads"
+            >
+              <p className="mb-3 text-[11.5px] leading-relaxed text-muted-foreground">
+                Example for <span className="font-mono">interested</span>: “Asked for pricing, budget confirmed,
+                or agreed to a site visit this week.”
+              </p>
               <div className="space-y-2.5">
                 {outcomeGuideKeys.map((key) => (
-                  <div key={key} className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-1.5">
+                  <div key={key} className="space-y-1.5 rounded-lg border border-border bg-background p-3">
                     <label className="text-[12px] font-medium text-foreground font-mono">{key}</label>
                     <Textarea
                       className="min-h-[72px] resize-y text-[12px] leading-relaxed"
@@ -4890,26 +4844,20 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                   </div>
                 ))}
               </div>
-            </div>
+            </BuilderPanel>
           )}
 
           {/* ── After-call messages (agent-owned) ─────────────────────── */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                  <h4 className="text-xs font-semibold text-foreground">After-call messages</h4>
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  After the call ends, send WhatsApp / email for matching outcomes. Pick the Meta template per rule. Connect the number under Connections.
-                </p>
-              </div>
+          <BuilderPanel
+            title="After-call messages"
+            icon={<MessageCircle />}
+            description="WhatsApp / email sent when an outcome matches"
+            action={
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs gap-1"
+                className="h-7 gap-1 px-2.5 text-[11px]"
                 disabled={dispositionKeys.length === 0}
                 onClick={() => {
                   setAfterCallMessages((prev) => ({
@@ -4927,12 +4875,12 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                   setDirty(true);
                 }}
               >
-                <Plus className="h-3.5 w-3.5" /> Add rule
+                <Plus className="size-3" /> Add rule
               </Button>
-            </div>
-
+            }
+          >
             {(!whatsappReady || !emailReady) && (
-              <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 mb-3 space-y-2">
+              <div className="mb-3 space-y-2 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
                 <p className="text-[12px] font-medium text-foreground">
                   {!whatsappReady && !emailReady
                     ? "Connect WhatsApp or email first"
@@ -5085,8 +5033,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
             </div>
 
             {afterCallMessages.rules.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border/50 p-4 text-center">
-                <p className="text-xs text-muted-foreground/60">
+              <div className="rounded-lg border border-dashed border-border p-4 text-center">
+                <p className="text-[11.5px] text-muted-foreground">
                   {dispositionKeys.length === 0
                     ? "Add outcomes first, then map WhatsApp / email per disposition."
                     : "No disposition rules yet — use Add rule, or turn on Every call."}
@@ -5095,7 +5043,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
             ) : (
               <div className="space-y-3">
                 {afterCallMessages.rules.map((rule) => (
-                  <div key={rule.id} className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-3">
+                  <div key={rule.id} className="space-y-3 rounded-lg border border-border bg-background p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex flex-wrap gap-1.5 flex-1">
                         {dispositionKeys.map((d) => {
@@ -5200,22 +5148,22 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                 ))}
               </div>
             )}
-          </div>
+          </BuilderPanel>
 
           {/* ── Data to collect ──────────────────────────────────────── */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h4 className="text-xs font-semibold text-foreground">Data to collect</h4>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  AI pulls these from the transcript after the call as structured fields.
-                  Phone / WhatsApp / alternate number → digits only (spoken “eight nine…” is converted).
-                </p>
-              </div>
-              <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => addField()}>
-                <Plus className="h-3.5 w-3.5" /> Add field
+          <BuilderPanel
+            title="Data to collect"
+            icon={<List />}
+            description="Structured fields pulled from the transcript"
+            action={
+              <Button type="button" variant="outline" size="sm" className="h-7 gap-1 px-2.5 text-[11px]" onClick={() => addField()}>
+                <Plus className="size-3" /> Add field
               </Button>
-            </div>
+            }
+          >
+            <p className="mb-3 text-[11.5px] leading-relaxed text-muted-foreground">
+              Phone / WhatsApp / alternate number are saved as digits only — spoken “eight nine…” is converted.
+            </p>
             <div className="flex flex-wrap gap-1.5 mb-3">
               {DOMAIN_FIELD_QUICK_ADDS.map((q) => (
                 <Button
@@ -5232,14 +5180,14 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
               ))}
             </div>
             {fields.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border/50 p-6 text-center">
-                <p className="text-sm font-medium text-muted-foreground/60">No data fields</p>
-                <p className="text-xs text-muted-foreground/40 mt-0.5">Quick-add WhatsApp, email, city…</p>
+              <div className="rounded-lg border border-dashed border-border p-6 text-center">
+                <p className="text-[12.5px] font-medium text-muted-foreground">No data fields</p>
+                <p className="mt-0.5 text-[11.5px] text-muted-foreground/70">Quick-add WhatsApp, email, city…</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {fields.map((field) => (
-                  <div key={field.id} className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
+                  <div key={field.id} className="space-y-3 rounded-lg border border-border bg-background p-4">
                     <div className="flex items-start gap-3">
                       <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="space-y-1">
@@ -5306,7 +5254,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                 ))}
               </div>
             )}
-          </div>
+          </BuilderPanel>
         </>
       )}
 
@@ -6564,32 +6512,32 @@ function VersionsTab({ agentId }: { agentId: number }) {
         ) : undefined}
       />
 
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="inline-flex flex-wrap items-center gap-1 self-start rounded-lg border border-border bg-card p-1">
         <button
           type="button"
           onClick={() => setActiveSubTab("published")}
           className={cn(
-            "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-[11.5px] font-medium transition-all",
+            "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-[11.5px] font-medium transition-all",
             activeSubTab === "published"
-              ? "border border-primary/30 bg-primary/15 text-primary"
-              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              ? "bg-foreground text-background"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
           )}
         >
-          Published Versions
-          <Badge variant="outline" className="text-[10px] h-4 px-1">{activePublished.length}</Badge>
+          Published
+          <Badge variant="outline" className={cn("h-4 px-1 text-[10px]", activeSubTab === "published" && "border-background/30 text-background")}>{activePublished.length}</Badge>
         </button>
         <button
           type="button"
           onClick={() => setActiveSubTab("drafts")}
           className={cn(
-            "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-[11.5px] font-medium transition-all",
+            "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-[11.5px] font-medium transition-all",
             activeSubTab === "drafts"
-              ? "border border-primary/30 bg-primary/15 text-primary"
-              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              ? "bg-foreground text-background"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
           )}
         >
-          Draft History
-          <Badge variant="outline" className="text-[10px] h-4 px-1">{draftVersions.length}</Badge>
+          Drafts
+          <Badge variant="outline" className={cn("h-4 px-1 text-[10px]", activeSubTab === "drafts" && "border-background/30 text-background")}>{draftVersions.length}</Badge>
         </button>
       </div>
 
@@ -7524,8 +7472,8 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
             onSelect={handleTabClick}
           />
 
-          <div ref={tabContentRef} className="min-h-0 flex-1 overflow-y-auto">
-            <div className="builder-workspace-shell mx-auto flex min-h-full w-full">
+          <div ref={tabContentRef} className="min-h-0 flex-1 overflow-y-auto bg-muted/40">
+            <div className="builder-workspace-shell mx-auto flex min-h-full w-full border-border bg-background xl:border-x">
               <form
                 onSubmit={(e) => e.preventDefault()}
                 className={cn(
@@ -7546,7 +7494,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
                 {activeTab === "outcomes"  && (
-                  <div className={cn("space-y-10", BUILDER_TAB_PAD)}>
+                  <div className={cn("flex flex-col gap-6", BUILDER_TAB_PAD)}>
                     <BuilderTabHeader
                       title="After the call"
                       description="Label what happened, pick the WhatsApp template for each outcome, and decide what to do with voicemail."
@@ -7699,18 +7647,18 @@ function PromptReadinessAside({
   ];
 
   return (
-    <WorkspaceInspector title="At a glance" className="h-full bg-muted/[0.08]">
+    <WorkspaceInspector title="At a glance" className="h-full bg-muted/25">
       <div className="space-y-4">
-        <div className="space-y-1">
-          <p className="truncate text-[13px] font-medium">{agent?.name ?? "Agent"}</p>
-          <p className="inline-flex items-center gap-1.5 text-[11px] capitalize text-muted-foreground">
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2.5">
+          <p className="truncate text-[13px] font-semibold">{agent?.name ?? "Agent"}</p>
+          <p className="inline-flex shrink-0 items-center gap-1.5 text-[11px] capitalize text-muted-foreground">
             <StatusDot tone={agent?.status === "active" ? "success" : "neutral"} />
             {agent?.status === "active" ? "Live" : "Draft"}
           </p>
         </div>
-        <ul className="space-y-2">
+        <ul className="overflow-hidden rounded-lg border border-border bg-card divide-y divide-border">
           {rows.map((row) => (
-            <li key={row.label} className="flex items-start gap-2.5 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2">
+            <li key={row.label} className="flex items-start gap-2.5 px-3 py-2.5">
               <span
                 className={cn(
                   "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full",
@@ -7725,18 +7673,18 @@ function PromptReadinessAside({
               </span>
               <div className="min-w-0">
                 <p className="text-[12px] font-medium">{row.label}</p>
-                <p className="truncate text-[10px] text-muted-foreground">{row.detail}</p>
+                <p className="truncate text-[10.5px] text-muted-foreground">{row.detail}</p>
               </div>
             </li>
           ))}
         </ul>
         {onLiveTest && (
-          <Button type="button" size="sm" className="h-8 w-full gap-1.5 text-[11px]" onClick={onLiveTest}>
+          <Button type="button" size="sm" className="h-9 w-full gap-1.5 text-[12px]" onClick={onLiveTest}>
             <Play className="size-3.5" />
             Live test
           </Button>
         )}
-        <p className="text-[10px] leading-relaxed text-muted-foreground">
+        <p className="text-[10.5px] leading-relaxed text-muted-foreground">
           Save from the header when you are done. Overview shows phone, pipeline, and knowledge readiness.
         </p>
       </div>
