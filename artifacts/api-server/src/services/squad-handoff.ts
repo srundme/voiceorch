@@ -26,7 +26,7 @@ import {
   resolveTtsMinSentenceChars,
 } from "@workspace/db/call-engine-defaults";
 import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "../orchestration/mic-sensitivity.js";
-import { optionalMs } from "../orchestration/stt-tuning.js";
+import { optionalMs, optionalUnitInterval } from "../orchestration/stt-tuning.js";
 import { getAttachedSourceIds } from "../orchestration/kb-retrieval.js";
 import type { AgentConfig, AgentTool, SessionTransport } from "../orchestration/types.js";
 import type { VoiceSession } from "../orchestration/voice-session.js";
@@ -290,6 +290,7 @@ async function buildTargetAgentConfig(
     // sample rate. Null means "leave the provider default alone".
     sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
     sarvamEndOfSpeechSilenceMs: optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]),
+    sarvamVadThreshold: optionalUnitInterval(agentCfg["sarvamVadThreshold"]),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
     voiceStack,
     geminiLive: voiceStack === "gemini_live"

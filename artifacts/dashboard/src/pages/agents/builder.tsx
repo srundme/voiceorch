@@ -40,7 +40,7 @@ import type { AgentVersion } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, clampInterruptWords, voiceSecondsFromInterruptWords, WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER } from "./edit.schema";
+import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, hydrateSarvamRealtimeVad, clampInterruptWords, voiceSecondsFromInterruptWords, WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER } from "./edit.schema";
 import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
@@ -103,7 +103,7 @@ import {
   GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS, VOICE_STACK_OPTIONS,
   geminiLiveModelLabel, isGeminiLiveAgent, isGeminiLiveLlmModel, voiceStackForLlmModel,
   llmFieldsForVoiceStack,
-  languagesForAgent, isGeminiLiveLanguage,
+  languagesForAgent, isSarvamRealtimeAsr,
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
@@ -518,7 +518,7 @@ function AgentCostSummary({
 }
 
 const SECTION_FIELDS: Record<CardSection, string[]> = {
-  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "sarvamSttStreamType", "sarvamSttPrompt", "languageAutoDetect", "multilingualLanguages", "sarvamIndicNumbers"],
+  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "sarvamSttStreamType", "sarvamSttPrompt", "languageAutoDetect", "multilingualLanguages", "sarvamIndicNumbers", "sarvamEndOfSpeechSilenceMs", "sarvamFirstTurnMinSpeechMs", "sarvamVadThreshold"],
   model: ["voiceStack", "llmProvider", "llmModel", "temperature"],
   voice: ["ttsProvider", "ttsModel", "ttsVoice", "ttsSpeed", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
 };
@@ -922,7 +922,7 @@ function OverviewTab({
             description={
               isGeminiLive
                 ? "Choose the conversation language for Gemini Live. Native audio has no separate STT — language is enforced via system instructions."
-                : "Choose the speech-to-text provider, model, and language used to transcribe caller audio."
+                : "Speech-to-text for live calls: Sarvam language, model, mode, partials, and millisecond VAD."
             }
           >
             {isGeminiLive && (
@@ -934,8 +934,10 @@ function OverviewTab({
               <FormField control={form.control} name="language" render={({ field }) => {
                 const langOpts = languagesForAgent(isGeminiLive);
                 const current = field.value ?? "";
-                // Keep current selection visible even if it isn't in the Live catalog.
-                const options = (!isGeminiLive || !current || isGeminiLiveLanguage(current) || langOpts.some(l => l.value === current))
+                // Keep a saved tag visible even if it isn't in this stack's catalog
+                // (legacy en-US, Gemini-only codes, etc.). Runtime maps en-* → en-IN.
+                const inList = langOpts.some(l => l.value === current);
+                const options = (!current || inList)
                   ? langOpts
                   : [{ value: current, label: LANGUAGES.find(l => l.value === current)?.label ?? current }, ...langOpts];
                 return (
@@ -947,6 +949,11 @@ function OverviewTab({
                     // Users pick model + voice stack explicitly in the Model / Voice cards.
                   }}
                     options={options.map(l => ({ value: l.value, label: l.label }))} placeholder="Select language" />
+                  {!isGeminiLive && (
+                    <p className="text-[9px] text-muted-foreground leading-snug">
+                      Sarvam realtime accepts these 23 codes. English is en-IN.
+                    </p>
+                  )}
                 </FormItem>
                 );
               }} />
@@ -1043,6 +1050,50 @@ function OverviewTab({
                   </FormItem>
                 )} />
               )}
+              {!isGeminiLive && asrProvider === "sarvam" && isSarvamRealtimeAsr(asrModel) && (
+                <div className="col-span-2 space-y-4 border-t border-border/60 pt-3">
+                  <div>
+                    <p className="text-[10px] font-medium text-foreground/80">Turn-taking (Sarvam VAD)</p>
+                    <p className="text-[9px] text-muted-foreground leading-snug mt-0.5">
+                      Sent on connect as silence duration, minimum speech, and threshold.
+                      Encoding, sample rate, and timestamps are automatic. Endpointing stays on server VAD — not manual.
+                    </p>
+                  </div>
+                  <AdvSlider
+                    form={form}
+                    name="sarvamEndOfSpeechSilenceMs"
+                    label="End-of-speech silence"
+                    hint="How long the caller must be quiet before the turn ends. Fast 300 · Balanced 500 · Patient 700."
+                    min={150}
+                    max={800}
+                    step={25}
+                    fmt={(v) => `${v}ms`}
+                    onValueChange={(v: number) => {
+                      form.setValue("asrEndpointingSilenceMs", clampEndpointingMs(v), { shouldDirty: true });
+                    }}
+                  />
+                  <AdvSlider
+                    form={form}
+                    name="sarvamFirstTurnMinSpeechMs"
+                    label="Minimum speech"
+                    hint="Shortest burst counted as speech. Filters clicks and echo blips. Default 250ms."
+                    min={80}
+                    max={800}
+                    step={10}
+                    fmt={(v) => `${v}ms`}
+                  />
+                  <AdvSlider
+                    form={form}
+                    name="sarvamVadThreshold"
+                    label="VAD threshold"
+                    hint="0.3 is Sarvam's default. Higher = less sensitive to noise and echo."
+                    min={0.1}
+                    max={0.8}
+                    step={0.05}
+                    fmt={(v) => Number(v).toFixed(2)}
+                  />
+                </div>
+              )}
             </div>
             <div className="space-y-3 border-t border-border pt-3 mt-1">
               <p className="text-[11px] font-semibold text-foreground tracking-tight">Language personalisation</p>
@@ -1052,7 +1103,7 @@ function OverviewTab({
                   <p className="text-[9px] text-muted-foreground">
                     {isGeminiLive
                       ? "Allow Gemini Live to follow the caller when they switch languages mid-call."
-                      : "Follow along when the caller switches languages (Sarvam STT + TTS)."}
+                      : "Sends language_code=auto so Sarvam detects which of the 23 languages the caller is speaking."}
                   </p>
                 </div>
                 <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
@@ -1077,7 +1128,7 @@ function OverviewTab({
                   return (
                     <FormItem className="space-y-1.5">
                       <FormLabel className="text-[10px] font-medium text-foreground/80">Languages allowed</FormLabel>
-                      <p className="text-[9px] text-muted-foreground">Languages the agent can understand and reply in.</p>
+                      <p className="text-[9px] text-muted-foreground">Languages Sarvam may follow (same 23-code table as the picker). Odia is or-IN.</p>
                       <div className="flex flex-wrap gap-1.5">
                         {SARVAM_PERSONALISATION_LANGUAGES.map((lang) => {
                           const on = selected.has(lang.value);
@@ -2422,19 +2473,31 @@ function useCallEnginePreset(form: any): {
   applyPreset: (key: CallEnginePreset) => void;
 } {
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
+  const asrModelVal = form.watch("asrModel") as string | undefined;
+  const realtime = asrProviderVal === "sarvam" && isSarvamRealtimeAsr(asrModelVal);
   const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 250;
   const linearMs = form.watch("linearDelayMs") ?? 0;
   const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
   const vad = form.watch("sarvamHighVadSensitivity") ?? false;
+  const silenceMs = form.watch("sarvamEndOfSpeechSilenceMs") ?? 500;
+  const minSpeechMs = form.watch("sarvamFirstTurnMinSpeechMs") ?? 250;
+  const threshold = form.watch("sarvamVadThreshold") ?? 0.3;
 
   const matches = (key: CallEnginePreset): boolean => {
     const p = CALL_ENGINE_PRESETS[key];
-    return (
-      endpointMs === p.asrEndpointingSilenceMs
-      && linearMs === p.linearDelayMs
-      && interruptWords === p.stopSpeakingNumWords
-      && (asrProviderVal !== "sarvam" || vad === p.sarvamHighVadSensitivity)
-    );
+    if (
+      endpointMs !== p.asrEndpointingSilenceMs
+      || linearMs !== p.linearDelayMs
+      || interruptWords !== p.stopSpeakingNumWords
+    ) return false;
+    if (realtime) {
+      return (
+        silenceMs === p.sarvamEndOfSpeechSilenceMs
+        && minSpeechMs === p.sarvamFirstTurnMinSpeechMs
+        && Math.abs(threshold - p.sarvamVadThreshold) < 0.001
+      );
+    }
+    return asrProviderVal !== "sarvam" || vad === p.sarvamHighVadSensitivity;
   };
   const derived = (Object.keys(CALL_ENGINE_PRESETS) as CallEnginePreset[]).find(matches) ?? null;
 
@@ -2455,6 +2518,9 @@ function useCallEnginePreset(form: any): {
     form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(p.stopSpeakingNumWords), { shouldDirty: true });
     // Sarvam pause-detection is part of the preset — Fast without it leaves a ~2s turn tax.
     form.setValue("sarvamHighVadSensitivity", p.sarvamHighVadSensitivity, { shouldDirty: true });
+    form.setValue("sarvamEndOfSpeechSilenceMs", p.sarvamEndOfSpeechSilenceMs, { shouldDirty: true });
+    form.setValue("sarvamFirstTurnMinSpeechMs", p.sarvamFirstTurnMinSpeechMs, { shouldDirty: true });
+    form.setValue("sarvamVadThreshold", p.sarvamVadThreshold, { shouldDirty: true });
     setPinned(key);
   };
 
@@ -2464,6 +2530,8 @@ function useCallEnginePreset(form: any): {
 /** Voice-tab Call Engine presets — writes the same form keys as Advanced → Engine. */
 function VoiceCallFeelPresets({ form }: { form: any }) {
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
+  const asrModelVal = form.watch("asrModel") as string | undefined;
+  const realtime = asrProviderVal === "sarvam" && isSarvamRealtimeAsr(asrModelVal);
   const { preset: activePreset, tweaked, applyPreset } = useCallEnginePreset(form);
 
   return (
@@ -2473,10 +2541,15 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
         <p className="mt-0.5 text-[12px] text-muted-foreground">
           How quickly the agent takes the turn — same Call Engine knobs as Settings → Engine.
         </p>
-        {asrProviderVal === "sarvam" && (
+        {realtime && (
           <p className="text-[11px] text-muted-foreground mt-1">
-            Fast turns on quick pause detection (~0.13s) for Sarvam; Balanced and Patient
-            use Sarvam&apos;s patient mode so slow speakers aren&apos;t cut off.
+            Fast uses 300ms end-of-speech silence. Balanced is Sarvam&apos;s 500ms default.
+            Patient waits 700ms so slow speakers aren&apos;t cut off.
+          </p>
+        )}
+        {asrProviderVal === "sarvam" && !realtime && (
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Saarika uses legacy frame VAD. Prefer Saaras v3 realtime for live calls.
           </p>
         )}
       </div>
@@ -3585,6 +3658,8 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
 
   const bargeIn = form.watch("bargeInEnabled");
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
+  const asrModelVal = form.watch("asrModel") as string | undefined;
+  const sarvamRealtime = asrProviderVal === "sarvam" && isSarvamRealtimeAsr(asrModelVal);
   const { preset: activePreset, tweaked, applyPreset } = useCallEnginePreset(form);
 
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
@@ -3688,26 +3763,39 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 />
               )}
 
+              {sarvamRealtime ? (
+                <AdvSlider
+                  form={form}
+                  name="sarvamEndOfSpeechSilenceMs"
+                  label="End-of-speech silence"
+                  hint="Sarvam silence_duration_ms — quiet time before the turn ends. Fast 300 · Balanced 500 · Patient 700. Same control as Transcriber."
+                  min={150}
+                  max={800}
+                  step={25}
+                  fmt={(v) => `${v}ms`}
+                  onValueChange={(v: number) => {
+                    form.setValue("asrEndpointingSilenceMs", clampEndpointingMs(v), { shouldDirty: true });
+                  }}
+                />
+              ) : (
               <AdvSlider
                 form={form}
                 name="asrEndpointingSilenceMs"
                 label="Endpointing"
                 hint={asrProviderVal === "sarvam"
-                  ? "Silence before the agent decides you finished. With Sarvam: under 200ms = fast pause detection (~0.13s), 200ms+ = patient (~1s+). Fast 150 · Balanced 250 · Patient 500."
-                  : "Milliseconds of silence after the caller stops before we finalize the turn (Azure + Deepgram). Fast 150 · Balanced 250 · Patient 500."}
+                  ? "Silence before the agent decides you finished. Saarika legacy: under 200ms = fast pause detection, 200ms+ = patient. Fast 150 · Balanced 250 · Patient 500."
+                  : "Milliseconds of silence after the caller stops before we finalize the turn. Fast 150 · Balanced 250 · Patient 500."}
                 min={100}
                 max={800}
                 step={25}
                 fmt={(v) => `${v}ms`}
                 onValueChange={(v: number) => {
-                  // Sarvam has no fine-grained silence window — only fast (~0.13s)
-                  // vs patient (~1-2s) server VAD. Map the single Endpointing knob
-                  // onto that switch so users get Bolna-style one-slider control.
                   if (asrProviderVal === "sarvam") {
                     form.setValue("sarvamHighVadSensitivity", v < 200, { shouldDirty: true });
                   }
                 }}
               />
+              )}
 
               <AdvSlider
                 form={form}
@@ -3726,14 +3814,14 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                   Advanced timing — rarely needed
                 </summary>
                 <div className="space-y-5 pt-4">
-                  {asrProviderVal === "sarvam" && (
+                  {asrProviderVal === "sarvam" && !sarvamRealtime && (
                     <>
                       <FormField control={form.control} name="sarvamHighVadSensitivity" render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between gap-3 py-1">
                           <div>
                             <FormLabel className="text-[12px] font-medium text-foreground/90">Detect pauses quickly</FormLabel>
                             <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                              Saaras VAD owns end-of-speech. On = faster pause detection (default).
+                              Legacy Saarika frame VAD. Prefer Saaras v3 realtime for live calls.
                             </p>
                           </div>
                           <FormControl>
@@ -6771,7 +6859,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478", ttsModel: "sonic-3.5", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 480,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
-      language: "en-US", asrLanguage: "", backchannelingEnabled: true,
+      language: "en-IN", asrLanguage: "", backchannelingEnabled: true,
       backchannelingFrequency: 0.5, webhookUrl: "",
       webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: true,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0, promptVariables: [],
@@ -6807,6 +6895,9 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       sarvamHighVadSensitivity: true,
       sarvamSttStreamType: "fast",
       sarvamSttPrompt: "",
+      sarvamEndOfSpeechSilenceMs: 500,
+      sarvamFirstTurnMinSpeechMs: 250,
+      sarvamVadThreshold: 0.3,
       sarvamSpeechEndFlushMs: 0,
       sarvamIncompleteHoldMs: 0,
       kbBakedOnly: false,
@@ -6867,6 +6958,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
     const resetSig = `${agent.id}:${(agent as any).updatedAt ?? ""}`;
     if (agentResetSigRef.current === resetSig) return;
     agentResetSigRef.current = resetSig;
+    const sarvamVad = hydrateSarvamRealtimeVad((agent as any).agentConfig ?? {});
     form.reset({
       name:                     agent.name,
       description:              agent.description ?? "",
@@ -6885,7 +6977,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       firstSpeaker:             ((agent as any).firstSpeaker === "user" ? "user" : "assistant") as AgentFormValues["firstSpeaker"],
       endCallPhrases:           agent.endCallPhrases ?? "",
       silenceTimeoutSeconds:    agent.silenceTimeoutSeconds ?? 30,
-      language:                 agent.language ?? "en-US",
+      language:                 agent.language ?? "en-IN",
       asrLanguage:              agent.asrLanguage ?? "",
       backchannelingEnabled:    agent.backchannelingEnabled ?? true,
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
@@ -6969,6 +7061,9 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       sarvamSttPrompt:        typeof (agent as any).agentConfig?.sarvamSttPrompt === "string"
         ? (agent as any).agentConfig.sarvamSttPrompt
         : "",
+      sarvamEndOfSpeechSilenceMs: sarvamVad.silence,
+      sarvamFirstTurnMinSpeechMs: sarvamVad.minSpeech,
+      sarvamVadThreshold:         sarvamVad.threshold,
       schedulingCalendarId:   ((agent as any).agentConfig?.calendarCapability?.defaultCalendarId as number | null | undefined) ?? null,
       schedulingEventTypeId:  ((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId as number | null | undefined) ?? null,
       voiceStack:               (((agent as any).agentConfig?.voiceStack as string | undefined) === "gemini_live" ? "gemini_live" : "classic") as AgentFormValues["voiceStack"],
@@ -7048,6 +7143,9 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         fragmentCoalescePlayingMs:   "voice",
         telephonyTailDrainMs:        "voice",
         sarvamHighVadSensitivity:    "voice",
+        sarvamEndOfSpeechSilenceMs:  "voice",
+        sarvamFirstTurnMinSpeechMs:  "voice",
+        sarvamVadThreshold:          "voice",
         sarvamSpeechEndFlushMs:      "voice",
         sarvamIncompleteHoldMs:      "voice",
         stopSpeakingNumWords:     "voice",

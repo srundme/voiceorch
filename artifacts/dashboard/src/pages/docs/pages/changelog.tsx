@@ -9,6 +9,22 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-20-agent-builder-sarvam-realtime-ui">2026-08-20 — Agent Builder: Sarvam realtime settings</h2>
+      <ul>
+        <li>
+          Transcriber language picker is the 23-code Sarvam realtime table
+          (<code>en-IN</code>, Indic scheduled languages, Odia as <code>or-IN</code>).
+          Switch language during call still sends <code>language_code=auto</code>.
+        </li>
+        <li>
+          Turn-taking knobs match the connect query: end-of-speech silence
+          (<code>silence_duration_ms</code>, default 500), minimum speech
+          (<code>min_speech_duration_ms</code>, default 250), and VAD threshold
+          (default 0.3). Fast / Balanced / Patient write those values.
+          The legacy &quot;detect pauses quickly&quot; toggle is only shown for Saarika.
+        </li>
+      </ul>
+
       <h2 id="2026-08-19-sarvam-stt-realtime">2026-08-19 — Sarvam STT: realtime partials</h2>
       <ul>
         <li>

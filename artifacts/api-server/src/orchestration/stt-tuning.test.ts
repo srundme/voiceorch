@@ -91,3 +91,14 @@ describe("resolveSttTuning — environment overrides", () => {
     expect(resolveSttTuning(DEFAULTS).recoveryMinSilenceMs).toBe(700);
   });
 });
+
+describe("optionalUnitInterval", () => {
+  it("clamps 0–1 and rejects non-numbers", async () => {
+    const { optionalUnitInterval } = await import("./stt-tuning.js");
+    expect(optionalUnitInterval(0.3)).toBe(0.3);
+    expect(optionalUnitInterval(1.5)).toBe(1);
+    expect(optionalUnitInterval(-0.2)).toBe(0);
+    expect(optionalUnitInterval(undefined)).toBeNull();
+    expect(optionalUnitInterval("0.3")).toBeNull();
+  });
+});

@@ -443,10 +443,34 @@ export const LANGUAGES = [
   { value: "ht-HT",  label: "Haitian Creole" },
 ];
 
-/** Languages shown in builder “Languages allowed” when Multilingual is on (Sarvam-oriented). */
-export const SARVAM_PERSONALISATION_LANGUAGES = LANGUAGES.filter((l) =>
-  /^(en-IN|hi-IN|ta-IN|te-IN|kn-IN|ml-IN|bn-IN|mr-IN|gu-IN|pa-IN|or-IN|as-IN|ur-IN)$/.test(l.value),
-);
+/**
+ * Sarvam saaras:v3-realtime `language_code` values except `auto`.
+ * `auto` is the Transcriber “Switch language during call” toggle, not a picker row.
+ * Odia is `or-IN` (legacy socket used `od-IN`).
+ */
+export const SARVAM_REALTIME_LANGUAGE_CODES = [
+  "en-IN", "hi-IN", "bn-IN", "kn-IN", "ml-IN", "mr-IN", "or-IN", "pa-IN",
+  "ta-IN", "te-IN", "gu-IN", "as-IN", "ur-IN", "ne-IN", "kok-IN", "ks-IN",
+  "sd-IN", "sa-IN", "sat-IN", "mni-IN", "brx-IN", "mai-IN", "doi-IN",
+] as const;
+
+const SARVAM_REALTIME_LANGUAGE_SET = new Set<string>(SARVAM_REALTIME_LANGUAGE_CODES);
+
+/** Languages shown in the builder picker and “Languages allowed” chips for Sarvam STT. */
+export const SARVAM_STT_LANGUAGES = LANGUAGES.filter((l) => SARVAM_REALTIME_LANGUAGE_SET.has(l.value));
+
+/** @deprecated alias — same 23-code table as SARVAM_STT_LANGUAGES. */
+export const SARVAM_PERSONALISATION_LANGUAGES = SARVAM_STT_LANGUAGES;
+
+/**
+ * True when this ASR model rides the realtime socket (partials + ms VAD).
+ * Saarika stays on the legacy finals-only socket.
+ */
+export function isSarvamRealtimeAsr(model: string | null | undefined): boolean {
+  const m = (model ?? "").trim();
+  if (m.startsWith("saarika")) return false;
+  return m === "" || m === "saaras:v3" || m === "saaras:v3-realtime" || m === "saaras:v4" || m.startsWith("saaras");
+}
 
 /** Normalize a BCP-47-ish language tag to its lowercase base language ("ta-IN" → "ta"). */
 export function baseLanguage(language: string | null | undefined): string {
@@ -639,7 +663,7 @@ export const GEMINI_LIVE_LANGUAGES = LANGUAGES.filter((l) => isGeminiLiveLanguag
 
 /** Language picker options for classic vs Gemini Live agents. */
 export function languagesForAgent(isGeminiLive: boolean): typeof LANGUAGES {
-  return isGeminiLive ? GEMINI_LIVE_LANGUAGES : LANGUAGES;
+  return isGeminiLive ? GEMINI_LIVE_LANGUAGES : SARVAM_STT_LANGUAGES;
 }
 
 /** Static fallback; runtime UI may fetch GET /api/gemini-live/voices. */

@@ -22,9 +22,13 @@ import {
   clampFragmentCoalesceListeningMs,
   clampFragmentCoalescePlayingMs,
   clampTelephonyTailDrainMs,
-  clampSarvamSpeechEndFlushMs,
-  clampSarvamIncompleteHoldMs,
-  clampInterruptWords,
+    clampSarvamSpeechEndFlushMs,
+    clampSarvamIncompleteHoldMs,
+    clampSarvamSilenceMs,
+    clampSarvamMinSpeechMs,
+    clampSarvamVadThreshold,
+    hydrateSarvamRealtimeVad,
+    clampInterruptWords,
   voiceSecondsFromInterruptWords,
   WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER,
   type AgentFormValues,
@@ -91,6 +95,7 @@ import {
   llmFieldsForVoiceStack,
   languagesForAgent,
   isGeminiLiveLanguage,
+  isSarvamRealtimeAsr,
 } from "@/lib/agent-providers";
 
 export type { AgentFormValues } from "./edit.schema";
@@ -112,6 +117,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     autoRedialEnabled, autoRedialMaxAttempts,
     sarvamSttMode, sarvamSttStreamType, sarvamSttPrompt, kbBakedOnly, schedulingCalendarId, schedulingEventTypeId,
     sarvamHighVadSensitivity, sarvamSpeechEndFlushMs, sarvamIncompleteHoldMs,
+    sarvamEndOfSpeechSilenceMs, sarvamFirstTurnMinSpeechMs, sarvamVadThreshold,
     voiceStack, geminiLiveVoiceName, geminiLiveThinkingLevel,
     agentComposition, agentSurfaces, meetingPrompt,
     meetingMaxDurationSeconds, meetingSilenceTimeoutSeconds, meetingSilenceHangupEnabled,
@@ -185,6 +191,9 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["sarvamHighVadSensitivity"] = sarvamHighVadSensitivity !== false;
   agentConfig["sarvamSpeechEndFlushMs"] = 0;
   agentConfig["sarvamIncompleteHoldMs"] = 0;
+  agentConfig["sarvamEndOfSpeechSilenceMs"] = clampSarvamSilenceMs(sarvamEndOfSpeechSilenceMs);
+  agentConfig["sarvamFirstTurnMinSpeechMs"] = clampSarvamMinSpeechMs(sarvamFirstTurnMinSpeechMs);
+  agentConfig["sarvamVadThreshold"] = clampSarvamVadThreshold(sarvamVadThreshold);
   if (kbBakedOnly) agentConfig["kbBakedOnly"] = true;
   // Always persist speed so Sarvam pace / Cartesia speed stay UI-owned (1.0 clears prior boost).
   agentConfig["ttsSpeed"] = ttsSpeed != null && Number.isFinite(ttsSpeed) ? ttsSpeed : 1;
@@ -457,7 +466,7 @@ export default function AgentEdit() {
       ttsVoice: "priya", ttsModel: "bulbul:v3", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
       firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
-      language: "en-US", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
+      language: "en-IN", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: true,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0,
       promptVariables: [], vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1800, bargeInMinFrames: 4, micSensitivity: "low",
@@ -490,6 +499,9 @@ export default function AgentEdit() {
       sarvamHighVadSensitivity: true,
       sarvamSttStreamType: "fast",
       sarvamSttPrompt: "",
+      sarvamEndOfSpeechSilenceMs: 500,
+      sarvamFirstTurnMinSpeechMs: 250,
+      sarvamVadThreshold: 0.3,
       sarvamSpeechEndFlushMs: 0,
       sarvamIncompleteHoldMs: 0,
       kbBakedOnly: false,
@@ -708,6 +720,7 @@ export default function AgentEdit() {
       !liveOnLoad && (agent.llmProvider === "google" || agent.llmProvider === "gemini")
         ? { llmProvider: "sarvam", llmModel: "sarvam-105b-conversations" }
         : { llmProvider: agent.llmProvider, llmModel: agent.llmModel ?? "" };
+    const sarvamVad = hydrateSarvamRealtimeVad((agent as any).agentConfig ?? {});
     form.reset({
       name:              agent.name,
       description:       agent.description ?? "",
@@ -777,6 +790,9 @@ export default function AgentEdit() {
       sarvamSttPrompt: typeof (agent as any).agentConfig?.sarvamSttPrompt === "string"
         ? (agent as any).agentConfig.sarvamSttPrompt
         : "",
+      sarvamEndOfSpeechSilenceMs: sarvamVad.silence,
+      sarvamFirstTurnMinSpeechMs: sarvamVad.minSpeech,
+      sarvamVadThreshold: sarvamVad.threshold,
       sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs((agent as any).agentConfig?.sarvamSpeechEndFlushMs as number | undefined),
       sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs((agent as any).agentConfig?.sarvamIncompleteHoldMs as number | undefined),
       kbBakedOnly: ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
@@ -832,6 +848,7 @@ export default function AgentEdit() {
   }, [agent]);
 
   const asrProvider = useWatch({ control: form.control, name: "asrProvider" });
+  const asrModel = useWatch({ control: form.control, name: "asrModel" });
   const llmProvider = useWatch({ control: form.control, name: "llmProvider" });
   const llmModel = useWatch({ control: form.control, name: "llmModel" });
   const ttsProvider = useWatch({ control: form.control, name: "ttsProvider" });
@@ -1131,7 +1148,8 @@ export default function AgentEdit() {
                       <FormField control={form.control} name="language" render={({ field }) => {
                         const langOpts = languagesForAgent(isGeminiLive);
                         const current = field.value ?? "";
-                        const options = (!isGeminiLive || !current || isGeminiLiveLanguage(current) || langOpts.some(l => l.value === current))
+                        const inList = langOpts.some(l => l.value === current);
+                        const options = (!current || inList)
                           ? langOpts
                           : [{ value: current, label: LANGUAGES.find(l => l.value === current)?.label ?? current }, ...langOpts];
                         return (
@@ -1845,11 +1863,54 @@ export default function AgentEdit() {
                 )} />
               </div>
 
-              {asrProvider === "sarvam" && (
+              {asrProvider === "sarvam" && isSarvamRealtimeAsr(asrModel) && (
+                <div className="mt-6">
+                  <p className="text-sm font-medium text-foreground mb-0.5">Sarvam turn-taking (realtime VAD)</p>
+                  <p className="text-[11px] text-muted-foreground mb-4">
+                    Sent on connect as <code>silence_duration_ms</code>, <code>min_speech_duration_ms</code>, and <code>threshold</code>. Encoding, sample rate, and timestamps are automatic.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                    <FormField control={form.control} name="sarvamEndOfSpeechSilenceMs" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>End-of-speech silence</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={150} max={800} step={25}
+                            value={field.value ?? 500}
+                            onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                        </FormControl>
+                        <FormDescription className="text-[11px]">Quiet time before the turn ends. Default 500ms. Fast 300 · Balanced 500 · Patient 700.</FormDescription>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="sarvamFirstTurnMinSpeechMs" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Minimum speech</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={80} max={800} step={10}
+                            value={field.value ?? 250}
+                            onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                        </FormControl>
+                        <FormDescription className="text-[11px]">Shortest burst counted as speech. Default 250ms. Filters clicks and echo blips.</FormDescription>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="sarvamVadThreshold" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>VAD threshold</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={0.1} max={0.8} step={0.05}
+                            value={field.value ?? 0.3}
+                            onChange={e => field.onChange(parseFloat(e.target.value))} />
+                        </FormControl>
+                        <FormDescription className="text-[11px]">0.3 is Sarvam&apos;s default. Higher = less sensitive to noise.</FormDescription>
+                      </FormItem>
+                    )} />
+                  </div>
+                </div>
+              )}
+              {asrProvider === "sarvam" && !isSarvamRealtimeAsr(asrModel) && (
                 <div className="mt-6">
                   <p className="text-sm font-medium text-foreground mb-0.5">How quickly the agent hears you stop talking</p>
                   <p className="text-[11px] text-muted-foreground mb-4">
-                    These settings control how fast the agent decides you finished speaking. Defaults are already tuned for natural phone calls.
+                    Saarika uses the legacy socket. These settings control how fast the agent decides you finished speaking.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                     <FormField control={form.control} name="sarvamHighVadSensitivity" render={({ field }) => (
@@ -1857,10 +1918,10 @@ export default function AgentEdit() {
                         <FormLabel>Detect pauses quickly</FormLabel>
                         <div className="flex items-center gap-3 pt-2">
                           <Switch checked={!!field.value} onCheckedChange={field.onChange} />
-                          <span className="text-sm text-muted-foreground">{field.value ? "On (Saaras VAD)" : "Off (more patient)"}</span>
+                          <span className="text-sm text-muted-foreground">{field.value ? "On (legacy VAD)" : "Off (more patient)"}</span>
                         </div>
                         <FormDescription className="text-[11px]">
-                          Default <strong>On</strong> — Saaras VAD owns end-of-speech. Turn off only if callers get cut mid-sentence on noisy lines.
+                          Frame-count VAD on the legacy Saarika socket only. Prefer Saaras v3 realtime for live calls.
                         </FormDescription>
                       </FormItem>
                     )} />

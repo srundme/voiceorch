@@ -30,6 +30,12 @@ export function optionalMs(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : null;
 }
 
+/** Optional 0–1 float from agent config (Sarvam realtime VAD threshold). */
+export function optionalUnitInterval(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.min(1, Math.max(0, value));
+}
+
 /** Agent-level settings the recovery timings are derived from. */
 export interface SttTuningInputs {
   /** Local VAD silence that closes a turn on the batch path (agent `vadSilenceMs`). */

@@ -316,6 +316,39 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     expect((payload.agentConfig as any)?.sarvamSttStreamType).toBe("fast");
   });
 
+  it("persists Sarvam realtime VAD connect params", () => {
+    const payload = buildUpdateAgentPayload({
+      ...VALID_BASE,
+      asrProvider: "sarvam",
+      asrModel: "saaras:v3",
+      ttsProvider: "sarvam",
+      ttsModel: "bulbul:v3",
+      ttsVoice: "priya",
+      sarvamEndOfSpeechSilenceMs: 300,
+      sarvamFirstTurnMinSpeechMs: 200,
+      sarvamVadThreshold: 0.35,
+    } as AgentFormValues);
+    const cfg = payload.agentConfig as any;
+    expect(cfg.sarvamEndOfSpeechSilenceMs).toBe(300);
+    expect(cfg.sarvamFirstTurnMinSpeechMs).toBe(200);
+    expect(cfg.sarvamVadThreshold).toBe(0.35);
+  });
+
+  it("defaults Sarvam realtime VAD to 500 / 250 / 0.3 when unset", () => {
+    const payload = buildUpdateAgentPayload({
+      ...VALID_BASE,
+      asrProvider: "sarvam",
+      asrModel: "saaras:v3",
+      ttsProvider: "sarvam",
+      ttsModel: "bulbul:v3",
+      ttsVoice: "priya",
+    } as AgentFormValues);
+    const cfg = payload.agentConfig as any;
+    expect(cfg.sarvamEndOfSpeechSilenceMs).toBe(500);
+    expect(cfg.sarvamFirstTurnMinSpeechMs).toBe(250);
+    expect(cfg.sarvamVadThreshold).toBe(0.3);
+  });
+
   it("mismatched ASR provider+model — reports error on asrModel", () => {
     const result = agentFormSchema.safeParse({
       ...VALID_BASE,
@@ -438,5 +471,32 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     expect(paths).toContain("asrModel");
     expect(paths).toContain("llmModel");
     expect(paths).toContain("ttsModel");
+  });
+});
+
+describe("Sarvam realtime builder catalog", () => {
+  it("language picker is the 23-code table without auto or en-US", async () => {
+    const { SARVAM_STT_LANGUAGES, languagesForAgent } = await import("@/lib/agent-providers");
+    expect(SARVAM_STT_LANGUAGES).toHaveLength(23);
+    expect(SARVAM_STT_LANGUAGES.map((l) => l.value)).toContain("or-IN");
+    expect(SARVAM_STT_LANGUAGES.map((l) => l.value)).toContain("doi-IN");
+    expect(SARVAM_STT_LANGUAGES.map((l) => l.value)).not.toContain("en-US");
+    expect(SARVAM_STT_LANGUAGES.map((l) => l.value)).not.toContain("auto");
+    expect(languagesForAgent(false)).toEqual(SARVAM_STT_LANGUAGES);
+  });
+
+  it("Saaras models are realtime; Saarika is legacy", async () => {
+    const { isSarvamRealtimeAsr } = await import("@/lib/agent-providers");
+    expect(isSarvamRealtimeAsr("saaras:v3")).toBe(true);
+    expect(isSarvamRealtimeAsr("saaras:v3-realtime")).toBe(true);
+    expect(isSarvamRealtimeAsr("saarika:v2.5")).toBe(false);
+  });
+
+  it("hydrates unset VAD from Fast / Patient endpointing", async () => {
+    const { hydrateSarvamRealtimeVad } = await import("./edit.schema");
+    expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 150 }).silence).toBe(300);
+    expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 500 }).silence).toBe(700);
+    expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 250 }).silence).toBe(500);
+    expect(hydrateSarvamRealtimeVad({ sarvamEndOfSpeechSilenceMs: 400, asrEndpointingSilenceMs: 150 }).silence).toBe(400);
   });
 });
