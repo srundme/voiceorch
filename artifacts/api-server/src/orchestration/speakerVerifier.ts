@@ -300,7 +300,7 @@ export class SpeakerVerifier {
     );
     this.execLog(
       "info",
-      `Local voiceprint ready (${(pcm.byteLength / (SAMPLE_RATE * SAMPLE_BYTES)).toFixed(1)}s) — matching across numbers`,
+      `Local voiceprint ready (${(pcm.byteLength / (SAMPLE_RATE * SAMPLE_BYTES)).toFixed(1)}s) — matching across numbers now`,
       { bytes: pcm.byteLength },
     );
     if (this.phoneNumber) {
