@@ -28,6 +28,11 @@ import {
   dispatchWebhooks,
   flatDispositionFromTaxonomy,
 } from "./webhook-endpoints.js";
+import {
+  buildAgentNotifyHeaders,
+  readWebhookPayloadTemplate,
+  serializeAgentWebhookBody,
+} from "../lib/webhook-payload-template.js";
 import { disposeCall } from "../services/disposition.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE } from "../services/irdai/gate.js";
@@ -1321,13 +1326,24 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
       dispatchWebhooks(callUserId, event, payload).catch(() => {});
     }
 
-    // Agent webhook URL (if set on agent)
+    // Agent webhook URL (if set on agent) — default or custom JSON; HMAC if secret set
     if (agent?.webhookUrl) {
-      const bodyStr = JSON.stringify(payload);
+      const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+      const serialized = serializeAgentWebhookBody(
+        readWebhookPayloadTemplate(agentCfg),
+        payload,
+      );
+      if (serialized.error) {
+        req.log.warn(
+          { callId: call.id, error: serialized.error },
+          "Post-call notify template invalid — sending default payload",
+        );
+      }
+      const secret = typeof agentCfg["webhookSecret"] === "string" ? agentCfg["webhookSecret"] : undefined;
       fetch(agent.webhookUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: bodyStr,
+        headers: buildAgentNotifyHeaders(serialized.bodyStr, serialized.mode, secret),
+        body: serialized.bodyStr,
         signal: AbortSignal.timeout(10_000),
       }).catch(() => {});
     }

@@ -13,6 +13,8 @@ Auth: `Authorization: Bearer sk_live_...`
 | PATCH | `/agents/{id}/toggle` | Activate |
 | GET/POST | `/agents/{id}/versions` | Versions / publish |
 | POST | `/agents/{id}/versions/{vid}/restore` | Restore |
+| GET | `/agents/{id}/caller-memory/{phone}` | Read caller facts |
+| POST | `/agents/{id}/caller-memory/{phone}/facts` | `{ note, context }` for next call |
 
 ## Calls
 | Method | Path | Purpose |
@@ -34,6 +36,7 @@ Auth: `Authorization: Bearer sk_live_...`
 | GET | `/campaigns/{id}/leads` | Leads |
 | GET/POST | `/campaigns/{id}/batches` | Batches |
 | POST | `/campaigns/{id}/batches/{bid}/start` | Start dialing |
+| POST | `/campaigns/{id}/leads/{leadId}/memory` | Same body as caller-memory facts + lead fields |
 | **POST** | **`/webhooks/lead/{token}`** | **Public website intake (no API key)** |
 
 ## Journeys

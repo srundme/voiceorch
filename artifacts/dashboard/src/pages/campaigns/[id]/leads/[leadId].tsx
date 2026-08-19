@@ -15,6 +15,7 @@ import { DetailNav } from "@/components/detail-nav";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { UpdateCallerMemoryForm } from "@/components/update-caller-memory-form";
 import {
   ArrowLeft, Phone, PhoneCall, PhoneIncoming, Clock, User, Mail,
   RotateCcw, CheckCircle2, XCircle, PauseCircle,
@@ -22,7 +23,7 @@ import {
   Activity, Bell, History, FileText, Tag, Star, StarOff,
   Sparkles, Target, Hash, MessageSquare, ListTodo, Trash2,
   Plus, Check, X, ArrowRightLeft, TrendingUp, ChevronLeft,
-  Database, RefreshCw,
+  Database, RefreshCw, Brain,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -291,14 +292,83 @@ function ExecutionCard({ exec, idx }: { exec: ExecutionItem; idx: number }) {
   );
 }
 
-// ── Overview Tab ──────────────────────────────────────────────────────────────
+// ── Memory Tab ────────────────────────────────────────────────────────────────
 
-function OverviewTab({ ws }: { ws: LeadWorkspace }) {
-  const { lead, interactionSummary, source } = ws;
-  const sent = interactionSummary?.latestSentiment ? SENTIMENT_MAP[interactionSummary.latestSentiment] : null;
+function LeadMemoryTab({ ws, campaignId, leadId, onRefresh }: {
+  ws: LeadWorkspace;
+  campaignId: number;
+  leadId: number;
+  onRefresh: () => void;
+}) {
+  const data = ws.lead.leadData ?? {};
+  const fields = Object.entries(data).filter(([k, v]) => !k.startsWith("__") && String(v).trim());
 
   return (
     <div className="p-5 space-y-4">
+      <div className="rounded-xl border border-border/40 bg-card p-4 space-y-3">
+        <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40">
+          Update for next call
+        </p>
+        <p className="text-[12px] text-muted-foreground leading-relaxed">
+          Push the latest status of this request into the agent. The next campaign dial and any inbound follow-up will use it as ground truth.
+        </p>
+        <UpdateCallerMemoryForm
+          target={{ kind: "campaign", campaignId, leadId }}
+          onSaved={onRefresh}
+        />
+      </div>
+
+      {fields.length > 0 && (
+        <div className="rounded-xl border border-border/40 bg-card p-4">
+          <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40 mb-3">
+            What the agent knows for this lead
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
+            {fields.map(([k, v]) => (
+              <div key={k}>
+                <p className="text-[9px] text-muted-foreground/40 uppercase tracking-wider mb-0.5">{k.replace(/_/g, " ")}</p>
+                <p className="text-xs font-medium leading-relaxed">{String(v)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Overview Tab ──────────────────────────────────────────────────────────────
+
+function OverviewTab({ ws, campaignId, leadId, onRefresh }: {
+  ws: LeadWorkspace;
+  campaignId: number;
+  leadId: number;
+  onRefresh: () => void;
+}) {
+  const { lead, interactionSummary, source } = ws;
+  const sent = interactionSummary?.latestSentiment ? SENTIMENT_MAP[interactionSummary.latestSentiment] : null;
+  const operatorUpdate = typeof lead.leadData?.["operator_update"] === "string"
+    ? lead.leadData["operator_update"].trim() || null
+    : null;
+
+  return (
+    <div className="p-5 space-y-4">
+      {/* Agent memory — operators write request status for the next dial */}
+      <div className="rounded-xl border border-border/40 bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Brain className="h-3.5 w-3.5 text-muted-foreground" />
+          <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/50">Update agent memory</p>
+        </div>
+        {operatorUpdate && (
+          <p className="text-[12px] text-muted-foreground leading-relaxed">
+            <span className="text-muted-foreground/60">Current: </span>{operatorUpdate}
+          </p>
+        )}
+        <UpdateCallerMemoryForm
+          target={{ kind: "campaign", campaignId, leadId }}
+          onSaved={onRefresh}
+        />
+      </div>
       {/* AI Intelligence Panel */}
       {interactionSummary && (interactionSummary.latestSummary || interactionSummary.latestIntent || (interactionSummary.latestTopics?.length > 0)) && (
         <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4 space-y-3">
@@ -478,21 +548,35 @@ function NotesTab({ campaignId, leadId, initialNotes, onRefresh }: {
 }) {
   const [notes, setNotes] = useState<NoteItem[]>(initialNotes);
   const [body, setBody] = useState("");
+  const [factKey, setFactKey] = useState("");
+  const [factValue, setFactValue] = useState("");
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
   async function addNote() {
-    if (!body.trim()) return;
+    if (!body.trim() && !(factKey.trim() && factValue.trim())) return;
     setSaving(true);
     try {
-      const res = await apiFetch<{ note: NoteItem }>(
-        `${BASE}/api/campaigns/${campaignId}/leads/${leadId}/notes`,
-        { method: "POST", body: JSON.stringify({ body: body.trim() }) }
-      );
-      setNotes(prev => [res.note, ...prev]);
-      setBody("");
+      if (body.trim()) {
+        const res = await apiFetch<{ note: NoteItem }>(
+          `${BASE}/api/campaigns/${campaignId}/leads/${leadId}/notes`,
+          { method: "POST", body: JSON.stringify({ body: body.trim() }) }
+        );
+        if (res.note) setNotes(prev => [res.note, ...prev]);
+        else onRefresh();
+        setBody("");
+      }
+      if (factKey.trim() && factValue.trim()) {
+        await apiFetch(`${BASE}/api/campaigns/${campaignId}/leads/${leadId}/memory`, {
+          method: "POST",
+          body: JSON.stringify({ context: { [factKey.trim()]: factValue.trim() } }),
+        });
+        setFactKey("");
+        setFactValue("");
+      }
       onRefresh();
-    } catch { toast({ title: "Failed to save note", variant: "destructive" }); }
+      toast({ title: "Saved for next call", description: "The agent will use this on the next campaign dial or inbound follow-up." });
+    } catch { toast({ title: "Failed to save", variant: "destructive" }); }
     finally { setSaving(false); }
   }
 
@@ -510,15 +594,32 @@ function NotesTab({ campaignId, leadId, initialNotes, onRefresh }: {
       <div className="rounded-xl border border-border/40 bg-card p-4 space-y-2.5">
         <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40">Add Note</p>
         <Textarea
-          placeholder="Type a note about this lead…"
+          placeholder="Type a note about this lead… the agent will use it on the next call."
           value={body}
           onChange={e => setBody(e.target.value)}
           className="min-h-[80px] text-sm resize-none"
           onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void addNote(); }}
         />
-        <div className="flex justify-end">
-          <Button size="sm" className="h-7 text-xs gap-1.5" disabled={!body.trim() || saving} onClick={() => void addNote()}>
-            <Plus className="h-3 w-3" /> {saving ? "Saving…" : "Add Note"}
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-2">
+          <Input
+            placeholder="Field (e.g. order_status)"
+            value={factKey}
+            onChange={e => setFactKey(e.target.value)}
+            className="h-8 text-sm"
+          />
+          <Input
+            placeholder="Value (e.g. shipped)"
+            value={factValue}
+            onChange={e => setFactValue(e.target.value)}
+            className="h-8 text-sm"
+          />
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] text-muted-foreground/70 leading-snug">
+            Notes and fields sync to the agent’s caller memory so campaign follow-ups and inbound calls use the latest status.
+          </p>
+          <Button size="sm" className="h-7 text-xs gap-1.5 shrink-0" disabled={(!body.trim() && !(factKey.trim() && factValue.trim())) || saving} onClick={() => void addNote()}>
+            <Plus className="h-3 w-3" /> {saving ? "Saving…" : "Save for next call"}
           </Button>
         </div>
       </div>
@@ -899,7 +1000,7 @@ function ScoreEditor({ campaignId, leadId, initial, onSaved }: {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type CrmTab = "overview" | "interactions" | "timeline" | "notes" | "tasks";
+type CrmTab = "overview" | "interactions" | "timeline" | "notes" | "memory" | "tasks";
 
 export default function LeadCrmWorkspacePage() {
   const [, params] = useRoute("/app/campaigns/:id/leads/:leadId");
@@ -955,6 +1056,7 @@ export default function LeadCrmWorkspacePage() {
     { key: "interactions",  label: "Interactions",  icon: <PhoneCall className="h-3 w-3"  />, badge: ws?.executions.length },
     { key: "timeline",      label: "Timeline",      icon: <Activity className="h-3 w-3"   /> },
     { key: "notes",         label: "Notes",         icon: <MessageSquare className="h-3 w-3" />, badge: ws?.notes.length },
+    { key: "memory",        label: "Memory",        icon: <Brain className="h-3 w-3"      /> },
     { key: "tasks",         label: "Tasks",         icon: <ListTodo className="h-3 w-3"   />, badge: ws?.tasks.filter(t => t.status === "open").length },
   ];
 
@@ -1107,12 +1209,17 @@ export default function LeadCrmWorkspacePage() {
 
           {/* Tab content */}
           <div className="flex-1 overflow-auto min-h-0">
-            {activeTab === "overview"     && ws && <OverviewTab ws={ws} />}
+            {activeTab === "overview"     && ws && (
+              <OverviewTab ws={ws} campaignId={campaignId} leadId={leadId} onRefresh={() => void refetch()} />
+            )}
             {activeTab === "interactions" && ws && <InteractionsTab executions={ws.executions} />}
             {activeTab === "timeline"     && <TimelineTab campaignId={campaignId} leadId={leadId} />}
             {activeTab === "notes"        && ws && (
               <NotesTab campaignId={campaignId} leadId={leadId}
                 initialNotes={ws.notes} onRefresh={() => void refetch()} />
+            )}
+            {activeTab === "memory"       && ws && (
+              <LeadMemoryTab ws={ws} campaignId={campaignId} leadId={leadId} onRefresh={() => void refetch()} />
             )}
             {activeTab === "tasks"        && ws && (
               <TasksTab campaignId={campaignId} leadId={leadId}

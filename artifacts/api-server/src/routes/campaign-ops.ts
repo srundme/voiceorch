@@ -22,6 +22,7 @@ import {
 } from "@workspace/db";
 import { appendTimeline } from "../services/operational-outcome.js";
 import { logger } from "../lib/logger.js";
+import { applyCampaignLeadMemoryUpdate } from "../services/lead-caller-memory.js";
 
 const router: IRouter = Router();
 
@@ -30,14 +31,19 @@ router.use(requireAuth, clientContext);
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 async function requireCampaign(campaignId: number, userId: string) {
-  const [row] = await db.select({ id: campaignsTable.id })
+  const [row] = await db.select({ id: campaignsTable.id, agentId: campaignsTable.agentId })
     .from(campaignsTable)
     .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)));
   return row ?? null;
 }
 
 async function requireLead(leadId: number, campaignId: number) {
-  const [row] = await db.select({ id: campaignLeadsTable.id })
+  const [row] = await db.select({
+    id: campaignLeadsTable.id,
+    phone: campaignLeadsTable.phone,
+    normalizedPhone: campaignLeadsTable.normalizedPhone,
+    leadData: campaignLeadsTable.leadData,
+  })
     .from(campaignLeadsTable)
     .where(and(eq(campaignLeadsTable.id, leadId), eq(campaignLeadsTable.campaignId, campaignId)));
   return row ?? null;
@@ -237,8 +243,10 @@ router.post("/campaigns/:id/leads/:leadId/notes", async (req, res): Promise<void
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
   const campaignId = parseInt(req.params["id"]!, 10);
   const leadId     = parseInt(req.params["leadId"]!, 10);
-  if (!await requireCampaign(campaignId, userId)) { res.status(404).json({ error: "Campaign not found" }); return; }
-  if (!await requireLead(leadId, campaignId)) { res.status(404).json({ error: "Lead not found" }); return; }
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+  const lead = await requireLead(leadId, campaignId);
+  if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
 
   const { body } = req.body as { body: string };
   if (!body?.trim()) { res.status(400).json({ error: "body is required" }); return; }
@@ -251,6 +259,16 @@ router.post("/campaigns/:id/leads/:leadId/notes", async (req, res): Promise<void
   }).returning();
 
   await appendTimeline(db, leadId, campaignId, "note_added", { noteId: note.id });
+
+  const phone = lead.normalizedPhone || lead.phone;
+  void applyCampaignLeadMemoryUpdate({
+    agentId: campaign.agentId,
+    leadId,
+    phone,
+    currentLeadData: lead.leadData,
+    update: { note: body.trim() },
+  }).catch((err) => logger.warn({ err, leadId }, "note → caller memory sync failed"));
+
   res.status(201).json(note);
 });
 

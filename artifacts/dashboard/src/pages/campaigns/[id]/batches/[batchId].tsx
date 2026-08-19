@@ -276,10 +276,7 @@ type BatchHeader = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(url: string): Promise<T> {
-  const token = localStorage.getItem("voiceorch:session");
-  const r = await fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const r = await fetch(url, { credentials: "include" });
   if (!r.ok) throw new Error(await r.text());
   return r.json() as Promise<T>;
 }
@@ -850,13 +847,10 @@ export default function BatchWorkspacePage() {
   async function handleStart() {
     setIsStarting(true);
     try {
-      const token = localStorage.getItem("voiceorch:session");
       const r = await fetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/start`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
       });
       if (!r.ok) {
         const body = (await r.json().catch(() => ({}))) as { error?: string; code?: string; missingItems?: unknown[] };
@@ -982,8 +976,7 @@ export default function BatchWorkspacePage() {
               variant="outline"
               className="h-8 text-xs gap-1.5"
               onClick={() => {
-                const exportToken = localStorage.getItem("voiceorch:session");
-                const url = `${BASE}/api/campaigns/${campaignId}/batches/${batchId}/export.csv${exportToken ? `?token=${encodeURIComponent(exportToken)}` : ""}`;
+                const url = `${BASE}/api/campaigns/${campaignId}/batches/${batchId}/export.csv`;
                 window.open(url, "_blank");
               }}
             >

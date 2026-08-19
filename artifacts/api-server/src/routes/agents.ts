@@ -45,8 +45,23 @@ import {
 import { sanitizeToolName } from "../services/tool-executor.js";
 import { checkIrdaiCompliance } from "../services/irdai/index.js";
 import { callEngineInsertDefaults } from "@workspace/db/call-engine-defaults";
+import { resolveWorkspaceScope } from "../services/workspace-scope.js";
 
 const router: IRouter = Router();
+
+async function workspaceOwned(clerkId: string) {
+  const scope = await resolveWorkspaceScope(clerkId);
+  return { scope, owned: inArray(agentsTable.userId, scope.userIds) };
+}
+
+function rejectReadOnly(
+  res: { status: (code: number) => { json: (body: unknown) => void } },
+  canWrite: boolean,
+): boolean {
+  if (canWrite) return false;
+  res.status(403).json({ error: "Your team role cannot edit agents" });
+  return true;
+}
 
 /**
  * Auto-normalize every tool's LLM-facing `name` to a provider-safe function name
@@ -134,7 +149,7 @@ router.get("/agents", requireAuth, clientContext, async (req, res): Promise<void
   const agents = await db
     .select()
     .from(agentsTable)
-    .where(eq(agentsTable.userId, clerkId))
+    .where((await workspaceOwned(clerkId)).owned)
     .orderBy(agentsTable.createdAt);
   const sourceIdMap = await getKnowledgeSourceIdsByAgent(agents);
   res.json(ListAgentsResponse.parse(agents.map((a) => prepareAgentForResponse(a, sourceIdMap.get(a.id) ?? []))));
@@ -142,6 +157,7 @@ router.get("/agents", requireAuth, clientContext, async (req, res): Promise<void
 
 router.post("/agents", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
+  if (rejectReadOnly(res, (await workspaceOwned(clerkId)).scope.canWrite)) return;
   const parsed = CreateAgentBody.safeParse(req.body);
   if (!parsed.success) {
     const issues = parsed.error.issues;
@@ -334,7 +350,7 @@ router.get("/agents/:id", requireAuth, clientContext, async (req, res): Promise<
   const [agent] = await db
     .select()
     .from(agentsTable)
-    .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)));
+    .where(and(eq(agentsTable.id, params.data.id), (await workspaceOwned(clerkId)).owned));
   if (!agent) {
     res.status(404).json({ error: "Agent not found" });
     return;
@@ -345,6 +361,7 @@ router.get("/agents/:id", requireAuth, clientContext, async (req, res): Promise<
 
 router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
+  if (rejectReadOnly(res, (await workspaceOwned(clerkId)).scope.canWrite)) return;
   const params = UpdateAgentParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: "Validation failed", issues: params.error.issues });
@@ -375,7 +392,7 @@ router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promis
     const [existing] = await db
       .select({ agentConfig: agentsTable.agentConfig, systemPrompt: agentsTable.systemPrompt })
       .from(agentsTable)
-      .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)));
+      .where(and(eq(agentsTable.id, params.data.id), (await workspaceOwned(clerkId)).owned));
     if (existing) {
       const merged: AgentConfig = {
         ...(existing.agentConfig as AgentConfig ?? {}),
@@ -415,7 +432,7 @@ router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promis
   const [agent] = await db
     .update(agentsTable)
     .set({ ...updateData, updatedAt: new Date() })
-    .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)))
+    .where(and(eq(agentsTable.id, params.data.id), (await workspaceOwned(clerkId)).owned))
     .returning();
   if (!agent) {
     res.status(404).json({ error: "Agent not found" });
@@ -546,6 +563,7 @@ router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promis
 
 router.delete("/agents/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
+  if (rejectReadOnly(res, (await workspaceOwned(clerkId)).scope.canWrite)) return;
   const params = DeleteAgentParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: "Validation failed", issues: params.error.issues });
@@ -559,7 +577,7 @@ router.delete("/agents/:id", requireAuth, clientContext, async (req, res): Promi
     const [existing] = await db
       .select({ id: agentsTable.id, name: agentsTable.name })
       .from(agentsTable)
-      .where(and(eq(agentsTable.id, targetId), eq(agentsTable.userId, clerkId)));
+      .where(and(eq(agentsTable.id, targetId), (await workspaceOwned(clerkId)).owned));
 
     if (!existing) {
       res.status(404).json({ error: "Agent not found" });
@@ -585,7 +603,7 @@ router.delete("/agents/:id", requireAuth, clientContext, async (req, res): Promi
     // 6. Execute final agent deletion
     const [deleted] = await db
       .delete(agentsTable)
-      .where(and(eq(agentsTable.id, targetId), eq(agentsTable.userId, clerkId)))
+      .where(and(eq(agentsTable.id, targetId), (await workspaceOwned(clerkId)).owned))
       .returning();
 
     if (deleted) {
@@ -617,7 +635,7 @@ router.get("/agents/memory/summary", requireAuth, clientContext, async (req, res
   const agents = await db
     .select({ id: agentsTable.id, name: agentsTable.name, createdAt: agentsTable.createdAt })
     .from(agentsTable)
-    .where(eq(agentsTable.userId, clerkId))
+    .where((await workspaceOwned(clerkId)).owned)
     .orderBy(desc(agentsTable.createdAt));
 
   const ids = agents.map(a => a.id);
@@ -676,7 +694,7 @@ router.get("/agents/:id/memory/facts", requireAuth, clientContext, async (req, r
 
   const [agent] = await db.select({ id: agentsTable.id })
     .from(agentsTable)
-    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+    .where(and(eq(agentsTable.id, agentId), (await workspaceOwned(clerkId)).owned));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
   const facts = await db.select()
@@ -702,7 +720,7 @@ router.get("/agents/:id/memory/episodes", requireAuth, clientContext, async (req
 
   const [agent] = await db.select({ id: agentsTable.id })
     .from(agentsTable)
-    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+    .where(and(eq(agentsTable.id, agentId), (await workspaceOwned(clerkId)).owned));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
   const episodes = await db.select({
@@ -735,7 +753,7 @@ router.get("/agents/:id/caller-memory", requireAuth, clientContext, async (req, 
 
   const [agent] = await db.select({ id: agentsTable.id })
     .from(agentsTable)
-    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+    .where(and(eq(agentsTable.id, agentId), (await workspaceOwned(clerkId)).owned));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
   /** Fact keys that the memory system commonly stores caller names under. */
@@ -797,12 +815,14 @@ router.get("/agents/:id/caller-memory", requireAuth, clientContext, async (req, 
 router.get("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
-  const phoneNumber = decodeURIComponent(String(req.params["phone"] ?? ""));
-  if (isNaN(agentId) || !phoneNumber) { res.status(400).json({ error: "Invalid params" }); return; }
+  const rawPhone = decodeURIComponent(String(req.params["phone"] ?? ""));
+  if (isNaN(agentId) || !rawPhone) { res.status(400).json({ error: "Invalid params" }); return; }
+  const { canonicalizeCallerKey } = await import("../orchestration/callerMemory.js");
+  const phoneNumber = canonicalizeCallerKey(rawPhone) ?? rawPhone;
 
   const [agent] = await db.select({ id: agentsTable.id })
     .from(agentsTable)
-    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+    .where(and(eq(agentsTable.id, agentId), (await workspaceOwned(clerkId)).owned));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
   // Fetch all fact rows (current + superseded) to build chains, and episodes
@@ -910,6 +930,46 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async
   res.json({ facts: currentFacts, episodes });
 });
 
+// Write operator / CRM facts so the next call uses them as ground truth.
+router.post("/agents/:id/caller-memory/:phone/facts", requireAuth, clientContext, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  if (rejectReadOnly(res, (await workspaceOwned(clerkId)).scope.canWrite)) return;
+
+  const agentId = parseInt(String(req.params["id"] ?? ""), 10);
+  const rawPhone = decodeURIComponent(String(req.params["phone"] ?? ""));
+  if (isNaN(agentId) || !rawPhone) { res.status(400).json({ error: "Invalid params" }); return; }
+
+  const [agent] = await db.select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), (await workspaceOwned(clerkId)).owned));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  const { parseExternalMemoryBody, upsertExternalCallerFacts } = await import("../orchestration/callerMemory.js");
+  const parsed = parseExternalMemoryBody(req.body);
+  if ("error" in parsed) { res.status(400).json({ error: parsed.error }); return; }
+
+  try {
+    const result = await upsertExternalCallerFacts({
+      agentId,
+      phoneNumber: rawPhone,
+      update: parsed.update,
+    });
+    if (result.written.length === 0) {
+      res.status(400).json({ error: "No valid facts to write" });
+      return;
+    }
+    res.status(201).json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to update caller memory";
+    if (message === "Invalid phone number") {
+      res.status(400).json({ error: message });
+      return;
+    }
+    req.log.warn({ err, agentId }, "upsert caller memory facts failed");
+    res.status(500).json({ error: "Failed to update caller memory" });
+  }
+});
+
 // Delete an entire fact key (current + entire supersession chain) for a caller
 router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
@@ -920,7 +980,7 @@ router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, cli
 
   const [agent] = await db.select({ id: agentsTable.id })
     .from(agentsTable)
-    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+    .where(and(eq(agentsTable.id, agentId), (await workspaceOwned(clerkId)).owned));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
   // Find the key for this fact, then delete the entire supersession chain
@@ -966,7 +1026,7 @@ router.delete("/agents/:id/caller-memory/:phone", requireAuth, clientContext, as
 
   const [agent] = await db.select({ id: agentsTable.id })
     .from(agentsTable)
-    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+    .where(and(eq(agentsTable.id, agentId), (await workspaceOwned(clerkId)).owned));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
   // 1. Break the self-referential FK on caller_facts.superseded_by_id so we can
@@ -1052,7 +1112,7 @@ router.get("/agents/:id/snapserve-executions", requireAuth, clientContext, async
 
   const [agent] = await db.select({ id: agentsTable.id, snapserveAgentId: agentsTable.snapserveAgentId })
     .from(agentsTable)
-    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+    .where(and(eq(agentsTable.id, agentId), (await workspaceOwned(clerkId)).owned));
 
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
@@ -1112,6 +1172,7 @@ router.get("/agents/:id/snapserve-executions", requireAuth, clientContext, async
 
 router.patch("/agents/:id/toggle", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
+  if (rejectReadOnly(res, (await workspaceOwned(clerkId)).scope.canWrite)) return;
   const params = ToggleAgentParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: "Validation failed", issues: params.error.issues });
@@ -1120,7 +1181,7 @@ router.patch("/agents/:id/toggle", requireAuth, clientContext, async (req, res):
   const [existing] = await db
     .select()
     .from(agentsTable)
-    .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)));
+    .where(and(eq(agentsTable.id, params.data.id), (await workspaceOwned(clerkId)).owned));
   if (!existing) {
     res.status(404).json({ error: "Agent not found" });
     return;
@@ -1129,7 +1190,7 @@ router.patch("/agents/:id/toggle", requireAuth, clientContext, async (req, res):
   const [agent] = await db
     .update(agentsTable)
     .set({ status: newStatus, updatedAt: new Date() })
-    .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)))
+    .where(and(eq(agentsTable.id, params.data.id), (await workspaceOwned(clerkId)).owned))
     .returning();
   await logActivity({ userId: clerkId, eventType: "agent.toggled", resourceType: "agent", resourceId: String(agent.id), description: `Agent "${agent.name}" set to ${newStatus}` });
   res.json(ToggleAgentResponse.parse(agent));
@@ -1143,7 +1204,7 @@ router.get("/agents/:id/latency-stats", requireAuth, clientContext, async (req, 
 
   const [agent] = await db.select({ id: agentsTable.id })
     .from(agentsTable)
-    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+    .where(and(eq(agentsTable.id, agentId), (await workspaceOwned(clerkId)).owned));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
   const recentCalls = await db.select({ id: callsTable.id })

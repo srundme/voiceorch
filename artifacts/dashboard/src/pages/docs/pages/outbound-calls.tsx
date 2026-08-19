@@ -1,14 +1,15 @@
 import { Link } from "wouter";
-import { Callout, PageHeader } from "../DocsUi";
+import { Callout, LanguageTabs, PageHeader } from "../DocsUi";
 import { CodeBlock } from "../CodeBlock";
 
 export default function OutboundCallsPage() {
   return (
     <div>
       <PageHeader
-        breadcrumb="Product guides"
+        breadcrumb="Calls & campaigns"
         title="Calls & history"
-        description="Place outbound calls, watch live status in the dashboard, and pull transcript / summary / disposition into your app."
+        updated="18 Aug 2026"
+        description="Place outbound PSTN calls, watch live status, and pull transcript, summary, disposition, and cost into your app."
       />
 
       <h2 id="dashboard">In the dashboard</h2>
@@ -16,23 +17,44 @@ export default function OutboundCallsPage() {
         <a href="https://app.snapserve.ai/app/calls" target="_blank" rel="noreferrer">
           Calls
         </a>{" "}
-        lists every conversation — status, duration, cost, recording, transcript, and summary when
-        available. Use filters to find failed or completed dials.
+        lists every conversation — phone, webcall, and meetings — with status, duration, cost,
+        recording, transcript, and summary. Filter failed or completed dials. Vibe → Test places a
+        single outbound or webcall without a campaign.
       </p>
 
       <h2 id="place">Place a call (API)</h2>
-      <CodeBlock
-        language="bash"
-        code={`curl -X POST https://app.snapserve.ai/api/calls/outbound \\
+      <p>
+        Body is <code>agentId</code> + <code>toNumber</code> (E.164). Optional{" "}
+        <code>webhookBaseUrl</code> only if you must override telephony callbacks. There is no{" "}
+        <code>variables</code> field on this endpoint — see{" "}
+        <Link href="/docs/quick-start">Quick Start</Link>.
+      </p>
+      <LanguageTabs
+        tabs={[
+          {
+            label: "cURL",
+            language: "bash",
+            code: `curl -X POST https://app.snapserve.ai/api/calls/outbound \\
   -H "Authorization: Bearer $SNAPSERVE_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{
-    "agentId": 36,
-    "toNumber": "+919876543210"
-  }'`}
+  -d '{"agentId": 36, "toNumber": "+919876543210"}'`,
+          },
+          {
+            label: "Node",
+            language: "typescript",
+            code: `await fetch("https://app.snapserve.ai/api/calls/outbound", {
+  method: "POST",
+  headers: {
+    Authorization: \`Bearer \${process.env.SNAPSERVE_API_KEY}\`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({ agentId: 36, toNumber: "+919876543210" }),
+});`,
+          },
+        ]}
       />
       <p>
-        Details:{" "}
+        Schema:{" "}
         <Link href="/docs/api-reference/initiateOutboundCall">initiateOutboundCall</Link>.
       </p>
 
@@ -52,13 +74,13 @@ export default function OutboundCallsPage() {
           <code>successEvaluation</code> — outcome evaluation when enabled
         </li>
         <li>
-          <code>dispositionResult</code> / disposition fields
+          <code>dispositionResult</code> — label from the agent Outcomes taxonomy
         </li>
         <li>
-          <code>costCents</code> — cost in paise · <code>durationSeconds</code>
+          <code>costCents</code> — paise · <code>durationSeconds</code>
         </li>
         <li>
-          <code>recordingUrl</code> — when recording is available
+          <code>recordingUrl</code> — when recording is on and upload succeeded
         </li>
       </ul>
       <CodeBlock
@@ -66,10 +88,24 @@ export default function OutboundCallsPage() {
         code={`curl https://app.snapserve.ai/api/calls/2920 \\
   -H "Authorization: Bearer $SNAPSERVE_API_KEY"`}
       />
+      <CodeBlock
+        language="json"
+        code={`{
+  "id": 2920,
+  "status": "completed",
+  "durationSeconds": 84,
+  "costCents": 700,
+  "transcript": "Agent: Hello…",
+  "callSummary": "Caller asked about pricing…",
+  "dispositionResult": "Callback",
+  "recordingUrl": "https://…"
+}`}
+      />
 
       <Callout variant="tip">
         Prefer <Link href="/docs/webhooks">webhooks</Link> (<code>call.completed</code>) over
-        polling in production.
+        polling. Do not retry identical <code>POST /calls/outbound</code> on timeout without checking
+        whether the call already exists.
       </Callout>
 
       <h2 id="more-api">More call APIs</h2>
@@ -84,7 +120,7 @@ export default function OutboundCallsPage() {
           <Link href="/docs/api-reference/updateCallDisposition">Set disposition</Link>
         </li>
         <li>
-          <Link href="/docs/api-reference/transferCall">Transfer</Link>
+          <Link href="/docs/api-reference/transferCall">Transfer</Link> (warm or cold)
         </li>
       </ul>
     </div>

@@ -7,9 +7,9 @@
  *   - `requireAuth` / `getAuth(req)` see `req.clerkUserId`
  *   - `provisionUser` can read the decoded payload (`req.sessionPayload`)
  *
- * Accepts the token via `Authorization: Bearer <jwt>` or `?token=<jwt>` (the
- * latter for EventSource, which cannot set custom headers). Never rejects — it
- * only annotates the request; enforcement is left to `requireAuth`.
+ * Accepts the token via HttpOnly cookie, `Authorization: Bearer <jwt>`, or
+ * `?token=<jwt>` (EventSource / WebSocket). Never rejects — it only annotates
+ * the request; enforcement is left to `requireAuth`.
  *
  * Impersonation tokens carry an `imp` claim (the opaque session token stored in
  * admin_impersonation_sessions). For these tokens we do a fast DB/cache check to

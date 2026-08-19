@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { StripePage } from "@/components/stripe-page";
 import { EmptyState } from "@/components/empty-state";
+import { UpdateCallerMemoryForm } from "@/components/update-caller-memory-form";
 import {
   useListAgentMemorySummaries, getListAgentMemorySummariesQueryKey,
   getListAgentMemoryFactsQueryKey,
@@ -796,6 +797,8 @@ function CallerDetailView({
     queryClient.invalidateQueries({
       queryKey: getGetCallerDetailQueryKey(agentId, encodeURIComponent(contact.phoneNumber)),
     });
+    queryClient.invalidateQueries({ queryKey: getListAgentCallersQueryKey(agentId) });
+    queryClient.invalidateQueries({ queryKey: getListAgentMemorySummariesQueryKey() });
   }
 
   const displayEpisodes: AgentMemoryEpisode[] = useMemo(
@@ -959,6 +962,13 @@ function CallerDetailView({
             <>
               {/* Overview: Memory Summary up top, then previews that deep-link into the tabs */}
               <TabsContent value="overview" className="mt-0 space-y-5">
+                <SectionCard icon={Pencil} title="Update for next call" accent="bg-muted/50 text-muted-foreground border-border/50">
+                  <UpdateCallerMemoryForm
+                    target={{ kind: "agent", agentId, phone: contact.phoneNumber }}
+                    onSaved={invalidateCallerDetail}
+                  />
+                </SectionCard>
+
                 <SectionCard icon={Brain} title="Memory Summary" accent="bg-muted/50 text-muted-foreground border-border/50">
                   {contact.summary ? (
                     <p className="text-[13px] text-muted-foreground leading-relaxed">{contact.summary}</p>
@@ -1029,7 +1039,13 @@ function CallerDetailView({
               </TabsContent>
 
               {/* Facts */}
-              <TabsContent value="facts" className="mt-0">
+              <TabsContent value="facts" className="mt-0 space-y-5">
+                <SectionCard icon={Pencil} title="Update for next call" accent="bg-muted/50 text-muted-foreground border-border/50">
+                  <UpdateCallerMemoryForm
+                    target={{ kind: "agent", agentId, phone: contact.phoneNumber }}
+                    onSaved={invalidateCallerDetail}
+                  />
+                </SectionCard>
                 {facts.length === 0 ? (
                   <SectionCard icon={FileText} title="What the agent knows" accent="bg-muted/50 text-muted-foreground border-border/50">
                     <p className="text-[12.5px] text-muted-foreground py-6 text-center">No facts extracted for this caller yet.</p>

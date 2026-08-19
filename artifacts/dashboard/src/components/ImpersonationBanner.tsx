@@ -59,6 +59,7 @@ export function ImpersonationBanner() {
     } finally {
       localStorage.removeItem("voiceorch:impersonation");
       localStorage.removeItem("voiceorch:session");
+      void fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
       queryClient.clear();
       window.location.href = resolveExitUrl(imp.returnUrl);
     }

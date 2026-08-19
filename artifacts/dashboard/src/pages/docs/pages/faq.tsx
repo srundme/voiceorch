@@ -4,6 +4,54 @@ import { PageHeader } from "../DocsUi";
 
 const FAQS: { q: string; a: ReactNode }[] = [
   {
+    q: "Where do I start a first agent?",
+    a: (
+      <>
+        Direct SnapServe: <Link href="/docs/vibe">Vibe</Link> (Chat → Agent → Connect → Test).
+        Partner-managed workspaces use the classic <Link href="/docs/agents">Agents builder</Link>.
+      </>
+    ),
+  },
+  {
+    q: "I assigned a call number — why isn’t WhatsApp working?",
+    a: (
+      <>
+        A voice DID is not WhatsApp until you connect it on Connections → WhatsApp (path 2). Personal
+        WhatsApp cannot share that number. Guide: <Link href="/docs/whatsapp">WhatsApp</Link>.
+      </>
+    ),
+  },
+  {
+    q: "Will Meta block the WhatsApp chatbot?",
+    a: (
+      <>
+        Not for a business answering its own customers on the official API. Meta blocks
+        general-purpose ChatGPT-style bots and spam (blocks/reports). Stay inside the 24-hour
+        window, use templates to start new threads, honour STOP.{" "}
+        <Link href="/docs/whatsapp">WhatsApp</Link> · <Link href="/docs/compliance">Compliance</Link>.
+      </>
+    ),
+  },
+  {
+    q: "Do I create the Vobiz channel in the Vobiz console?",
+    a: (
+      <>
+        No. SnapServe creates it when you finish the WhatsApp wizard. Paste a Vobiz channel ID only
+        if you already have one. <Link href="/docs/whatsapp">WhatsApp</Link>.
+      </>
+    ),
+  },
+  {
+    q: "Can I pass {{customer_name}} on POST /calls/outbound?",
+    a: (
+      <>
+        No. That endpoint only accepts <code>agentId</code> and <code>toNumber</code>. Map columns
+        in a <Link href="/docs/campaigns">campaign</Link>, or put stable copy in the prompt.{" "}
+        <Link href="/docs/quick-start">Quick Start</Link>.
+      </>
+    ),
+  },
+  {
     q: "Why did my outbound call fail with 401?",
     a: (
       <>
@@ -50,6 +98,27 @@ const FAQS: { q: string; a: ReactNode }[] = [
       <>
         Define names on the agent, use <code>{"{{name}}"}</code> in the prompt, map values from
         campaigns or your app. Guide: <Link href="/docs/variables">Variables</Link>.
+      </>
+    ),
+  },
+  {
+    q: "How long until a purchased number can receive calls?",
+    a: (
+      <>
+        It shows in the dashboard immediately after payment. The carrier can still treat it as a
+        wrong number for <strong>5–30 minutes</strong> (rarely up to an hour) while routing
+        updates. Assign it to the agent and dial <code>+91…</code>. If it is still unreachable,
+        re-assign the number on Phone Numbers so inbound routing is linked again.
+      </>
+    ),
+  },
+  {
+    q: "Why don’t teammates see the number I bought?",
+    a: (
+      <>
+        They should — the workspace now lists the owner&apos;s numbers on shared agents. Teammates
+        must not buy a second number. If they still see a purchase prompt, refresh or re-open the
+        agent. See <Link href="/docs/team">Team workspace</Link>.
       </>
     ),
   },

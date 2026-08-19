@@ -1,24 +1,29 @@
 /**
  * Email + password authentication routes.
  *
- *   POST /api/auth/register                — create account, returns { token }
- *   POST /api/auth/login                   — sign in, returns { token }
+ *   POST /api/auth/register                — create account, Set-Cookie session
+ *   POST /api/auth/login                   — sign in, Set-Cookie session
  *   POST /api/auth/password-reset/request  — send OTP email for password reset
- *   POST /api/auth/password-reset/verify   — verify OTP + set new password, returns { token }
+ *   POST /api/auth/password-reset/verify   — verify OTP + set new password, Set-Cookie session
+ *   GET  /api/auth/me                      — current session identity (cookie)
+ *   POST /api/auth/session                 — mint cookie from a one-time JWT (OAuth / migration)
+ *   POST /api/auth/logout                  — clear session cookie
  *   GET  /api/auth/google/connect          — redirect to Google OAuth consent screen
- *   GET  /api/auth/google/callback         — handle Google OAuth callback, issue session token
+ *   GET  /api/auth/google/callback         — handle Google OAuth callback, Set-Cookie + redirect
  *
- * The session token is an HS256 JWT. The frontend stores it in
- * localStorage["voiceorch:session"] and sends it as Authorization: Bearer <token>.
+ * The session is an HS256 JWT stored in an HttpOnly cookie (`vo_session`).
+ * Bearer tokens and `?token=` still work for API keys, EventSource, and
+ * one-release localStorage migration.
  */
-import { Router, type IRouter, type Request } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { randomBytes } from "node:crypto";
 import { promisify } from "node:util";
 import { scrypt, timingSafeEqual } from "node:crypto";
 import { db, linkLegacyIdentitiesAtLogin } from "@workspace/db";
 import { usersTable, walletTransactionsTable, passwordResetOtpsTable, platformSettingsTable, partnersTable } from "@workspace/db/schema";
 import { eq, and, isNull, gt, desc, sql } from "drizzle-orm";
-import { createSessionToken } from "../lib/session.js";
+import { createSessionToken, verifySessionToken } from "../lib/session.js";
+import { setSessionCookie, clearSessionCookie } from "../lib/session-cookie.js";
 import { hashPassword, verifyPassword } from "../lib/password.js";
 import { logger } from "../lib/logger.js";
 import { sendBrevoEmail } from "../services/brevo.js";
@@ -79,6 +84,16 @@ function generateOtp(): string {
   const bytes = randomBytes(4);
   const num = bytes.readUInt32BE(0) % 1_000_000;
   return num.toString().padStart(6, "0");
+}
+
+function issueSession(
+  res: Response,
+  input: { sub: string; email: string | null; name: string | null; imp?: string },
+  ttlSec?: number,
+): string {
+  const token = createSessionToken(input, ttlSec);
+  setSessionCookie(res, token, ttlSec);
+  return token;
 }
 
 /** Resolve partner white-label host from request Host / forwarded headers / body. */
@@ -200,7 +215,8 @@ router.post("/auth/register", async (req, res): Promise<void> => {
       await applyPendingPartnerPromotion(user, { emailVerified: false });
     }
 
-    const token = createSessionToken({ sub, email: normalizedEmail, name: user.name });
+    issueSession(res, { sub, email: normalizedEmail, name: user.name });
+    res.json({ ok: true });
 
     // Welcome / welcome-back email — fire-and-forget, never block the signup response
     if (reactivated) {
@@ -220,8 +236,6 @@ router.post("/auth/register", async (req, res): Promise<void> => {
         { emailType: "welcome", toUserId: sub, toName: user.name },
       ).catch(err => logger.warn({ err, email: normalizedEmail }, "Welcome email send failed"));
     }
-
-    res.json({ token });
   } catch (err) {
     logger.error({ err }, "Registration error");
     res.status(500).json({ error: "Registration failed. Please try again." });
@@ -292,9 +306,9 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       }
     }
 
-    const token = createSessionToken({ sub, email: user.email, name: user.name });
+    issueSession(res, { sub, email: user.email, name: user.name });
     logger.info({ sub, email: normalizedEmail, partnerId: partnerBrand?.partnerId ?? null }, "User signed in");
-    res.json({ token });
+    res.json({ ok: true });
   } catch (err) {
     logger.error({ err }, "Login error");
     res.status(500).json({ error: "Sign in failed. Please try again." });
@@ -582,7 +596,7 @@ router.post("/auth/password-reset/verify", async (req, res): Promise<void> => {
       return;
     }
 
-    const token = createSessionToken({ sub, email: user.email, name: user.name });
+    issueSession(res, { sub, email: user.email, name: user.name });
     logger.info({ email: normalizedEmail }, "Password reset successful");
 
     // Password-changed confirmation — fire-and-forget
@@ -596,11 +610,53 @@ router.post("/auth/password-reset/verify", async (req, res): Promise<void> => {
       ),
     ).catch(err => logger.warn({ err, email: normalizedEmail }, "Password-changed email send failed"));
 
-    res.json({ token });
+    res.json({ ok: true });
   } catch (err) {
     logger.error({ err }, "Password reset verify error");
     res.status(500).json({ error: "Failed to reset password. Please try again." });
   }
+});
+
+router.get("/auth/me", (req, res): void => {
+  const payload = (req as unknown as { sessionPayload?: { sub: string; email: string | null; name: string | null } }).sessionPayload;
+  if (!payload) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  res.json({
+    id: payload.sub,
+    sub: payload.sub,
+    email: payload.email,
+    name: payload.name,
+  });
+});
+
+router.post("/auth/session", (req, res): void => {
+  const token = typeof (req.body as { token?: unknown })?.token === "string"
+    ? (req.body as { token: string }).token.trim()
+    : "";
+  if (!token) {
+    res.status(400).json({ error: "token is required" });
+    return;
+  }
+  const payload = verifySessionToken(token);
+  if (!payload) {
+    res.status(401).json({ error: "Invalid or expired session" });
+    return;
+  }
+  setSessionCookie(res, token, Math.max(60, payload.exp - Math.floor(Date.now() / 1000)));
+  res.json({
+    ok: true,
+    id: payload.sub,
+    sub: payload.sub,
+    email: payload.email,
+    name: payload.name,
+  });
+});
+
+router.post("/auth/logout", (req, res): void => {
+  clearSessionCookie(res);
+  res.json({ ok: true });
 });
 
 // ── Google Sign-In ────────────────────────────────────────────────────────────
@@ -841,18 +897,25 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       void trackEvent(googleSub, "login");
     }
 
-    const token = createSessionToken({
+    const token = issueSession(res, {
       sub: googleSub,
       email: user.email ?? normalizedEmail,
       name: user.name ?? profile.name,
     });
 
-    // Deliver the token via URL fragment — same pattern as email/password login.
-    // `new_user=1` tells the frontend this redirect is the result of a brand-new
-    // account being created (not an existing user logging back in), so it can
-    // fire the CompleteRegistration pixel event exactly once, only for signups.
-    const newUserFlag = isNewUser ? "&new_user=1" : "";
-    res.redirect(`${base}/#session=${encodeURIComponent(token)}${newUserFlag}`);
+    // Cookie is host-only. Same-origin redirects just land on /app. Cross-origin
+    // return_to (rare; Google is disabled on partner portals) still needs a
+    // one-time fragment so the destination origin can POST /api/auth/session.
+    const callbackHost = (req.get("host") ?? "").split(":")[0]?.toLowerCase() ?? "";
+    let returnHost = "";
+    try { returnHost = new URL(base).hostname.toLowerCase(); } catch { /* ignore */ }
+    const crossOrigin = !!returnHost && !!callbackHost && returnHost !== callbackHost;
+    if (crossOrigin) {
+      const hash = `session=${encodeURIComponent(token)}${isNewUser ? "&new_user=1" : ""}`;
+      res.redirect(`${base}/#${hash}`);
+    } else {
+      res.redirect(isNewUser ? `${base}/app?new_user=1` : `${base}/app`);
+    }
   } catch (err) {
     logger.error({ err }, "Google Sign-In callback: unexpected error");
     res.redirect(errorRedirect);

@@ -28,6 +28,7 @@ import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
 import { handleWebcallWebSocket } from "./orchestration/telephony/webcall.js";
 import { verifySessionToken } from "./lib/session.js";
+import { parseCookieHeader, SESSION_COOKIE_NAME } from "./lib/session-cookie.js";
 import { warmSileroVAD } from "./orchestration/silero-vad.js";
 import { probeGenderService } from "./orchestration/genderService.js";
 
@@ -171,7 +172,8 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   let webcallMeetPassCallContext: boolean | undefined;
   if (provider === "webcall") {
     const shareToken = qs.get("share");
-    const sessionToken = qs.get("token");
+    const sessionToken = qs.get("token")
+      || parseCookieHeader(typeof request.headers.cookie === "string" ? request.headers.cookie : undefined, SESSION_COOKIE_NAME);
     const meetBotToken = qs.get("meetbot");
 
     if (meetBotToken) {

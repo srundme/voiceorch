@@ -41,7 +41,7 @@ function TopTabs() {
           >
             {tab.label}
             {active ? (
-              <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-sky-500" />
+              <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-slate-900" />
             ) : null}
           </Link>
         );
@@ -69,7 +69,7 @@ export function ApiReferenceLayout({
   }, []);
 
   return (
-    <div className="min-h-screen bg-white text-foreground font-sans selection:bg-sky-400/25">
+    <div className="min-h-screen bg-white text-foreground font-sans selection:bg-slate-900/10">
       <header className="sticky top-0 z-40 hidden lg:block border-b border-slate-200 bg-white/90 backdrop-blur-xl">
         <div className="max-w-[1600px] mx-auto px-6 flex items-center h-14 gap-8">
           <Link href="/docs" className="flex items-center gap-2 shrink-0 hover:opacity-90 transition-opacity">
@@ -85,7 +85,7 @@ export function ApiReferenceLayout({
             </a>
             <a
               href="https://app.snapserve.ai/app/api-keys"
-              className="rounded-lg bg-sky-50 border border-sky-200 px-3 py-1.5 text-sm text-sky-800 hover:bg-sky-100 transition-colors"
+              className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 transition-colors"
             >
               Get API key
             </a>

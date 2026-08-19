@@ -19,7 +19,7 @@ import { EngageSection } from "@/components/whatsapp/engage-section";
 import {
   Copy, CheckCircle2, MessageCircle, Plus, Trash2, Pencil, ExternalLink,
   ArrowRight, PhoneIncoming, Send, Sparkles, Building2, ChevronDown, ChevronRight,
-  ArrowUpRight, ArrowDownLeft, AlertTriangle, Webhook,
+  ArrowUpRight, ArrowDownLeft, AlertTriangle,
 } from "lucide-react";
 
 const API = "/api";
@@ -187,13 +187,9 @@ const inr = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { max
 function NativeSection({
   agents,
   onChooseBsp,
-  onChooseMeta,
-  metaConnected,
 }: {
   agents: { id: number; name: string }[];
   onChooseBsp?: () => void;
-  onChooseMeta?: () => void;
-  metaConnected?: boolean;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -521,54 +517,25 @@ function NativeSection({
           )}
 
           <div>
-            <h3 className="text-sm font-semibold">Connect WhatsApp</h3>
+            <h3 className="text-sm font-semibold">How do you want WhatsApp?</h3>
             <p className="mt-0.5 text-xs text-muted-foreground max-w-2xl">
-              Pick one path. Paths 1 and 2 need a Meta Business Manager (WABA ID + permanent system-user token).
-              Instant WhatsApp is no longer offered for new signups.
+              Pick <strong className="text-foreground/80 font-medium">one</strong> path. You do not connect Meta and a BSP separately — every Business WhatsApp number already sits on Meta; a BSP (Vobiz, Wati, Gupshup, AiSensy…) is just who sends for you.
             </p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            {/* Path A — Buy from SnapServe / Vobiz */}
-            {!isManagedWorkspace && (
-              <div className="flex flex-col rounded-lg border border-emerald-500/30 bg-emerald-500/[0.04] p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  <h3 className="text-sm font-semibold">Get from SnapServe</h3>
-                  <Badge className="border-transparent bg-emerald-500/15 text-[10px] text-emerald-700 dark:text-emerald-300">Vobiz · recommended</Badge>
-                </div>
-                <ul className="mt-3 flex-1 space-y-1.5 text-xs text-muted-foreground">
-                  <li>• Buy a WhatsApp-ready number here</li>
-                  <li>• Message costs debit from your wallet</li>
-                  <li>• WhatsApp voice calling supported on this channel</li>
-                  <li>• Still need your Meta WABA + access token once</li>
-                </ul>
-                <Button
-                  size="sm"
-                  className="mt-4 h-9 w-full"
-                  onClick={() => {
-                    setNumberChoice("buy");
-                    openBizWizard();
-                  }}
-                >
-                  Buy number &amp; connect
-                </Button>
-              </div>
-            )}
+          <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-[12px] text-muted-foreground space-y-1.5 max-w-3xl">
+            <p><strong className="text-foreground/90">Personal WhatsApp app ≠ this.</strong> The green consumer app and WhatsApp Business API cannot share a number. Delete the number from the phone app first if you want it here.</p>
+            <p><strong className="text-foreground/90">A voice DID is not WhatsApp until you enable it.</strong> Buying a call number and assigning it to the agent does not turn WhatsApp on. Use “Same number as my calls” below if you want that DID on WhatsApp too.</p>
+            <p><strong className="text-foreground/90">If a BSP already made Meta for you</strong> (most do), you already have a WABA. Use “I already have Business WhatsApp” and paste the WABA ID, Phone Number ID, and token from Meta Business Manager or from that BSP’s dashboard.</p>
+          </div>
 
-            {/* Path B — Existing Meta WABA */}
-            <div className="flex flex-col rounded-lg border border-sky-500/25 bg-sky-500/[0.04] p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Building2 className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-                <h3 className="text-sm font-semibold">I already have WhatsApp Business</h3>
-                <Badge className="border-transparent bg-sky-500/15 text-[10px] text-sky-700 dark:text-sky-300">Meta WABA</Badge>
-              </div>
-              <ul className="mt-3 flex-1 space-y-1.5 text-xs text-muted-foreground">
-                <li>• Connect a number already in your WABA</li>
-                <li>• Or WhatsApp-enable a voice DID already on this workspace</li>
-                <li>• Workspace channel for post-call + mid-call</li>
-                <li>• Same Meta token + WABA ID required</li>
-              </ul>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col rounded-xl border border-sky-500/25 bg-sky-500/[0.04] p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">Path 1</p>
+              <h3 className="mt-1 text-sm font-semibold">I already have Business WhatsApp</h3>
+              <p className="mt-2 flex-1 text-xs leading-relaxed text-muted-foreground">
+                Number is already on Meta Cloud API, or your BSP (Wati, AiSensy, Interakt, Gupshup…) created a WABA for you. Connect it here so this agent can send.
+              </p>
               <Button
                 size="sm"
                 className="mt-4 h-9 w-full"
@@ -577,42 +544,61 @@ function NativeSection({
                   openBizWizard();
                 }}
               >
-                Connect my number
+                Connect existing WABA
               </Button>
-              {metaConnected ? (
-                <Button size="sm" variant="ghost" className="mt-2 h-8 w-full text-[11px] text-muted-foreground" onClick={() => onChooseMeta?.()}>
-                  Or add agent Meta connection
-                </Button>
-              ) : (
-                <Button size="sm" variant="ghost" className="mt-2 h-8 w-full text-[11px] text-muted-foreground" onClick={() => onChooseMeta?.()}>
-                  Prefer agent-scoped Meta API instead
-                </Button>
-              )}
             </div>
 
-            {/* Path C — Other BSP */}
-            <div className="flex flex-col rounded-lg border border-border/60 bg-card/30 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Webhook className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold">I use another BSP</h3>
-                <Badge variant="outline" className="text-[10px]">Wati · Gupshup · Zapier</Badge>
+            {!isManagedWorkspace && (
+              <div className="flex flex-col rounded-xl border border-border bg-card p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Path 2</p>
+                <h3 className="mt-1 text-sm font-semibold">Same number as my calls</h3>
+                <p className="mt-2 flex-1 text-xs leading-relaxed text-muted-foreground">
+                  Use a SnapServe voice number you already bought (even if it’s assigned to this agent). Voice calls keep working. We register that DID on WhatsApp Business API — still need a Meta WABA once. ₹0 extra for the number.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-4 h-9 w-full"
+                  onClick={() => {
+                    setNumberChoice("voice");
+                    openBizWizard();
+                  }}
+                >
+                  WhatsApp-enable my call number
+                </Button>
               </div>
-              <ul className="mt-3 flex-1 space-y-1.5 text-xs text-muted-foreground">
-                <li>• Keep your current provider</li>
-                <li>• This workspace POSTs to your webhook</li>
-                <li>• Per-agent override of workspace channel</li>
-                <li>• No WhatsApp calling on this path</li>
-              </ul>
+            )}
+
+            {!isManagedWorkspace && (
+              <div className="flex flex-col rounded-xl border border-emerald-500/30 bg-emerald-500/[0.04] p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Path 3 · Vobiz</p>
+                <h3 className="mt-1 text-sm font-semibold">Buy a new WhatsApp number</h3>
+                <p className="mt-2 flex-1 text-xs leading-relaxed text-muted-foreground">
+                  SnapServe uses Vobiz as the BSP. This is a <strong className="text-foreground/80 font-medium">different</strong> inventory from call numbers — do not expect the DID on Phone numbers to appear here. Still need Meta Business Manager once (WABA + token). Wallet pays messages.
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-4 h-9 w-full"
+                  onClick={() => {
+                    setNumberChoice("buy");
+                    openBizWizard();
+                  }}
+                >
+                  Buy WhatsApp number
+                </Button>
+              </div>
+            )}
+
+            <div className="flex flex-col rounded-xl border border-border/60 bg-card/30 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Path 4</p>
+              <h3 className="mt-1 text-sm font-semibold">Keep Wati / Gupshup / Zapier</h3>
+              <p className="mt-2 flex-1 text-xs leading-relaxed text-muted-foreground">
+                Don’t move the number off your current BSP. SnapServe only posts to their webhook after a call. No WhatsApp calling on this path. Use this only if you will not connect a WABA above.
+              </p>
               <Button size="sm" variant="outline" className="mt-4 h-9 w-full" onClick={() => onChooseBsp?.()}>
-                Connect BSP webhook
+                Connect webhook only
               </Button>
             </div>
-          </div>
-
-          <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground max-w-3xl">
-            <strong className="text-foreground/90">Meta checklist:</strong> Business Manager → WhatsApp accounts → copy WABA ID;
-            System user → generate a permanent token with <code className="text-[10px]">whatsapp_business_messaging</code> +{" "}
-            <code className="text-[10px]">whatsapp_business_management</code>. A number can only live on one BSP at a time.
           </div>
         </div>
       ) : (
@@ -1035,15 +1021,19 @@ function NativeSection({
             <DialogDescription>
               {bizStep === 1 ? (
                 <>
-                  From Meta's{" "}
+                  Every Business WhatsApp number has a Meta WABA — including numbers your BSP created for you.
+                  Copy WABA ID + a permanent System User token from{" "}
                   <a href="https://business.facebook.com/settings/whatsapp-business-accounts" target="_blank" rel="noreferrer" className="underline">
-                    WhatsApp Business settings
-                  </a>{" "}
-                  copy your WABA ID and a permanent (System User) access token. You start at 250
-                  conversations/day and Meta raises it automatically.
+                    Meta WhatsApp Business settings
+                  </a>
+                  {" "}or from your BSP dashboard. Token permissions: whatsapp_business_messaging + whatsapp_business_management.
                 </>
+              ) : numberChoice === "voice" ? (
+                "Pick the SnapServe call number to WhatsApp-enable. Assigning it to the agent was not enough by itself."
+              ) : numberChoice === "buy" ? (
+                "Buy a WhatsApp DID (not the same list as voice numbers). Vobiz is the BSP; Meta still holds the WABA."
               ) : (
-                "Choose the WhatsApp number your customers will see."
+                "Paste the Meta Phone Number ID for the number already on your WABA."
               )}
             </DialogDescription>
           </DialogHeader>
@@ -1108,10 +1098,10 @@ function NativeSection({
                 <div className="flex items-start gap-2">
                   <input type="radio" className="mt-1" checked={numberChoice === "buy"} onChange={() => setNumberChoice("buy")} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium">Buy a WhatsApp-ready number from SnapServe</p>
+                    <p className="text-xs font-medium">Buy a new WhatsApp number from SnapServe (Vobiz)</p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {inr(pricing.totalPaise)} first month (incl. GST), then {inr(pricing.renewalPaise)}/30 days
-                      from your wallet. The Phone Number ID is assigned automatically — no Meta number registration needed.
+                      Not the same list as call numbers. {inr(pricing.totalPaise)} first month (incl. GST), then {inr(pricing.renewalPaise)}/30 days
+                      from your wallet. Phone Number ID is assigned after buy — you still paste WABA + token in the previous step.
                     </p>
                     {numberChoice === "buy" && (
                       <div className="mt-2 space-y-1.5">
@@ -1153,10 +1143,9 @@ function NativeSection({
                 <div className="flex items-start gap-2">
                   <input type="radio" className="mt-1" checked={numberChoice === "direct"} onChange={() => setNumberChoice("direct")} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium">My number is already registered in my WABA</p>
+                    <p className="text-xs font-medium">Number already on my WABA (Meta or my BSP’s Meta)</p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Direct connection — you already have a Meta Phone Number ID for it. The number must not be
-                      in use on the personal WhatsApp app.
+                      Paste the Meta Phone Number ID. If Wati/AiSensy already created Meta for you, those IDs are in Meta Business Manager (or their dashboard). The number must not stay on the personal WhatsApp app.
                     </p>
                     {numberChoice === "direct" && (
                       <div className="mt-2 grid grid-cols-2 gap-3">
@@ -1180,10 +1169,9 @@ function NativeSection({
                 <div className="flex items-start gap-2">
                   <input type="radio" className="mt-1" checked={numberChoice === "voice"} onChange={() => setNumberChoice("voice")} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium">Use one of my SnapServe voice numbers <span className="text-emerald-600 dark:text-emerald-400 font-semibold">₹0</span></p>
+                    <p className="text-xs font-medium">Same SnapServe call number I already bought <span className="text-emerald-600 dark:text-emerald-400 font-semibold">₹0</span></p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      WhatsApp-enable a number you already rent for calls — it keeps taking voice calls.
-                      Verification calls land on the number itself, so SnapServe captures the code for you.
+                      Assigning a DID to the agent does not enable WhatsApp by itself. Pick that number here. Voice calls keep working. Verification OTP is captured for you because the DID routes to the agent.
                     </p>
                     {numberChoice === "voice" && (
                       <ByonPanel
@@ -1646,11 +1634,11 @@ export default function WhatsAppPage() {
   return (
     <StripePage
       title="WhatsApp"
-      description={`Get a Vobiz number, connect your Meta WABA, or bring another BSP. Return to ${backLabel} when you're done.`}
+      description="One number, one path. Meta is the network; Vobiz/Wati/etc. is the BSP. Return to Connections when you're done."
       back={{ href: backHref, label: backLabel }}
     >
       <div className="space-y-6">
-      <NativeSection agents={agents} onChooseBsp={() => openBspCreate("webhook")} onChooseMeta={() => openBspCreate("meta")} metaConnected={connections.some((c) => c.active && c.metaPhoneNumberId)} />
+      <NativeSection agents={agents} onChooseBsp={() => openBspCreate("webhook")} />
 
       {(showByo || connections.length > 0) && <BspAdopterGuide />}
 

@@ -116,6 +116,7 @@ const ROWS: Row[] = [
   { service: "tts", provider: "cartesia", model: "sonic-turbo", characterPriceMicros: charM(25) },
   { service: "tts", provider: "cartesia", model: "sonic-3", characterPriceMicros: charM(50) },
   { service: "tts", provider: "cartesia", model: "sonic-3.5", characterPriceMicros: charM(50) },
+  { service: "tts", provider: "cartesia", model: "sonic-preview", characterPriceMicros: charM(50) },
   // Deepgram Aura TTS: ~$15 / 1M chars
   { service: "tts", provider: "deepgram", model: "default", characterPriceMicros: charM(15) },
   { service: "tts", provider: "deepgram", model: "aura-2", characterPriceMicros: charM(30) },

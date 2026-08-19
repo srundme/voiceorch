@@ -152,12 +152,9 @@ export function WebcallPanel({
     setMuted(false);
     setState("connecting");
     try {
-      const sessionToken = localStorage.getItem("voiceorch:session");
       if (!shareToken) {
-        if (!sessionToken) throw new Error("You need to be signed in to start a test call.");
-        const walletResp = await fetch("/api/wallet/me", {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const walletResp = await fetch("/api/wallet", { credentials: "include" });
+        if (!walletResp.ok && walletResp.status === 401) throw new Error("You need to be signed in to start a test call.");
         if (walletResp.ok) {
           const walletData = await walletResp.json() as { balanceCents?: number };
           if (typeof walletData.balanceCents === "number" && walletData.balanceCents <= 0) {
@@ -174,8 +171,16 @@ export function WebcallPanel({
       const capture = new AudioContext({ sampleRate: 16000 });
       captureCtxRef.current = capture;
       await capture.resume();
-      const blobUrl = URL.createObjectURL(new Blob([CAPTURE_WORKLET], { type: "application/javascript" }));
-      try { await capture.audioWorklet.addModule(blobUrl); } finally { URL.revokeObjectURL(blobUrl); }
+      try {
+        await capture.audioWorklet.addModule("/worklets/pcm-capture.js");
+      } catch {
+        const blobUrl = URL.createObjectURL(new Blob([CAPTURE_WORKLET], { type: "application/javascript" }));
+        try {
+          await capture.audioWorklet.addModule(blobUrl);
+        } finally {
+          URL.revokeObjectURL(blobUrl);
+        }
+      }
 
       const srcNode = capture.createMediaStreamSource(stream);
       sourceNodeRef.current = srcNode;
@@ -242,11 +247,9 @@ export function WebcallPanel({
       nextStartRef.current = playback.currentTime;
 
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      const authQs = shareToken
-        ? `share=${encodeURIComponent(shareToken)}`
-        : `token=${encodeURIComponent(sessionToken!)}`;
+      const authQs = shareToken ? `share=${encodeURIComponent(shareToken)}&` : "";
       const ws = new WebSocket(
-        `${proto}://${location.host}/api/ws/webcall/${agentId}?${authQs}&rate=16000`,
+        `${proto}://${location.host}/api/ws/webcall/${agentId}?${authQs}rate=16000`,
       );
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;

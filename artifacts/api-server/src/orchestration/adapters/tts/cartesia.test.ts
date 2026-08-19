@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { CartesiaTTS } from "./cartesia.js";
+import { CartesiaTTS, resolveCartesiaModelId } from "./cartesia.js";
 
 /**
  * Regression test for the Cartesia emotion-voice-control bug: Cartesia can
@@ -99,5 +99,15 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
     await tts.synthesize("வணக்கம்");
 
     expect(languages).toEqual(["en", "ta"]);
+  });
+});
+
+describe("resolveCartesiaModelId", () => {
+  it("keeps sonic-3.5 as the default and maps Sonic 3.6 to sonic-preview", () => {
+    expect(resolveCartesiaModelId(null)).toBe("sonic-3.5");
+    expect(resolveCartesiaModelId("sonic-3.5")).toBe("sonic-3.5");
+    expect(resolveCartesiaModelId("sonic-preview")).toBe("sonic-preview");
+    expect(resolveCartesiaModelId("sonic-3.6")).toBe("sonic-preview");
+    expect(resolveCartesiaModelId("not-a-model")).toBe("sonic-3.5");
   });
 });

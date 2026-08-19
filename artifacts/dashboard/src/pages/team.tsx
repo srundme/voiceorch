@@ -46,7 +46,7 @@ interface TeamMember {
 }
 
 export function TeamPage() {
-  const { getToken } = useAuth();
+  const { userId } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -59,10 +59,7 @@ export function TeamPage() {
   const { data: members = [], isLoading } = useQuery<TeamMember[]>({
     queryKey: ["team-members"],
     queryFn: async () => {
-      const token = await getToken();
-      const res = await fetch("/api/team/members", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch("/api/team/members", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch team members");
       return res.json();
     },
@@ -71,13 +68,10 @@ export function TeamPage() {
   // Invite Mutation
   const inviteMutation = useMutation({
     mutationFn: async (payload: { email: string; name?: string; role: string }) => {
-      const token = await getToken();
       const res = await fetch("/api/team/invite", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -108,10 +102,9 @@ export function TeamPage() {
 
   const resendMutation = useMutation({
     mutationFn: async (memberId: number) => {
-      const token = await getToken();
       const res = await fetch(`/api/team/members/${memberId}/resend`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -138,10 +131,9 @@ export function TeamPage() {
   // Remove Mutation
   const removeMutation = useMutation({
     mutationFn: async (id: number) => {
-      const token = await getToken();
       const res = await fetch(`/api/team/members/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to remove team member");
       return res.json();
@@ -164,6 +156,7 @@ export function TeamPage() {
 
   const activeCount = members.filter((m) => m.status === "active").length;
   const pendingCount = members.filter((m) => m.status === "pending").length;
+  const isOwner = members.length === 0 || members.some((m) => m.ownerUserId === userId);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background overflow-y-auto">
@@ -179,6 +172,7 @@ export function TeamPage() {
             </Badge>
           </div>
 
+          {isOwner && (
           <Button
             onClick={() => setInviteModalOpen(true)}
             className="h-10 text-xs font-medium gap-2 shadow-sm rounded-xl"
@@ -186,6 +180,7 @@ export function TeamPage() {
             <UserPlus className="h-4 w-4" />
             Invite Member
           </Button>
+          )}
         </div>
       </div>
 
@@ -290,6 +285,7 @@ export function TeamPage() {
                             <Clock className="h-3 w-3" />
                             Pending Invite
                           </Badge>
+                          {isOwner && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -300,9 +296,11 @@ export function TeamPage() {
                             <Mail className="h-3 w-3" />
                             Resend Email
                           </Button>
+                          )}
                         </>
                       )}
 
+                      {isOwner && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -312,6 +310,7 @@ export function TeamPage() {
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
+                      )}
                     </div>
                 </div>
               ))}

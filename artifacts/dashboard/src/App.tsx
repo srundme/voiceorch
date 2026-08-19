@@ -90,6 +90,7 @@ import CommandCenterRedirect from "@/pages/command-center/index";
 import MemoryPage           from "@/pages/memory/index";
 import DocsPage             from "@/pages/docs/index";
 import TeamPage             from "@/pages/team";
+import TeamJoinPage         from "@/pages/team-join";
 import ImpersonatePage      from "@/pages/impersonate";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { initMetaPixel } from "@/lib/meta-pixel";
@@ -195,6 +196,7 @@ function SignInPage() {
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim(),
@@ -202,8 +204,8 @@ function SignInPage() {
           host: window.location.host,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { token?: string; error?: string };
-      if (!res.ok || !data.token) {
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; token?: string; error?: string };
+      if (!res.ok) {
         setError(data.error || "Sign in failed. Please try again.");
         return;
       }
@@ -436,6 +438,8 @@ function AppRoutes() {
         sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
         if (stored.includes("/app/partner-join") && !window.location.pathname.includes("/app/partner-join")) {
           window.location.replace(stored);
+        } else if (stored.includes("/app/join") && !window.location.pathname.includes("/app/join")) {
+          window.location.replace(stored);
         }
       }
     } catch { /* sessionStorage unavailable */ }
@@ -447,8 +451,9 @@ function AppRoutes() {
   // Partner invite acceptance must survive the onboarding gate — a fresh
   // signup can accept the invite first, then complete onboarding.
   const onPartnerJoinPage = location.startsWith("/app/partner-join");
+  const onTeamJoinPage = location.startsWith("/app/join");
   const skipOnboarding = partnerCtx?.isManagedClient === true;
-  if (!skipOnboarding && onboardingStatus?.completed === false && !onOnboardingPage && !onPartnerJoinPage) {
+  if (!skipOnboarding && onboardingStatus?.completed === false && !onOnboardingPage && !onPartnerJoinPage && !onTeamJoinPage) {
     return <Redirect to="/app/onboarding" />;
   }
   if (isManagedWorkspace && isBlockedForManagedClient(location)) {
@@ -485,6 +490,7 @@ function AppRoutes() {
 
         {/* ── Partner (reseller) hub ── */}
         <Route path="/app/partner-join" component={PartnerJoinPage} />
+        <Route path="/app/join" component={TeamJoinPage} />
         <Route path="/app/partner/clients/:clerkId" component={PartnerClientPage} />
         <Route path="/app/partner" component={PartnerPage} />
 
@@ -612,7 +618,7 @@ const POST_LOGIN_REDIRECT_KEY = "snapserve:post-login-redirect";
 /** Preserve partner invite links across the sign-in flow, then bounce home. */
 function SignedOutRedirect() {
   try {
-    if (window.location.pathname.includes("/app/partner-join")) {
+    if (window.location.pathname.includes("/app/partner-join") || window.location.pathname === "/app/join") {
       sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, window.location.pathname + window.location.search);
     }
   } catch { /* sessionStorage unavailable */ }

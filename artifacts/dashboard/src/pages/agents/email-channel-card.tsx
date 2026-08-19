@@ -313,7 +313,7 @@ export function EmailChannelCard({
             Email
           </h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Connect Brevo once, then add multiple verified From addresses and design as many templates as you need.
+            Connect Brevo once (email only). WhatsApp is a separate Connect card. Then add From addresses and templates.
           </p>
         </div>
         <StatusPill ready={ready} label={ready ? "Brevo connected" : "Needs setup"} />

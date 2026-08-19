@@ -14,6 +14,15 @@ PATCH https://app.snapserve.ai/api/phone-numbers/{id}/assign
 DELETE https://app.snapserve.ai/api/phone-numbers/{id}`}
       />
 
+      <Callout variant="info" title="After purchase">
+        The number appears in the dashboard as soon as payment and carrier provision succeed
+        (usually seconds). Calling it from a mobile can still say <strong>wrong number</strong> for
+        5–30 minutes while the Indian terminating network updates. Assign it to the agent, dial it
+        as <code>+91…</code> (or <code>0</code> + 10 digits from India), and if it is still dead
+        after an hour re-assign the number so inbound routing is linked again. Team members see the
+        owner&apos;s number on the shared agent — they should not buy a second one.
+      </Callout>
+
       <Callout variant="info" title="India pricing">
         Monthly rental by series: <strong>80-series ₹599</strong>, <strong>79-series ₹699</strong>,
         <strong> others ₹659</strong> — plus ₹100 setup and 18% GST (card on first purchase).

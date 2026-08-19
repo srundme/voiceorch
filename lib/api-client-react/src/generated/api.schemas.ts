@@ -1927,6 +1927,8 @@ export interface PhoneNumber {
   agentName?: string | null;
   /** True when the number is owned by the client's managing partner and assigned to one of the client's agents (read-only for the client). */
   partnerAssigned?: boolean;
+  /** True when the number is owned by another member of this team workspace (visible, not releasable). */
+  workspaceShared?: boolean;
   status: PhoneNumberStatus;
   purchasedAt: string;
   /** Monthly cost in paise (INR; from Vobiz, 0 = no recurring fee) */

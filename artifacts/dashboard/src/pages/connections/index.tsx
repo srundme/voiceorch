@@ -2035,8 +2035,7 @@ function CrmConnectorSection() {
   }, []);
 
   const handleConnect = (provider: "hubspot" | "zoho") => {
-    const token = localStorage.getItem("voiceorch:session") ?? "";
-    const url = `${BASE}/api/crm/connect/${provider}?returnOrigin=${encodeURIComponent(window.location.origin)}${token ? `&token=${encodeURIComponent(token)}` : ""}`;
+    const url = `${BASE}/api/crm/connect/${provider}?returnOrigin=${encodeURIComponent(window.location.origin)}`;
     window.location.href = url;
   };
 

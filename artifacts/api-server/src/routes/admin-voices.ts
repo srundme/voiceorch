@@ -4,6 +4,7 @@ import { platformListedVoicesTable, platformSettingsTable } from "@workspace/db"
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { logger } from "../lib/logger.js";
+import { resolveCartesiaModelId } from "../orchestration/adapters/tts/cartesia.js";
 
 const router: IRouter = Router();
 
@@ -156,14 +157,6 @@ router.get("/admin/voices/listed", requireAdmin, async (_req, res): Promise<void
 // ── POST /admin/voices/preview ────────────────────────────────────────────────
 // Returns raw WAV audio for a voice so the admin can audition it before listing
 
-const PREVIEW_VALID_MODELS = new Set([
-  "sonic-3.5", "sonic-3.5-2026-05-04", "sonic-latest",
-  "sonic-3", "sonic-3-2026-01-12", "sonic-3-latest",
-  "sonic-2", "sonic-2-2025-03-07", "sonic-2-2025-04-16", "sonic-2-2025-05-08", "sonic-2-2025-06-11",
-  "sonic-turbo", "sonic-turbo-2025-03-07", "sonic-turbo-2025-06-04",
-  "sonic-english", "sonic-multilingual",
-]);
-
 router.post("/admin/voices/preview", requireAdmin, async (req, res): Promise<void> => {
   const { voiceId, text, modelId } = req.body as { voiceId?: string; text?: string; modelId?: string };
 
@@ -179,7 +172,7 @@ router.post("/admin/voices/preview", requireAdmin, async (req, res): Promise<voi
   }
 
   const previewText = text?.slice(0, 200) ?? "Hello! I am your AI voice assistant. I am here to help you today. How can I assist you?";
-  const model = (modelId && PREVIEW_VALID_MODELS.has(modelId)) ? modelId : "sonic-3.5";
+  const model = resolveCartesiaModelId(modelId);
 
   try {
     const response = await fetch(`${CARTESIA_BASE_URL}/tts/bytes`, {

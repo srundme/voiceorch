@@ -26,6 +26,7 @@ import {
   jurisdictionMismatchWarnings,
 } from "../services/system-prompt-domain-checks.js";
 import { GenerateSystemPromptBody } from "@workspace/api-zod";
+import { resolveCartesiaModelId } from "../orchestration/adapters/tts/cartesia.js";
 
 interface FlowNode { label: string; badge?: string; branch?: boolean }
 
@@ -149,14 +150,6 @@ router.get("/wizard/voices", requireDbUser, async (req, res): Promise<void> => {
 
 // ── POST /wizard/preview-voice ────────────────────────────────────────────────
 
-const PREVIEW_VALID_MODELS = new Set([
-  "sonic-3.5", "sonic-3.5-2026-05-04", "sonic-latest",
-  "sonic-3", "sonic-3-2026-01-12", "sonic-3-latest",
-  "sonic-2", "sonic-2-2025-03-07", "sonic-2-2025-04-16", "sonic-2-2025-05-08", "sonic-2-2025-06-11",
-  "sonic-turbo", "sonic-turbo-2025-03-07", "sonic-turbo-2025-06-04",
-  "sonic-english", "sonic-multilingual",
-]);
-
 router.post("/wizard/preview-voice", requireDbUser, async (req, res): Promise<void> => {
   const { voiceId, text, modelId } = req.body as { voiceId?: string; text?: string; modelId?: string };
 
@@ -172,8 +165,7 @@ router.post("/wizard/preview-voice", requireDbUser, async (req, res): Promise<vo
   }
 
   const previewText = text?.slice(0, 200) ?? "Hello! I am your AI voice assistant. I am here to help you today. How can I assist you?";
-  // Use the caller-supplied model (so the preview matches the agent's model), default to sonic-3.5
-  const model = (modelId && PREVIEW_VALID_MODELS.has(modelId)) ? modelId : "sonic-3.5";
+  const model = resolveCartesiaModelId(modelId);
 
   try {
     const cartesiaBase2 = (process.env["CARTESIA_BASE_URL"] ?? "https://api-india.cartesia.ai").replace(/\/+$/, "");

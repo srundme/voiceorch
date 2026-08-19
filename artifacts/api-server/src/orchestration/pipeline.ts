@@ -7,6 +7,7 @@ import { SpeakerVerifier, type VoiceMemoryEvent } from "./speakerVerifier.js";
 import { SCREENING_PICKUP_NOTE } from "./callScreening.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
+import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN } from "./conversationDiscipline.js";
 import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
@@ -40,6 +41,7 @@ import {
   SilenceWatchdog,
   recoveryReprompt,
   speakerHandoffChallenge,
+  voiceLinkAckPhrase,
   inactivityReprompt,
   inactivityFarewell,
   meetingWaitingReprompt,
@@ -555,6 +557,18 @@ const VOICE_LINK_ACK_NOTE =
   "acknowledge that you remember speaking with them before — naturally, in one short phrase " +
   "woven into your answer (e.g. mention their name or something from the last conversation). " +
   "Never mention phone numbers, voice matching, or how you recognized them. Do this once only.";
+
+/** New phone number: CALLER MEMORY is empty until Voice Memory links. Stop the
+ *  agent from firmly denying "do you remember me?" during that window
+ *  (calls 11120/11133 — voice matched 0.59 at hangup after the agent said
+ *  it had no previous record). */
+const VOICE_MEMORY_PENDING_NOTE =
+  "[VOICE MEMORY] If CALLER MEMORY above shows this number as unknown / a first call, " +
+  "voice matching may still identify them after a few seconds of caller speech. " +
+  "If they ask whether you remember them, know them, or spoke before: do NOT firmly deny it — no " +
+  "\"I don't have a previous record\", \"I don't know you\", or \"we haven't spoken\". " +
+  "Ask their name, or say you may recognize them in a moment. Never mention voiceprints, " +
+  "matching, or how recognition works. If CALLER MEMORY already has their name or history, ignore this note.";
 
 /**
  * Build a COMPACT system prompt for the greeting-only LLM call. Returning callers were
@@ -1250,6 +1264,8 @@ export class OrchestrationPipeline implements VoiceSession {
   /** True after we forced a spoken handoff challenge for the current handoff. */
   private speakerChallengeSpoken = false;
   private speakingSpeakerHandoffChallenge = false;
+  /** True while speaking the forced "wait — is this {name}?" voice-link ack. */
+  private speakingVoiceLinkAck = false;
   /** While true, suppress in-flight LLM TTS so the forced handoff ask can take the floor. */
   private skipAgentPlaybackForHandoff = false;
   /**
@@ -3380,7 +3396,7 @@ export class OrchestrationPipeline implements VoiceSession {
       logger.error({ callId: this.config.callId, err }, "Turn error (streaming STT)");
     } finally {
       this.isProcessing = false;
-      if (!this.speakingSpeakerHandoffChallenge) {
+      if (!this.speakingSpeakerHandoffChallenge && !this.speakingVoiceLinkAck) {
         this.skipAgentPlaybackForHandoff = false;
       }
       // If the call ended (transfer or end_call) while this turn was processing,
@@ -4367,6 +4383,9 @@ export class OrchestrationPipeline implements VoiceSession {
           hasName: !!name,
         },
       });
+      // Don't wait for the next user turn — this call may hang up after a
+      // "do you remember me?" deny (call 11133). Cut in and acknowledge now.
+      void this.speakVoiceLinkAck(typeof name === "string" ? name : null);
     } catch (err) {
       logger.warn(
         { callId: this.config.callId, err },
@@ -4380,6 +4399,73 @@ export class OrchestrationPipeline implements VoiceSession {
           error: err instanceof Error ? err.message : String(err),
         },
       });
+    }
+  }
+
+  /**
+   * Interrupt in-flight "I don't know you" TTS and speak a one-line
+   * recognition. The next LLM turn still gets VOICE_LINK_ACK_NOTE if this
+   * doesn't run (caller talking, call already closed).
+   */
+  private async speakVoiceLinkAck(name: string | null): Promise<void> {
+    if (this.closed || this.voiceHandoffActive || this.speakingVoiceLinkAck) return;
+    if (this.inSpeechSegment) return;
+    this.speakingVoiceLinkAck = true;
+    this.skipAgentPlaybackForHandoff = true;
+    try {
+      if (this.isPlaying || this.isSendingTtsAudio) {
+        this.interruptionMgr.invalidateCurrentTurn();
+        for (const ac of this.activeTtsAborts) {
+          try { ac.abort(); } catch { /* noop */ }
+        }
+        this.activeTtsAborts.clear();
+        this.bargeInCallback?.();
+        this.bargeInRequested = true;
+        const deadline = Date.now() + 350;
+        while ((this.isSendingTtsAudio || this.isPlaying) && Date.now() < deadline && !this.closed) {
+          await new Promise((r) => setTimeout(r, 20));
+        }
+        this.prepareSystemPlayback();
+      } else {
+        this.prepareSystemPlayback();
+      }
+
+      if (this.closed || this.voiceHandoffActive || this.inSpeechSegment) return;
+
+      const text = voiceLinkAckPhrase(this.currentLang || this.agent.language, name);
+      this.pendingVoiceLinkAck = false;
+      this.conversationHistory.appendAssistant(text);
+      this.config.onTranscript("agent", text);
+      this.config.onConversationUpdate?.(this.conversationHistory.messages);
+      logger.info(
+        { callId: this.config.callId, text, name },
+        "Voice Memory: speaking forced cross-number recognition",
+      );
+      this.logExec("VoiceMemory", "system", {
+        status: "success",
+        metadata: { note: "Spoke mid-call recognition after voice match", name, text },
+      });
+
+      this.skipAgentPlaybackForHandoff = false;
+      this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+      this.isPlaying = true;
+      try {
+        await this.playSentence(text);
+      } finally {
+        this.isPlaying = false;
+        this.systemPlaybackActive = false;
+        this.armTailEchoGrace();
+      }
+      await this.drainPlaybackTail();
+    } catch (err) {
+      logger.warn({ callId: this.config.callId, err }, "Voice Memory: forced recognition line failed");
+      this.pendingVoiceLinkAck = true;
+    } finally {
+      this.speakingVoiceLinkAck = false;
+      this.systemPlaybackActive = false;
+      if (!this.isProcessing) {
+        this.skipAgentPlaybackForHandoff = false;
+      }
     }
   }
 
@@ -5583,7 +5669,7 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.bargeInRequested) return;
     // Voice Memory handoff takeover — drop in-flight LLM sentences so the
     // forced "who am I speaking with?" line can own the channel.
-    if (this.skipAgentPlaybackForHandoff && !this.speakingSpeakerHandoffChallenge) return;
+    if (this.skipAgentPlaybackForHandoff && !this.speakingSpeakerHandoffChallenge && !this.speakingVoiceLinkAck) return;
     // Track what the agent is about to speak so the streaming-STT path can reject
     // this same audio when the carrier echoes it back (content-based self-echo).
     this.recordAgentSpeech(job.text);
@@ -7958,6 +8044,8 @@ export class OrchestrationPipeline implements VoiceSession {
     } else if (this.pendingVoiceLinkNote && this.voiceLinkedFromPhone) {
       systemPromptForTurn += `\n\n${VOICE_LINKED_PHONE_NOTE}`;
       this.pendingVoiceLinkNote = false;
+    } else if (this.speakerVerifier && !this.voiceLinkedMemoryBlock) {
+      systemPromptForTurn += `\n\n${VOICE_MEMORY_PENDING_NOTE}`;
     }
     // Voice-matched caller history (new number, known voice) — persistent every
     // turn while the same speaker stays on the line; cleared on handoff.
@@ -9019,7 +9107,7 @@ export class OrchestrationPipeline implements VoiceSession {
       if (!this.closed) this.safetyNet.beginListening();
     } finally {
       this.isProcessing = false;
-      if (!this.speakingSpeakerHandoffChallenge) {
+      if (!this.speakingSpeakerHandoffChallenge && !this.speakingVoiceLinkAck) {
         this.skipAgentPlaybackForHandoff = false;
       }
       if (this.audioBuffer.length > 0) void this.flushAndProcess();
@@ -10168,157 +10256,6 @@ function stripToolArtifacts(text: string): string {
     .replace(/<\|(?:tool|python_tag)[\s\S]*$/i, "")
     .replace(/[^\S\r\n]{2,}/g, " ")
     .trim();
-}
-
-/**
- * Per-language spec for explicit language-request detection. `mention` matches
- * the language's NAME (romanised + native scripts). `roman` lists the romanised
- * names used to build the "in <lang>" / "<lang> me|la" and negation windows.
- */
-interface LangRequestSpec {
-  code: string;
-  mention: RegExp;
-  roman: string[];
-  /** Precompiled: "in/into/to <lang>" or "<lang> me|mein|la|il|alli…" (romanised). */
-  inLang: RegExp;
-  /** Precompiled: romanised/English negation windows around the language name. */
-  negation: RegExp[];
-}
-
-function buildLangRequestSpec(code: string, mention: RegExp, roman: string[]): LangRequestSpec {
-  const alt = roman.join("|");
-  return {
-    code,
-    mention,
-    roman,
-    inLang: new RegExp(
-      `\\b(in|into|to)\\s+(${alt})\\b|\\b(${alt})\\s*(me|mein|mai|main|men|la|le|lo|il|alli|nalli)\\b`,
-    ),
-    negation: [
-      new RegExp(`\\b(no|not|don'?t|do not|dont|never|stop)\\b[^.!?]{0,20}\\b(${alt})\\b`),
-      new RegExp(`\\b(${alt})\\b[^.!?]{0,15}\\b(nahi|nahin|mat|naa|na|venda|vendam|veno|beda|nako|illa|illai)\\b`),
-    ],
-  };
-}
-
-/** All languages the multilingual toggle supports for explicit switch requests. */
-const LANG_REQUEST_SPECS: LangRequestSpec[] = [
-  buildLangRequestSpec("en-IN", /\b(english|inglish)\b|\bangre[jz]i\b|अंग्रेज़ी|अंग्रेजी|ஆங்கில|இங்கிலீ?ஷ்?|இங்கிலிஷ்?|இங்கில|ఇంగ్లీష|ইংরেজি|انگریزی/iu, ["english", "inglish", "angrezi", "angreji"]),
-  buildLangRequestSpec("hi-IN", /\bhindi\b|हिन्दी|हिंदी|ஹிந்தி|இந்தி|ہندی/iu, ["hindi"]),
-  buildLangRequestSpec("ta-IN", /\b(tamil|thamizh|tamizh)\b|தமிழ|तमिल|తమిళ/iu, ["tamil", "thamizh", "tamizh"]),
-  buildLangRequestSpec("te-IN", /\btelugu\b|తెలుగు|तेलुगु|தெலுங்கு/iu, ["telugu"]),
-  buildLangRequestSpec("kn-IN", /\bkannada\b|ಕನ್ನಡ|कन्नड़|कन्नड|கன்னட/iu, ["kannada"]),
-  buildLangRequestSpec("ml-IN", /\bmalayalam\b|മലയാള|मलयालम|மலையாள/iu, ["malayalam"]),
-  buildLangRequestSpec("mr-IN", /\bmarathi\b|मराठी|மராத்தி/iu, ["marathi"]),
-  buildLangRequestSpec("bn-IN", /\b(bengali|bangla)\b|বাংলা|बांग्ला|बंगाली/iu, ["bengali", "bangla"]),
-  buildLangRequestSpec("gu-IN", /\b(gujarati|gujrati)\b|ગુજરાતી|गुजराती/iu, ["gujarati", "gujrati"]),
-  buildLangRequestSpec("pa-IN", /\b(punjabi|panjabi)\b|ਪੰਜਾਬੀ|पंजाबी|پنجابی/iu, ["punjabi", "panjabi"]),
-  buildLangRequestSpec("or-IN", /\b(odia|oriya)\b|ଓଡ଼ିଆ|ଓଡିଆ|ओड़िया|उड़िया/iu, ["odia", "oriya"]),
-  buildLangRequestSpec("ur-IN", /\burdu\b|اردو|उर्दू|உருது/iu, ["urdu"]),
-];
-
-/** Native-script negators checked in the ~18 chars right after a native-script
- *  language mention ("தமிழ் வேண்டாம்", "हिंदी नहीं"). */
-const NATIVE_NEGATORS = /வேண்டாம்|வேணாம்|மாட்|नहीं|मत|না|নয়|ਨਹੀਂ|نہیں|ಬೇಡ|వద్దు|വേണ്ട|નહીં/u;
-
-/**
- * Detect an explicit caller request to switch the agent's SPOKEN language.
- * Returns a BCP-47 code ("ta-IN", "en-IN", …) or null. Covers the full
- * multilingual set (en/hi/ta/te/kn/ml/mr/bn/gu/pa/or/ur) in romanised and
- * native scripts. Deliberately conservative — a real request/switch cue must
- * be present, so a bare mention ("English teacher", "do you support Hindi?",
- * "I don't know English") never latches. Simple negation ("don't speak
- * English", "English mat bolo", "தமிழ் வேண்டாம்") is stripped; on a true
- * Hindi/English two-language tie Hindi wins as the safer base-language
- * fallback (existing semantics); any other multi-language mention is
- * ambiguous and never latches.
- */
-function detectExplicitLanguageRequest(rawText: string): string | null {
-  // "Tamil Nadu" is a place, not a language request ("I live in Tamil Nadu"
-  // must never latch Tamil). Scrub the state name before any matching.
-  const text = rawText.replace(/tamil\s*nadu/gi, "TN").replace(/தமிழ்\s*நாடு|தமிழ்நாட்|तमिलनाडु/gu, "TN");
-  const t = text.toLowerCase();
-
-  const mentioned = LANG_REQUEST_SPECS.filter((s) => s.mention.test(text));
-  if (mentioned.length === 0) return null;
-
-  // Require an actual request/switch cue so a BARE mention never latches.
-  // Cues: a request/switch verb (English, romanised Hindi/Tamil/Telugu/Kannada/
-  // Malayalam, or native-script), "in/to <lang>", or "<lang> me/mein/la/il…".
-  const hasRequestVerb =
-    /\b(speak|speaking|talk|talking|say|reply|respond|answer|continue|switch|change|use|prefer|please)\b/.test(t) ||
-    /\bcan\s+you\b/.test(t) ||
-    /\b(pesu|pesunga|pesanum|pannunga|pannalam|matladu|maatladu|matladandi|helu|heli|parayu|samsarikku|bolna|bola)\b/.test(t) ||
-    /\b(bol|bolo|boliye|baat|baatein|kar|karo|karein|kijiye|kije|chahiye|chaiye)\b/.test(t) ||
-    /स्पीक|स्पिक|टॉक|பேச|பேசு|சொல்லு|बोल|बात|कीजिए|करो|करें|चाहिए|మాట్లాడ|ಮಾತನಾಡ|പറയ|സംസാരിക്ക|বল|বলুন|કહો|બોલ|ਬੋਲ|بولیں|بات/u.test(text);
-  const hasInLang =
-    mentioned.some((s) => s.inLang.test(t)) ||
-    // Native-script locatives: "<lang>में/इन" (Devanagari), "தமிழில்/தமிழ்ல", "…த்தில்/யில்" etc.
-    /(अंग्रेज़ी|अंग्रेजी|हिन्दी|हिंदी|तमिल|तेलुगु|कन्नड़|कन्नड|मलयालम|मराठी|बांग्ला|बंगाली|गुजराती|पंजाबी|उड़िया|ओड़िया|उर्दू)\s*(में|मे|इन|इन्)/u.test(text) ||
-    /(स्पीक|स्पिक|टॉक|बोल|बोलो)\s*(इन|इन्|में|मे)\s*(अंग्रेज़ी|अंग्रेजी|हिन्दी|हिंदी|तमिल|तेलुगु|कन्नड़|कन्नड|मलयालम)/u.test(text) ||
-    /தமிழ(ில்|்ல|ுல)|ஆங்கிலத்தில்|ஹிந்தியில்|இந்தியில்|தெலுங்கில்|கன்னடத்தில்|மலையாளத்தில்|উর্দু|ਵਿੱਚ/u.test(text);
-  if (!hasRequestVerb && !hasInLang) {
-    // ── Bare-imperative fast-path ──────────────────────────────────────────
-    // Indian conversational speech drops the request verb: "Ma'am Tamil" means
-    // "Ma'am, speak Tamil". If the ENTIRE non-address content of a SHORT (≤5
-    // word) utterance is exactly one language name and there is no negation
-    // present, treat it as an explicit language request.
-    //
-    // Safeguards:
-    //   • negation words ("no", "not", "nahi", "illa") veto this path
-    //   • more than one content word → not a bare imperative → fall through
-    //   • the sole content word must literally match the language spec's own
-    //     mention regex (prevents accidental matches from a nearby native-
-    //     script language glyph in an otherwise unrelated utterance)
-    //
-    // Examples that DO latch:   "Ma'am Tamil"  "sir Hindi"  "Tamil please"
-    // Examples that do NOT latch: "Do you support Tamil?" (3 content words)
-    //                             "I don't know Tamil" (negated)
-    //                             "Tamil teacher" (2 content words)
-    const isNegatedBare = /\b(no|not|dont|don'?t|never|nahi|nahin|illa|illai|vendam|venda|mat)\b/.test(t);
-    if (!isNegatedBare && mentioned.length === 1) {
-      const ADDR_TERMS = new Set([
-        "maam", "madam", "sir", "please", "hi", "hello", "ok", "okay",
-        "uh", "um", "hmm", "hm", "bhai", "didi", "anna", "akka", "hey",
-        "yeah", "yea", "yes", "can", "you",
-      ]);
-      const allWords = t.split(/\s+/).filter((w) => /[a-z]/.test(w));
-      const contentWords = allWords.filter((w) => !ADDR_TERMS.has(w.replace(/[^a-z]/g, "")));
-      if (allWords.length <= 5 && contentWords.length === 1) {
-        const soleWord = contentWords[0]!;
-        const spec = mentioned[0]!;
-        // Confirm the sole content word itself matches the language's mention pattern.
-        if (spec.mention.test(soleWord)) {
-          return spec.code;
-        }
-      }
-    }
-    return null;
-  }
-
-  // Negation guard per language: "don't speak English" / "English mat bolo" /
-  // "தமிழ் வேண்டாம்" must not latch that language (but leaves any OTHER
-  // positively-requested language free to latch: "Hindi nahi, Tamil me bolo").
-  const wanted = mentioned.filter((s) => {
-    if (s.negation.some((re) => re.test(t))) return false;
-    // Native-script negator shortly after the (native or romanised) mention.
-    const m = s.mention.exec(text);
-    if (m) {
-      const tail = text.slice(m.index + m[0].length, m.index + m[0].length + 18);
-      if (NATIVE_NEGATORS.test(tail)) return false;
-    }
-    return true;
-  });
-
-  // Exactly one positively requested → latch it.
-  if (wanted.length === 1) return wanted[0].code;
-  // Hindi wins a true Hindi/English tie (it's the safer base-language fallback);
-  // any other multi-language combination is ambiguous — never latch.
-  if (wanted.length === 2) {
-    const codes = new Set(wanted.map((w) => w.code));
-    if (codes.has("hi-IN") && codes.has("en-IN")) return "hi-IN";
-  }
-  return null;
 }
 
 /**

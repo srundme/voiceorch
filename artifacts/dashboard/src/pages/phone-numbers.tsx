@@ -1304,11 +1304,15 @@ export default function PhoneNumbersPage({
                 <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto sm:ml-auto">
                   {(() => {
                     const partnerAssigned = !!(n as { partnerAssigned?: boolean }).partnerAssigned;
-                    const ownerExtras = !isManagedWorkspace && !partnerAssigned;
+                    const workspaceShared = !!(n as { workspaceShared?: boolean }).workspaceShared;
+                    const ownerExtras = !isManagedWorkspace && !partnerAssigned && !workspaceShared;
                     return (
                       <>
                         {partnerAssigned && (
                           <Badge variant="secondary" className="text-[10px] shrink-0">From provider</Badge>
+                        )}
+                        {workspaceShared && (
+                          <Badge variant="secondary" className="text-[10px] shrink-0">Workspace</Badge>
                         )}
                         {ownerExtras && n.agentId && (
                           <Button

@@ -40,7 +40,7 @@ import type { AgentVersion } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, clampInterruptWords, voiceSecondsFromInterruptWords } from "./edit.schema";
+import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, clampInterruptWords, voiceSecondsFromInterruptWords, WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER } from "./edit.schema";
 import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
@@ -100,8 +100,9 @@ import {
   LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage, shouldClearVoiceForLanguage,
   getSarvamTtsVoices, isSarvamVoiceCompatible,
-  GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS,
+  GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS, VOICE_STACK_OPTIONS,
   geminiLiveModelLabel, isGeminiLiveAgent, isGeminiLiveLlmModel, voiceStackForLlmModel,
+  llmFieldsForVoiceStack,
   languagesForAgent, isGeminiLiveLanguage,
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
@@ -518,8 +519,8 @@ function AgentCostSummary({
 
 const SECTION_FIELDS: Record<CardSection, string[]> = {
   transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "languageAutoDetect", "multilingualLanguages", "sarvamIndicNumbers"],
-  model: ["llmProvider", "llmModel", "temperature"],
-  voice: ["voiceStack", "ttsProvider", "ttsModel", "ttsVoice", "ttsSpeed", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
+  model: ["voiceStack", "llmProvider", "llmModel", "temperature"],
+  voice: ["ttsProvider", "ttsModel", "ttsVoice", "ttsSpeed", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
 };
 
 /* ── Overview ───────────────────────────────────────────────────────────────── */
@@ -1088,8 +1089,27 @@ function OverviewTab({
             onSave={savePipelineDialog}
             icon={<Brain />}
             title="Model"
-            description="Choose the language model that powers the agent's responses."
+            description="Choose Classic STT+LLM+TTS, or Gemini Live native speech-to-speech."
           >
+            <FormField control={form.control} name="voiceStack" render={({ field }) => (
+              <FormItem className="space-y-1">
+                <FormLabel className="text-[10px] text-muted-foreground">Voice stack</FormLabel>
+                <SmallSelect
+                  value={isGeminiLive ? "gemini_live" : (field.value ?? "classic")}
+                  onChange={(v) => {
+                    const stack = v === "gemini_live" ? "gemini_live" : "classic";
+                    field.onChange(stack);
+                    const next = llmFieldsForVoiceStack(stack, {
+                      llmProvider: form.getValues("llmProvider"),
+                      llmModel: form.getValues("llmModel"),
+                    });
+                    form.setValue("llmProvider", next.llmProvider, { shouldDirty: true });
+                    form.setValue("llmModel", next.llmModel, { shouldDirty: true });
+                  }}
+                  options={VOICE_STACK_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
+                />
+              </FormItem>
+            )} />
             {isGeminiLive && (
               <p className="text-[11px] text-muted-foreground rounded-md border border-border/60 bg-muted/30 px-3 py-2">
                 Gemini Live uses native speech-to-speech. Classic STT/TTS are skipped — set language in the Language card and pick a preset voice in Voice.
@@ -1984,6 +2004,25 @@ function VoiceTab({ form }: { form: any }) {
           </p>
         </div>
         <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
+          <FormField control={form.control} name="voiceStack" render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel className="text-xs text-muted-foreground">Voice stack</FormLabel>
+              <SmallSelect
+                value={isGeminiLive ? "gemini_live" : (field.value ?? "classic")}
+                onChange={(v) => {
+                  const stack = v === "gemini_live" ? "gemini_live" : "classic";
+                  field.onChange(stack);
+                  const next = llmFieldsForVoiceStack(stack, {
+                    llmProvider: form.getValues("llmProvider"),
+                    llmModel: form.getValues("llmModel"),
+                  });
+                  form.setValue("llmProvider", next.llmProvider, { shouldDirty: true });
+                  form.setValue("llmModel", next.llmModel, { shouldDirty: true });
+                }}
+                options={VOICE_STACK_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
+              />
+            </FormItem>
+          )} />
           {isGeminiLive ? (
             <div className="space-y-3">
               <FormField control={form.control} name="geminiLiveVoiceName" render={({ field }) => (
@@ -3499,10 +3538,10 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
 
   // Surface webhook validation errors on the Integrations sub-tab
   useEffect(() => {
-    if (form.formState.errors?.webhookUrl || form.formState.errors?.webhookSecret) {
+    if (form.formState.errors?.webhookUrl || form.formState.errors?.webhookSecret || form.formState.errors?.webhookPayloadTemplate) {
       setSection("integrations");
     }
-  }, [form.formState.errors?.webhookUrl, form.formState.errors?.webhookSecret]);
+  }, [form.formState.errors?.webhookUrl, form.formState.errors?.webhookSecret, form.formState.errors?.webhookPayloadTemplate]);
 
   const bargeIn = form.watch("bargeInEnabled");
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
@@ -4051,8 +4090,31 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                     />
                   </FormControl>
                   <FormDescription className="text-[10px]">
-                    Sent as <code className="font-mono bg-muted px-0.5 rounded">X-Webhook-Signature</code> header so you can verify the payload wasn't tampered with.
+                    Sent as <code className="font-mono bg-muted px-0.5 rounded">X-SnapServe-Signature</code> so you can verify the body we actually POST.
                   </FormDescription>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="webhookPayloadTemplate" render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">JSON body template (optional)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder={WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER}
+                      className="min-h-[140px] text-[11px] font-mono bg-background/50 resize-y"
+                      spellCheck={false}
+                      {...field}
+                      value={field.value ?? ""}
+                    />
+                  </FormControl>
+                  <FormDescription className="text-[10px] leading-relaxed">
+                    Leave blank to send the default SnapServe payload. Use <code className="font-mono bg-muted px-0.5 rounded">{"{{callId}}"}</code>,{" "}
+                    <code className="font-mono bg-muted px-0.5 rounded">{"{{status}}"}</code>,{" "}
+                    <code className="font-mono bg-muted px-0.5 rounded">{"{{transcript}}"}</code>,{" "}
+                    <code className="font-mono bg-muted px-0.5 rounded">{"{{dispositionResult}}"}</code> (quoted placeholders keep JSON types).
+                    Applies only to this URL — not Developers event subscriptions. Invalid JSON falls back to the default body.
+                    Header <code className="font-mono bg-muted px-0.5 rounded">X-SnapServe-Payload</code> is <code className="font-mono">custom</code> or <code className="font-mono">default</code>.
+                  </FormDescription>
+                  <FormMessage />
                 </FormItem>
               )} />
             </div>
@@ -5292,6 +5354,7 @@ const FIELD_LABELS: Record<string, string> = {
   silenceTimeoutSeconds: "Silence Timeout (s)",
   language: "Language",
   webhookUrl: "Post-call notify URL",
+  webhookPayloadTemplate: "Post-call JSON template",
   noiseCancellationEnabled: "Noise Cancellation",
   backchannelingEnabled: "Backchannel",
   recordingEnabled: "Call Recording",
@@ -6606,7 +6669,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
 
 /* ── Agent editor panel ─────────────────────────────────────────────────────── */
 
-function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAgents?: () => void }) {
+export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId: number; onOpenAgents?: () => void; embedded?: boolean }) {
   const [, navigate] = useLocation();
   const { isManagedWorkspace } = usePartnerManagedWorkspace();
   const search = useSearch();
@@ -6670,7 +6733,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true,
       backchannelingFrequency: 0.5, webhookUrl: "",
-      webhookSecret: "", noiseCancellationEnabled: true,
+      webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: true,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0, promptVariables: [],
       vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1800,
       bargeInMinFrames: 4, micSensitivity: "low", timezone: "", machineDetectionMode: "disabled",
@@ -6786,6 +6849,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
       webhookUrl:               (agent.webhookUrl && agent.webhookUrl.startsWith("https://")) ? agent.webhookUrl : "",
       webhookSecret:            (agent as any).agentConfig?.webhookSecret ?? "",
+      webhookPayloadTemplate:   typeof (agent as any).agentConfig?.webhookPayloadTemplate === "string"
+        ? (agent as any).agentConfig.webhookPayloadTemplate
+        : "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
       ambientNoiseEnabled:      (agent as any).agentConfig?.ambientNoiseEnabled ?? false,
       ambientNoiseTrack:        (agent as any).agentConfig?.ambientNoiseTrack ?? "",
@@ -6923,6 +6989,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       const fieldTabMap: Record<string, TabId> = {
         webhookUrl:               "settings",
         webhookSecret:            "settings",
+        webhookPayloadTemplate:   "settings",
         schedulingCalendarId:     "tools",
         schedulingEventTypeId:    "tools",
         noiseCancellationEnabled: "voice",
@@ -6981,7 +7048,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       try { localStorage.removeItem(LAST_AGENT_ID_KEY); } catch {}
       await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
       const nextList = (queryClient.getQueryData(getListAgentsQueryKey()) as any[])?.filter(a => a.id !== agentId) || [];
-      if (nextList.length > 0) {
+      if (embedded) {
+        navigate("/app/vibe", { replace: true });
+      } else if (nextList.length > 0) {
         navigate(`/app/agents/${nextList[0].id}`, { replace: true });
       } else {
         navigate("/app/agents", { replace: true });
@@ -7076,20 +7145,22 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       {/* Single toolbar — agent identity + actions */}
       <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3 sm:h-16 sm:px-5">
         <div className="flex min-w-0 items-center gap-2.5">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-8 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              if (canGoBackInApp()) window.history.back();
-              else navigate("/app/home");
-            }}
-          >
-            <ChevronLeft className="size-3.5" />
-            <span className="hidden sm:inline">Back</span>
-          </Button>
-          {onOpenAgents && (
+          {!embedded && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                if (canGoBackInApp()) window.history.back();
+                else navigate("/app/home");
+              }}
+            >
+              <ChevronLeft className="size-3.5" />
+              <span className="hidden sm:inline">Back</span>
+            </Button>
+          )}
+          {!embedded && onOpenAgents && (
             <Button
               type="button"
               size="sm"
@@ -7102,7 +7173,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               <ChevronDown className="size-3 text-muted-foreground" />
             </Button>
           )}
-          <div className="h-4 w-px shrink-0 bg-border/80" />
+          {!embedded && <div className="h-4 w-px shrink-0 bg-border/80" />}
           <button
             type="button"
             onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
@@ -7178,7 +7249,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               <DropdownMenuItem onClick={() => setPublishModalOpen(true)}>
                 <Upload className="mr-2 size-3.5" /> Publish version
               </DropdownMenuItem>
-              {!isManagedWorkspace && (
+              {!isManagedWorkspace && !embedded && (
               <DropdownMenuItem onClick={() => navigate(`/app/vibe?refine=${agentId}`)}>
                 <Sparkles className="mr-2 size-3.5" /> Refine with AI
               </DropdownMenuItem>

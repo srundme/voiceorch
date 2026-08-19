@@ -4,6 +4,8 @@ import { BrandMark } from "@/components/logo";
 import { DocsSidebar } from "./DocsSidebar";
 import { DocsSearch } from "./DocsSearch";
 import { TableOfContents } from "./TableOfContents";
+import { DocsPager } from "./DocsPager";
+import { findDocsPage } from "./docs-nav";
 import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -30,7 +32,7 @@ function TopTabs() {
           >
             {tab.label}
             {active ? (
-              <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-sky-500" />
+              <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-slate-900" />
             ) : null}
           </Link>
         );
@@ -40,9 +42,13 @@ function TopTabs() {
 }
 
 export function DocsLayout({ children, section }: { children: React.ReactNode; section: string }) {
+  const page = findDocsPage(section);
+
   useEffect(() => {
-    document.title = "Documentation · SnapServe";
-  }, []);
+    document.title = page?.title
+      ? `${page.title} · SnapServe Docs`
+      : "Documentation · SnapServe";
+  }, [page?.title]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -56,12 +62,12 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
   }, []);
 
   return (
-    <div className="min-h-screen bg-white text-foreground font-sans selection:bg-sky-400/25">
-      {/* Desktop top bar */}
+    <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-slate-900/10">
       <header className="sticky top-0 z-40 hidden lg:block border-b border-slate-200 bg-white/90 backdrop-blur-xl">
         <div className="max-w-[1600px] mx-auto px-6 flex items-center h-14 gap-8">
           <Link href="/docs" className="flex items-center gap-2 shrink-0 hover:opacity-90 transition-opacity">
             <BrandMark iconSize={24} wordmarkHeight={18} />
+            <span className="text-[13px] font-medium text-slate-500">Docs</span>
           </Link>
           <TopTabs />
           <div className="ml-auto flex items-center gap-3">
@@ -73,7 +79,7 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
             </a>
             <a
               href="https://app.snapserve.ai/app/api-keys"
-              className="rounded-lg bg-sky-50 border border-sky-200 px-3 py-1.5 text-sm text-sky-800 hover:bg-sky-100 transition-colors"
+              className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 transition-colors"
             >
               Get API key
             </a>
@@ -81,7 +87,6 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
         </div>
       </header>
 
-      {/* Mobile Header */}
       <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/90 backdrop-blur-xl lg:hidden">
         <div className="flex items-center h-14 px-4 gap-4">
           <Sheet>
@@ -96,6 +101,7 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
                 <div className="p-4 border-b border-slate-200">
                   <Link href="/docs" className="flex items-center gap-2">
                     <BrandMark iconSize={24} wordmarkHeight={18} />
+                    <span className="text-[13px] font-medium text-slate-500">Docs</span>
                   </Link>
                 </div>
                 <div className="p-4 flex-1 overflow-y-auto">
@@ -109,6 +115,7 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
           </Sheet>
           <Link href="/docs" className="flex items-center gap-2">
             <BrandMark iconSize={24} wordmarkHeight={18} />
+            <span className="text-[13px] font-medium text-slate-500">Docs</span>
           </Link>
         </div>
       </header>
@@ -123,20 +130,11 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
 
         <main className="flex-1 min-w-0 py-10 lg:py-12 px-0 lg:px-12 flex justify-center relative">
           <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 opacity-[0.35]"
-            style={{
-              backgroundImage:
-                "linear-gradient(rgba(15,23,42,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,0.04) 1px, transparent 1px)",
-              backgroundSize: "48px 48px",
-              maskImage: "linear-gradient(to bottom, black 0%, black 35%, transparent 75%)",
-            }}
-          />
-          <div
             key={section}
-            className="relative w-full max-w-[760px] prose prose-slate prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-slate-900 prose-p:text-slate-600 prose-li:text-slate-600 prose-strong:text-slate-900 prose-a:text-sky-700 hover:prose-a:text-sky-800 prose-code:text-sky-700 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200"
+            className="relative w-full max-w-[760px] prose prose-slate prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-slate-900 prose-p:text-slate-600 prose-li:text-slate-600 prose-strong:text-slate-900 prose-a:text-slate-900 prose-a:underline prose-a:underline-offset-2 hover:prose-a:text-slate-700 prose-code:text-slate-800 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200"
           >
             {children}
+            <DocsPager slug={section} />
           </div>
         </main>
 
@@ -145,9 +143,15 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
         </aside>
       </div>
 
-      <footer className="border-t border-slate-200 py-6 px-6">
-        <div className="max-w-[1600px] mx-auto flex justify-center">
-          <p className="text-xs text-muted-foreground">SnapServe</p>
+      <footer className="border-t border-slate-200 py-8 px-6">
+        <div className="max-w-[1600px] mx-auto flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-slate-500">SnapServe documentation · app.snapserve.ai</p>
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
+            <Link href="/docs/api-reference" className="text-slate-500 hover:text-slate-900">API Reference</Link>
+            <Link href="/docs/changelog" className="text-slate-500 hover:text-slate-900">Changelog</Link>
+            <a href="https://app.snapserve.ai/app" className="text-slate-500 hover:text-slate-900">Dashboard</a>
+            <a href="mailto:support@snapserve.ai" className="text-slate-500 hover:text-slate-900">support@snapserve.ai</a>
+          </div>
         </div>
       </footer>
     </div>

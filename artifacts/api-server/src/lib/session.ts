@@ -11,6 +11,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
 import { APP_SECRET } from "./app-secret.js";
+import { parseCookieHeader, SESSION_COOKIE_NAME } from "./session-cookie.js";
 
 const SECRET = APP_SECRET;
 const DEFAULT_TTL_SEC = 60 * 60 * 24 * 30; // 30 days
@@ -78,13 +79,28 @@ export function verifySessionToken(token: string): SessionPayload | null {
   }
 }
 
-/** Pull a bearer token from the Authorization header, or `?token=` query (EventSource). */
+function looksLikeSessionJwt(token: string): boolean {
+  const parts = token.split(".");
+  return parts.length === 3 && parts.every((p) => p.length > 0);
+}
+
+/** Pull a session JWT from Bearer, the HttpOnly cookie, or `?token=` (EventSource / WS). */
 export function extractRequestToken(req: Request): string | null {
   const header = req.headers["authorization"];
   if (typeof header === "string" && header.startsWith("Bearer ")) {
     const t = header.slice(7).trim();
-    if (t) return t;
+    // Developer API keys (`sk_live_…`) are handled by authenticateApiKey, not here.
+    // Garbage values like `Bearer null` must not shadow the session cookie.
+    if (t && looksLikeSessionJwt(t)) return t;
   }
+  const cookies = (req as Request & { cookies?: Record<string, string> }).cookies;
+  const fromParser = cookies?.[SESSION_COOKIE_NAME];
+  if (typeof fromParser === "string" && fromParser) return fromParser;
+  const fromHeader = parseCookieHeader(
+    typeof req.headers.cookie === "string" ? req.headers.cookie : undefined,
+    SESSION_COOKIE_NAME,
+  );
+  if (fromHeader) return fromHeader;
   const q = req.query?.["token"];
   if (typeof q === "string" && q) return q;
   return null;

@@ -14,6 +14,7 @@ import { invalidateImpersonationCache, invalidateImpersonationSessionTokenCache 
 import { invalidateUserStatusCache } from "../middlewares/userStatusCache.js";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { createSessionToken } from "../lib/session.js";
+import { setSessionCookie } from "../lib/session-cookie.js";
 import { logger } from "../lib/logger.js";
 import { randomBytes } from "node:crypto";
 
@@ -57,8 +58,8 @@ router.get("/impersonate/exchange", async (req, res): Promise<void> => {
       },
       2 * 60 * 60,
     );
-
-    res.json({ sessionJwt });
+    setSessionCookie(res, sessionJwt, 2 * 60 * 60);
+    res.json({ ok: true });
   } catch (err) {
     req.log.error({ err, errMessage: String(err) }, "impersonate/exchange failed");
     res.status(500).json({

@@ -24,6 +24,31 @@ const RETRY_BASE_MS = 300;
 const CARTESIA_VERSION = "2026-03-01";
 const WS_CONNECT_TIMEOUT_MS = 6_000;
 
+/** Stable default. Sonic 3.6 is beta on `sonic-preview` until Cartesia GA. */
+export const CARTESIA_DEFAULT_MODEL = "sonic-3.5";
+/** Cartesia's live API id for Sonic 3.6 (beta). `sonic-3.6` is accepted as an alias. */
+export const CARTESIA_SONIC_36_MODEL = "sonic-preview";
+
+const CARTESIA_MODEL_ALIASES: Record<string, string> = {
+  "sonic-3.6": CARTESIA_SONIC_36_MODEL,
+};
+
+const CARTESIA_VALID_MODELS = new Set([
+  CARTESIA_DEFAULT_MODEL, "sonic-3.5-2026-05-04", "sonic-latest",
+  CARTESIA_SONIC_36_MODEL,
+  "sonic-3", "sonic-3-2026-01-12", "sonic-3-latest",
+  "sonic-2", "sonic-2-2025-03-07", "sonic-2-2025-04-16", "sonic-2-2025-05-08", "sonic-2-2025-06-11",
+  "sonic-turbo", "sonic-turbo-2025-03-07", "sonic-turbo-2025-06-04",
+  "sonic-english", "sonic-multilingual",
+]);
+
+/** Map agent TTS model ids to a Cartesia `model_id`. Unknown ids fall back to 3.5. */
+export function resolveCartesiaModelId(model: string | null | undefined): string {
+  const raw = (model ?? "").trim();
+  const id = CARTESIA_MODEL_ALIASES[raw] ?? raw;
+  return CARTESIA_VALID_MODELS.has(id) ? id : CARTESIA_DEFAULT_MODEL;
+}
+
 /** India endpoint by default for lowest latency; override via CARTESIA_BASE_URL env var. */
 const CARTESIA_BASE_URL = (process.env["CARTESIA_BASE_URL"] ?? "https://api-india.cartesia.ai").replace(/\/+$/, "");
 
@@ -147,14 +172,7 @@ export class CartesiaTTS implements TTSAdapter {
     this.speed = (speed != null && Number.isFinite(speed) && speed !== 1)
       ? Math.min(1.5, Math.max(0.6, speed))
       : null;
-    const VALID = new Set([
-      "sonic-3.5", "sonic-3.5-2026-05-04", "sonic-latest",
-      "sonic-3", "sonic-3-2026-01-12", "sonic-3-latest",
-      "sonic-2", "sonic-2-2025-03-07", "sonic-2-2025-04-16", "sonic-2-2025-05-08", "sonic-2-2025-06-11",
-      "sonic-turbo", "sonic-turbo-2025-03-07", "sonic-turbo-2025-06-04",
-      "sonic-english", "sonic-multilingual",
-    ]);
-    this.modelId = model && VALID.has(model) ? model : "sonic-3.5";
+    this.modelId = resolveCartesiaModelId(model);
     this.language = language ? language.split("-")[0] : null;
   }
 

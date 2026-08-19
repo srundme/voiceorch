@@ -45,9 +45,10 @@ export function ApiOverview() {
 
       <Section id="introduction" title="Introduction">
         <p>
-          Every endpoint accepts and returns JSON. Requests are made over HTTPS to the base URL
-          above. Use the sidebar to browse endpoints by resource, or jump straight to a specific
-          operation to see its parameters, request body, responses and a ready-to-run cURL example.
+          Every endpoint accepts and returns JSON over HTTPS. Follow the{" "}
+          <Link href="/docs/quick-start">Quick Start</Link> for a full list-agents → outbound → get
+          call recipe (cURL, Node, Python). Use the sidebar for schemas and ready-to-run cURL per
+          operation. Campaigns are dashboard-only and are not listed here.
         </p>
       </Section>
 
@@ -55,14 +56,14 @@ export function ApiOverview() {
         <p>
           Use a developer API key from{" "}
           <Link href="/docs/authentication">Authentication</Link> in the{" "}
-          <code className="text-sky-700">Authorization</code> header:
+          <code className="text-slate-800">Authorization</code> header:
         </p>
         <pre className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[13px] font-mono text-slate-800 overflow-x-auto">
           <code>Authorization: Bearer sk_live_…</code>
         </pre>
         <p>
           Dashboard session JWTs work for the browser app only. Prefer{" "}
-          <code className="text-sky-700">sk_live_</code> keys from your backend.
+          <code className="text-slate-800">sk_live_</code> keys from your backend.
         </p>
       </Section>
 

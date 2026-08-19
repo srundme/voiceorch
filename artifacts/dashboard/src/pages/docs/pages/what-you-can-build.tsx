@@ -10,6 +10,12 @@ export default function WhatYouCanBuildPage() {
         description="SnapServe runs the live phone conversation. Your product owns UI, leads, CRM, and business logic."
       />
 
+      <h2 id="vibe">Vibe (fastest first agent)</h2>
+      <p>
+        Describe the business in chat. Vibe writes the prompt and stays open as a studio (Chat,
+        Agent, Connect, Test). <Link href="/docs/vibe">Vibe builder</Link>.
+      </p>
+
       <h2 id="inbound">Inbound voice assistants</h2>
       <p>
         Buy or bring a number, assign it to an agent, and answer customers 24/7 — appointments,
@@ -33,6 +39,12 @@ export default function WhatYouCanBuildPage() {
         Batch-dial CSV / Sheets / website / Meta leads with retries, dispositions, and lead
         transfer to webhook or Sheets. After-call WhatsApp/email rules live on the agent. See{" "}
         <Link href="/docs/campaigns">Campaigns</Link>.
+      </p>
+
+      <h2 id="whatsapp">WhatsApp chatbot &amp; calling</h2>
+      <p>
+        After-call templates, inbound AI text replies, or 1:1 WhatsApp voice — not a bulk WhatsApp
+        campaign. <Link href="/docs/whatsapp">WhatsApp guide</Link>.
       </p>
 
       <h2 id="meetings">Meeting agents</h2>

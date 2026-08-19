@@ -18,6 +18,8 @@ import { parseVibeGeminiJson, parseVoicePick, looksLikePhoneAssign, looksLikePho
 import { buildPatternSystemPrompt } from "./vibe-system-prompt-pattern.js";
 import { filterVoicesByAgentGender } from "./vibe-agent-gender.js";
 import { getSarvamManagedKey, platformChatText, PLATFORM_CHAT_MODEL } from "../services/platform-chat-llm.js";
+import { SARVAM_FLAGSHIP_MODEL } from "../orchestration/adapters/llm/sarvam.js";
+import { resolveWorkspaceScope } from "../services/workspace-scope.js";
 
 const router = Router();
 
@@ -459,8 +461,11 @@ class VibeGeminiError extends Error {
 const VIBE_RECOVERY_NOTE =
   "IMPORTANT: Your previous response was cut off or was not valid JSON. Respond again to the conversation above with ONLY the complete, compact, valid JSON object matching the required schema — no markdown fences, no commentary, and keep the \"reply\" text brief.";
 
-/** Explicit JSON mode + Gemma 4 keeps builder turns fast without Gemini. */
-const VIBE_CHAT_MODEL = PLATFORM_CHAT_MODEL;
+/** Flagship 105B for agent specs. Thinking stays OFF — high reasoning eats
+ *  max_tokens and leaves content empty, which the UI surfaces as "AI is busy". */
+const VIBE_CHAT_MODEL = SARVAM_FLAGSHIP_MODEL;
+const VIBE_FALLBACK_MODEL = PLATFORM_CHAT_MODEL;
+const VIBE_LLM_TIMEOUT_MS = 90_000;
 
 function lastUserContent(msgs: VibeChatMessage[]): string {
   for (let i = msgs.length - 1; i >= 0; i--) {
@@ -470,84 +475,91 @@ function lastUserContent(msgs: VibeChatMessage[]): string {
 }
 
 async function callVibeLlm(_key: string, messages: VibeChatMessage[]): Promise<GeminiVibeResponse> {
-  const MAX_ATTEMPTS = 4;
+  const specs = [
+    { model: VIBE_CHAT_MODEL, attempts: 2 },
+    { model: VIBE_FALLBACK_MODEL, attempts: 2 },
+  ];
   let lastErr: Error | undefined;
   let needsRecovery = false;
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const chatMessages = needsRecovery
-      ? [...messages, { role: "user" as const, content: VIBE_RECOVERY_NOTE }]
-      : messages;
+  for (const spec of specs) {
+    for (let attempt = 1; attempt <= spec.attempts; attempt++) {
+      const chatMessages = needsRecovery
+        ? [...messages, { role: "user" as const, content: VIBE_RECOVERY_NOTE }]
+        : messages;
 
-    try {
-      const text = await Promise.race([
-        platformChatText({
-          system: VIBE_SYSTEM_PROMPT,
-          messages: chatMessages,
-          temperature: 0.4,
-          maxTokens: 8192,
-          timeoutMs: 90_000,
-          model: VIBE_CHAT_MODEL,
-          json: true,
-        }),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("vibe_llm_timeout")), 90000)),
-      ]);
+      try {
+        const text = await Promise.race([
+          platformChatText({
+            system: VIBE_SYSTEM_PROMPT,
+            messages: chatMessages,
+            temperature: 0.4,
+            maxTokens: 8_192,
+            timeoutMs: VIBE_LLM_TIMEOUT_MS,
+            model: spec.model,
+            json: true,
+            reasoningEffort: null,
+          }),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error("vibe_llm_timeout")), VIBE_LLM_TIMEOUT_MS)),
+        ]);
 
-      if (!text.trim() || text.trim() === "{}") {
+        if (!text.trim() || text.trim() === "{}") {
+          logger.warn(
+            { evt: "vibe_llm_empty", attempt, model: spec.model },
+            "vibe-chat: empty LLM response",
+          );
+          lastErr = new VibeGeminiError("empty candidate", "malformed");
+          needsRecovery = true;
+          continue;
+        }
+        const parsed = parseVibeGeminiJson(text);
+        if (parsed) {
+          return parsed as GeminiVibeResponse;
+        }
         logger.warn(
-          { evt: "vibe_llm_empty", attempt, model: VIBE_CHAT_MODEL },
-          "vibe-chat: empty LLM response",
+          {
+            evt: "vibe_llm_parse_failed",
+            attempt,
+            model: spec.model,
+            snippet: text.slice(0, 500),
+          },
+          "vibe-chat: JSON parse failed",
         );
-        lastErr = new VibeGeminiError("empty candidate", "malformed");
+        lastErr = new VibeGeminiError(
+          `JSON parse failed: ${text.slice(0, 200)}`,
+          "malformed",
+        );
         needsRecovery = true;
-        if (attempt < MAX_ATTEMPTS) { await sleep(attempt * 1000); continue; }
-        throw lastErr;
+      } catch (err) {
+        if (err instanceof VibeGeminiError) {
+          lastErr = err;
+          needsRecovery = err.kind === "malformed";
+          continue;
+        }
+        const msg = (err as Error).message ?? String(err);
+        const isRateLimit = /\b429\b/.test(msg) || /rate.?limit/i.test(msg);
+        const isTransient =
+          msg === "vibe_llm_timeout"
+          || msg.includes("fetch failed")
+          || isRateLimit
+          || /\b5\d\d\b/.test(msg)
+          || msg.includes("platform_chat_empty");
+        logger.warn(
+          {
+            evt: "vibe_llm_attempt_failed",
+            attempt,
+            model: spec.model,
+            transient: isTransient,
+            rateLimited: isRateLimit,
+            snippet: msg.slice(0, 500),
+          },
+          "vibe-chat: LLM request error",
+        );
+        lastErr = new VibeGeminiError(msg, isRateLimit ? "rate_limited" : "unavailable");
+        if (isTransient && attempt < spec.attempts) {
+          await sleep(attempt * 800);
+        }
       }
-      const parsed = parseVibeGeminiJson(text);
-      if (parsed) {
-        return parsed as GeminiVibeResponse;
-      }
-      logger.warn(
-        {
-          evt: "vibe_llm_parse_failed",
-          attempt,
-          model: VIBE_CHAT_MODEL,
-          snippet: text.slice(0, 500),
-        },
-        "vibe-chat: JSON parse failed",
-      );
-      lastErr = new VibeGeminiError(
-        `JSON parse failed: ${text.slice(0, 200)}`,
-        "malformed",
-      );
-      needsRecovery = true;
-      if (attempt < MAX_ATTEMPTS) { await sleep(attempt * 1000); continue; }
-      throw lastErr;
-    } catch (err) {
-      if (err instanceof VibeGeminiError) throw err;
-      const msg = (err as Error).message ?? String(err);
-      const isRateLimit = /\b429\b/.test(msg) || /rate.?limit/i.test(msg);
-      const isTransient =
-        msg === "vibe_llm_timeout"
-        || msg.includes("fetch failed")
-        || isRateLimit
-        || /\b5\d\d\b/.test(msg);
-      logger.warn(
-        {
-          evt: "vibe_llm_attempt_failed",
-          attempt,
-          transient: isTransient,
-          rateLimited: isRateLimit,
-          snippet: msg.slice(0, 500),
-        },
-        "vibe-chat: LLM request error",
-      );
-      lastErr = new VibeGeminiError(msg, isRateLimit ? "rate_limited" : "unavailable");
-      if (isTransient && attempt < MAX_ATTEMPTS) {
-        await sleep(attempt * 1500);
-        continue;
-      }
-      throw lastErr;
     }
   }
 
@@ -607,13 +619,14 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
       return;
     }
 
-    // User's purchased (active) phone numbers — used for the phone_number phase
+    // Workspace numbers (owner + teammates) — used for the phone_number phase
     // context, the inline picker emit, and save-time assignment validation.
-    let userNumbers: Array<{ id: number; number: string; region: string | null; agentId: number | null }> = [];
+    const scope = await resolveWorkspaceScope(clerkId);
+    let userNumbers: Array<{ id: number; number: string; region: string | null; agentId: number | null; userId: string | null }> = [];
     try {
       const numRows = await db.select().from(phoneNumbersTable)
-        .where(and(eq(phoneNumbersTable.userId, clerkId), eq(phoneNumbersTable.status, "active")));
-      userNumbers = numRows.map(n => ({ id: n.id, number: n.number, region: n.region, agentId: n.agentId }));
+        .where(and(inArray(phoneNumbersTable.userId, scope.userIds), eq(phoneNumbersTable.status, "active")));
+      userNumbers = numRows.map(n => ({ id: n.id, number: n.number, region: n.region, agentId: n.agentId, userId: n.userId }));
     } catch (err) {
       logger.warn({ err }, "vibe-chat: failed to fetch user phone numbers");
     }
@@ -631,7 +644,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
     if (isRefine) {
       try {
         const [agentRow] = await db.select().from(agentsTable)
-          .where(and(eq(agentsTable.id, refineAgentId!), eq(agentsTable.userId, clerkId)));
+          .where(and(eq(agentsTable.id, refineAgentId!), inArray(agentsTable.userId, scope.userIds)));
         if (agentRow) {
           existingAgentRow = agentRow as unknown as Record<string, unknown>;
           const acfg = (agentRow.agentConfig ?? {}) as Record<string, unknown>;
@@ -1566,9 +1579,9 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
             agentConfig:              agentConfigToSave as any,
             tools:                    toolsToSave as any,
           })
-          .where(and(eq(agentsTable.id, refineAgentId), eq(agentsTable.userId, clerkId)))
+          .where(and(eq(agentsTable.id, refineAgentId), inArray(agentsTable.userId, scope.userIds)))
           .returning();
-        if (!row) throw new Error(`Agent ${refineAgentId} not found or not owned by user`);
+        if (!row) throw new Error(`Agent ${refineAgentId} not found or not in this workspace`);
         insertedAgent = row;
       } else {
         // NEW agents get Bolna Call Engine safe defaults (same as POST /agents).
@@ -1649,17 +1662,18 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
 
     // Inbound phone-number assignment (vibe phone_number phase) — mirrors
     // PATCH /phone-numbers/:id/assign. Non-fatal: agent creation already succeeded.
-    // pickedNumberRow is validated against the user's own active numbers above.
+    // pickedNumberRow is validated against workspace-owned active numbers above.
     if (pickedNumberRow && pickedNumberRow.agentId !== insertedAgent.id) {
       try {
+        const numberOwnerId = pickedNumberRow.userId ?? clerkId;
         const [numRow] = await db.update(phoneNumbersTable)
           .set({ agentId: insertedAgent.id })
-          .where(and(eq(phoneNumbersTable.id, pickedNumberRow.id), eq(phoneNumbersTable.userId, clerkId)))
+          .where(and(eq(phoneNumbersTable.id, pickedNumberRow.id), eq(phoneNumbersTable.userId, numberOwnerId)))
           .returning();
         if (numRow) {
           await db.update(agentsTable)
             .set({ inboundPhoneNumberId: numRow.id, outboundPhoneNumberId: numRow.id })
-            .where(and(eq(agentsTable.id, insertedAgent.id), eq(agentsTable.userId, clerkId)));
+            .where(eq(agentsTable.id, insertedAgent.id));
           await logActivity({
             userId:       clerkId,
             eventType:    "phone_number.assigned",

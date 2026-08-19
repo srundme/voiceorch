@@ -22,6 +22,7 @@ Events: call.completed, call.failed`}
           </li>
           <li>
             <strong>Post-call notify</strong> — Agent Builder → Settings → one agent’s CRM URL after its calls
+            (optional custom JSON template)
           </li>
           <li>
             <strong>Form intake</strong> — Connections / Campaigns → website form → SnapServe → dial
@@ -36,6 +37,51 @@ Events: call.completed, call.failed`}
         </a>
         .
       </Callout>
+
+      <h2 id="post-call-notify">Post-call notify (one agent)</h2>
+      <p>
+        Agent Builder → Settings → Post-call notify POSTs JSON to <em>that</em> agent’s HTTPS URL when its
+        call ends. The default body is the inner <code>data</code> object below (camelCase) — not wrapped in{" "}
+        <code>event</code> / <code>timestamp</code>.
+      </p>
+      <p>
+        Optional <strong>JSON body template</strong>: map fields and nesting for your backend. Leave blank
+        to keep the default SnapServe schema. This does <strong>not</strong> change Developers event
+        subscriptions (other consumers keep the standard envelope).
+      </p>
+      <CodeBlock
+        language="json"
+        code={`{
+  "id": "{{callId}}",
+  "status": "{{status}}",
+  "transcript": "{{transcript}}",
+  "summary": "{{callSummary}}",
+  "data": "{{dispositionResult}}"
+}`}
+      />
+      <ul>
+        <li>
+          Quoted <code>{"{{path}}"}</code> becomes a typed JSON value (numbers stay numbers; objects nest).
+        </li>
+        <li>
+          Paths are camelCase (<code>callId</code>, <code>dispositionResult.outcome</code>). Snake_case
+          aliases like <code>call_id</code> also work.
+        </li>
+        <li>Missing paths become <code>null</code>.</li>
+        <li>
+          HMAC (<code>X-SnapServe-Signature</code>) is computed over the body we actually POST.
+        </li>
+        <li>
+          Invalid JSON after substitution: we send the default payload and set{" "}
+          <code>X-SnapServe-Payload: default</code> (otherwise <code>custom</code>).
+        </li>
+      </ul>
+      <p>
+        Useful keys: <code>callId</code>, <code>agentId</code>, <code>status</code>, <code>fromNumber</code>,{" "}
+        <code>toNumber</code>, <code>durationSeconds</code>, <code>transcript</code>, <code>callSummary</code>,{" "}
+        <code>dispositionResult</code>, <code>recordingUrl</code>, <code>campaignLeadId</code>,{" "}
+        <code>createdAt</code>, <code>endedAt</code>.
+      </p>
 
       <h2 id="events">Events</h2>
       <div className="not-prose my-4 overflow-x-auto rounded-xl border border-slate-200">
@@ -53,7 +99,7 @@ Events: call.completed, call.failed`}
               ["call.ended", "Legacy alias — still matched when we send call.completed"],
             ].map(([e, w]) => (
               <tr key={e} className="border-b border-slate-100 last:border-0">
-                <td className="px-4 py-3 font-mono text-xs text-sky-700">{e}</td>
+                <td className="px-4 py-3 font-mono text-xs text-slate-800">{e}</td>
                 <td className="px-4 py-3 text-muted-foreground">{w}</td>
               </tr>
             ))}

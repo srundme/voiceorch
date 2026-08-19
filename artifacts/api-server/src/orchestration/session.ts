@@ -1,6 +1,6 @@
-import { createHmac, createHash, randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
-import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, eventTypesTable, scheduledCallbacksTable, campaignsTable, executionLogsTable, squadsTable, squadRunsTable, phoneNumbersTable } from "@workspace/db";
+import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, leadNotesTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, eventTypesTable, scheduledCallbacksTable, campaignsTable, executionLogsTable, squadsTable, squadRunsTable, phoneNumbersTable } from "@workspace/db";
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
 import { computeProRataDebitCents, isNonBillableCallStatus } from "../services/call-billing.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode, resolveOwnTelephonyDiscount } from "../services/minute-rates.js";
@@ -8,7 +8,7 @@ import { resolvePartnerBilling, creditPartnerSpreadOnCall } from "../services/pa
 import { getAttachedSourceIds, buildKnowledgeBaseBlockEx } from "./kb-retrieval.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { decryptKey } from "../lib/crypto.js";
-import { eq, and, sql, inArray, or, gt, ne, lte, isNull } from "drizzle-orm";
+import { eq, and, sql, inArray, or, gt, ne, lte, isNull, desc } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
 import { optionalMs } from "./stt-tuning.js";
 import type { VoiceSession } from "./voice-session.js";
@@ -58,6 +58,11 @@ import {
   dispatchWebhooks,
   flatDispositionFromTaxonomy,
 } from "../routes/webhook-endpoints.js";
+import {
+  buildAgentNotifyHeaders,
+  readWebhookPayloadTemplate,
+  serializeAgentWebhookBody,
+} from "../lib/webhook-payload-template.js";
 import { computeOperationalOutcome, setOperationalOutcome } from "../services/operational-outcome.js";
 import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
@@ -926,10 +931,22 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         })
       : Promise.resolve(null),
 
-    // 2. Campaign lead variables
+    // 2. Campaign lead variables + recent operator notes
     params.campaignLeadId
       ? db.select().from(campaignLeadsTable).where(eq(campaignLeadsTable.id, params.campaignLeadId))
-          .then(([lead]) => lead ?? null)
+          .then(async ([lead]) => {
+            if (!lead) return null;
+            const notes = await db.select({ body: leadNotesTable.body })
+              .from(leadNotesTable)
+              .where(eq(leadNotesTable.leadId, lead.id))
+              .orderBy(desc(leadNotesTable.createdAt))
+              .limit(5)
+              .catch((noteErr) => {
+                logger.warn({ campaignLeadId: params.campaignLeadId, noteErr }, "Failed to load lead notes — continuing without them");
+                return [] as Array<{ body: string }>;
+              });
+            return { ...lead, recentNotes: notes.map((n) => n.body).filter((b) => b?.trim()) };
+          })
           .catch((leadErr) => {
             logger.warn({ campaignLeadId: params.campaignLeadId, leadErr }, "Failed to load campaign lead — continuing without lead vars");
             return null;
@@ -1252,6 +1269,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     if (campaignLeadVars.name?.trim()) {
       if (!campaignLeadVars["customer_name"]) campaignLeadVars["customer_name"] = campaignLeadVars.name;
       if (!campaignLeadVars["caller_name"]) campaignLeadVars["caller_name"] = campaignLeadVars.name;
+    }
+    const recentNotes = (campaignLeadResult as { recentNotes?: string[] }).recentNotes;
+    if (Array.isArray(recentNotes) && recentNotes.length > 0 && !campaignLeadVars["operator_notes"]) {
+      campaignLeadVars["operator_notes"] = recentNotes.join(" | ");
     }
     logger.info({ campaignLeadId: params.campaignLeadId, phone: campaignLeadResult.phone }, "Campaign lead vars loaded into session");
 
@@ -3678,16 +3699,20 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             metadata: freshCall?.metadata ?? call.metadata ?? null,
           });
 
-          // 4. Agent webhook URL (Settings → Analytics) — full enriched payload
+          // 4. Agent webhook URL (Settings → Post-call notify) — default or custom JSON
           if (ag.webhookUrl) {
-            const bodyStr = JSON.stringify(webhookPayload);
-            const headers: Record<string, string> = { "Content-Type": "application/json" };
-            if (webhookSecret) {
-              headers["X-VoiceOrch-Signature"] =
-                "sha256=" + createHmac("sha256", webhookSecret).update(bodyStr, "utf8").digest("hex");
-              headers["X-SnapServe-Signature"] = headers["X-VoiceOrch-Signature"];
+            const serialized = serializeAgentWebhookBody(
+              readWebhookPayloadTemplate(agCfgForWebhook),
+              webhookPayload,
+            );
+            if (serialized.error) {
+              logger.warn(
+                { sessionId, error: serialized.error },
+                "Post-call notify template invalid — sending default payload",
+              );
             }
-            fetch(ag.webhookUrl, { method: "POST", headers, body: bodyStr }).catch((err) => {
+            const headers = buildAgentNotifyHeaders(serialized.bodyStr, serialized.mode, webhookSecret);
+            fetch(ag.webhookUrl, { method: "POST", headers, body: serialized.bodyStr }).catch((err) => {
               logger.error({ sessionId, webhookUrl: ag.webhookUrl, err }, "Webhook delivery failed");
             });
           }

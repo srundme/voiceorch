@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
@@ -10,9 +10,9 @@ import {
   Send, Phone, Settings2, Sparkles, Globe, Mic, Cpu, Ear, Speaker,
   Building2, CheckCircle2, Loader2, ChevronLeft, ChevronRight, Zap, UserCheck,
   PhoneForwarded, Voicemail, Calendar, ShieldCheck,
-  Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
+  Play, Volume2, FileText, BookOpen, Paperclip,
   PlusCircle, History, PhoneIncoming, Info, PhoneOutgoing, Star, Rocket, X,
-  PanelRightOpen, PanelRightClose, ArrowLeft,
+  PanelRightOpen, PanelRightClose, ArrowLeft, Headphones, UtensilsCrossed,
 } from "lucide-react";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { OutboundCallDialog } from "@/components/outbound-call-dialog";
@@ -28,6 +28,14 @@ import { AGENT_TIMEZONES } from "@/lib/agent-providers";
 import { getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import VibeSchedulingWizard from "./SchedulingWizard";
+import { VibeStudioNav } from "./studio-nav";
+import { parseStudioTab, writeVibeStudioUrl, type VibeStudioTab } from "./studio";
+import { VibeConnectPane } from "./connect-pane";
+import { VibeTestPane } from "./test-pane";
+
+const AgentEditorPanel = lazy(() =>
+  import("@/pages/agents/builder").then((m) => ({ default: m.AgentEditorPanel })),
+);
 
 /* ── types ─────────────────────────────────────────────────────────────────── */
 
@@ -79,8 +87,8 @@ const FEATURE_ICONS: Record<string, React.ElementType> = {
 };
 
 /* ── auth ──────────────────────────────────────────────────────────────────── */
-function getToken(): string | null {
-  try { return localStorage.getItem("voiceorch:session"); } catch { return null; }
+function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  return fetch(input, { ...init, credentials: "include" });
 }
 function uid() { return Math.random().toString(36).slice(2); }
 
@@ -263,7 +271,7 @@ const QUICK_SUGGESTIONS: QuickSuggestion[] = [
 async function previewVoice(voiceId: string, setPlaying: (id: string | null) => void) {
   setPlaying(voiceId);
   try {
-    const resp = await fetch("/api/voices/preview", {
+    const resp = await apiFetch("/api/voices/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ voice: voiceId, model: "sonic-3.5" }),
@@ -286,7 +294,6 @@ async function previewVoice(voiceId: string, setPlaying: (id: string | null) => 
 function VibeAmbientBg() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {/* Dark mode: SnapServe brand — pure black / zinc silk (no purple) */}
       <div className="absolute inset-0 hidden dark:block">
         <SilkAurora
           interactive={false}
@@ -300,24 +307,40 @@ function VibeAmbientBg() {
           accentColor="#e4e4e7"
           className="absolute inset-0 h-full min-h-0 w-full items-stretch bg-[#0a0a0a]"
         />
-        {/* Keep text readable — soft zinc scrim, brand-neutral */}
-        <div className="absolute inset-0 bg-[#0a0a0a]/50" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_65%_55%_at_50%_42%,rgba(10,10,10,0.5),transparent_72%)]" />
+        <div className="absolute inset-0 bg-[#0a0a0a]/45" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_0%,rgba(255,255,255,0.07),transparent_58%)]" />
+        <div className="absolute -top-24 left-1/2 h-[42vh] w-[70vw] max-w-[720px] -translate-x-1/2 rounded-full bg-teal-400/[0.06] blur-[120px]" />
       </div>
 
-      {/* Light mode: soft zinc wash matching app chrome */}
-      <div className="absolute inset-0 block dark:hidden bg-[hsl(220_20%_96%)]">
-        <DottedSurface className="opacity-50" />
+      <div className="absolute inset-0 block dark:hidden bg-[hsl(220_18%_97%)]">
+        <DottedSurface className="opacity-40" />
         <div
           aria-hidden
           className={cn(
             "absolute -top-10 left-1/2 size-full -translate-x-1/2 rounded-full",
-            "bg-[radial-gradient(ellipse_at_center,hsl(var(--foreground)/0.05),transparent_55%)]",
+            "bg-[radial-gradient(ellipse_at_center,hsl(var(--foreground)/0.04),transparent_55%)]",
             "blur-[40px]",
           )}
         />
-        <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 h-[55vh] w-[85vw] max-w-[900px] rounded-full bg-zinc-400/[0.06] blur-[110px]" />
-        <div className="absolute bottom-[-10%] right-[-6%] h-[40vh] w-[50vw] max-w-[600px] rounded-full bg-zinc-500/[0.05] blur-[90px]" />
+        <div className="absolute top-[-18%] left-1/2 -translate-x-1/2 h-[50vh] w-[80vw] max-w-[880px] rounded-full bg-teal-500/[0.07] blur-[110px]" />
+        <div className="absolute bottom-[-8%] right-[-8%] h-[38vh] w-[48vw] max-w-[560px] rounded-full bg-orange-400/[0.06] blur-[100px]" />
+      </div>
+    </div>
+  );
+}
+
+function VibeHeroMark() {
+  return (
+    <div className="relative mx-auto h-16 w-16">
+      <div className="absolute inset-0 rounded-[1.15rem] bg-foreground/10 blur-2xl" />
+      <div className="relative flex h-16 w-16 items-end justify-center gap-[3px] rounded-[1.15rem] border border-border/50 bg-card/80 pb-[1.15rem] shadow-[0_8px_32px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:bg-card/50">
+        {[10, 16, 22, 14, 18].map((h, i) => (
+          <span
+            key={i}
+            className="voice-bar w-[3px] rounded-full bg-foreground/85"
+            style={{ height: h, animationDelay: `${i * 0.12}s` }}
+          />
+        ))}
       </div>
     </div>
   );
@@ -365,6 +388,7 @@ export default function VibePage() {
   const [callDialogOpen, setCallDialogOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [slowThink, setSlowThink] = useState(false);
+  const [studio, setStudio] = useState<VibeStudioTab>(() => parseStudioTab());
 
   const phaseRef    = useRef<string>("idle");
   const chatEndRef  = useRef<HTMLDivElement>(null);
@@ -462,8 +486,6 @@ export default function VibePage() {
     // Check whether there is anything to poll before starting the loop
     if (!vibeKbSources.some(s => NON_TERMINAL.has(s.status))) return;
 
-    const token = localStorage.getItem("voiceorch:session");
-    const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
     let active = true;
     let tid: ReturnType<typeof setTimeout>;
 
@@ -478,7 +500,7 @@ export default function VibePage() {
         const fetched = await Promise.all(
           pending.map(async s => {
             try {
-              const r = await fetch(`/api/knowledge-sources/${s.id}`, { headers: authHeaders });
+              const r = await apiFetch(`/api/knowledge-sources/${s.id}`);
               if (r.ok) return (await r.json()) as { id: number; status: string };
             } catch { /* transient network error — retry next tick */ }
             return null;
@@ -503,8 +525,8 @@ export default function VibePage() {
             void Promise.all(
               updates
                 .filter(u => TERMINAL_OK.has(u.status))
-                .map(u => fetch(`/api/knowledge-sources/${u.id}/attach-agent/${agentId}`, {
-                  method: "POST", headers: authHeaders,
+                .map(u => apiFetch(`/api/knowledge-sources/${u.id}/attach-agent/${agentId}`, {
+                  method: "POST",
                 }).catch(() => {}))
             );
           }
@@ -528,11 +550,9 @@ export default function VibePage() {
     const TERMINAL_OK = new Set(["active", "ready", "partial"]);
     const terminal = vibeKbSourcesRef.current.filter(s => TERMINAL_OK.has(s.status));
     if (!terminal.length) return;
-    const token = localStorage.getItem("voiceorch:session");
-    const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
     void Promise.all(
-      terminal.map(s => fetch(`/api/knowledge-sources/${s.id}/attach-agent/${createdId}`, {
-        method: "POST", headers: authHeaders,
+      terminal.map(s => apiFetch(`/api/knowledge-sources/${s.id}/attach-agent/${createdId}`, {
+        method: "POST",
       }).catch(() => {}))
     );
   }, [createdId]);
@@ -540,10 +560,7 @@ export default function VibePage() {
   // ── Load draft sessions for new builds (refine loads its own filtered list)
   useEffect(() => {
     if (refineId) return;
-    const token = getToken();
-    fetch("/api/vibe/sessions", {
-      headers: { Authorization: `Bearer ${token ?? ""}` },
-    })
+    apiFetch("/api/vibe/sessions")
       .then(r => r.ok ? r.json() : [])
       .then((list: SessionSummary[]) => {
         if (Array.isArray(list) && list.length > 0) setSessions(list);
@@ -555,21 +572,12 @@ export default function VibePage() {
   useEffect(() => {
     if (!refineId) return;
     setRefineLoading(true);
-    const token = getToken();
 
     Promise.all([
-      fetch(`/api/agents/${refineId}`, {
-        headers: { Authorization: `Bearer ${token ?? ""}` },
-      }).then(r => r.ok ? r.json() : null),
-      fetch(`/api/disposition/config/${refineId}`, {
-        headers: { Authorization: `Bearer ${token ?? ""}` },
-      }).then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch(`/api/vibe/sessions?agentId=${refineId}`, {
-        headers: { Authorization: `Bearer ${token ?? ""}` },
-      }).then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch(`/api/phone-numbers`, {
-        headers: { Authorization: `Bearer ${token ?? ""}` },
-      }).then(r => r.ok ? r.json() : null).catch(() => null),
+      apiFetch(`/api/agents/${refineId}`).then(r => r.ok ? r.json() : null),
+      apiFetch(`/api/disposition/config/${refineId}`).then(r => r.ok ? r.json() : null).catch(() => null),
+      apiFetch(`/api/vibe/sessions?agentId=${refineId}`).then(r => r.ok ? r.json() : []).catch(() => []),
+      apiFetch(`/api/phone-numbers`).then(r => r.ok ? r.json() : null).catch(() => null),
     ])
       .then(([agent, dispositionsData, sessionList, phoneNumbersData]: [Record<string, unknown> | null, unknown, SessionSummary[], unknown]) => {
         if (Array.isArray(sessionList) && sessionList.length > 0) {
@@ -869,14 +877,13 @@ export default function VibePage() {
     setPhase("thinking");
 
     const history = [...historyRef.current, { role: "user" as const, content: text }];
-    const token   = getToken();
 
     // Create a new session on the first message of a new conversation
     if (activeSessionIdRef.current === null) {
       try {
-        const sResp = await fetch("/api/vibe/sessions", {
+        const sResp = await apiFetch("/api/vibe/sessions", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token ?? ""}` },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ agentId: refineId ?? null, title: text.slice(0, 70) }),
         });
         if (sResp.ok) {
@@ -904,9 +911,9 @@ export default function VibePage() {
       streamHadError = false;
       let wantRetry = false;
 
-      const resp = await fetch("/api/agents/vibe-chat", {
+      const resp = await apiFetch("/api/agents/vibe-chat", {
         method:  "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token ?? ""}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages:        history,
           voicesShown:     voicesRef.current.shown,
@@ -1081,17 +1088,15 @@ export default function VibePage() {
               queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
               // Link the active session to the newly created agent (covers both new-agent and refine)
               if (activeSessionIdRef.current !== null) {
-                fetch(`/api/vibe/sessions/${activeSessionIdRef.current}`, {
+                apiFetch(`/api/vibe/sessions/${activeSessionIdRef.current}`, {
                   method: "PATCH",
-                  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${getToken() ?? ""}` },
+                  headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ agentId: evt.agentId }),
                 }).catch(() => {});
               }
               if (refineId != null) {
                 // Refine mode: fetch fresh state, sync preview + ref, then re-enable input.
-                fetch(`/api/agents/${evt.agentId as number}`, {
-                  headers: { Authorization: `Bearer ${getToken() ?? ""}` },
-                })
+                apiFetch(`/api/agents/${evt.agentId as number}`)
                   .then(r => r.ok ? r.json() : null)
                   .then((fresh: Record<string, unknown> | null) => {
                     if (!fresh || !refineBaseRef.current) return;
@@ -1134,9 +1139,7 @@ export default function VibePage() {
                   const path = window.location.pathname;
                   window.history.replaceState({}, "", `${path}?refine=${newId}`);
                 } catch { /* ignore */ }
-                fetch(`/api/agents/${newId}`, {
-                  headers: { Authorization: `Bearer ${getToken() ?? ""}` },
-                })
+                apiFetch(`/api/agents/${newId}`)
                   .then(r => r.ok ? r.json() : null)
                   .then((a: Record<string, unknown> | null) => {
                     if (!a) return;
@@ -1239,9 +1242,9 @@ export default function VibePage() {
       // Fire-and-forget: save the completed user+assistant turn to the session
       const sid = activeSessionIdRef.current;
       if (sid !== null && aiReply) {
-        fetch(`/api/vibe/sessions/${sid}/messages`, {
+        apiFetch(`/api/vibe/sessions/${sid}/messages`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token ?? ""}` },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ messages: [
             { role: "user",      content: text },
             { role: "assistant", content: aiReply },
@@ -1278,14 +1281,10 @@ export default function VibePage() {
     const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
     setUrlInputOpen(false);
     setUrlInputValue("");
-    const token = localStorage.getItem("voiceorch:session");
-    const authHeaders: Record<string, string> = {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
+    const authHeaders: Record<string, string> = { "Content-Type": "application/json" };
     let sourceId: number | null = null;
     try {
-      const r = await fetch("/api/knowledge-sources", {
+      const r = await apiFetch("/api/knowledge-sources", {
         method: "POST",
         headers: authHeaders,
         body: JSON.stringify({ type: "website", name: url, url }),
@@ -1322,9 +1321,6 @@ export default function VibePage() {
       return;
     }
 
-    const token = localStorage.getItem("voiceorch:session");
-    const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-
     // Show a pending card immediately while uploading
     const tempId = Date.now(); // safe: DB IDs are small integers
     setVibeKbSources(prev => [...prev, { id: tempId, name: file.name, type: "file", status: "processing" }]);
@@ -1333,9 +1329,8 @@ export default function VibePage() {
       const form = new FormData();
       form.append("file", file);
       form.append("name", file.name);
-      const r = await fetch("/api/knowledge-sources/upload", {
+      const r = await apiFetch("/api/knowledge-sources/upload", {
         method: "POST",
-        headers: authHeaders,
         body: form,
       });
       if (r.ok) {
@@ -1362,11 +1357,8 @@ export default function VibePage() {
   }, [send]);
 
   const loadHistorySession = useCallback(async (id: number) => {
-    const token = getToken();
     try {
-      const resp = await fetch(`/api/vibe/sessions/${id}/messages`, {
-        headers: { Authorization: `Bearer ${token ?? ""}` },
-      });
+      const resp = await apiFetch(`/api/vibe/sessions/${id}/messages`);
       if (!resp.ok) return;
       const msgs = await resp.json() as { id: number; role: string; content: string; createdAt: string }[];
       const chatMsgs: ChatMsg[] = msgs.map(m => ({
@@ -1452,6 +1444,16 @@ export default function VibePage() {
     [fields, callFlowNotes, dispositions, phase, refineId],
   );
 
+  const studioAgentId = lastSavedAgentId ?? createdId ?? refineId;
+  const openStudio = useCallback((tab: VibeStudioTab, section?: string) => {
+    setStudio(tab);
+    writeVibeStudioUrl({
+      studio: tab,
+      refineId: lastSavedAgentId ?? createdId ?? refineId,
+      section: section ?? null,
+    });
+  }, [lastSavedAgentId, createdId, refineId]);
+
   // Auto-name drafts once we know the agent / company — "Sruthi · SRM"
   useEffect(() => {
     const name = fields.find(f => f.key === "name")?.value?.trim();
@@ -1463,10 +1465,9 @@ export default function VibePage() {
     setDraftTitle(title);
     const sid = activeSessionIdRef.current;
     if (sid == null) return;
-    const token = getToken();
-    fetch(`/api/vibe/sessions/${sid}`, {
+    apiFetch(`/api/vibe/sessions/${sid}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title }),
     }).catch(() => {});
     setSessions(prev => prev.map(s => s.id === sid ? { ...s, title } : s));
@@ -1509,9 +1510,10 @@ export default function VibePage() {
     );
 
     if (isLanding) {
+      const attachDisabled = phase === "building" || phase === "thinking" || phase === "streaming" || isThinking;
       return (
         <div className="relative w-full group vibe-input-glow rounded-[26px]">
-          <div className="relative rounded-[26px] border border-border/30 bg-card/60 dark:bg-card/50 backdrop-blur-2xl shadow-[0_8px_40px_rgba(0,0,0,0.2)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.45)] transition-all group-focus-within:border-border/50">
+          <div className="relative rounded-[26px] border border-border/40 bg-card/70 dark:bg-card/55 backdrop-blur-2xl shadow-[0_12px_48px_rgba(0,0,0,0.12)] dark:shadow-[0_12px_48px_rgba(0,0,0,0.45)] transition-all group-focus-within:border-border/70">
             <Textarea
               ref={chatInputRef}
               value={input}
@@ -1526,21 +1528,44 @@ export default function VibePage() {
               }
               disabled={phase === "building" || phase === "thinking" || phase === "streaming"}
               rows={3}
-              className="resize-none border-0 bg-transparent text-[15px] leading-relaxed rounded-[26px] rounded-b-none px-5 pt-5 pb-2 min-h-[88px] placeholder:text-muted-foreground/45 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+              className="resize-none border-0 bg-transparent text-[15px] leading-relaxed rounded-[26px] rounded-b-none px-5 pt-5 pb-2 min-h-[96px] placeholder:text-muted-foreground/45 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
             />
-            <div className="flex items-center justify-between gap-4 border-t border-border/25 px-4 pt-3 pb-3.5">
-              <p className="text-[12px] text-muted-foreground pl-1 min-w-0 truncate">
-                Tip: write like you&apos;re texting a friend
-              </p>
+            <div className="flex items-center justify-between gap-3 border-t border-border/25 px-3 pt-2.5 pb-3">
+              <div className="flex items-center gap-0.5 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => { setUrlInputOpen(v => !v); setUrlInputValue(""); }}
+                  disabled={attachDisabled}
+                  title="Add a website for the knowledge base"
+                  className={cn(
+                    "flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground disabled:opacity-30",
+                    urlInputOpen && "bg-muted text-foreground",
+                  )}
+                >
+                  <Globe className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={attachDisabled}
+                  title="Upload a document for the knowledge base"
+                  className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground disabled:opacity-30"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </button>
+                <p className="hidden sm:block text-[12px] text-muted-foreground pl-1.5 min-w-0 truncate">
+                  Tip: write like you&apos;re briefing a colleague
+                </p>
+              </div>
               <Button
                 size="icon"
                 onClick={() => send()}
                 disabled={!canSend}
                 aria-label="Start building"
                 className={cn(
-                  "h-10 w-10 rounded-full transition-all duration-200 shrink-0",
+                  "h-10 w-10 rounded-full transition-all duration-200 shrink-0 cursor-pointer",
                   canSend
-                    ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:scale-105"
+                    ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:scale-[1.03]"
                     : "bg-muted text-muted-foreground",
                 )}
               >
@@ -1655,7 +1680,7 @@ export default function VibePage() {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   onClick={() => void loadHistorySession(sessions[0]!.id)}
-                  className="mb-8 w-full text-left rounded-2xl border border-border/60 bg-card/50 backdrop-blur-md px-4 py-3.5 hover:bg-card/80 hover:border-border transition-colors"
+                  className="mb-8 w-full cursor-pointer text-left rounded-2xl border border-border/60 bg-card/60 backdrop-blur-md px-4 py-3.5 hover:bg-card hover:border-border hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition-all"
                 >
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Continue where you left off
@@ -1674,31 +1699,29 @@ export default function VibePage() {
               )}
 
               <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
+                initial={{ opacity: 0, scale: 0.92 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.45 }}
-                className="mb-6"
+                transition={{ duration: 0.4 }}
+                className="mb-7"
               >
-                <div className="h-14 w-14 rounded-2xl border border-border/40 bg-card/50 backdrop-blur-xl flex items-center justify-center mx-auto">
-                  <Sparkles className="h-6 w-6 text-foreground/80" />
-                </div>
+                <VibeHeroMark />
               </motion.div>
 
               <motion.h1
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.45, delay: 0.05 }}
-                className="font-display text-3xl sm:text-4xl md:text-[2.75rem] font-semibold tracking-tight leading-[1.15] text-foreground"
+                className="font-display text-[2rem] sm:text-4xl md:text-[2.85rem] font-semibold tracking-tight leading-[1.12] text-foreground"
               >
                 {welcomeName ? (
                   <>
-                    <span className="block text-muted-foreground font-normal text-xl sm:text-2xl mb-1">
+                    <span className="block text-muted-foreground font-medium text-lg sm:text-xl mb-1.5">
                       Hi {welcomeName.split(" ")[0]}
                     </span>
-                    Create your calling agent
+                    Describe the agent. We&apos;ll build it.
                   </>
                 ) : (
-                  <>Create your calling agent</>
+                  <>Describe the agent. We&apos;ll build it.</>
                 )}
               </motion.h1>
 
@@ -1708,7 +1731,7 @@ export default function VibePage() {
                 transition={{ duration: 0.4, delay: 0.1 }}
                 className="mt-3 text-[15px] text-muted-foreground leading-relaxed max-w-md"
               >
-                Just describe what you need in plain words. We&apos;ll set up the voice, language, and script for you.
+                Voice, tools, connections, and live testing — all in one builder, not a settings maze.
               </motion.p>
 
               <motion.div
@@ -1726,27 +1749,34 @@ export default function VibePage() {
                 transition={{ duration: 0.4, delay: 0.25 }}
                 className="mt-8 w-full"
               >
-                <p className="text-[11px] text-muted-foreground/70 mb-3">
-                  Or tap an example to start
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80 mb-3">
+                  Start from an example
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left">
                   {[
-                    { title: "Answer customer calls", desc: "Support & FAQs", msg: QUICK_SUGGESTIONS[0]!.message },
-                    { title: "Book appointments", desc: "Clinic or salon", msg: QUICK_SUGGESTIONS[2]!.message },
-                    { title: "Follow up sales leads", desc: "Calls people who enquired", msg: QUICK_SUGGESTIONS[1]!.message },
-                    { title: "Take restaurant bookings", desc: "Tables & timings", msg: QUICK_SUGGESTIONS[4]!.message },
+                    { title: "Answer customer calls", desc: "Support & FAQs", icon: Headphones, msg: QUICK_SUGGESTIONS[0]!.message },
+                    { title: "Book appointments", desc: "Clinic or salon", icon: Calendar, msg: QUICK_SUGGESTIONS[2]!.message },
+                    { title: "Follow up sales leads", desc: "Calls people who enquired", icon: PhoneOutgoing, msg: QUICK_SUGGESTIONS[1]!.message },
+                    { title: "Take restaurant bookings", desc: "Tables & timings", icon: UtensilsCrossed, msg: QUICK_SUGGESTIONS[4]!.message },
                   ].map((ex, i) => (
                     <motion.button
                       key={ex.title}
                       type="button"
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.28 + i * 0.04 }}
+                      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ delay: 0.28 + i * 0.05, duration: 0.35 }}
                       onClick={() => send(ex.msg)}
-                      className="rounded-2xl border border-border/40 bg-card/30 backdrop-blur-md px-4 py-3.5 hover:border-border/70 hover:bg-card/50 transition-all text-left active:scale-[0.99]"
+                      className="group cursor-pointer rounded-2xl border border-border/50 bg-card/50 backdrop-blur-md px-4 py-3.5 text-left transition-all hover:border-border hover:bg-card/80 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] active:scale-[0.99]"
                     >
-                      <p className="text-[13px] font-semibold text-foreground">{ex.title}</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">{ex.desc}</p>
+                      <div className="flex items-start gap-3">
+                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/40 bg-background/70 text-muted-foreground transition-colors group-hover:text-foreground">
+                          <ex.icon className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0">
+                          <p className="text-[13px] font-semibold text-foreground">{ex.title}</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">{ex.desc}</p>
+                        </span>
+                      </div>
                     </motion.button>
                   ))}
                 </div>
@@ -1762,74 +1792,119 @@ export default function VibePage() {
           <VibeAmbientBg />
 
           {/* Floating header — keep chrome minimal for non-techies */}
-          <header className="relative z-10 flex items-center justify-between px-4 sm:px-6 min-h-16 py-2.5 shrink-0 border-b border-border/20 bg-background/60 backdrop-blur-xl">
-            <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 gap-1.5 rounded-full text-muted-foreground hover:text-foreground shrink-0 px-2.5"
-                onClick={() => navigate("/app/agents")}
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span className="text-sm font-medium">Back</span>
-              </Button>
-              <div className="hidden sm:block h-8 w-px shrink-0 bg-border/60" aria-hidden />
-              <div className="min-w-0 flex-1 max-w-lg">
-                <div className="flex items-center gap-2 min-w-0">
-                  <p className="font-semibold text-sm leading-none truncate">
-                    {draftTitle || (refineId ? "Improve your agent" : "Build your agent")}
-                  </p>
-                  {draftSavedFlash && (
-                    <span className="text-[10px] font-medium text-foreground/70 shrink-0 animate-in fade-in">
-                      Saved
-                    </span>
-                  )}
-                </div>
-                {phase !== "done" && (
-                  <div className="mt-2 flex items-center gap-2.5 min-w-0">
-                    <div className="flex-1 h-1 rounded-full bg-muted/60 overflow-hidden max-w-[180px]">
-                      <div
-                        className="h-full rounded-full bg-foreground/80 transition-all duration-500"
-                        style={{ width: `${Math.round((vibeProgress.doneCount / vibeProgress.steps.length) * 100)}%` }}
-                      />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      {vibeProgress.doneCount}/{vibeProgress.steps.length} · {vibeProgress.currentLabel}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1.5 rounded-full text-muted-foreground hover:text-foreground"
-                onClick={() => setSidebarOpen(v => !v)}
-                aria-label="Open saved drafts"
-              >
-                <History className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline text-xs">My drafts</span>
-                {sessions.length > 0 && (
-                  <span className="text-[10px] tabular-nums text-muted-foreground">({sessions.length})</span>
-                )}
-              </Button>
-              {previewWorthy && (
+          <header className="relative z-10 shrink-0 border-b border-border/20 bg-background/60 backdrop-blur-xl">
+            <div className="flex items-center justify-between px-4 sm:px-6 min-h-14 py-2 gap-2">
+              <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 gap-1.5 rounded-full text-muted-foreground hover:text-foreground"
-                  onClick={() => setPreviewOpen(v => !v)}
+                  className="h-9 gap-1.5 rounded-full text-muted-foreground hover:text-foreground shrink-0 px-2.5"
+                  onClick={() => navigate("/app/agents")}
                 >
-                  {previewOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
-                  <span className="hidden sm:inline text-xs">{previewOpen ? "Hide" : "Your agent"}</span>
+                  <ArrowLeft className="h-4 w-4" />
+                  <span className="text-sm font-medium">Back</span>
                 </Button>
-              )}
-              <ThemeToggle />
+                <div className="hidden sm:block h-8 w-px shrink-0 bg-border/60" aria-hidden />
+                <div className="min-w-0 flex-1 max-w-lg">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="font-semibold text-sm leading-none truncate">
+                      {draftTitle || (refineId ? "Improve your agent" : "Build your agent")}
+                    </p>
+                    {draftSavedFlash && (
+                      <span className="text-[10px] font-medium text-foreground/70 shrink-0 animate-in fade-in">
+                        Saved
+                      </span>
+                    )}
+                  </div>
+                  {phase !== "done" && studio === "chat" && (
+                    <div className="mt-2.5 flex items-center gap-2.5 min-w-0">
+                      <div className="flex items-center gap-1 min-w-0" aria-hidden>
+                        {vibeProgress.steps.map((s) => (
+                          <span
+                            key={s.id}
+                            title={s.label}
+                            className={cn(
+                              "h-1.5 w-4 sm:w-5 rounded-full transition-colors duration-300",
+                              s.done ? "bg-primary" : "bg-muted-foreground/25",
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {vibeProgress.currentLabel}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {studio === "chat" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 rounded-full text-muted-foreground hover:text-foreground"
+                    onClick={() => setSidebarOpen(v => !v)}
+                    aria-label="Open saved drafts"
+                  >
+                    <History className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline text-xs">My drafts</span>
+                    {sessions.length > 0 && (
+                      <span className="text-[10px] tabular-nums text-muted-foreground">({sessions.length})</span>
+                    )}
+                  </Button>
+                )}
+                {studio === "chat" && previewWorthy && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 rounded-full text-muted-foreground hover:text-foreground"
+                    onClick={() => setPreviewOpen(v => !v)}
+                  >
+                    {previewOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+                    <span className="hidden sm:inline text-xs">{previewOpen ? "Hide" : "Your agent"}</span>
+                  </Button>
+                )}
+                <ThemeToggle />
+              </div>
+            </div>
+            <div className="flex justify-center px-4 pb-2.5">
+              <VibeStudioNav
+                active={studio}
+                agentReady={studioAgentId != null}
+                onSelect={(tab) => openStudio(tab)}
+              />
             </div>
           </header>
 
+          {studio === "agent" && studioAgentId != null && (
+            <div className="relative z-10 flex min-h-0 flex-1 flex-col bg-background">
+              <Suspense fallback={<StudioPaneFallback label="Loading agent editor…" />}>
+                <AgentEditorPanel agentId={studioAgentId} embedded />
+              </Suspense>
+            </div>
+          )}
+
+          {studio === "connect" && studioAgentId != null && (
+            <div className="relative z-10 flex min-h-0 flex-1 flex-col bg-background">
+              <VibeConnectPane
+                agentId={studioAgentId}
+                onOpenAgentSection={(section) => openStudio("agent", section)}
+              />
+            </div>
+          )}
+
+          {studio === "test" && studioAgentId != null && (
+            <div className="relative z-10 flex min-h-0 flex-1 flex-col bg-background">
+              <VibeTestPane
+                agentId={studioAgentId}
+                agentName={createdName || draftTitle || "Agent"}
+                onPhoneCall={() => setCallDialogOpen(true)}
+              />
+            </div>
+          )}
+
+          {studio === "chat" && (
           <div className="relative z-10 flex flex-1 min-h-0">
             {(sidebarOpen || sessions.length > 0) && (
               <VibeSidebar
@@ -1940,9 +2015,9 @@ export default function VibePage() {
           )}>
 
             {/* Header */}
-            <div className="flex items-center justify-between px-6 h-14 shrink-0 border-b border-white/10 dark:border-white/10">
-              <div className="flex items-center gap-2.5">
-                <div className="h-7 w-7 rounded-lg bg-white/10 dark:bg-white/10 border border-white/10 flex items-center justify-center backdrop-blur-sm">
+            <div className="flex items-center justify-between px-5 h-14 shrink-0 border-b border-border/40">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="h-8 w-8 rounded-lg bg-muted/70 border border-border/40 flex items-center justify-center">
                   <Zap className="h-3.5 w-3.5 text-foreground/80" />
                 </div>
                 <div>
@@ -2000,7 +2075,7 @@ export default function VibePage() {
                   </Button>
                   {lastSavedAgentId != null && (
                     <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-lg bg-white/5 border-white/15"
-                      onClick={() => navigate(`/app/agents/${lastSavedAgentId}`)}>
+                      onClick={() => openStudio("agent")}>
                       <Settings2 className="h-3 w-3" /> Edit
                     </Button>
                   )}
@@ -2046,16 +2121,16 @@ export default function VibePage() {
               ) : postBuildStep === "hype" ? (
                 <HypePanel
                   name={createdName}
-                  agentId={(lastSavedAgentId ?? createdId)!}
                   fields={fields}
                   selectedVoice={selectedVoice}
-                  onTest={() => setShowTestCall(true)}
+                  onTest={() => openStudio("test")}
                   onSkip={() => setPostBuildStep("rating")}
                   onKeepEditing={() => {
                     chatInputRef.current?.focus();
                     chatInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
                   }}
-                  navigate={navigate}
+                  onOpenAgent={() => openStudio("agent")}
+                  onOpenConnect={() => openStudio("connect")}
                 />
               ) : postBuildStep === "rating" ? (
                 <RatingPanel
@@ -2069,8 +2144,8 @@ export default function VibePage() {
                     chatInputRef.current?.focus();
                     setPostBuildStep(null);
                   }}
-                  onTestAgain={() => setShowTestCall(true)}
-                  onLaunch={() => navigate(`/app/agents/${lastSavedAgentId ?? createdId}`)}
+                  onTestAgain={() => openStudio("test")}
+                  onLaunch={() => openStudio("test")}
                 />
               ) : !hasRightContent ? (
                 <EmptyState />
@@ -2267,7 +2342,7 @@ export default function VibePage() {
 
               {/* Done — only show in refine mode (new agents use hype/rating panels) */}
               {phase === "done" && createdId && postBuildStep === null && (
-                <DoneCard name={createdName} id={createdId} navigate={navigate} isUpdate={refineId != null} onTestWebCall={() => setShowTestCall(true)} />
+                <DoneCard name={createdName} id={createdId} onOpenAgent={() => openStudio("agent")} isUpdate={refineId != null} onTestWebCall={() => { setShowTestCall(true); openStudio("test"); }} />
               )}
             </div>
           )}
@@ -2275,12 +2350,13 @@ export default function VibePage() {
           </div>
           )}
 
-          </div>{/* flex row: chat + preview */}
+          </div>
+          )}
 
           {/* Outbound telephony call dialog */}
-          {lastSavedAgentId !== null && (
+          {studioAgentId != null && (
             <OutboundCallDialog
-              agentId={lastSavedAgentId}
+              agentId={studioAgentId}
               agentName={createdName || "Agent"}
               telephonyProvider={savedTelephonyProvider}
               open={callDialogOpen}
@@ -2291,6 +2367,15 @@ export default function VibePage() {
       )}
 
   </div>
+  );
+}
+
+function StudioPaneFallback({ label }: { label: string }) {
+  return (
+    <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" />
+      {label}
+    </div>
   );
 }
 
@@ -2314,8 +2399,8 @@ function MessageBubble({ msg, thinkingLabel = "Thinking…", selectedVoice, play
   if (!isAi) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-3xl rounded-br-md bg-foreground/[0.06] dark:bg-foreground/[0.08] px-4 py-3">
-          <p className="text-[15px] leading-relaxed text-foreground whitespace-pre-wrap">{msg.content}</p>
+        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-3 shadow-sm">
+          <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{msg.content}</p>
         </div>
       </div>
     );
@@ -2324,7 +2409,7 @@ function MessageBubble({ msg, thinkingLabel = "Thinking…", selectedVoice, play
   return (
     <div className="space-y-3">
       <div className="flex gap-3 items-start">
-        <div className="h-8 w-8 rounded-xl bg-card/60 border border-border/30 flex items-center justify-center shrink-0 overflow-hidden p-1.5">
+        <div className="h-8 w-8 rounded-xl bg-card border border-border/50 flex items-center justify-center shrink-0 overflow-hidden p-1.5 shadow-sm">
           <img src="/snapserve-icon.png" alt="" className="h-full w-full object-contain" />
         </div>
         <div className="flex-1 min-w-0 pt-0.5">
@@ -2634,15 +2719,15 @@ function Section({ title, badge, badgeVariant = "neutral", children }: {
 function FieldCard({ field }: { field: AgentField }) {
   const IconComp = FIELD_ICONS[field.icon] ?? Sparkles;
   return (
-    <div className="flex items-center gap-2.5 rounded-xl border vibe-glass-card px-3 py-2.5 animate-in fade-in duration-300">
-      <div className="h-6 w-6 rounded-md bg-white/10 dark:bg-white/10 flex items-center justify-center shrink-0">
-        <IconComp className="h-3 w-3 text-muted-foreground" />
+    <div className="flex items-center gap-2.5 rounded-xl border border-border/50 bg-card/60 px-3 py-2.5 animate-in fade-in duration-300">
+      <div className="h-7 w-7 rounded-lg bg-muted/70 flex items-center justify-center shrink-0">
+        <IconComp className="h-3.5 w-3.5 text-foreground/70" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{field.label}</p>
-        <p className="text-xs font-medium truncate mt-0.5">{field.value}</p>
+        <p className="text-[10px] text-muted-foreground font-medium">{field.label}</p>
+        <p className="text-xs font-semibold truncate mt-0.5">{field.value}</p>
       </div>
-      <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
     </div>
   );
 }
@@ -2710,33 +2795,29 @@ function DispositionRow({ d, i }: { d: DispositionCard; i: number }) {
 
 function EmptyState() {
   const items = [
-    "Name & company",
-    "Language & voice",
-    "What the agent says",
-    "Extra tools (optional)",
-    "Ready to call",
+    { label: "Name & company", icon: Building2 },
+    { label: "Language & voice", icon: Mic },
+    { label: "What the agent says", icon: FileText },
+    { label: "Extra tools (optional)", icon: Sparkles },
+    { label: "Ready to call", icon: Phone },
   ];
   return (
-    <div className="flex flex-col items-center justify-center min-h-full py-16 text-center gap-8">
-      <div className="relative">
-        <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-zinc-400/15 via-zinc-500/8 to-transparent blur-2xl scale-150" />
-        <div className="relative h-20 w-20 rounded-3xl border border-border/30 bg-card/30 backdrop-blur-xl flex items-center justify-center p-3">
-          <Sparkles className="h-8 w-8 text-muted-foreground/60" />
-        </div>
-      </div>
+    <div className="flex flex-col items-center justify-center min-h-full py-16 text-center gap-8 px-4">
+      <VibeHeroMark />
       <div className="max-w-xs">
-        <p className="font-display font-semibold text-lg">Your agent appears here</p>
+        <p className="font-display font-semibold text-lg tracking-tight">Your agent takes shape here</p>
         <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-          Just answer in the chat — no technical setup needed. We'll fill this side as you go.
+          Answer in the chat. We fill this panel as we go — no setup form.
         </p>
       </div>
       <div className="w-full max-w-xs space-y-2 text-left">
         {items.map((item, i) => (
-          <div key={item} className="flex items-center gap-2.5 text-xs text-muted-foreground">
-            <span className="h-5 w-5 rounded-full border border-border/50 flex items-center justify-center text-[10px] tabular-nums shrink-0">
-              {i + 1}
+          <div key={item.label} className="flex items-center gap-2.5 rounded-xl border border-border/40 bg-card/40 px-3 py-2 text-xs text-muted-foreground">
+            <span className="h-6 w-6 rounded-lg bg-muted/60 flex items-center justify-center shrink-0">
+              <item.icon className="h-3.5 w-3.5" />
             </span>
-            {item}
+            <span className="font-medium text-foreground/80">{item.label}</span>
+            <span className="ml-auto text-[10px] tabular-nums text-muted-foreground/70">{i + 1}</span>
           </div>
         ))}
       </div>
@@ -2932,15 +3013,15 @@ function VibeCalendarPanel({
 /*  HypePanel — celebratory screen shown right after agent creation            */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
-function HypePanel({ name, fields, selectedVoice, onTest, onSkip, onKeepEditing, navigate, agentId }: {
+function HypePanel({ name, fields, selectedVoice, onTest, onSkip, onKeepEditing, onOpenAgent, onOpenConnect }: {
   name: string;
-  agentId: number;
   fields: { key: string; label: string; value: string }[];
   selectedVoice: string | null;
   onTest: () => void;
   onSkip: () => void;
   onKeepEditing: () => void;
-  navigate: (to: string) => void;
+  onOpenAgent: () => void;
+  onOpenConnect: () => void;
 }) {
   const direction = fields.find(f => f.key === "direction")?.value;
   const language  = fields.find(f => f.key === "language")?.value;
@@ -2954,9 +3035,9 @@ function HypePanel({ name, fields, selectedVoice, onTest, onSkip, onKeepEditing,
 
   const checklist = [
     "System prompt written and ready",
-    "Voice selected and configured",
-    "Call flow and dispositions set",
-    "Agent is live — test calls work now",
+    "Voice, tools, and outcomes live in Agent",
+    "Connect phone, WhatsApp, and calendar here",
+    "Test a web call without leaving Vibe",
   ];
 
   return (
@@ -3068,21 +3149,24 @@ function HypePanel({ name, fields, selectedVoice, onTest, onSkip, onKeepEditing,
         </Button>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="flex-1 gap-1.5 rounded-xl text-xs"
+            onClick={onOpenAgent}>
+            <Settings2 className="h-3.5 w-3.5" /> Open agent
+          </Button>
+          <Button variant="outline" size="sm" className="flex-1 gap-1.5 rounded-xl text-xs"
+            onClick={onOpenConnect}>
+            Connect
+          </Button>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" className="flex-1 gap-1.5 rounded-xl text-xs"
             onClick={onKeepEditing}>
-            <Sparkles className="h-3.5 w-3.5" /> Keep editing in chat
+            <Sparkles className="h-3.5 w-3.5" /> Keep chatting
           </Button>
           <Button variant="ghost" size="sm" className="flex-1 gap-1.5 rounded-xl text-xs text-muted-foreground"
             onClick={onSkip}>
             Skip to launch →
           </Button>
         </div>
-        <button
-          type="button"
-          className="text-[11px] text-muted-foreground/70 hover:text-muted-foreground underline-offset-2 hover:underline"
-          onClick={() => navigate(`/app/agents/${agentId}`)}
-        >
-          Open full editor
-        </button>
       </motion.div>
     </motion.div>
   );
@@ -3187,10 +3271,10 @@ function RatingPanel({ name, agentId, rating, onRate, comment, onComment, onRefi
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
-function DoneCard({ name, id, navigate, isUpdate, onTestWebCall }: {
+function DoneCard({ name, onOpenAgent, isUpdate, onTestWebCall }: {
   name: string;
   id: number;
-  navigate: (to: string) => void;
+  onOpenAgent: () => void;
   isUpdate?: boolean;
   onTestWebCall: () => void;
 }) {
@@ -3203,19 +3287,15 @@ function DoneCard({ name, id, navigate, isUpdate, onTestWebCall }: {
       </div>
       <div>
         <p className="font-semibold"><span className="text-emerald-400">{name}</span> {isUpdate ? "updated" : "is live"}</p>
-        <p className="text-xs text-muted-foreground mt-1">Providers configured · System prompt ready · Dispositions set</p>
+        <p className="text-xs text-muted-foreground mt-1">Stay in Vibe — edit the agent, connect channels, or test a call.</p>
       </div>
       <div className="flex flex-wrap gap-2 justify-center">
         <Button size="sm" className="gap-1.5 rounded-xl" onClick={onTestWebCall}>
           <Phone className="h-3.5 w-3.5" /> Test Web Call
         </Button>
         <Button size="sm" variant="outline" className="gap-1.5 rounded-xl"
-          onClick={() => navigate(`/app/agents/${id}`)}>
-          <Settings2 className="h-3.5 w-3.5" /> Edit agent <ArrowUpRight className="h-3 w-3" />
-        </Button>
-        <Button size="sm" variant="ghost" className="gap-1.5 rounded-xl"
-          onClick={() => navigate(`/app/vibe?refine=${id}`)}>
-          <Sparkles className="h-3.5 w-3.5" /> Refine with AI
+          onClick={onOpenAgent}>
+          <Settings2 className="h-3.5 w-3.5" /> Open agent
         </Button>
       </div>
     </div>

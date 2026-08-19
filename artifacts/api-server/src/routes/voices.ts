@@ -13,6 +13,7 @@ import { decryptKey } from "../lib/crypto.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { createTTSAdapter } from "../orchestration/adapters/tts/index.js";
 import { isSarvamCatalogSpeaker } from "../orchestration/adapters/tts/sarvam.js";
+import { resolveCartesiaModelId } from "../orchestration/adapters/tts/cartesia.js";
 import { pcmToWav } from "../orchestration/audio.js";
 
 const router: IRouter = Router();
@@ -477,14 +478,6 @@ router.delete("/voices/mine/:id", requireAuth, async (req, res): Promise<void> =
 
 // ── POST /voices/preview ─────────────────────────────────────────────────────
 
-const PREVIEW_VALID_MODELS = new Set([
-  "sonic-3.5", "sonic-3.5-2026-05-04", "sonic-latest",
-  "sonic-3", "sonic-3-2026-01-12", "sonic-3-latest",
-  "sonic-2", "sonic-2-2025-03-07", "sonic-2-2025-04-16", "sonic-2-2025-05-08", "sonic-2-2025-06-11",
-  "sonic-turbo", "sonic-turbo-2025-03-07", "sonic-turbo-2025-06-04",
-  "sonic-english", "sonic-multilingual",
-]);
-
 const DEFAULT_PREVIEW_TEXT =
   "Hello! I am your AI voice assistant. I am here to help you today. How can I assist you?";
 
@@ -504,7 +497,7 @@ async function previewCartesia(
     return;
   }
 
-  const model = (modelId && PREVIEW_VALID_MODELS.has(modelId)) ? modelId : "sonic-3.5";
+  const model = resolveCartesiaModelId(modelId);
 
   const response = await fetch(`${CARTESIA_BASE_URL}/tts/bytes`, {
     method: "POST",

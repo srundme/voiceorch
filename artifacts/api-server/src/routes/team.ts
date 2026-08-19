@@ -1,42 +1,51 @@
 import { Router, type IRouter } from "express";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, teamMembersTable, usersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getAuth } from "../lib/auth-compat.js";
 import { logger } from "../lib/logger.js";
 import { sendBrevoEmail } from "../services/brevo.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
+import { ensureTeamMembersTable, claimPendingTeamInvites } from "../services/workspace-scope.js";
+import { randomBytes } from "node:crypto";
 
 const router: IRouter = Router();
 
-let tableEnsured = false;
+function newTeamInviteToken(): string {
+  return randomBytes(24).toString("hex");
+}
 
-async function ensureTeamMembersTable(): Promise<void> {
-  if (tableEnsured) return;
-  try {
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS team_members (
-        id SERIAL PRIMARY KEY,
-        owner_user_id TEXT NOT NULL,
-        member_user_id TEXT,
-        email TEXT NOT NULL,
-        name TEXT,
-        role TEXT NOT NULL DEFAULT 'member',
-        status TEXT NOT NULL DEFAULT 'pending',
-        invited_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        joined_at TIMESTAMPTZ
-      );
-    `);
-    tableEnsured = true;
-  } catch (err) {
-    logger.warn({ err }, "Failed to ensure team_members table");
+async function ensureInviteToken(row: { id: number; token: string | null }): Promise<string> {
+  if (row.token && row.token.length >= 24) return row.token;
+  const token = newTeamInviteToken();
+  await db.update(teamMembersTable).set({ token }).where(eq(teamMembersTable.id, row.id));
+  return token;
+}
+
+async function findInvite(opts: { token?: string; teamId?: number }) {
+  const token = (opts.token ?? "").trim();
+  if (token.length >= 24) {
+    const [byToken] = await db
+      .select()
+      .from(teamMembersTable)
+      .where(eq(teamMembersTable.token, token));
+    if (byToken) return byToken;
   }
+  const teamId = opts.teamId;
+  if (typeof teamId === "number" && Number.isFinite(teamId) && teamId > 0) {
+    const [byId] = await db
+      .select()
+      .from(teamMembersTable)
+      .where(eq(teamMembersTable.id, teamId));
+    return byId ?? null;
+  }
+  return null;
 }
 
 async function dispatchInviteEmail(
   email: string,
   ownerUserId: string,
-  teamMemberId: number,
+  inviteToken: string,
   role: string,
 ): Promise<void> {
   const [inviter] = await db
@@ -46,7 +55,7 @@ async function dispatchInviteEmail(
 
   const inviterName = inviter?.name || inviter?.email?.split("@")[0] || "A colleague";
   const appBase = process.env["APP_BASE_URL"]?.replace(/\/$/, "") || getSelfBaseUrl();
-  const inviteUrl = `${appBase}/app/join?teamId=${teamMemberId}`;
+  const inviteUrl = `${appBase}/app/join?token=${inviteToken}`;
   const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
 
   const htmlContent = `
@@ -94,7 +103,7 @@ async function dispatchInviteEmail(
     undefined,
     { emailType: "team_invite" },
   );
-  logger.info({ email, ownerUserId, teamMemberId }, "Team invite email dispatched via Brevo");
+  logger.info({ email, ownerUserId }, "Team invite email dispatched via Brevo");
 }
 
 /**
@@ -116,7 +125,36 @@ router.get("/team/members", requireAuth, async (req, res): Promise<void> => {
       .from(teamMembersTable)
       .where(eq(teamMembersTable.ownerUserId, userId));
 
-    res.json(members);
+    if (members.length > 0) {
+      res.json(members);
+      return;
+    }
+
+    // Teammate view: show the workspace they joined, not an empty owner list.
+    const [me] = await db
+      .select({ email: usersTable.email })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, userId));
+    await claimPendingTeamInvites(userId, me?.email);
+
+    const [membership] = await db
+      .select()
+      .from(teamMembersTable)
+      .where(and(
+        eq(teamMembersTable.memberUserId, userId),
+        eq(teamMembersTable.status, "active"),
+      ));
+
+    if (!membership) {
+      res.json([]);
+      return;
+    }
+
+    const workspace = await db
+      .select()
+      .from(teamMembersTable)
+      .where(eq(teamMembersTable.ownerUserId, membership.ownerUserId));
+    res.json(workspace);
   } catch (err) {
     logger.error({ err }, "Failed to fetch team members");
     res.status(500).json({ error: "Internal server error" });
@@ -175,8 +213,9 @@ router.post("/team/invite", requireAuth, async (req, res): Promise<void> => {
         .where(eq(teamMembersTable.id, existing.id))
         .returning();
 
+      const inviteToken = await ensureInviteToken(existing);
       try {
-        await dispatchInviteEmail(cleanEmail, ownerUserId, existing.id, memberRole);
+        await dispatchInviteEmail(cleanEmail, ownerUserId, inviteToken, memberRole);
       } catch (emailErr) {
         logger.warn({ emailErr, cleanEmail }, "Failed to re-send team invite email via Brevo");
       }
@@ -201,12 +240,13 @@ router.post("/team/invite", requireAuth, async (req, res): Promise<void> => {
         role: memberRole,
         status: existingUser ? "active" : "pending",
         joinedAt: existingUser ? new Date() : null,
+        token: newTeamInviteToken(),
       })
       .returning();
 
     // Dispatch email invitation
     try {
-      await dispatchInviteEmail(cleanEmail, ownerUserId, created!.id, memberRole);
+      await dispatchInviteEmail(cleanEmail, ownerUserId, created!.token || newTeamInviteToken(), memberRole);
     } catch (emailErr) {
       logger.warn({ emailErr, cleanEmail }, "Failed to send team invite email via Brevo");
     }
@@ -254,7 +294,8 @@ router.post("/team/members/:id/resend", requireAuth, async (req, res): Promise<v
       .set({ invitedAt: new Date() })
       .where(eq(teamMembersTable.id, memberId));
 
-    await dispatchInviteEmail(member.email, userId, member.id, member.role);
+    const inviteToken = await ensureInviteToken(member);
+    await dispatchInviteEmail(member.email, userId, inviteToken, member.role);
     res.json({ success: true, email: member.email });
   } catch (err) {
     logger.error({ err }, "Failed to resend team invite email");
@@ -294,6 +335,122 @@ router.delete("/team/members/:id", requireAuth, async (req, res): Promise<void> 
     res.json({ success: true });
   } catch (err) {
     logger.error({ err }, "Failed to remove team member");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/team/invite-preview?token=  (legacy: ?teamId=)
+ * Details for the /app/join page. Auth required so we can check email match.
+ */
+router.get("/team/invite-preview", requireAuth, async (req, res): Promise<void> => {
+  try {
+    await ensureTeamMembersTable();
+    const auth = getAuth(req);
+    const userId = auth.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const token = String(req.query["token"] ?? "").trim();
+    const teamId = parseInt(String(req.query["teamId"] ?? ""), 10);
+    const invite = await findInvite({
+      token,
+      teamId: Number.isFinite(teamId) ? teamId : undefined,
+    });
+    if (!invite) {
+      res.status(404).json({ error: "Invitation not found" });
+      return;
+    }
+
+    const [owner] = await db
+      .select({ name: usersTable.name, email: usersTable.email })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, invite.ownerUserId));
+    const [me] = await db
+      .select({ email: usersTable.email })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, userId));
+
+    const myEmail = (me?.email ?? "").trim().toLowerCase();
+    const alreadyJoined = invite.status === "active" && invite.memberUserId === userId;
+
+    res.json({
+      id: invite.id,
+      email: invite.email,
+      role: invite.role,
+      status: alreadyJoined ? "accepted" : invite.status,
+      ownerName: owner?.name || owner?.email?.split("@")[0] || "A teammate",
+      emailMatch: !!myEmail && myEmail === invite.email,
+      signedInEmail: me?.email ?? null,
+    });
+  } catch (err) {
+    logger.error({ err }, "Failed to preview team invite");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * POST /api/team/join { token }  (legacy: { teamId })
+ * Accept the emailed invite and bind this login to the owner's workspace.
+ */
+router.post("/team/join", requireAuth, async (req, res): Promise<void> => {
+  try {
+    await ensureTeamMembersTable();
+    const auth = getAuth(req);
+    const userId = auth.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const body = (req.body ?? {}) as { token?: unknown; teamId?: unknown };
+    const token = typeof body.token === "string" ? body.token.trim() : "";
+    const teamId = parseInt(String(body.teamId ?? ""), 10);
+    const invite = await findInvite({
+      token,
+      teamId: Number.isFinite(teamId) ? teamId : undefined,
+    });
+    if (!invite) {
+      res.status(404).json({ error: "Invitation not found" });
+      return;
+    }
+
+    const [me] = await db
+      .select({ email: usersTable.email, name: usersTable.name })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, userId));
+    const myEmail = (me?.email ?? "").trim().toLowerCase();
+    if (!myEmail || myEmail !== invite.email) {
+      res.status(403).json({
+        error: `This invitation was sent to ${invite.email}. Sign in with that email to join.`,
+      });
+      return;
+    }
+
+    if (invite.status === "active" && invite.memberUserId === userId) {
+      res.json({ joined: true, already: true, ownerUserId: invite.ownerUserId });
+      return;
+    }
+    if (invite.status === "active" && invite.memberUserId && invite.memberUserId !== userId) {
+      res.status(409).json({ error: "This invitation has already been accepted by another account" });
+      return;
+    }
+
+    await db
+      .update(teamMembersTable)
+      .set({
+        memberUserId: userId,
+        name: me?.name || invite.name,
+        status: "active",
+        joinedAt: invite.joinedAt ?? new Date(),
+      })
+      .where(eq(teamMembersTable.id, invite.id));
+
+    logger.info({ userId, teamId: invite.id, ownerUserId: invite.ownerUserId }, "Team invite accepted");
+    res.json({ joined: true, already: false, ownerUserId: invite.ownerUserId });
+  } catch (err) {
+    logger.error({ err }, "Failed to accept team invite");
     res.status(500).json({ error: "Internal server error" });
   }
 });

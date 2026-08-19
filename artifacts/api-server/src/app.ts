@@ -13,17 +13,20 @@ import router from "./routes";
 import { mountMcpWellKnown } from "./routes/mcp.js";
 import { logger } from "./lib/logger";
 import { ipRateLimit, authRateLimit, isRateLimitExempt } from "./lib/rate-limit.js";
+import { dashboardCspDirectives } from "./lib/csp.js";
 
 const app: Express = express();
 app.set("trust proxy", 1);
 
-// Security headers (clickjacking, MIME sniffing, etc.). CSP is left to the
-// static SPA builds (Vite) so we don't break their inline/hashed assets, and
-// cross-origin embedder/resource policies stay permissive so the lead-capture
-// embed widget script and Instagram/Meta browser flows keep working.
+// Security headers (clickjacking, MIME sniffing, CSP). Cross-origin embedder/
+// resource policies stay permissive so the lead-capture embed widget script and
+// Instagram/Meta browser flows keep working.
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: dashboardCspDirectives,
+    },
     crossOriginEmbedderPolicy: false,
     crossOriginResourcePolicy: { policy: "cross-origin" },
   }),
@@ -109,7 +112,7 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true, limit: "12mb" }));
 
-// Validate the platform session token (Bearer or ?token=) and populate
+// Validate the platform session token (cookie, Bearer, or ?token=) and populate
 // req.clerkUserId / req.sessionPayload before rate limiting + routing so the
 // IP rate limiter can skip authenticated users and the auth rate limiter can
 // key on the user id.

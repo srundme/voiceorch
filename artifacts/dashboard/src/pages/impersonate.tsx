@@ -18,13 +18,13 @@ export default function ImpersonatePage() {
     const returnTo = params.get("return_to");
 
     if (code && impToken) {
-      fetch(`/api/impersonate/exchange?code=${encodeURIComponent(code)}`)
+      fetch(`/api/impersonate/exchange?code=${encodeURIComponent(code)}`, { credentials: "include" })
         .then((r) => {
           if (!r.ok) throw new Error("Exchange failed");
-          return r.json() as Promise<{ sessionJwt: string }>;
+          return r.json() as Promise<{ ok?: boolean; sessionJwt?: string }>;
         })
-        .then(({ sessionJwt }) => {
-          signIn(sessionJwt);
+        .then((body) => {
+          signIn(body.sessionJwt);
           localStorage.setItem(
             "voiceorch:impersonation",
             JSON.stringify({

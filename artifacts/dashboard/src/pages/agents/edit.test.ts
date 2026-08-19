@@ -26,6 +26,7 @@ const BASE: AgentFormValues = {
   backchannelingFrequency: 0.5,
   webhookUrl: "",
   webhookSecret: "",
+  webhookPayloadTemplate: "",
   noiseCancellationEnabled: false,
   promptVariables: [],
   vadSilenceMs: 350,
@@ -52,6 +53,19 @@ describe("buildUpdateAgentPayload", () => {
       voiceName: "Puck",
       thinkingLevel: "low",
     });
+  });
+
+  it("gemini live via voice stack — payload still carries google + live model", () => {
+    const data: AgentFormValues = {
+      ...BASE,
+      llmProvider: "google",
+      llmModel: "gemini-3.1-flash-live-preview",
+      voiceStack: "gemini_live",
+    };
+    const payload = buildUpdateAgentPayload(data);
+    expect(payload.llmProvider).toBe("google");
+    expect(payload.llmModel).toBe("gemini-3.1-flash-live-preview");
+    expect((payload.agentConfig as Record<string, unknown>)["voiceStack"]).toBe("gemini_live");
   });
 
   it("minimal update — parses against UpdateAgentBody", () => {
@@ -130,6 +144,19 @@ describe("buildUpdateAgentPayload", () => {
     expect(result.success, JSON.stringify(result)).toBe(true);
     expect((payload as any).webhookSecret).toBeUndefined();
     expect((payload.agentConfig as any)?.webhookSecret).toBe("s3cr3t");
+  });
+
+  it("webhook payload template — stored in agentConfig; blank clears with null", () => {
+    const withTpl = buildUpdateAgentPayload({
+      ...BASE,
+      webhookPayloadTemplate: ' { "id": "{{callId}}" } ',
+    });
+    expect(UpdateAgentBody.safeParse(withTpl).success).toBe(true);
+    expect((withTpl as any).webhookPayloadTemplate).toBeUndefined();
+    expect((withTpl.agentConfig as any)?.webhookPayloadTemplate).toBe('{ "id": "{{callId}}" }');
+
+    const cleared = buildUpdateAgentPayload({ ...BASE, webhookPayloadTemplate: "   " });
+    expect((cleared.agentConfig as any)?.webhookPayloadTemplate).toBeNull();
   });
 
   it("non-default vadSilenceMs — appears in agentConfig", () => {

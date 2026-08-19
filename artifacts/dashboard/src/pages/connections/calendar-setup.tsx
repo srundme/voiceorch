@@ -101,7 +101,13 @@ function mapMeetingFromQuery(e: {
   };
 }
 
-export function ConnectionsCalendarSetup() {
+export function ConnectionsCalendarSetup({
+  backHref = "/app/connections",
+  backLabel = "Connections",
+}: {
+  backHref?: string;
+  backLabel?: string;
+} = {}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const calendarsQ = useListCalendars();
@@ -156,7 +162,7 @@ export function ConnectionsCalendarSetup() {
       <StripePage
         title="Bookings calendar"
         description="Set up booking in a few simple steps. Day-to-day appointments live under Bookings."
-        back={{ href: "/app/connections", label: "Connections" }}
+        back={{ href: backHref, label: backLabel }}
       >
         <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
           <Loader2 className="h-4 w-4 animate-spin" /> Checking your setup…
@@ -170,7 +176,7 @@ export function ConnectionsCalendarSetup() {
       <StripePage
         title="Bookings calendar"
         description="Set up booking in a few simple steps. Day-to-day appointments live under Bookings."
-        back={{ href: "/app/connections", label: "Connections" }}
+        back={{ href: backHref, label: backLabel }}
       >
         <div className="max-w-lg space-y-4">
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[12px] text-emerald-600 dark:text-emerald-400">
@@ -229,7 +235,7 @@ export function ConnectionsCalendarSetup() {
     <StripePage
       title="Bookings calendar"
       description="Set up booking in a few simple steps. Day-to-day appointments live under Bookings."
-      back={{ href: "/app/connections", label: "Connections" }}
+      back={{ href: backHref, label: backLabel }}
     >
       <div className="max-w-lg space-y-4">
         <div

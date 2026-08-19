@@ -492,6 +492,49 @@ paths:
         "404":
           description: Agent not found
 
+  /agents/{id}/caller-memory/{phone}/facts:
+    post:
+      operationId: upsertCallerMemoryFacts
+      tags: [agents]
+      summary: Update caller-specific memory for the next call
+      description: >-
+        Write operator/CRM facts for this caller. The agent injects them as
+        ground truth on the next inbound, outbound, or campaign call so it can
+        answer follow-ups without re-asking. `note` becomes `operator_update`.
+        `context` / `facts` keys are stored as `ext_<key>`. Does not change
+        POST /calls/outbound — personalization is caller memory plus campaign
+        lead fields. Phone must be URL-encoded.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: phone
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertCallerMemoryBody"
+      responses:
+        "201":
+          description: Facts written
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpsertCallerMemoryResponse"
+        "400":
+          description: Invalid body or phone
+        "403":
+          description: Read-only team role
+        "404":
+          description: Agent not found
+
   /agents/{id}/caller-memory/{phone}/facts/{factId}:
     delete:
       operationId: deleteCallerFact
@@ -3149,6 +3192,44 @@ paths:
         "404":
           description: Not found
 
+  /campaigns/{id}/leads/{leadId}/memory:
+    post:
+      operationId: upsertCampaignLeadMemory
+      tags: [campaigns]
+      summary: Update this lead's caller memory and lead fields
+      description: >-
+        Same body as POST /agents/{id}/caller-memory/{phone}/facts. Writes
+        caller memory for the campaign agent + this lead's phone, and merges
+        the fields into campaign leadData so the next campaign dial sees them
+        in LEAD CONTEXT (including {{order_status}} style variables). Adding a
+        lead note also syncs `operator_update` automatically.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertCallerMemoryBody"
+      responses:
+        "201":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpsertCampaignLeadMemoryResponse"
+        "400":
+          description: Invalid body or campaign has no agent
+        "404":
+          description: Not found
+
   /campaigns/{id}/leads/{leadId}/notes:
     get:
       operationId: listLeadNotes
@@ -3177,7 +3258,7 @@ paths:
     post:
       operationId: createLeadNote
       tags: [campaigns]
-      summary: Add a note to a lead
+      summary: Add a note to a lead (also writes caller memory for the next call)
       parameters:
         - name: id
           in: path
@@ -8091,6 +8172,53 @@ components:
           type: string
           format: date-time
 
+    UpsertCallerMemoryBody:
+      type: object
+      description: At least one of note, facts, or context is required.
+      properties:
+        note:
+          type: string
+          description: Freeform update (refund approved, appointment moved). Stored as operator_update.
+        facts:
+          type: array
+          items:
+            type: object
+            required: [key, value]
+            properties:
+              key: { type: string }
+              value: { type: string }
+        context:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Map of request fields, e.g. order_status=shipped"
+          example:
+            order_status: shipped
+            tracking_id: TRK-1
+
+    UpsertCallerMemoryResponse:
+      type: object
+      required: [phoneNumber, written]
+      properties:
+        phoneNumber: { type: string }
+        written:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              value: { type: string }
+              id: { type: ["integer", "null"] }
+
+    UpsertCampaignLeadMemoryResponse:
+      allOf:
+        - $ref: "#/components/schemas/UpsertCallerMemoryResponse"
+        - type: object
+          properties:
+            leadData:
+              type: object
+              additionalProperties: { type: string }
+
     AgentMemoryEpisode:
       type: object
       required: [id, createdAt]
@@ -8877,6 +9005,9 @@ components:
         partnerAssigned:
           type: boolean
           description: True when the number is owned by the client's managing partner and assigned to one of the client's agents (read-only for the client).
+        workspaceShared:
+          type: boolean
+          description: True when the number is owned by another member of this team workspace (visible, not releasable).
         status:
           type: string
           enum: [active, released]

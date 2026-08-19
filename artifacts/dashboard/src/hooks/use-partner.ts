@@ -36,13 +36,17 @@ export async function partnerFetch<T = unknown>(
   init?: RequestInit,
 ): Promise<T> {
   const token = await getToken();
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Content-Type") && init?.body && typeof init.body === "string") {
+    headers.set("Content-Type", "application/json");
+  }
+  // Only attach Bearer when a JWT is actually present. `Bearer null` would
+  // shadow the HttpOnly session cookie and 401 every partner call.
+  if (token) headers.set("Authorization", `Bearer ${token}`);
   const res = await fetch(path, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...(init?.headers ?? {}),
-    },
+    credentials: "include",
+    headers,
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({} as Record<string, unknown>));
@@ -53,11 +57,12 @@ export async function partnerFetch<T = unknown>(
 }
 
 export function usePartnerContext() {
-  const { getToken } = useAuth();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   return useQuery<PartnerContext>({
     queryKey: ["partner-context"],
     staleTime: 5 * 60 * 1000,
     retry: 1,
+    enabled: isLoaded && isSignedIn,
     queryFn: () => partnerFetch<PartnerContext>(getToken, "/api/partner/context"),
   });
 }
