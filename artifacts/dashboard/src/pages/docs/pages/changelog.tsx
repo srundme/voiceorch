@@ -31,6 +31,9 @@ export default function ChangelogPage() {
           The socket now sends the full connect query: 8 kHz linear16,
           millisecond VAD, <code>return_timestamps</code>, and an optional
           terminology <code>prompt</code> for finals.
+          Auto-detect uses the 24-code table (<code>or-IN</code> for Odia, not
+          legacy <code>od-IN</code>) and reads <code>language</code> /
+          <code>language_confidence</code> on transcripts.
         </li>
       </ul>
 

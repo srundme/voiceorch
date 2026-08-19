@@ -43,6 +43,17 @@ const REALTIME_LANG = new Set([
   "sd-IN", "sa-IN", "sat-IN", "mni-IN", "brx-IN", "mai-IN", "doi-IN",
 ]);
 
+/** 24 accepted `language_code` values (includes `auto`). */
+export const REALTIME_LANGUAGE_CODES = [...REALTIME_LANG] as const;
+
+const BARE_TO_REALTIME: Record<string, string> = {
+  en: "en-IN", hi: "hi-IN", bn: "bn-IN", kn: "kn-IN", ml: "ml-IN",
+  mr: "mr-IN", or: "or-IN", od: "or-IN", pa: "pa-IN", ta: "ta-IN",
+  te: "te-IN", gu: "gu-IN", as: "as-IN", ur: "ur-IN", ne: "ne-IN",
+  kok: "kok-IN", ks: "ks-IN", sd: "sd-IN", sa: "sa-IN", sat: "sat-IN",
+  mni: "mni-IN", brx: "brx-IN", mai: "mai-IN", doi: "doi-IN",
+};
+
 export function isSarvamRealtimeModel(model: string | null | undefined): boolean {
   const m = (model ?? "").trim();
   if (m === "saarika:v2.5" || m.startsWith("saarika")) return false;
@@ -58,16 +69,31 @@ export function toRealtimeLanguageCode(code: string | null | undefined, auto: bo
   if (!code) return "en-IN";
   const t = code.trim();
   if (t === "unknown") return "auto";
-  if (t === "od-IN" || t === "or") return "or-IN";
+  if (t === "od-IN" || t === "ne-NP") return t === "ne-NP" ? "ne-IN" : "or-IN";
   if (REALTIME_LANG.has(t)) return t;
   const bare = t.split("-")[0]?.toLowerCase() ?? "";
-  const mapped: Record<string, string> = {
-    en: "en-IN", hi: "hi-IN", bn: "bn-IN", kn: "kn-IN", ml: "ml-IN",
-    mr: "mr-IN", or: "or-IN", od: "or-IN", pa: "pa-IN", ta: "ta-IN",
-    te: "te-IN", gu: "gu-IN", as: "as-IN", ur: "ur-IN", ne: "ne-IN",
-  };
-  const hit = mapped[bare];
+  const hit = BARE_TO_REALTIME[bare];
   return hit && REALTIME_LANG.has(hit) ? hit : "en-IN";
+}
+
+/**
+ * LID on transcript.partial / transcript.final when language_code=auto.
+ * Returns undefined when pinned (no language field) or the code is unknown.
+ */
+export function parseRealtimeDetectedLang(code: string | null | undefined): string | undefined {
+  if (!code) return undefined;
+  const t = code.trim();
+  if (!t || t === "auto" || t === "unknown") return undefined;
+  if (t === "od-IN") return "or-IN";
+  if (t === "ne-NP") return "ne-IN";
+  if (REALTIME_LANG.has(t) && t !== "auto") return t;
+  return BARE_TO_REALTIME[t.split("-")[0]?.toLowerCase() ?? ""];
+}
+
+export function parseRealtimeLanguageConfidence(raw: unknown): number | undefined {
+  const n = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+  if (!Number.isFinite(n)) return undefined;
+  return Math.min(1, Math.max(0, n));
 }
 
 export function buildRealtimeWsUrl(opts: {
@@ -351,7 +377,11 @@ export class SarvamRealtimeSTT implements STTAdapter {
         drainQueue();
         return;
       }
-      if (event === "pong" || event === "config.updated") return;
+      if (event === "pong") return;
+      if (event === "config.updated") {
+        logger.info({ applied: msg.applied, requestId: lastRequestId }, "Sarvam STT realtime: config.updated");
+        return;
+      }
       if (event === "error") {
         logger.warn(
           { code: msg.code, fatal: msg.is_fatal, message: msg.message, requestId: lastRequestId },
@@ -377,8 +407,9 @@ export class SarvamRealtimeSTT implements STTAdapter {
         const text = stripSpeaker(msg.text ?? "");
         if (!text) return;
         lastPartial = text;
-        lastPartialLang = msg.language;
-        onTranscript(text, false, msg.language, {
+        const detected = parseRealtimeDetectedLang(msg.language);
+        lastPartialLang = detected;
+        onTranscript(text, false, detected, {
           pendingPartial: true,
           requestId: lastRequestId,
         });
@@ -387,19 +418,28 @@ export class SarvamRealtimeSTT implements STTAdapter {
       if (event === "transcript.final") {
         const text = stripSpeaker(msg.text ?? "");
         lastPartial = "";
-        const detected = msg.language;
+        const detected = parseRealtimeDetectedLang(msg.language);
         lastPartialLang = detected;
         if (!text) return;
+        const languageConfidence = parseRealtimeLanguageConfidence(msg.language_confidence);
         const meta: SttFinalMetadata = {
           requestId: lastRequestId,
           endDetectToFinalMs: speechEndAt > 0 ? Date.now() - speechEndAt : undefined,
           speechEndReceived: speechEndAt > 0,
           startS: typeof msg.start_s === "number" ? msg.start_s : undefined,
           endS: typeof msg.end_s === "number" ? msg.end_s : undefined,
+          languageConfidence,
         };
         speechEndAt = 0;
         logger.info(
-          { text: text.slice(0, 80), language: detected, requestId: lastRequestId, startS: meta.startS, endS: meta.endS },
+          {
+            text: text.slice(0, 80),
+            language: detected,
+            languageConfidence,
+            requestId: lastRequestId,
+            startS: meta.startS,
+            endS: meta.endS,
+          },
           "Sarvam STT realtime: final transcript",
         );
         onTranscript(text, true, detected, meta);

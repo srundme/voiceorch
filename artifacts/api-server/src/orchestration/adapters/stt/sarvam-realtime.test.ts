@@ -4,6 +4,8 @@ import {
   buildRealtimeWsUrl,
   clipRealtimePrompt,
   isSarvamRealtimeModel,
+  parseRealtimeDetectedLang,
+  REALTIME_LANGUAGE_CODES,
   resolveRealtimeStreamType,
   shouldBargeOnRealtimeVadStart,
   toRealtimeLanguageCode,
@@ -38,11 +40,40 @@ describe("toRealtimeLanguageCode", () => {
 
   it("maps legacy Odia od-IN to or-IN", () => {
     expect(toRealtimeLanguageCode("od-IN", false)).toBe("or-IN");
+    expect(parseRealtimeDetectedLang("od-IN")).toBe("or-IN");
+  });
+
+  it("maps Nepali ne-NP to ne-IN", () => {
+    expect(toRealtimeLanguageCode("ne-NP", false)).toBe("ne-IN");
+    expect(parseRealtimeDetectedLang("ne-NP")).toBe("ne-IN");
+  });
+
+  it("accepts all 24 realtime language_code values", () => {
+    expect(REALTIME_LANGUAGE_CODES).toHaveLength(24);
+    expect(REALTIME_LANGUAGE_CODES).toContain("auto");
+    expect(REALTIME_LANGUAGE_CODES).toContain("or-IN");
+    expect(REALTIME_LANGUAGE_CODES).not.toContain("od-IN");
+    for (const code of REALTIME_LANGUAGE_CODES) {
+      if (code === "auto") continue;
+      expect(toRealtimeLanguageCode(code, false)).toBe(code);
+    }
+  });
+
+  it("maps scheduled-language bare prefixes", () => {
+    expect(toRealtimeLanguageCode("kok", false)).toBe("kok-IN");
+    expect(toRealtimeLanguageCode("sat", false)).toBe("sat-IN");
+    expect(toRealtimeLanguageCode("mni", false)).toBe("mni-IN");
+    expect(toRealtimeLanguageCode("doi", false)).toBe("doi-IN");
   });
 
   it("keeps Tamil / Hindi BCP-47", () => {
     expect(toRealtimeLanguageCode("ta-IN", false)).toBe("ta-IN");
     expect(toRealtimeLanguageCode("hi", false)).toBe("hi-IN");
+  });
+
+  it("does not invent a language when LID is absent", () => {
+    expect(parseRealtimeDetectedLang(undefined)).toBeUndefined();
+    expect(parseRealtimeDetectedLang("xx-XX")).toBeUndefined();
   });
 });
 

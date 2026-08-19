@@ -16,7 +16,7 @@ import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
-import { shouldBargeOnRealtimeVadStart } from "./adapters/stt/sarvam-realtime.js";
+import { shouldBargeOnRealtimeVadStart, parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
@@ -466,6 +466,9 @@ const LANG_DISPLAY_NAMES: Record<string, string> = {
   "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
   "ml-IN": "Malayalam", "mr-IN": "Marathi", "bn-IN": "Bengali", "gu-IN": "Gujarati",
   "pa-IN": "Punjabi", "or-IN": "Odia", "ur-IN": "Urdu",
+  "as-IN": "Assamese", "ne-IN": "Nepali", "kok-IN": "Konkani", "ks-IN": "Kashmiri",
+  "sd-IN": "Sindhi", "sa-IN": "Sanskrit", "sat-IN": "Santali", "mni-IN": "Manipuri",
+  "brx-IN": "Bodo", "mai-IN": "Maithili", "doi-IN": "Dogri",
   "en-IN": "English", "en-US": "English", "en-GB": "English",
   "fr-FR": "French", "de-DE": "German", "es-ES": "Spanish", "pt-BR": "Portuguese",
   "it-IT": "Italian", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese",
@@ -707,7 +710,7 @@ function buildCompactGreetingPrompt(
 }
 
 /** Languages that share the Devanagari block (U+0900–U+097F) — script alone cannot separate them. */
-const DEVANAGARI_LANGUAGES = new Set(["hi-IN", "mr-IN", "ne-NP", "sa-IN", "kok-IN", "mai-IN"]);
+const DEVANAGARI_LANGUAGES = new Set(["hi-IN", "mr-IN", "ne-NP", "ne-IN", "sa-IN", "kok-IN", "mai-IN", "brx-IN", "doi-IN"]);
 
 /** True when the text contains at least one Devanagari character. */
 function hasDevanagari(text: string): boolean {
@@ -1142,7 +1145,12 @@ export class OrchestrationPipeline implements VoiceSession {
   private _lastEndpointMs: number | null = null;
   private _lastEndpointReason = "";
   // Azure STT endpointing metadata — set in streaming callback, consumed in processTurn
-  private _pendingSttMeta: { endDetectToFinalMs?: number; lastPartialToFinalMs?: number; detectedLang?: string } | null = null;
+  private _pendingSttMeta: {
+    endDetectToFinalMs?: number;
+    lastPartialToFinalMs?: number;
+    detectedLang?: string;
+    languageConfidence?: number;
+  } | null = null;
   /** STT-provider language code for the current in-flight transcript (forwarded to handleStreamingTranscript). */
   private _pendingSttLang: string | null = null;
   private _fillerPlayedThisTurn = false;
@@ -3176,14 +3184,18 @@ export class OrchestrationPipeline implements VoiceSession {
     // Language auto-detection — runs AFTER all discard guards so echoed transcripts
     // can never drive language switching or increment the consecutive-detection counter.
     {
-      // Sarvam saaras:v3 now forwards language_code via coalesceLang; other providers
-      // may leave this null. Fall back to Unicode-script detection on the text.
-      // Normalize Sarvam's non-standard Odia code (od-IN → or-IN) so that
-      // LANG_DISPLAY_NAMES lookups and the consecutive-detection guard resolve
-      // correctly (od-IN vs or-IN would never match → guard never fires → oscillation).
-      let sttLang = this._pendingSttLang;
+      // Sarvam realtime forwards `language` only when language_code=auto.
+      // Pinned language_code omits the field. Odia is or-IN on this socket (legacy was od-IN).
+      let sttLang = parseRealtimeDetectedLang(this._pendingSttLang) ?? null;
       this._pendingSttLang = null; // consume — prevent stale value leaking into force-finalize / queue-drain paths
-      if (sttLang === "od-IN") sttLang = "or-IN";
+      const lidConfidence = this._pendingSttMeta?.languageConfidence;
+      if (sttLang && lidConfidence != null && lidConfidence < 0.35) {
+        logger.info(
+          { callId: this.config.callId, sttLang, lidConfidence },
+          "STT language ignored — language_confidence too low",
+        );
+        sttLang = null;
+      }
       if (sttLang && !LANG_DISPLAY_NAMES[sttLang]) sttLang = null; // unknown code — fall through to script detection
 
       if (this.agent.languageAutoDetect) {

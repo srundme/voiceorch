@@ -19,6 +19,8 @@ export interface SttFinalMetadata {
   startS?: number;
   /** Sarvam realtime transcript.final end_s when return_timestamps=true. */
   endS?: number;
+  /** Sarvam realtime language_confidence on transcript.final when language_code=auto. */
+  languageConfidence?: number;
 }
 
 export interface STTAdapter {
