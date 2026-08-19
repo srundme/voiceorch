@@ -16,6 +16,7 @@ import {
   resolveVoiceStack,
 } from "../orchestration/adapters/live/gemini-live-voices.js";
 import { resolveSarvamSttMode } from "../orchestration/adapters/stt/sarvam-mode.js";
+import { resolveRealtimeStreamType } from "../orchestration/adapters/stt/sarvam-realtime.js";
 import {
   clampSarvamIncompleteHoldMs,
   clampSarvamSpeechEndFlushMs,
@@ -278,6 +279,7 @@ async function buildTargetAgentConfig(
           (agentCfg["sarvamSttMode"] as string | undefined) ?? null,
         )
       : ((agentCfg["sarvamSttMode"] as string | undefined) ?? null),
+    sarvamSttStreamType: resolveRealtimeStreamType(agentCfg["sarvamSttStreamType"]),
     sarvamHighVadSensitivity: resolveSarvamHighVadSensitivity(agentCfg["sarvamHighVadSensitivity"]),
     sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs(agentCfg["sarvamSpeechEndFlushMs"] as number | undefined),
     sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs(agentCfg["sarvamIncompleteHoldMs"] as number | undefined),

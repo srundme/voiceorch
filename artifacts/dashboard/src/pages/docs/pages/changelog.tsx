@@ -26,6 +26,8 @@ export default function ChangelogPage() {
           Barge-in uses <code>vad.speech_start</code> and early partials — not energy and not
           <code>transcript.final</code>. Language/mode changes go out as <code>config.update</code>.
           Call logs record Sarvam&apos;s billed <code>session.end.audio_duration_s</code>.
+          Transcriber → Partial transcripts picks <code>fast</code> (default),
+          <code>balanced</code>, or <code>simulated</code> (finals only).
         </li>
       </ul>
 

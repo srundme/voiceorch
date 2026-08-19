@@ -20,6 +20,7 @@ import {
   resolveVoiceStack,
 } from "./adapters/live/gemini-live-voices.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
+import { resolveRealtimeStreamType } from "./adapters/stt/sarvam-realtime.js";
 import { isSarvamCatalogSpeaker } from "./adapters/tts/sarvam.js";
 import {
   clampSarvamIncompleteHoldMs,
@@ -772,6 +773,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           (agentCfg["sarvamSttMode"] as string | undefined) ?? null,
         )
       : ((agentCfg["sarvamSttMode"] as string | undefined) ?? null),
+    sarvamSttStreamType: resolveRealtimeStreamType(agentCfg["sarvamSttStreamType"]),
     sarvamHighVadSensitivity: resolveSarvamHighVadSensitivity(agentCfg["sarvamHighVadSensitivity"]),
     sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs(agentCfg["sarvamSpeechEndFlushMs"] as number | undefined),
     sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs(agentCfg["sarvamIncompleteHoldMs"] as number | undefined),

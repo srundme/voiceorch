@@ -21,6 +21,14 @@ const DEFAULT_SILENCE_MS = 500;
 const DEFAULT_MIN_SPEECH_MS = 250;
 const DEFAULT_THRESHOLD = 0.3;
 
+export type SarvamRealtimeStreamType = "fast" | "balanced" | "simulated";
+
+/** Voice agents default to fast. Sarvam's API default is balanced (captioning). */
+export function resolveRealtimeStreamType(raw: unknown): SarvamRealtimeStreamType {
+  if (raw === "balanced" || raw === "simulated" || raw === "fast") return raw;
+  return "fast";
+}
+
 const REALTIME_LANG = new Set([
   "auto",
   "en-IN", "hi-IN", "bn-IN", "kn-IN", "ml-IN", "mr-IN", "or-IN", "pa-IN",
@@ -59,7 +67,7 @@ export function buildRealtimeWsUrl(opts: {
   languageCode: string;
   sampleRate: 8000 | 16000;
   mode: SarvamSttMode;
-  streamType?: "fast" | "balanced" | "simulated";
+  streamType?: SarvamRealtimeStreamType;
   silenceDurationMs: number;
   minSpeechDurationMs: number;
   threshold: number;
@@ -86,7 +94,7 @@ export function buildRealtimeWsUrl(opts: {
 export function buildRealtimeConfigUpdate(opts: {
   languageCode?: string;
   mode?: SarvamSttMode;
-  streamType?: "fast" | "balanced" | "simulated";
+  streamType?: SarvamRealtimeStreamType;
   threshold?: number;
   silenceDurationMs?: number;
   minSpeechDurationMs?: number;
@@ -145,6 +153,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
   private readonly silenceDurationMs: number;
   private readonly minSpeechDurationMs: number;
   private readonly threshold: number;
+  private readonly streamType: SarvamRealtimeStreamType;
 
   constructor(
     apiKey: string,
@@ -163,6 +172,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
           firstTurnMinSpeechMs?: number | null;
           endOfSpeechSilenceMs?: number | null;
           vadThreshold?: number | null;
+          streamType?: string;
         })
       : {};
 
@@ -186,11 +196,13 @@ export class SarvamRealtimeSTT implements STTAdapter {
       typeof th === "number" && Number.isFinite(th)
         ? Math.min(1, Math.max(0, th))
         : DEFAULT_THRESHOLD;
+    this.streamType = resolveRealtimeStreamType(extra.streamType);
 
     logger.info(
       {
         languageCode: this.languageCode,
         mode: this.mode,
+        streamType: this.streamType,
         sampleRate: this.sampleRate,
         silenceDurationMs: this.silenceDurationMs,
         minSpeechDurationMs: this.minSpeechDurationMs,
@@ -221,6 +233,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
     const silenceDurationMs = this.silenceDurationMs;
     const minSpeechDurationMs = this.minSpeechDurationMs;
     const threshold = this.threshold;
+    const streamType = this.streamType;
     const legacy = this.legacy;
 
     let ws: WebSocket | null = null;
@@ -384,7 +397,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
         languageCode,
         sampleRate,
         mode,
-        streamType: "fast",
+        streamType,
         silenceDurationMs,
         minSpeechDurationMs,
         threshold,
@@ -467,6 +480,9 @@ export class SarvamRealtimeSTT implements STTAdapter {
       },
       getRealtimeActive(): boolean {
         return !usingLegacy && sessionBegan;
+      },
+      getRealtimeStreamType(): SarvamRealtimeStreamType {
+        return streamType;
       },
       close(): void {
         intentionallyClosed = true;

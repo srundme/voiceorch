@@ -3,6 +3,7 @@ import {
   buildRealtimeConfigUpdate,
   buildRealtimeWsUrl,
   isSarvamRealtimeModel,
+  resolveRealtimeStreamType,
   shouldBargeOnRealtimeVadStart,
   toRealtimeLanguageCode,
 } from "./sarvam-realtime.js";
@@ -64,6 +65,32 @@ describe("buildRealtimeWsUrl", () => {
     expect(url).toContain("min_speech_duration_ms=250");
     expect(url).toContain("encoding=linear16");
     expect(url).not.toContain("high_vad_sensitivity");
+  });
+
+  it("honours balanced stream_type", () => {
+    const url = buildRealtimeWsUrl({
+      languageCode: "en-IN",
+      sampleRate: 16000,
+      mode: "codemix",
+      streamType: "balanced",
+      silenceDurationMs: 500,
+      minSpeechDurationMs: 250,
+      threshold: 0.3,
+    });
+    expect(url).toContain("stream_type=balanced");
+  });
+});
+
+describe("resolveRealtimeStreamType", () => {
+  it("defaults voice agents to fast", () => {
+    expect(resolveRealtimeStreamType(undefined)).toBe("fast");
+    expect(resolveRealtimeStreamType("nope")).toBe("fast");
+  });
+
+  it("accepts balanced and simulated", () => {
+    expect(resolveRealtimeStreamType("balanced")).toBe("balanced");
+    expect(resolveRealtimeStreamType("simulated")).toBe("simulated");
+    expect(resolveRealtimeStreamType("fast")).toBe("fast");
   });
 });
 

@@ -147,6 +147,8 @@ export const agentFormSchema = z.object({
 
   // Sarvam STT mode (only relevant when asrProvider === "sarvam")
   sarvamSttMode: z.enum(["codemix", "verbatim", "transcribe", "translit", "translate"]).optional(),
+  /** saaras:v3-realtime stream_type — default fast for voice agents. */
+  sarvamSttStreamType: z.enum(["fast", "balanced", "simulated"]).optional(),
   /** Sarvam high_vad_sensitivity — default true (~128ms silence @8kHz). */
   sarvamHighVadSensitivity: z.boolean().optional(),
   /** ms after speech_end before emitting final — default 30. */

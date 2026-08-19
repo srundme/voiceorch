@@ -110,7 +110,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs, ttsSpeed,
     fragmentCoalesceListeningMs, fragmentCoalescePlayingMs, telephonyTailDrainMs,
     autoRedialEnabled, autoRedialMaxAttempts,
-    sarvamSttMode, kbBakedOnly, schedulingCalendarId, schedulingEventTypeId,
+    sarvamSttMode, sarvamSttStreamType, kbBakedOnly, schedulingCalendarId, schedulingEventTypeId,
     sarvamHighVadSensitivity, sarvamSpeechEndFlushMs, sarvamIncompleteHoldMs,
     voiceStack, geminiLiveVoiceName, geminiLiveThinkingLevel,
     agentComposition, agentSurfaces, meetingPrompt,
@@ -173,6 +173,10 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     agentConfig["asrEndpointingSilenceMs"] = clampEndpointingMs(asrEndpointingSilenceMs);
   }
   if (sarvamSttMode) agentConfig["sarvamSttMode"] = sarvamSttMode;
+  agentConfig["sarvamSttStreamType"] =
+    sarvamSttStreamType === "balanced" || sarvamSttStreamType === "simulated"
+      ? sarvamSttStreamType
+      : "fast";
   // Saaras owns turn-taking — persist high-VAD only; hold knobs forced off.
   agentConfig["sarvamHighVadSensitivity"] = sarvamHighVadSensitivity !== false;
   agentConfig["sarvamSpeechEndFlushMs"] = 0;
@@ -480,6 +484,7 @@ export default function AgentEdit() {
       fragmentCoalescePlayingMs: 0,
       telephonyTailDrainMs: 400,
       sarvamHighVadSensitivity: true,
+      sarvamSttStreamType: "fast",
       sarvamSpeechEndFlushMs: 0,
       sarvamIncompleteHoldMs: 0,
       kbBakedOnly: false,
@@ -763,6 +768,7 @@ export default function AgentEdit() {
       fragmentCoalescePlayingMs: clampFragmentCoalescePlayingMs((agent as any).agentConfig?.fragmentCoalescePlayingMs as number | undefined),
       telephonyTailDrainMs: clampTelephonyTailDrainMs((agent as any).agentConfig?.telephonyTailDrainMs as number | undefined),
       sarvamHighVadSensitivity: ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) === true,
+      sarvamSttStreamType: ((agent as any).agentConfig?.sarvamSttStreamType as AgentFormValues["sarvamSttStreamType"] | undefined) ?? "fast",
       sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs((agent as any).agentConfig?.sarvamSpeechEndFlushMs as number | undefined),
       sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs((agent as any).agentConfig?.sarvamIncompleteHoldMs as number | undefined),
       kbBakedOnly: ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,

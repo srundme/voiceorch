@@ -439,6 +439,11 @@ export interface AgentConfig {
   /** Per-agent Sarvam STT mode. null = auto (en → codemix, Indic → transcribe). */
   sarvamSttMode: string | null;
   /**
+   * saaras:v3-realtime `stream_type`. fast = snappy partials (voice agents).
+   * balanced = slower/more accurate partials. simulated = finals only.
+   */
+  sarvamSttStreamType: "fast" | "balanced" | "simulated";
+  /**
    * Sarvam WS `high_vad_sensitivity`. true ≈ 2 VAD frames (~128ms @8kHz silence
    * boundary). false ≈ ~1s+ silence. Default true (snappy voice agents).
    */
@@ -550,6 +555,8 @@ export interface StreamSTT {
   close(): void;
   /** True while saaras:v3-realtime is the live socket (false after legacy fallback). */
   getRealtimeActive?: () => boolean;
+  /** saaras:v3-realtime stream_type on the live socket. */
+  getRealtimeStreamType?: () => "fast" | "balanced" | "simulated";
   /**
    * Sarvam realtime `session.end.audio_duration_s` — billed audio, not wall clock.
    */

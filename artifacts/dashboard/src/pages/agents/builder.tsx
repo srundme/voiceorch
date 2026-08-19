@@ -518,7 +518,7 @@ function AgentCostSummary({
 }
 
 const SECTION_FIELDS: Record<CardSection, string[]> = {
-  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "languageAutoDetect", "multilingualLanguages", "sarvamIndicNumbers"],
+  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "sarvamSttStreamType", "languageAutoDetect", "multilingualLanguages", "sarvamIndicNumbers"],
   model: ["voiceStack", "llmProvider", "llmModel", "temperature"],
   voice: ["ttsProvider", "ttsModel", "ttsVoice", "ttsSpeed", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
 };
@@ -998,6 +998,29 @@ function OverviewTab({
                         : currentValue === "translate"
                         ? "Speech-to-English: any language spoken → English text."
                         : "Auto: English → code-mix, Indic → native-script transcribe."}
+                    </p>
+                  </FormItem>
+                  );
+                }} />
+              )}
+              {!isGeminiLive && asrProvider === "sarvam" && (
+                <FormField control={form.control} name="sarvamSttStreamType" render={({ field }) => {
+                  const current = field.value ?? "fast";
+                  return (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] font-medium text-foreground/80">Partial transcripts</FormLabel>
+                    <SmallSelect value={current} onChange={field.onChange}
+                      options={[
+                        { value: "fast", label: "Fast — snappy barge-in (recommended)" },
+                        { value: "balanced", label: "Balanced — slightly slower, more accurate" },
+                        { value: "simulated", label: "Simulated — finals only, no partials" },
+                      ]} />
+                    <p className="text-[9.5px] text-muted-foreground leading-snug mt-1">
+                      {current === "simulated"
+                        ? "No live partials. Barge-in falls back to energy / final transcript — not for conversational agents."
+                        : current === "balanced"
+                        ? "Partials are a bit later and cleaner. Use for captioning-style accuracy."
+                        : "Lowest-latency partials. This is the voice-agent setting."}
                     </p>
                   </FormItem>
                   );
@@ -6765,6 +6788,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       fragmentCoalescePlayingMs: 0,
       telephonyTailDrainMs: 400,
       sarvamHighVadSensitivity: true,
+      sarvamSttStreamType: "fast",
       sarvamSpeechEndFlushMs: 0,
       sarvamIncompleteHoldMs: 0,
       kbBakedOnly: false,
@@ -6923,6 +6947,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       autoRedialEnabled:      (agent as any).agentConfig?.autoRedial?.enabled ?? false,
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,
       sarvamSttMode:          ((agent as any).agentConfig?.sarvamSttMode as AgentFormValues["sarvamSttMode"]) ?? undefined,
+      sarvamSttStreamType:    ((agent as any).agentConfig?.sarvamSttStreamType as AgentFormValues["sarvamSttStreamType"]) ?? "fast",
       schedulingCalendarId:   ((agent as any).agentConfig?.calendarCapability?.defaultCalendarId as number | null | undefined) ?? null,
       schedulingEventTypeId:  ((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId as number | null | undefined) ?? null,
       voiceStack:               (((agent as any).agentConfig?.voiceStack as string | undefined) === "gemini_live" ? "gemini_live" : "classic") as AgentFormValues["voiceStack"],

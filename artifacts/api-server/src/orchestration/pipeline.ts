@@ -1825,6 +1825,11 @@ export class OrchestrationPipeline implements VoiceSession {
     return this.streamSTT?.getRealtimeActive?.() === true;
   }
 
+  /** Realtime socket that actually emits transcript.partial (not simulated). */
+  private sarvamRealtimePartials(): boolean {
+    return this.liveSarvamRealtime() && this.streamSTT?.getRealtimeStreamType?.() !== "simulated";
+  }
+
   /**
    * Drive barge-in off vad.speech_start (Sarvam realtime best practice), not
    * transcript.final. PSTN echo still needs a partial or energy corroboration.
@@ -2473,6 +2478,7 @@ export class OrchestrationPipeline implements VoiceSession {
           firstTurnMinSpeechMs: this.agent.sarvamFirstTurnMinSpeechMs,
           endOfSpeechSilenceMs: this.agent.sarvamEndOfSpeechSilenceMs,
           languageAutoDetect: this.agent.languageAutoDetect,
+          streamType: this.agent.sarvamSttStreamType,
         })
       : providerExtraConfig;
     this.stt = createSTTAdapter(
@@ -2781,7 +2787,7 @@ export class OrchestrationPipeline implements VoiceSession {
               } else if (isBackchannelOnlyUtterance(text)) {
                 // Pure acks during agent speech are not interruptions — caller is
                 // often about to continue (call 2967: "சரி" then the real question).
-              } else if (this.liveSarvamRealtime()) {
+              } else if (this.sarvamRealtimePartials()) {
                 // Realtime best practice: barge on early partials, not transcript.final.
                 const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
                 this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
@@ -3084,7 +3090,7 @@ export class OrchestrationPipeline implements VoiceSession {
           { callId: this.config.callId, transcript: transcript.slice(0, 80) },
           "Streaming STT: barge-in suppressed for backchannel-only transcript",
         );
-      } else if (this.liveSarvamRealtime()) {
+      } else if (this.sarvamRealtimePartials()) {
         // Realtime already barged (or will barge) from vad.speech_start / partials.
         logger.info(
           { callId: this.config.callId, transcript: transcript.slice(0, 80) },
@@ -3927,7 +3933,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // Filters out brief mic clicks/breaths while reacting promptly to human interruptions.
       let effectiveMinFrames = Math.max(15, BARGE_IN_STREAMING_MIN_FRAMES);
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {
-        if (this.liveSarvamRealtime()) {
+        if (this.sarvamRealtimePartials()) {
           // Energy is echo evidence only. Barge-in is vad.speech_start / early partials.
           return;
         }
