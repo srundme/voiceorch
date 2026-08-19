@@ -28,6 +28,9 @@ export default function ChangelogPage() {
           Call logs record Sarvam&apos;s billed <code>session.end.audio_duration_s</code>.
           Transcriber → Partial transcripts picks <code>fast</code> (default),
           <code>balanced</code>, or <code>simulated</code> (finals only).
+          The socket now sends the full connect query: 8 kHz linear16,
+          millisecond VAD, <code>return_timestamps</code>, and an optional
+          terminology <code>prompt</code> for finals.
         </li>
       </ul>
 

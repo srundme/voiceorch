@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildRealtimeConfigUpdate,
   buildRealtimeWsUrl,
+  clipRealtimePrompt,
   isSarvamRealtimeModel,
   resolveRealtimeStreamType,
   shouldBargeOnRealtimeVadStart,
@@ -64,7 +65,23 @@ describe("buildRealtimeWsUrl", () => {
     expect(url).toContain("silence_duration_ms=500");
     expect(url).toContain("min_speech_duration_ms=250");
     expect(url).toContain("encoding=linear16");
+    expect(url).toContain("threshold=0.3");
+    expect(url).toContain("return_timestamps=true");
     expect(url).not.toContain("high_vad_sensitivity");
+  });
+
+  it("adds a terminology prompt and never sends a bogus sample rate", () => {
+    const url = buildRealtimeWsUrl({
+      languageCode: "hi-IN",
+      sampleRate: 8000,
+      mode: "transcribe",
+      silenceDurationMs: 500,
+      minSpeechDurationMs: 250,
+      threshold: 0.3,
+      prompt: "UPI GSTIN",
+    });
+    expect(url).toContain("prompt=UPI+GSTIN");
+    expect(url).toContain("sample_rate=8000");
   });
 
   it("honours balanced stream_type", () => {
@@ -78,6 +95,14 @@ describe("buildRealtimeWsUrl", () => {
       threshold: 0.3,
     });
     expect(url).toContain("stream_type=balanced");
+  });
+});
+
+describe("clipRealtimePrompt", () => {
+  it("drops empty and caps at 500", () => {
+    expect(clipRealtimePrompt("  ")).toBeUndefined();
+    expect(clipRealtimePrompt("ok")).toBe("ok");
+    expect(clipRealtimePrompt("x".repeat(600))?.length).toBe(500);
   });
 });
 

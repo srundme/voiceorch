@@ -443,6 +443,8 @@ export interface AgentConfig {
    * balanced = slower/more accurate partials. simulated = finals only.
    */
   sarvamSttStreamType: "fast" | "balanced" | "simulated";
+  /** Optional Sarvam realtime `prompt` — terminology hint on the final transcript. */
+  sarvamSttPrompt: string | null;
   /**
    * Sarvam WS `high_vad_sensitivity`. true ≈ 2 VAD frames (~128ms @8kHz silence
    * boundary). false ≈ ~1s+ silence. Default true (snappy voice agents).

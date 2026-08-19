@@ -518,7 +518,7 @@ function AgentCostSummary({
 }
 
 const SECTION_FIELDS: Record<CardSection, string[]> = {
-  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "sarvamSttStreamType", "languageAutoDetect", "multilingualLanguages", "sarvamIndicNumbers"],
+  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "sarvamSttStreamType", "sarvamSttPrompt", "languageAutoDetect", "multilingualLanguages", "sarvamIndicNumbers"],
   model: ["voiceStack", "llmProvider", "llmModel", "temperature"],
   voice: ["ttsProvider", "ttsModel", "ttsVoice", "ttsSpeed", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
 };
@@ -1025,6 +1025,23 @@ function OverviewTab({
                   </FormItem>
                   );
                 }} />
+              )}
+              {!isGeminiLive && asrProvider === "sarvam" && (
+                <FormField control={form.control} name="sarvamSttPrompt" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] font-medium text-foreground/80">Terminology hint</FormLabel>
+                    <Input
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      placeholder="e.g. SuperBae, IRDAI, UPI, GSTIN"
+                      className="h-8 text-[11px]"
+                      maxLength={500}
+                    />
+                    <p className="text-[9.5px] text-muted-foreground leading-snug mt-1">
+                      Boosts those words on the final transcript only. Partials stay plain.
+                    </p>
+                  </FormItem>
+                )} />
               )}
             </div>
             <div className="space-y-3 border-t border-border pt-3 mt-1">
@@ -6789,6 +6806,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       telephonyTailDrainMs: 400,
       sarvamHighVadSensitivity: true,
       sarvamSttStreamType: "fast",
+      sarvamSttPrompt: "",
       sarvamSpeechEndFlushMs: 0,
       sarvamIncompleteHoldMs: 0,
       kbBakedOnly: false,
@@ -6948,6 +6966,9 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,
       sarvamSttMode:          ((agent as any).agentConfig?.sarvamSttMode as AgentFormValues["sarvamSttMode"]) ?? undefined,
       sarvamSttStreamType:    ((agent as any).agentConfig?.sarvamSttStreamType as AgentFormValues["sarvamSttStreamType"]) ?? "fast",
+      sarvamSttPrompt:        typeof (agent as any).agentConfig?.sarvamSttPrompt === "string"
+        ? (agent as any).agentConfig.sarvamSttPrompt
+        : "",
       schedulingCalendarId:   ((agent as any).agentConfig?.calendarCapability?.defaultCalendarId as number | null | undefined) ?? null,
       schedulingEventTypeId:  ((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId as number | null | undefined) ?? null,
       voiceStack:               (((agent as any).agentConfig?.voiceStack as string | undefined) === "gemini_live" ? "gemini_live" : "classic") as AgentFormValues["voiceStack"],

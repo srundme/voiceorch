@@ -15,6 +15,10 @@ export interface SttFinalMetadata {
   pendingPartial?: boolean;
   /** Sarvam VAD END_SPEECH already received for this utterance (eager-commit signal). */
   speechEndReceived?: boolean;
+  /** Sarvam realtime transcript.final start_s when return_timestamps=true. */
+  startS?: number;
+  /** Sarvam realtime transcript.final end_s when return_timestamps=true. */
+  endS?: number;
 }
 
 export interface STTAdapter {

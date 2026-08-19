@@ -29,6 +29,13 @@ export function resolveRealtimeStreamType(raw: unknown): SarvamRealtimeStreamTyp
   return "fast";
 }
 
+/** Terminology hint for the final transcript only. Empty/omitted = none. */
+export function clipRealtimePrompt(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const t = raw.trim().slice(0, 500);
+  return t || undefined;
+}
+
 const REALTIME_LANG = new Set([
   "auto",
   "en-IN", "hi-IN", "bn-IN", "kn-IN", "ml-IN", "mr-IN", "or-IN", "pa-IN",
@@ -71,6 +78,8 @@ export function buildRealtimeWsUrl(opts: {
   silenceDurationMs: number;
   minSpeechDurationMs: number;
   threshold: number;
+  prompt?: string;
+  returnTimestamps?: boolean;
 }): string {
   const params = new URLSearchParams({
     model: "saaras:v3-realtime",
@@ -81,12 +90,16 @@ export function buildRealtimeWsUrl(opts: {
     // fight PSTN echo and our lost-turn backstop — do not switch unless we stop
     // feeding audio continuously.
     endpointing: "vad",
+    // We always decode carrier mulaw to PCM before this socket.
     encoding: "linear16",
-    sample_rate: String(opts.sampleRate),
+    sample_rate: String(opts.sampleRate === 8000 ? 8000 : 16000),
     silence_duration_ms: String(opts.silenceDurationMs),
     min_speech_duration_ms: String(opts.minSpeechDurationMs),
     threshold: String(opts.threshold),
+    return_timestamps: opts.returnTimestamps === false ? "false" : "true",
   });
+  const prompt = clipRealtimePrompt(opts.prompt);
+  if (prompt) params.set("prompt", prompt);
   return `${WS_BASE}?${params.toString()}`;
 }
 
@@ -98,6 +111,7 @@ export function buildRealtimeConfigUpdate(opts: {
   threshold?: number;
   silenceDurationMs?: number;
   minSpeechDurationMs?: number;
+  prompt?: string;
 }): Record<string, unknown> {
   const body: Record<string, unknown> = { event: "config.update" };
   if (opts.languageCode) body.language_code = opts.languageCode;
@@ -106,6 +120,8 @@ export function buildRealtimeConfigUpdate(opts: {
   if (opts.threshold !== undefined) body.threshold = opts.threshold;
   if (opts.silenceDurationMs !== undefined) body.silence_duration_ms = opts.silenceDurationMs;
   if (opts.minSpeechDurationMs !== undefined) body.min_speech_duration_ms = opts.minSpeechDurationMs;
+  const prompt = clipRealtimePrompt(opts.prompt);
+  if (prompt) body.prompt = prompt;
   return body;
 }
 
@@ -141,6 +157,8 @@ interface RealtimeMsg {
   message?: string;
   applied?: string[];
   audio_duration_s?: number;
+  start_s?: number;
+  end_s?: number;
 }
 
 export class SarvamRealtimeSTT implements STTAdapter {
@@ -154,6 +172,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
   private readonly minSpeechDurationMs: number;
   private readonly threshold: number;
   private readonly streamType: SarvamRealtimeStreamType;
+  private readonly prompt?: string;
 
   constructor(
     apiKey: string,
@@ -173,6 +192,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
           endOfSpeechSilenceMs?: number | null;
           vadThreshold?: number | null;
           streamType?: string;
+          prompt?: string;
         })
       : {};
 
@@ -197,12 +217,14 @@ export class SarvamRealtimeSTT implements STTAdapter {
         ? Math.min(1, Math.max(0, th))
         : DEFAULT_THRESHOLD;
     this.streamType = resolveRealtimeStreamType(extra.streamType);
+    this.prompt = clipRealtimePrompt(extra.prompt);
 
     logger.info(
       {
         languageCode: this.languageCode,
         mode: this.mode,
         streamType: this.streamType,
+        prompt: this.prompt ? this.prompt.slice(0, 40) : undefined,
         sampleRate: this.sampleRate,
         silenceDurationMs: this.silenceDurationMs,
         minSpeechDurationMs: this.minSpeechDurationMs,
@@ -234,6 +256,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
     const minSpeechDurationMs = this.minSpeechDurationMs;
     const threshold = this.threshold;
     const streamType = this.streamType;
+    const prompt = this.prompt;
     const legacy = this.legacy;
 
     let ws: WebSocket | null = null;
@@ -371,10 +394,12 @@ export class SarvamRealtimeSTT implements STTAdapter {
           requestId: lastRequestId,
           endDetectToFinalMs: speechEndAt > 0 ? Date.now() - speechEndAt : undefined,
           speechEndReceived: speechEndAt > 0,
+          startS: typeof msg.start_s === "number" ? msg.start_s : undefined,
+          endS: typeof msg.end_s === "number" ? msg.end_s : undefined,
         };
         speechEndAt = 0;
         logger.info(
-          { text: text.slice(0, 80), language: detected, requestId: lastRequestId },
+          { text: text.slice(0, 80), language: detected, requestId: lastRequestId, startS: meta.startS, endS: meta.endS },
           "Sarvam STT realtime: final transcript",
         );
         onTranscript(text, true, detected, meta);
@@ -401,6 +426,8 @@ export class SarvamRealtimeSTT implements STTAdapter {
         silenceDurationMs,
         minSpeechDurationMs,
         threshold,
+        prompt,
+        returnTimestamps: true,
       });
       ws = new WebSocket(url, { headers: { "api-subscription-key": key } });
       ws.on("open", () => {

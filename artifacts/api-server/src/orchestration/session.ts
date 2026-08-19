@@ -774,6 +774,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         )
       : ((agentCfg["sarvamSttMode"] as string | undefined) ?? null),
     sarvamSttStreamType: resolveRealtimeStreamType(agentCfg["sarvamSttStreamType"]),
+    sarvamSttPrompt: typeof agentCfg["sarvamSttPrompt"] === "string"
+      ? (agentCfg["sarvamSttPrompt"] as string)
+      : null,
     sarvamHighVadSensitivity: resolveSarvamHighVadSensitivity(agentCfg["sarvamHighVadSensitivity"]),
     sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs(agentCfg["sarvamSpeechEndFlushMs"] as number | undefined),
     sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs(agentCfg["sarvamIncompleteHoldMs"] as number | undefined),

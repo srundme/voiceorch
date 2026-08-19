@@ -110,7 +110,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs, ttsSpeed,
     fragmentCoalesceListeningMs, fragmentCoalescePlayingMs, telephonyTailDrainMs,
     autoRedialEnabled, autoRedialMaxAttempts,
-    sarvamSttMode, sarvamSttStreamType, kbBakedOnly, schedulingCalendarId, schedulingEventTypeId,
+    sarvamSttMode, sarvamSttStreamType, sarvamSttPrompt, kbBakedOnly, schedulingCalendarId, schedulingEventTypeId,
     sarvamHighVadSensitivity, sarvamSpeechEndFlushMs, sarvamIncompleteHoldMs,
     voiceStack, geminiLiveVoiceName, geminiLiveThinkingLevel,
     agentComposition, agentSurfaces, meetingPrompt,
@@ -177,6 +177,10 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     sarvamSttStreamType === "balanced" || sarvamSttStreamType === "simulated"
       ? sarvamSttStreamType
       : "fast";
+  {
+    const hint = (sarvamSttPrompt ?? "").trim().slice(0, 500);
+    agentConfig["sarvamSttPrompt"] = hint || null;
+  }
   // Saaras owns turn-taking — persist high-VAD only; hold knobs forced off.
   agentConfig["sarvamHighVadSensitivity"] = sarvamHighVadSensitivity !== false;
   agentConfig["sarvamSpeechEndFlushMs"] = 0;
@@ -485,6 +489,7 @@ export default function AgentEdit() {
       telephonyTailDrainMs: 400,
       sarvamHighVadSensitivity: true,
       sarvamSttStreamType: "fast",
+      sarvamSttPrompt: "",
       sarvamSpeechEndFlushMs: 0,
       sarvamIncompleteHoldMs: 0,
       kbBakedOnly: false,
@@ -769,6 +774,9 @@ export default function AgentEdit() {
       telephonyTailDrainMs: clampTelephonyTailDrainMs((agent as any).agentConfig?.telephonyTailDrainMs as number | undefined),
       sarvamHighVadSensitivity: ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) === true,
       sarvamSttStreamType: ((agent as any).agentConfig?.sarvamSttStreamType as AgentFormValues["sarvamSttStreamType"] | undefined) ?? "fast",
+      sarvamSttPrompt: typeof (agent as any).agentConfig?.sarvamSttPrompt === "string"
+        ? (agent as any).agentConfig.sarvamSttPrompt
+        : "",
       sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs((agent as any).agentConfig?.sarvamSpeechEndFlushMs as number | undefined),
       sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs((agent as any).agentConfig?.sarvamIncompleteHoldMs as number | undefined),
       kbBakedOnly: ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
