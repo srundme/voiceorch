@@ -8,40 +8,23 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db, callerVoiceprintsTable, callerProfilesTable, canonicalizeCallerKey } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import {
+  VOICE_MATCH_THRESHOLD,
+  VOICE_SOFT_MATCH_THRESHOLD,
+  VOICE_SOLO_LINK_THRESHOLD,
+  VOICE_ASNORM_MIN_COHORT,
+  VOICE_ASNORM_THRESHOLD,
+} from "./voiceMemoryThresholds.js";
 
-/** Hard match for cross-number same-person (stricter). */
-export const VOICE_MATCH_THRESHOLD = Number(process.env["VOICE_MEMORY_MATCH_THRESHOLD"] ?? 0.82);
-/** Soft mid-call handoff alert (more sensitive). */
-export const VOICE_HANDOFF_THRESHOLD = Number(process.env["VOICE_MEMORY_HANDOFF_THRESHOLD"] ?? 0.72);
-/**
- * Soft floor for NAME-CORROBORATED cross-number linking. 8kHz telephony audio
- * through a 16kHz-trained embedder drags same-person cross-device scores far
- * below the hard bar (observed 0.42-0.46 for a confirmed same speaker), so a
- * voice that is at least "somewhat similar" PLUS the same stated caller name
- * is accepted as the same person.
- */
-export const VOICE_SOFT_MATCH_THRESHOLD = Number(process.env["VOICE_MEMORY_SOFT_MATCH_THRESHOLD"] ?? 0.40);
-/**
- * Solo-candidate link: when the best candidate is the ONLY person the fresh
- * voice resembles (no next-best different person at all) and the raw score is
- * comfortably above the soft floor, link WITHOUT name corroboration.
- * Telephony compresses same-person scores; a clear solo 0.55+ is strong
- * evidence when there is no competing identity (call 5035: 0.56 solo).
- */
-export const VOICE_SOLO_LINK_THRESHOLD = Number(process.env["VOICE_MEMORY_SOLO_LINK_THRESHOLD"] ?? 0.55);
-
-/**
- * Adaptive score normalization (AS-norm / S-norm). Instead of judging the raw
- * cosine on an absolute bar, judge it RELATIVE to how this voice scores
- * against a cohort of OTHER callers of the same agent (impostors). On 8kHz
- * telephony where all raw scores are compressed downward, a raw 0.45 that
- * sits several standard deviations above the impostor crowd is strong
- * evidence of a true match.
- */
-/** Minimum number of different-person cohort prints required to trust normalization. */
-export const VOICE_ASNORM_MIN_COHORT = Number(process.env["VOICE_MEMORY_ASNORM_MIN_COHORT"] ?? 8);
-/** Normalized-score acceptance bar, in std-dev units above the impostor mean. */
-export const VOICE_ASNORM_THRESHOLD = Number(process.env["VOICE_MEMORY_ASNORM_THRESHOLD"] ?? 4.0);
+export {
+  VOICE_MATCH_THRESHOLD,
+  VOICE_HANDOFF_THRESHOLD,
+  VOICE_SOFT_MATCH_THRESHOLD,
+  VOICE_SOLO_LINK_THRESHOLD,
+  VOICE_ASNORM_MIN_COHORT,
+  VOICE_ASNORM_THRESHOLD,
+  explainVoiceNearMiss,
+} from "./voiceMemoryThresholds.js";
 /** Top-K cohort scores used for the adaptive statistics (per side). */
 const VOICE_ASNORM_TOP_K = Number(process.env["VOICE_MEMORY_ASNORM_TOP_K"] ?? 50);
 /** Std floor — tiny cohorts can produce degenerate (near-zero) std. */
@@ -227,7 +210,7 @@ export async function upsertCallerVoiceprint(opts: {
   personKey: string;
   linkedFromPhone: string | null;
   score: number | null;
-  nearMiss: { score: number; phoneNumber: string } | null;
+  nearMiss: VoiceMatchOutcome["nearMiss"];
 }> {
   const phoneNumber = canonicalizeCallerKey(opts.phoneNumber) ?? opts.phoneNumber;
   const { agentId, embedding, displayName } = opts;
@@ -304,7 +287,8 @@ export async function upsertCallerVoiceprint(opts: {
           eq(callerProfilesTable.agentId, agentId),
           inArray(callerProfilesTable.phoneNumber, phones),
         ));
-      const myName = normalizeName(profiles.find((p) => p.phoneNumber === phoneNumber)?.name);
+      const myName = normalizeName(profiles.find((p) => p.phoneNumber === phoneNumber)?.name)
+        ?? normalizeName(displayName);
       const theirName = normalizeName(profiles.find((p) => p.phoneNumber === nearMiss.phoneNumber)?.name);
       if (myName && theirName && myName === theirName && myName.length >= 3) {
         cross = { personKey: nearMiss.personKey, matchedPhone: nearMiss.phoneNumber, score: nearMiss.score, samePhone: false };

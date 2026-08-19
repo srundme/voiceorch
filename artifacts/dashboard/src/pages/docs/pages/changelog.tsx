@@ -9,6 +9,15 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-19-voice-memory-score">2026-08-19 — Voice Memory: telephony scores</h2>
+      <ul>
+        <li>
+          Cross-number voice match now uses ~5s of caller speech (or the full call at hangup),
+          not the first 2.5s of short replies. Same-person 8 kHz scores around 0.42 now link
+          when that voice is the only candidate.
+        </li>
+      </ul>
+
       <h2 id="2026-08-19-english-latch">2026-08-19 — Multilingual: Devanagari “English” requests</h2>
       <ul>
         <li>

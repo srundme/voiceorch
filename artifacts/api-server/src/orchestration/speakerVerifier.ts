@@ -17,16 +17,20 @@ import { writeExecutionLog } from "../services/execution-log.js";
 import { genderServiceBaseUrl } from "./genderService.js";
 import {
   VOICE_HANDOFF_THRESHOLD,
-  VOICE_MATCH_THRESHOLD,
+  explainVoiceNearMiss,
   upsertCallerVoiceprint,
 } from "./voiceMemoryStore.js";
 
 const SAMPLE_RATE = 8_000;
 const SAMPLE_BYTES = 2;
 const ENROLL_MS = Number(process.env["VOICE_MEMORY_ENROLL_MS"] ?? 2500);
+/** Cross-number match waits for this much caller speech (or call end). 2.5s
+ *  fragments of "hmm"/"yes" score ~0.19 across handsets (calls 11067/11068). */
+const MATCH_MS = Number(process.env["VOICE_MEMORY_MATCH_MS"] ?? 5_000);
 /** Faster mid-call windows so a phone handoff is detected within ~1 turn, not after 20s of mixed speech. */
 const VERIFY_MS = Number(process.env["VOICE_MEMORY_VERIFY_MS"] ?? 6_000);
 const ENROLL_BYTES = Math.round((ENROLL_MS / 1000) * SAMPLE_RATE) * SAMPLE_BYTES;
+const MATCH_BYTES = Math.round((MATCH_MS / 1000) * SAMPLE_RATE) * SAMPLE_BYTES;
 const VERIFY_BYTES = Math.round((VERIFY_MS / 1000) * SAMPLE_RATE) * SAMPLE_BYTES;
 /** Only adapt the reference when we are confident it's the same speaker (avoid poisoning on mixed audio). */
 const VOICE_ADAPT_THRESHOLD = Number(process.env["VOICE_MEMORY_ADAPT_THRESHOLD"] ?? 0.85);
@@ -98,6 +102,8 @@ export class SpeakerVerifier {
   private linked = false;
   /** Last refCount at which a refined cross-number re-match ran (milestone gate). */
   private lastRematchRefCount = 1;
+  /** True after we have upserted/matched from ≥MATCH_MS of speech (or finalize). */
+  private crossNumberPersisted = false;
   private readonly callId: number;
   private readonly agentId: number;
   private readonly phoneNumber: string | null;
@@ -178,6 +184,13 @@ export class SpeakerVerifier {
       // have a full caller-only window (phone handoffs mid-sentence).
       if (this.verifyAccumulated >= VERIFY_BYTES && !this.busy && !this.handoffFired) {
         this.tick();
+      } else if (
+        !this.linked
+        && !this.crossNumberPersisted
+        && this.accumulated >= MATCH_BYTES
+        && !this.busy
+      ) {
+        this.tick();
       }
     } else if (this.accumulated >= ENROLL_BYTES && !this.busy) {
       this.tick();
@@ -196,6 +209,18 @@ export class SpeakerVerifier {
         .finally(() => { this.busy = false; });
       return;
     }
+    if (
+      !this.linked
+      && !this.crossNumberPersisted
+      && this.accumulated >= MATCH_BYTES
+      && !this.hadAnyHandoff
+    ) {
+      this.busy = true;
+      void this.persistAndMatch("match_window")
+        .catch((err) => this.log.warn({ callId: this.callId, err }, "Voice Memory match-window persist failed"))
+        .finally(() => { this.busy = false; });
+      return;
+    }
     if (this.handoffFired) return;
     if (this.verifyAccumulated < VERIFY_BYTES) return;
     this.busy = true;
@@ -208,37 +233,23 @@ export class SpeakerVerifier {
   }
 
   /**
-   * Persist the refined full-call voiceprint at call end. No-op unless the
-   * reference actually improved (>=1 strong verify window folded in) — the
-   * enroll-time upsert already saved the initial print. Never persists after
-   * a handoff fired (mixed speakers must not overwrite the caller's print).
+   * Persist a full-speech voiceprint at call end and retry cross-number match.
+   * Re-embeds ALL accumulated caller PCM (up to 12s) — the 2.5s enroll window
+   * is too short/fragmented for 8kHz telephony (calls 11067/11068: 0.19).
    */
   async finalize(): Promise<void> {
     if (this.finalized) return;
     this.finalized = true;
-    // Hard block after ANY handoff this call — resetForNewSpeaker() clears
-    // handoffFired, so a re-enrolled second speaker must never be persisted
-    // under the original caller's phone record.
     if (this.hadAnyHandoff) return;
-    // Let an in-flight enroll/verify settle so we snapshot the latest mean
-    // (bounded wait — never delay teardown by more than ~2s).
     const waitDeadline = Date.now() + 2_000;
     while (this.busy && Date.now() < waitDeadline) {
       await new Promise((r) => setTimeout(r, 50));
     }
     if (this.hadAnyHandoff) return;
-    if (!this.enrolled || !this.refDirty || this.handoffFired) return;
-    if (!this.phoneNumber || !this.reference?.length) return;
+    if (!this.phoneNumber) return;
+    if (!this.enrolled && this.accumulated < ENROLL_BYTES) return;
     try {
-      await upsertCallerVoiceprint({
-        agentId: this.agentId,
-        phoneNumber: this.phoneNumber,
-        embedding: this.reference,
-      });
-      this.log.info(
-        { callId: this.callId, windows: this.refCount },
-        "Voice Memory: persisted refined full-call voiceprint",
-      );
+      await this.persistAndMatch("finalize");
     } catch (err) {
       this.log.warn({ callId: this.callId, err }, "Voice Memory: finalize persist failed");
     }
@@ -258,6 +269,7 @@ export class SpeakerVerifier {
     // rematch milestone so speaker B gets fresh 2/4/8 rematch attempts.
     this.linked = false;
     this.lastRematchRefCount = 1;
+    this.crossNumberPersisted = false;
     this.chunks = [];
     this.accumulated = 0;
     this.verifyChunks = [];
@@ -279,37 +291,86 @@ export class SpeakerVerifier {
     this.refCount = 1;
     this.refDirty = false;
 
-    let personKey = "session-only";
-    let linkedFromPhone: string | null = null;
-    let score: number | null = null;
-    let nearMiss: { score: number; phoneNumber: string } | null = null;
-    if (this.phoneNumber) {
-      const saved = await upsertCallerVoiceprint({
-        agentId: this.agentId,
-        phoneNumber: this.phoneNumber,
-        embedding: emb,
-      });
-      personKey = saved.personKey;
-      linkedFromPhone = saved.linkedFromPhone;
-      score = saved.score;
-      nearMiss = saved.nearMiss;
-    }
-    this.linked = !!linkedFromPhone;
-
     this.log.info(
-      { callId: this.callId, bytes: pcm.byteLength, linked: !!linkedFromPhone },
-      "Voice Memory: enrolled reference voiceprint",
+      { callId: this.callId, bytes: pcm.byteLength },
+      "Voice Memory: local reference ready — deferring cross-number match until more speech",
     );
     this.execLog(
-      "success",
-      linkedFromPhone
-        ? `Voiceprint enrolled — same voice recognized from another number (${linkedFromPhone})`
-        : nearMiss
-          ? `Voiceprint enrolled — a similar voice exists on ${nearMiss.phoneNumber} but scored ${nearMiss.score.toFixed(2)}, below the ${VOICE_MATCH_THRESHOLD} match bar (will retry with a refined voiceprint as the call goes on)`
-          : "Voiceprint enrolled for this caller",
-      { personKey, linkedFromPhone, score, nearMiss },
+      "info",
+      `Local voiceprint ready (${(pcm.byteLength / (SAMPLE_RATE * SAMPLE_BYTES)).toFixed(1)}s) — cross-number match waits for ~${MATCH_MS / 1000}s of caller speech or call end`,
+      { bytes: pcm.byteLength },
     );
-    this.onEvent({ type: "enrolled", personKey, linkedFromPhone, score });
+    if (this.phoneNumber && this.accumulated >= MATCH_BYTES) {
+      await this.persistAndMatch("match_window");
+    }
+  }
+
+  /**
+   * Embed ALL accumulated caller speech (up to 12s) and upsert/match.
+   * Used at the 5s match window and again at hangup so the stored print is
+   * not the first 2.5s of "hmm"/"yes" barge-in scraps.
+   */
+  private async persistAndMatch(reason: "match_window" | "finalize"): Promise<void> {
+    if (!this.phoneNumber || this.hadAnyHandoff) return;
+    const pcm = Buffer.concat(this.chunks);
+    if (pcm.byteLength < ENROLL_BYTES) return;
+    const emb = await this.fetchEmbed(pcm);
+    if (!emb?.length) return;
+    this.reference = emb;
+    this.refSum = emb.slice();
+    this.refCount = Math.max(this.refCount, 1);
+    this.refDirty = false;
+
+    const wasLinked = this.linked;
+    const saved = await upsertCallerVoiceprint({
+      agentId: this.agentId,
+      phoneNumber: this.phoneNumber,
+      embedding: emb,
+    });
+    this.crossNumberPersisted = true;
+    this.linked = this.linked || !!saved.linkedFromPhone;
+
+    const speechSec = pcm.byteLength / (SAMPLE_RATE * SAMPLE_BYTES);
+    this.log.info(
+      {
+        callId: this.callId,
+        reason,
+        seconds: speechSec,
+        linked: this.linked,
+        score: saved.score,
+      },
+      "Voice Memory: full-speech voiceprint persisted",
+    );
+
+    if (saved.linkedFromPhone) {
+      this.execLog(
+        "success",
+        reason === "finalize"
+          ? `Same voice recognized from another number (${saved.linkedFromPhone}) at hangup`
+          : `Voiceprint matched another number (${saved.linkedFromPhone}) after ${speechSec.toFixed(1)}s of speech`,
+        { personKey: saved.personKey, linkedFromPhone: saved.linkedFromPhone, score: saved.score, seconds: speechSec, reason },
+      );
+      if (!wasLinked) {
+        this.onEvent({
+          type: "enrolled",
+          personKey: saved.personKey,
+          linkedFromPhone: saved.linkedFromPhone,
+          score: saved.score,
+        });
+      }
+    } else if (saved.nearMiss) {
+      this.execLog(
+        "info",
+        `Voiceprint saved — did not link (${explainVoiceNearMiss(saved.nearMiss)})`,
+        { personKey: saved.personKey, linkedFromPhone: null, score: saved.score, nearMiss: saved.nearMiss, seconds: speechSec, reason },
+      );
+    } else {
+      this.execLog(
+        "success",
+        `Voiceprint enrolled for this caller (${speechSec.toFixed(1)}s of speech)`,
+        { personKey: saved.personKey, linkedFromPhone: null, score: saved.score, seconds: speechSec, reason },
+      );
+    }
   }
 
   /**
@@ -356,7 +417,7 @@ export class SpeakerVerifier {
         // undiagnosable without it).
         this.execLog(
           "info",
-          `Refined voiceprint re-match (window ${this.refCount}) still below the match bar — best candidate ${saved.nearMiss.phoneNumber} scored ${saved.nearMiss.score.toFixed(2)}`,
+          `Refined voiceprint re-match (window ${this.refCount}) still below the match bar — ${explainVoiceNearMiss(saved.nearMiss)}`,
           { nearMiss: saved.nearMiss, windows: this.refCount },
         );
       }
