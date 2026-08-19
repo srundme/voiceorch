@@ -50,13 +50,14 @@ export default function PlatformConceptsPage() {
       <p>
         After each call, AI picks an outcome from the agent’s taxonomy and fills data fields you
         define. Map labels to funnel meanings (Interested / Callback / DNC) for analytics. Set under
-        Agent Builder → <strong>Outcomes</strong> (top-level tab).
+        Agent Builder → <strong>After the call</strong>.
       </p>
 
       <h2 id="after-call">After-call messages</h2>
       <p>
-        Agent-owned WhatsApp / email rules: every call, or only for matching dispositions. Requires
-        live channels under Connections. Campaigns no longer map WA/email branches — they only{" "}
+        Agent-owned WhatsApp / email rules: every call, or only for matching dispositions. Connect
+        WhatsApp and email on the agent’s <strong>Actions</strong> or <strong>After the call</strong> tab.
+        Campaigns no longer map WA/email branches — they only{" "}
         <strong>transfer leads</strong>.
       </p>
 
@@ -107,7 +108,8 @@ export default function PlatformConceptsPage() {
       <h2 id="tools">Tools</h2>
       <p>
         Functions mid-conversation (book slot, transfer, HTTP webhook, meeting controls). Configured
-        in the agent builder Tools tab.
+        in the agent builder <strong>Actions</strong> tab. Email, WhatsApp, and Google Calendar
+        are configured on that same tab.
       </p>
 
       <h2 id="knowledge">Knowledge base</h2>

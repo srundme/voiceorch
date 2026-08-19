@@ -3,7 +3,7 @@
  * Creates calendar + Google link + bookable meeting without "event type" jargon.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -101,12 +101,38 @@ function mapMeetingFromQuery(e: {
   };
 }
 
+function CalendarShell({
+  embedded,
+  backHref,
+  backLabel,
+  children,
+}: {
+  embedded: boolean;
+  backHref: string;
+  backLabel: string;
+  children: ReactNode;
+}) {
+  if (embedded) return <div className="space-y-4">{children}</div>;
+  return (
+    <StripePage
+      title="Bookings calendar"
+      description="Set up booking in a few simple steps. Day-to-day appointments live under Bookings."
+      back={{ href: backHref, label: backLabel }}
+    >
+      {children}
+    </StripePage>
+  );
+}
+
 export function ConnectionsCalendarSetup({
   backHref = "/app/connections",
   backLabel = "Connections",
+  embedded = false,
 }: {
   backHref?: string;
   backLabel?: string;
+  /** Render inside Agent Builder without the Connections page chrome. */
+  embedded?: boolean;
 } = {}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -159,25 +185,17 @@ export function ConnectionsCalendarSetup({
 
   if (loading) {
     return (
-      <StripePage
-        title="Bookings calendar"
-        description="Set up booking in a few simple steps. Day-to-day appointments live under Bookings."
-        back={{ href: backHref, label: backLabel }}
-      >
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
+      <CalendarShell embedded={embedded} backHref={backHref} backLabel={backLabel}>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
           <Loader2 className="h-4 w-4 animate-spin" /> Checking your setup…
         </div>
-      </StripePage>
+      </CalendarShell>
     );
   }
 
   if (ready && !editingReady) {
     return (
-      <StripePage
-        title="Bookings calendar"
-        description="Set up booking in a few simple steps. Day-to-day appointments live under Bookings."
-        back={{ href: backHref, label: backLabel }}
-      >
+      <CalendarShell embedded={embedded} backHref={backHref} backLabel={backLabel}>
         <div className="max-w-lg space-y-4">
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[12px] text-emerald-600 dark:text-emerald-400">
             <p className="font-medium flex items-center gap-2">
@@ -185,7 +203,9 @@ export function ConnectionsCalendarSetup({
               3 of 3 ready
             </p>
             <p className="mt-1 leading-relaxed text-emerald-600 dark:text-emerald-400/90">
-              On your agent → Tools → turn on Booking and pick this meeting, then watch appointments under Bookings.
+              {embedded
+                ? "Google is linked. Pick the meeting above, then save the agent."
+                : "On your agent → Actions → turn on Booking and pick this meeting, then watch appointments under Bookings."}
             </p>
           </div>
 
@@ -227,16 +247,12 @@ export function ConnectionsCalendarSetup({
             </Button>
           </div>
         </div>
-      </StripePage>
+      </CalendarShell>
     );
   }
 
   return (
-    <StripePage
-      title="Bookings calendar"
-      description="Set up booking in a few simple steps. Day-to-day appointments live under Bookings."
-      back={{ href: backHref, label: backLabel }}
-    >
+    <CalendarShell embedded={embedded} backHref={backHref} backLabel={backLabel}>
       <div className="max-w-lg space-y-4">
         <div
           className={cn(
@@ -330,7 +346,9 @@ export function ConnectionsCalendarSetup({
                           setActiveStep(null);
                           toast({
                             title: "Booking setup complete",
-                            description: "Turn on Booking on an agent and pick this meeting.",
+                            description: embedded
+                              ? "Pick this meeting in the dropdown above, then save the agent."
+                              : "Turn on Booking on an agent and pick this meeting.",
                           });
                         }}
                       />
@@ -357,7 +375,7 @@ export function ConnectionsCalendarSetup({
           </Button>
         </div>
       </div>
-    </StripePage>
+    </CalendarShell>
   );
 }
 

@@ -82,10 +82,13 @@ export function EmailChannelCard({
   compact = false,
   forceExpanded = false,
   setupMode = false,
+  embedded = false,
 }: {
   compact?: boolean;
   forceExpanded?: boolean;
   setupMode?: boolean;
+  /** Hide the page-level Email title when shown inside Agent Builder. */
+  embedded?: boolean;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -306,6 +309,7 @@ export function EmailChannelCard({
 
   return (
     <div ref={rootRef} className="space-y-4">
+      {!embedded ? (
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="flex items-center gap-2 text-sm font-semibold">
@@ -318,6 +322,14 @@ export function EmailChannelCard({
         </div>
         <StatusPill ready={ready} label={ready ? "Brevo connected" : "Needs setup"} />
       </div>
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] text-muted-foreground">
+            Sender, template, and a test send — all here. No need to leave this agent.
+          </p>
+          <StatusPill ready={ready} label={ready ? "Brevo connected" : "Needs setup"} />
+        </div>
+      )}
 
       {!expanded ? (
         <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => setExpanded(true)}>

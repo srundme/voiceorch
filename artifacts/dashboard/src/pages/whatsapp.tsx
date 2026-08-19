@@ -1307,11 +1307,21 @@ function BspAdopterGuide() {
   );
 }
 
-export default function WhatsAppPage() {
+export default function WhatsAppPage({
+  embedded = false,
+  forAgentId,
+}: {
+  embedded?: boolean;
+  forAgentId?: number;
+} = {}) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const search = useSearch();
-  const urlAgentId = Number(new URLSearchParams(search).get("agentId") || "");
+  const searchAgentId = Number(new URLSearchParams(search).get("agentId") || "");
+  const urlAgentId =
+    Number.isFinite(searchAgentId) && searchAgentId > 0
+      ? searchAgentId
+      : (forAgentId && forAgentId > 0 ? forAgentId : 0);
   const { data: agentsData } = useListAgents({});
   const agents = useMemo(
     () => (agentsData ?? []).map((a) => ({ id: a.id, name: a.name })),
@@ -1628,16 +1638,12 @@ export default function WhatsAppPage() {
     || (backHref.includes("/agents/")
       ? "Outcomes"
       : backHref.includes("section=tools")
-        ? "Tools"
+        ? "Actions"
         : "Connections");
 
-  return (
-    <StripePage
-      title="WhatsApp"
-      description="One number, one path. Meta is the network; Vobiz/Wati/etc. is the BSP. Return to Connections when you're done."
-      back={{ href: backHref, label: backLabel }}
-    >
-      <div className="space-y-6">
+  const body = (
+    <>
+      <div className={embedded ? "space-y-6 max-h-[min(72vh,840px)] overflow-y-auto pr-0.5" : "space-y-6"}>
       <NativeSection agents={agents} onChooseBsp={() => openBspCreate("webhook")} />
 
       {(showByo || connections.length > 0) && <BspAdopterGuide />}
@@ -1896,7 +1902,7 @@ export default function WhatsAppPage() {
               <Switch checked={requestCall} onCheckedChange={setRequestCall} />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              For mid-call sends, enable <strong>Tools → Send WhatsApp</strong> on the agent after saving.
+              For mid-call sends, enable <strong>Actions → Send WhatsApp</strong> on the agent after saving.
             </p>
           </div>
           <DialogFooter>
@@ -2010,6 +2016,17 @@ export default function WhatsAppPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </>
+  );
+
+  if (embedded) return body;
+  return (
+    <StripePage
+      title="WhatsApp"
+      description="One number, one path. Meta is the network; Vobiz/Wati/etc. is the BSP. Return to Connections when you're done."
+      back={{ href: backHref, label: backLabel }}
+    >
+      {body}
     </StripePage>
   );
 }

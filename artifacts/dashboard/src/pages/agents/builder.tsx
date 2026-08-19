@@ -4,7 +4,7 @@ import { useLocation, useParams, useSearch, Link } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Trash2, Settings, FileText, Wrench,
-  VoicemailIcon, TestTube2, ChevronRight, ChevronLeft,
+  TestTube2, ChevronRight, ChevronLeft,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Users, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause,
@@ -119,6 +119,7 @@ import {
   type AgentTeamMembership,
 } from "./agent-team";
 import { ToolsWhatsappSetup, ToolsEmailSetup } from "./tools-messaging";
+import { ConnectionsCalendarSetup } from "@/pages/connections/calendar-setup";
 import { AgentAnalyticsPanel } from "./agent-analytics-panel";
 import {
   PropertyRow,
@@ -138,12 +139,11 @@ interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
 const TABS: TabDef[] = [
   { id: "overview",  label: "Overview",  icon: <Bot className="h-3.5 w-3.5" /> },
-  { id: "prompt",    label: "Prompt",    icon: <FileText className="h-3.5 w-3.5" /> },
-  { id: "voice",     label: "Voice",     icon: <Mic className="h-3.5 w-3.5" /> },
-  { id: "tools",     label: "Tools",     icon: <Wrench className="h-3.5 w-3.5" /> },
-  { id: "outcomes",  label: "Outcomes",  icon: <Tag className="h-3.5 w-3.5" /> },
-  { id: "analytics", label: "Analytics", icon: <BarChart3 className="h-3.5 w-3.5" /> },
-  { id: "voicemail", label: "Voicemail", icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
+  { id: "prompt",    label: "Script",    icon: <FileText className="h-3.5 w-3.5" /> },
+  { id: "voice",     label: "Sound",     icon: <Mic className="h-3.5 w-3.5" /> },
+  { id: "tools",     label: "Actions",   icon: <Wrench className="h-3.5 w-3.5" /> },
+  { id: "outcomes",  label: "After the call", icon: <Tag className="h-3.5 w-3.5" /> },
+  { id: "analytics", label: "Activity",  icon: <BarChart3 className="h-3.5 w-3.5" /> },
   { id: "settings",  label: "Settings",  icon: <Settings className="h-3.5 w-3.5" /> },
   { id: "versions",  label: "Versions",  icon: <History className="h-3.5 w-3.5" /> },
 ];
@@ -157,8 +157,10 @@ const BUILDER_SEGMENTS: WorkspaceNavItem<TabId>[] = TABS.map((tab) => ({
 function sectionFromSearch(search: string): TabId {
   const requested = new URLSearchParams(search).get("section");
   if (requested === "advanced") return "settings";
-  // Channels removed — messaging/booking live under Tools.
+  // Channels removed — messaging/booking live under Actions.
   if (requested === "channels") return "tools";
+  // Voicemail now sits on After the call.
+  if (requested === "voicemail") return "outcomes";
   // Disposition used to nest under Settings → Analytics.
   if (requested === "disposition" || requested === "dispositions") {
     return "outcomes";
@@ -831,7 +833,7 @@ function OverviewTab({
                   onClick={onGoToPrompt}
                 >
                   <FileText className="size-3.5" />
-                  Edit prompt
+                  Edit script
                 </Button>
               )}
             </div>
@@ -839,7 +841,7 @@ function OverviewTab({
 
           {/* Pipeline — primary composition */}
           <section className="space-y-2.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Pipeline</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">How it talks</p>
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
               <AgentConfigCard
                 icon={isGeminiLive ? <Globe /> : <Mic />}
@@ -2603,6 +2605,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const [testArgs, setTestArgs]             = useState<Record<string, string>>({});
   const [testResult, setTestResult]         = useState<Record<string, string | null>>({});
   const [bookingDetailsOpen, setBookingDetailsOpen] = useState(false);
+  const [showCalendarSetup, setShowCalendarSetup] = useState(false);
 
   const runTest = useRunToolTest();
 
@@ -2630,6 +2633,9 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
 
   const bookingEnabled = BOOKING_TYPES.every((type) => hasNativeTool(type));
   const bookingPartial = !bookingEnabled && BOOKING_TYPES.some((type) => hasNativeTool(type));
+  const calendarNeedsSetup = !agentCalendar
+    || !(agentCalendar as any).connectedGoogleEmail
+    || (agentEventTypes ?? []).length === 0;
 
   const toggleBookingSuite = (on: boolean) => {
     const current = (form.getValues("tools") ?? []) as any[];
@@ -2650,11 +2656,11 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       if (!agentId) {
         toast({ title: "Save agent first", description: "Save this agent before configuring calendar tools.", variant: "destructive" });
       } else if (!agentCalendar) {
-        toast({ title: "No calendar configured", description: "Finish Bookings calendar under Connections first.", variant: "destructive" });
+        toast({ title: "No calendar yet", description: "Connect Google Calendar in the steps below.", variant: "destructive" });
       } else if (!(agentCalendar as any).connectedGoogleEmail) {
-        toast({ title: "Google not connected", description: `Connect Google for "${agentCalendar.name}" under Connections → Bookings calendar.`, variant: "destructive" });
+        toast({ title: "Google not connected", description: `Connect Google for "${agentCalendar.name}" in the steps below.`, variant: "destructive" });
       } else if ((agentEventTypes ?? []).length === 0) {
-        toast({ title: "No meeting set up", description: "Create a meeting under Connections → Bookings calendar before using booking.", variant: "destructive" });
+        toast({ title: "No meeting set up", description: "Create a meeting in the steps below before using booking.", variant: "destructive" });
       }
     } else {
       replace(current.filter((t: any) => !(BOOKING_TYPES as readonly string[]).includes(t.type)));
@@ -2763,7 +2769,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <Mail className="h-4 w-4" />,
       color: "sky",
       label: "Send Email",
-      description: "Lets the agent email mid-call. Connect Brevo under Connections first; pick templates there.",
+      description: "Lets the agent email mid-call. Connect Brevo, pick From, and choose a template below.",
       needsEventType: false,
     },
     {
@@ -2771,7 +2777,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <MessageCircle className="h-4 w-4" />,
       color: "emerald",
       label: "Send WhatsApp",
-      description: "Mid-call WhatsApp only. After-call messages are on the Outcomes tab. Connect WhatsApp under Connections first.",
+      description: "Lets the agent send WhatsApp mid-call. Connect a number and pick templates below. After-call rules are on After the call.",
       needsEventType: false,
     },
   ] as const;
@@ -2813,8 +2819,8 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
 
       {/* ── Platform Tools ─── */}
       <div>
-        <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Platform Tools</h3>
-        <p className="mb-3 mt-0.5 text-[12px] text-muted-foreground">Built-in capabilities you can enable for this agent</p>
+        <h3 className="text-[15px] font-semibold tracking-[-0.02em]">What this agent can do</h3>
+        <p className="mb-3 mt-0.5 text-[12px] text-muted-foreground">Turn on an action, then finish its setup here — email, WhatsApp, and Google Calendar stay on this page.</p>
 
         <div className="space-y-2">
 
@@ -2919,11 +2925,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   </Select>
                   {(!calendarIdForEt || (agentEventTypes ?? []).length === 0) && (
                     <p className="text-[10px] text-amber-400/80">
-                      {!calendarIdForEt ? "No calendar yet. " : "No meeting yet. "}
-                      <Link href="/app/connections?setup=calendar" className="underline underline-offset-2">
-                        Finish Bookings calendar setup
-                      </Link>
-                      .
+                      {!calendarIdForEt ? "No calendar yet — finish the Google steps below." : "No meeting yet — create one in the steps below."}
                     </p>
                   )}
                 </div>
@@ -2935,19 +2937,11 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                     <p className="text-[10px] text-amber-400/80">Save agent first to link calendar tools.</p>
                   ) : !agentCalendar ? (
                     <p className="text-[10px] text-amber-400/80">
-                      No calendar found for this agent.{" "}
-                      <Link href="/app/connections?setup=calendar" className="underline underline-offset-2">
-                        Finish calendar setup
-                      </Link>
-                      .
+                      No calendar yet — connect Google below.
                     </p>
                   ) : !(agentCalendar as any).connectedGoogleEmail ? (
                     <span className="text-[10px] text-amber-400/80">
-                      No Google account connected.{" "}
-                      <Link href="/app/connections?setup=calendar" className="underline underline-offset-2">
-                        Finish calendar setup
-                      </Link>
-                      .
+                      No Google account connected — use the steps below.
                     </span>
                   ) : (
                     <span className="text-[10px] text-muted-foreground/60">
@@ -2955,6 +2949,17 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                         ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
                         : (agentCalendar as any).connectedGoogleEmail}
                     </span>
+                  )}
+                  {agentId && !calendarNeedsSetup && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-[10px]"
+                      onClick={() => setShowCalendarSetup((v) => !v)}
+                    >
+                      {showCalendarSetup ? "Hide calendar setup" : "Change Google / meeting"}
+                    </Button>
                   )}
                 </div>
                 <Button
@@ -2968,6 +2973,15 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   <ChevronDown className={cn("h-3 w-3 transition-transform", bookingDetailsOpen && "rotate-180")} />
                 </Button>
               </div>
+
+              {agentId && (calendarNeedsSetup || showCalendarSetup) && (
+                <div className="rounded-lg border border-border/40 bg-background/30 p-3">
+                  <p className="mb-3 text-[11px] font-medium text-foreground/80">
+                    Google Calendar for this agent
+                  </p>
+                  <ConnectionsCalendarSetup embedded />
+                </div>
+              )}
 
               {bookingDetailsOpen && (
                 <div className="space-y-2 rounded-lg border border-border/40 bg-muted/15 p-3">
@@ -3445,11 +3459,14 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
 
 /* ── Tab: Voicemail ─────────────────────────────────────────────────────────── */
 
-function VoicemailTab({ form }: { form: any }) {
+function VoicemailTab({ form, embedded = false }: { form: any; embedded?: boolean }) {
   const mode   = form.watch("machineDetectionMode");
   const action = form.watch("voicemailAction");
   return (
-    <div className="relative w-full max-w-xl space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+    <div className={cn(
+      "relative w-full max-w-xl space-y-5",
+      embedded ? "px-0 py-0" : "px-4 py-5 sm:px-6 lg:px-8",
+    )}>
       <div>
         <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Voicemail</h3>
         <p className="mt-1 text-[12px] text-muted-foreground">
@@ -3619,7 +3636,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
       <div className="border-b border-border/40 px-4 pt-5 sm:px-6 lg:px-8">
         <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Settings</h2>
         <p className="mt-0.5 text-[12px] text-muted-foreground">
-          Engine timing, call limits, post-call notify URL, and compliance. Outcomes &amp; after-call messages are on the Outcomes tab.
+          Engine timing, call limits, post-call notify URL, and compliance. After-call messages are on After the call.
         </p>
         {/* ── Sub-nav ── */}
         <div className="mt-3 flex flex-shrink-0 items-center gap-1 pb-3">
@@ -4210,8 +4227,8 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
               )} />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Disposition taxonomy and after-call WhatsApp / email live on the{" "}
-              <span className="text-foreground/80">Outcomes</span> tab.
+              Outcome labels and after-call WhatsApp / email live on{" "}
+              <span className="text-foreground/80">After the call</span>.
             </p>
           </>
         )}
@@ -4462,7 +4479,6 @@ type DispConfigRow = {
 function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [, navigate] = useLocation();
   const [categories, setCategories] = useState<DispositionCategory[]>([]);
   const [fields, setFields] = useState<UiDomainField[]>([]);
   const [rules, setRules] = useState<unknown[]>([]);
@@ -4474,12 +4490,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const [outcomeGuides, setOutcomeGuides] = useState<Record<string, string>>({});
   const [afterCallMessages, setAfterCallMessages] = useState<AfterCallMessagesState>(EMPTY_AFTER_CALL_MESSAGES);
   const [dirty, setDirty] = useState(false);
-
-  const connectionsReturn = (setup: "whatsapp" | "email") => {
-    const returnTo = encodeURIComponent(`/app/agents/${agentId}?section=outcomes`);
-    const returnLabel = encodeURIComponent("Outcomes");
-    navigate(`/app/connections?setup=${setup}&agentId=${agentId}&returnTo=${returnTo}&returnLabel=${returnLabel}`);
-  };
+  const [inlineSetup, setInlineSetup] = useState<"whatsapp" | "email" | null>(null);
 
   const { data: dispConfig, isLoading: dispLoading } = useQuery<DispConfigRow | null>({
     queryKey: ["disposition-config", agentId],
@@ -4696,7 +4707,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Tag className="h-4 w-4 text-amber-400" />
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Outcomes</h3>
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">What happened</h3>
         </div>
         <p className="text-[11px] text-muted-foreground mt-0.5">
           Save the agent first to define outcomes and data fields.
@@ -4710,7 +4721,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Tag className="h-4 w-4 text-amber-400" />
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Outcomes</h3>
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">What happened</h3>
         </div>
         <p className="text-[11px] text-muted-foreground">
           After each call, AI reads the transcript, picks one of <em>your</em> outcome labels
@@ -4843,7 +4854,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                   <h4 className="text-xs font-semibold text-foreground">After-call messages</h4>
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  WhatsApp / email after the call ends. Connecting channels opens a setup page — use Back to Outcomes when finished.
+                  WhatsApp / email after the call ends. Connect the channel on this page, then pick templates under Actions.
                 </p>
               </div>
               <Button
@@ -4882,7 +4893,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                       : "Email not connected yet"}
                 </p>
                 <p className="text-[10px] text-muted-foreground">
-                  You can still save rules now — messages only send after the channel is live under Connections.
+                  You can still save rules now — messages only send after the channel is live. Setup stays on this page.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {!whatsappReady && (
@@ -4890,9 +4901,9 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                       type="button"
                       size="sm"
                       className="h-7 text-[10px]"
-                      onClick={() => connectionsReturn("whatsapp")}
+                      onClick={() => setInlineSetup((v) => v === "whatsapp" ? null : "whatsapp")}
                     >
-                      Set up WhatsApp
+                      {inlineSetup === "whatsapp" ? "Hide WhatsApp setup" : "Set up WhatsApp"}
                     </Button>
                   )}
                   {!emailReady && (
@@ -4901,9 +4912,9 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                       size="sm"
                       variant={whatsappReady ? "default" : "outline"}
                       className="h-7 text-[10px]"
-                      onClick={() => connectionsReturn("email")}
+                      onClick={() => setInlineSetup((v) => v === "email" ? null : "email")}
                     >
-                      Set up email
+                      {inlineSetup === "email" ? "Hide email setup" : "Set up email"}
                     </Button>
                   )}
                 </div>
@@ -4940,7 +4951,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                     variant="ghost"
                     size="sm"
                     className="h-6 text-[10px] px-2"
-                    onClick={() => connectionsReturn("whatsapp")}
+                    onClick={() => setInlineSetup((v) => v === "whatsapp" ? null : "whatsapp")}
                   >
                     Connect WhatsApp
                   </Button>
@@ -4950,11 +4961,33 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                     variant="ghost"
                     size="sm"
                     className="h-6 text-[10px] px-2"
-                    onClick={() => connectionsReturn("whatsapp")}
+                    onClick={() => setInlineSetup((v) => v === "whatsapp" ? null : "whatsapp")}
                   >
-                    Manage WhatsApp
+                    {inlineSetup === "whatsapp" ? "Hide templates" : "WhatsApp templates"}
                   </Button>
                 )}
+                {emailReady && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] px-2"
+                    onClick={() => setInlineSetup((v) => v === "email" ? null : "email")}
+                  >
+                    {inlineSetup === "email" ? "Hide email" : "Email templates"}
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {inlineSetup === "whatsapp" && agentId > 0 && (
+              <div className="rounded-lg border border-border/50 bg-background/40 overflow-hidden mb-3">
+                <ToolsWhatsappSetup agentId={agentId} />
+              </div>
+            )}
+            {inlineSetup === "email" && (
+              <div className="rounded-lg border border-border/50 bg-background/40 overflow-hidden mb-3">
+                <ToolsEmailSetup />
               </div>
             )}
 
@@ -7121,10 +7154,10 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         autoRedialEnabled:        "settings",
         autoRedialMaxAttempts:    "settings",
         summarizationEnabled:     "tools",
-        machineDetectionMode:     "voicemail",
-        voicemailAction:          "voicemail",
-        voicemailMessage:         "voicemail",
-        voicemailLeadInSeconds:   "voicemail",
+        machineDetectionMode:     "outcomes",
+        voicemailAction:          "outcomes",
+        voicemailMessage:         "outcomes",
+        voicemailLeadInSeconds:   "outcomes",
         systemPrompt:             "prompt",
         meetingPrompt:            "prompt",
         temperature:              "prompt",
@@ -7462,14 +7495,14 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
                 {activeTab === "outcomes"  && (
-                  <div className="px-4 py-5 sm:px-6 lg:px-8">
+                  <div className="space-y-10 px-4 py-5 sm:px-6 lg:px-8">
                     <DispositionSettingsPanel agentId={agent?.id ?? 0} />
+                    <VoicemailTab form={form} embedded />
                   </div>
                 )}
                 {activeTab === "analytics" && (
                   <AgentAnalyticsPanel agentId={agent?.id ?? 0} embedded />
                 )}
-                {activeTab === "voicemail" && <VoicemailTab form={form} />}
                 {activeTab === "settings"  && <AdvancedTab form={form} agent={agent} />}
                 {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
               </form>
@@ -7607,7 +7640,7 @@ function PromptReadinessAside({
     ...(canAttendMeetings
       ? [{ label: "Meeting prompt", ready: meetingPrompt.length > 0, detail: meetingPrompt ? `${meetingPrompt.length.toLocaleString()} chars` : "Uses call prompt", optional: true as const }]
       : []),
-    { label: "Voice", ready: voiceOk, detail: voiceOk ? "Set" : "Missing" },
+    { label: "Sound", ready: voiceOk, detail: voiceOk ? "Set" : "Missing" },
   ];
 
   return (

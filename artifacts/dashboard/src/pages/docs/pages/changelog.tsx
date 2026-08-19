@@ -9,6 +9,19 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-20-agent-builder-actions">2026-08-20 — Agent Builder: Actions in one place</h2>
+      <ul>
+        <li>
+          Tabs are job-named: Script, Sound, Actions, After the call, Activity.
+          Voicemail moved onto After the call.
+        </li>
+        <li>
+          Email (Brevo From + templates), WhatsApp (connect + template pick), and
+          Google Calendar booking setup now happen inside the agent — no bounce
+          to Connections to finish a send or a booking.
+        </li>
+      </ul>
+
       <h2 id="2026-08-20-agent-builder-sarvam-realtime-ui">2026-08-20 — Agent Builder: Sarvam realtime settings</h2>
       <ul>
         <li>

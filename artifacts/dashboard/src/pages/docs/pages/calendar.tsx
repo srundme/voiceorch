@@ -37,8 +37,8 @@ export default function CalendarPage() {
 
       <h2 id="agent-tools">3. Link the agent</h2>
       <ol>
-        <li>Open the agent builder → Tools → Booking.</li>
-        <li>Select the calendar (and event type) for booking tools.</li>
+        <li>Open the agent builder → Actions → Booking.</li>
+        <li>Connect Google Calendar and pick the meeting callers can book — all on that tab.</li>
         <li>
           <strong>Save the agent first</strong> before enabling calendar tools if the UI prompts
           you.
