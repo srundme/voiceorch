@@ -118,8 +118,8 @@ import {
   agentPathWithSection,
   type AgentTeamMembership,
 } from "./agent-team";
-import { ToolsWhatsappSetup, ToolsEmailSetup } from "./tools-messaging";
-import { ConnectionsCalendarSetup } from "@/pages/connections/calendar-setup";
+import { ToolsWhatsappSetup, ToolsEmailSetup, connectionsSetupHref } from "./tools-messaging";
+import { WhatsappTemplateSelect, type WaCatalogEntry, type WaTplChoice } from "@/components/whatsapp/agent-template-picks";
 import { AgentAnalyticsPanel } from "./agent-analytics-panel";
 import {
   PropertyRow,
@@ -2529,7 +2529,7 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
           )}
         </div>
         <p className="text-[10px] text-muted-foreground leading-relaxed">
-          More timing on <span className="text-foreground/80">Settings → Engine</span>.
+          Fast replies quickly. Patient waits if the caller thinks mid-sentence.
         </p>
       </div>
     </section>
@@ -2605,7 +2605,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const [testArgs, setTestArgs]             = useState<Record<string, string>>({});
   const [testResult, setTestResult]         = useState<Record<string, string | null>>({});
   const [bookingDetailsOpen, setBookingDetailsOpen] = useState(false);
-  const [showCalendarSetup, setShowCalendarSetup] = useState(false);
 
   const runTest = useRunToolTest();
 
@@ -2633,9 +2632,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
 
   const bookingEnabled = BOOKING_TYPES.every((type) => hasNativeTool(type));
   const bookingPartial = !bookingEnabled && BOOKING_TYPES.some((type) => hasNativeTool(type));
-  const calendarNeedsSetup = !agentCalendar
-    || !(agentCalendar as any).connectedGoogleEmail
-    || (agentEventTypes ?? []).length === 0;
 
   const toggleBookingSuite = (on: boolean) => {
     const current = (form.getValues("tools") ?? []) as any[];
@@ -2656,11 +2652,11 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       if (!agentId) {
         toast({ title: "Save agent first", description: "Save this agent before configuring calendar tools.", variant: "destructive" });
       } else if (!agentCalendar) {
-        toast({ title: "No calendar yet", description: "Connect Google Calendar in the steps below.", variant: "destructive" });
+        toast({ title: "No calendar yet", description: "Connect Google Calendar under Connections, then pick a meeting here.", variant: "destructive" });
       } else if (!(agentCalendar as any).connectedGoogleEmail) {
-        toast({ title: "Google not connected", description: `Connect Google for "${agentCalendar.name}" in the steps below.`, variant: "destructive" });
+        toast({ title: "Google not connected", description: `Connect Google under Connections, then pick “${agentCalendar.name}” here.`, variant: "destructive" });
       } else if ((agentEventTypes ?? []).length === 0) {
-        toast({ title: "No meeting set up", description: "Create a meeting in the steps below before using booking.", variant: "destructive" });
+        toast({ title: "No meeting set up", description: "Create a meeting under Connections → Bookings calendar, then pick it here.", variant: "destructive" });
       }
     } else {
       replace(current.filter((t: any) => !(BOOKING_TYPES as readonly string[]).includes(t.type)));
@@ -2769,7 +2765,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <Mail className="h-4 w-4" />,
       color: "sky",
       label: "Send Email",
-      description: "Lets the agent email mid-call. Connect Brevo, pick From, and choose a template below.",
+      description: "Lets the agent email mid-call using the workspace Brevo connection.",
       needsEventType: false,
     },
     {
@@ -2777,7 +2773,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <MessageCircle className="h-4 w-4" />,
       color: "emerald",
       label: "Send WhatsApp",
-      description: "Lets the agent send WhatsApp mid-call. Connect a number and pick templates below. After-call rules are on After the call.",
+      description: "Lets the agent send WhatsApp mid-call. Pick a template from your connected number. After-call templates are on After the call.",
       needsEventType: false,
     },
   ] as const;
@@ -2820,7 +2816,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       {/* ── Platform Tools ─── */}
       <div>
         <h3 className="text-[15px] font-semibold tracking-[-0.02em]">What this agent can do</h3>
-        <p className="mb-3 mt-0.5 text-[12px] text-muted-foreground">Turn on an action, then finish its setup here — email, WhatsApp, and Google Calendar stay on this page.</p>
+        <p className="mb-3 mt-0.5 text-[12px] text-muted-foreground">Turn on an action, then pick which connected calendar, WhatsApp template, or email to use. Connecting the account itself is under Connections.</p>
 
         <div className="space-y-2">
 
@@ -2925,7 +2921,14 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   </Select>
                   {(!calendarIdForEt || (agentEventTypes ?? []).length === 0) && (
                     <p className="text-[10px] text-amber-400/80">
-                      {!calendarIdForEt ? "No calendar yet — finish the Google steps below." : "No meeting yet — create one in the steps below."}
+                      {!calendarIdForEt ? "No calendar yet. " : "No meeting yet. "}
+                      {agentId ? (
+                        <Link href={connectionsSetupHref("calendar", agentId)} className="underline underline-offset-2">
+                          Connect Google Calendar
+                        </Link>
+                      ) : (
+                        "Save the agent first, then connect Google Calendar under Connections."
+                      )}
                     </p>
                   )}
                 </div>
@@ -2937,11 +2940,17 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                     <p className="text-[10px] text-amber-400/80">Save agent first to link calendar tools.</p>
                   ) : !agentCalendar ? (
                     <p className="text-[10px] text-amber-400/80">
-                      No calendar yet — connect Google below.
+                      No calendar yet.{" "}
+                      <Link href={connectionsSetupHref("calendar", agentId)} className="underline underline-offset-2">
+                        Connect Google Calendar
+                      </Link>
                     </p>
                   ) : !(agentCalendar as any).connectedGoogleEmail ? (
                     <span className="text-[10px] text-amber-400/80">
-                      No Google account connected — use the steps below.
+                      Google is not connected.{" "}
+                      <Link href={connectionsSetupHref("calendar", agentId)} className="underline underline-offset-2">
+                        Open Connections
+                      </Link>
                     </span>
                   ) : (
                     <span className="text-[10px] text-muted-foreground/60">
@@ -2949,17 +2958,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                         ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
                         : (agentCalendar as any).connectedGoogleEmail}
                     </span>
-                  )}
-                  {agentId && !calendarNeedsSetup && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-[10px]"
-                      onClick={() => setShowCalendarSetup((v) => !v)}
-                    >
-                      {showCalendarSetup ? "Hide calendar setup" : "Change Google / meeting"}
-                    </Button>
                   )}
                 </div>
                 <Button
@@ -2973,15 +2971,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   <ChevronDown className={cn("h-3 w-3 transition-transform", bookingDetailsOpen && "rotate-180")} />
                 </Button>
               </div>
-
-              {agentId && (calendarNeedsSetup || showCalendarSetup) && (
-                <div className="rounded-lg border border-border/40 bg-background/30 p-3">
-                  <p className="mb-3 text-[11px] font-medium text-foreground/80">
-                    Google Calendar for this agent
-                  </p>
-                  <ConnectionsCalendarSetup embedded />
-                </div>
-              )}
 
               {bookingDetailsOpen && (
                 <div className="space-y-2 rounded-lg border border-border/40 bg-muted/15 p-3">
@@ -3121,7 +3110,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 </div>
               </div>
               {type === "send_whatsapp" && isOn && agentId ? <ToolsWhatsappSetup agentId={agentId} /> : null}
-              {type === "send_email" && isOn ? <ToolsEmailSetup /> : null}
+              {type === "send_email" && isOn ? <ToolsEmailSetup agentId={agentId} /> : null}
             </div>
           );
         })}
@@ -3618,10 +3607,6 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   }, [form.formState.errors?.webhookUrl, form.formState.errors?.webhookSecret, form.formState.errors?.webhookPayloadTemplate]);
 
   const bargeIn = form.watch("bargeInEnabled");
-  const asrProviderVal = form.watch("asrProvider") as string | undefined;
-  const asrModelVal = form.watch("asrModel") as string | undefined;
-  const sarvamRealtime = asrProviderVal === "sarvam" && isSarvamRealtimeAsr(asrModelVal);
-  const { preset: activePreset, tweaked, applyPreset } = useCallEnginePreset(form);
 
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
     { id: "engine",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"     },
@@ -3636,7 +3621,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
       <div className="border-b border-border/40 px-4 pt-5 sm:px-6 lg:px-8">
         <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Settings</h2>
         <p className="mt-0.5 text-[12px] text-muted-foreground">
-          Engine timing, call limits, post-call notify URL, and compliance. After-call messages are on After the call.
+          Call limits, barge-in, hang-up, post-call notify URL, and compliance. How fast the agent replies is on Sound.
         </p>
         {/* ── Sub-nav ── */}
         <div className="mt-3 flex flex-shrink-0 items-center gap-1 pb-3">
@@ -3668,33 +3653,8 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
             <div>
               <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Engine</h3>
               <p className="mt-0.5 text-[12px] text-muted-foreground">
-                The few knobs that actually drive live calls — whether the caller can interrupt, and how long to wait before the agent speaks.
+                Whether the caller can interrupt, an extra pause before the agent speaks, and hang-up if nobody talks. Fast / Balanced / Patient lives on Sound — not here.
               </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {([
-                { id: "fast" as const, label: "Fast" },
-                { id: "balanced" as const, label: "Balanced" },
-                { id: "patient" as const, label: "Patient" },
-              ]).map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => applyPreset(p.id)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-[11.5px] font-medium border transition-all",
-                    activePreset === p.id
-                      ? "bg-primary/15 text-primary border-primary/30"
-                      : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/40",
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
-              {tweaked && (
-                <span className="px-2 py-1.5 text-[11px] text-muted-foreground/70 self-center">edited — saves as set</span>
-              )}
             </div>
 
             <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
@@ -3724,24 +3684,6 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 />
               )}
 
-              {!sarvamRealtime && (
-              <AdvSlider
-                form={form}
-                name="asrEndpointingSilenceMs"
-                label="Wait after caller stops"
-                hint="How long to wait after the caller pauses before the agent replies. Fast 150 · Balanced 250 · Patient 500."
-                min={100}
-                max={800}
-                step={25}
-                fmt={(v) => `${v}ms`}
-                onValueChange={(v: number) => {
-                  if (asrProviderVal === "sarvam") {
-                    form.setValue("sarvamHighVadSensitivity", v < 200, { shouldDirty: true });
-                  }
-                }}
-              />
-              )}
-
               <AdvSlider
                 form={form}
                 name="linearDelayMs"
@@ -3759,59 +3701,6 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                   Advanced timing — rarely needed
                 </summary>
                 <div className="space-y-5 pt-4">
-                  {sarvamRealtime && (
-                    <>
-                      <AdvSlider
-                        form={form}
-                        name="sarvamEndOfSpeechSilenceMs"
-                        label="Wait after caller stops"
-                        hint="How long the caller must be quiet before the agent replies. Fast 300 · Balanced 500 · Patient 700."
-                        min={150}
-                        max={800}
-                        step={25}
-                        fmt={(v) => `${v}ms`}
-                        onValueChange={(v: number) => {
-                          form.setValue("asrEndpointingSilenceMs", clampEndpointingMs(v), { shouldDirty: true });
-                        }}
-                      />
-                      <AdvSlider
-                        form={form}
-                        name="sarvamFirstTurnMinSpeechMs"
-                        label="Ignore tiny sounds"
-                        hint="Shorter bursts are treated as noise. Default 250ms."
-                        min={80}
-                        max={800}
-                        step={10}
-                        fmt={(v) => `${v}ms`}
-                      />
-                      <AdvSlider
-                        form={form}
-                        name="sarvamVadThreshold"
-                        label="Noise sensitivity"
-                        hint="Higher ignores more background noise. Default 0.30."
-                        min={0.1}
-                        max={0.8}
-                        step={0.05}
-                        fmt={(v) => Number(v).toFixed(2)}
-                      />
-                    </>
-                  )}
-                  {asrProviderVal === "sarvam" && !sarvamRealtime && (
-                    <FormField control={form.control} name="sarvamHighVadSensitivity" render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between gap-3 py-1">
-                        <div>
-                          <FormLabel className="text-[12px] font-medium text-foreground/90">Detect pauses quickly</FormLabel>
-                          <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                            Legacy transcriber only. Prefer Saaras v3 for live calls.
-                          </p>
-                        </div>
-                        <FormControl>
-                          <Switch checked={!!field.value} onCheckedChange={field.onChange} />
-                        </FormControl>
-                      </FormItem>
-                    )} />
-                  )}
-
                   <AdvSlider
                     form={form}
                     name="fragmentCoalesceListeningMs"
@@ -4422,10 +4311,11 @@ type AfterCallMsgRule = {
   dispositions: string[];
   whatsapp: boolean;
   email: boolean;
+  whatsappTemplate?: WaTplChoice | null;
 };
 
 type AfterCallMessagesState = {
-  universal: { whatsapp: boolean; email: boolean };
+  universal: { whatsapp: boolean; email: boolean; whatsappTemplate?: WaTplChoice | null };
   skipUniversalWhenMatched: boolean;
   rules: AfterCallMsgRule[];
 };
@@ -4435,6 +4325,19 @@ const EMPTY_AFTER_CALL_MESSAGES: AfterCallMessagesState = {
   skipUniversalWhenMatched: true,
   rules: [],
 };
+
+function readWaTpl(raw: unknown): WaTplChoice | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const name = typeof o.name === "string" ? o.name.trim() : "";
+  const language = typeof o.language === "string" ? o.language.trim() : "";
+  if (!name || !language) return null;
+  return {
+    name,
+    language,
+    paramCount: Number.isFinite(Number(o.paramCount)) ? Math.max(0, Number(o.paramCount)) : 0,
+  };
+}
 
 function readAfterCallMessages(raw: unknown): AfterCallMessagesState {
   if (!raw || typeof raw !== "object") return { ...EMPTY_AFTER_CALL_MESSAGES, rules: [] };
@@ -4456,12 +4359,17 @@ function readAfterCallMessages(raw: unknown): AfterCallMessagesState {
             dispositions,
             whatsapp: !!r["whatsapp"],
             email: !!r["email"],
+            whatsappTemplate: readWaTpl(r["whatsappTemplate"]),
           };
         })
         .filter((r): r is AfterCallMsgRule => !!r)
     : [];
   return {
-    universal: { whatsapp: !!u["whatsapp"], email: !!u["email"] },
+    universal: {
+      whatsapp: !!u["whatsapp"],
+      email: !!u["email"],
+      whatsappTemplate: readWaTpl(u["whatsappTemplate"]),
+    },
     skipUniversalWhenMatched: o["skipUniversalWhenMatched"] !== false,
     rules,
   };
@@ -4479,6 +4387,7 @@ type DispConfigRow = {
 function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [, navigate] = useLocation();
   const [categories, setCategories] = useState<DispositionCategory[]>([]);
   const [fields, setFields] = useState<UiDomainField[]>([]);
   const [rules, setRules] = useState<unknown[]>([]);
@@ -4490,7 +4399,6 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const [outcomeGuides, setOutcomeGuides] = useState<Record<string, string>>({});
   const [afterCallMessages, setAfterCallMessages] = useState<AfterCallMessagesState>(EMPTY_AFTER_CALL_MESSAGES);
   const [dirty, setDirty] = useState(false);
-  const [inlineSetup, setInlineSetup] = useState<"whatsapp" | "email" | null>(null);
 
   const { data: dispConfig, isLoading: dispLoading } = useQuery<DispConfigRow | null>({
     queryKey: ["disposition-config", agentId],
@@ -4509,7 +4417,12 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
     queryKey: ["builder-whatsapp-connections", agentId],
     queryFn: () =>
       customFetch<{
-        connections: Array<{ id: string; active: boolean; agentId: number | null }>;
+        connections: Array<{
+          id: string;
+          active: boolean;
+          agentId: number | null;
+          templateCatalog?: WaCatalogEntry[];
+        }>;
       }>(`${DASH_API}/whatsapp/connections`),
     staleTime: 60_000,
     enabled: agentId > 0,
@@ -4517,7 +4430,14 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const { data: waChannel } = useQuery({
     queryKey: ["builder-whatsapp-channel", agentId],
     queryFn: () =>
-      customFetch<{ channel: { active?: boolean } | null }>(`${DASH_API}/whatsapp/channel`),
+      customFetch<{ channel: { active?: boolean; templateCatalog?: WaCatalogEntry[] } | null }>(`${DASH_API}/whatsapp/channel`),
+    staleTime: 60_000,
+    enabled: agentId > 0,
+  });
+  const { data: nativeTpl } = useQuery({
+    queryKey: ["wa-agent-templates", agentId],
+    queryFn: () =>
+      customFetch<{ templateCatalog?: WaCatalogEntry[] }>(`${DASH_API}/whatsapp/agents/${agentId}/templates`),
     staleTime: 60_000,
     enabled: agentId > 0,
   });
@@ -4535,6 +4455,21 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
     waChannel?.channel?.active
   );
   const emailReady = !!emailChannel?.channel?.active;
+  const waCatalog = useMemo(() => {
+    const map = new Map<string, WaCatalogEntry>();
+    const piles = [
+      waChannel?.channel?.templateCatalog,
+      nativeTpl?.templateCatalog,
+      ...waConnList.map((c) => c.templateCatalog),
+    ];
+    for (const list of piles) {
+      for (const t of list ?? []) {
+        if (!t?.name || !t.language) continue;
+        map.set(`${t.name}|${t.language}`, t);
+      }
+    }
+    return [...map.values()];
+  }, [waChannel?.channel?.templateCatalog, nativeTpl?.templateCatalog, waConnList]);
 
   useEffect(() => {
     if (!dispConfig) return;
@@ -4854,7 +4789,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                   <h4 className="text-xs font-semibold text-foreground">After-call messages</h4>
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  WhatsApp / email after the call ends. Connect the channel on this page, then pick templates under Actions.
+                  After the call ends, send WhatsApp / email for matching outcomes. Pick the Meta template per rule. Connect the number under Connections.
                 </p>
               </div>
               <Button
@@ -4893,7 +4828,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                       : "Email not connected yet"}
                 </p>
                 <p className="text-[10px] text-muted-foreground">
-                  You can still save rules now — messages only send after the channel is live. Setup stays on this page.
+                  You can still save rules now — messages only send after the workspace connection is live.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {!whatsappReady && (
@@ -4901,9 +4836,9 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                       type="button"
                       size="sm"
                       className="h-7 text-[10px]"
-                      onClick={() => setInlineSetup((v) => v === "whatsapp" ? null : "whatsapp")}
+                      onClick={() => navigate(connectionsSetupHref("whatsapp", agentId, "outcomes"))}
                     >
-                      {inlineSetup === "whatsapp" ? "Hide WhatsApp setup" : "Set up WhatsApp"}
+                      Connect WhatsApp
                     </Button>
                   )}
                   {!emailReady && (
@@ -4912,9 +4847,9 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                       size="sm"
                       variant={whatsappReady ? "default" : "outline"}
                       className="h-7 text-[10px]"
-                      onClick={() => setInlineSetup((v) => v === "email" ? null : "email")}
+                      onClick={() => navigate(connectionsSetupHref("email", agentId, "outcomes"))}
                     >
-                      {inlineSetup === "email" ? "Hide email setup" : "Set up email"}
+                      Connect email
                     </Button>
                   )}
                 </div>
@@ -4951,43 +4886,22 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                     variant="ghost"
                     size="sm"
                     className="h-6 text-[10px] px-2"
-                    onClick={() => setInlineSetup((v) => v === "whatsapp" ? null : "whatsapp")}
+                    onClick={() => navigate(connectionsSetupHref("whatsapp", agentId, "outcomes"))}
                   >
                     Connect WhatsApp
                   </Button>
-                ) : (
+                ) : null}
+                {!emailReady ? (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     className="h-6 text-[10px] px-2"
-                    onClick={() => setInlineSetup((v) => v === "whatsapp" ? null : "whatsapp")}
+                    onClick={() => navigate(connectionsSetupHref("email", agentId, "outcomes"))}
                   >
-                    {inlineSetup === "whatsapp" ? "Hide templates" : "WhatsApp templates"}
+                    Connect email
                   </Button>
-                )}
-                {emailReady && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-[10px] px-2"
-                    onClick={() => setInlineSetup((v) => v === "email" ? null : "email")}
-                  >
-                    {inlineSetup === "email" ? "Hide email" : "Email templates"}
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {inlineSetup === "whatsapp" && agentId > 0 && (
-              <div className="rounded-lg border border-border/50 bg-background/40 overflow-hidden mb-3">
-                <ToolsWhatsappSetup agentId={agentId} />
-              </div>
-            )}
-            {inlineSetup === "email" && (
-              <div className="rounded-lg border border-border/50 bg-background/40 overflow-hidden mb-3">
-                <ToolsEmailSetup />
+                ) : null}
               </div>
             )}
 
@@ -5026,6 +4940,23 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                   </label>
                 </div>
               </div>
+              {afterCallMessages.universal.whatsapp && whatsappReady && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground">WhatsApp template</p>
+                  <WhatsappTemplateSelect
+                    catalog={waCatalog}
+                    value={afterCallMessages.universal.whatsappTemplate}
+                    emptyLabel="Use agent default"
+                    onChange={(next) => {
+                      setAfterCallMessages((prev) => ({
+                        ...prev,
+                        universal: { ...prev.universal, whatsappTemplate: next },
+                      }));
+                      setDirty(true);
+                    }}
+                  />
+                </div>
+              )}
               {afterCallMessages.rules.length > 0 && (
                 <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
                   <Switch
@@ -5133,6 +5064,25 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                         Email
                       </label>
                     </div>
+                    {rule.whatsapp && whatsappReady && (
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">WhatsApp template for this outcome</p>
+                        <WhatsappTemplateSelect
+                          catalog={waCatalog}
+                          value={rule.whatsappTemplate}
+                          emptyLabel="Use agent default"
+                          onChange={(next) => {
+                            setAfterCallMessages((prev) => ({
+                              ...prev,
+                              rules: prev.rules.map((r) =>
+                                r.id === rule.id ? { ...r, whatsappTemplate: next } : r,
+                              ),
+                            }));
+                            setDirty(true);
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

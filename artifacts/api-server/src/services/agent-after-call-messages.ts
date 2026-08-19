@@ -165,9 +165,13 @@ export async function maybeRunAgentAfterCallMessages(opts: {
 
   if (wantWhatsapp) {
     try {
+      const waTpl =
+        matching.find((r) => r.whatsapp && r.whatsappTemplate)?.whatsappTemplate
+        ?? (config.universal?.whatsapp ? config.universal.whatsappTemplate : null);
       await dispatchWhatsappCallEnded(opts.callId, {
         callSummary: opts.callSummary,
         dispositionResult,
+        whatsappTemplate: waTpl ?? undefined,
       });
       ran.push("whatsapp");
     } catch (err) {

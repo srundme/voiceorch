@@ -52,13 +52,6 @@ function parseChoice(s: string): WaTplChoice | null {
   return null;
 }
 
-function hasPicks(t: AgentWaTemplates): boolean {
-  return SLOTS.some(({ key }) => {
-    const v = t[key];
-    return !!(v?.name && v.language);
-  });
-}
-
 type Props = {
   agentId: number;
   /** Meta connection path — save via PATCH connection */
@@ -67,7 +60,49 @@ type Props = {
   initialCatalog?: WaCatalogEntry[];
   /** Native channel — save via PUT /whatsapp/agents/:id/templates */
   nativeMode?: boolean;
+  /** Limit which send-moments appear. Default: all four. */
+  visibleSlots?: Array<keyof AgentWaTemplates>;
 };
+
+export function WhatsappTemplateSelect({
+  catalog,
+  value,
+  onChange,
+  emptyLabel = "— none —",
+}: {
+  catalog: WaCatalogEntry[];
+  value: WaTplChoice | null | undefined;
+  onChange: (next: WaTplChoice | null) => void;
+  emptyLabel?: string;
+}) {
+  const selected = choiceValue(value ?? undefined);
+  const inList = selected && catalog.some(
+    (t) => choiceValue({ name: t.name, language: t.language, paramCount: t.paramCount }) === selected,
+  );
+  let savedLabel = "";
+  if (selected && !inList) {
+    const v = parseChoice(selected);
+    if (v) savedLabel = `${v.name} (${v.language}, saved)`;
+  }
+  return (
+    <select
+      className="mt-1 w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+      value={selected}
+      onChange={(e) => onChange(parseChoice(e.target.value))}
+    >
+      <option value="">{emptyLabel}</option>
+      {savedLabel && <option value={selected}>{savedLabel}</option>}
+      {catalog.map((t) => {
+        const opt = choiceValue({ name: t.name, language: t.language, paramCount: t.paramCount });
+        return (
+          <option key={`${t.name}|${t.language}`} value={opt}>
+            {t.name} ({t.language})
+          </option>
+        );
+      })}
+    </select>
+  );
+}
 
 export function AgentWhatsappTemplatePicks({
   agentId,
@@ -75,9 +110,13 @@ export function AgentWhatsappTemplatePicks({
   initialTemplates,
   initialCatalog,
   nativeMode,
+  visibleSlots,
 }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const slotDefs = visibleSlots?.length
+    ? SLOTS.filter((s) => visibleSlots.includes(s.key))
+    : SLOTS;
   const [slots, setSlots] = useState<Record<string, string>>(() => {
     const t = initialTemplates ?? {};
     return Object.fromEntries(SLOTS.map(({ key }) => [key, choiceValue(t[key])]));
@@ -164,15 +203,24 @@ export function AgentWhatsappTemplatePicks({
   });
 
   const picks = payload();
-  const needsTemplates = !hasPicks(picks);
+  const needsTemplates = slotDefs.some(({ key }) => {
+    const v = picks[key];
+    return !!(v?.name && v.language);
+  }) === false;
 
   return (
     <div className="space-y-3 rounded-lg border border-border/60 p-3">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-[13px] font-medium">Templates for this agent</p>
+          <p className="text-[13px] font-medium">
+            {visibleSlots?.length === 1 && visibleSlots[0] === "default"
+              ? "Template for this agent"
+              : "Templates for this agent"}
+          </p>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            Your Meta catalog can have any template names. These rows are only SnapServe “when to send” moments — pick any approved template into each.
+            {visibleSlots?.length === 1 && visibleSlots[0] === "default"
+              ? "Pick an approved Meta template. This is what Send WhatsApp uses mid-call."
+              : "Your Meta catalog can have any template names. These rows are only SnapServe “when to send” moments — pick any approved template into each."}
           </p>
         </div>
         <Button
@@ -189,7 +237,7 @@ export function AgentWhatsappTemplatePicks({
 
       {needsTemplates && (
         <div className="rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400">
-          Needs templates — pick at least Default or After a call (any approved template from your list).
+          Needs templates — pick a template from your approved list.
         </div>
       )}
 
@@ -199,7 +247,7 @@ export function AgentWhatsappTemplatePicks({
         </p>
       ) : (
         <div className="space-y-2">
-          {SLOTS.map(({ key, label, hint }) => {
+          {slotDefs.map(({ key, label, hint }) => {
             const value = slots[key] ?? "";
             const inList = value && catalog.some(
               (t) => choiceValue({ name: t.name, language: t.language, paramCount: t.paramCount }) === value,

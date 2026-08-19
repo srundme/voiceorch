@@ -96,6 +96,7 @@ export async function dispatchWhatsappCallEnded(
   opts?: {
     callSummary?: string | null;
     dispositionResult?: unknown;
+    whatsappTemplate?: { name: string; language: string } | null;
   },
 ): Promise<void> {
   const [call] = await db.select().from(callsTable).where(eq(callsTable.id, callId)).limit(1);
@@ -168,10 +169,11 @@ export async function dispatchWhatsappCallEnded(
   if (withUrl.length > 0) {
     for (const conn of withUrl) {
       try {
-        const mapped = resolveConnectionTemplateName(
-          conn.templates as Record<string, string | undefined> | null,
-          basePayload.template_hint,
-        );
+        const mapped = (opts?.whatsappTemplate?.name ?? "").trim()
+          || resolveConnectionTemplateName(
+            conn.templates as Record<string, string | undefined> | null,
+            basePayload.template_hint,
+          );
         const payload: WhatsappCallEndedPayload = mapped
           ? { ...basePayload, template_name: mapped }
           : basePayload;
@@ -210,10 +212,16 @@ export async function dispatchWhatsappCallEnded(
     }
     for (const conn of withMeta) {
       try {
-        const tpl = resolveMetaTemplate(
-          conn.metaTemplates as Record<string, MetaTemplateChoice | undefined> | null,
-          hint,
-        );
+        const tpl = opts?.whatsappTemplate?.name
+          ? {
+              name: opts.whatsappTemplate.name,
+              language: opts.whatsappTemplate.language || "en",
+              paramCount: 0,
+            }
+          : resolveMetaTemplate(
+              conn.metaTemplates as Record<string, MetaTemplateChoice | undefined> | null,
+              hint,
+            );
         if (!tpl) {
           logger.info({ callId, connectionId: conn.id, hint }, "whatsapp-meta: no template linked for hint — skipped");
           await db.update(whatsappConnectionsTable)
@@ -311,6 +319,9 @@ export async function dispatchWhatsappCallEnded(
     params,
     callId,
     agentId: call.agentId ?? null,
+    templateOverride: opts?.whatsappTemplate?.name
+      ? { name: opts.whatsappTemplate.name, lang: opts.whatsappTemplate.language || "en" }
+      : undefined,
   });
 }
 

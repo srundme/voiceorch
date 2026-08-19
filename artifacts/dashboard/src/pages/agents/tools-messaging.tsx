@@ -1,16 +1,15 @@
 /**
- * WhatsApp + Email setup that lives inside Agent Builder (Actions tab).
- * Connect, pick templates, and test without leaving the agent.
+ * Agent Builder consumes workspace connections — it does not connect them.
+ * Credentials live under Connections. Here: pick a template / show ready state.
  */
 
-import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { EmailChannelCard } from "./email-channel-card";
-import WhatsAppPage from "@/pages/whatsapp";
+import { useEmailChannelReady } from "./email-channel-card";
 import {
   AgentWhatsappTemplatePicks,
   type AgentWaTemplates,
@@ -40,6 +39,17 @@ type BuilderWhatsappConnection = {
   templateCatalog?: WaCatalogEntry[];
 };
 
+type EmailChannelPeek = {
+  channel?: {
+    active?: boolean;
+    fromName?: string | null;
+    fromEmail?: string | null;
+    defaultTemplateId?: number | null;
+  } | null;
+  templates?: Array<{ id: number; name: string; isDefault: boolean }>;
+  identities?: Array<{ fromName: string; fromEmail: string; isDefault: boolean }>;
+};
+
 function StatusLine({ ready, label }: { ready: boolean; label: string }) {
   return (
     <span
@@ -56,8 +66,18 @@ function StatusLine({ ready, label }: { ready: boolean; label: string }) {
   );
 }
 
+export function connectionsSetupHref(
+  setup: "whatsapp" | "email" | "calendar",
+  agentId: number,
+  section: "tools" | "outcomes" = "tools",
+) {
+  const returnTo = encodeURIComponent(`/app/agents/${agentId}?section=${section}`);
+  const returnLabel = encodeURIComponent(section === "outcomes" ? "After the call" : "Actions");
+  return `/app/connections?setup=${setup}&agentId=${agentId}&returnTo=${returnTo}&returnLabel=${returnLabel}`;
+}
+
 export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
-  const [showConnect, setShowConnect] = useState(false);
+  const [, navigate] = useLocation();
 
   const { data: waData, isLoading: waLoading } = useQuery({
     queryKey: ["builder-whatsapp-channel", agentId],
@@ -81,31 +101,20 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
     <div className="space-y-3 border-t border-border/30 px-4 pb-4 pt-3">
       {waLoading ? (
         <Skeleton className="h-10 w-full rounded-md" />
-      ) : connected && !showConnect ? (
+      ) : connected ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-[12px] font-medium">
                 {agentConnection?.name
                   || waData?.channel?.businessName
-                  || "WhatsApp connected"}
+                  || "Workspace WhatsApp"}
               </p>
               <p className="text-[10px] text-muted-foreground">
-                Pick which approved template to send mid-call, after a call, after a booking, or after a callback.
+                Mid-call send uses this template. After-call templates are mapped to outcomes on After the call.
               </p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <StatusLine ready label="Ready" />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 text-[10px]"
-                onClick={() => setShowConnect(true)}
-              >
-                Change number
-              </Button>
-            </div>
+            <StatusLine ready label="Connected" />
           </div>
           {agentConnection && (agentConnection.metaPhoneNumberId || agentConnection.metaConnected) ? (
             <AgentWhatsappTemplatePicks
@@ -113,43 +122,87 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
               connectionId={agentConnection.id}
               initialTemplates={agentConnection.metaTemplates}
               initialCatalog={agentConnection.templateCatalog}
+              visibleSlots={["default"]}
             />
           ) : waData?.channel ? (
             <AgentWhatsappTemplatePicks
               agentId={agentId}
               nativeMode
               initialCatalog={waData.channel.templateCatalog}
+              visibleSlots={["default"]}
             />
           ) : null}
         </div>
       ) : (
-        <div className="space-y-3">
-          {!connected ? (
-            <div>
-              <p className="text-[12px] font-medium">Connect WhatsApp for this agent</p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                Pick a number and approved templates here. After-call rules still live under After the call.
-              </p>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[12px] font-medium">Change WhatsApp number</p>
-              <Button type="button" variant="ghost" size="sm" className="h-7 text-[10px]" onClick={() => setShowConnect(false)}>
-                Back to templates
-              </Button>
-            </div>
-          )}
-          <WhatsAppPage embedded forAgentId={agentId} />
+        <div className="rounded-lg bg-muted/25 px-3 py-3">
+          <p className="text-[12px] font-medium">WhatsApp is not connected yet</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Connect the number once under Connections. Then come back here to pick a template.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-2 h-7 text-[10px]"
+            onClick={() => navigate(connectionsSetupHref("whatsapp", agentId))}
+          >
+            Open Connections
+          </Button>
         </div>
       )}
     </div>
   );
 }
 
-export function ToolsEmailSetup() {
+export function ToolsEmailSetup({ agentId }: { agentId?: number }) {
+  const [, navigate] = useLocation();
+  const ready = useEmailChannelReady();
+  const { data, isLoading } = useQuery({
+    queryKey: ["email-channel"],
+    queryFn: () => customFetch<EmailChannelPeek>(`${DASH_API}/email/channel`),
+    staleTime: 30_000,
+  });
+  const from =
+    data?.identities?.find((i) => i.isDefault)
+    ?? data?.identities?.[0];
+  const tpl =
+    data?.templates?.find((t) => t.id === data.channel?.defaultTemplateId)
+    ?? data?.templates?.find((t) => t.isDefault)
+    ?? data?.templates?.[0];
+
   return (
     <div className="border-t border-border/30 px-4 pb-4 pt-3">
-      <EmailChannelCard embedded forceExpanded />
+      {isLoading ? (
+        <Skeleton className="h-16 w-full rounded-md" />
+      ) : ready ? (
+        <div className="flex items-start justify-between gap-3 rounded-lg bg-muted/25 px-3 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-[12px] font-medium">
+              {from ? `${from.fromName} · ${from.fromEmail}` : "Email connected"}
+            </p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              {tpl ? `Sends “${tpl.name}”. Edit From and templates under Connections.` : "Using the workspace default template."}
+            </p>
+          </div>
+          <StatusLine ready label="Connected" />
+        </div>
+      ) : (
+        <div className="rounded-lg bg-muted/25 px-3 py-3">
+          <p className="text-[12px] font-medium">Email is not connected yet</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Paste the Brevo key and From address under Connections. This agent only turns send on.
+          </p>
+          {agentId ? (
+            <Button
+              type="button"
+              size="sm"
+              className="mt-2 h-7 text-[10px]"
+              onClick={() => navigate(connectionsSetupHref("email", agentId))}
+            >
+              Open Connections
+            </Button>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

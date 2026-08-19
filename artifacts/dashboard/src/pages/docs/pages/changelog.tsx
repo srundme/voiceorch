@@ -9,16 +9,30 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-20-connections-vs-agent">2026-08-20 — Connections vs Agent Builder</h2>
+      <ul>
+        <li>
+          Connections is the raw-material page: WhatsApp number, Brevo, Google Calendar.
+          Agent Builder only <em>uses</em> those — turn on send, pick a Meta template,
+          map it to an outcome, pick a meeting.
+        </li>
+        <li>
+          After the call: each outcome rule can pick which approved WhatsApp template
+          to send. Fast / Balanced / Patient stays on Sound. Settings no longer
+          duplicates STT endpointing.
+        </li>
+      </ul>
+
       <h2 id="2026-08-20-agent-builder-actions">2026-08-20 — Agent Builder: Actions in one place</h2>
       <ul>
         <li>
           Tabs are job-named: Script, Sound, Actions, After the call, Activity.
-          Voicemail moved onto After the call.
+          Voicemail moved onto After the call. Connecting WhatsApp / email / Google
+          stays under Connections.
         </li>
         <li>
-          Email (Brevo From + templates), WhatsApp (connect + template pick), and
-          Google Calendar booking setup now happen inside the agent — no bounce
-          to Connections to finish a send or a booking.
+          After the call maps each outcome to an approved WhatsApp template. Fast /
+          Balanced / Patient lives on Sound.
         </li>
       </ul>
 
@@ -32,9 +46,9 @@ export default function ChangelogPage() {
         </li>
         <li>
           Model/provider pickers and millisecond VAD sliders are gone from
-          Transcriber. Fast / Balanced / Patient on Voice set turn-taking
-          (<code>silence_duration_ms</code> 300 / 500 / 700). Settings → Engine →
-          Advanced timing keeps the raw sliders.
+          Transcriber. Fast / Balanced / Patient on Sound set turn-taking
+          (<code>silence_duration_ms</code> 300 / 500 / 700). Settings no longer
+          repeats those STT sliders.
         </li>
       </ul>
 
