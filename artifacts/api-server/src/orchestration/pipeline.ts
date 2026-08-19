@@ -16,6 +16,7 @@ import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
+import { shouldBargeOnRealtimeVadStart } from "./adapters/stt/sarvam-realtime.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
@@ -1017,6 +1018,8 @@ export class OrchestrationPipeline implements VoiceSession {
   private bargeInPeakRmsSinceSentence = 0;
   // Throttle for the periodic "energy barge-in monitor" diagnostic log line.
   private lastEnergyMonitorLogAt = 0;
+  /** Sarvam realtime session.end.audio_duration_s — billed STT audio. */
+  private sarvamSttBilledAudioS: number | null = null;
   // Rolling record of text the agent recently synthesized (oldest first), with the
   // time it was dispatched and its estimated playback end. The streaming-STT path
   // uses this to recognize the agent's OWN words echoing back via the carrier
@@ -1797,8 +1800,62 @@ export class OrchestrationPipeline implements VoiceSession {
       if (!(agentAudioLive && this.streamingBargeInWordCount === 0)) {
         this.interruptionMgr.onUserSpeechStart();
       }
+      this.maybeBargeFromRealtimeVadStart();
       this.handleSttSpeechResumed();
     };
+    this.streamSTT.onSessionUsage = (info) => {
+      this.sarvamSttBilledAudioS = info.audioDurationS;
+      this.logExec(EXEC_COMPONENTS.STT, "system", {
+        status: "info",
+        provider: this.agent.asrProvider,
+        metadata: {
+          event: "STT billed audio",
+          audioDurationS: info.audioDurationS,
+        },
+      });
+      logger.info(
+        { callId: this.config.callId, audioDurationS: info.audioDurationS },
+        "Sarvam STT realtime billed audio (session.end.audio_duration_s)",
+      );
+    };
+  }
+
+  /** Live saaras:v3-realtime socket — not Saarika and not the legacy fallback. */
+  private liveSarvamRealtime(): boolean {
+    return this.streamSTT?.getRealtimeActive?.() === true;
+  }
+
+  /**
+   * Drive barge-in off vad.speech_start (Sarvam realtime best practice), not
+   * transcript.final. PSTN echo still needs a partial or energy corroboration.
+   */
+  private maybeBargeFromRealtimeVadStart(): void {
+    if (!this.liveSarvamRealtime()) return;
+    if (!this.bargeInEnabled || this.bargeInRequested) return;
+    const pending = this.streamSTT?.getPendingTranscript?.()?.trim() ?? "";
+    const usablePartial = pending.length > 0
+      && !isBackchannelOnlyUtterance(pending)
+      && !this.isSelfEcho(pending);
+    const echoBar = this.echoBarRms();
+    const energyAboveEchoBar =
+      echoBar !== null && this.bargeInPeakRmsSinceSentence > echoBar;
+    const inEchoGrace = Date.now() < this.greetingEchoHoldUntil
+      || Date.now() < this.bargeInSentenceStartAt + Math.max(600, this.bargeInEchoGraceMs);
+    if (!shouldBargeOnRealtimeVadStart({
+      agentSpeaking: this.isPlaying || this.isSendingTtsAudio,
+      greetingOrSystem: this.greetingPlaybackActive || this.systemPlaybackActive,
+      inEchoGrace,
+      isWebcall: this.config.telephonyProvider === "webcall",
+      hasUsablePartial: usablePartial,
+      energyAboveEchoBar,
+    })) return;
+    this.triggerBargeIn("vad_speech_start", pending || undefined, {
+      speculative: usablePartial,
+    });
+    logger.info(
+      { callId: this.config.callId, pending: pending.slice(0, 80), energyAboveEchoBar },
+      "Barge-in detected (Sarvam vad.speech_start)",
+    );
   }
 
   // ── Lost-turn backstop (calls 4831/4833) ────────────────────────────────────
@@ -2724,6 +2781,31 @@ export class OrchestrationPipeline implements VoiceSession {
               } else if (isBackchannelOnlyUtterance(text)) {
                 // Pure acks during agent speech are not interruptions — caller is
                 // often about to continue (call 2967: "சரி" then the real question).
+              } else if (this.liveSarvamRealtime()) {
+                // Realtime best practice: barge on early partials, not transcript.final.
+                const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+                this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
+                const charCount = [...text.trim()].length;
+                const minChars = bargeInMinChars(this.currentLang || this.agent.language);
+                const interimEchoBar = this.echoBarRms();
+                const interimIsSelfEcho =
+                  this.isSelfEcho(text)
+                  || (
+                    interimEchoBar !== null
+                    && this.bargeInPeakRmsSinceSentence <= interimEchoBar
+                  );
+                if (charCount >= minChars && !interimIsSelfEcho) {
+                  this.triggerBargeIn("vad_partial", text, { speculative: true });
+                  logger.info(
+                    {
+                      callId: this.config.callId,
+                      words: this.streamingBargeInWordCount,
+                      charCount,
+                      text: text.slice(0, 80),
+                    },
+                    "Barge-in detected (Sarvam realtime early partial)",
+                  );
+                }
               } else {
                 const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
                 // Bolna accumulates interim word length across partials for the turn
@@ -3001,6 +3083,12 @@ export class OrchestrationPipeline implements VoiceSession {
         logger.info(
           { callId: this.config.callId, transcript: transcript.slice(0, 80) },
           "Streaming STT: barge-in suppressed for backchannel-only transcript",
+        );
+      } else if (this.liveSarvamRealtime()) {
+        // Realtime already barged (or will barge) from vad.speech_start / partials.
+        logger.info(
+          { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+          "Streaming STT: skipping final-transcript barge-in (realtime uses VAD + partials)",
         );
       } else if (
         Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs ||
@@ -3839,6 +3927,10 @@ export class OrchestrationPipeline implements VoiceSession {
       // Filters out brief mic clicks/breaths while reacting promptly to human interruptions.
       let effectiveMinFrames = Math.max(15, BARGE_IN_STREAMING_MIN_FRAMES);
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {
+        if (this.liveSarvamRealtime()) {
+          // Energy is echo evidence only. Barge-in is vad.speech_start / early partials.
+          return;
+        }
         this.triggerBargeIn(source, undefined, {
           speculative: false,
           energyDetails: {
@@ -10190,6 +10282,12 @@ export class OrchestrationPipeline implements VoiceSession {
     this.activeTtsAborts.clear();
     this.streamSTT?.close();
     this.streamSTT = null;
+    if (this.sarvamSttBilledAudioS != null) {
+      logger.info(
+        { callId: this.config.callId, audioDurationS: this.sarvamSttBilledAudioS },
+        "Pipeline closed — Sarvam STT billed audio_duration_s",
+      );
+    }
     logger.info({ callId: this.config.callId }, "Pipeline closed");
   }
 }

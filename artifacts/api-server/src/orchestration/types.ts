@@ -548,6 +548,12 @@ export interface StreamSTT {
    */
   setLanguage?(lang: string): void;
   close(): void;
+  /** True while saaras:v3-realtime is the live socket (false after legacy fallback). */
+  getRealtimeActive?: () => boolean;
+  /**
+   * Sarvam realtime `session.end.audio_duration_s` — billed audio, not wall clock.
+   */
+  onSessionUsage?: ((info: { audioDurationS: number }) => void) | null;
   /**
    * Set by the caller immediately after creation.
    * Fired when the adapter detects that the WebSocket has silently died during

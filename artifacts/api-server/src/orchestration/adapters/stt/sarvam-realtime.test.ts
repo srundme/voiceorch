@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildRealtimeConfigUpdate,
   buildRealtimeWsUrl,
   isSarvamRealtimeModel,
+  shouldBargeOnRealtimeVadStart,
   toRealtimeLanguageCode,
 } from "./sarvam-realtime.js";
 
@@ -57,9 +59,51 @@ describe("buildRealtimeWsUrl", () => {
     expect(url).toContain("language_code=auto");
     expect(url).toContain("sample_rate=8000");
     expect(url).toContain("stream_type=fast");
+    expect(url).toContain("endpointing=vad");
     expect(url).toContain("silence_duration_ms=500");
     expect(url).toContain("min_speech_duration_ms=250");
     expect(url).toContain("encoding=linear16");
     expect(url).not.toContain("high_vad_sensitivity");
+  });
+});
+
+describe("buildRealtimeConfigUpdate", () => {
+  it("sends language and mode without reconnect fields", () => {
+    const body = buildRealtimeConfigUpdate({ languageCode: "ta-IN", mode: "transcribe" });
+    expect(body).toEqual({
+      event: "config.update",
+      language_code: "ta-IN",
+      mode: "transcribe",
+    });
+  });
+});
+
+describe("shouldBargeOnRealtimeVadStart", () => {
+  const base = {
+    agentSpeaking: true,
+    greetingOrSystem: false,
+    inEchoGrace: false,
+    isWebcall: false,
+    hasUsablePartial: false,
+    energyAboveEchoBar: false,
+  };
+
+  it("does not barge when the agent is not speaking", () => {
+    expect(shouldBargeOnRealtimeVadStart({ ...base, agentSpeaking: false, isWebcall: true })).toBe(false);
+  });
+
+  it("barges on webcall VAD alone", () => {
+    expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true })).toBe(true);
+  });
+
+  it("needs a partial or energy above the echo bar on PSTN", () => {
+    expect(shouldBargeOnRealtimeVadStart(base)).toBe(false);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true })).toBe(true);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, energyAboveEchoBar: true })).toBe(true);
+  });
+
+  it("holds through greeting and echo grace", () => {
+    expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true, greetingOrSystem: true })).toBe(false);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true, inEchoGrace: true })).toBe(false);
   });
 });

@@ -69,6 +69,9 @@ export function buildRealtimeWsUrl(opts: {
     language_code: opts.languageCode,
     stream_type: opts.streamType ?? "fast",
     mode: opts.mode,
+    // Server VAD owns turns. Manual (`speech_start`/`speech_end`/`flush`) would
+    // fight PSTN echo and our lost-turn backstop — do not switch unless we stop
+    // feeding audio continuously.
     endpointing: "vad",
     encoding: "linear16",
     sample_rate: String(opts.sampleRate),
@@ -77,6 +80,45 @@ export function buildRealtimeWsUrl(opts: {
     threshold: String(opts.threshold),
   });
   return `${WS_BASE}?${params.toString()}`;
+}
+
+/** Mid-call `config.update` — never reconnect the realtime socket for these. */
+export function buildRealtimeConfigUpdate(opts: {
+  languageCode?: string;
+  mode?: SarvamSttMode;
+  streamType?: "fast" | "balanced" | "simulated";
+  threshold?: number;
+  silenceDurationMs?: number;
+  minSpeechDurationMs?: number;
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = { event: "config.update" };
+  if (opts.languageCode) body.language_code = opts.languageCode;
+  if (opts.mode) body.mode = opts.mode;
+  if (opts.streamType) body.stream_type = opts.streamType;
+  if (opts.threshold !== undefined) body.threshold = opts.threshold;
+  if (opts.silenceDurationMs !== undefined) body.silence_duration_ms = opts.silenceDurationMs;
+  if (opts.minSpeechDurationMs !== undefined) body.min_speech_duration_ms = opts.minSpeechDurationMs;
+  return body;
+}
+
+/**
+ * Barge-in while the agent is talking: Sarvam says drive off vad.speech_start
+ * or early partials, not transcript.final. Webcall has AEC so VAD is enough.
+ * PSTN echo also trips server VAD — require a partial or energy above the echo bar.
+ */
+export function shouldBargeOnRealtimeVadStart(opts: {
+  agentSpeaking: boolean;
+  greetingOrSystem: boolean;
+  inEchoGrace: boolean;
+  isWebcall: boolean;
+  hasUsablePartial: boolean;
+  energyAboveEchoBar: boolean;
+}): boolean {
+  if (!opts.agentSpeaking) return false;
+  if (opts.greetingOrSystem) return false;
+  if (opts.inEchoGrace) return false;
+  if (opts.isWebcall) return true;
+  return opts.hasUsablePartial || opts.energyAboveEchoBar;
 }
 
 interface RealtimeMsg {
@@ -98,6 +140,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
   private readonly key: string;
   private readonly sampleRate: 8000 | 16000;
   private readonly mode: SarvamSttMode;
+  private readonly explicitMode: string | null;
   private languageCode: string;
   private readonly silenceDurationMs: number;
   private readonly minSpeechDurationMs: number;
@@ -123,7 +166,8 @@ export class SarvamRealtimeSTT implements STTAdapter {
         })
       : {};
 
-    this.mode = resolveSarvamSttMode(cfg.language, extra.mode ?? null);
+    this.explicitMode = extra.mode ?? null;
+    this.mode = resolveSarvamSttMode(cfg.language, this.explicitMode);
     this.languageCode = toRealtimeLanguageCode(cfg.language, extra.languageAutoDetect === true);
     this.silenceDurationMs = resolveMsSetting(
       extra.endOfSpeechSilenceMs,
@@ -172,7 +216,8 @@ export class SarvamRealtimeSTT implements STTAdapter {
     const key = this.key;
     const sampleRate = this.sampleRate;
     let languageCode = this.languageCode;
-    const mode = this.mode;
+    let mode = this.mode;
+    const explicitMode = this.explicitMode;
     const silenceDurationMs = this.silenceDurationMs;
     const minSpeechDurationMs = this.minSpeechDurationMs;
     const threshold = this.threshold;
@@ -195,6 +240,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
     let _onSpeechStart: (() => void) | null = null;
     let _onSpeechEnd: (() => void) | null = null;
     let _onConnectionDead: (() => void) | null = null;
+    let _onSessionUsage: ((info: { audioDurationS: number }) => void) | null = null;
 
     const stripSpeaker = (text: string): string =>
       text.replace(/(^|\n)\s*speaker\s*\d*\s*:\s*/gi, "$1").trim();
@@ -322,10 +368,14 @@ export class SarvamRealtimeSTT implements STTAdapter {
         return;
       }
       if (event === "session.end") {
+        const audioDurationS = typeof msg.audio_duration_s === "number" ? msg.audio_duration_s : undefined;
         logger.info(
-          { audioDurationS: msg.audio_duration_s, requestId: lastRequestId },
+          { audioDurationS, requestId: lastRequestId },
           "Sarvam STT realtime: session.end",
         );
+        if (audioDurationS !== undefined) {
+          _onSessionUsage?.({ audioDurationS });
+        }
       }
     };
 
@@ -390,8 +440,8 @@ export class SarvamRealtimeSTT implements STTAdapter {
       },
       flush(): boolean {
         if (usingLegacy) return legacyStream?.flush?.() === true;
-        // Realtime flush is documented for endpointing=manual only. Emit the
-        // last partial as a recovered fragment if we still have one.
+        // endpointing=vad: do not send {"event":"flush"} — that is manual-mode only.
+        // Recover a held partial locally for the lost-turn backstop.
         const held = lastPartial.trim();
         if (!held) return false;
         lastPartial = "";
@@ -407,11 +457,16 @@ export class SarvamRealtimeSTT implements STTAdapter {
           legacyStream?.setLanguage?.(lang);
           return;
         }
-        const next = toRealtimeLanguageCode(lang, false);
-        if (next === languageCode) return;
-        languageCode = next;
-        logger.info({ to: next }, "Sarvam STT realtime: config.update language_code");
-        sendJson({ event: "config.update", language_code: next });
+        const nextLang = toRealtimeLanguageCode(lang, false);
+        const nextMode = resolveSarvamSttMode(nextLang, explicitMode);
+        if (nextLang === languageCode && nextMode === mode) return;
+        languageCode = nextLang;
+        mode = nextMode;
+        logger.info({ to: nextLang, mode: nextMode }, "Sarvam STT realtime: config.update");
+        sendJson(buildRealtimeConfigUpdate({ languageCode: nextLang, mode: nextMode }));
+      },
+      getRealtimeActive(): boolean {
+        return !usingLegacy && sessionBegan;
       },
       close(): void {
         intentionallyClosed = true;
@@ -448,6 +503,12 @@ export class SarvamRealtimeSTT implements STTAdapter {
       set(cb: (() => void) | null): void {
         _onConnectionDead = cb;
         if (legacyStream) legacyStream.onConnectionDead = cb;
+      },
+    });
+    Object.defineProperty(sttObj, "onSessionUsage", {
+      get(): ((info: { audioDurationS: number }) => void) | null { return _onSessionUsage; },
+      set(cb: ((info: { audioDurationS: number }) => void) | null): void {
+        _onSessionUsage = cb;
       },
     });
 

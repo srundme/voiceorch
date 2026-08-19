@@ -21,6 +21,12 @@ export default function ChangelogPage() {
           Indic script on an English-configured agent is treated as a language switch, not
           garbled audio — Tamil inbound is no longer answered with &quot;I didn&apos;t get that.&quot;
         </li>
+        <li>
+          Server VAD (<code>endpointing=vad</code>, <code>stream_type=fast</code>) owns turns.
+          Barge-in uses <code>vad.speech_start</code> and early partials — not energy and not
+          <code>transcript.final</code>. Language/mode changes go out as <code>config.update</code>.
+          Call logs record Sarvam&apos;s billed <code>session.end.audio_duration_s</code>.
+        </li>
       </ul>
 
       <h2 id="2026-08-19-voice-memory-live-link">2026-08-19 — Voice Memory: recognize mid-call</h2>
