@@ -70,7 +70,8 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
 
 export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
   cartesia: [
-    { value: "sonic-3.5",   label: "Sonic 3.5 — 42 languages, lowest latency" },
+    { value: "sonic-3.5",     label: "Sonic 3.5 — 42 languages, lowest latency (default)" },
+    { value: "sonic-preview", label: "Sonic 3.6 (beta) — Hinglish, Odia/Urdu" },
     { value: "sonic-3",     label: "Sonic 3" },
     { value: "sonic-2",     label: "Sonic 2 (stable)" },
     { value: "sonic-turbo", label: "Sonic Turbo (fast, low-latency)" },

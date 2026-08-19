@@ -9,6 +9,17 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-19-sonic-36">2026-08-19 — Cartesia Sonic 3.6 (beta)</h2>
+      <ul>
+        <li>
+          Agent Builder → Voice now lists <strong>Sonic 3.6 (beta)</strong> for Cartesia. API id is{" "}
+          <code>sonic-preview</code>. Existing agents stay on <code>sonic-3.5</code> unless you switch them.
+        </li>
+        <li>
+          Beta: Cartesia can change 3.6 without notice. Flip back to Sonic 3.5 if a call sounds off.
+        </li>
+      </ul>
+
       <h2 id="2026-08-18-webhook-template">2026-08-18 — Custom post-call notify JSON</h2>
       <ul>
         <li>

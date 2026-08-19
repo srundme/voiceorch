@@ -98,7 +98,9 @@ const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
 };
 const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
   cartesia: [
-    { value: "sonic-3.5", label: "Sonic 3.5" }, { value: "sonic-3", label: "Sonic 3" },
+    { value: "sonic-3.5", label: "Sonic 3.5" },
+    { value: "sonic-preview", label: "Sonic 3.6 (beta)" },
+    { value: "sonic-3", label: "Sonic 3" },
     { value: "sonic-2", label: "Sonic 2 (stable)" },  { value: "sonic-turbo", label: "Sonic Turbo" },
   ],
 };
