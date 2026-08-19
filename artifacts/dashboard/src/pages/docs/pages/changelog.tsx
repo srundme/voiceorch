@@ -19,7 +19,7 @@ export default function ChangelogPage() {
         <li>
           On a new phone number, &quot;do you remember me?&quot; is no longer a hard deny while
           matching is still running. When a match lands, the agent cuts in to acknowledge
-          (by name when known).
+          (by name when known), even if this call started with an empty caller memory.
         </li>
       </ul>
 
