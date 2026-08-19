@@ -55,6 +55,19 @@ describe("buildUpdateAgentPayload", () => {
     });
   });
 
+  it("gemini live via voice stack — payload still carries google + live model", () => {
+    const data: AgentFormValues = {
+      ...BASE,
+      llmProvider: "google",
+      llmModel: "gemini-3.1-flash-live-preview",
+      voiceStack: "gemini_live",
+    };
+    const payload = buildUpdateAgentPayload(data);
+    expect(payload.llmProvider).toBe("google");
+    expect(payload.llmModel).toBe("gemini-3.1-flash-live-preview");
+    expect((payload.agentConfig as Record<string, unknown>)["voiceStack"]).toBe("gemini_live");
+  });
+
   it("minimal update — parses against UpdateAgentBody", () => {
     const payload = buildUpdateAgentPayload(BASE);
     const result = UpdateAgentBody.safeParse(payload);

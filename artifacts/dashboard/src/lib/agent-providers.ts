@@ -583,6 +583,23 @@ export const VOICE_STACK_OPTIONS = [
   { value: "gemini_live", label: "Gemini Live 3.1" },
 ] as const;
 
+/** Provider + model to persist when the user picks a voice stack in the UI. */
+export function llmFieldsForVoiceStack(
+  stack: "classic" | "gemini_live",
+  current: { llmProvider?: string | null; llmModel?: string | null },
+): { llmProvider: string; llmModel: string } {
+  if (stack === "gemini_live") {
+    return { llmProvider: "google", llmModel: GEMINI_LIVE_LLM_MODEL };
+  }
+  if (isGeminiLiveLlmModel(current.llmModel) || current.llmProvider === "google" || current.llmProvider === "gemini") {
+    return { llmProvider: DEFAULT_NONTAMIL_LLM_PROVIDER, llmModel: defaultSarvamModel() };
+  }
+  return {
+    llmProvider: current.llmProvider || DEFAULT_NONTAMIL_LLM_PROVIDER,
+    llmModel: current.llmModel || defaultSarvamModel(),
+  };
+}
+
 export const GEMINI_LIVE_THINKING_LEVELS = [
   { value: "minimal", label: "Minimal — lowest latency (recommended)" },
   { value: "low", label: "Low" },

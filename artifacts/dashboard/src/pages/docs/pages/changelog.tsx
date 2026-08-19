@@ -9,6 +9,14 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-19-gemini-live-ui">2026-08-19 — Gemini Live 3.1 in Agent Builder</h2>
+      <ul>
+        <li>
+          Model → Voice stack lists <strong>Gemini Live 3.1</strong> again (native speech-to-speech).
+          Classic STT + LLM + TTS stays the default. Live needs a Google API key on the workspace.
+        </li>
+      </ul>
+
       <h2 id="2026-08-19-voice-memory-score">2026-08-19 — Voice Memory: telephony scores</h2>
       <ul>
         <li>
