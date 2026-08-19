@@ -191,7 +191,7 @@ function countScriptLetters(text: string): { latin: number; devanagari: number; 
 
 /**
  * Flags transcripts whose Unicode script disagrees with the configured STT language.
- * Common Sarvam failure: en-IN + codemix → Gujarati/Tamil script for English speech.
+ * Indic on an English-configured agent is a language switch, not garbled STT.
  */
 function checkScriptMismatch(text: string, expectedLang?: string | null): { isGarbled: boolean; reason: string } {
   if (!expectedLang) return { isGarbled: false, reason: "" };
@@ -201,8 +201,11 @@ function checkScriptMismatch(text: string, expectedLang?: string | null): { isGa
   const total = c.latin + indic;
   if (total < 4) return { isGarbled: false, reason: "" };
 
+  // Indic on an English-configured agent is a language switch, not noise.
+  // Treating it as garbled made live Tamil inbound hear "I didn't get that"
+  // twice (call 11234) even though Saaras transcribed the line correctly.
   if (bare === "en" && indic / total >= 0.65) {
-    return { isGarbled: true, reason: "script-mismatch-en" };
+    return { isGarbled: false, reason: "script-switch-en" };
   }
   if (bare === "ta" && c.tamil / total < 0.25 && c.devanagari / total >= 0.5) {
     return { isGarbled: true, reason: "script-mismatch-ta" };

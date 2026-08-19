@@ -3,6 +3,7 @@ import type { STTConfig } from "../../types.js";
 import { AzureSTT } from "./azure.js";
 import { AssemblyAISTT } from "./assemblyai.js";
 import { SarvamSTT } from "./sarvam.js";
+import { isSarvamRealtimeModel, SarvamRealtimeSTT } from "./sarvam-realtime.js";
 import { CartesiaSTT } from "./cartesia.js";
 import { DeepgramSTT } from "./deepgram.js";
 import { GeminiSTT } from "./gemini.js";
@@ -23,6 +24,9 @@ export function createSTTAdapter(
     case "assemblyai":
       return new AssemblyAISTT(apiKey, model, cfg);
     case "sarvam":
+      if (isSarvamRealtimeModel(model)) {
+        return new SarvamRealtimeSTT(apiKey, model, extraConfig, cfg);
+      }
       return new SarvamSTT(apiKey, model, extraConfig, cfg);
     case "cartesia":
       return new CartesiaSTT(apiKey, model, cfg);

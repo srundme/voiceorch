@@ -2415,6 +2415,7 @@ export class OrchestrationPipeline implements VoiceSession {
           highVadSensitivity: this.agent.sarvamHighVadSensitivity,
           firstTurnMinSpeechMs: this.agent.sarvamFirstTurnMinSpeechMs,
           endOfSpeechSilenceMs: this.agent.sarvamEndOfSpeechSilenceMs,
+          languageAutoDetect: this.agent.languageAutoDetect,
         })
       : providerExtraConfig;
     this.stt = createSTTAdapter(

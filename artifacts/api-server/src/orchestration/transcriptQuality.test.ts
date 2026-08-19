@@ -29,10 +29,9 @@ describe("checkTranscriptQuality", () => {
     expect(checkTranscriptQuality("thank you", { expectedLang: "en-IN" }).isGarbled).toBe(false);
   });
 
-  it("flags Indic script when STT is configured for English", () => {
+  it("does not treat Indic script as garbled English (language switch, not noise)", () => {
     const r = checkTranscriptQuality("નમસ્તે બોલો", { expectedLang: "en-IN" });
-    expect(r.isGarbled).toBe(true);
-    expect(r.reason).toBe("script-mismatch-en");
+    expect(r.isGarbled).toBe(false);
   });
 
   it("accepts normal English on en-IN", () => {

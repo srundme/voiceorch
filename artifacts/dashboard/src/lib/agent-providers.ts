@@ -23,9 +23,10 @@ export const TELEPHONY_PROVIDERS = [
 
 export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   sarvam: [
-    { value: "saaras:v3",    label: "Saaras v3 — real-time streaming (recommended)" },
-    { value: "saaras:v4",    label: "Saaras v4 — new (drops turns on live calls, avoid for now)" },
-    { value: "saarika:v2.5", label: "Saarika v2.5 — real-time streaming (legacy)" },
+    { value: "saaras:v3",          label: "Saaras v3 realtime — partials + ms VAD (recommended)" },
+    { value: "saaras:v3-realtime", label: "Saaras v3 realtime (explicit id)" },
+    { value: "saarika:v2.5",       label: "Saarika v2.5 — legacy finals-only socket" },
+    { value: "saaras:v4",          label: "Saaras v4 — avoid on live calls" },
   ],
 };
 

@@ -9,6 +9,20 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-19-sarvam-stt-realtime">2026-08-19 — Sarvam STT: realtime partials</h2>
+      <ul>
+        <li>
+          Live Sarvam STT now uses <code>saaras:v3-realtime</code> (
+          <code>/speech-to-text-realtime/ws</code>): real <code>transcript.partial</code> events,
+          millisecond VAD, and mid-call <code>config.update</code> without reconnecting.
+          Saarika stays on the legacy finals-only socket.
+        </li>
+        <li>
+          Indic script on an English-configured agent is treated as a language switch, not
+          garbled audio — Tamil inbound is no longer answered with &quot;I didn&apos;t get that.&quot;
+        </li>
+      </ul>
+
       <h2 id="2026-08-19-voice-memory-live-link">2026-08-19 — Voice Memory: recognize mid-call</h2>
       <ul>
         <li>
