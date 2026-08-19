@@ -277,14 +277,41 @@ function resolveVoiceLabel(
   return voiceId;
 }
 
-function OverviewCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+/** Filled section box — title lives inside the shape, not floating above it. */
+function OverviewPanel({
+  title,
+  icon,
+  hint,
+  action,
+  children,
+  className,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  hint?: React.ReactNode;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="rounded-xl border border-border/60 bg-card/50 p-4 space-y-3">
-      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-        {icon}{title}
+    <section
+      className={cn(
+        "flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_0_hsl(var(--border)/0.6)]",
+        className,
+      )}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/80 bg-muted/25 px-4 py-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          {icon ? <span className="shrink-0 text-muted-foreground [&_svg]:size-3.5">{icon}</span> : null}
+          <h3 className="truncate text-[13px] font-semibold tracking-[-0.02em] text-foreground">{title}</h3>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {hint}
+          {action}
+        </div>
       </div>
-      {children}
-    </div>
+      <div className="flex min-h-0 flex-1 flex-col p-4">{children}</div>
+    </section>
   );
 }
 
@@ -328,7 +355,7 @@ function KnowledgeSourceMultiSelect({ value, onChange }: {
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="w-full h-12 flex items-center justify-between rounded-lg border border-border/60 bg-card/30 px-4 text-sm text-muted-foreground hover:border-border hover:text-foreground transition-colors"
+            className="flex h-12 w-full items-center justify-between rounded-lg border border-border bg-background px-4 text-sm text-muted-foreground hover:border-foreground/20 hover:text-foreground transition-colors"
           >
             <span>
               {value.length === 0
@@ -490,14 +517,13 @@ function AgentCostSummary({
 
   if (mode === "line") {
     return (
-      <p className="text-[12px] text-muted-foreground">
-        Billed at{" "}
+      <span className="text-[11px] text-muted-foreground">
         <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
           ₹{totalPerMin.toFixed(2)}
         </span>
         <span className="text-emerald-700/70 dark:text-emerald-400/70">/min</span>
         {isByop ? " · BYOP" : ""}
-      </p>
+      </span>
     );
   }
 
@@ -898,12 +924,13 @@ function OverviewTab({
               </>
             }
           />
-          <AgentCostSummary form={form} rateMap={rateMap} variant="line" />
 
-          {/* Pipeline — primary composition */}
-          <section className="space-y-2.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">How it talks</p>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+          <OverviewPanel
+            title="How it talks"
+            icon={<AudioLines />}
+            hint={<AgentCostSummary form={form} rateMap={rateMap} variant="line" />}
+          >
+            <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-3">
               <AgentConfigCard
                 icon={isGeminiLive ? <Globe /> : <Mic />}
                 label={isGeminiLive ? "Language" : "Transcriber"}
@@ -929,50 +956,69 @@ function OverviewTab({
                 onClick={() => openPipelineDialog("voice")}
               />
             </div>
-          </section>
+          </OverviewPanel>
 
-          {/* Phone + Knowledge side by side — one job each, no duplicate Knowledge banner */}
-          <section className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+          <section className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
             {agent?.id != null && (
-              <div className="space-y-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Phone</p>
+              <OverviewPanel
+                title="Phone"
+                icon={<PhoneForwarded />}
+                hint={phoneReady ? (
+                  <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">Live</span>
+                ) : (
+                  <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-300">Required</span>
+                )}
+                action={
+                  <Link href="/app/phone-numbers" className="text-[11px] font-medium text-muted-foreground hover:text-foreground">
+                    Numbers →
+                  </Link>
+                }
+              >
                 <AgentInboundPanel
                   agentId={agent.id}
                   preferredManagedNumber={form.watch("preferredManagedNumber")}
                   telephonyProvider={form.watch("telephonyProvider")}
+                  bare
                 />
-              </div>
+              </OverviewPanel>
             )}
-            <div className="space-y-2">
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Knowledge</p>
-                <span className="text-[10px] text-muted-foreground/70">
+            <OverviewPanel
+              title="Knowledge"
+              icon={<BookOpen />}
+              hint={
+                <span className="text-[10px] text-muted-foreground">
                   {knowledgeIds.length > 0
                     ? `${knowledgeIds.length} source${knowledgeIds.length === 1 ? "" : "s"}`
                     : "Optional"}
                 </span>
-              </div>
-              <div className="rounded-xl border border-border/60 bg-card/40 p-3 space-y-2">
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Documents searched during live calls and injected into context.
+              }
+            >
+              <p className="text-[12px] leading-relaxed text-muted-foreground">
+                Documents searched during live calls and injected into context.
+              </p>
+              <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
+                <FormItem className="mt-3 space-y-0">
+                  <FormControl>
+                    <KnowledgeSourceMultiSelect
+                      value={(field.value ?? []) as number[]}
+                      onChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormMessage className="text-[10px]" />
+                </FormItem>
+              )} />
+              {knowledgeIds.length === 0 ? (
+                <p className="mt-auto pt-4 text-[11px] leading-relaxed text-muted-foreground">
+                  Empty is fine. Attach a source only if this agent should look things up on the call.
                 </p>
-                <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
-                  <FormItem className="space-y-0">
-                    <FormControl>
-                      <KnowledgeSourceMultiSelect
-                        value={(field.value ?? []) as number[]}
-                        onChange={field.onChange}
-                      />
-                    </FormControl>
-                    <FormMessage className="text-[10px]" />
-                  </FormItem>
-                )} />
-              </div>
-            </div>
+              ) : null}
+            </OverviewPanel>
           </section>
 
           {agent?.id != null && (
-            <AgentTeamStrip agentId={agent.id} compact />
+            <OverviewPanel title="Team" icon={<Users />}>
+              <AgentTeamStrip agentId={agent.id} compact />
+            </OverviewPanel>
           )}
 
           {/* ── Transcriber / Language dialog ── */}
@@ -7779,13 +7825,13 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
 
   const shell = cn(
     compact
-      ? "flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/40 px-3 py-2.5"
+      ? "flex flex-wrap items-center gap-2"
       : "flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-5 py-1.5 sm:px-8",
   );
 
   if (!membership) {
     return (
-      <div className={cn(shell, compact && "border-dashed bg-transparent")}>
+      <div className={shell}>
         <Users className="size-3.5 shrink-0 text-muted-foreground/70" />
         <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
           Solo agent
@@ -7793,8 +7839,8 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
         <Button
           type="button"
           size="sm"
-          variant="ghost"
-          className="h-7 shrink-0 gap-1 px-2 text-[11px] text-muted-foreground"
+          variant="outline"
+          className="h-7 shrink-0 gap-1 px-2.5 text-[11px]"
           onClick={() => navigate(`/app/squads?seedAgent=${agentId}`)}
         >
           <Plus className="size-3" />

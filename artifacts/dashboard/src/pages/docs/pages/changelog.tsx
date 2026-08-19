@@ -17,8 +17,8 @@ export default function ChangelogPage() {
           (Activity, Settings, Versions). Script and Sound show ready/not-ready chips in the header.
         </li>
         <li>
-          Stays prompt + voice + tools — not a node canvas. Bolna/Vapi win on status-in-header and
-          test-first; SnapServe keeps Connections as workspace plug-in and agents as pick-and-use.
+          Overview sections are real panels now: title inside the box, equal-height Phone and
+          Knowledge, trial line nested in Phone. Builder no longer flattens card corners.
         </li>
       </ul>
 
