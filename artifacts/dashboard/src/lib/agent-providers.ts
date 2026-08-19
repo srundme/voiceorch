@@ -21,14 +21,33 @@ export const TELEPHONY_PROVIDERS = [
   { value: "vobiz",  label: "Vobiz" },
 ];
 
+/** Full catalog for validation / existing agents. The builder picker is `asrModelsForPicker`. */
 export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   sarvam: [
-    { value: "saaras:v3",          label: "Saaras v3 realtime — partials + ms VAD (recommended)" },
-    { value: "saaras:v3-realtime", label: "Saaras v3 realtime (explicit id)" },
-    { value: "saarika:v2.5",       label: "Saarika v2.5 — legacy finals-only socket" },
-    { value: "saaras:v4",          label: "Saaras v4 — avoid on live calls" },
+    { value: "saaras:v3",          label: "Saaras v3" },
+    { value: "saaras:v3-realtime", label: "Saaras v3 (legacy id)" },
+    { value: "saarika:v2.5",       label: "Saarika v2.5 (legacy)" },
+    { value: "saaras:v4",          label: "Saaras v4 (not for live calls)" },
   ],
 };
+
+export const SARVAM_PRODUCT_ASR_MODEL = "saaras:v3";
+
+/** Product picker: only Saaras v3. A non-product saved model stays visible so the agent can be migrated. */
+export function asrModelsForPicker(
+  provider: string,
+  current?: string | null,
+): { value: string; label: string }[] {
+  const product = provider === "sarvam"
+    ? [{ value: SARVAM_PRODUCT_ASR_MODEL, label: "Saaras v3" }]
+    : (ASR_MODELS[provider] ?? []);
+  const cur = (current ?? "").trim();
+  if (cur && !product.some((m) => m.value === cur)) {
+    const known = (ASR_MODELS[provider] ?? []).find((m) => m.value === cur);
+    return [...product, known ?? { value: cur, label: cur }];
+  }
+  return product;
+}
 
 /** LLM model id that routes calls through Gemini Live native audio. */
 export const GEMINI_LIVE_LLM_MODEL = "gemini-3.1-flash-live-preview" as const;

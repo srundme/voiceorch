@@ -499,4 +499,13 @@ describe("Sarvam realtime builder catalog", () => {
     expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 250 }).silence).toBe(500);
     expect(hydrateSarvamRealtimeVad({ sarvamEndOfSpeechSilenceMs: 400, asrEndpointingSilenceMs: 150 }).silence).toBe(400);
   });
+
+  it("product ASR picker is only Saaras v3", async () => {
+    const { asrModelsForPicker, SARVAM_PRODUCT_ASR_MODEL } = await import("@/lib/agent-providers");
+    expect(asrModelsForPicker("sarvam").map((m) => m.value)).toEqual([SARVAM_PRODUCT_ASR_MODEL]);
+    expect(asrModelsForPicker("sarvam", "saarika:v2.5").map((m) => m.value)).toEqual([
+      SARVAM_PRODUCT_ASR_MODEL,
+      "saarika:v2.5",
+    ]);
+  });
 });

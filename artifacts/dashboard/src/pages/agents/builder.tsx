@@ -96,8 +96,9 @@ import { SnapServeAgentIcon } from "@/components/logo";
 import { hostProductName } from "@/lib/white-label";
 import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import {
-  ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
-  LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
+  LLM_PROVIDERS, TTS_PROVIDERS,
+  LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, asrModelsForPicker, SARVAM_PRODUCT_ASR_MODEL,
+  LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage, shouldClearVoiceForLanguage,
   getSarvamTtsVoices, isSarvamVoiceCompatible,
   GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS, VOICE_STACK_OPTIONS,
@@ -518,7 +519,7 @@ function AgentCostSummary({
 }
 
 const SECTION_FIELDS: Record<CardSection, string[]> = {
-  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "sarvamSttStreamType", "sarvamSttPrompt", "languageAutoDetect", "multilingualLanguages", "sarvamIndicNumbers", "sarvamEndOfSpeechSilenceMs", "sarvamFirstTurnMinSpeechMs", "sarvamVadThreshold"],
+  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "sarvamSttStreamType", "sarvamSttPrompt", "languageAutoDetect", "multilingualLanguages", "sarvamIndicNumbers"],
   model: ["voiceStack", "llmProvider", "llmModel", "temperature"],
   voice: ["ttsProvider", "ttsModel", "ttsVoice", "ttsSpeed", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
 };
@@ -559,7 +560,7 @@ function OverviewTab({
   const temperature           = form.watch("temperature") ?? 0.4;
   const llmOptions    = LLM_MODELS[llmProvider]  ?? [];
   const ttsModelOpts  = TTS_MODELS[ttsProvider]  ?? [];
-  const asrModelOpts  = ASR_MODELS[asrProvider]  ?? [];
+  const asrModelOpts  = asrModelsForPicker(asrProvider, asrModel);
 
   // Fetch admin-whitelisted voices (shared cache with VoiceTab)
   const { data: whitelistedData } = useQuery({
@@ -686,7 +687,6 @@ function OverviewTab({
       ? sarvamOverviewOpts
       : ((ttsVoiceRaw ?? []) as { value: string; label: string }[]);
 
-  const asrLabel       = ASR_PROVIDERS.find(p => p.value === asrProvider)?.label ?? asrProvider;
   const llmLabel       = LLM_PROVIDERS.find(p => p.value === llmProvider)?.label ?? llmProvider;
   const ttsLabel       = TTS_PROVIDERS.find(p => p.value === ttsProvider)?.label ?? ttsProvider;
   const langLabel      = LANGUAGES.find(l => l.value === language)?.label ?? language;
@@ -845,7 +845,7 @@ function OverviewTab({
                 icon={isGeminiLive ? <Globe /> : <Mic />}
                 label={isGeminiLive ? "Language" : "Transcriber"}
                 value={langLabel}
-                subtext={isGeminiLive ? "Gemini Live conversation language" : <>{asrLabel}{asrModel ? ` · ${asrModel}` : ""}</>}
+                subtext={isGeminiLive ? "Gemini Live conversation language" : "Caller speech"}
                 active={openSection === "transcriber"}
                 onClick={() => openPipelineDialog("transcriber")}
               />
@@ -922,7 +922,7 @@ function OverviewTab({
             description={
               isGeminiLive
                 ? "Choose the conversation language for Gemini Live. Native audio has no separate STT — language is enforced via system instructions."
-                : "Speech-to-text for live calls: Sarvam language, model, mode, partials, and millisecond VAD."
+                : "What language callers speak, and how their words should be written."
             }
           >
             {isGeminiLive && (
@@ -930,12 +930,10 @@ function OverviewTab({
                 Gemini Live supports ~97 languages. Pick the primary language callers should hear and speak.
               </p>
             )}
-            <div className={isGeminiLive ? "space-y-3" : "grid grid-cols-2 gap-3"}>
+            <div className="space-y-4">
               <FormField control={form.control} name="language" render={({ field }) => {
                 const langOpts = languagesForAgent(isGeminiLive);
                 const current = field.value ?? "";
-                // Keep a saved tag visible even if it isn't in this stack's catalog
-                // (legacy en-US, Gemini-only codes, etc.). Runtime maps en-* → en-IN.
                 const inList = langOpts.some(l => l.value === current);
                 const options = (!current || inList)
                   ? langOpts
@@ -945,28 +943,26 @@ function OverviewTab({
                   <FormLabel className="text-[10px] text-muted-foreground">Language</FormLabel>
                   <SmallSelect value={field.value} onChange={(v) => {
                     field.onChange(v);
-                    // Language alone must never force Gemini Live / swap the LLM.
-                    // Users pick model + voice stack explicitly in the Model / Voice cards.
                   }}
                     options={options.map(l => ({ value: l.value, label: l.label }))} placeholder="Select language" />
-                  {!isGeminiLive && (
-                    <p className="text-[9px] text-muted-foreground leading-snug">
-                      Sarvam realtime accepts these 23 codes. English is en-IN.
-                    </p>
-                  )}
                 </FormItem>
                 );
               }} />
-              {!isGeminiLive && (
-              <FormField control={form.control} name="asrProvider" render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
-                  <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("asrModel", ""); }}
-                    options={ASR_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
-                </FormItem>
-              )} />
+              {!isGeminiLive && asrProvider === "sarvam" && asrModel && asrModel !== SARVAM_PRODUCT_ASR_MODEL && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 space-y-2">
+                  <p className="text-[11px] text-foreground/80 leading-snug">
+                    This agent is on a legacy transcriber. Switch to Saaras v3 for live calls.
+                  </p>
+                  <button
+                    type="button"
+                    className="text-[11px] font-medium text-primary hover:underline"
+                    onClick={() => form.setValue("asrModel", SARVAM_PRODUCT_ASR_MODEL, { shouldDirty: true })}
+                  >
+                    Use Saaras v3
+                  </button>
+                </div>
               )}
-              {!isGeminiLive && asrModelOpts.length > 0 && (
+              {!isGeminiLive && asrProvider === "sarvam" && asrModelOpts.length > 1 && (
                 <FormField control={form.control} name="asrModel" render={({ field }) => (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
@@ -978,56 +974,36 @@ function OverviewTab({
               )}
               {!isGeminiLive && asrProvider === "sarvam" && (
                 <FormField control={form.control} name="sarvamSttMode" render={({ field }) => {
-                  // Must match resolveSarvamSttMode: en → codemix, Indic → transcribe
                   const lang = form.watch("language") ?? "";
                   const autoDefault = lang.toLowerCase().startsWith("en") ? "codemix" : "transcribe";
                   const currentValue = field.value ?? autoDefault;
                   return (
                   <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] font-medium text-foreground/80">Speech Mode</FormLabel>
+                    <FormLabel className="text-[10px] font-medium text-foreground/80">How speech is written</FormLabel>
                     <SmallSelect value={currentValue} onChange={field.onChange}
                       options={[
-                        { value: "codemix", label: "Code-mix (English + regional, e.g. Hinglish)" },
-                        { value: "transcribe", label: "Transcribe (native script, e.g. हिंदी / தமிழ்)" },
-                        { value: "verbatim", label: "Verbatim (exact as spoken, incl. fillers)" },
-                        { value: "translit", label: "Translit (Indic speech → Roman script)" },
-                        { value: "translate", label: "Translate (speech → English text)" },
+                        { value: "codemix", label: "Mixed — Hinglish, Tanglish, …" },
+                        { value: "transcribe", label: "Native script — हिंदी, தமிழ்" },
+                        { value: "translate", label: "English text — any language spoken" },
+                        ...(currentValue === "verbatim"
+                          ? [{ value: "verbatim", label: "Verbatim — include fillers" }]
+                          : []),
+                        ...(currentValue === "translit"
+                          ? [{ value: "translit", label: "Roman script — Indic in Latin letters" }]
+                          : []),
                       ]} />
                     <p className="text-[9.5px] text-muted-foreground leading-snug mt-1">
                       {currentValue === "transcribe"
-                        ? "Clean native-script transcript. Recommended for Indic languages."
+                        ? "Caller speech stays in its own script. Best for Hindi, Tamil, and other Indic languages."
                         : currentValue === "codemix"
-                        ? "English words stay Latin; regional words stay native. Recommended for en-IN / mixed speech."
+                        ? "English words stay in English; regional words stay in their script. Best for mixed speech."
                         : currentValue === "verbatim"
                         ? "Keeps fillers and exact phrasing as spoken."
                         : currentValue === "translit"
-                        ? "Writes Indic speech in Roman/Latin script."
+                        ? "Writes Indic speech in English letters."
                         : currentValue === "translate"
-                        ? "Speech-to-English: any language spoken → English text."
-                        : "Auto: English → code-mix, Indic → native-script transcribe."}
-                    </p>
-                  </FormItem>
-                  );
-                }} />
-              )}
-              {!isGeminiLive && asrProvider === "sarvam" && (
-                <FormField control={form.control} name="sarvamSttStreamType" render={({ field }) => {
-                  const current = field.value ?? "fast";
-                  return (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] font-medium text-foreground/80">Partial transcripts</FormLabel>
-                    <SmallSelect value={current} onChange={field.onChange}
-                      options={[
-                        { value: "fast", label: "Fast — snappy barge-in (recommended)" },
-                        { value: "balanced", label: "Balanced — slightly slower, more accurate" },
-                        { value: "simulated", label: "Simulated — finals only, no partials" },
-                      ]} />
-                    <p className="text-[9.5px] text-muted-foreground leading-snug mt-1">
-                      {current === "simulated"
-                        ? "No live partials. Barge-in falls back to energy / final transcript — not for conversational agents."
-                        : current === "balanced"
-                        ? "Partials are a bit later and cleaner. Use for captioning-style accuracy."
-                        : "Lowest-latency partials. This is the voice-agent setting."}
+                        ? "Whatever the caller speaks is written as English."
+                        : "English agents default to mixed speech; Indic agents default to native script."}
                     </p>
                   </FormItem>
                   );
@@ -1036,7 +1012,7 @@ function OverviewTab({
               {!isGeminiLive && asrProvider === "sarvam" && (
                 <FormField control={form.control} name="sarvamSttPrompt" render={({ field }) => (
                   <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] font-medium text-foreground/80">Terminology hint</FormLabel>
+                    <FormLabel className="text-[10px] font-medium text-foreground/80">Brand names & terms</FormLabel>
                     <Input
                       value={field.value ?? ""}
                       onChange={field.onChange}
@@ -1045,53 +1021,23 @@ function OverviewTab({
                       maxLength={500}
                     />
                     <p className="text-[9.5px] text-muted-foreground leading-snug mt-1">
-                      Boosts those words on the final transcript only. Partials stay plain.
+                      Helps the transcriber spell these words correctly.
                     </p>
                   </FormItem>
                 )} />
               )}
-              {!isGeminiLive && asrProvider === "sarvam" && isSarvamRealtimeAsr(asrModel) && (
-                <div className="col-span-2 space-y-4 border-t border-border/60 pt-3">
-                  <div>
-                    <p className="text-[10px] font-medium text-foreground/80">Turn-taking (Sarvam VAD)</p>
-                    <p className="text-[9px] text-muted-foreground leading-snug mt-0.5">
-                      Sent on connect as silence duration, minimum speech, and threshold.
-                      Encoding, sample rate, and timestamps are automatic. Endpointing stays on server VAD — not manual.
-                    </p>
-                  </div>
-                  <AdvSlider
-                    form={form}
-                    name="sarvamEndOfSpeechSilenceMs"
-                    label="End-of-speech silence"
-                    hint="How long the caller must be quiet before the turn ends. Fast 300 · Balanced 500 · Patient 700."
-                    min={150}
-                    max={800}
-                    step={25}
-                    fmt={(v) => `${v}ms`}
-                    onValueChange={(v: number) => {
-                      form.setValue("asrEndpointingSilenceMs", clampEndpointingMs(v), { shouldDirty: true });
-                    }}
-                  />
-                  <AdvSlider
-                    form={form}
-                    name="sarvamFirstTurnMinSpeechMs"
-                    label="Minimum speech"
-                    hint="Shortest burst counted as speech. Filters clicks and echo blips. Default 250ms."
-                    min={80}
-                    max={800}
-                    step={10}
-                    fmt={(v) => `${v}ms`}
-                  />
-                  <AdvSlider
-                    form={form}
-                    name="sarvamVadThreshold"
-                    label="VAD threshold"
-                    hint="0.3 is Sarvam's default. Higher = less sensitive to noise and echo."
-                    min={0.1}
-                    max={0.8}
-                    step={0.05}
-                    fmt={(v) => Number(v).toFixed(2)}
-                  />
+              {!isGeminiLive && asrProvider === "sarvam" && form.watch("sarvamSttStreamType") === "simulated" && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 space-y-2">
+                  <p className="text-[11px] text-foreground/80 leading-snug">
+                    Partials are off, so the agent waits for a full sentence before it can hear an interrupt. Turn this on for live calls.
+                  </p>
+                  <button
+                    type="button"
+                    className="text-[11px] font-medium text-primary hover:underline"
+                    onClick={() => form.setValue("sarvamSttStreamType", "fast", { shouldDirty: true })}
+                  >
+                    Use fast partials
+                  </button>
                 </div>
               )}
             </div>
@@ -1103,7 +1049,7 @@ function OverviewTab({
                   <p className="text-[9px] text-muted-foreground">
                     {isGeminiLive
                       ? "Allow Gemini Live to follow the caller when they switch languages mid-call."
-                      : "Sends language_code=auto so Sarvam detects which of the 23 languages the caller is speaking."}
+                      : "Follow the caller if they switch languages mid-call."}
                   </p>
                 </div>
                 <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
@@ -1128,7 +1074,7 @@ function OverviewTab({
                   return (
                     <FormItem className="space-y-1.5">
                       <FormLabel className="text-[10px] font-medium text-foreground/80">Languages allowed</FormLabel>
-                      <p className="text-[9px] text-muted-foreground">Languages Sarvam may follow (same 23-code table as the picker). Odia is or-IN.</p>
+                      <p className="text-[9px] text-muted-foreground">Languages this agent can understand and reply in.</p>
                       <div className="flex flex-wrap gap-1.5">
                         {SARVAM_PERSONALISATION_LANGUAGES.map((lang) => {
                           const on = selected.has(lang.value);
@@ -2539,17 +2485,16 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
       <div>
         <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Phone feel</h3>
         <p className="mt-0.5 text-[12px] text-muted-foreground">
-          How quickly the agent takes the turn — same Call Engine knobs as Settings → Engine.
+          How quickly the agent starts talking after the caller pauses.
         </p>
         {realtime && (
           <p className="text-[11px] text-muted-foreground mt-1">
-            Fast uses 300ms end-of-speech silence. Balanced is Sarvam&apos;s 500ms default.
-            Patient waits 700ms so slow speakers aren&apos;t cut off.
+            Fast replies quickly. Patient waits if the caller thinks mid-sentence.
           </p>
         )}
         {asrProviderVal === "sarvam" && !realtime && (
           <p className="text-[11px] text-muted-foreground mt-1">
-            Saarika uses legacy frame VAD. Prefer Saaras v3 realtime for live calls.
+            This agent is on a legacy transcriber. Switch it to Saaras v3 in Transcriber.
           </p>
         )}
       </div>
@@ -2582,8 +2527,7 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
           )}
         </div>
         <p className="text-[10px] text-muted-foreground leading-relaxed">
-          Fine-tune endpointing, linear delay, and interrupt words on{" "}
-          <span className="text-foreground/80">Settings → Engine</span>.
+          More timing on <span className="text-foreground/80">Settings → Engine</span>.
         </p>
       </div>
     </section>
@@ -3707,7 +3651,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
             <div>
               <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Engine</h3>
               <p className="mt-0.5 text-[12px] text-muted-foreground">
-                The few knobs that actually drive live calls — interrupt words, when the turn ends, and how long to wait before the agent speaks.
+                The few knobs that actually drive live calls — whether the caller can interrupt, and how long to wait before the agent speaks.
               </p>
             </div>
 
@@ -3763,28 +3707,12 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 />
               )}
 
-              {sarvamRealtime ? (
-                <AdvSlider
-                  form={form}
-                  name="sarvamEndOfSpeechSilenceMs"
-                  label="End-of-speech silence"
-                  hint="Sarvam silence_duration_ms — quiet time before the turn ends. Fast 300 · Balanced 500 · Patient 700. Same control as Transcriber."
-                  min={150}
-                  max={800}
-                  step={25}
-                  fmt={(v) => `${v}ms`}
-                  onValueChange={(v: number) => {
-                    form.setValue("asrEndpointingSilenceMs", clampEndpointingMs(v), { shouldDirty: true });
-                  }}
-                />
-              ) : (
+              {!sarvamRealtime && (
               <AdvSlider
                 form={form}
                 name="asrEndpointingSilenceMs"
-                label="Endpointing"
-                hint={asrProviderVal === "sarvam"
-                  ? "Silence before the agent decides you finished. Saarika legacy: under 200ms = fast pause detection, 200ms+ = patient. Fast 150 · Balanced 250 · Patient 500."
-                  : "Milliseconds of silence after the caller stops before we finalize the turn. Fast 150 · Balanced 250 · Patient 500."}
+                label="Wait after caller stops"
+                hint="How long to wait after the caller pauses before the agent replies. Fast 150 · Balanced 250 · Patient 500."
                 min={100}
                 max={800}
                 step={25}
@@ -3800,8 +3728,8 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
               <AdvSlider
                 form={form}
                 name="linearDelayMs"
-                label="Linear delay"
-                hint="Extra wait after end-of-turn before the agent speaks — covers mid-sentence pauses. Default off (0)."
+                label="Extra pause before speaking"
+                hint="Add a beat after the caller finishes. Off by default."
                 min={0}
                 max={1500}
                 step={50}
@@ -3814,22 +3742,57 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                   Advanced timing — rarely needed
                 </summary>
                 <div className="space-y-5 pt-4">
-                  {asrProviderVal === "sarvam" && !sarvamRealtime && (
+                  {sarvamRealtime && (
                     <>
-                      <FormField control={form.control} name="sarvamHighVadSensitivity" render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between gap-3 py-1">
-                          <div>
-                            <FormLabel className="text-[12px] font-medium text-foreground/90">Detect pauses quickly</FormLabel>
-                            <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                              Legacy Saarika frame VAD. Prefer Saaras v3 realtime for live calls.
-                            </p>
-                          </div>
-                          <FormControl>
-                            <Switch checked={!!field.value} onCheckedChange={field.onChange} />
-                          </FormControl>
-                        </FormItem>
-                      )} />
+                      <AdvSlider
+                        form={form}
+                        name="sarvamEndOfSpeechSilenceMs"
+                        label="Wait after caller stops"
+                        hint="How long the caller must be quiet before the agent replies. Fast 300 · Balanced 500 · Patient 700."
+                        min={150}
+                        max={800}
+                        step={25}
+                        fmt={(v) => `${v}ms`}
+                        onValueChange={(v: number) => {
+                          form.setValue("asrEndpointingSilenceMs", clampEndpointingMs(v), { shouldDirty: true });
+                        }}
+                      />
+                      <AdvSlider
+                        form={form}
+                        name="sarvamFirstTurnMinSpeechMs"
+                        label="Ignore tiny sounds"
+                        hint="Shorter bursts are treated as noise. Default 250ms."
+                        min={80}
+                        max={800}
+                        step={10}
+                        fmt={(v) => `${v}ms`}
+                      />
+                      <AdvSlider
+                        form={form}
+                        name="sarvamVadThreshold"
+                        label="Noise sensitivity"
+                        hint="Higher ignores more background noise. Default 0.30."
+                        min={0.1}
+                        max={0.8}
+                        step={0.05}
+                        fmt={(v) => Number(v).toFixed(2)}
+                      />
                     </>
+                  )}
+                  {asrProviderVal === "sarvam" && !sarvamRealtime && (
+                    <FormField control={form.control} name="sarvamHighVadSensitivity" render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between gap-3 py-1">
+                        <div>
+                          <FormLabel className="text-[12px] font-medium text-foreground/90">Detect pauses quickly</FormLabel>
+                          <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                            Legacy transcriber only. Prefer Saaras v3 for live calls.
+                          </p>
+                        </div>
+                        <FormControl>
+                          <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                      </FormItem>
+                    )} />
                   )}
 
                   <AdvSlider
