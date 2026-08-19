@@ -151,7 +151,67 @@ const TABS: TabDef[] = [
 const BUILDER_SEGMENTS: WorkspaceNavItem<TabId>[] = TABS.map((tab) => ({
   id: tab.id,
   label: tab.label,
+  // Build (overview → after the call) | Review (activity, settings, versions)
+  dividerBefore: tab.id === "analytics",
 }));
+
+/** One left edge for header, tabs, and every builder page. */
+const BUILDER_TAB_PAD = "px-5 py-6 sm:px-8";
+
+function BuilderTabHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description?: React.ReactNode;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0 max-w-[68ch]">
+        <h2 className="text-[17px] font-semibold tracking-[-0.03em] text-foreground">{title}</h2>
+        {description ? (
+          <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+    </div>
+  );
+}
+
+function BuilderStatusChip({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
+        ok
+          ? "border-border/70 bg-muted/25 text-muted-foreground"
+          : "border-amber-500/35 bg-amber-500/10 text-amber-800 dark:text-amber-300",
+      )}
+    >
+      <span className={cn("size-1.5 shrink-0 rounded-full", ok ? "bg-emerald-500" : "bg-amber-500")} />
+      {label}
+    </span>
+  );
+}
+
+function BuilderPipelineStatus({ form }: { form: any }) {
+  const promptOk = String(form.watch("systemPrompt") ?? "").trim().length >= 40;
+  const greetOk = String(form.watch("greetingMessage") ?? "").trim().length >= 4;
+  const isGeminiLive = isGeminiLiveAgent({
+    llmModel: form.watch("llmModel"),
+    voiceStack: form.watch("voiceStack"),
+  });
+  const ttsVoice = form.watch("ttsVoice");
+  const voiceOk = isGeminiLive || Boolean(ttsVoice && ttsVoice !== "__custom__");
+  return (
+    <div className="hidden min-w-0 items-center gap-1 lg:flex" aria-label="Builder readiness">
+      <BuilderStatusChip ok={greetOk && promptOk} label="Script" />
+      <BuilderStatusChip ok={voiceOk} label="Sound" />
+    </div>
+  );
+}
 
 /** Map legacy ?section= values onto current tabs. */
 function sectionFromSearch(search: string): TabId {
@@ -790,12 +850,16 @@ function OverviewTab({
   return (
     <div className="flex flex-col">
       <div className="relative min-w-0">
-        <div className="space-y-5 p-5 sm:p-6">
-          {/* Compact status — no duplicate checklist of Phone/Knowledge/Voice */}
-          <section className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <div className="min-w-0 space-y-0.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Overview</h2>
+        <div className={cn("space-y-6", BUILDER_TAB_PAD)}>
+          <BuilderTabHeader
+            title="Overview"
+            description={
+              missingSetup.length === 0
+                ? "Ready to test. Script, sound, and phone are set."
+                : `Still needs ${missingSetup.join(", ")}.`
+            }
+            actions={
+              <>
                 {missingSetup.length === 0 ? (
                   <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                     <Check className="size-3" />
@@ -804,40 +868,37 @@ function OverviewTab({
                 ) : (
                   <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-300">
                     <AlertCircle className="size-3" />
-                    Needs {missingSetup.slice(0, 2).join(", ")}
-                    {missingSetup.length > 2 ? ` +${missingSetup.length - 2}` : ""}
+                    {missingSetup.length} to finish
                   </span>
                 )}
-              </div>
-              <AgentCostSummary form={form} rateMap={rateMap} variant="line" />
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {onGoToAnalytics && agent?.id ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5 text-xs"
-                  onClick={onGoToAnalytics}
-                >
-                  <BarChart3 className="size-3.5" />
-                  Analytics
-                </Button>
-              ) : null}
-              {onGoToPrompt && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5 text-xs"
-                  onClick={onGoToPrompt}
-                >
-                  <FileText className="size-3.5" />
-                  Edit script
-                </Button>
-              )}
-            </div>
-          </section>
+                {onGoToAnalytics && agent?.id ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={onGoToAnalytics}
+                  >
+                    <BarChart3 className="size-3.5" />
+                    Activity
+                  </Button>
+                ) : null}
+                {onGoToPrompt && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={onGoToPrompt}
+                  >
+                    <FileText className="size-3.5" />
+                    Edit script
+                  </Button>
+                )}
+              </>
+            }
+          />
+          <AgentCostSummary form={form} rateMap={rateMap} variant="line" />
 
           {/* Pipeline — primary composition */}
           <section className="space-y-2.5">
@@ -1408,7 +1469,11 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
   }, [canAttendMeetings, promptSurface]);
 
   return (
-    <div className="relative flex min-h-full flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
+    <div className={cn("relative flex min-h-full flex-col gap-6", BUILDER_TAB_PAD)}>
+      <BuilderTabHeader
+        title="Script"
+        description="Welcome first, then the instructions for the whole call. Live-test from the header before you publish."
+      />
       <GeneratePromptSheet
         open={generateOpen}
         onOpenChange={setGenerateOpen}
@@ -1458,7 +1523,7 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
 
       <section className="space-y-3">
         <div className="space-y-0.5">
-          <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Welcome</h2>
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Welcome</h3>
           <p className="text-[12px] text-muted-foreground">
             What callers hear at the start of the call.
           </p>
@@ -1496,7 +1561,7 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
       <div className="flex items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Talk</h2>
+            <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Talk</h3>
             <Badge variant="secondary" className="h-5 rounded-md px-1.5 py-0 text-[10px] font-medium">
               {langLabel}
             </Badge>
@@ -2032,7 +2097,11 @@ function VoiceTab({ form }: { form: any }) {
   );
 
   return (
-    <div className="relative flex min-h-full flex-col gap-8 px-4 py-5 sm:px-6 lg:px-8">
+    <div className={cn("relative flex min-h-full flex-col gap-8", BUILDER_TAB_PAD)}>
+      <BuilderTabHeader
+        title="Sound"
+        description="Voice, language, and how quickly the agent takes a turn after the caller pauses."
+      />
 
       {/* ── SPEAKING ── */}
       <section className="space-y-4">
@@ -2811,17 +2880,19 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   };
 
   return (
-    <div className="relative flex min-h-full flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
+    <div className={cn("relative flex min-h-full flex-col gap-6", BUILDER_TAB_PAD)}>
 
       {/* ── Platform Tools ─── */}
       <div>
-        <h3 className="text-[15px] font-semibold tracking-[-0.02em]">What this agent can do</h3>
-        <p className="mb-3 mt-0.5 text-[12px] text-muted-foreground">Turn on an action, then pick which connected calendar, WhatsApp template, or email to use. Connecting the account itself is under Connections.</p>
+        <BuilderTabHeader
+          title="Actions"
+          description="Turn on an action, then pick the calendar, WhatsApp template, or email already connected. Plug-in itself is under Connections."
+        />
 
-        <div className="space-y-2">
+        <div className="mt-5 space-y-2">
 
         {/* ── Booking suite (one switch → all five tools) ── */}
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-3">Scheduling & Bookings</p>
+        <p className="mb-1.5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Scheduling & Bookings</p>
         <div className={cn(
           "rounded-xl border transition-all duration-150",
           bookingEnabled || bookingPartial ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20",
@@ -3063,7 +3134,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         {/* Meeting bots — join actions live on /app/meet; Tools only explains capability. */}
         {canAttendMeetings && (
           <>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">
+            <p className="mb-1.5 mt-5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               Meeting bots
             </p>
             <div className="rounded-xl border border-border/70 bg-card/40 p-4">
@@ -3090,7 +3161,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           </>
         )}
 
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Messaging</p>
+        <p className="mb-1.5 mt-5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Messaging</p>
         {CALL_CONTROL_TOOLS.filter((t) => t.type === "send_email" || t.type === "send_whatsapp").map(({ type, icon, label, description }) => {
           const isOn = hasNativeTool(type);
           return (
@@ -3115,7 +3186,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           );
         })}
 
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Call Control</p>
+        <p className="mb-1.5 mt-5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Call Control</p>
         {CALL_CONTROL_TOOLS.filter((t) => t.type === "end_call").map(({ type, icon, label, description }) => {
           const isOn = hasNativeTool(type);
           return (
@@ -3210,7 +3281,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           )}
         </div>
 
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Recording</p>
+        <p className="mb-1.5 mt-5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Recording</p>
         {/* Call Recording card */}
         <div className={cn("rounded-xl border transition-all duration-150", recordingEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
           <div
@@ -3241,7 +3312,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           </div>
         </div>
 
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">After the call</p>
+        <p className="mb-1.5 mt-5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Call summaries</p>
         <div className={cn("rounded-xl border transition-all duration-150", summarizationEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
           <div
             role="button"
@@ -3271,7 +3342,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           </div>
         </div>
 
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Caller Intelligence</p>
+        <p className="mb-1.5 mt-5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Caller Intelligence</p>
         {/* Gender Identification card */}
         <div className={cn("rounded-xl border transition-all duration-150", genderEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
           <div
@@ -3453,8 +3524,8 @@ function VoicemailTab({ form, embedded = false }: { form: any; embedded?: boolea
   const action = form.watch("voicemailAction");
   return (
     <div className={cn(
-      "relative w-full max-w-xl space-y-5",
-      embedded ? "px-0 py-0" : "px-4 py-5 sm:px-6 lg:px-8",
+      "relative w-full space-y-5",
+      embedded ? "px-0 py-0" : BUILDER_TAB_PAD,
     )}>
       <div>
         <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Voicemail</h3>
@@ -3617,35 +3688,31 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   ];
 
   return (
-    <div className="flex flex-col">
-      <div className="border-b border-border/40 px-4 pt-5 sm:px-6 lg:px-8">
-        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Settings</h2>
-        <p className="mt-0.5 text-[12px] text-muted-foreground">
-          Call limits, barge-in, hang-up, post-call notify URL, and compliance. How fast the agent replies is on Sound.
-        </p>
-        {/* ── Sub-nav ── */}
-        <div className="mt-3 flex flex-shrink-0 items-center gap-1 pb-3">
-          {nav.map(n => (
-            <button
-              key={n.id}
-              type="button"
-              onClick={() => setSection(n.id)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-medium transition-all",
-                section === n.id
-                  ? "bg-primary/15 text-primary border border-primary/30"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
-              )}
-            >
-              {n.icon}
-              {n.label}
-            </button>
-          ))}
-        </div>
+    <div className={cn("flex flex-col gap-5", BUILDER_TAB_PAD)}>
+      <BuilderTabHeader
+        title="Settings"
+        description="Call limits, barge-in, hang-up, post-call notify URL, and compliance. How fast the agent replies is on Sound."
+      />
+      <div className="flex flex-wrap items-center gap-1">
+        {nav.map(n => (
+          <button
+            key={n.id}
+            type="button"
+            onClick={() => setSection(n.id)}
+            className={cn(
+              "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-[11.5px] font-medium transition-all",
+              section === n.id
+                ? "border border-primary/30 bg-primary/15 text-primary"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+            )}
+          >
+            {n.icon}
+            {n.label}
+          </button>
+        ))}
       </div>
 
-      {/* ── Content ── */}
-      <div className="space-y-4 px-4 py-5 sm:px-6 lg:px-8">
+      <div className="space-y-4">
 
         {/* ── ENGINE ── */}
         {section === "engine" && (
@@ -4658,7 +4725,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           <Tag className="h-4 w-4 text-amber-400" />
           <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">What happened</h3>
         </div>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-[12px] leading-relaxed text-muted-foreground">
           After each call, AI reads the transcript, picks one of <em>your</em> outcome labels
           (using the business definitions you write), and extracts data fields as structured values.
         </p>
@@ -6098,7 +6165,7 @@ function VersionCard({
 
   return (
     <div className={cn(
-      "flex items-start gap-4 px-5 py-4 hover:bg-muted/10 transition-colors",
+      "flex items-start gap-4 px-0 py-4 hover:bg-muted/10 transition-colors",
       isArchived && "opacity-60",
       selected && "bg-primary/5",
     )}>
@@ -6440,30 +6507,26 @@ function VersionsTab({ agentId }: { agentId: number }) {
   const selectedV2 = versions.find(v => v.id === selectedArr[1]);
 
   return (
-    <div className="flex flex-col">
-      {/* Header strip */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-border/60 shrink-0">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <History className="h-4 w-4 text-primary" />
-          Version History
-        </div>
-        {productionVersion && (
-          <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={() => setRestoreTarget(productionVersion)}>
-            <RotateCcw className="h-3 w-3" /> Restore Last Working Version
+    <div className={cn("flex flex-col gap-4", BUILDER_TAB_PAD)}>
+      <BuilderTabHeader
+        title="Versions"
+        description="Published snapshots you can restore. Drafts are auto-saved history."
+        actions={productionVersion ? (
+          <Button type="button" variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setRestoreTarget(productionVersion)}>
+            <RotateCcw className="h-3 w-3" /> Restore last working
           </Button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
-      {/* Sub-tabs */}
-      <div className="flex border-b border-border/60 shrink-0 px-1">
+      <div className="flex shrink-0 items-center gap-1">
         <button
           type="button"
           onClick={() => setActiveSubTab("published")}
           className={cn(
-            "flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors",
+            "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-[11.5px] font-medium transition-all",
             activeSubTab === "published"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground",
+              ? "border border-primary/30 bg-primary/15 text-primary"
+              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
           )}
         >
           Published Versions
@@ -6473,10 +6536,10 @@ function VersionsTab({ agentId }: { agentId: number }) {
           type="button"
           onClick={() => setActiveSubTab("drafts")}
           className={cn(
-            "flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors",
+            "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-[11.5px] font-medium transition-all",
             activeSubTab === "drafts"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground",
+              ? "border border-primary/30 bg-primary/15 text-primary"
+              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
           )}
         >
           Draft History
@@ -6489,7 +6552,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
         <>
           {/* Usage indicator */}
           {!isLoading && publishedVersions.length > 0 && (
-            <div className="px-5 py-3 border-b border-border/40 shrink-0 space-y-2">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground font-medium">
                   <span className={cn("font-bold", publishedCount >= limit ? "text-destructive" : publishedCount >= 8 ? "text-amber-400" : "text-foreground")}>
@@ -6504,7 +6567,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
           )}
           {/* Warning banner */}
           {isNearLimit && publishedCount < limit && (
-            <div className="mx-5 mt-3 shrink-0 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3.5 py-2.5">
+            <div className="mt-1 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3.5 py-2.5">
               <Info className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
               <p className="text-[11px] text-amber-400/90 leading-relaxed">
                 <strong>Approaching limit:</strong> You have {publishedCount} of {limit} published versions used. Consider archiving older versions to keep publishing new ones.
@@ -6553,7 +6616,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
                 <button
                   type="button"
                   onClick={() => setArchivedOpen(o => !o)}
-                  className="w-full flex items-center gap-2 px-5 py-2.5 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors border-t border-border/40 hover:bg-muted/10"
+                  className="flex w-full items-center gap-2 border-t border-border/40 py-2.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted/10 hover:text-foreground"
                 >
                   {archivedOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                   <Archive className="h-3 w-3" />
@@ -6603,12 +6666,12 @@ function VersionsTab({ agentId }: { agentId: number }) {
           )}
           {!isLoading && draftGroups.map(({ label, items }) => (
             <div key={label} className="mb-1">
-              <div className="px-5 py-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 bg-muted/10 border-y border-border/30">
+              <div className="border-y border-border/30 bg-muted/10 px-0 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">
                 {label}
               </div>
               <div className="divide-y divide-border/30">
                 {items.map((v) => (
-                  <div key={v.id} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/10 transition-colors">
+                  <div key={v.id} className="flex items-center gap-3 px-0 py-3 hover:bg-muted/10 transition-colors">
                     <div className="shrink-0 text-[10px] font-mono text-muted-foreground/60 w-10 text-right">
                       {format(new Date(v.createdAt), "HH:mm")}
                     </div>
@@ -6669,7 +6732,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
 
       {/* Quick compare sticky bar */}
       {selectedForCompare.size === 2 && selectedV1 && selectedV2 && (
-        <div className="shrink-0 border-t border-primary/30 bg-primary/5 px-5 py-3 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3 border-t border-primary/30 bg-primary/5 px-0 py-3">
           <ArrowLeftRight className="h-3.5 w-3.5 text-primary shrink-0" />
           <span className="text-xs text-foreground/80 flex-1 truncate">
             Compare <strong>{selectedV1.versionNumber}</strong> vs <strong>{selectedV2.versionNumber}</strong>
@@ -7233,7 +7296,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       {/* Single toolbar — agent identity + actions */}
-      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3 sm:h-16 sm:px-5">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-5 sm:h-16 sm:px-8">
         <div className="flex min-w-0 items-center gap-2.5">
           {!embedded && (
             <Button
@@ -7289,6 +7352,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
               Unsaved
             </span>
           )}
+          <BuilderPipelineStatus form={form} />
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
@@ -7415,16 +7479,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
           />
 
           <div ref={tabContentRef} className="min-h-0 flex-1 overflow-y-auto">
-            <div
-              className={cn(
-                "builder-workspace-shell mx-auto flex min-h-full w-full",
-                activeTab === "prompt" || activeTab === "overview"
-                  ? "max-w-[1200px]"
-                  : activeTab === "versions"
-                    ? "max-w-[1000px]"
-                    : "max-w-[1100px]",
-              )}
-            >
+            <div className="builder-workspace-shell mx-auto flex min-h-full w-full">
               <form
                 onSubmit={(e) => e.preventDefault()}
                 className={cn(
@@ -7445,7 +7500,11 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
                 {activeTab === "outcomes"  && (
-                  <div className="space-y-10 px-4 py-5 sm:px-6 lg:px-8">
+                  <div className={cn("space-y-10", BUILDER_TAB_PAD)}>
+                    <BuilderTabHeader
+                      title="After the call"
+                      description="Label what happened, pick the WhatsApp template for each outcome, and decide what to do with voicemail."
+                    />
                     <DispositionSettingsPanel agentId={agent?.id ?? 0} />
                     <VoicemailTab form={form} embedded />
                   </div>
@@ -7466,7 +7525,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
           </div>
 
           {/* Mobile-only sticky actions */}
-          <div className="shrink-0 border-t border-border/70 bg-background/95 px-3 py-2 pb-safe backdrop-blur-md sm:hidden">
+          <div className="shrink-0 border-t border-border/70 bg-background/95 px-5 py-2 pb-safe backdrop-blur-md sm:hidden">
             <div className="grid grid-cols-3 gap-1.5">
               <Button
                 type="button"
@@ -7626,7 +7685,7 @@ function PromptReadinessAside({
           ))}
         </ul>
         {onLiveTest && (
-          <Button type="button" variant="outline" size="sm" className="h-8 w-full gap-1.5 text-[11px]" onClick={onLiveTest}>
+          <Button type="button" size="sm" className="h-8 w-full gap-1.5 text-[11px]" onClick={onLiveTest}>
             <Play className="size-3.5" />
             Live test
           </Button>
@@ -7685,7 +7744,7 @@ function AgentTeamChromeBar({ agentId, section }: { agentId: number; section: st
   if (isLoading || !membership) return null;
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-3 py-1.5 sm:px-5">
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-5 py-1.5 sm:px-8">
       <Users className="size-3.5 shrink-0 text-muted-foreground" />
       <button
         type="button"
@@ -7721,7 +7780,7 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
   const shell = cn(
     compact
       ? "flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/40 px-3 py-2.5"
-      : "flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-3 py-1.5 sm:px-5",
+      : "flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-5 py-1.5 sm:px-8",
   );
 
   if (!membership) {

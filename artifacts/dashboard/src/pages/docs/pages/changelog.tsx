@@ -9,6 +9,19 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-20-builder-ux">2026-08-20 — Agent Builder: one column, aligned layout</h2>
+      <ul>
+        <li>
+          Header, tabs, and every builder page now share the same left edge and page width.
+          Tabs split <em>Build</em> (Overview → After the call) from <em>Review</em>
+          (Activity, Settings, Versions). Script and Sound show ready/not-ready chips in the header.
+        </li>
+        <li>
+          Stays prompt + voice + tools — not a node canvas. Bolna/Vapi win on status-in-header and
+          test-first; SnapServe keeps Connections as workspace plug-in and agents as pick-and-use.
+        </li>
+      </ul>
+
       <h2 id="2026-08-20-connections-vs-agent">2026-08-20 — Connections vs Agent Builder</h2>
       <ul>
         <li>
