@@ -24,8 +24,10 @@ import {
 const SAMPLE_RATE = 8_000;
 const SAMPLE_BYTES = 2;
 const ENROLL_MS = Number(process.env["VOICE_MEMORY_ENROLL_MS"] ?? 2500);
-/** Cross-number match waits for this much caller speech (or call end). 2.5s
- *  fragments of "hmm"/"yes" score ~0.19 across handsets (calls 11067/11068). */
+/** Second persist/match after this much caller speech — upgrades the stored
+ *  print past the first 2.5s window. First cross-number match still runs at
+ *  enroll so live calls can inject memory (calls 11120/11133: 2.5s scored
+ *  0.59 but match waited for 5s/hangup, so the agent denied knowing them). */
 const MATCH_MS = Number(process.env["VOICE_MEMORY_MATCH_MS"] ?? 5_000);
 /** Faster mid-call windows so a phone handoff is detected within ~1 turn, not after 20s of mixed speech. */
 const VERIFY_MS = Number(process.env["VOICE_MEMORY_VERIFY_MS"] ?? 6_000);
@@ -102,7 +104,8 @@ export class SpeakerVerifier {
   private linked = false;
   /** Last refCount at which a refined cross-number re-match ran (milestone gate). */
   private lastRematchRefCount = 1;
-  /** True after we have upserted/matched from ≥MATCH_MS of speech (or finalize). */
+  /** True after we have upserted/matched from ≥MATCH_MS of speech (or finalize).
+   *  Enroll persist does not set this, so a miss at 2.5s can still retry at 5s. */
   private crossNumberPersisted = false;
   private readonly callId: number;
   private readonly agentId: number;
@@ -293,28 +296,31 @@ export class SpeakerVerifier {
 
     this.log.info(
       { callId: this.callId, bytes: pcm.byteLength },
-      "Voice Memory: local reference ready — deferring cross-number match until more speech",
+      "Voice Memory: local reference ready — matching across numbers now",
     );
     this.execLog(
       "info",
-      `Local voiceprint ready (${(pcm.byteLength / (SAMPLE_RATE * SAMPLE_BYTES)).toFixed(1)}s) — cross-number match waits for ~${MATCH_MS / 1000}s of caller speech or call end`,
+      `Local voiceprint ready (${(pcm.byteLength / (SAMPLE_RATE * SAMPLE_BYTES)).toFixed(1)}s) — matching across numbers`,
       { bytes: pcm.byteLength },
     );
-    if (this.phoneNumber && this.accumulated >= MATCH_BYTES) {
-      await this.persistAndMatch("match_window");
+    if (this.phoneNumber) {
+      await this.persistAndMatch("enroll", emb);
     }
   }
 
   /**
-   * Embed ALL accumulated caller speech (up to 12s) and upsert/match.
-   * Used at the 5s match window and again at hangup so the stored print is
-   * not the first 2.5s of "hmm"/"yes" barge-in scraps.
+   * Embed accumulated caller speech (up to 12s) and upsert/match.
+   * First run is enroll (~2.5s) so live calls can inject memory; 5s window
+   * and hangup re-embed upgrade the stored print past short barge-in scraps.
    */
-  private async persistAndMatch(reason: "match_window" | "finalize"): Promise<void> {
+  private async persistAndMatch(
+    reason: "enroll" | "match_window" | "finalize",
+    reuseEmb?: number[],
+  ): Promise<void> {
     if (!this.phoneNumber || this.hadAnyHandoff) return;
     const pcm = Buffer.concat(this.chunks);
     if (pcm.byteLength < ENROLL_BYTES) return;
-    const emb = await this.fetchEmbed(pcm);
+    const emb = reuseEmb?.length ? reuseEmb : await this.fetchEmbed(pcm);
     if (!emb?.length) return;
     this.reference = emb;
     this.refSum = emb.slice();
@@ -327,7 +333,7 @@ export class SpeakerVerifier {
       phoneNumber: this.phoneNumber,
       embedding: emb,
     });
-    this.crossNumberPersisted = true;
+    this.crossNumberPersisted = reason !== "enroll";
     this.linked = this.linked || !!saved.linkedFromPhone;
 
     const speechSec = pcm.byteLength / (SAMPLE_RATE * SAMPLE_BYTES);
@@ -347,7 +353,9 @@ export class SpeakerVerifier {
         "success",
         reason === "finalize"
           ? `Same voice recognized from another number (${saved.linkedFromPhone}) at hangup`
-          : `Voiceprint matched another number (${saved.linkedFromPhone}) after ${speechSec.toFixed(1)}s of speech`,
+          : reason === "enroll"
+            ? `Same voice recognized from another number (${saved.linkedFromPhone}) after ${speechSec.toFixed(1)}s of speech`
+            : `Voiceprint matched another number (${saved.linkedFromPhone}) after ${speechSec.toFixed(1)}s of speech`,
         { personKey: saved.personKey, linkedFromPhone: saved.linkedFromPhone, score: saved.score, seconds: speechSec, reason },
       );
       if (!wasLinked) {

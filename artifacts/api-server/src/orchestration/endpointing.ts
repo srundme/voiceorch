@@ -241,6 +241,39 @@ export function speakerHandoffChallenge(lang?: string | null): string {
   return SPEAKER_HANDOFF_CHALLENGES[prefix] ?? SPEAKER_HANDOFF_CHALLENGES["en"]!;
 }
 
+/** Mid-call acknowledgment when a new number's voice matches a known caller. */
+const VOICE_LINK_ACK_NAMED: Record<string, (name: string) => string> = {
+  en: (n) => `Wait — is this ${n}? We spoke just a little while ago.`,
+  hi: (n) => `रुकिए — क्या आप ${n} हैं? हमने अभी कुछ देर पहले बात की थी।`,
+  ta: (n) => `சொல்லிக்கோங்க — நீங்க ${n} தானே? கொஞ்ச நேரம் முன்னாடி பேசினோம்.`,
+  te: (n) => `ఆగండి — మీరు ${n} నా? మనం కొద్దిసేపటి క్రితం మాట్లాడాం.`,
+  kn: (n) => `ನಿಲ್ಲಿ — ನೀವು ${n} ಅಲ್ವಾ? ಸ್ವಲ್ಪ ಹಿಂದೆ ಮಾತನಾಡಿದ್ದೇವೆ.`,
+  mr: (n) => `थांबा — तुम्ही ${n} आहात का? आपण थोड्या वेळापूर्वी बोललो होतो.`,
+  gu: (n) => `રહેજો — તમે ${n} છો? આપણે થોડી વાર પહેલાં વાત કરી હતી.`,
+  bn: (n) => `থামুন — আপনি কি ${n}? আমরা কিছুক্ষণ আগেই কথা বলেছি।`,
+  ml: (n) => `നിൽക്കൂ — നിങ്ങൾ ${n} അല്ലേ? നമ്മൾ അൽപ്പം മുമ്പ് സംസാരിച്ചതാണ്.`,
+};
+const VOICE_LINK_ACK_GENERIC: Record<string, string> = {
+  en: "Wait — I think we've spoken before. Sorry, it took me a moment.",
+  hi: "रुकिए — लगता है हम पहले बात कर चुके हैं। पहचानने में थोड़ी देर लगी।",
+  ta: "சொல்லிக்கோங்க — நம்ம முன்னாடி பேசிருக்கோம் போல. இப்பதான் தெரிஞ்சுது.",
+  te: "ఆగండి — మనం ఇంతకు ముందు మాట్లాడినట్టు అనిపిస్తోంది. కాసేపు పట్టింది.",
+  kn: "ನಿಲ್ಲಿ — ನಾವು ಮೊದಲು ಮಾತನಾಡಿದ್ದೇವೆ ಅನಿಸುತ್ತೆ. ಗುರುತಿಸಲು ಸ್ವಲ್ಪ ಸಮಯ ಬೇಕಾಯಿತು.",
+  mr: "थांबा — आपण आधी बोललो आहोत असे वाटते. ओळखायला थोडा वेळ लागला.",
+  gu: "રહેજો — લાગે છે આપણે પહેલાં વાત કરી છે. ઓળખવામાં થોડો સમય લાગ્યો.",
+  bn: "থামুন — মনে হচ্ছে আমরা আগে কথা বলেছি। চিনতে একটু সময় লেগেছে।",
+  ml: "നിൽക്കൂ — നമ്മൾ മുമ്പ് സംസാരിച്ചതായി തോന്നുന്നു. തിരിച്ചറിയാൻ അല്പസമയം വേണ്ടിവന്നു.",
+};
+export function voiceLinkAckPhrase(lang?: string | null, name?: string | null): string {
+  const prefix = (lang ?? "en").split("-")[0] ?? "en";
+  const n = name?.trim();
+  if (n) {
+    const fn = VOICE_LINK_ACK_NAMED[prefix] ?? VOICE_LINK_ACK_NAMED["en"]!;
+    return fn(n);
+  }
+  return VOICE_LINK_ACK_GENERIC[prefix] ?? VOICE_LINK_ACK_GENERIC["en"]!;
+}
+
 // Language-aware "are you there?" check-in — spoken when the per-agent
 // silence-hangup timer expires the FIRST time, so the caller gets an audible
 // chance to respond before the call is ended (call 1915: silent mid-speech drop).

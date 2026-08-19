@@ -41,6 +41,7 @@ import {
   SilenceWatchdog,
   recoveryReprompt,
   speakerHandoffChallenge,
+  voiceLinkAckPhrase,
   inactivityReprompt,
   inactivityFarewell,
   meetingWaitingReprompt,
@@ -556,6 +557,18 @@ const VOICE_LINK_ACK_NOTE =
   "acknowledge that you remember speaking with them before — naturally, in one short phrase " +
   "woven into your answer (e.g. mention their name or something from the last conversation). " +
   "Never mention phone numbers, voice matching, or how you recognized them. Do this once only.";
+
+/** New phone number: CALLER MEMORY is empty until Voice Memory links. Stop the
+ *  agent from firmly denying "do you remember me?" during that window
+ *  (calls 11120/11133 — voice matched 0.59 at hangup after the agent said
+ *  it had no previous record). */
+const VOICE_MEMORY_PENDING_NOTE =
+  "[VOICE MEMORY] If CALLER MEMORY above shows this number as unknown / a first call, " +
+  "voice matching may still identify them after a few seconds of caller speech. " +
+  "If they ask whether you remember them, know them, or spoke before: do NOT firmly deny it — no " +
+  "\"I don't have a previous record\", \"I don't know you\", or \"we haven't spoken\". " +
+  "Ask their name, or say you may recognize them in a moment. Never mention voiceprints, " +
+  "matching, or how recognition works. If CALLER MEMORY already has their name or history, ignore this note.";
 
 /**
  * Build a COMPACT system prompt for the greeting-only LLM call. Returning callers were
@@ -1251,6 +1264,8 @@ export class OrchestrationPipeline implements VoiceSession {
   /** True after we forced a spoken handoff challenge for the current handoff. */
   private speakerChallengeSpoken = false;
   private speakingSpeakerHandoffChallenge = false;
+  /** True while speaking the forced "wait — is this {name}?" voice-link ack. */
+  private speakingVoiceLinkAck = false;
   /** While true, suppress in-flight LLM TTS so the forced handoff ask can take the floor. */
   private skipAgentPlaybackForHandoff = false;
   /**
@@ -3381,7 +3396,7 @@ export class OrchestrationPipeline implements VoiceSession {
       logger.error({ callId: this.config.callId, err }, "Turn error (streaming STT)");
     } finally {
       this.isProcessing = false;
-      if (!this.speakingSpeakerHandoffChallenge) {
+      if (!this.speakingSpeakerHandoffChallenge && !this.speakingVoiceLinkAck) {
         this.skipAgentPlaybackForHandoff = false;
       }
       // If the call ended (transfer or end_call) while this turn was processing,
@@ -4368,6 +4383,9 @@ export class OrchestrationPipeline implements VoiceSession {
           hasName: !!name,
         },
       });
+      // Don't wait for the next user turn — this call may hang up after a
+      // "do you remember me?" deny (call 11133). Cut in and acknowledge now.
+      void this.speakVoiceLinkAck(typeof name === "string" ? name : null);
     } catch (err) {
       logger.warn(
         { callId: this.config.callId, err },
@@ -4381,6 +4399,73 @@ export class OrchestrationPipeline implements VoiceSession {
           error: err instanceof Error ? err.message : String(err),
         },
       });
+    }
+  }
+
+  /**
+   * Interrupt in-flight "I don't know you" TTS and speak a one-line
+   * recognition. The next LLM turn still gets VOICE_LINK_ACK_NOTE if this
+   * doesn't run (caller talking, call already closed).
+   */
+  private async speakVoiceLinkAck(name: string | null): Promise<void> {
+    if (this.closed || this.voiceHandoffActive || this.speakingVoiceLinkAck) return;
+    if (this.inSpeechSegment) return;
+    this.speakingVoiceLinkAck = true;
+    this.skipAgentPlaybackForHandoff = true;
+    try {
+      if (this.isPlaying || this.isSendingTtsAudio) {
+        this.interruptionMgr.invalidateCurrentTurn();
+        for (const ac of this.activeTtsAborts) {
+          try { ac.abort(); } catch { /* noop */ }
+        }
+        this.activeTtsAborts.clear();
+        this.bargeInCallback?.();
+        this.bargeInRequested = true;
+        const deadline = Date.now() + 350;
+        while ((this.isSendingTtsAudio || this.isPlaying) && Date.now() < deadline && !this.closed) {
+          await new Promise((r) => setTimeout(r, 20));
+        }
+        this.prepareSystemPlayback();
+      } else {
+        this.prepareSystemPlayback();
+      }
+
+      if (this.closed || this.voiceHandoffActive || this.inSpeechSegment) return;
+
+      const text = voiceLinkAckPhrase(this.currentLang || this.agent.language, name);
+      this.pendingVoiceLinkAck = false;
+      this.conversationHistory.appendAssistant(text);
+      this.config.onTranscript("agent", text);
+      this.config.onConversationUpdate?.(this.conversationHistory.messages);
+      logger.info(
+        { callId: this.config.callId, text, name },
+        "Voice Memory: speaking forced cross-number recognition",
+      );
+      this.logExec("VoiceMemory", "system", {
+        status: "success",
+        metadata: { note: "Spoke mid-call recognition after voice match", name, text },
+      });
+
+      this.skipAgentPlaybackForHandoff = false;
+      this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+      this.isPlaying = true;
+      try {
+        await this.playSentence(text);
+      } finally {
+        this.isPlaying = false;
+        this.systemPlaybackActive = false;
+        this.armTailEchoGrace();
+      }
+      await this.drainPlaybackTail();
+    } catch (err) {
+      logger.warn({ callId: this.config.callId, err }, "Voice Memory: forced recognition line failed");
+      this.pendingVoiceLinkAck = true;
+    } finally {
+      this.speakingVoiceLinkAck = false;
+      this.systemPlaybackActive = false;
+      if (!this.isProcessing) {
+        this.skipAgentPlaybackForHandoff = false;
+      }
     }
   }
 
@@ -5584,7 +5669,7 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.bargeInRequested) return;
     // Voice Memory handoff takeover — drop in-flight LLM sentences so the
     // forced "who am I speaking with?" line can own the channel.
-    if (this.skipAgentPlaybackForHandoff && !this.speakingSpeakerHandoffChallenge) return;
+    if (this.skipAgentPlaybackForHandoff && !this.speakingSpeakerHandoffChallenge && !this.speakingVoiceLinkAck) return;
     // Track what the agent is about to speak so the streaming-STT path can reject
     // this same audio when the carrier echoes it back (content-based self-echo).
     this.recordAgentSpeech(job.text);
@@ -7959,6 +8044,8 @@ export class OrchestrationPipeline implements VoiceSession {
     } else if (this.pendingVoiceLinkNote && this.voiceLinkedFromPhone) {
       systemPromptForTurn += `\n\n${VOICE_LINKED_PHONE_NOTE}`;
       this.pendingVoiceLinkNote = false;
+    } else if (this.speakerVerifier && !this.voiceLinkedMemoryBlock) {
+      systemPromptForTurn += `\n\n${VOICE_MEMORY_PENDING_NOTE}`;
     }
     // Voice-matched caller history (new number, known voice) — persistent every
     // turn while the same speaker stays on the line; cleared on handoff.
@@ -9020,7 +9107,7 @@ export class OrchestrationPipeline implements VoiceSession {
       if (!this.closed) this.safetyNet.beginListening();
     } finally {
       this.isProcessing = false;
-      if (!this.speakingSpeakerHandoffChallenge) {
+      if (!this.speakingSpeakerHandoffChallenge && !this.speakingVoiceLinkAck) {
         this.skipAgentPlaybackForHandoff = false;
       }
       if (this.audioBuffer.length > 0) void this.flushAndProcess();

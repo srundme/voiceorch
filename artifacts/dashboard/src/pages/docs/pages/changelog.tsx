@@ -9,6 +9,20 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-19-voice-memory-live-link">2026-08-19 — Voice Memory: recognize mid-call</h2>
+      <ul>
+        <li>
+          Cross-number match runs at the first ~2.5s of caller speech, so the agent can use
+          the previous number&apos;s memory while the call is still live. A ~5s refine and hangup
+          re-embed still upgrade the stored print.
+        </li>
+        <li>
+          On a new phone number, &quot;do you remember me?&quot; is no longer a hard deny while
+          matching is still running. When a match lands, the agent cuts in to acknowledge
+          (by name when known).
+        </li>
+      </ul>
+
       <h2 id="2026-08-19-gemini-live-ui">2026-08-19 — Gemini Live 3.1 in Agent Builder</h2>
       <ul>
         <li>
