@@ -9,6 +9,15 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-19-english-latch">2026-08-19 — Multilingual: Devanagari “English” requests</h2>
+      <ul>
+        <li>
+          Callers who ask for English in Hindi script (<code>इंग्लिश मैडम</code>,{" "}
+          <code>इंग्लिश में बात करो</code>) now switch the agent to English. Sarvam often
+          writes “English” as <code>इंग्लिश</code>, which the previous detector missed.
+        </li>
+      </ul>
+
       <h2 id="2026-08-19-sonic-36">2026-08-19 — Cartesia Sonic 3.6 (beta)</h2>
       <ul>
         <li>
