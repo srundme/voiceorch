@@ -48,6 +48,15 @@ describe("pricePhonePurchase", () => {
     expect(p.promoLabel).toBe("Voiceathon 2026");
   });
 
+  it("prices SNAPXHITECH at ₹249 + 18% GST = ₹293.82", () => {
+    const p = pricePhonePurchase(NUM_80, "snapxhitech");
+    expect(p.basePaise).toBe(24_900);
+    expect(p.gstPaise).toBe(4_482);
+    expect(p.payablePaise).toBe(29_382);
+    expect(p.promoCode).toBe("SNAPXHITECH");
+    expect(p.promoLabel).toBe("SnapX HiTech");
+  });
+
   it("applies the same flat promo base across pricing tiers", () => {
     const cheap = pricePhonePurchase(NUM_80, "VOICEATHON26");
     const dear = pricePhonePurchase(NUM_79, "VOICEATHON26");

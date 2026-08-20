@@ -34,6 +34,11 @@ const PROMOS: readonly PhonePromo[] = [
     basePaise: 19_900, // ₹199 before GST → ₹234.82 payable
     label: "Voiceathon 2026",
   },
+  {
+    code: "SNAPXHITECH",
+    basePaise: 24_900, // ₹249 before GST → ₹293.82 payable
+    label: "SnapX HiTech",
+  },
 ];
 
 export type PromoRejection = "unknown" | "expired";
