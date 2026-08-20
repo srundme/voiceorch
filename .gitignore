@@ -60,6 +60,16 @@ backup.sql
 # Without them in git, Railway builds fail with "No file *.sql found".
 !lib/db/drizzle/*.sql
 
+# Environment and secret files
+.env
+.env.*
+*.env
+
+# Local development files
+surat.js
+attached_assets/
+brag-output-*
+
 # Never push user-attached call logs (contain caller PII/transcripts)
 attached_assets/call-*logs*.json
 # Pasted chat attachments are conversation ephemera, not source
