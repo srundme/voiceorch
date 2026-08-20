@@ -592,7 +592,7 @@ export default function Overview() {
             <div className="text-3xl font-bold font-mono tabular-nums text-primary">
               {callsToday.toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">Calendar day · {segment} users</p>
+            <p className="text-xs text-muted-foreground mt-0.5">12:00 AM–11:59 PM IST · {segment} users</p>
           </CardContent>
         </Card>
         <Card className="border-primary/40 shadow-none">
@@ -605,7 +605,7 @@ export default function Overview() {
             <div className="text-3xl font-bold font-mono tabular-nums text-primary">
               {minutesToday.toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">Talk time consumed today</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Talk time consumed today (IST)</p>
           </CardContent>
         </Card>
         <Card className="border-primary/40 shadow-none">
@@ -638,7 +638,7 @@ export default function Overview() {
         <Card className="border-border shadow-none">
           <CardHeader className="pb-2 pt-3 px-4">
             <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Top minutes today
+              Top minutes today (IST)
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-3">

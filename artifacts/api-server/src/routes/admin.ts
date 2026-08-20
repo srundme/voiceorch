@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable, bookInternsTable, bookProgressTable, bookExamAttemptsTable, partnersTable, phoneNumberOrdersTable } from "@workspace/db";
 import { invalidateMinuteRatesCache } from "../services/minute-rates.js";
 import { sendTestEmail } from "../services/scheduling/notifications.js";
-import { eq, sql, count, sum, desc, lt, gt, and, inArray, ilike, like, type SQL, type AnyColumn } from "drizzle-orm";
+import { eq, sql, count, sum, desc, lt, gt, gte, and, inArray, ilike, like, type SQL, type AnyColumn } from "drizzle-orm";
 import { TRACK_PARAMS } from "../orchestration/ambient.js";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getAllSessions } from "../orchestration/session.js";
@@ -48,8 +48,13 @@ router.get("/admin/overview", async (req, res): Promise<void> => {
     const usersSeg = segment === "all" ? undefined : eq(usersTable.isTest, segment === "test");
     const callsSeg = segByClerkId(callsTable.userId, segment);
 
-    const todayStart = sql`current_date::timestamptz`;
-    const todayCallWhere = and(gt(callsTable.createdAt, todayStart), callsSeg);
+    // Indian calendar day: 12:00 AM IST inclusive → next 12:00 AM IST exclusive.
+    const todayIstStart = sql`(date_trunc('day', timezone('Asia/Kolkata', now())) AT TIME ZONE 'Asia/Kolkata')`;
+    const todayCallWhere = and(
+      gte(callsTable.createdAt, todayIstStart),
+      lt(callsTable.createdAt, sql`${todayIstStart} + interval '1 day'`),
+      callsSeg,
+    );
 
     const [
       [{ totalUsers }],
