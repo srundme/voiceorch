@@ -75,7 +75,6 @@
     "vite": "catalog:",
     "vitest": "^4.1.7",
     "wouter": "^3.3.5",
-    "vitest": "^4.1.7",
     "zod": "catalog:"
   }
 }

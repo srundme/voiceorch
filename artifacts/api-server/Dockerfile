@@ -7,6 +7,7 @@ RUN npm install -g pnpm@10.26.1
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY tsconfig.base.json tsconfig.json ./
 COPY lib/db/package.json ./lib/db/
+COPY lib/brand-icons/package.json ./lib/brand-icons/
 COPY lib/api-spec/package.json ./lib/api-spec/
 COPY lib/api-zod/package.json ./lib/api-zod/
 COPY lib/api-client-react/package.json ./lib/api-client-react/
@@ -47,6 +48,7 @@ RUN npm install -g pnpm@10.26.1
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY lib/db/package.json ./lib/db/
+COPY lib/brand-icons/package.json ./lib/brand-icons/
 COPY lib/api-spec/package.json ./lib/api-spec/
 COPY lib/api-zod/package.json ./lib/api-zod/
 COPY lib/api-client-react/package.json ./lib/api-client-react/
