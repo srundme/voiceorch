@@ -113,10 +113,12 @@ router.get("/admin/overview", async (req, res): Promise<void> => {
 
 router.get("/admin/users", async (req, res): Promise<void> => {
   try {
-    const users = await db.select().from(usersTable).orderBy(desc(usersTable.createdAt)).limit(500);
-    const clerkIds = users.map((u) => u.clerkId);
+    // Returns every account. Aggregates are grouped across the whole table
+    // rather than filtered by an IN list, which would otherwise grow one bind
+    // parameter per user and eventually exceed Postgres' parameter limit.
+    const users = await db.select().from(usersTable).orderBy(desc(usersTable.createdAt));
 
-    if (clerkIds.length === 0) {
+    if (users.length === 0) {
       res.json([]);
       return;
     }
@@ -125,12 +127,10 @@ router.get("/admin/users", async (req, res): Promise<void> => {
       db
         .select({ clerkId: callsTable.userId, callCount: count() })
         .from(callsTable)
-        .where(inArray(callsTable.userId, clerkIds))
         .groupBy(callsTable.userId),
       db
         .select({ clerkId: agentsTable.userId, agentCount: count() })
         .from(agentsTable)
-        .where(inArray(agentsTable.userId, clerkIds))
         .groupBy(agentsTable.userId),
       db
         .select({
@@ -138,15 +138,7 @@ router.get("/admin/users", async (req, res): Promise<void> => {
           totalSpentCents: sql<number>`coalesce(sum(abs(amount_cents)), 0)`,
         })
         .from(walletTransactionsTable)
-        .where(
-          and(
-            inArray(
-              walletTransactionsTable.userId,
-              users.map((u) => u.id),
-            ),
-            lt(walletTransactionsTable.amountCents, 0),
-          ),
-        )
+        .where(lt(walletTransactionsTable.amountCents, 0))
         .groupBy(walletTransactionsTable.userId),
       db
         .select({
@@ -154,7 +146,6 @@ router.get("/admin/users", async (req, res): Promise<void> => {
           totalDurationSeconds: sql<number>`coalesce(sum(duration_seconds), 0)`,
         })
         .from(callsTable)
-        .where(inArray(callsTable.userId, clerkIds))
         .groupBy(callsTable.userId),
     ]);
 

@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Search, FlaskConical } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 
 const SEGMENTS: { id: UserSegment; label: string }[] = [
@@ -27,6 +27,55 @@ const CATEGORIES: { id: UserCategory; label: string }[] = [
   { id: "professional", label: "Professional" },
   { id: "student", label: "Student" },
 ];
+
+/** Strips accents and collapses punctuation so "José R." matches "jose r". */
+function normalize(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[._\-+]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Every field a person might type into the search box. */
+function buildHaystack(user: any): string {
+  const onboarding = user?.onboardingData ?? {};
+  const emailLocalPart = typeof user?.email === "string" ? user.email.split("@")[0] : "";
+  return [
+    user?.name,
+    user?.email,
+    emailLocalPart,
+    user?.clerkId,
+    onboarding.name,
+    onboarding.fullName,
+    onboarding.company,
+    onboarding.companyName,
+    onboarding.role,
+    onboarding.referralSource,
+  ]
+    .map(normalize)
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** All words must match, in any order and any field. */
+function matchesSearch(user: any, terms: string[]): boolean {
+  if (terms.length === 0) return true;
+  const haystack = buildHaystack(user);
+  return terms.every((term) => haystack.includes(term));
+}
+
+/** Falls back to the email local part when the account has no name. */
+function displayName(user: any): string {
+  if (typeof user?.name === "string" && user.name.trim()) return user.name.trim();
+  if (typeof user?.email === "string" && user.email.includes("@")) {
+    return user.email.split("@")[0]!.replace(/[._\-+]+/g, " ");
+  }
+  return "Unnamed";
+}
 
 function TestFlagToggle({ clerkId, isTest }: { clerkId: string; isTest: boolean }) {
   const mutation = useSetUserTestFlag(clerkId);
@@ -54,19 +103,32 @@ export default function UsersList() {
   const [segment, setSegment] = useState<UserSegment>("all");
   const [category, setCategory] = useState<UserCategory>("all");
 
-  const filteredUsers = users?.filter(
-    (u) =>
-      (u.email?.toLowerCase().includes(search.toLowerCase()) ||
-        u.name?.toLowerCase().includes(search.toLowerCase()) ||
-        u.clerkId?.toLowerCase().includes(search.toLowerCase())) &&
-      (segment === "all" ? true : segment === "test" ? !!u.isTest : !u.isTest) &&
-      (category === "all" ? true : u.onboardingData?.role === category)
+  const searchTerms = useMemo(
+    () => normalize(search).split(" ").filter(Boolean),
+    [search],
+  );
+
+  const filteredUsers = useMemo(
+    () =>
+      users?.filter(
+        (u) =>
+          matchesSearch(u, searchTerms) &&
+          (segment === "all" ? true : segment === "test" ? !!u.isTest : !u.isTest) &&
+          (category === "all" ? true : u.onboardingData?.role === category),
+      ),
+    [users, searchTerms, segment, category],
   );
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Users</h1>
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">Users</h1>
+          <p className="text-xs text-muted-foreground">
+            Showing {(filteredUsers?.length ?? 0).toLocaleString()} of{" "}
+            {(users?.length ?? 0).toLocaleString()} total users
+          </p>
+        </div>
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           <div className="inline-flex items-center rounded-md border border-border bg-card p-0.5 shrink-0">
             {SEGMENTS.map((s) => (
@@ -103,7 +165,7 @@ export default function UsersList() {
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search email, name, ID..."
+              placeholder="Search name, email, company, ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9 h-10 bg-muted/50 border-border"
@@ -111,6 +173,15 @@ export default function UsersList() {
           </div>
         </div>
       </div>
+
+      {searchTerms.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>
+            {(filteredUsers?.length ?? 0).toLocaleString()} of{" "}
+            {(users?.length ?? 0).toLocaleString()} users match
+          </span>
+        </div>
+      )}
 
       <div className="border border-border rounded-lg bg-card overflow-hidden">
         <Table>
@@ -151,8 +222,10 @@ export default function UsersList() {
                 <TableRow key={user.id} className="group transition-colors">
                   <TableCell>
                     <Link href={`/users/${user.clerkId}`} className="block">
-                      <div className="font-medium text-primary hover:underline">{user.email}</div>
-                      <div className="text-xs text-muted-foreground truncate max-w-[200px]">{user.name || 'Unnamed'}</div>
+                      <div className="font-medium text-primary hover:underline truncate max-w-[220px] capitalize">
+                        {displayName(user)}
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate max-w-[220px]">{user.email || "No email"}</div>
                       <div className="text-[10px] text-muted-foreground font-mono mt-1 opacity-50 group-hover:opacity-100">{user.clerkId}</div>
                     </Link>
                   </TableCell>
