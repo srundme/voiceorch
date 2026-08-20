@@ -3833,7 +3833,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                       <div>
                         <FormLabel className="text-[12px] font-medium text-foreground/90">Silence check-in</FormLabel>
                         <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                          If the caller is silent this long, play a check-in / end the call.
+                          After each turn: if they stay quiet this long, ask “are you there?” Stay silent another window and the call ends. How fast the agent replies is Fast / Balanced / Patient on Sound.
                         </p>
                       </div>
                       <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{val}s</span>
