@@ -2,13 +2,16 @@ import { describe, it, expect } from "vitest";
 import { voiceLinkAckPhrase } from "./endpointing.js";
 
 describe("voiceLinkAckPhrase", () => {
-  it("uses the matched name in English", () => {
-    expect(voiceLinkAckPhrase("en-IN", "Bhavya")).toContain("Bhavya");
+  it("addresses the matched caller by name immediately", () => {
+    const text = voiceLinkAckPhrase("en-IN", "Bhavya");
+    expect(text).toContain("Bhavya");
+    expect(text.toLowerCase()).toMatch(/^hi\b/);
+    expect(text).not.toMatch(/\?/);
   });
 
   it("falls back to a generic line when the name is missing", () => {
     const text = voiceLinkAckPhrase("en", null);
-    expect(text.toLowerCase()).toMatch(/spoken before|spoke/);
+    expect(text.toLowerCase()).toMatch(/hear from you again|spoke before/);
     expect(text).not.toMatch(/undefined|null/i);
   });
 

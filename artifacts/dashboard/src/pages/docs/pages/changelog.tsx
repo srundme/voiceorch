@@ -9,6 +9,16 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-20-voice-memory-address">2026-08-20 — Voice Memory: address the caller on match</h2>
+      <ul>
+        <li>
+          When a voiceprint match lands, the agent now speaks immediately —{" "}
+          <em>Hi Priya — good to hear from you again</em> — instead of waiting for the
+          next LLM turn. If they are still talking, it waits for the pause, then takes
+          the floor. Match without stored facts still greets them.
+        </li>
+      </ul>
+
       <h2 id="2026-08-20-builder-panels">2026-08-20 — Agent Builder: every tab is panels</h2>
       <ul>
         <li>

@@ -3423,11 +3423,11 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400">Beta</span>
               </div>
               <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                Remembers the caller&apos;s voiceprint. Detects mid-call handoffs (phone given to someone else) and can link the same voice across different phone numbers. Phone-number memory stays primary.
+                Remembers the caller&apos;s voiceprint. When a match lands, the agent addresses them immediately (by name if known). Also detects mid-call handoffs and links the same voice across phone numbers. Phone-number memory stays primary.
               </p>
               {voiceMemoryEnabled && (
                 <p className="text-[10px] text-amber-600 dark:text-amber-400 leading-relaxed mt-1.5">
-                  Soft signal only — not identity verification. Requires the voice-analysis service. On handoff the agent asks who it&apos;s speaking with and stops using the previous person&apos;s name/salutation until confirmed.
+                  Soft signal only — not identity verification. Requires the voice-analysis service. On a match the agent greets them as soon as they pause; on handoff it asks who it&apos;s speaking with and stops using the previous person&apos;s name until confirmed.
                 </p>
               )}
             </div>
