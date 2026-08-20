@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   Timer,
   Handshake,
+  Trophy,
 } from "lucide-react";
 import { formatApiError } from "@/lib/format-api-error";
 import { useToast } from "@/hooks/use-toast";
@@ -507,6 +508,23 @@ export default function Overview() {
   const pendingCount = overview?.pendingCallbacks ?? 0;
   const recentCallsCount = overview?.recentCalls ?? 0;
   const liveSessions = live?.count ?? activeCount;
+  const callsToday = Number(overview?.callsToday ?? 0);
+  const minutesToday = Number(overview?.minutesToday ?? 0);
+  const topMinutesUsers: Array<{
+    clerkId: string | null;
+    email: string | null;
+    name: string | null;
+    callCount: number;
+    minutes: number;
+  }> = overview?.topMinutesUsers ?? [];
+  const heaviest = topMinutesUsers[0];
+
+  function todayUserLabel(row: (typeof topMinutesUsers)[number] | undefined) {
+    if (!row) return "No calls yet today";
+    if (row.name?.trim()) return row.name.trim();
+    if (row.email) return row.email;
+    return row.clerkId ?? "Unknown user";
+  }
 
   if (isLoading) {
     return (
@@ -562,6 +580,104 @@ export default function Overview() {
           </div>
         }
       />
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Card className="border-primary/40 shadow-none">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em] flex items-center gap-1.5">
+              <PhoneCall className="h-3.5 w-3.5" /> Calls today
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <div className="text-3xl font-bold font-mono tabular-nums text-primary">
+              {callsToday.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">Calendar day · {segment} users</p>
+          </CardContent>
+        </Card>
+        <Card className="border-primary/40 shadow-none">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em] flex items-center gap-1.5">
+              <Timer className="h-3.5 w-3.5" /> Minutes today
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <div className="text-3xl font-bold font-mono tabular-nums text-primary">
+              {minutesToday.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">Talk time consumed today</p>
+          </CardContent>
+        </Card>
+        <Card className="border-primary/40 shadow-none">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em] flex items-center gap-1.5">
+              <Trophy className="h-3.5 w-3.5" /> Heaviest user today
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            {heaviest?.clerkId ? (
+              <>
+                <Link
+                  href={`/users/${heaviest.clerkId}`}
+                  className="text-lg font-semibold text-primary hover:underline truncate block"
+                >
+                  {todayUserLabel(heaviest)}
+                </Link>
+                <p className="text-xs text-muted-foreground mt-1 font-mono tabular-nums">
+                  {heaviest.minutes.toLocaleString()} min · {heaviest.callCount.toLocaleString()} calls
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No calls yet today</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {topMinutesUsers.length > 0 && (
+        <Card className="border-border shadow-none">
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+              Top minutes today
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="text-xs">User</TableHead>
+                  <TableHead className="text-xs text-right">Calls</TableHead>
+                  <TableHead className="text-xs text-right">Minutes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {topMinutesUsers.map((row, i) => (
+                  <TableRow key={row.clerkId ?? i}>
+                    <TableCell>
+                      {row.clerkId ? (
+                        <Link href={`/users/${row.clerkId}`} className="text-sm text-primary hover:underline">
+                          {todayUserLabel(row)}
+                        </Link>
+                      ) : (
+                        <span className="text-sm">{todayUserLabel(row)}</span>
+                      )}
+                      {row.email && row.name ? (
+                        <div className="text-[11px] text-muted-foreground">{row.email}</div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-sm">
+                      {row.callCount.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-sm font-medium">
+                      {row.minutes.toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="border-border shadow-none">

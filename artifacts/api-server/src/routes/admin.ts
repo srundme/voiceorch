@@ -48,6 +48,9 @@ router.get("/admin/overview", async (req, res): Promise<void> => {
     const usersSeg = segment === "all" ? undefined : eq(usersTable.isTest, segment === "test");
     const callsSeg = segByClerkId(callsTable.userId, segment);
 
+    const todayStart = sql`current_date::timestamptz`;
+    const todayCallWhere = and(gt(callsTable.createdAt, todayStart), callsSeg);
+
     const [
       [{ totalUsers }],
       [{ totalCalls }],
@@ -56,6 +59,8 @@ router.get("/admin/overview", async (req, res): Promise<void> => {
       [{ recentCalls }],
       [{ totalDurationSeconds }],
       [{ successfulCalls }],
+      [{ callsToday, durationTodaySeconds }],
+      topMinutesToday,
     ] =
       await Promise.all([
         db.select({ totalUsers: count() }).from(usersTable).where(usersSeg),
@@ -86,10 +91,39 @@ router.get("/admin/overview", async (req, res): Promise<void> => {
           .select({ successfulCalls: count() })
           .from(callsTable)
           .where(and(eq(callsTable.status, "completed"), callsSeg)),
+        db
+          .select({
+            callsToday: count(),
+            durationTodaySeconds: sql<number>`coalesce(sum(least(coalesce(duration_seconds, 0), 7200)), 0)`,
+          })
+          .from(callsTable)
+          .where(todayCallWhere),
+        db
+          .select({
+            clerkId: callsTable.userId,
+            email: usersTable.email,
+            name: usersTable.name,
+            callCount: count(),
+            durationSeconds: sql<number>`coalesce(sum(least(coalesce(${callsTable.durationSeconds}, 0), 7200)), 0)`,
+          })
+          .from(callsTable)
+          .leftJoin(usersTable, eq(callsTable.userId, usersTable.clerkId))
+          .where(todayCallWhere)
+          .groupBy(callsTable.userId, usersTable.email, usersTable.name)
+          .orderBy(sql`sum(least(coalesce(${callsTable.durationSeconds}, 0), 7200)) desc`)
+          .limit(5),
       ]);
 
     const activeCalls = getAllSessions().length;
     const totalMinutes = Math.round(Number(totalDurationSeconds) / 60);
+    const minutesToday = Math.round(Number(durationTodaySeconds) / 60);
+    const topMinutesUsers = topMinutesToday.map((row) => ({
+      clerkId: row.clerkId,
+      email: row.email,
+      name: row.name,
+      callCount: Number(row.callCount),
+      minutes: Math.round(Number(row.durationSeconds) / 60),
+    }));
 
     res.json({
       segment,
@@ -102,6 +136,9 @@ router.get("/admin/overview", async (req, res): Promise<void> => {
       recentCalls,
       totalDurationSeconds: Number(totalDurationSeconds),
       totalMinutes,
+      callsToday: Number(callsToday),
+      minutesToday,
+      topMinutesUsers,
     });
   } catch (err) {
     req.log.error({ err }, "admin/overview failed");
