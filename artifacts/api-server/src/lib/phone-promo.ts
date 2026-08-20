@@ -1,5 +1,6 @@
 /**
  * Promo codes for first-time phone-number purchases.
+ * (Updated: August 2026 for SNAPXHITECH)
  *
  * A promo replaces the standard first-purchase base (tiered rental + ₹100
  * setup) with a flat promotional base, before GST. Renewals are deliberately
