@@ -149,7 +149,7 @@ export default function Platform() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Execution ID</TableHead>
+                  <TableHead>Call ID</TableHead>
                   <TableHead>Session ID</TableHead>
                   <TableHead className="text-right">Started At</TableHead>
                 </TableRow>
@@ -291,7 +291,7 @@ export default function Platform() {
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
                 <Input
                   className="h-8 text-xs pl-6 w-[200px] font-mono"
-                  placeholder="Search execution ID (exec_…)"
+                  placeholder="Search Call ID (exec_…)"
                   value={executionIdInput}
                   onChange={handleExecutionIdChange}
                 />
@@ -305,7 +305,7 @@ export default function Platform() {
                   <TableRow>
                     <TableHead className="w-[110px]">Date</TableHead>
                     <TableHead className="w-[140px]">User</TableHead>
-                    <TableHead className="w-[130px]">Execution ID</TableHead>
+                    <TableHead className="w-[130px]">Call ID</TableHead>
                     <TableHead className="w-[160px]">Agent</TableHead>
                     <TableHead>Reason</TableHead>
                   </TableRow>
