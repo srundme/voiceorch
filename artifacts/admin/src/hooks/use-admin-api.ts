@@ -549,12 +549,16 @@ export interface FailedCallsFilters {
   agentId?: number | null;
   userId?: string;
   reason?: string;
+  executionId?: string;
   page?: number;
   limit?: number;
 }
 
+/** The generated schema predates `executionId` on this endpoint. */
+export type FailedCallRow = AdminFailedCall & { executionId?: string | null };
+
 export interface FailedCallsResponse {
-  data: AdminFailedCall[];
+  data: FailedCallRow[];
   total: number;
   page: number;
   pageSize: number;
@@ -565,6 +569,7 @@ export function usePlatformFailedCalls(filters: FailedCallsFilters = {}) {
   if (filters.agentId != null) params.set("agentId", String(filters.agentId));
   if (filters.userId) params.set("userId", filters.userId);
   if (filters.reason) params.set("reason", filters.reason);
+  if (filters.executionId) params.set("executionId", filters.executionId);
   if (filters.page) params.set("page", String(filters.page));
   if (filters.limit) params.set("limit", String(filters.limit));
   const qs = params.toString();

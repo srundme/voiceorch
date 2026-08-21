@@ -65,7 +65,7 @@ function ErrorCategoryBadge({ reason }: { reason: string | null }) {
 }
 
 function hasActiveFilters(filters: FailedCallsFilters): boolean {
-  return !!(filters.agentId || filters.userId || filters.reason);
+  return !!(filters.agentId || filters.userId || filters.reason || filters.executionId);
 }
 
 export default function Platform() {
@@ -76,15 +76,18 @@ export default function Platform() {
   const [agentId, setAgentId] = useState<number | null>(null);
   const [userIdInput, setUserIdInput] = useState("");
   const [reasonInput, setReasonInput] = useState("");
+  const [executionIdInput, setExecutionIdInput] = useState("");
   const [page, setPage] = useState(1);
 
   const debouncedUserId = useDebounce(userIdInput, 400);
   const debouncedReason = useDebounce(reasonInput, 400);
+  const debouncedExecutionId = useDebounce(executionIdInput, 400);
 
   const filters: FailedCallsFilters = {
     agentId: agentId ?? undefined,
     userId: debouncedUserId || undefined,
     reason: debouncedReason || undefined,
+    executionId: debouncedExecutionId.trim() || undefined,
     page,
     limit: PAGE_SIZE,
   };
@@ -100,6 +103,7 @@ export default function Platform() {
     setAgentId(null);
     setUserIdInput("");
     setReasonInput("");
+    setExecutionIdInput("");
     setPage(1);
   }, []);
 
@@ -115,6 +119,11 @@ export default function Platform() {
 
   const handleReasonChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setReasonInput(e.target.value);
+    setPage(1);
+  };
+
+  const handleExecutionIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setExecutionIdInput(e.target.value);
     setPage(1);
   };
 
@@ -265,6 +274,16 @@ export default function Platform() {
                   onChange={handleReasonChange}
                 />
               </div>
+
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <Input
+                  className="h-8 text-xs pl-6 w-[200px] font-mono"
+                  placeholder="Search execution ID (exec_…)"
+                  value={executionIdInput}
+                  onChange={handleExecutionIdChange}
+                />
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-0 h-[400px] overflow-auto">
@@ -274,7 +293,7 @@ export default function Platform() {
                   <TableRow>
                     <TableHead className="w-[110px]">Date</TableHead>
                     <TableHead className="w-[140px]">User</TableHead>
-                    <TableHead className="w-[80px]">Call ID</TableHead>
+                    <TableHead className="w-[130px]">Execution ID</TableHead>
                     <TableHead className="w-[160px]">Agent</TableHead>
                     <TableHead>Reason</TableHead>
                   </TableRow>
@@ -316,7 +335,13 @@ export default function Platform() {
                               {call.userId && <TooltipContent className="max-w-[400px] break-all">{call.userId}</TooltipContent>}
                             </Tooltip>
                           </TableCell>
-                          <TableCell className="text-xs font-mono truncate" title={String(call.id)}>{call.id}</TableCell>
+                          <TableCell className="text-xs font-mono truncate" title={call.executionId ?? undefined}>
+                            {call.executionId ? (
+                              call.executionId
+                            ) : (
+                              <span className="text-muted-foreground italic">Not available</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-xs">
                             <Tooltip>
                               <TooltipTrigger asChild>

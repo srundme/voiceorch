@@ -680,10 +680,13 @@ router.get("/admin/platform/failed-calls", async (req, res): Promise<void> => {
     const agentIdRaw = req.query["agentId"];
     const userIdRaw = req.query["userId"];
     const reasonRaw = req.query["reason"];
+    const executionIdRaw = req.query["executionId"];
 
     const agentId = agentIdRaw ? Number(agentIdRaw) : null;
     const userId = typeof userIdRaw === "string" && userIdRaw.trim() ? userIdRaw.trim() : null;
     const reason = typeof reasonRaw === "string" && reasonRaw.trim() ? reasonRaw.trim() : null;
+    const executionId =
+      typeof executionIdRaw === "string" && executionIdRaw.trim() ? executionIdRaw.trim() : null;
 
     const conditions = [eq(callsTable.status, "failed")];
     if (agentId !== null && !isNaN(agentId)) {
@@ -695,6 +698,9 @@ router.get("/admin/platform/failed-calls", async (req, res): Promise<void> => {
     if (reason !== null) {
       conditions.push(ilike(callsTable.errorMessage, `%${reason}%`));
     }
+    if (executionId !== null) {
+      conditions.push(ilike(callsTable.executionId, `%${executionId}%`));
+    }
 
     const where = and(...conditions);
 
@@ -702,6 +708,7 @@ router.get("/admin/platform/failed-calls", async (req, res): Promise<void> => {
       db
         .select({
           id: callsTable.id,
+          executionId: callsTable.executionId,
           userId: callsTable.userId,
           userEmail: usersTable.email,
           userName: usersTable.name,
