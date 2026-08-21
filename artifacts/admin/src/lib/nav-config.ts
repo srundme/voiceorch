@@ -46,7 +46,7 @@ export type NavItem = {
   keywords?: string;
 };
 
-export type NavGroupId = "today" | "analytics" | "money" | "customers" | "control" | "labs";
+export type NavGroupId = "today" | "analytics" | "money" | "customers" | "control";
 
 export type NavGroup = {
   id: NavGroupId;
@@ -125,18 +125,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/settings", label: "Settings", icon: SettingsIcon },
       { href: "/dpdp", label: "DPDP erasure", icon: DpdpIcon, keywords: "privacy users delete" },
       { href: "/audit-logs", label: "Audit logs", icon: AuditIcon, keywords: "users actions" },
-    ],
-  },
-  {
-    id: "labs",
-    label: "Labs",
-    defaultOpen: false,
-    items: [
-      { href: "/events", label: "Workshops", icon: WorkshopsIcon },
-      { href: "/voiceathon", label: "Voice-a-thons", icon: TrophyIcon },
-      { href: "/book-interns", label: "Book interns", icon: GraduationIcon },
-      { href: "/family/companies", label: "Family companies", icon: BuildingIcon },
-      { href: "/family/agents", label: "Family agents", icon: ShieldAgentIcon },
     ],
   },
 ];
