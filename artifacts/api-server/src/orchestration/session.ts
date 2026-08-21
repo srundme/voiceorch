@@ -3417,8 +3417,9 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
 
           // 1. Generate call summary when the agent has Auto Summarization on.
           // Uses BYOP key when available; falls back to platform managed key (Groq).
-          const summarizationEnabled = agCfgForWebhook["summarizationEnabled"] === true;
-          if (ag.userId && summarizationEnabled) {
+          const rawSum = agCfgForWebhook["summarizationEnabled"];
+          const summarizationEnabled = rawSum === true || rawSum === "true" || rawSum === 1 || rawSum === "1";
+          if (summarizationEnabled) {
             try {
               const hasTranscript = !!(transcript && transcript.trim().length > 0);
               if (!hasTranscript) {
@@ -3426,16 +3427,22 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 callSummary = "No conversation took place on this call, so there is nothing to summarize.";
                 await db.update(callsTable).set({ callSummary }).where(eq(callsTable.id, session.callId));
               } else {
-                const llmProvs = await db.select().from(providersTable).where(
-                  and(
-                    eq(providersTable.isActive, true),
-                    eq(providersTable.userId, ag.userId!),
-                    eq(providersTable.providerName, ag.llmProvider)
-                  )
-                );
-                let sumLlmKey: string | null = llmProvs[0] ? decryptKey(llmProvs[0].apiKey) : null;
+                let sumLlmKey: string | null = null;
                 let sumLlmProvider = ag.llmProvider;
                 let sumLlmModel = ag.llmModel;
+
+                if (ag.userId) {
+                  const llmProvs = await db.select().from(providersTable).where(
+                    and(
+                      eq(providersTable.isActive, true),
+                      eq(providersTable.userId, ag.userId),
+                      eq(providersTable.providerName, ag.llmProvider)
+                    )
+                  );
+                  if (llmProvs[0]) {
+                    sumLlmKey = decryptKey(llmProvs[0].apiKey);
+                  }
+                }
                 // Managed plan: no BYOP key → fall back to Admin Panel managed keys
                 // Priority: (1) BYOP key, (2) admin managed_sarvam_key (Sarvam-105B / GLM 5.2), (3) admin managed_groq_key, (4) env GROQ_API_KEY
                 let fallbackGroqKey: string | null = null;
