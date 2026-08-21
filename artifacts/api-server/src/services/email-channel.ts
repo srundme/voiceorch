@@ -22,7 +22,7 @@ import { logger } from "../lib/logger.js";
 import { interpolateTemplate, type TemplateContext } from "./template-vars.js";
 import { compileEmailDesign, defaultEmailDesign } from "./email-design.js";
 
-const MANAGED_FROM = { name: "SnapServe", email: "noreply@snapserve.ai" };
+const MANAGED_FROM = { fromName: "SnapServe", fromEmail: "noreply@snapserve.ai", name: "SnapServe", email: "noreply@snapserve.ai" };
 
 function wrapManagedShell(innerHtml: string, agentName?: string): string {
   const safe = innerHtml.includes("<") ? innerHtml : `<p>${innerHtml.replace(/\n/g, "<br/>")}</p>`;
