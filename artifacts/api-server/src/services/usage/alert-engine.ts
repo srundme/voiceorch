@@ -11,7 +11,8 @@ export type AlertType =
   | "threshold_100"
   | "error_spike"
   | "usage_spike"
-  | "provider_down";
+  | "provider_down"
+  | "account_deletion";
 
 interface CreateAlertOpts {
   type: AlertType;
@@ -25,7 +26,8 @@ interface CreateAlertOpts {
   dedupeKey: string;
 }
 
-async function createAlert(opts: CreateAlertOpts): Promise<void> {
+/** Create a persistent admin alert and (best-effort) notify configured email/Slack. */
+export async function createAlert(opts: CreateAlertOpts): Promise<void> {
   try {
     const inserted = await db
       .insert(adminAlertsTable)

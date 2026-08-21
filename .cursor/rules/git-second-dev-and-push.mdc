@@ -1,0 +1,27 @@
+---
+description: Remind about 2nd developer on commits; push to main when asked
+alwaysApply: true
+---
+
+# Git: 2nd developer + push to main
+
+## 2nd developer reminder (every commit)
+
+Whenever the user asks to **commit** (or before proposing a commit), **always remind** them about the second developer on this repo:
+
+- **Name / GitHub:** `varshaappbeatsol`
+- **Email:** `varsha.mohan@appbeatsol.com`
+
+Remind briefly (e.g. “Reminder: 2nd developer on this repo is Varsha (`varshaappbeatsol` / `varsha.mohan@appbeatsol.com`).”). Do this even if they did not ask about her.
+
+Do **not** invent co-author trailers unless the user explicitly asks to co-author.
+
+## Push to main
+
+If the user says **“push to main”** (or similar: push main alone, push to main only) **without** extra caveats:
+
+1. Push the current branch to `origin` as needed for the request.
+2. If they mean push **this** work onto **`main`**, push to `origin main` (after commit if they also asked to commit).
+3. Treat that phrase as explicit authorization to **push** — do not only prepare the push and stop.
+
+Still follow normal safety: no force-push to main/master unless they explicitly demand it; do not skip hooks unless they ask.

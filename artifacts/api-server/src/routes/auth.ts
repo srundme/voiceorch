@@ -169,6 +169,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     let reactivated = false;
     if (existing) {
       reactivated = true;
+      // Returning after self-delete: no second ₹500 / ~100 min welcome credit.
       [user] = await db
         .update(usersTable)
         .set({
@@ -177,10 +178,14 @@ router.post("/auth/register", async (req, res): Promise<void> => {
           status: "active",
           suspendedAt: null,
           suspendedReason: null,
+          walletBalanceCents: 0,
+          freeCreditsGranted: true,
+          apiKey: generateApiKey(),
+          orgKey: generateOrgKey(),
         })
         .where(eq(usersTable.id, existing.id))
         .returning();
-      logger.info({ sub, email: normalizedEmail }, "Previously deleted account reactivated via register");
+      logger.info({ sub, email: normalizedEmail }, "Previously deleted account reactivated via register (no welcome credit)");
       // Password signup can't prove email ownership — any pending partner
       // promotion stays pending for one-click admin approval.
       await applyPendingPartnerPromotion(user, { emailVerified: false });
@@ -860,11 +865,8 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
         ).catch(err => logger.warn({ err, email: normalizedEmail }, "Google signup welcome email failed"));
       }
     } else if (user.status === "deleted") {
-      // Soft-deleted account — the row is never removed, so the same
-      // uniqueness lookup above always finds it. Product intent is that a
-      // deleted account's email should be free to sign up again, so treat
-      // this as a fresh signup: reactivate the row instead of blocking it.
-      // Suspended accounts are intentionally NOT reactivated this way.
+      // Soft-deleted account — reactivate the same row, but never re-grant
+      // ₹500 / ~100 min welcome credit (freeCreditsGranted stays true, wallet = 0).
       const [reactivatedRow] = await db
         .update(usersTable)
         .set({
@@ -872,11 +874,15 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
           suspendedAt: null,
           suspendedReason: null,
           name: user.name ?? profile.name?.trim() ?? normalizedEmail?.split("@")[0] ?? "User",
+          walletBalanceCents: 0,
+          freeCreditsGranted: true,
+          apiKey: generateApiKey(),
+          orgKey: generateOrgKey(),
         })
         .where(eq(usersTable.id, user.id))
         .returning();
       user = reactivatedRow;
-      logger.info({ sub: googleSub, email: normalizedEmail }, "Google Sign-In: previously deleted account reactivated");
+      logger.info({ sub: googleSub, email: normalizedEmail }, "Google Sign-In: previously deleted account reactivated (no welcome credit)");
 
       // Welcome-back email — fire-and-forget, distinct from the first-time welcome email
       if (normalizedEmail) {
