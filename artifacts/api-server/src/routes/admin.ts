@@ -597,7 +597,22 @@ router.get("/admin/phone-purchases", async (req, res): Promise<void> => {
 router.get("/admin/platform/active", async (_req, res): Promise<void> => {
   try {
     const sessions = getAllSessions();
-    res.json({ activeSessions: sessions, count: sessions.length });
+    const callIds = [...new Set(sessions.map((s) => s.callId).filter((id) => Number.isFinite(id)))];
+    const execMap = new Map<number, string | null>();
+    if (callIds.length > 0) {
+      const rows = await db
+        .select({ id: callsTable.id, executionId: callsTable.executionId })
+        .from(callsTable)
+        .where(inArray(callsTable.id, callIds));
+      for (const row of rows) execMap.set(row.id, row.executionId ?? null);
+    }
+    res.json({
+      activeSessions: sessions.map((s) => ({
+        ...s,
+        executionId: execMap.get(s.callId) ?? null,
+      })),
+      count: sessions.length,
+    });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
   }

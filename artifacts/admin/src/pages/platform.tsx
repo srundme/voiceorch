@@ -149,8 +149,8 @@ export default function Platform() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Execution ID</TableHead>
                   <TableHead>Session ID</TableHead>
-                  <TableHead>Call ID</TableHead>
                   <TableHead className="text-right">Started At</TableHead>
                 </TableRow>
               </TableHeader>
@@ -163,9 +163,21 @@ export default function Platform() {
                   <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No active calls right now</TableCell></TableRow>
                 ) : (
                   activeData?.activeSessions?.map((session: any) => (
-                    <TableRow key={session.sessionId}>
-                      <TableCell className="font-mono text-xs">{session.sessionId}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{session.callId}</TableCell>
+                    <TableRow
+                      key={session.sessionId}
+                      className={session.callId ? "cursor-pointer hover:bg-muted/50" : undefined}
+                      onClick={() => {
+                        if (session.callId) window.open(`/app/calls/${session.callId}`, "_blank", "noopener,noreferrer");
+                      }}
+                    >
+                      <TableCell className="font-mono text-xs" title={session.executionId ?? undefined}>
+                        {session.executionId ? (
+                          session.executionId
+                        ) : (
+                          <span className="text-muted-foreground italic">Not available</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{session.sessionId}</TableCell>
                       <TableCell className="text-right font-mono text-xs">
                         {session.startedAt ? format(new Date(session.startedAt), "HH:mm:ss") : "-"}
                       </TableCell>
