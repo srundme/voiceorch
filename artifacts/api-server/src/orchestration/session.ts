@@ -3436,26 +3436,30 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 let sumLlmKey: string | null = llmProvs[0] ? decryptKey(llmProvs[0].apiKey) : null;
                 let sumLlmProvider = ag.llmProvider;
                 let sumLlmModel = ag.llmModel;
-                // Managed plan: no BYOP key → fall back to platform managed Groq key
-                // Priority: (1) BYOP key, (2) admin managed_groq_key, (3) admin managed_qwen_key, (4) env GROQ_API_KEY
+                // Managed plan: no BYOP key → fall back to Admin Panel managed keys
+                // Priority: (1) BYOP key, (2) admin managed_sarvam_key (Sarvam-105B / GLM 5.2), (3) admin managed_groq_key, (4) env GROQ_API_KEY
+                let fallbackGroqKey: string | null = null;
                 if (!sumLlmKey) {
                   const platformRows = await db
                     .select()
                     .from(platformSettingsTable)
-                    .where(inArray(platformSettingsTable.key, ["managed_groq_key", "managed_qwen_key"]));
+                    .where(inArray(platformSettingsTable.key, ["managed_sarvam_key", "managed_groq_key", "managed_qwen_key"]));
                   const byKey = Object.fromEntries(platformRows.map((r) => [r.key, r.value?.trim() || ""]));
-                  sumLlmKey =
-                    byKey["managed_groq_key"] ||
-                    byKey["managed_qwen_key"] ||
-                    process.env["GROQ_API_KEY"] ||
-                    null;
-                  if (sumLlmKey) {
+
+                  const sarvamKey = byKey["managed_sarvam_key"] || process.env["SARVAM_API_KEY"] || null;
+                  fallbackGroqKey = byKey["managed_groq_key"] || byKey["managed_qwen_key"] || process.env["GROQ_API_KEY"] || null;
+
+                  if (sarvamKey) {
+                    sumLlmProvider = "sarvam";
+                    sumLlmKey = sarvamKey;
+                    sumLlmModel = "sarvam-105b";
+                  } else if (fallbackGroqKey) {
                     sumLlmProvider = "groq";
+                    sumLlmKey = fallbackGroqKey;
                     sumLlmModel = "llama-3.3-70b-versatile";
                   }
                 }
                 if (sumLlmKey) {
-                  const llm = createLLMAdapter(sumLlmProvider, sumLlmKey, sumLlmModel);
                   const customPrompt = (agCfgForWebhook["summarizationPrompt"] as string | undefined) ?? "";
                   // Freeze relative dates to absolute ones. This summary is replayed
                   // as cross-call memory on future calls; a bare "tomorrow" written
@@ -3475,24 +3479,64 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                     : `Summarize this call transcript as a single natural paragraph of 4 to 6 sentences. Briefly cover why the customer called, what was discussed, any important information collected, the outcome, and any follow-up or next steps (only if applicable). Write plain prose — do not use bullet points, numbered lists, or headings.`;
                   const userContent = `${baseInstruction}\n\n${dateRule}\n\nTranscript:\n${transcript.slice(0, 6000)}`;
                   let summary = "";
-                  await llm.chat(
-                    [{ role: "user", content: userContent }],
-                    "You are a call analyst. Write a concise, factual summary of the call as a single natural paragraph of 4 to 6 sentences. Do not use bullet points, numbered lists, or headings — write plain readable prose only.",
-                    () => {},
-                    (full) => { summary = full; }
-                  );
+
+                  // Try primary model (BYOP, or Sarvam-105B, or Groq Llama 3.3)
+                  try {
+                    const llm = createLLMAdapter(sumLlmProvider, sumLlmKey, sumLlmModel);
+                    await llm.chat(
+                      [{ role: "user", content: userContent }],
+                      "You are a call analyst. Write a concise, factual summary of the call as a single natural paragraph of 4 to 6 sentences. Do not use bullet points, numbered lists, or headings — write plain readable prose only.",
+                      () => {},
+                      (full) => { summary = full; }
+                    );
+                  } catch (primaryErr) {
+                    logger.warn({ sessionId, agentId: ag.id, provider: sumLlmProvider, model: sumLlmModel, primaryErr }, "Primary summary model failed");
+                  }
+
+                  // Fallback 1: If Sarvam-105B produced no output, try Sarvam GLM 5.2
+                  if (!summary && sumLlmProvider === "sarvam" && sumLlmKey) {
+                    try {
+                      logger.info({ sessionId, agentId: ag.id }, "Retrying summary with Sarvam GLM 5.2 (glm5.2)...");
+                      const glmLlm = createLLMAdapter("sarvam", sumLlmKey, "glm5.2");
+                      await glmLlm.chat(
+                        [{ role: "user", content: userContent }],
+                        "You are a call analyst. Write a concise, factual summary of the call as a single natural paragraph of 4 to 6 sentences. Do not use bullet points, numbered lists, or headings — write plain readable prose only.",
+                        () => {},
+                        (full) => { summary = full; }
+                      );
+                    } catch (glmErr) {
+                      logger.warn({ sessionId, agentId: ag.id, glmErr }, "Sarvam GLM 5.2 summary fallback failed");
+                    }
+                  }
+
+                  // Fallback 2: If Sarvam models produced no output, try Groq fallback key if available
+                  if (!summary && fallbackGroqKey && sumLlmProvider !== "groq") {
+                    try {
+                      logger.info({ sessionId, agentId: ag.id }, "Retrying summary with Groq (llama-3.3-70b-versatile)...");
+                      const groqLlm = createLLMAdapter("groq", fallbackGroqKey, "llama-3.3-70b-versatile");
+                      await groqLlm.chat(
+                        [{ role: "user", content: userContent }],
+                        "You are a call analyst. Write a concise, factual summary of the call as a single natural paragraph of 4 to 6 sentences. Do not use bullet points, numbered lists, or headings — write plain readable prose only.",
+                        () => {},
+                        (full) => { summary = full; }
+                      );
+                    } catch (groqErr) {
+                      logger.warn({ sessionId, agentId: ag.id, groqErr }, "Groq summary fallback failed");
+                    }
+                  }
+
                   if (summary) {
                     callSummary = summary;
                     await db.update(callsTable).set({ callSummary: summary }).where(eq(callsTable.id, session.callId));
                   } else {
-                    logger.warn({ sessionId, agentId: ag.id }, "Post-call summary: LLM returned empty response, callSummary not saved");
+                    logger.warn({ sessionId, agentId: ag.id }, "Post-call summary: All LLM models returned empty response, callSummary not saved");
                   }
                 } else {
                   // summarizationEnabled is true but no LLM key found — log so admins can diagnose.
                   logger.warn(
                     { sessionId, agentId: ag.id, llmProvider: ag.llmProvider },
                     "Post-call summary skipped: no LLM key available (no BYOP key for provider and no platform managed key). " +
-                    "Set GROQ_API_KEY env var or configure a provider key for this agent."
+                    "Set managed_sarvam_key, managed_groq_key, or SARVAM_API_KEY / GROQ_API_KEY env var."
                   );
                 }
               }
