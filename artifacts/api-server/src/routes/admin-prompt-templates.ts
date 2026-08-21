@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import multer from "multer";
-import { db, promptTemplatesTable, agentsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { db, promptTemplatesTable, agentsTable, callsTable } from "@workspace/db";
+import { eq, desc, sql, isNotNull } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import {
   extractTextFromUpload,
@@ -185,6 +185,11 @@ router.get("/admin/agents", async (_req, res): Promise<void> => {
       agentType: agentsTable.agentType,
       userId: agentsTable.userId,
       status: agentsTable.status,
+      asrProvider: agentsTable.asrProvider,
+      llmProvider: agentsTable.llmProvider,
+      ttsProvider: agentsTable.ttsProvider,
+      voice: agentsTable.voice,
+      language: agentsTable.language,
       systemPrompt: agentsTable.systemPrompt,
       generatedPrompt: agentsTable.generatedPrompt,
       promptTemplateVersion: agentsTable.promptTemplateVersion,
@@ -194,9 +199,39 @@ router.get("/admin/agents", async (_req, res): Promise<void> => {
     .from(agentsTable)
     .orderBy(desc(agentsTable.createdAt));
 
+  // Aggregate call metrics per agent
+  let countMap = new Map<number, { totalCalls: number; completedCalls: number; failedCalls: number; totalDurationSeconds: number }>();
+  try {
+    const callCounts = await db
+      .select({
+        agentId: callsTable.agentId,
+        totalCalls: sql<number>`count(*)::int`,
+        completedCalls: sql<number>`count(*) filter (where ${callsTable.status} = 'completed')::int`,
+        failedCalls: sql<number>`count(*) filter (where ${callsTable.status} in ('failed', 'error'))::int`,
+        totalDurationSeconds: sql<number>`coalesce(sum(${callsTable.duration}), 0)::int`,
+      })
+      .from(callsTable)
+      .where(isNotNull(callsTable.agentId))
+      .groupBy(callsTable.agentId);
+
+    for (const c of callCounts) {
+      if (c.agentId != null) {
+        countMap.set(c.agentId, {
+          totalCalls: c.totalCalls ?? 0,
+          completedCalls: c.completedCalls ?? 0,
+          failedCalls: c.failedCalls ?? 0,
+          totalDurationSeconds: c.totalDurationSeconds ?? 0,
+        });
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "Could not aggregate agent call counts for /admin/agents");
+  }
+
   // owner / company come from wizard inputs when available
   const result = rows.map((r) => {
     const wi = (r.wizardInputs ?? {}) as Record<string, unknown>;
+    const counts = countMap.get(r.id);
     return {
       id: r.id,
       name: r.name,
@@ -204,6 +239,15 @@ router.get("/admin/agents", async (_req, res): Promise<void> => {
       ownerUserId: r.userId,
       company: (wi["companyName"] as string | undefined) ?? null,
       status: r.status,
+      asrProvider: r.asrProvider,
+      llmProvider: r.llmProvider,
+      ttsProvider: r.ttsProvider,
+      voice: r.voice,
+      language: r.language,
+      totalCalls: counts?.totalCalls ?? 0,
+      completedCalls: counts?.completedCalls ?? 0,
+      failedCalls: counts?.failedCalls ?? 0,
+      totalDurationSeconds: counts?.totalDurationSeconds ?? 0,
       promptTemplateVersion: r.promptTemplateVersion,
       hasGeneratedPrompt: !!r.generatedPrompt,
       hasWizardInputs: !!r.wizardInputs,
