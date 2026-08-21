@@ -2980,18 +2980,30 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   </p>
                   <Select
                     value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
-                    onValueChange={(v) => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v), { shouldDirty: true })}
+                    onValueChange={(v) => {
+                      const parsed = Number(v);
+                      form.setValue(
+                        "schedulingEventTypeId",
+                        v === "__none__" || !Number.isFinite(parsed) ? null : parsed,
+                        { shouldDirty: true },
+                      );
+                    }}
                     disabled={!calendarIdForEt}
                   >
                     <SelectTrigger className="h-7 bg-background/50 text-xs">
+                      {/* Always render a label: Radix only falls back to the selected
+                          item's text when the value matches a rendered SelectItem. */}
                       <SelectValue placeholder="Any meeting">
-                        {schedulingEventTypeId != null
-                          ? agentEventTypes == null
+                        {schedulingEventTypeId == null
+                          ? "Any meeting"
+                          : agentEventTypes == null
                             ? "Loading…"
-                            : ((agentEventTypes as any[]).find((e: any) => e.id === schedulingEventTypeId)?.title
-                               || (agentEventTypes as any[]).find((e: any) => e.id === schedulingEventTypeId)?.name
-                               || undefined)
-                          : undefined}
+                            : (() => {
+                                const selected = (agentEventTypes as any[]).find(
+                                  (e: any) => String(e.id) === String(schedulingEventTypeId),
+                                );
+                                return selected ? (selected.title || selected.name) : "Any meeting";
+                              })()}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
