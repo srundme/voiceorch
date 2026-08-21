@@ -554,6 +554,7 @@ export default function UserDetail() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-[80px]">ID</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>ASR</TableHead>
@@ -565,12 +566,13 @@ export default function UserDetail() {
               </TableHeader>
               <TableBody>
                 {agents.isLoading ? (
-                  <TableRow><TableCell colSpan={7} className="text-center h-20 text-muted-foreground animate-pulse">Loading…</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center h-20 text-muted-foreground animate-pulse">Loading…</TableCell></TableRow>
                 ) : (agents.data ?? []).length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center h-20 text-muted-foreground">No agents</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center h-20 text-muted-foreground">No agents</TableCell></TableRow>
                 ) : (
                   (agents.data ?? []).map((agent: any) => (
                     <TableRow key={agent.id}>
+                      <TableCell className="font-mono text-xs text-muted-foreground font-semibold">#{agent.id}</TableCell>
                       <TableCell className="font-medium">{agent.name}</TableCell>
                       <TableCell>
                         <Badge variant={agent.status === "active" ? "default" : "secondary"} className="text-[10px] uppercase">{agent.status || "inactive"}</Badge>

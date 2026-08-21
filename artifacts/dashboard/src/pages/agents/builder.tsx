@@ -7,7 +7,7 @@ import {
   TestTube2, ChevronRight, ChevronLeft,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Users, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
-  Play, Pause,
+  Play, Pause, Copy,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
   Upload, Archive, Info, AlertCircle, Calendar, Star, Video,
@@ -4333,8 +4333,9 @@ function AgentListPanel({ selectedId, onSelect, className }: {
               )}
             >
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <span className="truncate text-[12px] font-medium">{agent.name}</span>
+                  <span className="shrink-0 rounded bg-muted/80 px-1 py-0.5 text-[9px] font-mono font-medium text-muted-foreground">#{agent.id}</span>
                   <StatusDot tone={isLive ? "success" : "neutral"} />
                 </div>
                 {team ? (
@@ -7337,6 +7338,21 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
             </span>
             <Pencil className="size-3.5 shrink-0 text-muted-foreground opacity-70 group-hover:opacity-100" />
           </button>
+          {agent.id != null && (
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard.writeText(String(agent.id));
+                toast({ title: "Copied Agent ID", description: `Agent #${agent.id} copied to clipboard.` });
+              }}
+              className="group inline-flex items-center gap-1 rounded-md border border-border/80 bg-muted/40 px-2 py-1 text-[11px] font-mono text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-muted hover:text-foreground"
+              title="Click to copy Agent ID"
+            >
+              <span className="text-[9px] font-sans font-semibold uppercase tracking-wider text-muted-foreground/70">ID</span>
+              <span className="font-semibold text-foreground">#{agent.id}</span>
+              <Copy className="size-2.5 opacity-50 group-hover:opacity-100" />
+            </button>
+          )}
           <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[10px] capitalize text-muted-foreground">
             <StatusDot tone={agent.status === "active" ? "success" : "neutral"} />
             {agent.status === "active" ? "Live" : "Draft"}
