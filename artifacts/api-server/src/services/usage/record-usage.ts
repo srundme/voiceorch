@@ -2,6 +2,7 @@ import { db, usageEventsTable, providerPricingTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { logger } from "../../lib/logger.js";
 import { evaluateAlertsAfterEvent } from "./alert-engine.js";
+import { quoteProviderCostMicros } from "../cost-pricing-lookup.js";
 
 export type UsageService = "stt" | "tts" | "llm";
 
@@ -108,7 +109,20 @@ export async function recordUsage(input: RecordUsageInput): Promise<void> {
   try {
     const model = input.model ?? "default";
     const pricing = await getPricing(input.service, input.provider, model);
-    const estimatedCostMicros = computeCostMicros(pricing, input);
+    let estimatedCostMicros = computeCostMicros(pricing, input);
+
+    // Prefer effective-dated provider_cost_rates when a quote is available (Admin V2).
+    const quote = await quoteProviderCostMicros({
+      provider: input.provider,
+      service: input.service,
+      audioSeconds: input.audioSeconds,
+      characters: input.characters,
+      inputTokens: input.inputTokens,
+      outputTokens: input.outputTokens,
+    });
+    if (quote.source === "provider_cost_rates" && quote.costMicros > 0) {
+      estimatedCostMicros = quote.costMicros;
+    }
 
     const [row] = await db
       .insert(usageEventsTable)

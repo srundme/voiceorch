@@ -393,7 +393,7 @@ export default function Finance() {
               {ledger?.total != null ? (
                 <p className="text-[11px] text-muted-foreground px-4 py-2 border-t">
                   Showing {ledger.rows.length} of {ledger.total.toLocaleString()} ·{" "}
-                  <Link href="/audit-logs" className="text-primary hover:underline">
+                  <Link href="/operations/audit" className="text-primary hover:underline">
                     Admin audit logs
                   </Link>
                 </p>

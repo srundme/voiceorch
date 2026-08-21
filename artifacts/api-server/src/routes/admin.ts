@@ -208,6 +208,7 @@ router.get("/admin/users", async (req, res): Promise<void> => {
       onboardingCompleted: u.onboardingCompleted,
       onboardingData: u.onboardingData,
       isTest: u.isTest,
+      status: u.status,
       callCount: callCountMap.get(u.clerkId) ?? 0,
       agentCount: agentCountMap.get(u.clerkId) ?? 0,
       totalDurationSeconds: durationMap.get(u.clerkId) ?? 0,

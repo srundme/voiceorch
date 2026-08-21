@@ -14,18 +14,28 @@
 import { db, providersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { RATE_PAISE_PER_MIN } from "../lib/money-inr.js";
+import { resolveCustomerRateCentsPerMin } from "./cost-pricing-lookup.js";
 
-export const MANAGED_RATE_CENTS_PER_MIN = RATE_PAISE_PER_MIN; // ₹5.00 / min
+export const MANAGED_RATE_CENTS_PER_MIN = RATE_PAISE_PER_MIN; // ₹5.00 / min (fallback)
 export const BYOP_RATE_CENTS_PER_MIN    = RATE_PAISE_PER_MIN; // ₹5.00 / min (flat)
 
 /**
- * Returns the flat per-minute charge in paise for a given billing mode.
+ * Sync fallback when DB lookup is unavailable. Prefer resolveCustomerRateCentsPerMin.
  */
 export function getFlatRateCentsPerMin(mode: "managed" | "byop" | string | null | undefined): number {
   return mode === "byop" ? BYOP_RATE_CENTS_PER_MIN : MANAGED_RATE_CENTS_PER_MIN;
 }
 
+/** Effective-dated customer voice rate (paise/min). Falls back to flat product rate. */
+export async function resolveBillingRateCentsPerMin(
+  _mode?: "managed" | "byop" | string | null,
+  at: Date = new Date(),
+): Promise<number> {
+  return resolveCustomerRateCentsPerMin(at);
+}
+
 export { computeProRataDebitCents, isNonBillableCallStatus } from "./call-billing.js";
+export { resolveCustomerRateCentsPerMin } from "./cost-pricing-lookup.js";
 
 /**
  * Dynamically resolves whether an agent should be billed at the managed or BYOP rate.

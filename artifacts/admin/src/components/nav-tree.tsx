@@ -10,7 +10,7 @@ import {
 } from "@/lib/nav-config";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-const STORAGE_KEY = "admin-nav-open-v1";
+const STORAGE_KEY = "admin-nav-open-v2";
 
 function loadOpen(): Record<NavGroupId, boolean> {
   const defaults = Object.fromEntries(

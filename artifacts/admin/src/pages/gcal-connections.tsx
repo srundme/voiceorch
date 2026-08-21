@@ -8,6 +8,9 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarCheck } from "lucide-react";
+import { SectionSubNav } from "@/components/section-subnav";
+import { PRODUCT_TABS } from "@/lib/nav-config";
+import { Link } from "wouter";
 
 type GcalConnection = {
   id: string;
@@ -47,6 +50,7 @@ export default function GcalConnectionsPage() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={PRODUCT_TABS} />
       <div className="flex items-center gap-3">
         <div className="p-2 rounded-lg bg-muted/40 border border-border">
           <CalendarCheck className="h-5 w-5 text-muted-foreground" />
@@ -54,7 +58,10 @@ export default function GcalConnectionsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Google Calendar Connections</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            All users' Google Calendar OAuth connections — scopes, token expiry, and sync health (read-only)
+            Per-user OAuth connections — scopes, token expiry, and sync health.{" "}
+            <Link href="/product/integrations" className="text-primary hover:underline">
+              All integrations →
+            </Link>
           </p>
         </div>
       </div>

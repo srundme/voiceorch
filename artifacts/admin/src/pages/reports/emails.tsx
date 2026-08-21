@@ -70,7 +70,7 @@ export default function EmailsReportPage() {
             </Button>
           ))}
           <Button size="sm" variant="ghost" asChild>
-            <Link href="/emails">View all sends →</Link>
+            <Link href="/operations/emails">View all sends →</Link>
           </Button>
         </div>
       </div>

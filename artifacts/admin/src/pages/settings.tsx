@@ -34,6 +34,9 @@ import { MessageCircle, Settings, Bell, Mail, Check, AlertTriangle, Slack, Send,
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
+import { SectionSubNav } from "@/components/section-subnav";
+import { SETTINGS_TABS } from "@/lib/nav-config";
+import { Link } from "wouter";
 
 function formatRelative(dateStr: string | null): string {
   if (!dateStr) return "Never";
@@ -383,10 +386,11 @@ export default function PlatformSettings() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={SETTINGS_TABS} />
       <div className="flex items-center gap-3">
         <Settings className="h-6 w-6 text-primary" />
         <h1 className="text-3xl font-bold tracking-tight">Platform Settings</h1>
-
+        <Link href="/settings/admin" className="text-xs text-primary hover:underline ml-auto">Admin settings →</Link>
       </div>
 
       {/* Token Optimization Kill Switch */}

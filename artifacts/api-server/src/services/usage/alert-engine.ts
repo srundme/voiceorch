@@ -1,4 +1,4 @@
-import { db, adminAlertsTable, providerAllocationsTable, usageEventsTable } from "@workspace/db";
+import { db, adminAlertsTable, providerAllocationsTable, usageEventsTable, callsTable } from "@workspace/db";
 import { and, eq, sql, gt } from "drizzle-orm";
 import { logger } from "../../lib/logger.js";
 import { dispatchAlertNotification } from "../alert-notifications.js";
@@ -12,7 +12,9 @@ export type AlertType =
   | "error_spike"
   | "usage_spike"
   | "provider_down"
-  | "account_deletion";
+  | "account_deletion"
+  | "daily_revenue_drop"
+  | "cost_per_min_increase";
 
 interface CreateAlertOpts {
   type: AlertType;
@@ -251,8 +253,8 @@ async function evaluateProviderDowntime(service: string, provider: string): Prom
   }
 }
 
-// Periodic sweep — detects usage spikes (rolling baseline) and re-evaluates
-// allocation thresholds for inactive providers.
+// Periodic sweep — detects usage spikes (rolling baseline), revenue/cost monitors,
+// and re-evaluates allocation thresholds for inactive providers.
 export async function sweepAlerts(): Promise<void> {
   try {
     // Per (service, provider) totals for today vs 14-day average
@@ -283,8 +285,84 @@ export async function sweepAlerts(): Promise<void> {
         });
       }
     }
+
+    await evaluateDailyRevenueDrop();
+    await evaluateCostPerMinIncrease();
   } catch (err) {
     logger.warn({ err }, "sweepAlerts failed");
+  }
+}
+
+/** Day-over-day billed revenue (calls.cost_cents) drop ≥ 30%. */
+async function evaluateDailyRevenueDrop(): Promise<void> {
+  try {
+    const [row] = await db
+      .select({
+        today: sql<string>`coalesce(sum(${callsTable.costCents}) filter (where ${callsTable.createdAt} >= current_date::timestamptz), 0)`,
+        yesterday: sql<string>`coalesce(sum(${callsTable.costCents}) filter (where ${callsTable.createdAt} >= (current_date - interval '1 day')::timestamptz and ${callsTable.createdAt} < current_date::timestamptz), 0)`,
+      })
+      .from(callsTable)
+      .where(gt(callsTable.createdAt, sql`current_date - interval '2 days'`));
+
+    const today = Number(row?.today ?? 0);
+    const yesterday = Number(row?.yesterday ?? 0);
+    if (yesterday < 500) return; // ignore tiny baselines (< ₹5)
+    const dropPct = ((yesterday - today) / yesterday) * 100;
+    if (dropPct >= 30) {
+      await createAlert({
+        type: "daily_revenue_drop",
+        severity: dropPct >= 50 ? "critical" : "warning",
+        title: "Daily revenue drop",
+        message: `Recognized call revenue is down ${dropPct.toFixed(0)}% vs yesterday (₹${(today / 100).toFixed(2)} today vs ₹${(yesterday / 100).toFixed(2)} yesterday).`,
+        payload: { today, yesterday, dropPct },
+        dedupeKey: `daily_revenue_drop:${todayBucket()}`,
+      });
+    }
+  } catch (err) {
+    logger.warn({ err }, "evaluateDailyRevenueDrop failed");
+  }
+}
+
+/** Day-over-day provider COGS per voice-minute increase ≥ 20%. */
+async function evaluateCostPerMinIncrease(): Promise<void> {
+  try {
+    const [costRow] = await db
+      .select({
+        todayMicros: sql<string>`coalesce(sum(${usageEventsTable.estimatedCostMicros}) filter (where ${usageEventsTable.createdAt} >= current_date::timestamptz), 0)`,
+        yesterdayMicros: sql<string>`coalesce(sum(${usageEventsTable.estimatedCostMicros}) filter (where ${usageEventsTable.createdAt} >= (current_date - interval '1 day')::timestamptz and ${usageEventsTable.createdAt} < current_date::timestamptz), 0)`,
+      })
+      .from(usageEventsTable)
+      .where(gt(usageEventsTable.createdAt, sql`current_date - interval '2 days'`));
+
+    const [minRow] = await db
+      .select({
+        todaySecs: sql<string>`coalesce(sum(${callsTable.durationSeconds}) filter (where ${callsTable.createdAt} >= current_date::timestamptz), 0)`,
+        yesterdaySecs: sql<string>`coalesce(sum(${callsTable.durationSeconds}) filter (where ${callsTable.createdAt} >= (current_date - interval '1 day')::timestamptz and ${callsTable.createdAt} < current_date::timestamptz), 0)`,
+      })
+      .from(callsTable)
+      .where(gt(callsTable.createdAt, sql`current_date - interval '2 days'`));
+
+    const todayMins = Number(minRow?.todaySecs ?? 0) / 60;
+    const yesterdayMins = Number(minRow?.yesterdaySecs ?? 0) / 60;
+    if (yesterdayMins < 5 || todayMins < 1) return;
+
+    const todayCpm = Number(costRow?.todayMicros ?? 0) / todayMins;
+    const yesterdayCpm = Number(costRow?.yesterdayMicros ?? 0) / yesterdayMins;
+    if (yesterdayCpm <= 0) return;
+
+    const increasePct = ((todayCpm - yesterdayCpm) / yesterdayCpm) * 100;
+    if (increasePct >= 20) {
+      await createAlert({
+        type: "cost_per_min_increase",
+        severity: increasePct >= 40 ? "critical" : "warning",
+        title: "Cost per minute increase",
+        message: `Variable cost/min is up ${increasePct.toFixed(0)}% vs yesterday.`,
+        payload: { todayCpm, yesterdayCpm, increasePct, todayMins, yesterdayMins },
+        dedupeKey: `cost_per_min_increase:${todayBucket()}`,
+      });
+    }
+  } catch (err) {
+    logger.warn({ err }, "evaluateCostPerMinIncrease failed");
   }
 }
 

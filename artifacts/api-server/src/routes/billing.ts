@@ -6,7 +6,7 @@ import { Router } from "express";
 import { db, platformSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { MANAGED_RATE_CENTS_PER_MIN, BYOP_RATE_CENTS_PER_MIN } from "../services/minute-rates.js";
+import { resolveBillingRateCentsPerMin } from "../services/minute-rates.js";
 
 async function getManagedKey(key: string): Promise<string | null> {
   const [row] = await db
@@ -20,13 +20,14 @@ const router = Router();
 
 /**
  * GET /billing/rates
- * Returns the two flat per-minute billing tiers so the dashboard can display
- * cost/min per agent based on its mode ("managed" vs "byop").
+ * Returns the effective per-minute billing tier (from customer_pricing_rates when set).
  */
 router.get("/billing/rates", requireAuth, async (_req, res): Promise<void> => {
+  const rate = await resolveBillingRateCentsPerMin();
+  const labelInr = `₹${(rate / 100).toFixed(2)}/min`;
   res.json([
-    { mode: "managed", rateCentsPerMin: MANAGED_RATE_CENTS_PER_MIN, label: "Managed — platform keys (₹5/min)", currency: "INR" },
-    { mode: "byop",    rateCentsPerMin: BYOP_RATE_CENTS_PER_MIN,    label: "BYOP — your own keys (₹5/min)", currency: "INR" },
+    { mode: "managed", rateCentsPerMin: rate, label: `Managed — platform keys (${labelInr})`, currency: "INR" },
+    { mode: "byop",    rateCentsPerMin: rate, label: `BYOP — your own keys (${labelInr})`, currency: "INR" },
   ]);
 });
 

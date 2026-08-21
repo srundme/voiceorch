@@ -5,15 +5,18 @@ import { ANALYTICS_TABS } from "@/lib/nav-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const LINKS = [
+  { href: "/analytics/daily-pnl", title: "Daily P&L", body: "Canonical revenue, cost, gross profit and margin by day." },
+  { href: "/analytics/users", title: "User Growth", body: "Signups, activated, active, paying, returning, churned." },
+  { href: "/analytics/activation", title: "Activation", body: "Cohort funnel from signup through paid usage." },
+  { href: "/analytics/retention", title: "Retention", body: "Weekly cohorts plus D1 / D7 / D30." },
+  { href: "/analytics/agents", title: "Agents", body: "Calls, minutes, revenue, cost and profit by agent." },
+  { href: "/analytics/providers", title: "Providers", body: "STT / TTS / LLM usage, failures, latency and COGS." },
   { href: "/call-analytics", title: "Calls", body: "Completed vs failed volume by week, month, or year." },
-  { href: "/growth", title: "Funnel", body: "Signup → agent → telephony → first call → power user." },
-  { href: "/usage", title: "Usage", body: "STT / TTS / LLM spend, allocations, and cost alerts." },
+  { href: "/growth", title: "Legacy Funnel", body: "Signup → agent → telephony → first call → power user." },
+  { href: "/usage", title: "Usage Monitor", body: "STT / TTS / LLM spend, allocations, and cost alerts." },
   { href: "/reports/signups", title: "Signups", body: "New accounts in range. Does not replace the Users list." },
   { href: "/board/pulse", title: "Company pulse", body: "Investor headline metrics for Friday reviews." },
-  { href: "/board/growth", title: "Board growth", body: "Minutes, new tenants, flagship goal." },
-  { href: "/board/retention", title: "Retention", body: "Cohort health and returning tenants." },
-  { href: "/board/moat", title: "Product moat", body: "What is sticky vs rented infrastructure." },
-  { href: "/board/unit-economics", title: "Unit economics", body: "Board cut of contribution margin." },
+  { href: "/cost-pricing", title: "Cost & Pricing", body: "Versioned provider costs and customer list prices." },
 ];
 
 export default function AnalyticsHub() {

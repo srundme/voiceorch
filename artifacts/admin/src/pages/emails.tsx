@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { Link } from "wouter";
-import { usePlatformEmails, usePlatformEmailDetail, useSendManualEmail } from "@/hooks/use-admin-api";
+import { usePlatformEmails, usePlatformEmailDetail, useSendManualEmail, useEmailOpsSummary } from "@/hooks/use-admin-api";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -17,7 +17,8 @@ import { ChevronLeft, ChevronRight, Mail, Send, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { SectionSubNav } from "@/components/section-subnav";
-import { EMAIL_TABS } from "@/lib/nav-config";
+import { EMAIL_TABS, OPERATIONS_TABS } from "@/lib/nav-config";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const TYPE_COLORS: Record<string, string> = {
   manual: "secondary",
@@ -54,6 +55,7 @@ export default function EmailsPage() {
   const { data, isLoading } = usePlatformEmails({ page, search: appliedSearch || undefined });
   const { data: previewEmail } = usePlatformEmailDetail(previewId);
   const sendEmail = useSendManualEmail();
+  const { data: summary } = useEmailOpsSummary(30);
 
   const rows: any[] = data?.data ?? [];
   const total: number = data?.total ?? 0;
@@ -92,17 +94,37 @@ export default function EmailsPage() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={OPERATIONS_TABS} />
       <SectionSubNav tabs={EMAIL_TABS} />
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Mail className="h-6 w-6 text-muted-foreground" />
           <h1 className="text-3xl font-bold tracking-tight">Emails</h1>
-          <Badge variant="outline" className="font-mono">{total.toLocaleString()} sent</Badge>
+          <Badge variant="outline" className="font-mono">{total.toLocaleString()} logged</Badge>
         </div>
         <Button size="sm" className="gap-1.5" onClick={() => setComposeOpen(true)}>
           <Send className="h-3.5 w-3.5" />
           Compose
         </Button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Sent (30d)</CardTitle></CardHeader>
+          <CardContent className="text-xl font-bold font-mono">{summary?.kpis?.sent ?? "…"}</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Delivered</CardTitle></CardHeader>
+          <CardContent className="text-xl font-bold font-mono">{summary?.kpis?.delivered ?? "…"}</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Failed</CardTitle></CardHeader>
+          <CardContent className="text-xl font-bold font-mono text-destructive">{summary?.kpis?.failed ?? "…"}</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Bounced</CardTitle></CardHeader>
+          <CardContent className="text-xl font-bold font-mono">{summary?.kpis?.bounced ?? "…"}</CardContent>
+        </Card>
       </div>
 
       {/* Search */}

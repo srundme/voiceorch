@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { adminFetch, BASE, formatAdminError } from "@/lib/api";
 import { NoActiveTemplateBanner } from "@/components/no-active-template-banner";
 import { SectionSubNav } from "@/components/section-subnav";
-import { PROMPT_TABS } from "@/lib/nav-config";
+import { PRODUCT_TABS, PROMPT_TABS } from "@/lib/nav-config";
 import {
   Upload,
   FileText,
@@ -272,6 +272,7 @@ export default function PromptTemplatePage() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={PRODUCT_TABS} />
       <SectionSubNav tabs={PROMPT_TABS} />
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Prompt Template</h1>

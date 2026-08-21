@@ -23,7 +23,7 @@ import { Activity, AlertTriangle, BarChart2, ChevronLeft, ChevronRight, Search, 
 import { useState, useCallback } from "react";
 import { useDebounce } from "@/hooks/use-debounce";
 import { SectionSubNav } from "@/components/section-subnav";
-import { OPS_TABS } from "@/lib/nav-config";
+import { VOICE_TABS } from "@/lib/nav-config";
 
 const PAGE_SIZE = 50;
 
@@ -133,7 +133,7 @@ export default function Platform() {
 
   return (
     <div className="space-y-6">
-      <SectionSubNav tabs={OPS_TABS} />
+      <SectionSubNav tabs={VOICE_TABS} />
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Platform Health</h1>
       </div>

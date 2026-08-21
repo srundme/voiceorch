@@ -8,7 +8,7 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext, denyManagedClient } from "../middlewares/clientContext.js";
 import { logger } from "../lib/logger.js";
 import { resolvePartnerBilling } from "../services/partner-billing.js";
-import { getFlatRateCentsPerMin } from "../services/minute-rates.js";
+import { resolveBillingRateCentsPerMin } from "../services/minute-rates.js";
 import { getAppOrigins } from "../lib/app-domain.js";
 import { issueInvoice, renderInvoiceHtml, renderInvoicePdf } from "../services/invoice.js";
 import {
@@ -81,7 +81,7 @@ router.get("/wallet", requireAuth, clientContext, async (req, res) => {
     isActivePartnerOwner(clerkId),
   ]);
   const effectiveRateCentsPerMin =
-    partnerBilling?.clientRateCentsPerMin ?? getFlatRateCentsPerMin("managed");
+    partnerBilling?.clientRateCentsPerMin ?? (await resolveBillingRateCentsPerMin("managed"));
   const minTopupPaise = minTopupPaiseForUser(isPartner);
   res.json({ ...walletInfoPayload(user, { minTopupPaise }), effectiveRateCentsPerMin });
 });

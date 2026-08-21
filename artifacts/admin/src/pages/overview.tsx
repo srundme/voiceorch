@@ -10,9 +10,10 @@ import {
   usePlatformActive,
   usePlatformFailedCalls,
   usePlatformFailedCallsByReason,
+  useAnalyticsOverview,
   type UserSegment,
 } from "@/hooks/use-admin-api";
-import { adminFetch } from "@/lib/api";
+import { adminFetch, formatCentsToDollars } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +44,7 @@ import { CallVolumeChart } from "@/components/call-volume-chart";
 import { PageHeader } from "@/components/page-header";
 import { SectionSubNav } from "@/components/section-subnav";
 import { OPS_TABS } from "@/lib/nav-config";
+import { formatYmd } from "@/hooks/use-date-range";
 import {
   Table,
   TableBody,
@@ -52,6 +54,121 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+function pctChange(current: number, previous: number): string | null {
+  if (previous === 0) return current === 0 ? null : "+∞";
+  const p = ((current - previous) / Math.abs(previous)) * 100;
+  const sign = p > 0 ? "↑" : p < 0 ? "↓" : "→";
+  return `${sign} ${Math.abs(p).toFixed(1)}%`;
+}
+
+function CommandKpiStrip() {
+  const today = new Date();
+  const to = formatYmd(today);
+  const fromDate = new Date(today);
+  fromDate.setDate(fromDate.getDate() - 29);
+  const from = formatYmd(fromDate);
+  const compareToDate = new Date(fromDate);
+  compareToDate.setDate(compareToDate.getDate() - 1);
+  const compareFromDate = new Date(compareToDate);
+  compareFromDate.setDate(compareFromDate.getDate() - 29);
+  const compareFrom = formatYmd(compareFromDate);
+  const compareTo = formatYmd(compareToDate);
+
+  const { data, isLoading, dataUpdatedAt } = useAnalyticsOverview(from, to, compareFrom, compareTo);
+  const k = data?.kpis;
+  const prev = data?.compare?.totals;
+
+  const cards: { label: string; value: string; delta: string | null; href?: string }[] = [
+    { label: "Total Users", value: String(k?.totalUsers ?? "—"), delta: null },
+    {
+      label: "Active Users",
+      value: String(k?.activeUsers ?? "—"),
+      delta: prev ? pctChange(k?.activeUsers ?? 0, prev.users) : null,
+    },
+    {
+      label: "Calls",
+      value: (k?.calls ?? 0).toLocaleString(),
+      delta: prev ? pctChange(k?.calls ?? 0, prev.calls) : null,
+    },
+    {
+      label: "Billable Minutes",
+      value: String(k?.billableMinutes ?? "—"),
+      delta: prev ? pctChange(k?.billableMinutes ?? 0, prev.billableMinutes) : null,
+    },
+    {
+      label: "Revenue",
+      value: formatCentsToDollars(k?.recognizedRevenuePaise ?? 0),
+      delta: prev ? pctChange(k?.recognizedRevenuePaise ?? 0, prev.recognizedRevenuePaise) : null,
+      href: "/analytics/daily-pnl",
+    },
+    {
+      label: "Cost",
+      value: formatCentsToDollars(k?.variableCostPaise ?? 0),
+      delta: prev ? pctChange(k?.variableCostPaise ?? 0, prev.variableCostPaise) : null,
+      href: "/analytics/daily-pnl",
+    },
+    {
+      label: "Gross Profit",
+      value: formatCentsToDollars(k?.grossProfitPaise ?? 0),
+      delta: prev ? pctChange(k?.grossProfitPaise ?? 0, prev.grossProfitPaise) : null,
+      href: "/analytics/daily-pnl",
+    },
+    {
+      label: "Gross Margin",
+      value: `${(k?.grossMarginPct ?? 0).toFixed(1)}%`,
+      delta: prev ? pctChange(k?.grossMarginPct ?? 0, prev.grossMarginPct) : null,
+      href: "/analytics/daily-pnl",
+    },
+  ];
+
+  const updatedLabel = dataUpdatedAt
+    ? `Updated ${Math.max(0, Math.round((Date.now() - dataUpdatedAt) / 60000))} min ago`
+    : null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          Command Center · Last 30 days
+        </p>
+        <div className="flex items-center gap-3">
+          {updatedLabel && <span className="text-[11px] text-muted-foreground">{updatedLabel}</span>}
+          <Link href="/analytics/daily-pnl" className="text-[11px] text-primary hover:underline">
+            Open Daily P&amp;L
+          </Link>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
+        {cards.map((c) => {
+          const inner = (
+            <Card key={c.label} className="shadow-none">
+              <CardHeader className="pb-1 pt-3 px-3">
+                <CardTitle className="text-[10px] font-semibold text-muted-foreground uppercase tracking-[0.12em]">
+                  {c.label}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-3 pb-3">
+                <div className="text-lg font-bold font-mono tabular-nums">
+                  {isLoading ? "…" : c.value}
+                </div>
+                {c.delta && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">vs prior {c.delta}</p>
+                )}
+              </CardContent>
+            </Card>
+          );
+          return c.href ? (
+            <Link key={c.label} href={c.href} className="block hover:opacity-90 transition-opacity">
+              {inner}
+            </Link>
+          ) : (
+            <div key={c.label}>{inner}</div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 function SpikeAlertsPanel() {
   const { data: alertsData, isLoading } = useSpikeAlerts();
   const dismissAlert = useDismissSpikeAlert();
@@ -305,7 +422,7 @@ function HealthLights() {
             Health
           </CardTitle>
           <Button variant="ghost" size="sm" className="h-7 text-xs cursor-pointer" asChild>
-            <Link href="/health">Open →</Link>
+            <Link href="/operations/health">Open →</Link>
           </Button>
         </div>
       </CardHeader>
@@ -550,8 +667,8 @@ export default function Overview() {
       {!hasActiveTemplate && <NoActiveTemplateBanner />}
 
       <PageHeader
-        title="Today"
-        subtitle="What needs a hand right now. User tools stay on this page — spikes, wallets, and account totals are not gone."
+        title="Overview"
+        subtitle="Command Center — health, money, and what needs attention. Live ops stay below."
         actions={
           <div className="flex items-center gap-3">
             <div className="inline-flex items-center rounded-md border border-border bg-card p-0.5">
@@ -580,6 +697,8 @@ export default function Overview() {
           </div>
         }
       />
+
+      <CommandKpiStrip />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card className="border-primary/40 shadow-none">
@@ -725,7 +844,7 @@ export default function Overview() {
           { href: "/users", label: "Users", icon: Users },
           { href: "/partners", label: "Partners", icon: Handshake },
           { href: "/all-agents", label: "All agents", icon: Activity },
-          { href: "/emails", label: "Emails", icon: Mail },
+          { href: "/operations/emails", label: "Emails", icon: Mail },
           { href: "/recharges", label: "Recharges", icon: Wallet },
           { href: "/platform", label: "Failed calls", icon: AlertCircle },
         ].map((a) => (

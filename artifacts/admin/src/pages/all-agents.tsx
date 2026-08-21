@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { adminFetch, formatAdminError } from "@/lib/api";
 import { Search, Copy, Check, ExternalLink, RefreshCw, Bot, User, Sparkles } from "lucide-react";
+import { SectionSubNav } from "@/components/section-subnav";
+import { CUSTOMERS_TABS } from "@/lib/nav-config";
 
 type AdminAgentRow = {
   id: number;
@@ -139,6 +141,7 @@ export default function AllAgentsPage() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={CUSTOMERS_TABS} />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">All Agents</h1>

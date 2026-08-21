@@ -4,7 +4,7 @@ import { randomBytes } from "crypto";
 import { eq, desc, and, or, sql, gte, gt, lte, isNull, inArray } from "drizzle-orm";
 import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callExecutionsTable, canonicalizeCallerKey, humanPhone, resolveCallerKey } from "@workspace/db";
 import { computeProRataDebitCents } from "../services/call-billing.js";
-import { getFlatRateCentsPerMin, resolveAgentBillingMode, resolveOwnTelephonyDiscount } from "../services/minute-rates.js";
+import { resolveAgentBillingMode, resolveOwnTelephonyDiscount, resolveBillingRateCentsPerMin } from "../services/minute-rates.js";
 import { resolvePartnerBilling, creditPartnerSpreadOnCall } from "../services/partner-billing.js";
 import {
   InitiateCallBody,
@@ -222,7 +222,7 @@ router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Pro
       // Partner-managed clients are billed at their partner-set rate — the
       // credit-seconds estimate must use the same rate as the final debit.
       const agentRate = (await resolvePartnerBilling(agent.userId))?.clientRateCentsPerMin
-        ?? Math.max(0, getFlatRateCentsPerMin(billingMode) - await resolveOwnTelephonyDiscount(agent.userId, agent));
+        ?? Math.max(0, (await resolveBillingRateCentsPerMin(billingMode)) - await resolveOwnTelephonyDiscount(agent.userId, agent));
       const creditSeconds = agentRate > 0
         ? Math.floor((user.walletBalanceCents / agentRate) * 60)
         : 0;
@@ -1136,7 +1136,7 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
   const partnerBilling = alreadyBilled ? null : await resolvePartnerBilling(callClerkId);
   const ownTelephonyDiscount = alreadyBilled ? 0 : await resolveOwnTelephonyDiscount(callClerkId, agentForBilling ?? {});
   const rateCentsPerMin = partnerBilling?.clientRateCentsPerMin
-    ?? Math.max(0, getFlatRateCentsPerMin(billingMode) - ownTelephonyDiscount);
+    ?? Math.max(0, (await resolveBillingRateCentsPerMin(billingMode)) - ownTelephonyDiscount);
   const modeLabel = partnerBilling ? "partner" : billingMode === "managed" ? "managed" : "BYOP";
   const rateLabel = `₹${(rateCentsPerMin / 100).toFixed(2)}/min (${modeLabel})`;
   // Per-second pro-rata (never ceil to a full minute). 9s @ ₹5/min → ₹0.75.

@@ -3,7 +3,7 @@ import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, leadNotesTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, eventTypesTable, scheduledCallbacksTable, campaignsTable, executionLogsTable, squadsTable, squadRunsTable, phoneNumbersTable } from "@workspace/db";
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
 import { computeProRataDebitCents, isNonBillableCallStatus } from "../services/call-billing.js";
-import { getFlatRateCentsPerMin, resolveAgentBillingMode, resolveOwnTelephonyDiscount } from "../services/minute-rates.js";
+import { resolveAgentBillingMode, resolveOwnTelephonyDiscount, resolveBillingRateCentsPerMin } from "../services/minute-rates.js";
 import { resolvePartnerBilling, creditPartnerSpreadOnCall } from "../services/partner-billing.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlockEx } from "./kb-retrieval.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
@@ -3297,7 +3297,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             // credited to the partner after the debit below.
             const partnerBilling  = await resolvePartnerBilling(sessionCallUserId);
             const rateCentsPerMin = partnerBilling?.clientRateCentsPerMin
-              ?? Math.max(0, getFlatRateCentsPerMin(billingMode) - await resolveOwnTelephonyDiscount(sessionCallUserId, ag));
+              ?? Math.max(0, (await resolveBillingRateCentsPerMin(billingMode)) - await resolveOwnTelephonyDiscount(sessionCallUserId, ag));
             const modeLabel       = partnerBilling ? "partner" : billingMode === "managed" ? "managed" : "BYOP";
             const rateLabel       = `₹${(rateCentsPerMin / 100).toFixed(2)}/min (${modeLabel})`;
             const debitCents      = computeProRataDebitCents(durationSeconds, rateCentsPerMin);

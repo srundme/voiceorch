@@ -7,7 +7,7 @@ import { formatDistanceToNow, format } from "date-fns";
 import { RefreshCw, Rocket, XCircle, AlertTriangle, CheckCircle2, Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionSubNav } from "@/components/section-subnav";
-import { OPS_TABS } from "@/lib/nav-config";
+import { OPERATIONS_TABS } from "@/lib/nav-config";
 
 /* ── types ─────────────────────────────────────────────────────────────── */
 
@@ -99,12 +99,12 @@ export default function DeploymentsPage() {
 
   return (
     <div className="space-y-6">
-      <SectionSubNav tabs={OPS_TABS} />
+      <SectionSubNav tabs={OPERATIONS_TABS} />
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Deployment Log</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Deployments</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Railway events received via webhook — auto-refreshes every 30 s
+            Current version history · Railway events · auto-refreshes every 30s
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>

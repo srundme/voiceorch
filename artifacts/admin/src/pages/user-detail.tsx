@@ -20,8 +20,11 @@ import {
   useSendEmailToUser,
   usePlatformEmails,
   useSetUserUnlimitedTrial,
+  useUser360,
 } from "@/hooks/use-admin-api";
 import { formatCentsToDollars, formatDuration, adminFetch } from "@/lib/api";
+import { SectionSubNav } from "@/components/section-subnav";
+import { CUSTOMERS_TABS } from "@/lib/nav-config";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,6 +58,7 @@ function StatusBadge({ status }: { status?: string }) {
 export default function UserDetail() {
   const { clerkId } = useParams<{ clerkId: string }>();
   const { data, isLoading } = useUserDetail(clerkId || "");
+  const { data: user360 } = useUser360(clerkId || "");
   const { toast } = useToast();
 
   const [tab, setTab] = useState<Tab>("overview");
@@ -258,6 +262,7 @@ export default function UserDetail() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={CUSTOMERS_TABS} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start gap-4">
         <Button variant="outline" size="icon" asChild className="shrink-0">
@@ -267,6 +272,12 @@ export default function UserDetail() {
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight truncate">{user.email}</h1>
             <StatusBadge status={user.status} />
+            {user360?.saas?.lifecycle && (
+              <Badge variant="outline" className="text-[10px]">{user360.saas.lifecycle}</Badge>
+            )}
+            {user360?.saas?.activation && (
+              <Badge variant="secondary" className="text-[10px]">Activation: {user360.saas.activation}</Badge>
+            )}
             {partner && (
               <Badge
                 variant="outline"
@@ -402,6 +413,87 @@ export default function UserDetail() {
       {/* ── Overview Tab ─────────────────────────────────────────── */}
       {tab === "overview" && (
         <div className="space-y-6">
+          {user360?.saas && (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Lifetime revenue</CardTitle></CardHeader>
+                <CardContent className="text-xl font-bold font-mono">{formatCentsToDollars(user360.saas.lifetimeRevenuePaise ?? 0)}</CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Lifetime cost</CardTitle></CardHeader>
+                <CardContent className="text-xl font-bold font-mono text-muted-foreground">{formatCentsToDollars(user360.saas.lifetimeCostPaise ?? 0)}</CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Lifetime profit</CardTitle></CardHeader>
+                <CardContent className={`text-xl font-bold font-mono ${(user360.saas.lifetimeProfitPaise ?? 0) < 0 ? "text-destructive" : "text-emerald-600"}`}>
+                  {formatCentsToDollars(user360.saas.lifetimeProfitPaise ?? 0)}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Calls</CardTitle></CardHeader>
+                <CardContent className="text-xl font-bold font-mono">{user360.saas.calls ?? 0}</CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Minutes</CardTitle></CardHeader>
+                <CardContent className="text-xl font-bold font-mono">{Math.round(user360.saas.minutes ?? 0)}</CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Last active</CardTitle></CardHeader>
+                <CardContent className="text-sm font-mono">
+                  {user360.saas.lastActiveAt ? format(new Date(user360.saas.lastActiveAt), "yyyy-MM-dd HH:mm") : "—"}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {user360?.timeline && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Activation timeline</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ol className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {user360.timeline.map((step: { stage: string; at: string | null; done: boolean }) => (
+                    <li key={step.stage} className="flex items-start gap-2 text-sm">
+                      {step.done ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-muted-foreground/40 mt-0.5 shrink-0" />
+                      )}
+                      <div>
+                        <div className={step.done ? "font-medium" : "text-muted-foreground"}>{step.stage}</div>
+                        <div className="text-[11px] text-muted-foreground font-mono">
+                          {step.at ? format(new Date(step.at), "yyyy-MM-dd HH:mm") : "Not yet"}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </CardContent>
+            </Card>
+          )}
+
+          {user360?.recentActivity?.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Recent activity</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {user360.recentActivity.slice(0, 12).map((a: any, i: number) => (
+                  <div key={i} className="flex justify-between gap-3 text-xs border-b border-border/50 pb-2 last:border-0">
+                    <div className="min-w-0">
+                      <span className="font-mono text-muted-foreground mr-2">{a.eventType}</span>
+                      <span className="truncate">{a.description}</span>
+                    </div>
+                    <span className="shrink-0 text-muted-foreground font-mono">
+                      {a.createdAt ? format(new Date(a.createdAt), "MMM d HH:mm") : ""}
+                    </span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
               <CardHeader className="pb-2">

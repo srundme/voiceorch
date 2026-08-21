@@ -16,6 +16,8 @@ import {
 import { Mic2, Save, RefreshCw, Loader2, Search, Info, Play, Square, AlertTriangle, KeyRound } from "lucide-react";
 import { Link } from "wouter";
 import { formatApiError } from "@/lib/format-api-error";
+import { SectionSubNav } from "@/components/section-subnav";
+import { PRODUCT_TABS } from "@/lib/nav-config";
 
 export default function Voices() {
   const { data, isLoading, refetch, isRefetching, isError, error } = useAdminCartesiaVoices();
@@ -168,11 +170,12 @@ export default function Voices() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={PRODUCT_TABS} />
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Voice Whitelist</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Voices</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Select which Cartesia voices are available to users in the agent wizard and settings.
+            List, unlist, and preview Cartesia voices available in the user builder.
           </p>
         </div>
         <div className="flex items-center gap-2">
