@@ -81,7 +81,6 @@ import AutomaticCallsPage   from "@/pages/automatic-calls/index";
 import AutomaticCallsWizardPage from "@/pages/automatic-calls/wizard";
 import AutomaticCallDetailPage  from "@/pages/automatic-calls/[id]";
 import TransfersPage        from "@/pages/transfers";
-import VoicesPage           from "@/pages/voices";
 import TestSimulatorPage    from "@/pages/test-simulator";
 import VibePage             from "@/pages/vibe";
 import HomePage             from "@/pages/home/index";
@@ -563,7 +562,9 @@ function AppRoutes() {
 
         <Route path="/app/connections" component={ConnectionsPage} />
         {/* WhatsApp page kept for Connections hub deep-link; removed from primary nav */}
-        <Route path="/app/whatsapp" component={WhatsAppPage} />
+        <Route path="/app/whatsapp">
+          <WhatsAppPage />
+        </Route>
 
         {/* ── Webhooks → api-keys?tab=webhooks redirect ── */}
         <Route path="/app/webhooks">
