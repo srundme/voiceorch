@@ -42,6 +42,7 @@ import {
   normalizeAgentWaTemplates,
   upsertAgentWaTemplates,
 } from "../services/whatsapp/agent-templates.js";
+import { isUsableWhatsappTemplateStatus } from "../services/whatsapp/meta.js";
 
 const router: IRouter = Router();
 
@@ -489,12 +490,12 @@ function toChannelCatalog(list: Array<Record<string, any>>): WaTemplateCatalogEn
     const name = typeof t.name === "string" ? t.name : null;
     const language = typeof t.language === "string" ? t.language : null;
     if (!name || !language) continue;
-    const status = String(t.status ?? "unknown").toUpperCase();
-    if (status !== "APPROVED" && status !== "PLATFORM_MANAGED") continue;
+    const status = String(t.status ?? "").toUpperCase();
+    if (!isUsableWhatsappTemplateStatus(status)) continue;
     out.push({
       name,
       language,
-      status,
+      status: status || "APPROVED",
       paramCount: countBodyParams(t.components),
       category: typeof t.category === "string" ? t.category : null,
     });
@@ -682,11 +683,15 @@ router.get("/whatsapp/agents/:agentId/templates", requireAuth, async (req, res):
   }
   const channel = await getUserChannel(userId);
   const templates = await loadAgentWaTemplates(userId, agentId);
+  let catalog = Array.isArray(channel?.templateCatalog) ? channel!.templateCatalog : [];
+  if (channel && catalog.length === 0 && channel.mode === "own" && channel.vobizChannelId) {
+    catalog = await refreshOwnChannelTemplateCatalog(channel, userId).catch(() => catalog);
+  }
   res.json({
     agentId,
     templates,
     needsTemplates: !hasAgentTemplatePicks(templates),
-    templateCatalog: Array.isArray(channel?.templateCatalog) ? channel!.templateCatalog : [],
+    templateCatalog: catalog,
     channelMode: channel?.mode ?? null,
   });
 });

@@ -3,7 +3,7 @@
  * Used in agent WhatsApp template picks and can share option JSON with /app/whatsapp.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -121,6 +121,7 @@ export function AgentWhatsappTemplatePicks({
     const t = initialTemplates ?? {};
     return Object.fromEntries(SLOTS.map(({ key }) => [key, choiceValue(t[key])]));
   });
+  const [refreshedCatalog, setRefreshedCatalog] = useState<WaCatalogEntry[] | null>(null);
 
   const nativeQ = useQuery({
     queryKey: ["wa-agent-templates", agentId],
@@ -133,9 +134,10 @@ export function AgentWhatsappTemplatePicks({
   });
 
   const catalog = useMemo(() => {
+    if (refreshedCatalog && refreshedCatalog.length) return refreshedCatalog;
     if (nativeMode) return nativeQ.data?.templateCatalog ?? initialCatalog ?? [];
     return initialCatalog ?? [];
-  }, [nativeMode, nativeQ.data?.templateCatalog, initialCatalog]);
+  }, [nativeMode, nativeQ.data?.templateCatalog, initialCatalog, refreshedCatalog]);
 
   useEffect(() => {
     const t = nativeMode ? (nativeQ.data?.templates ?? {}) : (initialTemplates ?? {});
@@ -179,20 +181,34 @@ export function AgentWhatsappTemplatePicks({
   });
 
   const refresh = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<{ templateCatalog?: WaCatalogEntry[] }> => {
       if (nativeMode) {
-        await customFetch(`${API}/whatsapp/templates/sync`, { method: "POST" }).catch(() => null);
-        return customFetch(`${API}/whatsapp/templates`);
+        const syncErr = await customFetch(`${API}/whatsapp/templates/sync`, { method: "POST" })
+          .then(() => null)
+          .catch((err: unknown) => err);
+        const listed = await customFetch<{ templateCatalog?: WaCatalogEntry[] }>(`${API}/whatsapp/templates`);
+        const catalog = Array.isArray(listed.templateCatalog) ? listed.templateCatalog : [];
+        if (!catalog.length && syncErr) throw syncErr;
+        return listed;
       }
       if (!connectionId) throw new Error("Save the Meta connection first, then refresh templates");
-      return customFetch(`${API}/whatsapp/meta/templates`, {
+      return customFetch<{ templateCatalog?: WaCatalogEntry[] }>(`${API}/whatsapp/meta/templates`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ connectionId }),
       });
     },
-    onSuccess: () => {
-      toast({ title: "Templates refreshed" });
+    onSuccess: (data) => {
+      const next = Array.isArray(data?.templateCatalog) ? data.templateCatalog : [];
+      setRefreshedCatalog(next);
+      toast({
+        title: next.length
+          ? `Loaded ${next.length} template${next.length === 1 ? "" : "s"}`
+          : "No sendable templates found",
+        description: next.length
+          ? undefined
+          : "They must be APPROVED in Meta. Recheck Phone Number ID + token (and WABA ID if you have it) on Connections, then Refresh.",
+      });
       void qc.invalidateQueries({ queryKey: ["builder-whatsapp-connections", agentId] });
       void qc.invalidateQueries({ queryKey: ["builder-whatsapp-channel", agentId] });
       void qc.invalidateQueries({ queryKey: ["wa-agent-templates", agentId] });
@@ -201,6 +217,19 @@ export function AgentWhatsappTemplatePicks({
       toast({ title: "Refresh failed", description: formatApiError(err), variant: "destructive" });
     },
   });
+
+  const autoTried = useRef(false);
+  useEffect(() => {
+    if (autoTried.current) return;
+    if (nativeMode && nativeQ.isLoading) return;
+    const existing = (nativeMode ? nativeQ.data?.templateCatalog : initialCatalog) ?? [];
+    if (existing.length > 0) return;
+    if (!nativeMode && !connectionId) return;
+    autoTried.current = true;
+    refresh.mutate();
+    // Intentionally once on first empty catalog.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nativeMode, nativeQ.isLoading, nativeQ.data?.templateCatalog, initialCatalog, connectionId]);
 
   const picks = payload();
   const needsTemplates = slotDefs.some(({ key }) => {

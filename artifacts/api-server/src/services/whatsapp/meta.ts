@@ -53,47 +53,123 @@ function bspError(json: unknown): string | null {
   return null;
 }
 
-/** Fetch approved templates from the user's WABA. Throws with a readable message. */
+function languageCode(raw: unknown): string {
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  if (raw && typeof raw === "object" && "code" in raw) {
+    const code = (raw as { code?: unknown }).code;
+    if (typeof code === "string") return code.trim();
+  }
+  return "";
+}
+
+function extractTemplateRows(json: unknown): Array<Record<string, unknown>> {
+  if (!json || typeof json !== "object") return [];
+  const j = json as Record<string, unknown>;
+  const list = j["data"] ?? j["templates"] ?? j["message_templates"] ?? j["items"] ?? j["results"] ?? j["records"];
+  if (Array.isArray(list)) return list as Array<Record<string, unknown>>;
+  return [];
+}
+
+function bodyParamCount(components: unknown, fallbackText?: string): number {
+  const body = Array.isArray(components)
+    ? components.find((c) => String((c as { type?: string })?.type ?? "").toUpperCase() === "BODY")
+    : null;
+  const text = typeof (body as { text?: string } | null)?.text === "string"
+    ? (body as { text: string }).text
+    : (fallbackText ?? "");
+  const params = new Set<string>();
+  for (const m of text.matchAll(/\{\{\s*(\d+)\s*\}\}/g)) params.add(m[1]!);
+  return params.size;
+}
+
+/** Statuses we can send. Empty/unknown is kept — many BSP panels omit status on approved templates. */
+export function isUsableWhatsappTemplateStatus(status: string): boolean {
+  const s = (status ?? "").trim().toUpperCase().replace(/\s+/g, "_");
+  if (!s || s === "UNKNOWN" || s === "N/A" || s === "NA") return true;
+  return s === "APPROVED" || s === "ACTIVE" || s === "ENABLED" || s === "PLATFORM_MANAGED";
+}
+
+/** Map fetch results to the persisted catalog (sendable templates only). */
+export function toTemplateCatalog(
+  templates: MetaTemplateInfo[],
+): Array<{ name: string; language: string; status: string; paramCount: number; category?: string | null; bodyPreview?: string }> {
+  return templates
+    .filter((t) => isUsableWhatsappTemplateStatus(t.status))
+    .map((t) => ({
+      name: t.name,
+      language: t.language,
+      status: t.status || "APPROVED",
+      paramCount: t.paramCount,
+      category: t.category,
+      bodyPreview: t.bodyPreview,
+    }));
+}
+
+/** When the user only pasted Phone Number ID + token, look up the WABA id. */
+export async function resolveWabaIdFromPhoneNumber(
+  accessToken: string,
+  phoneNumberId: string,
+  apiBase?: string | null,
+): Promise<string | null> {
+  const id = phoneNumberId.trim();
+  if (!id) return null;
+  try {
+    const res = await fetch(
+      `${resolveApiBase(apiBase)}/${encodeURIComponent(id)}?fields=whatsapp_business_account`,
+      { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(15_000) },
+    );
+    const json = (await res.json().catch(() => null)) as {
+      whatsapp_business_account?: { id?: string } | string;
+    } | null;
+    if (!res.ok) return null;
+    const waba = json?.whatsapp_business_account;
+    if (typeof waba === "string" && waba.trim()) return waba.trim();
+    if (waba && typeof waba === "object" && typeof waba.id === "string" && waba.id.trim()) return waba.id.trim();
+  } catch (err) {
+    logger.warn({ err, phoneNumberId: id }, "whatsapp-meta: WABA lookup from phone id failed");
+  }
+  return null;
+}
+
+/** Fetch templates from the user's WABA (or a Graph-compatible BSP). Throws with a readable message. */
 export async function fetchMetaTemplates(
   accessToken: string,
   wabaId: string,
   apiBase?: string | null,
 ): Promise<MetaTemplateInfo[]> {
   const out: MetaTemplateInfo[] = [];
+  const base = resolveApiBase(apiBase);
   let url: string | null =
-    `${resolveApiBase(apiBase)}/${encodeURIComponent(wabaId.trim())}/message_templates` +
+    `${base}/${encodeURIComponent(wabaId.trim())}/message_templates` +
     `?fields=name,status,language,category,components&limit=100`;
 
-  // Paginate defensively (cap 5 pages / 500 templates)
   for (let page = 0; url && page < 5; page++) {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: AbortSignal.timeout(15_000),
     });
     const json = (await res.json().catch(() => null)) as {
-      data?: Array<{
-        name?: string; status?: string; language?: string; category?: string;
-        components?: Array<{ type?: string; text?: string }>;
-      }>;
       paging?: { next?: string };
     } | null;
     if (!res.ok) throw new Error(graphError(json, res.status));
     const bsp = bspError(json);
     if (bsp) throw new Error(bsp);
 
-    for (const t of json?.data ?? []) {
-      if (!t.name || !t.language) continue;
-      const body = (t.components ?? []).find((c) => (c.type ?? "").toUpperCase() === "BODY");
+    for (const t of extractTemplateRows(json)) {
+      const name = typeof t["name"] === "string" ? t["name"].trim() : "";
+      const language = languageCode(t["language"]);
+      if (!name || !language) continue;
+      const components = t["components"];
+      const body = Array.isArray(components)
+        ? (components as Array<{ type?: string; text?: string }>).find((c) => (c.type ?? "").toUpperCase() === "BODY")
+        : null;
       const bodyText = body?.text ?? "";
-      // Count {{1}}, {{2}}… placeholders in the body
-      const params = new Set<string>();
-      for (const m of bodyText.matchAll(/\{\{\s*(\d+)\s*\}\}/g)) params.add(m[1]!);
       out.push({
-        name: t.name,
-        language: t.language,
-        status: (t.status ?? "").toUpperCase(),
-        category: t.category ?? null,
-        paramCount: params.size,
+        name,
+        language,
+        status: String(t["status"] ?? "").toUpperCase(),
+        category: typeof t["category"] === "string" ? t["category"] : null,
+        paramCount: bodyParamCount(components, bodyText),
         bodyPreview: bodyText.slice(0, 160),
       });
     }
@@ -229,20 +305,4 @@ export function resolveMetaTemplate(
     // silently failing when the user only linked e.g. booking_confirmed.
     ?? Object.values(metaTemplates).find((v) => v?.name && v.language) ?? null
   );
-}
-
-/** Map Meta fetch results to the persisted catalog shape (APPROVED only). */
-export function toTemplateCatalog(
-  templates: MetaTemplateInfo[],
-): Array<{ name: string; language: string; status: string; paramCount: number; category?: string | null; bodyPreview?: string }> {
-  return templates
-    .filter((t) => t.status === "APPROVED")
-    .map((t) => ({
-      name: t.name,
-      language: t.language,
-      status: t.status,
-      paramCount: t.paramCount,
-      category: t.category,
-      bodyPreview: t.bodyPreview,
-    }));
 }

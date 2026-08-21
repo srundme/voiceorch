@@ -67,12 +67,20 @@ describe("normalizeAgentWaTemplates / hasAgentTemplatePicks", () => {
 });
 
 describe("toTemplateCatalog", () => {
-  it("keeps only APPROVED templates", () => {
+  it("keeps APPROVED and omits PENDING", () => {
     const list: MetaTemplateInfo[] = [
       { name: "a", language: "en", status: "APPROVED", category: "UTILITY", paramCount: 1, bodyPreview: "hi" },
       { name: "b", language: "en", status: "PENDING", category: "UTILITY", paramCount: 0, bodyPreview: "" },
     ];
     expect(toTemplateCatalog(list)).toHaveLength(1);
     expect(toTemplateCatalog(list)[0]!.name).toBe("a");
+  });
+
+  it("keeps templates when BSP/Meta omit status", () => {
+    const list: MetaTemplateInfo[] = [
+      { name: "hello", language: "en_US", status: "", category: null, paramCount: 0, bodyPreview: "" },
+    ];
+    expect(toTemplateCatalog(list)).toHaveLength(1);
+    expect(toTemplateCatalog(list)[0]!.status).toBe("APPROVED");
   });
 });

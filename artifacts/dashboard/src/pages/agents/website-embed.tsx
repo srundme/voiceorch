@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Code2, Copy, ExternalLink, Globe, Loader2, RefreshCw } from "lucide-react";
 import { ApiError, customFetch } from "@workspace/api-client-react";
@@ -71,15 +71,9 @@ export function AgentWebsiteEmbedPanel({
 
   const embedQuery = useQuery({
     queryKey: qk,
-    queryFn: async () => {
-      try {
-        return await customFetch<EmbedPayload>(`${DASH_API}/agents/${agentId}/webcall-links/embed`);
-      } catch (err) {
-        if (err instanceof ApiError && err.status === 404) return null;
-        throw err;
-      }
-    },
+    queryFn: () => customFetch<EmbedPayload>(`${DASH_API}/agents/${agentId}/webcall-links/embed`),
     enabled: Number.isFinite(agentId) && agentId > 0,
+    retry: (count, err) => (err instanceof ApiError && err.status === 404 ? false : count < 2),
   });
 
   const createEmbed = useMutation({
@@ -89,14 +83,28 @@ export function AgentWebsiteEmbedPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ regenerate }),
       }),
-    onSuccess: (data) => {
+    onSuccess: (data, regenerate) => {
       qc.setQueryData(qk, data);
-      toast({ title: data ? "Embed ready" : "Created", description: "Paste the snippet on your website." });
+      toast({
+        title: regenerate ? "New embed token" : "Embed ready",
+        description: "Copy a snippet below onto your website.",
+      });
     },
     onError: (err: unknown) => {
       toast({ title: "Could not create embed", description: formatApiError(err), variant: "destructive" });
     },
   });
+
+  // Older APIs 404 until POST — mint once so copy blocks always appear.
+  const autoMinted = useRef(false);
+  useEffect(() => {
+    if (autoMinted.current) return;
+    if (embedQuery.isLoading || createEmbed.isPending || embedQuery.data) return;
+    if (embedQuery.error instanceof ApiError && embedQuery.error.status === 404) {
+      autoMinted.current = true;
+      createEmbed.mutate(false);
+    }
+  }, [embedQuery.isLoading, embedQuery.data, embedQuery.error, createEmbed]);
 
   const embed = embedQuery.data ?? null;
   const displayName = (agentName || embed?.agentName || "Voice assistant").trim() || "Voice assistant";
@@ -126,7 +134,7 @@ export function AgentWebsiteEmbedPanel({
         or a “talk to us” link. Calls use your wallet minutes, same as Live test.
       </p>
 
-      {embedQuery.isLoading ? (
+      {embedQuery.isLoading || createEmbed.isPending ? (
         <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
           <Loader2 className="size-3.5 animate-spin" /> Loading embed…
         </div>

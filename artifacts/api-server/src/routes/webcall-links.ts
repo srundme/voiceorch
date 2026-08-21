@@ -123,7 +123,30 @@ async function loadOwnedAgent(agentId: number, clerkId: string) {
   return agent;
 }
 
-/** GET — current website-embed link for this agent (404 if none yet). */
+async function listAgentWebcallLinks(agentId: number, clerkId: string) {
+  return db
+    .select()
+    .from(webcallLinksTable)
+    .where(and(eq(webcallLinksTable.agentId, agentId), eq(webcallLinksTable.userId, clerkId)))
+    .orderBy(desc(webcallLinksTable.createdAt));
+}
+
+async function mintWebsiteEmbedLink(agentId: number, clerkId: string) {
+  const [row] = await db
+    .insert(webcallLinksTable)
+    .values({
+      agentId,
+      userId: clerkId,
+      token: mintWebcallLinkToken(),
+      label: WEBSITE_EMBED_LABEL,
+      purpose: WEBSITE_EMBED_PURPOSE,
+      requireCamera: false,
+    })
+    .returning();
+  return row!;
+}
+
+/** GET — website-embed link for this agent. Creates one if the agent has none yet. */
 router.get("/agents/:agentId/webcall-links/embed", requireAuth, async (req, res): Promise<void> => {
   const agentId = parseInt(String(req.params.agentId), 10);
   const clerkId = (req as any).clerkUserId as string;
@@ -136,15 +159,23 @@ router.get("/agents/:agentId/webcall-links/embed", requireAuth, async (req, res)
     res.status(404).json({ error: "Agent not found" });
     return;
   }
-  const rows = await db
-    .select()
-    .from(webcallLinksTable)
-    .where(and(eq(webcallLinksTable.agentId, agentId), eq(webcallLinksTable.userId, clerkId)))
-    .orderBy(desc(webcallLinksTable.createdAt));
-  const link = rows.find((r) => isWebsiteEmbedLink(r) && r.active) ?? rows.find((r) => isWebsiteEmbedLink(r));
+  const rows = await listAgentWebcallLinks(agentId, clerkId);
+  let link = rows.find((r) => isWebsiteEmbedLink(r) && r.active) ?? rows.find((r) => isWebsiteEmbedLink(r));
   if (!link) {
-    res.status(404).json({ error: "No website embed yet" });
-    return;
+    try {
+      link = await mintWebsiteEmbedLink(agentId, clerkId);
+    } catch (err) {
+      logger.error({ err, agentId }, "Failed to mint website embed link");
+      res.status(500).json({ error: "Failed to create embed" });
+      return;
+    }
+  } else if (!link.active) {
+    const [reactivated] = await db
+      .update(webcallLinksTable)
+      .set({ active: true })
+      .where(eq(webcallLinksTable.id, link.id))
+      .returning();
+    link = reactivated ?? link;
   }
   res.json(embedPayload(link, agent.id, agent.name ?? "Voice assistant", publicOrigin(req)));
 });
@@ -167,11 +198,7 @@ router.post("/agents/:agentId/webcall-links/embed", requireAuth, async (req, res
   }
 
   const regenerate = (req.body as { regenerate?: unknown } | undefined)?.regenerate === true;
-  const rows = await db
-    .select()
-    .from(webcallLinksTable)
-    .where(and(eq(webcallLinksTable.agentId, agentId), eq(webcallLinksTable.userId, clerkId)))
-    .orderBy(desc(webcallLinksTable.createdAt));
+  const rows = await listAgentWebcallLinks(agentId, clerkId);
   const existing = rows.find((r) => isWebsiteEmbedLink(r));
 
   try {
@@ -193,19 +220,9 @@ router.post("/agents/:agentId/webcall-links/embed", requireAuth, async (req, res
       await db.delete(webcallLinksTable).where(eq(webcallLinksTable.id, existing.id));
     }
 
-    const [row] = await db
-      .insert(webcallLinksTable)
-      .values({
-        agentId,
-        userId: clerkId,
-        token: mintWebcallLinkToken(),
-        label: WEBSITE_EMBED_LABEL,
-        purpose: WEBSITE_EMBED_PURPOSE,
-        requireCamera: false,
-      })
-      .returning();
+    const row = await mintWebsiteEmbedLink(agentId, clerkId);
     res.status(existing && regenerate ? 200 : 201).json(
-      embedPayload(row!, agent.id, agent.name ?? "Voice assistant", publicOrigin(req)),
+      embedPayload(row, agent.id, agent.name ?? "Voice assistant", publicOrigin(req)),
     );
   } catch (err) {
     logger.error({ err, agentId }, "Failed to create website embed link");

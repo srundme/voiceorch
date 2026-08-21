@@ -1033,6 +1033,16 @@ function OverviewTab({
             </BuilderPanel>
           )}
 
+          {agent?.id != null && (
+            <BuilderPanel
+              title="Website embed"
+              icon={<Globe />}
+              description="Copy this onto your site so visitors can webcall this agent in the browser"
+            >
+              <AgentWebsiteEmbedPanel agentId={agent.id} agentName={agent.name ?? ""} />
+            </BuilderPanel>
+          )}
+
           {/* ── Transcriber / Language dialog ── */}
           <EditConfigDialog
             open={openSection === "transcriber"}
