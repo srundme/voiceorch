@@ -730,7 +730,7 @@ function DangerZoneCard() {
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-sm text-muted-foreground">
                 <p>
-                  You are about to permanently delete your data from SnapServe. Once completed, this action cannot be reversed. Appropriate administrators will be notified of the deletion.
+                This action cannot be reversed, You are about to permanently delete your data from SnapServe !!
                 </p>
                 <p>
                   Enter <span className="font-semibold text-foreground">DELETE</span> to confirm this action.
