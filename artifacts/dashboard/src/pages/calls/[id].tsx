@@ -1639,16 +1639,8 @@ export function CallDetailContent({
               <TabsContent value="summary" className="flex-1 overflow-auto mt-2 min-h-0">
                 <Card className="h-full flex flex-col">
                   <CardHeader className="shrink-0 pb-3">
-                    <CardTitle className="flex items-center justify-between text-sm">
-                      <span className="flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-primary" /> Conversation Summary
-                      </span>
-                      {summarizationEnabled && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          Auto-summarization ON
-                        </span>
-                      )}
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <Sparkles className="h-4 w-4 text-primary" /> Conversation Summary
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="flex-1 overflow-auto min-h-0">
