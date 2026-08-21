@@ -165,9 +165,9 @@ async function resolveManagedKey(provider: string): Promise<string | null> {
   if (provider === "sarvam") {
     return (await getSetting("managed_sarvam_key"))?.trim() || (process.env["SARVAM_API_KEY"] ?? "").trim() || null;
   }
-  // qwen / groq — both share managed_qwen_key (Groq-hosted Qwen), with the
-  // GROQ_API_KEY env as a runtime fallback.
+  // qwen / groq — checks managed_groq_key, managed_qwen_key, or GROQ_API_KEY env.
   return (
+    (await getSetting("managed_groq_key"))?.trim() ||
     (await getSetting("managed_qwen_key"))?.trim() ||
     (process.env["GROQ_API_KEY"] ?? "").trim() ||
     null
