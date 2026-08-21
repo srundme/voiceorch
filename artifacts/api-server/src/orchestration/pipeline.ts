@@ -6621,7 +6621,7 @@ export class OrchestrationPipeline implements VoiceSession {
     } else if (tool.type === "squad_followup") {
       return await this.executeSquadFollowup(args);
     } else if (tool.type === "webhook") {
-      await this.executeWebhookTool(tool, args);
+      return await this.executeWebhookTool(tool, args);
     } else if (tool.type === "send_sms") {
       await this.executeSendSms(tool, args);
     } else if (tool.type === "send_email") {
@@ -6733,8 +6733,8 @@ export class OrchestrationPipeline implements VoiceSession {
     return null;
   }
 
-  private async executeWebhookTool(tool: AgentTool & { type: "webhook" }, args: Record<string, unknown>): Promise<void> {
-    await sharedExecuteWebhookTool(this.config.callId, tool, args);
+  private async executeWebhookTool(tool: AgentTool & { type: "webhook" }, args: Record<string, unknown>): Promise<string> {
+    return await sharedExecuteWebhookTool(this.config.callId, tool, args);
   }
 
   private async executeSendSms(tool: AgentTool & { type: "send_sms" }, _args: Record<string, unknown>): Promise<void> {

@@ -1734,23 +1734,51 @@ export async function executeWebhookTool(
   try {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
+      "User-Agent": "SnapServe-VoiceAgent/1.0",
+      "ngrok-skip-browser-warning": "true",
       ...(tool.headers ?? {}),
     };
     if (tool.secret) headers["X-Webhook-Secret"] = tool.secret;
 
-    const resp = await fetch(tool.url, {
+    let targetUrl = tool.url;
+    if (tool.method === "GET" && args && Object.keys(args).length > 0) {
+      try {
+        const u = new URL(targetUrl);
+        for (const [k, v] of Object.entries(args)) {
+          if (v !== undefined && v !== null) {
+            u.searchParams.set(k, String(v));
+          }
+        }
+        targetUrl = u.toString();
+      } catch {
+        // if invalid URL for parsing, fallback to original
+      }
+    }
+
+    // Support both wrapped { args } and top-level fields for maximum developer compatibility
+    const requestBody =
+      tool.method === "POST"
+        ? JSON.stringify({
+            callId,
+            toolName: tool.name,
+            args,
+            ...args,
+          })
+        : undefined;
+
+    const resp = await fetch(targetUrl, {
       method: tool.method,
       headers,
-      body: tool.method === "POST" ? JSON.stringify({ callId, toolName: tool.name, args }) : undefined,
+      body: requestBody,
       signal: AbortSignal.timeout(8000),
     });
 
     if (!resp.ok) {
-      logger.warn({ callId, url: tool.url, status: resp.status }, "Webhook tool returned non-OK status");
+      logger.warn({ callId, url: targetUrl, status: resp.status }, "Webhook tool returned non-OK status");
       return `webhook_error: status=${resp.status}`;
     }
 
-    logger.info({ callId, url: tool.url, status: resp.status }, "Webhook tool executed successfully");
+    logger.info({ callId, url: targetUrl, status: resp.status }, "Webhook tool executed successfully");
 
     let body = "";
     try {
@@ -1758,7 +1786,7 @@ export async function executeWebhookTool(
     } catch {
       // ignore body read errors
     }
-    return body ? `webhook_result: ${body.slice(0, 500)}` : "webhook_success";
+    return body ? `webhook_result: ${body.slice(0, 2000)}` : "webhook_success";
   } catch (err) {
     logger.error({ callId, url: tool.url, err }, "Webhook tool execution failed");
     return "error: webhook tool failed to execute";

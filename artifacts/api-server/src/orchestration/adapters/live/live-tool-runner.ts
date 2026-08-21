@@ -243,8 +243,7 @@ async function executeLiveAgentTool(
       });
     }
     case "webhook":
-      await executeWebhookTool(callId, tool, args);
-      return undefined;
+      return await executeWebhookTool(callId, tool, args);
     case "end_call": {
       const goodbye = resolveGoodbyeMessage(tool.goodbyeMessage, agent.endCallPhrases);
       onAgentText(goodbye);
