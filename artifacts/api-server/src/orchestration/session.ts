@@ -3436,10 +3436,19 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 let sumLlmKey: string | null = llmProvs[0] ? decryptKey(llmProvs[0].apiKey) : null;
                 let sumLlmProvider = ag.llmProvider;
                 let sumLlmModel = ag.llmModel;
-                // Managed plan: no BYOP key → fall back to platform managed key (Groq)
+                // Managed plan: no BYOP key → fall back to platform managed Groq key
+                // Priority: (1) BYOP key, (2) admin managed_groq_key, (3) admin managed_qwen_key, (4) env GROQ_API_KEY
                 if (!sumLlmKey) {
-                  const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
-                  sumLlmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
+                  const platformRows = await db
+                    .select()
+                    .from(platformSettingsTable)
+                    .where(inArray(platformSettingsTable.key, ["managed_groq_key", "managed_qwen_key"]));
+                  const byKey = Object.fromEntries(platformRows.map((r) => [r.key, r.value?.trim() || ""]));
+                  sumLlmKey =
+                    byKey["managed_groq_key"] ||
+                    byKey["managed_qwen_key"] ||
+                    process.env["GROQ_API_KEY"] ||
+                    null;
                   if (sumLlmKey) {
                     sumLlmProvider = "groq";
                     sumLlmModel = "llama-3.3-70b-versatile";
