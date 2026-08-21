@@ -3475,7 +3475,16 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   if (summary) {
                     callSummary = summary;
                     await db.update(callsTable).set({ callSummary: summary }).where(eq(callsTable.id, session.callId));
+                  } else {
+                    logger.warn({ sessionId, agentId: ag.id }, "Post-call summary: LLM returned empty response, callSummary not saved");
                   }
+                } else {
+                  // summarizationEnabled is true but no LLM key found — log so admins can diagnose.
+                  logger.warn(
+                    { sessionId, agentId: ag.id, llmProvider: ag.llmProvider },
+                    "Post-call summary skipped: no LLM key available (no BYOP key for provider and no platform managed key). " +
+                    "Set GROQ_API_KEY env var or configure a provider key for this agent."
+                  );
                 }
               }
             } catch (summaryErr) {

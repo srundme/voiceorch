@@ -1370,9 +1370,9 @@ export function CallDetailContent({
     return parseToolEventsFromLines(lines);
   })();
 
-  const callSummary = (call as any).callSummary as string | null | undefined;
-  const summarizationEnabled = ((agent as any)?.agentConfig?.summarizationEnabled as boolean | undefined) ?? false;
-  const rawEval = (call as any).successEvaluation as string | null | undefined;
+  const callSummary = call.callSummary as string | null | undefined;
+  const summarizationEnabled = (agent as any)?.agentConfig?.summarizationEnabled === true;
+  const rawEval = call.successEvaluation as string | null | undefined;
   const evalVerdict = rawEval ? rawEval.split(/\r?\n/)[0]?.trim().toUpperCase() : undefined;
   const evalReason = rawEval ? rawEval.split(/\r?\n/).slice(1).join(" ").trim() : undefined;
   const evalIsPass = evalVerdict?.startsWith("PASS");
@@ -1639,19 +1639,64 @@ export function CallDetailContent({
               <TabsContent value="summary" className="flex-1 overflow-auto mt-2 min-h-0">
                 <Card className="h-full flex flex-col">
                   <CardHeader className="shrink-0 pb-3">
-                    <CardTitle className="flex items-center gap-2 text-sm">
-                      <Sparkles className="h-4 w-4 text-primary" /> Conversation Summary
+                    <CardTitle className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-primary" /> Conversation Summary
+                      </span>
+                      {summarizationEnabled && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Auto-summarization ON
+                        </span>
+                      )}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="flex-1 overflow-auto min-h-0">
                     {callSummary ? (
-                      <p className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
-                        {callSummary}
-                      </p>
+                      <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
+                          {callSummary}
+                        </p>
+                        <Link href={`/app/agents/${call.agentId}`}>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            Agent settings
+                          </button>
+                        </Link>
+                      </div>
                     ) : summarizationEnabled ? (
-                      <p className="text-sm text-muted-foreground">No summary available for this call.</p>
+                      <div className="flex flex-col items-center justify-center h-full text-center py-10 gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-muted border border-border flex items-center justify-center">
+                          <Sparkles className="h-5 w-5 text-muted-foreground/40" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground/60">No summary yet</p>
+                          <p className="text-xs text-muted-foreground/50 mt-1">
+                            Auto-summarization is ON — the summary will appear here once the AI processes this call.
+                          </p>
+                        </div>
+                      </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">Auto Summarization is off for this agent. Turn it on under Agents → Tools → After the call, then new calls will get a summary.</p>
+                      <div className="flex flex-col items-center justify-center h-full text-center py-10 gap-4">
+                        <div className="h-12 w-12 rounded-2xl bg-muted border border-border flex items-center justify-center">
+                          <Sparkles className="h-6 w-6 text-muted-foreground/30" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <p className="text-sm font-medium text-foreground/60">Auto Summarization is off</p>
+                          <p className="text-xs text-muted-foreground/50 max-w-[280px] leading-relaxed">
+                            Enable it on this agent to get AI-generated post-call summaries after every call.
+                          </p>
+                        </div>
+                        <Link href={`/app/agents/${call.agentId}?section=tools`}>
+                          <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs">
+                            <Sparkles className="h-3.5 w-3.5" />
+                            Enable Auto Summarization
+                          </Button>
+                        </Link>
+                      </div>
                     )}
                   </CardContent>
                 </Card>
