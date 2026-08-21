@@ -697,9 +697,13 @@ function DangerZoneCard() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this workspace?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove your workspace from SnapServe, including agents, campaigns,
-              call history access, and wallet data associated with this account. This cannot be undone.
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  Deleting this workspace is permanent and cannot be undone. All associated agents, campaigns, call history, and wallet data will be permanently removed from SnapServe. You will no longer be able to access or recover this data after deletion.
+                </p>
+                <p>Are you sure you want to continue?</p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -726,16 +730,18 @@ function DangerZoneCard() {
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-sm text-muted-foreground">
                 <p>
-                  Your data will be permanently removed from <span className="font-medium text-foreground">SnapServe</span>.
-                  Admins will be notified of this deletion. Type <span className="font-mono font-semibold text-foreground">DELETE</span> to confirm.
+                  You are about to permanently delete your data from SnapServe. Once completed, this action cannot be reversed. Appropriate administrators will be notified of the deletion.
+                </p>
+                <p>
+                  Enter <span className="font-semibold text-foreground">DELETE</span> to confirm this action.
                 </p>
                 <Input
                   value={confirmText}
                   onChange={(e) => setConfirmText(e.target.value)}
-                  placeholder="Type DELETE"
+                  placeholder="DELETE"
                   autoComplete="off"
                   disabled={isDeleting}
-                  className="font-mono"
+                  className="font-sans tracking-normal"
                 />
               </div>
             </AlertDialogDescription>
