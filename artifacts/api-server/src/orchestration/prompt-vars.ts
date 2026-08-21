@@ -29,6 +29,8 @@ const LEAD_CONTEXT_ALIAS_OF: Record<string, string> = {
 
 const LEAD_CONTEXT_KNOWN_LABELS: Record<string, string> = {
   name:    "Name",
+  patient_name: "Patient Name",
+  category: "Category",
   phone:   "Phone",
   email:   "Email",
   city:    "City",
@@ -84,6 +86,105 @@ export function buildLeadContextBlock(
       `Do NOT re-ask for any field listed above unless the caller corrects you.`;
 
   return `=== LEAD CONTEXT ===\n${lines.join("\n")}\n\n${directive}\n===================`;
+}
+
+const CALL_VAR_MAX_KEYS = 40;
+const CALL_VAR_MAX_KEY_LEN = 64;
+const CALL_VAR_MAX_VALUE = 8000;
+const QUESTIONS_KEYS = new Set(["questions", "question_list", "script_questions"]);
+
+function sanitizeVarKey(raw: string): string {
+  return raw.trim().replace(/[^\w]+/g, "_").replace(/^_+|_+$/g, "").slice(0, CALL_VAR_MAX_KEY_LEN);
+}
+
+function stringifyVarValue(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value.trim().slice(0, CALL_VAR_MAX_VALUE);
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item) => stringifyVarValue(item))
+      .filter(Boolean)
+      .slice(0, 80);
+    return items.map((item, i) => `${i + 1}. ${item}`).join("\n").slice(0, CALL_VAR_MAX_VALUE);
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value).slice(0, CALL_VAR_MAX_VALUE);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+/**
+ * Flatten a CRM/API bag into string prompt variables.
+ * Arrays (e.g. questions) become a numbered list.
+ */
+export function normalizeCallVariables(input: unknown): Record<string, string> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const out: Record<string, string> = {};
+  for (const [rawKey, rawVal] of Object.entries(input as Record<string, unknown>)) {
+    if (Object.keys(out).length >= CALL_VAR_MAX_KEYS) break;
+    const key = sanitizeVarKey(rawKey);
+    if (!key) continue;
+    const value = stringifyVarValue(rawVal);
+    if (!value) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+/** Read variables stored on a call row at dial time (`metadata.callVariables`). */
+export function callVariablesFromMetadata(meta: Record<string, unknown> | null | undefined): Record<string, string> {
+  if (!meta) return {};
+  const raw = meta["callVariables"] ?? meta["variables"] ?? meta["parameters"];
+  return normalizeCallVariables(raw);
+}
+
+/**
+ * Per-call context for API outbound (hospital CRM, dynamic questionnaires).
+ * Injected even when the agent prompt has no {{placeholders}}.
+ */
+export function buildCallContextBlock(vars: Record<string, string>): string {
+  const questionsKey = Object.keys(vars).find((k) => QUESTIONS_KEYS.has(k) && vars[k]?.trim());
+  const questions = questionsKey ? vars[questionsKey]!.trim() : "";
+  const rest: Record<string, string> = {};
+  for (const [k, v] of Object.entries(vars)) {
+    if (QUESTIONS_KEYS.has(k)) continue;
+    rest[k] = v;
+  }
+
+  const fieldBlock = buildLeadContextBlock(rest);
+  const fieldLines = fieldBlock
+    ? fieldBlock
+        .replace(/^=== LEAD CONTEXT ===\n/, "")
+        .replace(/\n\nDIRECTIVE[\s\S]*/, "")
+        .replace(/\n={3,}\s*$/, "")
+        .trim()
+    : "";
+
+  if (!fieldLines && !questions) return "";
+
+  const parts: string[] = ["=== THIS CALL ==="];
+  if (fieldLines) parts.push(fieldLines);
+  if (questions) {
+    parts.push("");
+    parts.push("Questions to ask (in order — wait for an answer after each):");
+    parts.push(questions);
+  }
+  parts.push("");
+  parts.push(
+    "DIRECTIVE (this call only): Use the fields above. " +
+      (questions
+        ? "Ask every listed question; do not skip or invent extra questionnaire items. "
+        : "") +
+      "Do NOT re-ask a field that is already listed unless the patient corrects you.",
+  );
+  parts.push("===================");
+  return parts.join("\n");
 }
 
 export function resolvePromptVariables(

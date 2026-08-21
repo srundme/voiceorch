@@ -34,7 +34,7 @@ import {
 import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
 import { transcriptHasFarewellEnding } from "./callFarewell.js";
-import { buildLeadContextBlock, resolvePromptVariables } from "./prompt-vars.js";
+import { buildLeadContextBlock, buildCallContextBlock, callVariablesFromMetadata, resolvePromptVariables } from "./prompt-vars.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "./mic-sensitivity.js";
 import { loadPcmLoop, TRACK_PARAMS } from "./ambient.js";
@@ -1677,6 +1677,28 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // ── Inject Agent Task brief into system prompt (from dial-time metadata) ────
   try {
     const meta = callRecord.metadata ? JSON.parse(callRecord.metadata) as Record<string, unknown> : {};
+    const callVars = callVariablesFromMetadata(meta);
+    if (Object.keys(callVars).length > 0) {
+      const patientName = (callVars["patient_name"] ?? callVars["name"] ?? "").trim();
+      if (patientName) {
+        if (!callVars["name"]) callVars["name"] = patientName;
+        if (!callVars["customer_name"]) callVars["customer_name"] = patientName;
+        if (!callVars["caller_name"]) callVars["caller_name"] = patientName;
+      }
+      Object.assign(dynVars, callVars);
+      const callBlock = buildCallContextBlock(callVars);
+      if (callBlock) {
+        agentConfig.systemPrompt = `${callBlock}\n\n${agentConfig.systemPrompt}`;
+      }
+      agentConfig.systemPrompt = resolvePromptVariables(agentConfig.systemPrompt, dynVars);
+      if (agentConfig.greetingMessage) {
+        agentConfig.greetingMessage = resolvePromptVariables(agentConfig.greetingMessage, dynVars);
+      }
+      logger.info(
+        { agentId: params.agentId, callId: callRecord.id, variableKeys: Object.keys(callVars) },
+        "Per-call API variables injected into system prompt",
+      );
+    }
     const taskBrief = typeof meta["taskBrief"] === "string" ? meta["taskBrief"].trim() : "";
     if (taskBrief) {
       agentConfig.systemPrompt += `\n\n${taskBrief}`;
@@ -1686,7 +1708,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       );
     }
   } catch (taskBriefErr) {
-    logger.warn({ err: taskBriefErr, callId: callRecord.id }, "Failed to inject agent task brief");
+    logger.warn({ err: taskBriefErr, callId: callRecord.id }, "Failed to inject dial-time prompt context");
   }
 
   // ── Write back triggeredCallId on the scheduled callback row ─────────────────

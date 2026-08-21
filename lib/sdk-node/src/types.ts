@@ -39,7 +39,12 @@ export type Call = Loose<{
 
 export type CallInput = Loose<Record<string, unknown>>;
 export type CallUpdate = Loose<Record<string, unknown>>;
-export type OutboundCallInput = Loose<{ agentId: number; toNumber: string }>;
+export type OutboundCallInput = Loose<{
+  agentId: number;
+  toNumber: string;
+  variables?: Record<string, unknown>;
+  parameters?: Record<string, unknown>;
+}>;
 export type TransferCallInput = Loose<{ to: string }>;
 export type CallEndPayload = Loose<Record<string, unknown>>;
 

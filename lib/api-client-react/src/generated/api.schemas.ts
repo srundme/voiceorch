@@ -1435,6 +1435,10 @@ export interface OutboundCallBody {
   toNumber: string;
   /** Override public base URL for webhooks (auto-detected if omitted) */
   webhookBaseUrl?: string;
+  /** Per-call values (patient fields, questions) for this dial */
+  variables?: { [key: string]: unknown };
+  /** Alias of variables */
+  parameters?: { [key: string]: unknown };
 }
 
 /**

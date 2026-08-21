@@ -112,7 +112,7 @@ export const DOCS_NAV: DocsNavGroup[] = [
         title: "Variables",
         slug: "variables",
         icon: Variable,
-        search: "mustache customer_name agent variables registry",
+        search: "mustache customer_name agent variables registry outbound questions patient",
         description: "Per-call placeholders in prompts and tools.",
       },
       {

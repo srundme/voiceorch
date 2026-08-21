@@ -1771,8 +1771,12 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
         bodyClassName="p-0"
       >
         {pvFields.length === 0 ? (
-          <p className="px-4 py-5 text-[12px] text-muted-foreground">
-            No variables yet.
+          <p className="px-4 py-5 text-[12px] leading-relaxed text-muted-foreground">
+            Optional defaults for {"{{placeholders}}"}. On each{" "}
+            <code className="font-mono text-[11px]">POST /calls/outbound</code>, pass a{" "}
+            <code className="font-mono text-[11px]">variables</code> object (patient name, category,
+            questions). Those values override defaults for that call only — one agent can serve many
+            questionnaires.
           </p>
         ) : (
           <div className="divide-y divide-border">

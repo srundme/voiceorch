@@ -25,9 +25,9 @@ export default function OutboundCallsPage() {
       <h2 id="place">Place a call (API)</h2>
       <p>
         Body is <code>agentId</code> + <code>toNumber</code> (E.164). Optional{" "}
-        <code>webhookBaseUrl</code> only if you must override telephony callbacks. There is no{" "}
-        <code>variables</code> field on this endpoint — see{" "}
-        <Link href="/docs/quick-start">Quick Start</Link>.
+        <code>variables</code> (or <code>parameters</code>) injects patient fields and questions for
+        that dial only — <Link href="/docs/variables">Variables</Link>. Optional{" "}
+        <code>webhookBaseUrl</code> only if you must override telephony callbacks.
       </p>
       <LanguageTabs
         tabs={[
@@ -37,7 +37,7 @@ export default function OutboundCallsPage() {
             code: `curl -X POST https://app.snapserve.ai/api/calls/outbound \\
   -H "Authorization: Bearer $SNAPSERVE_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"agentId": 36, "toNumber": "+919876543210"}'`,
+  -d '{"agentId": 36, "toNumber": "+919876543210", "variables": {"patient_name": "Priya", "questions": ["How is your pain today?"]}}'`,
           },
           {
             label: "Node",
@@ -48,7 +48,11 @@ export default function OutboundCallsPage() {
     Authorization: \`Bearer \${process.env.SNAPSERVE_API_KEY}\`,
     "Content-Type": "application/json",
   },
-  body: JSON.stringify({ agentId: 36, toNumber: "+919876543210" }),
+  body: JSON.stringify({
+    agentId: 36,
+    toNumber: "+919876543210",
+    variables: { patient_name: "Priya", questions: ["How is your pain today?"] },
+  }),
 });`,
           },
         ]}

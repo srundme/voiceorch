@@ -147,10 +147,14 @@ export function registerTools(server: McpServer, client: SnapServeClient) {
 
   server.tool(
     "outbound_call",
-    "Place an outbound phone call. toNumber should be E.164 (e.g. +918637416033).",
-    { agentId: Id, toNumber: z.string() },
-    async ({ agentId, toNumber }) => {
-      try { return ok(await client.request("POST", "/calls/outbound", { body: { agentId, toNumber } })); }
+    "Place an outbound phone call. toNumber should be E.164 (e.g. +918637416033). Optional variables are injected into the agent prompt for this call only (patient fields, questions).",
+    { agentId: Id, toNumber: z.string(), variables: z.record(z.unknown()).optional() },
+    async ({ agentId, toNumber, variables }) => {
+      try {
+        return ok(await client.request("POST", "/calls/outbound", {
+          body: { agentId, toNumber, ...(variables ? { variables } : {}) },
+        }));
+      }
       catch (e) { return fail(e); }
     },
   );

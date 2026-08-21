@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLeadContextBlock, resolvePromptVariables } from "./prompt-vars.js";
+import { buildLeadContextBlock, buildCallContextBlock, normalizeCallVariables, resolvePromptVariables } from "./prompt-vars.js";
 
 describe("buildLeadContextBlock", () => {
   it("includes a do-not-re-ask directive when name is known", () => {
@@ -40,5 +40,34 @@ describe("buildLeadContextBlock", () => {
 describe("resolvePromptVariables", () => {
   it("substitutes name placeholders", () => {
     expect(resolvePromptVariables("Hi {{name}}", { name: "gopi" })).toBe("Hi gopi");
+  });
+});
+
+describe("normalizeCallVariables", () => {
+  it("numbers question arrays and stringifies scalars", () => {
+    const out = normalizeCallVariables({
+      patient_name: "Priya",
+      age: 62,
+      questions: ["How is your pain?", "Are you walking?"],
+    });
+    expect(out["patient_name"]).toBe("Priya");
+    expect(out["age"]).toBe("62");
+    expect(out["questions"]).toContain("1. How is your pain?");
+    expect(out["questions"]).toContain("2. Are you walking?");
+  });
+});
+
+describe("buildCallContextBlock", () => {
+  it("lists patient fields and questions with a ask-in-order directive", () => {
+    const block = buildCallContextBlock({
+      patient_name: "Priya",
+      category: "post-op knee",
+      questions: "1. How is your pain?\n2. Are you walking?",
+    });
+    expect(block).toContain("=== THIS CALL ===");
+    expect(block).toContain("Patient Name: Priya");
+    expect(block).toContain("Questions to ask");
+    expect(block).toContain("How is your pain?");
+    expect(block).toMatch(/Ask every listed question/i);
   });
 });

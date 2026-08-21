@@ -104,9 +104,10 @@ export default function AgentsPage() {
 
       <h2 id="calls">Using on a call</h2>
       <p>
-        Pass <code>agentId</code> to{" "}
+        Pass <code>agentId</code> and optional <code>variables</code> (patient fields, questions) to{" "}
         <Link href="/docs/api-reference/initiateOutboundCall">POST /calls/outbound</Link>. Wallet
-        must cover ₹5/min. See <Link href="/docs/outbound-calls">Calls &amp; history</Link>.
+        must cover ₹5/min. See <Link href="/docs/variables">Variables</Link> and{" "}
+        <Link href="/docs/outbound-calls">Calls &amp; history</Link>.
       </p>
     </div>
   );

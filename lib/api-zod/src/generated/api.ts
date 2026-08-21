@@ -1291,7 +1291,9 @@ export const GetCallCallerMemoryResponse = zod.object({
 export const InitiateOutboundCallBody = zod.object({
   "agentId": zod.number(),
   "toNumber": zod.string().describe('E.164 destination number (e.g. +1234567890)'),
-  "webhookBaseUrl": zod.string().optional().describe('Override public base URL for webhooks (auto-detected if omitted)')
+  "webhookBaseUrl": zod.string().optional().describe('Override public base URL for webhooks (auto-detected if omitted)'),
+  "variables": zod.record(zod.string(), zod.unknown()).optional().describe('Per-call values for this dial: {{placeholders}} plus a THIS CALL context block (patient fields, questions). Same agent, different data per patient.'),
+  "parameters": zod.record(zod.string(), zod.unknown()).optional().describe('Alias of variables')
 })
 
 

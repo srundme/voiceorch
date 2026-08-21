@@ -7934,6 +7934,19 @@ components:
         webhookBaseUrl:
           type: string
           description: "Override public base URL for webhooks (auto-detected if omitted)"
+        variables:
+          type: object
+          additionalProperties: true
+          description: >-
+            Per-call values for this dial. Substituted into {{placeholders}} in the
+            agent prompt/greeting and injected as a THIS CALL context block so the
+            agent can use patient fields and a dynamic question list without
+            hardcoding them. Arrays (e.g. questions) become a numbered list.
+            Alias: parameters.
+        parameters:
+          type: object
+          additionalProperties: true
+          description: Alias of variables
 
     TransferCallBody:
       type: object

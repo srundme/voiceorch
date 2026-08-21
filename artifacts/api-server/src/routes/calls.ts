@@ -35,7 +35,7 @@ import {
 } from "../lib/webhook-payload-template.js";
 import { disposeCall } from "../services/disposition.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
-import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE } from "../services/irdai/gate.js";
+import { normalizeCallVariables } from "../orchestration/prompt-vars.js";
 
 function parseLatencyBody(body: unknown): { sttLatencyMs?: number; llmLatencyMs?: number; ttsFirstChunkMs?: number } {
   if (!body || typeof body !== "object") return {};
@@ -134,12 +134,17 @@ import { generateAndStoreOtp, verifyDestinationOtp } from "../services/phone-otp
 
 router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
-  const parsed = InitiateOutboundCallBody.safeParse(req.body);
+  const parsed = InitiateOutboundCallBody.passthrough().safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
     return;
   }
-  const { agentId, toNumber, webhookBaseUrl } = parsed.data;
+  const { agentId, toNumber, webhookBaseUrl, variables, parameters, ...rest } = parsed.data;
+  const callVariables = normalizeCallVariables({
+    ...(rest as Record<string, unknown>),
+    ...(parameters && typeof parameters === "object" ? parameters : {}),
+    ...(variables && typeof variables === "object" ? variables : {}),
+  });
 
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
@@ -424,12 +429,16 @@ router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Pro
       // answer-webhook WS session reconciles this row by corrToken.
       ...(vobizRequestUuid ? { requestUuid: vobizRequestUuid } : {}),
       ...(vobizCorrToken ? { corrToken: vobizCorrToken } : {}),
+      ...(Object.keys(callVariables).length > 0 ? { callVariables } : {}),
     }),
   }).returning();
 
   await db.update(agentsTable).set({ totalCalls: agent.totalCalls + 1 }).where(eq(agentsTable.id, agentId));
 
-  req.log.info({ agentId, toNumber, providerCallId, vobizRequestUuid, vobizCorrToken }, "Outbound call initiated");
+  req.log.info(
+    { agentId, toNumber, providerCallId, vobizRequestUuid, vobizCorrToken, variableKeys: Object.keys(callVariables) },
+    "Outbound call initiated",
+  );
   res.status(201).json(GetCallResponse.parse(await enrichCall(call)));
 });
 

@@ -36,16 +36,38 @@ export default function VariablesPage() {
         <Link href="/docs/api-reference/listAgentVariables">list / create / update / delete agent variables</Link>
         .
       </p>
+      <p>
+        For <strong>runtime values on each outbound call</strong> (patient name, category, questions),
+        pass a <code>variables</code> object on{" "}
+        <Link href="/docs/api-reference/initiateOutboundCall">POST /calls/outbound</Link>. The same
+        agent can dial hundreds of patients; only the payload changes. Keys fill{" "}
+        <code>{"{{placeholders}}"}</code> in the prompt and greeting. The whole bag is also injected
+        as a <strong>THIS CALL</strong> block, so a <code>questions</code> array is asked even if you
+        did not list every item in the script.
+      </p>
       <CodeBlock
         language="bash"
-        code={`curl https://app.snapserve.ai/api/agents/36/variables \\
-  -H "Authorization: Bearer $SNAPSERVE_API_KEY"`}
+        code={`curl -X POST https://app.snapserve.ai/api/calls/outbound \\
+  -H "Authorization: Bearer $SNAPSERVE_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "agentId": 36,
+    "toNumber": "+919876543210",
+    "variables": {
+      "patient_name": "Priya Sharma",
+      "category": "post-op knee",
+      "questions": [
+        "How is your pain today on a scale of 1 to 10?",
+        "Have you been walking as advised?",
+        "Any swelling, fever, or discharge from the wound?"
+      ]
+    }
+  }'`}
       />
-      <Callout variant="warn" title="Outbound API does not take runtime values">
-        <code>POST /calls/outbound</code> accepts <code>agentId</code> and <code>toNumber</code>{" "}
-        only. A <code>variables</code> object in that JSON is ignored. To personalize each dial,
-        map CSV/Sheets columns in a <Link href="/docs/campaigns">campaign</Link>, or push live
-        request status with <Link href="/docs/caller-memory">caller memory updates</Link>.
+      <Callout variant="tip" title="One agent, many questionnaires">
+        Keep the system prompt generic: greet {"{{patient_name}}"}, then ask every question listed
+        under THIS CALL in order. Do not hardcode hospital categories.{" "}
+        <code>parameters</code> is accepted as an alias of <code>variables</code>.
       </Callout>
 
       <h2 id="next">Next</h2>
