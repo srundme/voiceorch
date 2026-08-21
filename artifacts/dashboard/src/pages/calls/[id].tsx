@@ -1275,7 +1275,7 @@ export function CallDetailContent({
       else merged[f.key] = v;
     });
     updateDisposition.mutate(
-      { id, data: { dispositionResult: merged } },
+      { id, data: { dispositionResult: merged as any } },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getGetCallQueryKey(id) });
