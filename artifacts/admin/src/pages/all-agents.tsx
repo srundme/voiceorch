@@ -110,18 +110,30 @@ export default function AllAgentsPage() {
   };
 
   const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase().replace(/^#/, "");
+    const raw = search.trim();
+    if (!raw) {
+      return statusFilter === "all" ? rows : rows.filter((r) => r.status === statusFilter);
+    }
+
+    // If query starts with # or is purely digits (e.g. 179 or #179), match EXACT Agent ID only
+    if (/^#?\d+$/.test(raw)) {
+      const targetId = parseInt(raw.replace(/^#/, ""), 10);
+      return rows.filter((r) => {
+        if (statusFilter !== "all" && r.status !== statusFilter) return false;
+        return r.id === targetId;
+      });
+    }
+
+    const q = raw.toLowerCase();
     return rows.filter((r) => {
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
-      if (!q) return true;
-      const idMatch = String(r.id) === q || String(r.id).includes(q);
       const nameMatch = (r.name || "").toLowerCase().includes(q);
       const companyMatch = (r.company || "").toLowerCase().includes(q);
       const ownerMatch = (r.ownerUserId || "").toLowerCase().includes(q);
       const asrMatch = (r.asrProvider || "").toLowerCase().includes(q);
       const llmMatch = (r.llmProvider || "").toLowerCase().includes(q);
       const ttsMatch = (r.ttsProvider || "").toLowerCase().includes(q);
-      return idMatch || nameMatch || companyMatch || ownerMatch || asrMatch || llmMatch || ttsMatch;
+      return nameMatch || companyMatch || ownerMatch || asrMatch || llmMatch || ttsMatch;
     });
   }, [rows, search, statusFilter]);
 
