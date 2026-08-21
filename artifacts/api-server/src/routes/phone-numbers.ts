@@ -33,6 +33,7 @@ import {
 } from "@workspace/api-zod";
 import { releasePhoneNumberRecord } from "../services/phone-number-release.js";
 import { resolveWorkspaceScope } from "../services/workspace-scope.js";
+import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
@@ -867,154 +868,36 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, clientContext, denyM
     return;
   }
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
-  if (!user) { res.status(404).json({ error: "User not found" }); return; }
-
-  // Atomically claim the order — WHERE status='pending' ensures only one
-  // concurrent confirm request wins; duplicates find 0 rows and are rejected.
-  const [claimed] = await db
-    .update(phoneNumberOrdersTable)
-    .set({ status: "processing", razorpayPaymentId })
-    .where(
-      and(
-        eq(phoneNumberOrdersTable.id, purchaseOrderId),
-        eq(phoneNumberOrdersTable.razorpayOrderId, razorpayOrderId),
-        eq(phoneNumberOrdersTable.userId, clerkId),
-        eq(phoneNumberOrdersTable.status, "pending"),
-        // WhatsApp-number orders are confirmed via /whatsapp/numbers/purchase/confirm.
-        ne(phoneNumberOrdersTable.numberType, "whatsapp"),
-      ),
-    )
-    .returning();
-
-  if (!claimed) {
+  const [owned] = await db
+    .select({ id: phoneNumberOrdersTable.id })
+    .from(phoneNumberOrdersTable)
+    .where(and(
+      eq(phoneNumberOrdersTable.id, purchaseOrderId),
+      eq(phoneNumberOrdersTable.razorpayOrderId, razorpayOrderId),
+      eq(phoneNumberOrdersTable.userId, clerkId),
+    ))
+    .limit(1);
+  if (!owned) {
     res.status(400).json({ error: "Order not found or already processed" });
     return;
   }
 
-  const { number, countryCode, region, numberType, amountCents, renewalMode, promoCode } = claimed;
-  const resolvedRenewalMode = renewalMode === "autopay" ? "autopay" : "wallet";
-  const promoNote = promoCode ? ` [promo ${promoCode}]` : "";
-
-  // Always buy from the platform VoBiz master wallet. Per-user sub-accounts
-  // are not funded for DID cost and caused "balance debit failed" after the
-  // customer already paid via Razorpay. SnapServe owns the DID; SnapServe
-  // billing is Razorpay → user, VoBiz cost → master.
-  const { authId, authToken, configured } = getPlatformVobizCreds();
-  if (!configured) {
-    await db.update(phoneNumberOrdersTable)
-      .set({ status: "failed", failureReason: "Platform carrier credentials not configured" })
-      .where(eq(phoneNumberOrdersTable.id, claimed.id));
-    res.status(503).json({ error: "Platform carrier credentials not configured.", code: "PLATFORM_NOT_CONFIGURED" });
-    return;
-  }
-
-  // Re-check the number wasn't claimed by someone else while payment was in flight.
-  const [existing] = await db.select({ id: phoneNumbersTable.id }).from(phoneNumbersTable)
-    .where(and(eq(phoneNumbersTable.number, number), eq(phoneNumbersTable.status, "active")));
-  if (existing) {
-    await refundOrder(req, claimed.id, razorpayPaymentId, amountCents, "Number claimed by another user before confirmation");
-    res.status(409).json({ error: "This number was just taken by another user. Your payment has been refunded." });
-    return;
-  }
-
-  const webhookBase = deriveWebhookBase(req);
-  // Create/find SnapServe app + get app_id before VoBiz purchase (number may not
-  // exist yet — full verify/retry runs after purchase succeeds).
-  const linkResult = await configureVobizNumberWebhook(authId!, authToken!, number, webhookBase);
-  const snapserveAppId = linkResult.appId;
-
-  let vobizNumber: VobizOwnedNumber;
   try {
-    vobizNumber = await purchaseVobizNumber(authId!, authToken!, number, snapserveAppId ?? undefined);
-  } catch (err: any) {
-    const msg: string = err?.message ?? "";
-    req.log.error({ err, number }, "Vobiz purchase failed after payment confirmed — refunding");
-    await refundOrder(req, claimed.id, razorpayPaymentId, amountCents, `Vobiz provisioning failed: ${msg.slice(0, 200)}`);
-    res.status(502).json({
-      error: msg.toLowerCase().includes("not found")
-        ? "This number is no longer available. Your payment has been refunded."
-        : "Failed to provision number. Your payment has been refunded.",
+    const result = await fulfillCapturedPhonePurchase({
+      razorpayOrderId,
+      razorpayPaymentId,
+      webhookBase: deriveWebhookBase(req),
+      expectedClerkId: clerkId,
     });
-    return;
+    const [row] = await db.select().from(phoneNumbersTable).where(eq(phoneNumbersTable.id, result.phoneNumberId));
+    res.status(result.alreadyDone ? 200 : 201).json(row ? await enrichNumber(row) : result);
+  } catch (err) {
+    if (err instanceof PhoneFulfillError) {
+      res.status(err.httpStatus).json({ error: err.message, code: err.code });
+      return;
+    }
+    throw err;
   }
-
-  const now = new Date();
-  const nextRenewalAt = new Date(now.getTime() + RENEWAL_INTERVAL_DAYS * 24 * 60 * 60 * 1000);
-
-  // Bookkeeping amounts are locked to what the order actually charged
-  // (amountCents = base + 18% GST at initiate time), so a pricing change
-  // between initiate and confirm can't make records disagree with the payment.
-  const paidBasePaise = Math.round(amountCents / (1 + GST_RATE));
-
-  const [row] = await db.insert(phoneNumbersTable).values({
-    userId:           clerkId,
-    number,
-    countryCode:      (vobizNumber.country ?? countryCode).toUpperCase(),
-    region:           vobizNumber.region ?? region ?? null,
-    numberType:       numberType ?? "local",
-    vobizNumberId:    vobizNumber.id,
-    status:           "active",
-    monthlyRateCents: phonePurchaseBasePaise(number),
-    renewalRateCents: withGstPaise(phonePurchaseBasePaise(number)), // renewal = same as purchase price
-    renewalMode:      resolvedRenewalMode,
-    purchasedAt:      now,
-    nextRenewalAt,
-    lastRenewalAt:    now,
-  }).returning();
-
-  // Autopay renewal: ensure account-level auto-pay stays on when a mandate exists.
-  if (resolvedRenewalMode === "autopay" && user.razorpayCustomerId && user.razorpayTokenId && !user.autoPayEnabled) {
-    await db.update(usersTable).set({ autoPayEnabled: true }).where(eq(usersTable.id, user.id));
-  }
-
-  await db.update(phoneNumberOrdersTable)
-    .set({ status: "completed", phoneNumberId: row!.id })
-    .where(eq(phoneNumberOrdersTable.id, claimed.id));
-
-  // Audit-trail record only — this is a direct payment, NOT a wallet debit,
-  // so the wallet balance is intentionally left untouched here.
-  await db.insert(walletTransactionsTable).values({
-    userId:            user.id,
-    type:              "debit",
-    amountCents:       -amountCents,
-    description:       `Phone number ${number} purchased (${formatInr(paidBasePaise)} + GST ${formatInr(amountCents - paidBasePaise)} = ${formatInr(amountCents)}, paid by card)${promoNote}`,
-    status:            "completed",
-    razorpayOrderId,
-    razorpayPaymentId,
-  });
-
-  await logActivity({
-    userId:       clerkId,
-    eventType:    "phone_number.purchased",
-    resourceType: "phone_number",
-    resourceId:   String(row!.id),
-    description:  `Phone number ${number} purchased (₹${(amountCents / 100).toFixed(2)}, paid via Razorpay)`,
-  });
-
-  // GST tax invoice: base ₹800 + 18% GST, paid by card (total = amountCents).
-  void issueInvoice({
-    user: { id: user.id, name: user.name, email: user.email },
-    type: "phone_number",
-    description: `Phone number ${number} — provisioning & 1 month rental${promoNote}`,
-    hsnSac: "998411",
-    amountCents: paidBasePaise,
-    gstInclusive: false,
-    razorpayOrderId,
-    razorpayPaymentId,
-    metadata: { number, phoneNumberId: row!.id, ...(promoCode ? { promoCode } : {}) },
-  });
-
-  req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id, nextRenewalAt }, "Phone number purchased and provisioned after confirmed payment");
-
-  // Purchase-with-application_id can still leave VoBiz "Not linked" — retry until verified.
-  const postLink = await ensureVobizInboundLinked(authId!, authToken!, number, webhookBase);
-  req.log.info({ number, ...postLink }, "Vobiz inbound link after purchase");
-
-  res.status(201).json({
-    ...(await enrichNumber(row!)),
-    inboundLink: postLink,
-  });
 });
 
 // ── POST /phone-numbers/purchase/wallet ───────────────────────────────────────
@@ -1275,7 +1158,6 @@ router.post("/phone-numbers/purchase/wallet", requireAuth, clientContext, denyMa
 
 /** Best-effort refund of a failed/aborted phone-number purchase payment. */
 async function refundOrder(
-  req: import("express").Request,
   orderRowId: number,
   razorpayPaymentId: string,
   amountCents: number,
@@ -1284,14 +1166,293 @@ async function refundOrder(
   try {
     const razorpay = getRazorpay();
     await (razorpay.payments as any).refund(razorpayPaymentId, { amount: amountCents, speed: "optimum" });
-    req.log.info({ orderRowId, razorpayPaymentId, reason }, "Phone number purchase payment refunded");
+    logger.info({ orderRowId, razorpayPaymentId, reason }, "Phone number purchase payment refunded");
   } catch (err) {
-    req.log.error({ err, orderRowId, razorpayPaymentId, reason }, "Failed to refund phone number purchase payment — needs manual review");
+    logger.error({ err, orderRowId, razorpayPaymentId, reason }, "Failed to refund phone number purchase payment — needs manual review");
   } finally {
     await db.update(phoneNumberOrdersTable)
       .set({ status: "failed", failureReason: reason })
       .where(eq(phoneNumberOrdersTable.id, orderRowId));
   }
+}
+
+export class PhoneFulfillError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly httpStatus = 400,
+  ) {
+    super(message);
+    this.name = "PhoneFulfillError";
+  }
+}
+
+export type FulfillPhonePurchaseResult = {
+  alreadyDone: boolean;
+  phoneNumberId: number;
+  number: string;
+  userId: string;
+  assignedAgentId: number | null;
+};
+
+/**
+ * Provision a voice DID after Razorpay has captured payment.
+ * Used by checkout confirm, the Razorpay webhook (when the browser never
+ * called /purchase/confirm), and admin repair.
+ */
+export async function fulfillCapturedPhonePurchase(opts: {
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  webhookBase: string;
+  expectedClerkId?: string;
+  assignLoneAgent?: boolean;
+}): Promise<FulfillPhonePurchaseResult> {
+  const { razorpayOrderId, razorpayPaymentId, webhookBase } = opts;
+
+  const [existingDone] = await db
+    .select()
+    .from(phoneNumberOrdersTable)
+    .where(and(
+      eq(phoneNumberOrdersTable.razorpayOrderId, razorpayOrderId),
+      ne(phoneNumberOrdersTable.numberType, "whatsapp"),
+    ))
+    .limit(1);
+
+  if (!existingDone) {
+    throw new PhoneFulfillError("ORDER_NOT_FOUND", "Phone purchase order not found", 404);
+  }
+  if (opts.expectedClerkId && existingDone.userId !== opts.expectedClerkId) {
+    throw new PhoneFulfillError("FORBIDDEN", "Order not found or already processed", 400);
+  }
+  if (existingDone.status === "completed" && existingDone.phoneNumberId) {
+    return {
+      alreadyDone: true,
+      phoneNumberId: existingDone.phoneNumberId,
+      number: existingDone.number,
+      userId: existingDone.userId,
+      assignedAgentId: null,
+    };
+  }
+
+  const [claimed] = await db
+    .update(phoneNumberOrdersTable)
+    .set({ status: "processing", razorpayPaymentId })
+    .where(and(
+      eq(phoneNumberOrdersTable.id, existingDone.id),
+      eq(phoneNumberOrdersTable.razorpayOrderId, razorpayOrderId),
+      inArray(phoneNumberOrdersTable.status, ["pending", "processing"]),
+      ne(phoneNumberOrdersTable.numberType, "whatsapp"),
+    ))
+    .returning();
+
+  if (!claimed) {
+    const [again] = await db
+      .select()
+      .from(phoneNumberOrdersTable)
+      .where(eq(phoneNumberOrdersTable.id, existingDone.id))
+      .limit(1);
+    if (again?.status === "completed" && again.phoneNumberId) {
+      return {
+        alreadyDone: true,
+        phoneNumberId: again.phoneNumberId,
+        number: again.number,
+        userId: again.userId,
+        assignedAgentId: null,
+      };
+    }
+    throw new PhoneFulfillError("ORDER_NOT_FOUND", "Order not found or already processed", 400);
+  }
+
+  const clerkId = claimed.userId;
+  const { number, countryCode, region, numberType, amountCents, renewalMode, promoCode } = claimed;
+  const resolvedRenewalMode = renewalMode === "autopay" ? "autopay" : "wallet";
+  const promoNote = promoCode ? ` [promo ${promoCode}]` : "";
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
+  if (!user) {
+    throw new PhoneFulfillError("USER_NOT_FOUND", "User not found", 404);
+  }
+
+  const { authId, authToken, configured } = getPlatformVobizCreds();
+  if (!configured) {
+    await db.update(phoneNumberOrdersTable)
+      .set({ status: "failed", failureReason: "Platform carrier credentials not configured" })
+      .where(eq(phoneNumberOrdersTable.id, claimed.id));
+    throw new PhoneFulfillError("PLATFORM_NOT_CONFIGURED", "Platform carrier credentials not configured.", 503);
+  }
+
+  const [taken] = await db.select({ id: phoneNumbersTable.id, userId: phoneNumbersTable.userId })
+    .from(phoneNumbersTable)
+    .where(and(eq(phoneNumbersTable.number, number), eq(phoneNumbersTable.status, "active")));
+  if (taken && taken.userId !== clerkId) {
+    await refundOrder(claimed.id, razorpayPaymentId, amountCents, "Number claimed by another user before confirmation");
+    throw new PhoneFulfillError("NUMBER_TAKEN", "This number was just taken by another user. Your payment has been refunded.", 409);
+  }
+  if (taken && taken.userId === clerkId) {
+    await db.update(phoneNumberOrdersTable)
+      .set({ status: "completed", phoneNumberId: taken.id, razorpayPaymentId })
+      .where(eq(phoneNumberOrdersTable.id, claimed.id));
+    const assignedAgentId = opts.assignLoneAgent
+      ? await assignNumberToLoneAgent(taken.id, number, clerkId, webhookBase)
+      : null;
+    return {
+      alreadyDone: true,
+      phoneNumberId: taken.id,
+      number,
+      userId: clerkId,
+      assignedAgentId,
+    };
+  }
+
+  const linkResult = await configureVobizNumberWebhook(authId!, authToken!, number, webhookBase);
+  const snapserveAppId = linkResult.appId;
+
+  let vobizNumber: VobizOwnedNumber;
+  try {
+    vobizNumber = await purchaseVobizNumber(authId!, authToken!, number, snapserveAppId ?? undefined);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const owned = await findOwnedVobizNumber(authId!, authToken!, number);
+    if (owned) {
+      vobizNumber = owned;
+      logger.info({ number, vobizId: owned.id }, "Phone fulfill: number already on VoBiz account, reusing");
+    } else {
+      logger.error({ err, number }, "Vobiz purchase failed after payment confirmed — refunding");
+      await refundOrder(claimed.id, razorpayPaymentId, amountCents, `Vobiz provisioning failed: ${msg.slice(0, 200)}`);
+      throw new PhoneFulfillError(
+        "VOBIZ_FAILED",
+        msg.toLowerCase().includes("not found")
+          ? "This number is no longer available. Your payment has been refunded."
+          : "Failed to provision number. Your payment has been refunded.",
+        502,
+      );
+    }
+  }
+
+  const now = new Date();
+  const nextRenewalAt = new Date(now.getTime() + RENEWAL_INTERVAL_DAYS * 24 * 60 * 60 * 1000);
+  const paidBasePaise = Math.round(amountCents / (1 + GST_RATE));
+
+  const [row] = await db.insert(phoneNumbersTable).values({
+    userId:           clerkId,
+    number,
+    countryCode:      (vobizNumber.country ?? countryCode).toUpperCase(),
+    region:           vobizNumber.region ?? region ?? null,
+    numberType:       numberType ?? "local",
+    vobizNumberId:    vobizNumber.id,
+    status:           "active",
+    monthlyRateCents: phonePurchaseBasePaise(number),
+    renewalRateCents: withGstPaise(phonePurchaseBasePaise(number)),
+    renewalMode:      resolvedRenewalMode,
+    purchasedAt:      now,
+    nextRenewalAt,
+    lastRenewalAt:    now,
+  }).returning();
+
+  if (resolvedRenewalMode === "autopay" && user.razorpayCustomerId && user.razorpayTokenId && !user.autoPayEnabled) {
+    await db.update(usersTable).set({ autoPayEnabled: true }).where(eq(usersTable.id, user.id));
+  }
+
+  await db.update(phoneNumberOrdersTable)
+    .set({ status: "completed", phoneNumberId: row!.id, razorpayPaymentId })
+    .where(eq(phoneNumberOrdersTable.id, claimed.id));
+
+  await db.insert(walletTransactionsTable).values({
+    userId:            user.id,
+    type:              "debit",
+    amountCents:       -amountCents,
+    description:       `Phone number ${number} purchased (${formatInr(paidBasePaise)} + GST ${formatInr(amountCents - paidBasePaise)} = ${formatInr(amountCents)}, paid by card)${promoNote}`,
+    status:            "completed",
+    razorpayOrderId,
+    razorpayPaymentId,
+  });
+
+  await logActivity({
+    userId:       clerkId,
+    eventType:    "phone_number.purchased",
+    resourceType: "phone_number",
+    resourceId:   String(row!.id),
+    description:  `Phone number ${number} purchased (₹${(amountCents / 100).toFixed(2)}, paid via Razorpay)`,
+  });
+
+  void issueInvoice({
+    user: { id: user.id, name: user.name, email: user.email },
+    type: "phone_number",
+    description: `Phone number ${number} — provisioning & 1 month rental${promoNote}`,
+    hsnSac: "998411",
+    amountCents: paidBasePaise,
+    gstInclusive: false,
+    razorpayOrderId,
+    razorpayPaymentId,
+    metadata: { number, phoneNumberId: row!.id, ...(promoCode ? { promoCode } : {}) },
+  });
+
+  logger.info({ number, userId: clerkId, vobizId: vobizNumber.id, nextRenewalAt }, "Phone number purchased and provisioned after confirmed payment");
+
+  const postLink = await ensureVobizInboundLinked(authId!, authToken!, number, webhookBase);
+  logger.info({ number, ...postLink }, "Vobiz inbound link after purchase");
+
+  const assignedAgentId = opts.assignLoneAgent
+    ? await assignNumberToLoneAgent(row!.id, number, clerkId, webhookBase)
+    : null;
+
+  return {
+    alreadyDone: false,
+    phoneNumberId: row!.id,
+    number,
+    userId: clerkId,
+    assignedAgentId,
+  };
+}
+
+async function findOwnedVobizNumber(
+  authId: string,
+  authToken: string,
+  e164: string,
+): Promise<VobizOwnedNumber | null> {
+  const items = await listVobizNumbers(authId, vobizHeaders(authId, authToken));
+  const match = findVobizNumber(items, e164);
+  if (!match?.id) return null;
+  return {
+    id: String(match.id),
+    auth_id: authId,
+    e164: match.e164 ?? match.number ?? e164,
+    country: "IN",
+  };
+}
+
+async function assignNumberToLoneAgent(
+  phoneNumberId: number,
+  number: string,
+  clerkId: string,
+  webhookBase: string,
+): Promise<number | null> {
+  const agents = await db
+    .select({ id: agentsTable.id, inboundPhoneNumberId: agentsTable.inboundPhoneNumberId })
+    .from(agentsTable)
+    .where(eq(agentsTable.userId, clerkId));
+  const lone = agents.length === 1 && !agents[0]!.inboundPhoneNumberId ? agents[0]! : null;
+  if (!lone) return null;
+
+  await db.update(phoneNumbersTable)
+    .set({ agentId: lone.id })
+    .where(eq(phoneNumbersTable.id, phoneNumberId));
+  await db.update(agentsTable)
+    .set({ inboundPhoneNumberId: phoneNumberId, outboundPhoneNumberId: phoneNumberId })
+    .where(eq(agentsTable.id, lone.id));
+
+  const platform = getPlatformVobizCreds();
+  if (platform.configured) {
+    await ensureVobizInboundLinked(platform.authId!, platform.authToken!, number, webhookBase);
+  }
+  await logActivity({
+    userId: clerkId,
+    eventType: "phone_number.assigned",
+    resourceType: "phone_number",
+    resourceId: String(phoneNumberId),
+    description: `Phone number ${number} assigned to agent #${lone.id}`,
+  });
+  return lone.id;
 }
 
 // ── PATCH /phone-numbers/:id/assign ──────────────────────────────────────────

@@ -7,6 +7,7 @@ import { TRACK_PARAMS } from "../orchestration/ambient.js";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getAllSessions } from "../orchestration/session.js";
 import { logger } from "../lib/logger.js";
+import { fulfillCapturedPhonePurchase, PhoneFulfillError } from "./phone-numbers.js";
 import { sendTestAlertNotification, getAlertCooldownStats, resetAlertSuppressedCount, getAlertCooldownStatus } from "../services/alert-notifications.js";
 import { getAllCampaignConcurrency } from "../services/batchScheduler.js";
 import { processErasureRequest } from "../services/dpdp/index.js";
@@ -589,6 +590,76 @@ router.get("/admin/phone-purchases", async (req, res): Promise<void> => {
     });
   } catch (err) {
     req.log.error({ err }, "admin/phone-purchases failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * Repair a paid-but-never-provisioned DID (browser closed before /purchase/confirm).
+ * Verifies Razorpay captured the payment, then provisions and assigns the lone agent.
+ */
+router.post("/admin/phone-purchases/:id/fulfill", async (req, res): Promise<void> => {
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid order id" });
+    return;
+  }
+  try {
+    const [order] = await db
+      .select()
+      .from(phoneNumberOrdersTable)
+      .where(eq(phoneNumberOrdersTable.id, id))
+      .limit(1);
+    if (!order) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
+    if (order.numberType === "whatsapp") {
+      res.status(400).json({ error: "WhatsApp number orders are fulfilled on the WhatsApp confirm path" });
+      return;
+    }
+    if (!order.razorpayOrderId) {
+      res.status(400).json({ error: "Order has no Razorpay order id" });
+      return;
+    }
+
+    const keyId = process.env["RAZORPAY_KEY_ID"];
+    const secret = process.env["RAZORPAY_KEY_SECRET"];
+    if (!keyId || !secret) {
+      res.status(503).json({ error: "Razorpay not configured" });
+      return;
+    }
+    const auth = Buffer.from(`${keyId}:${secret}`).toString("base64");
+    const payRes = await fetch(
+      `https://api.razorpay.com/v1/orders/${encodeURIComponent(order.razorpayOrderId)}/payments`,
+      { headers: { Authorization: `Basic ${auth}` } },
+    );
+    const payJson = await payRes.json() as { items?: Array<{ id?: string; status?: string }> };
+    const captured = (payJson.items ?? []).find((p) => p.status === "captured" && p.id);
+    if (!captured?.id) {
+      res.status(409).json({ error: "Razorpay has not captured a payment for this order yet" });
+      return;
+    }
+
+    const webhookBase = (
+      process.env["WEBHOOK_BASE_URL"]
+      || process.env["APP_BASE_URL"]
+      || "https://app.snapserve.ai"
+    ).replace(/\/$/, "");
+    const result = await fulfillCapturedPhonePurchase({
+      razorpayOrderId: order.razorpayOrderId,
+      razorpayPaymentId: captured.id,
+      webhookBase,
+      assignLoneAgent: true,
+    });
+    logger.info({ orderId: id, ...result }, "admin: phone purchase fulfilled");
+    res.json(result);
+  } catch (err) {
+    if (err instanceof PhoneFulfillError) {
+      res.status(err.httpStatus).json({ error: err.message, code: err.code });
+      return;
+    }
+    req.log.error({ err }, "admin/phone-purchases fulfill failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
