@@ -3626,7 +3626,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                         parsed as Record<string, unknown>,
                       );
                       dispositionResult = result;
-                      await db.update(callsTable).set({ dispositionResult: result }).where(eq(callsTable.id, session.callId));
+                      await db.update(callsTable).set({ dispositionResult: result as Record<string, string | number | boolean> }).where(eq(callsTable.id, session.callId));
                     }
                   } catch {
                     logger.warn({ sessionId }, "Disposition JSON parse failed");
