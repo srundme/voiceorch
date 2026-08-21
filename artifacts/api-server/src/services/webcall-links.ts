@@ -1,6 +1,19 @@
 import { randomBytes } from "crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { db, webcallLinksTable, agentsTable, type WebcallLink } from "@workspace/db";
+import {
+  db,
+  webcallLinksTable,
+  agentsTable,
+  type WebcallLink,
+  WEBSITE_EMBED_LABEL,
+  WEBSITE_EMBED_PURPOSE,
+} from "@workspace/db";
+
+export { WEBSITE_EMBED_LABEL, WEBSITE_EMBED_PURPOSE };
+
+export function isWebsiteEmbedLink(link: Pick<WebcallLink, "purpose" | "label">): boolean {
+  return link.purpose === WEBSITE_EMBED_PURPOSE || link.label === WEBSITE_EMBED_LABEL;
+}
 
 export function mintWebcallLinkToken(): string {
   return `wcl_${randomBytes(18).toString("hex")}`;

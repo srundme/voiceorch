@@ -67,6 +67,11 @@ export default function AgentsPage() {
         <li>
           <strong>Save</strong>, then toggle <strong>Active</strong> when ready.
         </li>
+        <li>
+          Optional: <strong>Settings → Website</strong> — copy embed code so visitors can webcall this
+          agent on your site.{" "}
+          <Link href="/docs/website-embed">Website embed guide</Link>.
+        </li>
         <li>Use Test / Publish flows in the builder before going live.</li>
       </ol>
 

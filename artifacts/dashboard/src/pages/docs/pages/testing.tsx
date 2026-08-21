@@ -25,6 +25,11 @@ export default function TestingPage() {
         check greeting, barge-in, language, and tool calls. Share a webcall link when you need a
         stakeholder to try the agent without KYC.
       </p>
+      <p>
+        To put that same webcall on your own website (floating button, iframe, or join link), copy
+        the per-agent snippet from Settings → Website.{" "}
+        <Link href="/docs/website-embed">Website webcall embed</Link>.
+      </p>
 
       <h2 id="outbound">Outbound test</h2>
       <p>

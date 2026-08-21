@@ -33,7 +33,9 @@ export default function ConnectionsPage() {
           <strong>Google Sheets</strong> — campaign lead source and/or lead-transfer destination.
         </li>
         <li>
-          <strong>Website form</strong> — form POSTs into SnapServe as leads (form intake).
+          <strong>Website form</strong> — form POSTs into SnapServe as leads (form intake). For a
+          live in-browser voice call on your site, use the agent’s Settings → Website snippet
+          instead. <Link href="/docs/website-embed">Website webcall embed</Link>.
         </li>
         <li>
           <strong>Meta Lead Ads</strong> — Facebook / Instagram leads into a campaign.

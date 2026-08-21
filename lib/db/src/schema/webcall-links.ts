@@ -3,9 +3,14 @@ import {
 } from "drizzle-orm/pg-core";
 import { agentsTable } from "./agents";
 
+/** Purpose stored on the per-agent website widget link. */
+export const WEBSITE_EMBED_PURPOSE = "website-embed";
+export const WEBSITE_EMBED_LABEL = "Website embed";
+
 /**
  * Shareable webcall join links — guests open /join/:token without logging in.
- * Billing stays on the agent owner's wallet.
+ * Billing stays on the agent owner's wallet. The website widget uses a link
+ * with purpose `website-embed`.
  */
 export const webcallLinksTable = pgTable("webcall_links", {
   id: serial("id").primaryKey(),

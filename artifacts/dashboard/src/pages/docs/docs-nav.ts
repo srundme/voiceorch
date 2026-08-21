@@ -171,6 +171,13 @@ export const DOCS_NAV: DocsNavGroup[] = [
         description: "Join Google Meet, Zoom, or Teams as a bot.",
       },
       {
+        title: "Website webcall embed",
+        slug: "website-embed",
+        icon: Code2,
+        search: "embed widget website webcall iframe script data-share agent snippet join link",
+        description: "Put an agent’s voice widget on your own website.",
+      },
+      {
         title: "Phone numbers",
         slug: "phone-numbers",
         icon: Phone,

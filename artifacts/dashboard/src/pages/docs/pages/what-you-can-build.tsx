@@ -56,6 +56,10 @@ export default function WhatYouCanBuildPage() {
 
       <h2 id="embed">Apps on top of the API</h2>
       <ul>
+        <li>
+          Website voice widget — copy per-agent embed code from Settings → Website.{" "}
+          <Link href="/docs/website-embed">Website webcall embed</Link>
+        </li>
         <li>Custom CRM dialer UI</li>
         <li>Internal “call this contact” buttons</li>
         <li>Zapier-style automations / n8n workflows</li>

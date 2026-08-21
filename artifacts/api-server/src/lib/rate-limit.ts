@@ -205,6 +205,10 @@ export const exemptPaths = [
   // cap only produced 429s that blanked the shared deck. Covers /present too.
   "/api/meet-bots/present",
   "/api/mcp",
+  // Public website embed assets — cached, but a busy origin NAT would otherwise
+  // 429 /api/widget.js for every visitor.
+  "/api/widget.js",
+  "/api/widget/call",
   "/.well-known/oauth-authorization-server",
   "/.well-known/oauth-protected-resource",
 ];

@@ -41,6 +41,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, hydrateSarvamRealtimeVad, clampInterruptWords, voiceSecondsFromInterruptWords, WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER } from "./edit.schema";
+import { AgentWebsiteEmbedPanel } from "./website-embed";
 import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
@@ -227,6 +228,7 @@ function sectionFromSearch(search: string): TabId {
   }
   // Old Settings → Analytics was webhooks; real agent analytics is its own tab now.
   if (requested === "integrations") return "settings";
+  if (requested === "website" || requested === "embed") return "settings";
   return TABS.some((tab) => tab.id === requested) ? requested as TabId : "overview";
 }
 
@@ -3631,7 +3633,7 @@ function VoicemailTab({ form, embedded = false }: { form: any; embedded?: boolea
 
 /* ── Tab: Advanced ──────────────────────────────────────────────────────────── */
 
-type AdvSection = "engine" | "limits" | "compliance" | "integrations";
+type AdvSection = "engine" | "limits" | "website" | "integrations" | "compliance";
 
 function AdvSlider({ form, name, label, hint, min, max, step, fmt, onValueChange, disabled }: {
   form: any; name: string; label: string; hint?: string;
@@ -3701,7 +3703,11 @@ function IrdaiComplianceBanner({ enabled, agent }: { enabled: boolean; agent?: a
 }
 
 function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
-  const [section, setSection] = useState<AdvSection>("engine");
+  const search = useSearch();
+  const requested = new URLSearchParams(search).get("section");
+  const [section, setSection] = useState<AdvSection>(
+    requested === "website" || requested === "embed" ? "website" : "engine",
+  );
   const [traiConfirmOpen, setTraiConfirmOpen] = useState(false);
   const [dpdpConfirmOpen, setDpdpConfirmOpen] = useState(false);
   const [irdaiConfirmOpen, setIrdaiConfirmOpen] = useState(false);
@@ -3718,6 +3724,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
     { id: "engine",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"     },
     { id: "limits",       icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"     },
+    { id: "website",      icon: <Globe className="h-3.5 w-3.5" />,       label: "Website"    },
     // Post-call notify for this agent — not Developers event subscriptions or campaign form intake.
     { id: "integrations", icon: <Webhook className="h-3.5 w-3.5" />,     label: "Post-call notify" },
     { id: "compliance",   icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance" },
@@ -3727,7 +3734,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
     <div className={cn("flex flex-col gap-5", BUILDER_TAB_PAD)}>
       <BuilderTabHeader
         title="Settings"
-        description="Call limits, barge-in, hang-up, post-call notify URL, and compliance. How fast the agent replies is on Sound."
+        description="Call limits, barge-in, hang-up, website embed, post-call notify URL, and compliance. How fast the agent replies is on Sound."
       />
       <div className="inline-flex flex-wrap items-center gap-1 self-start rounded-lg border border-border bg-card p-1">
         {nav.map(n => (
@@ -4124,6 +4131,21 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
             </AlertDialog>
 
             <IrdaiComplianceBanner enabled={!!form.watch("complianceIrdai")} agent={agent} />
+          </BuilderPanel>
+        )}
+
+        {/* ── WEBSITE EMBED ── */}
+        {section === "website" && (
+          <BuilderPanel
+            title="Website webcall"
+            icon={<Globe />}
+            description="Embed this agent on your own site"
+          >
+            {agent?.id ? (
+              <AgentWebsiteEmbedPanel agentId={agent.id} agentName={agent.name ?? ""} />
+            ) : (
+              <p className="text-[12px] text-muted-foreground">Save the agent first, then generate embed code.</p>
+            )}
           </BuilderPanel>
         )}
 

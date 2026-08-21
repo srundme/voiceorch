@@ -29,6 +29,7 @@ import ErrorsPage from "./pages/errors";
 import PricingPage from "./pages/pricing";
 import FaqPage from "./pages/faq";
 import ChangelogPage from "./pages/changelog";
+import WebsiteEmbedPage from "./pages/website-embed";
 
 const ApiReference = lazy(() => import("./api/ApiReference"));
 
@@ -159,6 +160,9 @@ export default function DocsPage() {
       break;
     case "changelog":
       Content = ChangelogPage;
+      break;
+    case "website-embed":
+      Content = WebsiteEmbedPage;
       break;
     default:
       Content = () => (
