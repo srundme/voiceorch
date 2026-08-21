@@ -189,8 +189,10 @@ router.get("/admin/agents", async (_req, res): Promise<void> => {
         asrProvider: agentsTable.asrProvider,
         llmProvider: agentsTable.llmProvider,
         ttsProvider: agentsTable.ttsProvider,
-        voice: agentsTable.voice,
+        ttsVoice: agentsTable.ttsVoice,
+        ttsVoiceName: agentsTable.ttsVoiceName,
         language: agentsTable.language,
+        totalCalls: agentsTable.totalCalls,
         systemPrompt: agentsTable.systemPrompt,
         generatedPrompt: agentsTable.generatedPrompt,
         promptTemplateVersion: agentsTable.promptTemplateVersion,
@@ -200,8 +202,8 @@ router.get("/admin/agents", async (_req, res): Promise<void> => {
       .from(agentsTable)
       .orderBy(desc(agentsTable.createdAt));
 
-    // Aggregate call metrics per agent
-    let countMap = new Map<number, { totalCalls: number; completedCalls: number; failedCalls: number; totalDurationSeconds: number }>();
+    // Aggregate call metrics from calls table when available
+    const countMap = new Map<number, { totalCalls: number; completedCalls: number; failedCalls: number; totalDurationSeconds: number }>();
     try {
       const callCounts = await db
         .select({
@@ -243,9 +245,9 @@ router.get("/admin/agents", async (_req, res): Promise<void> => {
         asrProvider: r.asrProvider,
         llmProvider: r.llmProvider,
         ttsProvider: r.ttsProvider,
-        voice: r.voice,
+        voice: r.ttsVoiceName || r.ttsVoice,
         language: r.language,
-        totalCalls: counts?.totalCalls ?? 0,
+        totalCalls: counts?.totalCalls ?? r.totalCalls ?? 0,
         completedCalls: counts?.completedCalls ?? 0,
         failedCalls: counts?.failedCalls ?? 0,
         totalDurationSeconds: counts?.totalDurationSeconds ?? 0,
