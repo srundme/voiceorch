@@ -102,20 +102,38 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
   const nativeReady = Boolean(
     waData?.channel?.active && (waData.channel.status === "active" || waData.channel.vobizChannelId || waData.channel.phoneE164),
   );
-  const connected = metaReady || nativeReady;
 
   return (
     <div className="space-y-3 border-t border-border bg-muted/20 px-4 pb-4 pt-3">
       {waLoading ? (
         <Skeleton className="h-10 w-full rounded-md" />
-      ) : connected ? (
+      ) : metaReady && agentConnection ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-[12px] font-medium">
-                {agentConnection?.name
-                  || waData?.channel?.businessName
-                  || "Workspace WhatsApp"}
+                {agentConnection.name || "Workspace WhatsApp"}
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                Mid-call send uses this Meta template. After-call templates are mapped to outcomes on After the call.
+              </p>
+            </div>
+            <StatusLine ready label="Connected" />
+          </div>
+          <AgentWhatsappTemplatePicks
+            agentId={agentId}
+            connectionId={agentConnection.id}
+            initialTemplates={agentConnection.metaTemplates}
+            initialCatalog={agentConnection.templateCatalog}
+            visibleSlots={["default"]}
+          />
+        </div>
+      ) : nativeReady ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-[12px] font-medium">
+                {waData?.channel?.businessName || "Workspace WhatsApp"}
               </p>
               <p className="text-[10px] text-muted-foreground">
                 Mid-call send uses this template. After-call templates are mapped to outcomes on After the call.
@@ -123,22 +141,12 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
             </div>
             <StatusLine ready label="Connected" />
           </div>
-          {agentConnection ? (
-            <AgentWhatsappTemplatePicks
-              agentId={agentId}
-              connectionId={agentConnection.id}
-              initialTemplates={agentConnection.metaTemplates}
-              initialCatalog={agentConnection.templateCatalog}
-              visibleSlots={["default"]}
-            />
-          ) : (
-            <AgentWhatsappTemplatePicks
-              agentId={agentId}
-              nativeMode
-              initialCatalog={waData?.channel?.templateCatalog}
-              visibleSlots={["default"]}
-            />
-          )}
+          <AgentWhatsappTemplatePicks
+            agentId={agentId}
+            nativeMode
+            initialCatalog={waData?.channel?.templateCatalog}
+            visibleSlots={["default"]}
+          />
         </div>
       ) : agentConnection ? (
         <div className="rounded-lg bg-muted/25 px-3 py-3">

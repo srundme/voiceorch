@@ -333,6 +333,17 @@ router.post("/whatsapp/channel/own", requireAuth, async (req, res): Promise<void
     return;
   }
 
+  // Meta-first: "already on my WABA" and voice-DID WhatsApp-enable send via Graph.
+  // VoBiz is only for a SnapServe-bought WhatsApp DID or an existing VoBiz channel
+  // (WhatsApp calling / native chatbot).
+  if (!providedChannelId && numberSource !== "purchased") {
+    res.status(400).json({
+      error: "Use Meta connect (WABA + Phone Number ID + token) for a number already on your WABA. VoBiz is only required when you buy a WhatsApp number from SnapServe or enable WhatsApp calling.",
+      code: "USE_META_CONNECT",
+    });
+    return;
+  }
+
   let vobizChannelId = providedChannelId;
   let lastError: string | null = null;
   let status = "active";

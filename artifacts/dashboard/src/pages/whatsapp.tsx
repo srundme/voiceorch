@@ -13,6 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import { ByonPanel } from "@/components/whatsapp/byon-flow";
 import { EngageSection } from "@/components/whatsapp/engage-section";
@@ -187,9 +188,11 @@ const inr = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { max
 function NativeSection({
   agents,
   onChooseBsp,
+  preferredAgentId,
 }: {
   agents: { id: number; name: string }[];
   onChooseBsp?: () => void;
+  preferredAgentId?: number;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -200,6 +203,13 @@ function NativeSection({
     queryFn: () => customFetch<WaChannelResponse>(`${API}/whatsapp/channel`),
   });
   const channel = data?.channel && data.channel.active ? data.channel : null;
+  const ownVobiz = Boolean(channel?.mode === "own" && channel.vobizChannelId);
+
+  const { data: connData } = useQuery({
+    queryKey: ["whatsapp-connections"],
+    queryFn: () => customFetch<{ connections: WaConnection[] }>(`${API}/whatsapp/connections`),
+  });
+  const metaConn = (connData?.connections ?? []).find((c) => c.active && (c.metaConnected || c.metaPhoneNumberId)) ?? null;
 
   const { data: msgData } = useQuery({
     queryKey: ["whatsapp-native-messages"],
@@ -224,17 +234,20 @@ function NativeSection({
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["whatsapp-channel"] });
+    void qc.invalidateQueries({ queryKey: ["whatsapp-connections"] });
     void qc.invalidateQueries({ queryKey: ["whatsapp-native-messages"] });
     void qc.invalidateQueries({ queryKey: ["whatsapp-calls"] });
+    void qc.invalidateQueries({ queryKey: ["connections-whatsapp-status"] });
+    void qc.invalidateQueries({ queryKey: ["connections-whatsapp-connections"] });
+    void qc.invalidateQueries({ queryKey: ["builder-whatsapp-channel"] });
+    void qc.invalidateQueries({ queryKey: ["builder-whatsapp-connections"] });
   };
 
   /* dialogs */
   const [sharedOpen, setSharedOpen] = useState(false);
   const [bizOpen, setBizOpen] = useState(false);
   const [bizStep, setBizStep] = useState<1 | 2>(1);
-  const [numberChoice, setNumberChoice] = useState<"buy" | "direct" | "voice">(
-    isManagedWorkspace ? "direct" : "buy",
-  );
+  const [numberChoice, setNumberChoice] = useState<"buy" | "direct" | "voice">("direct");
   const [selectedNumber, setSelectedNumber] = useState<string | null>(null);
   const [voiceNumberId, setVoiceNumberId] = useState<number | null>(null);
   /** Set when reconnecting an already-purchased WhatsApp number (channel create failed). */
@@ -252,18 +265,17 @@ function NativeSection({
   const [callingBusy, setCallingBusy] = useState(false);
 
   const connectOwn = useMutation({
-    mutationFn: (vars: { numberSource: "direct" | "purchased" | "voice_number"; voicePhoneNumberId?: number }) =>
+    mutationFn: (vars: { numberSource: "purchased" | "direct" }) =>
       customFetch<WaChannel>(`${API}/whatsapp/channel/own`, {
         method: "POST",
         body: JSON.stringify({
           businessName,
           numberSource: vars.numberSource,
-          voicePhoneNumberId: vars.voicePhoneNumberId,
           wabaId: wabaId.trim() || undefined,
           phoneNumberId: vars.numberSource !== "purchased" ? (phoneNumberId.trim() || undefined) : undefined,
-          phoneE164: vars.numberSource === "voice_number" ? undefined : (phoneE164.trim() || undefined),
+          phoneE164: phoneE164.trim() || undefined,
           accessToken: accessToken.trim() || undefined,
-          vobizChannelId: vars.numberSource === "direct" ? (existingChannelId.trim() || undefined) : undefined,
+          vobizChannelId: existingChannelId.trim() || undefined,
           inboundAgentId: inboundAgentId === "" ? null : Number(inboundAgentId),
         }),
         headers: { "Content-Type": "application/json" },
@@ -274,9 +286,43 @@ function NativeSection({
       setAccessToken("");
       toast(ch.status === "active"
         ? { title: "Your WhatsApp channel is connected" }
-        : { title: "Channel created — provisioning", description: "VoBiz is finishing the Meta registration. Use “Check status” on the card to refresh." });
+        : { title: "Channel created — provisioning", description: "The carrier is finishing Meta registration. Use “Check status” on the card to refresh." });
     },
-    onError: (err: Error) => toast({ title: "Connect failed", description: err.message, variant: "destructive" }),
+    onError: (err: unknown) => toast({ title: "Connect failed", description: formatApiError(err), variant: "destructive" }),
+  });
+
+  const resolvedAgentId = (): number | undefined => {
+    if (inboundAgentId !== "") return Number(inboundAgentId);
+    if (preferredAgentId && preferredAgentId > 0) return preferredAgentId;
+    return agents[0]?.id;
+  };
+
+  const connectMeta = useMutation({
+    mutationFn: () =>
+      customFetch<WaConnection>(`${API}/whatsapp/meta/connect`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: businessName.trim() || "WhatsApp",
+          agentId: resolvedAgentId(),
+          wabaId: wabaId.trim() || undefined,
+          phoneNumberId: phoneNumberId.trim(),
+          accessToken: accessToken.trim(),
+        }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    onSuccess: (row) => {
+      invalidate();
+      setBizOpen(false);
+      setAccessToken("");
+      const n = Array.isArray(row.templateCatalog) ? row.templateCatalog.length : 0;
+      toast({
+        title: "WhatsApp connected via Meta",
+        description: n
+          ? `Loaded ${n} approved template${n === 1 ? "" : "s"}. Pick one on the agent.`
+          : "Refresh templates on the agent to load APPROVED templates from Meta.",
+      });
+    },
+    onError: (err: unknown) => toast({ title: "Connect failed", description: formatApiError(err), variant: "destructive" }),
   });
 
   const patchChannel = useMutation({
@@ -287,7 +333,7 @@ function NativeSection({
         headers: { "Content-Type": "application/json" },
       }),
     onSuccess: () => invalidate(),
-    onError: (err: Error) => toast({ title: "Update failed", description: err.message, variant: "destructive" }),
+    onError: (err: unknown) => toast({ title: "Update failed", description: formatApiError(err), variant: "destructive" }),
   });
 
   const deactivate = useMutation({
@@ -309,7 +355,7 @@ function NativeSection({
       invalidate();
       toast({ title: "Test message sent", description: "Check WhatsApp on that phone. Delivery status appears in the log below." });
     },
-    onError: (err: Error) => toast({ title: "Test failed", description: err.message, variant: "destructive" }),
+    onError: (err: unknown) => toast({ title: "Test failed", description: formatApiError(err), variant: "destructive" }),
   });
 
   /* Business-tier: live WhatsApp-capable inventory (separate from voice DIDs). */
@@ -330,7 +376,7 @@ function NativeSection({
         ? { title: "Your WhatsApp number is live!", description: "Post-call messages now go out from your own number." }
         : { title: "Still provisioning", description: "The carrier hasn't finished registering the number with Meta yet — check again in a few minutes." });
     },
-    onError: (err: Error) => toast({ title: "Refresh failed", description: err.message, variant: "destructive" }),
+    onError: (err: unknown) => toast({ title: "Refresh failed", description: formatApiError(err), variant: "destructive" }),
   });
 
   const releaseNumber = useMutation({
@@ -339,7 +385,7 @@ function NativeSection({
       invalidate();
       toast({ title: "WhatsApp number released", description: "The 30-day renewal billing has stopped." });
     },
-    onError: (err: Error) => toast({ title: "Release failed", description: err.message, variant: "destructive" }),
+    onError: (err: unknown) => toast({ title: "Release failed", description: formatApiError(err), variant: "destructive" }),
   });
 
   const openSharedDialog = () => {
@@ -488,7 +534,42 @@ function NativeSection({
 
   return (
     <div className="space-y-4">
-      {!channel ? (
+      {metaConn && !channel ? (
+        <div className="rounded-lg border border-sky-500/25 bg-sky-500/[0.04] p-5 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                <h3 className="text-sm font-semibold">{metaConn.name || "WhatsApp"}</h3>
+                <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-transparent text-[10px]">
+                  Meta connected
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                SnapServe sends templates through Meta Cloud API. Phone Number ID{" "}
+                <span className="font-mono text-foreground/80">{metaConn.metaPhoneNumberId}</span>
+                {metaConn.metaWabaId && <> · WABA {metaConn.metaWabaId}</>}
+                {Array.isArray(metaConn.templateCatalog) && metaConn.templateCatalog.length > 0 && (
+                  <> · {metaConn.templateCatalog.length} approved template{metaConn.templateCatalog.length === 1 ? "" : "s"}</>
+                )}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Vobiz is not used on this path. Buy a SnapServe WhatsApp number or enable WhatsApp calling only if you need those.
+              </p>
+            </div>
+            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setNumberChoice("direct"); openBizWizard(); }}>
+              Update Meta
+            </Button>
+          </div>
+          {!isManagedWorkspace && (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => { setNumberChoice("buy"); openBizWizard(); }}>
+                Buy a SnapServe WhatsApp number
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : !channel ? (
         <div className="space-y-4">
           {data?.purchasedNumber && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2">
@@ -519,7 +600,7 @@ function NativeSection({
           <div>
             <h3 className="text-sm font-semibold">How do you want WhatsApp?</h3>
             <p className="mt-0.5 text-xs text-muted-foreground max-w-2xl">
-              Pick <strong className="text-foreground/80 font-medium">one</strong> path. You do not connect Meta and a BSP separately — every Business WhatsApp number already sits on Meta; a BSP (Vobiz, Wati, Gupshup, AiSensy…) is just who sends for you.
+              Already on Meta? Paste WABA + token + Phone Number ID — SnapServe sends templates through Meta. Vobiz is only if we sell you a WhatsApp number or you want WhatsApp calling.
             </p>
           </div>
 
@@ -531,10 +612,10 @@ function NativeSection({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col rounded-xl border border-sky-500/25 bg-sky-500/[0.04] p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">Path 1</p>
-              <h3 className="mt-1 text-sm font-semibold">I already have Business WhatsApp</h3>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">Default</p>
+              <h3 className="mt-1 text-sm font-semibold">I already have Meta</h3>
               <p className="mt-2 flex-1 text-xs leading-relaxed text-muted-foreground">
-                Number is already on Meta Cloud API, or your BSP (Wati, AiSensy, Interakt, Gupshup…) created a WABA for you. Connect it here so this agent can send.
+                Paste WABA ID, Phone Number ID, and a permanent System User token. SnapServe talks to Meta only — no carrier channel, no Vobiz.
               </p>
               <Button
                 size="sm"
@@ -544,16 +625,16 @@ function NativeSection({
                   openBizWizard();
                 }}
               >
-                Connect existing WABA
+                Connect Meta
               </Button>
             </div>
 
             {!isManagedWorkspace && (
               <div className="flex flex-col rounded-xl border border-border bg-card p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Path 2</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Optional</p>
                 <h3 className="mt-1 text-sm font-semibold">Same number as my calls</h3>
                 <p className="mt-2 flex-1 text-xs leading-relaxed text-muted-foreground">
-                  Use a SnapServe voice number you already bought (even if it’s assigned to this agent). Voice calls keep working. We register that DID on WhatsApp Business API — still need a Meta WABA once. ₹0 extra for the number.
+                  WhatsApp-enable a SnapServe voice DID you already bought. Still paste Meta IDs — we do not create a Vobiz channel unless you later turn on WhatsApp calling.
                 </p>
                 <Button
                   size="sm"
@@ -571,10 +652,10 @@ function NativeSection({
 
             {!isManagedWorkspace && (
               <div className="flex flex-col rounded-xl border border-emerald-500/30 bg-emerald-500/[0.04] p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Path 3 · Vobiz</p>
-                <h3 className="mt-1 text-sm font-semibold">Buy a new WhatsApp number</h3>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Vobiz · buy from us</p>
+                <h3 className="mt-1 text-sm font-semibold">Buy a WhatsApp number from SnapServe</h3>
                 <p className="mt-2 flex-1 text-xs leading-relaxed text-muted-foreground">
-                  SnapServe uses Vobiz as the BSP. This is a <strong className="text-foreground/80 font-medium">different</strong> inventory from call numbers — do not expect the DID on Phone numbers to appear here. Still need Meta Business Manager once (WABA + token). Wallet pays messages.
+                  Different inventory from call numbers. We provision via Vobiz. You still paste WABA + token once (Meta owns the WABA).
                 </p>
                 <Button
                   size="sm"
@@ -651,7 +732,7 @@ function NativeSection({
                         invalidate();
                         toast({ title: "Refreshed channel status" });
                       })
-                      .catch((err: Error) => toast({ title: "Refresh failed", description: err.message, variant: "destructive" }));
+                      .catch((err: unknown) => toast({ title: "Refresh failed", description: formatApiError(err), variant: "destructive" }));
                   }}
                 >
                   Refresh pending
@@ -677,7 +758,7 @@ function NativeSection({
             <div className="flex items-start justify-between gap-2 rounded-md border border-red-500/25 bg-red-500/5 px-3 py-2 text-[11px] text-red-600 dark:text-red-400">
               <div className="flex items-start gap-2 min-w-0">
                 <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                <span className="break-all">{channel.lastError}</span>
+                <span className="break-all">{formatApiError(new Error(channel.lastError))}</span>
               </div>
               {channel.mode === "own" && !channel.vobizChannelId && data?.purchasedNumber && (
                 <Button
@@ -787,7 +868,7 @@ function NativeSection({
             </div>
           </div>
 
-          {channel.mode === "own" && (
+          {ownVobiz && (
             <div className="rounded-md border border-border/50 bg-muted/15 p-3 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -852,7 +933,7 @@ function NativeSection({
                             });
                             void refetchCalls();
                           })
-                          .catch((err: Error) => toast({ title: "Call failed", description: err.message, variant: "destructive" }))
+                          .catch((err: unknown) => toast({ title: "Call failed", description: formatApiError(err), variant: "destructive" }))
                           .finally(() => setCallingBusy(false));
                       }}
                     >
@@ -876,7 +957,7 @@ function NativeSection({
                           onClick={() => {
                             void customFetch(`${API}/whatsapp/calls/${c.id}/terminate`, { method: "POST" })
                               .then(() => void refetchCalls())
-                              .catch((err: Error) => toast({ title: "Hangup failed", description: err.message, variant: "destructive" }));
+                              .catch((err: unknown) => toast({ title: "Hangup failed", description: formatApiError(err), variant: "destructive" }));
                           }}
                         >
                           End
@@ -1021,19 +1102,18 @@ function NativeSection({
             <DialogDescription>
               {bizStep === 1 ? (
                 <>
-                  Every Business WhatsApp number has a Meta WABA — including numbers your BSP created for you.
-                  Copy WABA ID + a permanent System User token from{" "}
+                  Paste your WABA ID and a permanent System User token from{" "}
                   <a href="https://business.facebook.com/settings/whatsapp-business-accounts" target="_blank" rel="noreferrer" className="underline">
                     Meta WhatsApp Business settings
                   </a>
-                  {" "}or from your BSP dashboard. Token permissions: whatsapp_business_messaging + whatsapp_business_management.
+                  . Token permissions: whatsapp_business_messaging + whatsapp_business_management. SnapServe stores the token encrypted and sends templates through Meta.
                 </>
               ) : numberChoice === "voice" ? (
-                "Pick the SnapServe call number to WhatsApp-enable. Assigning it to the agent was not enough by itself."
+                "Pick the SnapServe call number and paste its Meta Phone Number ID. We save Meta creds only — no Vobiz unless you later enable calling."
               ) : numberChoice === "buy" ? (
-                "Buy a WhatsApp DID (not the same list as voice numbers). Vobiz is the BSP; Meta still holds the WABA."
+                "Buy a WhatsApp DID from SnapServe. Vobiz provisions the number; Meta still holds the WABA."
               ) : (
-                "Paste the Meta Phone Number ID for the number already on your WABA."
+                "Paste the Meta Phone Number ID. Connect saves creds and fetches approved templates — no Vobiz."
               )}
             </DialogDescription>
           </DialogHeader>
@@ -1063,7 +1143,7 @@ function NativeSection({
                   onChange={(e) => setAccessToken(e.target.value)}
                 />
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  Passed securely to the messaging carrier — it is not stored here.
+                  Stored encrypted. Used only to send templates through Meta.
                 </p>
               </div>
               <div>
@@ -1092,13 +1172,38 @@ function NativeSection({
             </div>
           ) : (
             <div className="space-y-3">
-              {/* Option A — buy from SnapServe (owners only; partner funds client numbers) */}
+              {/* Default — Meta-direct (no Vobiz) */}
+              <label className={`block rounded-lg border p-3 cursor-pointer transition-colors ${numberChoice === "direct" ? "border-sky-500/50 bg-sky-500/[0.04]" : "border-border/60 hover:border-border"}`}>
+                <div className="flex items-start gap-2">
+                  <input type="radio" className="mt-1" checked={numberChoice === "direct"} onChange={() => setNumberChoice("direct")} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium">I already have Meta (WABA)</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Paste the Meta Phone Number ID. Connect talks to Meta only — we do not create a Vobiz channel.
+                    </p>
+                    {numberChoice === "direct" && (
+                      <div className="mt-2 grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs">Phone Number ID *</Label>
+                          <Input className="mt-1 h-9" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Number (E.164)</Label>
+                          <Input className="mt-1 h-9" placeholder="+9198…" value={phoneE164} onChange={(e) => setPhoneE164(e.target.value)} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </label>
+
+              {/* Buy from SnapServe (owners only) — Vobiz provision */}
               {!isManagedWorkspace && (
               <label className={`block rounded-lg border p-3 cursor-pointer transition-colors ${numberChoice === "buy" ? "border-sky-500/50 bg-sky-500/[0.04]" : "border-border/60 hover:border-border"}`}>
                 <div className="flex items-start gap-2">
                   <input type="radio" className="mt-1" checked={numberChoice === "buy"} onChange={() => setNumberChoice("buy")} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium">Buy a new WhatsApp number from SnapServe (Vobiz)</p>
+                    <p className="text-xs font-medium">Buy a WhatsApp number from SnapServe (Vobiz)</p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
                       Not the same list as call numbers. {inr(pricing.totalPaise)} first month (incl. GST), then {inr(pricing.renewalPaise)}/30 days
                       from your wallet. Phone Number ID is assigned after buy — you still paste WABA + token in the previous step.
@@ -1114,7 +1219,7 @@ function NativeSection({
                           </div>
                         ) : (waNumbers?.numbers?.length ?? 0) === 0 ? (
                           <p className="text-[11px] text-amber-600 dark:text-amber-400/90">
-                            No WhatsApp numbers in stock right now — try again shortly, or connect a Meta-registered number below.
+                            No WhatsApp numbers in stock right now — try again shortly, or connect a Meta-registered number above.
                           </p>
                         ) : (
                           <div className="max-h-36 overflow-y-auto rounded-md border border-border/50 divide-y divide-border/40">
@@ -1138,32 +1243,7 @@ function NativeSection({
               </label>
               )}
 
-              {/* Option B — Meta-registered number */}
-              <label className={`block rounded-lg border p-3 cursor-pointer transition-colors ${numberChoice === "direct" ? "border-sky-500/50 bg-sky-500/[0.04]" : "border-border/60 hover:border-border"}`}>
-                <div className="flex items-start gap-2">
-                  <input type="radio" className="mt-1" checked={numberChoice === "direct"} onChange={() => setNumberChoice("direct")} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium">Number already on my WABA (Meta or my BSP’s Meta)</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Paste the Meta Phone Number ID. If Wati/AiSensy already created Meta for you, those IDs are in Meta Business Manager (or their dashboard). The number must not stay on the personal WhatsApp app.
-                    </p>
-                    {numberChoice === "direct" && (
-                      <div className="mt-2 grid grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-xs">Phone Number ID *</Label>
-                          <Input className="mt-1 h-9" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Number (E.164)</Label>
-                          <Input className="mt-1 h-9" placeholder="+9198…" value={phoneE164} onChange={(e) => setPhoneE164(e.target.value)} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </label>
-
-              {/* Option C — WhatsApp-enable an existing voice number (owners only) */}
+              {/* WhatsApp-enable an existing voice number (owners only) */}
               {!isManagedWorkspace && (
               <label className={`block rounded-lg border p-3 cursor-pointer transition-colors ${numberChoice === "voice" ? "border-sky-500/50 bg-sky-500/[0.04]" : "border-border/60 hover:border-border"}`}>
                 <div className="flex items-start gap-2">
@@ -1229,17 +1309,17 @@ function NativeSection({
               </div>
             ) : numberChoice === "voice" ? (
               <Button
-                disabled={voiceNumberId == null || !phoneNumberId.trim() || connectOwn.isPending}
-                onClick={() => connectOwn.mutate({ numberSource: "voice_number", voicePhoneNumberId: voiceNumberId ?? undefined })}
+                disabled={voiceNumberId == null || !phoneNumberId.trim() || connectMeta.isPending}
+                onClick={() => connectMeta.mutate()}
               >
-                {connectOwn.isPending ? "Connecting…" : "Connect voice number"}
+                {connectMeta.isPending ? "Connecting…" : "Connect via Meta"}
               </Button>
             ) : (
               <Button
-                disabled={!phoneNumberId.trim() || connectOwn.isPending}
-                onClick={() => connectOwn.mutate({ numberSource: "direct" })}
+                disabled={!phoneNumberId.trim() || connectMeta.isPending}
+                onClick={() => connectMeta.mutate()}
               >
-                {connectOwn.isPending ? "Connecting…" : "Connect"}
+                {connectMeta.isPending ? "Connecting…" : "Connect"}
               </Button>
             )}
           </DialogFooter>
@@ -1408,7 +1488,7 @@ export default function WhatsAppPage({
       }
     } catch (err) {
       setMetaTplList(null);
-      toast({ title: "Meta connection failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+      toast({ title: "Meta connection failed", description: formatApiError(err), variant: "destructive" });
     } finally {
       setMetaFetching(false);
     }
@@ -1590,7 +1670,7 @@ export default function WhatsAppPage({
       setCreateOpen(false);
       resetForm();
     },
-    onError: (err: Error) => toast({ title: "Create failed", description: err.message, variant: "destructive" }),
+    onError: (err: unknown) => toast({ title: "Create failed", description: formatApiError(err), variant: "destructive" }),
   });
 
   const patchMut = useMutation({
@@ -1605,7 +1685,7 @@ export default function WhatsAppPage({
       setEditConn(null);
       toast({ title: "Saved" });
     },
-    onError: (err: Error) => toast({ title: "Update failed", description: err.message, variant: "destructive" }),
+    onError: (err: unknown) => toast({ title: "Update failed", description: formatApiError(err), variant: "destructive" }),
   });
 
   const deleteMut = useMutation({
@@ -1644,7 +1724,11 @@ export default function WhatsAppPage({
   const body = (
     <>
       <div className={embedded ? "space-y-6 max-h-[min(72vh,840px)] overflow-y-auto pr-0.5" : "space-y-6"}>
-      <NativeSection agents={agents} onChooseBsp={() => openBspCreate("webhook")} />
+      <NativeSection
+        agents={agents}
+        onChooseBsp={() => openBspCreate("webhook")}
+        preferredAgentId={urlAgentId || undefined}
+      />
 
       {(showByo || connections.length > 0) && <BspAdopterGuide />}
 
@@ -1694,7 +1778,7 @@ export default function WhatsAppPage({
                         <div className="flex items-center gap-2">
                           <h3 className="text-sm font-semibold">{c.name}</h3>
                           <Badge variant="outline" className="text-[10px]">
-                            {c.active ? "Active" : "Paused"}
+                            {c.metaConnected ? "Meta connected" : c.active ? "Active" : "Paused"}
                           </Badge>
                           {c.requestCallEnabled && (
                             <Badge variant="secondary" className="text-[10px]">Request a Call</Badge>
@@ -1798,7 +1882,7 @@ export default function WhatsAppPage({
                       <div className="text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
                         {c.lastInboundAt && <span>Last inbound: {new Date(c.lastInboundAt).toLocaleString()}</span>}
                         {c.lastOutboundAt && <span>Last outbound: {new Date(c.lastOutboundAt).toLocaleString()}</span>}
-                        {c.lastError && <span className="text-red-600 dark:text-red-400">Error: {c.lastError}</span>}
+                        {c.lastError && <span className="text-red-600 dark:text-red-400">Error: {formatApiError(new Error(c.lastError))}</span>}
                       </div>
                     )}
                   </div>

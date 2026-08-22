@@ -332,12 +332,21 @@ export function hintEnabled(channel: WhatsappChannel, hint: TemplateHint): boole
  * exact secret occurrences removed, long token-like sequences redacted,
  * length capped.
  */
+function looksLikeHtmlError(raw: string): boolean {
+  const t = raw.trimStart();
+  return /^<!DOCTYPE/i.test(t) || /^<html[\s>]/i.test(t) || /<\/(?:html|body|head)>/i.test(raw);
+}
+
 export function sanitizeVobizError(raw: string, secrets: Array<string | undefined> = []): string {
+  if (looksLikeHtmlError(raw) || /bad gateway|error code 502|cloudflare/i.test(raw) && /<html/i.test(raw)) {
+    return "Carrier unavailable, try again";
+  }
   let out = raw;
   for (const s of secrets) {
     if (s && s.length >= 6) out = out.split(s).join("[redacted]");
   }
   out = out.replace(/[A-Za-z0-9_\-.]{24,}/g, "[redacted]");
+  if (looksLikeHtmlError(out)) return "Carrier unavailable, try again";
   return out.slice(0, 300);
 }
 

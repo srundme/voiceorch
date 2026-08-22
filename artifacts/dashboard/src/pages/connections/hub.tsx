@@ -255,12 +255,14 @@ export function ConnectionsHub({ embedded = false }: { embedded?: boolean }) {
   const { data: waConnections } = useQuery({
     queryKey: ["connections-whatsapp-connections"],
     queryFn: () =>
-      customFetch<{ connections: Array<{ active?: boolean }> }>("/api/whatsapp/connections"),
+      customFetch<{ connections: Array<{ active?: boolean; metaConnected?: boolean; metaPhoneNumberId?: string | null }> }>("/api/whatsapp/connections"),
     staleTime: 60_000,
   });
   const waReady =
     !!waData?.channel?.active
-    || (waConnections?.connections ?? []).some((c) => c.active);
+    || (waConnections?.connections ?? []).some((c) =>
+      Boolean(c.active && (c.metaConnected || c.metaPhoneNumberId)),
+    );
 
   const { data: connections = [] } = useListConnections();
   const websiteReady = connections.some((c) => c.type === "webhook");

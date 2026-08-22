@@ -76,6 +76,20 @@ describe("formatApiError", () => {
       expect(formatApiError(err)).toBe("Something went wrong on our end — please try again.");
     });
 
+    it("never dumps HTML from a 502 carrier/proxy page", () => {
+      const html = "<!DOCTYPE html><html><title>IE</title><body>Bad gateway</body></html>";
+      const err = makeApiError(html, 502, "Bad Gateway");
+      expect(formatApiError(err)).toBe("Carrier unavailable, try again");
+      expect(formatApiError(err)).not.toMatch(/DOCTYPE|<html/i);
+    });
+
+    it("sanitizes an error string that is HTML", () => {
+      const err = makeApiError({
+        error: "<html><head><title>Cloudflare</title></head><body>502</body></html>",
+      }, 502, "Bad Gateway");
+      expect(formatApiError(err)).toBe("Carrier unavailable, try again");
+    });
+
     it("returns a friendly 4xx message for a 422 with no body", () => {
       const err = makeApiError(null, 422, "Unprocessable Entity");
       expect(formatApiError(err)).toBe("Something went wrong with your request.");

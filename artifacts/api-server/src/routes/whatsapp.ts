@@ -138,6 +138,142 @@ async function ensureWabaId(opts: {
   return resolved ?? "";
 }
 
+/**
+ * Save Meta Cloud API creds (token + Phone Number ID + WABA) and fetch
+ * approved templates. No VoBiz channel. Used when the customer already has a WABA.
+ */
+async function upsertMetaConnection(
+  userId: string,
+  body: {
+    name?: string;
+    agentId?: number;
+    wabaId?: string;
+    phoneNumberId?: string;
+    accessToken?: string;
+    metaApiBase?: string | null;
+  },
+): Promise<
+  | { ok: true; row: typeof whatsappConnectionsTable.$inferSelect }
+  | { ok: false; status: number; error: string }
+> {
+  const token = (body.accessToken ?? "").replace(/\s+/g, "");
+  const phoneNumberId = (body.phoneNumberId ?? "").trim();
+  const apiBase = (body.metaApiBase ?? "").trim() || null;
+  if (!token || !phoneNumberId) {
+    return { ok: false, status: 400, error: "Phone Number ID and a permanent System User token are required" };
+  }
+
+  const phoneCheck = await verifyMetaPhoneNumber(token, phoneNumberId, apiBase);
+  if (!phoneCheck.ok) {
+    return { ok: false, status: 400, error: `Phone number ID check failed: ${phoneCheck.error}` };
+  }
+
+  let wabaId = "";
+  try {
+    wabaId = await ensureWabaId({
+      token,
+      wabaId: (body.wabaId ?? "").trim(),
+      phoneNumberId,
+      apiBase,
+    });
+  } catch (err) {
+    logger.warn({ err, userId }, "whatsapp-meta-connect: WABA lookup failed");
+  }
+  if (!wabaId) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Could not look up the WhatsApp Business Account. Paste the WABA ID from Meta Business settings.",
+    };
+  }
+
+  const requestedAgentId = Number(body.agentId);
+  let agentId = Number.isFinite(requestedAgentId) && requestedAgentId > 0 ? requestedAgentId : 0;
+  if (agentId) {
+    const [agent] = await db
+      .select({ id: agentsTable.id })
+      .from(agentsTable)
+      .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, userId)))
+      .limit(1);
+    if (!agent) return { ok: false, status: 404, error: "Agent not found" };
+  } else {
+    const [first] = await db
+      .select({ id: agentsTable.id })
+      .from(agentsTable)
+      .where(eq(agentsTable.userId, userId))
+      .orderBy(desc(agentsTable.id))
+      .limit(1);
+    if (!first) {
+      return { ok: false, status: 400, error: "Create an agent first, then connect WhatsApp" };
+    }
+    agentId = first.id;
+  }
+
+  const existing = await db
+    .select()
+    .from(whatsappConnectionsTable)
+    .where(eq(whatsappConnectionsTable.userId, userId))
+    .orderBy(desc(whatsappConnectionsTable.updatedAt));
+
+  const match =
+    existing.find((r) => r.agentId === agentId)
+    ?? existing.find((r) => r.metaPhoneNumberId === phoneNumberId)
+    ?? existing.find((r) => !r.metaAccessToken || !r.metaPhoneNumberId)
+    ?? null;
+
+  const name = (body.name ?? "").trim() || match?.name || "WhatsApp";
+  const encrypted = encryptKey(token);
+  let row = match;
+
+  if (match) {
+    const [updated] = await db.update(whatsappConnectionsTable)
+      .set({
+        name,
+        agentId,
+        metaAccessToken: encrypted,
+        metaPhoneNumberId: phoneNumberId,
+        metaWabaId: wabaId,
+        metaApiBase: apiBase,
+        lastError: null,
+        active: true,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(whatsappConnectionsTable.id, match.id),
+        eq(whatsappConnectionsTable.userId, userId),
+      ))
+      .returning();
+    row = updated ?? match;
+  } else {
+    const inboundToken = randomBytes(20).toString("hex");
+    const outboundSecret = `whsec_${randomBytes(24).toString("hex")}`;
+    const [created] = await db.insert(whatsappConnectionsTable).values({
+      userId,
+      name,
+      agentId,
+      inboundToken,
+      outboundSecret,
+      metaAccessToken: encrypted,
+      metaPhoneNumberId: phoneNumberId,
+      metaWabaId: wabaId,
+      metaApiBase: apiBase,
+      active: true,
+    }).returning();
+    row = created;
+  }
+
+  if (!row) return { ok: false, status: 500, error: "Could not save the WhatsApp connection" };
+
+  try {
+    const catalog = await persistMetaCatalogForConnection(row.id, userId, token, wabaId, apiBase);
+    row = { ...row, templateCatalog: catalog, metaWabaId: wabaId };
+  } catch (err) {
+    logger.warn({ err, connectionId: row.id }, "whatsapp-meta-connect: catalog fetch failed");
+  }
+
+  return { ok: true, row };
+}
+
 function toE164India(raw: string): string {
   const digits = normalizePhoneDigits(raw.replace(/\D/g, ""));
   if (digits.length === 10) return `+91${digits}`;
@@ -200,6 +336,29 @@ router.get("/whatsapp/connections", requireAuth, async (req, res): Promise<void>
       agentName: r.agentName ?? null,
     })),
   });
+});
+
+/**
+ * Meta-first connect: paste WABA + Phone Number ID + token, fetch approved
+ * templates. Does not create a VoBiz channel.
+ */
+router.post("/whatsapp/meta/connect", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const body = req.body as {
+    name?: string;
+    agentId?: number;
+    wabaId?: string;
+    phoneNumberId?: string;
+    accessToken?: string;
+    metaApiBase?: string | null;
+  };
+  const result = await upsertMetaConnection(userId, body);
+  if (!result.ok) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  logger.info({ userId, connectionId: result.row.id }, "whatsapp: meta-direct connected");
+  res.status(201).json(formatConnection(result.row));
 });
 
 router.post("/whatsapp/connections", requireAuth, async (req, res): Promise<void> => {
