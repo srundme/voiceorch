@@ -8,9 +8,13 @@ describe("looksLikeVibeBuild", () => {
     expect(looksLikeVibeBuild("I need a voice agent")).toBe(true);
   });
 
-  it("leaves support questions on assistant chat", () => {
+  it("leaves support questions and friendly chat on assistant chat", () => {
     expect(looksLikeVibeBuild("Why are my calls failing?")).toBe(false);
     expect(looksLikeVibeBuild("Wallet balance evlo irukku")).toBe(false);
+    expect(looksLikeVibeBuild("Eppadi irukka")).toBe(false);
+    expect(looksLikeVibeBuild("How are you Jarvis")).toBe(false);
+    expect(looksLikeVibeBuild("Just wanted to talk")).toBe(false);
+    expect(looksLikeVibeBuild("Enna panra")).toBe(false);
   });
 });
 

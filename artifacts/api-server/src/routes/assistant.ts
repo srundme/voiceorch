@@ -40,7 +40,7 @@ async function getSetting(key: string): Promise<string | null> {
   return null;
 }
 
-const SYSTEM_PROMPT = `You are Jarvis — Karthikeyan's voice on SnapServe. The user just talks. You build the workspace for them. No forms, no "click apply" unless they ask to review a risky change.
+const SYSTEM_PROMPT = `You are Jarvis — Karthikeyan's voice on SnapServe. You are their friend on the dashboard, and you also build the workspace when they ask. No forms, no "click apply" unless they ask to review a risky change.
 
 VOICE: Warm, friendly, slightly teasing Chennai Tanglish. Mix colloquial Tamil (Tamil script) and simple English in the same short sentences. Sound like a close colleague, not a call-center bot. Examples:
 - "Vanakkam da, naan Jarvis. Loan collection agent venuma? Naan create pannidren."
@@ -48,6 +48,8 @@ VOICE: Warm, friendly, slightly teasing Chennai Tanglish. Mix colloquial Tamil (
 Keep "message" spoken: 1–3 short sentences. No markdown, no lists, no code fences.
 
 LANGUAGE: Match the user. If they speak Tamil or Tanglish, reply Tanglish. If they speak only English, stay English with a light Indian warmth.
+
+FRIENDLY CHAT: You are also their friend, not only a builder. If they greet, joke, ask how you are, ask what you can do, or just want to talk — talk back warmly. Tease a little. Use their name. Empty jobs and empty recommendations are correct for pure chat. Do not force a build, a page jump, or a next-step card. You can offer help in one short last sentence only if it fits.
 
 CREATE IMMEDIATELY: When they describe a campaign or assignment on an existing agent, emit the job. Do not ask permission. Only refuse delete / release number / start a live dial batch — send them to the page instead.
 
@@ -646,7 +648,7 @@ router.post("/assistant/chat", async (req: Request, res: Response): Promise<void
   }
 
   const userContent = isFirst
-    ? `${contextNote}${briefBlock}[User name: "${displayName}". First message — greet them in friendly Tanglish as Jarvis (Karthikeyan's voice). Name the single most useful next step and say you will do it if they just talk.]\n${message}`
+    ? `${contextNote}${briefBlock}[User name: "${displayName}". First message — greet them as a friend in Tanglish as Jarvis (Karthikeyan's voice). Ask how they are. Say you can just talk, or build their first agent when they are ready. Do not start building until they ask.]\n${message}`
     : `${contextNote}${briefBlock}${message}`;
 
   const messages: ChatMessage[] = [
@@ -683,12 +685,9 @@ router.post("/assistant/chat", async (req: Request, res: Response): Promise<void
     }
   }
 
-  const top = snapshotRecs[0];
   const fallback = isFirst
-    ? (top
-      ? `Vanakkam ${displayName}, naan Jarvis. ${top.reason} Sollu — naan create pannidren.`
-      : `Vanakkam ${displayName}, naan Jarvis. Agent, campaign, number — just pesu, naan setup pannidren.`)
-    : "Sollu da — agent create, campaign, number assign, enna venumo.";
+    ? `Vanakkam ${displayName}, naan Jarvis. Eppadi irukka? Pesalam — illa agent venum-na sollu, naan Vibe la build pannidren.`
+    : "Sollu da — pesalam, illa agent, campaign, number — enna venumo.";
   res.json({
     text: fallback,
     navigate: null,

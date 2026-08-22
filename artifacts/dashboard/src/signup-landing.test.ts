@@ -44,6 +44,8 @@ describe("signup landing route", () => {
     const engine = src("../api-server/src/routes/vibe.ts");
     expect(hud).toMatch(/persona: "jarvis"/);
     expect(hud).toMatch(/\/api\/agents\/vibe-chat/);
+    expect(hud).toMatch(/looksLikeVibeBuild/);
+    expect(hud).toMatch(/sendAssistant/);
     expect(engine).toMatch(/persona === "jarvis"/);
     expect(engine).toMatch(/JARVIS_VIBE_PREFIX/);
   });

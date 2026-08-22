@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { getListAgentsQueryKey, useListAgents } from "@workspace/api-client-react";
+import { getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
-import { firstVibeKickoff, looksLikeVibeBuild, shouldAutoOpenJarvis } from "@/lib/jarvis-vibe";
+import { looksLikeVibeBuild, shouldAutoOpenJarvis } from "@/lib/jarvis-vibe";
 import { Mic, X, Send, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -133,9 +133,6 @@ export function VoiceAssistant() {
   const [location, navigate] = useLocation();
   const { user, getToken } = useAuth();
   const queryClient = useQueryClient();
-  const { data: agents } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
-  const agentList = Array.isArray(agents) ? agents : (agents as { agents?: unknown[] } | undefined)?.agents ?? [];
-  const noAgents = agentList.length === 0;
 
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -454,17 +451,9 @@ export function VoiceAssistant() {
   const sendMessage = useCallback(
     async (userText: string, isFirst = false) => {
       try {
-        const welcomeName = (() => {
-          try { return sessionStorage.getItem("vibe:welcomeName")?.trim() ?? ""; } catch { return ""; }
-        })();
-        const name = welcomeName || userName;
-        const startVibe = isFirst
-          ? noAgents
-          : vibeActiveRef.current || looksLikeVibeBuild(userText);
-
+        const startVibe = !isFirst && (vibeActiveRef.current || looksLikeVibeBuild(userText));
         if (startVibe) {
-          const payload = isFirst && noAgents ? firstVibeKickoff(name) : userText;
-          await sendVibe(payload, isFirst && noAgents);
+          await sendVibe(userText, false);
           return;
         }
         await sendAssistant(userText, isFirst);
@@ -474,7 +463,7 @@ export function VoiceAssistant() {
         setTimeout(() => { setPhase("idle"); setError(""); }, 3000);
       }
     },
-    [noAgents, userName, sendVibe, sendAssistant],
+    [sendVibe, sendAssistant],
   );
 
   sendMessageRef.current = sendMessage;
@@ -656,7 +645,7 @@ export function VoiceAssistant() {
             <JarvisOrb phase={phase} />
           </button>
           <p className="mb-2 px-6 text-center text-[11px] text-white/45">
-            {vibeStatus || "Karthikeyan voice · same Vibe Build · just talk"}
+            {vibeStatus || "Karthikeyan voice · friend + Vibe Build"}
           </p>
 
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-2" style={{ scrollbarWidth: "none" }}>
@@ -760,7 +749,7 @@ export function VoiceAssistant() {
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={phase === "listening" ? "Listening…" : "Priya collection agent create pannu…"}
+                placeholder={phase === "listening" ? "Listening…" : "Eppadi irukka? Illa agent create pannu…"}
                 disabled={isBusy}
                 className="h-10 flex-1 rounded-full border border-white/10 bg-white/5 px-4 text-sm text-white outline-none placeholder:text-white/30 focus:border-amber-200/40 disabled:opacity-60"
               />
