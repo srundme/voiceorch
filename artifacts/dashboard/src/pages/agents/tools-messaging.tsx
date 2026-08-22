@@ -25,6 +25,7 @@ type BuilderWhatsappChannel = {
   businessName?: string | null;
   mode?: string | null;
   phoneE164?: string | null;
+  vobizChannelId?: string | null;
   templateCatalog?: WaCatalogEntry[];
 };
 
@@ -95,7 +96,13 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
     waConnList.find((c) => c.active && c.agentId === agentId)
     ?? waConnList.find((c) => c.active)
     ?? null;
-  const connected = Boolean(agentConnection || waData?.channel);
+  const metaReady = Boolean(
+    agentConnection && (agentConnection.metaConnected || agentConnection.metaPhoneNumberId),
+  );
+  const nativeReady = Boolean(
+    waData?.channel?.active && (waData.channel.status === "active" || waData.channel.vobizChannelId || waData.channel.phoneE164),
+  );
+  const connected = metaReady || nativeReady;
 
   return (
     <div className="space-y-3 border-t border-border bg-muted/20 px-4 pb-4 pt-3">
@@ -116,7 +123,7 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
             </div>
             <StatusLine ready label="Connected" />
           </div>
-          {agentConnection && (agentConnection.metaPhoneNumberId || agentConnection.metaConnected) ? (
+          {agentConnection ? (
             <AgentWhatsappTemplatePicks
               agentId={agentId}
               connectionId={agentConnection.id}
@@ -124,14 +131,30 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
               initialCatalog={agentConnection.templateCatalog}
               visibleSlots={["default"]}
             />
-          ) : waData?.channel ? (
+          ) : (
             <AgentWhatsappTemplatePicks
               agentId={agentId}
               nativeMode
-              initialCatalog={waData.channel.templateCatalog}
+              initialCatalog={waData?.channel?.templateCatalog}
               visibleSlots={["default"]}
             />
-          ) : null}
+          )}
+        </div>
+      ) : agentConnection ? (
+        <div className="rounded-lg bg-muted/25 px-3 py-3">
+          <p className="text-[12px] font-medium">{agentConnection.name || "WhatsApp"} is saved, not fully wired</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Meta Business verification is not enough. Paste the Phone Number ID, WABA ID, and a permanent
+            System User token on Connections, then Refresh templates here.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-2 h-7 text-[10px]"
+            onClick={() => navigate(connectionsSetupHref("whatsapp", agentId))}
+          >
+            Finish on Connections
+          </Button>
         </div>
       ) : (
         <div className="rounded-lg bg-muted/25 px-3 py-3">
