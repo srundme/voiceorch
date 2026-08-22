@@ -115,7 +115,7 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
             <StatusLine ready label="Connected" />
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Mid-call uses the After the call default. Map one template for all outcomes, or different templates per disposition, on After the call.
+            Leave this off unless the customer asks for a message during the call. Interested vs Not Interested templates send only after the call, on After the call.
           </p>
         </div>
       ) : nativeReady ? (
@@ -127,7 +127,7 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
             <StatusLine ready label="Connected" />
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Mid-call uses the After the call default. Map templates by outcome there.
+            Leave this off unless the customer asks during the call. Outcome templates send after the call.
           </p>
         </div>
       ) : agentConnection ? (

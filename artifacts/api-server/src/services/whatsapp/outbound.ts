@@ -16,7 +16,6 @@ import {
   callsTable,
   agentsTable,
   bookingsTable,
-  agentDispositionsTable,
 } from "@workspace/db";
 import { logger } from "../../lib/logger.js";
 import {
@@ -42,22 +41,6 @@ import {
 
 export { buildWhatsappCallEndedPayload } from "./payload.js";
 export type { WhatsappCallEndedPayload } from "./payload.js";
-
-/** After-call “one template for all outcomes” — also used mid-call so they pick once. */
-async function afterCallFixedTemplate(agentId: number): Promise<MetaTemplateChoice | null> {
-  const [row] = await db
-    .select({ afterCallMessages: agentDispositionsTable.afterCallMessages })
-    .from(agentDispositionsTable)
-    .where(eq(agentDispositionsTable.agentId, agentId))
-    .limit(1);
-  const raw = row?.afterCallMessages;
-  if (!raw || typeof raw !== "object") return null;
-  const universal = (raw as { universal?: { whatsappTemplate?: { name?: string; language?: string } } }).universal;
-  const name = universal?.whatsappTemplate?.name?.trim() ?? "";
-  const language = universal?.whatsappTemplate?.language?.trim() ?? "en";
-  if (!name) return null;
-  return { name, language: language || "en", paramCount: 0 };
-}
 
 async function postOutbound(
   url: string,
@@ -412,11 +395,10 @@ export async function sendMidCallWhatsapp(opts: {
   /* Mid-call direct Meta Cloud API send */
   if (conn && conn.metaAccessToken && conn.metaPhoneNumberId) {
     try {
-    const fromAfterCall = await afterCallFixedTemplate(opts.agentId);
     const tpl = resolveMetaTemplate(
       conn.metaTemplates as Record<string, MetaTemplateChoice | undefined> | null,
       safeHint,
-    ) ?? fromAfterCall;
+    );
     if (!tpl) {
       const err = `No Meta template linked for ${safeHint} on this connection — open the connection (pencil icon), fetch templates and pick one for Call summary`;
       await db.update(whatsappConnectionsTable)

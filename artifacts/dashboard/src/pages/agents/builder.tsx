@@ -2868,7 +2868,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <MessageCircle className="h-4 w-4" />,
       color: "emerald",
       label: "Send WhatsApp",
-      description: "Lets the agent send WhatsApp mid-call. Templates are picked on After the call — one for all outcomes, or per disposition.",
+      description: "Usually leave off. The agent would send before we know Interested vs Not Interested. Outcome templates go out after the call.",
       needsEventType: false,
     },
   ] as const;
@@ -3199,7 +3199,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         <BuilderPanel
           title="Messaging"
           icon={<MessageCircle />}
-          description="Send mid-call. WhatsApp templates are mapped on After the call."
+          description="Mid-call is optional. WhatsApp by outcome sends after the call ends."
           bodyClassName="p-0 divide-y divide-border"
         >
         {CALL_CONTROL_TOOLS.filter((t) => t.type === "send_email" || t.type === "send_whatsapp").map(({ type, icon, label, description }) => {
@@ -4700,24 +4700,6 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           ...(persistAfterCall ? { afterCallMessages } : {}),
         }),
       });
-      const fixed = afterCallMessages.universal.whatsappTemplate;
-      const conn = waConnList.find((c) => c.active && (c.metaConnected || c.metaPhoneNumberId));
-      if (fixed?.name && conn) {
-        const fromCat = waCatalog.find((t) => t.name === fixed.name && t.language === fixed.language);
-        await customFetch(`${DASH_API}/whatsapp/connections/${conn.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            metaTemplates: {
-              default: {
-                name: fixed.name,
-                language: fixed.language,
-                paramCount: fromCat?.paramCount ?? 0,
-              },
-            },
-          }),
-        }).catch(() => {});
-      }
     },
     onSuccess: () => {
       toast({ title: "Outcomes saved" });
@@ -4920,7 +4902,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           <BuilderPanel
             title="After-call messages"
             icon={<MessageCircle />}
-            description="One WhatsApp template for every outcome, or a different template for selected dispositions"
+            description="Sends when the call ends and the outcome is known — Interested vs Not Interested cannot be decided mid-call"
             action={
               <Button
                 type="button"
@@ -5040,7 +5022,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                 <div>
                   <p className="text-[12px] font-medium text-foreground">One template for all outcomes</p>
                   <p className="text-[10px] text-muted-foreground">
-                    Mid-call Send WhatsApp and after-call both use this unless a disposition rule matches.
+                    After the call, every lead gets this template. Add a rule below to send a different one for Interested, Not Interested, etc.
                   </p>
                 </div>
                 <div className="flex items-center gap-4">
