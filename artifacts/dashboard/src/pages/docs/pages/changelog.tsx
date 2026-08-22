@@ -1,3 +1,4 @@
+import { Link } from "wouter";
 import { PageHeader } from "../DocsUi";
 
 export default function ChangelogPage() {
@@ -8,6 +9,20 @@ export default function ChangelogPage() {
         title="Changelog"
         description="Notable documentation and API-consumer changes."
       />
+
+      <h2 id="2026-08-22-jarvis">2026-08-22 — Jarvis: speak, recommend, do the job</h2>
+      <ul>
+        <li>
+          The dashboard robot is Jarvis — SnapServe support you can talk to. It reads the live
+          workspace, recommends the next step (channel, campaign, publish, wallet, failed calls),
+          and runs confirmable jobs: open a page, publish an agent, create a campaign draft, assign
+          a number, or apply agent setting fixes.
+        </li>
+        <li>
+          Voice is first: tap the mic (Chrome / Edge). On the agent builder Jarvis docks as a right-edge
+          tab so it does not cover controls. Guide: <Link href="/docs/jarvis">Jarvis</Link>.
+        </li>
+      </ul>
 
       <h2 id="2026-08-20-voice-memory-address">2026-08-20 — Voice Memory: address the caller on match</h2>
       <ul>

@@ -4,6 +4,16 @@ import { PageHeader } from "../DocsUi";
 
 const FAQS: { q: string; a: ReactNode }[] = [
   {
+    q: "Where is support on the dashboard?",
+    a: (
+      <>
+        Tap the black robot — that is <Link href="/docs/jarvis">Jarvis</Link>. Speak or type.
+        It recommends the next workspace step and can publish an agent, draft a campaign, or
+        assign a number after you confirm.
+      </>
+    ),
+  },
+  {
     q: "Where do I start a first agent?",
     a: (
       <>

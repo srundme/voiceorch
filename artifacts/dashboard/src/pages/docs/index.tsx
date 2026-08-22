@@ -30,6 +30,7 @@ import PricingPage from "./pages/pricing";
 import FaqPage from "./pages/faq";
 import ChangelogPage from "./pages/changelog";
 import WebsiteEmbedPage from "./pages/website-embed";
+import JarvisPage from "./pages/jarvis";
 
 const ApiReference = lazy(() => import("./api/ApiReference"));
 
@@ -85,6 +86,9 @@ export default function DocsPage() {
       break;
     case "platform-concepts":
       Content = PlatformConceptsPage;
+      break;
+    case "jarvis":
+      Content = JarvisPage;
       break;
     case "quick-start":
       Content = QuickStartPage;

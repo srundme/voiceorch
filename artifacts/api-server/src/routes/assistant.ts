@@ -1,8 +1,23 @@
+import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { db, agentsTable, callsTable, platformSettingsTable } from "@workspace/db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import {
+  db,
+  agentsTable,
+  callsTable,
+  campaignsTable,
+  phoneNumbersTable,
+  platformSettingsTable,
+  usersTable,
+} from "@workspace/db";
+import { eq, and, desc, ne, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
+import {
+  formatBriefForLlm,
+  recommendationsFromSnapshot,
+  type AssistantRecommendation,
+} from "../services/assistant-brief.js";
+import { loadWorkspaceSnapshot } from "../services/assistant-brief-load.js";
 
 const router = Router();
 
@@ -17,22 +32,42 @@ async function getSetting(key: string): Promise<string | null> {
   return null;
 }
 
-const SYSTEM_PROMPT = `You are Orcha, an expert AI assistant embedded in SnapServe — India's AI voice agent orchestration platform. You have deep knowledge of the platform and can read users' real agent data, diagnose issues, and propose configuration changes.
+const SYSTEM_PROMPT = `You are Jarvis, SnapServe's in-app support concierge. Users speak to you on the dashboard. You do jobs for them (after they confirm) and you recommend the next useful step from their real workspace — never generic marketing.
+
+Be concise and spoken: short sentences, no markdown lists, no code fences in "message". Sound like a sharp operations partner, not a chatbot.
 
 ## DATA RETRIEVAL COMMANDS
-When you need data to answer a question accurately, output ONLY a JSON command (nothing else) and the system will fetch it for you. Then give your full response with the data.
+When you need data, output ONLY a JSON command (nothing else):
 
+Workspace snapshot:     {"cmd":"get_workspace_brief"}
 Get all agents:         {"cmd":"list_agents"}
 Get agent details:      {"cmd":"get_agent_detail","agent_id":36}
 Get call performance:   {"cmd":"get_call_stats","agent_id":36}
 Full diagnosis:         {"cmd":"diagnose_agent","agent_id":36}
+List campaigns:         {"cmd":"list_campaigns"}
+List phone numbers:     {"cmd":"list_phone_numbers"}
+Wallet + minutes:       {"cmd":"get_wallet"}
 
 ## RESPONSE FORMAT
 Always respond with valid JSON (no markdown, no code fences):
-{"message":"Your detailed response","navigate":"/app/agents","proposal":null}
+{"message":"Spoken reply","navigate":null,"proposal":null,"recommendations":[],"jobs":[]}
 
-"navigate" — optional, only when sending user to a specific page.
-"proposal" — include when proposing configuration changes (see PROPOSING CHANGES).
+"navigate" — send them to a page when that is the job.
+"proposal" — agent setting changes they must confirm with Apply.
+"recommendations" — 1–3 next steps with {id,title,reason,href,priority}.
+"jobs" — confirmable actions (see JOBS). Never execute a mutating job yourself.
+
+## JOBS
+Offer a job when you can actually do the work. Types:
+- navigate: {"type":"navigate","label":"Open campaigns","href":"/app/campaigns"}
+- set_agent_status: {"type":"set_agent_status","label":"Publish Priya","agentId":36,"status":"active"}
+- create_campaign: {"type":"create_campaign","label":"Create Website Leads","agentId":36,"campaignName":"Website Leads"}
+- assign_phone: {"type":"assign_phone","label":"Assign +9180… to Priya","agentId":36,"phoneNumberId":9}
+
+Never invent IDs. Use platform data. Destructive work (delete agent, release number, start a live dial batch) is not allowed — navigate them to the page instead.
+
+## RECOMMENDATIONS
+Lead with the highest-leverage gap: no agent, no phone/WhatsApp, unused number, no campaign, draft-only agent, low wallet, recent failed calls. If the workspace is healthy, recommend a test call.`}
 
 ## PROPOSING CHANGES
 When you want to change an agent's settings, include a proposal in your response:
@@ -146,6 +181,66 @@ interface Proposal {
   changes: ProposalChange[];
 }
 
+export type AssistantJobType = "navigate" | "set_agent_status" | "create_campaign" | "assign_phone";
+
+export interface AssistantJob {
+  type: AssistantJobType;
+  label: string;
+  href?: string;
+  agentId?: number;
+  status?: "draft" | "active";
+  campaignName?: string;
+  phoneNumberId?: number;
+}
+
+const JOB_TYPES = new Set<AssistantJobType>(["navigate", "set_agent_status", "create_campaign", "assign_phone"]);
+
+function sanitizeJobs(raw: unknown): AssistantJob[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AssistantJob[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const j = item as Record<string, unknown>;
+    if (typeof j.type !== "string" || !JOB_TYPES.has(j.type as AssistantJobType)) continue;
+    if (typeof j.label !== "string" || !j.label.trim()) continue;
+    out.push({
+      type: j.type as AssistantJobType,
+      label: j.label.trim().slice(0, 80),
+      href: typeof j.href === "string" ? j.href : undefined,
+      agentId: typeof j.agentId === "number" ? j.agentId : undefined,
+      status: j.status === "active" || j.status === "draft" ? j.status : undefined,
+      campaignName: typeof j.campaignName === "string" ? j.campaignName.slice(0, 80) : undefined,
+      phoneNumberId: typeof j.phoneNumberId === "number" ? j.phoneNumberId : undefined,
+    });
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
+function sanitizeRecs(raw: unknown): AssistantRecommendation[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AssistantRecommendation[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.id !== "string" || typeof r.title !== "string" || typeof r.href !== "string") continue;
+    out.push({
+      id: r.id.slice(0, 40),
+      title: r.title.slice(0, 80),
+      reason: typeof r.reason === "string" ? r.reason.slice(0, 160) : "",
+      href: r.href,
+      priority: r.priority === "high" || r.priority === "low" ? r.priority : "medium",
+    });
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
+function mergeRecs(server: AssistantRecommendation[], llm: AssistantRecommendation[]): AssistantRecommendation[] {
+  const seen = new Set(server.map((r) => r.id));
+  return [...server, ...llm.filter((r) => !seen.has(r.id))].slice(0, 4);
+}
+
 function tryParseCommand(raw: string): Record<string, unknown> | null {
   const cleaned = raw.trim().replace(/```json\n?|\n?```/g, "").trim();
   if (!cleaned.startsWith("{")) return null;
@@ -156,26 +251,57 @@ function tryParseCommand(raw: string): Record<string, unknown> | null {
   return null;
 }
 
-function parseResponse(raw: string): { text: string; navigate: string | null; proposal: Proposal | null } {
+type ChatResult = {
+  text: string;
+  navigate: string | null;
+  proposal: Proposal | null;
+  recommendations: AssistantRecommendation[];
+  jobs: AssistantJob[];
+};
+
+function emptyResult(text: string): ChatResult {
+  return { text, navigate: null, proposal: null, recommendations: [], jobs: [] };
+}
+
+function parseResponse(raw: string): ChatResult {
   const cleaned = raw.trim().replace(/```json\n?|\n?```/g, "").trim();
-  if (!cleaned.startsWith("{")) return { text: cleaned, navigate: null, proposal: null };
+  if (!cleaned.startsWith("{")) return emptyResult(cleaned);
   try {
-    const parsed = JSON.parse(cleaned) as { message?: string; navigate?: string; proposal?: Proposal };
+    const parsed = JSON.parse(cleaned) as {
+      message?: string;
+      navigate?: string;
+      proposal?: Proposal;
+      recommendations?: unknown;
+      jobs?: unknown;
+    };
     return {
       text: parsed.message ?? cleaned,
       navigate: parsed.navigate ?? null,
       proposal: parsed.proposal ?? null,
+      recommendations: sanitizeRecs(parsed.recommendations),
+      jobs: sanitizeJobs(parsed.jobs),
     };
   } catch {
-    // Try to extract JSON from mixed text
     const match = cleaned.match(/\{[\s\S]*\}/);
     if (match) {
       try {
-        const p = JSON.parse(match[0]) as { message?: string; navigate?: string; proposal?: Proposal };
-        return { text: p.message ?? cleaned, navigate: p.navigate ?? null, proposal: p.proposal ?? null };
+        const p = JSON.parse(match[0]) as {
+          message?: string;
+          navigate?: string;
+          proposal?: Proposal;
+          recommendations?: unknown;
+          jobs?: unknown;
+        };
+        return {
+          text: p.message ?? cleaned,
+          navigate: p.navigate ?? null,
+          proposal: p.proposal ?? null,
+          recommendations: sanitizeRecs(p.recommendations),
+          jobs: sanitizeJobs(p.jobs),
+        };
       } catch { /* ok */ }
     }
-    return { text: cleaned, navigate: null, proposal: null };
+    return emptyResult(cleaned);
   }
 }
 
@@ -360,6 +486,61 @@ async function executeTool(cmd: string, args: Record<string, unknown>, clerkUser
       });
     }
 
+    case "get_workspace_brief": {
+      const snap = await loadWorkspaceSnapshot(clerkUserId);
+      return formatBriefForLlm(snap);
+    }
+
+    case "list_campaigns": {
+      const rows = await db
+        .select({
+          id: campaignsTable.id,
+          name: campaignsTable.name,
+          status: campaignsTable.status,
+          isActive: campaignsTable.isActive,
+          agentId: campaignsTable.agentId,
+          totalLeads: campaignsTable.totalLeads,
+          calledLeads: campaignsTable.calledLeads,
+        })
+        .from(campaignsTable)
+        .where(eq(campaignsTable.userId, clerkUserId))
+        .orderBy(desc(campaignsTable.updatedAt))
+        .limit(20);
+      return JSON.stringify(rows);
+    }
+
+    case "list_phone_numbers": {
+      const rows = await db
+        .select({
+          id: phoneNumbersTable.id,
+          number: phoneNumbersTable.number,
+          agentId: phoneNumbersTable.agentId,
+          status: phoneNumbersTable.status,
+        })
+        .from(phoneNumbersTable)
+        .where(and(
+          eq(phoneNumbersTable.userId, clerkUserId),
+          eq(phoneNumbersTable.status, "active"),
+          ne(phoneNumbersTable.service, "whatsapp"),
+        ))
+        .limit(20);
+      return JSON.stringify(rows);
+    }
+
+    case "get_wallet": {
+      const [user] = await db
+        .select({ walletBalanceCents: usersTable.walletBalanceCents })
+        .from(usersTable)
+        .where(eq(usersTable.clerkId, clerkUserId))
+        .limit(1);
+      const cents = user?.walletBalanceCents ?? 0;
+      return JSON.stringify({
+        balanceInr: Math.round(cents / 100),
+        minutesLeft: Math.floor(cents / 500),
+        low: cents < 10_000,
+      });
+    }
+
     default:
       return JSON.stringify({ error: `Unknown command: ${cmd}` });
   }
@@ -381,7 +562,7 @@ async function callLLM(
     const body: Record<string, unknown> = {
       model,
       messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
-      max_tokens: 1024,
+      max_tokens: 1600,
       temperature: 0.65,
     };
     // Disable Qwen 3 chain-of-thought thinking on Groq — keeps responses clean
@@ -408,7 +589,7 @@ async function runChat(
   model: string,
   baseUrl: string,
   clerkUserId: string,
-): Promise<{ text: string; navigate: string | null; proposal: Proposal | null } | null> {
+): Promise<ChatResult | null> {
   const raw1 = await callLLM(messages.map((m) => ({ role: m.role, content: m.content })), key, model, baseUrl);
   if (!raw1) return null;
 
@@ -447,10 +628,19 @@ router.post("/assistant/chat", async (req: Request, res: Response): Promise<void
 
   const displayName = (userName || dbUser.name || dbUser.email?.split("@")[0] || "there").trim();
   const contextNote = pageUrl ? `[User is on page: ${pageUrl}] ` : "";
+  let snapshotRecs: AssistantRecommendation[] = [];
+  let briefBlock = "";
+  try {
+    const snap = await loadWorkspaceSnapshot(clerkUserId);
+    snapshotRecs = recommendationsFromSnapshot(snap);
+    briefBlock = `\n[WORKSPACE BRIEF]: ${formatBriefForLlm(snap)}\n`;
+  } catch (err) {
+    logger.warn({ err }, "assistant: workspace brief failed");
+  }
 
   const userContent = isFirst
-    ? `${contextNote}[User name: "${displayName}". First message — greet warmly by first name, welcome to SnapServe, ask what they need help with today.]\n${message}`
-    : `${contextNote}${message}`;
+    ? `${contextNote}${briefBlock}[User name: "${displayName}". First message — greet by first name as Jarvis. Say the single most useful next step from the workspace brief. Offer to do that job.]\n${message}`
+    : `${contextNote}${briefBlock}${message}`;
 
   const messages: ChatMessage[] = [
     ...(history ?? []).slice(-10),
@@ -463,19 +653,173 @@ router.post("/assistant/chat", async (req: Request, res: Response): Promise<void
   const qwenKey = await getSetting("managed_qwen_key");
   if (qwenKey) {
     const result = await runChat(messages, qwenKey, "qwen/qwen3-32b", GROQ_URL, clerkUserId);
-    if (result?.text) { res.json(result); return; }
+    if (result?.text) {
+      res.json({
+        ...result,
+        recommendations: mergeRecs(snapshotRecs, result.recommendations),
+      });
+      return;
+    }
   }
 
   const openaiKey = await getSetting("managed_openai_key");
   if (openaiKey) {
     const result = await runChat(messages, openaiKey, "gpt-4o-mini", OPENAI_URL, clerkUserId);
-    if (result?.text) { res.json(result); return; }
+    if (result?.text) {
+      res.json({
+        ...result,
+        recommendations: mergeRecs(snapshotRecs, result.recommendations),
+      });
+      return;
+    }
   }
 
+  const top = snapshotRecs[0];
   const fallback = isFirst
-    ? `Hi ${displayName}! I'm Orcha, your SnapServe assistant. I can read your agents, diagnose latency issues, write system prompts, and apply fixes for you. What do you need?`
-    : "I'm here to help with your agents and calls. Try asking 'why is my agent slow?' or 'show me my agents'.";
-  res.json({ text: fallback, navigate: null, proposal: null });
+    ? (top
+      ? `Hi ${displayName}. I'm Jarvis. ${top.reason} I can take you there, or you can tell me what you need.`
+      : `Hi ${displayName}. I'm Jarvis, your SnapServe support. Tell me what you want done — I'll recommend the next step and do the job when you confirm.`)
+    : "I can open a page, publish an agent, start a campaign draft, or assign a number. What should I do?";
+  res.json({
+    text: fallback,
+    navigate: null,
+    proposal: null,
+    recommendations: snapshotRecs,
+    jobs: top ? [{ type: "navigate", label: top.title, href: top.href }] : [],
+  });
+});
+
+// ── GET /assistant/brief — live recommendations without chatting ──────────────
+
+router.get("/assistant/brief", async (req: Request, res: Response): Promise<void> => {
+  const clerkUserId = (req as any).clerkUserId as string;
+  if (!clerkUserId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const snap = await loadWorkspaceSnapshot(clerkUserId);
+  res.json({
+    snapshot: snap,
+    recommendations: recommendationsFromSnapshot(snap),
+  });
+});
+
+// ── POST /assistant/job — confirmable workspace actions ───────────────────────
+
+router.post("/assistant/job", async (req: Request, res: Response): Promise<void> => {
+  const clerkUserId = (req as any).clerkUserId as string;
+  if (!clerkUserId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const job = req.body as AssistantJob;
+  if (!job || typeof job.type !== "string" || !JOB_TYPES.has(job.type)) {
+    res.status(400).json({ error: "Unsupported job" });
+    return;
+  }
+
+  if (job.type === "navigate") {
+    if (!job.href || !job.href.startsWith("/app/")) {
+      res.status(400).json({ error: "href must be an in-app path" });
+      return;
+    }
+    res.json({ success: true, navigate: job.href, message: "Opening that page." });
+    return;
+  }
+
+  if (job.type === "set_agent_status") {
+    if (!job.agentId || (job.status !== "active" && job.status !== "draft")) {
+      res.status(400).json({ error: "agentId and status required" });
+      return;
+    }
+    const [agent] = await db
+      .select({ id: agentsTable.id, name: agentsTable.name })
+      .from(agentsTable)
+      .where(and(eq(agentsTable.id, job.agentId), eq(agentsTable.userId, clerkUserId)));
+    if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+    await db.update(agentsTable).set({ status: job.status, updatedAt: new Date() }).where(eq(agentsTable.id, agent.id));
+    logger.info({ agentId: agent.id, status: job.status }, "assistant: set agent status");
+    res.json({
+      success: true,
+      navigate: `/app/agents/${agent.id}`,
+      message: job.status === "active"
+        ? `${agent.name || "Agent"} is live. Next inbound or campaign call will use it.`
+        : `${agent.name || "Agent"} is back to draft.`,
+    });
+    return;
+  }
+
+  if (job.type === "create_campaign") {
+    const name = (job.campaignName ?? "").trim();
+    if (!job.agentId || !name) {
+      res.status(400).json({ error: "agentId and campaignName required" });
+      return;
+    }
+    const [agent] = await db
+      .select({ id: agentsTable.id })
+      .from(agentsTable)
+      .where(and(eq(agentsTable.id, job.agentId), eq(agentsTable.userId, clerkUserId)));
+    if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+    const [campaign] = await db.insert(campaignsTable).values({
+      userId: clerkUserId,
+      name,
+      agentId: agent.id,
+      fieldMappings: { phone: "phone" },
+      webhookToken: randomUUID(),
+      status: "draft",
+      isActive: false,
+    }).returning({ id: campaignsTable.id, name: campaignsTable.name });
+    logger.info({ campaignId: campaign?.id, agentId: agent.id }, "assistant: created campaign");
+    res.json({
+      success: true,
+      navigate: campaign ? `/app/campaigns/${campaign.id}` : "/app/campaigns",
+      message: `${name} is ready as a draft. Import leads, then start a batch.`,
+    });
+    return;
+  }
+
+  if (job.type === "assign_phone") {
+    if (!job.agentId || !job.phoneNumberId) {
+      res.status(400).json({ error: "agentId and phoneNumberId required" });
+      return;
+    }
+    const [[agent], [phone]] = await Promise.all([
+      db.select({ id: agentsTable.id, name: agentsTable.name })
+        .from(agentsTable)
+        .where(and(eq(agentsTable.id, job.agentId), eq(agentsTable.userId, clerkUserId))),
+      db.select({
+        id: phoneNumbersTable.id,
+        number: phoneNumbersTable.number,
+        service: phoneNumbersTable.service,
+      })
+        .from(phoneNumbersTable)
+        .where(and(
+          eq(phoneNumbersTable.id, job.phoneNumberId),
+          eq(phoneNumbersTable.userId, clerkUserId),
+          eq(phoneNumbersTable.status, "active"),
+        )),
+    ]);
+    if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+    if (!phone) { res.status(404).json({ error: "Phone number not found" }); return; }
+    if (phone.service === "whatsapp") {
+      res.status(400).json({ error: "That number is WhatsApp-only. Connect voice DIDs on Phone numbers." });
+      return;
+    }
+    await db.update(phoneNumbersTable).set({ agentId: agent.id }).where(eq(phoneNumbersTable.id, phone.id));
+    await db.update(agentsTable)
+      .set({ inboundPhoneNumberId: null })
+      .where(and(eq(agentsTable.inboundPhoneNumberId, phone.id), ne(agentsTable.id, agent.id)));
+    await db.update(agentsTable)
+      .set({ outboundPhoneNumberId: null })
+      .where(and(eq(agentsTable.outboundPhoneNumberId, phone.id), ne(agentsTable.id, agent.id)));
+    await db.update(agentsTable)
+      .set({ inboundPhoneNumberId: phone.id, outboundPhoneNumberId: phone.id, updatedAt: new Date() })
+      .where(eq(agentsTable.id, agent.id));
+    logger.info({ agentId: agent.id, phoneNumberId: phone.id }, "assistant: assigned phone");
+    res.json({
+      success: true,
+      navigate: `/app/agents/${agent.id}`,
+      message: `${phone.number} now rings ${agent.name || "the agent"}. Place a test call to confirm inbound.`,
+    });
+    return;
+  }
+
+  res.status(400).json({ error: "Unsupported job" });
 });
 
 // ── POST /assistant/apply — applies proposed changes to an agent ───────────────

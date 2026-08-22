@@ -68,6 +68,13 @@ export const DOCS_NAV: DocsNavGroup[] = [
         description: "Agents, campaigns, connections, outcomes, and calls.",
       },
       {
+        title: "Jarvis",
+        slug: "jarvis",
+        icon: Bot,
+        search: "Jarvis support voice assistant recommend jobs publish campaign assign phone",
+        description: "Speak to in-app support. It recommends the next step and does the job.",
+      },
+      {
         title: "Quick Start (API)",
         slug: "quick-start",
         icon: Rocket,

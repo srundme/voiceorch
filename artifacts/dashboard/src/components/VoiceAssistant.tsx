@@ -1,20 +1,32 @@
-import { useState, useRef, useCallback, useEffect, KeyboardEvent } from "react";
+import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { Mic, MicOff, X, Volume2, Bot, Loader2, Send, Wrench, CheckCircle2, AlertTriangle, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import {
+  Mic,
+  MicOff,
+  X,
+  Volume2,
+  Bot,
+  Loader2,
+  Send,
+  Wrench,
+  CheckCircle2,
+  AlertTriangle,
+  ChevronRight,
+  Sparkles,
+  ArrowRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-// ── Draggable launcher constants ──────────────────────────────────────────────
-const BUTTON_SIZE = 56; // h-14 w-14
-const EDGE_MARGIN = 24; // default 1.5rem inset (bottom-6 right-6)
-const VIEWPORT_PADDING = 8; // min gap from viewport edges when clamping
-const PANEL_W = 420;
-const PANEL_H = 580;
+const BUTTON_SIZE = 56;
+const EDGE_MARGIN = 24;
+const VIEWPORT_PADDING = 8;
+const PANEL_W = 400;
+const PANEL_H = 600;
 const POS_STORAGE_KEY = "voiceorch:assistantPos";
-const DRAG_THRESHOLD = 5; // px of movement before an interaction counts as a drag
+const DRAG_THRESHOLD = 5;
 
 type Phase = "idle" | "listening" | "thinking" | "speaking" | "applying" | "error";
 
@@ -33,14 +45,33 @@ interface Proposal {
   changes: ProposalChange[];
 }
 
+interface Recommendation {
+  id: string;
+  title: string;
+  reason: string;
+  href: string;
+  priority: "high" | "medium" | "low";
+}
+
+interface Job {
+  type: "navigate" | "set_agent_status" | "create_campaign" | "assign_phone";
+  label: string;
+  href?: string;
+  agentId?: number;
+  status?: "draft" | "active";
+  campaignName?: string;
+  phoneNumberId?: number;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
   proposal?: Proposal;
+  recommendations?: Recommendation[];
+  jobs?: Job[];
   applied?: boolean;
 }
 
-// ── Speech recognition type shim ──────────────────────────────────────────────
 interface SpeechRecognitionEvent extends Event {
   results: SpeechRecognitionResultList;
 }
@@ -52,7 +83,7 @@ interface ISpeechRecognition extends EventTarget {
   stop(): void;
   onresult: ((e: SpeechRecognitionEvent) => void) | null;
   onerror: ((e: Event) => void) | null;
-  onend: (() => void) | null;
+  onend: ((e: Event) => void) | null;
 }
 declare global {
   interface Window {
@@ -65,7 +96,7 @@ function newRecognition(): ISpeechRecognition | null {
   const Ctor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
   if (!Ctor) return null;
   const r = new Ctor();
-  r.lang = "en-US";
+  r.lang = "en-IN";
   r.continuous = false;
   r.interimResults = false;
   return r;
@@ -77,7 +108,6 @@ function formatValue(v: unknown): string {
   return String(v);
 }
 
-// ── Proposal card ─────────────────────────────────────────────────────────────
 function ProposalCard({
   proposal,
   applied,
@@ -92,55 +122,58 @@ function ProposalCard({
   return (
     <div
       className={cn(
-        "mt-2 rounded-xl border overflow-hidden",
-        applied
-          ? "border-emerald-500/40 bg-emerald-500/10"
-          : "border-border bg-card",
+        "mt-2 overflow-hidden rounded-xl border",
+        applied ? "border-emerald-500/40 bg-emerald-500/10" : "border-border bg-card",
       )}
     >
       <div
         className={cn(
-          "flex items-center gap-2 px-3 py-2 border-b",
+          "flex items-center gap-2 border-b px-3 py-2",
           applied ? "border-emerald-500/30 bg-emerald-500/15" : "border-border bg-muted/50",
         )}
       >
-        <Wrench className={cn("w-3.5 h-3.5 shrink-0", applied ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")} />
+        <Wrench className={cn("h-3.5 w-3.5 shrink-0", applied ? "text-emerald-600" : "text-muted-foreground")} />
         <span className={cn("text-xs font-medium", applied ? "text-emerald-700 dark:text-emerald-300" : "text-foreground")}>
-          {applied ? <><CheckCircle2 className="h-3 w-3 inline mr-1" />Changes applied</> : `Update: ${proposal.agentName}`}
+          {applied ? (
+            <>
+              <CheckCircle2 className="mr-1 inline h-3 w-3" />
+              Changes applied
+            </>
+          ) : (
+            `Update: ${proposal.agentName}`
+          )}
         </span>
       </div>
-
       <div className="px-3 py-2">
-        <p className="text-[11px] mb-2 text-muted-foreground">{proposal.summary}</p>
+        <p className="mb-2 text-[11px] text-muted-foreground">{proposal.summary}</p>
         <div className="space-y-1.5">
           {proposal.changes.map((c, i) => (
-            <div key={i} className="rounded-lg px-2.5 py-1.5 bg-muted/60">
+            <div key={i} className="rounded-lg bg-muted/60 px-2.5 py-1.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-medium text-foreground">{c.label}</span>
-                {c.current_value !== undefined && (
-                  <span className="text-[10px] text-muted-foreground">
-                    {formatValue(c.current_value)}
-                    <ChevronRight className="inline w-2.5 h-2.5 mx-0.5 text-muted-foreground/70" />
-                    <span className="text-primary">{formatValue(c.proposed_value)}</span>
-                  </span>
-                )}
-                {c.current_value === undefined && (
-                  <span className="text-[10px] text-primary">{formatValue(c.proposed_value)}</span>
-                )}
+                <span className="text-[10px] text-muted-foreground">
+                  {c.current_value !== undefined && (
+                    <>
+                      {formatValue(c.current_value)}
+                      <ChevronRight className="mx-0.5 inline h-2.5 w-2.5" />
+                    </>
+                  )}
+                  <span className="text-primary">{formatValue(c.proposed_value)}</span>
+                </span>
               </div>
-              <p className="text-[10px] mt-0.5 text-muted-foreground">{c.reason}</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">{c.reason}</p>
             </div>
           ))}
         </div>
-
         {!applied && (
           <button
+            type="button"
             onClick={() => onApply(proposal)}
             disabled={loading}
-            className="mt-2.5 w-full rounded-lg py-1.5 text-xs font-semibold flex items-center justify-center gap-1.5 transition-opacity bg-primary text-primary-foreground disabled:opacity-60"
+            className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-60"
           >
-            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-            {loading ? "Applying…" : "Apply Changes"}
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            {loading ? "Applying…" : "Apply changes"}
           </button>
         )}
       </div>
@@ -148,8 +181,54 @@ function ProposalCard({
   );
 }
 
+function RecsAndJobs({
+  recommendations,
+  jobs,
+  busy,
+  onHref,
+  onJob,
+}: {
+  recommendations?: Recommendation[];
+  jobs?: Job[];
+  busy: boolean;
+  onHref: (href: string) => void;
+  onJob: (job: Job) => void;
+}) {
+  if ((!recommendations || recommendations.length === 0) && (!jobs || jobs.length === 0)) return null;
+  return (
+    <div className="mt-2 flex w-full flex-col gap-1.5">
+      {recommendations?.map((rec) => (
+        <button
+          key={rec.id}
+          type="button"
+          onClick={() => onHref(rec.href)}
+          className="rounded-xl border border-border bg-background px-3 py-2 text-left transition-colors hover:bg-muted/60"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12px] font-medium text-foreground">{rec.title}</span>
+            <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+          </div>
+          <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">{rec.reason}</p>
+        </button>
+      ))}
+      {jobs?.map((job, i) => (
+        <button
+          key={`${job.type}-${i}`}
+          type="button"
+          disabled={busy}
+          onClick={() => onJob(job)}
+          className="flex items-center justify-center gap-1.5 rounded-xl bg-foreground px-3 py-2 text-xs font-semibold text-background disabled:opacity-60"
+        >
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+          {job.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function VoiceAssistant() {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const { user, getToken } = useAuth();
 
   const [open, setOpen] = useState(false);
@@ -157,20 +236,18 @@ export function VoiceAssistant() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [textInput, setTextInput] = useState("");
   const [applyingId, setApplyingId] = useState<number | null>(null);
+  const [jobBusy, setJobBusy] = useState(false);
   const [greeted, setGreeted] = useState(false);
   const [error, setError] = useState("");
 
-  // ── Draggable launcher position ─────────────────────────────────────────────
   const [pos, setPos] = useState<{ x: number; y: number }>(() => {
     try {
       const raw = localStorage.getItem(POS_STORAGE_KEY);
       if (raw) {
         const p = JSON.parse(raw) as { x?: unknown; y?: unknown };
-        if (typeof p.x === "number" && typeof p.y === "number") {
-          return { x: p.x, y: p.y };
-        }
+        if (typeof p.x === "number" && typeof p.y === "number") return { x: p.x, y: p.y };
       }
-    } catch { /* ignore malformed storage */ }
+    } catch { /* ignore */ }
     return {
       x: window.innerWidth - BUTTON_SIZE - EDGE_MARGIN,
       y: window.innerHeight - BUTTON_SIZE - EDGE_MARGIN,
@@ -195,12 +272,10 @@ export function VoiceAssistant() {
     };
   }, []);
 
-  // Persist position across reloads.
   useEffect(() => {
     try { localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(pos)); } catch { /* ignore */ }
   }, [pos]);
 
-  // Keep the button on-screen when the viewport is resized.
   useEffect(() => {
     function onResize() {
       setPos((p) => clampButtonPos(p.x, p.y));
@@ -213,21 +288,21 @@ export function VoiceAssistant() {
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listenAfterSpeakRef = useRef(false);
+  const sendMessageRef = useRef<(userText: string, isFirst?: boolean) => Promise<void>>(async () => {});
 
   const userName = user?.name?.split(" ")[0] ?? "";
   const pageUrl = location;
+  const onBuilder = /^\/app\/agents\/[^/]+/.test(location);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 150);
-    }
+    if (open) setTimeout(() => inputRef.current?.focus(), 150);
   }, [open]);
 
-  // ── Audio playback ────────────────────────────────────────────────────────
   async function playAudio(arrayBuffer: ArrayBuffer): Promise<void> {
     if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
       audioCtxRef.current = new AudioContext();
@@ -260,15 +335,34 @@ export function VoiceAssistant() {
       });
       if (!r.ok) return;
       await playAudio(await r.arrayBuffer());
-    } catch { /* TTS failures are non-fatal */ }
+    } catch { /* TTS is optional */ }
   }
 
-  // ── Send message ─────────────────────────────────────────────────────────
+  const startListening = useCallback(() => {
+    const rec = newRecognition();
+    if (!rec) {
+      setError("Voice needs Chrome or Edge. Type instead.");
+      setPhase("error");
+      setTimeout(() => { setPhase("idle"); setError(""); }, 3000);
+      return;
+    }
+    recognitionRef.current = rec;
+    setPhase("listening");
+    rec.onresult = (e: SpeechRecognitionEvent) => {
+      const text = e.results[0]?.[0]?.transcript ?? "";
+      rec.stop();
+      if (text.trim()) void sendMessageRef.current(text.trim());
+      else setPhase("idle");
+    };
+    rec.onerror = () => { setPhase("idle"); };
+    rec.onend = () => { setPhase((p) => (p === "listening" ? "idle" : p)); };
+    rec.start();
+  }, []);
+
   const sendMessage = useCallback(
     async (userText: string, isFirst = false) => {
       const userMsg: Message = { role: "user", content: userText };
       const historyMsgs = isFirst ? [] : messages;
-
       if (!isFirst) setMessages((prev) => [...prev, userMsg]);
       setPhase("thinking");
       setTextInput("");
@@ -286,34 +380,46 @@ export function VoiceAssistant() {
             pageUrl,
           }),
         });
-
         if (!r.ok) throw new Error(`Chat failed: ${r.status}`);
 
-        const data = (await r.json()) as { text: string; navigate?: string | null; proposal?: Proposal | null };
+        const data = (await r.json()) as {
+          text: string;
+          navigate?: string | null;
+          proposal?: Proposal | null;
+          recommendations?: Recommendation[];
+          jobs?: Job[];
+        };
         const assistantMsg: Message = {
           role: "assistant",
           content: data.text,
           proposal: data.proposal ?? undefined,
+          recommendations: data.recommendations,
+          jobs: data.jobs,
         };
-
         setMessages((prev) => (isFirst ? [assistantMsg] : [...prev, assistantMsg]));
 
-        if (data.navigate) {
-          // navigate happens via anchor in the message — or we can use wouter here
+        if (data.navigate && data.navigate.startsWith("/app/")) {
+          navigate(data.navigate);
         }
 
+        listenAfterSpeakRef.current = isFirst;
         await speakText(data.text);
         setPhase("idle");
+        if (listenAfterSpeakRef.current) {
+          listenAfterSpeakRef.current = false;
+          startListening();
+        }
       } catch {
-        setError("Something went wrong. Please try again.");
+        setError("Jarvis could not reach the workspace. Try again.");
         setPhase("error");
         setTimeout(() => { setPhase("idle"); setError(""); }, 3000);
       }
     },
-    [messages, userName, pageUrl, getToken],
+    [messages, userName, pageUrl, getToken, navigate, startListening],
   );
 
-  // ── Apply proposal ────────────────────────────────────────────────────────
+  sendMessageRef.current = sendMessage;
+
   const handleApplyProposal = useCallback(
     async (proposal: Proposal) => {
       setApplyingId(proposal.agentId);
@@ -325,27 +431,22 @@ export function VoiceAssistant() {
           body: JSON.stringify({ agentId: proposal.agentId, changes: proposal.changes }),
         });
         if (!r.ok) throw new Error("Apply failed");
-
         setMessages((prev) =>
           prev.map((m) =>
-            m.proposal?.agentId === proposal.agentId && !m.applied
-              ? { ...m, applied: true }
-              : m,
+            m.proposal?.agentId === proposal.agentId && !m.applied ? { ...m, applied: true } : m,
           ),
         );
-
-        // Append a success message
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: `Done! I've applied ${proposal.changes.length} change${proposal.changes.length !== 1 ? "s" : ""} to ${proposal.agentName}. The agent will use the new settings on the next call. Want me to check anything else?`,
+            content: `Done. ${proposal.agentName} will use the new settings on the next call.`,
           },
         ]);
       } catch {
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: "Sorry, I couldn't apply those changes. Please try again or update the settings manually in the agent editor." },
+          { role: "assistant", content: "I could not apply those changes. Update them in the agent editor if you prefer." },
         ]);
       } finally {
         setApplyingId(null);
@@ -354,7 +455,39 @@ export function VoiceAssistant() {
     [getToken],
   );
 
-  // ── Text send ─────────────────────────────────────────────────────────────
+  const runJob = useCallback(
+    async (job: Job) => {
+      setJobBusy(true);
+      try {
+        const token = await getToken();
+        const r = await fetch(`${BASE}/api/assistant/job`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify(job),
+        });
+        const data = (await r.json()) as { success?: boolean; navigate?: string; message?: string; error?: string };
+        if (!r.ok) throw new Error(data.error || "Job failed");
+        if (data.navigate?.startsWith("/app/")) navigate(data.navigate);
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: data.message || "Done." },
+        ]);
+        await speakText(data.message || "Done.");
+        setPhase("idle");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "I could not finish that job.";
+        setMessages((prev) => [...prev, { role: "assistant", content: msg }]);
+      } finally {
+        setJobBusy(false);
+      }
+    },
+    [getToken, navigate],
+  );
+
+  function goHref(href: string) {
+    if (href.startsWith("/app/") || href.startsWith("/docs/")) navigate(href);
+  }
+
   function handleSend() {
     const text = textInput.trim();
     if (!text || phase !== "idle") return;
@@ -368,30 +501,6 @@ export function VoiceAssistant() {
     }
   }
 
-  // ── Voice input ──────────────────────────────────────────────────────────
-  function startListening() {
-    if (phase !== "idle") return;
-    const rec = newRecognition();
-    if (!rec) {
-      setError("Speech recognition not supported. Try Chrome.");
-      setPhase("error");
-      setTimeout(() => { setPhase("idle"); setError(""); }, 3000);
-      return;
-    }
-    recognitionRef.current = rec;
-    setPhase("listening");
-
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      const text = e.results[0]?.[0]?.transcript ?? "";
-      rec.stop();
-      if (text.trim()) void sendMessage(text.trim());
-      else setPhase("idle");
-    };
-    rec.onerror = () => { setPhase("idle"); };
-    rec.onend = () => { setPhase((p) => (p === "listening" ? "idle" : p)); };
-    rec.start();
-  }
-
   function stopListening() {
     recognitionRef.current?.stop();
     if (phase === "listening") setPhase("idle");
@@ -401,16 +510,17 @@ export function VoiceAssistant() {
     setOpen(true);
     if (!greeted) {
       setGreeted(true);
-      await sendMessage("Hello", true);
+      await sendMessage("What should I do next?", true);
     }
   }
 
   function handleClose() {
     recognitionRef.current?.stop();
+    listenAfterSpeakRef.current = false;
     setOpen(false);
+    setPhase("idle");
   }
 
-  // ── Drag handlers for the floating launcher ─────────────────────────────────
   function handlePointerDown(e: React.PointerEvent<HTMLButtonElement>) {
     dragRef.current = {
       pointerId: e.pointerId,
@@ -432,9 +542,7 @@ export function VoiceAssistant() {
       d.moved = true;
       setDragging(true);
     }
-    if (d.moved) {
-      setPos(clampButtonPos(d.origX + dx, d.origY + dy));
-    }
+    if (d.moved) setPos(clampButtonPos(d.origX + dx, d.origY + dy));
   }
 
   function handlePointerUp(e: React.PointerEvent<HTMLButtonElement>) {
@@ -444,17 +552,12 @@ export function VoiceAssistant() {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
-    if (d.moved) {
-      setDragging(false);
-    } else {
-      // A tap/click without meaningful movement opens the panel.
-      void handleOpen();
-    }
+    if (d.moved) setDragging(false);
+    else void handleOpen();
   }
 
-  const isBusy = phase === "thinking" || phase === "speaking" || phase === "applying";
+  const isBusy = phase === "thinking" || phase === "speaking" || phase === "applying" || jobBusy;
 
-  // Anchor the open panel to the button's bottom-right corner, clamped on-screen.
   const panelPos = (() => {
     const maxLeft = Math.max(VIEWPORT_PADDING, window.innerWidth - PANEL_W - VIEWPORT_PADDING);
     const maxTop = Math.max(VIEWPORT_PADDING, window.innerHeight - PANEL_H - VIEWPORT_PADDING);
@@ -464,129 +567,96 @@ export function VoiceAssistant() {
     };
   })();
 
-  // ── Suggested prompts ─────────────────────────────────────────────────────
-  const suggestions = [
-    "Show my agents",
-    "Why are my calls slow?",
-    "Write a system prompt for NBFC loan collection in Hindi",
-    "Diagnose my agent",
-  ];
-
-  // The agent builder is a dense editing surface — a draggable launcher parked
-  // over it covers form controls, so only surface the assistant once it's open.
-  const hideLauncher = /^\/app\/agents\/[^/]+/.test(location);
+  const phaseLabel =
+    phase === "listening" ? "Listening"
+      : phase === "thinking" ? "Working"
+        : phase === "speaking" ? "Speaking"
+          : phase === "applying" ? "Applying"
+            : "Ready";
 
   return (
     <>
-      {/* ── Floating button ──────────────────────────────────────────────────── */}
-      {!open && !hideLauncher && (
+      {!open && onBuilder && (
         <button
+          type="button"
+          onClick={() => void handleOpen()}
+          className="fixed top-1/2 right-0 z-50 flex -translate-y-1/2 items-center gap-1.5 rounded-l-lg border border-r-0 border-border bg-foreground px-2 py-3 text-background shadow-md"
+          title="Talk to Jarvis"
+        >
+          <Bot className="h-3.5 w-3.5" />
+          <span className="text-[10px] font-semibold tracking-wide [writing-mode:vertical-rl]">Jarvis</span>
+        </button>
+      )}
+
+      {!open && !onBuilder && (
+        <button
+          type="button"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-          className="fixed z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95 bg-primary text-primary-foreground"
-          style={{
-            left: pos.x,
-            top: pos.y,
-            touchAction: "none",
-            cursor: dragging ? "grabbing" : "grab",
-          }}
-          title="Open Orcha AI assistant · drag to move"
+          className="fixed z-50 flex h-14 w-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition-transform hover:scale-105 active:scale-95"
+          style={{ left: pos.x, top: pos.y, touchAction: "none", cursor: dragging ? "grabbing" : "grab" }}
+          title="Talk to Jarvis · drag to move"
         >
           <Bot className="h-6 w-6" />
           <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60 opacity-60" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-foreground/50 opacity-60" />
             <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-primary" />
           </span>
         </button>
       )}
 
-      {/* ── Assistant panel ───────────────────────────────────────────────────── */}
       {open && (
         <div
-          className="fixed z-50 flex flex-col rounded-2xl shadow-2xl overflow-hidden bg-card border border-border text-foreground"
+          className="fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-2xl"
           style={{ left: panelPos.left, top: panelPos.top, width: PANEL_W, height: PANEL_H }}
         >
-          {/* Header */}
-          <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border shrink-0 bg-muted/40">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full shrink-0 bg-primary">
-              <Bot className="h-4 w-4 text-primary-foreground" />
+          <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-muted/40 px-4 py-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground">
+              <Bot className="h-4 w-4 text-background" />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-foreground leading-none">Orcha</p>
-              <p className="text-[10px] mt-0.5 text-muted-foreground">
-                AI Platform Assistant · {pageUrl.replace("/app/", "").split("/")[0] || "home"}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold leading-none">Jarvis</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                {phaseLabel} · speaks and does jobs for you
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              {phase === "speaking" && <Volume2 className="h-4 w-4 animate-pulse" style={{ color: "#818cf8" }} />}
-              {phase === "thinking" && <Loader2 className="h-4 w-4 animate-spin" style={{ color: "#818cf8" }} />}
-              {phase === "applying" && <Loader2 className="h-4 w-4 animate-spin" style={{ color: "#4ade80" }} />}
-            </div>
+            {phase === "speaking" && <Volume2 className="h-4 w-4 animate-pulse text-primary" />}
+            {(phase === "thinking" || jobBusy) && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
             <button
+              type="button"
               onClick={handleClose}
-              className="flex h-7 w-7 items-center justify-center rounded-full transition-colors"
-              style={{ color: "#475569" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#fff")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#475569")}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3" style={{ scrollbarWidth: "none" }}>
-            {/* Loading state before first message */}
+          <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-3" style={{ scrollbarWidth: "none" }}>
             {messages.length === 0 && phase === "thinking" && (
-              <div className="flex gap-2 items-start">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full shrink-0" style={{ background: "#1e293b" }}>
-                  <Bot className="h-3 w-3" style={{ color: "#818cf8" }} />
+              <div className="flex items-start gap-2">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
+                  <Bot className="h-3 w-3" />
                 </div>
-                <div className="flex gap-1 items-center pt-1">
-                  {[0, 1, 2].map((i) => (
-                    <span key={i} className="h-1.5 w-1.5 rounded-full animate-bounce" style={{ background: "#475569", animationDelay: `${i * 0.15}s` }} />
-                  ))}
-                </div>
+                <p className="pt-1 text-[11px] text-muted-foreground">Looking at your workspace…</p>
               </div>
             )}
 
-            {/* Suggestion chips when no messages yet */}
-            {messages.length === 0 && phase === "idle" && (
-              <div className="flex flex-col gap-2 mt-4">
-                <p className="text-xs text-center" style={{ color: "#475569" }}>Try asking…</p>
-                <div className="flex flex-wrap gap-1.5 justify-center">
-                  {suggestions.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => void sendMessage(s)}
-                      className="text-[11px] px-2.5 py-1 rounded-full border transition-colors"
-                      style={{ borderColor: "#1e293b", color: "#94a3b8", background: "#1e293b" }}
-                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#6366f1"; e.currentTarget.style.color = "#e2e8f0"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.color = "#94a3b8"; }}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Render messages */}
             {messages.map((msg, i) => (
               <div key={i} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
                 {msg.role === "assistant" && (
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full shrink-0 mt-0.5" style={{ background: "#1e293b" }}>
-                    <Bot className="h-3 w-3" style={{ color: "#818cf8" }} />
+                  <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
+                    <Bot className="h-3 w-3" />
                   </div>
                 )}
-                <div className={cn("flex flex-col gap-1", msg.role === "user" ? "items-end max-w-[85%]" : "items-start max-w-[90%]")}>
+                <div className={cn("flex flex-col gap-1", msg.role === "user" ? "max-w-[85%] items-end" : "max-w-[90%] items-start")}>
                   <div
-                    className="px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap"
-                    style={
+                    className={cn(
+                      "whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm leading-relaxed",
                       msg.role === "user"
-                        ? { background: "#6366f1", color: "#fff", borderBottomRightRadius: 4 }
-                        : { background: "#1e293b", color: "#e2e8f0", borderBottomLeftRadius: 4 }
-                    }
+                        ? "rounded-br-sm bg-foreground text-background"
+                        : "rounded-bl-sm bg-muted text-foreground",
+                    )}
                   >
                     {msg.content}
                   </div>
@@ -598,43 +668,62 @@ export function VoiceAssistant() {
                       onApply={handleApplyProposal}
                     />
                   )}
+                  {msg.role === "assistant" && (
+                    <RecsAndJobs
+                      recommendations={msg.recommendations}
+                      jobs={msg.jobs}
+                      busy={isBusy}
+                      onHref={goHref}
+                      onJob={(job) => void runJob(job)}
+                    />
+                  )}
                 </div>
-                {msg.role === "user" && (
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full shrink-0 mt-0.5 text-[10px] font-bold"
-                    style={{ background: "#334155", color: "#94a3b8" }}>
-                    {userName?.[0]?.toUpperCase() ?? "U"}
-                  </div>
-                )}
               </div>
             ))}
 
-            {/* Thinking indicator after user sends */}
             {messages.length > 0 && phase === "thinking" && (
-              <div className="flex gap-2 items-start">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full shrink-0" style={{ background: "#1e293b" }}>
-                  <Bot className="h-3 w-3" style={{ color: "#818cf8" }} />
+              <div className="flex items-start gap-2">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
+                  <Bot className="h-3 w-3" />
                 </div>
-                <div className="flex gap-1 items-center pt-1.5">
+                <div className="flex items-center gap-1 pt-1.5">
                   {[0, 1, 2].map((i) => (
-                    <span key={i} className="h-1.5 w-1.5 rounded-full animate-bounce" style={{ background: "#475569", animationDelay: `${i * 0.15}s` }} />
+                    <span
+                      key={i}
+                      className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/50"
+                      style={{ animationDelay: `${i * 0.15}s` }}
+                    />
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Error */}
             {error && (
-              <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg" style={{ background: "#450a0a", color: "#fca5a5" }}>
+              <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 {error}
               </div>
             )}
-
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input bar */}
-          <div className="shrink-0 border-t px-3 py-3" style={{ borderColor: "#1e293b" }}>
+          <div className="shrink-0 border-t border-border px-3 py-3">
+            <div className="mb-2 flex justify-center">
+              <button
+                type="button"
+                onClick={phase === "listening" ? stopListening : startListening}
+                disabled={isBusy && phase !== "listening"}
+                className={cn(
+                  "flex h-14 w-14 items-center justify-center rounded-full shadow-sm transition-transform disabled:opacity-50",
+                  phase === "listening"
+                    ? "bg-destructive text-destructive-foreground animate-pulse"
+                    : "bg-foreground text-background hover:scale-105",
+                )}
+                title={phase === "listening" ? "Stop listening" : "Speak to Jarvis"}
+              >
+                {phase === "listening" ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+              </button>
+            </div>
             <div className="flex items-center gap-2">
               <input
                 ref={inputRef}
@@ -642,49 +731,21 @@ export function VoiceAssistant() {
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={phase === "listening" ? "Listening…" : "Ask about your agents, calls, settings…"}
+                placeholder={phase === "listening" ? "Listening…" : "Or type — publish agent, assign number…"}
                 disabled={isBusy}
-                className="flex-1 text-sm rounded-xl px-3 py-2 outline-none transition-colors"
-                style={{
-                  background: "#1e293b",
-                  color: "#e2e8f0",
-                  border: "1px solid #334155",
-                  opacity: isBusy ? 0.6 : 1,
-                }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = "#6366f1")}
-                onBlur={(e) => (e.currentTarget.style.borderColor = "#334155")}
+                className="h-9 flex-1 rounded-xl border border-input bg-background px-3 text-sm outline-none placeholder:text-muted-foreground focus:border-ring disabled:opacity-60"
               />
-
-              {/* Send button */}
               <button
+                type="button"
                 onClick={handleSend}
                 disabled={!textInput.trim() || isBusy}
-                className="flex h-9 w-9 items-center justify-center rounded-xl transition-all shrink-0"
-                style={{
-                  background: textInput.trim() && !isBusy ? "#6366f1" : "#1e293b",
-                  color: textInput.trim() && !isBusy ? "#fff" : "#475569",
-                }}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-foreground text-background disabled:bg-muted disabled:text-muted-foreground"
               >
                 <Send className="h-4 w-4" />
               </button>
-
-              {/* Mic button */}
-              <button
-                onClick={phase === "listening" ? stopListening : startListening}
-                disabled={isBusy}
-                className="flex h-9 w-9 items-center justify-center rounded-xl transition-all shrink-0"
-                style={{
-                  background: phase === "listening" ? "#7f1d1d" : "#1e293b",
-                  color: phase === "listening" ? "#fca5a5" : "#475569",
-                }}
-                title={phase === "listening" ? "Stop listening" : "Voice input"}
-              >
-                {phase === "listening" ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-              </button>
             </div>
-
-            <p className="text-[10px] text-center mt-1.5" style={{ color: "#334155" }}>
-              Orcha can read your agents, diagnose issues, and apply fixes
+            <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
+              Jarvis recommends the next step, then does the job when you confirm
             </p>
           </div>
         </div>
