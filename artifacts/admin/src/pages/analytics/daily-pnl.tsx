@@ -36,14 +36,16 @@ function Kpi({ label, value, sub }: { label: string; value: string; sub?: string
   );
 }
 
-function downloadCsv(days: { date: string; users: number; calls: number; billableMinutes: number; recognizedRevenuePaise: number; variableCostPaise: number; grossProfitPaise: number; grossMarginPct: number }[]) {
-  const header = "Date,Users,Calls,Minutes,Revenue_INR,Cost_INR,GrossProfit_INR,Margin_Pct";
+function downloadCsv(days: { date: string; users: number; calls: number; billableMinutes: number; callRevenuePaise?: number; phoneRevenuePaise?: number; recognizedRevenuePaise: number; variableCostPaise: number; grossProfitPaise: number; grossMarginPct: number }[]) {
+  const header = "Date,Users,Calls,Minutes,CallRevenue_INR,PhoneRevenue_INR,Revenue_INR,Cost_INR,GrossProfit_INR,Margin_Pct";
   const rows = days.map((d) =>
     [
       d.date,
       d.users,
       d.calls,
       d.billableMinutes,
+      ((d.callRevenuePaise ?? 0) / 100).toFixed(2),
+      ((d.phoneRevenuePaise ?? 0) / 100).toFixed(2),
       (d.recognizedRevenuePaise / 100).toFixed(2),
       (d.variableCostPaise / 100).toFixed(2),
       (d.grossProfitPaise / 100).toFixed(2),
@@ -82,7 +84,7 @@ export default function DailyPnlPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Daily P&amp;L</h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-            Recognized revenue vs variable cost by day. Cash (recharges) is shown separately and is not mixed into margin.
+            Recognized revenue (call usage + phone-number fees) vs variable cost by day. Cash (recharges) is shown separately and is not mixed into margin.
           </p>
         </div>
         <Button
@@ -106,7 +108,11 @@ export default function DailyPnlPage() {
         <Kpi
           label="Revenue"
           value={isLoading ? "…" : formatCentsToDollars(totals?.recognizedRevenuePaise ?? 0)}
-          sub="Recognized (call_debit)"
+          sub={
+            isLoading
+              ? "Calls + phone numbers"
+              : `Calls ${formatCentsToDollars(totals?.callRevenuePaise ?? 0)} · Numbers ${formatCentsToDollars(totals?.phoneRevenuePaise ?? 0)}`
+          }
         />
         <Kpi
           label="Cost"
@@ -172,6 +178,8 @@ export default function DailyPnlPage() {
                 <TableHead className="text-right">Users</TableHead>
                 <TableHead className="text-right">Calls</TableHead>
                 <TableHead className="text-right">Minutes</TableHead>
+                <TableHead className="text-right">Calls ₹</TableHead>
+                <TableHead className="text-right">Numbers ₹</TableHead>
                 <TableHead className="text-right">Revenue</TableHead>
                 <TableHead className="text-right">Cost</TableHead>
                 <TableHead className="text-right">Gross Profit</TableHead>
@@ -185,6 +193,8 @@ export default function DailyPnlPage() {
                   <TableCell className="text-right tabular-nums">{d.users}</TableCell>
                   <TableCell className="text-right tabular-nums">{d.calls}</TableCell>
                   <TableCell className="text-right tabular-nums">{d.billableMinutes}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCentsToDollars(d.callRevenuePaise ?? 0)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCentsToDollars(d.phoneRevenuePaise ?? 0)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatCentsToDollars(d.recognizedRevenuePaise)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatCentsToDollars(d.variableCostPaise)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatCentsToDollars(d.grossProfitPaise)}</TableCell>
@@ -193,7 +203,7 @@ export default function DailyPnlPage() {
               ))}
               {!isLoading && !(data?.days?.length) && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground text-sm py-8">
+                    <TableCell colSpan={10} className="text-center text-muted-foreground text-sm py-8">
                     No data in this range.
                   </TableCell>
                 </TableRow>

@@ -21,7 +21,10 @@ const METRIC_DEFINITIONS = {
   cashCollectedPaise:
     "Successful wallet topup + auto_topup amounts (paise). Cash in, not recognized revenue.",
   recognizedRevenuePaise:
-    "Abs(call_debit) wallet transactions in period — usage recognized as revenue.",
+    "Abs(call_debit) plus abs(phone-number debit) wallet transactions — usage and DID fees recognized as revenue.",
+  callRevenuePaise: "Abs(call_debit) wallet transactions in period.",
+  phoneRevenuePaise:
+    "Abs(debit) wallet rows whose description mentions phone (purchase, card, or monthly renewal).",
   variableCostPaise:
     "Sum of usage_events.estimated_cost_micros converted USD→INR paise via platform FX (approx COGS).",
   grossProfitPaise: "recognizedRevenuePaise - variableCostPaise",
@@ -94,6 +97,8 @@ type DayAgg = {
   calls: number;
   billableMinutes: number;
   cashCollectedPaise: number;
+  callRevenuePaise: number;
+  phoneRevenuePaise: number;
   recognizedRevenuePaise: number;
   variableCostPaise: number;
   grossProfitPaise: number;
@@ -125,11 +130,12 @@ async function computeDailySeries(from: Date, to: Date, fx: number): Promise<Day
     calls: number;
     seconds: number;
     cash: number;
-    revenue: number;
+    callRev: number;
+    phoneRev: number;
     costMicros: number;
   }>();
   for (const d of days) {
-    map.set(d, { users: new Set(), calls: 0, seconds: 0, cash: 0, revenue: 0, costMicros: 0 });
+    map.set(d, { users: new Set(), calls: 0, seconds: 0, cash: 0, callRev: 0, phoneRev: 0, costMicros: 0 });
   }
 
   const callRows = await db
@@ -175,21 +181,35 @@ async function computeDailySeries(from: Date, to: Date, fx: number): Promise<Day
   const revRows = await db
     .select({
       day: sql<string>`to_char(date_trunc('day', ${walletTransactionsTable.createdAt} AT TIME ZONE 'UTC'), 'YYYY-MM-DD')`,
-      paise: sql<number>`coalesce(sum(abs(${walletTransactionsTable.amountCents})), 0)`,
+      callPaise: sql<number>`coalesce(sum(abs(${walletTransactionsTable.amountCents})) filter (
+        where ${walletTransactionsTable.type} = 'call_debit'
+      ), 0)`,
+      phonePaise: sql<number>`coalesce(sum(abs(${walletTransactionsTable.amountCents})) filter (
+        where ${walletTransactionsTable.type} = 'debit'
+        and ${walletTransactionsTable.description} ilike '%phone%'
+      ), 0)`,
     })
     .from(walletTransactionsTable)
     .where(
       and(
         gte(walletTransactionsTable.createdAt, from),
         lte(walletTransactionsTable.createdAt, to),
-        eq(walletTransactionsTable.type, "call_debit"),
+        sql`(
+          ${walletTransactionsTable.type} = 'call_debit'
+          or (
+            ${walletTransactionsTable.type} = 'debit'
+            and ${walletTransactionsTable.description} ilike '%phone%'
+          )
+        )`,
       ),
     )
     .groupBy(sql`1`);
 
   for (const row of revRows) {
     const bucket = map.get(row.day);
-    if (bucket) bucket.revenue += Number(row.paise ?? 0);
+    if (!bucket) continue;
+    bucket.callRev += Number(row.callPaise ?? 0);
+    bucket.phoneRev += Number(row.phonePaise ?? 0);
   }
 
   const costRows = await db
@@ -214,7 +234,9 @@ async function computeDailySeries(from: Date, to: Date, fx: number): Promise<Day
       calls: b.calls,
       billableMinutes: Math.round((b.seconds / 60) * 100) / 100,
       cashCollectedPaise: b.cash,
-      recognizedRevenuePaise: b.revenue,
+      callRevenuePaise: b.callRev,
+      phoneRevenuePaise: b.phoneRev,
+      recognizedRevenuePaise: b.callRev + b.phoneRev,
       variableCostPaise: microsUsdToPaise(b.costMicros, fx),
     });
   });
@@ -227,6 +249,8 @@ function sumSeries(series: DayAgg[]) {
       acc.calls += d.calls;
       acc.billableMinutes += d.billableMinutes;
       acc.cashCollectedPaise += d.cashCollectedPaise;
+      acc.callRevenuePaise += d.callRevenuePaise;
+      acc.phoneRevenuePaise += d.phoneRevenuePaise;
       acc.recognizedRevenuePaise += d.recognizedRevenuePaise;
       acc.variableCostPaise += d.variableCostPaise;
       return acc;
@@ -236,6 +260,8 @@ function sumSeries(series: DayAgg[]) {
       calls: 0,
       billableMinutes: 0,
       cashCollectedPaise: 0,
+      callRevenuePaise: 0,
+      phoneRevenuePaise: 0,
       recognizedRevenuePaise: 0,
       variableCostPaise: 0,
     },

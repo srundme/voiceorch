@@ -1469,6 +1469,8 @@ export type DailyPnlDay = {
   calls: number;
   billableMinutes: number;
   cashCollectedPaise: number;
+  callRevenuePaise: number;
+  phoneRevenuePaise: number;
   recognizedRevenuePaise: number;
   variableCostPaise: number;
   grossProfitPaise: number;
