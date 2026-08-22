@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { Sparkles } from "lucide-react";
 import { AuthProvider, useAuth, SignedIn, SignedOut, consumeSignOutReason } from "@/lib/auth";
 import { DotGridBackground } from "@/components/ui/dot-grid-background";
-import { setAuthTokenGetter, setDefaultTimeoutMs, setUnauthorizedHandler, useGetOnboardingStatus, useListAgents } from "@workspace/api-client-react";
+import { setAuthTokenGetter, setDefaultTimeoutMs, setUnauthorizedHandler, useGetOnboardingStatus } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -405,12 +405,6 @@ function HomeRedirect() {
 }
 
 function AppRoot() {
-  const { data: agents, isLoading } = useListAgents({});
-  if (isLoading) return <AppLoader />;
-  const list = Array.isArray(agents) ? agents : (agents as any)?.agents ?? [];
-  // Accounts with no agents land on Home with Jarvis open. Jarvis runs the same
-  // Vibe Build engine in the page rail — do not dump them onto the Vibe page.
-  if (!list.length) return <Redirect to="/app/home?jarvis=1" />;
   return <Redirect to="/app/home" />;
 }
 

@@ -251,7 +251,7 @@ export default function HomePage() {
             </div>
             <h1 className="text-2xl font-semibold tracking-[-0.03em]">Create your first agent</h1>
             <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              Jarvis is here — say hi, or build with the same Vibe as “Build with AI”. You can also pick a fallback below.
+              Build the voice agent first, then create a campaign to dial leads.
             </p>
           </div>
           <div className={`grid gap-px overflow-hidden rounded-lg border border-border bg-border ${isManagedWorkspace ? "" : "sm:grid-cols-2"}`}>

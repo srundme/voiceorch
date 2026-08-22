@@ -416,16 +416,14 @@ export default function OnboardingPage() {
   const totalSteps = answers.usedVoiceAgents === true ? 5 : 4;
 
   const submitOnboarding = useCallback((finalAnswers: Answers) => {
-    // Finish onboarding on Home with Jarvis open. He runs official Vibe Build
-    // in the page rail. The name is stashed for the greeting; do not send them to /app/vibe.
+    // Finish onboarding on Home. Vibe stays opt-in from "Build with AI".
     const goToBuilder = () => {
       try {
         if (finalAnswers.name.trim()) {
           sessionStorage.setItem("vibe:welcomeName", finalAnswers.name.trim());
         }
-        sessionStorage.setItem("jarvis:open", "1");
       } catch { /* ignore */ }
-      setLocation("/app/home?jarvis=1");
+      setLocation("/app/home");
     };
     complete(
       {

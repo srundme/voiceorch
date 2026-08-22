@@ -18,9 +18,8 @@ export default function PlatformConceptsPage() {
 
       <h2 id="jarvis">Jarvis</h2>
       <p>
-        In-app support on the dashboard. After first signup Jarvis opens on Home, speaks colloquial
-        Tamil, and runs the same Vibe Build as the Vibe page. Speak or type; he also reads agents,
-        numbers, campaigns, and wallet. <Link href="/docs/jarvis">Jarvis guide</Link>.
+        The in-app Jarvis overlay is removed. Use <Link href="/docs/vibe">Vibe</Link> to build an
+        agent. <Link href="/docs/jarvis">Jarvis note</Link>.
       </p>
 
       <h2 id="agent">Agent</h2>

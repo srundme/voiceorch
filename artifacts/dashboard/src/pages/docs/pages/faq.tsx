@@ -7,8 +7,8 @@ const FAQS: { q: string; a: ReactNode }[] = [
     q: "Where is support on the dashboard?",
     a: (
       <>
-        Use the Jarvis column on the right — <Link href="/docs/jarvis">Jarvis</Link> speaks
-        Karthikeyan's voice in colloquial Tamil. Just talk: he creates the agent, campaign, or assignment.
+        In-app Jarvis is off while we rebuild it. Use{" "}
+        <Link href="/docs/vibe">Vibe</Link> or the <Link href="/docs/agents">Agents builder</Link>.
       </>
     ),
   },
@@ -16,8 +16,7 @@ const FAQS: { q: string; a: ReactNode }[] = [
     q: "Where do I start a first agent?",
     a: (
       <>
-        After signup, <Link href="/docs/jarvis">Jarvis</Link> opens on Home and runs the same{" "}
-        <Link href="/docs/vibe">Vibe Build</Link>. The Vibe page stays opt-in (“Build with AI”).
+        Direct SnapServe: <Link href="/docs/vibe">Vibe</Link> (Chat → Agent → Connect → Test).
         Partner-managed workspaces use the classic <Link href="/docs/agents">Agents builder</Link>.
       </>
     ),
