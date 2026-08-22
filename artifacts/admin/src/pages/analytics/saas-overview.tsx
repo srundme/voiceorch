@@ -182,7 +182,7 @@ export default function SaasOverviewPage() {
         <Kpi label="Revenue/min" value={isLoading ? "…" : formatCentsToDollars(k?.revenuePerMinPaise ?? 0)} />
         <Kpi label="Cost/min" value={isLoading ? "…" : formatCentsToDollars(k?.costPerMinPaise ?? 0)} />
         <Kpi label="Profit/min" value={isLoading ? "…" : formatCentsToDollars(k?.profitPerMinPaise ?? 0)} />
-        <Kpi label="Cash collected" value={isLoading ? "…" : formatCentsToDollars(k?.cashCollectedPaise ?? 0)} sub="Top-ups + GST + card-paid numbers" />
+        <Kpi label="Cash collected" value={isLoading ? "…" : formatCentsToDollars(k?.cashCollectedPaise ?? 0)} sub="Completed top-ups (same as Recharges)" />
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">

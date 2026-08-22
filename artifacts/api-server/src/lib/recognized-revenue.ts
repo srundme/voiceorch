@@ -43,6 +43,12 @@ export function successfulTopupRaw(alias = ""): string {
   return `${p}type in ('topup','auto_topup') and lower(${p}status) in ('completed','success')`;
 }
 
+/** Same population as Recharges “Real users only”. */
+export function realCustomerTxnRaw(alias = ""): string {
+  const col = alias ? `${alias}.user_id` : "user_id";
+  return `${col} in (select id from users where coalesce(is_test, false) = false)`;
+}
+
 /** Ledger rows that represent rupees received (GST-inclusive topups + card DIDs). */
 export function cashInEventRaw(alias = ""): string {
   return `(${successfulTopupRaw(alias)}) or (${cardPaidDidDebitRaw(alias)})`;
@@ -74,6 +80,7 @@ export const RECOGNIZED_REVENUE_RAW = recognizedRevenueRaw();
 export const CARD_PAID_DID_DEBIT_RAW = cardPaidDidDebitRaw();
 export const WALLET_FUNDED_PHONE_DEBIT_RAW = walletFundedPhoneDebitRaw();
 export const SUCCESSFUL_TOPUP_RAW = successfulTopupRaw();
+export const REAL_CUSTOMER_TXN_RAW = realCustomerTxnRaw();
 export const CASH_IN_EVENT_RAW = cashInEventRaw();
 export const PROMO_ADMIN_CREDIT_RAW = promoAdminCreditRaw();
 export const WALLET_INFLOW_RAW = walletInflowRaw();

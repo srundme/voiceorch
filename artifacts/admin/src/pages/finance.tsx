@@ -40,7 +40,8 @@ import {
 } from "recharts";
 
 function defaultFrom() {
-  return format(subDays(new Date(), 30), "yyyy-MM-dd");
+  // All-time so Cash-in / Wallet credited match Recharges (₹25k + ₹5k + ₹500s + ₹100).
+  return "2024-01-01";
 }
 function defaultTo() {
   return format(new Date(), "yyyy-MM-dd");
@@ -137,14 +138,36 @@ export default function Finance() {
           <h1 className="text-3xl font-bold tracking-tight">Finance &amp; Analytics</h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Audit ledger, unit economics, and investor headline metrics. Amounts are INR.
-            Cash-in = rupees received (GST-inclusive paid topups + card-paid numbers). Wallet credited also includes
-            signup ₹500, admin credits, and partner transfers — those are not cash. Recognized = calls + number fees.
+            Cash-in and Wallet credited match Recharges: completed top-ups for real users.
+            Open All time to include every recharge. GST is a side estimate. Recognized = calls + number fees.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-8 w-36 text-xs" />
           <span className="text-xs text-muted-foreground">→</span>
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-8 w-36 text-xs" />
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => {
+              setFrom("2024-01-01");
+              setTo(defaultTo());
+            }}
+          >
+            All time
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => {
+              setFrom(format(subDays(new Date(), 30), "yyyy-MM-dd"));
+              setTo(defaultTo());
+            }}
+          >
+            Last 30d
+          </Button>
           <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={exportLedger}>
             <Download className="h-3.5 w-3.5" /> Ledger CSV
           </Button>
@@ -166,21 +189,13 @@ export default function Finance() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Kpi
               label="Cash-in"
-              value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.cashCollectedPaise ?? audit?.period?.cashCollectedEstPaise ?? 0)}
-              hint={
-                auditLoading
-                  ? "Topups + GST + card-paid numbers"
-                  : `Topups ${formatCentsToDollars(audit?.period?.cashInTopupGrossPaise ?? 0)} · Numbers ${formatCentsToDollars(audit?.period?.cashInCardDidPaise ?? 0)}`
-              }
+              value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.paidTopupWalletPaise ?? audit?.period?.cashInWalletCreditPaise ?? 0)}
+              hint="Same as Recharges — completed top-ups, real users"
             />
             <Kpi
               label="Wallet credited"
               value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.cashInWalletCreditPaise ?? 0)}
-              hint={
-                auditLoading
-                  ? "Paid topups + signup ₹500 + admin / partner credits"
-                  : `Paid ${formatCentsToDollars(audit?.period?.paidTopupWalletPaise ?? 0)} · Promo/admin ${formatCentsToDollars(audit?.period?.otherCreditPaise ?? audit?.period?.freeCreditPaise ?? 0)}`
-              }
+              hint="Completed top-up / auto-topup credits (pre-GST)"
             />
             <Kpi
               label="Recognized revenue"
@@ -481,7 +496,7 @@ export default function Finance() {
             <Kpi
               label="Cash-in"
               value={econLoading ? "…" : formatCentsToDollars(economics?.totals?.cashInPaise ?? 0)}
-              hint="GST-inclusive topups + card-paid numbers"
+              hint="Completed top-ups — same as Recharges"
             />
             <Kpi
               label="Recognized revenue"
@@ -567,11 +582,7 @@ export default function Finance() {
             <Kpi
               label="Lifetime cash-in"
               value={invLoading ? "…" : formatCentsToDollars(investor?.headline?.cashCollectedLifetimePaise ?? 0)}
-              hint={
-                invLoading
-                  ? "GST-inclusive topups + card-paid numbers"
-                  : `Topups ${formatCentsToDollars((investor?.headline?.cashCollectedLifetimePaise ?? 0) - (investor?.headline?.cashInCardDidPaise ?? 0))} · Numbers ${formatCentsToDollars(investor?.headline?.cashInCardDidPaise ?? 0)}`
-              }
+              hint="Completed top-ups for real users — same as Recharges"
             />
             <Kpi
               label="Wallet liability"

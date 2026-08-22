@@ -5,6 +5,7 @@ import {
   ledgerAdjustmentRaw,
   phoneFeeDebitRaw,
   promoAdminCreditRaw,
+  realCustomerTxnRaw,
   recognizedRevenueRaw,
   successfulTopupRaw,
   topupGrossExpr,
@@ -43,5 +44,10 @@ describe("recognized revenue SQL", () => {
     expect(cashInEventRaw()).not.toContain("free_credit");
     expect(ledgerAdjustmentRaw()).toContain("admin_credit");
     expect(ledgerAdjustmentRaw()).toContain("admin_debit");
+  });
+
+  it("excludes is_test accounts the same way Recharges does", () => {
+    expect(realCustomerTxnRaw()).toContain("is_test");
+    expect(realCustomerTxnRaw("wt")).toContain("wt.user_id");
   });
 });

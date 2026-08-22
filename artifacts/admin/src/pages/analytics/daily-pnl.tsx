@@ -132,7 +132,7 @@ export default function DailyPnlPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi label="Cash collected" value={isLoading ? "…" : formatCentsToDollars(totals?.cashCollectedPaise ?? 0)} sub="Top-ups + GST + card-paid numbers" />
+        <Kpi label="Cash collected" value={isLoading ? "…" : formatCentsToDollars(totals?.cashCollectedPaise ?? 0)} sub="Completed top-ups (same as Recharges)" />
         <Kpi label="Calls" value={isLoading ? "…" : String(totals?.calls ?? 0)} />
         <Kpi label="Active users" value={isLoading ? "…" : String(totals?.users ?? 0)} sub="Distinct callers in range" />
         <Kpi
