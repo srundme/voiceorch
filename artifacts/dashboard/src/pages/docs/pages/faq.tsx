@@ -16,7 +16,8 @@ const FAQS: { q: string; a: ReactNode }[] = [
     q: "Where do I start a first agent?",
     a: (
       <>
-        Direct SnapServe: <Link href="/docs/vibe">Vibe</Link> (Chat → Agent → Connect → Test).
+        After signup, <Link href="/docs/jarvis">Jarvis</Link> opens on Home and runs the same{" "}
+        <Link href="/docs/vibe">Vibe Build</Link>. The Vibe page stays opt-in (“Build with AI”).
         Partner-managed workspaces use the classic <Link href="/docs/agents">Agents builder</Link>.
       </>
     ),

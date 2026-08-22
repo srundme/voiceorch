@@ -409,10 +409,9 @@ function AppRoot() {
   const { data: agents, isLoading } = useListAgents({});
   if (isLoading) return <AppLoader />;
   const list = Array.isArray(agents) ? agents : (agents as any)?.agents ?? [];
-  // Accounts with no agents land in the builder, not Vibe. Vibe stays available
-  // from the "Build with AI" entry points, but it is opt-in rather than the
-  // forced first screen after signup.
-  if (!list.length) return <Redirect to="/app/agents" />;
+  // Accounts with no agents land on Home with Jarvis open. Jarvis runs the same
+  // Vibe Build engine in the HUD — do not dump them onto the Vibe page.
+  if (!list.length) return <Redirect to="/app/home?jarvis=1" />;
   return <Redirect to="/app/home" />;
 }
 

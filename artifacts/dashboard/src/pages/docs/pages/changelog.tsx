@@ -15,7 +15,8 @@ export default function ChangelogPage() {
         <li>
           Jarvis is a dark HUD on the dashboard. It speaks with the admin-listed{" "}
           <strong>Karthikeyan</strong> Cartesia voice, in friendly colloquial Tamil + English.
-          Say the job — create agent, draft campaign, assign a number — and it does it.
+          After first signup he opens on Home and runs the same Vibe Build phases as{" "}
+          <Link href="/docs/vibe">Vibe</Link>.
         </li>
         <li>
           Guide: <Link href="/docs/jarvis">Jarvis</Link>.

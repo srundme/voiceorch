@@ -1,9 +1,8 @@
 /**
- * New signups must land in the agent builder, not Vibe.
+ * New signups land on Home with Jarvis open — not the Vibe page.
  *
- * Vibe Build used to be the forced first screen after onboarding and for any
- * account with zero agents. It is now opt-in ("Build with AI"), so these
- * static assertions keep the two redirect sites from drifting back.
+ * Jarvis runs the same Vibe Build engine in the HUD. These static assertions
+ * keep the two redirect sites from dumping people onto /app/vibe.
  */
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -17,27 +16,35 @@ function src(rel: string) {
 }
 
 describe("signup landing route", () => {
-  it("sends agent-less accounts to the builder from AppRoot", () => {
+  it("sends agent-less accounts to Home with Jarvis from AppRoot", () => {
     const app = src("src/App.tsx");
     const appRoot = app.slice(app.indexOf("function AppRoot()"));
     const body = appRoot.slice(0, appRoot.indexOf("\n}"));
 
     expect(body).toMatch(/!list\.length/);
-    expect(body).toMatch(/Redirect to="\/app\/agents"/);
+    expect(body).toMatch(/Redirect to="\/app\/home\?jarvis=1"/);
     expect(body).not.toMatch(/\/app\/vibe/);
   });
 
-  it("finishes onboarding in the builder with the create dialog open", () => {
+  it("finishes onboarding on Home with Jarvis open", () => {
     const onboarding = src("src/pages/onboarding.tsx");
 
-    expect(onboarding).toMatch(/setLocation\("\/app\/agents\?create=1"\)/);
-    // The only remaining "vibe" reference is the stashed welcome name, which
-    // Vibe consumes if the user later opens it of their own accord.
+    expect(onboarding).toMatch(/setLocation\("\/app\/home\?jarvis=1"\)/);
+    expect(onboarding).toMatch(/jarvis:open/);
     expect(onboarding).not.toMatch(/setLocation\("\/app\/vibe"\)/);
   });
 
   it("keeps Vibe reachable as an explicit choice", () => {
     expect(src("src/pages/home/index.tsx")).toMatch(/navigate\("\/app\/vibe"\)/);
     expect(src("src/components/layout.tsx")).toMatch(/navigate\("\/app\/vibe"\)/);
+  });
+
+  it("runs official Vibe from the Jarvis HUD", () => {
+    const hud = src("src/components/VoiceAssistant.tsx");
+    const engine = src("../api-server/src/routes/vibe.ts");
+    expect(hud).toMatch(/persona: "jarvis"/);
+    expect(hud).toMatch(/\/api\/agents\/vibe-chat/);
+    expect(engine).toMatch(/persona === "jarvis"/);
+    expect(engine).toMatch(/JARVIS_VIBE_PREFIX/);
   });
 });

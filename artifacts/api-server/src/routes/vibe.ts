@@ -249,6 +249,14 @@ interface GeminiVibeResponse {
   config: VibeConfig | null;
 }
 
+const JARVIS_VIBE_PREFIX = `You are Jarvis — Karthikeyan's voice on SnapServe, running the official Vibe Build. The phases, JSON schema, auto-advance rules, call-flow draft, voices, phone numbers, and agent save path are UNCHANGED from Vibe. Do not invent a shorter builder.
+
+SPEAK: warm colloquial Tanglish (Tamil script + simple English) like a close Chennai colleague, or Indian English if they only speak English. 2–3 spoken sentences in "reply". No markdown.
+
+FIRST OPEN: greet by name if given, then start PHASE core — ask what the agent should do.
+
+`;
+
 const VIBE_SYSTEM_PROMPT = `You are an expert AI agent builder for SnapServe, a voice AI platform. Guide the user conversationally — warm, smart, 2–3 sentences per turn.
 
 CONVERSATION PHASES — complete IN ORDER, never skip:
@@ -474,7 +482,7 @@ function lastUserContent(msgs: VibeChatMessage[]): string {
   return "";
 }
 
-async function callVibeLlm(_key: string, messages: VibeChatMessage[]): Promise<GeminiVibeResponse> {
+async function callVibeLlm(_key: string, messages: VibeChatMessage[], system = VIBE_SYSTEM_PROMPT): Promise<GeminiVibeResponse> {
   const specs = [
     { model: VIBE_CHAT_MODEL, attempts: 2 },
     { model: VIBE_FALLBACK_MODEL, attempts: 2 },
@@ -491,7 +499,7 @@ async function callVibeLlm(_key: string, messages: VibeChatMessage[]): Promise<G
       try {
         const text = await Promise.race([
           platformChatText({
-            system: VIBE_SYSTEM_PROMPT,
+            system,
             messages: chatMessages,
             temperature: 0.4,
             maxTokens: 8_192,
@@ -578,6 +586,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
     refineAgentId,
     refineBaseConfig,
     knowledgeSourceIds = [] as number[],
+    persona,
   } = req.body as {
     messages:             VibeChatMessage[];
     voicesShown?:         boolean;
@@ -586,7 +595,9 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
     refineAgentId?:       number;
     refineBaseConfig?:    Record<string, unknown>;
     knowledgeSourceIds?:  number[];
+    persona?:             string;
   };
+  const vibeSystem = persona === "jarvis" ? JARVIS_VIBE_PREFIX + VIBE_SYSTEM_PROMPT : VIBE_SYSTEM_PROMPT;
 
   const isRefine = typeof refineAgentId === "number" && refineAgentId > 0;
   if (!isRefine) void trackEvent(clerkId, "vibe_started");
@@ -905,7 +916,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
 
     let parsed: GeminiVibeResponse;
     try {
-      parsed = await callVibeLlm(geminiKey, contextualMessages);
+      parsed = await callVibeLlm(geminiKey, contextualMessages, vibeSystem);
     } catch (err) {
       const kind = err instanceof VibeGeminiError ? err.kind : "unavailable";
       const detail = err instanceof Error ? err.message : String(err);

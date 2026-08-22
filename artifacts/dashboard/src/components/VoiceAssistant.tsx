@@ -1,6 +1,9 @@
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from "react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
+import { getListAgentsQueryKey, useListAgents } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
+import { firstVibeKickoff, looksLikeVibeBuild, shouldAutoOpenJarvis } from "@/lib/jarvis-vibe";
 import { Mic, X, Send, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,12 +31,30 @@ interface DoneItem {
   href?: string;
 }
 
+interface VoicePick {
+  voiceId: string;
+  voiceName: string;
+  gender: string;
+  language: string;
+  description: string;
+}
+
+interface PhonePick {
+  id: number;
+  number: string;
+  region: string;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
   recommendations?: Recommendation[];
   done?: DoneItem[];
+  voices?: VoicePick[];
+  phones?: PhonePick[];
 }
+
+type VibeTurn = { role: "user" | "assistant"; content: string };
 
 interface SpeechRecognitionEvent extends Event {
   results: SpeechRecognitionResultList;
@@ -111,14 +132,18 @@ function JarvisOrb({ phase }: { phase: Phase }) {
 export function VoiceAssistant() {
   const [location, navigate] = useLocation();
   const { user, getToken } = useAuth();
+  const queryClient = useQueryClient();
+  const { data: agents } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
+  const agentList = Array.isArray(agents) ? agents : (agents as { agents?: unknown[] } | undefined)?.agents ?? [];
+  const noAgents = agentList.length === 0;
 
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [textInput, setTextInput] = useState("");
   const [interim, setInterim] = useState("");
-  const [greeted, setGreeted] = useState(false);
   const [error, setError] = useState("");
+  const [vibeStatus, setVibeStatus] = useState("");
 
   const [pos, setPos] = useState<{ x: number; y: number }>(() => {
     try {
@@ -170,6 +195,12 @@ export function VoiceAssistant() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listenAfterSpeakRef = useRef(false);
   const sendMessageRef = useRef<(userText: string, isFirst?: boolean) => Promise<void>>(async () => {});
+  const vibeActiveRef = useRef(false);
+  const vibeHistoryRef = useRef<VibeTurn[]>([]);
+  const voicesRef = useRef<{ shown: boolean; list: VoicePick[] }>({ shown: false, list: [] });
+  const selectedVoiceIdRef = useRef("");
+  const autoOpenedRef = useRef(false);
+  const greetedRef = useRef(false);
 
   const userName = user?.name?.split(" ")[0] ?? "";
   const pageUrl = location;
@@ -243,55 +274,207 @@ export function VoiceAssistant() {
     rec.start();
   }, []);
 
-  const sendMessage = useCallback(
-    async (userText: string, isFirst = false) => {
+  const finishSpeak = useCallback(async (text: string) => {
+    listenAfterSpeakRef.current = true;
+    await speakText(text);
+    setPhase("idle");
+    if (listenAfterSpeakRef.current) {
+      listenAfterSpeakRef.current = false;
+      startListening();
+    }
+  }, [startListening]);
+
+  const sendVibe = useCallback(
+    async (userText: string, hideUserBubble: boolean) => {
+      if (!hideUserBubble) setMessages((prev) => [...prev, { role: "user", content: userText }]);
+      setPhase("thinking");
+      setTextInput("");
+      setInterim("");
+      setVibeStatus("");
+      vibeActiveRef.current = true;
+
+      const history: VibeTurn[] = [...vibeHistoryRef.current, { role: "user", content: userText }];
+      const token = await getToken();
+      const resp = await fetch(`${BASE}/api/agents/vibe-chat`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({
+          persona: "jarvis",
+          messages: history,
+          voicesShown: voicesRef.current.shown,
+          availableVoices: voicesRef.current.list,
+          selectedVoiceId: selectedVoiceIdRef.current,
+        }),
+      });
+      if (!resp.ok || !resp.body) throw new Error(`Vibe failed: ${resp.status}`);
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let aiReply = "";
+      let voices: VoicePick[] = [];
+      let phones: PhonePick[] = [];
+      let created: { agentId: number; agentName: string } | null = null;
+      let streamError = "";
+
+      const flushAssistant = (partial: string) => {
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.role === "assistant" && last.content.startsWith(partial.slice(0, 12))) {
+            next[next.length - 1] = { ...last, content: partial, voices: voices.length ? voices : last.voices, phones: phones.length ? phones : last.phones };
+            return next;
+          }
+          return [...next, { role: "assistant", content: partial, voices, phones }];
+        });
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          let evt: Record<string, unknown>;
+          try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+          switch (evt.type) {
+            case "text":
+              aiReply += String(evt.delta ?? "");
+              flushAssistant(aiReply);
+              break;
+            case "voice_options": {
+              voices = (evt.voices as VoicePick[]) ?? [];
+              if (voices.length) voicesRef.current = { shown: true, list: voices };
+              if (aiReply) flushAssistant(aiReply);
+              break;
+            }
+            case "voice_selected":
+              selectedVoiceIdRef.current = String(evt.voiceId ?? "");
+              voices = [];
+              break;
+            case "phone_number_options":
+              phones = (evt.numbers as PhonePick[]) ?? [];
+              if (aiReply) flushAssistant(aiReply);
+              break;
+            case "phone_number_selected":
+              phones = [];
+              break;
+            case "status":
+              setVibeStatus(String(evt.message ?? ""));
+              break;
+            case "created":
+              created = { agentId: Number(evt.agentId), agentName: String(evt.agentName ?? "Agent") };
+              vibeActiveRef.current = false;
+              break;
+            case "error":
+              streamError = String(evt.message ?? "Vibe failed");
+              break;
+            default:
+              break;
+          }
+        }
+      }
+
+      if (streamError && !aiReply) throw new Error(streamError);
+      vibeHistoryRef.current = [...history, { role: "assistant", content: aiReply || streamError }];
+
+      const doneItems: DoneItem[] = created
+        ? [{ label: created.agentName, message: "Agent ready", href: `/app/agents/${created.agentId}` }]
+        : [];
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last?.role === "assistant") {
+          next[next.length - 1] = {
+            ...last,
+            content: aiReply || last.content,
+            voices: voices.length ? voices : undefined,
+            phones: phones.length ? phones : undefined,
+            done: doneItems.length ? doneItems : last.done,
+          };
+          return next;
+        }
+        return [...next, { role: "assistant", content: aiReply || streamError, voices, phones, done: doneItems }];
+      });
+
+      if (created) {
+        setVibeStatus("");
+        void queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+        navigate(`/app/agents/${created.agentId}`);
+      }
+
+      const spoken = aiReply || (created ? `${created.agentName} ready da.` : "");
+      if (spoken) await finishSpeak(spoken);
+      else setPhase("idle");
+    },
+    [getToken, navigate, queryClient, finishSpeak],
+  );
+
+  const sendAssistant = useCallback(
+    async (userText: string, isFirst: boolean) => {
       const historyMsgs = isFirst ? [] : messages;
       if (!isFirst) setMessages((prev) => [...prev, { role: "user", content: userText }]);
       setPhase("thinking");
       setTextInput("");
       setInterim("");
 
+      const token = await getToken();
+      const r = await fetch(`${BASE}/api/assistant/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({
+          message: userText,
+          history: historyMsgs.map((m) => ({ role: m.role, content: m.content })),
+          userName,
+          isFirst,
+          pageUrl,
+        }),
+      });
+      if (!r.ok) throw new Error(`Chat failed: ${r.status}`);
+
+      const data = (await r.json()) as {
+        text: string;
+        navigate?: string | null;
+        recommendations?: Recommendation[];
+        done?: DoneItem[];
+      };
+      setMessages((prev) => (isFirst
+        ? [{ role: "assistant", content: data.text, recommendations: data.recommendations, done: data.done }]
+        : [...prev, { role: "assistant", content: data.text, recommendations: data.recommendations, done: data.done }]));
+
+      if (data.navigate?.startsWith("/app/")) navigate(data.navigate);
+      await finishSpeak(data.text);
+    },
+    [messages, userName, pageUrl, getToken, navigate, finishSpeak],
+  );
+
+  const sendMessage = useCallback(
+    async (userText: string, isFirst = false) => {
       try {
-        const token = await getToken();
-        const r = await fetch(`${BASE}/api/assistant/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({
-            message: userText,
-            history: historyMsgs.map((m) => ({ role: m.role, content: m.content })),
-            userName,
-            isFirst,
-            pageUrl,
-          }),
-        });
-        if (!r.ok) throw new Error(`Chat failed: ${r.status}`);
+        const welcomeName = (() => {
+          try { return sessionStorage.getItem("vibe:welcomeName")?.trim() ?? ""; } catch { return ""; }
+        })();
+        const name = welcomeName || userName;
+        const startVibe = isFirst
+          ? noAgents
+          : vibeActiveRef.current || looksLikeVibeBuild(userText);
 
-        const data = (await r.json()) as {
-          text: string;
-          navigate?: string | null;
-          recommendations?: Recommendation[];
-          done?: DoneItem[];
-        };
-        setMessages((prev) => (isFirst
-          ? [{ role: "assistant", content: data.text, recommendations: data.recommendations, done: data.done }]
-          : [...prev, { role: "assistant", content: data.text, recommendations: data.recommendations, done: data.done }]));
-
-        if (data.navigate?.startsWith("/app/")) navigate(data.navigate);
-
-        listenAfterSpeakRef.current = true;
-        await speakText(data.text);
-        setPhase("idle");
-        if (listenAfterSpeakRef.current) {
-          listenAfterSpeakRef.current = false;
-          startListening();
+        if (startVibe) {
+          const payload = isFirst && noAgents ? firstVibeKickoff(name) : userText;
+          await sendVibe(payload, isFirst && noAgents);
+          return;
         }
+        await sendAssistant(userText, isFirst);
       } catch {
         setError("Jarvis reach aagala. Innoru thadava try pannu.");
         setPhase("error");
         setTimeout(() => { setPhase("idle"); setError(""); }, 3000);
       }
     },
-    [messages, userName, pageUrl, getToken, navigate, startListening],
+    [noAgents, userName, sendVibe, sendAssistant],
   );
 
   sendMessageRef.current = sendMessage;
@@ -321,13 +504,30 @@ export function VoiceAssistant() {
 
   async function handleOpen() {
     setOpen(true);
-    if (!greeted) {
-      setGreeted(true);
-      await sendMessage("Vanakkam, enna setup pannanum?", true);
+    if (!greetedRef.current) {
+      greetedRef.current = true;
+      await sendMessageRef.current("Vanakkam, enna setup pannanum?", true);
     } else if (phase === "idle") {
       startListening();
     }
   }
+
+  useEffect(() => {
+    if (autoOpenedRef.current) return;
+    let sessionFlag: string | null = null;
+    try { sessionFlag = sessionStorage.getItem("jarvis:open"); } catch { /* ignore */ }
+    if (!shouldAutoOpenJarvis(window.location.search, sessionFlag)) return;
+    autoOpenedRef.current = true;
+    try { sessionStorage.removeItem("jarvis:open"); } catch { /* ignore */ }
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("jarvis")) {
+        url.searchParams.delete("jarvis");
+        window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+      }
+    } catch { /* ignore */ }
+    void handleOpen();
+  }, []);
 
   function handleClose() {
     recognitionRef.current?.stop();
@@ -456,7 +656,7 @@ export function VoiceAssistant() {
             <JarvisOrb phase={phase} />
           </button>
           <p className="mb-2 px-6 text-center text-[11px] text-white/45">
-            Karthikeyan voice · Tanglish · just talk, I will create
+            {vibeStatus || "Karthikeyan voice · same Vibe Build · just talk"}
           </p>
 
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-2" style={{ scrollbarWidth: "none" }}>
@@ -484,6 +684,38 @@ export function VoiceAssistant() {
                         >
                           <CheckCircle2 className="h-3 w-3" />
                           {d.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {msg.voices && msg.voices.length > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                      {msg.voices.slice(0, 6).map((v) => (
+                        <button
+                          key={v.voiceId}
+                          type="button"
+                          onClick={() => void sendMessage(`I'll go with ${v.voiceName} (voiceId: ${v.voiceId})`)}
+                          className="cursor-pointer rounded-xl border border-amber-200/20 bg-white/[0.04] px-3 py-2 text-left hover:bg-white/[0.08]"
+                        >
+                          <p className="text-[12px] font-medium text-white">{v.voiceName}</p>
+                          <p className="mt-0.5 text-[10px] leading-4 text-white/45">
+                            {v.language} · {v.gender}{v.description ? ` · ${v.description}` : ""}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {msg.phones && msg.phones.length > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                      {msg.phones.slice(0, 6).map((n) => (
+                        <button
+                          key={n.id}
+                          type="button"
+                          onClick={() => void sendMessage(`Assign ${n.number} (number id ${n.id}) as the inbound number`)}
+                          className="cursor-pointer rounded-xl border border-cyan-200/20 bg-white/[0.04] px-3 py-2 text-left hover:bg-white/[0.08]"
+                        >
+                          <p className="text-[12px] font-medium text-white">{n.number}</p>
+                          <p className="mt-0.5 text-[10px] leading-4 text-white/45">{n.region || "Voice number"}</p>
                         </button>
                       ))}
                     </div>

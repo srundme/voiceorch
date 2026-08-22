@@ -8,19 +8,21 @@ export default function JarvisPage() {
         breadcrumb="Get started"
         title="Jarvis"
         updated="22 Aug 2026"
-        description="Speak to SnapServe support on the dashboard. Jarvis reads your workspace, recommends the next step, and does the job when you confirm."
+        description="Speak to SnapServe on the dashboard. After signup Jarvis opens first and runs official Vibe Build — same phases, voices, numbers, and save path as the Vibe page."
       />
 
       <Callout variant="tip">
         The gold orb on Home is Jarvis — Karthikeyan's listed Cartesia voice, speaking friendly
-        Tanglish. On the agent builder it docks as a right-edge tab so it does not cover controls.
+        Tanglish. After first signup he opens on Home automatically. On the agent builder he docks
+        as a right-edge tab so he does not cover controls.
       </Callout>
 
       <h2 id="talk">Talk to Jarvis</h2>
       <p>
-        Open the orb. Jarvis greets you in Tanglish, then listens. Say what you want —{" "}
-        <em>Priya collection agent create pannu</em> — and he builds it. Chrome or Edge for voice;
-        typing works everywhere.
+        Open the orb (or let him open after signup). Jarvis greets you in Tanglish, then listens.
+        Say what you want — <em>Priya collection agent create pannu</em> — and he walks the same
+        Vibe phases: core, voice, call flow, knowledge, features, dispositions, phone, then save.
+        Chrome or Edge for voice; typing works everywhere.
       </p>
 
       <h2 id="recommend">What it recommends</h2>
@@ -41,9 +43,12 @@ export default function JarvisPage() {
       </p>
 
       <h2 id="jobs">Jobs it does while you talk</h2>
-      <p>No confirm tap for create. Speak the job; Jarvis does it:</p>
+      <p>
+        First agent and “create / build an agent” go through{" "}
+        <Link href="/docs/vibe">Vibe Build</Link> inside the HUD — not a shortcut insert.
+        After an agent exists, speak the next job:
+      </p>
       <ul>
-        <li>Create a live agent (Tanglish prompt if you asked for Tamil)</li>
         <li>Draft a campaign on that agent</li>
         <li>Assign one of your voice numbers</li>
         <li>Publish or park an agent</li>
