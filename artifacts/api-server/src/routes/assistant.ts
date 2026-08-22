@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import type { Request, Response } from "express";
 import {
@@ -18,6 +17,15 @@ import {
   type AssistantRecommendation,
 } from "../services/assistant-brief.js";
 import { loadWorkspaceSnapshot } from "../services/assistant-brief-load.js";
+import { resolveJarvisVoice } from "../services/assistant-voice-resolve.js";
+import { JARVIS_TTS_FALLBACK_VOICE_ID } from "../services/assistant-voice.js";
+import {
+  JOB_TYPES,
+  runAssistantJob,
+  runAssistantJobs,
+  sanitizeJobs,
+  type AssistantJob,
+} from "../services/assistant-jobs.js";
 
 const router = Router();
 
@@ -32,9 +40,16 @@ async function getSetting(key: string): Promise<string | null> {
   return null;
 }
 
-const SYSTEM_PROMPT = `You are Jarvis, SnapServe's in-app support concierge. Users speak to you on the dashboard. You do jobs for them (after they confirm) and you recommend the next useful step from their real workspace — never generic marketing.
+const SYSTEM_PROMPT = `You are Jarvis — Karthikeyan's voice on SnapServe. The user just talks. You build the workspace for them. No forms, no "click apply" unless they ask to review a risky change.
 
-Be concise and spoken: short sentences, no markdown lists, no code fences in "message". Sound like a sharp operations partner, not a chatbot.
+VOICE: Warm, friendly, slightly teasing Chennai Tanglish. Mix colloquial Tamil (Tamil script) and simple English in the same short sentences. Sound like a close colleague, not a call-center bot. Examples:
+- "Vanakkam da, naan Jarvis. Loan collection agent venuma? Naan create pannidren."
+- "Priya ready da. Campaign-um draft la vechuten — leads import panna sollu."
+Keep "message" spoken: 1–3 short sentences. No markdown, no lists, no code fences.
+
+LANGUAGE: Match the user. If they speak Tamil or Tanglish, reply Tanglish. If they speak only English, stay English with a light Indian warmth.
+
+CREATE IMMEDIATELY: When they describe an agent, campaign, or assignment, emit the job. Do not ask permission to create. Only refuse delete / release number / start a live dial batch — send them to the page instead.
 
 ## DATA RETRIEVAL COMMANDS
 When you need data, output ONLY a JSON command (nothing else):
@@ -55,16 +70,17 @@ Always respond with valid JSON (no markdown, no code fences):
 "navigate" — send them to a page when that is the job.
 "proposal" — agent setting changes they must confirm with Apply.
 "recommendations" — 1–3 next steps with {id,title,reason,href,priority}.
-"jobs" — confirmable actions (see JOBS). Never execute a mutating job yourself.
+"jobs" — actions the system runs immediately (except navigate).
 
 ## JOBS
-Offer a job when you can actually do the work. Types:
-- navigate: {"type":"navigate","label":"Open campaigns","href":"/app/campaigns"}
+Emit jobs to do the work now. Types:
+- create_agent: {"type":"create_agent","label":"Create Priya","agentName":"Priya","useCase":"NBFC loan collection","language":"ta-IN","companyName":"their company","direction":"outbound","gender":"female"}
+- create_campaign: {"type":"create_campaign","label":"Website Leads","agentId":36,"campaignName":"Website Leads"}
+- assign_phone: {"type":"assign_phone","label":"Assign number","agentId":36,"phoneNumberId":9}
 - set_agent_status: {"type":"set_agent_status","label":"Publish Priya","agentId":36,"status":"active"}
-- create_campaign: {"type":"create_campaign","label":"Create Website Leads","agentId":36,"campaignName":"Website Leads"}
-- assign_phone: {"type":"assign_phone","label":"Assign +9180… to Priya","agentId":36,"phoneNumberId":9}
+- navigate: {"type":"navigate","label":"Open wallet","href":"/app/wallet"}
 
-Never invent IDs. Use platform data. Destructive work (delete agent, release number, start a live dial batch) is not allowed — navigate them to the page instead.
+If you just created an agent and also want a campaign, emit both — create_agent first, then create_campaign without inventing agentId. Never invent IDs for existing records. Destructive work (delete, release number, start a live batch) is navigate-only.
 
 ## RECOMMENDATIONS
 Lead with the highest-leverage gap: no agent, no phone/WhatsApp, unused number, no campaign, draft-only agent, low wallet, recent failed calls. If the workspace is healthy, recommend a test call.`}
@@ -181,42 +197,6 @@ interface Proposal {
   changes: ProposalChange[];
 }
 
-export type AssistantJobType = "navigate" | "set_agent_status" | "create_campaign" | "assign_phone";
-
-export interface AssistantJob {
-  type: AssistantJobType;
-  label: string;
-  href?: string;
-  agentId?: number;
-  status?: "draft" | "active";
-  campaignName?: string;
-  phoneNumberId?: number;
-}
-
-const JOB_TYPES = new Set<AssistantJobType>(["navigate", "set_agent_status", "create_campaign", "assign_phone"]);
-
-function sanitizeJobs(raw: unknown): AssistantJob[] {
-  if (!Array.isArray(raw)) return [];
-  const out: AssistantJob[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const j = item as Record<string, unknown>;
-    if (typeof j.type !== "string" || !JOB_TYPES.has(j.type as AssistantJobType)) continue;
-    if (typeof j.label !== "string" || !j.label.trim()) continue;
-    out.push({
-      type: j.type as AssistantJobType,
-      label: j.label.trim().slice(0, 80),
-      href: typeof j.href === "string" ? j.href : undefined,
-      agentId: typeof j.agentId === "number" ? j.agentId : undefined,
-      status: j.status === "active" || j.status === "draft" ? j.status : undefined,
-      campaignName: typeof j.campaignName === "string" ? j.campaignName.slice(0, 80) : undefined,
-      phoneNumberId: typeof j.phoneNumberId === "number" ? j.phoneNumberId : undefined,
-    });
-    if (out.length >= 3) break;
-  }
-  return out;
-}
-
 function sanitizeRecs(raw: unknown): AssistantRecommendation[] {
   if (!Array.isArray(raw)) return [];
   const out: AssistantRecommendation[] = [];
@@ -257,10 +237,33 @@ type ChatResult = {
   proposal: Proposal | null;
   recommendations: AssistantRecommendation[];
   jobs: AssistantJob[];
+  done: Array<{ label: string; message: string; href?: string }>;
 };
 
 function emptyResult(text: string): ChatResult {
-  return { text, navigate: null, proposal: null, recommendations: [], jobs: [] };
+  return { text, navigate: null, proposal: null, recommendations: [], jobs: [], done: [] };
+}
+
+async function fulfillJobs(clerkUserId: string, result: ChatResult): Promise<ChatResult> {
+  const actionable = result.jobs.filter((j) => j.type !== "navigate");
+  if (actionable.length === 0) return result;
+  const voice = await resolveJarvisVoice();
+  const { results, navigate } = await runAssistantJobs(clerkUserId, actionable, voice);
+  const done = results
+    .filter((r) => r.success)
+    .map((r) => ({
+      label: r.message.split(/[.!]/)[0] || "Done",
+      message: r.message,
+      href: r.navigate,
+    }));
+  const extra = results.map((r) => r.message).filter(Boolean).join(" ");
+  return {
+    ...result,
+    text: extra ? `${result.text} ${extra}`.trim() : result.text,
+    navigate: navigate ?? result.navigate,
+    jobs: result.jobs.filter((j) => j.type === "navigate"),
+    done,
+  };
 }
 
 function parseResponse(raw: string): ChatResult {
@@ -280,6 +283,7 @@ function parseResponse(raw: string): ChatResult {
       proposal: parsed.proposal ?? null,
       recommendations: sanitizeRecs(parsed.recommendations),
       jobs: sanitizeJobs(parsed.jobs),
+      done: [],
     };
   } catch {
     const match = cleaned.match(/\{[\s\S]*\}/);
@@ -298,6 +302,7 @@ function parseResponse(raw: string): ChatResult {
           proposal: p.proposal ?? null,
           recommendations: sanitizeRecs(p.recommendations),
           jobs: sanitizeJobs(p.jobs),
+          done: [],
         };
       } catch { /* ok */ }
     }
@@ -639,7 +644,7 @@ router.post("/assistant/chat", async (req: Request, res: Response): Promise<void
   }
 
   const userContent = isFirst
-    ? `${contextNote}${briefBlock}[User name: "${displayName}". First message — greet by first name as Jarvis. Say the single most useful next step from the workspace brief. Offer to do that job.]\n${message}`
+    ? `${contextNote}${briefBlock}[User name: "${displayName}". First message — greet them in friendly Tanglish as Jarvis (Karthikeyan's voice). Name the single most useful next step and say you will do it if they just talk.]\n${message}`
     : `${contextNote}${briefBlock}${message}`;
 
   const messages: ChatMessage[] = [
@@ -654,10 +659,11 @@ router.post("/assistant/chat", async (req: Request, res: Response): Promise<void
   if (qwenKey) {
     const result = await runChat(messages, qwenKey, "qwen/qwen3-32b", GROQ_URL, clerkUserId);
     if (result?.text) {
-      res.json({
+      const fulfilled = await fulfillJobs(clerkUserId, {
         ...result,
         recommendations: mergeRecs(snapshotRecs, result.recommendations),
       });
+      res.json(fulfilled);
       return;
     }
   }
@@ -666,10 +672,11 @@ router.post("/assistant/chat", async (req: Request, res: Response): Promise<void
   if (openaiKey) {
     const result = await runChat(messages, openaiKey, "gpt-4o-mini", OPENAI_URL, clerkUserId);
     if (result?.text) {
-      res.json({
+      const fulfilled = await fulfillJobs(clerkUserId, {
         ...result,
         recommendations: mergeRecs(snapshotRecs, result.recommendations),
       });
+      res.json(fulfilled);
       return;
     }
   }
@@ -677,15 +684,16 @@ router.post("/assistant/chat", async (req: Request, res: Response): Promise<void
   const top = snapshotRecs[0];
   const fallback = isFirst
     ? (top
-      ? `Hi ${displayName}. I'm Jarvis. ${top.reason} I can take you there, or you can tell me what you need.`
-      : `Hi ${displayName}. I'm Jarvis, your SnapServe support. Tell me what you want done — I'll recommend the next step and do the job when you confirm.`)
-    : "I can open a page, publish an agent, start a campaign draft, or assign a number. What should I do?";
+      ? `Vanakkam ${displayName}, naan Jarvis. ${top.reason} Sollu — naan create pannidren.`
+      : `Vanakkam ${displayName}, naan Jarvis. Agent, campaign, number — just pesu, naan setup pannidren.`)
+    : "Sollu da — agent create, campaign, number assign, enna venumo.";
   res.json({
     text: fallback,
     navigate: null,
     proposal: null,
     recommendations: snapshotRecs,
-    jobs: top ? [{ type: "navigate", label: top.title, href: top.href }] : [],
+    jobs: [],
+    done: [],
   });
 });
 
@@ -713,113 +721,13 @@ router.post("/assistant/job", async (req: Request, res: Response): Promise<void>
     return;
   }
 
-  if (job.type === "navigate") {
-    if (!job.href || !job.href.startsWith("/app/")) {
-      res.status(400).json({ error: "href must be an in-app path" });
-      return;
-    }
-    res.json({ success: true, navigate: job.href, message: "Opening that page." });
+  const voice = await resolveJarvisVoice();
+  const result = await runAssistantJob(clerkUserId, job, voice);
+  if (!result.success) {
+    res.status(400).json({ error: result.message });
     return;
   }
-
-  if (job.type === "set_agent_status") {
-    if (!job.agentId || (job.status !== "active" && job.status !== "draft")) {
-      res.status(400).json({ error: "agentId and status required" });
-      return;
-    }
-    const [agent] = await db
-      .select({ id: agentsTable.id, name: agentsTable.name })
-      .from(agentsTable)
-      .where(and(eq(agentsTable.id, job.agentId), eq(agentsTable.userId, clerkUserId)));
-    if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
-    await db.update(agentsTable).set({ status: job.status, updatedAt: new Date() }).where(eq(agentsTable.id, agent.id));
-    logger.info({ agentId: agent.id, status: job.status }, "assistant: set agent status");
-    res.json({
-      success: true,
-      navigate: `/app/agents/${agent.id}`,
-      message: job.status === "active"
-        ? `${agent.name || "Agent"} is live. Next inbound or campaign call will use it.`
-        : `${agent.name || "Agent"} is back to draft.`,
-    });
-    return;
-  }
-
-  if (job.type === "create_campaign") {
-    const name = (job.campaignName ?? "").trim();
-    if (!job.agentId || !name) {
-      res.status(400).json({ error: "agentId and campaignName required" });
-      return;
-    }
-    const [agent] = await db
-      .select({ id: agentsTable.id })
-      .from(agentsTable)
-      .where(and(eq(agentsTable.id, job.agentId), eq(agentsTable.userId, clerkUserId)));
-    if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
-    const [campaign] = await db.insert(campaignsTable).values({
-      userId: clerkUserId,
-      name,
-      agentId: agent.id,
-      fieldMappings: { phone: "phone" },
-      webhookToken: randomUUID(),
-      status: "draft",
-      isActive: false,
-    }).returning({ id: campaignsTable.id, name: campaignsTable.name });
-    logger.info({ campaignId: campaign?.id, agentId: agent.id }, "assistant: created campaign");
-    res.json({
-      success: true,
-      navigate: campaign ? `/app/campaigns/${campaign.id}` : "/app/campaigns",
-      message: `${name} is ready as a draft. Import leads, then start a batch.`,
-    });
-    return;
-  }
-
-  if (job.type === "assign_phone") {
-    if (!job.agentId || !job.phoneNumberId) {
-      res.status(400).json({ error: "agentId and phoneNumberId required" });
-      return;
-    }
-    const [[agent], [phone]] = await Promise.all([
-      db.select({ id: agentsTable.id, name: agentsTable.name })
-        .from(agentsTable)
-        .where(and(eq(agentsTable.id, job.agentId), eq(agentsTable.userId, clerkUserId))),
-      db.select({
-        id: phoneNumbersTable.id,
-        number: phoneNumbersTable.number,
-        service: phoneNumbersTable.service,
-      })
-        .from(phoneNumbersTable)
-        .where(and(
-          eq(phoneNumbersTable.id, job.phoneNumberId),
-          eq(phoneNumbersTable.userId, clerkUserId),
-          eq(phoneNumbersTable.status, "active"),
-        )),
-    ]);
-    if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
-    if (!phone) { res.status(404).json({ error: "Phone number not found" }); return; }
-    if (phone.service === "whatsapp") {
-      res.status(400).json({ error: "That number is WhatsApp-only. Connect voice DIDs on Phone numbers." });
-      return;
-    }
-    await db.update(phoneNumbersTable).set({ agentId: agent.id }).where(eq(phoneNumbersTable.id, phone.id));
-    await db.update(agentsTable)
-      .set({ inboundPhoneNumberId: null })
-      .where(and(eq(agentsTable.inboundPhoneNumberId, phone.id), ne(agentsTable.id, agent.id)));
-    await db.update(agentsTable)
-      .set({ outboundPhoneNumberId: null })
-      .where(and(eq(agentsTable.outboundPhoneNumberId, phone.id), ne(agentsTable.id, agent.id)));
-    await db.update(agentsTable)
-      .set({ inboundPhoneNumberId: phone.id, outboundPhoneNumberId: phone.id, updatedAt: new Date() })
-      .where(eq(agentsTable.id, agent.id));
-    logger.info({ agentId: agent.id, phoneNumberId: phone.id }, "assistant: assigned phone");
-    res.json({
-      success: true,
-      navigate: `/app/agents/${agent.id}`,
-      message: `${phone.number} now rings ${agent.name || "the agent"}. Place a test call to confirm inbound.`,
-    });
-    return;
-  }
-
-  res.status(400).json({ error: "Unsupported job" });
+  res.json(result);
 });
 
 // ── POST /assistant/apply — applies proposed changes to an agent ───────────────
@@ -887,6 +795,8 @@ router.post("/assistant/tts", async (req: Request, res: Response): Promise<void>
     return;
   }
 
+  const jarvisVoice = voiceId || (await resolveJarvisVoice()).voiceId || JARVIS_TTS_FALLBACK_VOICE_ID;
+
   try {
     const cartesiaBase = (process.env["CARTESIA_BASE_URL"] ?? "https://api-india.cartesia.ai").replace(/\/+$/, "");
     const ttsRes = await fetch(`${cartesiaBase}/tts/bytes`, {
@@ -898,8 +808,8 @@ router.post("/assistant/tts", async (req: Request, res: Response): Promise<void>
       },
       body: JSON.stringify({
         model_id: "sonic-3.5",
-        transcript: text.slice(0, 500),
-        voice: { mode: "id", id: voiceId ?? "a0e99841-438c-4a64-b679-ae501e7d6091" },
+        transcript: text.slice(0, 700),
+        voice: { mode: "id", id: jarvisVoice },
         output_format: { container: "wav", encoding: "pcm_f32le", sample_rate: 22050 },
       }),
     });

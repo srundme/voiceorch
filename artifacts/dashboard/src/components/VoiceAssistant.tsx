@@ -1,75 +1,38 @@
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import {
-  Mic,
-  MicOff,
-  X,
-  Volume2,
-  Bot,
-  Loader2,
-  Send,
-  Wrench,
-  CheckCircle2,
-  AlertTriangle,
-  ChevronRight,
-  Sparkles,
-  ArrowRight,
-} from "lucide-react";
+import { Mic, X, Send, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-const BUTTON_SIZE = 56;
-const EDGE_MARGIN = 24;
-const VIEWPORT_PADDING = 8;
-const PANEL_W = 400;
-const PANEL_H = 600;
+const BUTTON_SIZE = 64;
+const EDGE_MARGIN = 28;
+const VIEWPORT_PADDING = 12;
+const PANEL_W = 420;
+const PANEL_H = 640;
 const POS_STORAGE_KEY = "voiceorch:assistantPos";
 const DRAG_THRESHOLD = 5;
 
-type Phase = "idle" | "listening" | "thinking" | "speaking" | "applying" | "error";
-
-interface ProposalChange {
-  field: string;
-  label: string;
-  current_value?: unknown;
-  proposed_value: unknown;
-  reason: string;
-}
-
-interface Proposal {
-  agentId: number;
-  agentName: string;
-  summary: string;
-  changes: ProposalChange[];
-}
+type Phase = "idle" | "listening" | "thinking" | "speaking" | "error";
 
 interface Recommendation {
   id: string;
   title: string;
   reason: string;
   href: string;
-  priority: "high" | "medium" | "low";
 }
 
-interface Job {
-  type: "navigate" | "set_agent_status" | "create_campaign" | "assign_phone";
+interface DoneItem {
   label: string;
+  message: string;
   href?: string;
-  agentId?: number;
-  status?: "draft" | "active";
-  campaignName?: string;
-  phoneNumberId?: number;
 }
 
 interface Message {
   role: "user" | "assistant";
   content: string;
-  proposal?: Proposal;
   recommendations?: Recommendation[];
-  jobs?: Job[];
-  applied?: boolean;
+  done?: DoneItem[];
 }
 
 interface SpeechRecognitionEvent extends Event {
@@ -98,131 +61,49 @@ function newRecognition(): ISpeechRecognition | null {
   const r = new Ctor();
   r.lang = "en-IN";
   r.continuous = false;
-  r.interimResults = false;
+  r.interimResults = true;
   return r;
 }
 
-function formatValue(v: unknown): string {
-  if (v === null || v === undefined) return "—";
-  if (typeof v === "boolean") return v ? "Yes" : "No";
-  return String(v);
-}
-
-function ProposalCard({
-  proposal,
-  applied,
-  onApply,
-  loading,
-}: {
-  proposal: Proposal;
-  applied: boolean;
-  onApply: (p: Proposal) => void;
-  loading: boolean;
-}) {
+function JarvisOrb({ phase }: { phase: Phase }) {
+  const listening = phase === "listening";
+  const thinking = phase === "thinking";
+  const speaking = phase === "speaking";
   return (
-    <div
-      className={cn(
-        "mt-2 overflow-hidden rounded-xl border",
-        applied ? "border-emerald-500/40 bg-emerald-500/10" : "border-border bg-card",
-      )}
-    >
-      <div
+    <div className="relative mx-auto flex h-28 w-28 items-center justify-center">
+      <span
         className={cn(
-          "flex items-center gap-2 border-b px-3 py-2",
-          applied ? "border-emerald-500/30 bg-emerald-500/15" : "border-border bg-muted/50",
+          "absolute inset-0 rounded-full border opacity-40 motion-reduce:animate-none",
+          listening && "animate-ping border-cyan-300",
+          speaking && "animate-pulse border-amber-300",
+          thinking && "animate-pulse border-white/40",
+          phase === "idle" && "border-white/20",
         )}
+      />
+      <span
+        className={cn(
+          "absolute inset-3 rounded-full border motion-reduce:animate-none",
+          listening && "animate-pulse border-cyan-200/80",
+          speaking && "border-amber-200/70",
+          thinking && "border-white/30",
+          phase === "idle" && "border-white/15",
+        )}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        className={cn(
+          "relative z-10 flex h-16 w-16 items-center justify-center rounded-full shadow-[0_0_40px_rgba(251,191,36,0.25)]",
+          listening && "bg-cyan-300 text-slate-950",
+          speaking && "bg-amber-300 text-slate-950",
+          thinking && "bg-white/90 text-slate-950",
+          phase === "idle" && "bg-gradient-to-b from-amber-200 to-amber-400 text-slate-950",
+          phase === "error" && "bg-red-400 text-slate-950",
+        )}
+        aria-hidden
       >
-        <Wrench className={cn("h-3.5 w-3.5 shrink-0", applied ? "text-emerald-600" : "text-muted-foreground")} />
-        <span className={cn("text-xs font-medium", applied ? "text-emerald-700 dark:text-emerald-300" : "text-foreground")}>
-          {applied ? (
-            <>
-              <CheckCircle2 className="mr-1 inline h-3 w-3" />
-              Changes applied
-            </>
-          ) : (
-            `Update: ${proposal.agentName}`
-          )}
-        </span>
-      </div>
-      <div className="px-3 py-2">
-        <p className="mb-2 text-[11px] text-muted-foreground">{proposal.summary}</p>
-        <div className="space-y-1.5">
-          {proposal.changes.map((c, i) => (
-            <div key={i} className="rounded-lg bg-muted/60 px-2.5 py-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-medium text-foreground">{c.label}</span>
-                <span className="text-[10px] text-muted-foreground">
-                  {c.current_value !== undefined && (
-                    <>
-                      {formatValue(c.current_value)}
-                      <ChevronRight className="mx-0.5 inline h-2.5 w-2.5" />
-                    </>
-                  )}
-                  <span className="text-primary">{formatValue(c.proposed_value)}</span>
-                </span>
-              </div>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">{c.reason}</p>
-            </div>
-          ))}
-        </div>
-        {!applied && (
-          <button
-            type="button"
-            onClick={() => onApply(proposal)}
-            disabled={loading}
-            className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-60"
-          >
-            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-            {loading ? "Applying…" : "Apply changes"}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function RecsAndJobs({
-  recommendations,
-  jobs,
-  busy,
-  onHref,
-  onJob,
-}: {
-  recommendations?: Recommendation[];
-  jobs?: Job[];
-  busy: boolean;
-  onHref: (href: string) => void;
-  onJob: (job: Job) => void;
-}) {
-  if ((!recommendations || recommendations.length === 0) && (!jobs || jobs.length === 0)) return null;
-  return (
-    <div className="mt-2 flex w-full flex-col gap-1.5">
-      {recommendations?.map((rec) => (
-        <button
-          key={rec.id}
-          type="button"
-          onClick={() => onHref(rec.href)}
-          className="rounded-xl border border-border bg-background px-3 py-2 text-left transition-colors hover:bg-muted/60"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[12px] font-medium text-foreground">{rec.title}</span>
-            <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-          </div>
-          <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">{rec.reason}</p>
-        </button>
-      ))}
-      {jobs?.map((job, i) => (
-        <button
-          key={`${job.type}-${i}`}
-          type="button"
-          disabled={busy}
-          onClick={() => onJob(job)}
-          className="flex items-center justify-center gap-1.5 rounded-xl bg-foreground px-3 py-2 text-xs font-semibold text-background disabled:opacity-60"
-        >
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-          {job.label}
-        </button>
-      ))}
+        {thinking ? <Loader2 className="h-6 w-6 animate-spin" /> : <Mic className="h-6 w-6" />}
+      </button>
     </div>
   );
 }
@@ -235,8 +116,7 @@ export function VoiceAssistant() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [textInput, setTextInput] = useState("");
-  const [applyingId, setApplyingId] = useState<number | null>(null);
-  const [jobBusy, setJobBusy] = useState(false);
+  const [interim, setInterim] = useState("");
   const [greeted, setGreeted] = useState(false);
   const [error, setError] = useState("");
 
@@ -297,11 +177,7 @@ export function VoiceAssistant() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 150);
-  }, [open]);
+  }, [messages, interim]);
 
   async function playAudio(arrayBuffer: ArrayBuffer): Promise<void> {
     if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
@@ -335,37 +211,45 @@ export function VoiceAssistant() {
       });
       if (!r.ok) return;
       await playAudio(await r.arrayBuffer());
-    } catch { /* TTS is optional */ }
+    } catch { /* TTS optional */ }
   }
 
   const startListening = useCallback(() => {
     const rec = newRecognition();
     if (!rec) {
-      setError("Voice needs Chrome or Edge. Type instead.");
+      setError("Chrome or Edge la pesu da — ila type pannu.");
       setPhase("error");
-      setTimeout(() => { setPhase("idle"); setError(""); }, 3000);
+      setTimeout(() => { setPhase("idle"); setError(""); }, 2800);
       return;
     }
     recognitionRef.current = rec;
     setPhase("listening");
+    setInterim("");
     rec.onresult = (e: SpeechRecognitionEvent) => {
-      const text = e.results[0]?.[0]?.transcript ?? "";
-      rec.stop();
-      if (text.trim()) void sendMessageRef.current(text.trim());
-      else setPhase("idle");
+      const last = e.results[e.results.length - 1];
+      const text = last?.[0]?.transcript ?? "";
+      if (!last) return;
+      if (last.isFinal) {
+        rec.stop();
+        setInterim("");
+        if (text.trim()) void sendMessageRef.current(text.trim());
+        else setPhase("idle");
+      } else {
+        setInterim(text);
+      }
     };
-    rec.onerror = () => { setPhase("idle"); };
+    rec.onerror = () => { setPhase("idle"); setInterim(""); };
     rec.onend = () => { setPhase((p) => (p === "listening" ? "idle" : p)); };
     rec.start();
   }, []);
 
   const sendMessage = useCallback(
     async (userText: string, isFirst = false) => {
-      const userMsg: Message = { role: "user", content: userText };
       const historyMsgs = isFirst ? [] : messages;
-      if (!isFirst) setMessages((prev) => [...prev, userMsg]);
+      if (!isFirst) setMessages((prev) => [...prev, { role: "user", content: userText }]);
       setPhase("thinking");
       setTextInput("");
+      setInterim("");
 
       try {
         const token = await getToken();
@@ -385,24 +269,16 @@ export function VoiceAssistant() {
         const data = (await r.json()) as {
           text: string;
           navigate?: string | null;
-          proposal?: Proposal | null;
           recommendations?: Recommendation[];
-          jobs?: Job[];
+          done?: DoneItem[];
         };
-        const assistantMsg: Message = {
-          role: "assistant",
-          content: data.text,
-          proposal: data.proposal ?? undefined,
-          recommendations: data.recommendations,
-          jobs: data.jobs,
-        };
-        setMessages((prev) => (isFirst ? [assistantMsg] : [...prev, assistantMsg]));
+        setMessages((prev) => (isFirst
+          ? [{ role: "assistant", content: data.text, recommendations: data.recommendations, done: data.done }]
+          : [...prev, { role: "assistant", content: data.text, recommendations: data.recommendations, done: data.done }]));
 
-        if (data.navigate && data.navigate.startsWith("/app/")) {
-          navigate(data.navigate);
-        }
+        if (data.navigate?.startsWith("/app/")) navigate(data.navigate);
 
-        listenAfterSpeakRef.current = isFirst;
+        listenAfterSpeakRef.current = true;
         await speakText(data.text);
         setPhase("idle");
         if (listenAfterSpeakRef.current) {
@@ -410,7 +286,7 @@ export function VoiceAssistant() {
           startListening();
         }
       } catch {
-        setError("Jarvis could not reach the workspace. Try again.");
+        setError("Jarvis reach aagala. Innoru thadava try pannu.");
         setPhase("error");
         setTimeout(() => { setPhase("idle"); setError(""); }, 3000);
       }
@@ -420,77 +296,13 @@ export function VoiceAssistant() {
 
   sendMessageRef.current = sendMessage;
 
-  const handleApplyProposal = useCallback(
-    async (proposal: Proposal) => {
-      setApplyingId(proposal.agentId);
-      try {
-        const token = await getToken();
-        const r = await fetch(`${BASE}/api/assistant/apply`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ agentId: proposal.agentId, changes: proposal.changes }),
-        });
-        if (!r.ok) throw new Error("Apply failed");
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.proposal?.agentId === proposal.agentId && !m.applied ? { ...m, applied: true } : m,
-          ),
-        );
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: `Done. ${proposal.agentName} will use the new settings on the next call.`,
-          },
-        ]);
-      } catch {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: "I could not apply those changes. Update them in the agent editor if you prefer." },
-        ]);
-      } finally {
-        setApplyingId(null);
-      }
-    },
-    [getToken],
-  );
-
-  const runJob = useCallback(
-    async (job: Job) => {
-      setJobBusy(true);
-      try {
-        const token = await getToken();
-        const r = await fetch(`${BASE}/api/assistant/job`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify(job),
-        });
-        const data = (await r.json()) as { success?: boolean; navigate?: string; message?: string; error?: string };
-        if (!r.ok) throw new Error(data.error || "Job failed");
-        if (data.navigate?.startsWith("/app/")) navigate(data.navigate);
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: data.message || "Done." },
-        ]);
-        await speakText(data.message || "Done.");
-        setPhase("idle");
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "I could not finish that job.";
-        setMessages((prev) => [...prev, { role: "assistant", content: msg }]);
-      } finally {
-        setJobBusy(false);
-      }
-    },
-    [getToken, navigate],
-  );
-
   function goHref(href: string) {
     if (href.startsWith("/app/") || href.startsWith("/docs/")) navigate(href);
   }
 
   function handleSend() {
     const text = textInput.trim();
-    if (!text || phase !== "idle") return;
+    if (!text || phase === "thinking" || phase === "speaking") return;
     void sendMessage(text);
   }
 
@@ -503,6 +315,7 @@ export function VoiceAssistant() {
 
   function stopListening() {
     recognitionRef.current?.stop();
+    setInterim("");
     if (phase === "listening") setPhase("idle");
   }
 
@@ -510,7 +323,9 @@ export function VoiceAssistant() {
     setOpen(true);
     if (!greeted) {
       setGreeted(true);
-      await sendMessage("What should I do next?", true);
+      await sendMessage("Vanakkam, enna setup pannanum?", true);
+    } else if (phase === "idle") {
+      startListening();
     }
   }
 
@@ -519,6 +334,7 @@ export function VoiceAssistant() {
     listenAfterSpeakRef.current = false;
     setOpen(false);
     setPhase("idle");
+    setInterim("");
   }
 
   function handlePointerDown(e: React.PointerEvent<HTMLButtonElement>) {
@@ -556,7 +372,7 @@ export function VoiceAssistant() {
     else void handleOpen();
   }
 
-  const isBusy = phase === "thinking" || phase === "speaking" || phase === "applying" || jobBusy;
+  const isBusy = phase === "thinking" || phase === "speaking";
 
   const panelPos = (() => {
     const maxLeft = Math.max(VIEWPORT_PADDING, window.innerWidth - PANEL_W - VIEWPORT_PADDING);
@@ -567,12 +383,11 @@ export function VoiceAssistant() {
     };
   })();
 
-  const phaseLabel =
-    phase === "listening" ? "Listening"
-      : phase === "thinking" ? "Working"
-        : phase === "speaking" ? "Speaking"
-          : phase === "applying" ? "Applying"
-            : "Ready";
+  const phaseCopy =
+    phase === "listening" ? "Listening…"
+      : phase === "thinking" ? "Setup pannitu irukken…"
+        : phase === "speaking" ? "Jarvis pesitu irukku"
+          : "Pesa start pannu";
 
   return (
     <>
@@ -580,11 +395,10 @@ export function VoiceAssistant() {
         <button
           type="button"
           onClick={() => void handleOpen()}
-          className="fixed top-1/2 right-0 z-50 flex -translate-y-1/2 items-center gap-1.5 rounded-l-lg border border-r-0 border-border bg-foreground px-2 py-3 text-background shadow-md"
+          className="fixed top-1/2 right-0 z-50 flex -translate-y-1/2 cursor-pointer items-center gap-1.5 rounded-l-xl border border-r-0 border-amber-300/30 bg-slate-950 px-2 py-3 text-amber-200 shadow-lg"
           title="Talk to Jarvis"
         >
-          <Bot className="h-3.5 w-3.5" />
-          <span className="text-[10px] font-semibold tracking-wide [writing-mode:vertical-rl]">Jarvis</span>
+          <span className="text-[10px] font-semibold tracking-[0.2em] [writing-mode:vertical-rl]">JARVIS</span>
         </button>
       )}
 
@@ -594,112 +408,111 @@ export function VoiceAssistant() {
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-          className="fixed z-50 flex h-14 w-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition-transform hover:scale-105 active:scale-95"
+          className="fixed z-50 flex h-16 w-16 cursor-grab items-center justify-center rounded-full bg-slate-950 text-amber-200 shadow-[0_8px_40px_rgba(15,23,42,0.45)] transition-transform hover:scale-105 active:scale-95"
           style={{ left: pos.x, top: pos.y, touchAction: "none", cursor: dragging ? "grabbing" : "grab" }}
-          title="Talk to Jarvis · drag to move"
+          title="Talk to Jarvis"
         >
-          <Bot className="h-6 w-6" />
-          <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-foreground/50 opacity-60" />
-            <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-primary" />
+          <span className="absolute inset-0 rounded-full bg-gradient-to-b from-amber-200/20 to-transparent" />
+          <Mic className="relative h-6 w-6" />
+          <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-300/70 motion-reduce:animate-none" />
+            <span className="relative inline-flex h-3 w-3 rounded-full bg-amber-300" />
           </span>
         </button>
       )}
 
       {open && (
         <div
-          className="fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-2xl"
-          style={{ left: panelPos.left, top: panelPos.top, width: PANEL_W, height: PANEL_H }}
+          className="fixed z-50 flex flex-col overflow-hidden rounded-[28px] border border-white/10 text-white shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+          style={{
+            left: panelPos.left,
+            top: panelPos.top,
+            width: PANEL_W,
+            height: PANEL_H,
+            background: "linear-gradient(180deg, #0b1220 0%, #111827 55%, #0a0f1a 100%)",
+          }}
         >
-          <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-muted/40 px-4 py-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground">
-              <Bot className="h-4 w-4 text-background" />
+          <div className="flex shrink-0 items-center justify-between px-5 pt-4">
+            <div>
+              <p className="text-[11px] font-semibold tracking-[0.28em] text-amber-200/80">JARVIS</p>
+              <p className="mt-0.5 text-[11px] text-white/50">{phaseCopy}</p>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold leading-none">Jarvis</p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                {phaseLabel} · speaks and does jobs for you
-              </p>
-            </div>
-            {phase === "speaking" && <Volume2 className="h-4 w-4 animate-pulse text-primary" />}
-            {(phase === "thinking" || jobBusy) && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
             <button
               type="button"
               onClick={handleClose}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-white/50 hover:bg-white/10 hover:text-white"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-3" style={{ scrollbarWidth: "none" }}>
-            {messages.length === 0 && phase === "thinking" && (
-              <div className="flex items-start gap-2">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
-                  <Bot className="h-3 w-3" />
-                </div>
-                <p className="pt-1 text-[11px] text-muted-foreground">Looking at your workspace…</p>
-              </div>
-            )}
+          <button
+            type="button"
+            onClick={phase === "listening" ? stopListening : startListening}
+            disabled={isBusy}
+            className="cursor-pointer disabled:opacity-70"
+            title={phase === "listening" ? "Stop" : "Speak"}
+          >
+            <JarvisOrb phase={phase} />
+          </button>
+          <p className="mb-2 px-6 text-center text-[11px] text-white/45">
+            Karthikeyan voice · Tanglish · just talk, I will create
+          </p>
 
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-2" style={{ scrollbarWidth: "none" }}>
             {messages.map((msg, i) => (
-              <div key={i} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
-                {msg.role === "assistant" && (
-                  <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
-                    <Bot className="h-3 w-3" />
-                  </div>
-                )}
-                <div className={cn("flex flex-col gap-1", msg.role === "user" ? "max-w-[85%] items-end" : "max-w-[90%] items-start")}>
+              <div key={i} className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
+                <div className={cn("max-w-[92%] space-y-2", msg.role === "user" ? "items-end" : "items-start")}>
                   <div
                     className={cn(
-                      "whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm leading-relaxed",
+                      "whitespace-pre-wrap px-3.5 py-2.5 text-[13.5px] leading-relaxed",
                       msg.role === "user"
-                        ? "rounded-br-sm bg-foreground text-background"
-                        : "rounded-bl-sm bg-muted text-foreground",
+                        ? "rounded-2xl rounded-br-md bg-white/10 text-white"
+                        : "rounded-2xl rounded-bl-md bg-white/[0.06] text-amber-50",
                     )}
                   >
                     {msg.content}
                   </div>
-                  {msg.proposal && (
-                    <ProposalCard
-                      proposal={msg.proposal}
-                      applied={msg.applied ?? false}
-                      loading={applyingId === msg.proposal.agentId}
-                      onApply={handleApplyProposal}
-                    />
+                  {msg.done && msg.done.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {msg.done.map((d, di) => (
+                        <button
+                          key={`${d.label}-${di}`}
+                          type="button"
+                          onClick={() => d.href && goHref(d.href)}
+                          className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-medium text-emerald-200"
+                        >
+                          <CheckCircle2 className="h-3 w-3" />
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
                   )}
-                  {msg.role === "assistant" && (
-                    <RecsAndJobs
-                      recommendations={msg.recommendations}
-                      jobs={msg.jobs}
-                      busy={isBusy}
-                      onHref={goHref}
-                      onJob={(job) => void runJob(job)}
-                    />
+                  {msg.recommendations && msg.recommendations.length > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                      {msg.recommendations.map((rec) => (
+                        <button
+                          key={rec.id}
+                          type="button"
+                          onClick={() => goHref(rec.href)}
+                          className="cursor-pointer rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-left hover:bg-white/[0.08]"
+                        >
+                          <p className="text-[12px] font-medium text-white">{rec.title}</p>
+                          <p className="mt-0.5 text-[10px] leading-4 text-white/45">{rec.reason}</p>
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
             ))}
 
-            {messages.length > 0 && phase === "thinking" && (
-              <div className="flex items-start gap-2">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
-                  <Bot className="h-3 w-3" />
-                </div>
-                <div className="flex items-center gap-1 pt-1.5">
-                  {[0, 1, 2].map((i) => (
-                    <span
-                      key={i}
-                      className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/50"
-                      style={{ animationDelay: `${i * 0.15}s` }}
-                    />
-                  ))}
-                </div>
-              </div>
+            {interim && (
+              <p className="text-center text-[12px] italic text-cyan-200/80">“{interim}”</p>
             )}
 
             {error && (
-              <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <div className="flex items-center gap-2 rounded-xl bg-red-500/15 px-3 py-2 text-xs text-red-200">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 {error}
               </div>
@@ -707,23 +520,7 @@ export function VoiceAssistant() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="shrink-0 border-t border-border px-3 py-3">
-            <div className="mb-2 flex justify-center">
-              <button
-                type="button"
-                onClick={phase === "listening" ? stopListening : startListening}
-                disabled={isBusy && phase !== "listening"}
-                className={cn(
-                  "flex h-14 w-14 items-center justify-center rounded-full shadow-sm transition-transform disabled:opacity-50",
-                  phase === "listening"
-                    ? "bg-destructive text-destructive-foreground animate-pulse"
-                    : "bg-foreground text-background hover:scale-105",
-                )}
-                title={phase === "listening" ? "Stop listening" : "Speak to Jarvis"}
-              >
-                {phase === "listening" ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-              </button>
-            </div>
+          <div className="shrink-0 border-t border-white/10 px-3 py-3">
             <div className="flex items-center gap-2">
               <input
                 ref={inputRef}
@@ -731,22 +528,19 @@ export function VoiceAssistant() {
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={phase === "listening" ? "Listening…" : "Or type — publish agent, assign number…"}
+                placeholder={phase === "listening" ? "Listening…" : "Priya collection agent create pannu…"}
                 disabled={isBusy}
-                className="h-9 flex-1 rounded-xl border border-input bg-background px-3 text-sm outline-none placeholder:text-muted-foreground focus:border-ring disabled:opacity-60"
+                className="h-10 flex-1 rounded-full border border-white/10 bg-white/5 px-4 text-sm text-white outline-none placeholder:text-white/30 focus:border-amber-200/40 disabled:opacity-60"
               />
               <button
                 type="button"
                 onClick={handleSend}
                 disabled={!textInput.trim() || isBusy}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-foreground text-background disabled:bg-muted disabled:text-muted-foreground"
+                className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-amber-300 text-slate-950 disabled:bg-white/10 disabled:text-white/30"
               >
                 <Send className="h-4 w-4" />
               </button>
             </div>
-            <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
-              Jarvis recommends the next step, then does the job when you confirm
-            </p>
           </div>
         </div>
       )}

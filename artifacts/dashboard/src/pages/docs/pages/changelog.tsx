@@ -10,17 +10,15 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
-      <h2 id="2026-08-22-jarvis">2026-08-22 — Jarvis: speak, recommend, do the job</h2>
+      <h2 id="2026-08-22-jarvis">2026-08-22 — Jarvis: Karthikeyan voice, Tanglish, creates as you talk</h2>
       <ul>
         <li>
-          The dashboard robot is Jarvis — SnapServe support you can talk to. It reads the live
-          workspace, recommends the next step (channel, campaign, publish, wallet, failed calls),
-          and runs confirmable jobs: open a page, publish an agent, create a campaign draft, assign
-          a number, or apply agent setting fixes.
+          Jarvis is a dark HUD on the dashboard. It speaks with the admin-listed{" "}
+          <strong>Karthikeyan</strong> Cartesia voice, in friendly colloquial Tamil + English.
+          Say the job — create agent, draft campaign, assign a number — and it does it.
         </li>
         <li>
-          Voice is first: tap the mic (Chrome / Edge). On the agent builder Jarvis docks as a right-edge
-          tab so it does not cover controls. Guide: <Link href="/docs/jarvis">Jarvis</Link>.
+          Guide: <Link href="/docs/jarvis">Jarvis</Link>.
         </li>
       </ul>
 

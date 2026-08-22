@@ -12,14 +12,14 @@ export default function JarvisPage() {
       />
 
       <Callout variant="tip">
-        The black robot button on Home is Jarvis. On the agent builder it docks as a slim tab on
-        the right edge so it does not cover form controls.
+        The gold orb on Home is Jarvis — Karthikeyan's listed Cartesia voice, speaking friendly
+        Tanglish. On the agent builder it docks as a right-edge tab so it does not cover controls.
       </Callout>
 
       <h2 id="talk">Talk to Jarvis</h2>
       <p>
-        Open the button, then tap the large microphone. Jarvis greets you, speaks the highest-leverage
-        next step, and starts listening. You can also type. Chrome or Edge is required for voice;
+        Open the orb. Jarvis greets you in Tanglish, then listens. Say what you want —{" "}
+        <em>Priya collection agent create pannu</em> — and he builds it. Chrome or Edge for voice;
         typing works everywhere.
       </p>
 
@@ -40,14 +40,14 @@ export default function JarvisPage() {
         If the workspace is healthy, Jarvis asks you to test the agent before spending minutes.
       </p>
 
-      <h2 id="jobs">Jobs it can do</h2>
-      <p>Confirm the card — Jarvis does not mutate the workspace without that tap:</p>
+      <h2 id="jobs">Jobs it does while you talk</h2>
+      <p>No confirm tap for create. Speak the job; Jarvis does it:</p>
       <ul>
-        <li>Open the right page (campaigns, wallet, history, Connections)</li>
-        <li>Publish a draft agent or move it back to draft</li>
-        <li>Create a campaign draft on an existing agent</li>
-        <li>Assign one of your voice numbers to an agent</li>
-        <li>Apply proposed agent setting fixes (latency, VAD, prompt trim)</li>
+        <li>Create a live agent (Tanglish prompt if you asked for Tamil)</li>
+        <li>Draft a campaign on that agent</li>
+        <li>Assign one of your voice numbers</li>
+        <li>Publish or park an agent</li>
+        <li>Open wallet, history, Connections when that is the next step</li>
       </ul>
       <p>
         Jarvis will not delete an agent, release a number, or start a live dial batch. Those stay

@@ -7,9 +7,8 @@ const FAQS: { q: string; a: ReactNode }[] = [
     q: "Where is support on the dashboard?",
     a: (
       <>
-        Tap the black robot — that is <Link href="/docs/jarvis">Jarvis</Link>. Speak or type.
-        It recommends the next workspace step and can publish an agent, draft a campaign, or
-        assign a number after you confirm.
+        Tap the gold orb — that is <Link href="/docs/jarvis">Jarvis</Link>, speaking with
+        Karthikeyan's voice in Tanglish. Just talk: he creates the agent, campaign, or assignment.
       </>
     ),
   },
