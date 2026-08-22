@@ -15,7 +15,19 @@ import {
 import { eq, sql, and, gte, lte, desc, asc, inArray, count } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { GST_RATE } from "../lib/money-inr.js";
-import { PHONE_FEE_DEBIT_RAW, RECOGNIZED_REVENUE_RAW, recognizedRevenueRaw } from "../lib/recognized-revenue.js";
+import {
+  CARD_PAID_DID_DEBIT_RAW,
+  CASH_IN_EVENT_RAW,
+  PHONE_FEE_DEBIT_RAW,
+  RECOGNIZED_REVENUE_RAW,
+  SUCCESSFUL_TOPUP_RAW,
+  WALLET_FUNDED_PHONE_DEBIT_RAW,
+  cardPaidDidDebitRaw,
+  recognizedRevenueRaw,
+  successfulTopupRaw,
+  topupGrossExpr,
+  topupGrossPaise,
+} from "../lib/recognized-revenue.js";
 import { getVobizWalletStatus } from "../services/vobiz-wallet-monitor.js";
 
 const router = Router();
@@ -79,6 +91,7 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
 
     const [
       [cashIn],
+      [cardDidCash],
       [recognized],
       [phoneDebits],
       [adjustments],
@@ -102,6 +115,12 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
         })
         .from(walletTransactionsTable)
         .where(range),
+      db
+        .select({
+          paise: sql<number>`coalesce(sum(abs(${walletTransactionsTable.amountCents})), 0)`,
+        })
+        .from(walletTransactionsTable)
+        .where(and(range, sql`${sql.raw(CARD_PAID_DID_DEBIT_RAW)}`)),
       db
         .select({
           paise: sql<number>`coalesce(sum(abs(${walletTransactionsTable.amountCents})) filter (
@@ -185,7 +204,9 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
 
     const cashInPaise = Number(cashIn?.paise ?? 0);
     const gstOnCashInPaise = Math.round(cashInPaise * GST_RATE);
-    const cashCollectedPaise = cashInPaise + gstOnCashInPaise;
+    const topupGrossCollectedPaise = topupGrossPaise(cashInPaise, GST_RATE);
+    const cardDidCashPaise = Number(cardDidCash?.paise ?? 0);
+    const cashCollectedPaise = topupGrossCollectedPaise + cardDidCashPaise;
     const recognizedPaise = Number(recognized?.paise ?? 0);
     const phonePaise = Number(phoneDebits?.paise ?? 0);
     const recognizedRevenuePaise = recognizedPaise + phonePaise;
@@ -208,7 +229,7 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
           paise: sql<number>`coalesce(sum(abs(${walletTransactionsTable.amountCents})), 0)`,
         })
         .from(walletTransactionsTable)
-        .where(sql`${sql.raw(PHONE_FEE_DEBIT_RAW)}`),
+        .where(sql`${sql.raw(WALLET_FUNDED_PHONE_DEBIT_RAW)}`),
     ]);
     const [[lifetimeAdj]] = await Promise.all([
       db
@@ -237,7 +258,10 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
       period: {
         cashInWalletCreditPaise: cashInPaise,
         gstEstimatedPaise: gstOnCashInPaise,
+        cashInTopupGrossPaise: topupGrossCollectedPaise,
+        cashInCardDidPaise: cardDidCashPaise,
         cashCollectedEstPaise: cashCollectedPaise,
+        cashCollectedPaise,
         topupCount: Number(cashIn?.count ?? 0),
         recognizedUsagePaise: recognizedPaise,
         recognizedRevenuePaise,
@@ -255,11 +279,12 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
         balanced: Math.abs(liabilityGapPaise) < 100, // within ₹1
       },
       definitions: {
-        cashIn: "Successful topup/auto_topup wallet credits (pre-GST base)",
-        cashCollectedEst: "cashIn × (1 + GST) — estimate of Razorpay charged amount",
+        cashIn: "Rupees received: GST-inclusive topups + card-paid voice/WhatsApp numbers. Wallet-paid DIDs are not new cash.",
+        cashInWalletCredit: "Successful topup/auto_topup wallet credits (pre-GST base)",
+        cashCollectedEst: "Same as cash-in (GST on topups + card-paid DID fees)",
         recognizedUsage: "Absolute call_debit amounts (calls only)",
         recognizedRevenue: "call_debit + phone / WhatsApp number fees",
-        liability: "Sum of user wallet balances (prepaid deferred obligation)",
+        liability: "Sum of user wallet balances (prepaid deferred obligation). Phone outflows in the rollforward are wallet-funded only.",
       },
     });
   } catch (err) {
@@ -288,7 +313,7 @@ router.get("/admin/finance/ledger", async (req, res): Promise<void> => {
     if (status) conditions.push(sql`lower(${walletTransactionsTable.status}) = ${status.toLowerCase()}`);
 
     if (tab === "cash_in") {
-      conditions.push(inArray(walletTransactionsTable.type, ["topup", "auto_topup"]));
+      conditions.push(sql`${sql.raw(CASH_IN_EVENT_RAW)}`);
     } else if (tab === "recognized") {
       conditions.push(sql`${sql.raw(RECOGNIZED_REVENUE_RAW)}`);
     } else if (tab === "phones") {
@@ -349,8 +374,11 @@ router.get("/admin/finance/daily-close", async (req, res): Promise<void> => {
       select
         date_trunc('day', created_at)::date as day,
         coalesce(sum(amount_cents) filter (
-          where type in ('topup','auto_topup') and lower(status) in ('completed','success')
+          where ${sql.raw(SUCCESSFUL_TOPUP_RAW)}
         ), 0)::bigint as topups_success_paise,
+        coalesce(sum(abs(amount_cents)) filter (
+          where ${sql.raw(CARD_PAID_DID_DEBIT_RAW)}
+        ), 0)::bigint as card_did_cash_paise,
         coalesce(sum(abs(amount_cents)) filter (where type = 'call_debit'), 0)::bigint as call_debit_paise,
         coalesce(sum(abs(amount_cents)) filter (
           where ${sql.raw(PHONE_FEE_DEBIT_RAW)}
@@ -360,7 +388,7 @@ router.get("/admin/finance/daily-close", async (req, res): Promise<void> => {
             or (type = 'debit' and not (${sql.raw(PHONE_FEE_DEBIT_RAW)}))
         ), 0)::bigint as adjustments_paise,
         count(*) filter (
-          where type in ('topup','auto_topup') and lower(status) in ('completed','success')
+          where ${sql.raw(SUCCESSFUL_TOPUP_RAW)}
         )::int as topup_count
       from wallet_transactions
       where created_at >= ${from} and created_at <= ${to}
@@ -370,10 +398,14 @@ router.get("/admin/finance/daily-close", async (req, res): Promise<void> => {
 
     const days = (rows.rows as Array<Record<string, unknown>>).map((r) => {
       const topups = Number(r.topups_success_paise ?? 0);
+      const cardDid = Number(r.card_did_cash_paise ?? 0);
+      const gstEstimatedPaise = Math.round(topups * GST_RATE);
       return {
         day: String(r.day).slice(0, 10),
         topupsSuccessPaise: topups,
-        gstEstimatedPaise: Math.round(topups * GST_RATE),
+        gstEstimatedPaise,
+        cardDidCashPaise: cardDid,
+        cashCollectedPaise: topups + gstEstimatedPaise + cardDid,
         callDebitPaise: Number(r.call_debit_paise ?? 0),
         phoneDebitPaise: Number(r.phone_debit_paise ?? 0),
         adjustmentsPaise: Number(r.adjustments_paise ?? 0),
@@ -439,9 +471,12 @@ router.get("/admin/finance/economics", async (req, res): Promise<void> => {
         coalesce(sum(abs(amount_cents)) filter (
           where ${sql.raw(PHONE_FEE_DEBIT_RAW)}
         ), 0)::bigint as phone_paise,
-        coalesce(sum(amount_cents) filter (
-          where type in ('topup','auto_topup') and lower(status) in ('completed','success')
-        ), 0)::bigint as cash_in_paise
+        coalesce(sum(${sql.raw(topupGrossExpr())}) filter (
+          where ${sql.raw(SUCCESSFUL_TOPUP_RAW)}
+        ), 0)::bigint as topup_gross_paise,
+        coalesce(sum(abs(amount_cents)) filter (
+          where ${sql.raw(CARD_PAID_DID_DEBIT_RAW)}
+        ), 0)::bigint as card_did_cash_paise
       from wallet_transactions
       where created_at >= ${from} and created_at <= ${to}
       group by 1
@@ -467,7 +502,7 @@ router.get("/admin/finance/economics", async (req, res): Promise<void> => {
       const day = String(r.day).slice(0, 10);
       const recognized = Number(r.recognized_paise ?? 0);
       const phone = Number(r.phone_paise ?? 0);
-      const cashIn = Number(r.cash_in_paise ?? 0);
+      const cashIn = Number(r.topup_gross_paise ?? 0) + Number(r.card_did_cash_paise ?? 0);
       const cogsMicros = cogsMap.get(day) ?? 0;
       const cogsPaise = microsUsdToPaise(cogsMicros, fx);
       const revenue = recognized + phone;
@@ -610,12 +645,10 @@ router.get("/admin/finance/investor", async (req, res): Promise<void> => {
     ] = await Promise.all([
       db
         .select({
-          paise: sql<number>`coalesce(sum(amount_cents), 0)`,
+          topupBase: sql<number>`coalesce(sum(amount_cents) filter (where ${sql.raw(SUCCESSFUL_TOPUP_RAW)}), 0)`,
+          cardDid: sql<number>`coalesce(sum(abs(amount_cents)) filter (where ${sql.raw(CARD_PAID_DID_DEBIT_RAW)}), 0)`,
         })
-        .from(walletTransactionsTable)
-        .where(
-          sql`type in ('topup','auto_topup') and lower(status) in ('completed','success')`,
-        ),
+        .from(walletTransactionsTable),
       db
         .select({
           paise: sql<number>`coalesce(sum(abs(amount_cents)), 0)`,
@@ -633,7 +666,7 @@ router.get("/admin/finance/investor", async (req, res): Promise<void> => {
         })
         .from(walletTransactionsTable)
         .where(
-          sql`type in ('topup','auto_topup') and lower(status) in ('completed','success')
+          sql`(${sql.raw(CASH_IN_EVENT_RAW)})
             and created_at > now() - interval '30 days'`,
         ),
       db
@@ -642,7 +675,7 @@ router.get("/admin/finance/investor", async (req, res): Promise<void> => {
         })
         .from(walletTransactionsTable)
         .where(
-          sql`type in ('topup','auto_topup') and lower(status) in ('completed','success')
+          sql`(${sql.raw(CASH_IN_EVENT_RAW)})
             and created_at > now() - interval '60 days'
             and created_at <= now() - interval '30 days'`,
         ),
@@ -677,12 +710,15 @@ router.get("/admin/finance/investor", async (req, res): Promise<void> => {
       db.execute(sql`
         select
           date_trunc('month', created_at)::date as month,
-          coalesce(sum(amount_cents) filter (
-            where type in ('topup','auto_topup') and lower(status) in ('completed','success')
+          coalesce(sum(${sql.raw(topupGrossExpr())}) filter (
+            where ${sql.raw(SUCCESSFUL_TOPUP_RAW)}
+          ), 0)::bigint
+          + coalesce(sum(abs(amount_cents)) filter (
+            where ${sql.raw(CARD_PAID_DID_DEBIT_RAW)}
           ), 0)::bigint as cash_in_paise,
           coalesce(sum(abs(amount_cents)) filter (where ${sql.raw(RECOGNIZED_REVENUE_RAW)}), 0)::bigint as recognized_paise,
           count(distinct user_id) filter (
-            where type in ('topup','auto_topup') and lower(status) in ('completed','success')
+            where ${sql.raw(CASH_IN_EVENT_RAW)}
           )::int as paying_users
         from wallet_transactions
         where created_at > now() - (${months} || ' months')::interval
@@ -695,8 +731,11 @@ router.get("/admin/finance/investor", async (req, res): Promise<void> => {
           u.email,
           u.name,
           coalesce(sum(abs(wt.amount_cents)) filter (where ${sql.raw(recognizedRevenueRaw("wt"))}), 0)::bigint as spend_paise,
-          coalesce(sum(wt.amount_cents) filter (
-            where wt.type in ('topup','auto_topup') and lower(wt.status) in ('completed','success')
+          coalesce(sum(${sql.raw(topupGrossExpr("wt"))}) filter (
+            where ${sql.raw(successfulTopupRaw("wt"))}
+          ), 0)::bigint
+          + coalesce(sum(abs(wt.amount_cents)) filter (
+            where ${sql.raw(cardPaidDidDebitRaw("wt"))}
           ), 0)::bigint as topup_paise
         from wallet_transactions wt
         join users u on u.id = wt.user_id
@@ -708,7 +747,9 @@ router.get("/admin/finance/investor", async (req, res): Promise<void> => {
       getVobizWalletStatus().catch(() => null),
     ]);
 
-    const cashIn = Number(cashLifetime?.paise ?? 0);
+    const cashIn =
+      topupGrossPaise(Number(cashLifetime?.topupBase ?? 0), GST_RATE) +
+      Number(cashLifetime?.cardDid ?? 0);
     const recognized = Number(recognizedLifetime?.paise ?? 0);
     const cogs30Paise = microsUsdToPaise(Number(cogs30?.micros ?? 0), fx);
     const revenue30 = await db
@@ -747,7 +788,9 @@ router.get("/admin/finance/investor", async (req, res): Promise<void> => {
     res.json({
       headline: {
         cashCollectedLifetimePaise: cashIn,
-        cashCollectedLifetimeEstWithGstPaise: Math.round(cashIn * (1 + GST_RATE)),
+        cashCollectedLifetimeEstWithGstPaise: cashIn,
+        cashInWalletCreditPaise: Number(cashLifetime?.topupBase ?? 0),
+        cashInCardDidPaise: Number(cashLifetime?.cardDid ?? 0),
         walletLiabilityPaise: Number(liability?.paise ?? 0),
         recognizedUsageLifetimePaise: recognized,
         last30d: {
@@ -782,7 +825,7 @@ router.get("/admin/finance/investor", async (req, res): Promise<void> => {
         : null,
       usdToInrRate: fx,
       definitions: {
-        cashCollected: "Successful wallet topup credits (base). GST = ×18% estimate of Razorpay charge.",
+        cashCollected: "Rupees received: GST-inclusive topups + card-paid voice/WhatsApp numbers.",
         liability: "Sum of prepaid wallet balances still owed as service.",
         recognized: "call_debit plus phone / WhatsApp number fees.",
       },
@@ -805,8 +848,11 @@ router.get("/admin/finance/export.csv", async (req, res): Promise<void> => {
         select
           date_trunc('day', created_at)::date as day,
           coalesce(sum(amount_cents) filter (
-            where type in ('topup','auto_topup') and lower(status) in ('completed','success')
+            where ${sql.raw(SUCCESSFUL_TOPUP_RAW)}
           ), 0)::bigint as topups_success_paise,
+          coalesce(sum(abs(amount_cents)) filter (
+            where ${sql.raw(CARD_PAID_DID_DEBIT_RAW)}
+          ), 0)::bigint as card_did_cash_paise,
           coalesce(sum(abs(amount_cents)) filter (where type = 'call_debit'), 0)::bigint as call_debit_paise,
           coalesce(sum(abs(amount_cents)) filter (
             where ${sql.raw(PHONE_FEE_DEBIT_RAW)}
@@ -820,14 +866,18 @@ router.get("/admin/finance/export.csv", async (req, res): Promise<void> => {
         group by 1 order by 1
       `);
       const header =
-        "day,topups_success_paise,gst_estimated_paise,call_debit_paise,phone_debit_paise,adjustments_paise\n";
+        "day,topups_success_paise,gst_estimated_paise,card_did_cash_paise,cash_collected_paise,call_debit_paise,phone_debit_paise,adjustments_paise\n";
       const lines = (data.rows as Array<Record<string, unknown>>)
         .map((r) => {
           const top = Number(r.topups_success_paise ?? 0);
+          const gst = Math.round(top * GST_RATE);
+          const cardDid = Number(r.card_did_cash_paise ?? 0);
           return [
             String(r.day).slice(0, 10),
             top,
-            Math.round(top * GST_RATE),
+            gst,
+            cardDid,
+            top + gst + cardDid,
             Number(r.call_debit_paise ?? 0),
             Number(r.phone_debit_paise ?? 0),
             Number(r.adjustments_paise ?? 0),

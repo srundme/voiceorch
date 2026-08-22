@@ -13,14 +13,14 @@ import {
 } from "@workspace/db";
 import { eq, sql, and, gte, lte, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
-import { PHONE_FEE_DEBIT_RAW } from "../lib/recognized-revenue.js";
+import { CARD_PAID_DID_DEBIT_RAW, PHONE_FEE_DEBIT_RAW, SUCCESSFUL_TOPUP_RAW } from "../lib/recognized-revenue.js";
 
 const router = Router();
 router.use("/admin/analytics", requireAdmin);
 
 const METRIC_DEFINITIONS = {
   cashCollectedPaise:
-    "Successful wallet topup + auto_topup amounts (paise). Cash in, not recognized revenue.",
+    "Rupees received: GST-inclusive topups plus card-paid voice/WhatsApp numbers. Wallet-paid DIDs are not new cash.",
   recognizedRevenuePaise:
     "Abs(call_debit) plus abs(phone-number debit) wallet transactions — usage and DID fees recognized as revenue.",
   callRevenuePaise: "Abs(call_debit) wallet transactions in period.",
@@ -161,22 +161,26 @@ async function computeDailySeries(from: Date, to: Date, fx: number): Promise<Day
   const cashRows = await db
     .select({
       day: sql<string>`to_char(date_trunc('day', ${walletTransactionsTable.createdAt} AT TIME ZONE 'UTC'), 'YYYY-MM-DD')`,
-      paise: sql<number>`coalesce(sum(${walletTransactionsTable.amountCents}), 0)`,
+      topupGross: sql<number>`coalesce(sum(${walletTransactionsTable.amountCents} + round(${walletTransactionsTable.amountCents} * 0.18)) filter (
+        where ${sql.raw(SUCCESSFUL_TOPUP_RAW)}
+      ), 0)`,
+      cardDid: sql<number>`coalesce(sum(abs(${walletTransactionsTable.amountCents})) filter (
+        where ${sql.raw(CARD_PAID_DID_DEBIT_RAW)}
+      ), 0)`,
     })
     .from(walletTransactionsTable)
     .where(
       and(
         gte(walletTransactionsTable.createdAt, from),
         lte(walletTransactionsTable.createdAt, to),
-        sql`${walletTransactionsTable.type} in ('topup','auto_topup')`,
-        sql`lower(${walletTransactionsTable.status}) in ('completed','success')`,
+        sql`(${sql.raw(SUCCESSFUL_TOPUP_RAW)}) or (${sql.raw(CARD_PAID_DID_DEBIT_RAW)})`,
       ),
     )
     .groupBy(sql`1`);
 
   for (const row of cashRows) {
     const bucket = map.get(row.day);
-    if (bucket) bucket.cash += Number(row.paise ?? 0);
+    if (bucket) bucket.cash += Number(row.topupGross ?? 0) + Number(row.cardDid ?? 0);
   }
 
   const revRows = await db

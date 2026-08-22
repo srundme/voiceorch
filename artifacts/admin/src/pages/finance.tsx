@@ -137,7 +137,8 @@ export default function Finance() {
           <h1 className="text-3xl font-bold tracking-tight">Finance &amp; Analytics</h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Audit ledger, unit economics, and investor headline metrics. Amounts are INR.
-            Cash-in = successful wallet topups; recognized = call usage plus phone / WhatsApp number fees.
+            Cash-in = rupees received (GST-inclusive topups + card-paid numbers). Wallet-paid DIDs are not new cash.
+            Recognized = call usage plus phone / WhatsApp number fees.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -164,14 +165,18 @@ export default function Finance() {
         <TabsContent value="audit" className="space-y-6 mt-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Kpi
-              label="Cash-in (wallet credit)"
-              value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.cashInWalletCreditPaise ?? 0)}
-              hint="Successful topups in range (pre-GST)"
+              label="Cash-in"
+              value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.cashCollectedPaise ?? audit?.period?.cashCollectedEstPaise ?? 0)}
+              hint={
+                auditLoading
+                  ? "Topups + GST + card-paid numbers"
+                  : `Topups ${formatCentsToDollars(audit?.period?.cashInTopupGrossPaise ?? 0)} · Numbers ${formatCentsToDollars(audit?.period?.cashInCardDidPaise ?? 0)}`
+              }
             />
             <Kpi
-              label="Est. cash collected"
-              value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.cashCollectedEstPaise ?? 0)}
-              hint={`Includes ~${Math.round((audit?.gstRate ?? 0.18) * 100)}% GST on topups`}
+              label="Wallet credited"
+              value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.cashInWalletCreditPaise ?? 0)}
+              hint="Successful topups in range (pre-GST)"
             />
             <Kpi
               label="Recognized revenue"
@@ -198,7 +203,7 @@ export default function Finance() {
             <Kpi
               label="GST est. (period)"
               value={formatCentsToDollars(audit?.period?.gstEstimatedPaise ?? 0)}
-              hint="18% of successful topup base"
+              hint="18% GST on successful topup base (not on card-paid numbers)"
             />
             <Kpi
               label="Phone / WhatsApp numbers"
@@ -419,6 +424,8 @@ export default function Finance() {
                       <TableHead>Day</TableHead>
                       <TableHead className="text-right">Topups</TableHead>
                       <TableHead className="text-right">GST est.</TableHead>
+                      <TableHead className="text-right">Card numbers</TableHead>
+                      <TableHead className="text-right">Cash-in</TableHead>
                       <TableHead className="text-right">Call debit</TableHead>
                       <TableHead className="text-right">Phone</TableHead>
                       <TableHead className="text-right">Adjust</TableHead>
@@ -433,6 +440,12 @@ export default function Finance() {
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs">
                           {formatCentsToDollars(d.gstEstimatedPaise)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {formatCentsToDollars(d.cardDidCashPaise ?? 0)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {formatCentsToDollars(d.cashCollectedPaise ?? (d.topupsSuccessPaise ?? 0) + (d.gstEstimatedPaise ?? 0))}
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs">
                           {formatCentsToDollars(d.callDebitPaise)}
@@ -463,6 +476,7 @@ export default function Finance() {
             <Kpi
               label="Cash-in"
               value={econLoading ? "…" : formatCentsToDollars(economics?.totals?.cashInPaise ?? 0)}
+              hint="GST-inclusive topups + card-paid numbers"
             />
             <Kpi
               label="Recognized revenue"
@@ -548,7 +562,11 @@ export default function Finance() {
             <Kpi
               label="Lifetime cash-in"
               value={invLoading ? "…" : formatCentsToDollars(investor?.headline?.cashCollectedLifetimePaise ?? 0)}
-              hint={`Est. with GST ${formatCentsToDollars(investor?.headline?.cashCollectedLifetimeEstWithGstPaise ?? 0)}`}
+              hint={
+                invLoading
+                  ? "GST-inclusive topups + card-paid numbers"
+                  : `Topups ${formatCentsToDollars((investor?.headline?.cashCollectedLifetimePaise ?? 0) - (investor?.headline?.cashInCardDidPaise ?? 0))} · Numbers ${formatCentsToDollars(investor?.headline?.cashInCardDidPaise ?? 0)}`
+              }
             />
             <Kpi
               label="Wallet liability"
