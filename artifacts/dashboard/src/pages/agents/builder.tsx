@@ -2868,7 +2868,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <MessageCircle className="h-4 w-4" />,
       color: "emerald",
       label: "Send WhatsApp",
-      description: "Lets the agent send WhatsApp mid-call. Pick a template from your connected number. After-call templates are on After the call.",
+      description: "Lets the agent send WhatsApp mid-call. Templates are picked on After the call — one for all outcomes, or per disposition.",
       needsEventType: false,
     },
   ] as const;
@@ -3199,7 +3199,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         <BuilderPanel
           title="Messaging"
           icon={<MessageCircle />}
-          description="Send mid-call — templates come from Connections"
+          description="Send mid-call. WhatsApp templates are mapped on After the call."
           bodyClassName="p-0 divide-y divide-border"
         >
         {CALL_CONTROL_TOOLS.filter((t) => t.type === "send_email" || t.type === "send_whatsapp").map(({ type, icon, label, description }) => {
@@ -4553,6 +4553,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           id: string;
           active: boolean;
           agentId: number | null;
+          metaConnected?: boolean;
+          metaPhoneNumberId?: string | null;
           templateCatalog?: WaCatalogEntry[];
         }>;
       }>(`${DASH_API}/whatsapp/connections`),
@@ -4562,7 +4564,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const { data: waChannel } = useQuery({
     queryKey: ["builder-whatsapp-channel", agentId],
     queryFn: () =>
-      customFetch<{ channel: { active?: boolean; templateCatalog?: WaCatalogEntry[] } | null }>(`${DASH_API}/whatsapp/channel`),
+      customFetch<{ channel: { active?: boolean; status?: string | null; vobizChannelId?: string | null; phoneE164?: string | null; templateCatalog?: WaCatalogEntry[] } | null }>(`${DASH_API}/whatsapp/channel`),
     staleTime: 60_000,
     enabled: agentId > 0,
   });
@@ -4583,8 +4585,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
 
   const waConnList = Array.isArray(waConnections?.connections) ? waConnections.connections : [];
   const whatsappReady = !!(
-    waConnList.some((c) => c.active && (c.agentId === agentId || c.agentId == null)) ||
-    waChannel?.channel?.active
+    waConnList.some((c) => c.active && (c.metaConnected || c.metaPhoneNumberId))
+    || (waChannel?.channel?.active && (waChannel.channel.status === "active" || waChannel.channel.vobizChannelId || waChannel.channel.phoneE164))
   );
   const emailReady = !!emailChannel?.channel?.active;
   const waCatalog = useMemo(() => {
@@ -4698,6 +4700,24 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           ...(persistAfterCall ? { afterCallMessages } : {}),
         }),
       });
+      const fixed = afterCallMessages.universal.whatsappTemplate;
+      const conn = waConnList.find((c) => c.active && (c.metaConnected || c.metaPhoneNumberId));
+      if (fixed?.name && conn) {
+        const fromCat = waCatalog.find((t) => t.name === fixed.name && t.language === fixed.language);
+        await customFetch(`${DASH_API}/whatsapp/connections/${conn.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            metaTemplates: {
+              default: {
+                name: fixed.name,
+                language: fixed.language,
+                paramCount: fromCat?.paramCount ?? 0,
+              },
+            },
+          }),
+        }).catch(() => {});
+      }
     },
     onSuccess: () => {
       toast({ title: "Outcomes saved" });
@@ -4900,7 +4920,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           <BuilderPanel
             title="After-call messages"
             icon={<MessageCircle />}
-            description="WhatsApp / email sent when an outcome matches"
+            description="One WhatsApp template for every outcome, or a different template for selected dispositions"
             action={
               <Button
                 type="button"
@@ -5018,8 +5038,10 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
             <div className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-3 mb-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[12px] font-medium text-foreground">Every call</p>
-                  <p className="text-[10px] text-muted-foreground">Universal follow-up for all leads</p>
+                  <p className="text-[12px] font-medium text-foreground">One template for all outcomes</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Mid-call Send WhatsApp and after-call both use this unless a disposition rule matches.
+                  </p>
                 </div>
                 <div className="flex items-center gap-4">
                   <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -5056,7 +5078,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                   <WhatsappTemplateSelect
                     catalog={waCatalog}
                     value={afterCallMessages.universal.whatsappTemplate}
-                    emptyLabel="Use agent default"
+                    emptyLabel="Select template"
                     onChange={(next) => {
                       setAfterCallMessages((prev) => ({
                         ...prev,
@@ -5085,8 +5107,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
               <div className="rounded-lg border border-dashed border-border p-4 text-center">
                 <p className="text-[11.5px] text-muted-foreground">
                   {dispositionKeys.length === 0
-                    ? "Add outcomes first, then map WhatsApp / email per disposition."
-                    : "No disposition rules yet — use Add rule, or turn on Every call."}
+                    ? "Add outcomes above, then Add rule to send a different template for one or more dispositions."
+                    : "Same template for every outcome above — or Add rule to pick dispositions and a different template."}
                 </p>
               </div>
             ) : (
@@ -5176,11 +5198,11 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                     </div>
                     {rule.whatsapp && whatsappReady && (
                       <div>
-                        <p className="text-[10px] text-muted-foreground">WhatsApp template for this outcome</p>
+                        <p className="text-[10px] text-muted-foreground">Template for the selected dispositions</p>
                         <WhatsappTemplateSelect
                           catalog={waCatalog}
                           value={rule.whatsappTemplate}
-                          emptyLabel="Use agent default"
+                          emptyLabel="Select template"
                           onChange={(next) => {
                             setAfterCallMessages((prev) => ({
                               ...prev,

@@ -1,6 +1,6 @@
 /**
  * Agent Builder consumes workspace connections — it does not connect them.
- * Credentials live under Connections. Here: pick a template / show ready state.
+ * Credentials live under Connections. Templates are mapped on After the call.
  */
 
 import { useLocation } from "wouter";
@@ -11,7 +11,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useEmailChannelReady } from "./email-channel-card";
 import {
-  AgentWhatsappTemplatePicks,
   type AgentWaTemplates,
   type WaCatalogEntry,
 } from "@/components/whatsapp/agent-template-picks";
@@ -108,35 +107,28 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
       {waLoading ? (
         <Skeleton className="h-10 w-full rounded-md" />
       ) : metaReady && agentConnection ? (
-        <div className="space-y-2">
+        <div className="space-y-1">
           <div className="flex items-center justify-between gap-3">
             <p className="truncate text-[12px] font-medium">
               {agentConnection.name || "WhatsApp"}
             </p>
             <StatusLine ready label="Connected" />
           </div>
-          <AgentWhatsappTemplatePicks
-            agentId={agentId}
-            connectionId={agentConnection.id}
-            initialTemplates={agentConnection.metaTemplates}
-            initialCatalog={agentConnection.templateCatalog}
-            visibleSlots={["default"]}
-          />
+          <p className="text-[11px] text-muted-foreground">
+            Mid-call uses the After the call default. Map one template for all outcomes, or different templates per disposition, on After the call.
+          </p>
         </div>
       ) : nativeReady ? (
-        <div className="space-y-2">
+        <div className="space-y-1">
           <div className="flex items-center justify-between gap-3">
             <p className="truncate text-[12px] font-medium">
               {waData?.channel?.businessName || "WhatsApp"}
             </p>
             <StatusLine ready label="Connected" />
           </div>
-          <AgentWhatsappTemplatePicks
-            agentId={agentId}
-            nativeMode
-            initialCatalog={waData?.channel?.templateCatalog}
-            visibleSlots={["default"]}
-          />
+          <p className="text-[11px] text-muted-foreground">
+            Mid-call uses the After the call default. Map templates by outcome there.
+          </p>
         </div>
       ) : agentConnection ? (
         <div className="rounded-lg bg-muted/25 px-3 py-3">
