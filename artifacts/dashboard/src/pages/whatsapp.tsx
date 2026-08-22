@@ -264,6 +264,12 @@ function NativeSection({
   const [callPhone, setCallPhone] = useState("");
   const [callingBusy, setCallingBusy] = useState(false);
 
+  useEffect(() => {
+    if (inboundAgentId === "" && preferredAgentId && preferredAgentId > 0) {
+      setInboundAgentId(preferredAgentId);
+    }
+  }, [preferredAgentId, inboundAgentId]);
+
   const connectOwn = useMutation({
     mutationFn: (vars: { numberSource: "purchased" | "direct" }) =>
       customFetch<WaChannel>(`${API}/whatsapp/channel/own`, {
@@ -535,37 +541,48 @@ function NativeSection({
   return (
     <div className="space-y-4">
       {metaConn && !channel ? (
-        <div className="rounded-lg border border-sky-500/25 bg-sky-500/[0.04] p-5 space-y-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-                <h3 className="text-sm font-semibold">{metaConn.name || "WhatsApp"}</h3>
-                <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-transparent text-[10px]">
-                  Meta connected
-                </Badge>
+        <div className="mx-auto w-full max-w-xl rounded-xl border border-border bg-card p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-[15px] font-semibold tracking-tight">{metaConn.name || "WhatsApp"}</h3>
+                <span className="inline-flex items-center rounded-full bg-emerald-500/12 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+                  Connected
+                </span>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                SnapServe sends templates through Meta Cloud API. Phone Number ID{" "}
-                <span className="font-mono text-foreground/80">{metaConn.metaPhoneNumberId}</span>
-                {metaConn.metaWabaId && <> · WABA {metaConn.metaWabaId}</>}
-                {Array.isArray(metaConn.templateCatalog) && metaConn.templateCatalog.length > 0 && (
-                  <> · {metaConn.templateCatalog.length} approved template{metaConn.templateCatalog.length === 1 ? "" : "s"}</>
+              <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+                Templates send through Meta.
+                {Array.isArray(metaConn.templateCatalog) && metaConn.templateCatalog.length > 0
+                  ? ` ${metaConn.templateCatalog.length} approved template${metaConn.templateCatalog.length === 1 ? "" : "s"} loaded.`
+                  : " Refresh templates on the agent to load approved ones."}
+              </p>
+              <dl className="mt-3 space-y-1 text-[12px] text-muted-foreground">
+                <div className="flex gap-2">
+                  <dt className="w-28 shrink-0">Phone Number ID</dt>
+                  <dd className="font-mono text-foreground/80 break-all">{metaConn.metaPhoneNumberId}</dd>
+                </div>
+                {metaConn.metaWabaId && (
+                  <div className="flex gap-2">
+                    <dt className="w-28 shrink-0">WABA</dt>
+                    <dd className="font-mono text-foreground/80 break-all">{metaConn.metaWabaId}</dd>
+                  </div>
                 )}
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Vobiz is not used on this path. Buy a SnapServe WhatsApp number or enable WhatsApp calling only if you need those.
-              </p>
+              </dl>
             </div>
-            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setNumberChoice("direct"); openBizWizard(); }}>
-              Update Meta
+            <Button size="sm" variant="outline" className="h-8 shrink-0 text-xs" onClick={() => { setNumberChoice("direct"); openBizWizard(); }}>
+              Update
             </Button>
           </div>
           {!isManagedWorkspace && (
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => { setNumberChoice("buy"); openBizWizard(); }}>
+            <div className="mt-5 border-t border-border pt-4 text-[12px]">
+              <button
+                type="button"
+                className="text-foreground/80 underline-offset-2 hover:underline"
+                onClick={() => { setNumberChoice("buy"); openBizWizard(); }}
+              >
                 Buy a SnapServe WhatsApp number
-              </Button>
+              </button>
             </div>
           )}
         </div>
@@ -597,88 +614,136 @@ function NativeSection({
             </div>
           )}
 
-          <div>
-            <h3 className="text-sm font-semibold">How do you want WhatsApp?</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground max-w-2xl">
-              Already on Meta? Paste WABA + token + Phone Number ID — SnapServe sends templates through Meta. Vobiz is only if we sell you a WhatsApp number or you want WhatsApp calling.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-[12px] text-muted-foreground space-y-1.5 max-w-3xl">
-            <p><strong className="text-foreground/90">Personal WhatsApp app ≠ this.</strong> The green consumer app and WhatsApp Business API cannot share a number. Delete the number from the phone app first if you want it here.</p>
-            <p><strong className="text-foreground/90">A voice DID is not WhatsApp until you enable it.</strong> Buying a call number and assigning it to the agent does not turn WhatsApp on. Use “Same number as my calls” below if you want that DID on WhatsApp too.</p>
-            <p><strong className="text-foreground/90">If a BSP already made Meta for you</strong> (most do), you already have a WABA. Use “I already have Business WhatsApp” and paste the WABA ID, Phone Number ID, and token from Meta Business Manager or from that BSP’s dashboard.</p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="flex flex-col rounded-xl border border-sky-500/25 bg-sky-500/[0.04] p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">Default</p>
-              <h3 className="mt-1 text-sm font-semibold">I already have Meta</h3>
-              <p className="mt-2 flex-1 text-xs leading-relaxed text-muted-foreground">
-                Paste WABA ID, Phone Number ID, and a permanent System User token. SnapServe talks to Meta only — no carrier channel, no Vobiz.
+          <div className="mx-auto w-full max-w-xl rounded-xl border border-border bg-card p-5 sm:p-6">
+            <div className="space-y-1">
+              <h3 className="text-[15px] font-semibold tracking-tight">Connect Meta</h3>
+              <p className="text-[13px] leading-relaxed text-muted-foreground">
+                Paste the three IDs from{" "}
+                <a
+                  href="https://business.facebook.com/settings/whatsapp-business-accounts"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline underline-offset-2"
+                >
+                  Meta Business settings
+                </a>
+                . SnapServe sends approved templates through Meta — no Vobiz.
               </p>
-              <Button
-                size="sm"
-                className="mt-4 h-9 w-full"
-                onClick={() => {
-                  setNumberChoice("direct");
-                  openBizWizard();
-                }}
-              >
-                Connect Meta
-              </Button>
             </div>
 
-            {!isManagedWorkspace && (
-              <div className="flex flex-col rounded-xl border border-border bg-card p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Optional</p>
-                <h3 className="mt-1 text-sm font-semibold">Same number as my calls</h3>
-                <p className="mt-2 flex-1 text-xs leading-relaxed text-muted-foreground">
-                  WhatsApp-enable a SnapServe voice DID you already bought. Still paste Meta IDs — we do not create a Vobiz channel unless you later turn on WhatsApp calling.
-                </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="mt-4 h-9 w-full"
-                  onClick={() => {
-                    setNumberChoice("voice");
-                    openBizWizard();
-                  }}
-                >
-                  WhatsApp-enable my call number
-                </Button>
+            <div className="mt-5 space-y-3.5">
+              <div>
+                <Label htmlFor="wa-biz-name" className="text-xs">Business name</Label>
+                <Input
+                  id="wa-biz-name"
+                  className="mt-1 h-9"
+                  placeholder="Shown on messages"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                />
               </div>
-            )}
-
-            {!isManagedWorkspace && (
-              <div className="flex flex-col rounded-xl border border-emerald-500/30 bg-emerald-500/[0.04] p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Vobiz · buy from us</p>
-                <h3 className="mt-1 text-sm font-semibold">Buy a WhatsApp number from SnapServe</h3>
-                <p className="mt-2 flex-1 text-xs leading-relaxed text-muted-foreground">
-                  Different inventory from call numbers. We provision via Vobiz. You still paste WABA + token once (Meta owns the WABA).
-                </p>
-                <Button
-                  size="sm"
-                  className="mt-4 h-9 w-full"
-                  onClick={() => {
-                    setNumberChoice("buy");
-                    openBizWizard();
-                  }}
-                >
-                  Buy WhatsApp number
-                </Button>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="wa-waba" className="text-xs">WABA ID</Label>
+                  <Input
+                    id="wa-waba"
+                    className="mt-1 h-9 font-mono text-[13px]"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={wabaId}
+                    onChange={(e) => setWabaId(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="wa-phone-id" className="text-xs">Phone Number ID</Label>
+                  <Input
+                    id="wa-phone-id"
+                    className="mt-1 h-9 font-mono text-[13px]"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={phoneNumberId}
+                    onChange={(e) => setPhoneNumberId(e.target.value)}
+                  />
+                </div>
               </div>
-            )}
+              <div>
+                <Label htmlFor="wa-token" className="text-xs">Permanent System User token</Label>
+                <Input
+                  id="wa-token"
+                  className="mt-1 h-9 font-mono text-[13px]"
+                  type="password"
+                  autoComplete="off"
+                  value={accessToken}
+                  onChange={(e) => setAccessToken(e.target.value)}
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Needs whatsapp_business_messaging + whatsapp_business_management. Stored encrypted.
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="wa-agent" className="text-xs">Attach to agent</Label>
+                <select
+                  id="wa-agent"
+                  className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                  value={inboundAgentId}
+                  onChange={(e) => setInboundAgentId(e.target.value ? Number(e.target.value) : "")}
+                >
+                  <option value="">{preferredAgentId ? "This agent" : "First agent"}</option>
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
-            <div className="flex flex-col rounded-xl border border-border/60 bg-card/30 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Path 4</p>
-              <h3 className="mt-1 text-sm font-semibold">Keep Wati / Gupshup / Zapier</h3>
-              <p className="mt-2 flex-1 text-xs leading-relaxed text-muted-foreground">
-                Don’t move the number off your current BSP. SnapServe only posts to their webhook after a call. No WhatsApp calling on this path. Use this only if you will not connect a WABA above.
-              </p>
-              <Button size="sm" variant="outline" className="mt-4 h-9 w-full" onClick={() => onChooseBsp?.()}>
-                Connect webhook only
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <Button
+                className="h-9 sm:min-w-[140px]"
+                disabled={!wabaId.trim() || !phoneNumberId.trim() || !accessToken.trim() || connectMeta.isPending}
+                onClick={() => connectMeta.mutate()}
+              >
+                {connectMeta.isPending ? "Connecting…" : "Connect"}
               </Button>
+              <p className="text-[11px] text-muted-foreground">
+                Personal WhatsApp app cannot share this number.
+              </p>
+            </div>
+
+            <div className="mt-5 border-t border-border pt-4">
+              <p className="text-[11px] text-muted-foreground">Need a number, or staying on Wati?</p>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5 text-[12px]">
+                {!isManagedWorkspace && (
+                  <button
+                    type="button"
+                    className="text-foreground/80 underline-offset-2 hover:underline"
+                    onClick={() => {
+                      setNumberChoice("buy");
+                      openBizWizard();
+                    }}
+                  >
+                    Buy a SnapServe WhatsApp number
+                  </button>
+                )}
+                {!isManagedWorkspace && (
+                  <button
+                    type="button"
+                    className="text-foreground/80 underline-offset-2 hover:underline"
+                    onClick={() => {
+                      setNumberChoice("voice");
+                      openBizWizard();
+                    }}
+                  >
+                    Use my call number
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="text-foreground/80 underline-offset-2 hover:underline"
+                  onClick={() => onChooseBsp?.()}
+                >
+                  Webhook only
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1415,7 +1480,6 @@ export default function WhatsAppPage({
   const connections = data?.connections ?? [];
 
   const [showByo, setShowByo] = useState(false);
-  const byoVisible = showByo || connections.length > 0;
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editConn, setEditConn] = useState<WaConnection | null>(null);
@@ -1730,10 +1794,10 @@ export default function WhatsAppPage({
         preferredAgentId={urlAgentId || undefined}
       />
 
-      {(showByo || connections.length > 0) && <BspAdopterGuide />}
+      {showByo && <BspAdopterGuide />}
 
-      {/* Your connections */}
-      {(connections.length > 0 || createdSecret || isLoading || byoVisible) && (
+      {/* Webhook / per-agent overrides — hidden on the Meta-only happy path */}
+      {(showByo || createdSecret || connections.some((c) => !c.metaConnected)) && (
       <div className="space-y-4 pb-4" id="bsp-adopter">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -2107,7 +2171,7 @@ export default function WhatsAppPage({
   return (
     <StripePage
       title="WhatsApp"
-      description="One number, one path. Meta is the network; Vobiz/Wati/etc. is the BSP. Return to Connections when you're done."
+      description="Paste WABA, Phone Number ID, and token. SnapServe sends templates through Meta. Vobiz only if we sell you the number or you want WhatsApp calling."
       back={{ href: backHref, label: backLabel }}
     >
       {body}
