@@ -134,9 +134,12 @@ export function AgentWhatsappTemplatePicks({
   });
 
   const catalog = useMemo(() => {
-    if (refreshedCatalog && refreshedCatalog.length) return refreshedCatalog;
-    if (nativeMode) return nativeQ.data?.templateCatalog ?? initialCatalog ?? [];
-    return initialCatalog ?? [];
+    const raw = refreshedCatalog && refreshedCatalog.length
+      ? refreshedCatalog
+      : nativeMode
+        ? (nativeQ.data?.templateCatalog ?? initialCatalog ?? [])
+        : (initialCatalog ?? []);
+    return raw.filter((t) => t?.name && t.language);
   }, [nativeMode, nativeQ.data?.templateCatalog, initialCatalog, refreshedCatalog]);
 
   useEffect(() => {
@@ -144,18 +147,18 @@ export function AgentWhatsappTemplatePicks({
     setSlots(Object.fromEntries(SLOTS.map(({ key }) => [key, choiceValue(t[key])])));
   }, [nativeMode, nativeQ.data?.templates, initialTemplates]);
 
-  const payload = (): AgentWaTemplates => {
+  const payloadFrom = (nextSlots: Record<string, string>): AgentWaTemplates => {
     const out: AgentWaTemplates = {};
     for (const { key } of SLOTS) {
-      const c = parseChoice(slots[key] ?? "");
+      const c = parseChoice(nextSlots[key] ?? "");
       if (c) out[key] = c;
     }
     return out;
   };
 
   const save = useMutation({
-    mutationFn: async () => {
-      const templates = payload();
+    mutationFn: async (vars: { templates: AgentWaTemplates; silent?: boolean }) => {
+      const templates = vars.templates;
       if (nativeMode) {
         return customFetch(`${API}/whatsapp/agents/${agentId}/templates`, {
           method: "PUT",
@@ -170,8 +173,8 @@ export function AgentWhatsappTemplatePicks({
         body: JSON.stringify({ metaTemplates: templates }),
       });
     },
-    onSuccess: () => {
-      toast({ title: "Templates saved for this agent" });
+    onSuccess: (_data, vars) => {
+      if (!vars.silent) toast({ title: "Template saved" });
       void qc.invalidateQueries({ queryKey: ["builder-whatsapp-connections", agentId] });
       void qc.invalidateQueries({ queryKey: ["wa-agent-templates", agentId] });
     },
@@ -231,49 +234,111 @@ export function AgentWhatsappTemplatePicks({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nativeMode, nativeQ.isLoading, nativeQ.data?.templateCatalog, initialCatalog, connectionId]);
 
-  const picks = payload();
-  const needsTemplates = slotDefs.some(({ key }) => {
-    const v = picks[key];
-    return !!(v?.name && v.language);
-  }) === false;
+  const autoPicked = useRef(false);
+  useEffect(() => {
+    if (autoPicked.current || !catalog.length) return;
+    const current = parseChoice(slots.default ?? "");
+    if (current?.name) {
+      autoPicked.current = true;
+      return;
+    }
+    const first = catalog[0]!;
+    const next = choiceValue({ name: first.name, language: first.language, paramCount: first.paramCount });
+    autoPicked.current = true;
+    const nextSlots = { ...slots, default: next };
+    setSlots(nextSlots);
+    if (!nativeMode && !connectionId) return;
+    save.mutate({ templates: payloadFrom(nextSlots), silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalog]);
+
+  const compact = visibleSlots?.length === 1 && visibleSlots[0] === "default";
+  const defaultChoice = parseChoice(slots.default ?? "");
+
+  const applySlot = (key: string, raw: string) => {
+    setSlots((s) => ({ ...s, [key]: raw }));
+  };
 
   return (
-    <div className="space-y-3 rounded-lg border border-border/60 p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-[13px] font-medium">
-            {visibleSlots?.length === 1 && visibleSlots[0] === "default"
-              ? "Template for this agent"
-              : "Templates for this agent"}
-          </p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            {visibleSlots?.length === 1 && visibleSlots[0] === "default"
-              ? "Pick an approved Meta template. This is what Send WhatsApp uses mid-call."
-              : "Your Meta catalog can have any template names. These rows are only SnapServe “when to send” moments — pick any approved template into each."}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 text-[11px] shrink-0"
-          disabled={refresh.isPending}
-          onClick={() => refresh.mutate()}
-        >
-          {refresh.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Refresh"}
-        </Button>
-      </div>
-
-      {needsTemplates && (
-        <div className="rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400">
-          Needs templates — pick a template from your approved list.
+    <div className={compact ? "space-y-2" : "space-y-3"}>
+      {!compact && (
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-[13px] font-medium">Templates for this agent</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Pick any approved Meta template into each send moment.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 shrink-0 text-[11px]"
+            disabled={refresh.isPending}
+            onClick={() => refresh.mutate()}
+          >
+            {refresh.isPending ? <Loader2 className="size-3 animate-spin" /> : "Refresh"}
+          </Button>
         </div>
       )}
 
       {catalog.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          No approved templates saved yet. Click Refresh, or finish connect on the WhatsApp page.
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[12px] text-muted-foreground">
+            {refresh.isPending
+              ? "Loading approved templates…"
+              : "No approved templates yet. They must be APPROVED in Meta, then Refresh."}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 shrink-0 text-[11px]"
+            disabled={refresh.isPending}
+            onClick={() => refresh.mutate()}
+          >
+            {refresh.isPending ? <Loader2 className="size-3 animate-spin" /> : "Refresh"}
+          </Button>
+        </div>
+      ) : compact ? (
+        <div>
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-[11px] text-muted-foreground">Mid-call template</Label>
+            <button
+              type="button"
+              className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+              disabled={refresh.isPending}
+              onClick={() => refresh.mutate()}
+            >
+              {refresh.isPending ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
+          <select
+            className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-[12px]"
+            value={slots.default ?? ""}
+            onChange={(e) => {
+              const nextSlots = { ...slots, default: e.target.value };
+              setSlots(nextSlots);
+              save.mutate({ templates: payloadFrom(nextSlots) });
+            }}
+          >
+            <option value="">Select a template</option>
+            {defaultChoice && !catalog.some((t) => choiceValue({ name: t.name, language: t.language, paramCount: t.paramCount }) === (slots.default ?? "")) && (
+              <option value={slots.default}>{defaultChoice.name} ({defaultChoice.language}, saved)</option>
+            )}
+            {catalog.map((t) => {
+              const opt = choiceValue({ name: t.name, language: t.language, paramCount: t.paramCount });
+              return (
+                <option key={`${t.name}|${t.language}`} value={opt}>
+                  {t.name} ({t.language})
+                </option>
+              );
+            })}
+          </select>
+          {save.isPending && (
+            <p className="mt-1 text-[10px] text-muted-foreground">Saving…</p>
+          )}
+        </div>
       ) : (
         <div className="space-y-2">
           {slotDefs.map(({ key, label, hint }) => {
@@ -289,11 +354,11 @@ export function AgentWhatsappTemplatePicks({
             return (
               <div key={key}>
                 <Label className="text-[10px] text-muted-foreground">{label}</Label>
-                <p className="text-[9px] text-muted-foreground/80 mb-0.5">{hint}</p>
+                <p className="mb-0.5 text-[9px] text-muted-foreground/80">{hint}</p>
                 <select
-                  className="mt-1 w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
                   value={value}
-                  onChange={(e) => setSlots((s) => ({ ...s, [key]: e.target.value }))}
+                  onChange={(e) => applySlot(key, e.target.value)}
                 >
                   <option value="">— none —</option>
                   {savedLabel && <option value={value}>{savedLabel}</option>}
@@ -301,7 +366,7 @@ export function AgentWhatsappTemplatePicks({
                     const opt = choiceValue({ name: t.name, language: t.language, paramCount: t.paramCount });
                     return (
                       <option key={`${t.name}|${t.language}`} value={opt}>
-                        {t.name} ({t.language}, {t.paramCount} var{t.paramCount === 1 ? "" : "s"})
+                        {t.name} ({t.language})
                       </option>
                     );
                   })}
@@ -309,19 +374,18 @@ export function AgentWhatsappTemplatePicks({
               </div>
             );
           })}
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 text-xs"
+            disabled={save.isPending}
+            onClick={() => save.mutate({ templates: payloadFrom(slots) })}
+          >
+            {save.isPending && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+            Save templates
+          </Button>
         </div>
       )}
-
-      <Button
-        type="button"
-        size="sm"
-        className="h-8 text-xs"
-        disabled={save.isPending || catalog.length === 0}
-        onClick={() => save.mutate()}
-      >
-        {save.isPending && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
-        Save templates
-      </Button>
     </div>
   );
 }

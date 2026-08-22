@@ -108,16 +108,11 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
       {waLoading ? (
         <Skeleton className="h-10 w-full rounded-md" />
       ) : metaReady && agentConnection ? (
-        <div className="space-y-3">
+        <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-[12px] font-medium">
-                {agentConnection.name || "Workspace WhatsApp"}
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                Mid-call send uses this Meta template. After-call templates are mapped to outcomes on After the call.
-              </p>
-            </div>
+            <p className="truncate text-[12px] font-medium">
+              {agentConnection.name || "WhatsApp"}
+            </p>
             <StatusLine ready label="Connected" />
           </div>
           <AgentWhatsappTemplatePicks
@@ -129,16 +124,11 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
           />
         </div>
       ) : nativeReady ? (
-        <div className="space-y-3">
+        <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-[12px] font-medium">
-                {waData?.channel?.businessName || "Workspace WhatsApp"}
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                Mid-call send uses this template. After-call templates are mapped to outcomes on After the call.
-              </p>
-            </div>
+            <p className="truncate text-[12px] font-medium">
+              {waData?.channel?.businessName || "WhatsApp"}
+            </p>
             <StatusLine ready label="Connected" />
           </div>
           <AgentWhatsappTemplatePicks
