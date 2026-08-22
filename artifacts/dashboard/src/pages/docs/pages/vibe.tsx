@@ -38,7 +38,7 @@ export default function VibePage() {
       </ul>
 
       <Callout variant="tip" title="Start here for a first agent">
-        After signup, Jarvis opens on Home and runs this same builder in the HUD. You can still open
+        After signup, Jarvis opens on Home and runs this same builder in the page rail. You can still open
         this page from “Build with AI”. Tell it who the agent is, what language they speak, and what
         a successful call looks like.
       </Callout>

@@ -15,7 +15,6 @@ import { Layout } from "@/components/layout";
 import { recordInAppNavigation } from "@/lib/nav-history";
 import { AppLoader } from "@/components/logo";
 import { isDirectSnapServeHost, loadHostBrand, type HostBrand } from "@/lib/white-label";
-import { VoiceAssistant } from "@/components/VoiceAssistant";
 
 // ── Page imports ─────────────────────────────────────────────────────────────
 // Tabbed wrappers (new routes)
@@ -410,7 +409,7 @@ function AppRoot() {
   if (isLoading) return <AppLoader />;
   const list = Array.isArray(agents) ? agents : (agents as any)?.agents ?? [];
   // Accounts with no agents land on Home with Jarvis open. Jarvis runs the same
-  // Vibe Build engine in the HUD — do not dump them onto the Vibe page.
+  // Vibe Build engine in the page rail — do not dump them onto the Vibe page.
   if (!list.length) return <Redirect to="/app/home?jarvis=1" />;
   return <Redirect to="/app/home" />;
 }
@@ -460,7 +459,6 @@ function AppRoutes() {
 
   return (
     <Layout>
-      <VoiceAssistant />
       <Switch>
         <Route path="/app" component={AppRoot} />
         <Route path="/app/home" component={HomePage} />

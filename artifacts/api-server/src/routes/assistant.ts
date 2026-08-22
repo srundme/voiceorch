@@ -19,6 +19,8 @@ import {
 import { loadWorkspaceSnapshot } from "../services/assistant-brief-load.js";
 import { resolveJarvisVoice } from "../services/assistant-voice-resolve.js";
 import { JARVIS_TTS_FALLBACK_VOICE_ID, ttsLanguageForText } from "../services/assistant-voice.js";
+import { platformChatText } from "../services/platform-chat-llm.js";
+import { SARVAM_FLAGSHIP_MODEL } from "../orchestration/adapters/llm/sarvam.js";
 import {
   JOB_TYPES,
   runAssistantJob,
@@ -555,67 +557,70 @@ async function executeTool(cmd: string, args: Record<string, unknown>, clerkUser
   }
 }
 
-function stripThinkTags(raw: string): string {
-  // Qwen 3 / reasoning models wrap internal monologue in <think>...</think> — strip it
-  return raw.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+const briefCache = new Map<string, { at: number; recs: AssistantRecommendation[]; block: string }>();
+const BRIEF_TTL_MS = 20_000;
+
+async function loadBriefCached(clerkUserId: string): Promise<{ recs: AssistantRecommendation[]; block: string }> {
+  const hit = briefCache.get(clerkUserId);
+  if (hit && Date.now() - hit.at < BRIEF_TTL_MS) return { recs: hit.recs, block: hit.block };
+  const snap = await loadWorkspaceSnapshot(clerkUserId);
+  const recs = recommendationsFromSnapshot(snap);
+  const block = `\n[WORKSPACE BRIEF]: ${formatBriefForLlm(snap)}\n`;
+  briefCache.set(clerkUserId, { at: Date.now(), recs, block });
+  return { recs, block };
 }
 
-async function callLLM(
-  messages: Array<{ role: string; content: string }>,
-  key: string,
+async function jarvisComplete(
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
   model: string,
-  baseUrl: string,
-): Promise<string | null> {
-  try {
-    const isGroq = baseUrl.includes("groq.com");
-    const body: Record<string, unknown> = {
-      model,
-      messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
-      max_tokens: 1600,
-      temperature: 0.65,
-    };
-    // Disable Qwen 3 chain-of-thought thinking on Groq — keeps responses clean
-    if (isGroq) body["reasoning_effort"] = null;
-
-    const r = await fetch(baseUrl, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) return null;
-    const data = (await r.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    const raw = data.choices?.[0]?.message?.content ?? null;
-    return raw ? stripThinkTags(raw) : null;
-  } catch (err) {
-    logger.warn({ err, model }, "assistant: LLM call error");
-    return null;
-  }
+  timeoutMs: number,
+): Promise<string> {
+  return platformChatText({
+    system: SYSTEM_PROMPT,
+    messages,
+    model,
+    json: true,
+    reasoningEffort: null,
+    maxTokens: 700,
+    timeoutMs,
+    temperature: 0.5,
+  });
 }
 
-async function runChat(
-  messages: ChatMessage[],
-  key: string,
-  model: string,
-  baseUrl: string,
-  clerkUserId: string,
-): Promise<ChatResult | null> {
-  const raw1 = await callLLM(messages.map((m) => ({ role: m.role, content: m.content })), key, model, baseUrl);
-  if (!raw1) return null;
+async function runChat(messages: ChatMessage[], clerkUserId: string): Promise<ChatResult | null> {
+  const mapped = messages.map((m) => ({
+    role: m.role as "user" | "assistant",
+    content: m.content,
+  }));
 
-  const cmd = tryParseCommand(raw1);
-  if (cmd) {
+  const tryOnce = async (model: string, timeoutMs: number): Promise<ChatResult> => {
+    const raw1 = await jarvisComplete(mapped, model, timeoutMs);
+    const cmd = tryParseCommand(raw1);
+    if (!cmd) return parseResponse(raw1);
     const toolResult = await executeTool(cmd.cmd as string, cmd, clerkUserId);
-    const messages2 = [
-      ...messages.map((m) => ({ role: m.role, content: m.content })),
-      { role: "assistant", content: raw1 },
-      { role: "user", content: `[PLATFORM DATA RESULT]:\n${toolResult}\n\nNow give your complete response to the user based on this data.` },
-    ];
-    const raw2 = await callLLM(messages2, key, model, baseUrl);
-    if (!raw2) return null;
+    const raw2 = await jarvisComplete(
+      [
+        ...mapped,
+        { role: "assistant", content: raw1 },
+        { role: "user", content: `[PLATFORM DATA RESULT]:\n${toolResult}\n\nNow give your complete response to the user based on this data.` },
+      ],
+      model,
+      timeoutMs,
+    );
     return parseResponse(raw2);
-  }
+  };
 
-  return parseResponse(raw1);
+  try {
+    return await tryOnce(SARVAM_FLAGSHIP_MODEL, 20_000);
+  } catch (err) {
+    logger.warn({ err }, "assistant: sarvam-105b failed");
+  }
+  try {
+    return await tryOnce("gemma4", 10_000);
+  } catch (err) {
+    logger.warn({ err }, "assistant: gemma4 fallback failed");
+  }
+  return null;
 }
 
 // ── POST /assistant/chat ──────────────────────────────────────────────────────
@@ -639,50 +644,33 @@ router.post("/assistant/chat", async (req: Request, res: Response): Promise<void
   const contextNote = pageUrl ? `[User is on page: ${pageUrl}] ` : "";
   let snapshotRecs: AssistantRecommendation[] = [];
   let briefBlock = "";
-  try {
-    const snap = await loadWorkspaceSnapshot(clerkUserId);
-    snapshotRecs = recommendationsFromSnapshot(snap);
-    briefBlock = `\n[WORKSPACE BRIEF]: ${formatBriefForLlm(snap)}\n`;
-  } catch (err) {
-    logger.warn({ err }, "assistant: workspace brief failed");
+  if (!isFirst) {
+    try {
+      const brief = await loadBriefCached(clerkUserId);
+      snapshotRecs = brief.recs;
+      briefBlock = brief.block;
+    } catch (err) {
+      logger.warn({ err }, "assistant: workspace brief failed");
+    }
   }
 
   const userContent = isFirst
-    ? `${contextNote}${briefBlock}[User name: "${displayName}". First message — greet them as a friend in colloquial Tamil script as Jarvis (Karthikeyan's voice). Ask how they are. Say you can just talk, or build their first agent when they are ready. Do not start building until they ask.]\n${message}`
+    ? `${contextNote}[User name: "${displayName}". First message — greet them as a friend in colloquial Tamil script as Jarvis (Karthikeyan's voice). Ask how they are. Say you can just talk, or build their first agent when they are ready. Do not start building until they ask.]\n${message}`
     : `${contextNote}${briefBlock}${message}`;
 
   const messages: ChatMessage[] = [
-    ...(history ?? []).slice(-10),
+    ...(history ?? []).slice(-8),
     { role: "user", content: userContent },
   ];
 
-  const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-  const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-
-  const qwenKey = await getSetting("managed_qwen_key");
-  if (qwenKey) {
-    const result = await runChat(messages, qwenKey, "qwen/qwen3-32b", GROQ_URL, clerkUserId);
-    if (result?.text) {
-      const fulfilled = await fulfillJobs(clerkUserId, {
-        ...result,
-        recommendations: mergeRecs(snapshotRecs, result.recommendations),
-      });
-      res.json(fulfilled);
-      return;
-    }
-  }
-
-  const openaiKey = await getSetting("managed_openai_key");
-  if (openaiKey) {
-    const result = await runChat(messages, openaiKey, "gpt-4o-mini", OPENAI_URL, clerkUserId);
-    if (result?.text) {
-      const fulfilled = await fulfillJobs(clerkUserId, {
-        ...result,
-        recommendations: mergeRecs(snapshotRecs, result.recommendations),
-      });
-      res.json(fulfilled);
-      return;
-    }
+  const result = await runChat(messages, clerkUserId);
+  if (result?.text) {
+    const fulfilled = await fulfillJobs(clerkUserId, {
+      ...result,
+      recommendations: mergeRecs(snapshotRecs, result.recommendations),
+    });
+    res.json(fulfilled);
+    return;
   }
 
   const fallback = isFirst

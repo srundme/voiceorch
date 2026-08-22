@@ -417,7 +417,7 @@ export default function OnboardingPage() {
 
   const submitOnboarding = useCallback((finalAnswers: Answers) => {
     // Finish onboarding on Home with Jarvis open. He runs official Vibe Build
-    // in the HUD. The name is stashed for the greeting; do not send them to /app/vibe.
+    // in the page rail. The name is stashed for the greeting; do not send them to /app/vibe.
     const goToBuilder = () => {
       try {
         if (finalAnswers.name.trim()) {

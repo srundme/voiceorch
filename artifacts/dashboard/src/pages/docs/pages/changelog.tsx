@@ -13,7 +13,7 @@ export default function ChangelogPage() {
       <h2 id="2026-08-22-jarvis">2026-08-22 — Jarvis: Karthikeyan voice, colloquial Tamil, creates as you talk</h2>
       <ul>
         <li>
-          Jarvis is a dark HUD on the dashboard. It speaks with the admin-listed{" "}
+          Jarvis is an in-page rail on the dashboard (Sarvam 105B). It speaks with the admin-listed{" "}
           <strong>Karthikeyan</strong> Cartesia voice, in colloquial Tamil (பேச்சுத் தமிழ்).
           After first signup he opens on Home as a friend in colloquial Tamil, then runs the same
           Vibe Build phases as <Link href="/docs/vibe">Vibe</Link> when you ask to create an agent.

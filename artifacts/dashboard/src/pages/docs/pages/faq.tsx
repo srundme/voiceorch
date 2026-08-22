@@ -7,7 +7,7 @@ const FAQS: { q: string; a: ReactNode }[] = [
     q: "Where is support on the dashboard?",
     a: (
       <>
-        Tap the gold orb — that is <Link href="/docs/jarvis">Jarvis</Link>, speaking with
+        Use the Jarvis column on the right — <Link href="/docs/jarvis">Jarvis</Link> speaks
         Karthikeyan's voice in colloquial Tamil. Just talk: he creates the agent, campaign, or assignment.
       </>
     ),

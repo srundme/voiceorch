@@ -1,8 +1,8 @@
 /**
  * New signups land on Home with Jarvis open — not the Vibe page.
  *
- * Jarvis runs the same Vibe Build engine in the HUD. These static assertions
- * keep the two redirect sites from dumping people onto /app/vibe.
+ * Jarvis runs the same Vibe Build engine in the in-page rail. These static
+ * assertions keep the two redirect sites from dumping people onto /app/vibe.
  */
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -39,14 +39,17 @@ describe("signup landing route", () => {
     expect(src("src/components/layout.tsx")).toMatch(/navigate\("\/app\/vibe"\)/);
   });
 
-  it("runs official Vibe from the Jarvis HUD", () => {
+  it("runs official Vibe from the in-page Jarvis rail", () => {
     const hud = src("src/components/VoiceAssistant.tsx");
     const engine = src("../api-server/src/routes/vibe.ts");
+    const layout = src("src/components/layout.tsx");
+    expect(layout).toMatch(/<VoiceAssistant \/>/);
     expect(hud).toMatch(/persona: "jarvis"/);
     expect(hud).toMatch(/\/api\/agents\/vibe-chat/);
     expect(hud).toMatch(/looksLikeVibeBuild/);
     expect(hud).toMatch(/sendAssistant/);
     expect(engine).toMatch(/persona === "jarvis"/);
     expect(engine).toMatch(/JARVIS_VIBE_PREFIX/);
+    expect(src("../api-server/src/routes/assistant.ts")).toMatch(/SARVAM_FLAGSHIP_MODEL/);
   });
 });

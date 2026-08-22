@@ -40,6 +40,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { loadActingAs, stopActingAs } from "@/lib/acting-as";
+import { VoiceAssistant } from "@/components/VoiceAssistant";
 
 /* ─── Error boundary ─────────────────────────────────────────────────────── */
 interface ErrorBoundaryState { hasError: boolean; error: unknown }
@@ -1025,11 +1026,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto min-h-0 overscroll-y-contain">
-          <ErrorBoundary location={location}>
-            {children}
-          </ErrorBoundary>
+        {/* Scrollable content + in-page Jarvis rail */}
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+            <ErrorBoundary location={location}>
+              {children}
+            </ErrorBoundary>
+          </div>
+          <VoiceAssistant />
         </div>
       </main>
 

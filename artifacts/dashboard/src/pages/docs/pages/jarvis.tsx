@@ -12,10 +12,9 @@ export default function JarvisPage() {
       />
 
       <Callout variant="tip">
-        The gold orb on Home is Jarvis — Karthikeyan's listed Cartesia voice, speaking colloquial
-        Tamil (பேச்சுத் தமிழ்), not literary Tamil. After first signup he opens on Home
-        automatically. You can just talk. On the agent builder he docks as a right-edge tab so he
-        does not cover controls.
+        Jarvis is the right-hand column on every dashboard page — same chrome as the rest of the
+        app, not a floating overlay. Karthikeyan's Cartesia voice, colloquial Tamil, Sarvam 105B.
+        After first signup the rail is already open on Home.
       </Callout>
 
       <h2 id="can-do">What Jarvis can do</h2>
@@ -26,7 +25,7 @@ export default function JarvisPage() {
         </li>
         <li>
           <strong>Build an agent</strong> — official{" "}
-          <Link href="/docs/vibe">Vibe Build</Link> in the HUD (core → voice → flow → knowledge →
+          <Link href="/docs/vibe">Vibe Build</Link> in the rail (core → voice → flow → knowledge →
           features → dispositions → phone → save).
         </li>
         <li>
@@ -45,7 +44,7 @@ export default function JarvisPage() {
 
       <h2 id="talk">Talk to Jarvis</h2>
       <p>
-        Open the orb (or let him open after signup). He greets you in colloquial Tamil. Say{" "}
+        Talk in the Jarvis column (open after signup). He greets you in colloquial Tamil. Say{" "}
         <em>எப்படி இருக்கே</em> and he chats. Say <em>பிரியா கலெக்ஷன் ஏஜென்ட் கிரியேட் பண்ணு</em>{" "}
         and he walks Vibe. Chrome or Edge for voice; typing works everywhere.
       </p>
@@ -70,7 +69,7 @@ export default function JarvisPage() {
       <h2 id="jobs">Jobs while you talk</h2>
       <p>
         “Create / build an agent” goes through <Link href="/docs/vibe">Vibe Build</Link> inside
-        the HUD. After an agent exists: campaign draft, assign a number, publish, or open the
+        the rail. After an agent exists: campaign draft, assign a number, publish, or open the
         next page.
       </p>
 
