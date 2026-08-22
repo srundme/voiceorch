@@ -12,9 +12,10 @@ import {
   callsTable,
   platformSettingsTable,
 } from "@workspace/db";
-import { eq, sql, and, gte, lte, desc, asc, inArray, ilike, count } from "drizzle-orm";
+import { eq, sql, and, gte, lte, desc, asc, inArray, count } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { GST_RATE } from "../lib/money-inr.js";
+import { PHONE_FEE_DEBIT_RAW, RECOGNIZED_REVENUE_RAW, recognizedRevenueRaw } from "../lib/recognized-revenue.js";
 import { getVobizWalletStatus } from "../services/vobiz-wallet-monitor.js";
 
 const router = Router();
@@ -112,8 +113,7 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
       db
         .select({
           paise: sql<number>`coalesce(sum(abs(${walletTransactionsTable.amountCents})) filter (
-            where ${walletTransactionsTable.type} = 'debit'
-            and ${walletTransactionsTable.description} ilike '%phone%'
+            where ${sql.raw(PHONE_FEE_DEBIT_RAW)}
           ), 0)`,
         })
         .from(walletTransactionsTable)
@@ -124,7 +124,7 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
             where ${walletTransactionsTable.type} in ('refund','credit')
             or (
               ${walletTransactionsTable.type} = 'debit'
-              and ${walletTransactionsTable.description} not ilike '%phone%'
+              and not (${sql.raw(PHONE_FEE_DEBIT_RAW)})
             )
           ), 0)`,
         })
@@ -188,6 +188,7 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
     const cashCollectedPaise = cashInPaise + gstOnCashInPaise;
     const recognizedPaise = Number(recognized?.paise ?? 0);
     const phonePaise = Number(phoneDebits?.paise ?? 0);
+    const recognizedRevenuePaise = recognizedPaise + phonePaise;
     const adjustmentsPaise = Number(adjustments?.paise ?? 0);
     const freeCreditPaise = Number(freeCredits?.paise ?? 0);
     const liabilityPaise = Number(liability?.totalPaise ?? 0);
@@ -207,12 +208,7 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
           paise: sql<number>`coalesce(sum(abs(${walletTransactionsTable.amountCents})), 0)`,
         })
         .from(walletTransactionsTable)
-        .where(
-          and(
-            eq(walletTransactionsTable.type, "debit"),
-            ilike(walletTransactionsTable.description, "%phone%"),
-          ),
-        ),
+        .where(sql`${sql.raw(PHONE_FEE_DEBIT_RAW)}`),
     ]);
     const [[lifetimeAdj]] = await Promise.all([
       db
@@ -222,7 +218,7 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
         .from(walletTransactionsTable)
         .where(
           sql`${walletTransactionsTable.type} in ('refund','credit')
-            or (${walletTransactionsTable.type} = 'debit' and ${walletTransactionsTable.description} not ilike '%phone%')`,
+            or (${walletTransactionsTable.type} = 'debit' and not (${sql.raw(PHONE_FEE_DEBIT_RAW)}))`,
         ),
     ]);
 
@@ -244,6 +240,7 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
         cashCollectedEstPaise: cashCollectedPaise,
         topupCount: Number(cashIn?.count ?? 0),
         recognizedUsagePaise: recognizedPaise,
+        recognizedRevenuePaise,
         phoneDebitPaise: phonePaise,
         adjustmentsPaise,
         freeCreditPaise,
@@ -260,7 +257,8 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
       definitions: {
         cashIn: "Successful topup/auto_topup wallet credits (pre-GST base)",
         cashCollectedEst: "cashIn × (1 + GST) — estimate of Razorpay charged amount",
-        recognizedUsage: "Absolute call_debit amounts",
+        recognizedUsage: "Absolute call_debit amounts (calls only)",
+        recognizedRevenue: "call_debit + phone / WhatsApp number fees",
         liability: "Sum of user wallet balances (prepaid deferred obligation)",
       },
     });
@@ -292,14 +290,13 @@ router.get("/admin/finance/ledger", async (req, res): Promise<void> => {
     if (tab === "cash_in") {
       conditions.push(inArray(walletTransactionsTable.type, ["topup", "auto_topup"]));
     } else if (tab === "recognized") {
-      conditions.push(eq(walletTransactionsTable.type, "call_debit"));
+      conditions.push(sql`${sql.raw(RECOGNIZED_REVENUE_RAW)}`);
     } else if (tab === "phones") {
-      conditions.push(eq(walletTransactionsTable.type, "debit"));
-      conditions.push(ilike(walletTransactionsTable.description, "%phone%"));
+      conditions.push(sql`${sql.raw(PHONE_FEE_DEBIT_RAW)}`);
     } else if (tab === "adjustments") {
       conditions.push(
         sql`(${walletTransactionsTable.type} in ('refund','credit','free_credit')
-          or (${walletTransactionsTable.type} = 'debit' and ${walletTransactionsTable.description} not ilike '%phone%'))`,
+          or (${walletTransactionsTable.type} = 'debit' and not (${sql.raw(PHONE_FEE_DEBIT_RAW)})))`,
       );
     }
 
@@ -356,11 +353,11 @@ router.get("/admin/finance/daily-close", async (req, res): Promise<void> => {
         ), 0)::bigint as topups_success_paise,
         coalesce(sum(abs(amount_cents)) filter (where type = 'call_debit'), 0)::bigint as call_debit_paise,
         coalesce(sum(abs(amount_cents)) filter (
-          where type = 'debit' and description ilike '%phone%'
+          where ${sql.raw(PHONE_FEE_DEBIT_RAW)}
         ), 0)::bigint as phone_debit_paise,
         coalesce(sum(amount_cents) filter (
           where type in ('refund','credit','free_credit')
-            or (type = 'debit' and description not ilike '%phone%')
+            or (type = 'debit' and not (${sql.raw(PHONE_FEE_DEBIT_RAW)}))
         ), 0)::bigint as adjustments_paise,
         count(*) filter (
           where type in ('topup','auto_topup') and lower(status) in ('completed','success')
@@ -440,7 +437,7 @@ router.get("/admin/finance/economics", async (req, res): Promise<void> => {
         date_trunc('day', created_at)::date as day,
         coalesce(sum(abs(amount_cents)) filter (where type = 'call_debit'), 0)::bigint as recognized_paise,
         coalesce(sum(abs(amount_cents)) filter (
-          where type = 'debit' and description ilike '%phone%'
+          where ${sql.raw(PHONE_FEE_DEBIT_RAW)}
         ), 0)::bigint as phone_paise,
         coalesce(sum(amount_cents) filter (
           where type in ('topup','auto_topup') and lower(status) in ('completed','success')
@@ -624,7 +621,7 @@ router.get("/admin/finance/investor", async (req, res): Promise<void> => {
           paise: sql<number>`coalesce(sum(abs(amount_cents)), 0)`,
         })
         .from(walletTransactionsTable)
-        .where(eq(walletTransactionsTable.type, "call_debit")),
+        .where(sql`${sql.raw(RECOGNIZED_REVENUE_RAW)}`),
       db
         .select({
           paise: sql<number>`coalesce(sum(${usersTable.walletBalanceCents}), 0)`,
@@ -683,7 +680,7 @@ router.get("/admin/finance/investor", async (req, res): Promise<void> => {
           coalesce(sum(amount_cents) filter (
             where type in ('topup','auto_topup') and lower(status) in ('completed','success')
           ), 0)::bigint as cash_in_paise,
-          coalesce(sum(abs(amount_cents)) filter (where type = 'call_debit'), 0)::bigint as recognized_paise,
+          coalesce(sum(abs(amount_cents)) filter (where ${sql.raw(RECOGNIZED_REVENUE_RAW)}), 0)::bigint as recognized_paise,
           count(distinct user_id) filter (
             where type in ('topup','auto_topup') and lower(status) in ('completed','success')
           )::int as paying_users
@@ -697,7 +694,7 @@ router.get("/admin/finance/investor", async (req, res): Promise<void> => {
           u.clerk_id,
           u.email,
           u.name,
-          coalesce(sum(abs(wt.amount_cents)) filter (where wt.type = 'call_debit'), 0)::bigint as spend_paise,
+          coalesce(sum(abs(wt.amount_cents)) filter (where ${sql.raw(recognizedRevenueRaw("wt"))}), 0)::bigint as spend_paise,
           coalesce(sum(wt.amount_cents) filter (
             where wt.type in ('topup','auto_topup') and lower(wt.status) in ('completed','success')
           ), 0)::bigint as topup_paise
@@ -720,7 +717,7 @@ router.get("/admin/finance/investor", async (req, res): Promise<void> => {
       })
       .from(walletTransactionsTable)
       .where(
-        sql`type = 'call_debit' and created_at > now() - interval '30 days'`,
+        sql`${sql.raw(RECOGNIZED_REVENUE_RAW)} and created_at > now() - interval '30 days'`,
       );
     const rev30 = Number(revenue30[0]?.paise ?? 0);
 
@@ -744,7 +741,7 @@ router.get("/admin/finance/investor", async (req, res): Promise<void> => {
         paise: sql<number>`coalesce(sum(abs(amount_cents)), 0)`,
       })
       .from(walletTransactionsTable)
-      .where(sql`type = 'call_debit' and created_at > now() - interval '90 days'`);
+      .where(sql`${sql.raw(RECOGNIZED_REVENUE_RAW)} and created_at > now() - interval '90 days'`);
     const spend90All = Number(totalSpend90[0]?.paise ?? 0);
 
     res.json({
@@ -787,7 +784,7 @@ router.get("/admin/finance/investor", async (req, res): Promise<void> => {
       definitions: {
         cashCollected: "Successful wallet topup credits (base). GST = ×18% estimate of Razorpay charge.",
         liability: "Sum of prepaid wallet balances still owed as service.",
-        recognized: "call_debit amounts (₹5/min platform fees collected from wallets).",
+        recognized: "call_debit plus phone / WhatsApp number fees.",
       },
     });
   } catch (err) {
@@ -812,11 +809,11 @@ router.get("/admin/finance/export.csv", async (req, res): Promise<void> => {
           ), 0)::bigint as topups_success_paise,
           coalesce(sum(abs(amount_cents)) filter (where type = 'call_debit'), 0)::bigint as call_debit_paise,
           coalesce(sum(abs(amount_cents)) filter (
-            where type = 'debit' and description ilike '%phone%'
+            where ${sql.raw(PHONE_FEE_DEBIT_RAW)}
           ), 0)::bigint as phone_debit_paise,
           coalesce(sum(amount_cents) filter (
             where type in ('refund','credit','free_credit')
-              or (type = 'debit' and description not ilike '%phone%')
+              or (type = 'debit' and not (${sql.raw(PHONE_FEE_DEBIT_RAW)}))
           ), 0)::bigint as adjustments_paise
         from wallet_transactions
         where created_at >= ${from} and created_at <= ${to}

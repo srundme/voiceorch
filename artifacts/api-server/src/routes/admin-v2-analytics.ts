@@ -13,6 +13,7 @@ import {
 } from "@workspace/db";
 import { eq, sql, and, gte, lte, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
+import { PHONE_FEE_DEBIT_RAW } from "../lib/recognized-revenue.js";
 
 const router = Router();
 router.use("/admin/analytics", requireAdmin);
@@ -185,8 +186,7 @@ async function computeDailySeries(from: Date, to: Date, fx: number): Promise<Day
         where ${walletTransactionsTable.type} = 'call_debit'
       ), 0)`,
       phonePaise: sql<number>`coalesce(sum(abs(${walletTransactionsTable.amountCents})) filter (
-        where ${walletTransactionsTable.type} = 'debit'
-        and ${walletTransactionsTable.description} ilike '%phone%'
+        where ${sql.raw(PHONE_FEE_DEBIT_RAW)}
       ), 0)`,
     })
     .from(walletTransactionsTable)
@@ -196,10 +196,7 @@ async function computeDailySeries(from: Date, to: Date, fx: number): Promise<Day
         lte(walletTransactionsTable.createdAt, to),
         sql`(
           ${walletTransactionsTable.type} = 'call_debit'
-          or (
-            ${walletTransactionsTable.type} = 'debit'
-            and ${walletTransactionsTable.description} ilike '%phone%'
-          )
+          or (${sql.raw(PHONE_FEE_DEBIT_RAW)})
         )`,
       ),
     )

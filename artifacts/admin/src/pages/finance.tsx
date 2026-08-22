@@ -137,7 +137,7 @@ export default function Finance() {
           <h1 className="text-3xl font-bold tracking-tight">Finance &amp; Analytics</h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Audit ledger, unit economics, and investor headline metrics. Amounts are INR.
-            Cash-in = successful wallet topups; recognized = call usage billed from wallets.
+            Cash-in = successful wallet topups; recognized = call usage plus phone / WhatsApp number fees.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -174,9 +174,13 @@ export default function Finance() {
               hint={`Includes ~${Math.round((audit?.gstRate ?? 0.18) * 100)}% GST on topups`}
             />
             <Kpi
-              label="Recognized usage"
-              value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.recognizedUsagePaise ?? 0)}
-              hint="call_debit from wallets"
+              label="Recognized revenue"
+              value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.recognizedRevenuePaise ?? (audit?.period?.recognizedUsagePaise ?? 0) + (audit?.period?.phoneDebitPaise ?? 0))}
+              hint={
+                auditLoading
+                  ? "Calls + phone / WhatsApp numbers"
+                  : `Calls ${formatCentsToDollars(audit?.period?.recognizedUsagePaise ?? 0)} · Numbers ${formatCentsToDollars(audit?.period?.phoneDebitPaise ?? 0)}`
+              }
             />
             <Kpi
               label="Wallet liability"
@@ -197,8 +201,9 @@ export default function Finance() {
               hint="18% of successful topup base"
             />
             <Kpi
-              label="Phone debits"
+              label="Phone / WhatsApp numbers"
               value={formatCentsToDollars(audit?.period?.phoneDebitPaise ?? 0)}
+              hint="Included in recognized revenue"
             />
             <Kpi
               label="Pending / failed topups"
@@ -289,8 +294,8 @@ export default function Finance() {
                 {[
                   ["all", "All"],
                   ["cash_in", "Cash-in"],
-                  ["recognized", "Usage"],
-                  ["phones", "Phones"],
+                  ["recognized", "Revenue"],
+                  ["phones", "Numbers"],
                   ["adjustments", "Adjustments"],
                 ].map(([id, label]) => (
                   <Button
@@ -451,7 +456,7 @@ export default function Finance() {
         <TabsContent value="economics" className="space-y-6 mt-4">
           <div className="flex gap-2 rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
             <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            Revenue = call_debit + phone fees. COGS ≈ provider usage (USD micros → INR @ FX{" "}
+            Revenue = call usage + phone / WhatsApp number fees. COGS ≈ provider usage (USD micros → INR @ FX{" "}
             {economics?.usdToInrRate ?? "…"}). Margin is approximate.
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -555,7 +560,7 @@ export default function Finance() {
               value={
                 invLoading ? "…" : formatCentsToDollars(investor?.headline?.recognizedUsageLifetimePaise ?? 0)
               }
-              hint="Usage billed from wallets"
+              hint="Calls + phone / WhatsApp number fees"
             />
             <Kpi
               label="30d margin"
