@@ -137,8 +137,8 @@ export default function Finance() {
           <h1 className="text-3xl font-bold tracking-tight">Finance &amp; Analytics</h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Audit ledger, unit economics, and investor headline metrics. Amounts are INR.
-            Cash-in = rupees received (GST-inclusive topups + card-paid numbers). Wallet-paid DIDs are not new cash.
-            Recognized = call usage plus phone / WhatsApp number fees.
+            Cash-in = rupees received (GST-inclusive paid topups + card-paid numbers). Wallet credited also includes
+            signup ₹500, admin credits, and partner transfers — those are not cash. Recognized = calls + number fees.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -176,7 +176,11 @@ export default function Finance() {
             <Kpi
               label="Wallet credited"
               value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.cashInWalletCreditPaise ?? 0)}
-              hint="Successful topups in range (pre-GST)"
+              hint={
+                auditLoading
+                  ? "Paid topups + signup ₹500 + admin / partner credits"
+                  : `Paid ${formatCentsToDollars(audit?.period?.paidTopupWalletPaise ?? 0)} · Promo/admin ${formatCentsToDollars(audit?.period?.otherCreditPaise ?? audit?.period?.freeCreditPaise ?? 0)}`
+              }
             />
             <Kpi
               label="Recognized revenue"
@@ -299,6 +303,7 @@ export default function Finance() {
                 {[
                   ["all", "All"],
                   ["cash_in", "Cash-in"],
+                  ["wallet_credit", "Credits"],
                   ["recognized", "Revenue"],
                   ["phones", "Numbers"],
                   ["adjustments", "Adjustments"],

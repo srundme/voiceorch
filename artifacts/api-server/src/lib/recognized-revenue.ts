@@ -48,9 +48,33 @@ export function cashInEventRaw(alias = ""): string {
   return `(${successfulTopupRaw(alias)}) or (${cardPaidDidDebitRaw(alias)})`;
 }
 
+/** Credits that hit the wallet but are not Razorpay top-ups (signup ₹500, admin, partner). */
+export function promoAdminCreditRaw(alias = ""): string {
+  const p = alias ? `${alias}.` : "";
+  return `${p}type in ('free_credit','admin_credit','partner_transfer_in','credit')
+    and lower(${p}status) in ('completed','success')`;
+}
+
+/** Every completed inflow that increased a wallet balance. */
+export function walletInflowRaw(alias = ""): string {
+  return `(${successfulTopupRaw(alias)}) or (${promoAdminCreditRaw(alias)})`;
+}
+
+/** Non-revenue ledger movements used in the liability rollforward. */
+export function ledgerAdjustmentRaw(alias = ""): string {
+  const p = alias ? `${alias}.` : "";
+  return `(
+    ${p}type in ('refund','credit','admin_credit','admin_debit','partner_transfer_in','partner_transfer_out')
+    or (${p}type = 'debit' and not (${phoneFeeDebitRaw(alias)}))
+  )`;
+}
+
 export const PHONE_FEE_DEBIT_RAW = phoneFeeDebitRaw();
 export const RECOGNIZED_REVENUE_RAW = recognizedRevenueRaw();
 export const CARD_PAID_DID_DEBIT_RAW = cardPaidDidDebitRaw();
 export const WALLET_FUNDED_PHONE_DEBIT_RAW = walletFundedPhoneDebitRaw();
 export const SUCCESSFUL_TOPUP_RAW = successfulTopupRaw();
 export const CASH_IN_EVENT_RAW = cashInEventRaw();
+export const PROMO_ADMIN_CREDIT_RAW = promoAdminCreditRaw();
+export const WALLET_INFLOW_RAW = walletInflowRaw();
+export const LEDGER_ADJUSTMENT_RAW = ledgerAdjustmentRaw();

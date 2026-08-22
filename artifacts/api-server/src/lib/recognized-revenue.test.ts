@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   cardPaidDidDebitRaw,
   cashInEventRaw,
+  ledgerAdjustmentRaw,
   phoneFeeDebitRaw,
+  promoAdminCreditRaw,
   recognizedRevenueRaw,
   successfulTopupRaw,
   topupGrossExpr,
   topupGrossPaise,
   walletFundedPhoneDebitRaw,
+  walletInflowRaw,
 } from "./recognized-revenue.js";
 
 describe("recognized revenue SQL", () => {
@@ -30,5 +33,15 @@ describe("recognized revenue SQL", () => {
     expect(successfulTopupRaw()).toContain("topup");
     expect(cashInEventRaw()).toContain("paid by card");
     expect(topupGrossExpr()).toContain("0.18");
+  });
+
+  it("counts signup, admin, and partner credits as wallet inflows — not cash-in", () => {
+    expect(promoAdminCreditRaw()).toContain("free_credit");
+    expect(promoAdminCreditRaw()).toContain("admin_credit");
+    expect(walletInflowRaw()).toContain("free_credit");
+    expect(walletInflowRaw()).toContain("topup");
+    expect(cashInEventRaw()).not.toContain("free_credit");
+    expect(ledgerAdjustmentRaw()).toContain("admin_credit");
+    expect(ledgerAdjustmentRaw()).toContain("admin_debit");
   });
 });

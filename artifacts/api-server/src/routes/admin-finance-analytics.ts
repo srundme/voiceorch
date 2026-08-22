@@ -18,10 +18,13 @@ import { GST_RATE } from "../lib/money-inr.js";
 import {
   CARD_PAID_DID_DEBIT_RAW,
   CASH_IN_EVENT_RAW,
+  LEDGER_ADJUSTMENT_RAW,
   PHONE_FEE_DEBIT_RAW,
+  PROMO_ADMIN_CREDIT_RAW,
   RECOGNIZED_REVENUE_RAW,
   SUCCESSFUL_TOPUP_RAW,
   WALLET_FUNDED_PHONE_DEBIT_RAW,
+  WALLET_INFLOW_RAW,
   cardPaidDidDebitRaw,
   recognizedRevenueRaw,
   successfulTopupRaw,
@@ -92,6 +95,7 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
     const [
       [cashIn],
       [cardDidCash],
+      [otherCredits],
       [recognized],
       [phoneDebits],
       [adjustments],
@@ -123,6 +127,12 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
         .where(and(range, sql`${sql.raw(CARD_PAID_DID_DEBIT_RAW)}`)),
       db
         .select({
+          paise: sql<number>`coalesce(sum(${walletTransactionsTable.amountCents}), 0)`,
+        })
+        .from(walletTransactionsTable)
+        .where(and(range, sql`${sql.raw(PROMO_ADMIN_CREDIT_RAW)}`)),
+      db
+        .select({
           paise: sql<number>`coalesce(sum(abs(${walletTransactionsTable.amountCents})) filter (
             where ${walletTransactionsTable.type} = 'call_debit'
           ), 0)`,
@@ -140,11 +150,7 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
       db
         .select({
           paise: sql<number>`coalesce(sum(${walletTransactionsTable.amountCents}) filter (
-            where ${walletTransactionsTable.type} in ('refund','credit')
-            or (
-              ${walletTransactionsTable.type} = 'debit'
-              and not (${sql.raw(PHONE_FEE_DEBIT_RAW)})
-            )
+            where ${sql.raw(LEDGER_ADJUSTMENT_RAW)}
           ), 0)`,
         })
         .from(walletTransactionsTable)
@@ -203,6 +209,8 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
     ]);
 
     const cashInPaise = Number(cashIn?.paise ?? 0);
+    const otherCreditPaise = Number(otherCredits?.paise ?? 0);
+    const walletCreditedPaise = cashInPaise + otherCreditPaise;
     const gstOnCashInPaise = Math.round(cashInPaise * GST_RATE);
     const topupGrossCollectedPaise = topupGrossPaise(cashInPaise, GST_RATE);
     const cardDidCashPaise = Number(cardDidCash?.paise ?? 0);
@@ -237,10 +245,7 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
           paise: sql<number>`coalesce(sum(${walletTransactionsTable.amountCents}), 0)`,
         })
         .from(walletTransactionsTable)
-        .where(
-          sql`${walletTransactionsTable.type} in ('refund','credit')
-            or (${walletTransactionsTable.type} = 'debit' and not (${sql.raw(PHONE_FEE_DEBIT_RAW)}))`,
-        ),
+        .where(sql`${sql.raw(LEDGER_ADJUSTMENT_RAW)}`),
     ]);
 
     const expectedLiabilityPaise =
@@ -256,7 +261,9 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
       to: to.toISOString(),
       gstRate: GST_RATE,
       period: {
-        cashInWalletCreditPaise: cashInPaise,
+        cashInWalletCreditPaise: walletCreditedPaise,
+        paidTopupWalletPaise: cashInPaise,
+        otherCreditPaise,
         gstEstimatedPaise: gstOnCashInPaise,
         cashInTopupGrossPaise: topupGrossCollectedPaise,
         cashInCardDidPaise: cardDidCashPaise,
@@ -280,7 +287,7 @@ router.get("/admin/finance/audit-summary", async (req, res): Promise<void> => {
       },
       definitions: {
         cashIn: "Rupees received: GST-inclusive topups + card-paid voice/WhatsApp numbers. Wallet-paid DIDs are not new cash.",
-        cashInWalletCredit: "Successful topup/auto_topup wallet credits (pre-GST base)",
+        cashInWalletCredit: "All completed wallet inflows: paid topups + signup/free + admin + partner transfers. GST is not applied here.",
         cashCollectedEst: "Same as cash-in (GST on topups + card-paid DID fees)",
         recognizedUsage: "Absolute call_debit amounts (calls only)",
         recognizedRevenue: "call_debit + phone / WhatsApp number fees",
@@ -314,15 +321,14 @@ router.get("/admin/finance/ledger", async (req, res): Promise<void> => {
 
     if (tab === "cash_in") {
       conditions.push(sql`${sql.raw(CASH_IN_EVENT_RAW)}`);
+    } else if (tab === "wallet_credit") {
+      conditions.push(sql`${sql.raw(WALLET_INFLOW_RAW)}`);
     } else if (tab === "recognized") {
       conditions.push(sql`${sql.raw(RECOGNIZED_REVENUE_RAW)}`);
     } else if (tab === "phones") {
       conditions.push(sql`${sql.raw(PHONE_FEE_DEBIT_RAW)}`);
     } else if (tab === "adjustments") {
-      conditions.push(
-        sql`(${walletTransactionsTable.type} in ('refund','credit','free_credit')
-          or (${walletTransactionsTable.type} = 'debit' and not (${sql.raw(PHONE_FEE_DEBIT_RAW)})))`,
-      );
+      conditions.push(sql`${sql.raw(LEDGER_ADJUSTMENT_RAW)}`);
     }
 
     const where = and(...conditions);
@@ -384,8 +390,7 @@ router.get("/admin/finance/daily-close", async (req, res): Promise<void> => {
           where ${sql.raw(PHONE_FEE_DEBIT_RAW)}
         ), 0)::bigint as phone_debit_paise,
         coalesce(sum(amount_cents) filter (
-          where type in ('refund','credit','free_credit')
-            or (type = 'debit' and not (${sql.raw(PHONE_FEE_DEBIT_RAW)}))
+          where ${sql.raw(LEDGER_ADJUSTMENT_RAW)}
         ), 0)::bigint as adjustments_paise,
         count(*) filter (
           where ${sql.raw(SUCCESSFUL_TOPUP_RAW)}
@@ -858,8 +863,7 @@ router.get("/admin/finance/export.csv", async (req, res): Promise<void> => {
             where ${sql.raw(PHONE_FEE_DEBIT_RAW)}
           ), 0)::bigint as phone_debit_paise,
           coalesce(sum(amount_cents) filter (
-            where type in ('refund','credit','free_credit')
-              or (type = 'debit' and not (${sql.raw(PHONE_FEE_DEBIT_RAW)}))
+            where ${sql.raw(LEDGER_ADJUSTMENT_RAW)}
           ), 0)::bigint as adjustments_paise
         from wallet_transactions
         where created_at >= ${from} and created_at <= ${to}
