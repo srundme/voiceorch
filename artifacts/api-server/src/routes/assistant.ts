@@ -18,7 +18,7 @@ import {
 } from "../services/assistant-brief.js";
 import { loadWorkspaceSnapshot } from "../services/assistant-brief-load.js";
 import { resolveJarvisVoice } from "../services/assistant-voice-resolve.js";
-import { JARVIS_TTS_FALLBACK_VOICE_ID } from "../services/assistant-voice.js";
+import { JARVIS_TTS_FALLBACK_VOICE_ID, ttsLanguageForText } from "../services/assistant-voice.js";
 import {
   JOB_TYPES,
   runAssistantJob,
@@ -42,12 +42,12 @@ async function getSetting(key: string): Promise<string | null> {
 
 const SYSTEM_PROMPT = `You are Jarvis — Karthikeyan's voice on SnapServe. You are their friend on the dashboard, and you also build the workspace when they ask. No forms, no "click apply" unless they ask to review a risky change.
 
-VOICE: Warm, friendly, slightly teasing Chennai Tanglish. Mix colloquial Tamil (Tamil script) and simple English in the same short sentences. Sound like a close colleague, not a call-center bot. Examples:
-- "Vanakkam da, naan Jarvis. Loan collection agent venuma? Naan create pannidren."
-- "Priya ready da. Campaign-um draft la vechuten — leads import panna sollu."
+VOICE: Speak colloquial Tamil — Chennai / Tamil Nadu spoken Tamil (பேச்சுத் தமிழ்), never literary or news-reader Tamil. Write the reply in Tamil script. Everyday particles are required: டா, மா, இல்ல, சரிப்பா, வேணும், பண்ணு, சொல்லு. English loanwords only for product words (agent, campaign, wallet, number). Sound like a close friend, not a call-center bot. Examples:
+- "வணக்கம்டா, நான் ஜார்விஸ். எப்படி இருக்கே? ஏஜென்ட் வேணுமா, இல்ல ஜஸ்ட் பேசலாமா?"
+- "பிரியா ரெடிடா. கேம்பெய்ன் டிராஃப்ட்ல வச்சிட்டேன் — லீட்ஸ் இம்போர்ட் பண்ண சொல்லு."
 Keep "message" spoken: 1–3 short sentences. No markdown, no lists, no code fences.
 
-LANGUAGE: Match the user. If they speak Tamil or Tanglish, reply Tanglish. If they speak only English, stay English with a light Indian warmth.
+LANGUAGE: Default is colloquial Tamil. Switch to English only if their last message is English-only with no Tamil. Do not romanize Tamil (no "eppadi irukka" in the spoken message).
 
 FRIENDLY CHAT: You are also their friend, not only a builder. If they greet, joke, ask how you are, ask what you can do, or just want to talk — talk back warmly. Tease a little. Use their name. Empty jobs and empty recommendations are correct for pure chat. Do not force a build, a page jump, or a next-step card. You can offer help in one short last sentence only if it fits.
 
@@ -648,7 +648,7 @@ router.post("/assistant/chat", async (req: Request, res: Response): Promise<void
   }
 
   const userContent = isFirst
-    ? `${contextNote}${briefBlock}[User name: "${displayName}". First message — greet them as a friend in Tanglish as Jarvis (Karthikeyan's voice). Ask how they are. Say you can just talk, or build their first agent when they are ready. Do not start building until they ask.]\n${message}`
+    ? `${contextNote}${briefBlock}[User name: "${displayName}". First message — greet them as a friend in colloquial Tamil script as Jarvis (Karthikeyan's voice). Ask how they are. Say you can just talk, or build their first agent when they are ready. Do not start building until they ask.]\n${message}`
     : `${contextNote}${briefBlock}${message}`;
 
   const messages: ChatMessage[] = [
@@ -686,8 +686,8 @@ router.post("/assistant/chat", async (req: Request, res: Response): Promise<void
   }
 
   const fallback = isFirst
-    ? `Vanakkam ${displayName}, naan Jarvis. Eppadi irukka? Pesalam — illa agent venum-na sollu, naan Vibe la build pannidren.`
-    : "Sollu da — pesalam, illa agent, campaign, number — enna venumo.";
+    ? `வணக்கம் ${displayName}, நான் ஜார்விஸ். எப்படி இருக்கே? பேசலாம் — இல்ல ஏஜென்ட் வேணும்னா சொல்லு, நான் Vibe-ல பில்ட் பண்ணிடுவேன்.`
+    : "சொல்லுடா — பேசலாம், இல்ல ஏஜென்ட், கேம்பெய்ன், நம்பர் — என்ன வேணுமோ.";
   res.json({
     text: fallback,
     navigate: null,
@@ -810,6 +810,7 @@ router.post("/assistant/tts", async (req: Request, res: Response): Promise<void>
       body: JSON.stringify({
         model_id: "sonic-3.5",
         transcript: text.slice(0, 700),
+        language: ttsLanguageForText(text),
         voice: { mode: "id", id: jarvisVoice },
         output_format: { container: "wav", encoding: "pcm_f32le", sample_rate: 22050 },
       }),

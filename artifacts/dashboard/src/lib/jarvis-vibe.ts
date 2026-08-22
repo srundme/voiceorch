@@ -8,13 +8,14 @@ export function looksLikeVibeBuild(text: string): boolean {
   if (/(agent|bot).{0,40}(create|build|venum|pannu|setup)/.test(t)) return true;
   if (/(create|build|pannu|venum).{0,40}(agent|bot)/.test(t)) return true;
   if (/\b(new agent|first agent|voice agent)\b/.test(t)) return true;
+  if (/(ஏஜென்ட்|போட்).{0,40}(பண்ணு|கிரியேட்|வேணும்)/.test(text)) return true;
   return false;
 }
 
 export function firstVibeKickoff(name: string): string {
   const n = name.trim();
   const who = n ? ` User name: "${n}".` : "";
-  return `[First open after signup.${who} You are Jarvis. Start official Vibe PHASE core now. Greet them in Tanglish and ask what the voice agent should do.]`;
+  return `[First open after signup.${who} You are Jarvis. Start official Vibe PHASE core now. Greet them in colloquial Tamil script (பேச்சுத் தமிழ்) and ask what the voice agent should do.]`;
 }
 
 export function shouldAutoOpenJarvis(search: string, sessionFlag: string | null): boolean {

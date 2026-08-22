@@ -14,3 +14,10 @@ export function looksLikeKarthikeyan(name: string): boolean {
 export function isCartesiaVoiceId(id: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id.trim());
 }
+
+/** Cartesia language tag so Tamil script is spoken as Tamil, not English phonemes. */
+export function ttsLanguageForText(text: string): "ta" | "en" {
+  const tamil = (text.match(/[\u0B80-\u0BFF]/g) ?? []).length;
+  const latin = (text.match(/[A-Za-z]/g) ?? []).length;
+  return tamil >= latin ? "ta" : "en";
+}

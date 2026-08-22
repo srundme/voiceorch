@@ -12,9 +12,10 @@ export default function JarvisPage() {
       />
 
       <Callout variant="tip">
-        The gold orb on Home is Jarvis — Karthikeyan's listed Cartesia voice, speaking friendly
-        Tanglish. After first signup he opens on Home automatically. You can just talk. On the
-        agent builder he docks as a right-edge tab so he does not cover controls.
+        The gold orb on Home is Jarvis — Karthikeyan's listed Cartesia voice, speaking colloquial
+        Tamil (பேச்சுத் தமிழ்), not literary Tamil. After first signup he opens on Home
+        automatically. You can just talk. On the agent builder he docks as a right-edge tab so he
+        does not cover controls.
       </Callout>
 
       <h2 id="can-do">What Jarvis can do</h2>
@@ -44,9 +45,9 @@ export default function JarvisPage() {
 
       <h2 id="talk">Talk to Jarvis</h2>
       <p>
-        Open the orb (or let him open after signup). He greets you as a friend. Say{" "}
-        <em>eppadi irukka</em> and he chats. Say <em>Priya collection agent create pannu</em> and
-        he walks Vibe. Chrome or Edge for voice; typing works everywhere.
+        Open the orb (or let him open after signup). He greets you in colloquial Tamil. Say{" "}
+        <em>எப்படி இருக்கே</em> and he chats. Say <em>பிரியா கலெக்ஷன் ஏஜென்ட் கிரியேட் பண்ணு</em>{" "}
+        and he walks Vibe. Chrome or Edge for voice; typing works everywhere.
       </p>
 
       <h2 id="recommend">What it recommends</h2>

@@ -18,9 +18,9 @@ export default function PlatformConceptsPage() {
 
       <h2 id="jarvis">Jarvis</h2>
       <p>
-        In-app support on the dashboard. After first signup Jarvis opens on Home and runs the same
-        Vibe Build as the Vibe page. Speak or type; he also reads agents, numbers, campaigns, and
-        wallet. <Link href="/docs/jarvis">Jarvis guide</Link>.
+        In-app support on the dashboard. After first signup Jarvis opens on Home, speaks colloquial
+        Tamil, and runs the same Vibe Build as the Vibe page. Speak or type; he also reads agents,
+        numbers, campaigns, and wallet. <Link href="/docs/jarvis">Jarvis guide</Link>.
       </p>
 
       <h2 id="agent">Agent</h2>

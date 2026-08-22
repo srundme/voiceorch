@@ -10,12 +10,12 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
-      <h2 id="2026-08-22-jarvis">2026-08-22 — Jarvis: Karthikeyan voice, Tanglish, creates as you talk</h2>
+      <h2 id="2026-08-22-jarvis">2026-08-22 — Jarvis: Karthikeyan voice, colloquial Tamil, creates as you talk</h2>
       <ul>
         <li>
           Jarvis is a dark HUD on the dashboard. It speaks with the admin-listed{" "}
-          <strong>Karthikeyan</strong> Cartesia voice, in friendly colloquial Tamil + English.
-          After first signup he opens on Home as a friend (Tanglish chat), then runs the same
+          <strong>Karthikeyan</strong> Cartesia voice, in colloquial Tamil (பேச்சுத் தமிழ்).
+          After first signup he opens on Home as a friend in colloquial Tamil, then runs the same
           Vibe Build phases as <Link href="/docs/vibe">Vibe</Link> when you ask to create an agent.
         </li>
         <li>

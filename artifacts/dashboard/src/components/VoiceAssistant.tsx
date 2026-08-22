@@ -80,7 +80,7 @@ function newRecognition(): ISpeechRecognition | null {
   const Ctor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
   if (!Ctor) return null;
   const r = new Ctor();
-  r.lang = "en-IN";
+  r.lang = "ta-IN";
   r.continuous = false;
   r.interimResults = true;
   return r;
@@ -645,7 +645,7 @@ export function VoiceAssistant() {
             <JarvisOrb phase={phase} />
           </button>
           <p className="mb-2 px-6 text-center text-[11px] text-white/45">
-            {vibeStatus || "Karthikeyan voice · friend + Vibe Build"}
+            {vibeStatus || "Karthikeyan voice · பேச்சுத் தமிழ்"}
           </p>
 
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-2" style={{ scrollbarWidth: "none" }}>
@@ -749,7 +749,7 @@ export function VoiceAssistant() {
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={phase === "listening" ? "Listening…" : "Eppadi irukka? Illa agent create pannu…"}
+                placeholder={phase === "listening" ? "கேட்டுக்கிட்டு இருக்கேன்…" : "எப்படி இருக்கே? இல்ல ஏஜென்ட் கிரியேட் பண்ணு…"}
                 disabled={isBusy}
                 className="h-10 flex-1 rounded-full border border-white/10 bg-white/5 px-4 text-sm text-white outline-none placeholder:text-white/30 focus:border-amber-200/40 disabled:opacity-60"
               />

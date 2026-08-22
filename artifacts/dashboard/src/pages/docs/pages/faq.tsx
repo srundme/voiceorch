@@ -8,7 +8,7 @@ const FAQS: { q: string; a: ReactNode }[] = [
     a: (
       <>
         Tap the gold orb — that is <Link href="/docs/jarvis">Jarvis</Link>, speaking with
-        Karthikeyan's voice in Tanglish. Just talk: he creates the agent, campaign, or assignment.
+        Karthikeyan's voice in colloquial Tamil. Just talk: he creates the agent, campaign, or assignment.
       </>
     ),
   },

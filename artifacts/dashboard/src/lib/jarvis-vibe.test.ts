@@ -6,6 +6,7 @@ describe("looksLikeVibeBuild", () => {
     expect(looksLikeVibeBuild("Priya collection agent create pannu")).toBe(true);
     expect(looksLikeVibeBuild("Build a new inbound agent")).toBe(true);
     expect(looksLikeVibeBuild("I need a voice agent")).toBe(true);
+    expect(looksLikeVibeBuild("பிரியா கலெக்ஷன் ஏஜென்ட் கிரியேட் பண்ணு")).toBe(true);
   });
 
   it("leaves support questions and friendly chat on assistant chat", () => {
