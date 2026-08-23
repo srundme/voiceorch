@@ -7,7 +7,7 @@ export default function WhatsAppDocsPage() {
       <PageHeader
         breadcrumb="Connect & channels"
         title="WhatsApp"
-        updated="22 Aug 2026"
+        updated="23 Aug 2026"
         description="Meta is enough to send templates. Vobiz is only if SnapServe sells you the number or you want WhatsApp calling."
       />
 
@@ -50,6 +50,12 @@ export default function WhatsAppDocsPage() {
         + WABA). Assigning the DID to an agent does <em>not</em> turn WhatsApp on. We do not
         create a Vobiz channel on this path unless you later enable WhatsApp calling.
       </p>
+      <Callout variant="warn" title="Meta OTP on a SnapServe number">
+        Click <strong>Start capture</strong> and wait for <strong>listening…</strong> before
+        Meta rings. In Meta choose <strong>Voice call</strong> — SMS will never show on this
+        page (the DID is a voice line). The 6-digit code appears after the call. If you
+        already verified the number on your WABA, skip OTP and paste Phone Number ID + token.
+      </Callout>
 
       <h2 id="text">Text chatbot</h2>
       <p>

@@ -22,7 +22,9 @@ export default function ConnectionsPage() {
       <h2 id="cards">What lives here</h2>
       <ul>
         <li>
-          <strong>WhatsApp</strong> — own WABA / Vobiz channel or webhook-only BSP.{" "}
+          <strong>WhatsApp</strong> — Meta Cloud API (WABA + Phone Number ID + token) is
+          enough to send templates. Vobiz only if we sell you the WhatsApp number or you
+          want WhatsApp calling. Webhook-only BSP still works.{" "}
           <Link href="/docs/whatsapp">WhatsApp guide</Link>.
         </li>
         <li>

@@ -364,7 +364,7 @@ export default function VoiceathonPlaybook() {
             {[
               {
                 title: "REST API", icon: "⚡",
-                items: ["API key: sk_live_••••••••", "Base URL: https://api.snapserve.ai", "Full CRUD on agents, calls, campaigns", "Webhook events with HMAC signatures"],
+                items: ["API key: sk_live_••••••••", "Base URL: https://app.snapserve.ai/api", "Full CRUD on agents, calls, campaigns", "Webhook events with HMAC signatures"],
                 color: "#f97316",
               },
               {
@@ -587,7 +587,7 @@ export default function VoiceathonPlaybook() {
                 step: 1,
                 title: "Create your Agent",
                 desc: "Define who the agent is, what language it speaks, and which providers to use.",
-                code: `curl -X POST https://api.snapserve.ai/api/agents \\
+                code: `curl -X POST https://app.snapserve.ai/api/agents \\
   -H "Authorization: Bearer sk_live_YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -606,7 +606,7 @@ export default function VoiceathonPlaybook() {
                 step: 2,
                 title: "Make the Call",
                 desc: "Trigger a live outbound call using the agent ID from Step 1.",
-                code: `curl -X POST https://api.snapserve.ai/api/calls/outbound \\
+                code: `curl -X POST https://app.snapserve.ai/api/calls/outbound \\
   -H "Authorization: Bearer sk_live_YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -676,7 +676,7 @@ export default function VoiceathonPlaybook() {
             <span style={{ color: "#6b7280", fontSize: 14 }}>Reference</span>
           </div>
           <h2>API Reference</h2>
-          <p>The essential endpoints. All routes are under <code className="mono" style={{ background: "rgba(255,255,255,0.08)", padding: "2px 6px", borderRadius: 4, color: "#93c5fd" }}>https://api.snapserve.ai/api</code> with Bearer auth.</p>
+          <p>The essential endpoints. All routes are under <code className="mono" style={{ background: "rgba(255,255,255,0.08)", padding: "2px 6px", borderRadius: 4, color: "#93c5fd" }}>https://app.snapserve.ai/api</code> with Bearer auth.</p>
 
           <div style={{ overflow: "auto", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", marginTop: 20 }}>
             <table>
@@ -725,7 +725,7 @@ export default function VoiceathonPlaybook() {
           <h3 style={{ marginBottom: 12 }}>Webhook Lead Injection — Instant Calls from Anywhere</h3>
           <p>Every campaign has a unique URL. POST a JSON body to it — agent calls the number within seconds.</p>
           <div className="code-block">{`# The campaign's webhookToken is returned when you create it
-POST https://api.snapserve.ai/api/webhooks/campaign/{webhookToken}/lead
+POST https://app.snapserve.ai/api/webhooks/lead/{webhookToken}
 
 {
   "phone": "+919876543210",

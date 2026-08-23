@@ -10,6 +10,21 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-23-base-url">2026-08-23 — Published hosts (API + docs)</h2>
+      <ul>
+        <li>
+          The only public API base is <code>https://app.snapserve.ai/api</code>.{" "}
+          <code>api.snapserve.ai</code> is not a SnapServe API host (it 404s).
+        </li>
+        <li>
+          Docs live at <code>https://app.snapserve.ai/docs</code>, not{" "}
+          <code>docs.snapserve.ai</code>.
+        </li>
+        <li>
+          Dashboard → API Keys curl sample now uses the live base URL.
+        </li>
+      </ul>
+
       <h2 id="2026-08-22-jarvis">2026-08-22 — Jarvis: Karthikeyan voice, colloquial Tamil, creates as you talk</h2>
       <ul>
         <li>

@@ -4,6 +4,20 @@ import { PageHeader } from "../DocsUi";
 
 const FAQS: { q: string; a: ReactNode }[] = [
   {
+    q: "What is the app URL and API base URL?",
+    a: (
+      <>
+        App: <code>https://app.snapserve.ai</code>. Docs:{" "}
+        <code>https://app.snapserve.ai/docs</code>. REST API:{" "}
+        <code>https://app.snapserve.ai/api</code> with{" "}
+        <code>Authorization: Bearer sk_live_…</code>.{" "}
+        <code>api.snapserve.ai</code> and <code>docs.snapserve.ai</code> are not
+        SnapServe hosts — they 404. Guide:{" "}
+        <Link href="/docs/authentication">Authentication</Link>.
+      </>
+    ),
+  },
+  {
     q: "Where is support on the dashboard?",
     a: (
       <>
@@ -25,8 +39,10 @@ const FAQS: { q: string; a: ReactNode }[] = [
     q: "I assigned a call number — why isn’t WhatsApp working?",
     a: (
       <>
-        A voice DID is not WhatsApp until you connect it on Connections → WhatsApp (path 2). Personal
-        WhatsApp cannot share that number. Guide: <Link href="/docs/whatsapp">WhatsApp</Link>.
+        A voice DID is not WhatsApp until you connect it on Connections → WhatsApp. If the
+        number is already on Meta, paste WABA ID, Phone Number ID, and a System User token
+        — you do not need a Vobiz channel just to send templates. Personal WhatsApp cannot
+        share that number. Guide: <Link href="/docs/whatsapp">WhatsApp</Link>.
       </>
     ),
   },
@@ -45,8 +61,22 @@ const FAQS: { q: string; a: ReactNode }[] = [
     q: "Do I create the Vobiz channel in the Vobiz console?",
     a: (
       <>
-        No. SnapServe creates it when you finish the WhatsApp wizard. Paste a Vobiz channel ID only
-        if you already have one. <Link href="/docs/whatsapp">WhatsApp</Link>.
+        Usually no. If the number is already on Meta Cloud API, SnapServe talks to Meta
+        only — skip Vobiz. Vobiz is used when SnapServe sells you the WhatsApp number or
+        you turn on WhatsApp calling. <Link href="/docs/whatsapp">WhatsApp</Link>.
+      </>
+    ),
+  },
+  {
+    q: "I pressed Start capture in Meta OTP but the code never appears",
+    a: (
+      <>
+        Click <strong>Start capture</strong> and wait for <strong>listening…</strong>, then
+        in Meta choose <strong>Voice call</strong> — not SMS (a SnapServe DID cannot
+        receive SMS). The spoken 6-digit code shows on that page after Meta rings the
+        number. If a player appears, listen and type the digits into Meta. If the number
+        is already verified on your WABA, skip OTP and paste Phone Number ID + token on
+        Connections. <Link href="/docs/whatsapp">WhatsApp</Link>.
       </>
     ),
   },
@@ -64,9 +94,11 @@ const FAQS: { q: string; a: ReactNode }[] = [
     q: "Why did my outbound call fail with 401?",
     a: (
       <>
-        Missing or wrong key. Use <code>Authorization: Bearer sk_live_…</code> from{" "}
-        <Link href="/docs/authentication">Authentication</Link>. Session JWTs are for the browser
-        dashboard only.
+        Missing or wrong key, or the request went to the wrong host. Use{" "}
+        <code>https://app.snapserve.ai/api</code> with{" "}
+        <code>Authorization: Bearer sk_live_…</code> from{" "}
+        <Link href="/docs/authentication">Authentication</Link>. Session JWTs are for the
+        browser dashboard only. <code>api.snapserve.ai</code> is not the API (it 404s).
       </>
     ),
   },

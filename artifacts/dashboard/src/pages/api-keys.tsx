@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { customFetch } from "@workspace/api-client-react";
+import { SNAPSERVE_API_BASE } from "@/lib/public-urls";
 
 interface ApiKey {
   id: number;
@@ -178,9 +179,13 @@ export default function ApiKeysPage() {
         <p className="text-sm font-semibold text-foreground">Using your API key</p>
         <p className="text-xs text-muted-foreground/60">Authenticate requests by passing the key in the Authorization header:</p>
         <pre className="text-xs bg-elevated border border-border/50 rounded-xl p-4 overflow-auto font-mono text-muted-foreground/70 leading-relaxed">
-{`curl https://api.snapserve.ai/api/agents \\
+{`curl ${SNAPSERVE_API_BASE}/agents \\
   -H "Authorization: Bearer sk_live_your_key_here"`}
         </pre>
+        <p className="text-[11px] text-muted-foreground/50">
+          Base URL is <code className="text-foreground/70">{SNAPSERVE_API_BASE}</code>. Do not use{" "}
+          <code>api.snapserve.ai</code> — that host is not the SnapServe API.
+        </p>
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

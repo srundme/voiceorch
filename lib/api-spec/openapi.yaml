@@ -5,8 +5,10 @@ info:
   version: 0.1.0
   description: SnapServe - AI Voice Agent Orchestration Platform API
 servers:
+  - url: https://app.snapserve.ai/api
+    description: Production
   - url: /api
-    description: Base API path
+    description: Same-origin (dashboard)
 tags:
   - name: health
     description: Health operations

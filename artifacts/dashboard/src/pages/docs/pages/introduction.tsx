@@ -16,7 +16,7 @@ export default function IntroductionPage() {
       <PageHeader
         breadcrumb="Get started"
         title="SnapServe documentation"
-        updated="18 Aug 2026"
+        updated="23 Aug 2026"
         description="Build Indic-first AI voice agents for phone, WhatsApp, webcall, and meetings. Configure in the dashboard, then drive calls from your own product with the REST API."
       />
 
@@ -25,6 +25,12 @@ export default function IntroductionPage() {
         leads, CRM, and business logic. These docs cover the dashboard product and the public API
         on <code>https://app.snapserve.ai/api</code>.
       </p>
+
+      <Callout variant="warn" title="Use these hosts — nothing else">
+        App: <code>https://app.snapserve.ai</code>. Docs: <code>https://app.snapserve.ai/docs</code>.
+        API: <code>https://app.snapserve.ai/api</code>. There is no{" "}
+        <code>api.snapserve.ai</code> or <code>docs.snapserve.ai</code> — those hostnames 404.
+      </Callout>
 
       <h2 id="start">Start here</h2>
       <div className="not-prose grid grid-cols-1 sm:grid-cols-2 gap-3 my-6">

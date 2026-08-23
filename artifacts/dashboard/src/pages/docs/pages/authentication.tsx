@@ -27,7 +27,8 @@ export default function AuthenticationPage() {
           <a href="https://app.snapserve.ai" target="_blank" rel="noreferrer">
             app.snapserve.ai
           </a>
-          .
+          {" "}
+          (the product lives here — not <code>api.snapserve.ai</code>).
         </li>
         <li>
           Open{" "}
@@ -45,6 +46,12 @@ export default function AuthenticationPage() {
       <Callout variant="warn" title="Never expose sk_live_ in browsers">
         API keys authenticate as your full account. Use them only from your backend, workers, or
         secure server environments — not React, mobile apps, or public clients.
+      </Callout>
+
+      <Callout variant="warn" title="API base URL">
+        Use <code>https://app.snapserve.ai/api</code>. Requests to{" "}
+        <code>https://api.snapserve.ai</code> return 404. Docs are at{" "}
+        <code>https://app.snapserve.ai/docs</code>, not <code>docs.snapserve.ai</code>.
       </Callout>
 
       <h2 id="bearer-header">Authorization header</h2>
