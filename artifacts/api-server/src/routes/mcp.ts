@@ -67,6 +67,30 @@ async function requireMcpAuth(req: Request, res: Response, next: NextFunction): 
   next();
 }
 
+/**
+ * The global dashboard CSP allows `form-action 'self'` only, which makes Chrome
+ * refuse the cross-origin 302 that completes the OAuth handshake. Narrow the
+ * policy for this page and allow the client's already-validated redirect origin.
+ */
+function setAuthorizePageCsp(res: Response, redirectUri: string): void {
+  let formAction = "'self'";
+  try {
+    formAction += ` ${new URL(redirectUri).origin}`;
+  } catch { /* unparseable redirect_uri never reaches here — keep 'self' */ }
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'none'",
+      "base-uri 'none'",
+      "object-src 'none'",
+      "script-src 'none'",
+      "style-src 'unsafe-inline'",
+      `form-action ${formAction}`,
+      "frame-ancestors 'none'",
+    ].join("; "),
+  );
+}
+
 function authorizePageHtml(opts: {
   error?: string;
   stateToken: string;
@@ -230,6 +254,7 @@ router.get("/mcp/oauth/authorize", async (req, res): Promise<void> => {
   });
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
+  setAuthorizePageCsp(res, redirectUri);
   res.send(authorizePageHtml({ stateToken, clientId, redirectUri }));
 });
 
@@ -244,6 +269,7 @@ router.post("/mcp/oauth/authorize", async (req, res): Promise<void> => {
   const stateToken = body.state_token!;
   const renderError = (error: string) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
+    setAuthorizePageCsp(res, payload["redirect_uri"] ?? "");
     res.status(400).send(
       authorizePageHtml({
         error,
