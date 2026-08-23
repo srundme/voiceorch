@@ -175,8 +175,13 @@ export function isSarvamVoiceCompatible(voice: string | null | undefined, ttsMod
   return true;
 }
 
+/** Default Cartesia voice for new SnapServe agents (listed as Gayathri). */
+export const DEFAULT_CARTESIA_VOICE_ID = "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee";
+export const DEFAULT_CARTESIA_VOICE_NAME = "Gayathri";
+
 export const TTS_VOICES: Record<string, { value: string; label: string }[] | null> = {
   cartesia: [
+    { value: DEFAULT_CARTESIA_VOICE_ID, label: DEFAULT_CARTESIA_VOICE_NAME },
     { value: "a0e99841-438c-4a64-b679-ae501e7d6091", label: "Barbershop Man" },
     { value: "79a125e8-cd45-4c13-8a67-188112f4dd22", label: "British Narration Lady" },
     { value: "b7d50908-b17c-442d-ad8d-810c63997ed9", label: "Calm Lady" },

@@ -217,6 +217,21 @@ router.post("/agents", requireAuth, clientContext, async (req, res): Promise<voi
     }
   }
 
+  // New Cartesia agents default to Gayathri (not the old Customer Support Lady).
+  // INSERT only — existing agents keep whatever voice they already have.
+  const DEFAULT_CARTESIA_VOICE_ID = "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee";
+  const DEFAULT_CARTESIA_VOICE_NAME = "Gayathri";
+  const LEGACY_CARTESIA_SUPPORT_LADY_ID = "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478";
+  if (String(insertData["ttsProvider"] ?? "").toLowerCase() === "cartesia") {
+    const voice = String(insertData["ttsVoice"] ?? "").trim();
+    if (!voice || voice === LEGACY_CARTESIA_SUPPORT_LADY_ID) {
+      insertData["ttsVoice"] = DEFAULT_CARTESIA_VOICE_ID;
+      insertData["ttsVoiceName"] = DEFAULT_CARTESIA_VOICE_NAME;
+    } else if (voice === DEFAULT_CARTESIA_VOICE_ID && !insertData["ttsVoiceName"]) {
+      insertData["ttsVoiceName"] = DEFAULT_CARTESIA_VOICE_NAME;
+    }
+  }
+
   // Apply new-agent defaults for the four settings that must be ON by default.
   // These only fire on the INSERT path (never on PATCH).
   if (insertData["backchannelingEnabled"] == null) insertData["backchannelingEnabled"] = true;

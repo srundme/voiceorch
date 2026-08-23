@@ -100,6 +100,7 @@ import {
   LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, asrModelsForPicker, SARVAM_PRODUCT_ASR_MODEL,
   LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
+  DEFAULT_CARTESIA_VOICE_ID, DEFAULT_CARTESIA_VOICE_NAME,
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage, shouldClearVoiceForLanguage,
   getSarvamTtsVoices, isSarvamVoiceCompatible,
   GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS, VOICE_STACK_OPTIONS,
@@ -6912,7 +6913,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
     defaultValues: {
       name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
       llmProvider: "sarvam", llmModel: "sarvam-105b-conversations", ttsProvider: "cartesia",
-      ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478", ttsModel: "sonic-3.5", telephonyProvider: "vobiz",
+      ttsVoice: DEFAULT_CARTESIA_VOICE_ID, ttsModel: "sonic-3.5", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 480,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-IN", asrLanguage: "", backchannelingEnabled: true,
@@ -7926,7 +7927,8 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     llmModel: "sarvam-105b-conversations",
     ttsProvider: "cartesia",
     ttsModel: "sonic-3.5",
-    ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478",
+    ttsVoice: DEFAULT_CARTESIA_VOICE_ID,
+    ttsVoiceName: DEFAULT_CARTESIA_VOICE_NAME,
     // Attendance capacity is fixed by agent type:
     // phone+meet → can join Meet (paste-link or booking); phone-only → book only, never join.
     agentConfig: {
