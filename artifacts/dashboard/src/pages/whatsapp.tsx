@@ -1316,7 +1316,7 @@ function NativeSection({
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium">Same SnapServe call number I already bought <span className="text-emerald-600 dark:text-emerald-400 font-semibold">₹0</span></p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Assigning a DID to the agent does not enable WhatsApp by itself. Pick that number here. Voice calls keep working. Verification OTP is captured for you because the DID routes to the agent.
+                      Assigning a DID to the agent does not enable WhatsApp by itself. Pick that number here. Voice calls keep working. Start capture first, then in Meta choose Voice call (not SMS) — we answer that call and show the OTP here.
                     </p>
                     {numberChoice === "voice" && (
                       <ByonPanel

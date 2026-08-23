@@ -1,10 +1,11 @@
 /**
  * BYON panel — WhatsApp-enable an existing SnapServe voice number.
  *
- * The tricky part: Meta/VoBiz verify number ownership with an OTP call or SMS
+ * The tricky part: Meta/VoBiz verify number ownership with a voice OTP call
  * to the number itself — which the owner can't answer (it's a virtual DID that
- * routes to their AI agent). While "capture" is armed, the platform answers
- * that call with a recorder + transcription and surfaces the spoken code here.
+ * routes to their AI agent). SMS will never arrive on a voice DID. While
+ * "capture" is armed, the platform answers that call with a recorder, we
+ * transcribe it, and the spoken code appears here.
  */
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -193,15 +194,20 @@ export function ByonPanel({
               </div>
             ) : (
               <p className="text-[11px] text-muted-foreground">
-                1. Click <strong>Start capture</strong>. 2. Trigger the OTP — in Meta Business Manager add this number to
-                your WABA and choose <strong>Voice call</strong> verification (or use <strong>VoBiz OTP call</strong>).
-                3. The call is answered &amp; transcribed automatically; the 6-digit code shows up here within ~1 minute.
+                1. Click <strong>Start capture</strong> and wait until it says <strong>listening…</strong>.
+                2. In Meta, add this number and choose <strong>Voice call</strong> — SMS will never appear here
+                (this is a voice line, not a mobile SIM). Or use <strong>VoBiz OTP call</strong>.
+                3. The 6-digit code shows up here within about a minute after Meta rings the number.
               </p>
             )}
 
             {verification?.hasRecording && !verification?.otpCode && (
               <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">Transcription didn't find a code — listen yourself:</p>
+                {verification.transcript ? (
+                  <p className="text-[11px] text-muted-foreground">We heard the call but could not pick a 6-digit code — listen and type it into Meta:</p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">Call recorded — reading the spoken code… if it stays blank, play the audio and type the digits into Meta.</p>
+                )}
                 <audio controls className="w-full h-8" src={`${API}/whatsapp/byon/recording?phoneNumberId=${voiceNumberId}`} />
                 {verification.transcript && (
                   <p className="text-[11px] text-muted-foreground italic">Heard: “{verification.transcript}”</p>
