@@ -11,7 +11,9 @@ import { SnapServe } from "@snapserveai/sdk";
 import { createSnapServeMcpServer } from "@snapserveai/mcp";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { logger } from "../lib/logger.js";
+import { describeApiKeyShapeError } from "../services/mcp-oauth-helpers.js";
 import {
+  checkClientRedirect,
   exchangeAuthorizationCode,
   issueAuthorizationCode,
   mcpResourceUrl,
@@ -110,6 +112,38 @@ function authorizePageHtml(opts: {
 </html>`;
 }
 
+function staleLinkPageHtml(reason: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Connect link expired — SnapServe</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; background:#0f172a; color:#e2e8f0; margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+    .card { width:100%; max-width:420px; background:#1e293b; border:1px solid #334155; border-radius:16px; padding:28px; box-shadow:0 20px 40px rgba(0,0,0,.35); }
+    h1 { font-size:1.25rem; margin:0 0 8px; }
+    p { color:#94a3b8; font-size:.925rem; line-height:1.45; margin:0 0 12px; }
+    ol { color:#94a3b8; font-size:.9rem; line-height:1.6; padding-left:20px; margin:0 0 8px; }
+    a { color:#fdba74; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Connect link expired</h1>
+    <p>${escapeHtml(reason)}</p>
+    <p>Start again from Claude so it can issue a fresh link:</p>
+    <ol>
+      <li>Open Claude → Settings → Connectors</li>
+      <li>Find <strong>snapserve</strong> and click <strong>Connect</strong></li>
+      <li>Paste your <code>sk_live_…</code> key on the page Claude opens</li>
+    </ol>
+    <p>Need a key? <a href="https://app.snapserve.ai" target="_blank" rel="noreferrer">Dashboard → API Keys</a>. Setup guide: <a href="https://app.snapserve.ai/docs/sdks#mcp" target="_blank" rel="noreferrer">docs</a>.</p>
+  </div>
+</body>
+</html>`;
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -156,7 +190,7 @@ router.post("/mcp/oauth/register", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/mcp/oauth/authorize", (req, res): void => {
+router.get("/mcp/oauth/authorize", async (req, res): Promise<void> => {
   const clientId = String(req.query["client_id"] ?? "");
   const redirectUri = String(req.query["redirect_uri"] ?? "");
   const state = String(req.query["state"] ?? "");
@@ -170,6 +204,20 @@ router.get("/mcp/oauth/authorize", (req, res): void => {
   }
   if (responseType !== "code") {
     res.status(400).send("Only response_type=code is supported");
+    return;
+  }
+
+  const clientCheck = await checkClientRedirect(clientId, redirectUri);
+  if (clientCheck !== "ok") {
+    logger.warn({ clientId, redirectUri, clientCheck }, "MCP OAuth authorize link rejected");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.status(400).send(
+      staleLinkPageHtml(
+        clientCheck === "unknown_client"
+          ? "This connect link is no longer valid — Claude registers a new one each time it connects."
+          : "This connect link points somewhere we do not recognise.",
+      ),
+    );
     return;
   }
 
@@ -206,7 +254,14 @@ router.post("/mcp/oauth/authorize", async (req, res): Promise<void> => {
     );
   };
 
-  const validated = await validateApiKeyForOauth(String(body.api_key ?? ""));
+  const rawKey = String(body.api_key ?? "");
+  const shapeError = describeApiKeyShapeError(rawKey);
+  if (shapeError) {
+    renderError(shapeError);
+    return;
+  }
+
+  const validated = await validateApiKeyForOauth(rawKey);
   if (!validated) {
     renderError("Invalid or revoked API key. Create one in Dashboard → API Keys.");
     return;
