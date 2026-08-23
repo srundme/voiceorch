@@ -6,10 +6,11 @@
  */
 import { Router, type IRouter, type Response, type Request } from "express";
 import { eq, desc } from "drizzle-orm";
-import { db, callsTable, callRecordingsTable, agentsTable } from "@workspace/db";
+import { db, callsTable, callRecordingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
 import { verifyRecordingShareToken } from "../services/recording-share.js";
+import { canAccessWorkspaceCall } from "../services/workspace-scope.js";
 
 const router: IRouter = Router();
 
@@ -103,19 +104,9 @@ router.get("/storage/recordings/:callId", requireAuth, clientContext, async (req
     res.status(404).json({ error: "Recording not found" });
     return;
   }
-  if (call.userId && call.userId !== clerkId) {
+  if (!clerkId || !(await canAccessWorkspaceCall(clerkId, call))) {
     res.status(404).json({ error: "Recording not found" });
     return;
-  }
-  if (!call.userId) {
-    const [agent] = await db
-      .select({ userId: agentsTable.userId })
-      .from(agentsTable)
-      .where(eq(agentsTable.id, call.agentId));
-    if (agent?.userId && agent.userId !== clerkId) {
-      res.status(404).json({ error: "Recording not found" });
-      return;
-    }
   }
 
   const rec = await loadRecordingAudio(callId);

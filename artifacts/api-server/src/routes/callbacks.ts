@@ -10,6 +10,7 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
 import { db, scheduledCallbacksTable, agentsTable } from "@workspace/db";
 import { eq, and, desc, sql, or, inArray } from "drizzle-orm";
+import { resolveWorkspaceScope } from "../services/workspace-scope.js";
 
 const router: IRouter = Router();
 
@@ -24,10 +25,11 @@ router.get("/callbacks", requireAuth, clientContext, async (req, res): Promise<v
   const page   = Math.max(0, parseInt(String(req.query["page"] ?? "0"), 10) || 0);
   const limit  = Math.min(100, Math.max(1, parseInt(String(req.query["limit"] ?? "50"), 10) || 50));
 
+  const scope = await resolveWorkspaceScope(userId);
   const agentIds = await db
     .select({ id: agentsTable.id })
     .from(agentsTable)
-    .where(eq(agentsTable.userId, userId));
+    .where(inArray(agentsTable.userId, scope.userIds));
   const ids = agentIds.map(a => a.id);
   if (ids.length === 0) { res.json({ items: [], total: 0, page, limit }); return; }
 
@@ -129,7 +131,11 @@ router.delete("/callbacks/:id", requireAuth, clientContext, async (req, res): Pr
     .from(agentsTable)
     .where(eq(agentsTable.id, cb.agentId));
 
-  if (agent?.userId !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
+  const scope = await resolveWorkspaceScope(userId);
+  if (!agent?.userId || !scope.userIds.includes(agent.userId) || !scope.canWrite) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   if (cb.status !== "pending") { res.status(400).json({ error: "Only pending callbacks can be cancelled" }); return; }
 
   await db
@@ -167,7 +173,11 @@ router.patch("/callbacks/:id", requireAuth, clientContext, async (req, res): Pro
     .from(agentsTable)
     .where(eq(agentsTable.id, cb.agentId));
 
-  if (agent?.userId !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
+  const scope = await resolveWorkspaceScope(userId);
+  if (!agent?.userId || !scope.userIds.includes(agent.userId) || !scope.canWrite) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
 
   await db
     .update(scheduledCallbacksTable)
@@ -183,10 +193,11 @@ router.get("/callbacks/stats", requireAuth, clientContext, async (req, res): Pro
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
+  const scope = await resolveWorkspaceScope(userId);
   const agentIds = await db
     .select({ id: agentsTable.id })
     .from(agentsTable)
-    .where(eq(agentsTable.userId, userId));
+    .where(inArray(agentsTable.userId, scope.userIds));
   const ids = agentIds.map(a => a.id);
   if (ids.length === 0) {
     res.json({ pendingCallbacks: 0, pendingRedials: 0, pendingNetworkDrops: 0, dueNow: 0 });

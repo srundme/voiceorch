@@ -37,6 +37,7 @@ import { disposeCall } from "../services/disposition.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE } from "../services/irdai/gate.js";
 import { normalizeCallVariables } from "../orchestration/prompt-vars.js";
+import { canAccessWorkspaceCall, resolveWorkspaceScope, workspaceCallsWhere } from "../services/workspace-scope.js";
 
 function parseLatencyBody(body: unknown): { sttLatencyMs?: number; llmLatencyMs?: number; ttsFirstChunkMs?: number } {
   if (!body || typeof body !== "object") return {};
@@ -151,8 +152,11 @@ router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Pro
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
   if (agent.userId !== userId) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
+    const scope = await resolveWorkspaceScope(userId ?? "");
+    if (!userId || !agent.userId || !scope.userIds.includes(agent.userId) || !scope.canWrite) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
   }
 
   // IRDAI compliance enforcement gate. Reads the agent's latest stored
@@ -536,18 +540,11 @@ router.get("/calls", requireAuth, clientContext, async (req, res): Promise<void>
   }
 
   const clerkId = (req as any).clerkUserId as string;
+  const scope = await resolveWorkspaceScope(clerkId);
 
-  // Ownership: rows the user directly owns, plus legacy/live-call rows where
-  // userId is null but the call's agent belongs to the requester (mirrors the
-  // fallback used by GET /calls/:id). Keeps the optional agentId filter intact.
-  const ownedAgentIds = db
-    .select({ id: agentsTable.id })
-    .from(agentsTable)
-    .where(eq(agentsTable.userId, clerkId));
-  const ownership = or(
-    eq(callsTable.userId, clerkId),
-    and(isNull(callsTable.userId), inArray(callsTable.agentId, ownedAgentIds)),
-  );
+  // Workspace: owner + teammates share one History list. Legacy rows with
+  // null userId still match if the agent belongs to someone in the workspace.
+  const ownership = workspaceCallsWhere(scope.userIds);
   const where = query.data.agentId != null
     ? and(ownership, eq(callsTable.agentId, query.data.agentId))
     : ownership;
@@ -584,10 +581,12 @@ router.post("/calls", requireAuth, clientContext, async (req, res): Promise<void
     return;
   }
 
-  // Ownership: only the agent's owner may create call records under it
   if (agent.userId !== userId) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
+    const scope = await resolveWorkspaceScope(userId ?? "");
+    if (!userId || !agent.userId || !scope.userIds.includes(agent.userId) || !scope.canWrite) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
   }
 
   // Balance gate — block if wallet is empty
@@ -631,19 +630,9 @@ router.get("/calls/:id", requireAuth, clientContext, async (req, res): Promise<v
     res.status(404).json({ error: "Call not found" });
     return;
   }
-  // Ownership check: call.userId must match the requester, or (for legacy rows
-  // where userId is null) the call's agent must belong to the requester.
-  if (call.userId && call.userId !== clerkId) {
+  if (!(await canAccessWorkspaceCall(clerkId, call))) {
     res.status(404).json({ error: "Call not found" });
     return;
-  }
-  if (!call.userId) {
-    const [agent] = await db.select({ userId: agentsTable.userId })
-      .from(agentsTable).where(eq(agentsTable.id, call.agentId));
-    if (agent?.userId && agent.userId !== clerkId) {
-      res.status(404).json({ error: "Call not found" });
-      return;
-    }
   }
   const [exec] = await db
     .select({ campaignId: callExecutionsTable.campaignId })
@@ -672,17 +661,9 @@ router.get("/calls/:id/meeting-recording", requireAuth, clientContext, async (re
     res.status(404).json({ error: "Call not found" });
     return;
   }
-  if (call.userId && call.userId !== clerkId) {
+  if (!(await canAccessWorkspaceCall(clerkId, call))) {
     res.status(404).json({ error: "Call not found" });
     return;
-  }
-  if (!call.userId) {
-    const [agent] = await db.select({ userId: agentsTable.userId })
-      .from(agentsTable).where(eq(agentsTable.id, call.agentId));
-    if (agent?.userId && agent.userId !== clerkId) {
-      res.status(404).json({ error: "Call not found" });
-      return;
-    }
   }
 
   let meta: Record<string, unknown> = {};
@@ -744,17 +725,9 @@ router.get("/calls/:id/meeting-separate-audio", requireAuth, clientContext, asyn
     res.status(404).json({ error: "Call not found" });
     return;
   }
-  if (call.userId && call.userId !== clerkId) {
+  if (!(await canAccessWorkspaceCall(clerkId, call))) {
     res.status(404).json({ error: "Call not found" });
     return;
-  }
-  if (!call.userId) {
-    const [agent] = await db.select({ userId: agentsTable.userId })
-      .from(agentsTable).where(eq(agentsTable.id, call.agentId));
-    if (agent?.userId && agent.userId !== clerkId) {
-      res.status(404).json({ error: "Call not found" });
-      return;
-    }
   }
 
   let meta: Record<string, unknown> = {};
@@ -830,17 +803,9 @@ router.get("/calls/:id/caller-memory", requireAuth, clientContext, async (req, r
     return;
   }
   // Ownership check identical to GET /calls/:id.
-  if (call.userId && call.userId !== clerkId) {
+  if (!(await canAccessWorkspaceCall(clerkId, call))) {
     res.status(404).json({ error: "Call not found" });
     return;
-  }
-  if (!call.userId) {
-    const [agent] = await db.select({ userId: agentsTable.userId })
-      .from(agentsTable).where(eq(agentsTable.id, call.agentId));
-    if (agent?.userId && agent.userId !== clerkId) {
-      res.status(404).json({ error: "Call not found" });
-      return;
-    }
   }
 
   // Resolve the SAME memory key the call session used. Sessions persist the
@@ -955,15 +920,14 @@ router.patch("/calls/:id", requireAuth, clientContext, async (req, res): Promise
     res.status(404).json({ error: "Call not found" });
     return;
   }
-  if (existing.userId && existing.userId !== userId) {
+  if (!userId || !(await canAccessWorkspaceCall(userId, existing))) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  if (!existing.userId) {
-    const [agent] = await db.select({ userId: agentsTable.userId })
-      .from(agentsTable).where(eq(agentsTable.id, existing.agentId));
-    if (agent?.userId && agent.userId !== userId) {
-      res.status(403).json({ error: "Forbidden" });
+  {
+    const scope = await resolveWorkspaceScope(userId);
+    if (!scope.canWrite) {
+      res.status(403).json({ error: "Your team role cannot edit calls" });
       return;
     }
   }
@@ -1104,15 +1068,14 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
   }
 
   // Ownership check — prevent cross-tenant billing manipulation
-  if (existing.userId && existing.userId !== userId) {
+  if (!userId || !(await canAccessWorkspaceCall(userId, existing))) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  if (!existing.userId) {
-    const [agent] = await db.select({ userId: agentsTable.userId })
-      .from(agentsTable).where(eq(agentsTable.id, existing.agentId));
-    if (agent?.userId && agent.userId !== userId) {
-      res.status(403).json({ error: "Forbidden" });
+  {
+    const scope = await resolveWorkspaceScope(userId);
+    if (!scope.canWrite) {
+      res.status(403).json({ error: "Your team role cannot edit calls" });
       return;
     }
   }
@@ -1438,10 +1401,13 @@ router.get("/calls/:id/logs", requireAuth, clientContext, async (req, res) => {
   const clerkId = (req as any).clerkUserId as string;
 
   // Verify the call belongs to the authenticated user
-  const [call] = await db.select({ id: callsTable.id, userId: callsTable.userId })
+  const [call] = await db.select({ id: callsTable.id, userId: callsTable.userId, agentId: callsTable.agentId })
     .from(callsTable).where(eq(callsTable.id, callId));
   if (!call) { res.status(404).json({ error: "Call not found" }); return; }
-  if (call.userId && call.userId !== clerkId) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (!(await canAccessWorkspaceCall(clerkId, call))) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
 
   const events = await db.select().from(executionLogsTable)
     .where(eq(executionLogsTable.callId, callId))

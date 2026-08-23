@@ -39,7 +39,7 @@ interface TeamMember {
   memberUserId: string | null;
   email: string;
   name: string | null;
-  role: "admin" | "developer" | "member" | "viewer" | string;
+  role: "owner" | "admin" | "developer" | "member" | "viewer" | string;
   status: "pending" | "active" | string;
   invitedAt: string;
   joinedAt: string | null;
@@ -201,7 +201,7 @@ export function TeamPage() {
               <span className="text-xs font-medium">Active Collaborators</span>
               <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             </div>
-            <p className="text-2xl font-bold mt-2 text-foreground">{activeCount + 1}</p>
+            <p className="text-2xl font-bold mt-2 text-foreground">{activeCount}</p>
             <p className="text-[11px] text-emerald-500/80 mt-0.5">Active workspace users</p>
           </div>
 
@@ -300,7 +300,7 @@ export function TeamPage() {
                         </>
                       )}
 
-                      {isOwner && (
+                      {isOwner && member.role !== "owner" && (
                       <Button
                         variant="ghost"
                         size="icon"

@@ -4,10 +4,11 @@
  * this router provides the supervisor dashboard and logging endpoints.
  */
 import { Router, type IRouter } from "express";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { db, callTransfersTable, callsTable, agentsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
+import { resolveWorkspaceScope } from "../services/workspace-scope.js";
 
 const router: IRouter = Router();
 
@@ -15,6 +16,7 @@ const router: IRouter = Router();
 
 router.get("/transfers", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
+  const scope = await resolveWorkspaceScope(userId);
 
   const rows = await db
     .select({
@@ -33,7 +35,7 @@ router.get("/transfers", requireAuth, clientContext, async (req, res): Promise<v
     .from(callTransfersTable)
     .leftJoin(callsTable, eq(callTransfersTable.callId, callsTable.id))
     .leftJoin(agentsTable, eq(callsTable.agentId, agentsTable.id))
-    .where(eq(callTransfersTable.userId, userId))
+    .where(inArray(callTransfersTable.userId, scope.userIds))
     .orderBy(desc(callTransfersTable.initiatedAt))
     .limit(100);
 
@@ -44,12 +46,13 @@ router.get("/transfers", requireAuth, clientContext, async (req, res): Promise<v
 
 router.get("/transfers/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
+  const scope = await resolveWorkspaceScope(userId);
   const id     = Number(req.params["id"]);
 
   const [row] = await db
     .select()
     .from(callTransfersTable)
-    .where(and(eq(callTransfersTable.id, id), eq(callTransfersTable.userId, userId)));
+    .where(and(eq(callTransfersTable.id, id), inArray(callTransfersTable.userId, scope.userIds)));
 
   if (!row) { res.status(404).json({ error: "Transfer not found" }); return; }
   res.json(row);
@@ -60,6 +63,11 @@ router.get("/transfers/:id", requireAuth, clientContext, async (req, res): Promi
 
 router.patch("/transfers/:id", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
+  const scope = await resolveWorkspaceScope(userId);
+  if (!scope.canWrite) {
+    res.status(403).json({ error: "Your team role cannot edit transfers" });
+    return;
+  }
   const id     = Number(req.params["id"]);
   const { status, connectedAt, completedAt } = req.body as {
     status?: string;
@@ -75,7 +83,7 @@ router.patch("/transfers/:id", requireAuth, async (req, res): Promise<void> => {
   const [row] = await db
     .update(callTransfersTable)
     .set(updates)
-    .where(and(eq(callTransfersTable.id, id), eq(callTransfersTable.userId, userId)))
+    .where(and(eq(callTransfersTable.id, id), inArray(callTransfersTable.userId, scope.userIds)))
     .returning();
 
   if (!row) { res.status(404).json({ error: "Transfer not found" }); return; }

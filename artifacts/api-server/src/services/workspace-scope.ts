@@ -6,12 +6,12 @@
  * filtered `agents.userId = me`, so the teammate saw an empty Agents page.
  * Resolve the owner + every active member so they share one agent list.
  */
-import { and, eq, inArray, or, sql } from "drizzle-orm";
-import { db, teamMembersTable, usersTable } from "@workspace/db";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { db, agentsTable, callsTable, teamMembersTable, usersTable } from "@workspace/db";
 import { logger } from "../lib/logger.js";
-import { collectWorkspaceUserIds, teamRoleCanWrite, type TeamScopeRow } from "./workspace-scope-logic.js";
+import { collectWorkspaceUserIds, isWorkspaceCall, teamRoleCanWrite, type TeamScopeRow } from "./workspace-scope-logic.js";
 
-export { collectWorkspaceUserIds, teamRoleCanWrite } from "./workspace-scope-logic.js";
+export { collectWorkspaceUserIds, isWorkspaceCall, teamRoleCanWrite } from "./workspace-scope-logic.js";
 
 export interface WorkspaceScope {
   /** User ids whose agents this caller may see. Always includes self. */
@@ -126,4 +126,29 @@ export async function resolveWorkspaceScope(clerkId: string): Promise<WorkspaceS
     : (rows.find((r) => r.status === "active" && r.memberUserId === clerkId)?.ownerUserId ?? clerkId);
 
   return { userIds, ownerUserId, canWrite, isOwner };
+}
+
+/** SQL: calls the workspace may list (direct owner or legacy null-userId on a workspace agent). */
+export function workspaceCallsWhere(userIds: string[]) {
+  const ownedAgentIds = db
+    .select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(inArray(agentsTable.userId, userIds));
+  return or(
+    inArray(callsTable.userId, userIds),
+    and(isNull(callsTable.userId), inArray(callsTable.agentId, ownedAgentIds)),
+  );
+}
+
+export async function canAccessWorkspaceCall(
+  clerkId: string,
+  call: { userId: string | null; agentId: number },
+): Promise<boolean> {
+  const scope = await resolveWorkspaceScope(clerkId);
+  if (call.userId) return isWorkspaceCall(scope.userIds, call.userId);
+  const [agent] = await db
+    .select({ userId: agentsTable.userId })
+    .from(agentsTable)
+    .where(eq(agentsTable.id, call.agentId));
+  return isWorkspaceCall(scope.userIds, null, agent?.userId);
 }
