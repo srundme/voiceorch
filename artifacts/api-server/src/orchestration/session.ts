@@ -34,6 +34,7 @@ import {
 import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
 import { transcriptHasFarewellEnding } from "./callFarewell.js";
+import { capHandoffTranscript, mergeHandoffTranscript } from "./squad-transcript.js";
 import { buildLeadContextBlock, buildCallContextBlock, callVariablesFromMetadata, resolvePromptVariables } from "./prompt-vars.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "./mic-sensitivity.js";
@@ -2006,7 +2007,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         return false;
       }
 
-      const transcriptSummary = live.pipeline.getTranscript().slice(-4000);
+      const priorTranscript = live.pipeline.getTranscript();
+      const transcriptSummary = priorTranscript.slice(-4000);
       const fromAgentId = live.agentId;
       const [runRow] = await db.select({ goal: squadRunsTable.goal })
         .from(squadRunsTable).where(eq(squadRunsTable.id, live.squadRunId)).limit(1);
@@ -2076,10 +2078,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       // Swap pointer first, THEN close the previous pipeline so inbound audio
       // never lands on a closed instance and a failed close can't orphan the call.
       const previous = result.previousPipeline;
-      live.handoffTranscriptAccum = [
-        live.handoffTranscriptAccum,
-        transcriptSummary,
-      ].filter(Boolean).join("\n--- handoff ---\n").slice(-12000);
+      live.handoffTranscriptAccum = capHandoffTranscript(
+        mergeHandoffTranscript(live.handoffTranscriptAccum, priorTranscript),
+      );
       live.pipeline = result.pipeline;
       live.agentId = targetAgentId;
       try {
@@ -2690,11 +2691,12 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
   const session = sessions.get(sessionId);
   if (!session) return;
 
+  const fullTranscript = mergeHandoffTranscript(
+    session.handoffTranscriptAccum,
+    session.pipeline.getTranscript(),
+  );
   const squadTranscriptPreview = session.squadRunId
-    ? [
-        session.handoffTranscriptAccum,
-        session.pipeline.getTranscript(),
-      ].filter(Boolean).join("\n--- handoff ---\n").slice(0, 4000)
+    ? fullTranscript.slice(0, 4000)
     : null;
 
   sessions.delete(sessionId);
@@ -2744,7 +2746,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
   // Redact high-risk secrets (card numbers, PAN, Aadhaar, CVV/OTP/PIN) before
   // the transcript is persisted or sent to webhooks/summaries. Phone/email are
   // intentionally preserved — they are legitimate lead-capture data.
-  const transcript = redactTranscriptPII(session.pipeline.getTranscript());
+  const transcript = redactTranscriptPII(fullTranscript);
 
   const { metricsAcc } = session;
   const avgSttMs = metricsAcc.count > 0 ? Math.round(metricsAcc.sttTotal / metricsAcc.count) : null;
