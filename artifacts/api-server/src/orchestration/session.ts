@@ -1034,7 +1034,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
 
     // 6. Inbound Automatic Calls sheet lookup (pre-fetched in parallel)
     (callDirection === "inbound" && !isWebcall && agent.userId && params.fromNumber?.trim())
-      ? lookupSheetsForSession(agent.userId, params.agentId, params.fromNumber).catch(() => null)
+      ? Promise.race([
+          lookupSheetsForSession(agent.userId, params.agentId, params.fromNumber).catch(() => null),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+        ])
       : Promise.resolve(null),
   ]);
 

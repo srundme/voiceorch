@@ -35,7 +35,7 @@ class OpenAIDispositionLLM implements DispositionLLM {
   private model: string;
 
   constructor(apiKey: string, model = "gpt-4o-mini") {
-    this.client = new OpenAI({ apiKey });
+    this.client = new OpenAI({ apiKey, timeout: 15_000 });
     this.model = model;
   }
 
@@ -71,6 +71,7 @@ class QwenDispositionLLM implements DispositionLLM {
     this.client = new OpenAI({
       apiKey,
       baseURL: "https://api.groq.com/openai/v1",
+      timeout: 15_000,
     });
     this.model = model;
   }
@@ -125,6 +126,7 @@ class SarvamDispositionLLM implements DispositionLLM {
       baseURL: openSource ? "https://api.sarvam.ai/v2" : "https://api.sarvam.ai/v1",
       // Docs require api-subscription-key; SDK also sends Authorization: Bearer.
       defaultHeaders: { "api-subscription-key": apiKey },
+      timeout: 15_000,
     });
     this.model = model;
   }
@@ -253,6 +255,8 @@ export function isRetryableProviderError(err: unknown): boolean {
     msg.includes("permission") ||
     msg.includes("billing") ||
     msg.includes("unavailable") ||
-    msg.includes("overload")
+    msg.includes("overload") ||
+    msg.includes("timed out") ||
+    msg.includes("timeout")
   );
 }

@@ -11,6 +11,9 @@ const IST = "Asia/Kolkata";
 const CALLBACK_RE =
   /\b(?:callback|call\s*back|call\s+(?:me\s+)?later)\b|\bschedule\b[\s\S]{0,40}\bcall\b/i;
 
+const BOOKED_RE =
+  /\b(?:booked|booking[_ ]confirmed|appointment[_ ]booked|meeting[_ ]booked|sale[_ ]closed)\b/i;
+
 /** Case-insensitive match on disposition / summary / status for callback intent. */
 export function isCallbackDisposition(
   ...texts: Array<string | null | undefined>
@@ -18,6 +21,15 @@ export function isCallbackDisposition(
   const blob = texts.filter((t) => typeof t === "string" && t.trim()).join(" ");
   if (!blob.trim()) return false;
   return CALLBACK_RE.test(blob);
+}
+
+/** True when hangup writeback should keep Status = Booked instead of Completed. */
+export function isBookedDisposition(
+  ...texts: Array<string | null | undefined>
+): boolean {
+  const blob = texts.filter((t) => typeof t === "string" && t.trim()).join(" ");
+  if (!blob.trim()) return false;
+  return BOOKED_RE.test(blob);
 }
 
 /**

@@ -37,6 +37,7 @@ import type { TimeSlot } from "./scheduling/slot-engine.js";
 import { sendChannelEmail } from "./email-channel.js";
 import { sendMidCallWhatsapp } from "./whatsapp/outbound.js";
 import { resolveBookingLineageCallId } from "./meet-booking.js";
+import { normalizeBookingDatetimeArgs } from "./booking-tool-args.js";
 
 // ── Booking diagnostic log helper ────────────────────────────────────────────
 
@@ -536,6 +537,7 @@ export async function executeNativeBooking(
   args: Record<string, unknown>,
   opts?: { lineageCallId?: number | null },
 ): Promise<string> {
+  args = normalizeBookingDatetimeArgs(args);
   logger.info({ callId, eventTypeId: tool.eventTypeId }, "Native booking tool invoked");
   const bookingCallId = await resolveBookingLineageCallId(callId, opts?.lineageCallId);
   const attendeeName = String(args["attendee_name"] ?? args["name"] ?? "Guest");
@@ -1059,6 +1061,7 @@ export async function executeNativeCheckAvailability(
   tool: AgentTool & { type: "native_check_availability" },
   args: Record<string, unknown>,
 ): Promise<string> {
+  args = normalizeBookingDatetimeArgs(args);
   logger.info({ callId, eventTypeId: tool.eventTypeId }, "Native check-availability tool invoked");
   const preferredRaw = args["preferred_date"] != null ? String(args["preferred_date"]) : null;
 
@@ -1112,7 +1115,9 @@ export async function executeNativeCheckAvailability(
       return `no_availability: no available slots ${rangeDesc}`;
     }
 
-    const tz = tool.timezone || calendar.timezone || "UTC";
+    const tz = (args["timezone"] != null && String(args["timezone"]).trim())
+      ? String(args["timezone"])
+      : (tool.timezone || calendar.timezone || "UTC");
 
     const slotLabel = (s: { slotStart: Date }) =>
       `${formatInTimeZone(s.slotStart, tz, "yyyy-MM-dd'T'HH:mm:ssxxx")} (${formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a")})`;
@@ -1287,6 +1292,7 @@ export async function executeNativeReschedule(
   args: Record<string, unknown>,
   opts?: { lineageCallId?: number | null },
 ): Promise<string> {
+  args = normalizeBookingDatetimeArgs(args);
   logger.info({ callId }, "Native reschedule tool invoked");
   const bookingId = Number(args["booking_id"] ?? args["bookingId"] ?? 0);
   const preferredRaw = args["preferred_date"] != null ? String(args["preferred_date"]) : null;
@@ -1927,6 +1933,83 @@ async function isSlotWithinAvailabilityWindow(
 
   const daySchedules = schedules.filter((s) => s.dayOfWeek === dayOfWeek);
   return daySchedules.some((s) => slotTimeStr >= s.startTime && slotTimeStr < s.endTime);
+}
+
+// ── Mid-call SMS (Twilio / Plivo) ────────────────────────────────────────────
+
+export async function executeSendSms(opts: {
+  callId: number;
+  callerPhone?: string | null;
+  telephonyProvider: string;
+  providerKeys: Map<string, string>;
+  messageTemplate: string;
+}): Promise<string> {
+  const callerPhone = opts.callerPhone?.trim() ?? "";
+  if (!callerPhone) {
+    logger.warn({ callId: opts.callId }, "Send SMS: no caller phone available — skipping");
+    return "error: no caller phone available to send SMS. Ask the caller for a number, or continue without SMS.";
+  }
+  const message = opts.messageTemplate;
+  const tprov = opts.telephonyProvider;
+  logger.info({ callId: opts.callId, to: callerPhone, tprov }, "Executing Send SMS tool");
+  try {
+    if (tprov === "twilio") {
+      const authToken = opts.providerKeys.get("twilio") ?? "";
+      const extra = opts.providerKeys.get("twilio:extraConfig");
+      const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+      const accountSid = cfg["accountSid"] ?? "";
+      const fromNumber = cfg["fromNumber"] ?? "";
+      const body = new URLSearchParams({ To: callerPhone, From: fromNumber, Body: message });
+      const resp = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: body.toString(),
+          signal: AbortSignal.timeout(8000),
+        },
+      );
+      if (!resp.ok) {
+        logger.warn({ callId: opts.callId, status: resp.status }, "Twilio SMS failed");
+        return `error: SMS send failed (twilio status ${resp.status}). Apologize and continue helping the caller.`;
+      }
+      logger.info({ callId: opts.callId, to: callerPhone }, "SMS sent via Twilio");
+      return `sms_sent: message delivered to ${callerPhone}. Confirm briefly to the caller.`;
+    }
+    if (tprov === "plivo") {
+      const authToken = opts.providerKeys.get("plivo") ?? "";
+      const extra = opts.providerKeys.get("plivo:extraConfig");
+      const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+      const authId = cfg["authId"] ?? "";
+      const fromNumber = cfg["fromNumber"] ?? "";
+      const resp = await fetch(
+        `https://api.plivo.com/v1/Account/${authId}/Message/`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Basic ${Buffer.from(`${authId}:${authToken}`).toString("base64")}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ src: fromNumber, dst: callerPhone, text: message }),
+          signal: AbortSignal.timeout(8000),
+        },
+      );
+      if (!resp.ok) {
+        logger.warn({ callId: opts.callId, status: resp.status }, "Plivo SMS failed");
+        return `error: SMS send failed (plivo status ${resp.status}). Apologize and continue helping the caller.`;
+      }
+      logger.info({ callId: opts.callId, to: callerPhone }, "SMS sent via Plivo");
+      return `sms_sent: message delivered to ${callerPhone}. Confirm briefly to the caller.`;
+    }
+    logger.warn({ callId: opts.callId, tprov }, "Send SMS: telephony provider does not support SMS");
+    return "error: this telephony provider does not support SMS. Tell the caller you cannot text them from this call.";
+  } catch (err) {
+    logger.error({ callId: opts.callId, err }, "Send SMS tool execution failed");
+    return "error: SMS send failed due to a technical issue. Apologize and continue helping the caller.";
+  }
 }
 
 // ── Mid-call email (Email channel: managed or BYO Brevo) ─────────────────────

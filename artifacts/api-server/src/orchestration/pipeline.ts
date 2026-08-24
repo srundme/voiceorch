@@ -98,6 +98,7 @@ import {
   executeWebhookTool as sharedExecuteWebhookTool,
   executeSendEmail as sharedExecuteSendEmail,
   executeSendWhatsapp as sharedExecuteSendWhatsapp,
+  executeSendSms as sharedExecuteSendSms,
   parsePreferredDate,
   writeTransferLeadDb,
 } from "../services/tool-executor.js";
@@ -6425,7 +6426,7 @@ export class OrchestrationPipeline implements VoiceSession {
    * Public tool dispatcher: writes Tool request/response execution-log rows
    * around the actual dispatch so the Call Log timeline shows every tool call
    * (mirrors the web-call path). Errors are logged with their real reason, then
-   * re-thrown to preserve existing control flow.
+   * returned as an `error:` string so the LLM can keep talking instead of dead air.
    */
   private async handleToolCall(toolName: string, args: Record<string, unknown>): Promise<string | undefined> {
     const _toolStart = Date.now();
@@ -6437,12 +6438,9 @@ export class OrchestrationPipeline implements VoiceSession {
     logToolExecutionStarted(this.logFn, { tool: toolName, turnNumber: this._activeTurnIndex });
     try {
       const result = await this.handleToolCallInner(toolName, args);
-      // A handful of built-in/terminal tools (end_call, webhook, send_sms,
-      // cal_com) intentionally return undefined — they don't hand a string
-      // back to the LLM for a follow-up turn because they act directly
-      // (speak + hang up, fire a webhook, etc). That's a legitimate success,
-      // not a missing/failed result, so label it clearly instead of the
-      // confusing "unavailable" (which reads like an error in the Tools tab).
+      // Terminal tools (end_call) may return undefined — they speak and hang up
+      // directly. Every other tool must return a string so the LLM can continue
+      // talking to the caller instead of leaving dead air after the filler.
       const displayResult = result ?? "(no reply needed — tool completed directly)";
       this.logExec("Tool", "system", {
         status: "success",
@@ -6483,7 +6481,7 @@ export class OrchestrationPipeline implements VoiceSession {
         requestPayload: { tool: toolName },
         responsePayload: { error: _reason, failureReason: _reason },
       });
-      throw err;
+      return `error: ${_reason}. Tell the caller briefly that you hit a technical issue and continue helping them.`;
     }
   }
 
@@ -6626,7 +6624,7 @@ export class OrchestrationPipeline implements VoiceSession {
     } else if (tool.type === "webhook") {
       return await this.executeWebhookTool(tool, args);
     } else if (tool.type === "send_sms") {
-      await this.executeSendSms(tool, args);
+      return await this.executeSendSms(tool, args);
     } else if (tool.type === "send_email") {
       return await sharedExecuteSendEmail({
         agentId: this.agent.id,
@@ -6646,7 +6644,7 @@ export class OrchestrationPipeline implements VoiceSession {
     } else if (tool.type === "end_call") {
       await this.executeEndCall(tool);
     } else if (tool.type === "cal_com") {
-      await this.executeCalCom(tool, args);
+      return await this.executeCalCom(tool, args);
     } else if (tool.type === "native_booking") {
       return await this.executeNativeBooking(tool, args);
     } else if (tool.type === "native_reschedule") {
@@ -6681,7 +6679,7 @@ export class OrchestrationPipeline implements VoiceSession {
         }
       }
       const result = await this.executeNativeCancel(tool, args);
-      if (result.includes("cancel_confirmed")) {
+      if (result.includes("cancel_confirmed") || result.includes("cancellation_confirmed")) {
         logger.info({ callId: this.config.callId }, "Cancel confirmed — clearing activeRescheduleBooking");
         this.activeRescheduleBooking = null;
         this.pendingListedBookings = [];
@@ -6740,61 +6738,14 @@ export class OrchestrationPipeline implements VoiceSession {
     return await sharedExecuteWebhookTool(this.config.callId, tool, args);
   }
 
-  private async executeSendSms(tool: AgentTool & { type: "send_sms" }, _args: Record<string, unknown>): Promise<void> {
-    const callerPhone = this.config.callerPhone;
-    if (!callerPhone) {
-      logger.warn({ callId: this.config.callId }, "Send SMS: no caller phone available — skipping");
-      return;
-    }
-    const message = tool.messageTemplate;
-    const tprov = this.config.telephonyProvider;
-    logger.info({ callId: this.config.callId, to: callerPhone, tprov }, "Executing Send SMS tool");
-    try {
-      if (tprov === "twilio") {
-        const authToken = this.config.providerKeys.get("twilio") ?? "";
-        const extra = this.config.providerKeys.get("twilio:extraConfig");
-        const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
-        const accountSid = cfg["accountSid"] ?? "";
-        const fromNumber = cfg["fromNumber"] ?? "";
-        const body = new URLSearchParams({ To: callerPhone, From: fromNumber, Body: message });
-        const resp = await fetch(
-          `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-          {
-            method: "POST",
-            headers: {
-              "Authorization": `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: body.toString(),
-          },
-        );
-        if (!resp.ok) logger.warn({ callId: this.config.callId, status: resp.status }, "Twilio SMS failed");
-        else logger.info({ callId: this.config.callId, to: callerPhone }, "SMS sent via Twilio");
-      } else if (tprov === "plivo") {
-        const authToken = this.config.providerKeys.get("plivo") ?? "";
-        const extra = this.config.providerKeys.get("plivo:extraConfig");
-        const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
-        const authId = cfg["authId"] ?? "";
-        const fromNumber = cfg["fromNumber"] ?? "";
-        const resp = await fetch(
-          `https://api.plivo.com/v1/Account/${authId}/Message/`,
-          {
-            method: "POST",
-            headers: {
-              "Authorization": `Basic ${Buffer.from(`${authId}:${authToken}`).toString("base64")}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ src: fromNumber, dst: callerPhone, text: message }),
-          },
-        );
-        if (!resp.ok) logger.warn({ callId: this.config.callId, status: resp.status }, "Plivo SMS failed");
-        else logger.info({ callId: this.config.callId, to: callerPhone }, "SMS sent via Plivo");
-      } else {
-        logger.warn({ callId: this.config.callId, tprov }, "Send SMS: telephony provider does not support SMS");
-      }
-    } catch (err) {
-      logger.error({ callId: this.config.callId, err }, "Send SMS tool execution failed");
-    }
+  private async executeSendSms(tool: AgentTool & { type: "send_sms" }, _args: Record<string, unknown>): Promise<string> {
+    return sharedExecuteSendSms({
+      callId: this.config.callId,
+      callerPhone: this.config.callerPhone,
+      telephonyProvider: this.config.telephonyProvider,
+      providerKeys: this.config.providerKeys,
+      messageTemplate: tool.messageTemplate,
+    });
   }
 
   private async executeEndCall(tool: AgentTool & { type: "end_call" }): Promise<void> {
@@ -6810,7 +6761,7 @@ export class OrchestrationPipeline implements VoiceSession {
     this.config.onCallEnd();
   }
 
-  private async executeCalCom(tool: AgentTool & { type: "cal_com" }, args: Record<string, unknown>): Promise<void> {
+  private async executeCalCom(tool: AgentTool & { type: "cal_com" }, args: Record<string, unknown>): Promise<string> {
     logger.info({ callId: this.config.callId, eventTypeId: tool.eventTypeId }, "Cal.com booking tool invoked");
     const attendeeName  = String(args["attendee_name"]  ?? args["name"]  ?? "Guest");
     const attendeeEmail = String(args["attendee_email"] ?? args["email"] ?? "");
@@ -6818,7 +6769,7 @@ export class OrchestrationPipeline implements VoiceSession {
 
     if (!attendeeEmail) {
       logger.warn({ callId: this.config.callId }, "Cal.com: no attendee email provided — cannot book");
-      return;
+      return "error: attendee_email is required to complete the Cal.com booking. Ask the caller for their email.";
     }
     try {
       // Fetch available slots for the next 7 days
@@ -6838,7 +6789,7 @@ export class OrchestrationPipeline implements VoiceSession {
       );
       if (!slotsResp.ok) {
         logger.warn({ callId: this.config.callId, status: slotsResp.status }, "Cal.com: slots API error");
-        return;
+        return `error: could not fetch Cal.com availability (status ${slotsResp.status}). Apologize and offer to try another time.`;
       }
       const slotsData = await slotsResp.json() as {
         data?: { slots?: Record<string, Array<{ time: string }>> }
@@ -6846,7 +6797,7 @@ export class OrchestrationPipeline implements VoiceSession {
       const allSlots = Object.values(slotsData.data?.slots ?? {}).flat();
       if (allSlots.length === 0) {
         logger.info({ callId: this.config.callId }, "Cal.com: no available slots in next 7 days");
-        return;
+        return "no_availability: no available slots in the next 7 days";
       }
       const slot = allSlots[0]!;
       const bookResp = await fetch("https://api.cal.com/v2/bookings", {
@@ -6865,12 +6816,14 @@ export class OrchestrationPipeline implements VoiceSession {
       });
       if (bookResp.ok) {
         logger.info({ callId: this.config.callId, start: slot.time, attendeeEmail }, "Cal.com booking created");
-      } else {
-        const errText = await bookResp.text().catch(() => "");
-        logger.warn({ callId: this.config.callId, status: bookResp.status, errText }, "Cal.com booking API error");
+        return `booking_confirmed: start="${slot.time}", attendee="${attendeeName}", email="${attendeeEmail}"`;
       }
+      const errText = await bookResp.text().catch(() => "");
+      logger.warn({ callId: this.config.callId, status: bookResp.status, errText }, "Cal.com booking API error");
+      return `error: Cal.com booking failed (status ${bookResp.status}). Apologize and offer to try another time.`;
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Cal.com tool execution failed");
+      return "error: Cal.com booking failed due to a technical issue. Apologize and continue helping the caller.";
     }
   }
 
@@ -9753,6 +9706,9 @@ export class OrchestrationPipeline implements VoiceSession {
       );
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "continueWithToolResult LLM call failed");
+      const recoveryLang = this.currentLang || this.agent.sttConfig.language;
+      const recovery = pickClarificationPhrase(recoveryLang, String(this.config.callId));
+      enqueue(recovery);
       allEnqueued = true;
       ctFinalizeTurnCtx();
       const wErr = wakePlayer as (() => void) | null; wakePlayer = null; if (wErr) wErr();
@@ -9798,6 +9754,21 @@ export class OrchestrationPipeline implements VoiceSession {
       } else if (flushText.trim() && stepGuard.truncated()) {
         enqueue(flushText.trim());
       }
+    }
+    if (
+      !cleanResponse.trim()
+      && !triggeredToolName
+      && sentenceQueue.length === 0
+      && !this.bargeInRequested
+      && !this.closed
+    ) {
+      const recoveryLang = this.currentLang || this.agent.sttConfig.language;
+      const recovery = pickClarificationPhrase(recoveryLang, String(this.config.callId));
+      logger.warn(
+        { callId: this.config.callId, recoveryLang, depth },
+        "continueWithToolResult: empty LLM follow-up — speaking clarification instead of dead air",
+      );
+      enqueue(recovery);
     }
     allEnqueued = true;
     ctFinalizeTurnCtx();

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isCallbackDisposition,
+  isBookedDisposition,
   defaultNextDayCallbackAt,
   extractExplicitCallbackAt,
   formatSheetIst,
@@ -24,6 +25,19 @@ describe("isCallbackDisposition", () => {
 
   it("scans across multiple text fields", () => {
     expect(isCallbackDisposition("Completed", "Said call me later")).toBe(true);
+  });
+});
+
+describe("isBookedDisposition", () => {
+  it("matches booked / booking_confirmed / sale closed", () => {
+    expect(isBookedDisposition("Booked a demo")).toBe(true);
+    expect(isBookedDisposition("booking_confirmed")).toBe(true);
+    expect(isBookedDisposition("SALE_CLOSED")).toBe(true);
+  });
+
+  it("ignores completed-without-booking", () => {
+    expect(isBookedDisposition("Completed")).toBe(false);
+    expect(isBookedDisposition("Not interested")).toBe(false);
   });
 });
 

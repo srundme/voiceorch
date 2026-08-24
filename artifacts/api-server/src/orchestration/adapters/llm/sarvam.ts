@@ -288,6 +288,7 @@ export function parseFunctionCallNotation(
           args["attendee_email"] = val;
           args["email"] = val;
         } else if (/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|pm|am|\d{1,2}:\d{2})\b/i.test(val)) {
+          args["preferred_date"] = val;
           args["date_time"] = val;
           args["start_time"] = val;
           args["slot"] = val;
@@ -748,7 +749,11 @@ ${systemPrompt}`
           try {
             args = JSON.parse(picked.args || "{}") as Record<string, unknown>;
           } catch {
-            // Empty args on JSON parse error
+            logger.warn(
+              { model: this.model, argsSnippet: (picked.args || "").slice(0, 200) },
+              "Sarvam tool args JSON parse failed — using empty object",
+            );
+            args = {};
           }
           options.onToolParsed?.({ name: picked.name, format: "structured", args });
           options.onToolCall(picked.name, args);

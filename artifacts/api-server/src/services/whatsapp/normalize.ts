@@ -96,7 +96,6 @@ function extractButtonId(flat: Record<string, unknown>): string | undefined {
 function extractPhone(flat: Record<string, unknown>): string | undefined {
   return pickString(
     flat["phone"],
-    flat["to"],
     flat["from"],
     flat["wa_id"],
     flat["waId"],
@@ -105,6 +104,8 @@ function extractPhone(flat: Record<string, unknown>): string | undefined {
     flat["customerPhone"],
     dig(flat, ["entry.0.changes.0.value.messages.0.from"]),
     dig(flat, ["entry.0.changes.0.value.contacts.0.wa_id"]),
+    // `to` is last — on inbound BSP payloads it is often the business number.
+    flat["to"],
   );
 }
 
@@ -151,6 +152,7 @@ function extractFromMetaCloud(body: Record<string, unknown>): Partial<WhatsappIn
   const image = asRecord(msg?.["image"] ?? null);
   const document = asRecord(msg?.["document"] ?? null);
   const msgType = pickString(msg?.["type"]);
+  const buttonId = pickString(buttonReply?.["id"], buttonReply?.["title"], button?.["payload"], button?.["text"]);
 
   const phone = pickString(msg?.["from"], contact?.["wa_id"]);
   if (!phone) return null;
@@ -182,9 +184,9 @@ function extractFromMetaCloud(body: Record<string, unknown>): Partial<WhatsappIn
   return {
     phone,
     name: pickString(profile?.["name"]),
-    buttonId: pickString(buttonReply?.["id"], buttonReply?.["title"], button?.["payload"], button?.["text"]),
+    buttonId,
     waMessageId: pickString(msg?.["id"]),
-    event: media ? "image" : "request_call",
+    event: media ? "image" : "message",
     media,
   };
 }
@@ -202,7 +204,7 @@ export function normalizeWhatsappInbound(body: unknown): WhatsappInboundEvent | 
     return {
       phone: meta.phone,
       name: meta.name,
-      event: meta.event ?? "request_call",
+      event: meta.event ?? "message",
       buttonId: meta.buttonId,
       waMessageId: meta.waMessageId,
       media: meta.media,

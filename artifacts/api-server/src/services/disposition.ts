@@ -6,6 +6,7 @@ import {
   buildPrompt,
   rulePrefilter,
   validate,
+  extractUnavailableFallback,
   type DispositionConfig,
   type CallEvent,
   type DispositionResult,
@@ -96,13 +97,11 @@ export async function disposeCall(input: DisposeCallInput): Promise<DispositionR
     // instead of stamping a bogus NOT_CONNECTED on a connected call.
     const chain = await getDispositionLLMChain();
     if (chain.length === 0 || !transcript?.trim()) {
+      const raw = extractUnavailableFallback(cfg, transcript, "no_llm");
+      result = validate(cfg, raw, callEvents);
       result = {
-        primary: "NOT_CONNECTED",
-        sub: "no_answer",
-        confidence: 0,
-        evidence: "",
-        summary: "No transcript or LLM unavailable",
-        flags: ["no_llm_available"],
+        ...result,
+        flags: [...(result.flags ?? []), "no_llm_available"],
         needsReview: true,
         error: "LLM unavailable or transcript empty",
       };
@@ -115,7 +114,12 @@ export async function disposeCall(input: DisposeCallInput): Promise<DispositionR
       for (let i = 0; i < chain.length; i++) {
         const { provider, client } = chain[i]!;
         try {
-          rawOut = await client.extract(systemPrompt, schema, transcript);
+          rawOut = await Promise.race([
+            client.extract(systemPrompt, schema, transcript),
+            new Promise<never>((_, reject) => {
+              setTimeout(() => reject(new Error("disposition extract timed out after 15000ms")), 15_000);
+            }),
+          ]);
           if (i > 0) logger.info({ agentId, callId, provider }, "disposition: succeeded on fallback provider");
           break;
         } catch (err) {
@@ -129,13 +133,11 @@ export async function disposeCall(input: DisposeCallInput): Promise<DispositionR
       if (rawOut) {
         result = validate(cfg, rawOut, callEvents);
       } else {
+        const raw = extractUnavailableFallback(cfg, transcript, "llm_error");
+        result = validate(cfg, raw, callEvents);
         result = {
-          primary: "NOT_CONNECTED",
-          sub: "no_answer",
-          confidence: 0,
-          evidence: "",
-          summary: "LLM extraction failed",
-          flags: ["llm_error"],
+          ...result,
+          flags: [...(result.flags ?? []), "llm_error"],
           needsReview: true,
           error: String(lastErr),
         };

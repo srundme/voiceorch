@@ -10,6 +10,7 @@ import {
   executeWebhookTool,
   executeSendEmail,
   executeSendWhatsapp,
+  executeSendSms,
 } from "../../../services/tool-executor.js";
 import { scheduleCallbackRequested } from "../../../services/autoRedial.js";
 import { resolveCallbackTime } from "../../../lib/tz-datetime.js";
@@ -170,7 +171,24 @@ export async function runLiveToolCall(
   }
 
   try {
-    const result = await executeLiveAgentTool(deps, tool, args);
+    const skipTimeout =
+      tool.type === "end_call"
+      || tool.type === "call_transfer"
+      || tool.type === "transfer_cold"
+      || tool.type === "transfer_warm"
+      || tool.type === "transfer_agent";
+    const resultPromise = executeLiveAgentTool(deps, tool, args);
+    const result = skipTimeout
+      ? await resultPromise
+      : await Promise.race([
+          resultPromise,
+          new Promise<never>((_, reject) => {
+            setTimeout(
+              () => reject(new Error(`tool timed out after ${LIVE_TOOL_TIMEOUT_MS}ms`)),
+              LIVE_TOOL_TIMEOUT_MS,
+            );
+          }),
+        ]);
     if (result === undefined) return { output: "ok" };
     return { output: result };
   } catch (err) {
@@ -179,6 +197,8 @@ export async function runLiveToolCall(
     return { error: message };
   }
 }
+
+const LIVE_TOOL_TIMEOUT_MS = 15_000;
 
 async function executeLiveAgentTool(
   deps: LiveToolRunnerDeps,
@@ -266,7 +286,13 @@ async function executeLiveAgentTool(
     case "native_cancel":
       return executeNativeCancel(callId, agentId, tool, args);
     case "send_sms":
-      return undefined;
+      return executeSendSms({
+        callId,
+        callerPhone: config.callerPhone,
+        telephonyProvider: config.telephonyProvider,
+        providerKeys: config.providerKeys,
+        messageTemplate: tool.messageTemplate,
+      });
     case "send_email":
       return executeSendEmail({
         agentId: agent.id,

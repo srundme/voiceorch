@@ -620,7 +620,7 @@ export async function createCalendarEvent(params: {
         },
         reminders: { useDefault: true },
       },
-    });
+    }, { timeout: 12_000 });
 
     const statusCode = event.data.conferenceData?.createRequest?.status?.statusCode;
     const eventId  = event.data.id ?? "";

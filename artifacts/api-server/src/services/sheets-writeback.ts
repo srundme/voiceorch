@@ -34,6 +34,7 @@ import {
 } from "./google-sheets.js";
 import {
   isCallbackDisposition,
+  isBookedDisposition,
   defaultNextDayCallbackAt,
   extractExplicitCallbackAt,
   formatSheetIst,
@@ -673,6 +674,33 @@ export async function writeSheetAutoCallResults(
   let sheetStatusLabel = friendlySheetStatus(status);
   let nextFollowUpValue = "";
 
+  const bookedHit = isBookedDisposition(
+    disposition,
+    summary,
+    typeof dispositionRaw === "object" && dispositionRaw
+      ? String((dispositionRaw as Record<string, unknown>)["status"] ?? "")
+      : "",
+    typeof dispositionRaw === "object" && dispositionRaw
+      ? String((dispositionRaw as Record<string, unknown>)["primary"] ?? "")
+      : "",
+    sheetStatusLabel,
+  );
+  if (bookedHit && sheetStatusLabel === "Completed") {
+    sheetStatusLabel = "Booked";
+  }
+  if (sheetStatusLabel === "Completed") {
+    try {
+      const [booking] = await db
+        .select({ id: bookingsTable.id })
+        .from(bookingsTable)
+        .where(and(eq(bookingsTable.callId, callId), ne(bookingsTable.status, "cancelled")))
+        .limit(1);
+      if (booking) sheetStatusLabel = "Booked";
+    } catch (err) {
+      logger.warn({ err, callId }, "sheet-auto-call: booking lookup for status preserve failed");
+    }
+  }
+
   const callbackHit = isCallbackDisposition(
     disposition,
     summary,
@@ -693,7 +721,9 @@ export async function writeSheetAutoCallResults(
       dispositionRaw,
     });
     if (scheduledAt) {
-      sheetStatusLabel = "Callback scheduled";
+      if (sheetStatusLabel !== "Booked") {
+        sheetStatusLabel = "Callback scheduled";
+      }
       nextFollowUpValue = formatSheetIst(scheduledAt);
     }
   }

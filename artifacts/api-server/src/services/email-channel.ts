@@ -511,6 +511,7 @@ async function sendViaBrevo(opts: {
       subject: opts.subject,
       htmlContent: opts.html,
     }),
+    signal: AbortSignal.timeout(10_000),
   });
   if (!resp.ok) {
     const text = await resp.text();
