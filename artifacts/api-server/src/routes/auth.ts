@@ -20,7 +20,7 @@ import { randomBytes } from "node:crypto";
 import { promisify } from "node:util";
 import { scrypt, timingSafeEqual } from "node:crypto";
 import { db, linkLegacyIdentitiesAtLogin } from "@workspace/db";
-import { usersTable, walletTransactionsTable, passwordResetOtpsTable, platformSettingsTable, partnersTable } from "@workspace/db/schema";
+import { usersTable, walletTransactionsTable, passwordResetOtpsTable, platformSettingsTable } from "@workspace/db/schema";
 import { eq, and, isNull, gt, desc, sql } from "drizzle-orm";
 import { createSessionToken, verifySessionToken } from "../lib/session.js";
 import { setSessionCookie, clearSessionCookie } from "../lib/session-cookie.js";
@@ -40,8 +40,10 @@ import { getLoginAuthUrl, exchangeLoginCode } from "../services/auth/google-logi
 import { trackEvent } from "../services/track-event.js";
 import { deriveRedirectUri, dashboardBase, isTrustedOrigin } from "../lib/oauth-redirect.js";
 import { SIGNUP_CREDIT_PAISE, formatInr } from "../lib/money-inr.js";
-import { resolvePartnerByHost } from "../services/partner-domains.js";
-import { normalizeDomain } from "../services/partner-domains-normalize.js";
+import {
+  assertLoginHostAllowed,
+  resolvePartnerHostFromRequest,
+} from "../lib/partner-portal-access.js";
 
 const OTP_RATE_LIMIT_MAX = parseInt(process.env.OTP_RATE_LIMIT_MAX ?? "3", 10);
 const OTP_RATE_LIMIT_WINDOW_MS = parseInt(process.env.OTP_RATE_LIMIT_WINDOW_MS ?? String(15 * 60 * 1000), 10);
@@ -96,22 +98,6 @@ function issueSession(
   return token;
 }
 
-/** Resolve partner white-label host from request Host / forwarded headers / body. */
-async function partnerFromAuthRequest(req: Request, bodyHost?: string) {
-  const candidates = [
-    typeof bodyHost === "string" ? bodyHost : "",
-    (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() ?? "",
-    req.hostname ?? "",
-  ];
-  for (const raw of candidates) {
-    const host = normalizeDomain(raw);
-    if (!host) continue;
-    const brand = await resolvePartnerByHost(host);
-    if (brand) return brand;
-  }
-  return null;
-}
-
 // ── Register ──────────────────────────────────────────────────────────────────
 
 router.post("/auth/register", async (req, res): Promise<void> => {
@@ -123,7 +109,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   };
 
   // Partner white-label gateways are invite/provision only — no public self-signup.
-  const partnerBrand = await partnerFromAuthRequest(req, bodyHost);
+  const partnerBrand = await resolvePartnerHostFromRequest(req, bodyHost);
   if (partnerBrand) {
     res.status(403).json({
       error: `Accounts on this portal are created by ${partnerBrand.companyName}. Contact them for access.`,
@@ -263,7 +249,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   const normalizedEmail = email.trim().toLowerCase();
   const sub = `email:${normalizedEmail}`;
-  const partnerBrand = await partnerFromAuthRequest(req, bodyHost);
+  const partnerBrand = await resolvePartnerHostFromRequest(req, bodyHost);
 
   try {
     const [user] = await db
@@ -293,22 +279,10 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       return;
     }
 
-    // On a partner white-label host, only that partner's clients (and the
-    // partner's own account) may sign in — keeps the gateway tenant-scoped.
-    if (partnerBrand) {
-      const [owner] = await db
-        .select({ userId: partnersTable.userId })
-        .from(partnersTable)
-        .where(eq(partnersTable.id, partnerBrand.partnerId))
-        .limit(1);
-      const isOwner = owner?.userId === user.clerkId;
-      const isClient = user.partnerId === partnerBrand.partnerId;
-      if (!isOwner && !isClient) {
-        res.status(403).json({
-          error: `This account is not registered with ${partnerBrand.companyName}.`,
-        });
-        return;
-      }
+    const gate = await assertLoginHostAllowed(user.clerkId, partnerBrand);
+    if (!gate.ok) {
+      res.status(403).json({ error: gate.error });
+      return;
     }
 
     issueSession(res, { sub, email: user.email, name: user.name });
@@ -601,6 +575,14 @@ router.post("/auth/password-reset/verify", async (req, res): Promise<void> => {
       return;
     }
 
+    const { host: bodyHost } = req.body as { host?: string };
+    const partnerBrand = await resolvePartnerHostFromRequest(req, bodyHost);
+    const gate = await assertLoginHostAllowed(sub, partnerBrand);
+    if (!gate.ok) {
+      res.status(403).json({ error: gate.error });
+      return;
+    }
+
     issueSession(res, { sub, email: user.email, name: user.name });
     logger.info({ email: normalizedEmail }, "Password reset successful");
 
@@ -636,7 +618,7 @@ router.get("/auth/me", (req, res): void => {
   });
 });
 
-router.post("/auth/session", (req, res): void => {
+router.post("/auth/session", async (req, res): Promise<void> => {
   const token = typeof (req.body as { token?: unknown })?.token === "string"
     ? (req.body as { token: string }).token.trim()
     : "";
@@ -649,6 +631,15 @@ router.post("/auth/session", (req, res): void => {
     res.status(401).json({ error: "Invalid or expired session" });
     return;
   }
+
+  const { host: bodyHost } = req.body as { host?: string };
+  const partnerBrand = await resolvePartnerHostFromRequest(req, bodyHost);
+  const gate = await assertLoginHostAllowed(payload.sub, partnerBrand);
+  if (!gate.ok) {
+    res.status(403).json({ error: gate.error });
+    return;
+  }
+
   setSessionCookie(res, token, Math.max(60, payload.exp - Math.floor(Date.now() / 1000)));
   res.json({
     ok: true,
@@ -670,7 +661,7 @@ const LOGIN_CALLBACK_PATH = "/api/auth/google/callback";
 
 router.get("/auth/google/connect", async (req, res): Promise<void> => {
   // Partner white-label portals are email/password only.
-  const partnerBrand = await partnerFromAuthRequest(req);
+  const partnerBrand = await resolvePartnerHostFromRequest(req);
   if (partnerBrand) {
     res.status(403).json({
       error: `Google sign-in is not available on ${partnerBrand.companyName}'s portal. Use email and password.`,
@@ -901,6 +892,15 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     } else {
       logger.info({ sub: googleSub, email: normalizedEmail }, "Google Sign-In: existing user signed in");
       void trackEvent(googleSub, "login");
+    }
+
+    const returnPartnerBrand = returnBase
+      ? await resolvePartnerHostFromRequest(req, new URL(returnBase).host)
+      : null;
+    const gate = await assertLoginHostAllowed(googleSub, returnPartnerBrand);
+    if (!gate.ok) {
+      res.redirect(`${base}/sign-in?google_error=true&reason=wrong_portal`);
+      return;
     }
 
     const token = issueSession(res, {

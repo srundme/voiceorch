@@ -61,7 +61,10 @@ async function adoptToken(token: string): Promise<SessionUser | null> {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({
+      token,
+      host: typeof window !== "undefined" ? window.location.host : undefined,
+    }),
   });
   if (!res.ok) return null;
   return userFromMe(await res.json());

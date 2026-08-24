@@ -7,6 +7,7 @@ import pinoHttp from "pino-http";
 import path from "path";
 import { existsSync } from "fs";
 import { attachSession } from "./middlewares/session.js";
+import { enforcePartnerPortalAccess } from "./middlewares/partnerPortalAccess.js";
 import { detectImpersonation } from "./middlewares/detectImpersonation.js";
 import { authenticateApiKey } from "./routes/user-api-keys.js";
 import router from "./routes";
@@ -122,6 +123,9 @@ app.use(express.urlencoded({ extended: true, limit: "12mb" }));
 // IP rate limiter can skip authenticated users and the auth rate limiter can
 // key on the user id.
 app.use(attachSession);
+
+// Partner white-label hosts: block cross-tenant sessions (login bypass paths included).
+app.use(enforcePartnerPortalAccess);
 
 // Developer API keys (Authorization: Bearer sk_live_…). No-op for session JWTs /
 // unauthenticated requests. Must run after attachSession so dashboard session
