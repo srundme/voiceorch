@@ -6512,9 +6512,9 @@ export class OrchestrationPipeline implements VoiceSession {
         const scheduledAtRaw = args["scheduled_at"] as string | undefined;
         const notes = args["notes"] as string | undefined;
         const cbTz = this.agent.timezone?.trim() || "Asia/Kolkata";
-        const { scheduledAt, wasDefaulted, wasClamped } = resolveCallbackTime(scheduledAtRaw, cbTz);
+        const { scheduledAt, wasDefaulted, wasClamped, wasRolled } = resolveCallbackTime(scheduledAtRaw, cbTz);
         logger.info(
-          { callId, agentId, toNumber, scheduledAtRaw, scheduledAt, tz: cbTz, wasDefaulted, wasClamped, notes },
+          { callId, agentId, toNumber, scheduledAtRaw, scheduledAt, tz: cbTz, wasDefaulted, wasClamped, wasRolled, notes },
           "Built-in schedule_callback invoked by LLM",
         );
         if (toNumber) {

@@ -61,7 +61,7 @@ export async function runLiveToolCall(
     const scheduledAtRaw = args["scheduled_at"] as string | undefined;
     const notes = args["notes"] as string | undefined;
     const cbTz = agent.timezone?.trim() || "Asia/Kolkata";
-    const { scheduledAt, wasDefaulted, wasClamped } = resolveCallbackTime(scheduledAtRaw, cbTz);
+    const { scheduledAt, wasDefaulted, wasClamped, wasRolled } = resolveCallbackTime(scheduledAtRaw, cbTz);
     if (toNumber) {
       await scheduleCallbackRequested({
         agentId: agent.id,
@@ -75,7 +75,7 @@ export async function runLiveToolCall(
         hour: "numeric", minute: "2-digit", hour12: true, timeZone: cbTz,
       });
       logger.info(
-        { callId: config.callId, agentId: agent.id, toNumber, scheduledAtRaw, scheduledAt, tz: cbTz, wasDefaulted, wasClamped },
+        { callId: config.callId, agentId: agent.id, toNumber, scheduledAtRaw, scheduledAt, tz: cbTz, wasDefaulted, wasClamped, wasRolled },
         "Live: schedule_callback invoked by LLM",
       );
       return {
