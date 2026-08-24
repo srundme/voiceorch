@@ -31,14 +31,7 @@ export default function ProvidersTabPage() {
           {
             key: "provider-keys",
             label: "Provider keys",
-            content: (
-              <>
-                <div className="max-w-[1400px] mx-auto px-10 pt-8">
-                  {clones.panel}
-                </div>
-                <ProvidersList />
-              </>
-            ),
+            content: <ProvidersList clonesPanel={clones.panel} />,
           },
         ]}
       />

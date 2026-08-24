@@ -4495,7 +4495,7 @@ function readAfterCallMessages(raw: unknown): AfterCallMessagesState {
             whatsappTemplate: readWaTpl(r["whatsappTemplate"]),
           };
         })
-        .filter((r): r is AfterCallMsgRule => !!r)
+        .filter((r): r is NonNullable<typeof r> => r !== null)
     : [];
   return {
     universal: {
