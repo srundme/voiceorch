@@ -33,9 +33,11 @@ RUN PORT=3000 BASE_PATH=/ pnpm --filter @workspace/dashboard run build
 
 RUN PORT=3000 BASE_PATH=/admin-ui/ pnpm --filter @workspace/admin run build
 
+# Hosted MCP is @snapserve/mcp (bundled into api-server). Do not tsc
+# @snapserveai/mcp here — that package re-exports @snapserve/mcp and Docker's
+# install layout makes tsc fail with TS2307.
 RUN pnpm --filter @snapserveai/sdk build \
  && pnpm --filter @snapserve/mcp build \
- && pnpm --filter @snapserveai/mcp build \
  && pnpm --filter @workspace/api-server run build
 
 FROM node:22-slim
@@ -65,7 +67,6 @@ COPY --from=builder /workspace/artifacts/api-server/dist ./artifacts/api-server/
 COPY --from=builder /workspace/artifacts/dashboard/dist ./artifacts/dashboard/dist
 COPY --from=builder /workspace/artifacts/admin/dist ./artifacts/admin/dist
 COPY --from=builder /workspace/lib/sdk-node/dist ./lib/sdk-node/dist
-COPY --from=builder /workspace/lib/mcp/dist ./lib/mcp/dist
 COPY --from=builder /workspace/lib/snapserve-mcp/dist ./lib/snapserve-mcp/dist
 COPY lib/db/drizzle ./lib/db/drizzle
 

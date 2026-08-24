@@ -403,9 +403,6 @@ importers:
       '@snapserve/mcp':
         specifier: workspace:*
         version: link:../../lib/snapserve-mcp
-      '@snapserveai/mcp':
-        specifier: workspace:*
-        version: link:../../lib/mcp
       '@snapserveai/sdk':
         specifier: workspace:*
         version: link:../../lib/sdk-node
