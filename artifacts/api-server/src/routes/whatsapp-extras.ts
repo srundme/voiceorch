@@ -289,6 +289,7 @@ router.post("/whatsapp/byon/submit-code", requireAuth, async (req, res): Promise
 });
 
 /** Poll the capture/verification state. */
+router.get("/whatsapp/byon/state", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const pnIdRaw = req.query["phoneNumberId"];
   let phoneE164: string | undefined;
