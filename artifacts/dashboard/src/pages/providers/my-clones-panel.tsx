@@ -181,36 +181,18 @@ export function useVoiceClones(onReveal?: () => void) {
   );
 
   const panel = (
-    <section className="rounded-xl border border-border/70 bg-card/40 overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setClonesOpen((open) => !open)}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
-        aria-expanded={clonesOpen}
-      >
-        <span className="flex items-center gap-2 min-w-0">
-          <ChevronDown className={cn("h-4 w-4 text-muted-foreground shrink-0 transition-transform", clonesOpen && "rotate-180")} />
-          <span className="text-sm font-semibold tracking-tight">My clones</span>
-        </span>
-        {!clonesLoading && (
-          <span className="text-[11px] text-muted-foreground shrink-0">
-            {myClones.length} voice{myClones.length === 1 ? "" : "s"}
-          </span>
-        )}
-      </button>
-      {clonesOpen && (
-        <div className="px-4 pb-4 pt-1 border-t border-border/50">
-          {clonesLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-3">
-              {Array.from({ length: 2 }).map((_, i) => (
-                <div key={i} className="rounded-xl border border-border/60 bg-card/40 p-4 h-[120px] animate-pulse" />
-              ))}
-            </div>
-          ) : myClones.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border/60 p-6 text-center text-sm text-muted-foreground mt-3">
-              No clones yet. Instant-clone with Cartesia, or add a Sarvam Creative Studio speaker id.
-            </div>
-          ) : (
+    <div className="w-full">
+      {clonesLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-border/60 bg-card/40 p-4 h-[120px] animate-pulse" />
+          ))}
+        </div>
+      ) : myClones.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border/60 p-8 text-center text-sm text-muted-foreground">
+          No clones yet. Instant-clone with Cartesia, or add a Sarvam Creative Studio speaker id.
+        </div>
+      ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-3">
               {myClones.map((voice) => {
                 const isPreviewing = previewingId === voice.id;
@@ -270,9 +252,7 @@ export function useVoiceClones(onReveal?: () => void) {
               })}
             </div>
           )}
-        </div>
-      )}
-    </section>
+    </div>
   );
 
   return { buttons, dialogs, panel };
