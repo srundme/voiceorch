@@ -1124,9 +1124,9 @@ function OverviewTab({
                       ]} />
                     <p className="text-[9.5px] text-muted-foreground leading-snug mt-1">
                       {currentValue === "transcribe"
-                        ? "Caller speech stays in its own script. Best for Hindi, Tamil, and other Indic languages."
+                        ? "Every word in native script (मेरा फोन नंबर). Not for Hinglish — English becomes हिंदी."
                         : currentValue === "codemix"
-                        ? "English words stay in English; regional words stay in their script. Best for mixed speech."
+                        ? "Sarvam's code-mix mode: English stays English, Hindi stays हिंदी. Right default for Indian calls."
                         : currentValue === "verbatim"
                         ? "Keeps fillers and exact phrasing as spoken."
                         : currentValue === "translit"

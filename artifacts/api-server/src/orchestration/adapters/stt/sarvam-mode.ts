@@ -1,15 +1,18 @@
 /**
- * Sarvam saaras:v3 STT mode resolution.
+ * Sarvam saaras:v3 / saaras:v3-realtime `mode` (final transcript only;
+ * partials are always plain transcription).
  *
- * Explicit agent-config mode ALWAYS wins. Default is `codemix` for every
- * language — Indian voice calls mix English (API, B2B, current price) with
- * Indic, and pinning `transcribe` + a single language_code made those turns
- * vanish from the transcript (call 12855: VAD kept firing, STT went silent).
+ * Explicit agent-config mode ALWAYS wins. Default is `codemix`:
+ *   https://docs.sarvam.ai/api/getting-started/models/saaras
+ *   transcribe → native-script only (मेरा फोन नंबर है 9840…)
+ *   codemix    → native + English  (मेरा phone number है 9840…)
  *
- * Pick `transcribe` in the builder only when you want every word in native
- * script. The five saaras modes stay available as explicit overrides.
+ * Indian voice calls are code-mix heavy (API, B2B, current price). Sarvam's
+ * own guidance: use codemix for that, not transcribe. transcribe on a Hindi
+ * pin wrote "करंट प्राइस" then later mixed turns produced empty finals
+ * (call 12855). Pick `transcribe` in the builder only for native-script records.
  *
- * Only saaras:v3 supports `mode` at all — the caller gates on MODE_CAPABLE.
+ * Only saaras:v3 supports `mode` — the caller gates on MODE_CAPABLE.
  */
 
 export type SarvamSttMode = "transcribe" | "codemix" | "verbatim" | "translit" | "translate";

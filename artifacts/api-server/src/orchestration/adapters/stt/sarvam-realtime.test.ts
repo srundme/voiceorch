@@ -36,10 +36,15 @@ describe("isSarvamRealtimeModel", () => {
 });
 
 describe("resolveRealtimeSocketLanguage", () => {
-  it("always opens with auto LID, even when the agent language is pinned Hindi", () => {
-    expect(resolveRealtimeSocketLanguage("hi-IN", false)).toBe("auto");
+  it("pins the agent language when auto-detect is off (short turns need it)", () => {
+    expect(resolveRealtimeSocketLanguage("hi-IN", false)).toBe("hi-IN");
+    expect(resolveRealtimeSocketLanguage("ta-IN", undefined)).toBe("ta-IN");
+    expect(resolveRealtimeSocketLanguage(undefined, false)).toBe("en-IN");
+  });
+
+  it("opens with auto LID only when auto-detect is on", () => {
+    expect(resolveRealtimeSocketLanguage("hi-IN", true)).toBe("auto");
     expect(resolveRealtimeSocketLanguage("ta-IN", true)).toBe("auto");
-    expect(resolveRealtimeSocketLanguage(undefined, undefined)).toBe("auto");
   });
 });
 
@@ -135,6 +140,7 @@ describe("buildRealtimeWsUrl", () => {
     expect(url).toContain("min_speech_duration_ms=250");
     expect(url).toContain("encoding=linear16");
     expect(url).toContain("threshold=0.3");
+    expect(url).toContain("prefix_padding_ms=300");
     expect(url).toContain("return_timestamps=true");
     expect(url).not.toContain("high_vad_sensitivity");
   });

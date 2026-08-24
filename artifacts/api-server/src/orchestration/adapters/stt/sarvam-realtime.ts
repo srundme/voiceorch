@@ -20,6 +20,8 @@ const PING_MS = 20_000;
 const DEFAULT_SILENCE_MS = 500;
 const DEFAULT_MIN_SPEECH_MS = 250;
 const DEFAULT_THRESHOLD = 0.3;
+/** Realtime API default. Pipecat: raise if the first syllable is clipped. */
+const DEFAULT_PREFIX_PADDING_MS = 300;
 
 export type SarvamRealtimeStreamType = "fast" | "balanced" | "simulated";
 
@@ -77,15 +79,17 @@ export function toRealtimeLanguageCode(code: string | null | undefined, auto: bo
 }
 
 /**
- * Voice-agent realtime sockets always use LID (`language_code=auto`).
- * Builder language drives LLM/TTS, not this pin. Pinned hi-IN + transcribe
- * produced VAD with no finals on mixed Hinglish (call 12855).
+ * Realtime `language_code` per Sarvam docs + speech-to-text skill:
+ *   • auto-detect ON  → `auto` (LID on every partial/final)
+ *   • auto-detect OFF → agent BCP-47 (skill: pin language for audio <3s)
+ * Never invent auto for a single-language agent — short "haan"/"ok" turns
+ * lose LID. Mixed Hinglish is `mode=codemix`, not a language pin.
  */
 export function resolveRealtimeSocketLanguage(
-  _configuredLang?: string | null,
-  _languageAutoDetect?: boolean,
+  configuredLang?: string | null,
+  languageAutoDetect?: boolean,
 ): string {
-  return "auto";
+  return toRealtimeLanguageCode(configuredLang, languageAutoDetect === true);
 }
 
 /**
@@ -131,6 +135,7 @@ export function buildRealtimeWsUrl(opts: {
   silenceDurationMs: number;
   minSpeechDurationMs: number;
   threshold: number;
+  prefixPaddingMs?: number;
   prompt?: string;
   returnTimestamps?: boolean;
 }): string {
@@ -149,6 +154,7 @@ export function buildRealtimeWsUrl(opts: {
     silence_duration_ms: String(opts.silenceDurationMs),
     min_speech_duration_ms: String(opts.minSpeechDurationMs),
     threshold: String(opts.threshold),
+    prefix_padding_ms: String(opts.prefixPaddingMs ?? DEFAULT_PREFIX_PADDING_MS),
     return_timestamps: opts.returnTimestamps === false ? "false" : "true",
   });
   const prompt = clipRealtimePrompt(opts.prompt);
@@ -277,6 +283,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
         languageCode: this.languageCode,
         mode: this.mode,
         streamType: this.streamType,
+        prefixPaddingMs: DEFAULT_PREFIX_PADDING_MS,
         prompt: this.prompt ? this.prompt.slice(0, 40) : undefined,
         sampleRate: this.sampleRate,
         silenceDurationMs: this.silenceDurationMs,
@@ -511,6 +518,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
         silenceDurationMs,
         minSpeechDurationMs,
         threshold,
+        prefixPaddingMs: DEFAULT_PREFIX_PADDING_MS,
         prompt,
         returnTimestamps: true,
       });
