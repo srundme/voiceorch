@@ -26,10 +26,9 @@ export default function IntroductionPage() {
         on <code>https://app.snapserve.ai/api</code>.
       </p>
 
-      <Callout variant="warn" title="Use these hosts — nothing else">
+      <Callout variant="info" title="Hosts">
         App: <code>https://app.snapserve.ai</code>. Docs: <code>https://app.snapserve.ai/docs</code>.
-        API: <code>https://app.snapserve.ai/api</code>. There is no{" "}
-        <code>api.snapserve.ai</code> or <code>docs.snapserve.ai</code> — those hostnames 404.
+        API: <code>https://app.snapserve.ai/api</code>.
       </Callout>
 
       <h2 id="start">Start here</h2>
