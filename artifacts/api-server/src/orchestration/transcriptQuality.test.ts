@@ -86,6 +86,29 @@ describe("checkTranscriptQuality", () => {
     expect(shouldHoldFragmentForCoalesce("No, not yet.", { expectedLang: "en-IN" })).toBe(false);
   });
 
+  it("holds Devanagari fragments left dangling on a postposition (call 12541)", () => {
+    // Saaras returns Devanagari for hi-IN, where the ASCII-only `\b` in the
+    // Hinglish dangler list can never match — these all read as complete before.
+    expect(checkTranscriptQuality("सौ करोड़ से", { expectedLang: "hi-IN" }).reason).toBe("truncated-dangling");
+    expect(checkTranscriptQuality("मुझे 30 लाख का", { expectedLang: "hi-IN" }).reason).toBe("truncated-dangling");
+    expect(checkTranscriptQuality("plot investment के", { expectedLang: "hi-IN" }).reason).toBe("truncated-dangling");
+    expect(shouldHoldFragmentForCoalesce("सौ करोड़ से", { expectedLang: "hi-IN" })).toBe(true);
+  });
+
+  it("leaves complete Hindi answers alone", () => {
+    expect(checkTranscriptQuality("रहने के लिए", { expectedLang: "hi-IN" }).reason).toBe("");
+    expect(checkTranscriptQuality("हाँ Sir", { expectedLang: "hi-IN" }).reason).toBe("");
+    expect(checkTranscriptQuality("ठीक है", { expectedLang: "hi-IN" }).reason).toBe("");
+    expect(shouldHoldFragmentForCoalesce("रहने के लिए", { expectedLang: "hi-IN" })).toBe(false);
+    // A lone particle is too often the whole answer to treat as a truncation.
+    expect(checkTranscriptQuality("एक", { expectedLang: "hi-IN" }).reason).toBe("");
+    expect(checkTranscriptQuality("तो", { expectedLang: "hi-IN" }).reason).toBe("");
+  });
+
+  it("keeps matching romanized Hinglish danglers", () => {
+    expect(checkTranscriptQuality("main Jaipur se", { expectedLang: "hi-IN" }).reason).toBe("truncated-dangling");
+  });
+
   it("holds Yes Ma'am so How are you can merge (call 4856 zigzag)", () => {
     expect(isBackchannelOnlyUtterance("Yes Ma'am")).toBe(true);
     expect(shouldHoldFragmentForCoalesce("Yes Ma'am", { expectedLang: "en-IN" })).toBe(true);

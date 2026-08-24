@@ -27,6 +27,18 @@ export interface TranscriptQualityOptions {
 const TRUNCATION_DANGLER_RE =
   /\b(about|with|for|from|into|through|of|to|and|but|or|because|although|though|a|an|the|just|like|so|also|even|only|already|still|both|either|neither|nor|since|until|unless|whether|while|as|if|then|than|that|this|these|those|which|who|whom|whose|when|where|how|what|why|ke|ki|ka|ko|mein|pe|par|se|ne|aur|lekin|jo|ek|toh|bhi|hi|na|kya|kaise|kyun|kyunki|jab|jahan|என்|உன்|என்|எனக்கு|உங்களுக்கு|என்ன|எந்த|இந்த|அந்த|ஒரு|மற்றும்|ஆனால்|அல்லது|ஏனெனில்|எப்படி|எங்கே|எப்போது)\s*[,.]?\s*$/i;
 
+/**
+ * Devanagari postpositions and conjunctions that almost never end a finished
+ * thought ("सौ करोड़ से", "मुझे 30 लाख का").
+ *
+ * Kept separate from TRUNCATION_DANGLER_RE because `\b` is ASCII-only in JS —
+ * a Devanagari alternation placed there can never match, which left Hindi-script
+ * agents with no truncation detection at all while Hinglish ("Jaipur se") worked.
+ * Anchored on whitespace instead, and `।` counts as terminal punctuation.
+ */
+const DEVANAGARI_DANGLER_RE =
+  /(?:^|\s)(से|को|में|पे|पर|का|की|के|ने|तक|और|या|लेकिन|क्योंकि|कि|अगर|जब|जहाँ|जहां|तो|भी|ही)\s*[,.।]?\s*$/u;
+
 /** Complete short negations that end on "yet" / time words — never clarification-bait. */
 const COMPLETE_SHORT_NEGATION_RE =
   /^(no|nope|nah)[,!]?\s+(not\s+)?(yet|now|really|today|ready)\.?$/i;
@@ -340,7 +352,10 @@ export function checkTranscriptQuality(
   // Only applied to short utterances (≤ MAX_TRUNCATION_WORDS) to avoid
   // false-positives on longer sentences that happen to end on these words.
   const wordCount = t.split(/\s+/).filter(Boolean).length;
-  if (wordCount <= MAX_TRUNCATION_WORDS && TRUNCATION_DANGLER_RE.test(t)) {
+  // A lone Devanagari particle ("एक", "तो") is too often a complete answer to
+  // treat as truncation, so the script path needs at least two words.
+  const danglesInDevanagari = wordCount >= 2 && DEVANAGARI_DANGLER_RE.test(t);
+  if (wordCount <= MAX_TRUNCATION_WORDS && (TRUNCATION_DANGLER_RE.test(t) || danglesInDevanagari)) {
     // English greeting "Hi" must not match the Hindi emphatic-particle dangler `hi`.
     if (wordCount === 1 && /^hi\.?$/i.test(t)) {
       return { isGarbled: false, reason: "" };
