@@ -46,6 +46,7 @@ import {
 } from "../services/whatsapp/agent-templates.js";
 import { isUsableWhatsappTemplateStatus } from "../services/whatsapp/meta.js";
 import { extractOtpCode } from "../services/whatsapp/extract-otp.js";
+import { buildByonOtpHangupXml } from "../services/whatsapp/byon-otp-xml.js";
 
 export { extractOtpCode };
 
@@ -260,8 +261,34 @@ router.post("/whatsapp/byon/vobiz-confirm", requireAuth, async (req, res): Promi
   res.json({ ok: true, verification: updated ? verificationPublic(updated) : null });
 });
 
+router.post("/whatsapp/byon/submit-code", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const body = (req.body ?? {}) as { phoneNumberId?: number; otpCode?: string };
+  const pn = await loadOwnedVoiceNumber(userId, Number(body.phoneNumberId));
+  if (!pn) {
+    res.status(404).json({ error: "Voice number not found" });
+    return;
+  }
+  const code = String(body.otpCode ?? "").replace(/\D/g, "");
+  if (!/^\d{4,8}$/.test(code)) {
+    res.status(400).json({ error: "Enter the 4–8 digit code you heard or saw in Meta" });
+    return;
+  }
+  const phoneE164 = toPlusE164(pn.number);
+  const row = await latestVerification(userId, phoneE164);
+  if (!row || (row.status !== "armed" && row.status !== "code_captured")) {
+    res.status(400).json({ error: "Start capture first, then enter the code" });
+    return;
+  }
+  const [updated] = await db.update(whatsappByonVerificationsTable)
+    .set({ otpCode: code, status: "code_captured", updatedAt: new Date() })
+    .where(eq(whatsappByonVerificationsTable.id, row.id))
+    .returning();
+  logger.info({ userId, phone: phoneE164 }, "whatsapp-byon: code submitted manually");
+  res.json({ verification: verificationPublic(updated ?? row) });
+});
+
 /** Poll the capture/verification state. */
-router.get("/whatsapp/byon/state", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const pnIdRaw = req.query["phoneNumberId"];
   let phoneE164: string | undefined;
@@ -446,7 +473,8 @@ async function transcribeRecordingAndStore(vid: string, url: string): Promise<vo
 }
 
 router.post("/webhooks/vobiz/wa-otp-recording", async (req, res): Promise<void> => {
-  res.status(200).json({ ok: true }); // ack fast; VoBiz retries otherwise
+  // Vobiz Record `action` expects VoiceXML back, not JSON.
+  res.status(200).set("Content-Type", "text/xml").send(buildByonOtpHangupXml());
   const vid = String(req.query["vid"] ?? "");
   if (!UUID_RE.test(vid)) return;
   const b = (req.body ?? {}) as Record<string, any>;

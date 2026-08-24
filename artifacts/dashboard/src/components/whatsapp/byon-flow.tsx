@@ -7,7 +7,7 @@
  * "capture" is armed, the platform answers that call with a recorder, we
  * transcribe it, and the spoken code appears here.
  */
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -65,9 +65,10 @@ export function ByonPanel({
         `${API}/whatsapp/byon/state?phoneNumberId=${voiceNumberId}`,
       ),
     enabled: voiceNumberId != null,
-    refetchInterval: (q) => (q.state.data?.verification?.armed ? 4000 : false),
+    refetchInterval: (q) => (q.state.data?.verification?.armed ? 2000 : false),
   });
   const verification = stateData?.verification ?? null;
+  const [manualCode, setManualCode] = useState("");
 
   const invalidateState = () => void qc.invalidateQueries({ queryKey: ["byon-state", voiceNumberId] });
 
@@ -100,6 +101,21 @@ export function ByonPanel({
       toast({ title: "VoBiz OTP call requested", description: "We'll auto-capture and confirm the code — watch the status below." });
     },
     onError: (err: Error) => toast({ title: "OTP request failed", description: err.message, variant: "destructive" }),
+  });
+
+  const submitCode = useMutation({
+    mutationFn: () =>
+      customFetch<{ verification: ByonVerification }>(`${API}/whatsapp/byon/submit-code`, {
+        method: "POST",
+        body: JSON.stringify({ phoneNumberId: voiceNumberId, otpCode: manualCode }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    onSuccess: () => {
+      setManualCode("");
+      invalidateState();
+      toast({ title: "Code saved — paste it into Meta Business Manager" });
+    },
+    onError: (err: Error) => toast({ title: "Could not save code", description: err.message, variant: "destructive" }),
   });
 
   const vobizConfirm = useMutation({
@@ -193,12 +209,39 @@ export function ByonPanel({
                 )}
               </div>
             ) : (
-              <p className="text-[11px] text-muted-foreground">
-                1. Click <strong>Start capture</strong> and wait until it says <strong>listening…</strong>.
-                2. In Meta, add this number and choose <strong>Voice call</strong> — SMS will never appear here
-                (this is a voice line, not a mobile SIM). Or use <strong>VoBiz OTP call</strong>.
-                3. The 6-digit code shows up here within about a minute after Meta rings the number.
-              </p>
+              <div className="space-y-2">
+                <p className="text-[11px] text-muted-foreground">
+                  1. Click <strong>Start capture</strong> and wait until it says <strong>listening…</strong>.
+                  2. In Meta, add this number and choose <strong>Voice call</strong> — SMS will never appear here
+                  (this is a voice line, not a mobile SIM). Or use <strong>VoBiz OTP call</strong>.
+                  3. The 6-digit code shows up here after Meta rings. That ring will <strong>not</strong> appear
+                  in Call History — capture answers it instead of your agent.
+                </p>
+                {verification?.transcript && (
+                  <p className="text-[11px] text-muted-foreground italic">{verification.transcript}</p>
+                )}
+                {verification?.armed && (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      className="h-8 font-mono tracking-widest max-w-[10rem]"
+                      inputMode="numeric"
+                      maxLength={8}
+                      placeholder="Type code"
+                      value={manualCode}
+                      onChange={(e) => setManualCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-[11px]"
+                      disabled={submitCode.isPending || manualCode.length < 4}
+                      onClick={() => submitCode.mutate()}
+                    >
+                      Save code
+                    </Button>
+                  </div>
+                )}
+              </div>
             )}
 
             {verification?.hasRecording && !verification?.otpCode && (

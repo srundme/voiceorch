@@ -53,8 +53,9 @@ export default function WhatsAppDocsPage() {
       <Callout variant="warn" title="Meta OTP on a SnapServe number">
         Click <strong>Start capture</strong> and wait for <strong>listening…</strong> before
         Meta rings. In Meta choose <strong>Voice call</strong> — SMS will never show on this
-        page (the DID is a voice line). The 6-digit code appears after the call. If you
-        already verified the number on your WABA, skip OTP and paste Phone Number ID + token.
+        page (the DID is a voice line). The 6-digit code appears after the call. That ring
+        does not show in Call History. If you already verified the number on your WABA,
+        skip OTP and paste Phone Number ID + token.
       </Callout>
 
       <h2 id="text">Text chatbot</h2>

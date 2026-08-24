@@ -74,8 +74,9 @@ const FAQS: { q: string; a: ReactNode }[] = [
         Click <strong>Start capture</strong> and wait for <strong>listening…</strong>, then
         in Meta choose <strong>Voice call</strong> — not SMS (a SnapServe DID cannot
         receive SMS). The spoken 6-digit code shows on that page after Meta rings the
-        number. If a player appears, listen and type the digits into Meta. If the number
-        is already verified on your WABA, skip OTP and paste Phone Number ID + token on
+        number. The OTP call will not appear in Call History — capture answers it
+        instead of your agent. If a player appears, listen and type the digits into Meta.
+        If the number is already verified on your WABA, skip OTP and paste Phone Number ID + token on
         Connections. <Link href="/docs/whatsapp">WhatsApp</Link>.
       </>
     ),
