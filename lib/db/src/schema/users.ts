@@ -42,10 +42,16 @@ export const usersTable = pgTable("users", {
    */
   /** Legacy flag — always treated as true for managed clients (full workspace). */
   partnerAllowAgentEdit: boolean("partner_allow_agent_edit").notNull().default(true),
+  /** Failed email/password attempts on the partner portal (managed clients only). */
+  portalLoginFailedAttempts: integer("portal_login_failed_attempts").notNull().default(0),
+  /** When set, managed-client portal login is locked until admin/partner unlocks. */
+  portalLoginLockedAt: timestamp("portal_login_locked_at", { withTimezone: true }),
+  portalLoginLockedReason: text("portal_login_locked_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [
   index("users_partner_id_idx").on(t.partnerId),
+  index("users_portal_login_locked_at_idx").on(t.portalLoginLockedAt),
 ]);
 
 export const walletTransactionsTable = pgTable("wallet_transactions", {

@@ -5,6 +5,7 @@ import {
   useUserDetail,
   useSetConcurrentLimit,
   useSetUserStatus,
+  useUnlockPortalLogin,
   useEditUserProfile,
   useUserProviders,
   useUserCalls,
@@ -67,6 +68,7 @@ export default function UserDetail() {
   const setConcurrentLimit = useSetConcurrentLimit(clerkId || "");
   const setUnlimitedTrial = useSetUserUnlimitedTrial(clerkId || "");
   const setStatus = useSetUserStatus(clerkId || "");
+  const unlockPortalLogin = useUnlockPortalLogin(clerkId || "");
   const editProfile = useEditUserProfile(clerkId || "");
   const creditWallet = useCreditWallet(clerkId || "");
   const debitWallet = useDebitWallet(clerkId || "");
@@ -289,6 +291,9 @@ export default function UserDetail() {
                 {partner.status === "suspended" ? "Partner · Suspended" : "Partner"}
               </Badge>
             )}
+            {user.portalLoginLockedAt && (
+              <Badge variant="destructive" className="text-[10px]">Portal login locked</Badge>
+            )}
           </div>
           <p className="text-xs text-muted-foreground font-mono mt-1">{user.clerkId}</p>
           <p className="text-sm text-muted-foreground">{user.name || "No name"}</p>
@@ -304,6 +309,23 @@ export default function UserDetail() {
             <LogIn className="h-3.5 w-3.5" />
             {impersonate.isPending ? "Starting…" : "Login As User"}
           </Button>
+          {user.portalLoginLockedAt && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="gap-1.5"
+              disabled={unlockPortalLogin.isPending}
+              onClick={() =>
+                unlockPortalLogin.mutate(undefined, {
+                  onSuccess: () => toast({ title: "Portal login unlocked" }),
+                  onError: (e) => toast({ title: "Unlock failed", description: formatApiError(e), variant: "destructive" }),
+                })
+              }
+            >
+              <ShieldAlert className="h-3.5 w-3.5" />
+              {unlockPortalLogin.isPending ? "Unlocking…" : "Unlock portal login"}
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={() => { setProfileEmail(user.email || ""); setProfileName(user.name || ""); setProfileModal(true); }}>
             Edit Profile
           </Button>

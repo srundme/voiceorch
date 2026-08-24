@@ -44,6 +44,12 @@ import {
   assertLoginHostAllowed,
   resolvePartnerHostFromRequest,
 } from "../lib/partner-portal-access.js";
+import {
+  clearPortalLoginFailures,
+  isPortalLoginLocked,
+  portalLoginLockedMessage,
+  recordPortalLoginFailure,
+} from "../lib/portal-login-lockout.js";
 
 const OTP_RATE_LIMIT_MAX = parseInt(process.env.OTP_RATE_LIMIT_MAX ?? "3", 10);
 const OTP_RATE_LIMIT_WINDOW_MS = parseInt(process.env.OTP_RATE_LIMIT_WINDOW_MS ?? String(15 * 60 * 1000), 10);
@@ -262,8 +268,40 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       return;
     }
 
+    // Managed-client portal lockout — only meaningful on the partner host.
+    const isManagedOnThisPortal =
+      !!partnerBrand
+      && user.partnerId != null
+      && user.partnerId === partnerBrand.partnerId;
+
+    if (isManagedOnThisPortal && isPortalLoginLocked(user)) {
+      res.status(403).json({
+        error: portalLoginLockedMessage(partnerBrand.companyName),
+        code: "portal_login_locked",
+      });
+      return;
+    }
+
     const ok = await verifyPassword(password, user.passwordHash);
     if (!ok) {
+      if (isManagedOnThisPortal && partnerBrand) {
+        const result = await recordPortalLoginFailure({
+          userId: user.id,
+          clerkId: user.clerkId,
+          email: user.email,
+          name: user.name,
+          partnerId: partnerBrand.partnerId,
+          companyName: partnerBrand.companyName,
+          priorAttempts: user.portalLoginFailedAttempts ?? 0,
+        });
+        if (result.locked) {
+          res.status(403).json({
+            error: portalLoginLockedMessage(partnerBrand.companyName),
+            code: "portal_login_locked",
+          });
+          return;
+        }
+      }
       res.status(401).json({ error: "Invalid email or password." });
       return;
     }
@@ -283,6 +321,10 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     if (!gate.ok) {
       res.status(403).json({ error: gate.error });
       return;
+    }
+
+    if (isManagedOnThisPortal && (user.portalLoginFailedAttempts > 0 || user.portalLoginLockedAt)) {
+      await clearPortalLoginFailures(user.id);
     }
 
     issueSession(res, { sub, email: user.email, name: user.name });

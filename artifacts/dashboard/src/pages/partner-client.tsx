@@ -32,6 +32,8 @@ interface PartnerClient {
   walletBalanceCents: number;
   rateCentsPerMin: number;
   allowAgentEdit?: boolean;
+  loginLocked?: boolean;
+  portalLoginLockedAt?: string | null;
   joinedAt: string;
   monthSeconds: number;
   monthSpendCents: number;
@@ -186,6 +188,19 @@ export default function PartnerClientPage() {
       toast({ title: "Transfer failed", description: err.message, variant: "destructive" }),
   });
 
+  const unlockMutation = useMutation({
+    mutationFn: () =>
+      partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(clerkId)}/unlock-login`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      toast({ title: "Client login unlocked" });
+      void qc.invalidateQueries({ queryKey: ["partner-clients"] });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Unlock failed", description: err.message, variant: "destructive" }),
+  });
+
   const createApiKeyMutation = useMutation({
     mutationFn: (name: string) =>
       partnerFetch<{ key: string; prefix: string; name: string }>(
@@ -306,9 +321,21 @@ export default function PartnerClientPage() {
           <p className="mt-0.5 text-[13px] text-muted-foreground truncate">
             {displayName}
             {client.email && client.name ? ` · ${client.email}` : ""}
+            {client.loginLocked ? " · login locked" : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {client.loginLocked && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-9 text-xs gap-1.5"
+              disabled={unlockMutation.isPending}
+              onClick={() => unlockMutation.mutate()}
+            >
+              Unlock login
+            </Button>
+          )}
           <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => openWorkspace("/app/home")}>
             <LogIn className="size-3.5" /> Open as client
           </Button>

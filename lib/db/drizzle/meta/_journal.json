@@ -834,6 +834,13 @@
       "when": 1791600018000,
       "tag": "0118_align_customer_voice_rate",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1791600019000,
+      "tag": "0119_portal_login_lockout",
+      "breakpoints": true
     }
   ]
 }

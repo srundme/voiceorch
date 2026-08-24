@@ -154,6 +154,39 @@ router.patch("/admin/users/:clerkId/status", async (req, res): Promise<void> => 
   }
 });
 
+router.post("/admin/users/:clerkId/unlock-portal-login", async (req, res): Promise<void> => {
+  try {
+    const { clerkId } = req.params;
+    const user = await findUserByClerkId(clerkId!);
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+    if (!user.portalLoginLockedAt && (user.portalLoginFailedAttempts ?? 0) === 0) {
+      res.json({ ok: true, unlocked: false, message: "Portal login was not locked." });
+      return;
+    }
+
+    const { unlockPortalLogin } = await import("../lib/portal-login-lockout.js");
+    await unlockPortalLogin(user.id);
+
+    await logAdminAction(req, {
+      targetUserId: clerkId,
+      targetResourceType: "user",
+      targetResourceId: clerkId,
+      action: "unlock_portal_login",
+      beforeValue: {
+        portalLoginLockedAt: user.portalLoginLockedAt,
+        portalLoginFailedAttempts: user.portalLoginFailedAttempts,
+      },
+      afterValue: { unlocked: true },
+    });
+
+    res.json({ ok: true, unlocked: true });
+  } catch (err) {
+    req.log.error({ err }, "admin unlock portal login failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ─── User Profile Edit ────────────────────────────────────────────────────────
 
 router.patch("/admin/users/:clerkId/profile", async (req, res): Promise<void> => {

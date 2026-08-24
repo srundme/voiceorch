@@ -66,6 +66,7 @@ import {
   validateSlug,
   verifyCustomDomainDns,
 } from "../services/partner-domains.js";
+import { unlockPortalLogin } from "../lib/portal-login-lockout.js";
 
 function generateClientApiKey(): { key: string; prefix: string; hash: string } {
   const secret = randomBytes(32).toString("hex");
@@ -1004,6 +1005,8 @@ router.get("/partner/clients", requireAuth, async (req, res): Promise<void> => {
         walletBalanceCents: usersTable.walletBalanceCents,
         rateCentsPerMin: usersTable.partnerRateCentsPerMin,
         allowAgentEdit: usersTable.partnerAllowAgentEdit,
+        portalLoginLockedAt: usersTable.portalLoginLockedAt,
+        portalLoginFailedAttempts: usersTable.portalLoginFailedAttempts,
         createdAt: usersTable.createdAt,
       })
       .from(usersTable)
@@ -1046,6 +1049,9 @@ router.get("/partner/clients", requireAuth, async (req, res): Promise<void> => {
         walletBalanceCents: c.walletBalanceCents,
         rateCentsPerMin: c.rateCentsPerMin ?? partner.defaultClientRateCentsPerMin,
         allowAgentEdit: c.allowAgentEdit === true,
+        loginLocked: !!c.portalLoginLockedAt,
+        portalLoginFailedAttempts: c.portalLoginFailedAttempts ?? 0,
+        portalLoginLockedAt: c.portalLoginLockedAt,
         joinedAt: c.createdAt,
         monthSeconds: usageByUser.get(c.clerkId)?.seconds ?? 0,
         monthSpendCents: usageByUser.get(c.clerkId)?.spendCents ?? 0,
@@ -1119,6 +1125,31 @@ router.patch("/partner/clients/:clerkId", requireAuth, async (req, res): Promise
     });
   } catch (err) {
     req.log.error({ err }, "partner/clients PATCH failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/partner/clients/:clerkId/unlock-login", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+
+    const client = await getOwnedClient(partner.id, String(req.params.clerkId ?? ""));
+    if (!client) {
+      res.status(404).json({ error: "Client not found" });
+      return;
+    }
+
+    if (!client.portalLoginLockedAt && (client.portalLoginFailedAttempts ?? 0) === 0) {
+      res.json({ ok: true, unlocked: false, message: "Client login was not locked." });
+      return;
+    }
+
+    await unlockPortalLogin(client.id);
+    req.log.info({ clientClerkId: client.clerkId, partnerId: partner.id }, "partner unlocked client portal login");
+    res.json({ ok: true, unlocked: true });
+  } catch (err) {
+    req.log.error({ err }, "partner/clients unlock-login failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

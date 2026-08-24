@@ -132,6 +132,20 @@ export function useSetUserStatus(clerkId: string) {
   });
 }
 
+export function useUnlockPortalLogin(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      adminFetch<{ ok: boolean; unlocked: boolean }>(`/users/${clerkId}/unlock-portal-login`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+  });
+}
+
 export function useEditUserProfile(clerkId: string) {
   const queryClient = useQueryClient();
   return useMutation({

@@ -14,7 +14,8 @@ export type AlertType =
   | "provider_down"
   | "account_deletion"
   | "daily_revenue_drop"
-  | "cost_per_min_increase";
+  | "cost_per_min_increase"
+  | "portal_login_lockout";
 
 interface CreateAlertOpts {
   type: AlertType;
