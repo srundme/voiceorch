@@ -212,10 +212,6 @@ export default function VoicesPage() {
   return (
     <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
       <div className="max-w-6xl mx-auto w-full p-4 sm:p-6 space-y-6">
-        <p className="text-muted-foreground text-sm">
-          Whitelisted Cartesia voices. Clones are under Provider keys → My clones.
-        </p>
-
         {error && (
           <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 flex items-start gap-3">
             <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
