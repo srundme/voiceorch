@@ -21,6 +21,7 @@ const PRE_AUTH_PREFIXES = [
   "/api/auth/register",
   "/api/auth/password-reset/request",
   "/api/auth/google/",
+  "/api/impersonate/exchange",
 ];
 
 function pathMatches(path: string, prefixes: string[]): boolean {
@@ -41,6 +42,14 @@ export async function enforcePartnerPortalAccess(
 
     const clerkId = (req as unknown as { clerkUserId?: string }).clerkUserId;
     if (!clerkId) {
+      next();
+      return;
+    }
+
+    // Admin "Login as user" sessions are allowed on SnapServe even when the
+    // target is a managed partner client (otherwise impersonation breaks).
+    const sessionPayload = (req as unknown as { sessionPayload?: { imp?: string } }).sessionPayload;
+    if (sessionPayload?.imp) {
       next();
       return;
     }
