@@ -46,6 +46,7 @@ export class TogetherLLM implements LLMAdapter {
   private model: string;
   private maxTokens: number | undefined;
   private temperature: number | undefined;
+  private abortController: AbortController | null = null;
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.client = new OpenAI({
@@ -59,6 +60,11 @@ export class TogetherLLM implements LLMAdapter {
     this.maxTokens = genParams?.maxTokens ?? undefined;
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
+  }
+
+  cancelInFlight(): void {
+    this.abortController?.abort();
+    this.abortController = null;
   }
 
   async chat(
@@ -107,8 +113,20 @@ export class TogetherLLM implements LLMAdapter {
       ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
       ...(togetherTools ? { tools: togetherTools, tool_choice: toolChoice } : {}),
     };
-    const stream = await this.client.chat.completions.create(reqBody) as unknown as AsyncIterable<any>;
-
-    await drainOpenAICompatibleStream(stream, onToken, onDone, options);
+    this.abortController?.abort();
+    const abortController = new AbortController();
+    this.abortController = abortController;
+    try {
+      const stream = await this.client.chat.completions.create(reqBody, { signal: abortController.signal }) as unknown as AsyncIterable<any>;
+      await drainOpenAICompatibleStream(stream, onToken, onDone, options);
+    } catch (err) {
+      if (abortController.signal.aborted) {
+        onDone("");
+        return;
+      }
+      throw err;
+    } finally {
+      if (this.abortController === abortController) this.abortController = null;
+    }
   }
 }

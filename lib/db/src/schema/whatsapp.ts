@@ -72,6 +72,8 @@ export const whatsappConnectionsTable = pgTable("whatsapp_connections", {
   templates: jsonb("templates").$type<WhatsappConnectionTemplates>().notNull().default({}),
   /** Meta WhatsApp Cloud API direct connection (no BSP middleman). Token AES-encrypted at rest. */
   metaAccessToken: text("meta_access_token"),
+  /** When the stored Meta user token expires (null for permanent system-user tokens). */
+  metaTokenExpiresAt: timestamp("meta_token_expires_at", { withTimezone: true }),
   metaPhoneNumberId: text("meta_phone_number_id"),
   metaWabaId: text("meta_waba_id"),
   /** Optional Graph-compatible API base URL (BSP proxy panels e.g. whatsapi.in). Null = graph.facebook.com. */

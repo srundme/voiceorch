@@ -23,13 +23,18 @@ import {
   resolveConnectionTemplateName,
   type WhatsappCallEndedPayload,
 } from "./payload.js";
-import { decryptKey } from "../../lib/crypto.js";
+import { fetchUserConfiguredUrl } from "../../lib/ssrf.js";
 import {
   buildMetaParams,
+  isMetaTokenExpiredError,
   resolveMetaTemplate,
   sendMetaTemplate,
   type MetaTemplateChoice,
 } from "./meta.js";
+import {
+  persistRefreshedMetaToken,
+  resolveMetaAccessToken,
+} from "./meta-token.js";
 import {
   getActiveChannel,
   hintEnabled,
@@ -63,12 +68,11 @@ async function postOutbound(
     headers["X-SnapServe-Signature"] = `sha256=${digest}`;
   }
 
-  const res = await fetch(url, {
+  const res = await fetchUserConfiguredUrl(url, {
     method: "POST",
     headers,
     body,
-    signal: AbortSignal.timeout(10_000),
-  });
+  }, { timeoutMs: 10_000, retries: 2 });
   if (!res.ok) {
     throw new Error(`outbound webhook HTTP ${res.status}`);
   }
@@ -84,6 +88,49 @@ function formatMeetingTimeIST(d: Date): string {
   } catch {
     return d.toISOString();
   }
+}
+
+async function sendMetaTemplateFresh(
+  conn: {
+    id: string;
+    metaAccessToken: string | null;
+    metaTokenExpiresAt?: Date | null;
+    metaPhoneNumberId: string | null;
+    metaApiBase: string | null;
+  },
+  opts: {
+    toPhone: string;
+    template: MetaTemplateChoice;
+    params: string[];
+  },
+): Promise<{ ok: true; messageId: string | null } | { ok: false; error: string }> {
+  if (!conn.metaAccessToken || !conn.metaPhoneNumberId) {
+    return { ok: false, error: "Meta WhatsApp is not connected" };
+  }
+  let token = await resolveMetaAccessToken({
+    connectionId: conn.id,
+    encryptedToken: conn.metaAccessToken,
+    expiresAt: conn.metaTokenExpiresAt ?? null,
+    apiBase: conn.metaApiBase,
+  });
+  const send = (accessToken: string) => sendMetaTemplate({
+    accessToken,
+    phoneNumberId: conn.metaPhoneNumberId!,
+    toPhone: opts.toPhone,
+    template: opts.template,
+    params: opts.params,
+    apiBase: conn.metaApiBase,
+  });
+  let result = await send(token);
+  if (!result.ok && isMetaTokenExpiredError(result.error)) {
+    token = await persistRefreshedMetaToken({
+      connectionId: conn.id,
+      accessToken: token,
+      apiBase: conn.metaApiBase,
+    });
+    result = await send(token);
+  }
+  return result;
 }
 
 /**
@@ -236,13 +283,10 @@ export async function dispatchWhatsappCallEnded(
           meetingTime: meetingTime ? formatMeetingTimeIST(meetingTime) : null,
           meetLink,
         }, tpl.paramCount);
-        const result = await sendMetaTemplate({
-          accessToken: decryptKey(conn.metaAccessToken!),
-          phoneNumberId: conn.metaPhoneNumberId!,
+        const result = await sendMetaTemplateFresh(conn, {
           toPhone: phone,
           template: tpl,
           params,
-          apiBase: conn.metaApiBase,
         });
         await db.update(whatsappConnectionsTable)
           .set(result.ok
@@ -411,13 +455,10 @@ export async function sendMidCallWhatsapp(opts: {
       businessName: opts.agentName || "SnapServe",
       summary: (opts.summary ?? "").trim(),
     }, tpl.paramCount);
-    const result = await sendMetaTemplate({
-      accessToken: decryptKey(conn.metaAccessToken),
-      phoneNumberId: conn.metaPhoneNumberId,
+    const result = await sendMetaTemplateFresh(conn, {
       toPhone: phone,
       template: tpl,
       params,
-      apiBase: conn.metaApiBase,
     });
     await db.update(whatsappConnectionsTable)
       .set(result.ok

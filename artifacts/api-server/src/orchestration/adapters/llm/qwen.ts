@@ -33,6 +33,7 @@ export class QwenLLM implements LLMAdapter {
   private model: string;
   private maxTokens: number | undefined;
   private temperature: number | undefined;
+  private abortController: AbortController | null = null;
 
   constructor(apiKey: string, rawModel: string | null, genParams?: LLMGenerationParams) {
     const isOpenRouter = apiKey?.startsWith("sk-or-v1");
@@ -52,6 +53,11 @@ export class QwenLLM implements LLMAdapter {
     this.maxTokens = genParams?.maxTokens ?? undefined;
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
+  }
+
+  cancelInFlight(): void {
+    this.abortController?.abort();
+    this.abortController = null;
   }
 
   async chat(
@@ -74,19 +80,32 @@ export class QwenLLM implements LLMAdapter {
 
     const toolChoice = qwenTools ? "auto" : undefined;
 
-    const stream = await this.client.chat.completions.create({
-      model:          this.model,
-      stream:         true,
-      stream_options: { include_usage: true },
-      ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
-      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...toOpenAIMessages(messages),
-      ] as any,
-      ...(qwenTools ? { tools: qwenTools, tool_choice: toolChoice } : {}),
-    });
+    this.abortController?.abort();
+    const abortController = new AbortController();
+    this.abortController = abortController;
+    try {
+      const stream = await this.client.chat.completions.create({
+        model:          this.model,
+        stream:         true,
+        stream_options: { include_usage: true },
+        ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
+        ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...toOpenAIMessages(messages),
+        ] as any,
+        ...(qwenTools ? { tools: qwenTools, tool_choice: toolChoice } : {}),
+      }, { signal: abortController.signal });
 
-    await drainOpenAICompatibleStream(stream as any, onToken, onDone, options);
+      await drainOpenAICompatibleStream(stream as any, onToken, onDone, options);
+    } catch (err) {
+      if (abortController.signal.aborted) {
+        onDone("");
+        return;
+      }
+      throw err;
+    } finally {
+      if (this.abortController === abortController) this.abortController = null;
+    }
   }
 }

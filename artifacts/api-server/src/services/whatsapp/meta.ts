@@ -44,6 +44,16 @@ function graphError(json: unknown, status: number): string {
   return `Meta API HTTP ${status}`;
 }
 
+export function isMetaTokenExpiredError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("session has expired")
+    || m.includes("error validating access token")
+    || /\berror.?190\b/.test(m)
+    || (m.includes("oauthexception") && m.includes("expired"))
+  );
+}
+
 /** BSP panels (e.g. whatapi.in) return HTTP 200 with { success:false, error:"..." }. */
 function bspError(json: unknown): string | null {
   const j = json as { success?: boolean; error?: unknown } | null;

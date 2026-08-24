@@ -11,6 +11,7 @@ import {
 import { logger } from "../lib/logger.js";
 import { toAbsoluteAppUrl } from "../lib/app-domain.js";
 import { shareableRecordingUrl } from "../services/recording-share.js";
+import { fetchUserConfiguredUrl } from "../lib/ssrf.js";
 
 const router: IRouter = Router();
 
@@ -150,12 +151,11 @@ export async function dispatchWebhooks(
       headers["X-VoiceOrch-Signature"] = createHmac("sha256", ep.secret).update(body).digest("hex");
     }
 
-    fetch(ep.url, {
+    fetchUserConfiguredUrl(ep.url, {
       method: "POST",
       headers,
       body,
-      signal: AbortSignal.timeout(10_000),
-    }).catch((err) => {
+    }, { timeoutMs: 10_000, retries: 2 }).catch((err) => {
       logger.warn({ err, webhookId: ep.id, event: canonical }, "Webhook delivery failed");
     });
   }

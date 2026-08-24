@@ -71,6 +71,7 @@ export class GroqLLM implements LLMAdapter {
   private model: string;
   private maxTokens: number | undefined;
   private temperature: number | undefined;
+  private abortController: AbortController | null = null;
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.client = new OpenAI({
@@ -81,6 +82,11 @@ export class GroqLLM implements LLMAdapter {
     this.maxTokens = genParams?.maxTokens ?? undefined;
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
+  }
+
+  cancelInFlight(): void {
+    this.abortController?.abort();
+    this.abortController = null;
   }
 
   async chat(
@@ -127,28 +133,41 @@ When you want to call a tool:
 ${systemPrompt}`
       : systemPrompt;
 
-    const stream = await this.client.chat.completions.create({
-      model:          this.model,
-      stream:         true,
-      stream_options: { include_usage: true },
-      // service_tier:"on_demand" guarantees dedicated LPU resources with no
-      // queue wait, which is critical for real-time voice turn latency.
-      service_tier:   "on_demand" as any,
-      // Capping output tokens directly reduces Decoding Time in the formula:
-      //   Total Latency = TTFT + (output_tokens / generation_speed) + network
-      // Voice turns rarely need more than 150–200 tokens; longer replies are
-      // chunked into sentences and played incrementally, so the cap doesn't
-      // truncate natural speech.
-      ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
-      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
-      messages: [
-        { role: "system", content: effectiveSystemPrompt },
-        ...toOpenAIMessages(messages),
-      ] as any,
-      ...(groqTools ? { tools: groqTools, tool_choice: toolChoice } : {}),
-    });
+    this.abortController?.abort();
+    const abortController = new AbortController();
+    this.abortController = abortController;
+    try {
+      const stream = await this.client.chat.completions.create({
+        model:          this.model,
+        stream:         true,
+        stream_options: { include_usage: true },
+        // service_tier:"on_demand" guarantees dedicated LPU resources with no
+        // queue wait, which is critical for real-time voice turn latency.
+        service_tier:   "on_demand" as any,
+        // Capping output tokens directly reduces Decoding Time in the formula:
+        //   Total Latency = TTFT + (output_tokens / generation_speed) + network
+        // Voice turns rarely need more than 150–200 tokens; longer replies are
+        // chunked into sentences and played incrementally, so the cap doesn't
+        // truncate natural speech.
+        ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
+        ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
+        messages: [
+          { role: "system", content: effectiveSystemPrompt },
+          ...toOpenAIMessages(messages),
+        ] as any,
+        ...(groqTools ? { tools: groqTools, tool_choice: toolChoice } : {}),
+      }, { signal: abortController.signal });
 
-    await drainOpenAICompatibleStream(stream as any, onToken, onDone, options);
+      await drainOpenAICompatibleStream(stream as any, onToken, onDone, options);
+    } catch (err) {
+      if (abortController.signal.aborted) {
+        onDone("");
+        return;
+      }
+      throw err;
+    } finally {
+      if (this.abortController === abortController) this.abortController = null;
+    }
   }
 }
 

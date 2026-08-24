@@ -26,6 +26,7 @@ import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
 import { isOnDnc } from "../lib/dnc-check.js";
 import { captureListenSample } from "./connections.js";
+import { sheetKeysForLead } from "../services/sheets-writeback.js";
 
 const router: IRouter = Router();
 
@@ -243,6 +244,7 @@ async function insertLeadAndSchedule(opts: {
     ? await getOrCreateLiveBatch(opts.campaignId, agentTimezone)
     : runningBatch ?? null;
 
+  const sheetKeys = await sheetKeysForLead(campaign.userId, campaign.agentId, opts.phone);
   const [lead] = await db.insert(campaignLeadsTable).values({
     campaignId:      opts.campaignId,
     batchId:         targetBatch?.id ?? null,
@@ -250,7 +252,7 @@ async function insertLeadAndSchedule(opts: {
     normalizedPhone: normalized,
     name:            opts.name,
     email:           opts.email,
-    leadData:        opts.leadData,
+    leadData:        { ...opts.leadData, ...sheetKeys },
     source:          opts.source,
     externalLeadId:  opts.externalLeadId ?? null,
     callStatus:      "pending",

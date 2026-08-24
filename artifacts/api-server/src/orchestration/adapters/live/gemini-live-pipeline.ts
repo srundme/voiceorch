@@ -222,6 +222,11 @@ export class GeminiLivePipeline implements VoiceSession {
   private meetingForceMuted = false;
   private meetingMuteWhenIdle = false;
   private pendingMeetingNotes: string[] = [];
+  /** Last Live session-resumption handle — reconnects after GoAway / socket close. */
+  private resumptionHandle: string | null = null;
+  private reconnecting = false;
+  private reconnectAttempts = 0;
+  private static readonly MAX_LIVE_RECONNECTS = 2;
 
   constructor(config: SessionConfig) {
     const rawAudioOut = config.onAudioOut;
@@ -527,9 +532,11 @@ export class GeminiLivePipeline implements VoiceSession {
     };
 
     const connectStarted = Date.now();
-    const liveSessionExtras = {
+    const liveSessionExtras: Record<string, unknown> = {
       // Without compression, audio sessions hard-drop around 15 min.
       contextWindowCompression: { slidingWindow: {} },
+      // Empty object enables handle updates; pass the last handle on reconnect.
+      sessionResumption: this.resumptionHandle ? { handle: this.resumptionHandle } : {},
     };
     this.session = await ai.live.connect({
       model,
@@ -562,13 +569,16 @@ export class GeminiLivePipeline implements VoiceSession {
         },
         onerror: (e) => {
           logger.error({ callId: this.config.callId, err: e.error ?? e }, "Gemini Live socket error");
+          if (!this.closed && this.resumptionHandle && this.reconnectAttempts < GeminiLivePipeline.MAX_LIVE_RECONNECTS) {
+            void this.tryResumeAfterDisconnect("socket_error");
+            return;
+          }
           this.handleFatal(e.error ?? e);
         },
         onclose: () => {
-          if (!this.closed) {
-            logger.info({ callId: this.config.callId }, "Gemini Live socket closed");
-            this.config.onCallEnd();
-          }
+          if (this.closed || this.reconnecting) return;
+          logger.info({ callId: this.config.callId, hasHandle: Boolean(this.resumptionHandle) }, "Gemini Live socket closed");
+          void this.tryResumeAfterDisconnect("socket_closed");
         },
       },
     });
@@ -616,6 +626,22 @@ export class GeminiLivePipeline implements VoiceSession {
       // Tool calls usually follow user speech with no output transcription yet.
       if (this.inputBuf.trim()) this.flushInputBuf();
       await this.handleToolCalls(msg.toolCall.functionCalls);
+    }
+
+    const extras = msg as LiveServerMessage & {
+      sessionResumptionUpdate?: { newHandle?: string; resumable?: boolean };
+      goAway?: { timeLeft?: string };
+    };
+    const handle = extras.sessionResumptionUpdate?.newHandle;
+    if (typeof handle === "string" && handle.trim()) {
+      this.resumptionHandle = handle.trim();
+    }
+    if (extras.goAway && !this.closed) {
+      logger.info(
+        { callId: this.config.callId, timeLeft: extras.goAway.timeLeft },
+        "Gemini Live GoAway — resuming session",
+      );
+      void this.tryResumeAfterDisconnect("go_away");
     }
 
     if (content?.turnComplete) {
@@ -774,6 +800,35 @@ export class GeminiLivePipeline implements VoiceSession {
       last.content = `${last.content} ${clean}`.trim();
     } else {
       this.history.push({ role: "assistant", content: clean });
+    }
+  }
+
+  private async tryResumeAfterDisconnect(reason: string): Promise<void> {
+    if (this.closed || this.reconnecting) return;
+    if (!this.resumptionHandle || this.reconnectAttempts >= GeminiLivePipeline.MAX_LIVE_RECONNECTS) {
+      logger.info(
+        { callId: this.config.callId, reason, hasHandle: Boolean(this.resumptionHandle), attempts: this.reconnectAttempts },
+        "Gemini Live: no resumable session — ending call",
+      );
+      this.config.onCallEnd();
+      return;
+    }
+    this.reconnecting = true;
+    this.reconnectAttempts += 1;
+    const attempt = this.reconnectAttempts;
+    try {
+      this.session = null;
+      this.connectPromise = null;
+      await this.ensureConnected();
+      logger.info(
+        { callId: this.config.callId, reason, attempt },
+        "Gemini Live session resumed",
+      );
+    } catch (err) {
+      logger.error({ callId: this.config.callId, reason, attempt, err }, "Gemini Live resume failed");
+      this.config.onCallEnd();
+    } finally {
+      this.reconnecting = false;
     }
   }
 

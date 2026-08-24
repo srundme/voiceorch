@@ -15,6 +15,7 @@ import {
   type CampaignLeadTransferRule,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { fetchUserConfiguredUrl } from "../lib/ssrf.js";
 import { appendCallLogRow } from "./google-sheets.js";
 import {
   dispositionMatchesAny,
@@ -481,12 +482,11 @@ async function sendTransferWebhook(
     headers["X-SnapServe-Signature"] = sig;
     headers["X-VoiceOrch-Signature"] = sig;
   }
-  const res = await fetch(url, {
+  const res = await fetchUserConfiguredUrl(url, {
     method: "POST",
     headers,
     body: bodyStr,
-    signal: AbortSignal.timeout(12_000),
-  });
+  }, { timeoutMs: 12_000, retries: 2 });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`webhook ${res.status}: ${text.slice(0, 200)}`);

@@ -22,6 +22,7 @@ import {
 } from "../services/whatsapp/normalize.js";
 import { dialOutboundAgent, OutboundDialError } from "../services/outbound-agent-dial.js";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
+import { persistRefreshedMetaToken } from "../services/whatsapp/meta-token.js";
 import {
   fetchMetaTemplates,
   resolveWabaIdFromPhoneNumber,
@@ -263,6 +264,16 @@ async function upsertMetaConnection(
   }
 
   if (!row) return { ok: false, status: 500, error: "Could not save the WhatsApp connection" };
+
+  try {
+    await persistRefreshedMetaToken({
+      connectionId: row.id,
+      accessToken: token,
+      apiBase,
+    });
+  } catch (err) {
+    logger.warn({ err, connectionId: row.id }, "whatsapp-meta-connect: token refresh skipped");
+  }
 
   try {
     const catalog = await persistMetaCatalogForConnection(row.id, userId, token, wabaId, apiBase);
@@ -532,6 +543,13 @@ router.patch("/whatsapp/connections/:id", requireAuth, async (req, res): Promise
   if (row.metaAccessToken && (row.metaWabaId || row.metaPhoneNumberId) && (metaTouched || catalogEmpty)) {
     try {
       const token = decryptKey(row.metaAccessToken);
+      if (body["metaAccessToken"] !== undefined) {
+        await persistRefreshedMetaToken({
+          connectionId: row.id,
+          accessToken: token,
+          apiBase: row.metaApiBase,
+        });
+      }
       const wabaId = await ensureWabaId({
         token,
         wabaId: row.metaWabaId ?? "",

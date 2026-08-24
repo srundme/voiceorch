@@ -38,6 +38,7 @@ import { sendChannelEmail } from "./email-channel.js";
 import { sendMidCallWhatsapp } from "./whatsapp/outbound.js";
 import { resolveBookingLineageCallId } from "./meet-booking.js";
 import { normalizeBookingDatetimeArgs } from "./booking-tool-args.js";
+import { fetchUserConfiguredUrl } from "../lib/ssrf.js";
 
 // ── Booking diagnostic log helper ────────────────────────────────────────────
 
@@ -1772,12 +1773,11 @@ export async function executeWebhookTool(
           })
         : undefined;
 
-    const resp = await fetch(targetUrl, {
+    const resp = await fetchUserConfiguredUrl(targetUrl, {
       method: tool.method,
       headers,
       body: requestBody,
-      signal: AbortSignal.timeout(8000),
-    });
+    }, { timeoutMs: 8000, retries: 1 });
 
     if (!resp.ok) {
       logger.warn({ callId, url: targetUrl, status: resp.status }, "Webhook tool returned non-OK status");

@@ -304,6 +304,25 @@ export async function lookupSheetsForSession(
   return { vars: {} };
 }
 
+export async function sheetKeysForLead(
+  userId: string,
+  agentId: number | null | undefined,
+  phone: string,
+): Promise<{ __sheet_pipeline_id?: string; __sheet_row_index?: string }> {
+  if (!userId || !agentId || !phone?.trim()) return {};
+  try {
+    const hit = await lookupSheetAutoCallPipelines(userId, agentId, phone);
+    if (!hit?.pipelineId || hit.sheetRowIndex == null) return {};
+    return {
+      __sheet_pipeline_id: hit.pipelineId,
+      __sheet_row_index: String(hit.sheetRowIndex),
+    };
+  } catch (err) {
+    logger.warn({ err, userId, agentId }, "sheets: stamp pipeline keys failed");
+    return {};
+  }
+}
+
 /** @deprecated Prefer lookupSheetsForSession — returns vars only for older callers. */
 export async function lookupSheetsCallerContext(
   userId: string,
