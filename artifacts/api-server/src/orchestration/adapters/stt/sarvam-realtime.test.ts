@@ -4,8 +4,11 @@ import {
   buildRealtimeWsUrl,
   clipRealtimePrompt,
   isSarvamRealtimeModel,
+  nextRealtimeLanguageOnSwitch,
   parseRealtimeDetectedLang,
   REALTIME_LANGUAGE_CODES,
+  resolveRealtimeFinalText,
+  resolveRealtimeSocketLanguage,
   resolveRealtimeStreamType,
   shouldBargeOnRealtimeVadStart,
   toRealtimeLanguageCode,
@@ -29,6 +32,41 @@ describe("isSarvamRealtimeModel", () => {
     expect(isSarvamRealtimeModel("saaras:v3-realtime")).toBe(true);
     if (prev === undefined) delete process.env["SARVAM_STT_REALTIME"];
     else process.env["SARVAM_STT_REALTIME"] = prev;
+  });
+});
+
+describe("resolveRealtimeSocketLanguage", () => {
+  it("always opens with auto LID, even when the agent language is pinned Hindi", () => {
+    expect(resolveRealtimeSocketLanguage("hi-IN", false)).toBe("auto");
+    expect(resolveRealtimeSocketLanguage("ta-IN", true)).toBe("auto");
+    expect(resolveRealtimeSocketLanguage(undefined, undefined)).toBe("auto");
+  });
+});
+
+describe("nextRealtimeLanguageOnSwitch", () => {
+  it("does not pin an auto socket to hi-IN mid-call", () => {
+    expect(nextRealtimeLanguageOnSwitch("auto", "hi-IN")).toBe("auto");
+    expect(nextRealtimeLanguageOnSwitch("auto", "en-IN")).toBe("auto");
+  });
+
+  it("still maps a pinned socket to a realtime code", () => {
+    expect(nextRealtimeLanguageOnSwitch("hi-IN", "ta-IN")).toBe("ta-IN");
+    expect(nextRealtimeLanguageOnSwitch("en-IN", "od-IN")).toBe("or-IN");
+  });
+});
+
+describe("resolveRealtimeFinalText", () => {
+  it("keeps a real final", () => {
+    expect(resolveRealtimeFinalText("करंट प्राइस।", "करंट प्राइस")).toBe("करंट प्राइस।");
+  });
+
+  it("recovers the last partial when the final is empty", () => {
+    expect(resolveRealtimeFinalText("", "API integration")).toBe("API integration");
+    expect(resolveRealtimeFinalText("   ", "  current price ")).toBe("current price");
+  });
+
+  it("returns empty when both are empty", () => {
+    expect(resolveRealtimeFinalText("", "")).toBe("");
   });
 });
 

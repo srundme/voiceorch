@@ -1106,9 +1106,7 @@ function OverviewTab({
               )}
               {!isGeminiLive && asrProvider === "sarvam" && (
                 <FormField control={form.control} name="sarvamSttMode" render={({ field }) => {
-                  const lang = form.watch("language") ?? "";
-                  const autoDefault = lang.toLowerCase().startsWith("en") ? "codemix" : "transcribe";
-                  const currentValue = field.value ?? autoDefault;
+                  const currentValue = field.value ?? "codemix";
                   return (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] font-medium text-foreground/80">How speech is written</FormLabel>
@@ -1135,7 +1133,7 @@ function OverviewTab({
                         ? "Writes Indic speech in English letters."
                         : currentValue === "translate"
                         ? "Whatever the caller speaks is written as English."
-                        : "English agents default to mixed speech; Indic agents default to native script."}
+                        : "Defaults to mixed speech so Hinglish is captured. Pick native script only if every word should stay in हिंदी / தமிழ்."}
                     </p>
                   </FormItem>
                   );

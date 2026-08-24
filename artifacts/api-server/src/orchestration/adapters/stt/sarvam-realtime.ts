@@ -77,6 +77,33 @@ export function toRealtimeLanguageCode(code: string | null | undefined, auto: bo
 }
 
 /**
+ * Voice-agent realtime sockets always use LID (`language_code=auto`).
+ * Builder language drives LLM/TTS, not this pin. Pinned hi-IN + transcribe
+ * produced VAD with no finals on mixed Hinglish (call 12855).
+ */
+export function resolveRealtimeSocketLanguage(
+  _configuredLang?: string | null,
+  _languageAutoDetect?: boolean,
+): string {
+  return "auto";
+}
+
+/**
+ * Once the socket is on auto LID, never pin mid-call. Script-detection
+ * switches to hi-IN are what silenced later mixed turns.
+ */
+export function nextRealtimeLanguageOnSwitch(current: string, requested: string): string {
+  if (current === "auto") return "auto";
+  return toRealtimeLanguageCode(requested, false);
+}
+
+/** Empty `transcript.final` used to be dropped silently; recover the last partial. */
+export function resolveRealtimeFinalText(finalText: string, lastPartial: string): string {
+  const text = finalText.trim();
+  return text || lastPartial.trim();
+}
+
+/**
  * LID on transcript.partial / transcript.final when language_code=auto.
  * Returns undefined when pinned (no language field) or the code is unknown.
  */
@@ -224,7 +251,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
 
     this.explicitMode = extra.mode ?? null;
     this.mode = resolveSarvamSttMode(cfg.language, this.explicitMode);
-    this.languageCode = toRealtimeLanguageCode(cfg.language, extra.languageAutoDetect === true);
+    this.languageCode = resolveRealtimeSocketLanguage(cfg.language, extra.languageAutoDetect);
     this.silenceDurationMs = resolveMsSetting(
       extra.endOfSpeechSilenceMs,
       "SARVAM_END_OF_SPEECH_SILENCE_MS",
@@ -416,11 +443,29 @@ export class SarvamRealtimeSTT implements STTAdapter {
         return;
       }
       if (event === "transcript.final") {
-        const text = stripSpeaker(msg.text ?? "");
+        const recoveredFromPartial = !stripSpeaker(msg.text ?? "") && lastPartial.trim();
+        const text = resolveRealtimeFinalText(stripSpeaker(msg.text ?? ""), lastPartial);
         lastPartial = "";
-        const detected = parseRealtimeDetectedLang(msg.language);
+        const detected = parseRealtimeDetectedLang(msg.language) ?? lastPartialLang;
         lastPartialLang = detected;
-        if (!text) return;
+        if (!text) {
+          logger.warn(
+            {
+              requestId: lastRequestId,
+              startS: msg.start_s,
+              endS: msg.end_s,
+              language: msg.language,
+            },
+            "Sarvam STT realtime: empty final — VAD heard speech but no transcript",
+          );
+          return;
+        }
+        if (recoveredFromPartial) {
+          logger.info(
+            { text: text.slice(0, 80), requestId: lastRequestId },
+            "Sarvam STT realtime: empty final — recovered last partial",
+          );
+        }
         const languageConfidence = parseRealtimeLanguageConfidence(msg.language_confidence);
         const meta: SttFinalMetadata = {
           requestId: lastRequestId,
@@ -537,9 +582,14 @@ export class SarvamRealtimeSTT implements STTAdapter {
           legacyStream?.setLanguage?.(lang);
           return;
         }
-        const nextLang = toRealtimeLanguageCode(lang, false);
+        const nextLang = nextRealtimeLanguageOnSwitch(languageCode, lang);
         const nextMode = resolveSarvamSttMode(nextLang, explicitMode);
-        if (nextLang === languageCode && nextMode === mode) return;
+        if (nextLang === languageCode && nextMode === mode) {
+          if (languageCode === "auto") {
+            logger.info({ requested: lang }, "Sarvam STT realtime: keeping language_code=auto (LID)");
+          }
+          return;
+        }
         languageCode = nextLang;
         mode = nextMode;
         logger.info({ to: nextLang, mode: nextMode }, "Sarvam STT realtime: config.update");

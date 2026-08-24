@@ -436,7 +436,7 @@ export interface AgentConfig {
    * the goodbye. Tuned via Latency Tuning UI.
    */
   telephonyTailDrainMs: number;
-  /** Per-agent Sarvam STT mode. null = auto (en → codemix, Indic → transcribe). */
+  /** Per-agent Sarvam STT mode. null = codemix (mixed Indian speech). */
   sarvamSttMode: string | null;
   /**
    * saaras:v3-realtime `stream_type`. fast = snappy partials (voice agents).

@@ -374,8 +374,7 @@ export class SarvamSTT implements STTAdapter {
     this.langCode = normaliseLang(cfg.language, this.model);
     this.explicitMode = extra.mode ?? null;
 
-    // Mode: explicit agent config wins; else language-aware default (en-IN →
-    // transcribe to avoid codemix writing English speech in Tamil script).
+    // Mode: explicit agent config wins; else codemix (mixed Indian speech).
     this.mode = MODE_CAPABLE.has(this.model)
       ? resolveSarvamSttMode(this.langCode, this.explicitMode)
       : "transcribe";
