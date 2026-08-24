@@ -334,7 +334,7 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     expect(cfg.sarvamVadThreshold).toBe(0.35);
   });
 
-  it("defaults Sarvam realtime VAD to 500 / 250 / 0.3 when unset", () => {
+  it("defaults Sarvam realtime VAD to 300 / 250 / 0.3 when unset", () => {
     const payload = buildUpdateAgentPayload({
       ...VALID_BASE,
       asrProvider: "sarvam",
@@ -344,7 +344,7 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
       ttsVoice: "priya",
     } as AgentFormValues);
     const cfg = payload.agentConfig as any;
-    expect(cfg.sarvamEndOfSpeechSilenceMs).toBe(500);
+    expect(cfg.sarvamEndOfSpeechSilenceMs).toBe(300);
     expect(cfg.sarvamFirstTurnMinSpeechMs).toBe(250);
     expect(cfg.sarvamVadThreshold).toBe(0.3);
   });
@@ -496,7 +496,7 @@ describe("Sarvam realtime builder catalog", () => {
     const { hydrateSarvamRealtimeVad } = await import("./edit.schema");
     expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 150 }).silence).toBe(300);
     expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 500 }).silence).toBe(700);
-    expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 250 }).silence).toBe(500);
+    expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 250 }).silence).toBe(400);
     expect(hydrateSarvamRealtimeVad({ sarvamEndOfSpeechSilenceMs: 400, asrEndpointingSilenceMs: 150 }).silence).toBe(400);
   });
 

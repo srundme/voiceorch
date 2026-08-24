@@ -2529,7 +2529,7 @@ function useCallEnginePreset(form: any): {
   const linearMs = form.watch("linearDelayMs") ?? 0;
   const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
   const vad = form.watch("sarvamHighVadSensitivity") ?? false;
-  const silenceMs = form.watch("sarvamEndOfSpeechSilenceMs") ?? 500;
+  const silenceMs = form.watch("sarvamEndOfSpeechSilenceMs") ?? 300;
   const minSpeechMs = form.watch("sarvamFirstTurnMinSpeechMs") ?? 250;
   const threshold = form.watch("sarvamVadThreshold") ?? 0.3;
 
@@ -2596,8 +2596,8 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
     >
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         {([
-          { id: "fast" as const, label: "Fast", hint: "Replies quickly, cuts in sooner" },
-          { id: "balanced" as const, label: "Balanced", hint: "Default natural pace" },
+          { id: "fast" as const, label: "Fast", hint: "Default — replies as soon as you pause" },
+          { id: "balanced" as const, label: "Balanced", hint: "Slightly more pause before the agent talks" },
           { id: "patient" as const, label: "Patient", hint: "Waits if the caller thinks mid-sentence" },
         ]).map((p) => (
           <button
@@ -6939,8 +6939,8 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       inboundPhoneNumberId: undefined,
       outboundPhoneNumberId: undefined,
       preferredManagedNumber: null,
-      asrEndpointingSilenceMs: 250,
-      llmMaxTokens: 200,
+      asrEndpointingSilenceMs: 150,
+      llmMaxTokens: 500,
       ttsMinSentenceChars: 5,
       ttsSpeed: 1,
       linearDelayMs: 0,
@@ -6950,8 +6950,8 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       sarvamHighVadSensitivity: true,
       sarvamSttStreamType: "fast",
       sarvamSttPrompt: "",
-      sarvamEndOfSpeechSilenceMs: 500,
-      sarvamFirstTurnMinSpeechMs: 250,
+      sarvamEndOfSpeechSilenceMs: 300,
+      sarvamFirstTurnMinSpeechMs: 200,
       sarvamVadThreshold: 0.3,
       sarvamSpeechEndFlushMs: 0,
       sarvamIncompleteHoldMs: 0,

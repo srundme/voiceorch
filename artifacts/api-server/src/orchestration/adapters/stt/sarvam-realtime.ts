@@ -17,7 +17,8 @@ import { resolveSarvamSttMode, type SarvamSttMode } from "./sarvam-mode.js";
 
 const WS_BASE = "wss://api.sarvam.ai/speech-to-text-realtime/ws";
 const PING_MS = 20_000;
-const DEFAULT_SILENCE_MS = 500;
+/** Voice default — Fast-preset EOS. 500 was the old Balanced factory default. */
+const DEFAULT_SILENCE_MS = 300;
 const DEFAULT_MIN_SPEECH_MS = 250;
 const DEFAULT_THRESHOLD = 0.3;
 /** Realtime API default. Pipecat: raise if the first syllable is clipped. */

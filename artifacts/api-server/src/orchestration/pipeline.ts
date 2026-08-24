@@ -220,6 +220,10 @@ const INSTANT_TOOLS = new Set<string>([
   "next_slide",
   "previous_slide",
   "goto_slide",
+  "schedule_callback",
+  "mute_meeting",
+  "unmute_meeting",
+  "leave_meeting",
 ]);
 
 const SEND_MEETING_CHAT_TOOL_DEF: ToolDefinition = {
@@ -290,10 +294,16 @@ const STREAM_ACCUM_BYTES      = 640;    // 20ms of 16kHz PCM before forwarding a
 // TTS jitter buffer (see drainSentenceJob): runway of audio to queue before
 // starting/resuming the paced send pump, so momentary provider-stream hiccups
 // don't become audible mid-sentence gaps. Caps bound the added latency.
-const TTS_PREBUFFER_MS     = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 300));
-const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 600));
+// Warm sessions start on ~80 ms; cold / post-underrun uses a longer runway.
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 80));
+const TTS_PREBUFFER_COLD_MS = Math.max(
+  TTS_PREBUFFER_WARM_MS,
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 220),
+);
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 400));
 const TTS_REBUFFER_MS      = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 160));
 const TTS_REBUFFER_CAP_MS  = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 400));
+const TTS_UNDERRUN_COLD_MS = 8_000;
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
 const FILLER_THRESHOLD_MS     = 350;    // play a filler phrase if LLM has not returned a first
                                         // token within this window (and backchannel didn't fire)
@@ -928,6 +938,9 @@ export class OrchestrationPipeline implements VoiceSession {
 
   // Barge-in state
   private isPlaying = false;
+  /** True after at least one sentence has played without a recent underrun. */
+  private ttsWarmed = false;
+  private ttsLastUnderrunAt = 0;
   /** Lost-turn backstop: one-shot force-flush timer armed on VAD speech_start (calls 4831/4833). */
   private _vadFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private _lastVadFlushAt = 0;
@@ -6237,7 +6250,12 @@ export class OrchestrationPipeline implements VoiceSession {
       // surfaced in the downloadable call execution log after playback.
       let underrunCount = 0;
       let underrunWaitMs = 0;
-      await awaitPrebuffer(TTS_PREBUFFER_MS, TTS_PREBUFFER_CAP_MS);
+      const recentlyUnderran = this.ttsLastUnderrunAt > 0
+        && Date.now() - this.ttsLastUnderrunAt < TTS_UNDERRUN_COLD_MS;
+      const prebufferMs = (this.ttsWarmed && !recentlyUnderran)
+        ? TTS_PREBUFFER_WARM_MS
+        : TTS_PREBUFFER_COLD_MS;
+      await awaitPrebuffer(prebufferMs, TTS_PREBUFFER_CAP_MS);
       // Re-anchor the per-sentence echo grace + adaptive echo-floor calibration
       // window to actual playback start: the prebuffer wait above would
       // otherwise consume the grace period before any audio is audible, and
@@ -6300,6 +6318,7 @@ export class OrchestrationPipeline implements VoiceSession {
           // into a rapid stutter of micro-gaps), re-buffer a short runway so
           // playback resumes smoothly, then reset pacing to avoid a burst.
           underrunCount++;
+          this.ttsLastUnderrunAt = Date.now();
           const _uStart = Date.now();
           await awaitPrebuffer(TTS_REBUFFER_MS, TTS_REBUFFER_CAP_MS);
           underrunWaitMs += Date.now() - _uStart;
@@ -6307,6 +6326,7 @@ export class OrchestrationPipeline implements VoiceSession {
         }
       }
       if (underrunCount > 0 && !this.closed) {
+        this.ttsWarmed = false;
         logger.warn(
           { callId: this.config.callId, underrunCount, underrunWaitMs, sentenceLen: job.text?.length ?? 0 },
           "TTS playback underruns — synthesis slower than realtime mid-sentence (audible glitches)",
@@ -6326,6 +6346,7 @@ export class OrchestrationPipeline implements VoiceSession {
       await job.ready;
       if (job.synthError) throw job.synthError;
       if (bytesSent <= 0) return undefined;
+      this.ttsWarmed = true;
       const bytesPerMs = this.config.rawPcmOutput ? (this.pcmOutRate() / 1000) * 2 : 8; // s16le vs mulaw
       return {
         pacedMs: Math.round(bytesSent / bytesPerMs),
@@ -9639,6 +9660,32 @@ export class OrchestrationPipeline implements VoiceSession {
       ].join("\n");
     }
 
+    let llmFirstSpeakableAt: number | null = null;
+    let followUpFillerTimer: ReturnType<typeof setTimeout> | null = null;
+    if (
+      this.agent.backchannelingEnabled
+      && !this.closed
+      && !this.bargeInRequested
+    ) {
+      followUpFillerTimer = setTimeout(() => {
+        if (llmFirstSpeakableAt || this.bargeInRequested || this.closed) return;
+        const fillerLang = this.currentLang
+          || (this.agent.languageAutoDetect ? null : this.agent.sttConfig.language);
+        if (!fillerLang) return;
+        const phrase = pickBackchannelFiller(fillerLang, this.recentFillerPhrases, this.backchannelFillerOpts());
+        if (!phrase) return;
+        rememberFillerPhrase(this.recentFillerPhrases, phrase);
+        logger.info(
+          { callId: this.config.callId, fillerType: "tool-followup", language: fillerLang, selectedFiller: phrase },
+          "Post-tool dead-air filler enqueued",
+        );
+        enqueue(phrase, FILLER_SEQUENCE_ID);
+        this._deadAirFillerEnqueuedAt = Date.now();
+        this.fillerPlayedCount++;
+        this._fillerPlayedThisTurn = true;
+      }, FILLER_THRESHOLD_MS);
+    }
+
     try {
       await this.llm.chat(
         this.conversationHistory.messages,
@@ -9658,6 +9705,10 @@ export class OrchestrationPipeline implements VoiceSession {
           if (!afterBrackets) return;
           const afterEnvelope = envelopeGuard.filter(afterBrackets);
           if (!afterEnvelope) return;
+          if (!llmFirstSpeakableAt) {
+            llmFirstSpeakableAt = Date.now();
+            if (followUpFillerTimer) { clearTimeout(followUpFillerTimer); followUpFillerTimer = null; }
+          }
           pendingText += afterEnvelope;
           const { sentences, remainder } = extractSentences(pendingText, this.agent.ttsMinSentenceChars);
           for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
@@ -9705,6 +9756,7 @@ export class OrchestrationPipeline implements VoiceSession {
             },
       );
     } catch (err) {
+      if (followUpFillerTimer) { clearTimeout(followUpFillerTimer); followUpFillerTimer = null; }
       logger.error({ callId: this.config.callId, err }, "continueWithToolResult LLM call failed");
       const recoveryLang = this.currentLang || this.agent.sttConfig.language;
       const recovery = pickClarificationPhrase(recoveryLang, String(this.config.callId));
@@ -9715,6 +9767,8 @@ export class OrchestrationPipeline implements VoiceSession {
       await playPromise;
       return;
     }
+
+    if (followUpFillerTimer) { clearTimeout(followUpFillerTimer); followUpFillerTimer = null; }
 
     // Compute the fully-cleaned response BEFORE the final flush so the spoken
     // tail and the stored history are derived from the exact same text.

@@ -499,7 +499,7 @@ export default function AgentEdit() {
       sarvamHighVadSensitivity: true,
       sarvamSttStreamType: "fast",
       sarvamSttPrompt: "",
-      sarvamEndOfSpeechSilenceMs: 500,
+      sarvamEndOfSpeechSilenceMs: 300,
       sarvamFirstTurnMinSpeechMs: 250,
       sarvamVadThreshold: 0.3,
       sarvamSpeechEndFlushMs: 0,
@@ -1875,10 +1875,10 @@ export default function AgentEdit() {
                         <FormLabel>End-of-speech silence</FormLabel>
                         <FormControl>
                           <Input type="number" min={150} max={800} step={25}
-                            value={field.value ?? 500}
+                            value={field.value ?? 300}
                             onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                         </FormControl>
-                        <FormDescription className="text-[11px]">Quiet time before the turn ends. Default 500ms. Fast 300 · Balanced 500 · Patient 700.</FormDescription>
+                        <FormDescription className="text-[11px]">Quiet time before the turn ends. Default 300ms. Fast 300 · Balanced 400 · Patient 700.</FormDescription>
                       </FormItem>
                     )} />
                     <FormField control={form.control} name="sarvamFirstTurnMinSpeechMs" render={({ field }) => (

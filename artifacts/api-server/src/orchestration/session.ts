@@ -578,6 +578,21 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   const configuredLlmMaxTokens = "llmMaxTokens" in agentCfg
     ? agentCfg["llmMaxTokens"]
     : agentCfg["maxTokens"];
+  // Builder used to persist 200 as the form default. That clips Indic Sarvam
+  // replies; treat the old factory cap as "unset" so voice uses 500.
+  const resolvedMaxTokens = typeof configuredLlmMaxTokens === "number"
+    ? (isSarvamLlm && configuredLlmMaxTokens === 200 ? VOICE_DEFAULT_MAX_TOKENS : configuredLlmMaxTokens)
+    : VOICE_DEFAULT_MAX_TOKENS;
+  const groqGemmaWithTools =
+    (agent.llmProvider ?? "").toLowerCase() === "groq"
+    && (agent.llmModel ?? "").trim() === "gemma2-9b-it"
+    && tools.length > 0;
+  if (groqGemmaWithTools) {
+    logger.warn(
+      { agentId: agent.id, toolCount: tools.length },
+      "Groq gemma2-9b-it cannot call tools — routing this call to llama-3.1-8b-instant",
+    );
+  }
 
   const agentConfig: AgentConfig = {
     id: agent.id,
@@ -590,9 +605,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // fields live in the agent_config JSON blob; only defined values are carried.
     llmGenerationParams: {
       ...(typeof agent.temperature === "number" ? { temperature: agent.temperature } : {}),
-      maxTokens: typeof configuredLlmMaxTokens === "number"
-        ? configuredLlmMaxTokens
-        : VOICE_DEFAULT_MAX_TOKENS,
+      maxTokens: resolvedMaxTokens,
       ...(typeof agentCfg["topP"] === "number" ? { topP: agentCfg["topP"] as number } : {}),
       // Repetition guard: OpenAI-compatible LLMs (incl. Sarvam) default these to 0,
       // which at low temperature lets the model emit byte-identical replies turn
@@ -620,7 +633,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     asrProvider: agent.asrProvider,
     asrModel: agent.asrModel,
     llmProvider: agent.llmProvider,
-    llmModel: agent.llmModel,
+    llmModel: groqGemmaWithTools ? "llama-3.1-8b-instant" : agent.llmModel,
     fallbackLlmProvider: agent.llmFallbackProvider ?? null,
     fallbackLlmModel: agent.llmFallbackModel ?? null,
     ttsProvider: agent.ttsProvider,

@@ -44,6 +44,14 @@ export const SARVAM_STT_LATENCY_DEFAULTS = {
   speechEndFlushMs: 0,
   /** Do not second-guess Saaras with mid-thought coalesce holds. */
   incompleteHoldMs: 0,
+  /**
+   * Realtime `silence_duration_ms` for new agents / unset config.
+   * 300 matches the Fast call-engine preset. 500 was the accidental Balanced
+   * factory default that stacked ~200 ms of lag after every utterance.
+   */
+  endOfSpeechSilenceMs: 300,
+  /** Previous builder/form default — rewritten to endOfSpeechSilenceMs. */
+  legacyEndOfSpeechSilenceMs: 500,
 } as const;
 
 /**
@@ -256,6 +264,14 @@ export function normalizeCallEngineAgentConfig(
     if (sspChanged) cfg["startSpeakingPlan"] = ssp;
   }
 
+  const eos = cfg["sarvamEndOfSpeechSilenceMs"];
+  if (eos === SARVAM_STT_LATENCY_DEFAULTS.legacyEndOfSpeechSilenceMs) {
+    reasons.push(
+      `sarvamEndOfSpeechSilenceMs ${eos}→${SARVAM_STT_LATENCY_DEFAULTS.endOfSpeechSilenceMs}`,
+    );
+    cfg["sarvamEndOfSpeechSilenceMs"] = SARVAM_STT_LATENCY_DEFAULTS.endOfSpeechSilenceMs;
+  }
+
   const ttsMin = cfg["ttsMinSentenceChars"];
   if (
     typeof ttsMin === "number"
@@ -289,6 +305,7 @@ export function callEngineInsertDefaults(): Record<string, unknown> {
     sarvamHighVadSensitivity: SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity,
     sarvamSpeechEndFlushMs: SARVAM_STT_LATENCY_DEFAULTS.speechEndFlushMs,
     sarvamIncompleteHoldMs: SARVAM_STT_LATENCY_DEFAULTS.incompleteHoldMs,
+    sarvamEndOfSpeechSilenceMs: SARVAM_STT_LATENCY_DEFAULTS.endOfSpeechSilenceMs,
     stopSpeakingPlan: {
       numWords: CALL_ENGINE_SAFE.wordsForInterruption,
       voiceSeconds: voiceSecondsFromInterruptWords(CALL_ENGINE_SAFE.wordsForInterruption),

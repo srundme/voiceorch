@@ -21,6 +21,7 @@ import {
   clampSarvamIncompleteHoldMs,
   clampSarvamSpeechEndFlushMs,
   resolveSarvamHighVadSensitivity,
+  normalizeCallEngineAgentConfig,
   FRAGMENT_COALESCE_DEFAULTS,
   resolveStartSpeakingPlan,
   resolveTtsMinSentenceChars,
@@ -104,7 +105,9 @@ async function buildTargetAgentConfig(
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId)).limit(1);
   if (!agent) return null;
 
-  const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+  const agentCfg = normalizeCallEngineAgentConfig(
+    (agent.agentConfig ?? {}) as Record<string, unknown>,
+  ).config;
   let tools = Array.isArray(agent.tools) ? (agent.tools as unknown as AgentTool[]) : [];
   const endCallPhrases = agent.endCallPhrases
     ? agent.endCallPhrases.split(",").map((s) => s.trim()).filter(Boolean)

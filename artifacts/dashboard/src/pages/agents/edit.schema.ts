@@ -151,7 +151,7 @@ export const agentFormSchema = z.object({
   sarvamSttStreamType: z.enum(["fast", "balanced", "simulated"]).optional(),
   /** Terminology hint applied to the final transcript only. */
   sarvamSttPrompt: z.string().max(500).optional(),
-  /** Realtime connect `silence_duration_ms`. Default 500. */
+  /** Realtime connect `silence_duration_ms`. Default 300 (Fast). */
   sarvamEndOfSpeechSilenceMs: z.number().min(150).max(800).optional(),
   /** Realtime connect `min_speech_duration_ms`. Default 250. */
   sarvamFirstTurnMinSpeechMs: z.number().min(80).max(800).optional(),
@@ -230,7 +230,7 @@ export const CALL_ENGINE_PRESETS = {
     linearDelayMs: 0,
     stopSpeakingNumWords: 3,
     sarvamHighVadSensitivity: true,
-    sarvamEndOfSpeechSilenceMs: 500,
+    sarvamEndOfSpeechSilenceMs: 400,
     sarvamFirstTurnMinSpeechMs: 250,
     sarvamVadThreshold: 0.3,
   },
@@ -296,7 +296,7 @@ export function clampSarvamIncompleteHoldMs(value: number | null | undefined): n
 
 /** Realtime `silence_duration_ms`. Adapter default 500. */
 export function clampSarvamSilenceMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 500;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 300;
   return Math.max(150, Math.min(800, Math.round(v)));
 }
 

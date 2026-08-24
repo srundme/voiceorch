@@ -65,7 +65,7 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: GEMINI_LIVE_LLM_MODEL, label: "Gemini 3.1 Flash Live (Native Realtime Bidirectional Voice)" },
   ],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
-  groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
+  groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }],
   sarvam: [
     { value: "sarvam-105b-conversations", label: "Sarvam 105B Conversations (recommended — voice)" },
     { value: "gemma4", label: "Gemma 4 31B" },

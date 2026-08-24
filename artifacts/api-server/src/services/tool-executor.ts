@@ -1949,67 +1949,77 @@ export async function executeSendSms(opts: {
     logger.warn({ callId: opts.callId }, "Send SMS: no caller phone available — skipping");
     return "error: no caller phone available to send SMS. Ask the caller for a number, or continue without SMS.";
   }
-  const message = opts.messageTemplate;
   const tprov = opts.telephonyProvider;
-  logger.info({ callId: opts.callId, to: callerPhone, tprov }, "Executing Send SMS tool");
-  try {
-    if (tprov === "twilio") {
-      const authToken = opts.providerKeys.get("twilio") ?? "";
-      const extra = opts.providerKeys.get("twilio:extraConfig");
-      const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
-      const accountSid = cfg["accountSid"] ?? "";
-      const fromNumber = cfg["fromNumber"] ?? "";
-      const body = new URLSearchParams({ To: callerPhone, From: fromNumber, Body: message });
-      const resp = await fetch(
-        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: body.toString(),
-          signal: AbortSignal.timeout(8000),
-        },
-      );
-      if (!resp.ok) {
-        logger.warn({ callId: opts.callId, status: resp.status }, "Twilio SMS failed");
-        return `error: SMS send failed (twilio status ${resp.status}). Apologize and continue helping the caller.`;
-      }
-      logger.info({ callId: opts.callId, to: callerPhone }, "SMS sent via Twilio");
-      return `sms_sent: message delivered to ${callerPhone}. Confirm briefly to the caller.`;
-    }
-    if (tprov === "plivo") {
-      const authToken = opts.providerKeys.get("plivo") ?? "";
-      const extra = opts.providerKeys.get("plivo:extraConfig");
-      const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
-      const authId = cfg["authId"] ?? "";
-      const fromNumber = cfg["fromNumber"] ?? "";
-      const resp = await fetch(
-        `https://api.plivo.com/v1/Account/${authId}/Message/`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Basic ${Buffer.from(`${authId}:${authToken}`).toString("base64")}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ src: fromNumber, dst: callerPhone, text: message }),
-          signal: AbortSignal.timeout(8000),
-        },
-      );
-      if (!resp.ok) {
-        logger.warn({ callId: opts.callId, status: resp.status }, "Plivo SMS failed");
-        return `error: SMS send failed (plivo status ${resp.status}). Apologize and continue helping the caller.`;
-      }
-      logger.info({ callId: opts.callId, to: callerPhone }, "SMS sent via Plivo");
-      return `sms_sent: message delivered to ${callerPhone}. Confirm briefly to the caller.`;
-    }
+  if (tprov !== "twilio" && tprov !== "plivo") {
     logger.warn({ callId: opts.callId, tprov }, "Send SMS: telephony provider does not support SMS");
     return "error: this telephony provider does not support SMS. Tell the caller you cannot text them from this call.";
-  } catch (err) {
-    logger.error({ callId: opts.callId, err }, "Send SMS tool execution failed");
-    return "error: SMS send failed due to a technical issue. Apologize and continue helping the caller.";
   }
+  logger.info({ callId: opts.callId, to: callerPhone, tprov }, "Executing Send SMS tool (queued)");
+  void sendSmsNow(opts, callerPhone, tprov).catch((err) => {
+    logger.error({ callId: opts.callId, err }, "Send SMS background delivery failed");
+  });
+  return `sms_queued: message is being sent to ${callerPhone}. Confirm briefly to the caller that it is on its way.`;
+}
+
+async function sendSmsNow(
+  opts: {
+    callId: number;
+    telephonyProvider: string;
+    providerKeys: Map<string, string>;
+    messageTemplate: string;
+  },
+  callerPhone: string,
+  tprov: string,
+): Promise<void> {
+  const message = opts.messageTemplate;
+  if (tprov === "twilio") {
+    const authToken = opts.providerKeys.get("twilio") ?? "";
+    const extra = opts.providerKeys.get("twilio:extraConfig");
+    const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+    const accountSid = cfg["accountSid"] ?? "";
+    const fromNumber = cfg["fromNumber"] ?? "";
+    const body = new URLSearchParams({ To: callerPhone, From: fromNumber, Body: message });
+    const resp = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: body.toString(),
+        signal: AbortSignal.timeout(8000),
+      },
+    );
+    if (!resp.ok) {
+      logger.warn({ callId: opts.callId, status: resp.status }, "Twilio SMS failed");
+      return;
+    }
+    logger.info({ callId: opts.callId, to: callerPhone }, "SMS sent via Twilio");
+    return;
+  }
+  const authToken = opts.providerKeys.get("plivo") ?? "";
+  const extra = opts.providerKeys.get("plivo:extraConfig");
+  const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+  const authId = cfg["authId"] ?? "";
+  const fromNumber = cfg["fromNumber"] ?? "";
+  const resp = await fetch(
+    `https://api.plivo.com/v1/Account/${authId}/Message/`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Basic ${Buffer.from(`${authId}:${authToken}`).toString("base64")}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ src: fromNumber, dst: callerPhone, text: message }),
+      signal: AbortSignal.timeout(8000),
+    },
+  );
+  if (!resp.ok) {
+    logger.warn({ callId: opts.callId, status: resp.status }, "Plivo SMS failed");
+    return;
+  }
+  logger.info({ callId: opts.callId, to: callerPhone }, "SMS sent via Plivo");
 }
 
 // ── Mid-call email (Email channel: managed or BYO Brevo) ─────────────────────
@@ -2054,10 +2064,10 @@ export async function executeSendEmail(opts: {
 
   logger.info(
     { callId: opts.callId, agentId: opts.agentId, toEmail, hasOverride: !!(subject || body) },
-    "Executing Send Email tool",
+    "Executing Send Email tool (queued)",
   );
 
-  const result = await sendChannelEmail({
+  void sendChannelEmail({
     userId: agent.userId,
     toEmail,
     context: {
@@ -2071,15 +2081,18 @@ export async function executeSendEmail(opts: {
     template,
     callId: opts.callId,
     journeyRunHint: "midcall_send_email",
+  }).then((result) => {
+    if (!result.ok) {
+      logger.warn(
+        { callId: opts.callId, error: result.error, skipped: result.skipped },
+        "Send Email background delivery failed",
+      );
+    }
+  }).catch((err) => {
+    logger.error({ callId: opts.callId, err }, "Send Email background delivery failed");
   });
 
-  if (result.ok) {
-    return `email_sent: successfully sent to ${toEmail}. Confirm briefly to the caller that the email is on its way.`;
-  }
-  if (result.skipped === "inactive" || result.skipped === "missing_config") {
-    return "email_failed: Email channel is not configured or inactive. Tell the caller you cannot send email right now.";
-  }
-  return `email_failed: ${result.error ?? "send failed"}. Apologize and offer another way to follow up.`;
+  return `email_queued: message is being sent to ${toEmail}. Confirm briefly to the caller that it is on its way.`;
 }
 
 // ── Mid-call WhatsApp (BYO BSP webhook or native Instant/Business) ───────────
@@ -2112,10 +2125,10 @@ export async function executeSendWhatsapp(opts: {
 
   logger.info(
     { callId: opts.callId, agentId: opts.agentId, toPhone, templateHint },
-    "Executing Send WhatsApp tool",
+    "Executing Send WhatsApp tool (queued)",
   );
 
-  const result = await sendMidCallWhatsapp({
+  void sendMidCallWhatsapp({
     userId: agent.userId,
     agentId: opts.agentId,
     agentName: opts.agentName || agent.name,
@@ -2124,12 +2137,18 @@ export async function executeSendWhatsapp(opts: {
     templateHint,
     templateName: templateName || undefined,
     summary,
+  }).then((result) => {
+    if (!result.ok) {
+      logger.warn(
+        { callId: opts.callId, error: result.error },
+        "Send WhatsApp background delivery failed",
+      );
+    }
+  }).catch((err) => {
+    logger.error({ callId: opts.callId, err }, "Send WhatsApp background delivery failed");
   });
 
-  if (result.ok) {
-    return `whatsapp_sent: message queued to ${toPhone} via ${result.via ?? "channel"}. Confirm briefly to the caller.`;
-  }
-  return `whatsapp_failed: ${result.error ?? "send failed"}. Apologize and offer another way to follow up.`;
+  return `whatsapp_queued: message is being sent to ${toPhone}. Confirm briefly to the caller that it is on its way.`;
 }
 
 // ── Transfer lead DB helper ────────────────────────────────────────────────────
