@@ -6605,7 +6605,7 @@ export class OrchestrationPipeline implements VoiceSession {
         });
       }
       logger.warn({ callId: this.config.callId, toolName }, "LLM called unknown tool — ignoring");
-      return undefined;
+      return `error: ${toolName} is not a tool on this call. Answer the caller now using the knowledge already in your prompt. Do not call any tool.`;
     }
 
     logger.info({ callId: this.config.callId, toolName, toolType: tool.type, args }, "Tool invoked by LLM");
@@ -8915,20 +8915,16 @@ export class OrchestrationPipeline implements VoiceSession {
     const cleanResponse = stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
     const baseSpokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
 
-    // Silent-turn recovery: the LLM produced no speakable text and no tool call
-    // even after the retry loop above (Sarvam/Gemma sometimes returns empty
-    // content — e.g. on "are you AI?" — and the last retry still comes back
-    // blank). Without this the turn ends with zero audio; a run of these reads
-    // as the agent going dead mid-call (call 8745: 6 empty turns in a row, the
-    // caller kept saying "Hello" and then hung up). Speak a short clarification
-    // in the caller's language so the line never goes silent. Safe because
-    // nothing streamed this turn (llmFirstTokenAt === null), so we can't
-    // double-speak.
+    // Silent-turn recovery: the LLM produced no speakable text and no tool call.
+    // Call 8745: empty content (no tokens). Call 12705: tokens streamed but they
+    // were a hallucinated <tool_call> that TTS filters stripped, so First Token
+    // fired and this recovery used to skip (llmFirstTokenAt !== null) — dead air,
+    // caller saying "hello". Recover whenever NOTHING was queued to speak.
     if (
       !cleanResponse.trim()
       && !triggeredToolName
+      && sentenceQueue.length === 0
       && !this.bargeInRequested
-      && llmFirstTokenAt === null
       && !this.closed
     ) {
       const recoveryLang = this.currentLang || this.agent.sttConfig.language;

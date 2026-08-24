@@ -122,7 +122,47 @@ function sanitizeForAlternation(messages: ConversationTurn[]): ConversationTurn[
   return merged;
 }
 
-export type ToolEnvelopeFormat = "structured" | "json" | "bracket" | "function_tag" | "function_call";
+export type ToolEnvelopeFormat = "structured" | "json" | "bracket" | "function_tag" | "function_call" | "xml";
+
+/**
+ * Sarvam-105b-conversations (and some Gemma/Groq prompts) emit tools as XML
+ * in delta.content instead of delta.tool_calls:
+ *
+ *   <tool_call>next_service_suggestion
+ *   <arg_key>offering_type</arg_key>
+ *   <arg_value>B2B portal</arg_value>
+ *   </tool_call>
+ *
+ * parseSerializedToolCall only understands JSON, so this used to stream to TTS,
+ * get stripped as a tool artifact, and leave the caller in dead air (call 12705).
+ */
+export function parseXmlToolCall(raw: string): { name: string; args: Record<string, unknown> } | null {
+  if (!raw) return null;
+  const text = raw.trim();
+  const block = /<tool_call>\s*([A-Za-z][\w]*)\s*([\s\S]*?)(?:<\/tool_call>|$)/i.exec(text);
+  if (!block) return null;
+  const name = block[1]!.trim();
+  if (!name) return null;
+  const body = block[2] ?? "";
+  const args: Record<string, unknown> = {};
+  const pairRe = /<arg_key>\s*([^<]+?)\s*<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/gi;
+  let pair: RegExpExecArray | null;
+  while ((pair = pairRe.exec(body)) !== null) {
+    const key = pair[1]!.trim();
+    if (key) args[key] = pair[2]!.trim();
+  }
+  return { name, args };
+}
+
+/** True when streamed content is (or might still become) an XML tool envelope. */
+export function xmlToolSniff(peek: string): "yes" | "no" | "hold" {
+  const p = peek.replace(/^\s+/, "").toLowerCase();
+  if (!p.startsWith("<")) return "no";
+  if (p.startsWith("<tool_call") || p.startsWith("<arg_key") || p.startsWith("<function")) return "yes";
+  const maybe = ["<tool_call", "<arg_key", "<function"];
+  if (maybe.some((m) => m.startsWith(p))) return "hold";
+  return "no";
+}
 
 export function parseSerializedToolCall(raw: string): { name: string; args: Record<string, unknown> } | null {
   if (!raw) return null;
@@ -271,6 +311,11 @@ export function parseToolEnvelope(
   validNames?: Set<string>,
 ): { name: string; args: Record<string, unknown>; format: ToolEnvelopeFormat } | null {
   const nameOk = (n: string) => !validNames || validNames.size === 0 || validNames.has(n);
+
+  // XML is unambiguous even when the tool name is hallucinated — dispatch it
+  // so the pipeline can return "tool not available" instead of going silent.
+  const xml = parseXmlToolCall(raw);
+  if (xml) return { ...xml, format: "xml" };
 
   const json = parseSerializedToolCall(raw);
   if (json && nameOk(json.name)) return { ...json, format: "json" };
@@ -604,13 +649,25 @@ ${systemPrompt}`
                 jsonBuffer += token;
                 return;
               }
-              jsonSniffDecided = true;
               const firstChar = peek[0];
               if (firstChar === "{" || firstChar === "`" || firstChar === "[") {
+                jsonSniffDecided = true;
                 bufferingJson = true;
                 jsonBuffer += token;
                 return;
               }
+              const xmlSniff = xmlToolSniff(peek);
+              if (xmlSniff === "hold") {
+                jsonBuffer += token;
+                return;
+              }
+              if (xmlSniff === "yes") {
+                jsonSniffDecided = true;
+                bufferingJson = true;
+                jsonBuffer += jsonBuffer ? token : peek;
+                return;
+              }
+              jsonSniffDecided = true;
               jsonBuffer = "";
               token = peek;
             }
@@ -663,6 +720,18 @@ ${systemPrompt}`
 
       if (usage) options?.onUsage?.(usage);
 
+      // Stream ended while still holding a possible XML prefix ("<", "<tool") —
+      // flush it as speech rather than dropping it.
+      if (!sawToolDelta && !bufferingJson && jsonBuffer) {
+        const leftover = jsonBuffer.replace(/^\s+/, "") || jsonBuffer;
+        jsonBuffer = "";
+        if (leftover) {
+          sawRealContent = true;
+          full += leftover;
+          onToken(leftover);
+        }
+      }
+
       if (toolAcc.size > 0 && options?.onToolCall) {
         const picked = [...toolAcc.entries()]
           .sort((a, b) => a[0] - b[0])
@@ -693,7 +762,10 @@ ${systemPrompt}`
           options.onToolCall(parsedCall.name, parsedCall.args);
           return;
         }
-        onDone("", usage);
+        // Withheld content was not a tool after all — speak it. onDone("") here
+        // is the silent-turn bug (call 12705): XML tool tags got buffered, failed
+        // JSON parse, and the caller heard nothing.
+        onDone(jsonBuffer, usage);
         return;
       }
 
