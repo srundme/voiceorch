@@ -510,15 +510,18 @@ export async function createSession(params: {
   if (isCartesiaTts) {
     effectiveSystemPrompt += `\n\n[TTS OUTPUT RULES — MANDATORY] Your responses are spoken aloud by Cartesia Sonic TTS. Follow these rules strictly:
 - Write plain prose in full sentences. End every response with . ? or !
+- Send complete phrases. Never reply with a bare number, code, or fragment — keep it inside a sentence.
 - Never use abbreviated place names with periods. Write "T Nagar" not "T. Nagar", "RK Salai" not "R.K. Salai", "MG Road" not "M.G. Road".
-- Never use ALL-CAPS words or acronyms — write them in lowercase or spell them out naturally.
+- Use normal capitalization. Standard acronyms (USA, NASA, ATM) stay as they are; never put an ordinary word in ALL-CAPS for emphasis — it will be read out letter by letter.
+- Leave numbers, currency, percentages, dates, times, phone numbers, addresses and emails in their conventional written form (1,234,567 · $19.99 · 12% · 04/20/2026 · 7:00 PM · (415) 555-1212 · 123 Main St · user@example.com). The engine speaks them naturally — do not spell them out yourself.
 - Never use markdown: no asterisks, hashes, bullet points, numbered lists, or underscores.
+- Write hesitation sounds in standard form set off by commas ("uh", "um", "hmm"), sparingly. Never stretch them ("Sooooo", "ummmm").
 - The ONLY markup allowed is the four delivery signals listed below. Every other XML or SSML tag is spoken aloud literally — never use <prosody>, <say-as>, <phoneme>, or any tag not listed here.
 CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
 - EMOTION: Optionally place <emotion value="VALUE"/> at the very start of a sentence — never mid-sentence, never mid-word, and never more than once per sentence. Supported values: enthusiastic (genuinely good news), sympathetic (empathy for a problem), calm (reset to neutral after an emotional moment), curious (when gathering information), content (successful resolution), sad (delivering bad news). Example: "<emotion value="sympathetic"/> I completely understand that, and I'm sorry to hear that."
 - LAUGHTER: Insert [laughter] at a natural moment where a brief, warm laugh fits — do not force it. Example: "That's actually a great question! [laughter] Let me check that for you."
-- SPELL: Wrap confirmation codes, reference IDs, or anything that must be read character by character in <spell> tags. Example: "Your booking ID is <spell>AB12CD</spell>."
-- BREAK: Use <break time="500ms"/> for a deliberate pause before an important point. Do not chain multiple break tags in a row.`;
+- SPELL: Wrap confirmation codes, reference IDs, or anything that must be read character by character in <spell> tags, inside a full sentence. Example: "Your booking ID is <spell>AB12CD</spell>." Without a spell tag, separate the characters with spaces (A B C 1 2 3) or commas for a slower read (A, B, C, 1, 2, 3) — never with full stops.
+- BREAK: Use <break time="500ms"/> for a deliberate pause before an important point. Do not chain multiple break tags in a row, and do not chain a break tag with a spell tag. Ordinary commas and full stops already give natural pauses.`;
   } else {
     effectiveSystemPrompt += `\n\n[TTS OUTPUT RULES — MANDATORY] Your responses are spoken aloud by a TTS engine. Follow these rules strictly:
 - Never use abbreviated place names with periods. Write "T Nagar" not "T. Nagar", "RK Salai" not "R.K. Salai", "MG Road" not "M.G. Road".

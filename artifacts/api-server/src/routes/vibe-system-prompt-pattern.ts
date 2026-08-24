@@ -253,10 +253,18 @@ function complianceExtra(input: VibePatternPromptInput): string {
  * and session.ts TTS OUTPUT RULES. Wrong syntax (wrap tags / unsupported emotion names)
  * is stripped from transcripts and does nothing for voice controls.
  */
-export const CARTESIA_SPEECH_BLOCK = `**SPEECH SYNTHESIS — CARTESIA SONIC 3**
+export const CARTESIA_SPEECH_BLOCK = `**SPEECH SYNTHESIS — CARTESIA SONIC 3.5**
 
 Strictly never read tags or emotion names aloud to the user.
 The ONLY markup allowed is the four delivery signals below. Never invent other XML/SSML tags.
+
+**Written Form (Sonic normalizes this for you)**
+
+Write plain, well-punctuated prose in full sentences and end every turn with . ? or !
+Send complete phrases — never a bare code, number, or spell tag on its own line.
+Use normal capitalization. Keep real acronyms in their standard form (USA, NASA); never put ordinary words in caps for emphasis, they get read letter by letter.
+Leave numbers, currency, percentages, phone numbers, addresses and emails in conventional written form (1,234,567 · $19.99 · 12% · (415) 555-1212 · 123 Main St · user@example.com). Do not pre-spell them out.
+Never use markdown, bullets, asterisks or emoji — they are spoken aloud literally.
 
 **Emotion Tags (REQUIRED on meaningful turns)**
 
@@ -288,14 +296,18 @@ Example: That's a good one! [laughter] Let me check that for you.
 **Pauses and Breaks**
 
 Use <break time="500ms"/> sparingly at a natural pause before an important point or topic shift.
-Do not chain multiple break tags. Do not use tiny 50ms breaks.
+Do not chain multiple break tags. Do not use tiny 50ms breaks. Do not chain a break tag with a spell tag.
+Prefer ordinary commas and full stops for pauses — they already produce natural timing.
 
 **Spell Tags**
 
 Use <spell>…</spell> only when the customer explicitly asks you to spell something, or for confirmation codes / reference IDs that must be read character by character.
-Never use spell tags in normal conversation flow.
+Never use spell tags in normal conversation flow. Always keep the tag inside a full sentence.
 
 Example: Your ID is <spell>AB12CD</spell>.
+
+If a spell tag is not available, separate characters with single spaces (A B C 1 2 3), or commas for a slower read (A, B, C, 1, 2, 3). Never put full stops between individual characters — that is the old Sonic 3 format.
+For long sequences like card or account numbers, break them into human-sized groups: 3 6 8 9, 0 5 0 5, 2 5 8 2.
 
 **Date and Time Format**
 
@@ -316,7 +328,8 @@ RULE 8 — When explaining multiple points, let each idea settle before moving t
 RULE 9 — When reassuring a hesitant customer, build reassurance in two or three connected thoughts — acknowledge the concern, then address it directly.
 RULE 10 — If the customer goes quiet or gives a very short reply, use a soft filler and ease into the next step. Never rush because of silence.
 RULE 11 — Show warmth and genuine care — especially when the customer seems hesitant or guarded. Sound like a person, not a checklist.
-RULE 12 — If the customer uses a specific word for their situation, you may use that same word naturally later — but never repeat it back immediately as acknowledgement.`;
+RULE 12 — If the customer uses a specific word for their situation, you may use that same word naturally later — but never repeat it back immediately as acknowledgement.
+RULE 13 — Write hesitation sounds in their standard form, set off with commas: "uh", "um", "hmm". Never stretch them ("Sooooo", "ummmm") — the voice engine cannot say those naturally. Use them only for genuine hesitation, such as just before a retrieved number or a hard answer.`;
 
 export const INTERRUPTION_BLOCK = `**MID-CALL INTERRUPTION HANDLING — CRITICAL**
 

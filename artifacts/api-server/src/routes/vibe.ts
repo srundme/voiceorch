@@ -839,7 +839,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
         ``,
         `CRITICAL — systemPrompt editing rules:`,
         `- The "systemPrompt" field above is the EXACT, COMPLETE current system prompt. Treat it as a literal string, not a description or summary.`,
-        `- Prompts use a fixed section pattern (IDENTITY, LANGUAGE STYLE, TONE, GENDER, CALL FLOW, INTERRUPTIONS, KB, OBJECTIONS, ERRORS, CARTESIA SONIC 3, HUMAN SPEECH RULES, CALL GOAL, COMPLETION, RESPONSE HANDLING). Preserve section headers and order.`,
+        `- Prompts use a fixed section pattern (IDENTITY, LANGUAGE STYLE, TONE, GENDER, CALL FLOW, INTERRUPTIONS, KB, OBJECTIONS, ERRORS, CARTESIA SONIC 3.5, HUMAN SPEECH RULES, CALL GOAL, COMPLETION, RESPONSE HANDLING). Preserve section headers and order.`,
         `- Never invent alternate Cartesia tag syntax. Emotion / [laughter] / <break> / <spell> rules stay as written unless the user explicitly changes them.`,
         `- When the user requests a text change (e.g. change "28" to "30", or update a specific phrase), find the exact substring in the system prompt and replace ONLY that. Copy the rest of the system prompt character-for-character.`,
         `- Do NOT rewrite, paraphrase, simplify, reformat, restructure, or shorten any part of the system prompt. The output "systemPrompt" must differ from the input "systemPrompt" only at the exact requested change site(s).`,
