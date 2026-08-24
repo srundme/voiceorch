@@ -23,6 +23,7 @@ import {
   peekCachedPcmLoop,
 } from "../../ambient.js";
 import { logger } from "../../../lib/logger.js";
+import { createExecutionLogger, EXEC_COMPONENTS } from "../../../services/execution-log.js";
 import { buildToolDefs } from "../../../services/tool-executor.js";
 import {
   DEFAULT_GEMINI_LIVE_MODEL,
@@ -532,6 +533,7 @@ export class GeminiLivePipeline implements VoiceSession {
       high: ThinkingLevel.HIGH,
     };
 
+    const connectStarted = Date.now();
     this.session = await ai.live.connect({
       model,
       config: {
@@ -573,7 +575,19 @@ export class GeminiLivePipeline implements VoiceSession {
       },
     });
 
-    logger.info({ callId: this.config.callId, model, voiceName }, "Gemini Live session connected");
+    const connectMs = Date.now() - connectStarted;
+    logger.info({ callId: this.config.callId, model, voiceName, connectMs }, "Gemini Live session connected");
+    createExecutionLogger(this.config.callId, null)(EXEC_COMPONENTS.LLM, "system", {
+      provider: "gemini_live",
+      status: "info",
+      latencyMs: connectMs,
+      metadata: {
+        event: "Gemini Live Connected",
+        model,
+        voiceName,
+        promptChars: this.agent.systemPrompt.length,
+      },
+    });
   }
 
   private async onServerMessage(msg: LiveServerMessage): Promise<void> {
@@ -690,10 +704,20 @@ export class GeminiLivePipeline implements VoiceSession {
       this.lastRealFrameAt = Date.now();
       if (!this.firstFrameLogged) {
         this.firstFrameLogged = true;
+        const bootMs = this.lastRealFrameAt - this.startedAtMs;
         logger.info(
-          { callId: this.config.callId, bootMs: this.lastRealFrameAt - this.startedAtMs },
+          { callId: this.config.callId, bootMs },
           "Gemini Live: first agent audio on the wire",
         );
+        createExecutionLogger(this.config.callId, null)(EXEC_COMPONENTS.TTS, "system", {
+          provider: "gemini_live",
+          status: "info",
+          latencyMs: bootMs,
+          metadata: {
+            event: "First Agent Audio",
+            bootMs,
+          },
+        });
       }
       this.recording.addAgentChunk(pcm8k); // record at playback time, not arrival time
       const out = this.config.rawPcmOutput
