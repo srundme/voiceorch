@@ -1,6 +1,6 @@
 # @snapserveai/mcp
 
-Official [MCP](https://modelcontextprotocol.io) server for [SnapServe](https://app.snapserve.ai) — control your AI voice agents, phone calls, numbers, analytics and wallet from Claude, Cursor, or any MCP-compatible client.
+Official [MCP](https://modelcontextprotocol.io) server for [SnapServe](https://app.snapserve.ai) — operate the full product (agents, calls, campaigns, journeys, WhatsApp, Sheets, wallet) from Claude, Cursor, or any MCP client.
 
 ## Hosted remote MCP (Claude custom connectors)
 
@@ -45,19 +45,24 @@ Optional: set `SNAPSERVE_BASE_URL` for self-hosted/staging deployments (default 
 
 ## Tools
 
-| Tool | What it does |
+| Area | Tools |
 |---|---|
-| `list_agents` / `get_agent` / `create_agent` / `update_agent` / `toggle_agent` / `delete_agent` | Manage voice agents |
-| `list_calls` / `get_call` / `create_outbound_call` / `end_call` / `transfer_call` | Place and manage phone calls |
-| `list_phone_numbers` / `assign_phone_number` | Manage phone numbers |
-| `get_dashboard_stats` / `get_recent_calls` / `get_calls_by_status` / `get_daily_call_volume` / `get_agent_stats` | Analytics |
-| `get_wallet` / `get_wallet_transactions` / `get_account` | Wallet & account |
-| `snapserve_api_request` | Escape hatch for any other REST endpoint |
+| Agents | `list_agents`, `get_agent`, `create_agent`, `update_agent`, `toggle_agent`, `delete_agent`, versions |
+| Calls | `list_calls`, `get_call`, `get_call_logs`, `outbound_call` / `create_outbound_call`, `end_call`, `transfer_call` |
+| Campaigns | `list_campaigns`, `create_campaign`, `update_campaign`, batches, leads |
+| Journeys | presets, create, activate, pause |
+| WhatsApp / email | channel status, BYO connections, Brevo |
+| Sheets | Automatic Calls list / create / start / pause |
+| Knowledge / squads / webcall | attach KB, squads, webcall links |
+| Numbers / providers / webhooks | list, assign, BYO keys, outbound webhooks |
+| Wallet / analytics | `get_wallet`, dashboard, per-agent stats |
+| Escape hatch | `snapserve_api` / `snapserve_api_request` |
 
 Example prompts once connected:
 
 - "List my SnapServe agents and show today's call volume"
 - "Call +91XXXXXXXXXX with my Tamil sales agent"
+- "Create a campaign from this sheet and start dialing"
 - "Why did call 1234 fail? Show me the transcript"
 
 ## License

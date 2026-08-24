@@ -576,7 +576,66 @@ export function registerTools(server: McpServer, client: SnapServeClient) {
     try { return ok(await client.request("GET", `/analytics/agents/${agentId}`)); } catch (e) { return fail(e); }
   });
 
-  // silence unused Json type if needed
+  server.tool("get_account", "Account profile for the authenticated API key.", {}, async () => {
+    try { return ok(await client.request("GET", "/account")); } catch (e) { return fail(e); }
+  });
+
+  // Aliases so Claude sessions that connected to the older hosted MCP keep working.
+  server.tool(
+    "create_outbound_call",
+    "Alias of outbound_call. Place an outbound phone call (E.164). Spends wallet — confirm first.",
+    { agentId: Id, toNumber: z.string(), metadata: z.record(z.unknown()).optional() },
+    async ({ agentId, toNumber, metadata }) => {
+      try {
+        return ok(await client.request("POST", "/calls/outbound", {
+          body: { agentId, toNumber, ...(metadata ? { metadata } : {}) },
+        }));
+      } catch (e) { return fail(e); }
+    },
+  );
+  server.tool(
+    "snapserve_api_request",
+    "Alias of snapserve_api. Call any SnapServe REST path under /api.",
+    {
+      method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
+      path: z.string(),
+      body: z.record(z.unknown()).optional(),
+      query: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+    },
+    async ({ method, path, body, query }) => {
+      try { return ok(await client.request(method, path, { body, query })); } catch (e) { return fail(e); }
+    },
+  );
+  server.tool("get_dashboard_stats", "Alias of get_analytics_dashboard.", {}, async () => {
+    try { return ok(await client.request("GET", "/analytics/dashboard")); } catch (e) { return fail(e); }
+  });
+  server.tool("get_recent_calls", "Most recent calls across agents.", {}, async () => {
+    try { return ok(await client.request("GET", "/analytics/calls/recent")); } catch (e) { return fail(e); }
+  });
+  server.tool("get_calls_by_status", "Call counts grouped by status.", {}, async () => {
+    try { return ok(await client.request("GET", "/analytics/calls/by-status")); } catch (e) { return fail(e); }
+  });
+  server.tool("get_daily_call_volume", "Daily call volume time series.", {}, async () => {
+    try { return ok(await client.request("GET", "/analytics/calls/daily")); } catch (e) { return fail(e); }
+  });
+  server.tool(
+    "get_agent_stats",
+    "Alias of get_agent_analytics.",
+    { agentId: Id },
+    async ({ agentId }) => {
+      try { return ok(await client.request("GET", `/analytics/agents/${agentId}`)); } catch (e) { return fail(e); }
+    },
+  );
+  server.tool(
+    "get_wallet_transactions",
+    "Alias of list_transactions.",
+    { limit: z.number().optional(), offset: z.number().optional() },
+    async ({ limit, offset }) => {
+      try { return ok(await client.request("GET", "/wallet/transactions", { query: { limit, offset } })); }
+      catch (e) { return fail(e); }
+    },
+  );
+
   void (0 as unknown as Json);
 }
 

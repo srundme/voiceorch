@@ -36,7 +36,7 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
-    "@snapserveai/sdk": "workspace:^",
+    "@snapserve/mcp": "workspace:*",
     "zod": "^3.23.8"
   },
   "devDependencies": {

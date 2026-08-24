@@ -10,6 +10,19 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-24-mcp-full">2026-08-24 — Claude MCP: full product tools</h2>
+      <ul>
+        <li>
+          Hosted connector <code>https://app.snapserve.ai/api/mcp</code> now exposes the full
+          SnapServe tool set (campaigns, journeys, WhatsApp, Sheets automatic calls, knowledge,
+          squads, webcall) rather than agents/calls/wallet only.
+        </li>
+        <li>
+          Older tool names (<code>create_outbound_call</code>, <code>snapserve_api_request</code>,
+          analytics aliases) still work.
+        </li>
+      </ul>
+
       <h2 id="2026-08-23-base-url">2026-08-23 — Published hosts (API + docs)</h2>
       <ul>
         <li>

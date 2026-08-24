@@ -41,9 +41,10 @@ const call = await snapserve.calls.createOutbound({
 
       <h2 id="mcp">MCP Server — use SnapServe from Claude, Cursor &amp; other AI tools</h2>
       <p>
-        The official MCP (Model Context Protocol) server lets AI assistants manage your SnapServe
-        account in plain English — list agents, place calls, read transcripts, check analytics and
-        wallet balance.
+        The official MCP server lets Claude (and Cursor) operate the SnapServe account
+        behind your API key: agents, calls, campaigns, journeys, WhatsApp, Google Sheets
+        automatic calls, knowledge, squads, webcall links, numbers, wallet, and analytics.
+        Anything without a named tool is reachable via <code>snapserve_api</code>.
       </p>
 
       <h3 id="mcp-remote">Hosted remote MCP (Claude custom connectors)</h3>

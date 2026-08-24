@@ -15,8 +15,7 @@
  * Hosted remote MCP (Claude custom connectors): https://app.snapserve.ai/api/mcp
  */
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { SnapServe } from "@snapserveai/sdk";
-import { createSnapServeMcpServer } from "./server.js";
+import { createSnapServeMcpServer } from "@snapserve/mcp";
 
 const apiKey = process.env["SNAPSERVE_API_KEY"];
 if (!apiKey) {
@@ -24,12 +23,10 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const snapserve = new SnapServe({
+const server = createSnapServeMcpServer({
   apiKey,
   ...(process.env["SNAPSERVE_BASE_URL"] ? { baseUrl: process.env["SNAPSERVE_BASE_URL"] } : {}),
 });
-
-const server = createSnapServeMcpServer(snapserve);
 const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error("SnapServe MCP server running on stdio");

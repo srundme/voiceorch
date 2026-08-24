@@ -7,8 +7,7 @@ import { Router, type IRouter, type Request, type Response, type NextFunction } 
 import { randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import { SnapServe } from "@snapserveai/sdk";
-import { createSnapServeMcpServer } from "@snapserveai/mcp";
+import { createSnapServeMcpServer } from "@snapserve/mcp";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { logger } from "../lib/logger.js";
 import { describeApiKeyShapeError } from "../services/mcp-oauth-helpers.js";
@@ -389,8 +388,7 @@ async function handleMcpPost(req: Request, res: Response): Promise<void> {
         if (sid) sessions.delete(sid);
       };
 
-      const snapserve = new SnapServe({ apiKey, baseUrl: apiBaseUrl() });
-      const server = createSnapServeMcpServer(snapserve);
+      const server = createSnapServeMcpServer({ apiKey, baseUrl: apiBaseUrl() });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
       return;
@@ -399,8 +397,7 @@ async function handleMcpPost(req: Request, res: Response): Promise<void> {
     // Stateless fallback: one-shot request (no session header)
     if (!sessionId) {
       transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      const snapserve = new SnapServe({ apiKey, baseUrl: apiBaseUrl() });
-      const server = createSnapServeMcpServer(snapserve);
+      const server = createSnapServeMcpServer({ apiKey, baseUrl: apiBaseUrl() });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
       res.on("close", () => {
@@ -474,6 +471,12 @@ router.get("/mcp/info", (_req, res): void => {
       oauth: "Claude Connect → paste API key on authorize page",
     },
     docs: "https://app.snapserve.ai/docs/sdks#mcp",
+    tools: [
+      "agents", "calls", "campaigns", "journeys", "whatsapp", "email",
+      "sheets_automatic_calls", "knowledge", "squads", "webcall",
+      "phone_numbers", "providers", "webhooks", "wallet", "analytics",
+      "snapserve_api",
+    ],
   });
 });
 
