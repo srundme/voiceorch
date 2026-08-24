@@ -27,6 +27,7 @@ import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
 import { handleWebcallWebSocket } from "./orchestration/telephony/webcall.js";
+import { endSession, getAllSessions } from "./orchestration/session.js";
 import { verifySessionToken } from "./lib/session.js";
 import { parseCookieHeader, SESSION_COOKIE_NAME } from "./lib/session-cookie.js";
 import { warmSileroVAD } from "./orchestration/silero-vad.js";
@@ -592,7 +593,30 @@ async function gracefulShutdown(signal: string) {
     else logger.info("Server closed cleanly");
   });
 
-  // 2) Drain in-flight outbound provider HTTP before exiting. close() (not
+  // 2) Persist every live call before the process disappears. Railway deploys
+  // used to wipe the in-memory sessions Map while calls were active, leaving
+  // their DB rows in_progress and losing the recording buffer forever. End all
+  // sessions concurrently so recordings finalize and terminal status is stored
+  // within the deploy grace window.
+  const activeSessions = getAllSessions();
+  if (activeSessions.length > 0) {
+    logger.warn(
+      { signal, count: activeSessions.length, callIds: activeSessions.map((s) => s.callId) },
+      "Shutdown: finalizing active calls before exit",
+    );
+    const results = await Promise.allSettled(
+      activeSessions.map((session) => endSession(session.sessionId, "server_shutdown")),
+    );
+    const failed = results.filter((result) => result.status === "rejected");
+    if (failed.length > 0) {
+      logger.error(
+        { signal, failed: failed.length, total: activeSessions.length },
+        "Shutdown: some active calls failed to finalize",
+      );
+    }
+  }
+
+  // 3) Drain in-flight outbound provider HTTP before exiting. close() (not
   //    destroy()) lets an LLM/TTS call mid-response on a live call finish rather
   //    than being aborted by a Railway SIGTERM redeploy. Bounded so a stuck
   //    socket can't block past the backstop above.
