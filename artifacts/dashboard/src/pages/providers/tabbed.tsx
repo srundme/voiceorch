@@ -13,7 +13,7 @@ export default function ProvidersTabPage() {
 
   const revealClones = () => {
     const sp = new URLSearchParams(search);
-    sp.set("tab", "provider-keys");
+    sp.set("tab", "my-clones");
     navigate(`${window.location.pathname}?${sp.toString()}`);
   };
 
@@ -31,7 +31,16 @@ export default function ProvidersTabPage() {
           {
             key: "provider-keys",
             label: "Provider keys",
-            content: <ProvidersList clonesPanel={clones.panel} />,
+            content: <ProvidersList />,
+          },
+          {
+            key: "my-clones",
+            label: "My clones",
+            content: (
+              <div className="max-w-[1400px] mx-auto px-10 py-10 space-y-6">
+                {clones.panel}
+              </div>
+            ),
           },
         ]}
       />

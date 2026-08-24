@@ -173,7 +173,7 @@ const providerFormSchema = z.object({
 type ProviderFormValues = z.infer<typeof providerFormSchema>;
 
 /* ── Page ─────────────────────────────────────────────────────────────────── */
-export default function ProvidersList({ clonesPanel }: { clonesPanel?: React.ReactNode } = {}) {
+export default function ProvidersList() {
   const queryClient = useQueryClient();
   const { toast }   = useToast();
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -259,7 +259,6 @@ export default function ProvidersList({ clonesPanel }: { clonesPanel?: React.Rea
   return (
     <div className="flex-1 overflow-y-auto animate-fade-in">
     <div className="max-w-[1400px] mx-auto px-10 py-10 space-y-6">
-      {clonesPanel}
 
       {/* Toolbar — parent StripeTabPage owns the Providers title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 sm:px-0">
