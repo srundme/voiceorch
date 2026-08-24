@@ -38,16 +38,6 @@ export default function ProvidersTabPage() {
             label: "My clones",
             content: (
               <div className="max-w-[1400px] mx-auto px-10 py-10 space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 sm:px-0">
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      Create and manage custom voice clones using Cartesia Sonic or Sarvam Creative Studio.
-                    </p>
-                    <p className="text-[13px] mt-1 text-muted-foreground/60 max-w-[520px]">
-                      Custom voice clones can be selected across all your AI voice agents and phone campaigns.
-                    </p>
-                  </div>
-                </div>
                 {clones.panel}
               </div>
             ),
