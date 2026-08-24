@@ -268,8 +268,8 @@ function sumSeries(series: DayAgg[]) {
   // Distinct users across period — recompute below if needed; for totals card use unique from series sum of daily is wrong.
   return finalizeDay({
     date: "total",
-    users: 0,
     ...totals,
+    users: 0,
     billableMinutes: Math.round(totals.billableMinutes * 100) / 100,
   });
 }
@@ -355,15 +355,16 @@ router.get("/admin/analytics/overview", async (req, res): Promise<void> => {
       }
     }
 
-    totals.users = Number(active[0]?.c ?? 0);
+    totals.users = Number(active?.c ?? 0);
 
     const profitPerMinPaise =
       totals.billableMinutes > 0
         ? Math.round(totals.grossProfitPaise / totals.billableMinutes)
         : 0;
+    const payingUsers = Number(paying?.c ?? 0);
     const arpuPaise =
-      Number(paying[0]?.c ?? 0) > 0
-        ? Math.round(totals.recognizedRevenuePaise / Number(paying[0]?.c ?? 1))
+      payingUsers > 0
+        ? Math.round(totals.recognizedRevenuePaise / payingUsers)
         : 0;
 
     const [healthRow] = await db
@@ -386,10 +387,11 @@ router.get("/admin/analytics/overview", async (req, res): Promise<void> => {
     const [revByUser, callByUser, costByUserRows, costByService] = await Promise.all([
       db
         .select({
-          userId: walletTransactionsTable.userId,
+          userId: usersTable.clerkId,
           revenuePaise: sql<number>`coalesce(sum(abs(${walletTransactionsTable.amountCents})), 0)`,
         })
         .from(walletTransactionsTable)
+        .innerJoin(usersTable, eq(walletTransactionsTable.userId, usersTable.id))
         .where(
           and(
             gte(walletTransactionsTable.createdAt, from),
@@ -397,7 +399,7 @@ router.get("/admin/analytics/overview", async (req, res): Promise<void> => {
             eq(walletTransactionsTable.type, "call_debit"),
           ),
         )
-        .groupBy(walletTransactionsTable.userId),
+        .groupBy(usersTable.clerkId),
       db
         .select({
           userId: callsTable.userId,
@@ -425,9 +427,13 @@ router.get("/admin/analytics/overview", async (req, res): Promise<void> => {
         .groupBy(usageEventsTable.service),
     ]);
 
-    const revMap = new Map(revByUser.filter((r) => r.userId).map((r) => [r.userId!, Number(r.revenuePaise ?? 0)]));
+    const revMap = new Map(
+      revByUser.filter((r) => r.userId).map((r) => [r.userId!, Number(r.revenuePaise ?? 0)] as const),
+    );
     const costMap = new Map(
-      costByUserRows.filter((r) => r.userId).map((r) => [r.userId!, microsUsdToPaise(Number(r.micros ?? 0), fx)]),
+      costByUserRows
+        .filter((r) => r.userId)
+        .map((r) => [r.userId!, microsUsdToPaise(Number(r.micros ?? 0), fx)] as const),
     );
     const merged = callByUser
       .filter((r) => r.userId)
@@ -463,8 +469,8 @@ router.get("/admin/analytics/overview", async (req, res): Promise<void> => {
       meta: { definitions: METRIC_DEFINITIONS },
       kpis: {
         totalUsers: Number(userCounts?.total ?? 0),
-        activeUsers: Number(active[0]?.c ?? 0),
-        payingUsers: Number(paying[0]?.c ?? 0),
+        activeUsers: Number(active?.c ?? 0),
+        payingUsers: payingUsers,
         calls: totals.calls,
         billableMinutes: totals.billableMinutes,
         cashCollectedPaise: totals.cashCollectedPaise,
@@ -538,8 +544,8 @@ router.get("/admin/analytics/unit-economics", async (req, res): Promise<void> =>
         ),
     ]);
 
-    const activeUsers = Number(active?.[0]?.c ?? 0);
-    const payingUsers = Number(paying?.[0]?.c ?? 0);
+    const activeUsers = Number(active?.c ?? 0);
+    const payingUsers = Number(paying?.c ?? 0);
     const mins = totals.billableMinutes;
     const rev = totals.recognizedRevenuePaise;
     const cost = totals.variableCostPaise;

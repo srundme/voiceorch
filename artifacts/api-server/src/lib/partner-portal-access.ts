@@ -5,48 +5,31 @@
  * Partner owners and direct SnapServe users use app.snapserve.ai.
  * Cross-tenant sign-in is rejected at login and on every authenticated request.
  */
-import type { Request } from "express";
 import { db, partnersTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import {
-  normalizeDomain,
   resolvePartnerByHost,
   subdomainHostForSlug,
   type PartnerBrandPublic,
 } from "../services/partner-domains.js";
+import {
+  managedClientSnapServeDeniedMessage,
+  partnerHostCandidates,
+  partnerPortalDeniedMessage,
+  type PartnerHostRequest,
+} from "./partner-portal-access-host.js";
 
-/** Hosts where the main SnapServe dashboard lives (not a partner portal). */
-export function isDirectSnapServeHost(hostname: string): boolean {
-  const h = normalizeDomain(hostname);
-  if (!h) return true;
-  if (h === "app.snapserve.ai" || h === "www.snapserve.ai" || h === "snapserve.ai") return true;
-  if (h === "localhost" || h === "127.0.0.1" || h.endsWith(".localhost")) return true;
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) return true;
-  return false;
-}
-
-export function primaryRequestHost(req: Request, bodyHost?: string): string {
-  return partnerHostCandidates(req, bodyHost)[0] ?? "";
-}
-
-/** Server-trusted host first; optional body host is a fallback only. */
-export function partnerHostCandidates(req: Request, bodyHost?: string): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  const push = (raw: string) => {
-    const host = normalizeDomain(raw);
-    if (!host || seen.has(host)) return;
-    seen.add(host);
-    out.push(host);
-  };
-  push((req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() ?? "");
-  push(req.hostname ?? "");
-  if (typeof bodyHost === "string") push(bodyHost);
-  return out;
-}
+export {
+  isDirectSnapServeHost,
+  managedClientSnapServeDeniedMessage,
+  partnerHostCandidates,
+  partnerPortalDeniedMessage,
+  primaryRequestHost,
+  type PartnerHostRequest,
+} from "./partner-portal-access-host.js";
 
 export async function resolvePartnerHostFromRequest(
-  req: Request,
+  req: PartnerHostRequest,
   bodyHost?: string,
 ): Promise<PartnerBrandPublic | null> {
   for (const host of partnerHostCandidates(req, bodyHost)) {
@@ -90,14 +73,6 @@ export function partnerPortalLoginUrl(partner: {
   return base;
 }
 
-export function managedClientSnapServeDeniedMessage(companyName: string, loginBase: string): string {
-  return `This account is managed by ${companyName}. Sign in at ${loginBase}/sign-in.`;
-}
-
-export function partnerPortalDeniedMessage(companyName: string): string {
-  return `This account is not registered with ${companyName}.`;
-}
-
 export async function assertUserMayAccessPartnerPortal(
   clerkId: string,
   partnerBrand: PartnerBrandPublic,
@@ -136,11 +111,13 @@ export async function assertLoginHostAllowed(
     .limit(1);
 
   const companyName = partner?.companyName ?? "your company";
-  const loginBase = partner ? partnerPortalLoginUrl(partner) : partnerPortalLoginUrl({
-    slug: null,
-    customDomain: null,
-    customDomainStatus: null,
-  });
+  const loginBase = partner
+    ? partnerPortalLoginUrl(partner)
+    : partnerPortalLoginUrl({
+        slug: null,
+        customDomain: null,
+        customDomainStatus: null,
+      });
   return {
     ok: false,
     error: managedClientSnapServeDeniedMessage(companyName, loginBase),

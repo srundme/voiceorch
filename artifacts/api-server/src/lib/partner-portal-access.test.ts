@@ -3,14 +3,14 @@ import {
   isDirectSnapServeHost,
   managedClientSnapServeDeniedMessage,
   partnerHostCandidates,
-} from "./partner-portal-access.js";
+} from "./partner-portal-access-host.js";
 
 describe("partnerHostCandidates", () => {
   it("prefers forwarded host over client body host", () => {
     const req = {
       headers: { "x-forwarded-host": "app.gopikrish.in" },
       hostname: "internal.railway.app",
-    } as Parameters<typeof partnerHostCandidates>[0];
+    };
 
     expect(partnerHostCandidates(req, "app.snapserve.ai")).toEqual([
       "app.gopikrish.in",
@@ -23,7 +23,7 @@ describe("partnerHostCandidates", () => {
     const req = {
       headers: { "x-forwarded-host": "APP.GOPIKRISH.IN" },
       hostname: "app.gopikrish.in",
-    } as Parameters<typeof partnerHostCandidates>[0];
+    };
 
     expect(partnerHostCandidates(req, "app.gopikrish.in")).toEqual(["app.gopikrish.in"]);
   });
