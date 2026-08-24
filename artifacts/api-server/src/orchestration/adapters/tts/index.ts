@@ -19,7 +19,7 @@ export function createTTSAdapter(
   if (STUB_PROVIDERS_ENABLED) return createStubTTS();
   switch (provider.toLowerCase()) {
     case "elevenlabs":
-      return new ElevenLabsTTS(apiKey, voice, speed);
+      return new ElevenLabsTTS(apiKey, voice, speed, model);
     case "cartesia":
       return new CartesiaTTS(apiKey, voice, model, language, speed);
     case "sarvam":

@@ -314,9 +314,7 @@ const LOST_TURN_RECOVERY_ENABLED = process.env.STT_LOST_TURN_RECOVERY !== "0";
 const LOST_TURN_RECOVERY_POLL_MS = 200;
 const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
 const LLM_SLOW_TTFT_MS        = Number(process.env.LLM_SLOW_TTFT_MS ?? 1200);     // warn in execution logs
-const TTS_STREAM_TIMEOUT_MS   = 8000;   // abort TTS streaming fetch if no data within 8 s —
-                                         // prevents a hung Cartesia/ElevenLabs connection from
-                                         // silencing the call until Vobiz times out and drops it
+const TTS_STREAM_TIMEOUT_MS   = 8000;   // abort TTS if no bytes for this long (re-armed on every chunk)
 const BARGE_IN_ENERGY_THRESHOLD = 1200; // Much higher than normal VAD (300) — only intentional,
                                          // loud caller speech should interrupt the agent.
                                          // Prevents phone echo, background TV, or ambient
@@ -6024,10 +6022,15 @@ export class OrchestrationPipeline implements VoiceSession {
       // indefinitely and the caller hears complete silence until Vobiz drops.
       const ttsAbort = new AbortController();
       this.activeTtsAborts.add(ttsAbort);
-      const ttsTimerId = setTimeout(() => {
-        logger.warn({ callId: this.config.callId }, "TTS streaming timed out — aborting fetch");
-        ttsAbort.abort();
-      }, TTS_STREAM_TIMEOUT_MS);
+      let ttsTimerId: ReturnType<typeof setTimeout> | null = null;
+      const armTtsIdleTimer = (): void => {
+        if (ttsTimerId) clearTimeout(ttsTimerId);
+        ttsTimerId = setTimeout(() => {
+          logger.warn({ callId: this.config.callId }, "TTS streaming timed out — aborting fetch");
+          ttsAbort.abort();
+        }, TTS_STREAM_TIMEOUT_MS);
+      };
+      armTtsIdleTimer();
       const closedWatcher = setInterval(() => {
         if (this.closed || this.bargeInRequested) ttsAbort.abort();
       }, 50);
@@ -6039,7 +6042,7 @@ export class OrchestrationPipeline implements VoiceSession {
             if (this._tTurnTtsFirstByte === null) this._tTurnTtsFirstByte = performance.now();
             if (_ttsFirstByteMs === null) _ttsFirstByteMs = Date.now() - _ttsReqStart;
             _ttsTotalBytes += chunk.length;
-            clearTimeout(ttsTimerId); // connection is alive — reset the hung-API timer
+            armTtsIdleTimer(); // re-arm idle watchdog after first byte and every later chunk
             accum.push(chunk);
             accumSize += chunk.length;
             if (accumSize >= STREAM_ACCUM_BYTES) flush();

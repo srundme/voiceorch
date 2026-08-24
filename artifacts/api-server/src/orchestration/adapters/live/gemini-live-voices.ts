@@ -41,6 +41,22 @@ export const DEFAULT_GEMINI_LIVE_MODEL = "gemini-3.1-flash-live-preview";
 export const DEFAULT_GEMINI_LIVE_TTS_MODEL = "gemini-3.1-flash-tts-preview";
 export const DEFAULT_GEMINI_LIVE_VOICE = "Kore";
 
+const DEPRECATED_LIVE_MODELS = new Set([
+  "gemini-2.5-flash-native-audio-preview-12-2025",
+  "gemini-2.5-flash-native-audio-preview-09-2025",
+  "gemini-2.0-flash-live-001",
+  "gemini-live-2.5-flash-preview",
+]);
+
+/** Map stored/legacy Live model IDs onto the current voice-agent model. */
+export function resolveGeminiLiveModel(raw: string | undefined | null): string {
+  const t = (raw ?? "").trim();
+  if (!t || DEPRECATED_LIVE_MODELS.has(t) || t.includes("native-audio") || t.includes("2.5-flash-live") || t.includes("2.0-flash-live")) {
+    return DEFAULT_GEMINI_LIVE_MODEL;
+  }
+  return t;
+}
+
 const VOICE_NAME_SET = new Set(GEMINI_LIVE_VOICES.map((v) => v.name));
 
 export function isValidGeminiLiveVoice(name: string): boolean {

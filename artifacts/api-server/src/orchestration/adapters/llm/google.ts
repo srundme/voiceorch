@@ -151,7 +151,7 @@ const CACHE_TTL_SECONDS = Number(process.env.GEMINI_CACHE_TTL_SECONDS) || 900;
 // Distinct cache bases warmed per call. A code-switching caller needs one per
 // language guard variant, so 3 was too tight for bilingual Indic presentations.
 const CACHE_MAX_WARMS = Number(process.env.GEMINI_CACHE_MAX_WARMS) || 6;
-const CACHE_WARM_WAIT_MS = 3000;
+const CACHE_WARM_WAIT_MS = Number(process.env.GEMINI_CACHE_WARM_WAIT_MS) || 250;
 const REQUEST_TIMEOUT_MS = Math.max(10000, Number(process.env.GEMINI_REQUEST_TIMEOUT_MS) || 12000);
 const GEMINI3_THINKING_HEADROOM = Number(process.env.GEMINI3_THINKING_HEADROOM) || 256;
 

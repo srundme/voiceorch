@@ -303,6 +303,10 @@ export class CartesiaTTS implements TTSAdapter {
           ctx.reject(new Error("CartesiaTTS: WS closed mid-stream"));
           this.pending.delete(id);
         }
+        for (const [, ctx] of this.flushPending) {
+          ctx.reject(new Error("CartesiaTTS: WS closed mid-stream"));
+        }
+        this.flushPending.clear();
       });
     });
 

@@ -15,6 +15,7 @@ import type { VoiceSession } from "./voice-session.js";
 import { GeminiLivePipeline } from "./adapters/live/gemini-live-pipeline.js";
 import {
   DEFAULT_GEMINI_LIVE_MODEL,
+  resolveGeminiLiveModel,
   resolveGeminiLiveThinkingLevel,
   resolveGeminiLiveVoice,
   resolveVoiceStack,
@@ -793,10 +794,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     voiceStack: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined),
     geminiLive: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined) === "gemini_live"
       ? {
-          model: (typeof (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["model"] === "string"
-            && ((agentCfg["geminiLive"] as Record<string, unknown>)["model"] as string).trim())
-            ? ((agentCfg["geminiLive"] as Record<string, unknown>)["model"] as string)
-            : DEFAULT_GEMINI_LIVE_MODEL,
+          model: resolveGeminiLiveModel(
+            (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["model"] as string | undefined,
+          ),
           voiceName: resolveGeminiLiveVoice(
             (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["voiceName"] as string | undefined,
           ),

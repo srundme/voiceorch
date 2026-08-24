@@ -448,16 +448,11 @@ export class SarvamLLM implements LLMAdapter {
       if (typeof mt !== "number" || mt < 500) genBody["max_tokens"] = 500;
     }
 
-    // Tool turns need reasoning on — with effort null, Sarvam stays conversational
-    // and ignores tools (confirmed). Flagship and conversations both bump to "low"
-    // for tools; non-tool voice turns keep reasoning off for TTFT.
-    if (hasTools && !openSource) {
-      if (genBody["reasoning_effort"] == null) {
-        genBody["reasoning_effort"] = "low";
-        const mt = genBody["max_tokens"];
-        if (typeof mt !== "number" || mt < 500) genBody["max_tokens"] = 500;
-      }
-    }
+    // Tool calling uses structured `tools` + XML fallback in the stream
+    // parser. Do NOT force reasoning_effort="low" just because tools exist —
+    // that re-enables CoT on every voice turn, burns max_tokens, and can
+    // return empty spoken `content` (Sarvam gotcha). Agents that want
+    // thinking set reasoningEffort explicitly.
 
     // glm5.2 reasons before every answer by default; that burns max_tokens and
     // adds seconds of silence on voice. Turn thinking off for live calls unless
@@ -509,8 +504,12 @@ ${systemPrompt}`
     this.abortController = abort;
     // Timeout covers connect + first headers only — clear once the SSE body is
     // open so a long spoken reply is not cut mid-sentence.
+    let connectTimedOut = false;
     let connectTimer: ReturnType<typeof setTimeout> | null = setTimeout(
-      () => abort.abort(),
+      () => {
+        connectTimedOut = true;
+        abort.abort();
+      },
       REQUEST_TIMEOUT_MS,
     );
     const clearConnectTimer = () => {
@@ -528,7 +527,10 @@ ${systemPrompt}`
 
     try {
       while (attempts < maxAttempts) {
-        if (abort.signal.aborted) return; // barge-in / connect timeout
+        if (abort.signal.aborted) {
+          if (connectTimedOut) throw new Error("Sarvam LLM connect timeout");
+          return; // barge-in
+        }
         attempts++;
         try {
           resp = await fetch(endpoint, {
@@ -557,7 +559,10 @@ ${systemPrompt}`
           }
           throw new Error(`Sarvam LLM error ${resp.status}: ${lastErr}`);
         } catch (err) {
-          if (abort.signal.aborted) return; // barge-in cancel — not an error
+          if (abort.signal.aborted) {
+            if (connectTimedOut) throw new Error("Sarvam LLM connect timeout");
+            return; // barge-in cancel — not an error
+          }
           if (attempts >= maxAttempts) throw err;
         }
       }

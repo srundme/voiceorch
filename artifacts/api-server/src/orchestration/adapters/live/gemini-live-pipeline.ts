@@ -26,7 +26,7 @@ import { logger } from "../../../lib/logger.js";
 import { createExecutionLogger, EXEC_COMPONENTS } from "../../../services/execution-log.js";
 import { buildToolDefs } from "../../../services/tool-executor.js";
 import {
-  DEFAULT_GEMINI_LIVE_MODEL,
+  resolveGeminiLiveModel,
   resolveGeminiLiveThinkingLevel,
   resolveGeminiLiveVoice,
 } from "./gemini-live-voices.js";
@@ -348,10 +348,7 @@ export class GeminiLivePipeline implements VoiceSession {
       ? `Begin the call by speaking this greeting naturally: "${greeting}"`
       : "Begin the call with a brief, friendly greeting and ask how you can help.";
 
-    this.session?.sendClientContent({
-      turns: [{ role: "user", parts: [{ text: prompt }] }],
-      turnComplete: true,
-    });
+    this.session?.sendRealtimeInput({ text: prompt });
   }
 
   async confirmAmdMachineThenBranch(): Promise<void> {
@@ -373,9 +370,8 @@ export class GeminiLivePipeline implements VoiceSession {
     await this.ensureConnected();
     this.appendAgent(text);
     this.config.onTranscript("agent", text);
-    this.session?.sendClientContent({
-      turns: [{ role: "user", parts: [{ text: `Speak exactly the following to the caller: "${text}"` }] }],
-      turnComplete: true,
+    this.session?.sendRealtimeInput({
+      text: `Speak exactly the following to the caller: "${text}"`,
     });
   }
 
@@ -434,10 +430,7 @@ export class GeminiLivePipeline implements VoiceSession {
     const line = `[Meeting chat from ${who}]: ${body}`;
     void this.ensureConnected().then(() => {
       if (this.closed) return;
-      this.session?.sendClientContent({
-        turns: [{ role: "user", parts: [{ text: line }] }],
-        turnComplete: true,
-      });
+      this.session?.sendRealtimeInput({ text: line });
       this.config.onTranscript("user", line);
       this.appendUser(line);
     }).catch((err) => {
@@ -515,7 +508,7 @@ export class GeminiLivePipeline implements VoiceSession {
   private async connect(): Promise<void> {
     const ai = new GoogleGenAI({ apiKey: this.apiKey });
     const liveCfg = this.agent.geminiLive;
-    const model = liveCfg?.model ?? DEFAULT_GEMINI_LIVE_MODEL;
+    const model = resolveGeminiLiveModel(liveCfg?.model);
     const voiceName = resolveGeminiLiveVoice(liveCfg?.voiceName);
     const thinkingLevel = resolveGeminiLiveThinkingLevel(liveCfg?.thinkingLevel);
 
@@ -534,6 +527,10 @@ export class GeminiLivePipeline implements VoiceSession {
     };
 
     const connectStarted = Date.now();
+    const liveSessionExtras = {
+      // Without compression, audio sessions hard-drop around 15 min.
+      contextWindowCompression: { slidingWindow: {} },
+    };
     this.session = await ai.live.connect({
       model,
       config: {
@@ -551,6 +548,7 @@ export class GeminiLivePipeline implements VoiceSession {
         outputAudioTranscription: {},
         tools,
         temperature: this.agent.temperature,
+        ...liveSessionExtras,
       },
       callbacks: {
         onmessage: (msg) => {

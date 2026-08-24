@@ -10,7 +10,7 @@ import { logger } from "../lib/logger.js";
 import { OrchestrationPipeline } from "../orchestration/pipeline.js";
 import { GeminiLivePipeline } from "../orchestration/adapters/live/gemini-live-pipeline.js";
 import {
-  DEFAULT_GEMINI_LIVE_MODEL,
+  resolveGeminiLiveModel,
   resolveGeminiLiveThinkingLevel,
   resolveGeminiLiveVoice,
   resolveVoiceStack,
@@ -295,10 +295,9 @@ async function buildTargetAgentConfig(
     voiceStack,
     geminiLive: voiceStack === "gemini_live"
       ? {
-          model: (typeof (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["model"] === "string"
-            && ((agentCfg["geminiLive"] as Record<string, unknown>)["model"] as string).trim())
-            ? ((agentCfg["geminiLive"] as Record<string, unknown>)["model"] as string)
-            : DEFAULT_GEMINI_LIVE_MODEL,
+          model: resolveGeminiLiveModel(
+            (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["model"] as string | undefined,
+          ),
           voiceName: resolveGeminiLiveVoice(
             (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["voiceName"] as string | undefined,
           ),
