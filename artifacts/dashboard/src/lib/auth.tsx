@@ -39,9 +39,9 @@ interface AuthState {
 /**
  * Why the session ended, so the sign-in page can show a helpful message.
  * `revoked` covers both a server-side 401 (e.g. suspended/deleted account)
- * and an expired token.
+ * and an expired token. `idle` is client-side inactivity logout (dashboard only).
  */
-export type SignOutReason = "revoked";
+export type SignOutReason = "revoked" | "idle";
 
 const SIGNOUT_REASON_KEY = "voiceorch:signoutReason";
 

@@ -9,6 +9,13 @@ export function portalLoginLockedMessage(companyName: string): string {
   return `This account is locked after too many failed sign-in attempts. Contact ${companyName} to unlock it.`;
 }
 
+export function portalWrongPasswordMessage(attemptsRemaining: number): string {
+  if (attemptsRemaining <= 1) {
+    return "Wrong password. One more failed attempt will lock your account.";
+  }
+  return `Wrong password. ${attemptsRemaining} attempts remaining before your account is locked.`;
+}
+
 export function isPortalLoginLocked(user: {
   portalLoginLockedAt?: Date | string | null;
 }): boolean {

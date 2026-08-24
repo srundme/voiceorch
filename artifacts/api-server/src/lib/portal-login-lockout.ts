@@ -20,6 +20,7 @@ export {
   PORTAL_LOGIN_MAX_ATTEMPTS,
   isPortalLoginLocked,
   portalLoginLockedMessage,
+  portalWrongPasswordMessage,
 } from "./portal-login-lockout-host.js";
 
 export async function clearPortalLoginFailures(userId: number): Promise<void> {

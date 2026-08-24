@@ -6,6 +6,8 @@ import { AuthProvider, useAuth, SignedIn, SignedOut, consumeSignOutReason } from
 import { DotGridBackground } from "@/components/ui/dot-grid-background";
 import { setAuthTokenGetter, setDefaultTimeoutMs, setUnauthorizedHandler, useGetOnboardingStatus } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
+import { useToast } from "@/hooks/use-toast";
+import { useIdleLogout } from "@/hooks/use-idle-logout";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -132,6 +134,12 @@ function UnauthorizedSignOutSync() {
   return null;
 }
 
+/** Dashboard only — admin app must not mount this. */
+function IdleLogoutGuard() {
+  useIdleLogout();
+  return null;
+}
+
 function QueryClientCacheInvalidator() {
   const { userId } = useAuth();
   const qc = useQueryClient();
@@ -152,6 +160,7 @@ type PartnerLoginBrand = HostBrand & { authMode?: "password" };
 function SignInPage() {
   const [location, navigate] = useLocation();
   const { signIn } = useAuth();
+  const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [branding, setBranding] = useState<PartnerLoginBrand | null>(null);
   const [brandingLoaded, setBrandingLoaded] = useState(false);
@@ -165,6 +174,8 @@ function SignInPage() {
     const reason = consumeSignOutReason();
     if (reason === "revoked") {
       setError("You've been signed out because your account access has changed. Please contact support if you believe this is a mistake.");
+    } else if (reason === "idle") {
+      setError("You were signed out after 5 minutes of inactivity. Please sign in again.");
     }
   }, []);
 
@@ -202,9 +213,31 @@ function SignInPage() {
           host: window.location.host,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; token?: string; error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        token?: string;
+        error?: string;
+        code?: string;
+        attemptsRemaining?: number;
+      };
       if (!res.ok) {
-        setError(data.error || "Sign in failed. Please try again.");
+        const message = data.error || "Sign in failed. Please try again.";
+        setError(message);
+        if (isPartnerGateway) {
+          if (data.code === "wrong_password") {
+            toast({
+              title: "Wrong password",
+              description: message,
+              variant: "destructive",
+            });
+          } else if (data.code === "portal_login_locked") {
+            toast({
+              title: "Account locked",
+              description: message,
+              variant: "destructive",
+            });
+          }
+        }
         return;
       }
       signIn(data.token);
@@ -685,6 +718,7 @@ function Router() {
       <QueryClientProvider client={queryClient}>
         <AuthTokenSync />
         <UnauthorizedSignOutSync />
+        <IdleLogoutGuard />
         <QueryClientCacheInvalidator />
         <NavHistoryTracker />
         <ThemeSync />

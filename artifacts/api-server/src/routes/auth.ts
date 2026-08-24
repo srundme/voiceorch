@@ -48,6 +48,8 @@ import {
   clearPortalLoginFailures,
   isPortalLoginLocked,
   portalLoginLockedMessage,
+  portalWrongPasswordMessage,
+  PORTAL_LOGIN_MAX_ATTEMPTS,
   recordPortalLoginFailure,
 } from "../lib/portal-login-lockout.js";
 
@@ -301,6 +303,13 @@ router.post("/auth/login", async (req, res): Promise<void> => {
           });
           return;
         }
+        const attemptsRemaining = Math.max(0, PORTAL_LOGIN_MAX_ATTEMPTS - result.attempts);
+        res.status(401).json({
+          error: portalWrongPasswordMessage(attemptsRemaining),
+          code: "wrong_password",
+          attemptsRemaining,
+        });
+        return;
       }
       res.status(401).json({ error: "Invalid email or password." });
       return;
