@@ -147,7 +147,7 @@ const NAV_SETTINGS: NavItem[] = [
   { name: "Billing",    href: "/app/wallet",    icon: BillingIcon },
 ];
 
-/** Partner clients: daily product only — no platform/docs/BYOP/developer pages. */
+/** Partner clients: product + developers (API keys / webhooks); no BYOP/docs/platform pages. */
 const MANAGED_NAV_GROUPS: NavGroup[] = [
   {
     items: [
@@ -170,8 +170,9 @@ const MANAGED_NAV_GROUPS: NavGroup[] = [
 ];
 
 const MANAGED_NAV_SETTINGS: NavItem[] = [
-  { name: "Workspace", href: "/app/settings", icon: WorkspaceIcon },
-  { name: "Billing",   href: "/app/wallet",   icon: BillingIcon },
+  { name: "Workspace",  href: "/app/settings", icon: WorkspaceIcon },
+  { name: "Developers", href: "/app/api-keys", icon: DevelopersIcon },
+  { name: "Billing",    href: "/app/wallet",   icon: BillingIcon },
 ];
 
 const SETTINGS_HREFS = NAV_SETTINGS.map(s => s.href);

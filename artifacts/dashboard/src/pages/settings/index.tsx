@@ -330,7 +330,6 @@ function AccountBillingCard() {
           <div className="h-24 bg-muted/30 rounded-lg animate-pulse" />
         ) : (
           <>
-            {!isManagedWorkspace && (
             <div className="flex items-center gap-2.5 p-3.5 rounded-lg border border-border/60 bg-muted/10">
               <Key className="h-4 w-4 text-muted-foreground shrink-0" />
               <p className="text-xs text-muted-foreground flex-1">
@@ -343,7 +342,6 @@ function AccountBillingCard() {
                 </Button>
               </Link>
             </div>
-            )}
 
             <div className="flex items-center justify-between p-4 rounded-lg border border-border/60 bg-muted/20">
               <div className="flex items-start gap-3">
@@ -563,7 +561,6 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
           { icon: Lock, label: "Change Password", onClick: onOpenGeneral },
         ]}
       />
-      {!isManagedWorkspace && (
       <CategoryCard
         icon={Terminal}
         title="API & Developers"
@@ -574,7 +571,6 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
           { icon: Webhook, label: "Event subscriptions", href: "/app/webhooks" },
         ]}
       />
-      )}
       <CategoryCard
         icon={Phone}
         title="Telephony"
