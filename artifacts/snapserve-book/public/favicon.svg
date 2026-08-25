@@ -1,3 +1,7 @@
-<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 100 100" role="img" aria-label="SnapServe">
+  <!-- Prefer PNG favicon in HTML; this SVG mirrors the official mark for tools that still request .svg -->
+  <rect width="100" height="100" rx="22" fill="#000000"/>
+  <rect x="14" y="22" width="58" height="14" rx="7" fill="#121212"/>
+  <rect x="22" y="43" width="58" height="14" rx="7" fill="#6c6c6c"/>
+  <rect x="30" y="64" width="58" height="14" rx="7" fill="#adaeb2"/>
 </svg>
