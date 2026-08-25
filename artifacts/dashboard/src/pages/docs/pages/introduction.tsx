@@ -26,10 +26,34 @@ export default function IntroductionPage() {
         on <code>https://app.snapserve.ai/api</code>.
       </p>
 
-      <Callout variant="info" title="Hosts">
-        App: <code>https://app.snapserve.ai</code>. Docs: <code>https://app.snapserve.ai/docs</code>.
-        API: <code>https://app.snapserve.ai/api</code>.
-      </Callout>
+      <div className="not-prose my-6 rounded-xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
+          Hosts
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            { label: "1. App", href: "https://app.snapserve.ai", hint: "Dashboard" },
+            { label: "2. Docs", href: "https://app.snapserve.ai/docs", hint: "This site" },
+            { label: "3. API", href: "https://app.snapserve.ai/api", hint: "REST base URL" },
+          ].map((host) => (
+            <a
+              key={host.href}
+              href={host.href}
+              target="_blank"
+              rel="noreferrer"
+              className="group flex flex-col gap-1 rounded-lg border border-slate-200 bg-white px-3.5 py-3 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
+            >
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {host.label}
+              </span>
+              <code className="text-[12px] sm:text-[13px] font-mono text-slate-900 break-all group-hover:text-slate-700">
+                {host.href}
+              </code>
+              <span className="text-[11px] text-slate-400">{host.hint}</span>
+            </a>
+          ))}
+        </div>
+      </div>
 
       <h2 id="start">Start here</h2>
       <div className="not-prose grid grid-cols-1 sm:grid-cols-2 gap-3 my-6">
