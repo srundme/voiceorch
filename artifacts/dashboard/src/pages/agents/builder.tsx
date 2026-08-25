@@ -8252,6 +8252,19 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                   />
                 </div>
               </div>
+              <div className="space-y-1.5 pt-1 border-t border-border/50">
+                <Label htmlFor="handoff-message" className="text-[11px]">Handoff announcement</Label>
+                <Textarea
+                  id="handoff-message"
+                  className="min-h-[60px] text-xs resize-none"
+                  value={handoffMessage}
+                  onChange={e => setHandoffMessage(e.target.value)}
+                  placeholder="One moment — I'm connecting you to a teammate who can help with this."
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Spoken by Agent 1 every time before connecting Agent 2.
+                </p>
+              </div>
             </div>
             <div className="rounded-lg border border-border/60 p-3 space-y-2">
               <p className="text-xs font-medium text-muted-foreground">Agent 2</p>
@@ -8275,23 +8288,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                   />
                 </div>
               </div>
-            </div>
-            <div className="rounded-lg border border-border/60 p-3 space-y-3">
-              <p className="text-xs font-medium text-muted-foreground">Handoff messages</p>
-              <div className="space-y-1.5">
-                <Label htmlFor="handoff-message" className="text-[11px]">Handoff announcement</Label>
-                <Textarea
-                  id="handoff-message"
-                  className="min-h-[60px] text-xs resize-none"
-                  value={handoffMessage}
-                  onChange={e => setHandoffMessage(e.target.value)}
-                  placeholder="One moment — I'm connecting you to a teammate who can help with this."
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Spoken by Agent 1 every time before connecting Agent 2.
-                </p>
-              </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 pt-1 border-t border-border/50">
                 <Label htmlFor="handoff-greeting" className="text-[11px]">Receiving agent greeting</Label>
                 <Textarea
                   id="handoff-greeting"

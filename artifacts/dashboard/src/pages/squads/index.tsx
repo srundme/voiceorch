@@ -254,17 +254,17 @@ function CreateSquadDialog({
   const seedName = seeded ? agents.find((a) => a.id === seedAgentId)?.name : null;
 
   const blankDrafts = (): MemberDraft[] => [
-    { agentId: "", roleName: "Lead Qualifier", instructions: "" },
-    { agentId: "", roleName: "Meeting Scheduler", instructions: "" },
+    { agentId: "", roleName: "", instructions: "" },
+    { agentId: "", roleName: "", instructions: "" },
   ];
 
   const seededDrafts = (): MemberDraft[] => [
     {
       agentId: String(seedAgentId),
-      roleName: "First agent",
+      roleName: seedName ?? "First agent",
       instructions: "Entry point — hand off when a specialist should take over",
     },
-    { agentId: "", roleName: "Specialist", instructions: "" },
+    { agentId: "", roleName: "", instructions: "" },
   ];
 
   const [name, setName] = useState("");
@@ -284,12 +284,17 @@ function CreateSquadDialog({
   }, [open, seedAgentId, seeded]);
 
   const usedIds = new Set(drafts.map((d) => d.agentId).filter(Boolean));
-  const filled = drafts.filter((d) => d.agentId && d.roleName.trim());
+  const filled = drafts.filter((d) => d.agentId);
   const canSave = name.trim() && filled.length >= 2
     && new Set(filled.map((d) => d.agentId)).size === filled.length;
 
   const setDraft = (i: number, patch: Partial<MemberDraft>) => {
     setDrafts((prev) => prev.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
+  };
+
+  const selectAgent = (i: number, agentId: string) => {
+    const agent = agents.find((a) => String(a.id) === agentId);
+    setDraft(i, { agentId, roleName: agent?.name?.trim() || "" });
   };
 
   return (
@@ -325,8 +330,9 @@ function CreateSquadDialog({
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Select value={d.agentId} onValueChange={(v) => setDraft(i, { agentId: v })}>
+              <div className="space-y-1.5">
+                <Label className="text-[11px]">Select agent</Label>
+                <Select value={d.agentId} onValueChange={(v) => selectAgent(i, v)}>
                   <SelectTrigger><SelectValue placeholder="Select agent" /></SelectTrigger>
                   <SelectContent>
                     {agents.map((a) => (
@@ -340,17 +346,54 @@ function CreateSquadDialog({
                     ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  value={d.roleName}
-                  onChange={(e) => setDraft(i, { roleName: e.target.value })}
-                  placeholder="Role, e.g. Lead Qualifier"
-                />
               </div>
+              {d.agentId ? (
+                <div className="space-y-1.5">
+                  <Label className="text-[11px]">Agent Role</Label>
+                  <Input
+                    value={d.roleName}
+                    onChange={(e) => setDraft(i, { roleName: e.target.value })}
+                    placeholder="Role for this agent on the team"
+                  />
+                </div>
+              ) : null}
               <Input
                 value={d.instructions}
                 onChange={(e) => setDraft(i, { instructions: e.target.value })}
                 placeholder="What they handle, e.g. qualifying new leads (helps teammates know when to transfer)"
               />
+              {i === 0 ? (
+                <div className="space-y-1.5 pt-1 border-t border-border/50">
+                  <Label className="text-[11px] inline-flex items-center gap-1.5">
+                    <PhoneForwarded className="w-3 h-3" /> Handoff announcement
+                  </Label>
+                  <Textarea
+                    value={handoffMessage}
+                    onChange={(e) => setHandoffMessage(e.target.value)}
+                    rows={2}
+                    placeholder={DEFAULT_HANDOFF_MESSAGE}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Spoken by this agent every time before connecting a teammate.
+                  </p>
+                </div>
+              ) : null}
+              {i === 1 ? (
+                <div className="space-y-1.5 pt-1 border-t border-border/50">
+                  <Label className="text-[11px] inline-flex items-center gap-1.5">
+                    <PhoneForwarded className="w-3 h-3" /> Receiving agent greeting
+                  </Label>
+                  <Textarea
+                    value={handoffGreeting}
+                    onChange={(e) => setHandoffGreeting(e.target.value)}
+                    rows={2}
+                    placeholder={DEFAULT_HANDOFF_GREETING}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Spoken by this agent after they take over the call.
+                  </p>
+                </div>
+              ) : null}
             </div>
           ))}
 
@@ -365,36 +408,6 @@ function CreateSquadDialog({
           {filled.length < 2 && (
             <p className="text-[11px] text-muted-foreground">Add at least two agents to form a team.</p>
           )}
-
-          <div className="rounded-lg border border-border/60 p-3 space-y-3">
-            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <PhoneForwarded className="w-3.5 h-3.5" /> Live handoff messages
-            </p>
-            <div>
-              <Label className="text-xs">Handoff announcement</Label>
-              <Textarea
-                value={handoffMessage}
-                onChange={(e) => setHandoffMessage(e.target.value)}
-                rows={2}
-                placeholder={DEFAULT_HANDOFF_MESSAGE}
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Spoken by the current agent every time before connecting a teammate.
-              </p>
-            </div>
-            <div>
-              <Label className="text-xs">Receiving agent greeting</Label>
-              <Textarea
-                value={handoffGreeting}
-                onChange={(e) => setHandoffGreeting(e.target.value)}
-                rows={2}
-                placeholder={DEFAULT_HANDOFF_GREETING}
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Spoken by the teammate after they take over the call.
-              </p>
-            </div>
-          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -409,7 +422,9 @@ function CreateSquadDialog({
                 handoffGreeting: handoffGreeting.trim() || DEFAULT_HANDOFF_GREETING,
                 members: filled.map((d, i) => ({
                   agentId: parseInt(d.agentId, 10),
-                  roleName: d.roleName.trim(),
+                  roleName: d.roleName.trim()
+                    || agents.find((a) => String(a.id) === d.agentId)?.name
+                    || `Agent ${i + 1}`,
                   roleType: "specialist",
                   instructions: d.instructions.trim() || null,
                   handoffEnabled: true,
@@ -463,12 +478,24 @@ function EditSquadDialog({
   }, [open, squad]);
 
   const usedIds = new Set(drafts.map((d) => d.agentId).filter(Boolean));
-  const filled = drafts.filter((d) => d.agentId && d.roleName.trim());
+  const filled = drafts.filter((d) => d.agentId);
   const canSave = name.trim() && filled.length >= 2
     && new Set(filled.map((d) => d.agentId)).size === filled.length;
 
   const setDraft = (i: number, patch: Partial<MemberDraft>) => {
     setDrafts((prev) => prev.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
+  };
+
+  const selectAgent = (i: number, agentId: string) => {
+    const agent = agents.find((a) => String(a.id) === agentId);
+    const prev = drafts[i];
+    // Keep an existing custom role unless it was empty or still matched the previous agent name.
+    const prevAgentName = agents.find((a) => String(a.id) === prev?.agentId)?.name?.trim() ?? "";
+    const keepRole = !!(prev?.roleName.trim() && prev.roleName.trim() !== prevAgentName);
+    setDraft(i, {
+      agentId,
+      roleName: keepRole ? prev!.roleName : (agent?.name?.trim() || ""),
+    });
   };
 
   return (
@@ -499,8 +526,9 @@ function EditSquadDialog({
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Select value={d.agentId} onValueChange={(v) => setDraft(i, { agentId: v })}>
+              <div className="space-y-1.5">
+                <Label className="text-[11px]">Select agent</Label>
+                <Select value={d.agentId} onValueChange={(v) => selectAgent(i, v)}>
                   <SelectTrigger><SelectValue placeholder="Select agent" /></SelectTrigger>
                   <SelectContent>
                     {agents.map((a) => (
@@ -514,17 +542,54 @@ function EditSquadDialog({
                     ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  value={d.roleName}
-                  onChange={(e) => setDraft(i, { roleName: e.target.value })}
-                  placeholder="Role, e.g. Lead Qualifier"
-                />
               </div>
+              {d.agentId ? (
+                <div className="space-y-1.5">
+                  <Label className="text-[11px]">Agent Role</Label>
+                  <Input
+                    value={d.roleName}
+                    onChange={(e) => setDraft(i, { roleName: e.target.value })}
+                    placeholder="Role for this agent on the team"
+                  />
+                </div>
+              ) : null}
               <Input
                 value={d.instructions}
                 onChange={(e) => setDraft(i, { instructions: e.target.value })}
                 placeholder="What they handle"
               />
+              {i === 0 ? (
+                <div className="space-y-1.5 pt-1 border-t border-border/50">
+                  <Label className="text-[11px] inline-flex items-center gap-1.5">
+                    <PhoneForwarded className="w-3 h-3" /> Handoff announcement
+                  </Label>
+                  <Textarea
+                    value={handoffMessage}
+                    onChange={(e) => setHandoffMessage(e.target.value)}
+                    rows={2}
+                    placeholder={DEFAULT_HANDOFF_MESSAGE}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Spoken by this agent every time before connecting a teammate.
+                  </p>
+                </div>
+              ) : null}
+              {i === 1 ? (
+                <div className="space-y-1.5 pt-1 border-t border-border/50">
+                  <Label className="text-[11px] inline-flex items-center gap-1.5">
+                    <PhoneForwarded className="w-3 h-3" /> Receiving agent greeting
+                  </Label>
+                  <Textarea
+                    value={handoffGreeting}
+                    onChange={(e) => setHandoffGreeting(e.target.value)}
+                    rows={2}
+                    placeholder={DEFAULT_HANDOFF_GREETING}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Spoken by this agent after they take over the call.
+                  </p>
+                </div>
+              ) : null}
             </div>
           ))}
           <Button
@@ -535,35 +600,6 @@ function EditSquadDialog({
           >
             <Plus className="w-3.5 h-3.5 mr-1" /> Add another agent
           </Button>
-          <div className="rounded-lg border border-border/60 p-3 space-y-3">
-            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <PhoneForwarded className="w-3.5 h-3.5" /> Live handoff messages
-            </p>
-            <div>
-              <Label className="text-xs">Handoff announcement</Label>
-              <Textarea
-                value={handoffMessage}
-                onChange={(e) => setHandoffMessage(e.target.value)}
-                rows={2}
-                placeholder={DEFAULT_HANDOFF_MESSAGE}
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Spoken by the current agent every time before connecting a teammate.
-              </p>
-            </div>
-            <div>
-              <Label className="text-xs">Receiving agent greeting</Label>
-              <Textarea
-                value={handoffGreeting}
-                onChange={(e) => setHandoffGreeting(e.target.value)}
-                rows={2}
-                placeholder={DEFAULT_HANDOFF_GREETING}
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Spoken by the teammate after they take over the call.
-              </p>
-            </div>
-          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -577,7 +613,9 @@ function EditSquadDialog({
                 handoffGreeting: handoffGreeting.trim() || DEFAULT_HANDOFF_GREETING,
                 members: filled.map((d, i) => ({
                   agentId: parseInt(d.agentId, 10),
-                  roleName: d.roleName.trim(),
+                  roleName: d.roleName.trim()
+                    || agents.find((a) => String(a.id) === d.agentId)?.name
+                    || `Agent ${i + 1}`,
                   roleType: "specialist",
                   instructions: d.instructions.trim() || null,
                   handoffEnabled: true,
@@ -704,7 +742,7 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
             follow-up calls for one another.
           </p>
           <div className="space-y-2">
-            {squad.members.map((m) => (
+            {squad.members.map((m, i) => (
               <div key={m.id ?? m.agentId} className="rounded-lg border border-border/60 p-3">
                 <div className="flex justify-between gap-2">
                   <div>
@@ -727,35 +765,35 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
                 {m.instructions && (
                   <p className="text-xs text-muted-foreground mt-2 line-clamp-2">Handles: {m.instructions}</p>
                 )}
+                {i === 0 ? (
+                  <div className="mt-3 pt-2 border-t border-border/50">
+                    <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+                      <PhoneForwarded className="w-3 h-3" /> Handoff announcement
+                    </p>
+                    <p className="text-xs text-foreground/90 mt-0.5">
+                      {squad.handoffMessage?.trim() || DEFAULT_HANDOFF_MESSAGE}
+                    </p>
+                  </div>
+                ) : null}
+                {i === 1 ? (
+                  <div className="mt-3 pt-2 border-t border-border/50">
+                    <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+                      <PhoneForwarded className="w-3 h-3" /> Receiving agent greeting
+                    </p>
+                    <p className="text-xs text-foreground/90 mt-0.5">
+                      {squad.handoffGreeting?.trim() || DEFAULT_HANDOFF_GREETING}
+                    </p>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
           <p className="text-[11px] text-muted-foreground">
             Agents without a phone number can still receive in-call handoffs, but cannot make follow-up calls.
           </p>
-
-          <div className="rounded-lg border border-border/60 p-3 space-y-2 mt-4">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-xs font-semibold inline-flex items-center gap-1.5">
-                <PhoneForwarded className="w-3.5 h-3.5" /> Live handoff messages
-              </h3>
-              <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditOpen(true)}>
-                Edit
-              </Button>
-            </div>
-            <div>
-              <p className="text-[11px] text-muted-foreground">Announcement (before transfer)</p>
-              <p className="text-xs text-foreground/90 mt-0.5">
-                {squad.handoffMessage?.trim() || DEFAULT_HANDOFF_MESSAGE}
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] text-muted-foreground">Receiving greeting (after transfer)</p>
-              <p className="text-xs text-foreground/90 mt-0.5">
-                {squad.handoffGreeting?.trim() || DEFAULT_HANDOFF_GREETING}
-              </p>
-            </div>
-          </div>
+          <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => setEditOpen(true)}>
+            Edit handoff messages
+          </Button>
         </section>
 
         <section className="space-y-3">
