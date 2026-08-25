@@ -330,23 +330,28 @@ async function recentlyDialed(
 /* ── Authenticated CRUD ─────────────────────────────────────────────────── */
 
 router.get("/whatsapp/connections", requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).clerkUserId as string;
-  const rows = await db
-    .select({
-      conn: whatsappConnectionsTable,
-      agentName: agentsTable.name,
-    })
-    .from(whatsappConnectionsTable)
-    .leftJoin(agentsTable, eq(whatsappConnectionsTable.agentId, agentsTable.id))
-    .where(eq(whatsappConnectionsTable.userId, userId))
-    .orderBy(desc(whatsappConnectionsTable.createdAt));
+  try {
+    const userId = (req as any).clerkUserId as string;
+    const rows = await db
+      .select({
+        conn: whatsappConnectionsTable,
+        agentName: agentsTable.name,
+      })
+      .from(whatsappConnectionsTable)
+      .leftJoin(agentsTable, eq(whatsappConnectionsTable.agentId, agentsTable.id))
+      .where(eq(whatsappConnectionsTable.userId, userId))
+      .orderBy(desc(whatsappConnectionsTable.createdAt));
 
-  res.json({
-    connections: rows.map((r) => ({
-      ...formatConnection(r.conn),
-      agentName: r.agentName ?? null,
-    })),
-  });
+    res.json({
+      connections: rows.map((r) => ({
+        ...formatConnection(r.conn),
+        agentName: r.agentName ?? null,
+      })),
+    });
+  } catch (err) {
+    req.log?.error({ err }, "whatsapp/connections GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 /**

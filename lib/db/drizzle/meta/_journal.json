@@ -848,6 +848,13 @@
       "when": 1791600020000,
       "tag": "0120_squad_handoff_message",
       "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1791600021000,
+      "tag": "0121_whatsapp_meta_token_expires",
+      "breakpoints": true
     }
   ]
 }
