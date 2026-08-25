@@ -16,6 +16,7 @@ import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { createSessionToken } from "../lib/session.js";
 import { setSessionCookie } from "../lib/session-cookie.js";
 import { logger } from "../lib/logger.js";
+import { applyPendingPartnerPromotion } from "../services/partner-promotion.js";
 import { randomBytes } from "node:crypto";
 
 const router = Router();
@@ -160,7 +161,8 @@ router.post("/admin/users/:clerkId/unlock-portal-login", async (req, res): Promi
     const user = await findUserByClerkId(clerkId!);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-    if (!user.portalLoginLockedAt && (user.portalLoginFailedAttempts ?? 0) === 0) {
+    const u = user as unknown as { portalLoginLockedAt?: Date | null; portalLoginFailedAttempts?: number };
+    if (!u.portalLoginLockedAt && (u.portalLoginFailedAttempts ?? 0) === 0) {
       res.json({ ok: true, unlocked: false, message: "Portal login was not locked." });
       return;
     }
@@ -174,8 +176,8 @@ router.post("/admin/users/:clerkId/unlock-portal-login", async (req, res): Promi
       targetResourceId: clerkId,
       action: "unlock_portal_login",
       beforeValue: {
-        portalLoginLockedAt: user.portalLoginLockedAt,
-        portalLoginFailedAttempts: user.portalLoginFailedAttempts,
+        portalLoginLockedAt: u.portalLoginLockedAt ?? null,
+        portalLoginFailedAttempts: u.portalLoginFailedAttempts ?? 0,
       },
       afterValue: { unlocked: true },
     });
@@ -203,7 +205,15 @@ router.patch("/admin/users/:clerkId/profile", async (req, res): Promise<void> =>
 
     const before = { email: user.email, name: user.name, concurrentLimit: user.concurrentLimit };
     const patch: Partial<typeof usersTable.$inferInsert> = {};
-    if (email !== undefined) patch.email = email;
+    const nextEmail =
+      email !== undefined ? String(email).trim().toLowerCase() : undefined;
+    if (nextEmail !== undefined) {
+      if (!nextEmail.includes("@")) {
+        res.status(400).json({ error: "Valid email is required" });
+        return;
+      }
+      patch.email = nextEmail;
+    }
     if (name !== undefined) patch.name = name;
     if (concurrentLimit !== undefined) patch.concurrentLimit = concurrentLimit;
 
@@ -216,7 +226,29 @@ router.patch("/admin/users/:clerkId/profile", async (req, res): Promise<void> =>
       .update(usersTable)
       .set(patch)
       .where(eq(usersTable.clerkId, clerkId!))
-      .returning({ email: usersTable.email, name: usersTable.name, concurrentLimit: usersTable.concurrentLimit });
+      .returning({
+        email: usersTable.email,
+        name: usersTable.name,
+        concurrentLimit: usersTable.concurrentLimit,
+        partnerId: usersTable.partnerId,
+      });
+
+    // Admin changing email to a pending-partner address is explicit approval —
+    // apply the promotion now (signup-only apply would never run for this user).
+    if (
+      nextEmail
+      && nextEmail !== (user.email ?? "").trim().toLowerCase()
+      && updated
+    ) {
+      await applyPendingPartnerPromotion(
+        {
+          clerkId: clerkId!,
+          email: updated.email,
+          partnerId: updated.partnerId,
+        },
+        { emailVerified: true },
+      );
+    }
 
     await logAdminAction(req, {
       targetUserId: clerkId,
@@ -227,7 +259,11 @@ router.patch("/admin/users/:clerkId/profile", async (req, res): Promise<void> =>
       afterValue: patch,
     });
 
-    res.json(updated);
+    res.json({
+      email: updated?.email,
+      name: updated?.name,
+      concurrentLimit: updated?.concurrentLimit,
+    });
   } catch (err) {
     req.log.error({ err }, "admin/users/:clerkId/profile failed");
     res.status(500).json({ error: "Internal server error" });

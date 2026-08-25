@@ -110,11 +110,13 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
 
 router.post("/admin/partners", async (req, res): Promise<void> => {
   try {
-    const { email, companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin } = (req.body ?? {}) as {
+    const { email, companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, clerkId } = (req.body ?? {}) as {
       email?: string;
       companyName?: string;
       baseRateCentsPerMin?: number;
       defaultClientRateCentsPerMin?: number;
+      /** When set (e.g. from user detail), promote this exact account — not another row with the same email. */
+      clerkId?: string;
     };
 
     const cleanEmail = String(email ?? "").trim().toLowerCase();
@@ -140,7 +142,16 @@ router.post("/admin/partners", async (req, res): Promise<void> => {
 
     // Case-insensitive: admin edits can store mixed-case emails, and missing
     // an existing user here would wrongly create a pending row instead.
-    const [user] = await db.select().from(usersTable).where(sql`lower(${usersTable.email}) = ${cleanEmail}`);
+    // Prefer clerkId when provided so duplicate-email accounts (email:… vs Google)
+    // don't promote the wrong row.
+    const cleanClerkId = typeof clerkId === "string" ? clerkId.trim() : "";
+    const [user] = cleanClerkId
+      ? await db.select().from(usersTable).where(eq(usersTable.clerkId, cleanClerkId)).limit(1)
+      : await db.select().from(usersTable).where(sql`lower(${usersTable.email}) = ${cleanEmail}`).limit(1);
+    if (cleanClerkId && user && user.email && user.email.trim().toLowerCase() !== cleanEmail) {
+      res.status(400).json({ error: "clerkId does not match the given email" });
+      return;
+    }
     if (!user) {
       // No account with this email yet — store a pending promotion that is
       // applied automatically the moment this email signs up (see
@@ -199,6 +210,33 @@ router.post("/admin/partners", async (req, res): Promise<void> => {
     if (existing) {
       res.status(409).json({ error: "This user is already a partner" });
       return;
+    }
+
+    // Email was fixed onto an account after a pending row was created — promote that.
+    const [pendingForEmail] = await db
+      .select()
+      .from(partnerPendingPromotionsTable)
+      .where(eq(partnerPendingPromotionsTable.email, cleanEmail))
+      .limit(1);
+    if (pendingForEmail) {
+      const applied = await claimPendingAndPromote(pendingForEmail.id, user);
+      if (applied.status === "promoted") {
+        await logAdminAction(req, {
+          targetUserId: user.clerkId,
+          action: "partner_create",
+          afterValue: {
+            partnerId: applied.partner!.id,
+            companyName: pendingForEmail.companyName,
+            viaPendingApply: true,
+          },
+        });
+        res.status(201).json({ partner: applied.partner });
+        return;
+      }
+      if (applied.status === "already_partner") {
+        res.status(409).json({ error: "This user is already a partner" });
+        return;
+      }
     }
 
     const [partner] = await db

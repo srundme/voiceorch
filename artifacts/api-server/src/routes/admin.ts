@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable, bookInternsTable, bookProgressTable, bookExamAttemptsTable, partnersTable, phoneNumberOrdersTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable, bookInternsTable, bookProgressTable, bookExamAttemptsTable, partnersTable, partnerPendingPromotionsTable, phoneNumberOrdersTable } from "@workspace/db";
 import { invalidateMinuteRatesCache } from "../services/minute-rates.js";
 import { sendTestEmail } from "../services/scheduling/notifications.js";
 import { eq, sql, count, sum, desc, lt, gt, gte, and, inArray, ilike, like, type SQL, type AnyColumn } from "drizzle-orm";
@@ -233,7 +233,8 @@ router.get("/admin/users/:clerkId", async (req, res): Promise<void> => {
       return;
     }
 
-    const [calls, walletTransactions, agents, partnerRows] = await Promise.all([
+    const userEmail = (user.email ?? "").trim().toLowerCase();
+    const [calls, walletTransactions, agents, partnerRows, pendingRows] = await Promise.all([
       db
         .select()
         .from(callsTable)
@@ -259,9 +260,37 @@ router.get("/admin/users/:clerkId", async (req, res): Promise<void> => {
         .from(partnersTable)
         .where(eq(partnersTable.userId, clerkId!))
         .limit(1),
+      // Pending promotion for this email (e.g. admin pre-created partner, or
+      // email was fixed after the pending row was saved).
+      userEmail
+        ? db
+            .select({
+              id: partnerPendingPromotionsTable.id,
+              email: partnerPendingPromotionsTable.email,
+              companyName: partnerPendingPromotionsTable.companyName,
+              baseRateCentsPerMin: partnerPendingPromotionsTable.baseRateCentsPerMin,
+              createdAt: partnerPendingPromotionsTable.createdAt,
+            })
+            .from(partnerPendingPromotionsTable)
+            .where(eq(partnerPendingPromotionsTable.email, userEmail))
+            .limit(1)
+        : Promise.resolve([] as Array<{
+            id: number;
+            email: string;
+            companyName: string;
+            baseRateCentsPerMin: number;
+            createdAt: Date;
+          }>),
     ]);
 
-    res.json({ user, calls, walletTransactions, agents, partner: partnerRows[0] ?? null });
+    res.json({
+      user,
+      calls,
+      walletTransactions,
+      agents,
+      partner: partnerRows[0] ?? null,
+      pendingPartner: partnerRows[0] ? null : (pendingRows[0] ?? null),
+    });
   } catch (err) {
     req.log.error({ err }, "admin/users/:clerkId failed");
     res.status(500).json({ error: "Internal server error" });

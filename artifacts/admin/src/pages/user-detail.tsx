@@ -120,6 +120,7 @@ export default function UserDetail() {
         method: "POST",
         body: JSON.stringify({
           email: data?.user?.email ?? "",
+          clerkId: data?.user?.clerkId ?? clerkId,
           companyName: partnerCompany.trim(),
           baseRateCentsPerMin: toPaise(partnerBaseText),
           // Client pricing is the partner's own setting (their panel).
@@ -136,6 +137,16 @@ export default function UserDetail() {
       queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
     },
     onError: (e) => toast({ title: "Could not create partner", description: formatApiError(e), variant: "destructive" }),
+  });
+  const applyPendingPartner = useMutation({
+    mutationFn: (pendingId: number) =>
+      adminFetch(`/partners/pending/${pendingId}/apply`, { method: "POST" }),
+    onSuccess: () => {
+      toast({ title: "Partner approved", description: "This user is now a partner." });
+      queryClient.invalidateQueries({ queryKey: ["admin", "partners"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+    },
+    onError: (e) => toast({ title: "Could not approve partner", description: formatApiError(e), variant: "destructive" }),
   });
 
   // Pagination
@@ -229,6 +240,7 @@ export default function UserDetail() {
 
   const { user } = data;
   const partner = data.partner ?? null;
+  const pendingPartner = data.pendingPartner ?? null;
   const isSuspended = user.status === "suspended";
   const isDeleted = user.status === "deleted";
 
@@ -291,6 +303,12 @@ export default function UserDetail() {
                 {partner.status === "suspended" ? "Partner · Suspended" : "Partner"}
               </Badge>
             )}
+            {!partner && pendingPartner && (
+              <Badge variant="outline" className="gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400">
+                <Handshake className="h-3 w-3" />
+                Partner · Pending
+              </Badge>
+            )}
             {user.portalLoginLockedAt && (
               <Badge variant="destructive" className="text-[10px]">Portal login locked</Badge>
             )}
@@ -345,6 +363,17 @@ export default function UserDetail() {
                 <Link href="/partners">
                   <Handshake className="h-3.5 w-3.5" /> Manage Partner
                 </Link>
+              </Button>
+            ) : pendingPartner ? (
+              <Button
+                size="sm"
+                variant="default"
+                className="gap-1.5 bg-sky-600 hover:bg-sky-700"
+                disabled={applyPendingPartner.isPending}
+                onClick={() => applyPendingPartner.mutate(pendingPartner.id)}
+              >
+                <Handshake className="h-3.5 w-3.5" />
+                {applyPendingPartner.isPending ? "Approving…" : "Approve Partner"}
               </Button>
             ) : (
               <Button
