@@ -15,7 +15,7 @@ import { ThemeSync } from "@/components/theme-sync";
 
 import { Layout } from "@/components/layout";
 import { recordInAppNavigation } from "@/lib/nav-history";
-import { AppLoader } from "@/components/logo";
+import { AppLoader, SnapServeIcon } from "@/components/logo";
 import { isDirectSnapServeHost, loadHostBrand, type HostBrand } from "@/lib/white-label";
 
 // ── Page imports ─────────────────────────────────────────────────────────────
@@ -298,11 +298,9 @@ function SignInPage() {
               {(branding?.companyName || "W").charAt(0).toUpperCase()}
             </div>
           ) : (
-            <div className="flex flex-col gap-[6px] w-[46px]">
-              <div className="h-[10px] w-full rounded-full bg-white" />
-              <div className="h-[10px] w-[78%] rounded-full bg-white/60" />
-              <div className="h-[10px] w-[58%] rounded-full bg-white/35" />
-            </div>
+            <span className="dark inline-flex">
+              <SnapServeIcon size={46} />
+            </span>
           )}
           <div className="flex flex-col items-center gap-1.5">
             {isPartnerGateway ? (
