@@ -100,8 +100,9 @@ export function SnapServeIcon({ size = 24, className = "" }: IconProps) {
     >
       {/* Top bar — black in light UI; white only under .dark */}
       <rect x="14" y="22" width="58" height="14" rx="7" className="fill-[#121212] dark:fill-white" />
-      <rect x="22" y="43" width="58" height="14" rx="7" fill="#6c6c6c" />
-      <rect x="30" y="64" width="58" height="14" rx="7" fill="#adaeb2" />
+      {/* Mid / bottom — light-theme colors from brand reference */}
+      <rect x="22" y="43" width="58" height="14" rx="7" fill="#9B9B9B" />
+      <rect x="30" y="64" width="58" height="14" rx="7" fill="#686868" />
     </svg>
   );
 }
