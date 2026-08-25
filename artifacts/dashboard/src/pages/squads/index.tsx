@@ -313,36 +313,6 @@ function CreateSquadDialog({
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
           </div>
 
-          <div className="rounded-lg border border-border/60 p-3 space-y-3">
-            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <PhoneForwarded className="w-3.5 h-3.5" /> Live handoff messages
-            </p>
-            <div>
-              <Label className="text-xs">Handoff announcement</Label>
-              <Textarea
-                value={handoffMessage}
-                onChange={(e) => setHandoffMessage(e.target.value)}
-                rows={2}
-                placeholder={DEFAULT_HANDOFF_MESSAGE}
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Spoken by the current agent every time before connecting a teammate.
-              </p>
-            </div>
-            <div>
-              <Label className="text-xs">Receiving agent greeting</Label>
-              <Textarea
-                value={handoffGreeting}
-                onChange={(e) => setHandoffGreeting(e.target.value)}
-                rows={2}
-                placeholder={DEFAULT_HANDOFF_GREETING}
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Spoken by the teammate after they take over the call.
-              </p>
-            </div>
-          </div>
-
           {drafts.map((d, i) => (
             <div key={i} className="rounded-lg border border-border/60 p-3 space-y-2">
               <div className="flex items-center justify-between">
@@ -395,6 +365,36 @@ function CreateSquadDialog({
           {filled.length < 2 && (
             <p className="text-[11px] text-muted-foreground">Add at least two agents to form a team.</p>
           )}
+
+          <div className="rounded-lg border border-border/60 p-3 space-y-3">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <PhoneForwarded className="w-3.5 h-3.5" /> Live handoff messages
+            </p>
+            <div>
+              <Label className="text-xs">Handoff announcement</Label>
+              <Textarea
+                value={handoffMessage}
+                onChange={(e) => setHandoffMessage(e.target.value)}
+                rows={2}
+                placeholder={DEFAULT_HANDOFF_MESSAGE}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Spoken by the current agent every time before connecting a teammate.
+              </p>
+            </div>
+            <div>
+              <Label className="text-xs">Receiving agent greeting</Label>
+              <Textarea
+                value={handoffGreeting}
+                onChange={(e) => setHandoffGreeting(e.target.value)}
+                rows={2}
+                placeholder={DEFAULT_HANDOFF_GREETING}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Spoken by the teammate after they take over the call.
+              </p>
+            </div>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -489,35 +489,6 @@ function EditSquadDialog({
             <Label>Description (optional)</Label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
           </div>
-          <div className="rounded-lg border border-border/60 p-3 space-y-3">
-            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <PhoneForwarded className="w-3.5 h-3.5" /> Live handoff messages
-            </p>
-            <div>
-              <Label className="text-xs">Handoff announcement</Label>
-              <Textarea
-                value={handoffMessage}
-                onChange={(e) => setHandoffMessage(e.target.value)}
-                rows={2}
-                placeholder={DEFAULT_HANDOFF_MESSAGE}
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Spoken by the current agent every time before connecting a teammate.
-              </p>
-            </div>
-            <div>
-              <Label className="text-xs">Receiving agent greeting</Label>
-              <Textarea
-                value={handoffGreeting}
-                onChange={(e) => setHandoffGreeting(e.target.value)}
-                rows={2}
-                placeholder={DEFAULT_HANDOFF_GREETING}
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Spoken by the teammate after they take over the call.
-              </p>
-            </div>
-          </div>
           {drafts.map((d, i) => (
             <div key={i} className="rounded-lg border border-border/60 p-3 space-y-2">
               <div className="flex items-center justify-between">
@@ -564,6 +535,35 @@ function EditSquadDialog({
           >
             <Plus className="w-3.5 h-3.5 mr-1" /> Add another agent
           </Button>
+          <div className="rounded-lg border border-border/60 p-3 space-y-3">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <PhoneForwarded className="w-3.5 h-3.5" /> Live handoff messages
+            </p>
+            <div>
+              <Label className="text-xs">Handoff announcement</Label>
+              <Textarea
+                value={handoffMessage}
+                onChange={(e) => setHandoffMessage(e.target.value)}
+                rows={2}
+                placeholder={DEFAULT_HANDOFF_MESSAGE}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Spoken by the current agent every time before connecting a teammate.
+              </p>
+            </div>
+            <div>
+              <Label className="text-xs">Receiving agent greeting</Label>
+              <Textarea
+                value={handoffGreeting}
+                onChange={(e) => setHandoffGreeting(e.target.value)}
+                rows={2}
+                placeholder={DEFAULT_HANDOFF_GREETING}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Spoken by the teammate after they take over the call.
+              </p>
+            </div>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
