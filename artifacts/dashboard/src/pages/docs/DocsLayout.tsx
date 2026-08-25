@@ -11,7 +11,15 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 
 const TOP_TABS = [
-  { label: "Documentation", href: "/docs", match: (path: string) => path === "/docs" || (path.startsWith("/docs/") && !path.startsWith("/docs/api-reference")) },
+  {
+    label: "Documentation",
+    href: "/docs",
+    match: (path: string) =>
+      path === "/docs" ||
+      (path.startsWith("/docs/") &&
+        !path.startsWith("/docs/api-reference") &&
+        !path.startsWith("/docs/changelog")),
+  },
   { label: "API Reference", href: "/docs/api-reference", match: (path: string) => path.startsWith("/docs/api-reference") },
   { label: "Changelog", href: "/docs/changelog", match: (path: string) => path.startsWith("/docs/changelog") },
 ];
@@ -67,7 +75,6 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
         <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-4 px-4 sm:gap-6 sm:px-6 xl:gap-8">
           <Link href="/docs" className="flex items-center gap-2 shrink-0 hover:opacity-90 transition-opacity">
             <BrandMark iconSize={24} wordmarkHeight={18} />
-            <span className="text-[13px] font-medium text-slate-500">Docs</span>
           </Link>
           <TopTabs />
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
@@ -101,7 +108,6 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
                 <div className="p-4 border-b border-slate-200">
                   <Link href="/docs" className="flex items-center gap-2">
                     <BrandMark iconSize={24} wordmarkHeight={18} />
-                    <span className="text-[13px] font-medium text-slate-500">Docs</span>
                   </Link>
                 </div>
                 <div className="p-4 flex-1 overflow-y-auto">
@@ -115,7 +121,6 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
           </Sheet>
           <Link href="/docs" className="flex items-center gap-2">
             <BrandMark iconSize={24} wordmarkHeight={18} />
-            <span className="text-[13px] font-medium text-slate-500">Docs</span>
           </Link>
         </div>
       </header>

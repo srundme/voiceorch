@@ -11,7 +11,10 @@ const TOP_TABS = [
     label: "Documentation",
     href: "/docs",
     match: (path: string) =>
-      path === "/docs" || (path.startsWith("/docs/") && !path.startsWith("/docs/api-reference")),
+      path === "/docs" ||
+      (path.startsWith("/docs/") &&
+        !path.startsWith("/docs/api-reference") &&
+        !path.startsWith("/docs/changelog")),
   },
   {
     label: "API Reference",
