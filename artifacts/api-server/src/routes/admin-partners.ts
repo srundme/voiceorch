@@ -20,11 +20,27 @@ import {
 import { and, desc, eq, gte, sql, count, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { claimPendingAndPromote } from "../services/partner-promotion.js";
+import { subdomainHostForSlug } from "../services/partner-domains-normalize.js";
 
 const router: Router = Router();
 router.use("/admin/partners", requireAdmin);
 
 const MAX_RATE_CENTS_PER_MIN = 100_000;
+
+/** Public portal URL clients use to sign in (custom domain wins when active). */
+function partnerPortalUrl(p: {
+  slug: string | null;
+  customDomain: string | null;
+  customDomainStatus: string | null;
+}): string | null {
+  if (p.customDomainStatus === "active" && p.customDomain) {
+    return `https://${p.customDomain}`;
+  }
+  if (p.slug) {
+    return `https://${subdomainHostForSlug(p.slug)}`;
+  }
+  return null;
+}
 
 async function logAdminAction(
   req: Request,
@@ -61,6 +77,9 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
         status: partnersTable.status,
         baseRateCentsPerMin: partnersTable.baseRateCentsPerMin,
         defaultClientRateCentsPerMin: partnersTable.defaultClientRateCentsPerMin,
+        slug: partnersTable.slug,
+        customDomain: partnersTable.customDomain,
+        customDomainStatus: partnersTable.customDomainStatus,
         createdAt: partnersTable.createdAt,
         userName: usersTable.name,
         userEmail: usersTable.email,
@@ -99,7 +118,11 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
     }
 
     res.json({
-      partners: partners.map(p => ({ ...p, clientCount: countMap.get(p.id) ?? 0 })),
+      partners: partners.map(p => ({
+        ...p,
+        clientCount: countMap.get(p.id) ?? 0,
+        portalUrl: partnerPortalUrl(p),
+      })),
       pending: pendingRows.map(p => ({ ...p, hasAccount: accountEmails.has(p.email) })),
     });
   } catch (err) {
