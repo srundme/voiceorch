@@ -216,14 +216,14 @@ export function PlatformUrls() {
 
   return (
     <div className="not-prose my-6 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50 to-slate-50/40 p-4 sm:p-5">
-      <div className="mb-4 flex items-center gap-1.5">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
           Platform URLs
         </p>
         <button
           type="button"
           onClick={onCopyAll}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white hover:text-slate-800"
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white hover:text-slate-800"
           aria-label="Copy all platform URLs"
           title={copiedAll ? "Copied all" : "Copy all URLs"}
         >
