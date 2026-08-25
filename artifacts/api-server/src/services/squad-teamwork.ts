@@ -149,7 +149,7 @@ export function buildSquadPromptBlock(team: SquadTeam): string {
     "[YOUR TEAM]",
     `You are the "${team.self.roleName}" on the "${team.squad.name}" team. Your teammates:`,
     ...lines,
-    "When the caller needs something a teammate handles, use the matching transfer tool to hand the call over mid-conversation — the caller stays on the line and the teammate receives the full context automatically. Tell the caller you are connecting them before you transfer.",
+    "When the caller needs something a teammate handles, use the matching transfer tool to hand the call over mid-conversation — the caller stays on the line and the teammate receives the full context automatically. Call the transfer tool immediately when ready; the system speaks a handoff announcement for you — do not invent your own connecting line.",
     "If the next step should happen later (a callback), use create_followup_task with the teammate's agentId, a clear note, and when to call.",
   ].join("\n");
 }

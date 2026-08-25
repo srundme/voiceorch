@@ -7109,6 +7109,8 @@ export class OrchestrationPipeline implements VoiceSession {
       return "transfer_failed: unable to transfer to the requested agent right now";
     }
     // In-call squad handoff keeps the same media connection — do NOT end the call.
+    // Return undefined so we do not run continueWithToolResult on this pipeline
+    // (session already swapped to the receiving agent and will close this one).
     this.transferInitiated = false;
     void writeTransferLeadDb({
       callId: this.config.callId,
@@ -7116,7 +7118,7 @@ export class OrchestrationPipeline implements VoiceSession {
       transferTo: `agent:${targetAgentId}`,
       type: "agent",
     });
-    return "handoff_complete: a teammate is now continuing with the customer";
+    return undefined;
   }
 
   private async executeSquadFollowup(args: Record<string, unknown>): Promise<string> {
@@ -8842,7 +8844,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // Slide navigation is a local in-memory state flip (~1 ms) that the viewer
       // polls for, so "One moment…" only delays the visible slide change by the
       // length of the filler audio. Fillers exist to cover slow network tools.
-      const filler = (triggeredToolName === "end_call" || INSTANT_TOOLS.has(canonicalName))
+      const filler = (triggeredToolName === "end_call" || triggeredToolName === "transfer_agent" || INSTANT_TOOLS.has(canonicalName))
         ? undefined
         : (toolSpecific?.[langPrefix] ?? TOOL_FILLERS[langPrefix]);
       if (filler && !this.closed && !this.bargeInRequested) {
@@ -8868,17 +8870,27 @@ export class OrchestrationPipeline implements VoiceSession {
       const finalWake = wakePlayer as (() => void) | null;
       wakePlayer = null;
       if (finalWake) finalWake();
-      // Start the tool immediately instead of after the filler finishes speaking.
+      // Start most tools immediately instead of after the filler finishes speaking.
       // Awaiting playback first added the filler's full audio duration (~1.5 s
       // measured on slide changes) to every tool, which is exactly the lag users
       // report when asking the agent to move to the next slide. The tool itself
       // emits no audio, so only the spoken follow-up needs the playback barrier.
-      const toolPromise = this.handleToolCall(triggeredToolName, triggeredToolArgs);
-      // Never let a tool rejection escape as an unhandled rejection while the
-      // filler is still playing — the await below re-throws it in order.
-      toolPromise.catch(() => { /* surfaced by the await below */ });
+      //
+      // Exception: transfer_agent must wait for any in-flight TTS to drain first.
+      // The handoff then speaks a squad handoff announcement and swaps pipelines —
+      // starting it mid-playback is what cut the first agent mid-sentence.
+      const waitForPlaybackBeforeTool = triggeredToolName === "transfer_agent";
+      let toolPromise: Promise<string | undefined> | null = null;
+      if (!waitForPlaybackBeforeTool) {
+        toolPromise = this.handleToolCall(triggeredToolName, triggeredToolArgs);
+        // Never let a tool rejection escape as an unhandled rejection while the
+        // filler is still playing — the await below re-throws it in order.
+        toolPromise.catch(() => { /* surfaced by the await below */ });
+      }
       await playPromise; // plays filler (and any earlier backchannel) before speaking
-      const toolResult = await toolPromise;
+      const toolResult = waitForPlaybackBeforeTool
+        ? await this.handleToolCall(triggeredToolName, triggeredToolArgs)
+        : await toolPromise!;
       if (toolResult !== undefined) {
         await this.continueWithToolResult(triggeredToolName, toolResult, 0, _toolCallId);
       }

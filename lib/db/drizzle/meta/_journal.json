@@ -841,6 +841,13 @@
       "when": 1791600019000,
       "tag": "0119_portal_login_lockout",
       "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1791600020000,
+      "tag": "0120_squad_handoff_message",
+      "breakpoints": true
     }
   ]
 }

@@ -23,6 +23,14 @@ export const DEFAULT_SQUAD_LIMITS: Required<SquadLimits> = {
   maxRuntimeMinutes: 60,
 };
 
+/** Spoken by the departing agent before every live teammate handoff. */
+export const DEFAULT_SQUAD_HANDOFF_MESSAGE =
+  "One moment — I'm connecting you to a teammate who can help with this.";
+
+/** Spoken by the receiving agent after a live handoff. */
+export const DEFAULT_SQUAD_HANDOFF_GREETING =
+  "Hi — I've been briefed on your conversation so far. How can I help?";
+
 export const squadsTable = pgTable("squads", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
@@ -33,10 +41,13 @@ export const squadsTable = pgTable("squads", {
   /** Default member that answers inbound / campaign dials for this squad. */
   entryMemberId: integer("entry_member_id"),
   limits: jsonb("limits").$type<SquadLimits>().notNull().default({}),
+  /**
+   * Line spoken by the *current* agent before a live teammate handoff.
+   * Always played (and drained) so the caller never hears a mid-sentence cut.
+   */
+  handoffMessage: text("handoff_message").default(DEFAULT_SQUAD_HANDOFF_MESSAGE),
   /** Warm line spoken by the receiving agent after a live handoff. */
-  handoffGreeting: text("handoff_greeting").default(
-    "Hi — I've been briefed on your conversation so far. How can I help?",
-  ),
+  handoffGreeting: text("handoff_greeting").default(DEFAULT_SQUAD_HANDOFF_GREETING),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

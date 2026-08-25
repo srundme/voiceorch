@@ -3,7 +3,7 @@
  * Keeps the carrier/webcall media transport open; swaps only the VoiceSession pipeline.
  */
 
-import { db, agentsTable, providersTable, platformSettingsTable, type Squad } from "@workspace/db";
+import { db, agentsTable, providersTable, platformSettingsTable, type Squad, DEFAULT_SQUAD_HANDOFF_MESSAGE, DEFAULT_SQUAD_HANDOFF_GREETING } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { decryptKey } from "../lib/crypto.js";
 import { logger } from "../lib/logger.js";
@@ -392,6 +392,23 @@ export async function performSquadAgentHandoff(opts: {
     return null;
   }
 
+  // Finish any in-flight TTS on the departing agent, then always speak the
+  // squad's handoff announcement so the caller never hears a mid-sentence cut
+  // when we swap pipelines / play the receiving greeting.
+  const announcement =
+    (opts.squad.handoffMessage && opts.squad.handoffMessage.trim()) ||
+    DEFAULT_SQUAD_HANDOFF_MESSAGE;
+  try {
+    await opts.previousPipeline.finishSpeakingForMaxDuration(2_500);
+  } catch (err) {
+    logger.warn({ err, callId: opts.hooks.callId }, "Handoff: finishSpeaking before announcement failed");
+  }
+  try {
+    await opts.previousPipeline.speakRaw(announcement);
+  } catch (err) {
+    logger.warn({ err, callId: opts.hooks.callId }, "Handoff announcement speakRaw failed");
+  }
+
   // Build the new pipeline WHILE the previous one is still alive.
   // Closing first used to leave the call dead if construction failed, and
   // dropped inbound audio during the gap before session swapped pointers.
@@ -446,7 +463,7 @@ export async function performSquadAgentHandoff(opts: {
 
   const greeting =
     (opts.squad.handoffGreeting && opts.squad.handoffGreeting.trim()) ||
-    "Hi — I've been briefed on your conversation so far. How can I help?";
+    DEFAULT_SQUAD_HANDOFF_GREETING;
 
   // Speak before the session swaps pointers — onAudioOut is shared, so the
   // caller hears the greeting even while inbound audio still hits the old

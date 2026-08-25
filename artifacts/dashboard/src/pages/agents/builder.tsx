@@ -7906,6 +7906,12 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
   const [agent1Role, setAgent1Role] = useState("Lead Qualifier");
   const [agent2Name, setAgent2Name] = useState("");
   const [agent2Role, setAgent2Role] = useState("Meeting Scheduler");
+  const [handoffMessage, setHandoffMessage] = useState(
+    "One moment — I'm connecting you to a teammate who can help with this.",
+  );
+  const [handoffGreeting, setHandoffGreeting] = useState(
+    "Hi — I've been briefed on your conversation so far. How can I help?",
+  );
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -7956,6 +7962,8 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     setAgent1Role("Lead Qualifier");
     setAgent2Name("");
     setAgent2Role("Meeting Scheduler");
+    setHandoffMessage("One moment — I'm connecting you to a teammate who can help with this.");
+    setHandoffGreeting("Hi — I've been briefed on your conversation so far. How can I help?");
     setCreateError(null);
     onClose();
   };
@@ -8003,6 +8011,12 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
               name: resolvedTeam,
               description: null,
               status: "active",
+              handoffMessage:
+                handoffMessage.trim() ||
+                "One moment — I'm connecting you to a teammate who can help with this.",
+              handoffGreeting:
+                handoffGreeting.trim() ||
+                "Hi — I've been briefed on your conversation so far. How can I help?",
               members: [
                 {
                   agentId: agent1.id,
@@ -8205,7 +8219,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         )}
 
         {step === "name" && composition === "team" && (
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
             <div className="space-y-1.5">
               <Label htmlFor="team-name">Team name</Label>
               <Input
@@ -8260,6 +8274,35 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                     onChange={e => setAgent2Role(e.target.value)}
                   />
                 </div>
+              </div>
+            </div>
+            <div className="rounded-lg border border-border/60 p-3 space-y-3">
+              <p className="text-xs font-medium text-muted-foreground">Handoff messages</p>
+              <div className="space-y-1.5">
+                <Label htmlFor="handoff-message" className="text-[11px]">Handoff announcement</Label>
+                <Textarea
+                  id="handoff-message"
+                  className="min-h-[60px] text-xs resize-none"
+                  value={handoffMessage}
+                  onChange={e => setHandoffMessage(e.target.value)}
+                  placeholder="One moment — I'm connecting you to a teammate who can help with this."
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Spoken by Agent 1 every time before connecting Agent 2.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="handoff-greeting" className="text-[11px]">Receiving agent greeting</Label>
+                <Textarea
+                  id="handoff-greeting"
+                  className="min-h-[60px] text-xs resize-none"
+                  value={handoffGreeting}
+                  onChange={e => setHandoffGreeting(e.target.value)}
+                  placeholder="Hi — I've been briefed on your conversation so far. How can I help?"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Spoken by Agent 2 after they take over the call.
+                </p>
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground">
