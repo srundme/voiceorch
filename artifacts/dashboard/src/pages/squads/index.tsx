@@ -261,7 +261,7 @@ function CreateSquadDialog({
   const seededDrafts = (): MemberDraft[] => [
     {
       agentId: String(seedAgentId),
-      roleName: seedName ?? "First agent",
+      roleName: "",
       instructions: "Entry point — hand off when a specialist should take over",
     },
     { agentId: "", roleName: "", instructions: "" },
@@ -284,7 +284,7 @@ function CreateSquadDialog({
   }, [open, seedAgentId, seeded]);
 
   const usedIds = new Set(drafts.map((d) => d.agentId).filter(Boolean));
-  const filled = drafts.filter((d) => d.agentId);
+  const filled = drafts.filter((d) => d.agentId && d.roleName.trim());
   const canSave = name.trim() && filled.length >= 2
     && new Set(filled.map((d) => d.agentId)).size === filled.length;
 
@@ -293,8 +293,7 @@ function CreateSquadDialog({
   };
 
   const selectAgent = (i: number, agentId: string) => {
-    const agent = agents.find((a) => String(a.id) === agentId);
-    setDraft(i, { agentId, roleName: agent?.name?.trim() || "" });
+    setDraft(i, { agentId, roleName: "" });
   };
 
   return (
@@ -353,7 +352,7 @@ function CreateSquadDialog({
                   <Input
                     value={d.roleName}
                     onChange={(e) => setDraft(i, { roleName: e.target.value })}
-                    placeholder="Role for this agent on the team"
+                    placeholder="e.g. Lead Qualifier"
                   />
                 </div>
               ) : null}
@@ -478,7 +477,7 @@ function EditSquadDialog({
   }, [open, squad]);
 
   const usedIds = new Set(drafts.map((d) => d.agentId).filter(Boolean));
-  const filled = drafts.filter((d) => d.agentId);
+  const filled = drafts.filter((d) => d.agentId && d.roleName.trim());
   const canSave = name.trim() && filled.length >= 2
     && new Set(filled.map((d) => d.agentId)).size === filled.length;
 
@@ -487,15 +486,7 @@ function EditSquadDialog({
   };
 
   const selectAgent = (i: number, agentId: string) => {
-    const agent = agents.find((a) => String(a.id) === agentId);
-    const prev = drafts[i];
-    // Keep an existing custom role unless it was empty or still matched the previous agent name.
-    const prevAgentName = agents.find((a) => String(a.id) === prev?.agentId)?.name?.trim() ?? "";
-    const keepRole = !!(prev?.roleName.trim() && prev.roleName.trim() !== prevAgentName);
-    setDraft(i, {
-      agentId,
-      roleName: keepRole ? prev!.roleName : (agent?.name?.trim() || ""),
-    });
+    setDraft(i, { agentId, roleName: "" });
   };
 
   return (
@@ -549,7 +540,7 @@ function EditSquadDialog({
                   <Input
                     value={d.roleName}
                     onChange={(e) => setDraft(i, { roleName: e.target.value })}
-                    placeholder="Role for this agent on the team"
+                    placeholder="e.g. Lead Qualifier"
                   />
                 </div>
               ) : null}
