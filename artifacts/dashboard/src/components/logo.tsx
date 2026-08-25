@@ -47,6 +47,38 @@ export function BrandMark({
   );
 }
 
+/**
+ * Docs header lockup — raster three-bar mark (black tile) + wordmark.
+ * Kept separate from BrandMark so the app chrome can stay on the SVG icon.
+ */
+export function DocsBrandMark({
+  iconSize = 24,
+  wordmarkHeight = 18,
+  gapClass = "gap-2",
+  className = "",
+}: BrandMarkProps) {
+  return (
+    <span className={`inline-flex items-center select-none text-foreground ${gapClass} ${className}`}>
+      <img
+        src="/brand/snapserve-docs-mark.png"
+        alt=""
+        width={iconSize}
+        height={iconSize}
+        className="shrink-0 rounded-md object-cover"
+        draggable={false}
+      />
+      <span
+        className="leading-none"
+        style={{ fontFamily: FONT, fontSize: wordmarkHeight, letterSpacing: "-0.02em" }}
+        aria-label="SnapServe"
+      >
+        <span style={{ fontWeight: 700 }}>Snap</span>
+        <span style={{ fontWeight: 400, opacity: 0.72 }}>Serve</span>
+      </span>
+    </span>
+  );
+}
+
 /* ── Icon ----------------------------------------------------------------- */
 
 interface IconProps {

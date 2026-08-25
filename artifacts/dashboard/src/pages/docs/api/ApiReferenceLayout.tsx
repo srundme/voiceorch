@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Menu } from "lucide-react";
-import { BrandMark } from "@/components/logo";
+import { DocsBrandMark } from "@/components/logo";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ApiSidebar } from "./ApiSidebar";
@@ -76,7 +76,7 @@ export function ApiReferenceLayout({
       <header className="sticky top-0 z-40 hidden border-b border-slate-200 bg-white/90 backdrop-blur-xl lg:block">
         <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-4 px-4 sm:gap-6 sm:px-6 xl:gap-8">
           <Link href="/docs" className="flex shrink-0 items-center gap-2 transition-opacity hover:opacity-90">
-            <BrandMark iconSize={24} wordmarkHeight={18} />
+            <DocsBrandMark iconSize={24} wordmarkHeight={18} />
           </Link>
           <TopTabs />
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
@@ -109,7 +109,7 @@ export function ApiReferenceLayout({
               <div className="flex h-full flex-col">
                 <div className="border-b border-slate-200 p-4">
                   <Link href="/docs" className="flex items-center gap-2">
-                    <BrandMark iconSize={24} wordmarkHeight={18} />
+                    <DocsBrandMark iconSize={24} wordmarkHeight={18} />
                   </Link>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4">
@@ -119,7 +119,7 @@ export function ApiReferenceLayout({
             </SheetContent>
           </Sheet>
           <Link href="/docs" className="flex items-center gap-2">
-            <BrandMark iconSize={24} wordmarkHeight={18} />
+            <DocsBrandMark iconSize={24} wordmarkHeight={18} />
           </Link>
         </div>
       </header>

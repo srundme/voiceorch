@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { BrandMark } from "@/components/logo";
+import { DocsBrandMark } from "@/components/logo";
 import { DocsSidebar } from "./DocsSidebar";
 import { DocsSearch } from "./DocsSearch";
 import { TableOfContents } from "./TableOfContents";
@@ -74,7 +74,7 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
       <header className="sticky top-0 z-40 hidden lg:block border-b border-slate-200 bg-white/90 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-4 px-4 sm:gap-6 sm:px-6 xl:gap-8">
           <Link href="/docs" className="flex items-center gap-2 shrink-0 hover:opacity-90 transition-opacity">
-            <BrandMark iconSize={24} wordmarkHeight={18} />
+            <DocsBrandMark iconSize={24} wordmarkHeight={18} />
           </Link>
           <TopTabs />
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
@@ -107,7 +107,7 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
               <div className="flex flex-col h-full">
                 <div className="p-4 border-b border-slate-200">
                   <Link href="/docs" className="flex items-center gap-2">
-                    <BrandMark iconSize={24} wordmarkHeight={18} />
+                    <DocsBrandMark iconSize={24} wordmarkHeight={18} />
                   </Link>
                 </div>
                 <div className="p-4 flex-1 overflow-y-auto">
@@ -120,7 +120,7 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
             </SheetContent>
           </Sheet>
           <Link href="/docs" className="flex items-center gap-2">
-            <BrandMark iconSize={24} wordmarkHeight={18} />
+            <DocsBrandMark iconSize={24} wordmarkHeight={18} />
           </Link>
         </div>
       </header>
