@@ -16,7 +16,7 @@ export default function IntroductionPage() {
       <PageHeader
         breadcrumb="Get started"
         title="SnapServe documentation"
-        updated="23 Aug 2026"
+        updated="25 Aug 2026"
         description="Build Indic-first AI voice agents for phone, WhatsApp, webcall, and meetings. Configure in the dashboard, then drive calls from your own product with the REST API."
       />
 
@@ -28,30 +28,68 @@ export default function IntroductionPage() {
 
       <div className="not-prose my-6 rounded-xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
         <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
-          Hosts
+          Platform URLs
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
-            { label: "1. App", href: "https://app.snapserve.ai", hint: "Dashboard" },
-            { label: "2. Docs", href: "https://app.snapserve.ai/docs", hint: "This site" },
-            { label: "3. API", href: "https://app.snapserve.ai/api", hint: "REST base URL" },
-          ].map((host) => (
-            <a
-              key={host.href}
-              href={host.href}
-              target="_blank"
-              rel="noreferrer"
-              className="group flex flex-col gap-1 rounded-lg border border-slate-200 bg-white px-3.5 py-3 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
-            >
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {host.label}
-              </span>
-              <code className="text-[12px] sm:text-[13px] font-mono text-slate-900 break-all group-hover:text-slate-700">
-                {host.href}
-              </code>
-              <span className="text-[11px] text-slate-400">{host.hint}</span>
-            </a>
-          ))}
+            {
+              label: "1. App",
+              href: "https://app.snapserve.ai",
+              display: "app.snapserve.ai",
+              hint: "Dashboard login & product",
+            },
+            {
+              label: "2. Docs",
+              href: "https://app.snapserve.ai/docs",
+              display: "app.snapserve.ai/docs",
+              hint: "Guides & this documentation",
+            },
+            {
+              label: "3. API base URL",
+              // Bare /api is not a webpage ("Cannot GET /api") — open the reference.
+              href: "/docs/api-reference",
+              display: "app.snapserve.ai/api",
+              hint: "For Bearer sk_live_… requests — not a browser page",
+              external: false,
+            },
+          ].map((host) => {
+            const external = host.external !== false && host.href.startsWith("http");
+            const className =
+              "group flex flex-col gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-3 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50";
+            const body = (
+              <>
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {host.label}
+                </span>
+                <code className="block text-[12px] font-mono leading-snug text-slate-900 whitespace-nowrap overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden group-hover:text-slate-700">
+                  <span className="text-slate-400">https://</span>
+                  {host.display}
+                </code>
+                <span className="text-[11px] text-slate-400">{host.hint}</span>
+              </>
+            );
+            return external ? (
+              <a
+                key={host.display}
+                href={host.href}
+                target="_blank"
+                rel="noreferrer"
+                title={`https://${host.display}`}
+                className={className}
+              >
+                {body}
+              </a>
+            ) : (
+              <Link
+                key={host.display}
+                href={host.href}
+                title={`https://${host.display} — open API reference`}
+                className={className}
+              >
+                {body}
+              </Link>
+            );
+          })}
         </div>
       </div>
 
@@ -116,8 +154,10 @@ export default function IntroductionPage() {
       <h2 id="base-url">API base URL</h2>
       <CodeBlock language="text" code={`https://app.snapserve.ai/api`} />
       <p>
-        Auth: <code>Authorization: Bearer sk_live_…</code> —{" "}
-        <Link href="/docs/authentication">Authentication</Link>.
+        This is the prefix for REST calls (not a webpage — opening it in a browser shows{" "}
+        <code>Cannot GET /api</code>). Auth: <code>Authorization: Bearer sk_live_…</code> —{" "}
+        <Link href="/docs/authentication">Authentication</Link>. Browse endpoints in the{" "}
+        <Link href="/docs/api-reference">API Reference</Link>.
       </p>
 
       <h2 id="guides">Popular guides</h2>

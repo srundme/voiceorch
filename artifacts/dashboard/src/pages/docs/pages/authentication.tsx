@@ -49,7 +49,8 @@ export default function AuthenticationPage() {
       </Callout>
 
       <Callout variant="warn" title="API base URL">
-        Use <code>https://app.snapserve.ai/api</code>. Requests to{" "}
+        Use <code>https://app.snapserve.ai/api</code> with a Bearer key from your server. Opening{" "}
+        <code>/api</code> in a browser is not a page (<code>Cannot GET /api</code>). Requests to{" "}
         <code>https://api.snapserve.ai</code> return 404. Docs are at{" "}
         <code>https://app.snapserve.ai/docs</code>, not <code>docs.snapserve.ai</code>.
       </Callout>

@@ -10,6 +10,19 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-25-platform-urls">2026-08-25 — Platform URLs (Hosts renamed)</h2>
+      <ul>
+        <li>
+          Intro page <strong>Hosts</strong> is now labeled <strong>Platform URLs</strong>: App, Docs,
+          and <strong>API base URL</strong> (<code>https://app.snapserve.ai/api</code>).
+        </li>
+        <li>
+          Opening <code>/api</code> in a browser is not a page (<code>Cannot GET /api</code>). The
+          card links to <Link href="/docs/api-reference">API Reference</Link> instead; use the base
+          URL only with a Bearer API key.
+        </li>
+      </ul>
+
       <h2 id="2026-08-24-mcp-full">2026-08-24 — Claude MCP: full product tools</h2>
       <ul>
         <li>

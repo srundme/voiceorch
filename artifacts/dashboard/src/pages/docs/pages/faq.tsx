@@ -7,13 +7,15 @@ const FAQS: { q: string; a: ReactNode }[] = [
     q: "What is the app URL and API base URL?",
     a: (
       <>
-        App: <code>https://app.snapserve.ai</code>. Docs:{" "}
-        <code>https://app.snapserve.ai/docs</code>. REST API:{" "}
-        <code>https://app.snapserve.ai/api</code> with{" "}
-        <code>Authorization: Bearer sk_live_…</code>.{" "}
-        <code>api.snapserve.ai</code> and <code>docs.snapserve.ai</code> are not
-        SnapServe hosts — they 404. Guide:{" "}
-        <Link href="/docs/authentication">Authentication</Link>.
+        <strong>App:</strong> <code>https://app.snapserve.ai</code> (dashboard).{" "}
+        <strong>Docs:</strong> <code>https://app.snapserve.ai/docs</code>.{" "}
+        <strong>API base URL:</strong> <code>https://app.snapserve.ai/api</code> — use this only
+        with <code>Authorization: Bearer sk_live_…</code> from your server. Opening{" "}
+        <code>/api</code> in a browser shows <code>Cannot GET /api</code> (expected — it is not a
+        webpage). Prefer{" "}
+        <Link href="/docs/api-reference">API Reference</Link>.{" "}
+        <code>api.snapserve.ai</code> and <code>docs.snapserve.ai</code> are not SnapServe hosts —
+        they 404. Guide: <Link href="/docs/authentication">Authentication</Link>.
       </>
     ),
   },
