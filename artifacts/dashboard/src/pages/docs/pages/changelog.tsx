@@ -10,6 +10,19 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-25-mcp-docs">2026-08-25 — MCP docs: npm name + tool count</h2>
+      <ul>
+        <li>
+          Claude skill &amp; MCP docs now recommend published{" "}
+          <code>@snapserveai/mcp</code> (<code>npx -y @snapserveai/mcp</code>) and note{" "}
+          <strong>76</strong> tools (was listed as 67).
+        </li>
+        <li>
+          Hosted connector remains <code>https://app.snapserve.ai/api/mcp</code> (see{" "}
+          <Link href="/docs/sdks#mcp">SDKs → MCP</Link>).
+        </li>
+      </ul>
+
       <h2 id="2026-08-25-platform-urls">2026-08-25 — Platform URLs (Hosts renamed)</h2>
       <ul>
         <li>

@@ -9,8 +9,8 @@ SNAPSERVE_BASE_URL=https://app.snapserve.ai/api
 const MCP_JSON = `{
   "mcpServers": {
     "snapserve": {
-      "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/voiceorch/lib/snapserve-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@snapserveai/mcp"],
       "env": {
         "SNAPSERVE_API_KEY": "sk_live_YOUR_KEY",
         "SNAPSERVE_BASE_URL": "https://app.snapserve.ai/api"
@@ -19,16 +19,17 @@ const MCP_JSON = `{
   }
 }`;
 
-/** Sarvam-style "Available tools" cards — grouped view of the 67 MCP tools. */
+/** Grouped view of SnapServe MCP tools (76 registered tools in lib/snapserve-mcp). */
 const TOOL_GROUPS: { title: string; desc: string; tools: string }[] = [
-  { title: "Agents",            desc: "Create, update, toggle and version voice agents in plain English.",            tools: "list_agents · create_agent · get_agent · toggle_agent" },
-  { title: "Calls",             desc: "Place outbound calls, end live calls, pull transcripts and execution logs.",   tools: "outbound_call · get_call · get_call_logs · end_call" },
-  { title: "Campaigns & leads", desc: "Run outbound campaigns, batches, retries and website / Sheet lead intake.",    tools: "list_campaigns · get_campaign · get_website_webhook" },
-  { title: "Journeys",          desc: "Build multi-step outreach journeys and activate or pause them.",               tools: "list_journeys · activate_journey · pause_journey" },
-  { title: "WhatsApp & email",  desc: "Check channel status, connections and message templates.",                     tools: "get_whatsapp_channel · get_email_channel" },
-  { title: "Numbers & squads",  desc: "Phone numbers, squads, webcall links and provider keys.",                      tools: "list_phone_numbers · list_squads · list_webcall_links" },
+  { title: "Agents",            desc: "Create, update, toggle and version voice agents in plain English.",            tools: "list_agents · create_agent · get_agent · toggle_agent · publish_agent_version" },
+  { title: "Calls",             desc: "Place outbound calls, end live calls, pull transcripts and execution logs.",   tools: "outbound_call · get_call · get_call_logs · end_call · transfer_call" },
+  { title: "Campaigns & leads", desc: "Run outbound campaigns, batches, retries and website / Sheet lead intake.",    tools: "list_campaigns · create_campaign · get_website_webhook · import_campaign_leads" },
+  { title: "Journeys",          desc: "Build multi-step outreach journeys and activate or pause them.",               tools: "list_journeys · create_journey · activate_journey · pause_journey" },
+  { title: "WhatsApp & email",  desc: "Check channel status, connections and message templates.",                     tools: "get_whatsapp_channel · list_whatsapp_connections · get_email_channel" },
+  { title: "Sheets auto-calls", desc: "Google Sheets Automatic Calls jobs — create, start, pause.",                   tools: "list_automatic_calls · create_automatic_call · start_automatic_call" },
+  { title: "Numbers & squads",  desc: "Phone numbers, squads, webcall links and provider keys.",                      tools: "list_phone_numbers · list_squads · list_webcall_links · list_providers" },
   { title: "Analytics & wallet",desc: "Dashboards, per-agent analytics, dispositions and wallet balance.",            tools: "get_analytics_dashboard · get_agent_analytics · get_wallet" },
-  { title: "Everything else",   desc: "An escape hatch that can call any SnapServe REST endpoint directly.",          tools: "snapserve_api · snapserve_help" },
+  { title: "Everything else",   desc: "Escape hatch that can call any SnapServe REST endpoint directly.",             tools: "snapserve_api · snapserve_help" },
 ];
 
 function McpHero() {
@@ -40,7 +41,7 @@ function McpHero() {
           <p className="text-sm text-muted-foreground mt-3">
             Drive your whole SnapServe account — agents, calls, campaigns, journeys, WhatsApp,
             analytics — as tools from Claude, Cursor, Windsurf, and any MCP-aware client.
-            67 tools, plus a skill that teaches the assistant how SnapServe works.
+            76 tools, plus a skill that teaches the assistant how SnapServe works.
           </p>
           <div className="flex gap-2 mt-4">
             <a href="https://app.snapserve.ai/app/api-keys" target="_blank" rel="noreferrer"
@@ -164,14 +165,24 @@ export default function ClaudeSkillPage() {
         into public chats or commit it to git.
       </Callout>
 
-      <h2 id="install-mcp">1. Build the SnapServe MCP</h2>
+      <h2 id="install-mcp">1. Install the SnapServe MCP</h2>
       <p>
-        The MCP package lives in the SnapServe open repo at <code>lib/snapserve-mcp</code>{" "}
-        (<code>@snapserve/mcp</code>).
+        Prefer the published npm package <code>@snapserveai/mcp</code> (stdio via{" "}
+        <code>npx</code>). Or build from this monorepo at <code>lib/snapserve-mcp</code>{" "}
+        (workspace package name <code>@snapserve/mcp</code>).
+      </p>
+      <p>
+        <strong>Hosted (no local install):</strong> Claude custom connector URL{" "}
+        <code>https://app.snapserve.ai/api/mcp</code> — see{" "}
+        <Link href="/docs/sdks#mcp">API Wrappers &amp; SDKs → MCP</Link>.
       </p>
       <CodeBlock
         language="bash"
-        code={`git clone https://github.com/srundme/voiceorch.git
+        code={`# Option A — npm (recommended for Claude Desktop / Cursor)
+# see config JSON below with npx -y @snapserveai/mcp
+
+# Option B — from this repo
+git clone https://github.com/srundme/voiceorch.git
 cd voiceorch
 pnpm install
 pnpm --filter @snapserve/mcp build
@@ -181,15 +192,16 @@ pnpm --filter @snapserve/mcp build
       <h2 id="claude-desktop">2. Claude Desktop</h2>
       <p>
         Edit Claude’s config file (macOS:{" "}
-        <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>):
+        <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>).{" "}
+        <strong>Recommended (npm):</strong>
       </p>
       <CodeBlock
         language="json"
         code={`{
   "mcpServers": {
     "snapserve": {
-      "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/voiceorch/lib/snapserve-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@snapserveai/mcp"],
       "env": {
         "SNAPSERVE_API_KEY": "sk_live_YOUR_KEY",
         "SNAPSERVE_BASE_URL": "https://app.snapserve.ai/api"
@@ -198,8 +210,12 @@ pnpm --filter @snapserve/mcp build
   }
 }`}
       />
+      <p>
+        Or point <code>command</code>/<code>args</code> at a built{" "}
+        <code>lib/snapserve-mcp/dist/index.js</code> from the repo.
+      </p>
       <ol>
-        <li>Replace the path and API key.</li>
+        <li>Replace the API key (and path if using the repo binary).</li>
         <li>Fully quit and reopen Claude Desktop.</li>
         <li>
           Confirm the SnapServe MCP appears under tools / connectors (wording varies by Claude
@@ -216,10 +232,16 @@ pnpm --filter @snapserve/mcp build
       <h2 id="claude-code">3. Claude Code</h2>
       <CodeBlock
         language="bash"
-        code={`claude mcp add snapserve \\
+        code={`# Hosted HTTP connector
+claude mcp add snapserve --transport http \\
+  --url https://app.snapserve.ai/api/mcp \\
+  --header "Authorization: Bearer sk_live_YOUR_KEY"
+
+# Or local stdio via npm
+claude mcp add snapserve \\
   --env SNAPSERVE_API_KEY=sk_live_YOUR_KEY \\
   --env SNAPSERVE_BASE_URL=https://app.snapserve.ai/api \\
-  -- node /ABSOLUTE/PATH/TO/voiceorch/lib/snapserve-mcp/dist/index.js`}
+  -- npx -y @snapserveai/mcp`}
       />
       <p>
         With the repo open, Claude Code can also use{" "}
