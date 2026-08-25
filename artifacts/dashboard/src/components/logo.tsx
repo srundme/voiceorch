@@ -1,8 +1,8 @@
 /* ── SnapServe brand components ────────────────────────────────────────────
-   SnapServeIcon   — the three-bar mark (SVG, inline, scalable)
+   SnapServeIcon   — official three-bar mark (raster)
    SnapServeAgentIcon — Headset agent mark (from @workspace/brand-icons)
    SnapServeLogo   — icon + wordmark  ("Snap" Bold / "Serve" Regular)
-   SnapServeLoader — full-screen splash with animated bars
+   SnapServeLoader — full-screen splash with brand mark
    ─────────────────────────────────────────────────────────────────────────*/
 
 import { useEffect, useState } from "react";
@@ -10,11 +10,12 @@ import { isDirectSnapServeHost, loadHostBrand, type HostBrand } from "@/lib/whit
 
 const FONT = "'Tex Gyre Heros', Helvetica, Arial, sans-serif";
 
+/** Canonical SnapServe three-bar mark (black tile). */
+export const SNAPSERVE_MARK_SRC = "/brand/snapserve-mark.png";
+
 /* ── BrandMark (theme-proof lockup) ---------------------------------------
-   Raster *-light.png files are white/grey art for dark chrome. On the Vibe
-   landing (and any light surface) "Snap" and the palest bar vanish, leaving
-   two bars + "Serve". Sidebar already uses currentColor SVG + text; do that
-   here so light and dark both stay readable. */
+   Raster mark on a black tile stays readable on light and dark chrome.
+   Wordmark uses currentColor / text-foreground for the surrounding theme. */
 
 interface BrandMarkProps {
   /** Pixel size of the icon (height & width). */
@@ -37,7 +38,7 @@ export function BrandMark({
       <SnapServeIcon size={iconSize} className="shrink-0" />
       <span
         className="leading-none"
-        style={{ fontFamily: FONT, fontSize: wordmarkHeight, letterSpacing: "-0.02em" }}
+        style={{ fontFamily: FONT, fontSize: wordmarkHeight, letterSpacing: "-0.02em", lineHeight: 1.15 }}
         aria-label="SnapServe"
       >
         <span style={{ fontWeight: 700 }}>Snap</span>
@@ -48,9 +49,8 @@ export function BrandMark({
 }
 
 /**
- * Docs header lockup — raster three-bar mark (black tile) + wordmark.
- * Colors are hard-coded for the white docs chrome so a dark-theme first paint
- * (before DocsLayout's light-mode effect) cannot wash out "SnapServe".
+ * Docs header lockup — same mark as BrandMark, but wordmark colors are hard-coded
+ * for white docs chrome so a dark-theme first paint cannot wash out "SnapServe".
  */
 export function DocsBrandMark({
   iconSize = 24,
@@ -60,22 +60,14 @@ export function DocsBrandMark({
 }: BrandMarkProps) {
   return (
     <span className={`inline-flex items-center select-none ${gapClass} ${className}`}>
-      <img
-        src="/brand/snapserve-docs-mark.png"
-        alt=""
-        width={iconSize}
-        height={iconSize}
-        className="shrink-0 rounded-md object-cover"
-        draggable={false}
-      />
+      <SnapServeIcon size={iconSize} className="shrink-0" />
       <span
-        className="leading-none text-slate-900"
+        className="leading-none"
         style={{
           fontFamily: FONT,
           fontSize: wordmarkHeight,
           letterSpacing: "-0.02em",
           lineHeight: 1.15,
-          color: "#0f172a",
         }}
         aria-label="SnapServe"
       >
@@ -90,25 +82,21 @@ export function DocsBrandMark({
 
 interface IconProps {
   className?: string;
-  /** px size of the bounding box — bars scale with it */
+  /** px size of the bounding box — mark scales with it */
   size?: number;
 }
 
 export function SnapServeIcon({ size = 24, className = "" }: IconProps) {
   return (
-    <svg
+    <img
+      src={SNAPSERVE_MARK_SRC}
+      alt="SnapServe"
       width={size}
       height={size}
-      viewBox="0 0 100 100"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-label="SnapServe"
-    >
-      <rect x="6"  y="14" width="88" height="20" rx="10" fill="currentColor" opacity="1"   />
-      <rect x="14" y="42" width="72" height="20" rx="10" fill="currentColor" opacity="0.60"/>
-      <rect x="22" y="70" width="56" height="20" rx="10" fill="currentColor" opacity="0.36"/>
-    </svg>
+      className={`rounded-md object-cover ${className}`.trim()}
+      style={{ width: size, height: size }}
+      draggable={false}
+    />
   );
 }
 
@@ -204,32 +192,18 @@ export function AppLoader() {
 
 export function SnapServeLoader() {
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
-      style={{
-        background: "#000",
-      }}
+    <div
+      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
+      style={{ background: "#000" }}
     >
-      {/* Animated three-bar icon */}
-      <div className="flex flex-col gap-2.5 mb-6" style={{ width: 56 }}>
-        {[
-          { width: "100%", opacity: 1,    delay: "0ms"   },
-          { width: "82%",  opacity: 0.62, delay: "120ms" },
-          { width: "64%",  opacity: 0.38, delay: "240ms" },
-        ].map((bar, i) => (
-          <div
-            key={i}
-            style={{
-              width: bar.width,
-              height: 12,
-              borderRadius: 6,
-              backgroundColor: "#111",
-              opacity: bar.opacity,
-              animation: `ss-bar-pulse 1.2s ease-in-out infinite`,
-              animationDelay: bar.delay,
-            }}
-          />
-        ))}
-      </div>
+      <img
+        src={SNAPSERVE_MARK_SRC}
+        alt=""
+        width={56}
+        height={56}
+        className="mb-6 rounded-xl object-cover"
+        draggable={false}
+      />
 
       <div className="flex flex-col items-center gap-1.5">
         <span
@@ -240,15 +214,6 @@ export function SnapServeLoader() {
           <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
         </span>
       </div>
-
-      <style>{`
-        @keyframes ss-bar-pulse {
-          0%   { transform: scaleX(1);    opacity: var(--bar-op, 1); }
-          40%  { transform: scaleX(0.88); opacity: calc(var(--bar-op, 1) * 0.5); }
-          70%  { transform: scaleX(1);    opacity: var(--bar-op, 1); }
-          100% { transform: scaleX(1);    opacity: var(--bar-op, 1); }
-        }
-      `}</style>
     </div>
   );
 }
