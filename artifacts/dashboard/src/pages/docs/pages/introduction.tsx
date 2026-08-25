@@ -7,7 +7,7 @@ import {
   Rocket,
   Sparkles,
 } from "lucide-react";
-import { Callout, DocCard, PageHeader } from "../DocsUi";
+import { Callout, DocCard, PageHeader, PlatformUrls } from "../DocsUi";
 import { CodeBlock } from "../CodeBlock";
 
 export default function IntroductionPage() {
@@ -26,72 +26,7 @@ export default function IntroductionPage() {
         on <code>https://app.snapserve.ai/api</code>.
       </p>
 
-      <div className="not-prose my-6 rounded-xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
-          Platform URLs
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {[
-            {
-              label: "1. App",
-              href: "https://app.snapserve.ai",
-              display: "app.snapserve.ai",
-              hint: "Dashboard login & product",
-            },
-            {
-              label: "2. Docs",
-              href: "https://app.snapserve.ai/docs",
-              display: "app.snapserve.ai/docs",
-              hint: "Guides & this documentation",
-            },
-            {
-              label: "3. API base URL",
-              // Bare /api is not a webpage ("Cannot GET /api") — open the reference.
-              href: "/docs/api-reference",
-              display: "app.snapserve.ai/api",
-              hint: "For Bearer sk_live_… requests — not a browser page",
-              external: false,
-            },
-          ].map((host) => {
-            const external = host.external !== false && host.href.startsWith("http");
-            const className =
-              "group flex flex-col gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-3 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50";
-            const body = (
-              <>
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {host.label}
-                </span>
-                <code className="block text-[12px] font-mono leading-snug text-slate-900 whitespace-nowrap overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden group-hover:text-slate-700">
-                  <span className="text-slate-400">https://</span>
-                  {host.display}
-                </code>
-                <span className="text-[11px] text-slate-400">{host.hint}</span>
-              </>
-            );
-            return external ? (
-              <a
-                key={host.display}
-                href={host.href}
-                target="_blank"
-                rel="noreferrer"
-                title={`https://${host.display}`}
-                className={className}
-              >
-                {body}
-              </a>
-            ) : (
-              <Link
-                key={host.display}
-                href={host.href}
-                title={`https://${host.display} — open API reference`}
-                className={className}
-              >
-                {body}
-              </Link>
-            );
-          })}
-        </div>
-      </div>
+      <PlatformUrls />
 
       <h2 id="start">Start here</h2>
       <div className="not-prose grid grid-cols-1 sm:grid-cols-2 gap-3 my-6">
