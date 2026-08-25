@@ -49,7 +49,8 @@ export function BrandMark({
 
 /**
  * Docs header lockup — raster three-bar mark (black tile) + wordmark.
- * Kept separate from BrandMark so the app chrome can stay on the SVG icon.
+ * Colors are hard-coded for the white docs chrome so a dark-theme first paint
+ * (before DocsLayout's light-mode effect) cannot wash out "SnapServe".
  */
 export function DocsBrandMark({
   iconSize = 24,
@@ -58,7 +59,7 @@ export function DocsBrandMark({
   className = "",
 }: BrandMarkProps) {
   return (
-    <span className={`inline-flex items-center select-none text-foreground ${gapClass} ${className}`}>
+    <span className={`inline-flex items-center select-none ${gapClass} ${className}`}>
       <img
         src="/brand/snapserve-docs-mark.png"
         alt=""
@@ -68,12 +69,18 @@ export function DocsBrandMark({
         draggable={false}
       />
       <span
-        className="leading-none"
-        style={{ fontFamily: FONT, fontSize: wordmarkHeight, letterSpacing: "-0.02em" }}
+        className="leading-none text-slate-900"
+        style={{
+          fontFamily: FONT,
+          fontSize: wordmarkHeight,
+          letterSpacing: "-0.02em",
+          lineHeight: 1.15,
+          color: "#0f172a",
+        }}
         aria-label="SnapServe"
       >
-        <span style={{ fontWeight: 700 }}>Snap</span>
-        <span style={{ fontWeight: 400, opacity: 0.72 }}>Serve</span>
+        <span style={{ fontWeight: 700, color: "#0f172a" }}>Snap</span>
+        <span style={{ fontWeight: 400, color: "#475569" }}>Serve</span>
       </span>
     </span>
   );

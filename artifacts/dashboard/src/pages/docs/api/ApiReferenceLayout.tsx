@@ -1,10 +1,24 @@
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Menu } from "lucide-react";
 import { DocsBrandMark } from "@/components/logo";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ApiSidebar } from "./ApiSidebar";
+
+/** Force light docs chrome before paint — avoids washed-out header on dark-theme hard refresh. */
+function useDocsLightMode() {
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const hadDark = root.classList.contains("dark");
+    root.classList.remove("dark");
+    root.classList.add("light");
+    return () => {
+      root.classList.remove("light");
+      if (hadDark) root.classList.add("dark");
+    };
+  }, []);
+}
 
 const TOP_TABS = [
   {
@@ -31,7 +45,7 @@ const TOP_TABS = [
 function TopTabs() {
   const [location] = useLocation();
   return (
-    <div className="hidden md:flex items-center gap-1 border-b border-slate-200">
+    <div className="hidden md:flex items-center gap-1">
       {TOP_TABS.map((tab) => {
         const active = tab.match(location);
         return (
@@ -44,7 +58,7 @@ function TopTabs() {
           >
             {tab.label}
             {active ? (
-              <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-slate-900" />
+              <span className="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-slate-900" />
             ) : null}
           </Link>
         );
@@ -60,19 +74,10 @@ export function ApiReferenceLayout({
   children: React.ReactNode;
   rightRail?: React.ReactNode;
 }) {
-  useEffect(() => {
-    const root = document.documentElement;
-    const hadDark = root.classList.contains("dark");
-    root.classList.remove("dark");
-    root.classList.add("light");
-    return () => {
-      root.classList.remove("light");
-      if (hadDark) root.classList.add("dark");
-    };
-  }, []);
+  useDocsLightMode();
 
   return (
-    <div className="min-h-screen overflow-x-clip bg-white font-sans text-foreground selection:bg-slate-900/10">
+    <div className="min-h-screen overflow-x-clip bg-white font-sans text-slate-900 selection:bg-slate-900/10">
       <header className="sticky top-0 z-40 hidden border-b border-slate-200 bg-white/90 backdrop-blur-xl lg:block">
         <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-4 px-4 sm:gap-6 sm:px-6 xl:gap-8">
           <Link href="/docs" className="flex shrink-0 items-center gap-2 transition-opacity hover:opacity-90">

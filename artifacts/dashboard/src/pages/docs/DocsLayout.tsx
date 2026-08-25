@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { DocsBrandMark } from "@/components/logo";
 import { DocsSidebar } from "./DocsSidebar";
@@ -9,6 +9,20 @@ import { findDocsPage } from "./docs-nav";
 import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+
+/** Force light docs chrome before paint — avoids washed-out header on dark-theme hard refresh. */
+function useDocsLightMode() {
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const hadDark = root.classList.contains("dark");
+    root.classList.remove("dark");
+    root.classList.add("light");
+    return () => {
+      root.classList.remove("light");
+      if (hadDark) root.classList.add("dark");
+    };
+  }, []);
+}
 
 const TOP_TABS = [
   {
@@ -27,7 +41,7 @@ const TOP_TABS = [
 function TopTabs() {
   const [location] = useLocation();
   return (
-    <div className="hidden md:flex items-center gap-1 border-b border-slate-200">
+    <div className="hidden md:flex items-center gap-1">
       {TOP_TABS.map((tab) => {
         const active = tab.match(location);
         return (
@@ -40,7 +54,7 @@ function TopTabs() {
           >
             {tab.label}
             {active ? (
-              <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-slate-900" />
+              <span className="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-slate-900" />
             ) : null}
           </Link>
         );
@@ -51,23 +65,13 @@ function TopTabs() {
 
 export function DocsLayout({ children, section }: { children: React.ReactNode; section: string }) {
   const page = findDocsPage(section);
+  useDocsLightMode();
 
   useEffect(() => {
     document.title = page?.title
       ? `${page.title} · SnapServe Docs`
       : "Documentation · SnapServe";
   }, [page?.title]);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const hadDark = root.classList.contains("dark");
-    root.classList.remove("dark");
-    root.classList.add("light");
-    return () => {
-      root.classList.remove("light");
-      if (hadDark) root.classList.add("dark");
-    };
-  }, []);
 
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-slate-900/10 overflow-x-clip">
