@@ -35,7 +35,7 @@ export function PageHeader({
         </p>
       ) : null}
       <div className="flex items-start justify-between gap-4">
-        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-slate-900 m-0">
+        <h1 className="m-0 text-[clamp(1.5rem,1.1rem+2vw,2.25rem)] font-semibold tracking-tight text-slate-900">
           {title}
         </h1>
         {copyText ? (
@@ -158,7 +158,7 @@ function PlatformUrlCard({
   };
 
   const className =
-    "group relative flex h-full min-w-0 flex-col rounded-xl border border-slate-200/90 bg-white px-3.5 py-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all hover:border-slate-300 hover:shadow-[0_4px_12px_rgba(15,23,42,0.06)]";
+    "group relative flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white px-3.5 py-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all hover:border-slate-300 hover:shadow-[0_4px_12px_rgba(15,23,42,0.06)]";
 
   const body = (
     <>
@@ -180,7 +180,7 @@ function PlatformUrlCard({
         </button>
       </div>
       <p
-        className="mt-3 whitespace-nowrap font-mono text-[11px] leading-none tracking-tight text-slate-900"
+        className="mt-3 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px] leading-none tracking-tight text-slate-900"
         title={url}
       >
         {url}
@@ -204,7 +204,7 @@ function PlatformUrlCard({
   );
 }
 
-/** Three host cards — full URLs, no horizontal scroll, per-URL + copy-all. */
+/** Three host cards — layout follows container width, not viewport (scaling-safe). */
 export function PlatformUrls() {
   const [copiedAll, setCopiedAll] = useState(false);
 
@@ -216,8 +216,8 @@ export function PlatformUrls() {
   };
 
   return (
-    <div className="not-prose my-6 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50 to-slate-50/40 p-4 sm:p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="@container/platform not-prose my-6 w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50 to-slate-50/40 p-3.5 sm:p-4 md:p-5">
+      <div className="mb-3.5 flex items-center justify-between gap-3 sm:mb-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
           Platform URLs
         </p>
@@ -231,7 +231,8 @@ export function PlatformUrls() {
           {copiedAll ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       </div>
-      <div className="grid grid-cols-1 gap-3 min-[680px]:grid-cols-3 min-[680px]:gap-2.5">
+      {/* auto-fit: 1→2→3 columns from *available* width; avoids viewport vs content mismatch under OS zoom */}
+      <div className="grid grid-cols-1 gap-3 @[420px]/platform:grid-cols-2 @[700px]/platform:grid-cols-3 @[700px]/platform:gap-2.5">
         {PLATFORM_URLS.map((host) => (
           <PlatformUrlCard key={host.url} {...host} />
         ))}

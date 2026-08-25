@@ -9,7 +9,7 @@ export function DocsPager({ slug }: { slug: string }) {
   return (
     <nav
       aria-label="Docs pagination"
-      className="not-prose mt-16 grid gap-3 border-t border-slate-200 pt-8 sm:grid-cols-2"
+      className="not-prose mt-16 grid gap-3 border-t border-slate-200 pt-8 @[480px]/docs:grid-cols-2"
     >
       {prev ? (
         <Link
@@ -24,7 +24,7 @@ export function DocsPager({ slug }: { slug: string }) {
           </span>
         </Link>
       ) : (
-        <div className="hidden sm:block" />
+        <div className="hidden @[480px]/docs:block" />
       )}
       {next ? (
         <Link

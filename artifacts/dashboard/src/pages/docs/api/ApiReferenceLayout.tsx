@@ -69,23 +69,23 @@ export function ApiReferenceLayout({
   }, []);
 
   return (
-    <div className="min-h-screen bg-white text-foreground font-sans selection:bg-slate-900/10">
-      <header className="sticky top-0 z-40 hidden lg:block border-b border-slate-200 bg-white/90 backdrop-blur-xl">
-        <div className="max-w-[1600px] mx-auto px-6 flex items-center h-14 gap-8">
-          <Link href="/docs" className="flex items-center gap-2 shrink-0 hover:opacity-90 transition-opacity">
+    <div className="min-h-screen overflow-x-clip bg-white font-sans text-foreground selection:bg-slate-900/10">
+      <header className="sticky top-0 z-40 hidden border-b border-slate-200 bg-white/90 backdrop-blur-xl lg:block">
+        <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-4 px-4 sm:gap-6 sm:px-6 xl:gap-8">
+          <Link href="/docs" className="flex shrink-0 items-center gap-2 transition-opacity hover:opacity-90">
             <BrandMark iconSize={24} wordmarkHeight={18} />
           </Link>
           <TopTabs />
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <a
               href="https://app.snapserve.ai/app"
-              className="text-sm text-slate-500 hover:text-slate-900 transition-colors"
+              className="text-sm text-slate-500 transition-colors hover:text-slate-900"
             >
               Dashboard
             </a>
             <a
               href="https://app.snapserve.ai/app/api-keys"
-              className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 transition-colors"
+              className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-slate-800"
             >
               Get API key
             </a>
@@ -94,7 +94,7 @@ export function ApiReferenceLayout({
       </header>
 
       <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/90 backdrop-blur-xl lg:hidden">
-        <div className="flex items-center h-14 px-4 gap-4">
+        <div className="flex h-14 items-center gap-4 px-4">
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="text-muted-foreground">
@@ -102,14 +102,14 @@ export function ApiReferenceLayout({
                 <span className="sr-only">Toggle Menu</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-80 bg-white border-slate-200 p-0">
-              <div className="flex flex-col h-full">
-                <div className="p-4 border-b border-slate-200">
+            <SheetContent side="left" className="w-[min(20rem,85vw)] border-slate-200 bg-white p-0">
+              <div className="flex h-full flex-col">
+                <div className="border-b border-slate-200 p-4">
                   <Link href="/docs" className="flex items-center gap-2">
                     <BrandMark iconSize={24} wordmarkHeight={18} />
                   </Link>
                 </div>
-                <div className="p-4 flex-1 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto p-4">
                   <ApiSidebar />
                 </div>
               </div>
@@ -121,17 +121,17 @@ export function ApiReferenceLayout({
         </div>
       </header>
 
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-6 flex">
-        <aside className="hidden lg:block w-[300px] shrink-0 pt-6 pb-16 pr-5 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto border-r border-slate-200">
+      <div className="mx-auto flex w-full min-w-0 max-w-[1600px] px-4 sm:px-6">
+        <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-[min(16rem,28vw)] shrink-0 overflow-y-auto border-r border-slate-200 pb-16 pr-4 pt-6 lg:block xl:w-[17.5rem] xl:pr-5 2xl:w-[18.75rem]">
           <ApiSidebar />
         </aside>
 
-        <main className="flex-1 min-w-0 py-10 lg:py-12 px-0 lg:px-12">
-          <div className="w-full max-w-[760px] mx-auto">{children}</div>
+        <main className="@container/api relative min-w-0 flex-1 px-0 py-8 sm:py-10 lg:px-6 lg:py-12 xl:px-8">
+          <div className="mx-auto w-full min-w-0 max-w-[min(47.5rem,100%)]">{children}</div>
         </main>
 
         {rightRail ? (
-          <aside className="hidden xl:block w-[440px] shrink-0 pt-12 pb-16 pl-6 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto border-l border-slate-200">
+          <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-[min(24rem,32vw)] shrink-0 overflow-y-auto border-l border-slate-200 pb-16 pl-4 pt-12 2xl:block 2xl:w-[27.5rem] 2xl:pl-6">
             {rightRail}
           </aside>
         ) : null}

@@ -29,7 +29,7 @@ export default function IntroductionPage() {
       <PlatformUrls />
 
       <h2 id="start">Start here</h2>
-      <div className="not-prose grid grid-cols-1 sm:grid-cols-2 gap-3 my-6">
+      <div className="not-prose my-6 grid grid-cols-1 gap-3 @[480px]/docs:grid-cols-2">
         <DocCard
           href="/docs/vibe"
           title="Create an agent in Vibe"
