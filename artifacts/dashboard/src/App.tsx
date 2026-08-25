@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation, Redirect, Link } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { Sparkles } from "lucide-react";
+import { Gift } from "lucide-react";
 import { AuthProvider, useAuth, SignedIn, SignedOut, consumeSignOutReason } from "@/lib/auth";
 import { DotGridBackground } from "@/components/ui/dot-grid-background";
 import { setAuthTokenGetter, setDefaultTimeoutMs, setUnauthorizedHandler, useGetOnboardingStatus } from "@workspace/api-client-react";
@@ -329,7 +329,7 @@ function SignInPage() {
 
         {!isPartnerGateway && (
           <div className="inline-flex items-center gap-1.5 mb-6 px-3 py-1 rounded-full border border-purple-400/20 bg-purple-400/10 text-[0.7rem] font-medium tracking-wide text-purple-200">
-            <Sparkles size={12} /> ₹500 free credit · ~100 minutes on us
+            <Gift size={12} /> ₹500 free credit · ~100 minutes on us
           </div>
         )}
 
