@@ -158,32 +158,33 @@ function PlatformUrlCard({
   };
 
   const className =
-    "group relative flex h-full min-w-0 flex-col rounded-xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all hover:border-slate-300 hover:shadow-[0_4px_12px_rgba(15,23,42,0.06)]";
+    "group relative flex h-full min-w-0 flex-col rounded-xl border border-slate-200/90 bg-white px-3.5 py-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all hover:border-slate-300 hover:shadow-[0_4px_12px_rgba(15,23,42,0.06)]";
 
   const body = (
     <>
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2">
         <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[11px] font-semibold tabular-nums text-slate-600">
           {n}
         </span>
-        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
           {label}
         </span>
-      </div>
-      <div className="mt-3 flex items-start gap-1.5">
-        <p className="min-w-0 flex-1 break-all font-mono text-[12.5px] leading-relaxed tracking-tight text-slate-900">
-          {url}
-        </p>
         <button
           type="button"
           onClick={onCopy}
-          className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
           aria-label={`Copy ${url}`}
           title={copied ? "Copied" : "Copy this URL"}
         >
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       </div>
+      <p
+        className="mt-3 whitespace-nowrap font-mono text-[11px] leading-none tracking-tight text-slate-900"
+        title={url}
+      >
+        {url}
+      </p>
       <p className="mt-auto pt-3 text-[12px] leading-snug text-slate-500">{hint}</p>
     </>
   );
@@ -230,7 +231,7 @@ export function PlatformUrls() {
           {copiedAll ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-3.5">
+      <div className="grid grid-cols-1 gap-3 min-[680px]:grid-cols-3 min-[680px]:gap-2.5">
         {PLATFORM_URLS.map((host) => (
           <PlatformUrlCard key={host.url} {...host} />
         ))}
