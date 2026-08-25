@@ -646,6 +646,87 @@ router.get("/calls/:id", requireAuth, clientContext, async (req, res): Promise<v
 });
 
 /**
+ * Translate this call's transcript into a preferred language (Sarvam Mayura).
+ * Does not persist — returns translated content for UI display only.
+ */
+router.post("/calls/:id/translate-transcript", requireAuth, clientContext, async (req, res): Promise<void> => {
+  const params = GetCallParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
+    return;
+  }
+
+  const targetLanguage = String((req.body as { targetLanguage?: string } | undefined)?.targetLanguage ?? "").trim();
+  const {
+    isTranscriptTranslateLang,
+    toSarvamTranslateTarget,
+    TRANSCRIPT_TRANSLATE_LANGUAGES,
+    parseTranscriptForTranslate,
+    translateTranscriptLines,
+    rebuildPlainTranscript,
+  } = await import("../services/transcript-translate.js");
+
+  if (!targetLanguage || !isTranscriptTranslateLang(targetLanguage)) {
+    res.status(400).json({
+      error: "Choose a supported target language",
+      languages: TRANSCRIPT_TRANSLATE_LANGUAGES,
+    });
+    return;
+  }
+
+  const clerkId = (req as any).clerkUserId as string;
+  const [call] = await db.select().from(callsTable).where(eq(callsTable.id, params.data.id));
+  if (!call) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (!(await canAccessWorkspaceCall(clerkId, call))) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (!call.transcript?.trim()) {
+    res.status(400).json({ error: "No transcript available for this call" });
+    return;
+  }
+
+  try {
+    const parsed = parseTranscriptForTranslate(call.transcript);
+    if (parsed.lines.length === 0) {
+      res.status(400).json({ error: "No transcript available for this call" });
+      return;
+    }
+
+    const translatedLines = await translateTranscriptLines(parsed.lines, targetLanguage);
+    const target = toSarvamTranslateTarget(targetLanguage);
+    const label =
+      TRANSCRIPT_TRANSLATE_LANGUAGES.find((l) => l.value === target)?.label ?? target;
+
+    if (parsed.kind === "json") {
+      res.json({
+        targetLanguage: target,
+        targetLanguageLabel: label,
+        kind: "json",
+        lines: translatedLines,
+      });
+      return;
+    }
+
+    res.json({
+      targetLanguage: target,
+      targetLanguageLabel: label,
+      kind: "plain",
+      transcript: rebuildPlainTranscript(parsed.plainLines ?? [], translatedLines),
+      lines: translatedLines,
+    });
+  } catch (err) {
+    req.log.error({ err, callId: params.data.id }, "translate-transcript failed");
+    const message = err instanceof Error ? err.message : "Translation failed";
+    const status = /not configured/i.test(message) ? 503 : 502;
+    res.status(status).json({ error: message });
+  }
+});
+
+/**
  * Fresh Recall mixed-meeting MP4 URL for call-log playback.
  * Pre-signed URLs expire — always re-fetch via recallBotId in call metadata.
  */

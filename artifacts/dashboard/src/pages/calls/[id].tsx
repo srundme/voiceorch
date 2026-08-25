@@ -8,7 +8,7 @@ import {
   BarChart3, Mic, Cpu, Volume2, Hash, ArrowRight, ArrowUpRight, UserCheck,
   Voicemail, BookOpen, Tag, Activity, ExternalLink, Copy, CheckCircle2,
   XCircle, PlayCircle, PauseCircle, MicOff, ScrollText, Video,
-  Play, Pause, MoreVertical, VolumeX, Gauge
+  Play, Pause, MoreVertical, VolumeX, Gauge, Languages, Loader2,
 } from "lucide-react";
 import {
   useGetCall,
@@ -48,6 +48,27 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
   DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+
+const TRANSCRIPT_TRANSLATE_LANGUAGES = [
+  { value: "en-IN", label: "English" },
+  { value: "hi-IN", label: "Hindi" },
+  { value: "ta-IN", label: "Tamil" },
+  { value: "te-IN", label: "Telugu" },
+  { value: "kn-IN", label: "Kannada" },
+  { value: "ml-IN", label: "Malayalam" },
+  { value: "mr-IN", label: "Marathi" },
+  { value: "gu-IN", label: "Gujarati" },
+  { value: "bn-IN", label: "Bengali" },
+  { value: "pa-IN", label: "Punjabi" },
+  { value: "od-IN", label: "Odia" },
+] as const;
 
 interface ToolEvent {
   toolName: string;
@@ -1187,6 +1208,24 @@ export function CallDetailContent({
   const initialTab = new URLSearchParams(window.location.search).get("tab") || "logs";
   const [activeTab, setActiveTab] = useState(initialTab);
 
+  const [translateOpen, setTranslateOpen] = useState(false);
+  const [translateLang, setTranslateLang] = useState<string>("en-IN");
+  const [translating, setTranslating] = useState(false);
+  const [translatedView, setTranslatedView] = useState<{
+    targetLanguage: string;
+    targetLanguageLabel: string;
+    kind: "json" | "plain";
+    lines?: Array<{ role?: string; content?: string; timestamp?: string }>;
+    transcript?: string;
+  } | null>(null);
+  const [showOriginalTranscript, setShowOriginalTranscript] = useState(false);
+
+  useEffect(() => {
+    setTranslatedView(null);
+    setShowOriginalTranscript(false);
+    setTranslateOpen(false);
+  }, [id]);
+
   const dispositionSchema = Array.isArray((agent as any)?.dispositionSchema)
     ? (agent as any).dispositionSchema as Array<{ key: string; label: string; type: string; options?: string[] }>
     : [];
@@ -1335,6 +1374,62 @@ export function CallDetailContent({
   const plainLines = (!isJsonTranscript && call.transcript)
     ? call.transcript.split(/\r?\n/)
     : [];
+
+  const showingTranslated = !!translatedView && !showOriginalTranscript;
+  const displayJsonLines = showingTranslated && translatedView?.kind === "json" && translatedView.lines
+    ? translatedView.lines
+    : transcriptLines;
+  const displayIsJson = showingTranslated
+    ? translatedView?.kind === "json"
+    : isJsonTranscript;
+  const displayPlainLines = showingTranslated && translatedView?.kind === "plain" && translatedView.transcript
+    ? translatedView.transcript.split(/\r?\n/)
+    : plainLines;
+
+  async function runTranscriptTranslate() {
+    if (!translateLang) return;
+    setTranslating(true);
+    try {
+      const token = await getToken();
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const clientCtx = getClientContext();
+      if (clientCtx) headers["x-client-context"] = clientCtx;
+      const res = await fetch(`/api/calls/${id}/translate-transcript`, {
+        method: "POST",
+        credentials: "include",
+        headers,
+        body: JSON.stringify({ targetLanguage: translateLang }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Translation failed (${res.status})`);
+      }
+      setTranslatedView({
+        targetLanguage: data.targetLanguage,
+        targetLanguageLabel: data.targetLanguageLabel,
+        kind: data.kind,
+        lines: data.lines,
+        transcript: data.transcript,
+      });
+      setShowOriginalTranscript(false);
+      setTranslateOpen(false);
+      toast({
+        title: "Transcript translated",
+        description: `Showing ${data.targetLanguageLabel || translateLang} translation.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Translation failed",
+        description: formatApiError(err),
+        variant: "destructive",
+      });
+    } finally {
+      setTranslating(false);
+    }
+  }
 
   const toolEvents: ToolEvent[] = (() => {
     if (callLogs && callLogs.length > 0) {
@@ -1592,6 +1687,38 @@ export function CallDetailContent({
                       </div>
                     )}
 
+                    {call.transcript && (
+                      <div className="mx-4 mt-3 flex flex-wrap items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1.5 text-xs"
+                          onClick={() => setTranslateOpen(true)}
+                          disabled={translating}
+                        >
+                          {translating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Languages className="h-3.5 w-3.5" />}
+                          Translate
+                        </Button>
+                        {translatedView && (
+                          <>
+                            <Badge variant="secondary" className="text-[10px]">
+                              {showOriginalTranscript
+                                ? "Original"
+                                : `Translated · ${translatedView.targetLanguageLabel}`}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs"
+                              onClick={() => setShowOriginalTranscript((v) => !v)}
+                            >
+                              {showOriginalTranscript ? "Show translation" : "Show original"}
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    )}
+
                     {/* Transcript Content */}
                     <div className="p-5 space-y-1">
                       {!call.transcript ? (
@@ -1602,9 +1729,9 @@ export function CallDetailContent({
                           <p className="text-sm text-foreground/40">No transcript available</p>
                           <p className="text-xs text-muted-foreground/30 mt-1">Transcript will appear once the call completes</p>
                         </div>
-                      ) : isJsonTranscript ? (
+                      ) : displayIsJson ? (
                         <div className="space-y-5">
-                          {transcriptLines.map((line, i) => {
+                          {displayJsonLines.map((line, i) => {
                             const content = stripTranscriptMarkup(String(line.content ?? ""));
                             if (!content) return null;
                             return (
@@ -1626,7 +1753,7 @@ export function CallDetailContent({
                         </div>
                       ) : (
                         <div className="p-4 space-y-4">
-                          {plainLines.map((line, i) => (
+                          {displayPlainLines.map((line, i) => (
                             <PlainTranscriptLine key={i} line={line} index={i} />
                           ))}
                         </div>
@@ -2339,6 +2466,50 @@ export function CallDetailContent({
           </div>
         </div>
       </div>
+
+      <Dialog open={translateOpen} onOpenChange={(open) => { if (!translating) setTranslateOpen(open); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Translate transcript</DialogTitle>
+            <DialogDescription>
+              Choose the language you want to read this call in. The original transcript stays unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            <Label htmlFor="transcript-translate-lang">Preferred language</Label>
+            <Select value={translateLang} onValueChange={setTranslateLang} disabled={translating}>
+              <SelectTrigger id="transcript-translate-lang">
+                <SelectValue placeholder="Select language" />
+              </SelectTrigger>
+              <SelectContent>
+                {TRANSCRIPT_TRANSLATE_LANGUAGES.map((lang) => (
+                  <SelectItem key={lang.value} value={lang.value}>
+                    {lang.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTranslateOpen(false)} disabled={translating}>
+              Cancel
+            </Button>
+            <Button onClick={() => void runTranscriptTranslate()} disabled={translating || !translateLang}>
+              {translating ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  Translating…
+                </>
+              ) : (
+                <>
+                  <Languages className="h-3.5 w-3.5 mr-1.5" />
+                  Translate
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }
