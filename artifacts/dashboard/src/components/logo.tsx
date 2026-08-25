@@ -1,5 +1,5 @@
 /* ── SnapServe brand components ────────────────────────────────────────────
-   SnapServeIcon   — official three-bar mark (raster)
+   SnapServeIcon   — official staggered three-bar mark (theme-aware SVG)
    SnapServeAgentIcon — Headset agent mark (from @workspace/brand-icons)
    SnapServeLogo   — icon + wordmark  ("Snap" Bold / "Serve" Regular)
    SnapServeLoader — full-screen splash with brand mark
@@ -10,12 +10,12 @@ import { isDirectSnapServeHost, loadHostBrand, type HostBrand } from "@/lib/whit
 
 const FONT = "'Tex Gyre Heros', Helvetica, Arial, sans-serif";
 
-/** Canonical SnapServe three-bar mark (black tile). */
+/** Raster mark for favicons / downloads (full black tile). In-app chrome uses SnapServeIcon SVG. */
 export const SNAPSERVE_MARK_SRC = "/brand/snapserve-mark.png";
 
 /* ── BrandMark (theme-proof lockup) ---------------------------------------
-   Raster mark on a black tile stays readable on light and dark chrome.
-   Wordmark uses currentColor / text-foreground for the surrounding theme. */
+   SVG mark: top bar flips to white under .dark so it never merges into dark chrome.
+   Light theme keeps the original black top bar. */
 
 interface BrandMarkProps {
   /** Pixel size of the icon (height & width). */
@@ -82,21 +82,27 @@ export function DocsBrandMark({
 
 interface IconProps {
   className?: string;
-  /** px size of the bounding box — mark scales with it */
+  /** px size of the bounding box — bars scale with it */
   size?: number;
 }
 
 export function SnapServeIcon({ size = 24, className = "" }: IconProps) {
   return (
-    <img
-      src={SNAPSERVE_MARK_SRC}
-      alt="SnapServe"
+    <svg
       width={size}
       height={size}
-      className={`rounded-md object-cover ${className}`.trim()}
+      viewBox="0 0 100 100"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-label="SnapServe"
       style={{ width: size, height: size }}
-      draggable={false}
-    />
+    >
+      {/* Top bar — black in light UI; white only under .dark */}
+      <rect x="14" y="22" width="58" height="14" rx="7" className="fill-[#121212] dark:fill-white" />
+      <rect x="22" y="43" width="58" height="14" rx="7" fill="#6c6c6c" />
+      <rect x="30" y="64" width="58" height="14" rx="7" fill="#adaeb2" />
+    </svg>
   );
 }
 
@@ -196,14 +202,10 @@ export function SnapServeLoader() {
       className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
       style={{ background: "#000" }}
     >
-      <img
-        src={SNAPSERVE_MARK_SRC}
-        alt=""
-        width={56}
-        height={56}
-        className="mb-6 rounded-xl object-cover"
-        draggable={false}
-      />
+      {/* Force dark-variant top bar (white) on the black splash */}
+      <span className="dark mb-6 inline-flex">
+        <SnapServeIcon size={56} />
+      </span>
 
       <div className="flex flex-col items-center gap-1.5">
         <span
