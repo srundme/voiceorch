@@ -19,19 +19,6 @@ const MCP_JSON = `{
   }
 }`;
 
-/** Grouped view of SnapServe MCP tools (76 registered tools in lib/snapserve-mcp). */
-const TOOL_GROUPS: { title: string; desc: string; tools: string }[] = [
-  { title: "Agents",            desc: "Create, update, toggle and version voice agents in plain English.",            tools: "list_agents · create_agent · get_agent · toggle_agent · publish_agent_version" },
-  { title: "Calls",             desc: "Place outbound calls, end live calls, pull transcripts and execution logs.",   tools: "outbound_call · get_call · get_call_logs · end_call · transfer_call" },
-  { title: "Campaigns & leads", desc: "Run outbound campaigns, batches, retries and website / Sheet lead intake.",    tools: "list_campaigns · create_campaign · get_website_webhook · import_campaign_leads" },
-  { title: "Journeys",          desc: "Build multi-step outreach journeys and activate or pause them.",               tools: "list_journeys · create_journey · activate_journey · pause_journey" },
-  { title: "WhatsApp & email",  desc: "Check channel status, connections and message templates.",                     tools: "get_whatsapp_channel · list_whatsapp_connections · get_email_channel" },
-  { title: "Sheets auto-calls", desc: "Google Sheets Automatic Calls jobs — create, start, pause.",                   tools: "list_automatic_calls · create_automatic_call · start_automatic_call" },
-  { title: "Numbers & squads",  desc: "Phone numbers, squads, webcall links and provider keys.",                      tools: "list_phone_numbers · list_squads · list_webcall_links · list_providers" },
-  { title: "Analytics & wallet",desc: "Dashboards, per-agent analytics, dispositions and wallet balance.",            tools: "get_analytics_dashboard · get_agent_analytics · get_wallet" },
-  { title: "Everything else",   desc: "Escape hatch that can call any SnapServe REST endpoint directly.",             tools: "snapserve_api · snapserve_help" },
-];
-
 function McpHero() {
   return (
     <div className="not-prose my-6 rounded-2xl border border-border/60 bg-card/40 p-6">
@@ -84,23 +71,6 @@ function McpHero() {
   );
 }
 
-function AvailableTools() {
-  return (
-    <div className="not-prose my-6">
-      <h2 className="text-lg font-semibold text-foreground mb-3" id="available-tools">Available tools</h2>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {TOOL_GROUPS.map((g) => (
-          <div key={g.title} className="rounded-xl border border-border/60 bg-card/40 p-4">
-            <p className="text-sm font-semibold text-foreground m-0">{g.title}</p>
-            <p className="text-xs text-muted-foreground mt-1 mb-2">{g.desc}</p>
-            <p className="text-[10px] font-mono text-muted-foreground/70 m-0 break-words">{g.tools}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export default function ClaudeSkillPage() {
   return (
     <div>
@@ -122,7 +92,6 @@ export default function ClaudeSkillPage() {
       />
 
       <McpHero />
-      <AvailableTools />
 
       <Callout variant="tip" title="Skill vs MCP">
         The <strong>skill</strong> teaches Claude <em>how</em> SnapServe works (workflows, safe
