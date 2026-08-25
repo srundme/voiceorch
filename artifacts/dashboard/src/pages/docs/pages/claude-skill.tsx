@@ -43,13 +43,20 @@ function McpHero() {
             analytics — as tools from Claude, Cursor, Windsurf, and any MCP-aware client.
             76 tools, plus a skill that teaches the assistant how SnapServe works.
           </p>
-          <div className="flex gap-2 mt-4">
-            <a href="https://app.snapserve.ai/app/api-keys" target="_blank" rel="noreferrer"
-               className="inline-flex items-center rounded-full bg-foreground text-background px-4 py-2 text-xs font-semibold no-underline">
-              Get API Key
+          <div className="flex flex-wrap items-center gap-3 mt-6">
+            <a
+              href="https://app.snapserve.ai/app/api-keys"
+              target="_blank"
+              rel="noreferrer"
+              className="group inline-flex h-11 min-w-[9.5rem] items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-slate-950 px-6 text-sm font-semibold tracking-[-0.01em] text-white no-underline shadow-[0_1px_2px_rgba(15,23,42,0.2),0_4px_12px_rgba(15,23,42,0.12)] transition-all duration-200 hover:-translate-y-px hover:bg-slate-800 hover:shadow-[0_2px_4px_rgba(15,23,42,0.18),0_8px_20px_rgba(15,23,42,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/50"
+            >
+              Get API key
+              <span aria-hidden className="text-[11px] text-white/45 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5">↗</span>
             </a>
-            <a href="#install-mcp"
-               className="inline-flex items-center rounded-full border border-border px-4 py-2 text-xs font-semibold text-foreground no-underline">
+            <a
+              href="#install-mcp"
+              className="inline-flex h-11 min-w-[9.5rem] items-center justify-center whitespace-nowrap rounded-lg border border-slate-200/90 bg-white/90 px-6 text-sm font-semibold tracking-[-0.01em] text-slate-800 no-underline shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur-sm transition-all duration-200 hover:-translate-y-px hover:border-slate-300 hover:bg-white hover:shadow-[0_2px_8px_rgba(15,23,42,0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/60"
+            >
               Full setup guide
             </a>
           </div>
