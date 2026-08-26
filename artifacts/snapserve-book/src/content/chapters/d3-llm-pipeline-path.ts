@@ -183,7 +183,7 @@ export const llmPipelinePath: Chapter = {
           lines: "5-14",
           label: "the hit conditions",
           explanation:
-            "Prefill commits only when `reconcileSpeculativePrefill` returns hash_match: not aborted, no speculative tool call, language unchanged, and SHA-1 of the normalized final equals `inputHash`. Prefix extensions (\"I want to participate in the…\" vs \"…hackathon\") are a discard — those tokens never reach TTS.",
+            "Prefill commits only when `reconcileSpeculativePrefill` returns hash_match: not aborted, no speculative tool call, language unchanged, pendingTurnId matches turnGeneration, and SHA-256 of the normalized final equals `inputHash`. Prefix extensions (\"I want to participate in the…\" vs \"…hackathon\") are a discard — those tokens never reach TTS.",
         },
         {
           lines: "16-25",

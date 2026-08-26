@@ -109,4 +109,20 @@ describe("reconcileSpeculativePrefill", () => {
     expect(miss.action).toBe("discard");
     expect(miss.reason).toBe("language_switched");
   });
+
+  it("discards when the prefill belongs to an older turnGeneration", () => {
+    const text = "I want to participate in the hackathon.";
+    const miss = reconcileSpeculativePrefill({
+      aborted: false,
+      hasToolCall: false,
+      langAtLaunch: "en-IN",
+      langNow: "en-IN",
+      inputHash: speculativeInputHash(text),
+      finalTranscript: text,
+      pendingTurnId: 3,
+      turnGeneration: 4,
+    });
+    expect(miss.action).toBe("discard");
+    expect(miss.reason).toBe("stale_turn");
+  });
 });
