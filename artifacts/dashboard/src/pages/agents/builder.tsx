@@ -2954,7 +2954,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         <BuilderPanel
           title="Scheduling & bookings"
           icon={<Calendar />}
-          description="Calendar, Meet link, then what callers can book"
+          description="Calendar and Google Meet for bookings"
           hint={bookingPartial ? (
             <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
               Incomplete
@@ -2991,9 +2991,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             const calendars = calendarsData ?? [];
             const googleEmail = (agentCalendar as { connectedGoogleEmail?: string | null } | undefined)?.connectedGoogleEmail;
             const googleReady = Boolean(googleEmail);
-            const meetingCount = (agentEventTypes ?? []).length;
             const calendarReady = Boolean(agentCalendar);
-            const meetingReady = meetingCount > 0;
             const calendarSetupHref = agentId ? connectionsSetupHref("calendar", agentId) : "/app/connections?setup=calendar";
             const conferencingHref = "/app/scheduling/conferencing";
             return (
@@ -3063,54 +3061,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 </div>
               </BookingSetupStep>
 
-              <BookingSetupStep step={3} title="Meeting callers can book" ready={meetingReady}>
-                <p className="mb-2 text-[11.5px] leading-relaxed text-muted-foreground">
-                  Length and name of the slot (for example 30-minute demo). “Any meeting” uses every type on this calendar.
-                </p>
-                <Select
-                  value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
-                  onValueChange={(v) => {
-                    const parsed = Number(v);
-                    form.setValue(
-                      "schedulingEventTypeId",
-                      v === "__none__" || !Number.isFinite(parsed) ? null : parsed,
-                      { shouldDirty: true },
-                    );
-                  }}
-                  disabled={!calendarIdForEt}
-                >
-                  <SelectTrigger className="h-9 bg-background text-xs">
-                    <SelectValue placeholder="Any meeting">
-                      {schedulingEventTypeId == null
-                        ? "Any meeting"
-                        : agentEventTypes == null
-                          ? "Loading…"
-                          : (() => {
-                              const selected = (agentEventTypes as { id: number; title?: string; name?: string }[]).find(
-                                (e) => String(e.id) === String(schedulingEventTypeId),
-                              );
-                              return selected ? (selected.title || selected.name) : "Any meeting";
-                            })()}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__" className="text-xs text-muted-foreground">Any meeting</SelectItem>
-                    {(agentEventTypes ?? []).map((et: { id: number; title?: string; name?: string }) => (
-                      <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title || et.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {!meetingReady && (
-                  <p className="mt-2 text-[11.5px] text-amber-700 dark:text-amber-400">
-                    No meeting types on this calendar yet.{" "}
-                    <Link href={calendarSetupHref} className="font-medium underline underline-offset-2">
-                      Create a meeting
-                    </Link>
-                  </p>
-                )}
-              </BookingSetupStep>
-
-              <BookingSetupStep step={4} title="AI joins the Meet (optional)" ready={canAttendMeetings}>
+              <BookingSetupStep step={3} title="AI joins the Meet (optional)" ready={canAttendMeetings}>
                 <p className="mb-2 text-[11.5px] leading-relaxed text-muted-foreground">
                   Phone-only still sends the Meet link to humans. Turn this on only if a SnapServe agent should enter the room.
                 </p>
