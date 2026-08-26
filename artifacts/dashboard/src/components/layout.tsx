@@ -1019,8 +1019,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Voice-a-thon top notification */}
         <VoiceathonTopBanner />
 
-        {/* Utility strip — desktop only; hide on full-bleed builder surfaces */}
-        {!location.startsWith("/app/agents") && !location.startsWith("/app/vibe") && (
+        {/* Utility strip — desktop only; hide on full-bleed vibe surface */}
+        {!location.startsWith("/app/vibe") && (
           <div className="hidden md:block">
             <UtilityStrip />
           </div>
