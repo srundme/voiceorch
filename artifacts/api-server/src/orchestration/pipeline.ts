@@ -23,6 +23,7 @@ import { createTTSAdapter } from "./adapters/tts/index.js";
 import { CartesiaTTS } from "./adapters/tts/cartesia.js";
 import { encodeMulaw, upsample8to16, downsample16to8, createDownsampler16to8, decodeMulaw, hasSpeechEnergy, frameRms } from "./audio.js";
 import { resolveMicSensitivity, getMicSensitivityThresholds, type MicSensitivityThresholds } from "./mic-sensitivity.js";
+import { resolveSoftwareNoiseGate, envForceVobizSoftwareNc, type NoiseGateDecision } from "./noise-gate.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, peekCachedPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
@@ -1091,6 +1092,9 @@ export class OrchestrationPipeline implements VoiceSession {
   private readonly bargeInEchoGraceMs: number;
   // Mic Sensitivity — resolved gate ratio / VAD floor / barge-in defaults (mic-sensitivity.ts)
   private readonly micThresholds: MicSensitivityThresholds;
+  // Whether the software noise gate runs on this call, and why (noise-gate.ts).
+  // Resolved once at construction so every audio frame uses the same decision.
+  private readonly noiseGate: NoiseGateDecision;
   // True when an explicit Stop Speaking Plan is configured. When set, the
   // plan-derived bargeInMinFrames is authoritative and the non-UI
   // wordsForInterruption×20 floor must NOT override the configured sensitivity.
@@ -2563,19 +2567,31 @@ export class OrchestrationPipeline implements VoiceSession {
       ]).catch(() => { /* ignore warmup error */ });
     }
 
-    if (this.agent.noiseCancellationEnabled) {
-      // VoBiz denoises at the carrier layer (always on, no API knob) and the
-      // browser runs AEC/NS for webcall — on those paths the transport passes
-      // noiseCancel=false to onRawPcm8kIn and our software gate never runs.
-      const upstreamNc = config.telephonyProvider === "vobiz" && process.env["VOBIZ_FORCE_SOFTWARE_NC"] !== "1"
-        ? "vobiz-carrier"
-        : config.telephonyProvider === "webcall" ? "browser-aec" : null;
-      if (upstreamNc) {
-        logger.info({ callId: config.callId, upstreamNc }, "Noise cancellation handled upstream — software gate bypassed");
-      } else {
-        logger.info({ callId: config.callId }, "Noise cancellation enabled (audio worker pool)");
-      }
-    }
+    // Resolve the software noise gate once per call. VoBiz denoises at the
+    // carrier layer and the browser runs AEC/NS for webcall, so the gate stays
+    // bypassed there by default; agent_config.forceSoftwareNoiseGate (or the
+    // fleet-wide VOBIZ_FORCE_SOFTWARE_NC) opts a VoBiz agent back in. Logged
+    // unconditionally so "was noise cancellation actually on?" is answerable
+    // from this one line — the previous log only fired when the toggle was on
+    // and never reported the effective decision.
+    this.noiseGate = resolveSoftwareNoiseGate({
+      telephonyProvider: config.telephonyProvider,
+      agentEnabled: this.agent.noiseCancellationEnabled,
+      agentOverride: this.agent.forceSoftwareNoiseGate,
+      envForceVobiz: envForceVobizSoftwareNc(),
+    });
+    logger.info(
+      {
+        callId: config.callId,
+        agentId: this.agent.id,
+        telephonyProvider: config.telephonyProvider,
+        toggle: this.agent.noiseCancellationEnabled,
+        softwareGate: this.noiseGate.enabled,
+        reason: this.noiseGate.reason,
+        gateRatio: this.noiseGate.enabled ? this.micThresholds.gateRatio : undefined,
+      },
+      "Noise cancellation resolved",
+    );
 
     // Ambient noise — start looping silence-fill interval
     if (this.agent.ambientNoiseEnabled && this.agent.ambientNoiseTrack) {
@@ -3704,7 +3720,7 @@ export class OrchestrationPipeline implements VoiceSession {
     this.recording.addCallerChunk(pcm8k);
     // Voice-intelligence tap — runs outside the main audio pipeline
     this.config.callerAudioTap?.(pcm8k);
-    processAudioIn(callId, mulawChunk, this.agent.noiseCancellationEnabled, this.micThresholds.gateRatio, this.micThresholds.vadThreshold)
+    processAudioIn(callId, mulawChunk, this.noiseGate.enabled, this.micThresholds.gateRatio, this.micThresholds.vadThreshold)
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (mulaw)"));
   }
@@ -3764,8 +3780,10 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       return;
     }
-    // Caller-supplied `noiseCancel` wins when present; fall back to agent setting.
-    const nc = noiseCancel !== undefined ? noiseCancel : this.agent.noiseCancellationEnabled;
+    // Caller-supplied `noiseCancel` wins when present; otherwise use the
+    // per-call decision resolved in the constructor (provider bypass + agent
+    // toggle + overrides — see noise-gate.ts).
+    const nc = noiseCancel !== undefined ? noiseCancel : this.noiseGate.enabled;
     // Queue the caller's TRUE 16k audio (before it was downsampled to 8k for
     // this call) so handleProcessedAudio can use it for STT instead of the
     // worker's upsample8to16 reconstruction, which cannot recover frequency

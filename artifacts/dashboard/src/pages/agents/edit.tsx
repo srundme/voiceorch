@@ -110,7 +110,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     snapserveAgentId,
     contextWindowTurns, summarizationEnabled,
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
-    ambientNoiseEnabled, ambientNoiseTrack, ambientNoiseVolume,
+    ambientNoiseEnabled, ambientNoiseTrack, ambientNoiseVolume, forceSoftwareNoiseGate,
     preferredManagedNumber,
     asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs, ttsSpeed,
     fragmentCoalesceListeningMs, fragmentCoalescePlayingMs, telephonyTailDrainMs,
@@ -169,6 +169,10 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["voiceMemoryEnabled"] = !!voiceMemoryEnabled;
   agentConfig["recordingEnabled"] = !!recordingEnabled;
   agentConfig["summarizationEnabled"] = !!summarizationEnabled;
+  // Re-applies our software noise gate on VoBiz calls, which bypass it by
+  // default because VoBiz denoises at the carrier. Always persisted so turning
+  // it back off actually clears it (agentConfig is merged server-side).
+  agentConfig["forceSoftwareNoiseGate"] = !!forceSoftwareNoiseGate;
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
   if (ambientNoiseVolume != null) agentConfig["ambientNoiseVolume"] = ambientNoiseVolume;
@@ -468,6 +472,7 @@ export default function AgentEdit() {
       firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-IN", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: true,
+      forceSoftwareNoiseGate: false,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0,
       promptVariables: [], vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1800, bargeInMinFrames: 4, micSensitivity: "low",
       timezone: "",
@@ -748,6 +753,7 @@ export default function AgentEdit() {
         ? (agent as any).agentConfig.webhookPayloadTemplate
         : "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
+      forceSoftwareNoiseGate:   ((agent as any).agentConfig?.forceSoftwareNoiseGate as boolean | undefined) ?? false,
       ambientNoiseEnabled:      ((agent as any).agentConfig?.ambientNoiseEnabled as boolean | undefined) ?? false,
       ambientNoiseTrack:        ((agent as any).agentConfig?.ambientNoiseTrack as string | undefined) ?? "",
       ambientNoiseVolume:       ((agent as any).agentConfig?.ambientNoiseVolume as number | undefined) ?? 1.0,
@@ -1215,6 +1221,29 @@ export default function AgentEdit() {
                           </FormItem>
                         )} />
                       </div>
+                      {form.watch("noiseCancellationEnabled") && form.watch("telephonyProvider") === "vobiz" && (
+                        <div className="flex items-center justify-between border-t pt-3">
+                          <div>
+                            <p className="text-sm font-medium leading-none">Also run it on VoBiz calls</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              VoBiz denoises at the carrier, so our filter is skipped by default. Turn this on only
+                              if callers still sound noisy — stacking a second filter can clip very quiet one-word
+                              replies like &quot;yes&quot;.
+                            </p>
+                          </div>
+                          <FormField control={form.control} name="forceSoftwareNoiseGate" render={({ field }) => (
+                            <FormItem>
+                              <Select onValueChange={(v) => field.onChange(v === "true")} value={field.value ? "true" : "false"}>
+                                <FormControl><SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                  <SelectItem value="false">Off</SelectItem>
+                                  <SelectItem value="true">On</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormItem>
+                          )} />
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-3 p-4 border rounded-md bg-muted/20">

@@ -38,6 +38,7 @@ export const agentFormSchema = z.object({
   webhookSecret:            z.string().optional(),
   webhookPayloadTemplate:   z.string().max(32000, "Payload template is too large").optional(),
   noiseCancellationEnabled: z.boolean().optional(),
+  forceSoftwareNoiseGate:   z.boolean().optional(),
   ambientNoiseEnabled:      z.boolean().optional(),
   ambientNoiseTrack:        z.string().optional(),
   ambientNoiseVolume:       z.number().min(0).max(1).optional(),

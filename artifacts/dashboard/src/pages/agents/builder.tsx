@@ -1997,6 +1997,10 @@ function VoiceTab({ form }: { form: any }) {
   const { data: ambientSounds, isLoading: ambientSoundsLoading } = useListAmbientSounds();
   const ambientNoiseEnabled = form.watch("ambientNoiseEnabled") ?? false;
   const ambientNoiseTrack   = form.watch("ambientNoiseTrack") ?? "";
+  // The software noise gate is bypassed on VoBiz (carrier already denoised), so
+  // the opt-in below is only meaningful for VoBiz agents with the toggle on.
+  const noiseCancelOn       = form.watch("noiseCancellationEnabled") ?? true;
+  const isVobizAgent        = (form.watch("telephonyProvider") ?? "") === "vobiz";
   const ambientNoiseVolume  = (form.watch("ambientNoiseVolume") as number | undefined) ?? 1.0;
   const [ambientPreviewPlaying, setAmbientPreviewPlaying] = useState<string | null>(null);
   const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -2423,6 +2427,20 @@ function VoiceTab({ form }: { form: any }) {
               <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
           )} />
+          {noiseCancelOn && isVobizAgent && (
+            <FormField control={form.control} name="forceSoftwareNoiseGate" render={({ field }) => (
+              <FormItem className="flex items-center justify-between rounded-lg border border-dashed border-border/50 bg-muted/10 px-3 py-2.5 ml-3">
+                <div>
+                  <FormLabel className="text-sm">Also run our noise filter on VoBiz</FormLabel>
+                  <FormDescription className="text-[10px]">
+                    VoBiz already denoises at the carrier, so our filter is skipped. Turn this on only if
+                    callers still sound noisy — it can clip very quiet one-word replies.
+                  </FormDescription>
+                </div>
+                <FormControl><Switch checked={field.value ?? false} onCheckedChange={field.onChange} /></FormControl>
+              </FormItem>
+            )} />
+          )}
           <FormField control={form.control} name="backchannelingEnabled" render={({ field }) => (
             <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
               <div>
@@ -6724,6 +6742,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       language: "en-IN", asrLanguage: "", backchannelingEnabled: true,
       backchannelingFrequency: 0.5, webhookUrl: "",
       webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: true,
+      forceSoftwareNoiseGate: false,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0, promptVariables: [],
       vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1800,
       bargeInMinFrames: 4, micSensitivity: "low", timezone: "", machineDetectionMode: "disabled",
@@ -6849,6 +6868,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         ? (agent as any).agentConfig.webhookPayloadTemplate
         : "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
+      forceSoftwareNoiseGate:   (agent as any).agentConfig?.forceSoftwareNoiseGate ?? false,
       ambientNoiseEnabled:      (agent as any).agentConfig?.ambientNoiseEnabled ?? false,
       ambientNoiseTrack:        (agent as any).agentConfig?.ambientNoiseTrack ?? "",
       ambientNoiseVolume:       (agent as any).agentConfig?.ambientNoiseVolume ?? 1.0,
