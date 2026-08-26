@@ -31,7 +31,7 @@ import {
   rowToPromptVars,
   resolveMatchColumnIndex,
   sheetRange,
-  columnIndexToA1,
+  a1FromColIndex,
 } from "./google-sheets-helpers.js";
 
 export {
@@ -41,7 +41,7 @@ export {
   phonesMatch,
   cellMatchesPhone,
   rowToPromptVars,
-  columnIndexToA1,
+  a1FromColIndex,
 };
 
 /** Rows per Sheets values.get when paging large lead tabs. */
@@ -337,24 +337,23 @@ const TEMPLATES: Record<SheetTemplate, {
     tab: "Leads",
     headers: [
       "Phone", "Name", "Email", "Status", "Last Call At", "Disposition",
-      "Summary", "Call ID", "Recording", "Next Follow-up", "Meeting Time", "Do Not Call",
+      "Summary", "Call ID", "Recording", "Follow-up",
     ],
     sampleRows: [
-      ["9876543210", "Sample Lead", "sample@example.com", "", "", "", "", "", "", "", "", ""],
-      ["9123456780", "Demo Contact", "", "", "", "", "", "", "", "", "", ""],
+      ["9876543210", "Sample Lead", "sample@example.com", "", "", "", "", "", "", ""],
+      ["9123456780", "Demo Contact", "", "", "", "", "", "", "", ""],
     ],
     instructions: [
       ["SnapServe Automatic Calls — how to use"],
       [""],
       ["1. Keep Phone in column A (required). Name/Email help the agent greet correctly."],
       ["2. Leave Status blank for new leads. SnapServe writes Queued → Calling → Completed / Failed."],
-      ["3. Put yes in Do Not Call to skip a row without deleting it."],
-      ["4. Set Status to Retry to dial that row again."],
-      ["5. Call Log tab gets one append-only row per call attempt."],
-      ["6. Phones work as 9876543210 or +91…; cells with two numbers use the first."],
-      ["7. Status Callback / call later → SnapServe schedules a platform callback and fills Next Follow-up."],
-      ["8. Inbound calls from a sheet phone update the same lead row (Status / Summary / Disposition)."],
-      ["9. When a meeting is booked on the call, Meeting Time (IST) is written and Status becomes Booked."],
+      ["3. Set Status to Retry to dial that row again."],
+      ["4. Call Log tab gets one append-only row per call attempt."],
+      ["5. Phones work as 9876543210 or +91…; cells with two numbers use the first."],
+      ["6. Disposition Callback / demo follow session → SnapServe fills Follow-up with date, time, and AM/PM. Status stays Completed."],
+      ["7. Inbound calls from a sheet phone update the same lead row (Status / Summary / Disposition)."],
+      ["8. When a meeting or demo is booked, the slot is written to Follow-up (date, time, AM/PM). Status stays Completed."],
     ],
     extraTabs: [
       {
@@ -454,7 +453,7 @@ export async function getSheetLastDataRow(
 
   const auth = await getAuthedClient(connectionId, userId);
   const sheets = google.sheets({ version: "v4", auth });
-  const col = columnIndexToA1(colIdx);
+  const col = a1FromColIndex(colIdx);
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: sheetRange(sheetName, `${col}:${col}`),
@@ -507,19 +506,45 @@ export async function readSheetColumnValues(
 
   const auth = await getAuthedClient(connectionId, userId);
   const sheets = google.sheets({ version: "v4", auth });
-  const col = columnIndexToA1(columnIndex);
+  const col = a1FromColIndex(columnIndex);
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: sheetRange(sheetName, `${col}${startRow}:${col}${endRow}`),
     majorDimension: "ROWS",
   });
   const raw = (res.data.values ?? []) as string[][];
-  // Pad to cover leading empties omitted only at the trailing end; leading empties in-range are kept.
   const values: string[] = [];
   for (let i = 0; i < raw.length; i++) {
     values.push(String(raw[i]?.[0] ?? "").trim());
   }
   return { columnIndex, values };
+}
+
+/** Rename a header in row 1 in place (e.g. Next Follow-up → Follow-up). */
+export async function renameSheetHeader(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+  fromHeader: string,
+  toHeader: string,
+): Promise<boolean> {
+  const from = fromHeader.trim().toLowerCase();
+  const to = toHeader.trim();
+  if (!from || !to || from === to.toLowerCase()) return false;
+  const headers = await readSheetHeaders(userId, connectionId, spreadsheetId, sheetName);
+  const idx = headers.findIndex((h) => h.trim().toLowerCase() === from);
+  if (idx < 0) return false;
+  if (headers.some((h) => h.trim().toLowerCase() === to.toLowerCase())) return false;
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: sheetRange(sheetName, `${a1FromColIndex(idx)}1`),
+    valueInputOption: "RAW",
+    requestBody: { values: [[to]] },
+  });
+  return true;
 }
 
 /**

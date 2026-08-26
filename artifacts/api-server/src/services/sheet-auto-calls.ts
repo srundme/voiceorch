@@ -27,23 +27,25 @@ import {
   getSheetLastDataRow,
   createSpreadsheet,
   ensureHeaders,
+  renameSheetHeader,
   updateSheetRowByIndex,
   SHEET_ROW_CHUNK_SIZE,
 } from "./google-sheets.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import {
   parseSheetLeadRow,
-  isDoNotDialValue,
-  resolveDoNotDialHeader,
   isRetryStatus,
   friendlySheetStatus,
   fuzzyDetectColumnMap,
 } from "./sheet-auto-calls-helpers.js";
+import { followUpColumnName } from "./sheet-auto-call-loops.js";
 
 export {
   parseSheetLeadRow,
   fuzzyDetectColumnMap,
   friendlySheetStatus,
+  formatSheetDisposition,
+  resolveSheetStatusLabel,
 } from "./sheet-auto-calls-helpers.js";
 
 const DEFAULT_STATUS_COLS: SheetAutoStatusColumns = {
@@ -53,8 +55,7 @@ const DEFAULT_STATUS_COLS: SheetAutoStatusColumns = {
   summary: "Summary",
   callId: "Call ID",
   recording: "Recording",
-  nextFollowUp: "Next Follow-up",
-  meetingTime: "Meeting Time",
+  nextFollowUp: "Follow-up",
 };
 
 const CALL_LOG_HEADERS = [
@@ -64,16 +65,34 @@ const CALL_LOG_HEADERS = [
 
 async function ensureWritebackHeaders(pipeline: SheetAutoCallPipeline): Promise<void> {
   if (pipeline.writebackMode === "same_sheet" || pipeline.writebackMode === "both") {
+    try {
+      await renameSheetHeader(
+        pipeline.userId,
+        pipeline.connectionId,
+        pipeline.spreadsheetId,
+        pipeline.sheetName,
+        "Next Follow-up",
+        "Follow-up",
+      );
+    } catch {
+      /* header may not exist yet */
+    }
+    const stored = pipeline.sameSheetStatusColumns ?? DEFAULT_STATUS_COLS;
     const cols = [
-      ...Object.values(pipeline.sameSheetStatusColumns ?? DEFAULT_STATUS_COLS).filter(Boolean) as string[],
-      "Do Not Call",
+      stored.status || "Status",
+      stored.lastCallAt || "Last Call At",
+      stored.disposition || "Disposition",
+      stored.summary || "Summary",
+      stored.callId || "Call ID",
+      stored.recording || "Recording",
+      followUpColumnName(stored.nextFollowUp),
     ];
     await ensureHeaders(
       pipeline.userId,
       pipeline.connectionId,
       pipeline.spreadsheetId,
       pipeline.sheetName,
-      [...new Set(cols)],
+      [...new Set(cols.filter(Boolean))],
     );
   }
   if (
@@ -277,20 +296,8 @@ async function enqueueRow(
   campaignId: number,
   sheetRowIndex: number,
   parsed: ReturnType<typeof parseSheetLeadRow>,
-  opts?: { forceRetry?: boolean; doNotDial?: boolean },
+  opts?: { forceRetry?: boolean },
 ): Promise<"enqueued" | "skipped" | "duplicate"> {
-  if (opts?.doNotDial) {
-    await db.insert(sheetAutoCallRowStateTable).values({
-      pipelineId: pipeline.id,
-      sheetRowIndex,
-      phoneNormalized: parsed.phoneNormalized || "",
-      status: "skipped",
-      error: "Do Not Call",
-    }).onConflictDoNothing();
-    await writeLiveSheetStatus(pipeline, sheetRowIndex, "Skipped");
-    return "skipped";
-  }
-
   if (!parsed.phoneNormalized) {
     await db.insert(sheetAutoCallRowStateTable).values({
       pipelineId: pipeline.id,
@@ -422,7 +429,6 @@ export async function processSheetRows(
     pipeline.sheetName,
   );
   const campaignId = await ensureCampaign(pipeline);
-  const dncHeader = resolveDoNotDialHeader(headers, columnMap);
   const statusHeader =
     (pipeline.sameSheetStatusColumns as SheetAutoStatusColumns | null)?.status ?? "Status";
 
@@ -453,12 +459,8 @@ export async function processSheetRows(
         const statusVal = cellAtHeader(headers, row, statusHeader);
         const forceRetry = isRetryStatus(statusVal);
         const parsed = parseSheetLeadRow(headers, row, columnMap);
-        const doNotDial = dncHeader
-          ? isDoNotDialValue(cellAtHeader(headers, row, dncHeader))
-          : false;
         const result = await enqueueRow(pipeline, campaignId, sheetRowIndex, parsed, {
           forceRetry,
-          doNotDial,
         });
         if (result === "enqueued") enqueued += 1;
         else skipped += 1;
@@ -488,7 +490,6 @@ export async function processSheetRows(
     for (let i = 0; i < statusVals.length; i++) {
       if (isRetryStatus(statusVals[i])) retryIndexes.push(i + 2);
     }
-    // Cap retries per tick so a sheet full of "Retry" cannot stall the poller
     const retryCap = 50;
     for (const sheetRowIndex of retryIndexes.slice(0, retryCap)) {
       const rowChunk = await readSheetDataRows(
@@ -501,12 +502,8 @@ export async function processSheetRows(
       );
       const row = rowChunk[0] ?? [];
       const parsed = parseSheetLeadRow(headers, row, columnMap);
-      const doNotDial = dncHeader
-        ? isDoNotDialValue(cellAtHeader(headers, row, dncHeader))
-        : false;
       const result = await enqueueRow(pipeline, campaignId, sheetRowIndex, parsed, {
         forceRetry: true,
-        doNotDial,
       });
       if (result === "enqueued") enqueued += 1;
       else skipped += 1;
@@ -793,19 +790,14 @@ export async function previewDialRows(
   const columnMap = opts.columnMap?.phone
     ? opts.columnMap
     : fuzzyDetectColumnMap(grid.headers);
-  const dncHeader = resolveDoNotDialHeader(grid.headers, columnMap);
   const limit = Math.min(Math.max(opts.limit ?? 3, 1), 10);
   const rows = [];
 
   for (let i = 0; i < grid.rows.length && rows.length < limit; i++) {
     const sheetRowIndex = i + 2;
     const parsed = parseSheetLeadRow(grid.headers, grid.rows[i]!, columnMap);
-    const doNotDial = dncHeader
-      ? isDoNotDialValue(cellAtHeader(grid.headers, grid.rows[i]!, dncHeader))
-      : false;
     let skipReason: string | null = null;
-    if (doNotDial) skipReason = "Do Not Call";
-    else if (!parsed.phoneNormalized) skipReason = "Invalid phone";
+    if (!parsed.phoneNormalized) skipReason = "Invalid phone";
     rows.push({
       sheetRowIndex,
       phone: parsed.phoneRaw,
@@ -841,14 +833,9 @@ export async function retrySheetRow(
   const campaignId = await ensureCampaign(pipeline);
   const columnMap = pipeline.columnMap as SheetAutoColumnMap;
   const parsed = parseSheetLeadRow(headers, rowChunk[0]!, columnMap);
-  const dncHeader = resolveDoNotDialHeader(headers, columnMap);
-  const doNotDial = dncHeader
-    ? isDoNotDialValue(cellAtHeader(headers, rowChunk[0]!, dncHeader))
-    : false;
 
   const result = await enqueueRow(pipeline, campaignId, sheetRowIndex, parsed, {
     forceRetry: true,
-    doNotDial,
   });
   return { status: result };
 }

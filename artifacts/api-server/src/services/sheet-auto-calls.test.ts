@@ -6,6 +6,8 @@ import {
   isDoNotDialValue,
   isRetryStatus,
   friendlySheetStatus,
+  formatSheetDisposition,
+  resolveSheetStatusLabel,
   resolveDoNotDialHeader,
 } from "./sheet-auto-calls-helpers.js";
 import { issueRecordingShareToken, verifyRecordingShareToken } from "./recording-share.js";
@@ -63,9 +65,50 @@ describe("do-not-dial / retry / friendly status", () => {
   it("maps friendly sheet statuses", () => {
     expect(friendlySheetStatus("enqueued")).toBe("Queued");
     expect(friendlySheetStatus("dialing")).toBe("Calling");
+    expect(friendlySheetStatus("connected")).toBe("Connected");
     expect(friendlySheetStatus("completed")).toBe("Completed");
-    expect(friendlySheetStatus("no_answer")).toBe("No answer");
+    expect(friendlySheetStatus("busy")).toBe("Busy");
     expect(friendlySheetStatus("failed")).toBe("Failed");
+  });
+});
+
+describe("sheet disposition / status labels", () => {
+  const taxonomy = {
+    OUTCOME: "Wrong number",
+    primary: "OUTCOME",
+    sub: "Wrong number",
+    confidence: 1,
+    summary: "Call reached a voicemail, not the intended person",
+  };
+
+  it("writes SnapServe PRIMARY: sub, not JSON or the summary paragraph", () => {
+    expect(formatSheetDisposition(taxonomy)).toBe("OUTCOME: Wrong number");
+    expect(formatSheetDisposition(JSON.stringify(taxonomy))).toBe("OUTCOME: Wrong number");
+    expect(formatSheetDisposition({
+      OUTCOME: "Callback confirmed",
+      primary: "OUTCOME",
+      sub: "Callback confirmed",
+      summary: "Callback scheduled for tomorrow morning after the customer asked to resume.",
+    })).toBe("OUTCOME: Callback confirmed");
+    expect(formatSheetDisposition("Call reached a voicemail, not the intended person.")).toBe("");
+    expect(formatSheetDisposition({
+      OUTCOME: "Wrong number",
+      confidence: 1,
+      summary: "Call reached a voicemail, not the intended person",
+    })).toBe("OUTCOME: Wrong number");
+  });
+
+  it("keeps Status as call state and Disposition as the outcome", () => {
+    expect(resolveSheetStatusLabel("completed", "Wrong number")).toBe("Completed");
+    expect(resolveSheetStatusLabel("failed", "Wrong number")).toBe("Failed");
+    expect(resolveSheetStatusLabel("no_answer", "Wrong number")).toBe("No answer");
+    expect(resolveSheetStatusLabel("completed", "Callback confirmed", "Callback scheduled"))
+      .toBe("Completed");
+    expect(resolveSheetStatusLabel("completed", "Interested", "Booked")).toBe("Completed");
+    expect(resolveSheetStatusLabel("connected", "Wrong number")).toBe("Connected");
+    expect(resolveSheetStatusLabel("busy")).toBe("Busy");
+    expect(resolveSheetStatusLabel("calling")).toBe("Calling");
+    expect(resolveSheetStatusLabel("queued")).toBe("Queued");
   });
 });
 

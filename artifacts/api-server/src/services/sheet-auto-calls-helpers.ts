@@ -4,6 +4,7 @@
 
 import { extractPhoneCandidates } from "./google-sheets-helpers.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
+import { formatDispositionLabel } from "../lib/disposition-match.js";
 import type { SheetAutoColumnMap } from "@workspace/db";
 
 function headerIndex(headers: string[], name: string | undefined): number {
@@ -129,18 +130,67 @@ export function friendlySheetStatus(raw: string | null | undefined): string {
   const s = (raw ?? "").trim().toLowerCase();
   if (!s) return "Completed";
   if (s === "enqueued" || s === "pending" || s === "queued") return "Queued";
-  if (s === "dialing" || s === "calling" || s === "ringing" || s === "connected") return "Calling";
+  if (s === "dialing" || s === "calling" || s === "ringing") return "Calling";
+  if (s === "connected" || s === "in_progress" || s === "in-progress") return "Connected";
   if (s === "completed" || s === "done" || s === "success") return "Completed";
   if (s === "no_answer" || s === "no-answer" || s === "no answer" || s === "unanswered") return "No answer";
   if (s === "busy") return "Busy";
   if (s === "voicemail" || s === "machine") return "Voicemail";
   if (s === "failed" || s === "error" || s === "cancelled" || s === "canceled") return "Failed";
   if (s === "skipped") return "Skipped";
-  // Preserve title-ish custom dispositions already written by the agent
-  if (s.length <= 40 && !/[_-]/.test(s)) {
-    return raw!.trim().replace(/^\w/, (c) => c.toUpperCase());
+  return "Completed";
+}
+
+function parseDispositionObject(disp: unknown): Record<string, unknown> | null {
+  if (disp == null) return null;
+  if (typeof disp === "string") {
+    const t = disp.trim();
+    if (!t.startsWith("{")) return null;
+    try {
+      const parsed = JSON.parse(t) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return null;
+    }
+    return null;
   }
-  return raw!.trim();
+  if (typeof disp === "object" && !Array.isArray(disp)) return disp as Record<string, unknown>;
+  return null;
+}
+
+function shortSheetLabel(raw: string): string {
+  const t = raw.trim().replace(/\s+/g, " ");
+  if (!t) return "";
+  if (t.startsWith("{") || t.startsWith("[")) return "";
+  // Summary / transcript sentences stay in the Summary column, not Disposition.
+  if (t.length > 80 || /[.!?]/.test(t)) return "";
+  return t;
+}
+
+/**
+ * Same short label SnapServe stores on the lead (`PRIMARY: sub`).
+ * Never writes taxonomy JSON or the summary paragraph.
+ */
+export function formatSheetDisposition(disp: unknown): string {
+  if (disp == null) return "";
+  const obj = parseDispositionObject(disp);
+  if (obj) return formatDispositionLabel(obj);
+  if (typeof disp === "string") return shortSheetLabel(disp);
+  return "";
+}
+
+/**
+ * Status is telephony state only: Queued, Calling, Connected, Busy, Failed,
+ * Completed (plus No answer / Voicemail / Skipped). Never Callback / Booked.
+ */
+export function resolveSheetStatusLabel(
+  callStatus: string | null | undefined,
+  _dispositionLabel?: string,
+  _reservedStatus?: string | null,
+): string {
+  return friendlySheetStatus(callStatus);
 }
 
 export function googleSheetUrl(spreadsheetId: string, gid?: number | null): string {

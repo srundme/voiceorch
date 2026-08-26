@@ -7,7 +7,7 @@ import {
   resolveMatchColumnIndex,
   defaultColumnMapForUseCase,
   sheetRange,
-  columnIndexToA1,
+  a1FromColIndex,
 } from "./google-sheets-helpers.js";
 
 describe("phonesMatch", () => {
@@ -91,11 +91,12 @@ describe("sheetRange", () => {
   });
 });
 
-describe("columnIndexToA1", () => {
+describe("a1FromColIndex", () => {
   it("maps 0-based indexes to A1 letters", () => {
-    expect(columnIndexToA1(0)).toBe("A");
-    expect(columnIndexToA1(25)).toBe("Z");
-    expect(columnIndexToA1(26)).toBe("AA");
-    expect(columnIndexToA1(27)).toBe("AB");
+    expect(a1FromColIndex(0)).toBe("A");
+    expect(a1FromColIndex(9)).toBe("J");
+    expect(a1FromColIndex(25)).toBe("Z");
+    expect(a1FromColIndex(26)).toBe("AA");
+    expect(a1FromColIndex(27)).toBe("AB");
   });
 });

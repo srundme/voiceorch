@@ -1538,7 +1538,7 @@ export default function CampaignDetailPage() {
   const campaignHealth: { label: string; accent: string; dotCls: string; icon: React.ReactNode } = (() => {
     // No activity yet → neutral.
     if (imported === 0 && called === 0) {
-      return { label: "Healthy", accent: "text-emerald-500", dotCls: "bg-emerald-500", icon: <CheckCircle2 className="h-3.5 w-3.5" /> };
+      return { label: "Not started", accent: "text-muted-foreground", dotCls: "bg-muted-foreground/40", icon: <Info className="h-3.5 w-3.5" /> };
     }
     // Fully completed (everything processed) → healthy.
     if (imported > 0 && called >= imported) {
@@ -1805,7 +1805,7 @@ export default function CampaignDetailPage() {
                     size="sm"
                     variant="outline"
                     className="h-7 text-xs gap-1.5"
-                    disabled={backfillingIntel || (pending === 0 && analysed > 0)}
+                    disabled={backfillingIntel || pending === 0}
                     onClick={() => void handleBackfillIntelligence()}
                   >
                     {backfillingIntel
@@ -1842,7 +1842,7 @@ export default function CampaignDetailPage() {
 
                 {analysed === 0 && pending === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    No completed calls with transcripts yet. After calls finish, sentiment and intent appear here automatically — or run Analyse on older campaigns.
+                    No completed calls with transcripts yet. Sentiment and intent show up here after calls finish. Use Analyse when pending calls appear.
                   </p>
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2">

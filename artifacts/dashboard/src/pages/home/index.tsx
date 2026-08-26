@@ -197,7 +197,7 @@ export default function HomePage() {
       issues.push({
         title: "Google Sheets disconnected",
         detail: `${pipeline.name} is paused`,
-        href: "/app/connections",
+        href: "/app/connections?setup=sheets",
         tone: "warning",
       });
     });
