@@ -31,6 +31,7 @@ import {
   rowToPromptVars,
   resolveMatchColumnIndex,
   sheetRange,
+  columnIndexToA1,
 } from "./google-sheets-helpers.js";
 
 export {
@@ -40,7 +41,11 @@ export {
   phonesMatch,
   cellMatchesPhone,
   rowToPromptVars,
+  columnIndexToA1,
 };
+
+/** Rows per Sheets values.get when paging large lead tabs. */
+export const SHEET_ROW_CHUNK_SIZE = 1000;
 
 const SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
@@ -405,23 +410,149 @@ export async function ensureHeaders(
   return { headers: merged, wrote: true, sheetName: tab.title };
 }
 
+function normalizeSheetMatrix(values: string[][]): string[][] {
+  return values.map((r) => r.map((c) => String(c ?? "")));
+}
+
+/** Header row only (sheet row 1). */
+export async function readSheetHeaders(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+): Promise<string[]> {
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: sheetRange(sheetName, "A1:ZZ1"),
+    majorDimension: "ROWS",
+  });
+  const row = (res.data.values?.[0] ?? []) as string[];
+  return row.map((h) => String(h ?? "").trim());
+}
+
+/**
+ * Last 1-based sheet row that has a value in the phone column (or column A).
+ * Trailing empty cells are omitted by the Sheets API.
+ */
+export async function getSheetLastDataRow(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+  phoneHeader?: string | null,
+): Promise<number> {
+  const headers = await readSheetHeaders(userId, connectionId, spreadsheetId, sheetName);
+  if (headers.length === 0) return 1;
+
+  let colIdx = phoneHeader
+    ? headers.findIndex((h) => h.toLowerCase() === phoneHeader.toLowerCase())
+    : -1;
+  if (colIdx < 0) colIdx = resolveMatchColumnIndex(headers, phoneHeader || "Phone");
+  if (colIdx < 0) colIdx = 0;
+
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  const col = columnIndexToA1(colIdx);
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: sheetRange(sheetName, `${col}:${col}`),
+    majorDimension: "ROWS",
+  });
+  const values = res.data.values ?? [];
+  return Math.max(1, values.length);
+}
+
+/**
+ * Read data rows for an inclusive 1-based sheet range (typically startRow >= 2).
+ * Returned `rows[i]` corresponds to sheet row `startRow + i`.
+ */
+export async function readSheetDataRows(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+  startRow: number,
+  endRow: number,
+): Promise<string[][]> {
+  if (endRow < startRow || startRow < 1) return [];
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: sheetRange(sheetName, `A${startRow}:ZZ${endRow}`),
+    majorDimension: "ROWS",
+  });
+  return normalizeSheetMatrix((res.data.values ?? []) as string[][]);
+}
+
+/** Read a single Status (or any) column for an inclusive row range. */
+export async function readSheetColumnValues(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+  columnHeader: string,
+  startRow: number,
+  endRow: number,
+): Promise<{ columnIndex: number; values: string[] }> {
+  const headers = await readSheetHeaders(userId, connectionId, spreadsheetId, sheetName);
+  const columnIndex = headers.findIndex(
+    (h) => h.toLowerCase() === columnHeader.toLowerCase(),
+  );
+  if (columnIndex < 0 || endRow < startRow) {
+    return { columnIndex: -1, values: [] };
+  }
+
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  const col = columnIndexToA1(columnIndex);
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: sheetRange(sheetName, `${col}${startRow}:${col}${endRow}`),
+    majorDimension: "ROWS",
+  });
+  const raw = (res.data.values ?? []) as string[][];
+  // Pad to cover leading empties omitted only at the trailing end; leading empties in-range are kept.
+  const values: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    values.push(String(raw[i]?.[0] ?? "").trim());
+  }
+  return { columnIndex, values };
+}
+
+/**
+ * Full used grid (header + all data rows). Pages in chunks so sheets past the
+ * old 500-row cap still load (lookup / preview / legacy callers).
+ */
 export async function readSheetGrid(
   userId: string,
   connectionId: string,
   spreadsheetId: string,
   sheetName: string,
 ): Promise<{ headers: string[]; rows: string[][] }> {
-  const auth = await getAuthedClient(connectionId, userId);
-  const sheets = google.sheets({ version: "v4", auth });
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: sheetRange(sheetName, "A1:ZZ500"),
-    majorDimension: "ROWS",
-  });
-  const values = (res.data.values ?? []) as string[][];
-  if (values.length === 0) return { headers: [], rows: [] };
-  const headers = (values[0] ?? []).map((h) => String(h ?? "").trim());
-  const rows = values.slice(1).map((r) => r.map((c) => String(c ?? "")));
+  const headers = await readSheetHeaders(userId, connectionId, spreadsheetId, sheetName);
+  if (headers.length === 0) return { headers: [], rows: [] };
+
+  const lastRow = await getSheetLastDataRow(
+    userId, connectionId, spreadsheetId, sheetName,
+  );
+  if (lastRow < 2) return { headers, rows: [] };
+
+  const rows: string[][] = [];
+  for (let start = 2; start <= lastRow; start += SHEET_ROW_CHUNK_SIZE) {
+    const end = Math.min(start + SHEET_ROW_CHUNK_SIZE - 1, lastRow);
+    const chunk = await readSheetDataRows(
+      userId, connectionId, spreadsheetId, sheetName, start, end,
+    );
+    // Align to expected row count when trailing cells in the chunk are empty
+    for (let i = 0; i < end - start + 1; i++) {
+      const sheetRow = start + i;
+      if (sheetRow > lastRow) break;
+      rows.push(chunk[i] ?? []);
+    }
+  }
   return { headers, rows };
 }
 

@@ -170,3 +170,16 @@ export function escapeSheetName(name: string): string {
 export function sheetRange(sheetName: string, a1: string): string {
   return `${escapeSheetName(sheetName)}!${a1}`;
 }
+
+/** Convert 0-based column index to A1 letter(s): 0→A, 25→Z, 26→AA. */
+export function columnIndexToA1(zeroBased: number): string {
+  if (!Number.isFinite(zeroBased) || zeroBased < 0) return "A";
+  let n = Math.floor(zeroBased) + 1;
+  let s = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s || "A";
+}
