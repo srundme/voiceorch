@@ -4,6 +4,7 @@ export const ASR_PROVIDERS = [
 
 export const LLM_PROVIDERS = [
   { value: "sarvam",   label: "Sarvam AI (India-hosted)" },
+  { value: "google",   label: "Google Gemini" },
   { value: "openai",   label: "OpenAI" },
   { value: "groq",     label: "Groq" },
   { value: "krutrim",  label: "Krutrim Cloud (India-hosted)" },
@@ -59,9 +60,12 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "gpt-4.1-mini", label: "GPT-4.1 Mini (Low Cost — Fast Voice)" },
     { value: "gpt-4o-mini",  label: "GPT-4o Mini" },
   ],
-  // Classic Gemini text models removed from the product catalog. `google` remains
-  // only for Gemini Live (native audio), selected via voice stack — not the LLM dropdown.
   google: [
+    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash (recommended — fast)" },
+    { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite (lowest cost)" },
+    { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview (advanced reasoning)" },
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
     { value: GEMINI_LIVE_LLM_MODEL, label: "Gemini 3.1 Flash Live (Native Realtime Bidirectional Voice)" },
   ],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
