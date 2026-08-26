@@ -112,6 +112,17 @@ describe("SemanticTurnGate", () => {
     expect(g.onStopTimeout(generation)).toBe("ignore");
     expect(g.phase).toBe("open");
   });
+
+  it("belongsTo is false after resume increments turnGeneration", () => {
+    const g = new SemanticTurnGate();
+    g.onSpeechStart();
+    const { generation } = g.onSpeechEnd();
+    expect(g.belongsTo(generation)).toBe(true);
+    expect(g.onEou(generation, { action: "eligible", reason: "audio_complete" })).toBe("eligible");
+    const resume = g.onSpeechStart();
+    expect(resume.wasAwaitingFinal).toBe(true);
+    expect(g.belongsTo(generation)).toBe(false);
+  });
 });
 
 describe("config helpers", () => {

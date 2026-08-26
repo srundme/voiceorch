@@ -24,7 +24,8 @@
  *    timeout 1.2s → AWAITING_FINAL (still no TTS)
  * AWAITING_FINAL
  *    transcript.final → VALIDATE → processTurn → TTS
- *    grace elapsed without final → STT flush / batch fallback, never TTS from a partial
+ *    grace elapsed without final → flush, then batch STT fallback
+      (batch may produce the authoritative final; it never answers from a partial)
  *
  * Fail-open (Smart Turn missing or >400ms) bypasses Smart Turn only.
  * It still runs the text veto and still requires transcript.final.
@@ -85,15 +86,16 @@ export class SemanticTurnGate {
   /** True after an incomplete pause — caller resumed; merge finals, don't LLM yet. */
   continuation = false;
 
-  onSpeechStart(): { cancelEvaluation: boolean; wasHolding: boolean } {
+  onSpeechStart(): { cancelEvaluation: boolean; wasHolding: boolean; wasAwaitingFinal: boolean } {
     const cancelEvaluation = this.phase === "evaluating"
       || this.phase === "holding"
       || this.phase === "awaiting_final";
-    const wasHolding = this.phase === "holding" || this.phase === "awaiting_final";
+    const wasHolding = this.phase === "holding";
+    const wasAwaitingFinal = this.phase === "awaiting_final";
     if (cancelEvaluation) this.continuation = true;
     this.generation += 1;
     this.phase = "open";
-    return { cancelEvaluation, wasHolding };
+    return { cancelEvaluation, wasHolding, wasAwaitingFinal };
   }
 
   /**
@@ -144,6 +146,11 @@ export class SemanticTurnGate {
 
   isAwaitingFinal(): boolean {
     return this.phase === "awaiting_final";
+  }
+
+  /** True iff `generation` is still the in-flight caller turn. */
+  belongsTo(generation: number): boolean {
+    return generation === this.generation;
   }
 
   /** TTS commit consumed this generation's final — back to idle, same generation. */

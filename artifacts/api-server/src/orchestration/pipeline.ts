@@ -961,6 +961,14 @@ export class OrchestrationPipeline implements VoiceSession {
   private _eouTimer: ReturnType<typeof setTimeout> | null = null;
   private _eouFinalTimer: ReturnType<typeof setTimeout> | null = null;
   private _eouHeldFinal: { text: string; emittedAt: number; closeReason: TurnCloseReason; turnGeneration: number } | null = null;
+  /**
+   * After resume from AWAITING_FINAL, drop delayed finals until we see a new
+   * partial for this generation — they belong to the abandoned turn.
+   */
+  private _dropStaleFinals = false;
+  private _partialThisGeneration = false;
+  /** processTurn's turnGeneration; playJob refuses TTS if it goes stale. */
+  private _processTurnGeneration: number | null = null;
   /** Duration of the last completed VAD speech segment — distinguishes a real
    *  utterance that STT mis-heard from an actual noise blip (call 5490). */
   private _lastVadSegmentMs = 0;
@@ -1817,6 +1825,7 @@ export class OrchestrationPipeline implements VoiceSession {
         new Promise<null>((resolve) => setTimeout(() => resolve(null), evalMs)),
       ])
       : null;
+    if (!this.semanticTurnGate.belongsTo(generation)) return;
     const eou = pred?.verdict ?? "unavailable";
     const resolved = resolveEouCommit({ eou, textLooksIncomplete });
     const action = this.semanticTurnGate.onEou(generation, resolved);
@@ -1870,12 +1879,13 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private becomeTurnEligible(reason: string): void {
     const pendingTurnId = this.semanticTurnGate.turnGeneration;
+    if (!this.semanticTurnGate.isAwaitingFinal()) return;
     this.clearSemanticTurnTimer();
     this.clearEouAudio();
     this.handleSttSpeechEnd(pendingTurnId);
     const held = this._eouHeldFinal;
     this._eouHeldFinal = null;
-    if (held && !this.closed) {
+    if (held && !this.closed && held.turnGeneration === pendingTurnId) {
       this.semanticTurnGate.markCommitted();
       void this.handleStreamingTranscript(held.text, held.emittedAt, held.closeReason);
       return;
@@ -1904,16 +1914,20 @@ export class OrchestrationPipeline implements VoiceSession {
     try {
       this.streamSTT?.flush?.();
     } catch { /* adapter flush is best-effort */ }
-    if (!this.semanticTurnGate.isAwaitingFinal()) return;
+    if (!this.semanticTurnGate.belongsTo(generation) || !this.semanticTurnGate.isAwaitingFinal()) return;
     if (this._eouHeldFinal) {
+      if (this._eouHeldFinal.turnGeneration !== generation) {
+        this._eouHeldFinal = null;
+        return;
+      }
       const held = this._eouHeldFinal;
       this._eouHeldFinal = null;
       this.semanticTurnGate.markCommitted();
       void this.handleStreamingTranscript(held.text, held.emittedAt, held.closeReason);
       return;
     }
-    await this.attemptLostTurnRecovery();
-    if (!this.semanticTurnGate.isAwaitingFinal()) return;
+    await this.attemptLostTurnRecovery(generation);
+    if (!this.semanticTurnGate.belongsTo(generation) || !this.semanticTurnGate.isAwaitingFinal()) return;
     logger.info(
       { callId: this.config.callId, generation, reason },
       "Semantic turn: still no authoritative final — not synthesizing from a partial",
@@ -2023,8 +2037,16 @@ export class OrchestrationPipeline implements VoiceSession {
       });
       this.armVadFlushBackstop();
       if (!this.isPlaying && !this.isSendingTtsAudio) {
+        const prevGen = this.semanticTurnGate.turnGeneration;
         const eouStart = this.semanticTurnGate.onSpeechStart();
+        this._partialThisGeneration = false;
         if (eouStart.cancelEvaluation) this.clearSemanticTurnTimer();
+        if (eouStart.wasAwaitingFinal) {
+          this._dropStaleFinals = true;
+          if (this._eouHeldFinal && this._eouHeldFinal.turnGeneration === prevGen) {
+            this._eouHeldFinal = null;
+          }
+        }
       }
       // Carrier echo of our own TTS often trips Sarvam VAD. Marking calleeSpeaking
       // during agent playback with no transcript evidence gates outbound audio
@@ -2230,7 +2252,7 @@ export class OrchestrationPipeline implements VoiceSession {
    * caller off; the streaming feed itself is untouched (see the DO-NOT-GATE
    * invariant) — this only reads a copy.
    */
-  private async attemptLostTurnRecovery(): Promise<void> {
+  private async attemptLostTurnRecovery(expectedTurnGeneration?: number): Promise<void> {
     if (!LOST_TURN_RECOVERY_ENABLED) return;
     if (this.closed || this.isProcessing || this.isPlaying || this.isSendingTtsAudio) return;
 
@@ -2263,6 +2285,16 @@ export class OrchestrationPipeline implements VoiceSession {
       return;
     }
     if (this.closed || this.isProcessing || this.isPlaying) return;
+    if (
+      expectedTurnGeneration !== undefined
+      && !this.semanticTurnGate.belongsTo(expectedTurnGeneration)
+    ) {
+      logger.info(
+        { callId: this.config.callId, expectedTurnGeneration, live: this.semanticTurnGate.turnGeneration },
+        "Lost-turn recovery discarded — turnGeneration moved during batch STT",
+      );
+      return;
+    }
     if (!text) {
       logger.info({ callId: this.config.callId, audioMs }, "Lost-turn recovery: batch STT returned nothing");
       return;
@@ -2393,9 +2425,12 @@ export class OrchestrationPipeline implements VoiceSession {
         await this.llm.chat(
           history,
           systemPrompt,
-          (t) => { if (!state.aborted) state.tokenSink(t); },
+          (t) => {
+            if (state.aborted || !this.semanticTurnGate.belongsTo(state.pendingTurnId)) return;
+            state.tokenSink(t);
+          },
           (ft, u) => {
-            if (!state.aborted) {
+            if (!state.aborted && this.semanticTurnGate.belongsTo(state.pendingTurnId)) {
               state.storedFullText = ft;
               if (u) state.storedUsage = u;
             }
@@ -2404,7 +2439,9 @@ export class OrchestrationPipeline implements VoiceSession {
           },
           {
             onToolCall: (name, args) => {
-              if (!state.aborted) state.storedToolCall = { name, args };
+              if (!state.aborted && this.semanticTurnGate.belongsTo(state.pendingTurnId)) {
+                state.storedToolCall = { name, args };
+              }
               // Tool-call turns also complete the stream. The call is recorded
               // only — never executed. Reconciliation discards tool-call prefills.
               state.done = true;
@@ -3012,6 +3049,8 @@ export class OrchestrationPipeline implements VoiceSession {
             if (!isFinal) {
             if (!this.isPlaying && text.trim()) {
               this.lastCallerActivityAt = Date.now();
+              this._partialThisGeneration = true;
+              this._dropStaleFinals = false;
               this.safetyNet.onPartial(text);
               this.resetHangupTimer();
               this.maybeLaunchEagerOnPartial(text, metadata ?? undefined);
@@ -3605,6 +3644,21 @@ export class OrchestrationPipeline implements VoiceSession {
     if (
       !this.isPlaying
       && this.agent.semanticTurnDetection
+      && this._dropStaleFinals
+      && !this._partialThisGeneration
+    ) {
+      logger.info(
+        { callId: this.config.callId, fragment: transcript.slice(0, 80), generation: this.semanticTurnGate.turnGeneration },
+        "Semantic turn: dropping delayed transcript.final from abandoned generation",
+      );
+      this._dropStaleFinals = false;
+      this.safetyNet.onFinal();
+      return;
+    }
+
+    if (
+      !this.isPlaying
+      && this.agent.semanticTurnDetection
       && this.semanticTurnGate.isAwaitingFinal()
     ) {
       this.clearSemanticTurnTimer();
@@ -3790,6 +3844,7 @@ export class OrchestrationPipeline implements VoiceSession {
       logger.error({ callId: this.config.callId, err }, "Turn error (streaming STT)");
     } finally {
       this.isProcessing = false;
+      this._processTurnGeneration = null;
       if (!this.speakingSpeakerHandoffChallenge && !this.speakingVoiceLinkAck) {
         this.skipAgentPlaybackForHandoff = false;
       }
@@ -6077,6 +6132,16 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private async playJob(job: TtsSentenceJob): Promise<void> {
     if (this.bargeInRequested) return;
+    if (
+      this._processTurnGeneration !== null
+      && !this.semanticTurnGate.belongsTo(this._processTurnGeneration)
+    ) {
+      logger.info(
+        { callId: this.config.callId, jobGen: this._processTurnGeneration, live: this.semanticTurnGate.turnGeneration },
+        "TTS skipped — turnGeneration moved before playback",
+      );
+      return;
+    }
     // Voice Memory handoff takeover — drop in-flight LLM sentences so the
     // forced "who am I speaking with?" line can own the channel.
     if (this.skipAgentPlaybackForHandoff && !this.speakingSpeakerHandoffChallenge && !this.speakingVoiceLinkAck) return;
@@ -7442,6 +7507,7 @@ export class OrchestrationPipeline implements VoiceSession {
   // ── Core turn logic ───────────────────────────────────────────────────────────
 
   private async processTurn(transcript: string, sttLatencyMs: number): Promise<void> {
+    this._processTurnGeneration = this.semanticTurnGate.turnGeneration;
     this.bargeInRequested = false;
     this.bargeInSpeechFrames = 0;
     // Reset the streaming word counter at this deterministic agent-turn
@@ -7541,6 +7607,16 @@ export class OrchestrationPipeline implements VoiceSession {
       if (delayMs > 0 && !this.bargeInRequested) {
         await new Promise<void>((r) => setTimeout(r, delayMs));
       }
+    }
+    if (
+      this._processTurnGeneration !== null
+      && !this.semanticTurnGate.belongsTo(this._processTurnGeneration)
+    ) {
+      logger.info(
+        { callId: this.config.callId, generation: this._processTurnGeneration },
+        "processTurn aborted — turnGeneration moved before LLM",
+      );
+      return;
     }
 
     this.config.onTranscript("user", transcript);
@@ -9540,6 +9616,7 @@ export class OrchestrationPipeline implements VoiceSession {
       if (!this.closed) this.safetyNet.beginListening();
     } finally {
       this.isProcessing = false;
+      this._processTurnGeneration = null;
       if (!this.speakingSpeakerHandoffChallenge && !this.speakingVoiceLinkAck) {
         this.skipAgentPlaybackForHandoff = false;
       }
