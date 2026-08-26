@@ -603,7 +603,7 @@ function CalendarCard({
                   </Select>
                   <p className="text-[10px] text-muted-foreground leading-tight">
                     {linkedConnectionId
-                      ? <>Calendar events and Meet links both use <strong className="text-foreground">{googleConnections.find(c => c.id === linkedConnectionId)?.email ?? "this account"}</strong></>
+                      ? <>Calendar events, Meet links, and booking mail use <strong className="text-foreground">{googleConnections.find(c => c.id === linkedConnectionId)?.email ?? "this account"}</strong></>
                       : <>No account assigned — using default: <strong className="text-foreground">{googleConnections[0]?.email ?? "first connected account"}</strong></>
                     }
                   </p>

@@ -1550,6 +1550,7 @@ export async function executeNativeReschedule(
     // Seed meetLink from the old booking — the GCal patch preserves the same link,
     // so even if the sync fails below the email still gets the correct Meet URL.
     let meetLink: string | null = existing.meetLink ?? null;
+    let calendarSyncStatus: string | null = null;
     try {
       const oldGcalRow = await db.execute(
         sql`SELECT google_event_id FROM bookings WHERE id = ${bookingId}`,
@@ -1605,6 +1606,7 @@ export async function executeNativeReschedule(
         if (gcalResult) {
           // Never wipe an existing Meet link if GCal omits conference data.
           meetLink = gcalResult.meetLink ?? meetLink ?? existing.meetLink ?? null;
+          calendarSyncStatus = "synced";
           await db.execute(
             sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${confirmedNewBooking.id}`,
           );
@@ -1630,6 +1632,7 @@ export async function executeNativeReschedule(
       notes: confirmedNewBooking.attendeeNotes,
       meetLink,
       oldSlotStart: existing.slotStart,
+      calendarSyncStatus,
     }).catch((err) => logger.error({ callId, bookingId: confirmedNewBooking.id, err }, "Native reschedule: email send failed"));
     dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.rescheduled", {
       booking: {
@@ -1748,6 +1751,7 @@ export async function executeNativeCancel(
         additionalHosts: calendar.additionalHosts,
         bookingId: existing.id,
         notes: existing.attendeeNotes,
+        calendarSyncStatus: existingGoogleEventId ? "synced" : null,
       }).catch((err) => logger.error({ callId, bookingId: existing.id, err }, "Native cancel: email send failed"));
       dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.cancelled", {
         booking: {
