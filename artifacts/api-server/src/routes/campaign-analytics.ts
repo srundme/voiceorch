@@ -144,7 +144,7 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
     interested:  sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} in ('interest_confirmed','booking_created','transfer_completed'))::int`,
     booked:      sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'booking_created')::int`,
     transferred: sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'transfer_completed')::int`,
-    failed:      sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('failed','busy','no_pickup'))::int`,
+    failed:      sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('failed','busy','no_pickup','exhausted'))::int`,
     voicemail:   sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'voicemail')::int`,
     pending:     sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'pending')::int`,
   }).from(campaignLeadsTable)
@@ -219,10 +219,20 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
   const totalCostCents = costDuration?.totalCostCents ?? 0;
   const avgCostPerBooking = booked > 0 ? Math.round(totalCostCents / booked) : null;
 
-  // Conversation intelligence (sentiment / intent / topics) — may be empty until
-  // backfill runs for older campaigns.
-  const { getCampaignIntelligenceStats } = await import("../services/analyze-call-intelligence.js");
-  const intelligence = await getCampaignIntelligenceStats(campaignId);
+  let intelligence = {
+    analysed: 0,
+    pendingAnalysis: 0,
+    sentiment: [] as Array<{ label: string; count: number }>,
+    intents: [] as Array<{ label: string; count: number }>,
+    topTopics: [] as Array<{ label: string; count: number }>,
+    hotLeads: 0,
+  };
+  try {
+    const { getCampaignIntelligenceStats } = await import("../services/analyze-call-intelligence.js");
+    intelligence = await getCampaignIntelligenceStats(campaignId);
+  } catch {
+    // Funnel numbers still return if transcript analysis is unavailable.
+  }
 
   res.json({
     campaignId,

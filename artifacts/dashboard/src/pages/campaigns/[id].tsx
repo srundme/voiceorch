@@ -1330,6 +1330,18 @@ export default function CampaignDetailPage() {
   const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { refetchInterval: 10_000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: analytics } = useGetCampaignAnalytics(campaignId, { query: { refetchInterval: 10_000 } as any });
+  const { data: liveQueueMetrics } = useQuery({
+    queryKey: ["lq-metrics", campaignId],
+    queryFn: () => customFetch<{
+      total: number;
+      queued: number;
+      calling: number;
+      connected: number;
+      nopickup: number;
+      failed: number;
+    }>(`/api/campaigns/${campaignId}/live-queue/metrics`),
+    refetchInterval: 10_000,
+  });
   const isSheetAuto = (campaign as { leadSource?: string } | undefined)?.leadSource === "google_sheets";
   const { data: autoPipelines } = useQuery({
     queryKey: ["automatic-calls"],
@@ -1485,9 +1497,15 @@ export default function CampaignDetailPage() {
     : "";
 
   const fm = campaign?.fieldMappings as Record<string, string> | undefined;
-  const imported    = analytics?.imported    ?? campaign?.totalLeads  ?? 0;
-  const called      = analytics?.called      ?? campaign?.calledLeads ?? 0;
-  const failed      = analytics?.failed      ?? 0;
+  const liveTotal = liveQueueMetrics?.total ?? 0;
+  const liveNoPickup = liveQueueMetrics?.nopickup ?? 0;
+  const liveExhausted = liveQueueMetrics?.failed ?? 0;
+  const liveQueued = liveQueueMetrics?.queued ?? 0;
+  const imported = (analytics?.imported ?? campaign?.totalLeads ?? 0) || liveTotal;
+  const called =
+    (analytics?.called ?? campaign?.calledLeads ?? 0)
+    || Math.max(0, liveTotal - liveQueued);
+  const failed = Math.max(analytics?.failed ?? 0, liveNoPickup + liveExhausted);
   const hasCsvSource = batches?.some(b => b.leadSource === "csv") ?? false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isContinuous = ["webhook", "meta_ads", "crm", "google_sheets"].includes((campaign as any)?.leadSource ?? "");
@@ -1544,6 +1562,10 @@ export default function CampaignDetailPage() {
       ? "Tracking..."
       : "0%";
 
+  const connectedCalls  = analytics?.connected ?? liveQueueMetrics?.connected ?? 0;
+  const successRatePct  = analytics?.successRate ?? 0;
+  const leadsRemaining  = Math.max(imported - called, 0);
+
   // Campaign health: derived purely from already-fetched batch/analytics data.
   const failureRate = called > 0 ? failed / called : 0;
   const campaignHealth: { label: string; accent: string; dotCls: string; icon: React.ReactNode } = (() => {
@@ -1554,27 +1576,20 @@ export default function CampaignDetailPage() {
       }
       return { label: "Not started", accent: "text-muted-foreground", dotCls: "bg-muted-foreground/40", icon: <Info className="h-3.5 w-3.5" /> };
     }
-    // Fully completed (everything processed) → healthy.
     if (imported > 0 && called >= imported) {
+      if (connectedCalls === 0 && failed > 0) {
+        return { label: "Dialled — no answers", accent: "text-amber-500", dotCls: "bg-amber-500", icon: <AlertCircle className="h-3.5 w-3.5" /> };
+      }
       return { label: "Healthy", accent: "text-emerald-500", dotCls: "bg-emerald-500", icon: <CheckCircle2 className="h-3.5 w-3.5" /> };
     }
-    // Unfinished work but nothing running → stalled.
     if (imported > called && activeBatches === 0) {
       return { label: "Stalled", accent: "text-red-500", dotCls: "bg-red-500", icon: <AlertCircle className="h-3.5 w-3.5" /> };
     }
-    // Something running but high failure rate or mixed stopped batches → needs attention.
     if (activeBatches > 0 && (failureRate >= 0.3 || stoppedBatches > 0)) {
       return { label: "Needs Attention", accent: "text-amber-500", dotCls: "bg-amber-500", icon: <AlertCircle className="h-3.5 w-3.5" /> };
     }
-    // Otherwise running cleanly.
     return { label: "Healthy", accent: "text-emerald-500", dotCls: "bg-emerald-500", icon: <CheckCircle2 className="h-3.5 w-3.5" /> };
   })();
-
-  // Outcome metrics sourced directly from the analytics endpoint — these are
-  // what a user actually acts on (vs administrative batch bookkeeping).
-  const connectedCalls  = analytics?.connected ?? 0;
-  const successRatePct  = analytics?.successRate ?? 0;
-  const leadsRemaining  = Math.max(imported - called, 0);
 
   async function handleDeleteBatch() {
     if (!deletingBatch) return;
@@ -1795,7 +1810,9 @@ export default function CampaignDetailPage() {
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-foreground">Automatic Calls from Google Sheets</p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Overview fills after sheet rows are queued and dialled. Stopping the pipeline does not mean calls ran — open Live Queue or the pipeline activity for the real row list.
+                  {liveTotal > 0
+                    ? "Sheet rows that were queued show in Live Queue and in the numbers below. Sentiment needs a real conversation (someone picked up)."
+                    : "Overview fills after sheet rows are queued and dialled. Stopping the pipeline does not mean calls ran — open Live Queue or the pipeline activity for the real row list."}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -1884,8 +1901,9 @@ export default function CampaignDetailPage() {
 
                 {analysed === 0 && pending === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    No completed calls with transcripts yet. Sentiment and intent show up here after calls finish
-                    {isSheetAuto ? " — sheet dials appear in Live Queue, not in Daily Batches until rows are enqueued." : ". Use Analyse when pending calls appear."}
+                    {liveNoPickup > 0 && analysed === 0
+                      ? "No pickup / no-answer dials have no transcript, so sentiment stays empty. Open Live Queue for those rows."
+                      : `No completed calls with transcripts yet. Sentiment and intent show up here after a caller actually talks${isSheetAuto ? "." : ". Use Analyse when pending calls appear."}`}
                   </p>
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -2323,6 +2341,18 @@ export default function CampaignDetailPage() {
             {batchLoading ? (
               <div className="grid grid-cols-1 gap-3">
                 {[1, 2].map(i => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}
+              </div>
+            ) : !batches?.length && liveTotal > 0 ? (
+              <div className="py-8 text-center border border-dashed border-border rounded-xl">
+                <Radio className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground/50">{liveTotal} lead{liveTotal === 1 ? "" : "s"} in Live Queue</p>
+                <p className="text-xs text-muted-foreground/30 mt-0.5 mb-3">
+                  Dials ran without a daily batch card. Open Live Queue for names, status, and cost.
+                </p>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                  onClick={() => setActiveTab("live-queue")}>
+                  Open Live Queue
+                </Button>
               </div>
             ) : !batches?.length ? (
               <div className="py-10 text-center border border-dashed border-border rounded-xl">
