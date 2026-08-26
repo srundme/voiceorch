@@ -11,10 +11,11 @@ import {
   usageEventsTable,
   platformSettingsTable,
 } from "@workspace/db";
-import { and, desc, eq, gte, sql, count, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, sql, count, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { logger } from "../lib/logger.js";
 import { getAllSessions } from "../orchestration/session.js";
+import { executionIdSearchPattern, parseCallLookup } from "../services/admin-call-lookup.js";
 
 const router = Router();
 router.use("/admin/voice", requireAdmin);
@@ -153,14 +154,76 @@ router.get("/admin/voice/live", async (_req, res): Promise<void> => {
   }
 });
 
+// ─── Call search (execution id or numeric call id) ────────────────────────────
+
+router.get("/admin/voice/call-search", async (req, res): Promise<void> => {
+  try {
+    const lookup = parseCallLookup(String(req.query["q"] ?? ""));
+    if (!lookup) {
+      res.json({ query: String(req.query["q"] ?? ""), count: 0, calls: [] });
+      return;
+    }
+
+    const rows = await db
+      .select({
+        id: callsTable.id,
+        executionId: callsTable.executionId,
+        status: callsTable.status,
+        userId: callsTable.userId,
+        agentId: callsTable.agentId,
+        toNumber: callsTable.toNumber,
+        durationSeconds: callsTable.durationSeconds,
+        costCents: callsTable.costCents,
+        errorMessage: callsTable.errorMessage,
+        createdAt: callsTable.createdAt,
+        agentName: agentsTable.name,
+        userEmail: usersTable.email,
+        userName: usersTable.name,
+      })
+      .from(callsTable)
+      .leftJoin(agentsTable, eq(callsTable.agentId, agentsTable.id))
+      .leftJoin(usersTable, eq(callsTable.userId, usersTable.clerkId))
+      .where(
+        lookup.kind === "id"
+          ? eq(callsTable.id, lookup.id)
+          : ilike(callsTable.executionId, executionIdSearchPattern(lookup.executionId)),
+      )
+      .orderBy(desc(callsTable.createdAt))
+      .limit(25);
+
+    res.json({ query: String(req.query["q"] ?? ""), count: rows.length, calls: rows });
+  } catch (err) {
+    logger.error({ err }, "voice/call-search failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ─── Call 360 ────────────────────────────────────────────────────────────────
 
 router.get("/admin/voice/calls/:callId", async (req, res): Promise<void> => {
   try {
-    const callId = Number(req.params.callId);
-    if (!Number.isFinite(callId)) {
+    // Operators reach this page from an execution id far more often than a row id.
+    const lookup = parseCallLookup(req.params.callId);
+    if (!lookup) {
       res.status(400).json({ error: "Invalid call id" });
       return;
+    }
+
+    let callId: number;
+    if (lookup.kind === "id") {
+      callId = lookup.id;
+    } else {
+      const [match] = await db
+        .select({ id: callsTable.id })
+        .from(callsTable)
+        .where(ilike(callsTable.executionId, executionIdSearchPattern(lookup.executionId)))
+        .orderBy(desc(callsTable.createdAt))
+        .limit(1);
+      if (!match) {
+        res.status(404).json({ error: "Call not found" });
+        return;
+      }
+      callId = match.id;
     }
 
     const [row] = await db
