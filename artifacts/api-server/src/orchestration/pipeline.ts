@@ -12,6 +12,11 @@ import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, b
 import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
 import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isSpeculativeHit } from "./eager-stt.js";
+import {
+  SemanticTurnGate,
+  resolveEouCommit,
+} from "./semantic-turn-gate.js";
+import { predictSmartTurn } from "./smart-turn.js";
 import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
@@ -948,6 +953,12 @@ export class OrchestrationPipeline implements VoiceSession {
   private _lastVadFlushAt = 0;
   /** VAD speech_start wall-clock, 0 when not mid-segment. */
   private _vadSpeechStartAt = 0;
+  /** Smart Turn v3 gate — VAD proposes a pause; this decides if the thought is done. */
+  private readonly semanticTurnGate = new SemanticTurnGate();
+  private _eouAudio: Buffer[] = [];
+  private _eouBytes = 0;
+  private _eouTimer: ReturnType<typeof setTimeout> | null = null;
+  private _eouHeldFinal: { text: string; emittedAt: number; closeReason: TurnCloseReason } | null = null;
   /** Duration of the last completed VAD speech segment — distinguishes a real
    *  utterance that STT mis-heard from an actual noise blip (call 5490). */
   private _lastVadSegmentMs = 0;
@@ -1706,20 +1717,153 @@ export class OrchestrationPipeline implements VoiceSession {
       if (this.eagerPartialText !== partial) return;
       if (!isEagerCommitReady(partial)) return;
       if (this.isPlaying || this.isProcessing || this.closed || this._specLlmState) return;
+      if (this.semanticTurnBlocksPrefill()) return;
       this.launchEagerLlmFromPartial(partial, "stable_partial");
     }, EAGER_PARTIAL_STABLE_MS);
   }
 
-  /** Sarvam VAD speech_end — launch speculative LLM before coalesced final arrives. */
+  /**
+   * Prefill the LLM after conversational end-of-turn is decided.
+   * Tokens are buffered only — TTS stays in processTurn after transcript.final
+   * is validated (spec hit vs miss). VAD speech_end must never call this
+   * while Smart Turn is still deciding.
+   */
   private handleSttSpeechEnd(): void {
     if (this.closed || this.isPlaying || this.isSendingTtsAudio || this.isProcessing) return;
+    if (this.semanticTurnBlocksPrefill()) return;
     if (this._specLlmState) return;
-    // Turn 1 allowed (see scheduleEagerLlm).
     const text = this.streamSTT?.getPendingTranscript?.()?.trim() ?? this.eagerPartialText.trim();
     if (!text) return;
     this.clearEagerPartialTimer();
     if (!isEagerCommitReady(text, { speechEnd: true })) return;
-    this.launchEagerLlmFromPartial(text, "speech_end");
+    this.launchEagerLlmFromPartial(text, "eou_commit");
+  }
+
+  /** VAD ≠ turn complete: do not prefetch LLM while Smart Turn is deciding / holding. */
+  private semanticTurnBlocksPrefill(): boolean {
+    return this.agent.semanticTurnDetection && this.semanticTurnGate.shouldBlockFinal();
+  }
+
+  private abortSpeculativeLlm(reason: string): void {
+    this.clearEagerPartialTimer();
+    if (!this._specLlmState || this.isProcessing) return;
+    this._specLlmState.aborted = true;
+    this._specLlmState = null;
+    this.logExec("LLM", "system", {
+      status: "info",
+      turnNumber: this._activeTurnIndex,
+      metadata: { event: "Eager LLM Cancelled", reason },
+    });
+    logger.info({ callId: this.config.callId, reason }, "Eager LLM cancelled");
+  }
+
+  private clearSemanticTurnTimer(): void {
+    if (this._eouTimer) {
+      clearTimeout(this._eouTimer);
+      this._eouTimer = null;
+    }
+  }
+
+  private captureEouAudio(pcm16k: Buffer): void {
+    if (!this.agent.semanticTurnDetection) return;
+    if (this.isPlaying || this.isSendingTtsAudio || Date.now() < this.bargeInHoldUntil) return;
+    const maxBytes = 16000 * 2 * 8;
+    this._eouAudio.push(pcm16k);
+    this._eouBytes += pcm16k.length;
+    while (this._eouBytes > maxBytes && this._eouAudio.length > 1) {
+      this._eouBytes -= this._eouAudio.shift()!.length;
+    }
+  }
+
+  private clearEouAudio(): void {
+    this._eouAudio = [];
+    this._eouBytes = 0;
+  }
+
+  private stashSemanticTurnFinal(transcript: string, emittedAt: number, closeReason: TurnCloseReason): void {
+    if (this._eouHeldFinal) {
+      transcript = `${this._eouHeldFinal.text} ${transcript}`.trim();
+    }
+    this._eouHeldFinal = { text: transcript, emittedAt, closeReason };
+    logger.info(
+      { callId: this.config.callId, fragment: transcript.slice(0, 80), phase: this.semanticTurnGate.phase },
+      "Semantic turn: holding STT final until end-of-turn commit",
+    );
+  }
+
+  /** VAD said quiet — ask Smart Turn (plus a transcript veto) before starting the LLM. */
+  private async evaluateSemanticTurn(): Promise<void> {
+    if (this.closed || this.isPlaying || this.isSendingTtsAudio || this.isProcessing) return;
+    const { generation } = this.semanticTurnGate.onSpeechEnd();
+    const pending = this.streamSTT?.getPendingTranscript?.()?.trim()
+      ?? this._eouHeldFinal?.text.trim()
+      ?? this.eagerPartialText.trim();
+    const textLooksIncomplete = shouldHoldFragmentForCoalesce(pending, {
+      expectedLang: this.currentLang || this.agent.sttConfig.language,
+    });
+    const pcm = this._eouBytes > 0 ? Buffer.concat(this._eouAudio) : Buffer.alloc(0);
+    const pred = pcm.length > 0 ? await predictSmartTurn(pcm) : null;
+    const eou = pred?.verdict ?? "unavailable";
+    const resolved = resolveEouCommit({ eou, textLooksIncomplete });
+    const action = this.semanticTurnGate.onEou(generation, resolved);
+    if (action === "ignore") return;
+    logger.info(
+      {
+        callId: this.config.callId,
+        action,
+        reason: resolved.reason,
+        eou,
+        probability: pred?.probability,
+        textLooksIncomplete,
+        audioMs: Math.round((pcm.length / 2 / 16000) * 1000),
+      },
+      "Semantic turn: end-of-turn decision",
+    );
+    this.logExec("STT", "system", {
+      status: "info",
+      turnNumber: this._activeTurnIndex,
+      metadata: {
+        event: action === "hold" ? "Semantic Turn Hold" : "Semantic Turn Commit",
+        reason: resolved.reason,
+        eou,
+        probability: pred?.probability,
+      },
+    });
+    if (action === "hold") {
+      // Incomplete only: complete turns never sit in this 1.2s window.
+      // Caller resume cancels the timer via onSpeechStart; timeout is the cap.
+      this.abortSpeculativeLlm("semantic_turn_hold");
+      this.clearSemanticTurnTimer();
+      const gen = generation;
+      this._eouTimer = setTimeout(() => {
+        this._eouTimer = null;
+        if (this.semanticTurnGate.onStopTimeout(gen) !== "commit") return;
+        logger.info(
+          { callId: this.config.callId, stopMs: this.agent.semanticTurnStopMs },
+          "Semantic turn: incomplete continuation window elapsed — commit",
+        );
+        this.commitSemanticTurn();
+      }, this.agent.semanticTurnStopMs);
+      return;
+    }
+    this.commitSemanticTurn();
+  }
+
+  /**
+   * Conversational turn is complete. Prefill LLM from the pending partial
+   * (no TTS). If transcript.final is already held, processTurn validates it
+   * and is the first place audio is synthesized.
+   */
+  private commitSemanticTurn(): void {
+    this.clearSemanticTurnTimer();
+    this.clearEouAudio();
+    this.semanticTurnGate.reset();
+    this.handleSttSpeechEnd();
+    const held = this._eouHeldFinal;
+    this._eouHeldFinal = null;
+    if (held && !this.closed) {
+      void this.handleStreamingTranscript(held.text, held.emittedAt, held.closeReason);
+    }
   }
 
   /** Bolna TurnResumed analogue — caller resumed before final; discard speculative work. */
@@ -1737,20 +1881,12 @@ export class OrchestrationPipeline implements VoiceSession {
       );
       return;
     }
-    if (this._specLlmState && !this.isProcessing) {
-      this._specLlmState.aborted = true;
-      this._specLlmState = null;
-      this.logExec("LLM", "system", {
-        status: "info",
-        turnNumber: this._activeTurnIndex,
-        metadata: { event: "Eager LLM Cancelled", reason: "speech_resumed" },
-      });
-      logger.info({ callId: this.config.callId }, "Eager LLM cancelled — caller resumed speaking");
-    }
+    this.abortSpeculativeLlm("speech_resumed");
   }
 
   private maybeLaunchEagerOnPartial(text: string, metadata?: SttFinalMetadata): void {
     if (!text.trim() || this.isPlaying || this.isProcessing || this.closed || this._specLlmState) return;
+    if (this.semanticTurnBlocksPrefill()) return;
     if (!this.conversationHistory.some((t) => t.role === "assistant")) return;
     const speechEnd = metadata?.speechEndReceived === true;
     if (speechEnd && isEagerCommitReady(text, { speechEnd: true })) {
@@ -1813,6 +1949,15 @@ export class OrchestrationPipeline implements VoiceSession {
         turnNumber: this._activeTurnIndex,
         metadata: { event: "VAD Speech End", segmentMs: this._lastVadSegmentMs || null },
       });
+      if (
+        this.agent.semanticTurnDetection
+        && !this.isPlaying
+        && !this.isSendingTtsAudio
+        && !this.isProcessing
+      ) {
+        void this.evaluateSemanticTurn();
+        return;
+      }
       this.handleSttSpeechEnd();
     };
     this.streamSTT.onSpeechStart = () => {
@@ -1823,6 +1968,10 @@ export class OrchestrationPipeline implements VoiceSession {
         metadata: { event: "VAD Speech Start" },
       });
       this.armVadFlushBackstop();
+      if (!this.isPlaying && !this.isSendingTtsAudio) {
+        const eouStart = this.semanticTurnGate.onSpeechStart();
+        if (eouStart.cancelEvaluation) this.clearSemanticTurnTimer();
+      }
       // Carrier echo of our own TTS often trips Sarvam VAD. Marking calleeSpeaking
       // during agent playback with no transcript evidence gates outbound audio
       // (WAIT) and aborts drain mid-sentence with a fake "Playback Completed"
@@ -3388,6 +3537,18 @@ export class OrchestrationPipeline implements VoiceSession {
       }
     }
 
+    if (
+      !this.isPlaying
+      && this.agent.semanticTurnDetection
+      && this.semanticTurnGate.shouldBlockFinal()
+    ) {
+      this.stashSemanticTurnFinal(transcript, sttEmittedAt, closeReason);
+      this.safetyNet.onFinal();
+      this.clearEagerPartialTimer();
+      if (!this.closed) this.safetyNet.beginListening();
+      return;
+    }
+
     const coalesceLang = this.currentLang || this.agent.sttConfig.language;
     if (
       closeReason !== "coalesced_fragment"
@@ -4189,6 +4350,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // Keep a copy for lost-turn recovery. Buffer the exact frames handed to the
       // socket so a replay through batch STT matches the configured sample rate.
       this.captureRecoveryAudio(sttFrame);
+      this.captureEouAudio(effectivePcm16k);
       this.streamSTT.sendAudio(sttFrame);
       return;
     }
@@ -10417,6 +10579,10 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     this.safetyNet?.clear();
     this.clearFragmentCoalesce();
+    this.clearSemanticTurnTimer();
+    this.clearEouAudio();
+    this.semanticTurnGate.reset();
+    this._eouHeldFinal = null;
     this.clearEagerPartialTimer();
     if (this._specLlmState) {
       this._specLlmState.aborted = true;

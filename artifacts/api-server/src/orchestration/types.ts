@@ -478,6 +478,13 @@ export interface AgentConfig {
    */
   sarvamVadThreshold: number | null;
   /**
+   * After Sarvam VAD silence, run an audio end-of-turn model (Smart Turn) so
+   * "yeah but…" pauses do not start the LLM. Default on. SEMANTIC_TURN=0 disables.
+   */
+  semanticTurnDetection: boolean;
+  /** Max extra silence after an incomplete EOU before we answer anyway. */
+  semanticTurnStopMs: number;
+  /**
    * When true, skip per-turn pgvector retrieval entirely — the KB is already baked into
    * the system prompt (see KB_INJECT_MAX_CHARS). Saves ~150-200ms per turn by eliminating
    * the embed+vector-search round-trip before each LLM call. Use when the KB is small/stable

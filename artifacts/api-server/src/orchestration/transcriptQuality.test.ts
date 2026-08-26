@@ -114,6 +114,11 @@ describe("checkTranscriptQuality", () => {
     expect(shouldHoldFragmentForCoalesce("Yes Ma'am", { expectedLang: "en-IN" })).toBe(true);
     expect(shouldHoldFragmentForCoalesce("How are you, Ma'am?", { expectedLang: "en-IN" })).toBe(false);
   });
+
+  it("treats yeah but as an unfinished thought", () => {
+    expect(shouldHoldFragmentForCoalesce("yeah but", { expectedLang: "en-IN" })).toBe(true);
+    expect(shouldHoldFragmentForCoalesce("yeah but...", { expectedLang: "en-IN" })).toBe(true);
+  });
 });
 
 describe("pickClarificationPhrase", () => {
