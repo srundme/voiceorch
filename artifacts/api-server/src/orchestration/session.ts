@@ -11,6 +11,7 @@ import { decryptKey } from "../lib/crypto.js";
 import { eq, and, sql, inArray, or, gt, ne, lte, isNull, desc } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
 import { optionalMs, optionalUnitInterval } from "./stt-tuning.js";
+import { clampSemanticTurnStopMs, resolveSemanticTurnEnabled } from "./semantic-turn-gate.js";
 import type { VoiceSession } from "./voice-session.js";
 import { GeminiLivePipeline } from "./adapters/live/gemini-live-pipeline.js";
 import {
@@ -805,6 +806,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
     sarvamEndOfSpeechSilenceMs: optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]),
     sarvamVadThreshold: optionalUnitInterval(agentCfg["sarvamVadThreshold"]),
+    semanticTurnDetection: resolveSemanticTurnEnabled(agentCfg["semanticTurnDetection"]),
+    semanticTurnStopMs: clampSemanticTurnStopMs(agentCfg["semanticTurnStopMs"]),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
     voiceStack: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined),
     geminiLive: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined) === "gemini_live"

@@ -29,6 +29,7 @@ import {
 import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "../orchestration/mic-sensitivity.js";
 import { FORCE_SOFTWARE_NOISE_GATE_KEY } from "../orchestration/noise-gate.js";
 import { optionalMs, optionalUnitInterval } from "../orchestration/stt-tuning.js";
+import { clampSemanticTurnStopMs, resolveSemanticTurnEnabled } from "../orchestration/semantic-turn-gate.js";
 import { getAttachedSourceIds } from "../orchestration/kb-retrieval.js";
 import type { AgentConfig, AgentTool, SessionTransport } from "../orchestration/types.js";
 import type { VoiceSession } from "../orchestration/voice-session.js";
@@ -296,6 +297,8 @@ async function buildTargetAgentConfig(
     sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
     sarvamEndOfSpeechSilenceMs: optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]),
     sarvamVadThreshold: optionalUnitInterval(agentCfg["sarvamVadThreshold"]),
+    semanticTurnDetection: resolveSemanticTurnEnabled(agentCfg["semanticTurnDetection"]),
+    semanticTurnStopMs: clampSemanticTurnStopMs(agentCfg["semanticTurnStopMs"]),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
     voiceStack,
     geminiLive: voiceStack === "gemini_live"
