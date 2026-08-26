@@ -436,7 +436,7 @@ export default function AutomaticCallsWizardPage() {
                   onChange={(e) => setCreateTitle(e.target.value)}
                 />
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  Creates Leads + Call Log + Instructions with sample rows (Phone, Name, Status, Do Not Call…).
+                  Creates Leads + Call Log + Instructions with sample rows (Phone, Name, Status, Follow-up…).
                 </p>
               </div>
             )}

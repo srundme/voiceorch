@@ -30,8 +30,6 @@ import {
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import {
   parseSheetLeadRow,
-  isDoNotDialValue,
-  resolveDoNotDialHeader,
   isRetryStatus,
   friendlySheetStatus,
   fuzzyDetectColumnMap,
@@ -84,7 +82,6 @@ async function ensureWritebackHeaders(pipeline: SheetAutoCallPipeline): Promise<
       stored.callId || "Call ID",
       stored.recording || "Recording",
       followUpColumnName(stored.nextFollowUp),
-      "Do Not Call",
     ];
     await ensureHeaders(
       pipeline.userId,
@@ -295,20 +292,8 @@ async function enqueueRow(
   campaignId: number,
   sheetRowIndex: number,
   parsed: ReturnType<typeof parseSheetLeadRow>,
-  opts?: { forceRetry?: boolean; doNotDial?: boolean },
+  opts?: { forceRetry?: boolean },
 ): Promise<"enqueued" | "skipped" | "duplicate"> {
-  if (opts?.doNotDial) {
-    await db.insert(sheetAutoCallRowStateTable).values({
-      pipelineId: pipeline.id,
-      sheetRowIndex,
-      phoneNormalized: parsed.phoneNormalized || "",
-      status: "skipped",
-      error: "Do Not Call",
-    }).onConflictDoNothing();
-    await writeLiveSheetStatus(pipeline, sheetRowIndex, "Skipped");
-    return "skipped";
-  }
-
   if (!parsed.phoneNormalized) {
     await db.insert(sheetAutoCallRowStateTable).values({
       pipelineId: pipeline.id,
@@ -431,7 +416,6 @@ export async function processSheetRows(
   const lastRow = rows.length + 1; // 1-based last data row index (= header + length)
   const campaignId = await ensureCampaign(pipeline);
   const columnMap = pipeline.columnMap as SheetAutoColumnMap;
-  const dncHeader = resolveDoNotDialHeader(headers, columnMap);
   const statusHeader =
     (pipeline.sameSheetStatusColumns as SheetAutoStatusColumns | null)?.status ?? "Status";
 
@@ -447,12 +431,8 @@ export async function processSheetRows(
     if (sheetRowIndex <= opts.fromRowExclusive && !forceRetry) continue;
 
     const parsed = parseSheetLeadRow(headers, row, columnMap);
-    const doNotDial = dncHeader
-      ? isDoNotDialValue(cellAtHeader(headers, row, dncHeader))
-      : false;
     const result = await enqueueRow(pipeline, campaignId, sheetRowIndex, parsed, {
       forceRetry,
-      doNotDial,
     });
     if (result === "enqueued") enqueued += 1;
     else skipped += 1;
@@ -721,19 +701,14 @@ export async function previewDialRows(
   const columnMap = opts.columnMap?.phone
     ? opts.columnMap
     : fuzzyDetectColumnMap(grid.headers);
-  const dncHeader = resolveDoNotDialHeader(grid.headers, columnMap);
   const limit = Math.min(Math.max(opts.limit ?? 3, 1), 10);
   const rows = [];
 
   for (let i = 0; i < grid.rows.length && rows.length < limit; i++) {
     const sheetRowIndex = i + 2;
     const parsed = parseSheetLeadRow(grid.headers, grid.rows[i]!, columnMap);
-    const doNotDial = dncHeader
-      ? isDoNotDialValue(cellAtHeader(grid.headers, grid.rows[i]!, dncHeader))
-      : false;
     let skipReason: string | null = null;
-    if (doNotDial) skipReason = "Do Not Call";
-    else if (!parsed.phoneNormalized) skipReason = "Invalid phone";
+    if (!parsed.phoneNormalized) skipReason = "Invalid phone";
     rows.push({
       sheetRowIndex,
       phone: parsed.phoneRaw,
@@ -766,14 +741,9 @@ export async function retrySheetRow(
   const campaignId = await ensureCampaign(pipeline);
   const columnMap = pipeline.columnMap as SheetAutoColumnMap;
   const parsed = parseSheetLeadRow(grid.headers, grid.rows[idx]!, columnMap);
-  const dncHeader = resolveDoNotDialHeader(grid.headers, columnMap);
-  const doNotDial = dncHeader
-    ? isDoNotDialValue(cellAtHeader(grid.headers, grid.rows[idx]!, dncHeader))
-    : false;
 
   const result = await enqueueRow(pipeline, campaignId, sheetRowIndex, parsed, {
     forceRetry: true,
-    doNotDial,
   });
   return { status: result };
 }

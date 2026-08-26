@@ -333,24 +333,23 @@ const TEMPLATES: Record<SheetTemplate, {
     tab: "Leads",
     headers: [
       "Phone", "Name", "Email", "Status", "Last Call At", "Disposition",
-      "Summary", "Call ID", "Recording", "Follow-up", "Do Not Call",
+      "Summary", "Call ID", "Recording", "Follow-up",
     ],
     sampleRows: [
-      ["9876543210", "Sample Lead", "sample@example.com", "", "", "", "", "", "", "", ""],
-      ["9123456780", "Demo Contact", "", "", "", "", "", "", "", "", ""],
+      ["9876543210", "Sample Lead", "sample@example.com", "", "", "", "", "", "", ""],
+      ["9123456780", "Demo Contact", "", "", "", "", "", "", "", ""],
     ],
     instructions: [
       ["SnapServe Automatic Calls — how to use"],
       [""],
       ["1. Keep Phone in column A (required). Name/Email help the agent greet correctly."],
       ["2. Leave Status blank for new leads. SnapServe writes Queued → Calling → Completed / Failed."],
-      ["3. Put yes in Do Not Call to skip a row without deleting it."],
-      ["4. Set Status to Retry to dial that row again."],
-      ["5. Call Log tab gets one append-only row per call attempt."],
-      ["6. Phones work as 9876543210 or +91…; cells with two numbers use the first."],
-      ["7. Disposition Callback / demo follow session → SnapServe fills Follow-up with date, time, and AM/PM. Status stays Completed."],
-      ["8. Inbound calls from a sheet phone update the same lead row (Status / Summary / Disposition)."],
-      ["9. When a meeting or demo is booked, the slot is written to Follow-up (date, time, AM/PM). Status stays Completed."],
+      ["3. Set Status to Retry to dial that row again."],
+      ["4. Call Log tab gets one append-only row per call attempt."],
+      ["5. Phones work as 9876543210 or +91…; cells with two numbers use the first."],
+      ["6. Disposition Callback / demo follow session → SnapServe fills Follow-up with date, time, and AM/PM. Status stays Completed."],
+      ["7. Inbound calls from a sheet phone update the same lead row (Status / Summary / Disposition)."],
+      ["8. When a meeting or demo is booked, the slot is written to Follow-up (date, time, AM/PM). Status stays Completed."],
     ],
     extraTabs: [
       {
