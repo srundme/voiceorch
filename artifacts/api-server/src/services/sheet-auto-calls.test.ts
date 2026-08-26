@@ -80,14 +80,16 @@ describe("sheet disposition / status labels", () => {
     summary: "Call reached a voicemail, not the intended person",
   };
 
-  it("writes the sub label, not taxonomy JSON", () => {
-    expect(formatSheetDisposition(taxonomy)).toBe("Wrong number");
-    expect(formatSheetDisposition(JSON.stringify(taxonomy))).toBe("Wrong number");
+  it("writes SnapServe PRIMARY: sub, not JSON or the summary paragraph", () => {
+    expect(formatSheetDisposition(taxonomy)).toBe("OUTCOME: Wrong number");
+    expect(formatSheetDisposition(JSON.stringify(taxonomy))).toBe("OUTCOME: Wrong number");
     expect(formatSheetDisposition({
       OUTCOME: "Callback confirmed",
       primary: "OUTCOME",
       sub: "Callback confirmed",
-    })).toBe("Callback confirmed");
+      summary: "Callback scheduled for tomorrow morning after the customer asked to resume.",
+    })).toBe("OUTCOME: Callback confirmed");
+    expect(formatSheetDisposition("Call reached a voicemail, not the intended person.")).toBe("");
   });
 
   it("keeps Status as call state and Disposition as the outcome", () => {

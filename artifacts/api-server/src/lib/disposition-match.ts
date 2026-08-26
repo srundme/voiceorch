@@ -44,15 +44,12 @@ export function dispositionMatchesAny(
 
 export function formatDispositionLabel(disp: Record<string, unknown> | null | undefined): string {
   if (!disp) return "";
-  const primary = typeof disp["primary"] === "string" ? disp["primary"] : "";
-  const sub = typeof disp["sub"] === "string" ? disp["sub"] : "";
+  const primary = typeof disp["primary"] === "string" ? disp["primary"].trim() : "";
+  const sub = typeof disp["sub"] === "string" ? disp["sub"].trim() : "";
   if (primary && sub) return `${primary}: ${sub}`;
+  if (sub) return sub;
   if (primary) return primary;
-  try {
-    return JSON.stringify(disp).slice(0, 200);
-  } catch {
-    return "";
-  }
+  return "";
 }
 
 /** Flatten taxonomy into selectable keys: primary + primary:sub. */

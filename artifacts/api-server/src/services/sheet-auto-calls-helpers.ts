@@ -4,6 +4,7 @@
 
 import { extractPhoneCandidates } from "./google-sheets-helpers.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
+import { formatDispositionLabel } from "../lib/disposition-match.js";
 import type { SheetAutoColumnMap } from "@workspace/db";
 
 function headerIndex(headers: string[], name: string | undefined): number {
@@ -143,10 +144,6 @@ export function friendlySheetStatus(raw: string | null | undefined): string {
   return raw!.trim();
 }
 
-const GENERIC_OUTCOME_KEYS = new Set([
-  "outcome", "status", "disposition", "result", "intent", "label", "primary", "sub",
-]);
-
 function parseDispositionObject(disp: unknown): Record<string, unknown> | null {
   if (disp == null) return null;
   if (typeof disp === "string") {
@@ -170,37 +167,20 @@ function shortSheetLabel(raw: string): string {
   const t = raw.trim().replace(/\s+/g, " ");
   if (!t) return "";
   if (t.startsWith("{") || t.startsWith("[")) return "";
-  return t.length > 80 ? `${t.slice(0, 77)}…` : t;
+  // Summary / transcript sentences stay in the Summary column, not Disposition.
+  if (t.length > 80 || /[.!?]/.test(t)) return "";
+  return t;
 }
 
 /**
- * Human label for the Disposition column. Never dumps taxonomy JSON.
- * Prefers `sub` ("Wrong number") over PRIMARY: sub ("OUTCOME: Wrong number").
+ * Same short label SnapServe stores on the lead (`PRIMARY: sub`).
+ * Never writes taxonomy JSON or the summary paragraph.
  */
 export function formatSheetDisposition(disp: unknown): string {
   if (disp == null) return "";
-  if (typeof disp === "string") {
-    const obj = parseDispositionObject(disp);
-    if (obj) return formatSheetDisposition(obj);
-    return shortSheetLabel(disp);
-  }
   const obj = parseDispositionObject(disp);
-  if (!obj) return shortSheetLabel(String(disp));
-
-  const sub = typeof obj["sub"] === "string" ? shortSheetLabel(obj["sub"]) : "";
-  if (sub) return sub;
-
-  for (const k of ["OUTCOME", "outcome", "disposition", "result", "intent", "label", "status"]) {
-    const v = obj[k];
-    if (typeof v !== "string") continue;
-    const label = shortSheetLabel(v);
-    if (!label) continue;
-    if (GENERIC_OUTCOME_KEYS.has(label.toLowerCase())) continue;
-    return label;
-  }
-
-  const primary = typeof obj["primary"] === "string" ? shortSheetLabel(obj["primary"]) : "";
-  if (primary && !GENERIC_OUTCOME_KEYS.has(primary.toLowerCase())) return primary;
+  if (obj) return formatDispositionLabel(obj);
+  if (typeof disp === "string") return shortSheetLabel(disp);
   return "";
 }
 
