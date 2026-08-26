@@ -142,13 +142,20 @@ export const llmPipelinePath: Chapter = {
       filename: "artifacts/api-server/src/orchestration/pipeline.ts",
       language: "typescript",
       intro:
-        "Consuming a speculative prefill. `_spec` is the buffered speculative state; `effectiveLlm` starts as the real adapter and is only replaced on a hit.",
+        "Consuming a speculative prefill. `_spec` is the buffered speculative state; `effectiveLlm` starts as the real adapter and is only replaced when the final transcript hash matches the prefill input.",
       code: `    const _spec = this._specLlmState;
     this._specLlmState = null;
     let effectiveLlm: typeof this.llm = this.llm;
     if (_spec) {
-      const _specLangStale = _spec.langAtLaunch !== this.currentLang;
-      if (!_spec.aborted && !_spec.storedToolCall && !_specLangStale && isSpeculativeHit(_spec.partial, transcript)) {
+      const recon = reconcileSpeculativePrefill({
+        aborted: _spec.aborted,
+        hasToolCall: Boolean(_spec.storedToolCall),
+        langAtLaunch: _spec.langAtLaunch,
+        langNow: this.currentLang,
+        inputHash: _spec.inputHash,
+        finalTranscript: transcript,
+      });
+      if (recon.action === "commit") {
         this._eagerLlmHitThisTurn = true;
         const spec = _spec;
         effectiveLlm = {
@@ -170,25 +177,25 @@ export const llmPipelinePath: Chapter = {
           lines: "1-3",
           label: "grab and consume the prefill",
           explanation:
-            "`_specLlmState` is read then set to null (consumed once). `effectiveLlm` defaults to the real adapter `this.llm` — only a confirmed hit replaces it.",
+            "`_specLlmState` is read then set to null (consumed once). `effectiveLlm` defaults to the real adapter `this.llm` — only a confirmed hash match replaces it.",
         },
         {
-          lines: "5-6",
+          lines: "5-14",
           label: "the hit conditions",
           explanation:
-            "A hit needs ALL of: not aborted, no tool call was speculatively triggered, the language hasn't changed since launch (`_specLangStale`), and `isSpeculativeHit` says the partial matches the final closely enough.",
+            "Prefill commits only when `reconcileSpeculativePrefill` returns hash_match: not aborted, no speculative tool call, language unchanged, and SHA-1 of the normalized final equals `inputHash`. Prefix extensions (\"I want to participate in the…\" vs \"…hackathon\") are a discard — those tokens never reach TTS.",
         },
         {
-          lines: "10-16",
+          lines: "16-25",
           label: "the mock adapter",
           explanation:
-            "A tiny object with only a `chat()` method. Step 1 drains tokens buffered so far. Step 2 redirects the still-running speculative stream's `tokenSink` to the real `onToken`. Step 3 flushes the buffered tokens. Because JS is single-threaded, the splice+redirect is atomic — no token can slip through the gap.",
+            "A tiny object with only a `chat()` method. Step 1 drains tokens buffered so far. Step 2 redirects the still-running speculative stream's `tokenSink` to the real `onToken`. Step 3 flushes the buffered tokens. Because JS is single-threaded, the splice+redirect is atomic — no token can slip through the gap. This redirect is the first moment speculative tokens can reach TTS.",
         },
         {
-          lines: "18-20",
+          lines: "26-28",
           label: "miss → abort",
           explanation:
-            "On a miss (or a stale language, or a speculative tool call), mark the background call aborted and fall through: `effectiveLlm` stays as the real adapter and a normal call runs.",
+            "On transcript_changed, language_switched, speculative_tool_call, or aborted: discard every buffered token. `effectiveLlm` stays the real adapter and processTurn runs on the authoritative final.",
         },
       ],
     },
@@ -197,7 +204,7 @@ export const llmPipelinePath: Chapter = {
       variant: "gotcha",
       title: "A language switch makes a prefill wrong, not just slow",
       body: [
-        "`_specLangStale` exists because the prefill's system prompt was built for the language the caller was using *before*. If the caller switched languages on this final transcript, replaying the prefill answers in the WRONG language (this bit us on call 4814: a Tamil caller got an English turn-1 reply).",
+        "`reconcileSpeculativePrefill` returns `language_switched` when the prefill's system prompt was built for the language the caller was using *before*. If the caller switched languages on this final transcript, replaying the prefill answers in the WRONG language (this bit us on call 4814: a Tamil caller got an English turn-1 reply).",
         "So a language change is always treated as a miss, even if the buffered reply already finished. Correctness beats the latency win.",
       ],
     },

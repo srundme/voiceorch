@@ -288,6 +288,67 @@ export function shouldHoldFragmentForCoalesce(
   return q.reason === "truncated-dangling";
 }
 
+const TAMIL_CONTINUATION_TAIL_RE =
+  /(ஆனால்|ஆனா|வந்து|இருந்து|பண்ண|பண்ணி|போய்|சொல்லி|பார்த்து|கேட்டு|ஒரு)\s*[,.…]*\s*$/u;
+
+const HINDI_CONTINUATION_TAIL_RE =
+  /(लेकिन(\s+मैं)?|क्योंकि|सोच\s+रहा|सोच\s+रही|वाला|वाली|वाले)\s*[,.।…]?\s*$/u;
+
+/**
+ * Semantic continuation veto for the turn gate — not a 3-phrase exact list.
+ * Detects dangling conversational structure ("I want to participate but…",
+ * "Actually I was thinking", "நான் participate பண்ண", "लेकिन मैं").
+ *
+ * Distinct from shouldHoldFragmentForCoalesce: backchannel acks ("yes" / "சரி")
+ * are complete turns here. This is only "the sentence signals they are still talking".
+ */
+export function signalsConversationalContinuation(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) return false;
+  if (COMPLETE_SHORT_NEGATION_RE.test(t) || /\bnot yet\.?$/i.test(t)) return false;
+  if (INDIC_SINGLE_ACK_RE.test(t) || INDIC_ACK_VOCATIVE_RE.test(t)) return false;
+  if (REDUPLICATED_ACK_RE.test(t)) return false;
+  // Pure acks are complete turns for EOU. "yeah but" is not a pure ack.
+  if (isBackchannelOnlyUtterance(t) && !/\bbut\b|ஆனால்|ஆனா|लेकिन|lekin/i.test(t)) {
+    return false;
+  }
+
+  if (/[…]|\.{2,}\s*$/.test(t)) return true;
+
+  if (/^(yes|yeah|yep|yup|no|nope|ok|okay|sure)[,.]?\s+but\b/i.test(t)) return true;
+
+  if (
+    /\b(i was thinking|i was wondering|i was going to|i was about to|i wanted to|i was saying|actually i was|the thing is|wait[,.]? i)\s*[,.…]*\s*$/i.test(t)
+  ) {
+    return true;
+  }
+
+  if (TAMIL_CONTINUATION_TAIL_RE.test(t)) return true;
+  if (HINDI_CONTINUATION_TAIL_RE.test(t)) return true;
+  if (/\b(lekin|kyunki)\b/i.test(t) && !/[?？]$/.test(t) && !/[.?!।]$/.test(t)) return true;
+
+  const hasStrongTerminal = /[.?!।]$/u.test(t) && !/[…]|\.{2,}/.test(t);
+  if (hasStrongTerminal) {
+    return /\b(but|although|though|because)\s*[.?!।]$/i.test(t)
+      || /(ஆனால்|ஆனா|लेकिन)\s*[.?!।]$/u.test(t);
+  }
+
+  if (/\b(but|although|though|because|unless|until|whereas)\s*[,.…]*\s*$/i.test(t)) {
+    return true;
+  }
+
+  const wordCount = t.split(/\s+/).filter(Boolean).length;
+  if (wordCount >= 3 && /\b(the|a|an|to|for|of|with|about|from)\s*[,.…]*\s*$/i.test(t)) {
+    return true;
+  }
+
+  if (TRUNCATION_DANGLER_RE.test(t)) return true;
+  if (wordCount >= 2 && DEVANAGARI_DANGLER_RE.test(t)) return true;
+
+  return false;
+}
+
 /**
  * Heuristic quality check on a raw STT transcript.
  * Catches noise, very short non-meaningful outputs, heavy repetition, and
