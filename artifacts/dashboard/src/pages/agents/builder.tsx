@@ -332,30 +332,45 @@ function BookingSetupStep({
   step,
   title,
   ready,
+  status,
+  headerRight,
   children,
 }: {
   step: number;
   title: string;
   ready: boolean;
+  /** Override Ready / Needs setup (e.g. "Off" when Meet is disabled). */
+  status?: "ready" | "needs" | "off";
+  headerRight?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const resolved = status ?? (ready ? "ready" : "needs");
   return (
     <div className="rounded-lg border border-border bg-background p-3.5">
       <div className="mb-2.5 flex items-center gap-2">
         <span
           className={cn(
             "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
-            ready ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground",
+            resolved === "ready"
+              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+              : resolved === "off"
+                ? "bg-muted text-muted-foreground"
+                : "bg-muted text-muted-foreground",
           )}
         >
-          {ready ? <Check className="h-3 w-3" /> : step}
+          {resolved === "ready" ? <Check className="h-3 w-3" /> : step}
         </span>
         <p className="text-[12.5px] font-semibold text-foreground">{title}</p>
-        {ready ? (
-          <span className="ml-auto text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Ready</span>
-        ) : (
-          <span className="ml-auto text-[10px] font-medium text-amber-600 dark:text-amber-400">Needs setup</span>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          {headerRight}
+          {resolved === "ready" ? (
+            <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Ready</span>
+          ) : resolved === "off" ? (
+            <span className="text-[10px] font-medium text-muted-foreground">Off</span>
+          ) : (
+            <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">Needs setup</span>
+          )}
+        </div>
       </div>
       {children}
     </div>
@@ -2675,6 +2690,10 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const summarizationEnabled = form.watch("summarizationEnabled") ?? false;
   const watchedTools  = (form.watch("tools") ?? []) as any[];
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [meetTogglePending, setMeetTogglePending] = useState(false);
+  /** Local preference when no meeting/event type exists yet on the calendar. */
+  const [meetEnabledFallback, setMeetEnabledFallback] = useState(true);
 
   const { data: calendarsData } = useListCalendars();
   const schedulingCalendarId = form.watch("schedulingCalendarId");
@@ -2689,6 +2708,61 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
     { query: { enabled: !!calendarIdForEt, queryKey: ["agent-event-types", calendarIdForEt ?? null] } }
   );
+
+  const preferredEventType = useMemo(() => {
+    const ets = (agentEventTypes ?? []) as Array<{ id: number; enableGoogleMeet?: boolean }>;
+    if (ets.length === 0) return null;
+    if (schedulingEventTypeId != null) {
+      return ets.find((e) => e.id === schedulingEventTypeId) ?? ets[0] ?? null;
+    }
+    return ets[0] ?? null;
+  }, [agentEventTypes, schedulingEventTypeId]);
+
+  const googleMeetEnabled = preferredEventType
+    ? preferredEventType.enableGoogleMeet !== false
+    : meetEnabledFallback;
+
+  const setGoogleMeetEnabled = async (on: boolean) => {
+    setMeetEnabledFallback(on);
+    const ets = (agentEventTypes ?? []) as Array<{ id: number }>;
+    if (ets.length === 0) {
+      toast({
+        title: on ? "Google Meet on" : "Google Meet off",
+        description: on
+          ? "Meet links will be added once a meeting exists on this calendar."
+          : "Bookings won’t include Meet links until you turn this back on.",
+      });
+      return;
+    }
+    setMeetTogglePending(true);
+    try {
+      await Promise.all(
+        ets.map((et) =>
+          customFetch(`${DASH_API}/scheduling/event-types/${et.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enableGoogleMeet: on }),
+          }),
+        ),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["agent-event-types", calendarIdForEt ?? null] });
+      toast({
+        title: on ? "Google Meet enabled" : "Google Meet disabled",
+        description: on
+          ? "New bookings will include a Meet link on the Google invite."
+          : "New bookings stay on the calendar without a Meet link.",
+      });
+    } catch (err: any) {
+      setMeetEnabledFallback(!on);
+      toast({
+        title: "Couldn’t update Meet setting",
+        description: err?.message ?? String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setMeetTogglePending(false);
+    }
+  };
 
   // ── Issue 1: Auto-link calendar when none is set ──────────────────────────
   // When the agent has no calendar linked yet, find a calendar whose name
@@ -3033,32 +3107,56 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 </div>
               </BookingSetupStep>
 
-              <BookingSetupStep step={2} title="Google Meet conferencing" ready={googleReady}>
-                <p className="mb-2 text-[11.5px] leading-relaxed text-muted-foreground">
-                  Bookings create a <span className="font-medium text-foreground">new Meet link</span> on the Google invite. Connect the Google account used for calendar + conferencing.
-                </p>
-                {googleReady ? (
-                  <p className="mb-2 text-[12px] text-foreground">
-                    Linked: <span className="font-medium">{googleEmail}</span>
-                  </p>
-                ) : (
-                  <p className="mb-2 text-[12px] text-amber-700 dark:text-amber-400">
-                    Google is not linked. Slots can still book, but Meet links will be missing.
-                  </p>
+              <BookingSetupStep
+                step={2}
+                title="Google Meet conferencing"
+                ready={googleMeetEnabled && googleReady}
+                status={googleMeetEnabled ? (googleReady ? "ready" : "needs") : "off"}
+                headerRight={(
+                  <Switch
+                    checked={googleMeetEnabled}
+                    disabled={meetTogglePending}
+                    onCheckedChange={(on) => { void setGoogleMeetEnabled(on); }}
+                  />
                 )}
-                <div className="flex flex-wrap gap-2">
-                  <Button asChild type="button" size="sm" className="h-8 text-[11px] gap-1.5">
-                    <Link href={calendarSetupHref}>
-                      {googleReady ? "Reconnect Google" : "Connect Google Calendar"}
-                    </Link>
-                  </Button>
-                  <Button asChild type="button" size="sm" variant="outline" className="h-8 text-[11px] gap-1.5">
-                    <Link href={conferencingHref}>
-                      Conferencing
-                      <Video className="h-3 w-3" />
-                    </Link>
-                  </Button>
-                </div>
+              >
+                <p className="mb-2 text-[11.5px] leading-relaxed text-muted-foreground">
+                  {googleMeetEnabled ? (
+                    <>
+                      Bookings create a <span className="font-medium text-foreground">new Meet link</span> on the Google invite. Connect the Google account used for calendar + conferencing.
+                    </>
+                  ) : (
+                    <>
+                      Meet links are off. Bookings can still use the calendar — turn this on to add a Meet link to each invite.
+                    </>
+                  )}
+                </p>
+                {googleMeetEnabled && (
+                  <>
+                    {googleReady ? (
+                      <p className="mb-2 text-[12px] text-foreground">
+                        Linked: <span className="font-medium">{googleEmail}</span>
+                      </p>
+                    ) : (
+                      <p className="mb-2 text-[12px] text-amber-700 dark:text-amber-400">
+                        Google is not linked. Slots can still book, but Meet links will be missing.
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <Button asChild type="button" size="sm" className="h-8 text-[11px] gap-1.5">
+                        <Link href={calendarSetupHref}>
+                          {googleReady ? "Reconnect Google" : "Connect Google Calendar"}
+                        </Link>
+                      </Button>
+                      <Button asChild type="button" size="sm" variant="outline" className="h-8 text-[11px] gap-1.5">
+                        <Link href={conferencingHref}>
+                          Conferencing
+                          <Video className="h-3 w-3" />
+                        </Link>
+                      </Button>
+                    </div>
+                  </>
+                )}
               </BookingSetupStep>
 
               <BookingSetupStep step={3} title="AI joins the Meet (optional)" ready={canAttendMeetings}>

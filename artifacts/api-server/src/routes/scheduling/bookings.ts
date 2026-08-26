@@ -175,7 +175,7 @@ router.post("/scheduling/bookings", requireAuth, clientContext, async (req, res)
     return;
   }
 
-  // Create Google Calendar event with Meet link
+  // Create Google Calendar event (Meet link only when enableGoogleMeet is on)
   let meetLink: string | null = null;
   let googleEventId: string | null = null;
   let gcalConnectionId: string | null = null;
@@ -183,13 +183,6 @@ router.post("/scheduling/bookings", requireAuth, clientContext, async (req, res)
   let calendarSyncStatus: string | null = null;
   let calendarSyncError: string | null = null;
 
-  if (!eventType.enableGoogleMeet) {
-    // Google Meet not enabled on this event type — skip GCal entirely
-    calendarSyncStatus = "skipped";
-    await db.update(bookingsTable)
-      .set({ calendarSyncStatus: "skipped" })
-      .where(eq(bookingsTable.id, booking.id));
-  } else {
   try {
     // Resolve which Google connection to use: calendar-specific mapping, or fall back to first user connection
     const calRow = await db.execute(
@@ -209,7 +202,7 @@ router.post("/scheduling/bookings", requireAuth, clientContext, async (req, res)
       );
     } else {
       req.log.info(
-        { calendarId: calendar.id, calendarConnectionId, connectionId: gcalConnectionId, bookingId: booking.id },
+        { calendarId: calendar.id, calendarConnectionId, connectionId: gcalConnectionId, bookingId: booking.id, createMeetLink: !!eventType.enableGoogleMeet },
         "Attempting Google Calendar event creation",
       );
     }
@@ -227,6 +220,7 @@ router.post("/scheduling/bookings", requireAuth, clientContext, async (req, res)
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
+      createMeetLink: !!eventType.enableGoogleMeet,
       onError: (detail) => { gcalErrCode = detail.errorCode; gcalErrMsg = detail.message ?? null; },
     }) : null;
     if (gcalConnectionId && !gcalResult) {
@@ -264,7 +258,6 @@ router.post("/scheduling/bookings", requireAuth, clientContext, async (req, res)
       "Google Calendar event creation failed",
     );
   }
-  } // end if (eventType.enableGoogleMeet)
 
   // Only downgrade to pending on GCal failure for manual-confirmation event types.
   // Instant (auto-confirm) events stay confirmed — GCal is supplementary.
