@@ -2,6 +2,18 @@
 export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 
 /**
+ * Connections created before the Gmail scope was added keep their old grant, so
+ * a send attempt would fail with 403. Read the stored grant instead of trying.
+ */
+export function hasGmailSendScope(grantedScopes: string | null | undefined): boolean {
+  if (!grantedScopes) return false;
+  return grantedScopes
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .includes(GMAIL_SEND_SCOPE);
+}
+
+/**
  * RFC 2822 message for Gmail API `users.messages.send` `raw` (base64url).
  * From is always the connected Google account — never platform GMAIL_USER.
  */

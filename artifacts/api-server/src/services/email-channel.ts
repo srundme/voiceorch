@@ -21,6 +21,10 @@ import { encryptKey, decryptKey } from "../lib/crypto.js";
 import { logger } from "../lib/logger.js";
 import { interpolateTemplate, type TemplateContext } from "./template-vars.js";
 import { compileEmailDesign, defaultEmailDesign } from "./email-design.js";
+import {
+  getGoogleMailConnectionForUser,
+  sendMailFromGoogleConnection,
+} from "./scheduling/google-calendar.js";
 
 const MANAGED_FROM = { fromName: "SnapServe", fromEmail: "noreply@snapserve.ai", name: "SnapServe", email: "noreply@snapserve.ai" };
 
@@ -549,6 +553,8 @@ export interface SendChannelEmailResult {
   /** Address the message was actually sent from. */
   fromEmail?: string;
   mode?: EmailChannelMode;
+  /** Which transport carried the message — useful when debugging the From address. */
+  transport?: "google" | "brevo";
 }
 
 export async function sendChannelEmail(opts: SendChannelEmailOpts): Promise<SendChannelEmailResult> {
@@ -605,6 +611,39 @@ export async function sendChannelEmail(opts: SendChannelEmailOpts): Promise<Send
   }).returning();
 
   try {
+    // Managed mode has no verified sender of the customer's own, so mail used to
+    // leave as noreply@snapserve.ai. When they connected Google we send as that
+    // address instead, and only fall back to Brevo if Gmail refuses.
+    if (channel.mode === "managed") {
+      const googleConn = await getGoogleMailConnectionForUser(opts.userId);
+      if (googleConn) {
+        const sentAsUser = await sendMailFromGoogleConnection(googleConn.id, { to, subject, html });
+        if (sentAsUser) {
+          await db.update(emailMessagesTable).set({ status: "sent" }).where(eq(emailMessagesTable.id, msg!.id));
+          await db.update(emailChannelsTable).set({
+            lastSentAt: new Date(),
+            lastError: null,
+          }).where(eq(emailChannelsTable.id, channel.id));
+          logger.info(
+            { userId: opts.userId, to, mode: channel.mode, fromEmail: googleConn.email, transport: "google" },
+            "email-channel: sent as connected Google account",
+          );
+          return {
+            ok: true,
+            messageId: msg!.id,
+            providerMessageId: null,
+            fromEmail: googleConn.email,
+            mode: channel.mode,
+            transport: "google",
+          };
+        }
+        logger.warn(
+          { userId: opts.userId, to, fromEmail: googleConn.email },
+          "email-channel: Gmail send failed — falling back to Brevo",
+        );
+      }
+    }
+
     const from = await resolveFrom(channel, {
       fromIdentityId: opts.fromIdentityId,
       template: stored,
@@ -657,6 +696,7 @@ export async function sendChannelEmail(opts: SendChannelEmailOpts): Promise<Send
       providerMessageId,
       fromEmail: from.fromEmail,
       mode: channel.mode,
+      transport: "brevo",
     };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);

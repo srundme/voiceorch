@@ -18,7 +18,7 @@ import { logger } from "../../lib/logger.js";
 import { encryptKey, decryptKey } from "../../lib/crypto.js";
 import { getSelfBaseUrl } from "../../lib/app-domain.js";
 import { APP_SECRET } from "../../lib/app-secret.js";
-import { encodeGmailRawMessage, GMAIL_SEND_SCOPE } from "./gmail-raw.js";
+import { encodeGmailRawMessage, GMAIL_SEND_SCOPE, hasGmailSendScope } from "./gmail-raw.js";
 
 // ── OAuth state signing ──────────────────────────────────────────────────────
 //
@@ -105,7 +105,7 @@ export function verifyOAuthState(raw: string | undefined): OAuthStatePayload | n
 // calendar.events alone returns 403 ACCESS_TOKEN_SCOPE_INSUFFICIENT when creating
 // events with Meet links. The full `calendar` scope is a superset — it covers events,
 // Meet creation, and calendar listing.
-export { encodeGmailRawMessage, GMAIL_SEND_SCOPE } from "./gmail-raw.js";
+export { encodeGmailRawMessage, GMAIL_SEND_SCOPE, hasGmailSendScope } from "./gmail-raw.js";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar",
@@ -831,6 +831,34 @@ export async function getLinkedGoogleConnectionForBooking(
     .where(eq(bookingsTable.id, bookingId))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * Google account this workspace should send agent mail as: the one linked to a
+ * scheduling calendar wins, since that is the address the user sees as "connected".
+ * Only connections that actually granted Gmail send are returned.
+ */
+export async function getGoogleMailConnectionForUser(
+  userId: string,
+): Promise<{ id: string; email: string } | null> {
+  const rows = await db
+    .select({
+      id: googleCalendarConnectionsTable.id,
+      email: googleCalendarConnectionsTable.email,
+      grantedScopes: googleCalendarConnectionsTable.grantedScopes,
+      linkedCalendarId: schedulingCalendarsTable.id,
+    })
+    .from(googleCalendarConnectionsTable)
+    .leftJoin(
+      schedulingCalendarsTable,
+      eq(schedulingCalendarsTable.googleCalendarConnectionId, googleCalendarConnectionsTable.id),
+    )
+    .where(eq(googleCalendarConnectionsTable.userId, userId))
+    .orderBy(asc(googleCalendarConnectionsTable.createdAt));
+
+  const sendable = rows.filter((row) => hasGmailSendScope(row.grantedScopes));
+  const preferred = sendable.find((row) => row.linkedCalendarId != null) ?? sendable[0];
+  return preferred ? { id: preferred.id, email: preferred.email } : null;
 }
 
 /** Send one email as the connected Google user. Returns false if token/scope/API fails. */
