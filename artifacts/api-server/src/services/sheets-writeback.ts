@@ -575,7 +575,7 @@ async function scheduleSheetCallback(opts: {
 }
 
 /**
- * Write Meeting Time + Status Booked onto the sheet row for a sheet-linked call.
+ * Write Meeting Time onto the sheet row for a sheet-linked call. Status stays call-state.
  */
 export async function writeSheetBookingForCall(
   callId: number,

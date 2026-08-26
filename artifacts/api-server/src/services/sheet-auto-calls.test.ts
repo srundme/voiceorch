@@ -91,6 +91,11 @@ describe("sheet disposition / status labels", () => {
       summary: "Callback scheduled for tomorrow morning after the customer asked to resume.",
     })).toBe("OUTCOME: Callback confirmed");
     expect(formatSheetDisposition("Call reached a voicemail, not the intended person.")).toBe("");
+    expect(formatSheetDisposition({
+      OUTCOME: "Wrong number",
+      confidence: 1,
+      summary: "Call reached a voicemail, not the intended person",
+    })).toBe("OUTCOME: Wrong number");
   });
 
   it("keeps Status as call state and Disposition as the outcome", () => {

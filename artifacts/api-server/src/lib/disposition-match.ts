@@ -42,6 +42,18 @@ export function dispositionMatchesAny(
   return needles.some((n) => candidates.has(n));
 }
 
+const DISPOSITION_META_KEYS = new Set([
+  "confidence",
+  "summary",
+  "evidence",
+  "primary",
+  "sub",
+  "flags",
+  "needsReview",
+  "domainFields",
+  "error",
+]);
+
 export function formatDispositionLabel(disp: Record<string, unknown> | null | undefined): string {
   if (!disp) return "";
   const primary = typeof disp["primary"] === "string" ? disp["primary"].trim() : "";
@@ -49,6 +61,11 @@ export function formatDispositionLabel(disp: Record<string, unknown> | null | un
   if (primary && sub) return `${primary}: ${sub}`;
   if (sub) return sub;
   if (primary) return primary;
+  for (const [k, v] of Object.entries(disp)) {
+    if (DISPOSITION_META_KEYS.has(k) || typeof v !== "string") continue;
+    const label = v.trim();
+    if (label) return `${k}: ${label}`;
+  }
   return "";
 }
 
