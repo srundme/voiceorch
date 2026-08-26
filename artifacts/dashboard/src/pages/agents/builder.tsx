@@ -10,7 +10,7 @@ import {
   Play, Pause, Copy,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle, Calendar, Star, Video,
+  Upload, Archive, Info, AlertCircle, Calendar, Star, Video, ExternalLink,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -306,7 +306,7 @@ function BuilderPanel({
   return (
     <section
       className={cn(
-        "flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm",
+        "flex h-full min-h-0 flex-col rounded-xl border border-border bg-card shadow-sm",
         className,
       )}
     >
@@ -325,6 +325,40 @@ function BuilderPanel({
       </div>
       <div className={cn("flex min-h-0 flex-1 flex-col p-4", bodyClassName)}>{children}</div>
     </section>
+  );
+}
+
+function BookingSetupStep({
+  step,
+  title,
+  ready,
+  children,
+}: {
+  step: number;
+  title: string;
+  ready: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-background p-3.5">
+      <div className="mb-2.5 flex items-center gap-2">
+        <span
+          className={cn(
+            "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+            ready ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground",
+          )}
+        >
+          {ready ? <Check className="h-3 w-3" /> : step}
+        </span>
+        <p className="text-[12.5px] font-semibold text-foreground">{title}</p>
+        {ready ? (
+          <span className="ml-auto text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Ready</span>
+        ) : (
+          <span className="ml-auto text-[10px] font-medium text-amber-600 dark:text-amber-400">Needs setup</span>
+        )}
+      </div>
+      {children}
+    </div>
   );
 }
 
@@ -2920,9 +2954,14 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         <BuilderPanel
           title="Scheduling & bookings"
           icon={<Calendar />}
+          description="Calendar, Meet link, then what callers can book"
           hint={bookingPartial ? (
             <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
               Incomplete
+            </span>
+          ) : bookingEnabled ? (
+            <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-600">
+              On
             </span>
           ) : undefined}
           bodyClassName="p-0"
@@ -2934,29 +2973,11 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
             <div className="min-w-0 flex-1">
               <div className="mb-0.5 flex items-center gap-2">
-                <span className="text-[12.5px] font-semibold text-foreground">Booking</span>
+                <span className="text-[12.5px] font-semibold text-foreground">Let the agent book meetings</span>
               </div>
               <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                One switch enables the full booking flow: check availability, book, list, reschedule, and cancel.
+                Turns on check availability, book, list, reschedule, and cancel. Setup stays open below — calendar and Google Meet are not hidden.
               </p>
-              {(bookingEnabled || bookingPartial) && (
-                <div className="mt-1.5 space-y-1">
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    {canAttendMeetings
-                      ? "Booking creates calendar invites with a Meet link. To send this agent into the room, use Meeting bots (/app/meet) — separate from booking."
-                      : "Phone-only is supported: Booking still creates calendar invites with a Meet link for humans to attend. The AI will not join the room."}
-                  </p>
-                  {!canAttendMeetings && (
-                    <button
-                      type="button"
-                      className="text-[11px] font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                      onClick={() => form.setValue("agentSurfaces", "phone_and_meet", { shouldDirty: true })}
-                    >
-                      Optional: upgrade to phone + meetings if you want the AI to join Meet — then Save
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
             <div className="mt-1 shrink-0">
               <Switch
@@ -2966,109 +2987,158 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
           </div>
 
-          {(bookingEnabled || bookingPartial) && (
+          {(bookingEnabled || bookingPartial) && (() => {
+            const calendars = calendarsData ?? [];
+            const googleEmail = (agentCalendar as { connectedGoogleEmail?: string | null } | undefined)?.connectedGoogleEmail;
+            const googleReady = Boolean(googleEmail);
+            const meetingCount = (agentEventTypes ?? []).length;
+            const calendarReady = Boolean(agentCalendar);
+            const meetingReady = meetingCount > 0;
+            const calendarSetupHref = agentId ? connectionsSetupHref("calendar", agentId) : "/app/connections?setup=calendar";
+            const conferencingHref = "/app/scheduling/conferencing";
+            return (
             <div className="space-y-3 border-t border-border bg-muted/20 px-4 pb-4 pt-3">
-              <div className="flex flex-wrap gap-1.5">
-                {BOOKING_TOOL_LABELS.map((tool) => (
-                  <span
-                    key={tool.type}
-                    className="rounded-md border border-border bg-background px-2 py-0.5 font-mono text-[10px] text-muted-foreground"
-                  >
-                    {tool.fnName}
-                  </span>
-                ))}
-              </div>
+              <BookingSetupStep step={1} title="Bookings calendar" ready={calendarReady}>
+                <p className="mb-2 text-[11.5px] leading-relaxed text-muted-foreground">
+                  Which calendar this agent uses. Create or repair it under Connections if the list is empty.
+                </p>
+                <Select
+                  value={agentCalendar ? String(agentCalendar.id) : "__none__"}
+                  onValueChange={(v) => {
+                    form.setValue(
+                      "schedulingCalendarId",
+                      v === "__none__" || !Number.isFinite(Number(v)) ? null : Number(v),
+                      { shouldDirty: true },
+                    );
+                    form.setValue("schedulingEventTypeId", null, { shouldDirty: true });
+                  }}
+                >
+                  <SelectTrigger className="h-9 bg-background text-xs">
+                    <SelectValue placeholder="Pick a calendar">
+                      {agentCalendar ? agentCalendar.name : calendars.length === 0 ? "No calendars yet" : "Pick a calendar"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__" className="text-xs text-muted-foreground">Pick a calendar</SelectItem>
+                    {calendars.map((cal: { id: number; name: string }) => (
+                      <SelectItem key={cal.id} value={String(cal.id)} className="text-xs">{cal.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button asChild type="button" size="sm" variant="outline" className="h-8 text-[11px] gap-1.5">
+                    <Link href={calendarSetupHref}>
+                      {calendarReady ? "Fix calendar setup" : "Set up calendar"}
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  </Button>
+                </div>
+              </BookingSetupStep>
 
-              <div className="flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-2.5">
-                <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1 space-y-1">
-                  <p className="text-[11px] text-muted-foreground/70">
-                    {agentCalendar ? (
-                      <>
-                        Calendar: <span className="font-medium text-foreground/80">{agentCalendar.name}</span>
-                        <span className="text-muted-foreground/50"> · </span>
-                        Meeting callers can book
-                      </>
-                    ) : (
-                      "Meeting callers can book"
-                    )}
+              <BookingSetupStep step={2} title="Google Meet conferencing" ready={googleReady}>
+                <p className="mb-2 text-[11.5px] leading-relaxed text-muted-foreground">
+                  Bookings create a <span className="font-medium text-foreground">new Meet link</span> on the Google invite. Connect the Google account used for calendar + conferencing.
+                </p>
+                {googleReady ? (
+                  <p className="mb-2 text-[12px] text-foreground">
+                    Linked: <span className="font-medium">{googleEmail}</span>
                   </p>
-                  <Select
-                    value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
-                    onValueChange={(v) => {
-                      const parsed = Number(v);
-                      form.setValue(
-                        "schedulingEventTypeId",
-                        v === "__none__" || !Number.isFinite(parsed) ? null : parsed,
-                        { shouldDirty: true },
-                      );
-                    }}
-                    disabled={!calendarIdForEt}
-                  >
-                    <SelectTrigger className="h-7 bg-background/50 text-xs">
-                      {/* Always render a label: Radix only falls back to the selected
-                          item's text when the value matches a rendered SelectItem. */}
-                      <SelectValue placeholder="Any meeting">
-                        {schedulingEventTypeId == null
-                          ? "Any meeting"
-                          : agentEventTypes == null
-                            ? "Loading…"
-                            : (() => {
-                                const selected = (agentEventTypes as any[]).find(
-                                  (e: any) => String(e.id) === String(schedulingEventTypeId),
-                                );
-                                return selected ? (selected.title || selected.name) : "Any meeting";
-                              })()}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__" className="text-xs text-muted-foreground">Any meeting</SelectItem>
-                      {(agentEventTypes ?? []).map((et: any) => (
-                        <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title || et.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {(!calendarIdForEt || (agentEventTypes ?? []).length === 0) && (
-                    <p className="text-[10px] text-amber-400/80">
-                      {!calendarIdForEt ? "No calendar yet. " : "No meeting yet. "}
-                      {agentId ? (
-                        <Link href={connectionsSetupHref("calendar", agentId)} className="underline underline-offset-2">
-                          Connect Google Calendar
-                        </Link>
-                      ) : (
-                        "Save the agent first, then connect Google Calendar under Connections."
-                      )}
-                    </p>
-                  )}
+                ) : (
+                  <p className="mb-2 text-[12px] text-amber-700 dark:text-amber-400">
+                    Google is not linked. Slots can still book, but Meet links will be missing.
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild type="button" size="sm" className="h-8 text-[11px] gap-1.5">
+                    <Link href={calendarSetupHref}>
+                      {googleReady ? "Reconnect Google" : "Connect Google Calendar"}
+                    </Link>
+                  </Button>
+                  <Button asChild type="button" size="sm" variant="outline" className="h-8 text-[11px] gap-1.5">
+                    <Link href={conferencingHref}>
+                      Conferencing
+                      <Video className="h-3 w-3" />
+                    </Link>
+                  </Button>
                 </div>
-              </div>
+              </BookingSetupStep>
 
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <BookingSetupStep step={3} title="Meeting callers can book" ready={meetingReady}>
+                <p className="mb-2 text-[11.5px] leading-relaxed text-muted-foreground">
+                  Length and name of the slot (for example 30-minute demo). “Any meeting” uses every type on this calendar.
+                </p>
+                <Select
+                  value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
+                  onValueChange={(v) => {
+                    const parsed = Number(v);
+                    form.setValue(
+                      "schedulingEventTypeId",
+                      v === "__none__" || !Number.isFinite(parsed) ? null : parsed,
+                      { shouldDirty: true },
+                    );
+                  }}
+                  disabled={!calendarIdForEt}
+                >
+                  <SelectTrigger className="h-9 bg-background text-xs">
+                    <SelectValue placeholder="Any meeting">
+                      {schedulingEventTypeId == null
+                        ? "Any meeting"
+                        : agentEventTypes == null
+                          ? "Loading…"
+                          : (() => {
+                              const selected = (agentEventTypes as { id: number; title?: string; name?: string }[]).find(
+                                (e) => String(e.id) === String(schedulingEventTypeId),
+                              );
+                              return selected ? (selected.title || selected.name) : "Any meeting";
+                            })()}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__" className="text-xs text-muted-foreground">Any meeting</SelectItem>
+                    {(agentEventTypes ?? []).map((et: { id: number; title?: string; name?: string }) => (
+                      <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title || et.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!meetingReady && (
+                  <p className="mt-2 text-[11.5px] text-amber-700 dark:text-amber-400">
+                    No meeting types on this calendar yet.{" "}
+                    <Link href={calendarSetupHref} className="font-medium underline underline-offset-2">
+                      Create a meeting
+                    </Link>
+                  </p>
+                )}
+              </BookingSetupStep>
+
+              <BookingSetupStep step={4} title="AI joins the Meet (optional)" ready={canAttendMeetings}>
+                <p className="mb-2 text-[11.5px] leading-relaxed text-muted-foreground">
+                  Phone-only still sends the Meet link to humans. Turn this on only if a SnapServe agent should enter the room.
+                </p>
                 <div className="flex flex-wrap items-center gap-2">
-                  {!agentId ? (
-                    <p className="text-[10px] text-amber-400/80">Save agent first to link calendar tools.</p>
-                  ) : !agentCalendar ? (
-                    <p className="text-[10px] text-amber-400/80">
-                      No calendar yet.{" "}
-                      <Link href={connectionsSetupHref("calendar", agentId)} className="underline underline-offset-2">
-                        Connect Google Calendar
+                  <Switch
+                    checked={canAttendMeetings}
+                    onCheckedChange={(on) => form.setValue("agentSurfaces", on ? "phone_and_meet" : "phone", { shouldDirty: true })}
+                  />
+                  <span className="text-[12px] text-foreground">
+                    {canAttendMeetings ? "Phone + meetings" : "Phone only"}
+                  </span>
+                  {canAttendMeetings && (
+                    <Button asChild type="button" size="sm" variant="outline" className="h-8 text-[11px] ml-auto">
+                      <Link href={agentId ? `/app/meet?agentId=${agentId}` : "/app/meet"}>
+                        Meeting bots
                       </Link>
-                    </p>
-                  ) : !(agentCalendar as any).connectedGoogleEmail ? (
-                    <span className="text-[10px] text-amber-400/80">
-                      Google is not connected.{" "}
-                      <Link href={connectionsSetupHref("calendar", agentId)} className="underline underline-offset-2">
-                        Open Connections
-                      </Link>
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-muted-foreground/60">
-                      {(agentCalendar as any).connectedGoogleAccountsCount > 1
-                        ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
-                        : (agentCalendar as any).connectedGoogleEmail}
-                    </span>
+                    </Button>
                   )}
                 </div>
+                {canAttendMeetings && !agentId && (
+                  <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">Save the agent, then open Meeting bots.</p>
+                )}
+              </BookingSetupStep>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <p className="text-[10px] text-muted-foreground">
+                  Tools: {BOOKING_TOOL_LABELS.map((t) => t.fnName).join(" · ")}
+                </p>
                 <Button
                   type="button"
                   variant="ghost"
@@ -3076,7 +3146,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   className="h-7 gap-1 px-2 text-[10px]"
                   onClick={() => setBookingDetailsOpen((v) => !v)}
                 >
-                  {bookingDetailsOpen ? "Hide details" : "Test & schema"}
+                  {bookingDetailsOpen ? "Hide developer tests" : "Test & schema"}
                   <ChevronDown className={cn("h-3 w-3 transition-transform", bookingDetailsOpen && "rotate-180")} />
                 </Button>
               </div>
@@ -3166,12 +3236,12 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
         </BuilderPanel>
 
-        {/* Meeting bots — join actions live on /app/meet; Tools only explains capability. */}
-        {canAttendMeetings && (
+        {canAttendMeetings && !(bookingEnabled || bookingPartial) && (
           <BuilderPanel title="Meeting bots" icon={<Video />}>
             <div className="flex items-start gap-3">
               <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
@@ -3180,8 +3250,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
               <div className="min-w-0 flex-1 space-y-2">
                 <p className="text-[12.5px] font-semibold text-foreground">Can join Meet / Zoom / Teams</p>
                 <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                  Join now, calendar Join toggles, and bot settings (waiting room, slides) live on the Meeting bots page — not here.
-                  Booking a calendar slot is separate (switch above).
+                  Join now and bot settings live on Meeting bots. Turn on Scheduling & bookings above to send Meet links on calendar invites.
                 </p>
                 {agentId ? (
                   <Button asChild type="button" variant="outline" size="sm" className="h-7 text-[11px]">
