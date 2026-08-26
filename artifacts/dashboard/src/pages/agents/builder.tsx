@@ -95,6 +95,7 @@ import {
 } from "@/lib/disposition-fields";
 import { SnapServeAgentIcon } from "@/components/logo";
 import { hostProductName } from "@/lib/white-label";
+import { findBySchedulingId, normalizeSchedulingId } from "@/lib/scheduling-setup";
 import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import {
   LLM_PROVIDERS, TTS_PROVIDERS,
@@ -2650,7 +2651,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const schedulingCalendarId = form.watch("schedulingCalendarId");
   const schedulingEventTypeId = form.watch("schedulingEventTypeId");
   const agentCalendar = schedulingCalendarId != null
-    ? (calendarsData ?? []).find((cal: any) => cal.id === schedulingCalendarId)
+    ? findBySchedulingId(calendarsData as Array<{ id: number }>, schedulingCalendarId)
     : agentId
       ? ((calendarsData ?? []).find((cal: any) => cal.agentId === agentId) ?? (calendarsData ?? [])[0])
       : (calendarsData ?? [])[0];
@@ -2664,7 +2665,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     const ets = (agentEventTypes ?? []) as Array<{ id: number; enableGoogleMeet?: boolean }>;
     if (ets.length === 0) return null;
     if (schedulingEventTypeId != null) {
-      return ets.find((e) => e.id === schedulingEventTypeId) ?? ets[0] ?? null;
+      return ets.find((e) => normalizeSchedulingId(e.id) === normalizeSchedulingId(schedulingEventTypeId)) ?? ets[0] ?? null;
     }
     return ets[0] ?? null;
   }, [agentEventTypes, schedulingEventTypeId]);
@@ -2785,9 +2786,13 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   useEffect(() => {
     if (!bookingToolsOn || eventTypesLoading || !calendarIdForEt) return;
     const eventTypes = (agentEventTypes ?? []) as Array<{ id: number }>;
-    const selectedIsValid = eventTypes.some((eventType) => eventType.id === schedulingEventTypeId);
+    const selectedIsValid = eventTypes.some(
+      (eventType) => normalizeSchedulingId(eventType.id) === normalizeSchedulingId(schedulingEventTypeId),
+    );
     if (selectedIsValid) return;
-    form.setValue("schedulingEventTypeId", eventTypes[0]?.id ?? null, {
+    // Empty list is loading/error — do not wipe a saved meeting type.
+    if (eventTypes.length === 0) return;
+    form.setValue("schedulingEventTypeId", eventTypes[0].id, {
       shouldDirty: true,
       shouldValidate: true,
     });
@@ -2930,7 +2935,13 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
               <div className="space-y-1.5">
                 <p className="text-[11px] font-medium text-foreground">Calendar</p>
                 <Select
-                  value={agentCalendar ? String(agentCalendar.id) : "__none__"}
+                  value={
+                    agentCalendar
+                      ? String(agentCalendar.id)
+                      : normalizeSchedulingId(schedulingCalendarId) != null
+                        ? String(normalizeSchedulingId(schedulingCalendarId))
+                        : "__none__"
+                  }
                   onValueChange={(v) => {
                     form.setValue(
                       "schedulingCalendarId",
@@ -2942,11 +2953,22 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 >
                   <SelectTrigger className="h-9 bg-background text-xs">
                     <SelectValue placeholder="Pick a calendar">
-                      {agentCalendar ? agentCalendar.name : calendars.length === 0 ? "No calendars yet" : "Pick a calendar"}
+                      {agentCalendar
+                        ? agentCalendar.name
+                        : calendars.length === 0
+                          ? "No calendars yet"
+                          : normalizeSchedulingId(schedulingCalendarId) != null
+                            ? "Saved calendar — pick it again"
+                            : "Pick a calendar"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__" className="text-xs text-muted-foreground">Pick a calendar</SelectItem>
+                    {normalizeSchedulingId(schedulingCalendarId) != null && !agentCalendar && (
+                      <SelectItem value={String(normalizeSchedulingId(schedulingCalendarId))} className="text-xs">
+                        Saved calendar #{normalizeSchedulingId(schedulingCalendarId)}
+                      </SelectItem>
+                    )}
                     {calendars.map((cal: { id: number; name: string }) => (
                       <SelectItem key={cal.id} value={String(cal.id)} className="text-xs">{cal.name}</SelectItem>
                     ))}
@@ -2995,7 +3017,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   <div className="space-y-1.5">
                     <p className="text-[11px] font-medium text-foreground">Meeting type</p>
                     <Select
-                      value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
+                      value={normalizeSchedulingId(schedulingEventTypeId) != null ? String(normalizeSchedulingId(schedulingEventTypeId)) : "__none__"}
                       onValueChange={(value) => {
                         form.setValue(
                           "schedulingEventTypeId",
@@ -3012,6 +3034,15 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                         <SelectItem value="__none__" disabled className="text-xs text-muted-foreground">
                           Pick a meeting type
                         </SelectItem>
+                        {normalizeSchedulingId(schedulingEventTypeId) != null
+                          && !(agentEventTypes ?? []).some(
+                            (eventType: { id: number }) =>
+                              normalizeSchedulingId(eventType.id) === normalizeSchedulingId(schedulingEventTypeId),
+                          ) && (
+                          <SelectItem value={String(normalizeSchedulingId(schedulingEventTypeId))} className="text-xs">
+                            Saved meeting type #{normalizeSchedulingId(schedulingEventTypeId)}
+                          </SelectItem>
+                        )}
                         {(agentEventTypes ?? []).map((eventType: any) => (
                           <SelectItem key={eventType.id} value={String(eventType.id)} className="text-xs">
                             {eventType.title || eventType.name}
@@ -6997,8 +7028,8 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       sarvamEndOfSpeechSilenceMs: sarvamVad.silence,
       sarvamFirstTurnMinSpeechMs: sarvamVad.minSpeech,
       sarvamVadThreshold:         sarvamVad.threshold,
-      schedulingCalendarId:   ((agent as any).agentConfig?.calendarCapability?.defaultCalendarId as number | null | undefined) ?? null,
-      schedulingEventTypeId:  ((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId as number | null | undefined) ?? null,
+      schedulingCalendarId:   normalizeSchedulingId((agent as any).agentConfig?.calendarCapability?.defaultCalendarId),
+      schedulingEventTypeId:  normalizeSchedulingId((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId),
       voiceStack:               (((agent as any).agentConfig?.voiceStack as string | undefined) === "gemini_live" ? "gemini_live" : "classic") as AgentFormValues["voiceStack"],
       geminiLiveVoiceName:      ((agent as any).agentConfig?.geminiLive?.voiceName as string | undefined) ?? "Kore",
       geminiLiveThinkingLevel:  ((agent as any).agentConfig?.geminiLive?.thinkingLevel as AgentFormValues["geminiLiveThinkingLevel"] | undefined) ?? "minimal",
@@ -7046,8 +7077,10 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         form.setValue("sarvamIndicNumbers", (saved as any)?.agentConfig?.sarvamIndicNumbers !== false, { shouldDirty: false });
         // Sync scheduling fields immediately from the save response so the event-type
         // Select is not shown as "Any event type" while the background refetch is in-flight.
-        form.setValue("schedulingCalendarId", (saved as any)?.agentConfig?.calendarCapability?.defaultCalendarId ?? null, { shouldDirty: false });
-        form.setValue("schedulingEventTypeId", (saved as any)?.agentConfig?.calendarCapability?.defaultEventTypeId ?? null, { shouldDirty: false });
+        const savedCal = normalizeSchedulingId((saved as any)?.agentConfig?.calendarCapability?.defaultCalendarId);
+        const savedEt = normalizeSchedulingId((saved as any)?.agentConfig?.calendarCapability?.defaultEventTypeId);
+        if (savedCal != null) form.setValue("schedulingCalendarId", savedCal, { shouldDirty: false });
+        if (savedEt != null) form.setValue("schedulingEventTypeId", savedEt, { shouldDirty: false });
         queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
         queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
         toast({ title: "Saved", description: `${data.name} updated.` });

@@ -33,6 +33,7 @@ import {
   WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER,
   type AgentFormValues,
 } from "./edit.schema";
+import { findBySchedulingId, normalizeSchedulingId } from "@/lib/scheduling-setup";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SnapServeAgentIcon } from "@/components/logo";
 import { isDirectSnapServeHost } from "@/lib/white-label";
@@ -237,10 +238,14 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     trai:  !!complianceTrai,
   };
   if (schedulingCalendarId != null) {
-    agentConfig["calendarCapability"] = {
-      defaultCalendarId: schedulingCalendarId,
-      ...(schedulingEventTypeId != null ? { defaultEventTypeId: schedulingEventTypeId } : {}),
-    };
+    const calendarId = normalizeSchedulingId(schedulingCalendarId);
+    const eventTypeId = normalizeSchedulingId(schedulingEventTypeId);
+    if (calendarId != null) {
+      agentConfig["calendarCapability"] = {
+        defaultCalendarId: calendarId,
+        ...(eventTypeId != null ? { defaultEventTypeId: eventTypeId } : {}),
+      };
+    }
   }
   if (isGeminiLiveLlmModel(rest.llmModel) || voiceStack === "gemini_live") {
     agentConfig["voiceStack"] = "gemini_live";
@@ -542,7 +547,7 @@ export default function AgentEdit() {
   const schedulingCalendarId = form.watch("schedulingCalendarId");
   const schedulingEventTypeId = form.watch("schedulingEventTypeId");
   const agentCalendar = schedulingCalendarId != null
-    ? (calendarsData ?? []).find((cal: any) => cal.id === schedulingCalendarId)
+    ? findBySchedulingId(calendarsData as Array<{ id: number }>, schedulingCalendarId)
     : id
       ? ((calendarsData ?? []).find((cal: any) => cal.agentId === id) ?? (calendarsData ?? [])[0])
       : (calendarsData ?? [])[0];
@@ -581,8 +586,9 @@ export default function AgentEdit() {
   useEffect(() => {
     if (!hasBookingTools || eventTypesLoading || !calendarIdForEt) return;
     const eventTypes = (agentEventTypes ?? []) as Array<{ id: number }>;
-    if (eventTypes.some((eventType) => eventType.id === schedulingEventTypeId)) return;
-    form.setValue("schedulingEventTypeId", eventTypes[0]?.id ?? null, {
+    if (eventTypes.some((eventType) => normalizeSchedulingId(eventType.id) === normalizeSchedulingId(schedulingEventTypeId))) return;
+    if (eventTypes.length === 0) return;
+    form.setValue("schedulingEventTypeId", eventTypes[0].id, {
       shouldDirty: true,
       shouldValidate: true,
     });
@@ -844,8 +850,8 @@ export default function AgentEdit() {
       complianceTrai:  ((agent as any).agentConfig?.compliance?.trai  as boolean | undefined) ?? false,
       autoRedialEnabled:      ((agent as any).agentConfig?.autoRedial?.enabled as boolean | undefined) ?? false,
       autoRedialMaxAttempts:  ((agent as any).agentConfig?.autoRedial?.maxAttempts as number | undefined) ?? 3,
-      schedulingCalendarId:   ((agent as any).agentConfig?.calendarCapability?.defaultCalendarId as number | null | undefined) ?? null,
-      schedulingEventTypeId:  ((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId as number | null | undefined) ?? null,
+      schedulingCalendarId:   normalizeSchedulingId((agent as any).agentConfig?.calendarCapability?.defaultCalendarId),
+      schedulingEventTypeId:  normalizeSchedulingId((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId),
       voiceStack:               (((agent as any).agentConfig?.voiceStack as string | undefined) === "gemini_live" ? "gemini_live" : "classic") as AgentFormValues["voiceStack"],
       geminiLiveVoiceName:      ((agent as any).agentConfig?.geminiLive?.voiceName as string | undefined) ?? "Kore",
       geminiLiveThinkingLevel:  ((agent as any).agentConfig?.geminiLive?.thinkingLevel as AgentFormValues["geminiLiveThinkingLevel"] | undefined) ?? "minimal",
@@ -2161,7 +2167,7 @@ export default function AgentEdit() {
                         ) : "Event type used by booking tools"}
                       </p>
                       <Select
-                        value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
+                        value={normalizeSchedulingId(schedulingEventTypeId) != null ? String(normalizeSchedulingId(schedulingEventTypeId)) : "__none__"}
                         onValueChange={v => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v), { shouldDirty: true, shouldValidate: true })}
                         disabled={!calendarIdForEt || eventTypesLoading || (agentEventTypes ?? []).length === 0}
                       >

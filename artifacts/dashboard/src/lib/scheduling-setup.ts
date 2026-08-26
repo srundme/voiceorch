@@ -103,6 +103,23 @@ export function getBrowserTimezone(): string {
   }
 }
 
+/** Agent JSON / Select values sometimes store calendar ids as strings. */
+export function normalizeSchedulingId(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.trunc(n);
+}
+
+export function findBySchedulingId<T extends { id: number | string }>(
+  rows: T[] | undefined | null,
+  id: unknown,
+): T | undefined {
+  const n = normalizeSchedulingId(id);
+  if (n == null) return undefined;
+  return (rows ?? []).find((row) => normalizeSchedulingId(row.id) === n);
+}
+
 export function computeBookingSetupReadiness(
   calendars: SchedulingCalendarInfo[],
   meetings: MeetingInfo[],
@@ -112,7 +129,7 @@ export function computeBookingSetupReadiness(
     selectedCalendarId === null
       ? null
       : selectedCalendarId != null
-        ? calendars.find((c) => c.id === selectedCalendarId) ?? null
+        ? findBySchedulingId(calendars, selectedCalendarId) ?? null
         : calendars[0] ?? null;
   const googleLinked = Boolean(calendar?.connectedGoogleEmail);
   const meeting = calendar
