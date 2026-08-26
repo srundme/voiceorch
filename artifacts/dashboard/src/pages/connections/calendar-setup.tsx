@@ -59,13 +59,6 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 type WizardStepId = "calendar" | "google" | "meeting";
 
-/** One control height / radius / label scale across every panel on this page. */
-const FIELD_LABEL = "text-[11.5px] font-medium text-foreground";
-const FIELD_HINT = "text-[11px] leading-relaxed text-muted-foreground";
-const FIELD_CONTROL = "h-10 w-full rounded-xl text-[13px]";
-const TIME_INPUT =
-  "h-8 w-full min-w-0 rounded-lg border border-input bg-background px-2 text-[11.5px] tabular-nums text-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-40";
-
 const STEPS: { id: WizardStepId; title: string; blurb: string }[] = [
   {
     id: "calendar",
@@ -165,39 +158,29 @@ function SetupCard({
   children: ReactNode;
 }) {
   return (
-    <section className="flex min-h-[320px] max-h-[min(80vh,720px)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-      <header className="flex items-start gap-3 border-b border-border/70 px-5 py-4">
+    <section className="flex min-h-[320px] max-h-[min(80vh,720px)] flex-col rounded-xl border border-border bg-card p-4 shadow-sm">
+      <div className="mb-4 flex items-start gap-2.5">
         <span
           className={cn(
-            "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11.5px] font-semibold tabular-nums ring-1",
+            "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
             done
-              ? "bg-emerald-500/10 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400"
-              : "bg-muted text-muted-foreground ring-border",
+              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+              : "bg-muted text-muted-foreground",
           )}
         >
           {done ? <Check className="h-3.5 w-3.5" /> : step}
         </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[13.5px] font-semibold leading-5 tracking-[-0.01em] text-foreground">
-            {title}
-          </p>
-          <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">{blurb}</p>
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-foreground">{title}</p>
+          <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">{blurb}</p>
         </div>
-      </header>
-      <div className="relative min-h-0 flex-1">
-        <div className="h-full overflow-y-auto px-5 py-4">
-          {locked ? (
-            <p className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-[12.5px] text-muted-foreground">
-              Save a calendar on the left first.
-            </p>
-          ) : (
-            children
-          )}
-        </div>
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-card to-transparent"
-        />
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
+        {locked ? (
+          <p className="text-[13px] text-muted-foreground">Save a calendar on the left first.</p>
+        ) : (
+          children
+        )}
       </div>
     </section>
   );
@@ -269,7 +252,7 @@ export function ConnectionsCalendarSetup({
   if (loading) {
     return (
       <CalendarShell embedded={embedded} backHref={backHref} backLabel={backLabel}>
-        <div className="flex items-center gap-2 rounded-2xl border border-border bg-card px-4 py-5 text-[13px] text-muted-foreground shadow-sm">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
           <Loader2 className="h-4 w-4 animate-spin" /> Checking your setup…
         </div>
       </CalendarShell>
@@ -278,65 +261,30 @@ export function ConnectionsCalendarSetup({
 
   return (
     <CalendarShell embedded={embedded} backHref={backHref} backLabel={backLabel}>
-      <div className="space-y-5">
+      <div className="space-y-6">
         <div
           className={cn(
-            "flex items-start gap-3 rounded-2xl border px-4 py-3.5 sm:px-5",
+            "rounded-xl border px-4 py-3",
             ready
-              ? "border-emerald-500/30 bg-emerald-500/[0.07]"
-              : "border-border bg-muted/25",
+              ? "border-emerald-500/30 bg-emerald-500/10"
+              : "border-border bg-muted/20",
           )}
         >
-          <span
-            className={cn(
-              "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
-              ready
-                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                : "bg-background text-muted-foreground ring-1 ring-border",
-            )}
-          >
-            {ready ? (
-              <CheckCircle2 className="h-3.5 w-3.5" />
-            ) : (
-              <span className="text-[10.5px] font-semibold tabular-nums">{requiredReadyCount}</span>
-            )}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p
-              className={cn(
-                "text-[13.5px] font-semibold leading-5 tracking-[-0.01em]",
-                ready ? "text-emerald-700 dark:text-emerald-400" : "text-foreground",
-              )}
-            >
-              {ready ? "Ready — you can still change anything below" : `${requiredReadyCount} of 3 set up`}
-            </p>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-              {embedded
-                ? "Save the agent after you pick this calendar on Actions → Bookings."
-                : "Agent → Actions → Bookings → pick this calendar. Appointments show under Bookings."}
-            </p>
-          </div>
-          <div aria-hidden className="hidden shrink-0 items-center gap-1 pt-1.5 sm:flex">
-            {[0, 1, 2].map((i) => (
-              <span
-                key={i}
-                className={cn(
-                  "h-1 w-6 rounded-full",
-                  i < requiredReadyCount
-                    ? ready
-                      ? "bg-emerald-500"
-                      : "bg-foreground/70"
-                    : "bg-border",
-                )}
-              />
-            ))}
-          </div>
+          <p className={cn("flex items-center gap-2 text-sm font-medium", ready ? "text-emerald-700 dark:text-emerald-400" : "text-foreground")}>
+            {ready ? <CheckCircle2 className="h-4 w-4" /> : null}
+            {ready ? "Ready — you can still change anything below" : `${requiredReadyCount} of 3 set up`}
+          </p>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+            {embedded
+              ? "Save the agent after you pick this calendar on Actions → Bookings."
+              : "Agent → Actions → Bookings → pick this calendar. Appointments show under Bookings."}
+          </p>
         </div>
 
         {calendars.length > 0 ? (
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
-            <Label className={FIELD_LABEL}>Which calendar</Label>
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Label className="text-xs font-medium">Which calendar</Label>
               <Select
                 value={composingNew ? "__new__" : selectedId != null ? String(selectedId) : undefined}
                 onValueChange={(value) => {
@@ -349,7 +297,7 @@ export function ConnectionsCalendarSetup({
                   setSelectedId(Number(value));
                 }}
               >
-                <SelectTrigger className="h-10 min-w-0 flex-1 rounded-xl">
+                <SelectTrigger className="h-9">
                   <SelectValue placeholder="Select a calendar" />
                 </SelectTrigger>
                 <SelectContent>
@@ -361,28 +309,28 @@ export function ConnectionsCalendarSetup({
                   <SelectItem value="__new__">Create new calendar</SelectItem>
                 </SelectContent>
               </Select>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-10 w-full shrink-0 gap-1.5 rounded-xl text-[13px] sm:w-auto"
-                onClick={() => {
-                  setUserWantsNew(true);
-                  setSelectedId(null);
-                }}
-              >
-                <Plus className="h-3.5 w-3.5" /> New calendar
-              </Button>
+              <p className="text-[11px] text-muted-foreground">
+                {calendars.length === 1
+                  ? "You already have a calendar. Open it here, or create another."
+                  : `${calendars.length} calendars in this workspace. Google and meeting setup follow the one you pick.`}
+              </p>
             </div>
-            <p className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
-              {calendars.length === 1
-                ? "You already have a calendar. Open it here, or create another."
-                : `${calendars.length} calendars in this workspace. Google and meeting setup follow the one you pick.`}
-            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 shrink-0 gap-1.5"
+              onClick={() => {
+                setUserWantsNew(true);
+                setSelectedId(null);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" /> New calendar
+            </Button>
           </div>
         ) : null}
 
-        <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <SetupCard step={1} title={STEPS[0]!.title} blurb={STEPS[0]!.blurb} done={doneFlags.calendar}>
             <CalendarPanel
               key={calendar?.id ?? "new"}
@@ -436,14 +384,14 @@ export function ConnectionsCalendarSetup({
           </SetupCard>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
-          <Button asChild size="sm" variant="outline" className="h-9 rounded-lg px-3.5 text-[13px]">
+        <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+          <Button asChild size="sm" variant="outline" className="h-9">
             <Link href={`${BASE}/app/scheduling/availability`}>Hours</Link>
           </Button>
-          <Button asChild size="sm" variant="ghost" className="h-9 rounded-lg px-3 text-[13px] text-muted-foreground">
+          <Button asChild size="sm" variant="ghost" className="h-9 text-muted-foreground">
             <Link href={`${BASE}/app/scheduling/event-types`}>All meetings</Link>
           </Button>
-          <Button asChild size="sm" variant="ghost" className="h-9 rounded-lg px-3 text-[13px] text-muted-foreground">
+          <Button asChild size="sm" variant="ghost" className="h-9 text-muted-foreground">
             <Link href={`${BASE}/app/scheduling/calendars`}>All calendars</Link>
           </Button>
         </div>
@@ -537,31 +485,29 @@ function CalendarPanel({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="space-y-1.5">
-        <Label className={FIELD_LABEL}>Calendar name *</Label>
+        <Label className="text-xs font-medium">Calendar name *</Label>
         <Input
-          className={FIELD_CONTROL}
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Clinic bookings"
         />
       </div>
       <div className="space-y-1.5">
-        <Label className={FIELD_LABEL}>Description</Label>
+        <Label className="text-xs font-medium">Description</Label>
         <Input
-          className={FIELD_CONTROL}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="e.g. Handles inbound demo booking requests"
         />
-        <p className={FIELD_HINT}>Optional. Shown on the calendar card.</p>
+        <p className="text-[11px] text-muted-foreground">Optional. Shown on the calendar card.</p>
       </div>
       <div className="space-y-1.5">
-        <Label className={FIELD_LABEL}>Timezone *</Label>
+        <Label className="text-xs font-medium">Timezone *</Label>
         <Select value={timezone} onValueChange={setTimezone}>
-          <SelectTrigger className={FIELD_CONTROL}>
-            <Globe className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <SelectTrigger className="h-9">
+            <Globe className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="max-h-64">
@@ -570,28 +516,26 @@ function CalendarPanel({
             ))}
           </SelectContent>
         </Select>
-        <p className={FIELD_HINT}>Slots and availability use this timezone.</p>
+        <p className="text-[11px] text-muted-foreground">Slots and availability use this timezone.</p>
       </div>
       <div className="space-y-1.5">
-        <Label className={FIELD_LABEL}>Host / organizer email *</Label>
+        <Label className="text-xs font-medium">Host / organizer email *</Label>
         <Input
-          className={FIELD_CONTROL}
           type="email"
           value={hostEmail}
           onChange={(e) => setHostEmail(e.target.value)}
           placeholder="you@company.com"
         />
-        <p className={FIELD_HINT}>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
           Organizer on Google invites. Use the same Google account you connect next.
         </p>
       </div>
       <div className="space-y-1.5">
-        <Label className={FIELD_LABEL}>Additional hosts</Label>
+        <Label className="text-xs font-medium">Additional hosts</Label>
         <div className="space-y-2">
           {additionalHosts.map((host, i) => (
             <div key={i} className="flex items-center gap-2">
               <Input
-                className={FIELD_CONTROL}
                 type="email"
                 value={host}
                 onChange={(e) => {
@@ -605,7 +549,7 @@ function CalendarPanel({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-10 w-10 shrink-0 rounded-xl text-muted-foreground hover:text-destructive"
+                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
                 onClick={() => setAdditionalHosts(additionalHosts.filter((_, j) => j !== i))}
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -616,28 +560,28 @@ function CalendarPanel({
             type="button"
             variant="outline"
             size="sm"
-            className="h-9 gap-1.5 rounded-lg text-[12px]"
+            className="h-8 gap-1.5 text-[11px]"
             onClick={() => setAdditionalHosts([...additionalHosts, ""])}
           >
             <Plus className="h-3.5 w-3.5" /> Add host
           </Button>
         </div>
-        <p className={FIELD_HINT}>Extra people get the Meet link on every booking.</p>
+        <p className="text-[11px] text-muted-foreground">
+          Extra people get the Meet link on every booking.
+        </p>
       </div>
-      <div className="space-y-2.5 border-t border-border pt-4">
-        <div>
-          <p className="text-[12.5px] font-semibold text-foreground">Weekly hours</p>
-          <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
-            Days and times callers can book. Uses the timezone above.
-          </p>
-        </div>
-        <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border">
+      <div className="space-y-2 border-t border-border pt-3">
+        <p className="text-xs font-medium text-foreground">Weekly hours</p>
+        <p className="text-[11px] text-muted-foreground">
+          Days and times callers can book. Uses the timezone above.
+        </p>
+        <div className="space-y-1">
           {slots.map((slot) => (
             <div
               key={slot.dayOfWeek}
               className={cn(
-                "grid grid-cols-[auto_2rem_1fr_auto_1fr] items-center gap-2 px-2.5 py-1.5 transition-colors",
-                slot.isActive ? "bg-background" : "bg-muted/30",
+                "flex items-center gap-2 rounded-md px-1.5 py-1",
+                slot.isActive ? "bg-muted/40" : "opacity-50",
               )}
             >
               <Switch
@@ -651,14 +595,7 @@ function CalendarPanel({
                 }
                 className="scale-75 origin-left"
               />
-              <span
-                className={cn(
-                  "text-[11.5px] font-medium",
-                  slot.isActive ? "text-foreground" : "text-muted-foreground",
-                )}
-              >
-                {WEEKDAY_SHORT[slot.dayOfWeek]}
-              </span>
+              <span className="w-8 shrink-0 text-[11px] font-medium">{WEEKDAY_SHORT[slot.dayOfWeek]}</span>
               <input
                 type="time"
                 value={slot.startTime}
@@ -670,7 +607,7 @@ function CalendarPanel({
                     ),
                   )
                 }
-                className={TIME_INPUT}
+                className="h-7 w-[5.75rem] rounded border border-input bg-background px-1.5 text-[11px] text-foreground disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-ring"
               />
               <span className="text-[11px] text-muted-foreground">–</span>
               <input
@@ -684,17 +621,13 @@ function CalendarPanel({
                     ),
                   )
                 }
-                className={TIME_INPUT}
+                className="h-7 w-[5.75rem] rounded border border-input bg-background px-1.5 text-[11px] text-foreground disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
           ))}
         </div>
       </div>
-      <Button
-        className="h-10 w-full rounded-xl"
-        disabled={saving}
-        onClick={() => void handleSave()}
-      >
+      <Button className="w-full" disabled={saving} onClick={() => void handleSave()}>
         {saving ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…
@@ -774,20 +707,14 @@ function GooglePanel({
   if (linkedEmail) {
     return (
       <div className="space-y-3">
-        <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/25 px-3 py-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background text-[12px] font-semibold ring-1 ring-border">
-            {linkedEmail[0]?.toUpperCase()}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-medium text-foreground">{linkedEmail}</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">Connected</p>
-          </div>
-        </div>
-        <p className={FIELD_HINT}>Each booking gets a Google Meet link on the invite.</p>
+        <p className="text-sm text-muted-foreground">
+          Connected as <span className="font-medium text-foreground">{linkedEmail}</span>
+        </p>
+        <p className="text-[11.5px] text-muted-foreground">Each booking gets a Google Meet link on the invite.</p>
         <Button
           variant="outline"
           size="sm"
-          className="h-9 gap-1.5 rounded-lg text-[12.5px]"
+          className="gap-1.5"
           disabled={connecting}
           onClick={() => void handleAddAccount()}
         >
@@ -817,7 +744,7 @@ function GooglePanel({
 
   return (
     <div className="space-y-4">
-      <p className="text-[12px] leading-relaxed text-muted-foreground">
+      <p className="text-[12px] text-muted-foreground leading-relaxed">
         Connect the Google account that matches your booking email. Callers get a Meet link and events land on your calendar.
       </p>
 
@@ -826,15 +753,15 @@ function GooglePanel({
           {connections.map((conn) => (
             <div
               key={conn.id}
-              className="flex items-center gap-3 rounded-xl border border-border bg-background px-3 py-2.5"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-background"
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-[12px] font-semibold">
-                {conn.email[0]?.toUpperCase()}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{conn.email}</span>
+              <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                <span className="text-xs font-semibold">{conn.email[0]?.toUpperCase()}</span>
+              </div>
+              <span className="flex-1 text-sm truncate">{conn.email}</span>
               <Button
                 size="sm"
-                className="h-8 shrink-0 rounded-lg px-3 text-[12px]"
+                className="h-7 px-3 text-xs shrink-0"
                 disabled={linking !== null}
                 onClick={() => void handleSelect(conn.id)}
               >
@@ -850,7 +777,7 @@ function GooglePanel({
           ))}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-[12.5px] text-muted-foreground">
+        <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
           No Google account connected yet.
         </div>
       )}
@@ -858,7 +785,7 @@ function GooglePanel({
       <Button
         variant="outline"
         size="sm"
-        className="h-9 gap-1.5 rounded-lg text-[12.5px]"
+        className="gap-1.5"
         disabled={connecting}
         onClick={() => void handleAddAccount()}
       >
@@ -921,16 +848,14 @@ function MeetingPanel({
   if (existing) {
     return (
       <div className="space-y-3">
-        <div className="rounded-xl border border-border bg-muted/25 px-3 py-2.5">
-          <p className="flex items-baseline gap-1.5 text-[13px] text-foreground">
-            <span className="min-w-0 truncate font-medium">{existing.name}</span>
-            <span className="shrink-0 text-muted-foreground">· {existing.durationMinutes} min</span>
-          </p>
-          <p className="mt-1 truncate text-[11px] text-muted-foreground">
-            Public link: <span className="font-mono">/book/{existing.slug}</span>
-          </p>
-        </div>
-        <Button asChild variant="outline" size="sm" className="h-9 rounded-lg text-[12.5px]">
+        <p className="text-sm text-foreground">
+          <span className="font-medium">{existing.name}</span>
+          <span className="text-muted-foreground"> · {existing.durationMinutes} min</span>
+        </p>
+        <p className="text-[11.5px] text-muted-foreground">
+          Public link: <span className="font-mono">/book/{existing.slug}</span>
+        </p>
+        <Button asChild variant="outline" size="sm" className="h-8">
           <Link href={`${BASE}/app/scheduling/event-types/${existing.id}`}>Change name or length</Link>
         </Button>
       </div>
@@ -940,24 +865,23 @@ function MeetingPanel({
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label className={FIELD_LABEL}>Meeting name</Label>
+        <Label className="text-xs font-medium">Meeting name</Label>
         <Input
-          className={FIELD_CONTROL}
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Consultation"
           autoFocus
         />
         {name.trim() && (
-          <p className={FIELD_HINT}>
-            Booking link: <span className="rounded bg-muted px-1 font-mono">/book/{slug}</span>
+          <p className="text-[11px] text-muted-foreground">
+            Booking link: <span className="font-mono bg-muted rounded px-1">/book/{slug}</span>
           </p>
         )}
       </div>
       <div className="space-y-1.5">
-        <Label className={FIELD_LABEL}>How long?</Label>
+        <Label className="text-xs font-medium">How long?</Label>
         <Select value={String(duration)} onValueChange={(v) => setDuration(Number(v))}>
-          <SelectTrigger className={FIELD_CONTROL}>
+          <SelectTrigger className="h-9">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -969,11 +893,7 @@ function MeetingPanel({
           </SelectContent>
         </Select>
       </div>
-      <Button
-        className="h-10 w-full rounded-xl"
-        disabled={saving}
-        onClick={() => void handleSave()}
-      >
+      <Button className="w-full" disabled={saving} onClick={() => void handleSave()}>
         {saving ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin mr-2" /> Creating…
