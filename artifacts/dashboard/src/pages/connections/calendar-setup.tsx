@@ -23,20 +23,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
   computeBookingSetupReadiness,
   createMeeting,
   createOrUpdateCalendar,
+  defaultWeeklyAvailability,
   getBrowserTimezone,
   linkGoogleToCalendar,
+  listCalendarAvailability,
   listGoogleConnections,
+  mergeWeeklyAvailability,
+  replaceCalendarAvailability,
   MEETING_DURATION_OPTIONS,
   CALENDAR_TIMEZONES,
+  WEEKDAY_SHORT,
   openGoogleConnectPopup,
   slugifyMeetingName,
   type MeetingInfo,
   type SchedulingCalendarInfo,
+  type WeeklyAvailabilitySlot,
 } from "@/lib/scheduling-setup";
 import {
   Check,
@@ -56,7 +63,7 @@ const STEPS: { id: WizardStepId; title: string; blurb: string }[] = [
   {
     id: "calendar",
     title: "Your calendar",
-    blurb: "Name, timezone, host email, and extra hosts.",
+    blurb: "Name, timezone, hosts, and weekly hours.",
   },
   {
     id: "google",
@@ -151,7 +158,7 @@ function SetupCard({
   children: ReactNode;
 }) {
   return (
-    <section className="flex min-h-[320px] flex-col rounded-xl border border-border bg-card p-4 shadow-sm">
+    <section className="flex min-h-[320px] max-h-[min(80vh,720px)] flex-col rounded-xl border border-border bg-card p-4 shadow-sm">
       <div className="mb-4 flex items-start gap-2.5">
         <span
           className={cn(
@@ -408,7 +415,26 @@ function CalendarPanel({
   const [timezone, setTimezone] = useState(existing?.timezone || getBrowserTimezone() || "Asia/Kolkata");
   const [hostEmail, setHostEmail] = useState(existing?.hostEmail ?? "");
   const [additionalHosts, setAdditionalHosts] = useState<string[]>(existing?.additionalHosts?.length ? [...existing.additionalHosts] : []);
+  const [slots, setSlots] = useState<WeeklyAvailabilitySlot[]>(() => defaultWeeklyAvailability());
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!existing?.id) {
+      setSlots(defaultWeeklyAvailability());
+      return;
+    }
+    let cancelled = false;
+    void listCalendarAvailability(existing.id)
+      .then((rows) => {
+        if (!cancelled) setSlots(mergeWeeklyAvailability(rows));
+      })
+      .catch(() => {
+        if (!cancelled) setSlots(defaultWeeklyAvailability());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [existing?.id]);
 
   const tzOptions = CALENDAR_TIMEZONES.includes(timezone as (typeof CALENDAR_TIMEZONES)[number])
     ? CALENDAR_TIMEZONES
@@ -423,6 +449,18 @@ function CalendarPanel({
       toast({ title: "Enter the host / organizer email", variant: "destructive" });
       return;
     }
+    const invalid = slots.find((s) => s.isActive && s.startTime >= s.endTime);
+    if (invalid) {
+      toast({
+        title: `End time must be after start on ${WEEKDAY_SHORT[invalid.dayOfWeek]}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!slots.some((s) => s.isActive)) {
+      toast({ title: "Turn on at least one day for bookings", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
       const saved = await createOrUpdateCalendar({
@@ -433,6 +471,7 @@ function CalendarPanel({
         hostEmail,
         additionalHosts,
       });
+      await replaceCalendarAvailability(saved.id, slots);
       await onDone(saved);
     } catch (e: unknown) {
       toast({
@@ -530,6 +569,63 @@ function CalendarPanel({
         <p className="text-[11px] text-muted-foreground">
           Extra people get the Meet link on every booking.
         </p>
+      </div>
+      <div className="space-y-2 border-t border-border pt-3">
+        <p className="text-xs font-medium text-foreground">Weekly hours</p>
+        <p className="text-[11px] text-muted-foreground">
+          Days and times callers can book. Uses the timezone above.
+        </p>
+        <div className="space-y-1">
+          {slots.map((slot) => (
+            <div
+              key={slot.dayOfWeek}
+              className={cn(
+                "flex items-center gap-2 rounded-md px-1.5 py-1",
+                slot.isActive ? "bg-muted/40" : "opacity-50",
+              )}
+            >
+              <Switch
+                checked={slot.isActive}
+                onCheckedChange={() =>
+                  setSlots((prev) =>
+                    prev.map((s) =>
+                      s.dayOfWeek === slot.dayOfWeek ? { ...s, isActive: !s.isActive } : s,
+                    ),
+                  )
+                }
+                className="scale-75 origin-left"
+              />
+              <span className="w-8 shrink-0 text-[11px] font-medium">{WEEKDAY_SHORT[slot.dayOfWeek]}</span>
+              <input
+                type="time"
+                value={slot.startTime}
+                disabled={!slot.isActive}
+                onChange={(e) =>
+                  setSlots((prev) =>
+                    prev.map((s) =>
+                      s.dayOfWeek === slot.dayOfWeek ? { ...s, startTime: e.target.value } : s,
+                    ),
+                  )
+                }
+                className="h-7 w-[5.75rem] rounded border border-input bg-background px-1.5 text-[11px] text-foreground disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <span className="text-[11px] text-muted-foreground">–</span>
+              <input
+                type="time"
+                value={slot.endTime}
+                disabled={!slot.isActive}
+                onChange={(e) =>
+                  setSlots((prev) =>
+                    prev.map((s) =>
+                      s.dayOfWeek === slot.dayOfWeek ? { ...s, endTime: e.target.value } : s,
+                    ),
+                  )
+                }
+                className="h-7 w-[5.75rem] rounded border border-input bg-background px-1.5 text-[11px] text-foreground disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+          ))}
+        </div>
       </div>
       <Button className="w-full" disabled={saving} onClick={() => void handleSave()}>
         {saving ? (

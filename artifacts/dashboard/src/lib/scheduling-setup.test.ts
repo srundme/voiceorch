@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeBookingSetupReadiness,
+  mergeWeeklyAvailability,
   slugifyMeetingName,
   type MeetingInfo,
   type SchedulingCalendarInfo,
@@ -80,5 +81,21 @@ describe("computeBookingSetupReadiness", () => {
     expect(r.calendar).toBeNull();
     expect(r.meeting).toBeNull();
     expect(r.ready).toBe(false);
+  });
+});
+
+describe("mergeWeeklyAvailability", () => {
+  it("turns off days that have no saved window", () => {
+    const merged = mergeWeeklyAvailability([
+      { dayOfWeek: 1, startTime: "10:00:00", endTime: "18:00", isActive: true },
+    ]);
+    expect(merged[0]!.isActive).toBe(false);
+    expect(merged[1]).toEqual({
+      dayOfWeek: 1,
+      startTime: "10:00",
+      endTime: "18:00",
+      isActive: true,
+    });
+    expect(merged[5]!.isActive).toBe(false);
   });
 });

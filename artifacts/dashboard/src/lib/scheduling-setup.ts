@@ -58,6 +58,43 @@ export function slugifyMeetingName(s: string): string {
   return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "meeting";
 }
 
+export const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+export type WeeklyAvailabilitySlot = {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isActive: boolean;
+};
+
+export function defaultWeeklyAvailability(): WeeklyAvailabilitySlot[] {
+  return [0, 1, 2, 3, 4, 5, 6].map((d) => ({
+    dayOfWeek: d,
+    startTime: "09:00",
+    endTime: "17:00",
+    isActive: d >= 1 && d <= 5,
+  }));
+}
+
+function toHhMm(value: string): string {
+  return value.slice(0, 5) || "09:00";
+}
+
+export function mergeWeeklyAvailability(
+  existing: Array<{ dayOfWeek: number; startTime: string; endTime: string; isActive?: boolean }>,
+): WeeklyAvailabilitySlot[] {
+  return defaultWeeklyAvailability().map((def) => {
+    const fetched = existing.find((s) => s.dayOfWeek === def.dayOfWeek);
+    if (!fetched) return { ...def, isActive: false };
+    return {
+      dayOfWeek: def.dayOfWeek,
+      startTime: toHhMm(fetched.startTime),
+      endTime: toHhMm(fetched.endTime),
+      isActive: fetched.isActive !== false,
+    };
+  });
+}
+
 export function getBrowserTimezone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -250,4 +287,46 @@ export async function createMeeting(input: {
     }),
   });
   return mapMeeting(r);
+}
+
+type AvailabilityRow = {
+  id: number;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isActive?: boolean;
+};
+
+export async function listCalendarAvailability(calendarId: number): Promise<AvailabilityRow[]> {
+  const rows = await customFetch<AvailabilityRow[]>(
+    `${SCHEDULING_API}/scheduling/availability?calendarId=${calendarId}`,
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
+export async function replaceCalendarAvailability(
+  calendarId: number,
+  slots: WeeklyAvailabilitySlot[],
+): Promise<void> {
+  const existing = await listCalendarAvailability(calendarId);
+  await Promise.allSettled(
+    existing.map((row) =>
+      customFetch(`${SCHEDULING_API}/scheduling/availability/${row.id}`, { method: "DELETE" }),
+    ),
+  );
+  const active = slots.filter((s) => s.isActive);
+  await Promise.all(
+    active.map((s) =>
+      customFetch(`${SCHEDULING_API}/scheduling/availability`, {
+        method: "POST",
+        body: JSON.stringify({
+          calendarId,
+          dayOfWeek: s.dayOfWeek,
+          startTime: toHhMm(s.startTime),
+          endTime: toHhMm(s.endTime),
+          isActive: true,
+        }),
+      }),
+    ),
+  );
 }
