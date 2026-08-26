@@ -244,9 +244,9 @@ export async function createOrUpdateCalendar(input: {
 
 export async function openGoogleConnectPopup(): Promise<void> {
   const { url } = await customFetch<{ url: string }>(
-    `${SCHEDULING_API}/scheduling/google/connect-url?returnTo=calendar&returnOrigin=${encodeURIComponent(window.location.origin)}`,
+    `${SCHEDULING_API}/scheduling/google/connect-url?returnTo=connections-calendar&returnOrigin=${encodeURIComponent(window.location.origin)}`,
   );
-  window.open(url, "_blank", "noopener,width=500,height=650");
+  window.open(url, "snapserve-google-oauth", "width=500,height=650");
 }
 
 export async function linkGoogleToCalendar(
