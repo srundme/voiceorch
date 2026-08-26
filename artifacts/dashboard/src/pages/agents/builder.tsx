@@ -2969,24 +2969,67 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   </div>
                 )
               )}
+
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-[12px] font-medium text-foreground">Phone + meetings</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                    {canAttendMeetings
+                      ? "On — this agent can join Meet / Zoom / Teams (not phone-only)."
+                      : "Off — phone only. Bookings can still send a Meet link to humans; this agent won’t join."}
+                  </p>
+                </div>
+                <Switch
+                  className="mt-0.5 shrink-0"
+                  checked={canAttendMeetings}
+                  onCheckedChange={(on) =>
+                    form.setValue("agentSurfaces", on ? "phone_and_meet" : "phone", { shouldDirty: true })
+                  }
+                />
+              </div>
+              {canAttendMeetings && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {agentId ? (
+                    <Button asChild type="button" size="sm" variant="outline" className="h-8 text-[11px]">
+                      <Link href={`/app/meet?agentId=${agentId}`}>Meeting bots settings</Link>
+                    </Button>
+                  ) : (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400">Save the agent, then open Meeting bots.</p>
+                  )}
+                </div>
+              )}
             </div>
             );
           })()}
         </div>
         </BuilderPanel>
 
-        {canAttendMeetings && (
-          <BuilderPanel title="Meeting bots" icon={<Video />}>
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                This agent can join Google Meet. Open Meeting bots for join settings.
+        <BuilderPanel title="Meeting bots" icon={<Video />} bodyClassName="p-0">
+          <div className="flex items-start gap-3 p-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-[12.5px] font-semibold text-foreground">Phone + meetings</p>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">
+                {canAttendMeetings
+                  ? "On — this agent can join Meet / Zoom / Teams."
+                  : "Off — phone only. Turn on when the agent should join meetings."}
               </p>
-              <Button asChild type="button" variant="outline" size="sm" className="h-8 shrink-0 text-[11px]">
-                <Link href={agentId ? `/app/meet?agentId=${agentId}` : "/app/meet"}>Open</Link>
+            </div>
+            <Switch
+              className="mt-0.5 shrink-0"
+              checked={canAttendMeetings}
+              onCheckedChange={(on) =>
+                form.setValue("agentSurfaces", on ? "phone_and_meet" : "phone", { shouldDirty: true })
+              }
+            />
+          </div>
+          {canAttendMeetings && agentId ? (
+            <div className="border-t border-border px-4 pb-4 pt-3">
+              <Button asChild type="button" variant="outline" size="sm" className="h-8 text-[11px]">
+                <Link href={`/app/meet?agentId=${agentId}`}>Open Meeting bots</Link>
               </Button>
             </div>
-          </BuilderPanel>
-        )}
+          ) : null}
+        </BuilderPanel>
 
         <BuilderPanel
           title="Messaging"
