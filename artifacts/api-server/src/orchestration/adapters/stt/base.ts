@@ -21,6 +21,9 @@ export interface SttFinalMetadata {
   endS?: number;
   /** Sarvam realtime language_confidence on transcript.final when language_code=auto. */
   languageConfidence?: number;
+  /** Set on the final where auto LID kept drifting to English and the socket was
+   *  pinned to the agent's own language instead (visible in the call log). */
+  languagePinnedTo?: string;
 }
 
 export interface STTAdapter {

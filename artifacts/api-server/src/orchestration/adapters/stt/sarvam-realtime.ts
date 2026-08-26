@@ -128,6 +128,34 @@ export function parseRealtimeLanguageConfidence(raw: unknown): number | undefine
   return Math.min(1, Math.max(0, n));
 }
 
+/**
+ * Sarvam's own guidance: pin `language_code` for audio under ~3s, because auto
+ * LID needs more signal. Real PSTN turns are 0.5–2s, so a multilingual agent on
+ * `auto` can have every short Tamil/Hindi turn come back as low-confidence
+ * `en-IN` — and Saaras then decodes that audio with the English model, so the
+ * caller side of the whole transcript is English junk (call 13919: "Killer
+ * calendar", "Complex" for Tamil speech, confidence 0.1–0.4).
+ *
+ * Two such finals in a row are enough to stop trusting LID and pin the agent's
+ * own language for the rest of the call. Turn 1 still gets `auto`, so a caller
+ * who really opens in another language is still discovered.
+ */
+export const LID_DRIFT_CONFIDENCE_BAR = 0.6;
+export const LID_DRIFT_FINALS_TO_PIN = 2;
+
+export function isLidDriftFinal(opts: {
+  /** Agent's own language as a realtime code — "auto"/English disables the guard. */
+  primaryLanguage: string;
+  detectedLanguage: string | undefined;
+  languageConfidence: number | undefined;
+}): boolean {
+  const primary = opts.primaryLanguage.trim().toLowerCase();
+  if (!primary || primary === "auto" || primary.startsWith("en")) return false;
+  if (!opts.detectedLanguage?.toLowerCase().startsWith("en")) return false;
+  // A confident English read is a real English caller, not LID drift.
+  return opts.languageConfidence !== undefined && opts.languageConfidence < LID_DRIFT_CONFIDENCE_BAR;
+}
+
 export function buildRealtimeWsUrl(opts: {
   languageCode: string;
   sampleRate: 8000 | 16000;
@@ -228,6 +256,8 @@ export class SarvamRealtimeSTT implements STTAdapter {
   private readonly mode: SarvamSttMode;
   private readonly explicitMode: string | null;
   private languageCode: string;
+  /** Agent language, kept even when the socket opens on `auto`, for LID-drift recovery. */
+  private readonly primaryLanguage: string;
   private readonly silenceDurationMs: number;
   private readonly minSpeechDurationMs: number;
   private readonly threshold: number;
@@ -259,6 +289,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
     this.explicitMode = extra.mode ?? null;
     this.mode = resolveSarvamSttMode(cfg.language, this.explicitMode);
     this.languageCode = resolveRealtimeSocketLanguage(cfg.language, extra.languageAutoDetect);
+    this.primaryLanguage = toRealtimeLanguageCode(cfg.language, false);
     this.silenceDurationMs = resolveMsSetting(
       extra.endOfSpeechSilenceMs,
       "SARVAM_END_OF_SPEECH_SILENCE_MS",
@@ -282,6 +313,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
     logger.info(
       {
         languageCode: this.languageCode,
+        primaryLanguage: this.primaryLanguage,
         mode: this.mode,
         streamType: this.streamType,
         prefixPaddingMs: DEFAULT_PREFIX_PADDING_MS,
@@ -312,6 +344,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
     const sampleRate = this.sampleRate;
     let languageCode = this.languageCode;
     let mode = this.mode;
+    const primaryLanguage = this.primaryLanguage;
     const explicitMode = this.explicitMode;
     const silenceDurationMs = this.silenceDurationMs;
     const minSpeechDurationMs = this.minSpeechDurationMs;
@@ -331,6 +364,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
     let lastPartialLang: string | undefined;
     let speechEndAt = 0;
     let lastRequestId: string | undefined;
+    let lidDriftFinals = 0;
     const audioQueue: Buffer[] = [];
     const MAX_QUEUE_BYTES = sampleRate * 2 * 8;
 
@@ -475,6 +509,31 @@ export class SarvamRealtimeSTT implements STTAdapter {
           );
         }
         const languageConfidence = parseRealtimeLanguageConfidence(msg.language_confidence);
+        let languagePinnedTo: string | undefined;
+        if (languageCode === "auto") {
+          if (isLidDriftFinal({ primaryLanguage, detectedLanguage: detected, languageConfidence })) {
+            lidDriftFinals++;
+            if (lidDriftFinals >= LID_DRIFT_FINALS_TO_PIN) {
+              lidDriftFinals = 0;
+              languageCode = primaryLanguage;
+              mode = resolveSarvamSttMode(primaryLanguage, explicitMode);
+              languagePinnedTo = primaryLanguage;
+              logger.warn(
+                {
+                  to: primaryLanguage,
+                  mode,
+                  detected,
+                  languageConfidence,
+                  requestId: lastRequestId,
+                },
+                "Sarvam STT realtime: LID drift — pinning language_code to the agent language",
+              );
+              sendJson(buildRealtimeConfigUpdate({ languageCode, mode }));
+            }
+          } else {
+            lidDriftFinals = 0;
+          }
+        }
         const meta: SttFinalMetadata = {
           requestId: lastRequestId,
           endDetectToFinalMs: speechEndAt > 0 ? Date.now() - speechEndAt : undefined,
@@ -482,6 +541,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
           startS: typeof msg.start_s === "number" ? msg.start_s : undefined,
           endS: typeof msg.end_s === "number" ? msg.end_s : undefined,
           languageConfidence,
+          languagePinnedTo,
         };
         speechEndAt = 0;
         logger.info(

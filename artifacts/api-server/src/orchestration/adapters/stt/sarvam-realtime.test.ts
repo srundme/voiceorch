@@ -3,6 +3,7 @@ import {
   buildRealtimeConfigUpdate,
   buildRealtimeWsUrl,
   clipRealtimePrompt,
+  isLidDriftFinal,
   isSarvamRealtimeModel,
   nextRealtimeLanguageOnSwitch,
   parseRealtimeDetectedLang,
@@ -57,6 +58,30 @@ describe("nextRealtimeLanguageOnSwitch", () => {
   it("still maps a pinned socket to a realtime code", () => {
     expect(nextRealtimeLanguageOnSwitch("hi-IN", "ta-IN")).toBe("ta-IN");
     expect(nextRealtimeLanguageOnSwitch("en-IN", "od-IN")).toBe("or-IN");
+  });
+});
+
+describe("isLidDriftFinal", () => {
+  const tamil = { primaryLanguage: "ta-IN" };
+
+  it("flags a low-confidence English read on a Tamil agent (call 13919)", () => {
+    expect(isLidDriftFinal({ ...tamil, detectedLanguage: "en-IN", languageConfidence: 0.23 })).toBe(true);
+    expect(isLidDriftFinal({ ...tamil, detectedLanguage: "en-IN", languageConfidence: 0.1 })).toBe(true);
+  });
+
+  it("trusts a confident English read — that is a real English caller", () => {
+    expect(isLidDriftFinal({ ...tamil, detectedLanguage: "en-IN", languageConfidence: 0.88 })).toBe(false);
+    expect(isLidDriftFinal({ ...tamil, detectedLanguage: "en-IN", languageConfidence: undefined })).toBe(false);
+  });
+
+  it("never fires for an English or unpinnable agent language", () => {
+    expect(isLidDriftFinal({ primaryLanguage: "en-IN", detectedLanguage: "en-IN", languageConfidence: 0.1 })).toBe(false);
+    expect(isLidDriftFinal({ primaryLanguage: "auto", detectedLanguage: "en-IN", languageConfidence: 0.1 })).toBe(false);
+  });
+
+  it("ignores non-English detections and missing LID", () => {
+    expect(isLidDriftFinal({ ...tamil, detectedLanguage: "hi-IN", languageConfidence: 0.2 })).toBe(false);
+    expect(isLidDriftFinal({ ...tamil, detectedLanguage: undefined, languageConfidence: 0.2 })).toBe(false);
   });
 });
 
