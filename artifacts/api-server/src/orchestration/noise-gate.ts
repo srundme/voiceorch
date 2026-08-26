@@ -2,21 +2,19 @@
  * Software noise-gate arbitration — decides whether the NoiseCanceller runs on
  * a given call, and records WHY.
  *
- * Background: the agent's `noiseCancellationEnabled` toggle used to be silently
- * ignored on VoBiz calls (the VoBiz media handler hardcoded noiseCancel=false
- * because VoBiz denoises at the carrier layer). Since every new agent defaults
- * to telephonyProvider "vobiz", the toggle was a no-op for effectively the whole
- * fleet — flipping it changed nothing, which is exactly what field complaints
- * described. The bypass itself is still correct as a DEFAULT (double-processing
- * already-denoised audio has a documented history of attenuating quiet one-word
- * replies), so this resolver keeps it while adding a per-agent opt-in that
- * support can flip for one customer instead of the fleet-wide env var.
+ * Product rule: the agent's Noise Cancellation toggle is the only user-facing
+ * control, and it applies to every LLM stack (classic Sarvam/OpenAI/Groq and
+ * Gemini Live alike). Telephony audio (VoBiz, Twilio, Plivo) is gated when the
+ * toggle is on. Browser webcall is the one exception: the mic already ran AEC/NS
+ * and stacking our gate erases quiet speech, so webcall stays off.
  *
- * The returned `reason` is logged once per call so "was the gate actually on?"
- * is answerable from logs alone — previously it was not.
+ * Historically VoBiz calls skipped the software gate because the carrier also
+ * denoises. That made the toggle a no-op for almost every agent. The extra
+ * forceSoftwareNoiseGate / VOBIZ_FORCE_SOFTWARE_NC knobs are kept as aliases
+ * that still force the gate on, but they are no longer required.
  */
 
-/** Per-agent escape hatch key inside agents.agent_config. */
+/** Per-agent escape hatch key inside agents.agent_config (legacy, still honored). */
 export const FORCE_SOFTWARE_NOISE_GATE_KEY = "forceSoftwareNoiseGate";
 
 export type NoiseGateReason =
@@ -24,13 +22,11 @@ export type NoiseGateReason =
   | "agent-toggle-off"
   /** Browser already ran AEC/NS on webcall audio. */
   | "browser-aec"
-  /** VoBiz denoised at the carrier layer; software gate deliberately skipped. */
-  | "vobiz-carrier"
-  /** Per-agent forceSoftwareNoiseGate=true overrode the VoBiz bypass. */
+  /** Per-agent forceSoftwareNoiseGate=true (legacy VoBiz opt-in). */
   | "agent-override"
-  /** VOBIZ_FORCE_SOFTWARE_NC=1 overrode the VoBiz bypass fleet-wide. */
+  /** VOBIZ_FORCE_SOFTWARE_NC=1 (legacy fleet-wide VoBiz opt-in). */
   | "env-override"
-  /** Carrier does no cleanup (Twilio/Plivo) — software gate is the only denoiser. */
+  /** Toggle on — software gate runs for this telephony call. */
   | "software-gate";
 
 export interface NoiseGateDecision {
@@ -42,7 +38,7 @@ export interface NoiseGateInput {
   telephonyProvider: string | null | undefined;
   /** agents.noise_cancellation_enabled */
   agentEnabled: boolean;
-  /** agent_config.forceSoftwareNoiseGate — only consulted on VoBiz. */
+  /** agent_config.forceSoftwareNoiseGate — still forces the gate on if set. */
   agentOverride?: unknown;
   /** VOBIZ_FORCE_SOFTWARE_NC === "1" */
   envForceVobiz?: boolean;
@@ -51,9 +47,9 @@ export interface NoiseGateInput {
 /**
  * Resolve the software noise gate for one call.
  *
- * Precedence on VoBiz: per-agent override > env override > carrier bypass.
- * The agent toggle is checked first everywhere — an explicitly disabled gate is
- * never re-enabled by an override.
+ * The agent toggle is checked first — an explicitly disabled gate is never
+ * re-enabled by an override. Webcall is always bypassed. Every other provider
+ * (including VoBiz) runs the gate when the toggle is on, for every LLM.
  */
 export function resolveSoftwareNoiseGate(input: NoiseGateInput): NoiseGateDecision {
   if (!input.agentEnabled) return { enabled: false, reason: "agent-toggle-off" };
@@ -62,11 +58,8 @@ export function resolveSoftwareNoiseGate(input: NoiseGateInput): NoiseGateDecisi
 
   if (provider === "webcall") return { enabled: false, reason: "browser-aec" };
 
-  if (provider === "vobiz") {
-    if (input.agentOverride === true) return { enabled: true, reason: "agent-override" };
-    if (input.envForceVobiz) return { enabled: true, reason: "env-override" };
-    return { enabled: false, reason: "vobiz-carrier" };
-  }
+  if (input.agentOverride === true) return { enabled: true, reason: "agent-override" };
+  if (input.envForceVobiz) return { enabled: true, reason: "env-override" };
 
   return { enabled: true, reason: "software-gate" };
 }

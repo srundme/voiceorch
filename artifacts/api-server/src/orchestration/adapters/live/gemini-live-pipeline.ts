@@ -10,11 +10,18 @@ import type { AgentConfig, ConversationTurn, SessionConfig } from "../../types.j
 import type { VoiceSession } from "../../voice-session.js";
 import { RecordingBuffer, WEBCALL_GAP_RESYNC_MS } from "../../recorder.js";
 import {
+  NoiseCanceller,
   createDownsampler24to8,
   decodeMulaw,
   encodeMulaw,
   upsample8to16,
 } from "../../audio.js";
+import {
+  envForceVobizSoftwareNc,
+  resolveSoftwareNoiseGate,
+  type NoiseGateDecision,
+} from "../../noise-gate.js";
+import { getMicSensitivityThresholds, resolveMicSensitivity } from "../../mic-sensitivity.js";
 import {
   AmbientNoiseStream,
   FileAmbientNoiseStream,
@@ -185,6 +192,14 @@ export class GeminiLivePipeline implements VoiceSession {
   private readonly outDecim24to8 = createDownsampler24to8();
   private isPlayingOut = false;
 
+  // ── Caller-audio noise gate ──────────────────────────────────────────────
+  // Live used to send caller audio straight to Gemini, which made the Noise
+  // Cancellation toggle a no-op on this stack. Both Live and classic now share
+  // resolveSoftwareNoiseGate so the same toggle covers every LLM.
+  private readonly noiseGate: NoiseGateDecision;
+  private readonly gateRatio: number;
+  private noiseCanceller: NoiseCanceller | null = null;
+
   // ── Paced outbound pump ──────────────────────────────────────────────────
   // Gemini Live streams a whole reply's audio much faster than real time. If we
   // forward it to the carrier as it arrives, the carrier buffers many seconds of
@@ -251,6 +266,26 @@ export class GeminiLivePipeline implements VoiceSession {
     if (config.answeredAt) {
       this.recording.anchorStart(config.answeredAt);
     }
+    this.gateRatio = getMicSensitivityThresholds(resolveMicSensitivity()).gateRatio;
+    this.noiseGate = resolveSoftwareNoiseGate({
+      telephonyProvider: config.telephonyProvider,
+      agentEnabled: this.agent.noiseCancellationEnabled,
+      agentOverride: this.agent.forceSoftwareNoiseGate,
+      envForceVobiz: envForceVobizSoftwareNc(),
+    });
+    logger.info(
+      {
+        callId: config.callId,
+        agentId: this.agent.id,
+        telephonyProvider: config.telephonyProvider,
+        voiceStack: "gemini-live",
+        toggle: this.agent.noiseCancellationEnabled,
+        softwareGate: this.noiseGate.enabled,
+        reason: this.noiseGate.reason,
+        gateRatio: this.noiseGate.enabled ? this.gateRatio : undefined,
+      },
+      "Noise cancellation resolved",
+    );
     this.initAmbient();
     this.startKeepalive();
   }
@@ -321,13 +356,28 @@ export class GeminiLivePipeline implements VoiceSession {
     this.onRawPcm8kIn(decodeMulaw(mulawChunk));
   }
 
+  /** NoiseCanceller is stateful (it calibrates a noise floor), so one instance
+   *  must serve the whole call. */
+  private denoise(pcm8k: Buffer): Buffer {
+    this.noiseCanceller ??= new NoiseCanceller(this.gateRatio);
+    return this.noiseCanceller.process(pcm8k);
+  }
 
-  onRawPcm8kIn(pcm8k: Buffer, _noiseCancel?: boolean, nativePcm16k?: Buffer): void {
+
+  onRawPcm8kIn(pcm8k: Buffer, noiseCancel?: boolean, nativePcm16k?: Buffer): void {
     if (this.closed || pcm8k.length < 2) return;
+    // Record and tap the RAW caller audio, so the recording stays a faithful
+    // copy of what the carrier delivered even when the gate is attenuating.
     this.recording.addCallerChunk(pcm8k);
     this.config.callerAudioTap?.(pcm8k);
 
-    const pcm16k = nativePcm16k?.length ? nativePcm16k : upsample8to16(pcm8k);
+    // An explicit caller-supplied flag wins (webcall passes false because the
+    // browser already ran AEC/NS); otherwise use the per-call decision.
+    const gateOn = noiseCancel !== undefined ? noiseCancel : this.noiseGate.enabled;
+    // The gate is calibrated for 8 kHz telephony frames, so run it on the 8k
+    // leg and upsample the result rather than gating a native 16k buffer.
+    const gated = gateOn ? this.denoise(pcm8k) : pcm8k;
+    const pcm16k = !gateOn && nativePcm16k?.length ? nativePcm16k : upsample8to16(gated);
     void this.ensureConnected().then(() => {
       if (this.closed || !this.session) return;
       this.session.sendRealtimeInput({

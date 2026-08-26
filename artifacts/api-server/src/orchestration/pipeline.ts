@@ -2574,13 +2574,10 @@ export class OrchestrationPipeline implements VoiceSession {
       ]).catch(() => { /* ignore warmup error */ });
     }
 
-    // Resolve the software noise gate once per call. VoBiz denoises at the
-    // carrier layer and the browser runs AEC/NS for webcall, so the gate stays
-    // bypassed there by default; agent_config.forceSoftwareNoiseGate (or the
-    // fleet-wide VOBIZ_FORCE_SOFTWARE_NC) opts a VoBiz agent back in. Logged
-    // unconditionally so "was noise cancellation actually on?" is answerable
-    // from this one line — the previous log only fired when the toggle was on
-    // and never reported the effective decision.
+    // Resolve the software noise gate once per call. The agent's Noise
+    // Cancellation toggle is the source of truth for every LLM stack; webcall
+    // is the only bypass (browser AEC/NS). Logged unconditionally so
+    // "was noise cancellation actually on?" is answerable from this one line.
     this.noiseGate = resolveSoftwareNoiseGate({
       telephonyProvider: config.telephonyProvider,
       agentEnabled: this.agent.noiseCancellationEnabled,

@@ -1226,7 +1226,7 @@ export default function AgentEdit() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium leading-none">Noise Cancellation</p>
-                          <p className="text-xs text-muted-foreground mt-1">Software noise filtering on caller audio. VoBiz and web calls are already denoised upstream (carrier / browser), so this applies to other carriers.</p>
+                          <p className="text-xs text-muted-foreground mt-1">Software noise filtering on caller audio for every LLM, including Gemini Live. Browser web calls still use the mic&apos;s own noise suppression.</p>
                         </div>
                         <FormField control={form.control} name="noiseCancellationEnabled" render={({ field }) => (
                           <FormItem>
@@ -1240,29 +1240,6 @@ export default function AgentEdit() {
                           </FormItem>
                         )} />
                       </div>
-                      {form.watch("noiseCancellationEnabled") && form.watch("telephonyProvider") === "vobiz" && (
-                        <div className="flex items-center justify-between border-t pt-3">
-                          <div>
-                            <p className="text-sm font-medium leading-none">Also run it on VoBiz calls</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              VoBiz denoises at the carrier, so our filter is skipped by default. Turn this on only
-                              if callers still sound noisy — stacking a second filter can clip very quiet one-word
-                              replies like &quot;yes&quot;.
-                            </p>
-                          </div>
-                          <FormField control={form.control} name="forceSoftwareNoiseGate" render={({ field }) => (
-                            <FormItem>
-                              <Select onValueChange={(v) => field.onChange(v === "true")} value={field.value ? "true" : "false"}>
-                                <FormControl><SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                  <SelectItem value="false">Off</SelectItem>
-                                  <SelectItem value="true">On</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </FormItem>
-                          )} />
-                        </div>
-                      )}
                     </div>
 
                     <div className="space-y-3 p-4 border rounded-md bg-muted/20">

@@ -7,19 +7,11 @@ import { eq } from "drizzle-orm";
 import { startEarlyAmbientKeepalive } from "./early-ambient.js";
 
 /**
- * VoBiz performs noise removal / voice isolation natively in its telecom media
- * layer — verified against the complete VoBiz docs (Jul 2026): there is NO API
- * parameter to toggle it; it is always on for every call. Audio arriving on
- * this WebSocket is therefore already denoised, so our software noise gate stays
- * bypassed for VoBiz-carried calls by default (same treatment webcall gives
- * browser-AEC audio).
- *
- * This handler no longer decides that itself. It passes no noiseCancel flag and
- * lets the pipeline arbitrate, because the decision needs the agent config that
- * only the pipeline holds: agent_config.forceSoftwareNoiseGate opts a single
- * agent back into the software gate, and VOBIZ_FORCE_SOFTWARE_NC=1 still does it
- * fleet-wide. Hardcoding false here made the agent's Noise Cancellation toggle a
- * silent no-op for every VoBiz agent. See orchestration/noise-gate.ts.
+ * VoBiz also denoises in its media layer, but the agent's Noise Cancellation
+ * toggle is still honored here. This handler does not decide that itself: it
+ * passes no noiseCancel flag and lets the pipeline (classic or Gemini Live)
+ * apply resolveSoftwareNoiseGate. Hardcoding false here used to make the
+ * toggle a silent no-op for every VoBiz agent. See orchestration/noise-gate.ts.
  */
 
 /**
@@ -324,9 +316,8 @@ export async function handleVobizWebSocket(
         // Vobiz sends inbound audio as little-endian LINEAR16 PCM (same as outbound).
         // Pass directly to pipeline — no byte-swap needed.
         const pcm8k = Buffer.from(msg.media.payload, "base64");
-        // No noiseCancel argument: the pipeline resolves the software gate for
-        // VoBiz itself (carrier bypass by default, plus the per-agent and env
-        // overrides) — see the header note and noise-gate.ts.
+        // No noiseCancel argument: the pipeline (classic or Gemini Live) applies
+        // the agent's Noise Cancellation toggle via noise-gate.ts.
         session.pipeline.onRawPcm8kIn(pcm8k);
         break;
       }

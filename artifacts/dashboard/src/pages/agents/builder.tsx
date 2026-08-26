@@ -1997,10 +1997,6 @@ function VoiceTab({ form }: { form: any }) {
   const { data: ambientSounds, isLoading: ambientSoundsLoading } = useListAmbientSounds();
   const ambientNoiseEnabled = form.watch("ambientNoiseEnabled") ?? false;
   const ambientNoiseTrack   = form.watch("ambientNoiseTrack") ?? "";
-  // The software noise gate is bypassed on VoBiz (carrier already denoised), so
-  // the opt-in below is only meaningful for VoBiz agents with the toggle on.
-  const noiseCancelOn       = form.watch("noiseCancellationEnabled") ?? true;
-  const isVobizAgent        = (form.watch("telephonyProvider") ?? "") === "vobiz";
   const ambientNoiseVolume  = (form.watch("ambientNoiseVolume") as number | undefined) ?? 1.0;
   const [ambientPreviewPlaying, setAmbientPreviewPlaying] = useState<string | null>(null);
   const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -2422,25 +2418,11 @@ function VoiceTab({ form }: { form: any }) {
             <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
               <div>
                 <FormLabel className="text-sm">Noise Cancellation</FormLabel>
-                <FormDescription className="text-[10px]">Software noise filter — VoBiz &amp; web calls are denoised upstream automatically</FormDescription>
+                <FormDescription className="text-[10px]">Software noise filter on caller audio — applies to every LLM, including Gemini Live</FormDescription>
               </div>
               <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
           )} />
-          {noiseCancelOn && isVobizAgent && (
-            <FormField control={form.control} name="forceSoftwareNoiseGate" render={({ field }) => (
-              <FormItem className="flex items-center justify-between rounded-lg border border-dashed border-border/50 bg-muted/10 px-3 py-2.5 ml-3">
-                <div>
-                  <FormLabel className="text-sm">Also run our noise filter on VoBiz</FormLabel>
-                  <FormDescription className="text-[10px]">
-                    VoBiz already denoises at the carrier, so our filter is skipped. Turn this on only if
-                    callers still sound noisy — it can clip very quiet one-word replies.
-                  </FormDescription>
-                </div>
-                <FormControl><Switch checked={field.value ?? false} onCheckedChange={field.onChange} /></FormControl>
-              </FormItem>
-            )} />
-          )}
           <FormField control={form.control} name="backchannelingEnabled" render={({ field }) => (
             <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
               <div>

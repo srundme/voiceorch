@@ -312,9 +312,8 @@ export interface AgentConfig {
   backchannelingFrequency: number | null;
   webhookUrl: string | null;
   noiseCancellationEnabled: boolean;
-  /** Per-agent opt-in that re-applies our software noise gate on VoBiz calls,
-   *  which bypass it by default because VoBiz denoises at the carrier layer.
-   *  Only meaningful when noiseCancellationEnabled is also true. See noise-gate.ts. */
+  /** Kept for existing agent_config rows. The Noise Cancellation toggle now
+   *  runs the software gate on VoBiz by itself; this flag is no longer required. */
   forceSoftwareNoiseGate: boolean;
   ambientNoiseEnabled: boolean;
   ambientNoiseTrack: string | null;

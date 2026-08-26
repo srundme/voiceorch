@@ -23,21 +23,28 @@ describe("resolveSoftwareNoiseGate — agent toggle off wins everywhere", () => 
   });
 });
 
-describe("resolveSoftwareNoiseGate — VoBiz default is still carrier bypass", () => {
-  it("bypasses the software gate on VoBiz with no override (unchanged behaviour)", () => {
+describe("resolveSoftwareNoiseGate — toggle on runs the gate on every telephony LLM path", () => {
+  it("runs the software gate on VoBiz when the toggle is on (no extra opt-in needed)", () => {
     expect(resolveSoftwareNoiseGate({ telephonyProvider: "vobiz", agentEnabled: true })).toEqual({
-      enabled: false,
-      reason: "vobiz-carrier",
+      enabled: true,
+      reason: "software-gate",
     });
   });
 
-  it("honours the per-agent override ahead of the carrier bypass", () => {
+  it("matches the provider case-insensitively", () => {
+    expect(resolveSoftwareNoiseGate({ telephonyProvider: "VoBiz", agentEnabled: true })).toEqual({
+      enabled: true,
+      reason: "software-gate",
+    });
+  });
+
+  it("still records the legacy per-agent override reason when that flag is set", () => {
     expect(
       resolveSoftwareNoiseGate({ telephonyProvider: "vobiz", agentEnabled: true, agentOverride: true }),
     ).toEqual({ enabled: true, reason: "agent-override" });
   });
 
-  it("honours the fleet-wide env override", () => {
+  it("still records the legacy fleet-wide env override reason when that flag is set", () => {
     expect(
       resolveSoftwareNoiseGate({ telephonyProvider: "vobiz", agentEnabled: true, envForceVobiz: true }),
     ).toEqual({ enabled: true, reason: "env-override" });
@@ -52,21 +59,6 @@ describe("resolveSoftwareNoiseGate — VoBiz default is still carrier bypass", (
         envForceVobiz: true,
       }),
     ).toEqual({ enabled: true, reason: "agent-override" });
-  });
-
-  it("treats non-true override values as unset (no accidental opt-in from stale JSON)", () => {
-    for (const override of ["true", 1, {}, [], null, undefined, false]) {
-      expect(
-        resolveSoftwareNoiseGate({ telephonyProvider: "vobiz", agentEnabled: true, agentOverride: override }),
-      ).toEqual({ enabled: false, reason: "vobiz-carrier" });
-    }
-  });
-
-  it("matches the provider case-insensitively", () => {
-    expect(resolveSoftwareNoiseGate({ telephonyProvider: "VoBiz", agentEnabled: true })).toEqual({
-      enabled: false,
-      reason: "vobiz-carrier",
-    });
   });
 });
 
