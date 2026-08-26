@@ -32,6 +32,7 @@ import {
   linkGoogleToCalendar,
   listGoogleConnections,
   MEETING_DURATION_OPTIONS,
+  CALENDAR_TIMEZONES,
   openGoogleConnectPopup,
   slugifyMeetingName,
   type MeetingInfo,
@@ -40,8 +41,10 @@ import {
 import {
   Check,
   CheckCircle2,
+  Globe,
   Loader2,
   Plus,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +56,7 @@ const STEPS: { id: WizardStepId; title: string; blurb: string }[] = [
   {
     id: "calendar",
     title: "Your calendar",
-    blurb: "Name it and the email where bookings should go.",
+    blurb: "Name, timezone, host email, and extra hosts.",
   },
   {
     id: "google",
@@ -70,14 +73,18 @@ const STEPS: { id: WizardStepId; title: string; blurb: string }[] = [
 function mapCalFromQuery(c: {
   id: number;
   name: string;
+  description?: string | null;
   hostEmail?: string | null;
+  additionalHosts?: string[] | null;
   connectedGoogleEmail?: string | null;
   timezone?: string;
 }): SchedulingCalendarInfo {
   return {
     id: c.id,
     name: c.name,
+    description: c.description ?? null,
     hostEmail: c.hostEmail ?? null,
+    additionalHosts: c.additionalHosts ?? null,
     connectedGoogleEmail: c.connectedGoogleEmail ?? null,
     timezone: c.timezone || "UTC",
   };
@@ -161,7 +168,7 @@ function SetupCard({
           <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">{blurb}</p>
         </div>
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
         {locked ? (
           <p className="text-[13px] text-muted-foreground">Save a calendar on the left first.</p>
         ) : (
@@ -318,8 +325,15 @@ function CalendarPanel({
 }) {
   const { toast } = useToast();
   const [name, setName] = useState(existing?.name ?? "My Calendar");
+  const [description, setDescription] = useState(existing?.description ?? "");
+  const [timezone, setTimezone] = useState(existing?.timezone || getBrowserTimezone() || "Asia/Kolkata");
   const [hostEmail, setHostEmail] = useState(existing?.hostEmail ?? "");
+  const [additionalHosts, setAdditionalHosts] = useState<string[]>(existing?.additionalHosts?.length ? [...existing.additionalHosts] : []);
   const [saving, setSaving] = useState(false);
+
+  const tzOptions = CALENDAR_TIMEZONES.includes(timezone as (typeof CALENDAR_TIMEZONES)[number])
+    ? CALENDAR_TIMEZONES
+    : [timezone, ...CALENDAR_TIMEZONES];
 
   async function handleSave() {
     if (!name.trim()) {
@@ -327,7 +341,7 @@ function CalendarPanel({
       return;
     }
     if (!hostEmail.trim() || !hostEmail.includes("@")) {
-      toast({ title: "Enter the email where bookings should go", variant: "destructive" });
+      toast({ title: "Enter the host / organizer email", variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -335,8 +349,10 @@ function CalendarPanel({
       await createOrUpdateCalendar({
         id: existing?.id,
         name,
+        description,
+        timezone,
         hostEmail,
-        timezone: existing?.timezone || getBrowserTimezone(),
+        additionalHosts,
       });
       await onDone();
     } catch (e: unknown) {
@@ -351,9 +367,9 @@ function CalendarPanel({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="space-y-1.5">
-        <Label className="text-xs font-medium">Calendar name</Label>
+        <Label className="text-xs font-medium">Calendar name *</Label>
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -361,7 +377,31 @@ function CalendarPanel({
         />
       </div>
       <div className="space-y-1.5">
-        <Label className="text-xs font-medium">Email where bookings should go</Label>
+        <Label className="text-xs font-medium">Description</Label>
+        <Input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="e.g. Handles inbound demo booking requests"
+        />
+        <p className="text-[11px] text-muted-foreground">Optional. Shown on the calendar card.</p>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium">Timezone *</Label>
+        <Select value={timezone} onValueChange={setTimezone}>
+          <SelectTrigger className="h-9">
+            <Globe className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="max-h-64">
+            {tzOptions.map((tz) => (
+              <SelectItem key={tz} value={tz}>{tz.replace(/_/g, " ")}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-[11px] text-muted-foreground">Slots and availability use this timezone.</p>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium">Host / organizer email *</Label>
         <Input
           type="email"
           value={hostEmail}
@@ -369,7 +409,47 @@ function CalendarPanel({
           placeholder="you@company.com"
         />
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Use the inbox you check every day. You’ll get booking emails here — ideally the same Google account you’ll connect next.
+          Organizer on Google invites. Use the same Google account you connect next.
+        </p>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium">Additional hosts</Label>
+        <div className="space-y-2">
+          {additionalHosts.map((host, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Input
+                type="email"
+                value={host}
+                onChange={(e) => {
+                  const next = [...additionalHosts];
+                  next[i] = e.target.value;
+                  setAdditionalHosts(next);
+                }}
+                placeholder="cohost@example.com"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                onClick={() => setAdditionalHosts(additionalHosts.filter((_, j) => j !== i))}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-[11px]"
+            onClick={() => setAdditionalHosts([...additionalHosts, ""])}
+          >
+            <Plus className="h-3.5 w-3.5" /> Add host
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Extra people get the Meet link on every booking.
         </p>
       </div>
       <Button className="w-full" disabled={saving} onClick={() => void handleSave()}>
