@@ -11,7 +11,7 @@ import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN } from "./conversationDiscipline.js";
 import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
-import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isSpeculativeHit } from "./eager-stt.js";
+import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
 import {
   SemanticTurnGate,
   resolveEouCommit,
@@ -64,7 +64,7 @@ import {
   isAffirmationOnlyUtterance,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts } from "./transcriptQuality.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { getCachedFillerPcm, setCachedFillerPcm } from "./fillerPcmCache.js";
@@ -1418,7 +1418,10 @@ export class OrchestrationPipeline implements VoiceSession {
   // Populated by _launchSpeculativeLlm() at semantic barge-in; consumed (or
   // aborted) in processTurn() before the LLM retry loop runs.
   private _specLlmState: {
+    pendingTurnId: number;
     partial: string;
+    partialSnapshot: string;
+    inputHash: string;
     /** `this.currentLang` snapshot at launch. If the final transcript triggers
      *  a language switch, the prefill's langGuard is stale (built for the old
      *  language) and replaying it answers the caller in the WRONG language
@@ -1723,12 +1726,12 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /**
-   * Prefill the LLM after conversational end-of-turn is decided.
+   * Prefill the LLM after the turn is eligible for commit.
    * Tokens are buffered only — TTS stays in processTurn after transcript.final
-   * is validated (spec hit vs miss). VAD speech_end must never call this
+   * is hash-validated against this prefill. VAD speech_end must never call this
    * while Smart Turn is still deciding.
    */
-  private handleSttSpeechEnd(): void {
+  private handleSttSpeechEnd(pendingTurnId?: number): void {
     if (this.closed || this.isPlaying || this.isSendingTtsAudio || this.isProcessing) return;
     if (this.semanticTurnBlocksPrefill()) return;
     if (this._specLlmState) return;
@@ -1736,7 +1739,7 @@ export class OrchestrationPipeline implements VoiceSession {
     if (!text) return;
     this.clearEagerPartialTimer();
     if (!isEagerCommitReady(text, { speechEnd: true })) return;
-    this.launchEagerLlmFromPartial(text, "eou_commit");
+    this.launchEagerLlmFromPartial(text, "eou_commit", pendingTurnId);
   }
 
   /** VAD ≠ turn complete: do not prefetch LLM while Smart Turn is deciding / holding. */
@@ -1787,22 +1790,27 @@ export class OrchestrationPipeline implements VoiceSession {
     this._eouHeldFinal = { text: transcript, emittedAt, closeReason };
     logger.info(
       { callId: this.config.callId, fragment: transcript.slice(0, 80), phase: this.semanticTurnGate.phase },
-      "Semantic turn: holding STT final until end-of-turn commit",
+      "Semantic turn: buffering STT final until turn commit",
     );
   }
 
   /** VAD said quiet — ask Smart Turn (plus a transcript veto) before starting the LLM. */
   private async evaluateSemanticTurn(): Promise<void> {
     if (this.closed || this.isPlaying || this.isSendingTtsAudio || this.isProcessing) return;
-    const { generation } = this.semanticTurnGate.onSpeechEnd();
+    const { generation, started } = this.semanticTurnGate.onSpeechEnd();
+    if (!started) return;
     const pending = this.streamSTT?.getPendingTranscript?.()?.trim()
       ?? this._eouHeldFinal?.text.trim()
       ?? this.eagerPartialText.trim();
-    const textLooksIncomplete = shouldHoldFragmentForCoalesce(pending, {
-      expectedLang: this.currentLang || this.agent.sttConfig.language,
-    });
+    const textLooksIncomplete = signalsConversationalContinuation(pending);
     const pcm = this._eouBytes > 0 ? Buffer.concat(this._eouAudio) : Buffer.alloc(0);
-    const pred = pcm.length > 0 ? await predictSmartTurn(pcm) : null;
+    const evalMs = envInt("SEMANTIC_TURN_EVAL_MS", 400, 100);
+    const pred = pcm.length > 0
+      ? await Promise.race([
+        predictSmartTurn(pcm),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), evalMs)),
+      ])
+      : null;
     const eou = pred?.verdict ?? "unavailable";
     const resolved = resolveEouCommit({ eou, textLooksIncomplete });
     const action = this.semanticTurnGate.onEou(generation, resolved);
@@ -1850,15 +1858,16 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /**
-   * Conversational turn is complete. Prefill LLM from the pending partial
-   * (no TTS). If transcript.final is already held, processTurn validates it
-   * and is the first place audio is synthesized.
+   * Turn is eligible for commit. Prefill LLM from the pending partial (no TTS).
+   * Buffered transcript.final is then hash-validated in processTurn — the first
+   * place audio is synthesized. Smart Turn is not the final authority.
    */
   private commitSemanticTurn(): void {
+    const pendingTurnId = this.semanticTurnGate.generation;
     this.clearSemanticTurnTimer();
     this.clearEouAudio();
     this.semanticTurnGate.reset();
-    this.handleSttSpeechEnd();
+    this.handleSttSpeechEnd(pendingTurnId);
     const held = this._eouHeldFinal;
     this._eouHeldFinal = null;
     if (held && !this.closed) {
@@ -1897,9 +1906,9 @@ export class OrchestrationPipeline implements VoiceSession {
     this.scheduleEagerLlm(text);
   }
 
-  private launchEagerLlmFromPartial(partial: string, source: string): void {
+  private launchEagerLlmFromPartial(partial: string, source: string, pendingTurnId?: number): void {
     if (this._specLlmState || this.closed || this.isProcessing) return;
-    this._launchSpeculativeLlm(partial);
+    this._launchSpeculativeLlm(partial, pendingTurnId);
     this.logExec("LLM", "system", {
       status: "info",
       turnNumber: this._activeTurnIndex,
@@ -2288,17 +2297,17 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /**
-   * Launch a speculative / eager LLM call using the barge-in partial text.
+   * Launch a speculative / eager LLM call using the pending partial.
    * Tokens are buffered into `_specLlmState.storedTokens` (via a redirectable
-   * `tokenSink`).  processTurn() checks the state before its own llm.chat
-   * call: if the final transcript is a "hit", it drains the buffer and
-   * redirects the live stream; on a miss it aborts and runs normally.
+   * `tokenSink`).  processTurn() reconciles the final transcript hash against
+   * `inputHash` before any token can reach TTS: match → drain; mismatch →
+   * discard and run llm.chat on the authoritative final.
    *
    * Fires only on SEMANTIC barge-in triggers — those carry meaningful partial
    * text.  Skipped on energy / word-count triggers (no reliable text) and on
    * the first agent turn (no conversation history yet).
    */
-  private _launchSpeculativeLlm(partialText: string): void {
+  private _launchSpeculativeLlm(partialText: string, pendingTurnId?: number): void {
     // Only one speculative call per turn; don't start if session is closing.
     if (this._specLlmState || this.closed) return;
     // Need at least one prior assistant turn so the history has context.
@@ -2317,8 +2326,12 @@ export class OrchestrationPipeline implements VoiceSession {
     let resolveCompletion!: () => void;
     const completedPromise = new Promise<void>(r => { resolveCompletion = r; });
 
+    const inputHash = speculativeInputHash(partialText);
     const state = {
+      pendingTurnId: pendingTurnId ?? this.semanticTurnGate.generation,
       partial: partialText,
+      partialSnapshot: partialText,
+      inputHash,
       langAtLaunch: this.currentLang,
       storedTokens: [] as string[],
       storedFullText: "",
@@ -2366,7 +2379,12 @@ export class OrchestrationPipeline implements VoiceSession {
     void run();
     this._specLlmState = state;
     logger.info(
-      { callId: this.config.callId, partial: partialText.slice(0, 80) },
+      {
+        callId: this.config.callId,
+        pendingTurnId: state.pendingTurnId,
+        inputHash: state.inputHash.slice(0, 12),
+        partial: partialText.slice(0, 80),
+      },
       "Speculative LLM prefill launched",
     );
   }
@@ -3542,10 +3560,16 @@ export class OrchestrationPipeline implements VoiceSession {
       && this.agent.semanticTurnDetection
       && this.semanticTurnGate.shouldBlockFinal()
     ) {
+      const phaseAtStash = this.semanticTurnGate.phase;
       this.stashSemanticTurnFinal(transcript, sttEmittedAt, closeReason);
       this.safetyNet.onFinal();
       this.clearEagerPartialTimer();
       if (!this.closed) this.safetyNet.beginListening();
+      // Final arrived before vad.speech_end — treat it as an endpoint proposal
+      // so we don't wait on event order. Duplicate speech_end is ignored.
+      if (phaseAtStash === "open") {
+        void this.evaluateSemanticTurn();
+      }
       return;
     }
 
@@ -8539,42 +8563,50 @@ export class OrchestrationPipeline implements VoiceSession {
       },
     });
 
-    // ── Speculative LLM prefill — consume or abort ───────────────────────────
+    // ── Speculative LLM prefill — transactional reconcile ────────────────────
     this.interruptionMgr.pruneStaleSequences();
     this.activeAgentSequenceId = this.interruptionMgr.beginAgentTurn();
-    // If _launchSpeculativeLlm() fired at barge-in time and the final transcript
-    // is close enough to the partial, replay the already-buffered tokens through
-    // the normal onToken pipeline via a mock adapter.  On a miss, abort the
-    // background speculative call and fall through to the real llm.chat below.
-    //
-    // JS is single-threaded, so the splice(0) + tokenSink redirect is atomic —
-    // no new tokens can arrive between drain and redirect.
+    // Prefill tokens must not reach TTS until transcript.final hashes equal
+    // the speculative input. Prefix extensions ("…the" → "…the hackathon")
+    // are a discard — the truncated thought must not be answered.
     const _spec = this._specLlmState;
     this._specLlmState = null;
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     let effectiveLlm: typeof this.llm = this.llm;
     if (_spec) {
-      // A language switch detected on THIS final transcript makes the prefill
-      // stale: its langGuard/system prompt were built for the previous
-      // language, so replaying it answers the caller in the WRONG language
-      // (call 4814: Tamil caller, English turn-1 reply). Treat as a miss so
-      // the real llm.chat below rebuilds the prompt with the new language.
-      const _specLangStale = _spec.langAtLaunch !== this.currentLang;
-      if (!_spec.aborted && !_spec.storedToolCall && !_specLangStale && isSpeculativeHit(_spec.partial, transcript)) {
+      const recon = reconcileSpeculativePrefill({
+        aborted: _spec.aborted,
+        hasToolCall: Boolean(_spec.storedToolCall),
+        langAtLaunch: _spec.langAtLaunch,
+        langNow: this.currentLang,
+        inputHash: _spec.inputHash,
+        finalTranscript: transcript,
+      });
+      if (recon.action === "commit") {
         this._eagerLlmHitThisTurn = true;
         this.logExec("LLM", "system", {
           status: "info", turnNumber: _currentTurnIndex,
           metadata: {
             event: "Speculative LLM Hit",
-            partial: _spec.partial.slice(0, 80),
+            pendingTurnId: _spec.pendingTurnId,
+            reason: recon.reason,
+            inputHash: _spec.inputHash.slice(0, 12),
+            finalHash: recon.finalHash.slice(0, 12),
+            partial: _spec.partialSnapshot.slice(0, 80),
             final: transcript.slice(0, 80),
             bufferedTokens: _spec.storedTokens.length,
             done: _spec.done,
           },
         });
         logger.info(
-          { callId: this.config.callId, partial: _spec.partial.slice(0, 60), final: transcript.slice(0, 60), buffered: _spec.storedTokens.length },
-          "Speculative LLM hit — replaying prefill tokens",
+          {
+            callId: this.config.callId,
+            pendingTurnId: _spec.pendingTurnId,
+            partial: _spec.partialSnapshot.slice(0, 60),
+            final: transcript.slice(0, 60),
+            buffered: _spec.storedTokens.length,
+          },
+          "Speculative LLM hit — committing prefill tokens",
         );
         const spec = _spec;
         effectiveLlm = {
@@ -8599,26 +8631,33 @@ export class OrchestrationPipeline implements VoiceSession {
           },
         } as unknown as typeof this.llm;
       } else {
-        // Miss (or tool call in speculative): discard speculative tokens.
+        // Transcript changed, language switched, tool call, or already aborted:
+        // discard every speculative token. processTurn runs llm.chat on the final.
         _spec.aborted = true;
-        if (_specLangStale) {
-          // Logged even when the prefill already completed — this is the
-          // wrong-language near-miss trail (see call 4814 turn 1).
-          logger.info(
-            {
-              callId: this.config.callId,
-              langAtLaunch: _spec.langAtLaunch || "(none)",
-              langNow: this.currentLang || "(none)",
-              partial: _spec.partial.slice(0, 60),
-            },
-            "Speculative LLM invalidated — caller language switched after prefill launch",
-          );
-        } else if (!_spec.done) {
-          logger.info(
-            { callId: this.config.callId, partial: _spec.partial.slice(0, 60), final: transcript.slice(0, 60) },
-            "Speculative LLM miss — aborting prefill",
-          );
-        }
+        this.logExec("LLM", "system", {
+          status: "info", turnNumber: _currentTurnIndex,
+          metadata: {
+            event: "Speculative LLM Discard",
+            pendingTurnId: _spec.pendingTurnId,
+            reason: recon.reason,
+            inputHash: _spec.inputHash.slice(0, 12),
+            finalHash: recon.finalHash.slice(0, 12),
+            partial: _spec.partialSnapshot.slice(0, 80),
+            final: transcript.slice(0, 80),
+          },
+        });
+        logger.info(
+          {
+            callId: this.config.callId,
+            pendingTurnId: _spec.pendingTurnId,
+            reason: recon.reason,
+            langAtLaunch: _spec.langAtLaunch || "(none)",
+            langNow: this.currentLang || "(none)",
+            partial: _spec.partialSnapshot.slice(0, 60),
+            final: transcript.slice(0, 60),
+          },
+          "Speculative LLM discarded — processing final transcript",
+        );
       }
     }
 

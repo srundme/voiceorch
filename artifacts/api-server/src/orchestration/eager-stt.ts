@@ -5,28 +5,59 @@
  * (VAD END_SPEECH) as the commit signal. Mid-utterance stable-partial launches are
  * off by default in the pipeline (`EAGER_STABLE_PARTIAL=1` to re-enable) — that path
  * second-guesses STT before the provider decides the turn is done.
+ *
+ * Speculative LLM is transactional: tokens never reach TTS until the final
+ * transcript hash matches the prefill input. Prefix/overlap “close enough”
+ * is a miss — truncated thoughts must not be answered.
  */
 
+import { createHash } from "node:crypto";
 import { isBackchannelOnlyUtterance } from "./transcriptQuality.js";
 import { envInt } from "./utils.js";
 
 /** Stable-partial timer before launching eager LLM (Path A Bolna-feel: 180ms). */
 export const EAGER_PARTIAL_STABLE_MS = envInt("EAGER_PARTIAL_STABLE_MS", 60, 30);
 
-/** Trailing-char tolerance when final extends a speculative partial. */
-const SPECULATIVE_TRAIL_CHARS = 24;
+/** Strip case, extra space, and trailing punctuation so "Hello." matches "Hello". */
+export function normalizeSpeculativeInput(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[.?!…,।]+$/u, "")
+    .trim();
+}
 
-/** If the speculative partial is close enough to the final transcript, reuse it. */
+/** Identity of the text the speculative LLM was launched on. */
+export function speculativeInputHash(text: string): string {
+  return createHash("sha1").update(normalizeSpeculativeInput(text), "utf8").digest("hex");
+}
+
+export type SpeculativeReconcileAction = "commit" | "discard";
+
+export function reconcileSpeculativePrefill(opts: {
+  aborted: boolean;
+  hasToolCall: boolean;
+  langAtLaunch: string;
+  langNow: string;
+  inputHash: string;
+  finalTranscript: string;
+}): { action: SpeculativeReconcileAction; reason: string; finalHash: string } {
+  const finalHash = speculativeInputHash(opts.finalTranscript);
+  if (opts.aborted) return { action: "discard", reason: "aborted", finalHash };
+  if (opts.hasToolCall) return { action: "discard", reason: "speculative_tool_call", finalHash };
+  if (opts.langAtLaunch !== opts.langNow) {
+    return { action: "discard", reason: "language_switched", finalHash };
+  }
+  if (opts.inputHash !== finalHash) {
+    return { action: "discard", reason: "transcript_changed", finalHash };
+  }
+  return { action: "commit", reason: "hash_match", finalHash };
+}
+
+/** True only when the final is the same utterance the prefill was built from. */
 export function isSpeculativeHit(partial: string, final: string): boolean {
-  const p = partial.trim().toLowerCase();
-  const f = final.trim().toLowerCase();
-  if (p === f) return true;
-  if (f.startsWith(p) && f.length - p.length <= SPECULATIVE_TRAIL_CHARS) return true;
-  const pWords = p.split(/\s+/).filter(Boolean);
-  if (pWords.length === 0) return false;
-  const fWordSet = new Set(f.split(/\s+/).filter(Boolean));
-  const overlap = pWords.filter((w) => fWordSet.has(w)).length;
-  return overlap / pWords.length >= 0.75;
+  return speculativeInputHash(partial) === speculativeInputHash(final);
 }
 
 /**

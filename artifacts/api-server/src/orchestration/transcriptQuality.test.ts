@@ -12,6 +12,7 @@ import {
   isBackchannelOnlyUtterance,
   normalizeSttPhonetics,
   coalescePendingTranscripts,
+  signalsConversationalContinuation,
 } from "./transcriptQuality.js";
 import { isAffirmationOnlyUtterance } from "./endpointing.js";
 
@@ -118,6 +119,29 @@ describe("checkTranscriptQuality", () => {
   it("treats yeah but as an unfinished thought", () => {
     expect(shouldHoldFragmentForCoalesce("yeah but", { expectedLang: "en-IN" })).toBe(true);
     expect(shouldHoldFragmentForCoalesce("yeah but...", { expectedLang: "en-IN" })).toBe(true);
+  });
+});
+
+describe("signalsConversationalContinuation", () => {
+  it("detects dangling conversational structure, not just three phrases", () => {
+    expect(signalsConversationalContinuation("I want to participate but...")).toBe(true);
+    expect(signalsConversationalContinuation("Actually I was thinking")).toBe(true);
+    expect(signalsConversationalContinuation("Yes, but...")).toBe(true);
+    expect(signalsConversationalContinuation("நான் participate பண்ண")).toBe(true);
+    expect(signalsConversationalContinuation("அது வந்து...")).toBe(true);
+    expect(signalsConversationalContinuation("लेकिन मैं...")).toBe(true);
+    expect(signalsConversationalContinuation("எனக்கு ஒரு...")).toBe(true);
+    expect(signalsConversationalContinuation("yeah but")).toBe(true);
+    expect(signalsConversationalContinuation("I want to participate in the")).toBe(true);
+  });
+
+  it("does not veto complete short answers", () => {
+    expect(signalsConversationalContinuation("Yes, that works for me.")).toBe(false);
+    expect(signalsConversationalContinuation("No, not yet.")).toBe(false);
+    expect(signalsConversationalContinuation("I want to participate in the hackathon.")).toBe(false);
+    expect(signalsConversationalContinuation("Okay.")).toBe(false);
+    expect(signalsConversationalContinuation("சரி")).toBe(false);
+    expect(signalsConversationalContinuation("हाँ Sir")).toBe(false);
   });
 });
 

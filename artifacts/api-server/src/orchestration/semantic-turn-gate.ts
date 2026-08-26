@@ -1,16 +1,24 @@
 /**
- * Semantic end-of-turn gate.
+ * Semantic end-of-turn gate — state machine, not event-order.
  *
- * VAD = "the person stopped talking."
- * Smart Turn = "was that a complete conversational turn?"
- * Text veto = "even if the audio model says complete, the words say they are continuing."
- * transcript.final = source of truth for LLM/TTS — never send TTS before that
- * is validated. The 1.2s timer is an incomplete-only continuation cap, not a
- * wait on every turn.
+ * TURN_OPEN (phase "open")
+ *    partial / speech_start / speech_end / final (buffered)
+ * TURN_EVALUATING
+ *    final arrives → BUFFER (never processTurn yet)
+ *    Smart Turn complete → eligible for commit (not final authority)
+ *    Smart Turn incomplete → HOLD / RESUME
+ *
+ * VAD proposes a pause. Smart Turn + text veto decide eligibility.
+ * transcript.final is buffered until the turn is committed, then validated
+ * against any speculative LLM prefill. TTS starts only after that.
+ *
+ * The 1.2s timer is an incomplete-only continuation cap. Complete turns
+ * do not wait.
  */
 
 export type EouVerdict = "complete" | "incomplete" | "unavailable";
-export type SemanticTurnPhase = "idle" | "speaking" | "evaluating" | "holding";
+/** idle | open (TURN_OPEN) | evaluating | holding */
+export type SemanticTurnPhase = "idle" | "open" | "evaluating" | "holding";
 export type SemanticTurnAction = "commit" | "hold" | "ignore";
 
 export const SEMANTIC_TURN_STOP_MS_DEFAULT = 1200;
@@ -56,14 +64,22 @@ export class SemanticTurnGate {
     const wasHolding = this.phase === "holding";
     if (cancelEvaluation) this.continuation = true;
     this.generation += 1;
-    this.phase = "speaking";
+    this.phase = "open";
     return { cancelEvaluation, wasHolding };
   }
 
-  onSpeechEnd(): { generation: number } {
+  /**
+   * VAD (or a final that arrived first) proposes endpoint.
+   * Duplicate proposals while already evaluating are ignored so
+   * speech_end vs transcript.final order does not restart inference.
+   */
+  onSpeechEnd(): { generation: number; started: boolean } {
+    if (this.phase === "evaluating") {
+      return { generation: this.generation, started: false };
+    }
     this.generation += 1;
     this.phase = "evaluating";
-    return { generation: this.generation };
+    return { generation: this.generation, started: true };
   }
 
   onEou(generation: number, resolved: { action: "commit" | "hold"; reason: string }): SemanticTurnAction {
@@ -84,10 +100,13 @@ export class SemanticTurnGate {
     return "commit";
   }
 
-  /** Finals must not start the LLM while we are still deciding or the caller resumed mid-thought. */
+  /**
+   * Finals are buffered until the turn is committed — not until Smart Turn
+   * merely “decides”. Any non-idle phase (open / evaluating / holding) blocks
+   * processTurn so event order cannot leak a final into the LLM.
+   */
   shouldBlockFinal(): boolean {
-    return this.phase === "evaluating" || this.phase === "holding"
-      || (this.phase === "speaking" && this.continuation);
+    return this.phase !== "idle";
   }
 
   reset(): void {

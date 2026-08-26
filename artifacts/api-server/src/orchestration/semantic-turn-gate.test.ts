@@ -61,7 +61,7 @@ describe("SemanticTurnGate", () => {
     const first = g.onSpeechEnd();
     g.onSpeechStart();
     expect(g.onEou(first.generation, { action: "commit", reason: "audio_complete" })).toBe("ignore");
-    expect(g.phase).toBe("speaking");
+    expect(g.phase).toBe("open");
   });
 
   it("cancels a hold when speech resumes and keeps blocking until the next commit", () => {
@@ -76,6 +76,21 @@ describe("SemanticTurnGate", () => {
     expect(g.shouldBlockFinal()).toBe(true);
     const next = g.onSpeechEnd();
     expect(g.onEou(next.generation, { action: "commit", reason: "audio_complete" })).toBe("commit");
+    expect(g.shouldBlockFinal()).toBe(false);
+  });
+
+  it("buffers finals for the whole open→evaluating window, not only after Smart Turn returns", () => {
+    const g = new SemanticTurnGate();
+    g.onSpeechStart();
+    expect(g.phase).toBe("open");
+    expect(g.shouldBlockFinal()).toBe(true);
+    const first = g.onSpeechEnd();
+    expect(first.started).toBe(true);
+    expect(g.shouldBlockFinal()).toBe(true);
+    const dup = g.onSpeechEnd();
+    expect(dup.started).toBe(false);
+    expect(dup.generation).toBe(first.generation);
+    expect(g.onEou(first.generation, { action: "commit", reason: "audio_complete" })).toBe("commit");
     expect(g.shouldBlockFinal()).toBe(false);
   });
 });
