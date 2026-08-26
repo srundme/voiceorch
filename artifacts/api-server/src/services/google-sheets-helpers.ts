@@ -171,14 +171,18 @@ export function sheetRange(sheetName: string, a1: string): string {
   return `${escapeSheetName(sheetName)}!${a1}`;
 }
 
-/** 0-based column index → A1 column letters. */
+/** 0-based column index → A1 column letters (0→A, 25→Z, 26→AA). */
 export function a1FromColIndex(index: number): string {
-  let n = index + 1;
+  if (!Number.isFinite(index) || index < 0) return "A";
+  let n = Math.floor(index) + 1;
   let s = "";
   while (n > 0) {
     const r = (n - 1) % 26;
     s = String.fromCharCode(65 + r) + s;
     n = Math.floor((n - 1) / 26);
   }
-  return s;
+  return s || "A";
 }
+
+/** @deprecated Prefer a1FromColIndex — same behavior. */
+export const columnIndexToA1 = a1FromColIndex;

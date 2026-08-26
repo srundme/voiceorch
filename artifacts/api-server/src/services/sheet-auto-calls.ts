@@ -22,11 +22,15 @@ import {
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import {
-  readSheetGrid,
+  readSheetHeaders,
+  readSheetDataRows,
+  readSheetColumnValues,
+  getSheetLastDataRow,
   createSpreadsheet,
   ensureHeaders,
   renameSheetHeader,
   updateSheetRowByIndex,
+  SHEET_ROW_CHUNK_SIZE,
 } from "./google-sheets.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { getOrCreateLiveBatch } from "./campaign-live-batch.js";
@@ -413,49 +417,117 @@ async function enqueueRow(
 }
 
 /**
- * Process sheet rows for a pipeline. When `fromRowExclusive` is set, only rows
- * after that index (1-based header=1) are considered.
+ * Process sheet rows for a pipeline using cursor + chunked reads.
+ * - New / backfill rows: up to a few chunks after `fromRowExclusive` per call
+ * - Retry: Status column scan for rows already behind the cursor
+ *
+ * When `fromRowExclusive` is set, only rows after that index (1-based header=1)
+ * are treated as new; Retry status can re-enqueue earlier rows.
  */
 export async function processSheetRows(
   pipeline: SheetAutoCallPipeline,
   opts: { fromRowExclusive: number; advanceCursor: boolean },
-): Promise<{ enqueued: number; skipped: number; lastRow: number }> {
-  const grid = await readSheetGrid(
+): Promise<{ enqueued: number; skipped: number; lastRow: number; cursorRowIndex: number }> {
+  const columnMap = pipeline.columnMap as SheetAutoColumnMap;
+  const lastDataRow = await getSheetLastDataRow(
+    pipeline.userId,
+    pipeline.connectionId,
+    pipeline.spreadsheetId,
+    pipeline.sheetName,
+    columnMap.phone,
+  );
+  const headers = await readSheetHeaders(
     pipeline.userId,
     pipeline.connectionId,
     pipeline.spreadsheetId,
     pipeline.sheetName,
   );
-  const { headers, rows } = grid;
-  const lastRow = rows.length + 1; // 1-based last data row index (= header + length)
   const campaignId = await ensureCampaign(pipeline);
-  const columnMap = pipeline.columnMap as SheetAutoColumnMap;
   const statusHeader =
     (pipeline.sameSheetStatusColumns as SheetAutoStatusColumns | null)?.status ?? "Status";
 
   let enqueued = 0;
   let skipped = 0;
+  let cursor = Math.max(pipeline.cursorRowIndex, opts.fromRowExclusive);
 
-  for (let i = 0; i < rows.length; i++) {
-    const sheetRowIndex = i + 2; // row 1 = header
-    const row = rows[i]!;
-    const statusVal = cellAtHeader(headers, row, statusHeader);
-    const forceRetry = isRetryStatus(statusVal);
+  // --- New rows after cursor (a few chunks per tick for large backfills) ---
+  const maxChunksPerTick = 3;
+  if (headers.length > 0) {
+    for (let c = 0; c < maxChunksPerTick; c++) {
+      const firstNewRow = Math.max(cursor + 1, 2);
+      if (firstNewRow > lastDataRow) break;
 
-    if (sheetRowIndex <= opts.fromRowExclusive && !forceRetry) continue;
+      const chunkEnd = Math.min(firstNewRow + SHEET_ROW_CHUNK_SIZE - 1, lastDataRow);
+      const chunk = await readSheetDataRows(
+        pipeline.userId,
+        pipeline.connectionId,
+        pipeline.spreadsheetId,
+        pipeline.sheetName,
+        firstNewRow,
+        chunkEnd,
+      );
 
-    const parsed = parseSheetLeadRow(headers, row, columnMap);
-    const result = await enqueueRow(pipeline, campaignId, sheetRowIndex, parsed, {
-      forceRetry,
-    });
-    if (result === "enqueued") enqueued += 1;
-    else skipped += 1;
+      for (let i = 0; i < chunkEnd - firstNewRow + 1; i++) {
+        const sheetRowIndex = firstNewRow + i;
+        const row = chunk[i] ?? [];
+        const statusVal = cellAtHeader(headers, row, statusHeader);
+        const forceRetry = isRetryStatus(statusVal);
+        const parsed = parseSheetLeadRow(headers, row, columnMap);
+        const result = await enqueueRow(pipeline, campaignId, sheetRowIndex, parsed, {
+          forceRetry,
+        });
+        if (result === "enqueued") enqueued += 1;
+        else skipped += 1;
+      }
+      cursor = Math.max(cursor, chunkEnd);
+    }
+  }
+
+  // Caught up with known sheet extent
+  if (cursor + 1 > lastDataRow) {
+    cursor = Math.max(cursor, lastDataRow);
+  }
+
+  // --- Retry: scan Status on rows already behind the *start* cursor ---
+  const retryThrough = Math.min(opts.fromRowExclusive, lastDataRow);
+  if (headers.length > 0 && retryThrough >= 2 && statusHeader) {
+    const { values: statusVals } = await readSheetColumnValues(
+      pipeline.userId,
+      pipeline.connectionId,
+      pipeline.spreadsheetId,
+      pipeline.sheetName,
+      statusHeader,
+      2,
+      retryThrough,
+    );
+    const retryIndexes: number[] = [];
+    for (let i = 0; i < statusVals.length; i++) {
+      if (isRetryStatus(statusVals[i])) retryIndexes.push(i + 2);
+    }
+    const retryCap = 50;
+    for (const sheetRowIndex of retryIndexes.slice(0, retryCap)) {
+      const rowChunk = await readSheetDataRows(
+        pipeline.userId,
+        pipeline.connectionId,
+        pipeline.spreadsheetId,
+        pipeline.sheetName,
+        sheetRowIndex,
+        sheetRowIndex,
+      );
+      const row = rowChunk[0] ?? [];
+      const parsed = parseSheetLeadRow(headers, row, columnMap);
+      const result = await enqueueRow(pipeline, campaignId, sheetRowIndex, parsed, {
+        forceRetry: true,
+      });
+      if (result === "enqueued") enqueued += 1;
+      else skipped += 1;
+    }
   }
 
   if (opts.advanceCursor) {
     await db.update(sheetAutoCallPipelinesTable)
       .set({
-        cursorRowIndex: Math.max(pipeline.cursorRowIndex, lastRow),
+        cursorRowIndex: Math.max(pipeline.cursorRowIndex, cursor),
         lastPolledAt: new Date(),
         lastError: null,
         updatedAt: new Date(),
@@ -463,7 +535,12 @@ export async function processSheetRows(
       .where(eq(sheetAutoCallPipelinesTable.id, pipeline.id));
   }
 
-  return { enqueued, skipped, lastRow };
+  return {
+    enqueued,
+    skipped,
+    lastRow: lastDataRow,
+    cursorRowIndex: Math.max(pipeline.cursorRowIndex, cursor),
+  };
 }
 
 function cellAtHeader(headers: string[], row: string[], headerName: string): string {
@@ -483,11 +560,14 @@ export async function startPipeline(userId: string, id: string) {
   const fresh = (await getPipeline(userId, id))!;
 
   if (pipeline.startMode === "new_only") {
-    // Set cursor to current last row so existing rows are ignored
-    const grid = await readSheetGrid(
-      fresh.userId, fresh.connectionId, fresh.spreadsheetId, fresh.sheetName,
+    // Set cursor to current last data row so existing rows are ignored
+    const lastRow = await getSheetLastDataRow(
+      fresh.userId,
+      fresh.connectionId,
+      fresh.spreadsheetId,
+      fresh.sheetName,
+      (fresh.columnMap as SheetAutoColumnMap | null)?.phone,
     );
-    const lastRow = grid.rows.length + 1;
     await db.update(sheetAutoCallPipelinesTable)
       .set({
         status: "running",
@@ -498,7 +578,7 @@ export async function startPipeline(userId: string, id: string) {
       })
       .where(eq(sheetAutoCallPipelinesTable.id, id));
   } else {
-    // Backfill existing rows, then watch
+    // Backfill existing rows (chunked across start + poller ticks), then watch
     await db.update(sheetAutoCallPipelinesTable)
       .set({ status: "running", lastError: null, updatedAt: new Date() })
       .where(eq(sheetAutoCallPipelinesTable.id, id));
@@ -718,7 +798,16 @@ export async function previewDialRows(
     .limit(1);
   if (!conn) throw new Error("Google Sheets connection not found");
 
-  const grid = await readSheetGrid(userId, opts.connectionId, opts.spreadsheetId, opts.sheetName);
+  const grid = await readSheetHeaders(userId, opts.connectionId, opts.spreadsheetId, opts.sheetName)
+    .then(async (headers) => {
+      const limit = Math.min(Math.max(opts.limit ?? 3, 1), 10);
+      // Read a small window so preview stays cheap on large sheets
+      const rows = await readSheetDataRows(
+        userId, opts.connectionId, opts.spreadsheetId, opts.sheetName,
+        2, 1 + Math.max(limit * 5, 25),
+      );
+      return { headers, rows };
+    });
   const columnMap = opts.columnMap?.phone
     ? opts.columnMap
     : fuzzyDetectColumnMap(grid.headers);
@@ -753,15 +842,18 @@ export async function retrySheetRow(
   if (!pipeline) throw new Error("Pipeline not found");
   if (pipeline.status === "stopped") throw new Error("Pipeline is stopped");
 
-  const grid = await readSheetGrid(
+  const headers = await readSheetHeaders(
     pipeline.userId, pipeline.connectionId, pipeline.spreadsheetId, pipeline.sheetName,
   );
-  const idx = sheetRowIndex - 2;
-  if (idx < 0 || idx >= grid.rows.length) throw new Error("Row not found in sheet");
+  const rowChunk = await readSheetDataRows(
+    pipeline.userId, pipeline.connectionId, pipeline.spreadsheetId, pipeline.sheetName,
+    sheetRowIndex, sheetRowIndex,
+  );
+  if (sheetRowIndex < 2 || rowChunk.length === 0) throw new Error("Row not found in sheet");
 
   const campaignId = await ensureCampaign(pipeline);
   const columnMap = pipeline.columnMap as SheetAutoColumnMap;
-  const parsed = parseSheetLeadRow(grid.headers, grid.rows[idx]!, columnMap);
+  const parsed = parseSheetLeadRow(headers, rowChunk[0]!, columnMap);
 
   const result = await enqueueRow(pipeline, campaignId, sheetRowIndex, parsed, {
     forceRetry: true,

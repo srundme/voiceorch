@@ -95,6 +95,8 @@ describe("a1FromColIndex", () => {
   it("maps 0-based indexes to A1 letters", () => {
     expect(a1FromColIndex(0)).toBe("A");
     expect(a1FromColIndex(9)).toBe("J");
+    expect(a1FromColIndex(25)).toBe("Z");
     expect(a1FromColIndex(26)).toBe("AA");
+    expect(a1FromColIndex(27)).toBe("AB");
   });
 });
