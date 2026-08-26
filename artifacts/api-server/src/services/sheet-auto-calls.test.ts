@@ -6,6 +6,8 @@ import {
   isDoNotDialValue,
   isRetryStatus,
   friendlySheetStatus,
+  formatSheetDisposition,
+  resolveSheetStatusLabel,
   resolveDoNotDialHeader,
 } from "./sheet-auto-calls-helpers.js";
 import { issueRecordingShareToken, verifyRecordingShareToken } from "./recording-share.js";
@@ -66,6 +68,34 @@ describe("do-not-dial / retry / friendly status", () => {
     expect(friendlySheetStatus("completed")).toBe("Completed");
     expect(friendlySheetStatus("no_answer")).toBe("No answer");
     expect(friendlySheetStatus("failed")).toBe("Failed");
+  });
+});
+
+describe("sheet disposition / status labels", () => {
+  const taxonomy = {
+    OUTCOME: "Wrong number",
+    primary: "OUTCOME",
+    sub: "Wrong number",
+    confidence: 1,
+    summary: "Call reached a voicemail, not the intended person",
+  };
+
+  it("writes the sub label, not taxonomy JSON", () => {
+    expect(formatSheetDisposition(taxonomy)).toBe("Wrong number");
+    expect(formatSheetDisposition(JSON.stringify(taxonomy))).toBe("Wrong number");
+    expect(formatSheetDisposition({
+      OUTCOME: "Callback confirmed",
+      primary: "OUTCOME",
+      sub: "Callback confirmed",
+    })).toBe("Callback confirmed");
+  });
+
+  it("uses outcome as Status when the call completed", () => {
+    expect(resolveSheetStatusLabel("completed", "Wrong number")).toBe("Wrong number");
+    expect(resolveSheetStatusLabel("failed", "Wrong number")).toBe("Failed");
+    expect(resolveSheetStatusLabel("completed", "Callback confirmed", "Callback scheduled"))
+      .toBe("Callback scheduled");
+    expect(resolveSheetStatusLabel("completed", "Wrong number", "Booked")).toBe("Booked");
   });
 });
 

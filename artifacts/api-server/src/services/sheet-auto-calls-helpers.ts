@@ -143,6 +143,83 @@ export function friendlySheetStatus(raw: string | null | undefined): string {
   return raw!.trim();
 }
 
+const GENERIC_OUTCOME_KEYS = new Set([
+  "outcome", "status", "disposition", "result", "intent", "label", "primary", "sub",
+]);
+
+function parseDispositionObject(disp: unknown): Record<string, unknown> | null {
+  if (disp == null) return null;
+  if (typeof disp === "string") {
+    const t = disp.trim();
+    if (!t.startsWith("{")) return null;
+    try {
+      const parsed = JSON.parse(t) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+  if (typeof disp === "object" && !Array.isArray(disp)) return disp as Record<string, unknown>;
+  return null;
+}
+
+function shortSheetLabel(raw: string): string {
+  const t = raw.trim().replace(/\s+/g, " ");
+  if (!t) return "";
+  if (t.startsWith("{") || t.startsWith("[")) return "";
+  return t.length > 80 ? `${t.slice(0, 77)}…` : t;
+}
+
+/**
+ * Human label for the Disposition column. Never dumps taxonomy JSON.
+ * Prefers `sub` ("Wrong number") over PRIMARY: sub ("OUTCOME: Wrong number").
+ */
+export function formatSheetDisposition(disp: unknown): string {
+  if (disp == null) return "";
+  if (typeof disp === "string") {
+    const obj = parseDispositionObject(disp);
+    if (obj) return formatSheetDisposition(obj);
+    return shortSheetLabel(disp);
+  }
+  const obj = parseDispositionObject(disp);
+  if (!obj) return shortSheetLabel(String(disp));
+
+  const sub = typeof obj["sub"] === "string" ? shortSheetLabel(obj["sub"]) : "";
+  if (sub) return sub;
+
+  for (const k of ["OUTCOME", "outcome", "disposition", "result", "intent", "label", "status"]) {
+    const v = obj[k];
+    if (typeof v !== "string") continue;
+    const label = shortSheetLabel(v);
+    if (!label) continue;
+    if (GENERIC_OUTCOME_KEYS.has(label.toLowerCase())) continue;
+    return label;
+  }
+
+  const primary = typeof obj["primary"] === "string" ? shortSheetLabel(obj["primary"]) : "";
+  if (primary && !GENERIC_OUTCOME_KEYS.has(primary.toLowerCase())) return primary;
+  return "";
+}
+
+/**
+ * Status stays operational (Queued / Calling / Failed / Callback scheduled / Booked)
+ * unless the call completed — then show the outcome instead of a blank "Completed".
+ */
+export function resolveSheetStatusLabel(
+  callStatus: string | null | undefined,
+  dispositionLabel: string,
+  reservedStatus?: string | null,
+): string {
+  if (reservedStatus?.trim()) return reservedStatus.trim();
+  const operational = friendlySheetStatus(callStatus);
+  if (operational !== "Completed") return operational;
+  const outcome = shortSheetLabel(dispositionLabel);
+  return outcome || "Completed";
+}
+
 export function googleSheetUrl(spreadsheetId: string, gid?: number | null): string {
   const base = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
   return gid != null ? `${base}#gid=${gid}` : base;

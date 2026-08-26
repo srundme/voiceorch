@@ -40,6 +40,8 @@ export {
   parseSheetLeadRow,
   fuzzyDetectColumnMap,
   friendlySheetStatus,
+  formatSheetDisposition,
+  resolveSheetStatusLabel,
 } from "./sheet-auto-calls-helpers.js";
 
 const DEFAULT_STATUS_COLS: SheetAutoStatusColumns = {

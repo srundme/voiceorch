@@ -22,7 +22,7 @@ import {
 import { logger } from "../lib/logger.js";
 import { toAbsoluteAppUrl } from "../lib/app-domain.js";
 import { shareableRecordingUrl } from "./recording-share.js";
-import { friendlySheetStatus } from "./sheet-auto-calls-helpers.js";
+import { formatSheetDisposition, resolveSheetStatusLabel } from "./sheet-auto-calls-helpers.js";
 import {
   listEnabledBindings,
   appendCallLogRow,
@@ -53,22 +53,7 @@ function sheetRecordingUrl(call: { id: number; recordingUrl: string | null }): s
 }
 
 function formatDisposition(disp: unknown): string {
-  if (disp == null) return "";
-  if (typeof disp === "string") return disp;
-  if (typeof disp === "object") {
-    try {
-      const obj = disp as Record<string, unknown>;
-      const preferred = ["outcome", "status", "disposition", "result", "intent"];
-      for (const k of preferred) {
-        const v = obj[k];
-        if (v != null && String(v).trim()) return String(v);
-      }
-      return JSON.stringify(disp);
-    } catch {
-      return String(disp);
-    }
-  }
-  return String(disp);
+  return formatSheetDisposition(disp);
 }
 
 function resolveCallPhone(call: {
@@ -690,7 +675,7 @@ export async function writeSheetAutoCallResults(
   const mode = pipeline.writebackMode;
   const cols = statusColumnMap(pipeline);
 
-  let sheetStatusLabel = friendlySheetStatus(status);
+  let reservedStatus: string | null = null;
   let nextFollowUpValue = "";
 
   const bookedHit = isBookedDisposition(
@@ -702,19 +687,18 @@ export async function writeSheetAutoCallResults(
     typeof dispositionRaw === "object" && dispositionRaw
       ? String((dispositionRaw as Record<string, unknown>)["primary"] ?? "")
       : "",
-    sheetStatusLabel,
   );
-  if (bookedHit && sheetStatusLabel === "Completed") {
-    sheetStatusLabel = "Booked";
+  if (bookedHit) {
+    reservedStatus = "Booked";
   }
-  if (sheetStatusLabel === "Completed") {
+  if (!reservedStatus) {
     try {
       const [booking] = await db
         .select({ id: bookingsTable.id })
         .from(bookingsTable)
         .where(and(eq(bookingsTable.callId, callId), ne(bookingsTable.status, "cancelled")))
         .limit(1);
-      if (booking) sheetStatusLabel = "Booked";
+      if (booking) reservedStatus = "Booked";
     } catch (err) {
       logger.warn({ err, callId }, "sheet-auto-call: booking lookup for status preserve failed");
     }
@@ -726,7 +710,6 @@ export async function writeSheetAutoCallResults(
     typeof dispositionRaw === "object" && dispositionRaw
       ? String((dispositionRaw as Record<string, unknown>)["status"] ?? "")
       : "",
-    sheetStatusLabel,
   );
 
   if (callbackHit && call.userId) {
@@ -740,12 +723,14 @@ export async function writeSheetAutoCallResults(
       dispositionRaw,
     });
     if (scheduledAt) {
-      if (sheetStatusLabel !== "Booked") {
-        sheetStatusLabel = "Callback scheduled";
+      if (reservedStatus !== "Booked") {
+        reservedStatus = "Callback scheduled";
       }
       nextFollowUpValue = formatSheetIst(scheduledAt);
     }
   }
+
+  const sheetStatusLabel = resolveSheetStatusLabel(status, disposition, reservedStatus);
 
   if ((mode === "same_sheet" || mode === "both") && sheetRowIndex != null) {
     try {
