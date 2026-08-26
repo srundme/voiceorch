@@ -1,12 +1,12 @@
 /**
  * Semantic end-of-turn gate.
  *
- * Sarvam (and Silero) only detect speech vs silence. A pause after "yeah but…"
- * looks like end-of-turn to VAD even though the caller is still thinking.
- * This gate sits AFTER vad.speech_end and BEFORE speculative LLM / processTurn.
- *
- * Fail-open: if the audio model is missing or errors, we commit unless the
- * transcript itself looks incomplete (text veto).
+ * VAD = "the person stopped talking."
+ * Smart Turn = "was that a complete conversational turn?"
+ * Text veto = "even if the audio model says complete, the words say they are continuing."
+ * transcript.final = source of truth for LLM/TTS — never send TTS before that
+ * is validated. The 1.2s timer is an incomplete-only continuation cap, not a
+ * wait on every turn.
  */
 
 export type EouVerdict = "complete" | "incomplete" | "unavailable";

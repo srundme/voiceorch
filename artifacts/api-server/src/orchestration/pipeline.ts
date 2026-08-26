@@ -1717,20 +1717,44 @@ export class OrchestrationPipeline implements VoiceSession {
       if (this.eagerPartialText !== partial) return;
       if (!isEagerCommitReady(partial)) return;
       if (this.isPlaying || this.isProcessing || this.closed || this._specLlmState) return;
+      if (this.semanticTurnBlocksPrefill()) return;
       this.launchEagerLlmFromPartial(partial, "stable_partial");
     }, EAGER_PARTIAL_STABLE_MS);
   }
 
-  /** Sarvam VAD speech_end — launch speculative LLM before coalesced final arrives. */
+  /**
+   * Prefill the LLM after conversational end-of-turn is decided.
+   * Tokens are buffered only — TTS stays in processTurn after transcript.final
+   * is validated (spec hit vs miss). VAD speech_end must never call this
+   * while Smart Turn is still deciding.
+   */
   private handleSttSpeechEnd(): void {
     if (this.closed || this.isPlaying || this.isSendingTtsAudio || this.isProcessing) return;
+    if (this.semanticTurnBlocksPrefill()) return;
     if (this._specLlmState) return;
-    // Turn 1 allowed (see scheduleEagerLlm).
     const text = this.streamSTT?.getPendingTranscript?.()?.trim() ?? this.eagerPartialText.trim();
     if (!text) return;
     this.clearEagerPartialTimer();
     if (!isEagerCommitReady(text, { speechEnd: true })) return;
-    this.launchEagerLlmFromPartial(text, "speech_end");
+    this.launchEagerLlmFromPartial(text, "eou_commit");
+  }
+
+  /** VAD ≠ turn complete: do not prefetch LLM while Smart Turn is deciding / holding. */
+  private semanticTurnBlocksPrefill(): boolean {
+    return this.agent.semanticTurnDetection && this.semanticTurnGate.shouldBlockFinal();
+  }
+
+  private abortSpeculativeLlm(reason: string): void {
+    this.clearEagerPartialTimer();
+    if (!this._specLlmState || this.isProcessing) return;
+    this._specLlmState.aborted = true;
+    this._specLlmState = null;
+    this.logExec("LLM", "system", {
+      status: "info",
+      turnNumber: this._activeTurnIndex,
+      metadata: { event: "Eager LLM Cancelled", reason },
+    });
+    logger.info({ callId: this.config.callId, reason }, "Eager LLM cancelled");
   }
 
   private clearSemanticTurnTimer(): void {
@@ -1806,12 +1830,18 @@ export class OrchestrationPipeline implements VoiceSession {
       },
     });
     if (action === "hold") {
+      // Incomplete only: complete turns never sit in this 1.2s window.
+      // Caller resume cancels the timer via onSpeechStart; timeout is the cap.
+      this.abortSpeculativeLlm("semantic_turn_hold");
       this.clearSemanticTurnTimer();
       const gen = generation;
       this._eouTimer = setTimeout(() => {
         this._eouTimer = null;
         if (this.semanticTurnGate.onStopTimeout(gen) !== "commit") return;
-        logger.info({ callId: this.config.callId, stopMs: this.agent.semanticTurnStopMs }, "Semantic turn: silence fallback commit");
+        logger.info(
+          { callId: this.config.callId, stopMs: this.agent.semanticTurnStopMs },
+          "Semantic turn: incomplete continuation window elapsed — commit",
+        );
         this.commitSemanticTurn();
       }, this.agent.semanticTurnStopMs);
       return;
@@ -1819,6 +1849,11 @@ export class OrchestrationPipeline implements VoiceSession {
     this.commitSemanticTurn();
   }
 
+  /**
+   * Conversational turn is complete. Prefill LLM from the pending partial
+   * (no TTS). If transcript.final is already held, processTurn validates it
+   * and is the first place audio is synthesized.
+   */
   private commitSemanticTurn(): void {
     this.clearSemanticTurnTimer();
     this.clearEouAudio();
@@ -1846,20 +1881,12 @@ export class OrchestrationPipeline implements VoiceSession {
       );
       return;
     }
-    if (this._specLlmState && !this.isProcessing) {
-      this._specLlmState.aborted = true;
-      this._specLlmState = null;
-      this.logExec("LLM", "system", {
-        status: "info",
-        turnNumber: this._activeTurnIndex,
-        metadata: { event: "Eager LLM Cancelled", reason: "speech_resumed" },
-      });
-      logger.info({ callId: this.config.callId }, "Eager LLM cancelled — caller resumed speaking");
-    }
+    this.abortSpeculativeLlm("speech_resumed");
   }
 
   private maybeLaunchEagerOnPartial(text: string, metadata?: SttFinalMetadata): void {
     if (!text.trim() || this.isPlaying || this.isProcessing || this.closed || this._specLlmState) return;
+    if (this.semanticTurnBlocksPrefill()) return;
     if (!this.conversationHistory.some((t) => t.role === "assistant")) return;
     const speechEnd = metadata?.speechEndReceived === true;
     if (speechEnd && isEagerCommitReady(text, { speechEnd: true })) {
