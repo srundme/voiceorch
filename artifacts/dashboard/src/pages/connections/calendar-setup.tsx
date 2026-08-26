@@ -71,8 +71,8 @@ const STEPS: { id: WizardStepId; title: string; blurb: string }[] = [
   },
   {
     id: "meeting",
-    title: "What can callers book?",
-    blurb: "Name and length. Meet link is included on every invite by default.",
+    title: "Create a meeting (with Google Meet)",
+    blurb: "Give it a name and length. When a caller books, they get a Google Meet link on the calendar invite — you do not create that Meet URL yourself.",
   },
 ];
 
@@ -858,10 +858,13 @@ function MeetingPanel({
           <span className="text-muted-foreground"> · {existing.durationMinutes} min</span>
         </p>
         <p className="text-[11.5px] text-muted-foreground">
-          Public link: <span className="font-mono">/book/{existing.slug}</span>
+          Booking page (not the Meet link): <span className="font-mono">/book/{existing.slug}</span>
+        </p>
+        <p className="text-[11.5px] text-muted-foreground">
+          After someone picks a time, Google Meet is added automatically on the invite.
         </p>
         <Button asChild variant="outline" size="sm" className="h-8">
-          <Link href={`${BASE}/app/scheduling/event-types/${existing.id}`}>Change name or length</Link>
+          <Link href={`${BASE}/app/scheduling/event-types/${existing.id}`}>Edit this meeting</Link>
         </Button>
       </div>
     );
@@ -879,7 +882,9 @@ function MeetingPanel({
         />
         {name.trim() && (
           <p className="text-[11px] text-muted-foreground">
-            Booking link: <span className="font-mono bg-muted rounded px-1">/book/{slug}</span>
+            Callers open this page to pick a time:{" "}
+            <span className="font-mono bg-muted rounded px-1">/book/{slug}</span>
+            . The Google Meet URL is generated only after they book.
           </p>
         )}
       </div>
