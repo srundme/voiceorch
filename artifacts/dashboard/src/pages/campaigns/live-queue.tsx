@@ -483,6 +483,7 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
       setSelectedIds(new Set());
       void qc.invalidateQueries({ queryKey: ["lq-metrics", campaignId] });
       void qc.invalidateQueries({ queryKey: ["lq-leads", campaignId] });
+      void qc.invalidateQueries({ queryKey: [`/api/campaigns/${campaignId}/analytics`] });
     },
   });
 

@@ -59,7 +59,7 @@ type BookingsPage = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, init);
+  const r = await fetch(url, { credentials: "include", ...init });
   if (!r.ok) throw new Error(await r.text());
   return r.json() as Promise<T>;
 }
@@ -149,6 +149,9 @@ export default function BookingsTab({ campaignId }: { campaignId: number }) {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: metricsKey });
     qc.invalidateQueries({ queryKey: ["bookings", campaignId] });
+    qc.invalidateQueries({ queryKey: ["lq-metrics", campaignId] });
+    qc.invalidateQueries({ queryKey: ["lq-leads", campaignId] });
+    qc.invalidateQueries({ queryKey: [`/api/campaigns/${campaignId}/analytics`] });
   };
 
   // ── Mutations ──────────────────────────────────────────────────────────────
@@ -189,16 +192,15 @@ export default function BookingsTab({ campaignId }: { campaignId: number }) {
       <div className="flex items-stretch gap-2 px-6 pt-5 pb-3 flex-wrap">
 
         {/* Today */}
-        <button
-          onClick={() => { setTab("all"); setPage(0); }}
-          className="flex-1 min-w-[100px] rounded-lg border px-4 py-3 text-left border-border/40 bg-card hover:bg-muted/30 transition-all"
+        <div
+          className="flex-1 min-w-[100px] rounded-lg border px-4 py-3 text-left border-border/40 bg-card"
         >
           <div className="flex items-center gap-1.5 mb-1">
             <Clock className="h-3 w-3 text-muted-foreground" />
             <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground">Today</span>
           </div>
           <p className="text-xl font-bold tabular-nums">{m?.today ?? "—"}</p>
-        </button>
+        </div>
 
         {/* Upcoming */}
         <button
@@ -297,7 +299,7 @@ export default function BookingsTab({ campaignId }: { campaignId: number }) {
           <Button
             size="sm" variant="ghost"
             className={cn("h-7 gap-1.5 text-xs", isFetching && "opacity-60")}
-            onClick={() => qc.invalidateQueries({ queryKey: listKey })}
+            onClick={invalidate}
           >
             <RefreshCw className={cn("h-3 w-3", isFetching && "animate-spin")} />
           </Button>

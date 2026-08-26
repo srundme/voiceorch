@@ -23,6 +23,7 @@ import { startStaleCallCleanup } from "./services/stale-call-cleanup.js";
 import { startKbEmbedMaintenance } from "./services/kb-embeddings.js";
 import { startKrutrimSummaryMaintenance } from "./services/kb-source-summary.js";
 import { startWorkflowWorker } from "./services/workflow-worker.js";
+import { startCallIntelligenceWorker } from "./services/analyze-call-intelligence.js";
 import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
@@ -563,6 +564,7 @@ server.listen(port, () => {
       startKbEmbedMaintenance();
       startKrutrimSummaryMaintenance();
       startWorkflowWorker();
+      startCallIntelligenceWorker();
     })
     .catch((err: unknown) => {
       // Log but do NOT exit — keeps the process alive so Railway's healthcheck

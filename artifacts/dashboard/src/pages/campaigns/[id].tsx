@@ -4,7 +4,7 @@ import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
   useDeleteCampaign, useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
   useGetBatchWorkspaceKpis,
-  getListCampaignBatchesQueryKey, getGetCampaignQueryKey,
+  getListCampaignBatchesQueryKey, getGetCampaignQueryKey, getGetCampaignAnalyticsQueryKey,
   getGetBatchAnalyticsQueryOptions,
   useListCrmConnections, useUpdateCrmConnection, getListCrmConnectionsQueryKey,
   customFetch,
@@ -30,6 +30,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getIrdaiBlockedError } from "@/lib/irdai-block";
+import { resolveCampaignOverviewMetrics } from "@/lib/campaign-overview-metrics";
 import {
   ArrowLeft, Copy, Check, Megaphone, Upload, FileText, Layers,
   ChevronRight, ChevronDown, Calendar, Trash2, Users, Clock, AlertCircle,
@@ -1450,7 +1451,7 @@ export default function CampaignDetailPage() {
           await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
         }
       }
-      await qc.invalidateQueries({ queryKey: ["getCampaignAnalytics", campaignId] });
+      await qc.invalidateQueries({ queryKey: getGetCampaignAnalyticsQueryKey(campaignId) });
     } catch {
       toast({ title: "Action failed", variant: "destructive" });
     } finally {
@@ -1484,7 +1485,7 @@ export default function CampaignDetailPage() {
             + (result.error ? ` — ${result.error}` : ""),
         });
       }
-      await qc.invalidateQueries({ queryKey: ["getCampaignAnalytics", campaignId] });
+      await qc.invalidateQueries({ queryKey: getGetCampaignAnalyticsQueryKey(campaignId) });
     } catch {
       toast({ title: "Could not analyse outcomes", variant: "destructive" });
     } finally {
@@ -1499,13 +1500,12 @@ export default function CampaignDetailPage() {
   const fm = campaign?.fieldMappings as Record<string, string> | undefined;
   const liveTotal = liveQueueMetrics?.total ?? 0;
   const liveNoPickup = liveQueueMetrics?.nopickup ?? 0;
-  const liveExhausted = liveQueueMetrics?.failed ?? 0;
-  const liveQueued = liveQueueMetrics?.queued ?? 0;
-  const imported = (analytics?.imported ?? campaign?.totalLeads ?? 0) || liveTotal;
-  const called =
-    (analytics?.called ?? campaign?.calledLeads ?? 0)
-    || Math.max(0, liveTotal - liveQueued);
-  const failed = Math.max(analytics?.failed ?? 0, liveNoPickup + liveExhausted);
+  const overviewMetrics = resolveCampaignOverviewMetrics({
+    analytics,
+    campaign,
+    live: liveQueueMetrics,
+  });
+  const { imported, called, failed } = overviewMetrics;
   const hasCsvSource = batches?.some(b => b.leadSource === "csv") ?? false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isContinuous = ["webhook", "meta_ads", "crm", "google_sheets"].includes((campaign as any)?.leadSource ?? "");
@@ -1562,7 +1562,7 @@ export default function CampaignDetailPage() {
       ? "Tracking..."
       : "0%";
 
-  const connectedCalls  = analytics?.connected ?? liveQueueMetrics?.connected ?? 0;
+  const connectedCalls  = overviewMetrics.connected;
   const successRatePct  = analytics?.successRate ?? 0;
   const leadsRemaining  = Math.max(imported - called, 0);
 
@@ -2247,7 +2247,7 @@ export default function CampaignDetailPage() {
             <CampaignAnalyticsTab
               campaignId={campaignId}
               onAnalysed={() => {
-                void qc.invalidateQueries({ queryKey: ["getCampaignAnalytics", campaignId] });
+                void qc.invalidateQueries({ queryKey: getGetCampaignAnalyticsQueryKey(campaignId) });
               }}
             />
           )}

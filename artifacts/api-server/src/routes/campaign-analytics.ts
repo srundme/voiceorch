@@ -17,6 +17,7 @@ import {
 import { eq, and, count, sql, desc, isNotNull, inArray, ne, or } from "drizzle-orm";
 import { normalizePhone } from "../lib/phone-normalize.js";
 import { canonicalDispositionBucket, dispositionBucketSql } from "../lib/disposition/canonical.js";
+import { safelyReconcileCampaignTabs } from "../services/campaign-tab-sync.js";
 
 const router: IRouter = Router();
 
@@ -135,6 +136,7 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
   const campaignId = parseInt(req.params["id"]!, 10);
   const campaign = await requireCampaign(campaignId, userId);
   if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+  await safelyReconcileCampaignTabs(campaignId);
 
   // Single-pass funnel aggregation from campaign_leads
   const [funnel] = await db.select({

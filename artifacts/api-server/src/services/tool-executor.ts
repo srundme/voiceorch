@@ -39,6 +39,11 @@ import { sendMidCallWhatsapp } from "./whatsapp/outbound.js";
 import { resolveBookingLineageCallId } from "./meet-booking.js";
 import { normalizeBookingDatetimeArgs } from "./booking-tool-args.js";
 import { fetchUserConfiguredUrl } from "../lib/ssrf.js";
+import {
+  syncCampaignBooking,
+  syncCampaignTransfer,
+  type CampaignCallContext,
+} from "./campaign-tab-sync.js";
 
 // ── Booking diagnostic log helper ────────────────────────────────────────────
 
@@ -1004,6 +1009,13 @@ export async function executeNativeBooking(
             googleEventId,
           },
         }).catch((err) => logger.warn({ callId, bookingId: confirmedBooking.id, err }, "Native booking: webhook dispatch failed"));
+        await syncCampaignBooking({
+          callId: bookingCallId,
+          bookingId: confirmedBooking.id,
+          meetingTime: confirmedBooking.slotStart,
+          meetingLink: meetLink,
+          status: "pending",
+        }).catch((err) => logger.warn({ callId, bookingId: confirmedBooking.id, err }, "Native booking: campaign tab sync failed"));
         return `booking_pending: booking_id=${confirmedBooking.id}, slot="${dateStr}", status="pending", note="Google Calendar event creation failed — booking requires manual confirmation"`;
       }
       // Instant-confirm: GCal failure is non-blocking — booking stays confirmed
@@ -1067,6 +1079,14 @@ export async function executeNativeBooking(
       meetLink: meetLink ?? null,
       googleEventId: googleEventId ?? null,
     }, "success");
+
+    await syncCampaignBooking({
+      callId: bookingCallId,
+      bookingId: confirmedBooking.id,
+      meetingTime: confirmedBooking.slotStart,
+      meetingLink: meetLink,
+      status: confirmedBooking.status,
+    }).catch((err) => logger.warn({ callId, bookingId: confirmedBooking.id, err }, "Native booking: campaign tab sync failed"));
 
     const meetingsEnabled = await agentMeetingsChannelEnabled(agentId);
     const meetNote = formatMeetLinkToolNote(meetLink, meetingsEnabled);
@@ -2250,6 +2270,11 @@ export async function writeTransferLeadDb(
     return;
   }
   if (!campaignId) return;
+  const campaignContext: CampaignCallContext = {
+    leadId: campaignLeadId,
+    campaignId,
+    batchId,
+  };
 
   let callExecutionId: number | null = null;
   try {
@@ -2285,5 +2310,16 @@ export async function writeTransferLeadDb(
     });
   } catch (err) {
     logger.warn({ callId, campaignLeadId, err }, "Transfer DB: lead_timeline insert failed");
+  }
+
+  try {
+    await syncCampaignTransfer({
+      callId,
+      context: campaignContext,
+      transferTo,
+      summary,
+    });
+  } catch (err) {
+    logger.warn({ callId, campaignLeadId, err }, "Transfer DB: campaign transfer sync failed");
   }
 }

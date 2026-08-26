@@ -73,6 +73,11 @@ router.get("/campaigns/:id/incoming", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Not found" }); return;
   }
 
+  // Keep list-only consumers in sync too; previously only the metrics endpoint
+  // ran this idempotent repair, so a direct list refresh could stay stale.
+  const { syncCampaignIncomingCalls } = await import("../services/incoming-call-match.js");
+  await syncCampaignIncomingCalls(campaignId, userId);
+
   const status = String(req.query["status"] ?? "all");
   const search = String(req.query["search"] ?? "").trim();
   const page   = Math.max(0, parseInt(String(req.query["page"] ?? "0"), 10) || 0);

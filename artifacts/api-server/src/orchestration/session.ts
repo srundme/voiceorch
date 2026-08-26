@@ -3695,18 +3695,17 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           // disposition so we can pass dispositionResult as a hint. Non-campaign
           // calls are skipped inside analyzeCallIntelligence.
           if (session.campaignLeadId && transcript && transcript.trim().length >= 20) {
-            try {
-              const { analyzeCallIntelligence } = await import("../services/analyze-call-intelligence.js");
-              await analyzeCallIntelligence({
+            void import("../services/analyze-call-intelligence.js").then(({ analyzeCallIntelligence }) =>
+              analyzeCallIntelligence({
                 callId: session.callId,
                 leadId: session.campaignLeadId,
                 transcript,
                 callSummary: callSummary || null,
                 dispositionResult,
-              });
-            } catch (intelErr) {
+              }),
+            ).catch((intelErr) => {
               logger.warn({ sessionId, intelErr }, "Post-call intelligence analysis failed");
-            }
+            });
           }
 
           // 2c. Inbound call → campaign matching ("who called us back?").

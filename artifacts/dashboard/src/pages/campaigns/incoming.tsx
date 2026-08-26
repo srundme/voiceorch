@@ -62,7 +62,7 @@ type IncomingCallsPage = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, init);
+  const r = await fetch(url, { credentials: "include", ...init });
   if (!r.ok) throw new Error(await r.text());
   return r.json() as Promise<T>;
 }
@@ -162,6 +162,10 @@ export default function IncomingCallsTab({ campaignId }: { campaignId: number })
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: metricsKey });
     qc.invalidateQueries({ queryKey: ["incoming", campaignId] });
+    qc.invalidateQueries({ queryKey: ["callback-metrics", campaignId] });
+    qc.invalidateQueries({ queryKey: ["callbacks", campaignId] });
+    qc.invalidateQueries({ queryKey: ["lq-metrics", campaignId] });
+    qc.invalidateQueries({ queryKey: [`/api/campaigns/${campaignId}/analytics`] });
   };
 
   const statusMutation = useMutation({
@@ -256,11 +260,10 @@ export default function IncomingCallsTab({ campaignId }: { campaignId: number })
         </button>
 
         {/* Today */}
-        <button
-          onClick={() => { setTab("all"); setPage(0); }}
+        <div
           className={cn(
-            "flex-1 min-w-[110px] rounded-lg border px-4 py-3 text-left transition-all",
-            "border-border/40 bg-card hover:bg-muted/30",
+            "flex-1 min-w-[110px] rounded-lg border px-4 py-3 text-left",
+            "border-border/40 bg-card",
           )}
         >
           <div className="flex items-center gap-1.5 mb-1">
@@ -268,14 +271,13 @@ export default function IncomingCallsTab({ campaignId }: { campaignId: number })
             <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/50">Today</span>
           </div>
           <p className="text-xl font-bold tabular-nums text-foreground">{m?.today ?? "—"}</p>
-        </button>
+        </div>
 
         {/* This Week */}
-        <button
-          onClick={() => { setTab("all"); setPage(0); }}
+        <div
           className={cn(
-            "flex-1 min-w-[110px] rounded-lg border px-4 py-3 text-left transition-all",
-            "border-border/40 bg-card hover:bg-muted/30",
+            "flex-1 min-w-[110px] rounded-lg border px-4 py-3 text-left",
+            "border-border/40 bg-card",
           )}
         >
           <div className="flex items-center gap-1.5 mb-1">
@@ -283,7 +285,7 @@ export default function IncomingCallsTab({ campaignId }: { campaignId: number })
             <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/50">This Week</span>
           </div>
           <p className="text-xl font-bold tabular-nums text-foreground">{m?.thisWeek ?? "—"}</p>
-        </button>
+        </div>
 
         {/* Completed */}
         <button
@@ -344,7 +346,7 @@ export default function IncomingCallsTab({ campaignId }: { campaignId: number })
           <Button
             size="sm" variant="ghost"
             className={cn("h-7 gap-1.5 text-xs", isFetching && "opacity-60")}
-            onClick={() => qc.invalidateQueries({ queryKey: listKey })}
+            onClick={invalidate}
           >
             <RefreshCw className={cn("h-3 w-3", isFetching && "animate-spin")} />
           </Button>

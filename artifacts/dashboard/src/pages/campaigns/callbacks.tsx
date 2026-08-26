@@ -61,7 +61,7 @@ type CallbacksPage = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, init);
+  const r = await fetch(url, { credentials: "include", ...init });
   if (!r.ok) throw new Error(await r.text());
   return r.json() as Promise<T>;
 }
@@ -165,6 +165,9 @@ export default function CallbacksTab({ campaignId }: { campaignId: number }) {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: metricsKey });
     qc.invalidateQueries({ queryKey: ["callbacks", campaignId] });
+    qc.invalidateQueries({ queryKey: ["lq-metrics", campaignId] });
+    qc.invalidateQueries({ queryKey: ["lq-leads", campaignId] });
+    qc.invalidateQueries({ queryKey: [`/api/campaigns/${campaignId}/analytics`] });
   };
 
   const completeMutation = useMutation({
@@ -372,7 +375,7 @@ export default function CallbacksTab({ campaignId }: { campaignId: number }) {
           <Button
             size="sm" variant="ghost"
             className={cn("h-7 gap-1.5 text-xs", isFetching && "opacity-60")}
-            onClick={() => qc.invalidateQueries({ queryKey: listKey })}
+            onClick={invalidate}
           >
             <RefreshCw className={cn("h-3 w-3", isFetching && "animate-spin")} />
           </Button>

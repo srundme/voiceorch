@@ -15,6 +15,7 @@ import {
   callBookingsTable, bookingsTable, eventTypesTable,
 } from "@workspace/db";
 import { eq, and, sql, desc, or, ilike } from "drizzle-orm";
+import { reconcileCampaignBookings } from "../services/campaign-tab-sync.js";
 
 const router: IRouter = Router();
 
@@ -45,6 +46,7 @@ router.get("/campaigns/:id/bookings/metrics", async (req, res): Promise<void> =>
   if (isNaN(campaignId) || !await requireCampaign(campaignId, userId)) {
     res.status(404).json({ error: "Not found" }); return;
   }
+  await reconcileCampaignBookings(campaignId).catch(() => {});
 
   const [m] = await db.select({
     today:     sql<number>`count(*) filter (where date(${callBookingsTable.createdAt} at time zone 'UTC') = current_date)::int`,
@@ -75,6 +77,7 @@ router.get("/campaigns/:id/bookings", async (req, res): Promise<void> => {
   if (isNaN(campaignId) || !await requireCampaign(campaignId, userId)) {
     res.status(404).json({ error: "Not found" }); return;
   }
+  await reconcileCampaignBookings(campaignId).catch(() => {});
 
   const status = String(req.query["status"] ?? "all");
   const search = String(req.query["search"] ?? "").trim();
