@@ -47,7 +47,6 @@ import {
 } from "@/lib/scheduling-setup";
 import {
   Check,
-  CheckCircle2,
   Globe,
   Loader2,
   Plus,
@@ -231,7 +230,7 @@ export function ConnectionsCalendarSetup({
     meetings,
     composingNew ? null : selectedId,
   );
-  const { calendar, meeting, requiredReadyCount, ready } = readiness;
+  const { calendar, meeting } = readiness;
   const doneFlags: Record<WizardStepId, boolean> = {
     calendar: Boolean(calendar),
     google: readiness.googleLinked,
@@ -262,25 +261,6 @@ export function ConnectionsCalendarSetup({
   return (
     <CalendarShell embedded={embedded} backHref={backHref} backLabel={backLabel}>
       <div className="space-y-6">
-        <div
-          className={cn(
-            "rounded-xl border px-4 py-3",
-            ready
-              ? "border-emerald-500/30 bg-emerald-500/10"
-              : "border-border bg-muted/20",
-          )}
-        >
-          <p className={cn("flex items-center gap-2 text-sm font-medium", ready ? "text-emerald-700 dark:text-emerald-400" : "text-foreground")}>
-            {ready ? <CheckCircle2 className="h-4 w-4" /> : null}
-            {ready ? "Ready — you can still change anything below" : `${requiredReadyCount} of 3 set up`}
-          </p>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-            {embedded
-              ? "Save the agent after you pick this calendar on Actions → Bookings."
-              : "Agent → Actions → Bookings → pick this calendar. Appointments show under Bookings."}
-          </p>
-        </div>
-
         {calendars.length > 0 ? (
           <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-end">
             <div className="min-w-0 flex-1 space-y-1.5">
@@ -655,32 +635,73 @@ function GooglePanel({
   const googleQ = useQuery({
     queryKey: ["scheduling-google-connections"],
     queryFn: () => listGoogleConnections(),
-    staleTime: 15_000,
+    staleTime: 5_000,
   });
   const [linking, setLinking] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+
+  const finishOauthReturn = useCallback((ok: boolean, email?: string) => {
+    setConnecting(false);
+    void googleQ.refetch();
+    if (ok) {
+      toast({
+        title: "Google account added",
+        description: email
+          ? `${email} is saved. Pick it below to use it on this calendar.`
+          : "Pick the account below to use it on this calendar.",
+      });
+    } else {
+      toast({
+        title: "Google sign-in failed",
+        description: "Try Add Google account again and choose the Gmail you want.",
+        variant: "destructive",
+      });
+    }
+  }, [googleQ, toast]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gcal = params.get("gcal");
+    const email = params.get("email") ?? undefined;
+    if (gcal !== "connected" && gcal !== "error") return;
+    params.delete("gcal");
+    params.delete("email");
+    const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+    window.history.replaceState({}, "", next);
+    try {
+      const ch = new BroadcastChannel("google-oauth");
+      ch.postMessage({ type: gcal === "connected" ? "connected" : "error", email });
+      ch.close();
+    } catch {
+      /* BroadcastChannel unavailable */
+    }
+    if (window.name === "snapserve-google-oauth") {
+      window.setTimeout(() => {
+        try { window.close(); } catch { /* not a popup */ }
+      }, 400);
+      return;
+    }
+    finishOauthReturn(gcal === "connected", email);
+  }, [finishOauthReturn]);
 
   useEffect(() => {
     let ch: BroadcastChannel | null = null;
     try {
       ch = new BroadcastChannel("google-oauth");
-      ch.onmessage = (e: MessageEvent<{ type: string }>) => {
+      ch.onmessage = (e: MessageEvent<{ type: string; email?: string }>) => {
         if (e.data?.type === "connected") {
-          setConnecting(false);
-          void googleQ.refetch();
+          finishOauthReturn(true, e.data.email);
+        } else if (e.data?.type === "error") {
+          finishOauthReturn(false);
         }
       };
     } catch {
       /* BroadcastChannel unavailable */
     }
     return () => {
-      try {
-        ch?.close();
-      } catch {
-        /* ignore */
-      }
+      try { ch?.close(); } catch { /* ignore */ }
     };
-  }, [googleQ]);
+  }, [finishOauthReturn]);
 
   async function handleAddAccount() {
     setConnecting(true);
@@ -704,34 +725,6 @@ function GooglePanel({
     }
   }
 
-  if (linkedEmail) {
-    return (
-      <div className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Connected as <span className="font-medium text-foreground">{linkedEmail}</span>
-        </p>
-        <p className="text-[11.5px] text-muted-foreground">Each booking gets a Google Meet link on the invite.</p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          disabled={connecting}
-          onClick={() => void handleAddAccount()}
-        >
-          {connecting ? (
-            <>
-              <Loader2 className="h-3 w-3 animate-spin" /> Opening Google…
-            </>
-          ) : (
-            <>
-              <Plus className="h-3 w-3" /> Use a different Google account
-            </>
-          )}
-        </Button>
-      </div>
-    );
-  }
-
   if (googleQ.isLoading) {
     return (
       <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
@@ -745,36 +738,48 @@ function GooglePanel({
   return (
     <div className="space-y-4">
       <p className="text-[12px] text-muted-foreground leading-relaxed">
-        Connect the Google account that matches your booking email. Callers get a Meet link and events land on your calendar.
+        Connect every Google account you need, then pick which one this calendar uses. Events and Meet links go to that account.
       </p>
 
       {connections.length > 0 ? (
         <div className="space-y-2">
-          {connections.map((conn) => (
-            <div
-              key={conn.id}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-background"
-            >
-              <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
-                <span className="text-xs font-semibold">{conn.email[0]?.toUpperCase()}</span>
-              </div>
-              <span className="flex-1 text-sm truncate">{conn.email}</span>
-              <Button
-                size="sm"
-                className="h-7 px-3 text-xs shrink-0"
-                disabled={linking !== null}
-                onClick={() => void handleSelect(conn.id)}
+          {connections.map((conn) => {
+            const isLinked = linkedEmail != null && conn.email.toLowerCase() === linkedEmail.toLowerCase();
+            return (
+              <div
+                key={conn.id}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-background"
               >
-                {linking === conn.id ? (
-                  <>
-                    <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> Linking…
-                  </>
+                <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                  <span className="text-xs font-semibold">{conn.email[0]?.toUpperCase()}</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm truncate">{conn.email}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {isLinked ? "Used on this calendar" : "Saved — not used on this calendar yet"}
+                  </p>
+                </div>
+                {isLinked ? (
+                  <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 shrink-0">Connected</span>
                 ) : (
-                  "Use this"
+                  <Button
+                    size="sm"
+                    className="h-7 px-3 text-xs shrink-0"
+                    disabled={linking !== null}
+                    onClick={() => void handleSelect(conn.id)}
+                  >
+                    {linking === conn.id ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> Linking…
+                      </>
+                    ) : (
+                      "Use this"
+                    )}
+                  </Button>
                 )}
-              </Button>
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">

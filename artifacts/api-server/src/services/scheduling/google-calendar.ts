@@ -169,7 +169,10 @@ export function getAuthUrl(
   return client.generateAuthUrl({
     access_type: "offline",
     scope: SCOPES,
-    prompt: "consent",   // force refresh_token on every connect
+    // Re-auth of a known row: consent only so Google re-issues a refresh token.
+    // New account: also show the account picker — otherwise Google silently
+    // reuses the current session and a second Gmail never appears.
+    prompt: connectionId ? "consent" : "select_account consent",
     state,
   });
 }
