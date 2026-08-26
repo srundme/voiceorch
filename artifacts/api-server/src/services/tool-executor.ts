@@ -837,7 +837,7 @@ export async function executeNativeBooking(
       }).catch((err) => logger.warn({ callId, err }, "sheet-auto-call: booking writeback failed"));
     }).catch(() => {});
 
-    // Create Google Calendar event with Meet link
+    // Create Google Calendar event (Meet link only when enableGoogleMeet is on)
     let meetLink: string | null = null;
     let googleEventId: string | null = null;
     let gcalConnectionId: string | null = null;
@@ -845,15 +845,6 @@ export async function executeNativeBooking(
     let calendarSyncStatus: string | null = null;
     let calendarSyncError: string | null = null;
 
-    if (!eventType.enableGoogleMeet) {
-      // Google Meet not enabled on this event type — skip GCal entirely
-      calendarSyncStatus = "skipped";
-      await db.execute(
-        sql`UPDATE bookings SET calendar_sync_status = 'skipped' WHERE id = ${confirmedBooking.id}`,
-      );
-      logger.info({ callId, bookingId: confirmedBooking.id }, "Native booking: GCal skipped — enableGoogleMeet=false on event type");
-    }
-    if (eventType.enableGoogleMeet) {
     try {
       const calRow = await db.execute(
         sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${calendar.id}`,
@@ -867,7 +858,12 @@ export async function executeNativeBooking(
       }
 
       if (gcalConnectionId) {
-        logger.info({ callId, bookingId: confirmedBooking.id, connectionId: gcalConnectionId }, "Native booking: creating Google Calendar event");
+        logger.info({
+          callId,
+          bookingId: confirmedBooking.id,
+          connectionId: gcalConnectionId,
+          createMeetLink: !!eventType.enableGoogleMeet,
+        }, "Native booking: creating Google Calendar event");
       } else {
         calendarSyncStatus = "skipped";
         await db.execute(
@@ -898,6 +894,7 @@ export async function executeNativeBooking(
             timezone: tz,
             hostEmail: calendar.hostEmail,
             additionalHosts: calendar.additionalHosts,
+            createMeetLink: !!eventType.enableGoogleMeet,
             onError: (detail) => { gcalErrCode = detail.errorCode; gcalErrMsg = detail.message ?? null; },
           })
         : null;
@@ -980,7 +977,6 @@ export async function executeNativeBooking(
         calendarSyncStatus: "sync_failed",
       }, "error");
     }
-    } // end if (eventType.enableGoogleMeet)
 
     // If GCal was configured but failed, only downgrade to pending for manual-confirmation
     // event types. Instant (auto-confirm) events stay confirmed — GCal is supplementary.

@@ -2640,9 +2640,15 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const recordingEnabled = form.watch("recordingEnabled") ?? true;
   const summarizationEnabled = form.watch("summarizationEnabled") ?? false;
   const watchedTools  = (form.watch("tools") ?? []) as any[];
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [meetTogglePending, setMeetTogglePending] = useState(false);
+  /** Local preference when no meeting/event type exists yet on the calendar. */
+  const [meetEnabledFallback, setMeetEnabledFallback] = useState(true);
 
   const { data: calendarsData } = useListCalendars();
   const schedulingCalendarId = form.watch("schedulingCalendarId");
+  const schedulingEventTypeId = form.watch("schedulingEventTypeId");
   const agentCalendar = schedulingCalendarId != null
     ? (calendarsData ?? []).find((cal: any) => cal.id === schedulingCalendarId)
     : agentId
@@ -2653,6 +2659,61 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
     { query: { enabled: !!calendarIdForEt, queryKey: ["agent-event-types", calendarIdForEt ?? null] } }
   );
+
+  const preferredEventType = useMemo(() => {
+    const ets = (agentEventTypes ?? []) as Array<{ id: number; enableGoogleMeet?: boolean }>;
+    if (ets.length === 0) return null;
+    if (schedulingEventTypeId != null) {
+      return ets.find((e) => e.id === schedulingEventTypeId) ?? ets[0] ?? null;
+    }
+    return ets[0] ?? null;
+  }, [agentEventTypes, schedulingEventTypeId]);
+
+  const googleMeetEnabled = preferredEventType
+    ? preferredEventType.enableGoogleMeet !== false
+    : meetEnabledFallback;
+
+  const setGoogleMeetEnabled = async (on: boolean) => {
+    setMeetEnabledFallback(on);
+    const ets = (agentEventTypes ?? []) as Array<{ id: number }>;
+    if (ets.length === 0) {
+      toast({
+        title: on ? "Google Meet on" : "Google Meet off",
+        description: on
+          ? "Meet links will be added once a meeting exists on this calendar."
+          : "Bookings won’t include Meet links until you turn this back on.",
+      });
+      return;
+    }
+    setMeetTogglePending(true);
+    try {
+      await Promise.all(
+        ets.map((et) =>
+          customFetch(`${DASH_API}/scheduling/event-types/${et.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enableGoogleMeet: on }),
+          }),
+        ),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["agent-event-types", calendarIdForEt ?? null] });
+      toast({
+        title: on ? "Google Meet enabled" : "Google Meet disabled",
+        description: on
+          ? "New bookings will include a Meet link on the Google invite."
+          : "New bookings stay on the calendar without a Meet link.",
+      });
+    } catch (err: any) {
+      setMeetEnabledFallback(!on);
+      toast({
+        title: "Couldn’t update Meet setting",
+        description: err?.message ?? String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setMeetTogglePending(false);
+    }
+  };
 
   // ── Issue 1: Auto-link calendar when none is set ──────────────────────────
   // When the agent has no calendar linked yet, find a calendar whose name
@@ -2877,17 +2938,36 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 )}
               </div>
 
-              {googleEmail ? (
-                <p className="text-[11.5px] text-muted-foreground">
-                  Meet links via <span className="font-medium text-foreground">{googleEmail}</span>
-                </p>
-              ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-[11.5px] text-muted-foreground">Connect Google so each booking gets a Meet link.</p>
-                  <Button asChild type="button" size="sm" className="h-8 text-[11px]">
-                    <Link href={setupHref}>Connect Google</Link>
-                  </Button>
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-[12px] font-medium text-foreground">Google Meet conferencing</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                    {googleMeetEnabled
+                      ? "Add a Meet link on each booking invite."
+                      : "Off — bookings can still use the calendar without a Meet link."}
+                  </p>
                 </div>
+                <Switch
+                  className="mt-0.5 shrink-0"
+                  checked={googleMeetEnabled}
+                  disabled={meetTogglePending}
+                  onCheckedChange={(on) => { void setGoogleMeetEnabled(on); }}
+                />
+              </div>
+
+              {googleMeetEnabled && (
+                googleEmail ? (
+                  <p className="text-[11.5px] text-muted-foreground">
+                    Meet links via <span className="font-medium text-foreground">{googleEmail}</span>
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[11.5px] text-muted-foreground">Connect Google so each booking gets a Meet link.</p>
+                    <Button asChild type="button" size="sm" className="h-8 text-[11px]">
+                      <Link href={setupHref}>Connect Google</Link>
+                    </Button>
+                  </div>
+                )
               )}
             </div>
             );
