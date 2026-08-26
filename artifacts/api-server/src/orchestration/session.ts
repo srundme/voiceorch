@@ -39,6 +39,7 @@ import { capHandoffTranscript, mergeHandoffTranscript } from "./squad-transcript
 import { buildLeadContextBlock, buildCallContextBlock, callVariablesFromMetadata, resolvePromptVariables } from "./prompt-vars.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "./mic-sensitivity.js";
+import { FORCE_SOFTWARE_NOISE_GATE_KEY } from "./noise-gate.js";
 import { loadPcmLoop, TRACK_PARAMS } from "./ambient.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
@@ -660,6 +661,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
     noiseCancellationEnabled: agent.noiseCancellationEnabled ?? false,
+    forceSoftwareNoiseGate: agentCfg[FORCE_SOFTWARE_NOISE_GATE_KEY] === true,
     ambientNoiseEnabled: (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false,
     ambientNoiseTrack: (agentCfg["ambientNoiseTrack"] as string | undefined) ?? null,
     ambientNoiseVolume: (() => {

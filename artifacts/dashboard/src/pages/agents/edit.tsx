@@ -110,7 +110,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     snapserveAgentId,
     contextWindowTurns, summarizationEnabled,
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
-    ambientNoiseEnabled, ambientNoiseTrack, ambientNoiseVolume,
+    ambientNoiseEnabled, ambientNoiseTrack, ambientNoiseVolume, forceSoftwareNoiseGate,
     preferredManagedNumber,
     asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs, ttsSpeed,
     fragmentCoalesceListeningMs, fragmentCoalescePlayingMs, telephonyTailDrainMs,
@@ -169,6 +169,10 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["voiceMemoryEnabled"] = !!voiceMemoryEnabled;
   agentConfig["recordingEnabled"] = !!recordingEnabled;
   agentConfig["summarizationEnabled"] = !!summarizationEnabled;
+  // Re-applies our software noise gate on VoBiz calls, which bypass it by
+  // default because VoBiz denoises at the carrier. Always persisted so turning
+  // it back off actually clears it (agentConfig is merged server-side).
+  agentConfig["forceSoftwareNoiseGate"] = !!forceSoftwareNoiseGate;
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
   if (ambientNoiseVolume != null) agentConfig["ambientNoiseVolume"] = ambientNoiseVolume;
@@ -468,6 +472,7 @@ export default function AgentEdit() {
       firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-IN", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: true,
+      forceSoftwareNoiseGate: false,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0,
       promptVariables: [], vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1800, bargeInMinFrames: 4, micSensitivity: "low",
       timezone: "",
@@ -542,7 +547,7 @@ export default function AgentEdit() {
       ? ((calendarsData ?? []).find((cal: any) => cal.agentId === id) ?? (calendarsData ?? [])[0])
       : (calendarsData ?? [])[0];
   const calendarIdForEt = agentCalendar?.id;
-  const { data: agentEventTypes } = useListEventTypes(
+  const { data: agentEventTypes, isLoading: eventTypesLoading } = useListEventTypes(
     calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
     { query: { enabled: !!calendarIdForEt, queryKey: ["agent-event-types", calendarIdForEt ?? null] } }
   );
@@ -570,6 +575,25 @@ export default function AgentEdit() {
   const watchedTools = (form.watch("tools") ?? []) as any[];
   const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
   const nativeToolIndex = (type: string) => watchedTools.findIndex((t: any) => t.type === type);
+  const hasBookingTools = watchedTools.some((tool: any) =>
+    ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"].includes(tool.type),
+  );
+  useEffect(() => {
+    if (!hasBookingTools || eventTypesLoading || !calendarIdForEt) return;
+    const eventTypes = (agentEventTypes ?? []) as Array<{ id: number }>;
+    if (eventTypes.some((eventType) => eventType.id === schedulingEventTypeId)) return;
+    form.setValue("schedulingEventTypeId", eventTypes[0]?.id ?? null, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }, [
+    agentEventTypes,
+    calendarIdForEt,
+    eventTypesLoading,
+    form,
+    hasBookingTools,
+    schedulingEventTypeId,
+  ]);
   const EDIT_TOOL_FN_NAMES: Record<string, string> = {
     native_booking: "book_appointment",
     native_check_availability: "check_availability",
@@ -748,6 +772,7 @@ export default function AgentEdit() {
         ? (agent as any).agentConfig.webhookPayloadTemplate
         : "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
+      forceSoftwareNoiseGate:   ((agent as any).agentConfig?.forceSoftwareNoiseGate as boolean | undefined) ?? false,
       ambientNoiseEnabled:      ((agent as any).agentConfig?.ambientNoiseEnabled as boolean | undefined) ?? false,
       ambientNoiseTrack:        ((agent as any).agentConfig?.ambientNoiseTrack as string | undefined) ?? "",
       ambientNoiseVolume:       ((agent as any).agentConfig?.ambientNoiseVolume as number | undefined) ?? 1.0,
@@ -1215,6 +1240,29 @@ export default function AgentEdit() {
                           </FormItem>
                         )} />
                       </div>
+                      {form.watch("noiseCancellationEnabled") && form.watch("telephonyProvider") === "vobiz" && (
+                        <div className="flex items-center justify-between border-t pt-3">
+                          <div>
+                            <p className="text-sm font-medium leading-none">Also run it on VoBiz calls</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              VoBiz denoises at the carrier, so our filter is skipped by default. Turn this on only
+                              if callers still sound noisy — stacking a second filter can clip very quiet one-word
+                              replies like &quot;yes&quot;.
+                            </p>
+                          </div>
+                          <FormField control={form.control} name="forceSoftwareNoiseGate" render={({ field }) => (
+                            <FormItem>
+                              <Select onValueChange={(v) => field.onChange(v === "true")} value={field.value ? "true" : "false"}>
+                                <FormControl><SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                  <SelectItem value="false">Off</SelectItem>
+                                  <SelectItem value="true">On</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormItem>
+                          )} />
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-3 p-4 border rounded-md bg-muted/20">
@@ -2137,14 +2185,14 @@ export default function AgentEdit() {
                       </p>
                       <Select
                         value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
-                        onValueChange={v => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v))}
-                        disabled={!calendarIdForEt}
+                        onValueChange={v => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v), { shouldDirty: true, shouldValidate: true })}
+                        disabled={!calendarIdForEt || eventTypesLoading || (agentEventTypes ?? []).length === 0}
                       >
                         <SelectTrigger className="h-7 text-xs bg-background/50">
-                          <SelectValue placeholder="Any event type" />
+                          <SelectValue placeholder="Select a meeting type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="__none__" className="text-xs text-muted-foreground">Any event type</SelectItem>
+                          <SelectItem value="__none__" disabled className="text-xs text-muted-foreground">Select a meeting type</SelectItem>
                           {(agentEventTypes ?? []).map((et: any) => (
                             <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title || et.name}</SelectItem>
                           ))}

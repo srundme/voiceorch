@@ -1997,6 +1997,10 @@ function VoiceTab({ form }: { form: any }) {
   const { data: ambientSounds, isLoading: ambientSoundsLoading } = useListAmbientSounds();
   const ambientNoiseEnabled = form.watch("ambientNoiseEnabled") ?? false;
   const ambientNoiseTrack   = form.watch("ambientNoiseTrack") ?? "";
+  // The software noise gate is bypassed on VoBiz (carrier already denoised), so
+  // the opt-in below is only meaningful for VoBiz agents with the toggle on.
+  const noiseCancelOn       = form.watch("noiseCancellationEnabled") ?? true;
+  const isVobizAgent        = (form.watch("telephonyProvider") ?? "") === "vobiz";
   const ambientNoiseVolume  = (form.watch("ambientNoiseVolume") as number | undefined) ?? 1.0;
   const [ambientPreviewPlaying, setAmbientPreviewPlaying] = useState<string | null>(null);
   const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -2423,6 +2427,20 @@ function VoiceTab({ form }: { form: any }) {
               <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
           )} />
+          {noiseCancelOn && isVobizAgent && (
+            <FormField control={form.control} name="forceSoftwareNoiseGate" render={({ field }) => (
+              <FormItem className="flex items-center justify-between rounded-lg border border-dashed border-border/50 bg-muted/10 px-3 py-2.5 ml-3">
+                <div>
+                  <FormLabel className="text-sm">Also run our noise filter on VoBiz</FormLabel>
+                  <FormDescription className="text-[10px]">
+                    VoBiz already denoises at the carrier, so our filter is skipped. Turn this on only if
+                    callers still sound noisy — it can clip very quiet one-word replies.
+                  </FormDescription>
+                </div>
+                <FormControl><Switch checked={field.value ?? false} onCheckedChange={field.onChange} /></FormControl>
+              </FormItem>
+            )} />
+          )}
           <FormField control={form.control} name="backchannelingEnabled" render={({ field }) => (
             <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
               <div>
@@ -2655,7 +2673,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       ? ((calendarsData ?? []).find((cal: any) => cal.agentId === agentId) ?? (calendarsData ?? [])[0])
       : (calendarsData ?? [])[0];
   const calendarIdForEt = agentCalendar?.id;
-  const { data: agentEventTypes } = useListEventTypes(
+  const { data: agentEventTypes, isLoading: eventTypesLoading } = useListEventTypes(
     calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
     { query: { enabled: !!calendarIdForEt, queryKey: ["agent-event-types", calendarIdForEt ?? null] } }
   );
@@ -2777,6 +2795,28 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
 
   const bookingEnabled = BOOKING_TYPES.every((type) => hasNativeTool(type));
   const bookingPartial = !bookingEnabled && BOOKING_TYPES.some((type) => hasNativeTool(type));
+  const bookingToolsOn = bookingEnabled || bookingPartial;
+
+  // A calendar alone is not runnable: native scheduling requires an active
+  // event type. Auto-select the first event type when possible, but never leave
+  // the form looking ready when the selected calendar has none (call 13380).
+  useEffect(() => {
+    if (!bookingToolsOn || eventTypesLoading || !calendarIdForEt) return;
+    const eventTypes = (agentEventTypes ?? []) as Array<{ id: number }>;
+    const selectedIsValid = eventTypes.some((eventType) => eventType.id === schedulingEventTypeId);
+    if (selectedIsValid) return;
+    form.setValue("schedulingEventTypeId", eventTypes[0]?.id ?? null, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }, [
+    agentEventTypes,
+    bookingToolsOn,
+    calendarIdForEt,
+    eventTypesLoading,
+    form,
+    schedulingEventTypeId,
+  ]);
 
   const toggleBookingSuite = (on: boolean) => {
     const current = (form.getValues("tools") ?? []) as any[];
@@ -2938,6 +2978,48 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 )}
               </div>
 
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-medium text-foreground">Meeting type</p>
+                <Select
+                  value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
+                  onValueChange={(value) => {
+                    form.setValue(
+                      "schedulingEventTypeId",
+                      value === "__none__" ? null : Number(value),
+                      { shouldDirty: true, shouldValidate: true },
+                    );
+                  }}
+                  disabled={!calendarIdForEt || eventTypesLoading || (agentEventTypes ?? []).length === 0}
+                >
+                  <SelectTrigger className="h-9 bg-background text-xs">
+                    <SelectValue placeholder={eventTypesLoading ? "Loading meeting types…" : "Pick a meeting type"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__" disabled className="text-xs text-muted-foreground">
+                      Pick a meeting type
+                    </SelectItem>
+                    {(agentEventTypes ?? []).map((eventType: any) => (
+                      <SelectItem key={eventType.id} value={String(eventType.id)} className="text-xs">
+                        {eventType.title || eventType.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!eventTypesLoading && calendarIdForEt && (agentEventTypes ?? []).length === 0 && (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5">
+                    <p className="text-[11.5px] font-medium text-amber-700 dark:text-amber-300">
+                      Booking is not ready — this calendar has no meeting type.
+                    </p>
+                    <p className="mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
+                      Create one before saving. Without it, the agent cannot check availability, book a meeting, or send a Meet link.
+                    </p>
+                    <Button asChild type="button" size="sm" variant="outline" className="mt-2 h-8 text-[11px]">
+                      <Link href={setupHref}>Create meeting type</Link>
+                    </Button>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
                 <div className="min-w-0">
                   <p className="text-[12px] font-medium text-foreground">Google Meet conferencing</p>
@@ -2950,7 +3032,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 <Switch
                   className="mt-0.5 shrink-0"
                   checked={googleMeetEnabled}
-                  disabled={meetTogglePending}
+                  disabled={meetTogglePending || !preferredEventType}
                   onCheckedChange={(on) => { void setGoogleMeetEnabled(on); }}
                 />
               </div>
@@ -6724,6 +6806,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       language: "en-IN", asrLanguage: "", backchannelingEnabled: true,
       backchannelingFrequency: 0.5, webhookUrl: "",
       webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: true,
+      forceSoftwareNoiseGate: false,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0, promptVariables: [],
       vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1800,
       bargeInMinFrames: 4, micSensitivity: "low", timezone: "", machineDetectionMode: "disabled",
@@ -6849,6 +6932,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         ? (agent as any).agentConfig.webhookPayloadTemplate
         : "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
+      forceSoftwareNoiseGate:   (agent as any).agentConfig?.forceSoftwareNoiseGate ?? false,
       ambientNoiseEnabled:      (agent as any).agentConfig?.ambientNoiseEnabled ?? false,
       ambientNoiseTrack:        (agent as any).agentConfig?.ambientNoiseTrack ?? "",
       ambientNoiseVolume:       (agent as any).agentConfig?.ambientNoiseVolume ?? 1.0,

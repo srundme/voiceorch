@@ -36,6 +36,33 @@ const BASE: AgentFormValues = {
   tools: [],
 };
 
+describe("agentFormSchema booking readiness", () => {
+  const bookingTool = {
+    type: "native_booking" as const,
+    name: "book_appointment",
+    description: "Book an appointment",
+  };
+
+  it("rejects booking tools without a calendar and meeting type", () => {
+    const parsed = agentFormSchema.safeParse({ ...BASE, tools: [bookingTool] });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.map((issue) => issue.path.join("."))).toEqual(
+        expect.arrayContaining(["schedulingCalendarId", "schedulingEventTypeId"]),
+      );
+    }
+  });
+
+  it("accepts booking tools when both are selected", () => {
+    expect(agentFormSchema.safeParse({
+      ...BASE,
+      tools: [bookingTool],
+      schedulingCalendarId: 12,
+      schedulingEventTypeId: 34,
+    }).success).toBe(true);
+  });
+});
+
 describe("buildUpdateAgentPayload", () => {
   it("gemini live settings — placed in agentConfig when Live model selected", () => {
     const data: AgentFormValues = {

@@ -38,6 +38,7 @@ export const agentFormSchema = z.object({
   webhookSecret:            z.string().optional(),
   webhookPayloadTemplate:   z.string().max(32000, "Payload template is too large").optional(),
   noiseCancellationEnabled: z.boolean().optional(),
+  forceSoftwareNoiseGate:   z.boolean().optional(),
   ambientNoiseEnabled:      z.boolean().optional(),
   ambientNoiseTrack:        z.string().optional(),
   ambientNoiseVolume:       z.number().min(0).max(1).optional(),
@@ -177,6 +178,24 @@ export const agentFormSchema = z.object({
 
   const ttsErr = getModelError(data.ttsProvider, data.ttsModel, TTS_MODELS);
   if (ttsErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ttsModel"], message: ttsErr });
+
+  const hasBookingTools = (data.tools ?? []).some((tool) =>
+    ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"].includes(tool.type),
+  );
+  if (hasBookingTools && data.schedulingCalendarId == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["schedulingCalendarId"],
+      message: "Select a calendar before enabling booking tools",
+    });
+  }
+  if (hasBookingTools && data.schedulingEventTypeId == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["schedulingEventTypeId"],
+      message: "Select or create a meeting type before enabling booking tools",
+    });
+  }
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;
