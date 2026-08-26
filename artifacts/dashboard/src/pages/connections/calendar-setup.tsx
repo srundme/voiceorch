@@ -738,7 +738,7 @@ function GooglePanel({
   return (
     <div className="space-y-4">
       <p className="text-[12px] text-muted-foreground leading-relaxed">
-        Connect every Google account you need, then pick which one this calendar uses. Events and Meet links go to that account.
+        Connect every Google account you need, then pick which one this calendar uses. Calendar invites, Meet links, and booking mail are sent from that account — not the Google Cloud Console mailbox. Reconnect the account once so mail permission is granted.
       </p>
 
       {connections.length > 0 ? (

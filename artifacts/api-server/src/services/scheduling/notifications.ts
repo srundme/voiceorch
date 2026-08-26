@@ -1,5 +1,9 @@
 import nodemailer from "nodemailer";
 import { logger } from "../../lib/logger.js";
+import {
+  getLinkedGoogleConnectionForBooking,
+  sendMailFromGoogleConnection,
+} from "./google-calendar.js";
 
 interface BookingEmailData {
   attendeeName: string;
@@ -89,25 +93,26 @@ function hostRecipients(data: { hostEmail?: string | null; additionalHosts?: str
 }
 
 async function sendToAll(
-  transporter: ReturnType<typeof nodemailer.createTransport>,
   to: string,
-  cc: string | null | undefined,
   content: { subject: string; text: string; html: string },
   bookingId: number,
   tag: string,
 ) {
-  const mailOptions: nodemailer.SendMailOptions = {
-    from: process.env["GMAIL_USER"],
+  const conn = await getLinkedGoogleConnectionForBooking(bookingId);
+  if (!conn) {
+    logger.warn(
+      { bookingId, to, tag },
+      "Booking email skipped — calendar has no linked Google account (will not send as platform GMAIL_USER)",
+    );
+    return;
+  }
+  const ok = await sendMailFromGoogleConnection(conn.id, {
     to,
-    ...content,
-  };
-  if (cc) mailOptions.cc = cc;
-
-  try {
-    await transporter.sendMail(mailOptions);
-    logger.info({ bookingId, email: to, cc, tag }, "Booking email sent");
-  } catch (err) {
-    logger.warn({ err, bookingId, tag }, "Failed to send booking email");
+    subject: content.subject,
+    html: content.html,
+  });
+  if (ok) {
+    logger.info({ bookingId, email: to, from: conn.email, tag }, "Booking email sent");
   }
 }
 
@@ -153,14 +158,8 @@ export async function sendBookingCreatedEmail(data: BookingEmailData): Promise<v
   if (data.calendarSyncStatus === "synced") {
     logger.info(
       { bookingId: data.bookingId, attendeeEmail: data.attendeeEmail },
-      "Skipping system SMTP booking email: Google Calendar invitation was sent from the connected Google account",
+      "Skipping extra booking email: Google Calendar invitation was sent from the connected Google account",
     );
-    return;
-  }
-
-  const transporter = getTransporter();
-  if (!transporter) {
-    logger.warn("GMAIL_USER or GMAIL_APP_PASSWORD not set — skipping email notification");
     return;
   }
 
@@ -184,7 +183,7 @@ We look forward to speaking with you!`;
 
   const hosts = hostRecipients(data);
   const content = buildEmailContent(`Appointment Confirmed: ${data.eventTypeName}`, attendeeBody);
-  await sendToAll(transporter, data.attendeeEmail, hosts.join(", ") || null, content, data.bookingId, "created");
+  await sendToAll(data.attendeeEmail, content, data.bookingId, "created");
 
   if (hosts.length > 0) {
     const hostBody = `New booking received.
@@ -196,13 +195,18 @@ Date & Time: ${from} – ${to} (${data.timezone})${meetLine}${data.notes ? `\nNo
 Booking Reference: #${data.bookingId}`;
 
     const hostContent = buildEmailContent(`New Booking: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
-    await sendToAll(transporter, hosts.join(", "), null, hostContent, data.bookingId, "created-host");
+    await sendToAll(hosts.join(", "), hostContent, data.bookingId, "created-host");
   }
 }
 
 export async function sendBookingConfirmedEmail(data: BookingEmailData): Promise<void> {
-  const transporter = getTransporter();
-  if (!transporter) return;
+  if (data.calendarSyncStatus === "synced") {
+    logger.info(
+      { bookingId: data.bookingId, attendeeEmail: data.attendeeEmail },
+      "Skipping extra booking email: Google Calendar invitation was sent from the connected Google account",
+    );
+    return;
+  }
 
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
@@ -218,20 +222,17 @@ Booking Reference: #${data.bookingId}
 See you then!`;
 
   const content = buildEmailContent(`Appointment Confirmed: ${data.eventTypeName}`, body);
-  await sendToAll(transporter, data.attendeeEmail, hostRecipients(data).join(", ") || null, content, data.bookingId, "confirmed");
+  await sendToAll(data.attendeeEmail, content, data.bookingId, "confirmed");
 }
 
 export async function sendBookingCancelledEmail(data: BookingEmailData): Promise<void> {
   if (data.calendarSyncStatus === "synced") {
     logger.info(
       { bookingId: data.bookingId, attendeeEmail: data.attendeeEmail },
-      "Skipping system SMTP booking cancel email: Google Calendar cancellation was sent from the connected Google account",
+      "Skipping extra booking cancel email: Google Calendar cancellation was sent from the connected Google account",
     );
     return;
   }
-
-  const transporter = getTransporter();
-  if (!transporter) return;
 
   const from = formatDateTime(data.slotStart, data.timezone);
 
@@ -244,7 +245,7 @@ Booking Reference: #${data.bookingId}
 If you have any questions, please reach out.`;
 
   const content = buildEmailContent(`Appointment Cancelled: ${data.eventTypeName}`, attendeeBody);
-  await sendToAll(transporter, data.attendeeEmail, null, content, data.bookingId, "cancelled-attendee");
+  await sendToAll(data.attendeeEmail, content, data.bookingId, "cancelled-attendee");
 
   const hosts = hostRecipients(data);
   if (hosts.length > 0) {
@@ -256,7 +257,7 @@ Originally scheduled: ${from} (${data.timezone})
 Booking Reference: #${data.bookingId}`;
 
     const hostContent = buildEmailContent(`Booking Cancelled: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
-    await sendToAll(transporter, hosts.join(", "), null, hostContent, data.bookingId, "cancelled-host");
+    await sendToAll(hosts.join(", "), hostContent, data.bookingId, "cancelled-host");
   }
 }
 
@@ -264,13 +265,10 @@ export async function sendBookingRescheduledEmail(data: BookingEmailData & { old
   if (data.calendarSyncStatus === "synced") {
     logger.info(
       { bookingId: data.bookingId, attendeeEmail: data.attendeeEmail },
-      "Skipping system SMTP booking reschedule email: Google Calendar notification was sent from the connected Google account",
+      "Skipping extra booking reschedule email: Google Calendar notification was sent from the connected Google account",
     );
     return;
   }
-
-  const transporter = getTransporter();
-  if (!transporter) return;
 
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
@@ -292,7 +290,7 @@ Booking Reference: #${data.bookingId}${selfServiceLines}
 If you did not request this change, please contact us.`;
 
   const content = buildEmailContent(`Appointment Rescheduled: ${data.eventTypeName}`, attendeeBody);
-  await sendToAll(transporter, data.attendeeEmail, null, content, data.bookingId, "rescheduled-attendee");
+  await sendToAll(data.attendeeEmail, content, data.bookingId, "rescheduled-attendee");
 
   const hosts = hostRecipients(data);
   if (hosts.length > 0) {
@@ -301,10 +299,10 @@ If you did not request this change, please contact us.`;
 Attendee: ${data.attendeeName} (${data.attendeeEmail})
 Event: ${data.eventTypeName}
 Previous time: ${oldFrom}
-New Date & Time: ${from} – ${to} (${data.timezone})${meetLine}
+New Date & Time: ${from} – ${to} (${data.timezone})${meetLink}
 Booking Reference: #${data.bookingId}`;
 
     const hostContent = buildEmailContent(`Booking Rescheduled: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
-    await sendToAll(transporter, hosts.join(", "), null, hostContent, data.bookingId, "rescheduled-host");
+    await sendToAll(hosts.join(", "), hostContent, data.bookingId, "rescheduled-host");
   }
 }

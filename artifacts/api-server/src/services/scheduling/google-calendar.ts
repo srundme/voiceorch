@@ -10,7 +10,7 @@
  */
 
 import { google } from "googleapis";
-import { db, googleCalendarConnectionsTable } from "@workspace/db";
+import { db, googleCalendarConnectionsTable, bookingsTable, schedulingCalendarsTable } from "@workspace/db";
 import { eq, asc, sql } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
 import { createHmac, randomBytes } from "node:crypto";
@@ -18,6 +18,7 @@ import { logger } from "../../lib/logger.js";
 import { encryptKey, decryptKey } from "../../lib/crypto.js";
 import { getSelfBaseUrl } from "../../lib/app-domain.js";
 import { APP_SECRET } from "../../lib/app-secret.js";
+import { encodeGmailRawMessage, GMAIL_SEND_SCOPE } from "./gmail-raw.js";
 
 // ── OAuth state signing ──────────────────────────────────────────────────────
 //
@@ -104,9 +105,12 @@ export function verifyOAuthState(raw: string | undefined): OAuthStatePayload | n
 // calendar.events alone returns 403 ACCESS_TOKEN_SCOPE_INSUFFICIENT when creating
 // events with Meet links. The full `calendar` scope is a superset — it covers events,
 // Meet creation, and calendar listing.
+export { encodeGmailRawMessage, GMAIL_SEND_SCOPE } from "./gmail-raw.js";
+
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/userinfo.email",
+  GMAIL_SEND_SCOPE,
 ];
 
 // Only the full calendar scope allows conferenceDataVersion=1 (Google Meet creation).
@@ -169,6 +173,7 @@ export function getAuthUrl(
   return client.generateAuthUrl({
     access_type: "offline",
     scope: SCOPES,
+    include_granted_scopes: true,
     // Re-auth of a known row: consent only so Google re-issues a refresh token.
     // New account: also show the account picker — otherwise Google silently
     // reuses the current session and a second Gmail never appears.
@@ -805,6 +810,67 @@ export async function updateCalendarEvent(params: {
       "Failed to update Google Calendar event",
     );
     return null;
+  }
+}
+
+/** Google account linked on the booking's scheduling calendar — no first-connection fallback. */
+export async function getLinkedGoogleConnectionForBooking(
+  bookingId: number,
+): Promise<{ id: string; email: string } | null> {
+  const rows = await db
+    .select({
+      id: googleCalendarConnectionsTable.id,
+      email: googleCalendarConnectionsTable.email,
+    })
+    .from(bookingsTable)
+    .innerJoin(schedulingCalendarsTable, eq(bookingsTable.calendarId, schedulingCalendarsTable.id))
+    .innerJoin(
+      googleCalendarConnectionsTable,
+      eq(schedulingCalendarsTable.googleCalendarConnectionId, googleCalendarConnectionsTable.id),
+    )
+    .where(eq(bookingsTable.id, bookingId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Send one email as the connected Google user. Returns false if token/scope/API fails. */
+export async function sendMailFromGoogleConnection(
+  connectionId: string,
+  mail: { to: string; subject: string; html: string },
+): Promise<boolean> {
+  const tokens = await getValidAccessToken(connectionId);
+  if (!tokens) return false;
+  const client = makePlatformOAuth2Client();
+  client.setCredentials({ access_token: tokens.accessToken });
+  const gmail = google.gmail({ version: "v1", auth: client });
+  try {
+    await gmail.users.messages.send({
+      userId: "me",
+      requestBody: {
+        raw: encodeGmailRawMessage({
+          from: tokens.email,
+          to: mail.to,
+          subject: mail.subject,
+          html: mail.html,
+        }),
+      },
+    });
+    logger.info(
+      { connectionId, from: tokens.email, to: mail.to },
+      "Booking email sent from connected Google calendar account",
+    );
+    return true;
+  } catch (err) {
+    logger.warn(
+      {
+        err,
+        connectionId,
+        from: tokens.email,
+        googleApiError: (err as { response?: { data?: unknown } })?.response?.data,
+      },
+      "Gmail send as connected calendar account failed — reconnect Google with mail permission, or rely on Calendar invites",
+    );
+    return false;
   }
 }
 

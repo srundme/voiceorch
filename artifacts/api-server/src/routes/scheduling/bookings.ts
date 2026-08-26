@@ -428,6 +428,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, clientContext, async (req,
     // Google Calendar sync for reschedule (best-effort) — awaited so the resulting
     // Meet link is available for the reschedule confirmation email.
     let rescheduledMeetLink: string | null = existing.meetLink ?? null;
+    let calendarSyncStatus: string | null = null;
     {
       let reschedConnectionId: string | null = null;
       try {
@@ -470,6 +471,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, clientContext, async (req,
                 .set({ meetLink: gcalResult.meetLink, googleEventId: gcalResult.eventId })
                 .where(eq(bookingsTable.id, newBooking.id));
               rescheduledMeetLink = gcalResult.meetLink ?? rescheduledMeetLink;
+              calendarSyncStatus = "synced";
             }
           } else {
             // No existing Google event — create fresh
@@ -495,6 +497,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, clientContext, async (req,
                 .set({ meetLink: gcalResult.meetLink, googleEventId: gcalResult.eventId })
                 .where(eq(bookingsTable.id, newBooking.id));
               rescheduledMeetLink = gcalResult.meetLink ?? null;
+              calendarSyncStatus = "synced";
             }
           }
         }
@@ -519,6 +522,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, clientContext, async (req,
       bookingId: newBooking.id,
       oldSlotStart: existing.slotStart,
       meetLink: rescheduledMeetLink,
+      calendarSyncStatus,
     });
     void dispatchSchedulingWebhooks(clerkId, "scheduling.booking.rescheduled", { booking: formatBooking(newBooking) });
     res.json(UpdateBookingResponse.parse(formatBooking(newBooking)));
@@ -575,6 +579,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, clientContext, async (req,
       hostEmail: calendar?.hostEmail,
       additionalHosts: calendar?.additionalHosts,
       bookingId: row.id,
+      calendarSyncStatus: existingGoogleEventId ? "synced" : null,
     });
   } else if (webhookEvent === "scheduling.booking.confirmed") {
     void sendBookingConfirmedEmail({

@@ -459,6 +459,7 @@ router.post("/scheduling/public/bookings/cancel", async (req, res): Promise<void
     hostEmail: calendar?.hostEmail,
     additionalHosts: calendar?.additionalHosts,
     bookingId: cancelled.id,
+    calendarSyncStatus: existingGoogleEventId ? "synced" : null,
   });
 
   void dispatchSchedulingWebhooks(booking.userId, "scheduling.booking.cancelled", {
@@ -614,6 +615,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
   // Google Calendar sync (best-effort) — awaited so the resulting Meet link is
   // available for the reschedule confirmation email.
   let rescheduledMeetLink: string | null = booking.meetLink ?? null;
+  let calendarSyncStatus: string | null = null;
   {
     let reschedConnectionId: string | null = null;
     try {
@@ -656,6 +658,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
               sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
             );
             rescheduledMeetLink = gcalResult.meetLink ?? rescheduledMeetLink;
+            calendarSyncStatus = "synced";
           }
         } else {
           // No existing event — create fresh
@@ -681,6 +684,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
               sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
             );
             rescheduledMeetLink = gcalResult.meetLink ?? null;
+            calendarSyncStatus = "synced";
           }
         }
       }
@@ -714,6 +718,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
     meetLink: rescheduledMeetLink,
     cancelLink: newCancelLink,
     rescheduleLink: newRescheduleLink,
+    calendarSyncStatus,
   });
 
   void dispatchSchedulingWebhooks(booking.userId, "scheduling.booking.rescheduled", {
