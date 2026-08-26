@@ -29,7 +29,7 @@ import {
   useListAgents, useGetAgent, useUpdateAgent, useDeleteAgent,
   useCreateAgent, useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
   useListCalendars, customFetch,
-  useListKnowledgeSources, useRunToolTest, useListAmbientSounds, useListEventTypes,
+  useListKnowledgeSources, useListAmbientSounds, useListEventTypes,
   useListAgentVersions, usePublishAgentVersion, useGetAgentVersion, useRestoreAgentVersion,
   useArchiveAgentVersion, useDeleteAgentVersion,
   getListAgentVersionsQueryKey, getGetAgentVersionQueryKey,
@@ -325,40 +325,6 @@ function BuilderPanel({
       </div>
       <div className={cn("flex min-h-0 flex-1 flex-col p-4", bodyClassName)}>{children}</div>
     </section>
-  );
-}
-
-function BookingSetupStep({
-  step,
-  title,
-  ready,
-  children,
-}: {
-  step: number;
-  title: string;
-  ready: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-background p-3.5">
-      <div className="mb-2.5 flex items-center gap-2">
-        <span
-          className={cn(
-            "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
-            ready ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground",
-          )}
-        >
-          {ready ? <Check className="h-3 w-3" /> : step}
-        </span>
-        <p className="text-[12.5px] font-semibold text-foreground">{title}</p>
-        {ready ? (
-          <span className="ml-auto text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Ready</span>
-        ) : (
-          <span className="ml-auto text-[10px] font-medium text-amber-600 dark:text-amber-400">Needs setup</span>
-        )}
-      </div>
-      {children}
-    </div>
   );
 }
 
@@ -2674,11 +2640,9 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const recordingEnabled = form.watch("recordingEnabled") ?? true;
   const summarizationEnabled = form.watch("summarizationEnabled") ?? false;
   const watchedTools  = (form.watch("tools") ?? []) as any[];
-  const { toast } = useToast();
 
   const { data: calendarsData } = useListCalendars();
   const schedulingCalendarId = form.watch("schedulingCalendarId");
-  const schedulingEventTypeId = form.watch("schedulingEventTypeId");
   const agentCalendar = schedulingCalendarId != null
     ? (calendarsData ?? []).find((cal: any) => cal.id === schedulingCalendarId)
     : agentId
@@ -2728,14 +2692,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     }
   }, [calendarIdForEt]);
 
-  const [expandedSchema, setExpandedSchema] = useState<string | null>(null);
-  const [expandedTest, setExpandedTest]     = useState<string | null>(null);
-  const [testArgs, setTestArgs]             = useState<Record<string, string>>({});
-  const [testResult, setTestResult]         = useState<Record<string, string | null>>({});
-  const [bookingDetailsOpen, setBookingDetailsOpen] = useState(false);
-
-  const runTest = useRunToolTest();
-
   const BOOKING_TYPES = [
     "native_booking",
     "native_check_availability",
@@ -2776,21 +2732,8 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           })),
       ];
       replace(next);
-      setBookingDetailsOpen(true);
-      if (!agentId) {
-        toast({ title: "Save agent first", description: "Save this agent before configuring calendar tools.", variant: "destructive" });
-      } else if (!agentCalendar) {
-        toast({ title: "No calendar yet", description: "Connect Google Calendar under Connections, then pick a meeting here.", variant: "destructive" });
-      } else if (!(agentCalendar as any).connectedGoogleEmail) {
-        toast({ title: "Google not connected", description: `Connect Google under Connections, then pick “${agentCalendar.name}” here.`, variant: "destructive" });
-      } else if ((agentEventTypes ?? []).length === 0) {
-        toast({ title: "No meeting set up", description: "Create a meeting under Connections → Bookings calendar, then pick it here.", variant: "destructive" });
-      }
     } else {
       replace(current.filter((t: any) => !(BOOKING_TYPES as readonly string[]).includes(t.type)));
-      setExpandedSchema(null);
-      setExpandedTest(null);
-      setBookingDetailsOpen(false);
     }
   };
 
@@ -2798,86 +2741,11 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     const idx = nativeToolIndex(type);
     if (idx >= 0) {
       remove(idx);
-      setExpandedSchema(null);
-      setExpandedTest(null);
     } else {
       append({ type: type as any, name: NATIVE_DEFAULT_NAMES[type] ?? "", description: "" });
     }
   };
 
-
-  const BOOKING_TOOL_LABELS = [
-    { type: "native_booking", fnName: "book_appointment", label: "Book" },
-    { type: "native_check_availability", fnName: "check_availability", label: "Check availability" },
-    { type: "native_list_bookings", fnName: "list_bookings", label: "List" },
-    { type: "native_reschedule", fnName: "reschedule_booking", label: "Reschedule" },
-    { type: "native_cancel", fnName: "cancel_booking", label: "Cancel" },
-  ] as const;
-
-  const BOOKING_TOOL_SCHEMAS: Record<string, object> = {
-    native_booking: {
-      name: "book_appointment",
-      description: "Book an appointment for the caller.",
-      parameters: {
-        type: "object",
-        properties: {
-          attendee_name:  { type: "string", description: "Full name of the person being booked" },
-          attendee_email: { type: "string", description: "Email address of the person being booked" },
-          preferred_date: { type: "string", description: "Optional preferred date/time, e.g. 'next Tuesday' or '2026-06-10'" },
-          meeting_type:   { type: "string", enum: ["google_meet", "in_person"], description: "Meeting format" },
-          meeting_address: { type: "string", description: "Physical address (required when meeting_type is in_person)" },
-        },
-        required: ["attendee_name", "attendee_email"],
-      },
-    },
-    native_check_availability: {
-      name: "check_availability",
-      description: "Check available appointment slots.",
-      parameters: {
-        type: "object",
-        properties: {
-          preferred_date: { type: "string", description: "Optional preferred date/time to check, e.g. 'tomorrow morning'" },
-          timezone:       { type: "string", description: "IANA timezone, e.g. 'America/New_York'" },
-        },
-        required: [],
-      },
-    },
-    native_list_bookings: {
-      name: "list_bookings",
-      description: "List existing bookings for the caller.",
-      parameters: {
-        type: "object",
-        properties: {
-          attendee_name: { type: "string", description: "Full name of the caller whose bookings to look up" },
-          timezone:      { type: "string", description: "IANA timezone for formatting dates" },
-        },
-        required: ["attendee_name"],
-      },
-    },
-    native_reschedule: {
-      name: "reschedule_booking",
-      description: "Reschedule an existing booking to a new time slot.",
-      parameters: {
-        type: "object",
-        properties: {
-          booking_id:     { type: "string", description: "The booking reference ID to reschedule" },
-          preferred_date: { type: "string", description: "Optional new preferred date/time" },
-        },
-        required: ["booking_id"],
-      },
-    },
-    native_cancel: {
-      name: "cancel_booking",
-      description: "Cancel an upcoming booking on the caller's request.",
-      parameters: {
-        type: "object",
-        properties: {
-          booking_id: { type: "string", description: "The booking reference ID to cancel" },
-        },
-        required: ["booking_id"],
-      },
-    },
-  };
 
   const CALL_CONTROL_TOOLS = [
     {
@@ -2952,54 +2820,32 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
 
         {/* ── Booking suite (one switch → all five tools) ── */}
         <BuilderPanel
-          title="Scheduling & bookings"
+          title="Bookings"
           icon={<Calendar />}
-          description="Calendar and Google Meet for bookings"
-          hint={bookingPartial ? (
-            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
-              Incomplete
-            </span>
-          ) : bookingEnabled ? (
-            <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-600">
-              On
-            </span>
-          ) : undefined}
           bodyClassName="p-0"
         >
         <div>
           <div className="flex items-start gap-3 p-4">
-            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
-              <Calendar className={cn("h-4 w-4", bookingEnabled || bookingPartial ? "text-foreground" : "text-muted-foreground/50")} />
-            </div>
             <div className="min-w-0 flex-1">
-              <div className="mb-0.5 flex items-center gap-2">
-                <span className="text-[12.5px] font-semibold text-foreground">Let the agent book meetings</span>
-              </div>
-              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                Turns on check availability, book, list, reschedule, and cancel. Setup stays open below — calendar and Google Meet are not hidden.
+              <p className="text-[12.5px] font-semibold text-foreground">Book meetings on the call</p>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">
+                Agent can check times and book. Caller gets a Google Meet link.
               </p>
             </div>
-            <div className="mt-1 shrink-0">
-              <Switch
-                checked={bookingEnabled || bookingPartial}
-                onCheckedChange={(on) => toggleBookingSuite(on)}
-              />
-            </div>
+            <Switch
+              checked={bookingEnabled || bookingPartial}
+              onCheckedChange={(on) => toggleBookingSuite(on)}
+            />
           </div>
 
           {(bookingEnabled || bookingPartial) && (() => {
             const calendars = calendarsData ?? [];
             const googleEmail = (agentCalendar as { connectedGoogleEmail?: string | null } | undefined)?.connectedGoogleEmail;
-            const googleReady = Boolean(googleEmail);
-            const calendarReady = Boolean(agentCalendar);
-            const calendarSetupHref = agentId ? connectionsSetupHref("calendar", agentId) : "/app/connections?setup=calendar";
-            const conferencingHref = "/app/scheduling/conferencing";
+            const setupHref = agentId ? connectionsSetupHref("calendar", agentId) : "/app/connections?setup=calendar";
             return (
-            <div className="space-y-3 border-t border-border bg-muted/20 px-4 pb-4 pt-3">
-              <BookingSetupStep step={1} title="Bookings calendar" ready={calendarReady}>
-                <p className="mb-2 text-[11.5px] leading-relaxed text-muted-foreground">
-                  Which calendar this agent uses. Create or repair it under Connections if the list is empty.
-                </p>
+            <div className="space-y-3 border-t border-border px-4 pb-4 pt-3">
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-medium text-foreground">Calendar</p>
                 <Select
                   value={agentCalendar ? String(agentCalendar.id) : "__none__"}
                   onValueChange={(v) => {
@@ -3023,167 +2869,24 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                     ))}
                   </SelectContent>
                 </Select>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Button asChild type="button" size="sm" variant="outline" className="h-8 text-[11px] gap-1.5">
-                    <Link href={calendarSetupHref}>
-                      {calendarReady ? "Fix calendar setup" : "Set up calendar"}
-                      <ExternalLink className="h-3 w-3" />
-                    </Link>
-                  </Button>
-                </div>
-              </BookingSetupStep>
-
-              <BookingSetupStep step={2} title="Google Meet conferencing" ready={googleReady}>
-                <p className="mb-2 text-[11.5px] leading-relaxed text-muted-foreground">
-                  Bookings create a <span className="font-medium text-foreground">new Meet link</span> on the Google invite. Connect the Google account used for calendar + conferencing.
-                </p>
-                {googleReady ? (
-                  <p className="mb-2 text-[12px] text-foreground">
-                    Linked: <span className="font-medium">{googleEmail}</span>
-                  </p>
-                ) : (
-                  <p className="mb-2 text-[12px] text-amber-700 dark:text-amber-400">
-                    Google is not linked. Slots can still book, but Meet links will be missing.
-                  </p>
+                {calendars.length === 0 && (
+                  <Link href={setupHref} className="inline-flex items-center gap-1 text-[11.5px] font-medium text-foreground underline underline-offset-2">
+                    Create a calendar
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
                 )}
-                <div className="flex flex-wrap gap-2">
-                  <Button asChild type="button" size="sm" className="h-8 text-[11px] gap-1.5">
-                    <Link href={calendarSetupHref}>
-                      {googleReady ? "Reconnect Google" : "Connect Google Calendar"}
-                    </Link>
-                  </Button>
-                  <Button asChild type="button" size="sm" variant="outline" className="h-8 text-[11px] gap-1.5">
-                    <Link href={conferencingHref}>
-                      Conferencing
-                      <Video className="h-3 w-3" />
-                    </Link>
-                  </Button>
-                </div>
-              </BookingSetupStep>
-
-              <BookingSetupStep step={3} title="AI joins the Meet (optional)" ready={canAttendMeetings}>
-                <p className="mb-2 text-[11.5px] leading-relaxed text-muted-foreground">
-                  Phone-only still sends the Meet link to humans. Turn this on only if a SnapServe agent should enter the room.
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Switch
-                    checked={canAttendMeetings}
-                    onCheckedChange={(on) => form.setValue("agentSurfaces", on ? "phone_and_meet" : "phone", { shouldDirty: true })}
-                  />
-                  <span className="text-[12px] text-foreground">
-                    {canAttendMeetings ? "Phone + meetings" : "Phone only"}
-                  </span>
-                  {canAttendMeetings && (
-                    <Button asChild type="button" size="sm" variant="outline" className="h-8 text-[11px] ml-auto">
-                      <Link href={agentId ? `/app/meet?agentId=${agentId}` : "/app/meet"}>
-                        Meeting bots
-                      </Link>
-                    </Button>
-                  )}
-                </div>
-                {canAttendMeetings && !agentId && (
-                  <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">Save the agent, then open Meeting bots.</p>
-                )}
-              </BookingSetupStep>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <p className="text-[10px] text-muted-foreground">
-                  Tools: {BOOKING_TOOL_LABELS.map((t) => t.fnName).join(" · ")}
-                </p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-[10px]"
-                  onClick={() => setBookingDetailsOpen((v) => !v)}
-                >
-                  {bookingDetailsOpen ? "Hide developer tests" : "Test & schema"}
-                  <ChevronDown className={cn("h-3 w-3 transition-transform", bookingDetailsOpen && "rotate-180")} />
-                </Button>
               </div>
 
-              {bookingDetailsOpen && (
-                <div className="space-y-2 rounded-lg border border-border/40 bg-muted/15 p-3">
-                  {BOOKING_TOOL_LABELS.map(({ type, fnName, label }) => {
-                    const schemaOpen = expandedSchema === type;
-                    const testOpen = expandedTest === type;
-                    const argKey = `${type}:args`;
-                    const handleRunTest = async () => {
-                      setTestResult((r) => ({ ...r, [type]: null }));
-                      try {
-                        let parsedArgs: Record<string, unknown> = {};
-                        try { parsedArgs = JSON.parse(testArgs[argKey] || "{}"); } catch { parsedArgs = {}; }
-                        const res = await runTest.mutateAsync({ data: { agentId: agentId!, toolName: fnName, args: parsedArgs } });
-                        setTestResult((r) => ({ ...r, [type]: res.result ?? JSON.stringify(res) }));
-                      } catch (err: any) {
-                        setTestResult((r) => ({ ...r, [type]: `Error: ${err?.message ?? String(err)}` }));
-                      }
-                    };
-                    return (
-                      <div key={type} className="rounded-md border border-border/40 bg-background/40">
-                        <div className="flex items-center justify-between gap-2 px-3 py-2">
-                          <div className="min-w-0">
-                            <p className="text-[11px] font-medium">{label}</p>
-                            <code className="font-mono text-[10px] text-muted-foreground">{fnName}</code>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-6 gap-1 px-2 text-[10px]"
-                              onClick={() => {
-                                setExpandedSchema(schemaOpen ? null : type);
-                                setExpandedTest(null);
-                              }}
-                            >
-                              Schema
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-6 gap-1 px-2 text-[10px]"
-                              onClick={() => {
-                                setExpandedTest(testOpen ? null : type);
-                                setExpandedSchema(null);
-                                setTestResult((r) => ({ ...r, [type]: null }));
-                              }}
-                            >
-                              Test
-                            </Button>
-                          </div>
-                        </div>
-                        {schemaOpen && (
-                          <pre className="overflow-x-auto border-t border-border/30 p-3 font-mono text-[10px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap">
-                            {JSON.stringify(BOOKING_TOOL_SCHEMAS[type] ?? {}, null, 2)}
-                          </pre>
-                        )}
-                        {testOpen && (
-                          <div className="space-y-2 border-t border-border/30 p-3">
-                            {!agentCalendar ? (
-                              <p className="text-[10px] text-amber-400/80">No calendar assigned yet.</p>
-                            ) : (
-                              <>
-                                <textarea
-                                  className="min-h-[60px] w-full resize-y rounded-md border border-border/50 bg-background/50 p-2 font-mono text-[10px] focus:outline-none focus:ring-1 focus:ring-ring"
-                                  placeholder="{}"
-                                  value={testArgs[argKey] ?? "{}"}
-                                  onChange={(e) => setTestArgs((a) => ({ ...a, [argKey]: e.target.value }))}
-                                />
-                                <Button type="button" size="sm" className="h-6 px-3 text-[10px]" disabled={runTest.isPending} onClick={handleRunTest}>
-                                  {runTest.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Run test"}
-                                </Button>
-                                {testResult[type] != null && (
-                                  <pre className="whitespace-pre-wrap break-all font-mono text-[10px] text-muted-foreground/80">{testResult[type]}</pre>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+              {googleEmail ? (
+                <p className="text-[11.5px] text-muted-foreground">
+                  Meet links via <span className="font-medium text-foreground">{googleEmail}</span>
+                </p>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-[11.5px] text-muted-foreground">Connect Google so each booking gets a Meet link.</p>
+                  <Button asChild type="button" size="sm" className="h-8 text-[11px]">
+                    <Link href={setupHref}>Connect Google</Link>
+                  </Button>
                 </div>
               )}
             </div>
@@ -3192,25 +2895,15 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         </div>
         </BuilderPanel>
 
-        {canAttendMeetings && !(bookingEnabled || bookingPartial) && (
+        {canAttendMeetings && (
           <BuilderPanel title="Meeting bots" icon={<Video />}>
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
-                <Video className="h-4 w-4 text-foreground" />
-              </div>
-              <div className="min-w-0 flex-1 space-y-2">
-                <p className="text-[12.5px] font-semibold text-foreground">Can join Meet / Zoom / Teams</p>
-                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                  Join now and bot settings live on Meeting bots. Turn on Scheduling & bookings above to send Meet links on calendar invites.
-                </p>
-                {agentId ? (
-                  <Button asChild type="button" variant="outline" size="sm" className="h-7 text-[11px]">
-                    <Link href={`/app/meet?agentId=${agentId}`}>Open Meeting bots</Link>
-                  </Button>
-                ) : (
-                  <p className="text-[11px] text-amber-400/80">Save the agent first, then open Meeting bots.</p>
-                )}
-              </div>
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                This agent can join Google Meet. Open Meeting bots for join settings.
+              </p>
+              <Button asChild type="button" variant="outline" size="sm" className="h-8 shrink-0 text-[11px]">
+                <Link href={agentId ? `/app/meet?agentId=${agentId}` : "/app/meet"}>Open</Link>
+              </Button>
             </div>
           </BuilderPanel>
         )}
