@@ -1771,6 +1771,38 @@ export function useVoiceCall360(callId: string) {
   });
 }
 
+export interface CallSearchRow {
+  id: number;
+  executionId: string | null;
+  status: string | null;
+  userId: string | null;
+  agentId: number | null;
+  toNumber: string | null;
+  durationSeconds: number | null;
+  costCents: number | null;
+  errorMessage: string | null;
+  createdAt: string | null;
+  agentName: string | null;
+  userEmail: string | null;
+  userName: string | null;
+}
+
+export interface CallSearchResponse {
+  query: string;
+  count: number;
+  calls: CallSearchRow[];
+}
+
+/** Look a call up by execution id (exec_…) or numeric call id. */
+export function useVoiceCallSearch(query: string) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ["admin", "voice", "call-search", q],
+    queryFn: () => adminFetch<CallSearchResponse>(`/voice/call-search?q=${encodeURIComponent(q)}`),
+    enabled: q.length >= 3,
+  });
+}
+
 export function useVoiceFailures(days = 7) {
   return useQuery({
     queryKey: ["admin", "voice", "failures", days],

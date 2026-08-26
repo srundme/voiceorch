@@ -805,6 +805,7 @@ export default function UserDetail() {
                 <TableRow className="hover:bg-transparent">
                   <TableHead>Status</TableHead>
                   <TableHead>Date</TableHead>
+                  <TableHead>Execution ID</TableHead>
                   <TableHead>Agent</TableHead>
                   <TableHead className="text-right">Duration</TableHead>
                   <TableHead className="text-right">Cost</TableHead>
@@ -812,16 +813,27 @@ export default function UserDetail() {
               </TableHeader>
               <TableBody>
                 {calls.isLoading ? (
-                  <TableRow><TableCell colSpan={5} className="text-center h-20 animate-pulse text-muted-foreground">Loading…</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center h-20 animate-pulse text-muted-foreground">Loading…</TableCell></TableRow>
                 ) : (calls.data?.data ?? []).length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center h-20 text-muted-foreground">No calls found</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center h-20 text-muted-foreground">No calls found</TableCell></TableRow>
                 ) : (
                   (calls.data?.data ?? []).map((call: any) => (
-                    <TableRow key={call.id}>
+                    <TableRow
+                      key={call.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => window.open(`/app/calls/${call.id}`, "_blank", "noopener,noreferrer")}
+                    >
                       <TableCell>
                         <Badge variant={call.status === "completed" ? "default" : call.status === "failed" ? "destructive" : "secondary"} className="text-[10px] uppercase">{call.status}</Badge>
                       </TableCell>
                       <TableCell className="text-xs font-mono text-muted-foreground">{format(new Date(call.createdAt), "MMM d HH:mm")}</TableCell>
+                      <TableCell className="text-xs font-mono truncate" title={call.executionId ?? undefined}>
+                        {call.executionId ? (
+                          call.executionId
+                        ) : (
+                          <span className="text-muted-foreground italic">Not available</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{call.agentId ?? "—"}</TableCell>
                       <TableCell className="text-right text-xs font-mono">{formatDuration(call.durationSeconds || 0)}</TableCell>
                       <TableCell className="text-right text-xs font-mono">{formatCentsToDollars(call.costCents || 0)}</TableCell>

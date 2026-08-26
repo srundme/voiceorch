@@ -299,7 +299,7 @@ If you did not request this change, please contact us.`;
 Attendee: ${data.attendeeName} (${data.attendeeEmail})
 Event: ${data.eventTypeName}
 Previous time: ${oldFrom}
-New Date & Time: ${from} – ${to} (${data.timezone})${meetLink}
+New Date & Time: ${from} – ${to} (${data.timezone})${meetLine}
 Booking Reference: #${data.bookingId}`;
 
     const hostContent = buildEmailContent(`Booking Rescheduled: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
