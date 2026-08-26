@@ -8,10 +8,23 @@ import { customFetch } from "@workspace/api-client-react";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 export const SCHEDULING_API = `${BASE}/api`;
 
+export const CALENDAR_TIMEZONES = [
+  "UTC",
+  "Asia/Kolkata",
+  "Asia/Dubai",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Europe/London",
+  "America/New_York",
+  "America/Los_Angeles",
+] as const;
+
 export type SchedulingCalendarInfo = {
   id: number;
   name: string;
+  description: string | null;
   hostEmail: string | null;
+  additionalHosts: string[] | null;
   connectedGoogleEmail: string | null;
   timezone: string;
 };
@@ -76,14 +89,18 @@ export function computeBookingSetupReadiness(
 function mapCalendar(c: {
   id: number;
   name: string;
+  description?: string | null;
   hostEmail?: string | null;
+  additionalHosts?: string[] | null;
   connectedGoogleEmail?: string | null;
   timezone?: string;
 }): SchedulingCalendarInfo {
   return {
     id: c.id,
     name: c.name,
+    description: c.description ?? null,
     hostEmail: c.hostEmail ?? null,
+    additionalHosts: c.additionalHosts ?? null,
     connectedGoogleEmail: c.connectedGoogleEmail ?? null,
     timezone: c.timezone || "UTC",
   };
@@ -110,7 +127,9 @@ export async function listSchedulingCalendars(): Promise<SchedulingCalendarInfo[
   const rows = await customFetch<Array<{
     id: number;
     name: string;
+    description?: string | null;
     hostEmail?: string | null;
+    additionalHosts?: string[] | null;
     connectedGoogleEmail?: string | null;
     timezone?: string;
   }>>(`${SCHEDULING_API}/scheduling/calendars`);
@@ -139,18 +158,25 @@ export async function createOrUpdateCalendar(input: {
   id?: number;
   name: string;
   hostEmail: string;
+  description?: string | null;
   timezone?: string;
+  additionalHosts?: string[];
 }): Promise<SchedulingCalendarInfo> {
   const body = {
     name: input.name.trim(),
     hostEmail: input.hostEmail.trim(),
+    description: input.description?.trim() || null,
+    timezone: input.timezone || getBrowserTimezone(),
+    additionalHosts: (input.additionalHosts ?? []).map((e) => e.trim()).filter((e) => e.includes("@")),
     isActive: true,
   };
   if (input.id != null) {
     const r = await customFetch<{
       id: number;
       name: string;
+      description?: string | null;
       hostEmail?: string | null;
+      additionalHosts?: string[] | null;
       connectedGoogleEmail?: string | null;
       timezone?: string;
     }>(`${SCHEDULING_API}/scheduling/calendars/${input.id}`, {
@@ -162,15 +188,14 @@ export async function createOrUpdateCalendar(input: {
   const r = await customFetch<{
     id: number;
     name: string;
+    description?: string | null;
     hostEmail?: string | null;
+    additionalHosts?: string[] | null;
     connectedGoogleEmail?: string | null;
     timezone?: string;
   }>(`${SCHEDULING_API}/scheduling/calendars`, {
     method: "POST",
-    body: JSON.stringify({
-      ...body,
-      timezone: input.timezone || getBrowserTimezone(),
-    }),
+    body: JSON.stringify(body),
   });
   return mapCalendar(r);
 }
