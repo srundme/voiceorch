@@ -57,4 +57,28 @@ describe("computeBookingSetupReadiness", () => {
     expect(r.requiredReadyCount).toBe(3);
     expect(r.meeting?.name).toBe("Consultation");
   });
+
+  it("uses the selected calendar, not the first one", () => {
+    const second: SchedulingCalendarInfo = {
+      ...cal,
+      id: 2,
+      name: "Demos",
+      connectedGoogleEmail: null,
+    };
+    const r = computeBookingSetupReadiness(
+      [cal, second],
+      [meeting, { ...meeting, id: 10, calendarId: 2, name: "Demo" }],
+      2,
+    );
+    expect(r.calendar?.name).toBe("Demos");
+    expect(r.googleLinked).toBe(false);
+    expect(r.meeting?.name).toBe("Demo");
+  });
+
+  it("treats composing a new calendar as not selected", () => {
+    const r = computeBookingSetupReadiness([cal], [meeting], null);
+    expect(r.calendar).toBeNull();
+    expect(r.meeting).toBeNull();
+    expect(r.ready).toBe(false);
+  });
 });

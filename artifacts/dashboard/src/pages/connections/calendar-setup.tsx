@@ -203,7 +203,27 @@ export function ConnectionsCalendarSetup({
     [eventTypesQ.data],
   );
 
-  const readiness = computeBookingSetupReadiness(calendars, meetings);
+  const [userWantsNew, setUserWantsNew] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (userWantsNew) return;
+    if (calendars.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    if (selectedId == null || !calendars.some((c) => c.id === selectedId)) {
+      setSelectedId(calendars[0]!.id);
+    }
+  }, [calendars, selectedId, userWantsNew]);
+
+  const composingNew = userWantsNew || calendars.length === 0;
+
+  const readiness = computeBookingSetupReadiness(
+    calendars,
+    meetings,
+    composingNew ? null : selectedId,
+  );
   const { calendar, meeting, requiredReadyCount, ready } = readiness;
   const doneFlags: Record<WizardStepId, boolean> = {
     calendar: Boolean(calendar),
@@ -254,9 +274,68 @@ export function ConnectionsCalendarSetup({
           </p>
         </div>
 
+        {calendars.length > 0 ? (
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Label className="text-xs font-medium">Which calendar</Label>
+              <Select
+                value={composingNew ? "__new__" : selectedId != null ? String(selectedId) : undefined}
+                onValueChange={(value) => {
+                  if (value === "__new__") {
+                    setUserWantsNew(true);
+                    setSelectedId(null);
+                    return;
+                  }
+                  setUserWantsNew(false);
+                  setSelectedId(Number(value));
+                }}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select a calendar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {calendars.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="__new__">Create new calendar</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                {calendars.length === 1
+                  ? "You already have a calendar. Open it here, or create another."
+                  : `${calendars.length} calendars in this workspace. Google and meeting setup follow the one you pick.`}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 shrink-0 gap-1.5"
+              onClick={() => {
+                setUserWantsNew(true);
+                setSelectedId(null);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" /> New calendar
+            </Button>
+          </div>
+        ) : null}
+
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <SetupCard step={1} title={STEPS[0]!.title} blurb={STEPS[0]!.blurb} done={doneFlags.calendar}>
-            <CalendarPanel existing={calendar} onDone={refresh} />
+            <CalendarPanel
+              key={calendar?.id ?? "new"}
+              existing={calendar}
+              onDone={async (saved) => {
+                await refresh();
+                if (saved) {
+                  setUserWantsNew(false);
+                  setSelectedId(saved.id);
+                }
+              }}
+            />
           </SetupCard>
           <SetupCard
             step={2}
@@ -321,7 +400,7 @@ function CalendarPanel({
   onDone,
 }: {
   existing: SchedulingCalendarInfo | null;
-  onDone: () => Promise<void>;
+  onDone: (saved: SchedulingCalendarInfo) => Promise<void>;
 }) {
   const { toast } = useToast();
   const [name, setName] = useState(existing?.name ?? "My Calendar");
@@ -346,7 +425,7 @@ function CalendarPanel({
     }
     setSaving(true);
     try {
-      await createOrUpdateCalendar({
+      const saved = await createOrUpdateCalendar({
         id: existing?.id,
         name,
         description,
@@ -354,7 +433,7 @@ function CalendarPanel({
         hostEmail,
         additionalHosts,
       });
-      await onDone();
+      await onDone(saved);
     } catch (e: unknown) {
       toast({
         title: "Couldn’t save calendar",

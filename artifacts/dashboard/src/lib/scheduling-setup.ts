@@ -69,13 +69,18 @@ export function getBrowserTimezone(): string {
 export function computeBookingSetupReadiness(
   calendars: SchedulingCalendarInfo[],
   meetings: MeetingInfo[],
+  selectedCalendarId?: number | null,
 ): BookingSetupReadiness {
-  const calendar = calendars[0] ?? null;
+  const calendar =
+    selectedCalendarId === null
+      ? null
+      : selectedCalendarId != null
+        ? calendars.find((c) => c.id === selectedCalendarId) ?? null
+        : calendars[0] ?? null;
   const googleLinked = Boolean(calendar?.connectedGoogleEmail);
-  const meeting =
-    (calendar ? meetings.find((m) => m.calendarId === calendar.id) : undefined)
-    ?? meetings[0]
-    ?? null;
+  const meeting = calendar
+    ? meetings.find((m) => m.calendarId === calendar.id) ?? null
+    : null;
   const requiredReadyCount = [Boolean(calendar), googleLinked, Boolean(meeting)].filter(Boolean).length;
   return {
     calendar,
