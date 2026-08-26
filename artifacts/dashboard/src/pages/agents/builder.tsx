@@ -2975,18 +2975,38 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         </div>
         </BuilderPanel>
 
-        {canAttendMeetings && (
-          <BuilderPanel title="Meeting bots" icon={<Video />}>
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                This agent can join Google Meet. Open Meeting bots for join settings.
+        <BuilderPanel title="Meeting bots" icon={<Video />} bodyClassName="p-0">
+          <div className="flex items-start gap-3 p-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-[12.5px] font-semibold text-foreground">AI joins the Meet</p>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">
+                {canAttendMeetings
+                  ? "Phone + meetings — this agent can enter Meet / Zoom / Teams rooms."
+                  : "Phone only — bookings can still send a Meet link to humans; this agent won’t join."}
               </p>
-              <Button asChild type="button" variant="outline" size="sm" className="h-8 shrink-0 text-[11px]">
-                <Link href={agentId ? `/app/meet?agentId=${agentId}` : "/app/meet"}>Open</Link>
-              </Button>
             </div>
-          </BuilderPanel>
-        )}
+            <Switch
+              className="mt-0.5 shrink-0"
+              checked={canAttendMeetings}
+              onCheckedChange={(on) =>
+                form.setValue("agentSurfaces", on ? "phone_and_meet" : "phone", { shouldDirty: true })
+              }
+            />
+          </div>
+          {canAttendMeetings && (
+            <div className="flex items-start justify-between gap-3 border-t border-border px-4 pb-4 pt-3">
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                Open Meeting bots for join settings
+                {!agentId ? " (save the agent first)." : "."}
+              </p>
+              {agentId ? (
+                <Button asChild type="button" variant="outline" size="sm" className="h-8 shrink-0 text-[11px]">
+                  <Link href={`/app/meet?agentId=${agentId}`}>Open</Link>
+                </Button>
+              ) : null}
+            </div>
+          )}
+        </BuilderPanel>
 
         <BuilderPanel
           title="Messaging"
