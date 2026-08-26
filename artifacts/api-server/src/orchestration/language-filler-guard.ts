@@ -55,6 +55,9 @@ const FILLER_WORDS = new Set([
   "haan", "han", "ha", "hn", "ji", "hai", "nahi", "nhi",
   "acha", "accha", "achha", "theek", "thik", "sari", "seri", "sar",
   "ama", "aama", "illa", "illai",
+  // romanized Hindi/Indic "go ahead / tell me" replies (call 13340: "Aa boliye Ma'am")
+  "aa", "boliye", "bolie", "bolo", "boli", "batao", "bataiye",
+  "suniye", "suno", "bolna", "baat", "karo", "kijiye", "kripya",
   // continuation / clarification requests (e.g. "please tell me", "tell me more")
   "tell", "me", "more",
   // hold-on fragments

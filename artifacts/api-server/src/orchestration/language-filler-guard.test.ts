@@ -45,6 +45,12 @@ describe("isRealEnglishUtterance", () => {
     expect(isRealEnglishUtterance("")).toBe(false);
     expect(isRealEnglishUtterance("   ")).toBe(false);
   });
+  it("rejects romanized Indic go-ahead replies (Latin script, not English)", () => {
+    expect(isRealEnglishUtterance("Aa boliye Ma'am")).toBe(false);
+    expect(isRealEnglishUtterance("boliye")).toBe(false);
+    expect(isRealEnglishUtterance("haan boliye")).toBe(false);
+    expect(isRealEnglishUtterance("bolo na")).toBe(false);
+  });
 });
 
 describe("resolveAutoDetectLanguage", () => {
@@ -56,6 +62,17 @@ describe("resolveAutoDetectLanguage", () => {
       text: "okay thank you",
     });
     expect(r.lang).toBe("ta-IN");
+    expect(r.heldFiller).toBe(true);
+  });
+
+  it("holds Hindi when the first reply is Romanized Indic written in Latin letters", () => {
+    const r = resolveAutoDetectLanguage({
+      detected: "en-IN",
+      latchedLang: null,
+      currentLang: "hi-IN",
+      text: "Aa boliye Ma'am",
+    });
+    expect(r.lang).toBe("hi-IN");
     expect(r.heldFiller).toBe(true);
   });
 

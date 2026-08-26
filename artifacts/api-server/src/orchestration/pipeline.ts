@@ -2512,10 +2512,18 @@ export class OrchestrationPipeline implements VoiceSession {
     this.llm = createLLMAdapter(this.agent.llmProvider, llmKey, this.agent.llmModel, undefined, this.agent.llmGenerationParams, config.callId);
 
     // Seed currentLang for per-turn LLM language injection.
+    // Multilingual: prefer a returning-caller language, else the agent's STT /
+    // primary language so turn 1 already has a baseline. Without this, the first
+    // short Romanized Indic reply ("Aa boliye Ma'am") is script-detected as
+    // English and cold-starts the call into English (call 13340).
+    // Strict mode: always lock from the configured agent language.
     const agentLanguage = this.agent.language ?? null;
     const seedLang = this.agent.languageAutoDetect
-      ? (this.agent.initialLanguage ?? null)   // returning-caller preference only
-      : agentLanguage;                          // strict mode: always lock from config
+      ? (this.agent.initialLanguage
+          ?? this.agent.sttConfig.language
+          ?? agentLanguage
+          ?? null)
+      : agentLanguage;
     if (seedLang) this.currentLang = seedLang;
 
     // Launch greeting LLM prewarm IMMEDIATELY after LLM adapter creation so the 1-3s LLM round-trip
