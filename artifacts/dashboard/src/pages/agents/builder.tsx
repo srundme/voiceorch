@@ -328,8 +328,6 @@ function BuilderPanel({
   );
 }
 
-}
-
 function SectionDivider({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3">
