@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch, useListAgents } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,11 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Loader2, ArrowLeft, ArrowRight, Check } from "lucide-react";
+import { Loader2, ArrowRight, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/brand-logos";
+import { StripePage } from "@/components/stripe-page";
 
 const API = "/api";
 
@@ -316,20 +317,12 @@ export default function AutomaticCallsWizardPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" asChild className="h-8 px-2 gap-1.5 text-muted-foreground hover:text-foreground">
-          <Link href="/app/campaigns">
-            <ArrowLeft className="h-4 w-4" />
-            <span className="text-xs font-medium">Campaigns</span>
-          </Link>
-        </Button>
-        <div>
-          <h1 className="text-xl font-semibold">Create Automatic Calls</h1>
-          <p className="text-xs text-muted-foreground">Sheet → dial with lookup vars → write results back</p>
-        </div>
-      </div>
-
+    <StripePage
+      title="Create Automatic Calls"
+      description="Sheet → dial with lookup vars → write results back"
+      back={{ href: "/app/campaigns", label: "Campaigns" }}
+    >
+      <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex gap-1.5">
         {steps.map((s, i) => (
           <div
@@ -646,6 +639,7 @@ export default function AutomaticCallsWizardPage() {
           </Button>
         )}
       </div>
-    </div>
+      </div>
+    </StripePage>
   );
 }
