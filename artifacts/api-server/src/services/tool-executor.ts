@@ -367,7 +367,11 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
           description:
             (t.description || "Send a WhatsApp message to the caller.") +
             " Use when the caller asks you to WhatsApp them something." +
-            " Put the actual content you want to send in `message` — it is delivered inside the business's approved WhatsApp template." +
+            " Approved templates have numbered blanks {{1}}, {{2}}, {{3}}, {{4}} — fill them separately." +
+            " For appointment confirmations: caller_name = the person on the phone (NEVER the agent/dashboard name)," +
+            " doctor = the doctor or staff they booked with, date = appointment date, time = appointment time." +
+            " Prefer those fields (or `params` in {{1}}…{{n}} order) over stuffing everything into `message`." +
+            " `message` is only extra notes or 1-blank templates." +
             " Prefer the caller's phone from the call; only pass to_phone if they give a different number." +
             " template_hint is one of: call_summary, booking_confirmed, callback_scheduled.",
           parameters: {
@@ -377,9 +381,30 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
                 type: "string",
                 description: "Recipient phone in E.164 or 10-digit local form. Omit to use the caller on this call.",
               },
+              caller_name: {
+                type: "string",
+                description: "The caller's real name for a greeting blank. Never the agent name.",
+              },
+              doctor: {
+                type: "string",
+                description: "Doctor / provider / staff name for the 'appointment with' blank.",
+              },
+              date: {
+                type: "string",
+                description: "Appointment date only, e.g. 27 Aug 2026. Do not combine with time.",
+              },
+              time: {
+                type: "string",
+                description: "Appointment time only, e.g. 9:30 am IST. Do not combine with date.",
+              },
+              params: {
+                type: "array",
+                items: { type: "string" },
+                description: "Optional ordered template body values for {{1}}…{{n}} matching the approved template.",
+              },
               message: {
                 type: "string",
-                description: "The message content to send (any text: details, address, price, link, summary…). Inserted into the approved template's variable.",
+                description: "Extra notes, address, or the full message for a 1-variable template. Do not use this as the only field when the template has multiple blanks.",
               },
               template_hint: {
                 type: "string",
@@ -2122,6 +2147,7 @@ export async function executeSendWhatsapp(opts: {
   const templateName = typeof opts.args["template_name"] === "string" ? opts.args["template_name"].trim() : "";
   const message = typeof opts.args["message"] === "string" ? opts.args["message"].trim() : "";
   const summary = message || (typeof opts.args["summary"] === "string" ? opts.args["summary"].trim() : "");
+  const fields = readWhatsappToolFields(opts.args, opts.agentName || agent.name);
 
   logger.info(
     { callId: opts.callId, agentId: opts.agentId, toPhone, templateHint },
@@ -2137,6 +2163,11 @@ export async function executeSendWhatsapp(opts: {
     templateHint,
     templateName: templateName || undefined,
     summary,
+    callerName: fields.callerName || undefined,
+    doctor: fields.doctor || undefined,
+    date: fields.date || undefined,
+    time: fields.time || undefined,
+    explicitParams: fields.explicitParams,
   }).then((result) => {
     if (!result.ok) {
       logger.warn(
@@ -2149,6 +2180,48 @@ export async function executeSendWhatsapp(opts: {
   });
 
   return `whatsapp_queued: message is being sent to ${toPhone}. Confirm briefly to the caller that it is on its way.`;
+}
+
+function readWhatsappToolFields(
+  args: Record<string, unknown>,
+  agentName?: string,
+): {
+  callerName: string;
+  doctor: string;
+  date: string;
+  time: string;
+  explicitParams?: string[];
+} {
+  const str = (key: string): string =>
+    typeof args[key] === "string" ? String(args[key]).trim() : "";
+  let callerName = str("caller_name") || str("attendee_name") || str("patient_name") || str("name");
+  const doctor = str("doctor") || str("provider") || str("with");
+  const date = str("date");
+  const time = str("time");
+  const agent = (agentName ?? "").trim();
+  if (callerName && agent && callerName.toLowerCase() === agent.toLowerCase()) {
+    callerName = "";
+  }
+
+  let explicitParams: string[] | undefined;
+  const raw = args["params"] ?? args["template_params"];
+  if (Array.isArray(raw)) {
+    explicitParams = raw.map((v) => String(v ?? ""));
+  } else if (typeof raw === "string" && raw.trim().startsWith("[")) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) explicitParams = parsed.map((v) => String(v ?? ""));
+    } catch { /* ignore */ }
+  }
+  if (!explicitParams) {
+    const numbered: string[] = [];
+    for (let i = 1; i <= 8; i++) {
+      const v = str(`param_${i}`);
+      if (v) numbered[i - 1] = v;
+    }
+    if (numbered.length) explicitParams = numbered;
+  }
+  return { callerName, doctor, date, time, explicitParams };
 }
 
 // ── Transfer lead DB helper ────────────────────────────────────────────────────

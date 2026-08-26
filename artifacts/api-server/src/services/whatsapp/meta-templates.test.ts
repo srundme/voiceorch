@@ -1,7 +1,98 @@
 import { describe, expect, it } from "vitest";
-import { resolveMetaTemplate, toTemplateCatalog, type MetaTemplateChoice, type MetaTemplateInfo } from "./meta.js";
+import {
+  buildMetaParams,
+  inferTemplateSlotRoles,
+  resolveMetaTemplate,
+  toTemplateCatalog,
+  type MetaTemplateChoice,
+  type MetaTemplateInfo,
+} from "./meta.js";
 import { resolveConnectionTemplateName } from "./payload.js";
 import { hasAgentTemplatePicks, normalizeAgentWaTemplates } from "./agent-templates.js";
+
+describe("buildMetaParams", () => {
+  const clinicBody =
+    "Vanakkam {{1}}, your appointment with {{2}} on {{3}} at {{4}} is confirmed at Aarthi Clinic, Redhills. — AutoFlow";
+  const agentName = "Divya · Aarthi Clinic (AutoFlow Demo)";
+
+  it("maps clinic 4-blank templates to caller / doctor / date / time — not agent name + blob", () => {
+    expect(buildMetaParams("call_summary", {
+      businessName: agentName,
+      summary: "27 Aug 2026, 9:30 am IST",
+      callerName: "Priya",
+      doctor: "Dr. Aarthi",
+      bodyPreview: clinicBody,
+    }, 4)).toEqual(["Priya", "Dr. Aarthi", "27 Aug 2026", "9:30 am IST"]);
+  });
+
+  it("does not change slot order when template_hint flips", () => {
+    const ctx = {
+      businessName: agentName,
+      summary: "Aarthi Clinic, Redhills, Chennai",
+      callerName: "Priya",
+      doctor: "Dr. Aarthi",
+      date: "27 Aug 2026",
+      time: "9:30 am IST",
+      bodyPreview: clinicBody,
+    };
+    expect(buildMetaParams("call_summary", ctx, 4)).toEqual(
+      buildMetaParams("booking_confirmed", ctx, 4),
+    );
+    expect(buildMetaParams("call_summary", ctx, 4)).toEqual([
+      "Priya", "Dr. Aarthi", "27 Aug 2026", "9:30 am IST",
+    ]);
+  });
+
+  it("rescues the old [agentName, datetime, —, —] layout when caller + doctor are known", () => {
+    expect(buildMetaParams("call_summary", {
+      businessName: agentName,
+      summary: "",
+      callerName: "Priya",
+      doctor: "Dr. Aarthi",
+      explicitParams: [agentName, "27 Aug 2026, 9:30 am IST", "—", "—"],
+      bodyPreview: clinicBody,
+    }, 4)).toEqual(["Priya", "Dr. Aarthi", "27 Aug 2026", "9:30 am IST"]);
+  });
+
+  it("keeps 1-variable templates on the message content", () => {
+    expect(buildMetaParams("call_summary", {
+      businessName: agentName,
+      summary: "Clinic address: Redhills",
+    }, 1)).toEqual(["Clinic address: Redhills"]);
+  });
+
+  it("keeps legacy 2-variable templates as business + summary when body is unknown", () => {
+    expect(buildMetaParams("call_summary", {
+      businessName: agentName,
+      summary: "Thanks for calling",
+      callerName: "Priya",
+    }, 2)).toEqual([agentName, "Thanks for calling"]);
+  });
+
+  it("fills caller/doctor/date/time on 4-blank templates even without a body preview", () => {
+    const ctx = {
+      businessName: agentName,
+      summary: "27 Aug 2026, 9:30 am IST",
+      callerName: "Priya",
+      doctor: "Dr. Aarthi",
+    };
+    expect(buildMetaParams("call_summary", ctx, 4)).toEqual([
+      "Priya", "Dr. Aarthi", "27 Aug 2026", "9:30 am IST",
+    ]);
+    expect(buildMetaParams("booking_confirmed", ctx, 4)).toEqual([
+      "Priya", "Dr. Aarthi", "27 Aug 2026", "9:30 am IST",
+    ]);
+  });
+});
+
+describe("inferTemplateSlotRoles", () => {
+  it("reads Vanakkam / with / on / at as name, doctor, date, time", () => {
+    expect(inferTemplateSlotRoles(
+      "Vanakkam {{1}}, your appointment with {{2}} on {{3}} at {{4}} is confirmed",
+      4,
+    )).toEqual(["name", "doctor", "date", "time"]);
+  });
+});
 
 describe("resolveMetaTemplate", () => {
   const booking: MetaTemplateChoice = { name: "book", language: "en", paramCount: 2 };

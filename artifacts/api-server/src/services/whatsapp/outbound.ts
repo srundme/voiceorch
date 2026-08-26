@@ -9,13 +9,15 @@
  */
 
 import { createHmac } from "crypto";
-import { and, eq, ne } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import {
   db,
   whatsappConnectionsTable,
   callsTable,
   agentsTable,
   bookingsTable,
+  eventTypesTable,
+  schedulingCalendarsTable,
 } from "@workspace/db";
 import { logger } from "../../lib/logger.js";
 import {
@@ -26,9 +28,11 @@ import {
 import { fetchUserConfiguredUrl } from "../../lib/ssrf.js";
 import {
   buildMetaParams,
+  catalogBodyPreview,
   isMetaTokenExpiredError,
   resolveMetaTemplate,
   sendMetaTemplate,
+  type MetaParamContext,
   type MetaTemplateChoice,
 } from "./meta.js";
 import {
@@ -79,15 +83,95 @@ async function postOutbound(
 }
 
 function formatMeetingTimeIST(d: Date): string {
+  return formatMeetingDateAndTime(d).combined;
+}
+
+function formatMeetingDateAndTime(d: Date, timeZone = "Asia/Kolkata"): {
+  date: string;
+  time: string;
+  combined: string;
+} {
   try {
-    return new Intl.DateTimeFormat("en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: "Asia/Kolkata",
-    }).format(d) + " IST";
+    const date = new Intl.DateTimeFormat("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone,
+    }).format(d);
+    const time = new Intl.DateTimeFormat("en-IN", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone,
+    }).format(d);
+    return { date, time: `${time} IST`, combined: `${date}, ${time} IST` };
   } catch {
-    return d.toISOString();
+    const iso = d.toISOString();
+    return { date: iso.slice(0, 10), time: iso.slice(11, 16), combined: iso };
   }
+}
+
+export type WhatsappFillContext = {
+  callerName: string;
+  doctor: string;
+  date: string;
+  time: string;
+  meetingTime: string;
+  meetLink: string;
+  slotStart: Date | null;
+};
+
+async function loadCallWhatsappFill(callId: number): Promise<WhatsappFillContext> {
+  const empty: WhatsappFillContext = {
+    callerName: "", doctor: "", date: "", time: "", meetingTime: "", meetLink: "", slotStart: null,
+  };
+  try {
+    const [row] = await db
+      .select({
+        attendeeName: bookingsTable.attendeeName,
+        slotStart: bookingsTable.slotStart,
+        meetLink: bookingsTable.meetLink,
+        eventName: eventTypesTable.name,
+        timezone: schedulingCalendarsTable.timezone,
+      })
+      .from(bookingsTable)
+      .leftJoin(eventTypesTable, eq(bookingsTable.eventTypeId, eventTypesTable.id))
+      .leftJoin(schedulingCalendarsTable, eq(bookingsTable.calendarId, schedulingCalendarsTable.id))
+      .where(and(
+        eq(bookingsTable.callId, callId),
+        ne(bookingsTable.status, "cancelled"),
+        ne(bookingsTable.status, "rescheduled"),
+      ))
+      .orderBy(desc(bookingsTable.createdAt))
+      .limit(1);
+    if (!row?.slotStart) return empty;
+    const parts = formatMeetingDateAndTime(row.slotStart, row.timezone || "Asia/Kolkata");
+    return {
+      callerName: (row.attendeeName ?? "").trim(),
+      doctor: (row.eventName ?? "").trim(),
+      date: parts.date,
+      time: parts.time,
+      meetingTime: parts.combined,
+      meetLink: (row.meetLink ?? "").trim(),
+      slotStart: row.slotStart,
+    };
+  } catch {
+    return empty;
+  }
+}
+
+function mergeWhatsappFill(
+  booked: WhatsappFillContext,
+  overlay: Partial<Omit<WhatsappFillContext, "slotStart">> & { summary?: string },
+): WhatsappFillContext {
+  const callerName = (overlay.callerName ?? "").trim() || booked.callerName;
+  const doctor = (overlay.doctor ?? "").trim() || booked.doctor;
+  const date = (overlay.date ?? "").trim() || booked.date;
+  const time = (overlay.time ?? "").trim() || booked.time;
+  const meetingTime = (overlay.meetingTime ?? "").trim() || booked.meetingTime
+    || (date && time ? `${date}, ${time}` : date || time);
+  const meetLink = (overlay.meetLink ?? "").trim() || booked.meetLink;
+  return { callerName, doctor, date, time, meetingTime, meetLink, slotStart: booked.slotStart };
 }
 
 async function sendMetaTemplateFresh(
@@ -181,25 +265,9 @@ export async function dispatchWhatsappCallEnded(
     .where(eq(agentsTable.id, call.agentId))
     .limit(1);
 
-  let meetingTime: Date | null = null;
-  let meetLink: string | null = null;
-  try {
-    const [booking] = await db
-      .select({
-        slotStart: bookingsTable.slotStart,
-        meetLink: bookingsTable.meetLink,
-      })
-      .from(bookingsTable)
-      .where(and(
-        eq(bookingsTable.callId, callId),
-        ne(bookingsTable.status, "cancelled"),
-      ))
-      .limit(1);
-    if (booking) {
-      meetingTime = booking.slotStart;
-      meetLink = booking.meetLink;
-    }
-  } catch { /* ignore */ }
+  const booked = await loadCallWhatsappFill(callId);
+  const meetingTime = booked.slotStart;
+  const meetLink = booked.meetLink || null;
 
   const basePayload = buildWhatsappCallEndedPayload({
     call,
@@ -277,12 +345,22 @@ export async function dispatchWhatsappCallEnded(
             .catch(() => {});
           continue;
         }
+        const catalog = catalogBodyPreview(
+          conn.templateCatalog as Array<{ name?: string; language?: string; bodyPreview?: string; paramCount?: number }> | null,
+          tpl,
+        );
+        const paramCount = catalog.paramCount || tpl.paramCount;
         const params = buildMetaParams(hint, {
           businessName,
           summary,
-          meetingTime: meetingTime ? formatMeetingTimeIST(meetingTime) : null,
+          callerName: booked.callerName,
+          doctor: booked.doctor,
+          date: booked.date,
+          time: booked.time,
+          meetingTime: booked.meetingTime || (meetingTime ? formatMeetingTimeIST(meetingTime) : null),
           meetLink,
-        }, tpl.paramCount);
+          bodyPreview: catalog.bodyPreview,
+        }, paramCount);
         const result = await sendMetaTemplateFresh(conn, {
           toPhone: phone,
           template: tpl,
@@ -382,6 +460,11 @@ export async function sendMidCallWhatsapp(opts: {
   templateHint?: string;
   templateName?: string;
   summary?: string;
+  callerName?: string;
+  doctor?: string;
+  date?: string;
+  time?: string;
+  explicitParams?: string[];
 }): Promise<{ ok: boolean; error?: string; via?: "byo" | "native" }> {
   const phone = opts.toPhone.trim();
   if (!phone) return { ok: false, error: "Missing phone number" };
@@ -389,6 +472,25 @@ export async function sendMidCallWhatsapp(opts: {
   const hint = (opts.templateHint?.trim() || "call_summary") as TemplateHint;
   const allowed: TemplateHint[] = ["call_summary", "booking_confirmed", "callback_scheduled"];
   const safeHint = allowed.includes(hint) ? hint : "call_summary";
+  const booked = await loadCallWhatsappFill(opts.callId);
+  const fill = mergeWhatsappFill(booked, {
+    callerName: opts.callerName,
+    doctor: opts.doctor,
+    date: opts.date,
+    time: opts.time,
+  });
+  const paramCtx = (bodyPreview?: string): MetaParamContext => ({
+    businessName: opts.agentName || "SnapServe",
+    summary: (opts.summary ?? "").trim(),
+    callerName: fill.callerName,
+    doctor: fill.doctor,
+    date: fill.date,
+    time: fill.time,
+    meetingTime: fill.meetingTime || null,
+    meetLink: fill.meetLink || null,
+    explicitParams: opts.explicitParams,
+    bodyPreview: bodyPreview || null,
+  });
 
   const [conn] = await db
     .select()
@@ -416,7 +518,12 @@ export async function sendMidCallWhatsapp(opts: {
       agent_id: opts.agentId,
       agent_name: opts.agentName ?? "",
       summary: opts.summary ?? "",
+      caller_name: fill.callerName,
+      doctor: fill.doctor,
+      date: fill.date,
+      time: fill.time,
       template_hint: safeHint,
+      ...(opts.explicitParams?.length ? { params: opts.explicitParams } : {}),
       ...(mapped ? { template_name: mapped } : {}),
       timestamp: new Date().toISOString(),
     };
@@ -451,10 +558,16 @@ export async function sendMidCallWhatsapp(opts: {
         .catch(() => {});
       return { ok: false, error: err, via: "byo" };
     }
-    const params = buildMetaParams(safeHint, {
-      businessName: opts.agentName || "SnapServe",
-      summary: (opts.summary ?? "").trim(),
-    }, tpl.paramCount);
+    const catalog = catalogBodyPreview(
+      conn.templateCatalog as Array<{ name?: string; language?: string; bodyPreview?: string; paramCount?: number }> | null,
+      tpl,
+    );
+    const paramCount = catalog.paramCount || tpl.paramCount;
+    const params = buildMetaParams(safeHint, paramCtx(catalog.bodyPreview), paramCount);
+    logger.info(
+      { callId: opts.callId, template: tpl.name, paramCount, params, hint: safeHint },
+      "whatsapp-meta: mid-call params",
+    );
     const result = await sendMetaTemplateFresh(conn, {
       toPhone: phone,
       template: tpl,
@@ -488,8 +601,16 @@ export async function sendMidCallWhatsapp(opts: {
 
   const businessName = channel.businessName || opts.agentName || "SnapServe";
   const summary = (opts.summary ?? "").trim() || "Thanks for speaking with us.";
-  const params =
-    safeHint === "booking_confirmed"
+  const { resolveNativeTemplateForAgent } = await import("./agent-templates.js");
+  const nativeTpl = await resolveNativeTemplateForAgent(opts.userId, opts.agentId, safeHint);
+  const catalog = catalogBodyPreview(
+    channel.templateCatalog as Array<{ name?: string; language?: string; bodyPreview?: string; paramCount?: number }> | null,
+    { name: nativeTpl.name, language: nativeTpl.lang, paramCount: 0 },
+  );
+  const paramCount = catalog.paramCount || (catalog.bodyPreview ? (catalog.bodyPreview.match(/\{\{\s*\d+\s*\}\}/g)?.length ?? 0) : 0);
+  const params = paramCount > 0
+    ? buildMetaParams(safeHint, { ...paramCtx(catalog.bodyPreview), businessName, summary }, paramCount)
+    : safeHint === "booking_confirmed"
       ? [businessName, summary, "—"]
       : [businessName, summary];
 
