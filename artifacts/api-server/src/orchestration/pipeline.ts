@@ -24,6 +24,7 @@ import { CartesiaTTS } from "./adapters/tts/cartesia.js";
 import { encodeMulaw, upsample8to16, downsample16to8, createDownsampler16to8, decodeMulaw, hasSpeechEnergy, frameRms } from "./audio.js";
 import { resolveMicSensitivity, getMicSensitivityThresholds, type MicSensitivityThresholds } from "./mic-sensitivity.js";
 import { resolveSoftwareNoiseGate, envForceVobizSoftwareNc, type NoiseGateDecision } from "./noise-gate.js";
+import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, peekCachedPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
@@ -1249,6 +1250,12 @@ export class OrchestrationPipeline implements VoiceSession {
   // Reschedule context — set when list_bookings returns exactly one booking,
   // cleared when reschedule_confirmed or cancel_confirmed is received.
   private activeRescheduleBooking: { bookingId: number; isoDate: string; timeLabel: string; eventName: string } | null = null;
+  /** True only after this call receives booking_confirmed/reschedule_confirmed.
+   * Prevents generic send_email from fabricating a booking confirmation. */
+  private schedulingActionConfirmed = false;
+  /** Latched when scheduling has no calendar event type. Stops the LLM from
+   * inventing slots or confirmations after a configuration failure. */
+  private schedulingConfigurationFailed = false;
   // All bookings returned by the most recent list_bookings call (used to infer
   // which booking the caller selected when count > 1 and reschedule/cancel fires).
   private pendingListedBookings: Array<{ bookingId: number; isoDate: string; timeLabel: string; eventName: string }> = [];
@@ -6673,6 +6680,22 @@ export class OrchestrationPipeline implements VoiceSession {
     } else if (tool.type === "send_sms") {
       return await this.executeSendSms(tool, args);
     } else if (tool.type === "send_email") {
+      if (looksLikeBookingConfirmationEmail(args) && !this.schedulingActionConfirmed) {
+        logger.warn(
+          { callId: this.config.callId, agentId: this.agent.id },
+          "Booking confirmation email blocked: no successful booking in this call",
+        );
+        this.logExec("Tool", "system", {
+          status: "error",
+          turnNumber: this._activeTurnIndex,
+          metadata: {
+            event: "Email Blocked",
+            reason: "booking_not_confirmed",
+            tool: tool.name || "send_email",
+          },
+        });
+        return "email_failed: no appointment was confirmed in this call, so a booking confirmation email was not sent. Do not claim that a meeting is booked or that a link will be sent. Tell the caller scheduling could not be completed.";
+      }
       return await sharedExecuteSendEmail({
         agentId: this.agent.id,
         callId: this.config.callId,
@@ -6693,7 +6716,10 @@ export class OrchestrationPipeline implements VoiceSession {
     } else if (tool.type === "cal_com") {
       return await this.executeCalCom(tool, args);
     } else if (tool.type === "native_booking") {
-      return await this.executeNativeBooking(tool, args);
+      const result = await this.executeNativeBooking(tool, args);
+      if (result.startsWith("booking_confirmed:")) this.schedulingActionConfirmed = true;
+      if (result.includes("\"no_event_type\"")) this.schedulingConfigurationFailed = true;
+      return result;
     } else if (tool.type === "native_reschedule") {
       // Infer active booking from booking_id arg when multiple bookings were listed
       if (!this.activeRescheduleBooking) {
@@ -6708,6 +6734,7 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       const result = await this.executeNativeReschedule(tool, args);
       if (result.includes("reschedule_confirmed")) {
+        this.schedulingActionConfirmed = true;
         logger.info({ callId: this.config.callId }, "Reschedule confirmed — clearing activeRescheduleBooking");
         this.activeRescheduleBooking = null;
         this.pendingListedBookings = [];
@@ -6733,7 +6760,9 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       return result;
     } else if (tool.type === "native_check_availability") {
-      return await this.executeNativeCheckAvailability(tool, args);
+      const result = await this.executeNativeCheckAvailability(tool, args);
+      if (result.includes("\"no_event_type\"")) this.schedulingConfigurationFailed = true;
+      return result;
     } else if (tool.type === "native_list_bookings") {
       const result = await this.executeNativeListBookings(tool, args);
       // Always reset first to avoid stale context from a previous list call
@@ -7948,6 +7977,17 @@ export class OrchestrationPipeline implements VoiceSession {
         );
       }
       systemPromptForTurn += lines.join("\n");
+      if (this.schedulingConfigurationFailed) {
+        systemPromptForTurn += [
+          "",
+          "",
+          "[SCHEDULING UNAVAILABLE — HARD STOP]",
+          "A scheduling tool failed because this agent has no configured event type.",
+          "Do NOT invent or offer any dates or times. Do NOT claim a booking, appointment, meeting, demo, or audit is scheduled or confirmed.",
+          "Do NOT send a booking-confirmation email or promise a meeting link/calendar invite.",
+          "Tell the caller briefly that scheduling could not be completed right now and that the team will follow up.",
+        ].join("\n");
+      }
     } else {
       // No booking/availability tool is configured for this agent. Without this
       // guard the LLM cheerfully "confirms" a meeting and promises a calendar
@@ -9563,7 +9603,12 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.agent.isMeetingSession) {
       toolDefs.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_SESSION_TOOL_DEFS);
     }
-    const attachTools = depth < MAX_TOOL_DEPTH && toolDefs.length > 0;
+    const fatalSchedulingConfig =
+      this.schedulingConfigurationFailed && result.includes("\"no_event_type\"");
+    // A missing event type cannot be recovered by another tool call. Detach all
+    // tools for this follow-up so the model cannot chain into send_email and
+    // manufacture a confirmation (call 13380).
+    const attachTools = !fatalSchedulingConfig && depth < MAX_TOOL_DEPTH && toolDefs.length > 0;
     let triggeredToolName: string | null = null;
     let triggeredToolArgs: Record<string, unknown> = {};
 
@@ -9695,6 +9740,16 @@ export class OrchestrationPipeline implements VoiceSession {
         `Currently rescheduling booking #${bookingId} (${eventName}: ${timeLabel}).`,
         `When the caller proposes only a new time (e.g. "Can we do 12:30?"), you MUST default preferred_date to "${isoDate}" unless they explicitly state a different date.`,
         `Always pass preferred_date as a full ISO datetime (e.g. "${isoDate}T12:30:00+05:30") — never omit the date portion.`,
+      ].join("\n");
+    }
+    if (fatalSchedulingConfig) {
+      toolSystemPrompt += [
+        "",
+        "",
+        "[SCHEDULING CONFIGURATION ERROR — FINAL RESPONSE]",
+        "The scheduling tool failed because no event type is configured.",
+        "Say only that scheduling could not be completed right now and the team will follow up.",
+        "Do NOT invent dates or available slots. Do NOT claim anything is booked. Do NOT promise or send a meeting link, calendar invite, or confirmation email.",
       ].join("\n");
     }
 

@@ -547,7 +547,7 @@ export default function AgentEdit() {
       ? ((calendarsData ?? []).find((cal: any) => cal.agentId === id) ?? (calendarsData ?? [])[0])
       : (calendarsData ?? [])[0];
   const calendarIdForEt = agentCalendar?.id;
-  const { data: agentEventTypes } = useListEventTypes(
+  const { data: agentEventTypes, isLoading: eventTypesLoading } = useListEventTypes(
     calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
     { query: { enabled: !!calendarIdForEt, queryKey: ["agent-event-types", calendarIdForEt ?? null] } }
   );
@@ -575,6 +575,25 @@ export default function AgentEdit() {
   const watchedTools = (form.watch("tools") ?? []) as any[];
   const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
   const nativeToolIndex = (type: string) => watchedTools.findIndex((t: any) => t.type === type);
+  const hasBookingTools = watchedTools.some((tool: any) =>
+    ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"].includes(tool.type),
+  );
+  useEffect(() => {
+    if (!hasBookingTools || eventTypesLoading || !calendarIdForEt) return;
+    const eventTypes = (agentEventTypes ?? []) as Array<{ id: number }>;
+    if (eventTypes.some((eventType) => eventType.id === schedulingEventTypeId)) return;
+    form.setValue("schedulingEventTypeId", eventTypes[0]?.id ?? null, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }, [
+    agentEventTypes,
+    calendarIdForEt,
+    eventTypesLoading,
+    form,
+    hasBookingTools,
+    schedulingEventTypeId,
+  ]);
   const EDIT_TOOL_FN_NAMES: Record<string, string> = {
     native_booking: "book_appointment",
     native_check_availability: "check_availability",
@@ -2166,14 +2185,14 @@ export default function AgentEdit() {
                       </p>
                       <Select
                         value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
-                        onValueChange={v => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v))}
-                        disabled={!calendarIdForEt}
+                        onValueChange={v => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v), { shouldDirty: true, shouldValidate: true })}
+                        disabled={!calendarIdForEt || eventTypesLoading || (agentEventTypes ?? []).length === 0}
                       >
                         <SelectTrigger className="h-7 text-xs bg-background/50">
-                          <SelectValue placeholder="Any event type" />
+                          <SelectValue placeholder="Select a meeting type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="__none__" className="text-xs text-muted-foreground">Any event type</SelectItem>
+                          <SelectItem value="__none__" disabled className="text-xs text-muted-foreground">Select a meeting type</SelectItem>
                           {(agentEventTypes ?? []).map((et: any) => (
                             <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title || et.name}</SelectItem>
                           ))}

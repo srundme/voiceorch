@@ -2673,7 +2673,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       ? ((calendarsData ?? []).find((cal: any) => cal.agentId === agentId) ?? (calendarsData ?? [])[0])
       : (calendarsData ?? [])[0];
   const calendarIdForEt = agentCalendar?.id;
-  const { data: agentEventTypes } = useListEventTypes(
+  const { data: agentEventTypes, isLoading: eventTypesLoading } = useListEventTypes(
     calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
     { query: { enabled: !!calendarIdForEt, queryKey: ["agent-event-types", calendarIdForEt ?? null] } }
   );
@@ -2795,6 +2795,28 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
 
   const bookingEnabled = BOOKING_TYPES.every((type) => hasNativeTool(type));
   const bookingPartial = !bookingEnabled && BOOKING_TYPES.some((type) => hasNativeTool(type));
+  const bookingToolsOn = bookingEnabled || bookingPartial;
+
+  // A calendar alone is not runnable: native scheduling requires an active
+  // event type. Auto-select the first event type when possible, but never leave
+  // the form looking ready when the selected calendar has none (call 13380).
+  useEffect(() => {
+    if (!bookingToolsOn || eventTypesLoading || !calendarIdForEt) return;
+    const eventTypes = (agentEventTypes ?? []) as Array<{ id: number }>;
+    const selectedIsValid = eventTypes.some((eventType) => eventType.id === schedulingEventTypeId);
+    if (selectedIsValid) return;
+    form.setValue("schedulingEventTypeId", eventTypes[0]?.id ?? null, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }, [
+    agentEventTypes,
+    bookingToolsOn,
+    calendarIdForEt,
+    eventTypesLoading,
+    form,
+    schedulingEventTypeId,
+  ]);
 
   const toggleBookingSuite = (on: boolean) => {
     const current = (form.getValues("tools") ?? []) as any[];
@@ -2956,6 +2978,48 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 )}
               </div>
 
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-medium text-foreground">Meeting type</p>
+                <Select
+                  value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
+                  onValueChange={(value) => {
+                    form.setValue(
+                      "schedulingEventTypeId",
+                      value === "__none__" ? null : Number(value),
+                      { shouldDirty: true, shouldValidate: true },
+                    );
+                  }}
+                  disabled={!calendarIdForEt || eventTypesLoading || (agentEventTypes ?? []).length === 0}
+                >
+                  <SelectTrigger className="h-9 bg-background text-xs">
+                    <SelectValue placeholder={eventTypesLoading ? "Loading meeting types…" : "Pick a meeting type"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__" disabled className="text-xs text-muted-foreground">
+                      Pick a meeting type
+                    </SelectItem>
+                    {(agentEventTypes ?? []).map((eventType: any) => (
+                      <SelectItem key={eventType.id} value={String(eventType.id)} className="text-xs">
+                        {eventType.title || eventType.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!eventTypesLoading && calendarIdForEt && (agentEventTypes ?? []).length === 0 && (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5">
+                    <p className="text-[11.5px] font-medium text-amber-700 dark:text-amber-300">
+                      Booking is not ready — this calendar has no meeting type.
+                    </p>
+                    <p className="mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
+                      Create one before saving. Without it, the agent cannot check availability, book a meeting, or send a Meet link.
+                    </p>
+                    <Button asChild type="button" size="sm" variant="outline" className="mt-2 h-8 text-[11px]">
+                      <Link href={setupHref}>Create meeting type</Link>
+                    </Button>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
                 <div className="min-w-0">
                   <p className="text-[12px] font-medium text-foreground">Google Meet conferencing</p>
@@ -2968,7 +3032,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 <Switch
                   className="mt-0.5 shrink-0"
                   checked={googleMeetEnabled}
-                  disabled={meetTogglePending}
+                  disabled={meetTogglePending || !preferredEventType}
                   onCheckedChange={(on) => { void setGoogleMeetEnabled(on); }}
                 />
               </div>
