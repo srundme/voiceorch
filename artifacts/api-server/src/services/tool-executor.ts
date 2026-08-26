@@ -829,7 +829,7 @@ export async function executeNativeBooking(
       attendeeName,
     }, "success");
 
-    // Automatic Calls sheet: Meeting Time (fire-and-forget; Status stays call-state)
+    // Automatic Calls sheet: Follow-up datetime (fire-and-forget; Status stays call-state)
     import("./sheets-writeback.js").then(({ writeSheetBookingForCall }) => {
       writeSheetBookingForCall(callId, {
         slotStart: confirmedBooking.slotStart,

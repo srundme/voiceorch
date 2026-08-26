@@ -5,6 +5,7 @@ import {
   defaultNextDayCallbackAt,
   extractExplicitCallbackAt,
   formatSheetIst,
+  followUpColumnName,
 } from "./sheet-auto-call-loops.js";
 import { phonesMatch } from "./google-sheets-helpers.js";
 
@@ -14,6 +15,8 @@ describe("isCallbackDisposition", () => {
     expect(isCallbackDisposition("please call back tomorrow")).toBe(true);
     expect(isCallbackDisposition("Call later")).toBe(true);
     expect(isCallbackDisposition("Please schedule a call next week")).toBe(true);
+    expect(isCallbackDisposition("Customer asked for a demo follow session")).toBe(true);
+    expect(isCallbackDisposition("demo follow-up session tomorrow")).toBe(true);
   });
 
   it("ignores unrelated dispositions", () => {
@@ -65,10 +68,20 @@ describe("extractExplicitCallbackAt", () => {
 });
 
 describe("formatSheetIst / booking field", () => {
-  it("formats meeting time in IST en-IN style", () => {
+  it("formats follow-up time in IST with AM/PM", () => {
     const s = formatSheetIst("2026-07-20T04:30:00.000Z"); // 10:00 IST
     expect(s).toMatch(/20 Jul 2026/i);
     expect(s.toLowerCase()).toMatch(/10:00/);
+    expect(s).toMatch(/AM/i);
+  });
+});
+
+describe("followUpColumnName", () => {
+  it("renames Next Follow-up and Meeting Time to Follow-up", () => {
+    expect(followUpColumnName("Next Follow-up")).toBe("Follow-up");
+    expect(followUpColumnName("Meeting Time")).toBe("Follow-up");
+    expect(followUpColumnName("Follow-up")).toBe("Follow-up");
+    expect(followUpColumnName("Custom When")).toBe("Custom When");
   });
 });
 

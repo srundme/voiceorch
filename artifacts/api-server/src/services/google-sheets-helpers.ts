@@ -23,7 +23,7 @@ export const DEFAULT_COLUMN_MAPS: Record<"call_log" | "outcome" | "lookup", Reco
     lastCallAt: "Last Call At",
     disposition: "Disposition",
     notes: "Notes",
-    nextFollowUp: "Next Follow-up",
+    nextFollowUp: "Follow-up",
   },
   lookup: {
     phone: "Phone",
@@ -169,4 +169,16 @@ export function escapeSheetName(name: string): string {
 
 export function sheetRange(sheetName: string, a1: string): string {
   return `${escapeSheetName(sheetName)}!${a1}`;
+}
+
+/** 0-based column index → A1 column letters. */
+export function a1FromColIndex(index: number): string {
+  let n = index + 1;
+  let s = "";
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
 }

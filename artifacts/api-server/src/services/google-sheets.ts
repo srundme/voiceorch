@@ -31,6 +31,7 @@ import {
   rowToPromptVars,
   resolveMatchColumnIndex,
   sheetRange,
+  a1FromColIndex,
 } from "./google-sheets-helpers.js";
 
 export {
@@ -332,11 +333,11 @@ const TEMPLATES: Record<SheetTemplate, {
     tab: "Leads",
     headers: [
       "Phone", "Name", "Email", "Status", "Last Call At", "Disposition",
-      "Summary", "Call ID", "Recording", "Next Follow-up", "Meeting Time", "Do Not Call",
+      "Summary", "Call ID", "Recording", "Follow-up", "Do Not Call",
     ],
     sampleRows: [
-      ["9876543210", "Sample Lead", "sample@example.com", "", "", "", "", "", "", "", "", ""],
-      ["9123456780", "Demo Contact", "", "", "", "", "", "", "", "", "", ""],
+      ["9876543210", "Sample Lead", "sample@example.com", "", "", "", "", "", "", "", ""],
+      ["9123456780", "Demo Contact", "", "", "", "", "", "", "", "", ""],
     ],
     instructions: [
       ["SnapServe Automatic Calls — how to use"],
@@ -347,9 +348,9 @@ const TEMPLATES: Record<SheetTemplate, {
       ["4. Set Status to Retry to dial that row again."],
       ["5. Call Log tab gets one append-only row per call attempt."],
       ["6. Phones work as 9876543210 or +91…; cells with two numbers use the first."],
-      ["7. Disposition Callback → SnapServe schedules a platform callback and fills Next Follow-up. Status stays Completed."],
+      ["7. Disposition Callback / demo follow session → SnapServe fills Follow-up with date, time, and AM/PM. Status stays Completed."],
       ["8. Inbound calls from a sheet phone update the same lead row (Status / Summary / Disposition)."],
-      ["9. When a meeting is booked on the call, Meeting Time (IST) is written. Status stays Completed."],
+      ["9. When a meeting or demo is booked, the slot is written to Follow-up (date, time, AM/PM). Status stays Completed."],
     ],
     extraTabs: [
       {
@@ -403,6 +404,33 @@ export async function ensureHeaders(
     requestBody: { values: [merged] },
   });
   return { headers: merged, wrote: true, sheetName: tab.title };
+}
+
+/** Rename a header in row 1 in place (e.g. Next Follow-up → Follow-up). */
+export async function renameSheetHeader(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+  fromHeader: string,
+  toHeader: string,
+): Promise<boolean> {
+  const from = fromHeader.trim().toLowerCase();
+  const to = toHeader.trim();
+  if (!from || !to || from === to.toLowerCase()) return false;
+  const { headers } = await readSheetGrid(userId, connectionId, spreadsheetId, sheetName);
+  const idx = headers.findIndex((h) => h.trim().toLowerCase() === from);
+  if (idx < 0) return false;
+  if (headers.some((h) => h.trim().toLowerCase() === to.toLowerCase())) return false;
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: sheetRange(sheetName, `${a1FromColIndex(idx)}1`),
+    valueInputOption: "RAW",
+    requestBody: { values: [[to]] },
+  });
+  return true;
 }
 
 export async function readSheetGrid(

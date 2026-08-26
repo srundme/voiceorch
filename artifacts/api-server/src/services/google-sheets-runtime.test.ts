@@ -7,6 +7,7 @@ import {
   resolveMatchColumnIndex,
   defaultColumnMapForUseCase,
   sheetRange,
+  a1FromColIndex,
 } from "./google-sheets-helpers.js";
 
 describe("phonesMatch", () => {
@@ -87,5 +88,13 @@ describe("sheetRange", () => {
     expect(sheetRange("Call Log", "A1")).toBe("'Call Log'!A1");
     expect(sheetRange("Call Log", "A1:Z1")).toBe("'Call Log'!A1:Z1");
     expect(sheetRange("Leads", "A1")).toBe("'Leads'!A1");
+  });
+});
+
+describe("a1FromColIndex", () => {
+  it("maps 0-based indexes to A1 letters", () => {
+    expect(a1FromColIndex(0)).toBe("A");
+    expect(a1FromColIndex(9)).toBe("J");
+    expect(a1FromColIndex(26)).toBe("AA");
   });
 });

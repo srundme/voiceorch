@@ -24,6 +24,7 @@ import {
   readSheetGrid,
   createSpreadsheet,
   ensureHeaders,
+  renameSheetHeader,
   updateSheetRowByIndex,
 } from "./google-sheets.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
@@ -35,6 +36,7 @@ import {
   friendlySheetStatus,
   fuzzyDetectColumnMap,
 } from "./sheet-auto-calls-helpers.js";
+import { followUpColumnName } from "./sheet-auto-call-loops.js";
 
 export {
   parseSheetLeadRow,
@@ -51,8 +53,7 @@ const DEFAULT_STATUS_COLS: SheetAutoStatusColumns = {
   summary: "Summary",
   callId: "Call ID",
   recording: "Recording",
-  nextFollowUp: "Next Follow-up",
-  meetingTime: "Meeting Time",
+  nextFollowUp: "Follow-up",
 };
 
 const CALL_LOG_HEADERS = [
@@ -62,8 +63,27 @@ const CALL_LOG_HEADERS = [
 
 async function ensureWritebackHeaders(pipeline: SheetAutoCallPipeline): Promise<void> {
   if (pipeline.writebackMode === "same_sheet" || pipeline.writebackMode === "both") {
+    try {
+      await renameSheetHeader(
+        pipeline.userId,
+        pipeline.connectionId,
+        pipeline.spreadsheetId,
+        pipeline.sheetName,
+        "Next Follow-up",
+        "Follow-up",
+      );
+    } catch {
+      /* header may not exist yet */
+    }
+    const stored = pipeline.sameSheetStatusColumns ?? DEFAULT_STATUS_COLS;
     const cols = [
-      ...Object.values(pipeline.sameSheetStatusColumns ?? DEFAULT_STATUS_COLS).filter(Boolean) as string[],
+      stored.status || "Status",
+      stored.lastCallAt || "Last Call At",
+      stored.disposition || "Disposition",
+      stored.summary || "Summary",
+      stored.callId || "Call ID",
+      stored.recording || "Recording",
+      followUpColumnName(stored.nextFollowUp),
       "Do Not Call",
     ];
     await ensureHeaders(
@@ -71,7 +91,7 @@ async function ensureWritebackHeaders(pipeline: SheetAutoCallPipeline): Promise<
       pipeline.connectionId,
       pipeline.spreadsheetId,
       pipeline.sheetName,
-      [...new Set(cols)],
+      [...new Set(cols.filter(Boolean))],
     );
   }
   if (

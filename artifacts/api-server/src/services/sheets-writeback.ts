@@ -31,12 +31,14 @@ import {
   runLookupBindings,
   lookupRowByPhone,
   ensureHeaders,
+  renameSheetHeader,
 } from "./google-sheets.js";
 import {
   isCallbackDisposition,
   defaultNextDayCallbackAt,
   extractExplicitCallbackAt,
   formatSheetIst,
+  followUpColumnName,
 } from "./sheet-auto-call-loops.js";
 import { phonesMatch, rowToPromptVars } from "./google-sheets-helpers.js";
 
@@ -109,8 +111,7 @@ function statusColumnMap(pipeline: SheetAutoCallPipeline): SheetAutoStatusColumn
     summary: cols.summary || "Summary",
     callId: cols.callId || "Call ID",
     recording: cols.recording || "Recording",
-    nextFollowUp: cols.nextFollowUp || "Next Follow-up",
-    meetingTime: cols.meetingTime || "Meeting Time",
+    nextFollowUp: followUpColumnName(cols.nextFollowUp),
   };
 }
 
@@ -575,7 +576,8 @@ async function scheduleSheetCallback(opts: {
 }
 
 /**
- * Write Meeting Time onto the sheet row for a sheet-linked call. Status stays call-state.
+ * Write Follow-up (date, time, AM/PM) onto the sheet row for a booked demo/session.
+ * Status stays call-state. Meeting Time is not written.
  */
 export async function writeSheetBookingForCall(
   callId: number,
@@ -587,20 +589,26 @@ export async function writeSheetBookingForCall(
     if (target.pipeline.writebackMode === "call_log") return;
 
     const cols = statusColumnMap(target.pipeline);
+    const followUpHeader = followUpColumnName(cols.nextFollowUp);
     const [call] = await db.select().from(callsTable).where(eq(callsTable.id, callId)).limit(1);
     if (!call?.userId) return;
 
-    const headers = [cols.status!, cols.meetingTime!].filter(Boolean);
+    await renameSheetHeader(
+      call.userId,
+      target.pipeline.connectionId,
+      target.pipeline.spreadsheetId,
+      target.pipeline.sheetName,
+      "Next Follow-up",
+      followUpHeader,
+    );
+
     await ensureHeaders(
       call.userId,
       target.pipeline.connectionId,
       target.pipeline.spreadsheetId,
       target.pipeline.sheetName,
-      headers,
+      [followUpHeader],
     );
-
-    const updates: Record<string, string> = {};
-    if (cols.meetingTime) updates[cols.meetingTime] = formatSheetIst(opts.slotStart);
 
     await updateSheetRowByIndex(
       call.userId,
@@ -608,7 +616,7 @@ export async function writeSheetBookingForCall(
       target.pipeline.spreadsheetId,
       target.pipeline.sheetName,
       target.sheetRowIndex,
-      updates,
+      { [followUpHeader]: formatSheetIst(opts.slotStart) },
     );
     logger.info(
       { callId, pipelineId: target.pipeline.id, sheetRowIndex: target.sheetRowIndex },
@@ -675,13 +683,17 @@ export async function writeSheetAutoCallResults(
 
   let nextFollowUpValue = "";
 
-  const callbackHit = isCallbackDisposition(
+  const followTexts = [
     disposition,
     summary,
     typeof dispositionRaw === "object" && dispositionRaw
       ? String((dispositionRaw as Record<string, unknown>)["status"] ?? "")
       : "",
-  );
+    typeof dispositionRaw === "object" && dispositionRaw
+      ? String((dispositionRaw as Record<string, unknown>)["sub"] ?? "")
+      : "",
+  ];
+  const callbackHit = isCallbackDisposition(...followTexts);
 
   if (callbackHit && call.userId) {
     const scheduledAt = await scheduleSheetCallback({
@@ -698,13 +710,35 @@ export async function writeSheetAutoCallResults(
     }
   }
 
+  try {
+    const [booking] = await db
+      .select({ slotStart: bookingsTable.slotStart })
+      .from(bookingsTable)
+      .where(and(eq(bookingsTable.callId, callId), ne(bookingsTable.status, "cancelled")))
+      .limit(1);
+    if (booking?.slotStart) {
+      nextFollowUpValue = formatSheetIst(booking.slotStart);
+    }
+  } catch (err) {
+    logger.warn({ err, callId }, "sheet-auto-call: booking lookup for follow-up failed");
+  }
+
   const sheetStatusLabel = resolveSheetStatusLabel(status, disposition);
+  const followUpHeader = followUpColumnName(cols.nextFollowUp);
 
   if ((mode === "same_sheet" || mode === "both") && sheetRowIndex != null) {
     try {
+      await renameSheetHeader(
+        call.userId,
+        pipeline.connectionId,
+        pipeline.spreadsheetId,
+        pipeline.sheetName,
+        "Next Follow-up",
+        followUpHeader,
+      );
       const headerNames = [
         cols.status, cols.lastCallAt, cols.disposition, cols.summary,
-        cols.callId, cols.recording, cols.nextFollowUp,
+        cols.callId, cols.recording, followUpHeader,
       ].filter(Boolean) as string[];
       await ensureHeaders(
         call.userId,
@@ -721,8 +755,8 @@ export async function writeSheetAutoCallResults(
       if (cols.summary) updates[cols.summary] = summary;
       if (cols.callId) updates[cols.callId] = String(call.id);
       if (cols.recording) updates[cols.recording] = sheetRecordingUrl(call);
-      if (cols.nextFollowUp && nextFollowUpValue) {
-        updates[cols.nextFollowUp] = nextFollowUpValue;
+      if (followUpHeader && nextFollowUpValue) {
+        updates[followUpHeader] = nextFollowUpValue;
       }
       await updateSheetRowByIndex(
         call.userId,
