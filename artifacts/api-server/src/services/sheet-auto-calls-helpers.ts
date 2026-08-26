@@ -130,18 +130,15 @@ export function friendlySheetStatus(raw: string | null | undefined): string {
   const s = (raw ?? "").trim().toLowerCase();
   if (!s) return "Completed";
   if (s === "enqueued" || s === "pending" || s === "queued") return "Queued";
-  if (s === "dialing" || s === "calling" || s === "ringing" || s === "connected") return "Calling";
+  if (s === "dialing" || s === "calling" || s === "ringing") return "Calling";
+  if (s === "connected" || s === "in_progress" || s === "in-progress") return "Connected";
   if (s === "completed" || s === "done" || s === "success") return "Completed";
   if (s === "no_answer" || s === "no-answer" || s === "no answer" || s === "unanswered") return "No answer";
   if (s === "busy") return "Busy";
   if (s === "voicemail" || s === "machine") return "Voicemail";
   if (s === "failed" || s === "error" || s === "cancelled" || s === "canceled") return "Failed";
   if (s === "skipped") return "Skipped";
-  // Preserve title-ish custom dispositions already written by the agent
-  if (s.length <= 40 && !/[_-]/.test(s)) {
-    return raw!.trim().replace(/^\w/, (c) => c.toUpperCase());
-  }
-  return raw!.trim();
+  return "Completed";
 }
 
 function parseDispositionObject(disp: unknown): Record<string, unknown> | null {
@@ -185,15 +182,14 @@ export function formatSheetDisposition(disp: unknown): string {
 }
 
 /**
- * Status is call state only. Disposition is the outcome (see formatSheetDisposition).
- * Reserved values: Booked, Callback scheduled. Never copy the outcome into Status.
+ * Status is telephony state only: Queued, Calling, Connected, Busy, Failed,
+ * Completed (plus No answer / Voicemail / Skipped). Never Callback / Booked.
  */
 export function resolveSheetStatusLabel(
   callStatus: string | null | undefined,
   _dispositionLabel?: string,
-  reservedStatus?: string | null,
+  _reservedStatus?: string | null,
 ): string {
-  if (reservedStatus?.trim()) return reservedStatus.trim();
   return friendlySheetStatus(callStatus);
 }
 

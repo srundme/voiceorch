@@ -347,9 +347,9 @@ const TEMPLATES: Record<SheetTemplate, {
       ["4. Set Status to Retry to dial that row again."],
       ["5. Call Log tab gets one append-only row per call attempt."],
       ["6. Phones work as 9876543210 or +91…; cells with two numbers use the first."],
-      ["7. Status Callback / call later → SnapServe schedules a platform callback and fills Next Follow-up."],
+      ["7. Disposition Callback → SnapServe schedules a platform callback and fills Next Follow-up. Status stays Completed."],
       ["8. Inbound calls from a sheet phone update the same lead row (Status / Summary / Disposition)."],
-      ["9. When a meeting is booked on the call, Meeting Time (IST) is written and Status becomes Booked."],
+      ["9. When a meeting is booked on the call, Meeting Time (IST) is written. Status stays Completed."],
     ],
     extraTabs: [
       {

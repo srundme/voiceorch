@@ -65,8 +65,9 @@ describe("do-not-dial / retry / friendly status", () => {
   it("maps friendly sheet statuses", () => {
     expect(friendlySheetStatus("enqueued")).toBe("Queued");
     expect(friendlySheetStatus("dialing")).toBe("Calling");
+    expect(friendlySheetStatus("connected")).toBe("Connected");
     expect(friendlySheetStatus("completed")).toBe("Completed");
-    expect(friendlySheetStatus("no_answer")).toBe("No answer");
+    expect(friendlySheetStatus("busy")).toBe("Busy");
     expect(friendlySheetStatus("failed")).toBe("Failed");
   });
 });
@@ -97,8 +98,12 @@ describe("sheet disposition / status labels", () => {
     expect(resolveSheetStatusLabel("failed", "Wrong number")).toBe("Failed");
     expect(resolveSheetStatusLabel("no_answer", "Wrong number")).toBe("No answer");
     expect(resolveSheetStatusLabel("completed", "Callback confirmed", "Callback scheduled"))
-      .toBe("Callback scheduled");
-    expect(resolveSheetStatusLabel("completed", "Interested", "Booked")).toBe("Booked");
+      .toBe("Completed");
+    expect(resolveSheetStatusLabel("completed", "Interested", "Booked")).toBe("Completed");
+    expect(resolveSheetStatusLabel("connected", "Wrong number")).toBe("Connected");
+    expect(resolveSheetStatusLabel("busy")).toBe("Busy");
+    expect(resolveSheetStatusLabel("calling")).toBe("Calling");
+    expect(resolveSheetStatusLabel("queued")).toBe("Queued");
   });
 });
 

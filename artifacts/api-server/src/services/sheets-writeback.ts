@@ -34,7 +34,6 @@ import {
 } from "./google-sheets.js";
 import {
   isCallbackDisposition,
-  isBookedDisposition,
   defaultNextDayCallbackAt,
   extractExplicitCallbackAt,
   formatSheetIst,
@@ -601,7 +600,6 @@ export async function writeSheetBookingForCall(
     );
 
     const updates: Record<string, string> = {};
-    if (cols.status) updates[cols.status] = "Booked";
     if (cols.meetingTime) updates[cols.meetingTime] = formatSheetIst(opts.slotStart);
 
     await updateSheetRowByIndex(
@@ -675,34 +673,7 @@ export async function writeSheetAutoCallResults(
   const mode = pipeline.writebackMode;
   const cols = statusColumnMap(pipeline);
 
-  let reservedStatus: string | null = null;
   let nextFollowUpValue = "";
-
-  const bookedHit = isBookedDisposition(
-    disposition,
-    summary,
-    typeof dispositionRaw === "object" && dispositionRaw
-      ? String((dispositionRaw as Record<string, unknown>)["status"] ?? "")
-      : "",
-    typeof dispositionRaw === "object" && dispositionRaw
-      ? String((dispositionRaw as Record<string, unknown>)["primary"] ?? "")
-      : "",
-  );
-  if (bookedHit) {
-    reservedStatus = "Booked";
-  }
-  if (!reservedStatus) {
-    try {
-      const [booking] = await db
-        .select({ id: bookingsTable.id })
-        .from(bookingsTable)
-        .where(and(eq(bookingsTable.callId, callId), ne(bookingsTable.status, "cancelled")))
-        .limit(1);
-      if (booking) reservedStatus = "Booked";
-    } catch (err) {
-      logger.warn({ err, callId }, "sheet-auto-call: booking lookup for status preserve failed");
-    }
-  }
 
   const callbackHit = isCallbackDisposition(
     disposition,
@@ -723,14 +694,11 @@ export async function writeSheetAutoCallResults(
       dispositionRaw,
     });
     if (scheduledAt) {
-      if (reservedStatus !== "Booked") {
-        reservedStatus = "Callback scheduled";
-      }
       nextFollowUpValue = formatSheetIst(scheduledAt);
     }
   }
 
-  const sheetStatusLabel = resolveSheetStatusLabel(status, disposition, reservedStatus);
+  const sheetStatusLabel = resolveSheetStatusLabel(status, disposition);
 
   if ((mode === "same_sheet" || mode === "both") && sheetRowIndex != null) {
     try {
