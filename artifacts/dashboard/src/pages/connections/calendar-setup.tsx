@@ -47,7 +47,6 @@ import {
 } from "@/lib/scheduling-setup";
 import {
   Check,
-  CheckCircle2,
   Globe,
   Loader2,
   Plus,
@@ -231,7 +230,7 @@ export function ConnectionsCalendarSetup({
     meetings,
     composingNew ? null : selectedId,
   );
-  const { calendar, meeting, requiredReadyCount, ready } = readiness;
+  const { calendar, meeting } = readiness;
   const doneFlags: Record<WizardStepId, boolean> = {
     calendar: Boolean(calendar),
     google: readiness.googleLinked,
@@ -262,25 +261,6 @@ export function ConnectionsCalendarSetup({
   return (
     <CalendarShell embedded={embedded} backHref={backHref} backLabel={backLabel}>
       <div className="space-y-6">
-        <div
-          className={cn(
-            "rounded-xl border px-4 py-3",
-            ready
-              ? "border-emerald-500/30 bg-emerald-500/10"
-              : "border-border bg-muted/20",
-          )}
-        >
-          <p className={cn("flex items-center gap-2 text-sm font-medium", ready ? "text-emerald-700 dark:text-emerald-400" : "text-foreground")}>
-            {ready ? <CheckCircle2 className="h-4 w-4" /> : null}
-            {ready ? "Ready — you can still change anything below" : `${requiredReadyCount} of 3 set up`}
-          </p>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-            {embedded
-              ? "Save the agent after you pick this calendar on Actions → Bookings."
-              : "Agent → Actions → Bookings → pick this calendar. Appointments show under Bookings."}
-          </p>
-        </div>
-
         {calendars.length > 0 ? (
           <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-end">
             <div className="min-w-0 flex-1 space-y-1.5">
