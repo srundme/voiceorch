@@ -40,7 +40,6 @@ import {
 import {
   Check,
   CheckCircle2,
-  ChevronRight,
   Loader2,
   Plus,
 } from "lucide-react";
@@ -116,11 +115,60 @@ function CalendarShell({
   return (
     <StripePage
       title="Bookings calendar"
-      description="Set up booking in a few simple steps. Day-to-day appointments live under Bookings."
+      description="Keep calendar, Google Meet, and the meeting type on this page — nothing is hidden in an accordion."
       back={{ href: backHref, label: backLabel }}
+      actions={
+        <Button asChild size="sm" className="h-9">
+          <Link href={`${BASE}/app/scheduling`}>Open Bookings</Link>
+        </Button>
+      }
     >
       {children}
     </StripePage>
+  );
+}
+
+function SetupCard({
+  step,
+  title,
+  blurb,
+  done,
+  locked,
+  children,
+}: {
+  step: number;
+  title: string;
+  blurb: string;
+  done: boolean;
+  locked?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section className="flex min-h-[320px] flex-col rounded-xl border border-border bg-card p-4 shadow-sm">
+      <div className="mb-4 flex items-start gap-2.5">
+        <span
+          className={cn(
+            "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+            done
+              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+              : "bg-muted text-muted-foreground",
+          )}
+        >
+          {done ? <Check className="h-3.5 w-3.5" /> : step}
+        </span>
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-foreground">{title}</p>
+          <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">{blurb}</p>
+        </div>
+      </div>
+      <div className="min-h-0 flex-1">
+        {locked ? (
+          <p className="text-[13px] text-muted-foreground">Save a calendar on the left first.</p>
+        ) : (
+          children
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -156,22 +204,6 @@ export function ConnectionsCalendarSetup({
     meeting: Boolean(meeting),
   };
 
-  const firstIncomplete = STEPS.find((s) => !doneFlags[s.id])?.id ?? null;
-  const [activeStep, setActiveStep] = useState<WizardStepId | null>(null);
-  const [editingReady, setEditingReady] = useState(false);
-
-  useEffect(() => {
-    if (ready && !editingReady) {
-      setActiveStep(null);
-      return;
-    }
-    if (!activeStep || doneFlags[activeStep]) {
-      if (firstIncomplete) setActiveStep(firstIncomplete);
-    }
-    // Only re-pick when readiness / first incomplete changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, firstIncomplete, editingReady]);
-
   const refresh = useCallback(async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: getListCalendarsQueryKey() }),
@@ -193,185 +225,81 @@ export function ConnectionsCalendarSetup({
     );
   }
 
-  if (ready && !editingReady) {
-    return (
-      <CalendarShell embedded={embedded} backHref={backHref} backLabel={backLabel}>
-        <div className="max-w-lg space-y-4">
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[12px] text-emerald-600 dark:text-emerald-400">
-            <p className="font-medium flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              3 of 3 ready
-            </p>
-            <p className="mt-1 leading-relaxed text-emerald-600 dark:text-emerald-400/90">
-              {embedded
-                ? "Google is linked. Pick the meeting above, then save the agent."
-                : "On your agent → Actions → turn on Booking and pick this meeting, then watch appointments under Bookings."}
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3 space-y-2">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Your meeting</p>
-            <p className="text-[14px] font-medium">{meeting?.name}</p>
-            <p className="text-[12px] text-muted-foreground">
-              {meeting?.durationMinutes} minutes
-              {calendar?.connectedGoogleEmail ? ` · ${calendar.connectedGoogleEmail}` : ""}
-              {meeting?.slug ? (
-                <>
-                  {" · "}
-                  <span className="font-mono text-[11px]">/book/{meeting.slug}</span>
-                </>
-              ) : null}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button asChild size="sm" className="h-9">
-              <Link href={`${BASE}/app/scheduling`}>Open Bookings</Link>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9"
-              onClick={() => {
-                setEditingReady(true);
-                setActiveStep("meeting");
-              }}
-            >
-              Change meeting
-            </Button>
-            <Button asChild size="sm" variant="ghost" className="h-9 text-muted-foreground">
-              <Link href={`${BASE}/app/scheduling/availability`}>Adjust hours</Link>
-            </Button>
-            <Button asChild size="sm" variant="ghost" className="h-9 text-muted-foreground">
-              <Link href={`${BASE}/app/scheduling/calendars`}>Advanced</Link>
-            </Button>
-          </div>
-        </div>
-      </CalendarShell>
-    );
-  }
-
   return (
     <CalendarShell embedded={embedded} backHref={backHref} backLabel={backLabel}>
-      <div className="max-w-lg space-y-4">
+      <div className="space-y-6">
         <div
           className={cn(
-            "rounded-xl border px-4 py-3 text-[12px]",
+            "rounded-xl border px-4 py-3",
             ready
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-              : "border-border/60 bg-muted/20 text-muted-foreground",
+              ? "border-emerald-500/30 bg-emerald-500/10"
+              : "border-border bg-muted/20",
           )}
         >
-          <p className="font-medium text-[12px]">
-            {ready ? "3 of 3 ready" : `${requiredReadyCount} of 3 ready`}
+          <p className={cn("flex items-center gap-2 text-sm font-medium", ready ? "text-emerald-700 dark:text-emerald-400" : "text-foreground")}>
+            {ready ? <CheckCircle2 className="h-4 w-4" /> : null}
+            {ready ? "Ready — you can still change anything below" : `${requiredReadyCount} of 3 set up`}
           </p>
-          <p className="mt-0.5 leading-relaxed">
-            {ready
-              ? "You're set — turn on Booking on an agent and pick this meeting."
-              : "Follow the steps below. We’ll create everything agents need to book calls."}
+          <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+            {embedded
+              ? "Save the agent after you pick this calendar on Actions → Bookings."
+              : "Agent → Actions → Bookings → pick this calendar. Appointments show under Bookings."}
           </p>
         </div>
 
-        <ol className="space-y-2">
-          {STEPS.map((step, i) => {
-            const done = doneFlags[step.id];
-            const unlocked =
-              i === 0 || STEPS.slice(0, i).every((s) => doneFlags[s.id]);
-            const open = activeStep === step.id;
-            return (
-              <li key={step.id} className="rounded-xl border border-border/60 bg-card/40 overflow-hidden">
-                <button
-                  type="button"
-                  disabled={!unlocked}
-                  onClick={() => unlocked && setActiveStep(open ? null : step.id)}
-                  className={cn(
-                    "flex w-full items-start gap-3 px-3.5 py-3 text-left transition-colors",
-                    unlocked ? "hover:bg-muted/30" : "opacity-40 cursor-not-allowed",
-                  )}
-                >
-                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-background/50">
-                    {done ? (
-                      <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    ) : (
-                      <span className="text-[12px] font-semibold text-muted-foreground">{i + 1}</span>
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-medium">
-                      {step.title}
-                      {done && !open ? (
-                        <span className="ml-2 text-[11px] font-normal text-emerald-600 dark:text-emerald-400/80">Done</span>
-                      ) : null}
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground leading-relaxed">{step.blurb}</p>
-                  </div>
-                  {unlocked && (
-                    <ChevronRight
-                      className={cn(
-                        "mt-2 h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-transform",
-                        open && "rotate-90",
-                      )}
-                    />
-                  )}
-                </button>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <SetupCard step={1} title={STEPS[0]!.title} blurb={STEPS[0]!.blurb} done={doneFlags.calendar}>
+            <CalendarPanel existing={calendar} onDone={refresh} />
+          </SetupCard>
+          <SetupCard
+            step={2}
+            title={STEPS[1]!.title}
+            blurb={STEPS[1]!.blurb}
+            done={doneFlags.google}
+            locked={!calendar}
+          >
+            {calendar ? (
+              <GooglePanel
+                calendarId={calendar.id}
+                linkedEmail={calendar.connectedGoogleEmail}
+                onDone={refresh}
+              />
+            ) : null}
+          </SetupCard>
+          <SetupCard
+            step={3}
+            title={STEPS[2]!.title}
+            blurb={STEPS[2]!.blurb}
+            done={doneFlags.meeting}
+            locked={!calendar}
+          >
+            {calendar ? (
+              <MeetingPanel
+                calendarId={calendar.id}
+                existing={meeting}
+                onDone={async () => {
+                  await refresh();
+                  toast({
+                    title: "Meeting saved",
+                    description: embedded
+                      ? "Pick this calendar on the agent Bookings toggle, then save."
+                      : "Turn on Bookings on the agent and pick this calendar.",
+                  });
+                }}
+              />
+            ) : null}
+          </SetupCard>
+        </div>
 
-                {open && unlocked && (
-                  <div className="border-t border-border/40 px-3.5 pb-4 pt-3">
-                    {step.id === "calendar" && (
-                      <CalendarPanel
-                        existing={calendar}
-                        onDone={async () => {
-                          await refresh();
-                          setActiveStep("google");
-                        }}
-                      />
-                    )}
-                    {step.id === "google" && calendar && (
-                      <GooglePanel
-                        calendarId={calendar.id}
-                        linkedEmail={calendar.connectedGoogleEmail}
-                        onDone={async () => {
-                          await refresh();
-                          setActiveStep("meeting");
-                        }}
-                      />
-                    )}
-                    {step.id === "meeting" && calendar && (
-                      <MeetingPanel
-                        calendarId={calendar.id}
-                        existing={meeting}
-                        onDone={async () => {
-                          await refresh();
-                          setEditingReady(false);
-                          setActiveStep(null);
-                          toast({
-                            title: "Booking setup complete",
-                            description: embedded
-                              ? "Pick this meeting in the dropdown above, then save the agent."
-                              : "Turn on Booking on an agent and pick this meeting.",
-                          });
-                        }}
-                      />
-                    )}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Button asChild size="sm" className="h-9">
-            <Link href={`${BASE}/app/scheduling`}>Open Bookings</Link>
+        <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+          <Button asChild size="sm" variant="outline" className="h-9">
+            <Link href={`${BASE}/app/scheduling/availability`}>Hours</Link>
           </Button>
           <Button asChild size="sm" variant="ghost" className="h-9 text-muted-foreground">
-            <Link href={`${BASE}/app/scheduling/availability`}>Adjust hours later</Link>
+            <Link href={`${BASE}/app/scheduling/event-types`}>All meetings</Link>
           </Button>
           <Button asChild size="sm" variant="ghost" className="h-9 text-muted-foreground">
-            <Link href={`${BASE}/app/scheduling/event-types`}>Meetings</Link>
-          </Button>
-          <Button asChild size="sm" variant="ghost" className="h-9 text-muted-foreground">
-            <Link href={`${BASE}/app/scheduling/calendars`}>Advanced</Link>
+            <Link href={`${BASE}/app/scheduling/calendars`}>All calendars</Link>
           </Button>
         </div>
       </div>
@@ -450,9 +378,9 @@ function CalendarPanel({
             <Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…
           </>
         ) : existing ? (
-          "Save & continue"
+          "Save calendar"
         ) : (
-          "Create calendar & continue"
+          "Create calendar"
         )}
       </Button>
     </div>
@@ -527,8 +455,23 @@ function GooglePanel({
         <p className="text-sm text-muted-foreground">
           Connected as <span className="font-medium text-foreground">{linkedEmail}</span>
         </p>
-        <Button className="w-full" onClick={() => void onDone()}>
-          Continue
+        <p className="text-[11.5px] text-muted-foreground">Each booking gets a Google Meet link on the invite.</p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          disabled={connecting}
+          onClick={() => void handleAddAccount()}
+        >
+          {connecting ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" /> Opening Google…
+            </>
+          ) : (
+            <>
+              <Plus className="h-3 w-3" /> Use a different Google account
+            </>
+          )}
         </Button>
       </div>
     );
@@ -650,19 +593,15 @@ function MeetingPanel({
   if (existing) {
     return (
       <div className="space-y-3">
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Callers can book <span className="font-medium text-foreground">{existing.name}</span>
-          {" "}({existing.durationMinutes} min).
+        <p className="text-sm text-foreground">
+          <span className="font-medium">{existing.name}</span>
+          <span className="text-muted-foreground"> · {existing.durationMinutes} min</span>
         </p>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-[11.5px] text-muted-foreground">
           Public link: <span className="font-mono">/book/{existing.slug}</span>
-          {" · "}
-          <Link href={`${BASE}/app/scheduling/event-types/${existing.id}`} className="underline underline-offset-2">
-            Edit details
-          </Link>
         </p>
-        <Button className="w-full" onClick={() => void onDone()}>
-          Looks good — finish
+        <Button asChild variant="outline" size="sm" className="h-8">
+          <Link href={`${BASE}/app/scheduling/event-types/${existing.id}`}>Change name or length</Link>
         </Button>
       </div>
     );
@@ -705,7 +644,7 @@ function MeetingPanel({
             <Loader2 className="h-4 w-4 animate-spin mr-2" /> Creating…
           </>
         ) : (
-          "Create meeting & finish"
+          "Create meeting"
         )}
       </Button>
     </div>
