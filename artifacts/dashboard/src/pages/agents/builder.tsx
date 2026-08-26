@@ -2969,35 +2969,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   </div>
                 )
               )}
-
-              <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="text-[12px] font-medium text-foreground">Phone + meetings</p>
-                  <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                    {canAttendMeetings
-                      ? "On — this agent can join Meet / Zoom / Teams (not phone-only)."
-                      : "Off — phone only. Bookings can still send a Meet link to humans; this agent won’t join."}
-                  </p>
-                </div>
-                <Switch
-                  className="mt-0.5 shrink-0"
-                  checked={canAttendMeetings}
-                  onCheckedChange={(on) =>
-                    form.setValue("agentSurfaces", on ? "phone_and_meet" : "phone", { shouldDirty: true })
-                  }
-                />
-              </div>
-              {canAttendMeetings && (
-                <div className="flex flex-wrap items-center gap-2">
-                  {agentId ? (
-                    <Button asChild type="button" size="sm" variant="outline" className="h-8 text-[11px]">
-                      <Link href={`/app/meet?agentId=${agentId}`}>Meeting bots settings</Link>
-                    </Button>
-                  ) : (
-                    <p className="text-[11px] text-amber-700 dark:text-amber-400">Save the agent, then open Meeting bots.</p>
-                  )}
-                </div>
-              )}
             </div>
             );
           })()}
