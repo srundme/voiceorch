@@ -11,7 +11,7 @@ import {
 } from "@workspace/api-client-react";
 import type { CampaignBatch, CrmConnection } from "@workspace/api-client-react";
 import { CrmImportDialog } from "../connections";
-import { useQueryClient, useQueries } from "@tanstack/react-query";
+import { useQueryClient, useQueries, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,8 @@ import {
   KeyRound, Link2, Link2Off, Loader2, Instagram,
   Download,
   Sparkles,
+  Table2,
+  ExternalLink,
 } from "lucide-react";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 import { TablePagination } from "@/components/table-pagination";
@@ -1328,6 +1330,15 @@ export default function CampaignDetailPage() {
   const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { refetchInterval: 10_000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: analytics } = useGetCampaignAnalytics(campaignId, { query: { refetchInterval: 10_000 } as any });
+  const isSheetAuto = (campaign as { leadSource?: string } | undefined)?.leadSource === "google_sheets";
+  const { data: autoPipelines } = useQuery({
+    queryKey: ["automatic-calls"],
+    queryFn: () => customFetch<Array<{ id: string; campaignId: number | null; name: string; status: string }>>(
+      "/api/automatic-calls",
+    ),
+    enabled: isSheetAuto,
+  });
+  const sheetPipeline = autoPipelines?.find((p) => p.campaignId === campaignId);
 
   // Business hours editor state — declared after campaign so the useEffect dep is valid
   const [editingHours, setEditingHours] = useState(false);
@@ -1479,7 +1490,7 @@ export default function CampaignDetailPage() {
   const failed      = analytics?.failed      ?? 0;
   const hasCsvSource = batches?.some(b => b.leadSource === "csv") ?? false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const isContinuous = ["webhook", "meta_ads", "crm"].includes((campaign as any)?.leadSource ?? "");
+  const isContinuous = ["webhook", "meta_ads", "crm", "google_sheets"].includes((campaign as any)?.leadSource ?? "");
 
   // ── Campaign-level summary metrics ────────────────────────────────────────
   const totalBatches     = batches?.length ?? 0;
@@ -1536,8 +1547,11 @@ export default function CampaignDetailPage() {
   // Campaign health: derived purely from already-fetched batch/analytics data.
   const failureRate = called > 0 ? failed / called : 0;
   const campaignHealth: { label: string; accent: string; dotCls: string; icon: React.ReactNode } = (() => {
-    // No activity yet → neutral.
+    const terminal = campaign?.status === "completed" || campaign?.status === "stopped";
     if (imported === 0 && called === 0) {
+      if (terminal) {
+        return { label: "Stopped", accent: "text-muted-foreground", dotCls: "bg-muted-foreground/40", icon: <Info className="h-3.5 w-3.5" /> };
+      }
       return { label: "Not started", accent: "text-muted-foreground", dotCls: "bg-muted-foreground/40", icon: <Info className="h-3.5 w-3.5" /> };
     }
     // Fully completed (everything processed) → healthy.
@@ -1661,6 +1675,11 @@ export default function CampaignDetailPage() {
                   <Instagram className="h-3 w-3" /> Meta Ads
                 </span>
               )}
+              {isSheetAuto && (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 rounded-md">
+                  <Table2 className="h-3 w-3" /> Google Sheets
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1771,6 +1790,29 @@ export default function CampaignDetailPage() {
             </Button>
           </div>
 
+          {isSheetAuto && (
+            <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-foreground">Automatic Calls from Google Sheets</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Overview fills after sheet rows are queued and dialled. Stopping the pipeline does not mean calls ran — open Live Queue or the pipeline activity for the real row list.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                  onClick={() => setActiveTab("live-queue")}>
+                  <Radio className="h-3 w-3" /> Live Queue
+                </Button>
+                {sheetPipeline && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                    onClick={() => setLocation(`/app/automatic-calls/${sheetPipeline.id}`)}>
+                    <ExternalLink className="h-3 w-3" /> Pipeline
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Conversation intelligence — sentiment / intent / topics */}
           {(() => {
             type Intel = {
@@ -1842,7 +1884,8 @@ export default function CampaignDetailPage() {
 
                 {analysed === 0 && pending === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    No completed calls with transcripts yet. Sentiment and intent show up here after calls finish. Use Analyse when pending calls appear.
+                    No completed calls with transcripts yet. Sentiment and intent show up here after calls finish
+                    {isSheetAuto ? " — sheet dials appear in Live Queue, not in Daily Batches until rows are enqueued." : ". Use Analyse when pending calls appear."}
                   </p>
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -2267,7 +2310,11 @@ export default function CampaignDetailPage() {
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>
                 <h3 className="text-sm font-semibold text-foreground">Daily Batches</h3>
-                <p className="text-xs text-muted-foreground/50 mt-0.5">Auto-created per day as leads arrive via the webhook</p>
+                <p className="text-xs text-muted-foreground/50 mt-0.5">
+                  {isSheetAuto
+                    ? "Created per day when Automatic Calls enqueues sheet rows"
+                    : "Auto-created per day as leads arrive via the webhook"}
+                </p>
               </div>
               {(campaign as any).leadSource === "crm" && (
                 <CrmImportButton campaignId={campaignId} />
@@ -2280,8 +2327,14 @@ export default function CampaignDetailPage() {
             ) : !batches?.length ? (
               <div className="py-10 text-center border border-dashed border-border rounded-xl">
                 <Zap className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground/50">No leads yet</p>
-                <p className="text-xs text-muted-foreground/30 mt-0.5">A batch is auto-created the moment the first lead arrives today.</p>
+                <p className="text-sm text-muted-foreground/50">
+                  {isSheetAuto ? "No sheet rows dialled yet" : "No leads yet"}
+                </p>
+                <p className="text-xs text-muted-foreground/30 mt-0.5">
+                  {isSheetAuto
+                    ? "Start (or keep running) Automatic Calls so existing or new sheet rows enqueue. Activity lives on the pipeline page; this campaign stays empty until a row is actually queued."
+                    : "A batch is auto-created the moment the first lead arrives today."}
+                </p>
               </div>
             ) : (() => {
               // Group batches by their date label (extracted from "Live — Jun 30" names)

@@ -8,6 +8,7 @@ import {
   db,
   agentsTable,
   campaignsTable,
+  campaignBatchesTable,
   campaignLeadsTable,
   leadTimelineTable,
   googleSheetsConnectionsTable,
@@ -32,6 +33,7 @@ import {
   SHEET_ROW_CHUNK_SIZE,
 } from "./google-sheets.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
+import { getOrCreateLiveBatch } from "./campaign-live-batch.js";
 import {
   parseSheetLeadRow,
   isRetryStatus,
@@ -350,6 +352,11 @@ async function enqueueRow(
   const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId)).limit(1);
   if (!campaign) throw new Error("Campaign missing");
 
+  const liveBatch = await getOrCreateLiveBatch(campaignId, campaign.timezone ?? "Asia/Kolkata", {
+    leadSource: "google_sheets",
+    description: "Auto-created — Google Sheet rows are dialled immediately",
+  });
+
   const leadData = {
     ...parsed.leadData,
     ...(parsed.name
@@ -361,6 +368,7 @@ async function enqueueRow(
 
   const [lead] = await db.insert(campaignLeadsTable).values({
     campaignId,
+    batchId: liveBatch?.id ?? null,
     phone: parsed.phoneRaw || parsed.phoneNormalized,
     normalizedPhone: parsed.phoneNormalized,
     name: parsed.name || null,
@@ -381,6 +389,12 @@ async function enqueueRow(
   await db.update(campaignsTable)
     .set({ totalLeads: sql`${campaignsTable.totalLeads} + 1` })
     .where(eq(campaignsTable.id, campaignId));
+
+  if (liveBatch) {
+    await db.update(campaignBatchesTable)
+      .set({ totalLeads: sql`${campaignBatchesTable.totalLeads} + 1` })
+      .where(eq(campaignBatchesTable.id, liveBatch.id));
+  }
 
   await db.insert(sheetAutoCallRowStateTable).values({
     pipelineId: pipeline.id,
@@ -619,8 +633,15 @@ export async function stopPipeline(userId: string, id: string) {
     .where(eq(sheetAutoCallPipelinesTable.id, id));
   if (pipeline.campaignId) {
     await db.update(campaignsTable)
-      .set({ status: "completed", isActive: false })
+      .set({ status: "stopped", isActive: false })
       .where(eq(campaignsTable.id, pipeline.campaignId));
+    await db.update(campaignBatchesTable)
+      .set({ status: "completed" })
+      .where(and(
+        eq(campaignBatchesTable.campaignId, pipeline.campaignId),
+        eq(campaignBatchesTable.status, "running"),
+        eq(campaignBatchesTable.leadSource, "google_sheets"),
+      ));
   }
   return getPipeline(userId, id);
 }
