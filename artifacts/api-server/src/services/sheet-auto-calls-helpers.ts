@@ -205,19 +205,16 @@ export function formatSheetDisposition(disp: unknown): string {
 }
 
 /**
- * Status stays operational (Queued / Calling / Failed / Callback scheduled / Booked)
- * unless the call completed — then show the outcome instead of a blank "Completed".
+ * Status is call state only. Disposition is the outcome (see formatSheetDisposition).
+ * Reserved values: Booked, Callback scheduled. Never copy the outcome into Status.
  */
 export function resolveSheetStatusLabel(
   callStatus: string | null | undefined,
-  dispositionLabel: string,
+  _dispositionLabel?: string,
   reservedStatus?: string | null,
 ): string {
   if (reservedStatus?.trim()) return reservedStatus.trim();
-  const operational = friendlySheetStatus(callStatus);
-  if (operational !== "Completed") return operational;
-  const outcome = shortSheetLabel(dispositionLabel);
-  return outcome || "Completed";
+  return friendlySheetStatus(callStatus);
 }
 
 export function googleSheetUrl(spreadsheetId: string, gid?: number | null): string {

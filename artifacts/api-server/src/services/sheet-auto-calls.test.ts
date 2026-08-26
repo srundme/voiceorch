@@ -90,12 +90,13 @@ describe("sheet disposition / status labels", () => {
     })).toBe("Callback confirmed");
   });
 
-  it("uses outcome as Status when the call completed", () => {
-    expect(resolveSheetStatusLabel("completed", "Wrong number")).toBe("Wrong number");
+  it("keeps Status as call state and Disposition as the outcome", () => {
+    expect(resolveSheetStatusLabel("completed", "Wrong number")).toBe("Completed");
     expect(resolveSheetStatusLabel("failed", "Wrong number")).toBe("Failed");
+    expect(resolveSheetStatusLabel("no_answer", "Wrong number")).toBe("No answer");
     expect(resolveSheetStatusLabel("completed", "Callback confirmed", "Callback scheduled"))
       .toBe("Callback scheduled");
-    expect(resolveSheetStatusLabel("completed", "Wrong number", "Booked")).toBe("Booked");
+    expect(resolveSheetStatusLabel("completed", "Interested", "Booked")).toBe("Booked");
   });
 });
 

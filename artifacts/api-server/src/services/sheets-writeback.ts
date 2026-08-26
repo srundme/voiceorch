@@ -397,7 +397,7 @@ export async function writeSheetsOutcome(
   const summary = opts?.callSummary ?? call.callSummary ?? "";
   const dispositionRaw = opts?.dispositionResult ?? call.dispositionResult ?? null;
   const disposition = formatDisposition(dispositionRaw);
-  const status = disposition || call.status || "completed";
+  const status = resolveSheetStatusLabel(call.status || "completed", disposition);
   const identity = await resolveCallerIdentity(callId, call.agentId, phone, dispositionRaw);
 
   const fields: Record<string, string | number | null | undefined> = {
