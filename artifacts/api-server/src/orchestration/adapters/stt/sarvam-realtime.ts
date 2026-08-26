@@ -328,7 +328,8 @@ export class SarvamRealtimeSTT implements STTAdapter {
   }
 
   transcribe(audioBuffer: Buffer, sampleRate?: number): Promise<string> {
-    return this.legacy.transcribe(audioBuffer, sampleRate);
+    const rate = sampleRate === 8000 || sampleRate === 16000 ? sampleRate : undefined;
+    return this.legacy.transcribe(audioBuffer, rate);
   }
 
   transcribeStream(
