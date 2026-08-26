@@ -320,9 +320,7 @@ export function ConnectionsHub({ embedded = false }: { embedded?: boolean }) {
         description="Email only — not WhatsApp. Paste Brevo API key, add a verified From, test. Then enable Send Email on the agent."
         back={setupBackFromReturn ?? { href: hubHref, label: embedded ? "Vibe" : "Connections" }}
       >
-        <div className="max-w-lg">
-          <EmailChannelCard forceExpanded setupMode />
-        </div>
+        <EmailChannelCard forceExpanded setupMode />
       </StripePage>
     );
   }
