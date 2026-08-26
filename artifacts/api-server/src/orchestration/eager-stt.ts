@@ -30,7 +30,7 @@ export function normalizeSpeculativeInput(text: string): string {
 
 /** Identity of the text the speculative LLM was launched on. */
 export function speculativeInputHash(text: string): string {
-  return createHash("sha1").update(normalizeSpeculativeInput(text), "utf8").digest("hex");
+  return createHash("sha256").update(normalizeSpeculativeInput(text), "utf8").digest("hex");
 }
 
 export type SpeculativeReconcileAction = "commit" | "discard";
@@ -42,10 +42,19 @@ export function reconcileSpeculativePrefill(opts: {
   langNow: string;
   inputHash: string;
   finalTranscript: string;
+  pendingTurnId?: number;
+  turnGeneration?: number;
 }): { action: SpeculativeReconcileAction; reason: string; finalHash: string } {
   const finalHash = speculativeInputHash(opts.finalTranscript);
   if (opts.aborted) return { action: "discard", reason: "aborted", finalHash };
   if (opts.hasToolCall) return { action: "discard", reason: "speculative_tool_call", finalHash };
+  if (
+    opts.pendingTurnId !== undefined
+    && opts.turnGeneration !== undefined
+    && opts.pendingTurnId !== opts.turnGeneration
+  ) {
+    return { action: "discard", reason: "stale_turn", finalHash };
+  }
   if (opts.langAtLaunch !== opts.langNow) {
     return { action: "discard", reason: "language_switched", finalHash };
   }

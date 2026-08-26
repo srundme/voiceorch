@@ -15,6 +15,7 @@ import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, reconcileSpeculativePrefil
 import {
   SemanticTurnGate,
   resolveEouCommit,
+  SEMANTIC_TURN_FINAL_MS_DEFAULT,
 } from "./semantic-turn-gate.js";
 import { predictSmartTurn } from "./smart-turn.js";
 import type { SttFinalMetadata } from "./adapters/stt/base.js";
@@ -958,7 +959,8 @@ export class OrchestrationPipeline implements VoiceSession {
   private _eouAudio: Buffer[] = [];
   private _eouBytes = 0;
   private _eouTimer: ReturnType<typeof setTimeout> | null = null;
-  private _eouHeldFinal: { text: string; emittedAt: number; closeReason: TurnCloseReason } | null = null;
+  private _eouFinalTimer: ReturnType<typeof setTimeout> | null = null;
+  private _eouHeldFinal: { text: string; emittedAt: number; closeReason: TurnCloseReason; turnGeneration: number } | null = null;
   /** Duration of the last completed VAD speech segment — distinguishes a real
    *  utterance that STT mis-heard from an actual noise blip (call 5490). */
   private _lastVadSegmentMs = 0;
@@ -1765,6 +1767,10 @@ export class OrchestrationPipeline implements VoiceSession {
       clearTimeout(this._eouTimer);
       this._eouTimer = null;
     }
+    if (this._eouFinalTimer) {
+      clearTimeout(this._eouFinalTimer);
+      this._eouFinalTimer = null;
+    }
   }
 
   private captureEouAudio(pcm16k: Buffer): void {
@@ -1787,7 +1793,7 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this._eouHeldFinal) {
       transcript = `${this._eouHeldFinal.text} ${transcript}`.trim();
     }
-    this._eouHeldFinal = { text: transcript, emittedAt, closeReason };
+    this._eouHeldFinal = { text: transcript, emittedAt, closeReason, turnGeneration: this.semanticTurnGate.turnGeneration };
     logger.info(
       { callId: this.config.callId, fragment: transcript.slice(0, 80), phase: this.semanticTurnGate.phase },
       "Semantic turn: buffering STT final until turn commit",
@@ -1831,7 +1837,7 @@ export class OrchestrationPipeline implements VoiceSession {
       status: "info",
       turnNumber: this._activeTurnIndex,
       metadata: {
-        event: action === "hold" ? "Semantic Turn Hold" : "Semantic Turn Commit",
+        event: action === "hold" ? "Semantic Turn Hold" : "Semantic Turn Eligible",
         reason: resolved.reason,
         eou,
         probability: pred?.probability,
@@ -1845,34 +1851,73 @@ export class OrchestrationPipeline implements VoiceSession {
       const gen = generation;
       this._eouTimer = setTimeout(() => {
         this._eouTimer = null;
-        if (this.semanticTurnGate.onStopTimeout(gen) !== "commit") return;
+        if (this.semanticTurnGate.onStopTimeout(gen) !== "await_final") return;
         logger.info(
           { callId: this.config.callId, stopMs: this.agent.semanticTurnStopMs },
-          "Semantic turn: incomplete continuation window elapsed — commit",
+          "Semantic turn: incomplete continuation window elapsed — wait for transcript.final",
         );
-        this.commitSemanticTurn();
+        this.becomeTurnEligible("incomplete_timeout");
       }, this.agent.semanticTurnStopMs);
       return;
     }
-    this.commitSemanticTurn();
+    this.becomeTurnEligible("eou_eligible");
   }
 
   /**
-   * Turn is eligible for commit. Prefill LLM from the pending partial (no TTS).
-   * Buffered transcript.final is then hash-validated in processTurn — the first
-   * place audio is synthesized. Smart Turn is not the final authority.
+   * Turn is eligible: prefill LLM from the pending partial (no TTS, no tools).
+   * TTS starts only after transcript.final is hash-validated in processTurn.
+   * If no final is buffered, wait a short grace then flush / batch-STT fallback.
    */
-  private commitSemanticTurn(): void {
-    const pendingTurnId = this.semanticTurnGate.generation;
+  private becomeTurnEligible(reason: string): void {
+    const pendingTurnId = this.semanticTurnGate.turnGeneration;
     this.clearSemanticTurnTimer();
     this.clearEouAudio();
-    this.semanticTurnGate.reset();
     this.handleSttSpeechEnd(pendingTurnId);
     const held = this._eouHeldFinal;
     this._eouHeldFinal = null;
     if (held && !this.closed) {
+      this.semanticTurnGate.markCommitted();
       void this.handleStreamingTranscript(held.text, held.emittedAt, held.closeReason);
+      return;
     }
+    const gen = pendingTurnId;
+    const graceMs = envInt("SEMANTIC_TURN_FINAL_MS", SEMANTIC_TURN_FINAL_MS_DEFAULT, 100);
+    this._eouFinalTimer = setTimeout(() => {
+      this._eouFinalTimer = null;
+      void this.finalizeAwaitingTurn(gen, reason);
+    }, graceMs);
+  }
+
+  /**
+   * Eligible / hold-timeout with no transcript.final yet. Flush STT, then batch
+   * recovery. Never synthesize from a pending partial.
+   */
+  private async finalizeAwaitingTurn(generation: number, reason: string): Promise<void> {
+    if (this.closed || this.isProcessing || this.isPlaying) return;
+    if (this.semanticTurnGate.turnGeneration !== generation) return;
+    if (!this.semanticTurnGate.isAwaitingFinal()) return;
+
+    logger.info(
+      { callId: this.config.callId, generation, reason },
+      "Semantic turn: no transcript.final yet — flushing STT / batch fallback",
+    );
+    try {
+      this.streamSTT?.flush?.();
+    } catch { /* adapter flush is best-effort */ }
+    if (!this.semanticTurnGate.isAwaitingFinal()) return;
+    if (this._eouHeldFinal) {
+      const held = this._eouHeldFinal;
+      this._eouHeldFinal = null;
+      this.semanticTurnGate.markCommitted();
+      void this.handleStreamingTranscript(held.text, held.emittedAt, held.closeReason);
+      return;
+    }
+    await this.attemptLostTurnRecovery();
+    if (!this.semanticTurnGate.isAwaitingFinal()) return;
+    logger.info(
+      { callId: this.config.callId, generation, reason },
+      "Semantic turn: still no authoritative final — not synthesizing from a partial",
+    );
   }
 
   /** Bolna TurnResumed analogue — caller resumed before final; discard speculative work. */
@@ -2360,11 +2405,13 @@ export class OrchestrationPipeline implements VoiceSession {
           {
             onToolCall: (name, args) => {
               if (!state.aborted) state.storedToolCall = { name, args };
-              // Tool-call turns also complete the stream.
+              // Tool-call turns also complete the stream. The call is recorded
+              // only — never executed. Reconciliation discards tool-call prefills.
               state.done = true;
               resolveCompletion();
             },
             onUsage: (u) => { if (!state.aborted) state.storedUsage = u; },
+            tools: [],
             // Prevent stateful adapters (e.g. OpenAI Responses API) from
             // advancing their previousResponseId on a speculative call.
             // A spec miss must not corrupt the real turn's conversation context.
@@ -3553,6 +3600,15 @@ export class OrchestrationPipeline implements VoiceSession {
           this.maybeSwitchStreamingSttLang(requested, true);
         }
       }
+    }
+
+    if (
+      !this.isPlaying
+      && this.agent.semanticTurnDetection
+      && this.semanticTurnGate.isAwaitingFinal()
+    ) {
+      this.clearSemanticTurnTimer();
+      this.semanticTurnGate.markCommitted();
     }
 
     if (
@@ -8581,6 +8637,8 @@ export class OrchestrationPipeline implements VoiceSession {
         langNow: this.currentLang,
         inputHash: _spec.inputHash,
         finalTranscript: transcript,
+        pendingTurnId: _spec.pendingTurnId,
+        turnGeneration: this.semanticTurnGate.turnGeneration,
       });
       if (recon.action === "commit") {
         this._eagerLlmHitThisTurn = true;
