@@ -22,9 +22,15 @@ describe("buildInstantReturningGreeting", () => {
   });
 
   it("falls back without name — asks why they called, not how are you", () => {
-    expect(buildInstantReturningGreeting(null, "en")).toBe("Hi, what are you calling about?");
+    expect(buildInstantReturningGreeting(null, "en")).toBe("Hi. What are you calling about?");
     expect(buildInstantReturningGreeting("", "hi")).toMatch(/किस बारे में कॉल|किस विषय/);
     expect(buildInstantReturningGreeting(null, "en")).not.toMatch(/how are you/i);
+  });
+
+  it("splits greeting and purpose with a period so TTS can breathe", () => {
+    const g = buildInstantReturningGreeting("Karthik", "ta");
+    expect(g).toMatch(/வணக்கம் Karthik\./);
+    expect(g.indexOf(".")).toBeLessThan(g.indexOf("சொல்லுங்க"));
   });
 });
 

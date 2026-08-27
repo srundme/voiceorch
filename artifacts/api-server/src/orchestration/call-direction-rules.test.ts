@@ -3,6 +3,7 @@ import {
   buildCallDirectionRule,
   inboundPurposeExamples,
   resolveCallOpeningLanguage,
+  resolveInboundGreetingTtsSpeed,
   resolveOpeningLanguageKey,
 } from "./call-direction-rules.js";
 
@@ -81,7 +82,15 @@ describe("buildCallDirectionRule", () => {
       languageAutoDetect: true,
     });
     expect(rule).toContain("English");
-    expect(rule).toContain("what are you calling about");
+    expect(rule).toContain("What are you calling about");
+  });
+});
+
+describe("resolveInboundGreetingTtsSpeed", () => {
+  it("slows default pace for inbound openers", () => {
+    expect(resolveInboundGreetingTtsSpeed(1)).toBe(0.85);
+    expect(resolveInboundGreetingTtsSpeed(1.2)).toBe(1.02);
+    expect(resolveInboundGreetingTtsSpeed(0.7)).toBe(0.7);
   });
 });
 

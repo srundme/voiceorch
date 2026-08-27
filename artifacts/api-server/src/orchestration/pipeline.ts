@@ -5,7 +5,7 @@ import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
 import { GenderDetectorChained } from "./genderDetectorChained.js";
 import { SpeakerVerifier, type VoiceMemoryEvent } from "./speakerVerifier.js";
 import { SCREENING_PICKUP_NOTE } from "./callScreening.js";
-import { buildCallDirectionRule } from "./call-direction-rules.js";
+import { buildCallDirectionRule, resolveInboundGreetingTtsSpeed } from "./call-direction-rules.js";
 import { buildDatetimeInjection, buildTurnClockBlock } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
@@ -5699,7 +5699,21 @@ export class OrchestrationPipeline implements VoiceSession {
         metadata: { bootLatencyMs, greetingLen: greeting.length },
       });
       try {
-        await this.playTextAsSentences(greeting, greetingEmotions);
+        // Inbound openers feel rushed at full pace (especially long Tamil
+        // purpose-of-call lines). Slow TTS slightly for this playback only.
+        const restoreSpeed = this.agent.ttsSpeed ?? 1;
+        const slowedInbound =
+          this.callDirection === "inbound" && typeof this.tts.setSpeed === "function";
+        if (slowedInbound) {
+          this.tts.setSpeed!(resolveInboundGreetingTtsSpeed(restoreSpeed));
+        }
+        try {
+          await this.playTextAsSentences(greeting, greetingEmotions);
+        } finally {
+          if (slowedInbound) {
+            this.tts.setSpeed!(restoreSpeed === 1 ? null : restoreSpeed);
+          }
+        }
       } finally {
         this.greetingPlaybackActive = false;
         this.isPlaying = false;

@@ -42,11 +42,26 @@ const LANG_LABEL: Record<string, string> = {
   pa: "Punjabi",
 };
 
-/** Prefix greeting (+ optional remembered name) onto purpose-of-call tails. */
+/** Prefix greeting (+ optional remembered name) onto purpose-of-call tails.
+ *  Use a period (not comma) so TTS plays two beats — greeting, then the
+ *  purpose question — instead of rushing one long line. */
 function withInboundGreeting(greet: string, name: string | null, tails: string[]): string[] {
   const n = name?.trim() || null;
-  const head = n ? `${greet} ${n}, ` : `${greet}, `;
-  return tails.map((t) => `${head}${t}`);
+  const head = n ? `${greet} ${n}. ` : `${greet}. `;
+  return tails.map((t) => {
+    const body = t.trim();
+    // Latin tails need a capital after the period ("Hi. What are you…").
+    const capped = /^[a-z]/.test(body) ? body[0]!.toUpperCase() + body.slice(1) : body;
+    return `${head}${capped}`;
+  });
+}
+
+/** Slightly slower TTS for the inbound opener only (sounds less rushed). */
+export function resolveInboundGreetingTtsSpeed(agentSpeed: number | null | undefined): number {
+  const base = typeof agentSpeed === "number" && Number.isFinite(agentSpeed) && agentSpeed > 0
+    ? agentSpeed
+    : 1;
+  return Math.round(Math.max(0.7, Math.min(1.2, base * 0.85)) * 100) / 100;
 }
 
 /** Purpose-of-call examples for inbound openers (with optional name). */
