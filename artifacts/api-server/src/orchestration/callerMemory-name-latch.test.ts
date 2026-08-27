@@ -74,6 +74,19 @@ describe("detectNameLatch — Tier A (explicit self-introductions)", () => {
     expect(detectNameLatch("my name is who")).toBeNull();
     expect(detectNameLatch("I am this")).toBeNull();
   });
+
+  it("latches the affirmed name after a Tamil denial (call 14222)", () => {
+    expect(
+      detectNameLatch("சார் என்னோட பேரு ராஜேஸ்வரி கிடையாது என்னோட பேரு வந்து சிவராம்"),
+    ).toEqual({ name: "சிவராம்", tier: "A" });
+  });
+
+  it("latches romanized Tamil with a trailing denial (enoda peru Karthi, rajeswari ella)", () => {
+    expect(detectNameLatch("enoda peru Karthi, rajeswari ella")).toEqual({
+      name: "Karthi",
+      tier: "A",
+    });
+  });
 });
 
 describe("detectNameLatch — Tier B (ambiguous 'I am X')", () => {
@@ -97,6 +110,10 @@ describe("isPlausibleName", () => {
     for (const w of ["so confused", "so", "confused", "very", "really"]) {
       expect(isPlausibleName(w)).toBe(false);
     }
+  });
+  it("rejects Tamil/English negation fragments as names", () => {
+    expect(isPlausibleName("ராஜேஸ்வரி கிடையாது")).toBe(false);
+    expect(isPlausibleName("not Rajesh")).toBe(false);
   });
   it("keeps existing rejections", () => {
     for (const w of ["sorry", "calling", "trying", "tomorrow by", "managed"]) {

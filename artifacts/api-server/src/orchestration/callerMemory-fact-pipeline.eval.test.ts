@@ -132,6 +132,25 @@ const CASES: LabeledCase[] = [
       { key: "location", value: "Bangalore", confidence: 0.88, sentence_ids: [21] },
     ],
   },
+  {
+    id: "existing-product-caller-stated",
+    notes: "Named policy the caller said they already hold",
+    callerSentenceIds: [30],
+    expected: [{ key: "existing_product", value: "Galaxy Marvel" }],
+    candidates: [
+      { key: "policy_name", value: "Galaxy Marvel", confidence: 0.92, sentence_ids: [30] },
+    ],
+  },
+  {
+    id: "agent-pitch-not-a-fact",
+    notes: "Agent wellness pitch must not become existing_product",
+    callerSentenceIds: [31],
+    expected: [],
+    candidates: [
+      { key: "existing_product", value: "Gala Fit", confidence: 0.99, sentence_ids: [99] },
+      { key: "interested_in", value: "wellness add-on", confidence: 0.99, sentence_ids: [31] },
+    ],
+  },
 ];
 
 function runCase(c: LabeledCase): Array<{ key: string; value: string }> {

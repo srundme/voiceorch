@@ -64,4 +64,43 @@ describe("matchCallerFactPatterns — occupation / company", () => {
     expect(matchCallerFactPatterns("என்னோட வேலை doctor").get("occupation")?.toLowerCase())
       .toContain("doctor");
   });
+
+  it("matches Tamil copula occupation from call 14222", () => {
+    expect(matchCallerFactPatterns("நான் professor-ஆ இருக்கேன்.").get("occupation")?.toLowerCase())
+      .toBe("professor");
+  });
+
+  it("matches English 'I am a professor'", () => {
+    expect(matchCallerFactPatterns("I am a professor.").get("occupation")?.toLowerCase())
+      .toBe("professor");
+  });
+
+  it("matches romanized Tamil occupation", () => {
+    expect(matchCallerFactPatterns("naan professor-a irukken").get("occupation")?.toLowerCase())
+      .toBe("professor");
+  });
+
+  it("does not treat a policy name as an occupation", () => {
+    expect(matchCallerFactPatterns("I am a Galaxy Marvel policy").has("occupation")).toBe(false);
+  });
+
+  it("matches caller-stated existing product", () => {
+    expect(matchCallerFactPatterns("I have a Galaxy Marvel policy").get("existing_product"))
+      .toMatch(/galaxy marvel/i);
+    expect(matchCallerFactPatterns("என்னோட policy Galaxy Marvel").get("existing_product"))
+      .toMatch(/galaxy marvel/i);
+    expect(matchCallerFactPatterns("enoda policy Galaxy Marvel").get("existing_product"))
+      .toMatch(/galaxy marvel/i);
+  });
+
+  it("matches spoken email", () => {
+    expect(matchCallerFactPatterns("my email is karthi@gmail.com").get("email"))
+      .toBe("karthi@gmail.com");
+  });
+});
+
+describe("matchCallerFactPatterns — romanized location", () => {
+  it("matches enoda oor Chennai", () => {
+    expect(matchCallerFactPatterns("enoda oor Chennai").get("location")).toMatch(/chennai/i);
+  });
 });

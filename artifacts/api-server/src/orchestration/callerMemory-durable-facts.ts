@@ -20,6 +20,8 @@ export const DURABLE_FACT_KEYS = [
   "email",
   "language_pref",
   "preferred_contact_method",
+  // Named policy/product the CALLER said they already hold (not an agent pitch).
+  "existing_product",
 ] as const;
 
 export type DurableFactKey = (typeof DURABLE_FACT_KEYS)[number];
@@ -105,6 +107,13 @@ const FACT_KEY_SYNONYMS: Record<string, DurableFactKey> = {
   preferred_contact_method: "preferred_contact_method",
   contact_method: "preferred_contact_method",
   preferred_channel: "preferred_contact_method",
+
+  existing_product: "existing_product",
+  existing_policy: "existing_product",
+  policy_name: "existing_product",
+  current_policy: "existing_product",
+  held_product: "existing_product",
+  product_name: "existing_product",
 };
 
 /** Indian city aliases → canonical (extend as needed). */
@@ -305,6 +314,12 @@ export function normalizeFactValue(key: DurableFactKey, raw: string): string | n
       return normalizeLanguage(value);
     case "preferred_contact_method":
       return normalizeContactMethod(value);
+    case "existing_product": {
+      const v = value.replace(/\s+/g, " ").trim().slice(0, 80);
+      if (v.length < 2) return null;
+      if (/^(insurance|policy|plan|product|premium|coverage)$/i.test(v)) return null;
+      return v;
+    }
     default:
       return null;
   }
@@ -453,6 +468,7 @@ export const DURABLE_FACT_LABELS: Record<DurableFactKey, string> = {
   email: "email",
   language_pref: "language preference",
   preferred_contact_method: "preferred contact",
+  existing_product: "existing product / policy",
 };
 
 /** Prompt fragment listing allowed durable keys for the extract LLM. */
@@ -470,10 +486,17 @@ export function durableFactsPromptBlock(): string {
     `- company_name: employer / company they work for\n` +
     `- email: email address if stated\n` +
     `- language_pref: preferred spoken language (hi/en/ta/te/kn/ml/mr/bn/gu/pa)\n` +
-    `- preferred_contact_method: call | sms | whatsapp | email if stated\n\n` +
-    `DO NOT store as facts (put in summary instead if relevant):\n` +
-    `budget, interested_in, concerns, follow_up, timeline, policy/product preferences,\n` +
-    `coverage amounts, quotes, temporary intent, objections, family_size, family_members.\n\n` +
+    `- preferred_contact_method: call | sms | whatsapp | email if stated\n` +
+    `- existing_product: named policy/product the CALLER said they already have (e.g. "Galaxy Marvel")\n\n` +
+    `DO NOT store as facts (put in the episode summary instead if relevant):\n` +
+    `budget, interested_in, follow_up, timeline, quotes, temporary intent, objections,\n` +
+    `wellness upsells the AGENT mentioned, family_size, family_members.\n` +
+    `Caller concerns MAY go in the episode summary, not as a fact key.\n\n` +
+    `Episode summary (2-4 sentences) MUST include:\n` +
+    `- The affirmed caller name (after any denial), city, job, company, email if they stated them\n` +
+    `- Any existing_product they confirmed they already hold\n` +
+    `- What they asked or needed, and how the call ended (completed / dropped / callback)\n` +
+    `- Do NOT write agent pitches as if the caller said them\n\n` +
     `Multilingual / code-switch:\n` +
     `- Transcripts may be Tamil, Hindi, English, or mixed (e.g. "என்னோட பேரு Murali", "मेरा नाम Ravi").\n` +
     `- Extract the SAME durable keys regardless of language — do not skip because the line is not English.\n` +
@@ -484,6 +507,9 @@ export function durableFactsPromptBlock(): string {
     `- Every fact MUST include sentence_ids citing numbered CALLER lines from the transcript\n` +
     `- If you cannot cite a caller sentence, omit the fact\n` +
     `- If the caller states the same key twice, keep only the LAST-stated value\n` +
+    `- If the caller DENIES a name then gives another ("என்னோட பேரு X கிடையாது என்னோட பேரு Y", "enoda peru Karthi, Rajeswari ella", "my name is not X, it's Y"), store Y only — never a negation word\n` +
+    `- occupation includes code-mixed copulas ("நான் professor-ஆ இருக்கேன்", "I am a teacher")\n` +
+    `- existing_product only if the CALLER named a product they already have — never copy the agent's script\n` +
     `- confidence: 0.9+ = direct statement; ~0.7 = clear but indirect; omit anything weaker\n` +
     `- Be concise with values (e.g. "4" not "four children"; "Bengaluru" not "I live in Bangalore")\n` +
     `- name is ONLY a personal human name — never a plan, product, topic, or question ("who's this")`
