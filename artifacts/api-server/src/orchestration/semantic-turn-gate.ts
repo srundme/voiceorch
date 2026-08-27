@@ -47,6 +47,21 @@ export const SEMANTIC_TURN_EVAL_MS_DEFAULT = 400;
 /** Extra eval budget while collecting digits / email so we prefer HOLD over timeout. */
 export const SEMANTIC_TURN_EVAL_MS_COLLECTION = 700;
 
+/**
+ * Map a Smart Turn race onto an EOU verdict.
+ * A session that is still loading is missing, not slow — timeout HOLD must
+ * not apply until the ONNX session has actually run once.
+ */
+export function resolveSmartTurnEval(opts: {
+  sessionReady: boolean;
+  timedOut: boolean;
+  verdict: EouVerdict | null | undefined;
+}): EouVerdict {
+  if (!opts.sessionReady) return "unavailable";
+  if (opts.timedOut) return "timeout";
+  return opts.verdict ?? "unavailable";
+}
+
 export function clampSemanticTurnStopMs(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return SEMANTIC_TURN_STOP_MS_DEFAULT;
   return Math.max(SEMANTIC_TURN_STOP_MS_MIN, Math.min(SEMANTIC_TURN_STOP_MS_MAX, Math.round(value)));

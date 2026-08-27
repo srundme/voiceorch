@@ -15,11 +15,12 @@ import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, reconcileSpeculativePrefil
 import {
   SemanticTurnGate,
   resolveEouCommit,
+  resolveSmartTurnEval,
   SEMANTIC_TURN_FINAL_MS_DEFAULT,
   SEMANTIC_TURN_EVAL_MS_DEFAULT,
   SEMANTIC_TURN_EVAL_MS_COLLECTION,
 } from "./semantic-turn-gate.js";
-import { predictSmartTurn } from "./smart-turn.js";
+import { isSmartTurnReady, predictSmartTurn, warmSmartTurn } from "./smart-turn.js";
 import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
@@ -1832,6 +1833,8 @@ export class OrchestrationPipeline implements VoiceSession {
     const textLooksIncomplete = hold.incomplete;
     this.syncCollectionVad(hold.collectionKind);
     const pcm = this._eouBytes > 0 ? Buffer.concat(this._eouAudio) : Buffer.alloc(0);
+    const sessionReady = isSmartTurnReady();
+    if (!sessionReady) void warmSmartTurn();
     const evalMs = hold.collectionKind === "none"
       ? envInt("SEMANTIC_TURN_EVAL_MS", SEMANTIC_TURN_EVAL_MS_DEFAULT, 100)
       : Math.max(
@@ -1839,16 +1842,18 @@ export class OrchestrationPipeline implements VoiceSession {
         SEMANTIC_TURN_EVAL_MS_COLLECTION,
       );
     const timedOut = Symbol("smart-turn-timeout");
-    const pred = pcm.length > 0
+    const pred = pcm.length > 0 && sessionReady
       ? await Promise.race([
         predictSmartTurn(pcm),
         new Promise<typeof timedOut>((resolve) => setTimeout(() => resolve(timedOut), evalMs)),
       ])
       : null;
     if (!this.semanticTurnGate.belongsTo(generation)) return;
-    const eou = pred === timedOut
-      ? "timeout"
-      : pred?.verdict ?? "unavailable";
+    const eou = resolveSmartTurnEval({
+      sessionReady,
+      timedOut: pred === timedOut,
+      verdict: pred === timedOut ? null : pred?.verdict,
+    });
     const smartTurn = pred === timedOut ? null : pred;
     const resolved = resolveEouCommit({
       eou,
@@ -1864,6 +1869,7 @@ export class OrchestrationPipeline implements VoiceSession {
         reason: resolved.reason,
         eou,
         probability: smartTurn?.probability,
+        sessionReady,
         textLooksIncomplete,
         holdReason: hold.reason,
         collectionKind: hold.collectionKind,
@@ -1880,6 +1886,7 @@ export class OrchestrationPipeline implements VoiceSession {
         holdReason: hold.reason,
         eou,
         probability: smartTurn?.probability,
+        sessionReady,
         collectionKind: hold.collectionKind,
       },
     });

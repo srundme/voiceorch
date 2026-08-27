@@ -40,6 +40,12 @@ async function loadOrt(): Promise<typeof OrtNS | null> {
 }
 
 let _sessionPromise: Promise<OrtNS.InferenceSession | null> | null = null;
+/** True after the first successful session create + warmup inference. */
+let _ready = false;
+
+export function isSmartTurnReady(): boolean {
+  return _ready;
+}
 
 async function getSession(): Promise<OrtNS.InferenceSession | null> {
   if (!_sessionPromise) {
@@ -60,27 +66,16 @@ async function getSession(): Promise<OrtNS.InferenceSession | null> {
 }
 
 export async function warmSmartTurn(): Promise<void> {
+  if (_ready) return;
   const session = await getSession();
   if (!session) return;
   const silent = Buffer.alloc(SMART_TURN_SAMPLE_RATE * 2);
-  await predictSmartTurn(silent);
+  await runInference(silent);
+  _ready = true;
   logger.info("SmartTurn: ONNX session ready");
 }
 
-function pcm16kToFloat32Last8s(pcm16k: Buffer): Float32Array {
-  const samples = pcm16k.length >> 1;
-  const max = SMART_TURN_MAX_SAMPLES;
-  const startSample = samples > max ? samples - max : 0;
-  const count = Math.min(samples, max);
-  const out = new Float32Array(max);
-  const offset = max - count; // left-pad zeros, audio at the end
-  for (let i = 0; i < count; i++) {
-    out[offset + i] = pcm16k.readInt16LE((startSample + i) * 2) / 32768;
-  }
-  return out;
-}
-
-export async function predictSmartTurn(pcm16k: Buffer): Promise<{
+async function runInference(pcm16k: Buffer): Promise<{
   verdict: EouVerdict;
   probability: number;
 } | null> {
@@ -107,4 +102,30 @@ export async function predictSmartTurn(pcm16k: Buffer): Promise<{
     logger.warn({ err }, "SmartTurn: inference error");
     return null;
   }
+}
+
+function pcm16kToFloat32Last8s(pcm16k: Buffer): Float32Array {
+  const samples = pcm16k.length >> 1;
+  const max = SMART_TURN_MAX_SAMPLES;
+  const startSample = samples > max ? samples - max : 0;
+  const count = Math.min(samples, max);
+  const out = new Float32Array(max);
+  const offset = max - count; // left-pad zeros, audio at the end
+  for (let i = 0; i < count; i++) {
+    out[offset + i] = pcm16k.readInt16LE((startSample + i) * 2) / 32768;
+  }
+  return out;
+}
+
+export async function predictSmartTurn(pcm16k: Buffer): Promise<{
+  verdict: EouVerdict;
+  probability: number;
+} | null> {
+  // First turns after process boot must not sit in InferenceSession.create
+  // until the 400 ms eval race fires — that used to fail-open, and now HOLDs.
+  if (!_ready) {
+    void warmSmartTurn();
+    return null;
+  }
+  return runInference(pcm16k);
 }

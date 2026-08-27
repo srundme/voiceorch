@@ -4,6 +4,7 @@ import {
   clampSemanticTurnStopMs,
   resolveEouCommit,
   resolveSemanticTurnEnabled,
+  resolveSmartTurnEval,
 } from "./semantic-turn-gate.js";
 
 describe("resolveEouCommit", () => {
@@ -65,6 +66,32 @@ describe("resolveEouCommit", () => {
       action: "hold",
       reason: "text_incomplete",
     });
+  });
+});
+
+describe("resolveSmartTurnEval", () => {
+  it("treats a session that is still loading as missing, not as a slow eval", () => {
+    expect(resolveSmartTurnEval({
+      sessionReady: false,
+      timedOut: true,
+      verdict: null,
+    })).toBe("unavailable");
+  });
+
+  it("HOLDs only after the model is warm and the eval budget expires", () => {
+    expect(resolveSmartTurnEval({
+      sessionReady: true,
+      timedOut: true,
+      verdict: null,
+    })).toBe("timeout");
+  });
+
+  it("passes through a real verdict when the session is ready", () => {
+    expect(resolveSmartTurnEval({
+      sessionReady: true,
+      timedOut: false,
+      verdict: "complete",
+    })).toBe("complete");
   });
 });
 
