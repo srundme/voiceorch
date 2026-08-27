@@ -56,6 +56,7 @@ import {
   shouldSkipSmartTurnEval,
   resolveCollectionKind,
   resolveCollectionVadSilenceMs,
+  isEmailCollectionContext,
   looksSnapComplete,
   sanitizeSpokenEmailsInTranscript,
   preferEmailTranscript,
@@ -8724,6 +8725,7 @@ export class OrchestrationPipeline implements VoiceSession {
         lines.push(
           `Before calling "${bookName}", you MUST collect the caller's full name and email address. Ask for them if not yet provided.`,
           `EMAIL ACCURACY (call-critical): never book on a half-heard email. If the address is incomplete (no domain, ends with @, or has spaces), ask the caller to spell it letter by letter.`,
+          `EMAIL vs PHONE (call 14394): email local-parts often contain digits (e.g. ramsiva97465@gmail.com). While collecting email, NEVER say the caller is giving a phone number. If @ / gmail / mail / அட் is missing, ask them to say: username, then \"at gmail dot com\" — do not reclassify digits as a mobile number.`,
           `After you hear an email, ALWAYS spell it back with <spell>r a m … @ g m a i l . c o m</spell> and wait for an explicit yes/correct before calling "${bookName}" with email_confirmed=true.`,
           `When reading available slots aloud, keep the whole list in ONE reply sentence — do not chop each time (9:00 AM / 9:15 AM) into separate fragments.`,
           `NEVER tell the caller their appointment is confirmed or scheduled unless you have received a booking_confirmed: result from "${bookName}".`,
@@ -8840,6 +8842,27 @@ export class OrchestrationPipeline implements VoiceSession {
           ...historyForLlm.slice(0, -1),
           { ...lastTurn, content: `${lastTurn.content}\n\n${CONVERSATION_DISCIPLINE_TURN_REMINDER}` },
         ];
+      }
+    }
+
+    // Email-collection turn reminder (call 14394): STT often drops "@gmail.com"
+    // so "ramsiva97465" looks like a phone. Keep the model in email mode.
+    if (historyForLlm.length > 0) {
+      const lastAgentText =
+        this.conversationHistory.findLast((t) => t.role === "assistant")?.content ?? "";
+      if (isEmailCollectionContext(lastAgentText)) {
+        const lastTurn = historyForLlm[historyForLlm.length - 1]!;
+        if (lastTurn.role === "user") {
+          const emailHint =
+            "[EMAIL COLLECTION] Digits in an email username are normal. " +
+            "Do NOT say this sounds like a phone number. " +
+            "If @/gmail/domain is missing, ask them to say: username at gmail dot com, " +
+            "or spell letter-by-letter — then spell it back with <spell>…</spell>.";
+          historyForLlm = [
+            ...historyForLlm.slice(0, -1),
+            { ...lastTurn, content: `${lastTurn.content}\n\n${emailHint}` },
+          ];
+        }
       }
     }
 
