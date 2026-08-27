@@ -10,7 +10,7 @@ import { buildDatetimeInjection, buildTurnClockBlock } from "./datetimeInject.js
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN } from "./conversationDiscipline.js";
-import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared } from "./callFarewell.js";
+import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared, isCallerClosingUtterance } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
 import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
 import {
@@ -76,7 +76,7 @@ import {
   isAffirmationOnlyUtterance,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeBookingTimeAnswer } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeBookingTimeAnswer } from "./transcriptQuality.js";
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
@@ -3413,9 +3413,21 @@ export class OrchestrationPipeline implements VoiceSession {
     // GTCRN is speech enhancement, not "ignore other people". A bystander a
     // few metres away still transcribes; drop it when the RAW mic never
     // reached near-talker level (telephony + Noise Cancellation on).
+    // Do NOT apply while we were still playing / in echo grace — peak RMS then
+    // is only the quiet tail, so a real "Hello" was thrown away (call 14315)
+    // and the caller sat in silence. Echo/self-echo guards below still run.
+    const attention = isCallerAttentionUtterance(transcript);
     if (
       this.noiseGate.enabled
       && this.config.telephonyProvider !== "webcall"
+      && !this.isPlaying
+      && !this.greetingPlaybackActive
+      && Date.now() >= this.bargeInHoldUntil
+      && !attention
+      && !isSemanticInterrupt(transcript)
+      && !isAccidentalInterruptPhrase(transcript)
+      && !looksLikeBookingTimeAnswer(transcript)
+      && !isCallerClosingUtterance(transcript)
       && isBackgroundTalkerUtterance(this.utterancePeakRawRms)
     ) {
       logger.info(
@@ -7911,7 +7923,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // ("சரிங்க") and keeps waiting — the caller has to hang up manually.
     // In group meetings, "thank you"/"bye" is usually participants talking to
     // EACH OTHER — never auto-leave the meeting on a farewell phrase.
-    if (!this.isMeetingMode && this.turnIndex >= 3 && this.isCallerFarewellUtterance(transcript)) {
+    if (!this.isMeetingMode && this.turnIndex >= 3 && isCallerClosingUtterance(transcript)) {
       const endCallTool = this.agent.tools.find((t) => t.type === "end_call");
       if (endCallTool) {
         logger.info(

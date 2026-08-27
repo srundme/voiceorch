@@ -9,6 +9,7 @@ import {
   isFalseInterruptionScrap,
   isTopicClarificationAsk,
   isAccidentalInterruptPhrase,
+  isCallerAttentionUtterance,
   isBackchannelOnlyUtterance,
   normalizeSttPhonetics,
   coalescePendingTranscripts,
@@ -338,5 +339,13 @@ describe("looksLikeBookingTimeAnswer", () => {
   it("rejects ordinary acks", () => {
     expect(looksLikeBookingTimeAnswer("हाँ।")).toBe(false);
     expect(looksLikeBookingTimeAnswer("okay madam")).toBe(false);
+  });
+});
+
+describe("isCallerAttentionUtterance", () => {
+  it("keeps Hello from being far-field-dropped (call 14315)", () => {
+    expect(isCallerAttentionUtterance("Hello")).toBe(true);
+    expect(isCallerAttentionUtterance("வணக்கம்")).toBe(true);
+    expect(isCallerAttentionUtterance("காலைல 10 மணிக்கு சார்")).toBe(false);
   });
 });

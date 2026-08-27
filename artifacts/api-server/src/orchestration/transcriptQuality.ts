@@ -571,6 +571,13 @@ export function isAccidentalInterruptPhrase(text: string): boolean {
   return ACCIDENTAL_INTERRUPTION_PHRASES.has(compact);
 }
 
+/** Short "hello" / "வணக்கம்" to get the agent's attention — never far-field-drop. */
+export function isCallerAttentionUtterance(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/[.!?]+$/g, "");
+  if (!t) return false;
+  return /^(hello|hi|hey|vanakkam|வணக்கம்|ஹலோ)(\s+(sir|madam|சார்|மேடம்))?$/.test(t);
+}
+
 /**
  * Returns true if the transcript contains a semantic interruption signal.
  * Called on both interim and final transcripts from streaming STT.

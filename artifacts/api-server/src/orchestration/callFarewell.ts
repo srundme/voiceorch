@@ -28,6 +28,8 @@ const FAREWELL_PHRASES = [
   "ciao",
   "tata",
   "ta-ta",
+  "nothing else",
+  "no more help",
   // Tamil
   "பாய்",
   "பாய்க்க",
@@ -35,6 +37,8 @@ const FAREWELL_PHRASES = [
   "போயிட்டு",
   "நன்றி",
   "சரியாய்",
+  "வேற எதுவும்",
+  "வேற ஒன்னும்",
   // Hindi / Hinglish romanised + Devanagari
   "alvida",
   "phir milte",
@@ -76,6 +80,26 @@ export function isCallerFarewellUtterance(transcript: string): boolean {
   if (/^(நன்றி|धन्यवाद)$/u.test(stripped)) return true;
   if (/நன்றி/.test(t) && stripped.replace(/நன்றி/gu, "").trim().length === 0) return true;
 
+  return false;
+}
+
+/**
+ * Caller is wrapping up — not always a one-word "bye". Call 14315: after
+ * "வேற ஏதாச்சும் help வேணுமா?" they said they need no more help / will talk
+ * tomorrow; the LLM asked the same question again and they hung up in silence.
+ */
+export function isCallerClosingUtterance(transcript: string): boolean {
+  if (isCallerFarewellUtterance(transcript)) return true;
+  const t = transcript
+    .toLowerCase()
+    .replace(/[^\u0B80-\u0BFF\u0900-\u097Fa-z\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (t.length === 0 || t.length > 120) return false;
+  if (/வேற\s*(எதுவும்|ஒன்னும்|ஏதும்)/u.test(t) && /இல்ல|help|வேணா|வேண்டா/u.test(t)) return true;
+  if (/வேற\s*(எதுவும்|ஒன்னும்|ஏதும்).{0,24}(பண்ண|help)/u.test(t)) return true;
+  if (/\b(nothing else|no more help|thats all|that's all|that is all|im done|i'm done)\b/.test(t)) return true;
+  if (/\bno\s+(more\s+)?(thanks|thank you|help)\b/.test(t)) return true;
   return false;
 }
 
