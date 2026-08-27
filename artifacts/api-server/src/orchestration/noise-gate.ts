@@ -7,7 +7,9 @@
  * Gemini Live alike). When the toggle is on, the audio worker runs GTCRN
  * neural voice isolation first (VOICE_ISOLATION=0 falls back to this energy
  * gate). Telephony audio (VoBiz, Twilio, Plivo) is processed when the toggle
- * is on. Browser webcall is the one exception: the mic already ran AEC/NS
+ * is on, but only while we are listening — isolation pauses while the agent
+ * is speaking / in echo-hold so carrier sidetone is not cleaned into a false
+ * barge-in. Browser webcall is the one exception: the mic already ran AEC/NS
  * and stacking our isolator/gate erases quiet speech, so webcall stays off.
  *
  * Historically VoBiz calls skipped the software gate because the carrier also

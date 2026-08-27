@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { isVoiceIsolationEnabled, VoiceIsolator, warmVoiceIsolator } from "./voice-isolator.js";
+import { isVoiceIsolationEnabled, shouldEnhanceCallerAudio, VoiceIsolator, warmVoiceIsolator } from "./voice-isolator.js";
 
 function tone8k(samples = 1600, hz = 440, peak = 8000): Buffer {
   const buf = Buffer.allocUnsafe(samples * 2);
@@ -29,6 +29,28 @@ describe("isVoiceIsolationEnabled", () => {
   it("honors VOICE_ISOLATION=0", () => {
     expect(isVoiceIsolationEnabled({ VOICE_ISOLATION: "0" })).toBe(false);
     expect(isVoiceIsolationEnabled({ VOICE_ISOLATION: "false" })).toBe(false);
+  });
+});
+
+describe("shouldEnhanceCallerAudio", () => {
+  it("runs isolation while listening with NC on", () => {
+    expect(shouldEnhanceCallerAudio({ noiseCancellationOn: true, agentSpeaking: false })).toBe(true);
+  });
+
+  it("skips isolation while the agent is speaking so echo is not cleaned into a barge-in", () => {
+    expect(shouldEnhanceCallerAudio({ noiseCancellationOn: true, agentSpeaking: true })).toBe(false);
+  });
+
+  it("skips isolation during echo-hold even if NC is on", () => {
+    expect(shouldEnhanceCallerAudio({
+      noiseCancellationOn: true,
+      agentSpeaking: false,
+      echoHoldActive: true,
+    })).toBe(false);
+  });
+
+  it("stays off when the product toggle is off", () => {
+    expect(shouldEnhanceCallerAudio({ noiseCancellationOn: false, agentSpeaking: false })).toBe(false);
   });
 });
 

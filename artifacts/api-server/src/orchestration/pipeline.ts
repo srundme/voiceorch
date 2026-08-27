@@ -37,6 +37,7 @@ import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, peekCachedPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
+import { shouldEnhanceCallerAudio } from "./voice-isolator.js";
 import { RecordingBuffer, WEBCALL_GAP_RESYNC_MS } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMAdapter, LLMUsage, SessionConfig, StreamSTT, STTConfig, ToolDefinition } from "./types.js";
@@ -4093,6 +4094,19 @@ export class OrchestrationPipeline implements VoiceSession {
 
   // ── Audio input ─────────────────────────────────────────────────────────────
 
+  /**
+   * NC stays on for production listening. Skip GTCRN/gate while we are speaking
+   * or in echo-hold so carrier sidetone is not cleaned into a false barge-in.
+   */
+  private callerEnhanceOn(noiseCancellationOn: boolean): boolean {
+    const now = Date.now();
+    return shouldEnhanceCallerAudio({
+      noiseCancellationOn,
+      agentSpeaking: this.isPlaying || this.isSendingTtsAudio,
+      echoHoldActive: now < this.bargeInHoldUntil || now < this.greetingEchoHoldUntil,
+    });
+  }
+
   /** Incoming mulaw from Twilio / Plivo — offloads decode + noise-cancel + VAD to worker thread */
   onAudioIn(mulawChunk: Buffer): void {
     if (this.closed) return;
@@ -4102,7 +4116,13 @@ export class OrchestrationPipeline implements VoiceSession {
     this.recording.addCallerChunk(pcm8k);
     // Voice-intelligence tap — runs outside the main audio pipeline
     this.config.callerAudioTap?.(pcm8k);
-    processAudioIn(callId, mulawChunk, this.noiseGate.enabled, this.micThresholds.gateRatio, this.micThresholds.vadThreshold)
+    processAudioIn(
+      callId,
+      mulawChunk,
+      this.callerEnhanceOn(this.noiseGate.enabled),
+      this.micThresholds.gateRatio,
+      this.micThresholds.vadThreshold,
+    )
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (mulaw)"));
   }
@@ -4165,7 +4185,9 @@ export class OrchestrationPipeline implements VoiceSession {
     // Caller-supplied `noiseCancel` wins when present; otherwise use the
     // per-call decision resolved in the constructor (provider bypass + agent
     // toggle + overrides — see noise-gate.ts).
-    const nc = noiseCancel !== undefined ? noiseCancel : this.noiseGate.enabled;
+    const nc = this.callerEnhanceOn(
+      noiseCancel !== undefined ? noiseCancel : this.noiseGate.enabled,
+    );
     // Queue the caller's TRUE 16k audio (before it was downsampled to 8k for
     // this call) so handleProcessedAudio can use it for STT instead of the
     // worker's upsample8to16 reconstruction, which cannot recover frequency

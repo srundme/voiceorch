@@ -44,6 +44,19 @@ export function isVoiceIsolationEnabled(env: NodeJS.ProcessEnv = process.env): b
   return raw !== "0" && raw !== "false" && raw !== "off";
 }
 
+/**
+ * Isolation stays ON for production listening, but must not run while the
+ * agent is on the wire. Echo is still speech — GTCRN cleans it and STT/VAD
+ * treat it as a barge-in (call 14195: 16 echo cuts in 163s).
+ */
+export function shouldEnhanceCallerAudio(opts: {
+  noiseCancellationOn: boolean;
+  agentSpeaking: boolean;
+  echoHoldActive?: boolean;
+}): boolean {
+  return opts.noiseCancellationOn && !opts.agentSpeaking && !opts.echoHoldActive;
+}
+
 let _ortPromise: Promise<typeof OrtNS | null> | null = null;
 async function loadOrt(): Promise<typeof OrtNS | null> {
   if (!_ortPromise) {

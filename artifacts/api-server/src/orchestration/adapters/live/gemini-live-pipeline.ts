@@ -16,6 +16,7 @@ import {
   upsample8to16,
 } from "../../audio.js";
 import { processRawPcm8kIn } from "../../audioPool.js";
+import { shouldEnhanceCallerAudio } from "../../voice-isolator.js";
 import {
   envForceVobizSoftwareNc,
   resolveSoftwareNoiseGate,
@@ -369,7 +370,10 @@ export class GeminiLivePipeline implements VoiceSession {
 
     // An explicit caller-supplied flag wins (webcall passes false because the
     // browser already ran AEC/NS); otherwise use the per-call decision.
-    const gateOn = noiseCancel !== undefined ? noiseCancel : this.noiseGate.enabled;
+    const gateOn = shouldEnhanceCallerAudio({
+      noiseCancellationOn: noiseCancel !== undefined ? noiseCancel : this.noiseGate.enabled,
+      agentSpeaking: this.isPlayingOut || this.outFrames8k.length > 0,
+    });
     const callId = String(this.config.callId);
     const pcm8kCopy = Buffer.from(pcm8k);
     const nativeCopy = nativePcm16k?.length ? Buffer.from(nativePcm16k) : undefined;
