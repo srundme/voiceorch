@@ -75,7 +75,8 @@ import {
   isAffirmationOnlyUtterance,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeBookingTimeAnswer } from "./transcriptQuality.js";
+import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { getCachedFillerPcm, setCachedFillerPcm } from "./fillerPcmCache.js";
@@ -2422,6 +2423,16 @@ export class OrchestrationPipeline implements VoiceSession {
     );
   }
 
+  /** Same tool list as processTurn / continueWithToolResult / Gemini cache warm. */
+  private buildVoiceToolDefs(): ToolDefinition[] {
+    const toolDefs = buildToolDefs(this.agent.tools);
+    toolDefs.push(SCHEDULE_CALLBACK_TOOL_DEF);
+    if (this.agent.isMeetingSession) {
+      toolDefs.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_SESSION_TOOL_DEFS);
+    }
+    return toolDefs;
+  }
+
   /**
    * Launch a speculative / eager LLM call using the pending partial.
    * Tokens are buffered into `_specLlmState.storedTokens` (via a redirectable
@@ -2498,7 +2509,9 @@ export class OrchestrationPipeline implements VoiceSession {
               resolveCompletion();
             },
             onUsage: (u) => { if (!state.aborted) state.storedUsage = u; },
-            tools: [],
+            // Must match the real turn: tools: [] made Sarvam dump <tool_call> XML
+            // as "speech" (call 14160). Reconciliation still discards tool prefills.
+            tools: this.buildVoiceToolDefs(),
             // Prevent stateful adapters (e.g. OpenAI Responses API) from
             // advancing their previousResponseId on a speculative call.
             // A spec miss must not corrupt the real turn's conversation context.
@@ -3422,19 +3435,34 @@ export class OrchestrationPipeline implements VoiceSession {
     if (!isSemanticInterrupt(transcript) && this.isPlaying && !this.bargeInRequested) {
       const echoBar = this.echoBarRms();
       if (echoBar !== null && this.bargeInPeakRmsSinceSentence <= echoBar) {
-        this.streamingBargeInWordCount = 0;
-        logger.info(
-          {
-            callId: this.config.callId,
-            transcript: transcript.slice(0, 80),
-            peakRms: Math.round(this.bargeInPeakRmsSinceSentence),
-            echoBar: Math.round(echoBar),
-            echoFloor: Math.round(this.playbackEchoFloor),
-          },
-          "Streaming STT: discarding self-echo transcript (no caller energy above echo bar)",
-        );
-        this.logDiscardedTranscript(transcript, "self_echo_energy_guard");
-        return;
+        // Call 14160: "कल टेन थर्टी मैडम" while the agent was still offering 3/4 PM.
+        // Energy never cleared the echo bar, so a real slot answer was discarded.
+        // Keep content self-echo above; only skip the energy-only discard.
+        if (looksLikeBookingTimeAnswer(transcript) && !this.isSelfEcho(transcript)) {
+          logger.info(
+            {
+              callId: this.config.callId,
+              transcript: transcript.slice(0, 80),
+              peakRms: Math.round(this.bargeInPeakRmsSinceSentence),
+              echoBar: Math.round(echoBar),
+            },
+            "Streaming STT: energy echo guard skipped — time/slot answer",
+          );
+        } else {
+          this.streamingBargeInWordCount = 0;
+          logger.info(
+            {
+              callId: this.config.callId,
+              transcript: transcript.slice(0, 80),
+              peakRms: Math.round(this.bargeInPeakRmsSinceSentence),
+              echoBar: Math.round(echoBar),
+              echoFloor: Math.round(this.playbackEchoFloor),
+            },
+            "Streaming STT: discarding self-echo transcript (no caller energy above echo bar)",
+          );
+          this.logDiscardedTranscript(transcript, "self_echo_energy_guard");
+          return;
+        }
       }
     }
 
@@ -5336,12 +5364,7 @@ export class OrchestrationPipeline implements VoiceSession {
       !(this.agent.stagedPromptEnabled && this.agent.stagedPromptStages.length > 0)
     ) {
       try {
-        const warmTools = buildToolDefs(this.agent.tools);
-        warmTools.push(SCHEDULE_CALLBACK_TOOL_DEF);
-        if (this.agent.isMeetingSession) {
-          warmTools.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_SESSION_TOOL_DEFS);
-        }
-        void this.llm.warmContextCache(this.buildCacheBase(null), warmTools);
+        void this.llm.warmContextCache(this.buildCacheBase(null), this.buildVoiceToolDefs());
       } catch (err) {
         logger.debug({ callId: this.config.callId, err }, "Gemini cache warm (greeting) skipped");
       }
@@ -7020,6 +7043,9 @@ export class OrchestrationPipeline implements VoiceSession {
         });
       }
       logger.warn({ callId: this.config.callId, toolName }, "LLM called unknown tool — ignoring");
+      if (toolName === "send_email") {
+        return "error: send_email is not a tool on this call. Confirmation email is sent automatically after book_appointment succeeds. If the caller named a time, call check_availability then book_appointment after you have their name and email. Speak a short reply now — do not emit XML.";
+      }
       return `error: ${toolName} is not a tool on this call. Answer the caller now using the knowledge already in your prompt. Do not call any tool.`;
     }
 
@@ -7792,11 +7818,7 @@ export class OrchestrationPipeline implements VoiceSession {
     }
 
     // ── Build tool definitions from agent config ──
-    const toolDefs = buildToolDefs(this.agent.tools);
-    toolDefs.push(SCHEDULE_CALLBACK_TOOL_DEF);
-    if (this.agent.isMeetingSession) {
-      toolDefs.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_SESSION_TOOL_DEFS);
-    }
+    const toolDefs = this.buildVoiceToolDefs();
 
     const llmStart = Date.now();
     let llmFirstTokenAt: number | null = null;
@@ -8350,6 +8372,8 @@ export class OrchestrationPipeline implements VoiceSession {
           `  • requested_slot_unavailable — the requested time is not open. Tell the caller and read out the slots from the 'alternatives' field. Once the caller picks one, collect their name and email and call "${bookName}" with the chosen ISO string verbatim as preferred_date.`,
           `  • available_slots — a general list of upcoming slots. Each entry in 'next' is an ISO 8601 string followed by a human label in parentheses. Present them to the caller. After the caller picks one, collect name and email and call "${bookName}" with the ISO string verbatim as preferred_date.`,
           `Always pass ISO strings to "${bookName}" exactly as returned — never reformat or convert them.`,
+          `When the caller names a day and/or time (tomorrow, 10:30, eleven AM, कल टेन थर्टी), call "${checkName}" in THAT turn. Do not keep asking कल या परसों or Google Meet vs in-person after they already answered.`,
+          `NEVER invent slot times. NEVER emit XML or <tool_call> text. NEVER invent send_email — a confirmation email is sent automatically after "${bookName}" succeeds.`,
         );
       }
       if (hasBookingTool) {
@@ -9221,6 +9245,24 @@ export class OrchestrationPipeline implements VoiceSession {
       });
     }
 
+    if (!triggeredToolName) {
+      const recovered = parseToolEnvelope(llmResponse) ?? parseToolEnvelope(envelopeGuard.captured());
+      if (recovered) {
+        triggeredToolName = recovered.name;
+        triggeredToolArgs = recovered.args;
+        this.logExec("Tool", "system", {
+          status: "info",
+          turnNumber: _currentTurnIndex,
+          metadata: {
+            event: "Text Tool Call Recovered",
+            tool: recovered.name,
+            format: recovered.format,
+            args: recovered.args,
+          },
+        });
+      }
+    }
+
     // LLM response execution-log row — logged before tool handling so the
     // timeline reads LLM request → LLM response → Tool request → Tool response
     // (identical ordering to the web-call path).
@@ -10016,11 +10058,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // single user turn (e.g. check_availability → book_appointment → end_call).
     // A depth cap forces a final tools-detached narration to prevent runaway loops.
     const MAX_TOOL_DEPTH = 5;
-    const toolDefs = buildToolDefs(this.agent.tools);
-    toolDefs.push(SCHEDULE_CALLBACK_TOOL_DEF);
-    if (this.agent.isMeetingSession) {
-      toolDefs.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_SESSION_TOOL_DEFS);
-    }
+    const toolDefs = this.buildVoiceToolDefs();
     const fatalSchedulingConfig =
       this.schedulingConfigurationFailed && result.includes("\"no_event_type\"");
     // A missing event type cannot be recovered by another tool call. Detach all
@@ -10280,6 +10318,25 @@ export class OrchestrationPipeline implements VoiceSession {
     }
 
     if (followUpFillerTimer) { clearTimeout(followUpFillerTimer); followUpFillerTimer = null; }
+
+    if (!triggeredToolName) {
+      const recovered = parseToolEnvelope(llmResponse) ?? parseToolEnvelope(envelopeGuard.captured());
+      if (recovered) {
+        triggeredToolName = recovered.name;
+        triggeredToolArgs = recovered.args;
+        this.logExec("Tool", "system", {
+          status: "info",
+          turnNumber: this._activeTurnIndex,
+          metadata: {
+            event: "Text Tool Call Recovered",
+            tool: recovered.name,
+            format: recovered.format,
+            args: recovered.args,
+            path: "continueWithToolResult",
+          },
+        });
+      }
+    }
 
     // Compute the fully-cleaned response BEFORE the final flush so the spoken
     // tail and the stored history are derived from the exact same text.
@@ -11291,6 +11348,7 @@ function toolNamesOf(toolDefs: unknown[]): Set<string> {
  * reply:
  *   • starts with `{` or a ``` fence  → JSON/fenced envelope, suppress
  *   • starts with `[<validToolName>]` → bracket envelope, suppress
+ *   • starts with `<tool_call` / XML tool tags → suppress (call 14160)
  *   • anything else                   → ordinary text, flush and stop guarding
  * Ordinary bracketed text (e.g. "[laughs]") is NOT suppressed because its name
  * is not in validToolNames. Once the first decision is made the guard becomes a
@@ -11315,6 +11373,11 @@ function makeToolEnvelopeGuard(validToolNames: Set<string>): {
       held += token;
       const peek = held.replace(/^\s+/, "");
       if (peek === "") return ""; // only whitespace so far — keep holding
+      const xml = xmlToolSniff(peek);
+      if (xml === "hold") return "";
+      if (xml === "yes") {
+        decided = true; suppress = true; captured = held; return "";
+      }
       const first = peek[0];
       if (first === "{" || first === "`") {
         decided = true; suppress = true; captured = held; return "";

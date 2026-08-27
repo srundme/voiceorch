@@ -583,6 +583,35 @@ export function isSemanticInterrupt(text: string): boolean {
 }
 
 /**
+ * Caller named a day/time for booking while the agent was still talking.
+ * Energy-only self-echo discard must not drop these (call 14160: "कल टेन थर्टी मैडम"
+ * was thrown away because RMS never cleared the echo bar). Content self-echo
+ * still applies — if the transcript is the agent's own "three PM or four PM",
+ * that path remains.
+ */
+export function looksLikeBookingTimeAnswer(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (/\b\d{1,2}[:.]\d{2}\b/.test(t)) return true;
+  if (/\b\d{1,2}\s*(?:a\.?m\.?|p\.?m\.?)\b/i.test(t)) return true;
+  if (
+    /\b(?:ten|eleven|twelve|one|two|three|four|five|six|seven|eight|nine)\s*(?:thirty|fifteen|forty[\s-]?five|o'?clock)?\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(?:tomorrow|today|tonight|morning|afternoon|evening|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  return /(?:कल|परसों|आज|सुबह|दोपहर|शाम|बजे|टेन|थर्टी|इलेवन|ट्वेल्व)/u.test(t);
+}
+
+/**
  * Normalises spoken Indian email tokens into valid formatted email strings.
  * E.g., "karthik 1 2 3 அட் ஜிமெல் டாட் காம்" -> "karthik123@gmail.com"
  * "user name ऐट जीमेल डॉट कॉम" -> "username@gmail.com"

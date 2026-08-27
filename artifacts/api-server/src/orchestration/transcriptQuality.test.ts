@@ -13,6 +13,7 @@ import {
   normalizeSttPhonetics,
   coalescePendingTranscripts,
   signalsConversationalContinuation,
+  looksLikeBookingTimeAnswer,
 } from "./transcriptQuality.js";
 import { isAffirmationOnlyUtterance } from "./endpointing.js";
 
@@ -318,5 +319,18 @@ describe("isAccidentalInterruptPhrase", () => {
       ]);
       expect(coalesced?.text).toBe("ஆமா.");
     });
+  });
+});
+
+describe("looksLikeBookingTimeAnswer", () => {
+  it("accepts Hindi/Hinglish slot answers discarded on call 14160", () => {
+    expect(looksLikeBookingTimeAnswer("कल टेन थर्टी मैडम")).toBe(true);
+    expect(looksLikeBookingTimeAnswer("tomorrow 10:30")).toBe(true);
+    expect(looksLikeBookingTimeAnswer("eleven AM")).toBe(true);
+  });
+
+  it("rejects ordinary acks", () => {
+    expect(looksLikeBookingTimeAnswer("हाँ।")).toBe(false);
+    expect(looksLikeBookingTimeAnswer("okay madam")).toBe(false);
   });
 });
