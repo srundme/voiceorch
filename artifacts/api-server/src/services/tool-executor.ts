@@ -40,6 +40,11 @@ import { attachMeetLinkToEmailBody } from "../orchestration/booking-email-guard.
 import { sendMidCallWhatsapp } from "./whatsapp/outbound.js";
 import { resolveBookingLineageCallId } from "./meet-booking.js";
 import { normalizeBookingDatetimeArgs } from "./booking-tool-args.js";
+import {
+  sanitizeAttendeeEmail,
+  validateBookableEmail,
+  isEmailConfirmedFlag,
+} from "../orchestration/booking-email-validate.js";
 import { fetchUserConfiguredUrl } from "../lib/ssrf.js";
 import {
   syncCampaignBooking,
@@ -161,12 +166,18 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
             " (1) NEVER call this tool with placeholder, example, or test values — attendee_name must be the caller's real full name and attendee_email must be their real email address (not @example.com, @test.com, or similar fake domains)." +
             " (2) You MUST have the caller's real name AND real email address explicitly stated in the conversation before calling — do NOT fabricate or guess these details." +
             " (3) Only book ONE slot per conversation turn — present available slots to the caller, wait for them to choose one, then book only that ONE slot. Do NOT call this tool multiple times in a row." +
-            " (4) Required fields: attendee_name (ask the caller if not yet provided) and attendee_email (ask the caller if not yet provided).",
+            " (4) Required fields: attendee_name (ask the caller if not yet provided) and attendee_email (ask the caller if not yet provided)." +
+            " (5) EMAIL CONFIRMATION (mandatory): after the caller gives an email, spell it back with <spell>…</spell> character-by-character, wait for an explicit yes/correct, THEN call this tool with email_confirmed=true. Never book on a half-heard address (e.g. missing domain or spaces in the local-part).",
           parameters: {
             type: "object",
             properties: {
               attendee_name: { type: "string", description: "Full name of the person being booked" },
               attendee_email: { type: "string", description: "Email address of the person being booked" },
+              email_confirmed: {
+                type: "boolean",
+                description:
+                  "Must be true only after you spelled the email back with <spell> tags and the caller explicitly confirmed it is correct.",
+              },
               preferred_date: {
                 type: "string",
                 description:
@@ -576,12 +587,34 @@ export async function executeNativeBooking(
   logger.info({ callId, eventTypeId: tool.eventTypeId }, "Native booking tool invoked");
   const bookingCallId = await resolveBookingLineageCallId(callId, opts?.lineageCallId);
   const attendeeName = String(args["attendee_name"] ?? args["name"] ?? "Guest");
-  const attendeeEmail = String(args["attendee_email"] ?? args["email"] ?? "");
+  const attendeeEmailRaw = String(args["attendee_email"] ?? args["email"] ?? "");
   const preferredRaw = args["preferred_date"] != null ? String(args["preferred_date"]) : null;
 
-  if (!attendeeEmail) {
+  if (!attendeeEmailRaw.trim()) {
     logger.warn({ callId }, "Native booking: no attendee email — cannot book");
     return "error: attendee_email is required to complete the booking";
+  }
+
+  const emailCheck = validateBookableEmail(attendeeEmailRaw);
+  if (!emailCheck.ok) {
+    logger.warn({ callId, attendeeEmailRaw, reason: emailCheck.reason }, "Native booking blocked: invalid email");
+    void appendBookingLog(callId, agentId, "Booking Blocked", {
+      reason: emailCheck.reason,
+      attendeeEmail: sanitizeAttendeeEmail(attendeeEmailRaw),
+      attendeeName,
+    }, "error");
+    return `error: ${emailCheck.detail} Do not call this tool again until you have a complete, confirmed email.`;
+  }
+  const attendeeEmail = emailCheck.email;
+
+  if (!isEmailConfirmedFlag(args)) {
+    logger.warn({ callId, attendeeEmail }, "Native booking blocked: email not confirmed by caller");
+    void appendBookingLog(callId, agentId, "Booking Blocked", {
+      reason: "email_not_confirmed",
+      attendeeEmail,
+      attendeeName,
+    }, "error");
+    return "error: email_confirmed must be true. Spell the email back with <spell>…</spell>, get an explicit yes from the caller, then call again with email_confirmed=true and the exact address.";
   }
 
   // ── Placeholder email guard ──────────────────────────────────────────────

@@ -35,6 +35,7 @@ import { encodeMulaw, upsample8to16, downsample16to8, createDownsampler16to8, de
 import { resolveMicSensitivity, getMicSensitivityThresholds, isIdleCancellingMicEnergy, type MicSensitivityThresholds } from "./mic-sensitivity.js";
 import { resolveSoftwareNoiseGate, envForceVobizSoftwareNc, type NoiseGateDecision } from "./noise-gate.js";
 import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
+import { validateBookableEmail, isEmailConfirmedFlag } from "./booking-email-validate.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, peekCachedPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
@@ -7559,13 +7560,21 @@ export class OrchestrationPipeline implements VoiceSession {
   private async executeCalCom(tool: AgentTool & { type: "cal_com" }, args: Record<string, unknown>): Promise<string> {
     logger.info({ callId: this.config.callId, eventTypeId: tool.eventTypeId }, "Cal.com booking tool invoked");
     const attendeeName  = String(args["attendee_name"]  ?? args["name"]  ?? "Guest");
-    const attendeeEmail = String(args["attendee_email"] ?? args["email"] ?? "");
+    const attendeeEmailRaw = String(args["attendee_email"] ?? args["email"] ?? "");
     const timezone      = String(args["timezone"]       ?? tool.timezone  ?? "UTC");
 
-    if (!attendeeEmail) {
+    if (!attendeeEmailRaw.trim()) {
       logger.warn({ callId: this.config.callId }, "Cal.com: no attendee email provided — cannot book");
       return "error: attendee_email is required to complete the Cal.com booking. Ask the caller for their email.";
     }
+    const emailCheck = validateBookableEmail(attendeeEmailRaw);
+    if (!emailCheck.ok) {
+      return `error: ${emailCheck.detail}`;
+    }
+    if (!isEmailConfirmedFlag(args)) {
+      return "error: email_confirmed must be true. Spell the email back with <spell>…</spell>, get an explicit yes, then retry with email_confirmed=true.";
+    }
+    const attendeeEmail = emailCheck.email;
     try {
       // Fetch available slots for the next 7 days
       const now       = new Date();
@@ -8714,6 +8723,9 @@ export class OrchestrationPipeline implements VoiceSession {
       if (hasBookingTool) {
         lines.push(
           `Before calling "${bookName}", you MUST collect the caller's full name and email address. Ask for them if not yet provided.`,
+          `EMAIL ACCURACY (call-critical): never book on a half-heard email. If the address is incomplete (no domain, ends with @, or has spaces), ask the caller to spell it letter by letter.`,
+          `After you hear an email, ALWAYS spell it back with <spell>r a m … @ g m a i l . c o m</spell> and wait for an explicit yes/correct before calling "${bookName}" with email_confirmed=true.`,
+          `When reading available slots aloud, keep the whole list in ONE reply sentence — do not chop each time (9:00 AM / 9:15 AM) into separate fragments.`,
           `NEVER tell the caller their appointment is confirmed or scheduled unless you have received a booking_confirmed: result from "${bookName}".`,
           `Do NOT say "Your appointment has been scheduled" or any equivalent phrase before "${bookName}" returns a booking_confirmed: result.`,
           `When "${bookName}" returns booking_pending: — the booking was received but NOT confirmed. Tell the caller ONLY: "Your appointment request has been received and is pending confirmation — we'll follow up to confirm it." Do NOT say it is booked, scheduled, or confirmed. NEVER mention internal reasons like "Google Calendar", "calendar event creation failed", or any technical system error to the caller — just say it is pending confirmation.`,
@@ -11902,6 +11914,20 @@ export function extractSentences(text: string, minCommaClauseChars = 8): { sente
  * boundary (.!?) arrives. Uses comma/semicolon breaks first, then a word
  * boundary once the buffer is long enough for natural prosody.
  */
+/** Clock / slot tokens — never early-split a comma between these (call 14390 choppy TTS). */
+const TIME_SLOT_TOKEN = /\b\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)\b/;
+
+function isTimeListComma(clause: string, rest: string): boolean {
+  const head = clause.slice(-48);
+  const tail = rest.slice(0, 48);
+  if (TIME_SLOT_TOKEN.test(head) && TIME_SLOT_TOKEN.test(tail)) return true;
+  // "...9:00 AM, 9:15..." — rest opens with another clock
+  if (/\b(?:AM|PM)\s*$/i.test(clause.trim()) && /^\s*\d{1,2}\s*(?::\d{2})?\s*(?:AM|PM)?/i.test(rest)) {
+    return true;
+  }
+  return false;
+}
+
 export function tryEarlyPhraseDispatch(
   remainder: string,
   minChars: number,
@@ -11912,13 +11938,19 @@ export function tryEarlyPhraseDispatch(
   const firstComma = remainder.indexOf(", ");
   if (firstComma !== -1 && remainder.length >= minBuffer) {
     const clause = remainder.slice(0, firstComma).trim();
-    // Latin: "Hello Gopi," can start TTS early. Indic commas are mid-clause
-    // breaths (call 14345: "புரியுது," became its own Cartesia clip and the
-    // voice broke between every comma).
-    const indic = /[\u0900-\u0D7F]/.test(clause);
-    const minClause = indic ? Math.max(24, minChars) : 5;
-    if (clause.length >= minClause) {
-      return { clause, rest: remainder.slice(firstComma + 2) };
+    const rest = remainder.slice(firstComma + 2);
+    // Keep slot offers as one Cartesia clip: "9:00 AM, 9:15 AM, 9:30 AM…"
+    if (isTimeListComma(clause, rest)) {
+      // fall through to semicolon / dash breaks only
+    } else {
+      // Latin: "Hello Gopi," can start TTS early. Indic commas are mid-clause
+      // breaths (call 14345: "புரியுது," became its own Cartesia clip and the
+      // voice broke between every comma).
+      const indic = /[\u0900-\u0D7F]/.test(clause);
+      const minClause = indic ? Math.max(24, minChars) : 5;
+      if (clause.length >= minClause) {
+        return { clause, rest };
+      }
     }
   }
 
