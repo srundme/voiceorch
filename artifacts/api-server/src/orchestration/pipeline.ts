@@ -317,7 +317,7 @@ const STREAM_ACCUM_BYTES      = 640;    // 20ms of 16kHz PCM before forwarding a
 const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 80));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
-  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 220),
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 320),
 );
 const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 400));
 const TTS_REBUFFER_MS      = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 160));
@@ -1050,6 +1050,10 @@ export class OrchestrationPipeline implements VoiceSession {
   // cut the greeting on streaming_energy). Word-count / semantic interrupts
   // still work after greetingEchoHoldUntil so a real "wait" can cut in.
   private greetingPlaybackActive = false;
+  /** True while a dead-air filler (ம்ம் / ஆஹா) is on the wire. Energy barge-in
+   *  of that clip's own echo chops the voice (call 14276: streaming_energy on
+   *  "அப்படியா"). Semantic / vad_partial can still cut a real talk-over. */
+  private fillerPlaybackActive = false;
   // Self-calibrating echo floor (RMS) for the streaming-STT energy barge-in path.
   // A rolling EMA of the inbound frame RMS measured WHILE the agent is playing but
   // NOT (yet) accumulating a barge-in — i.e. it tracks the carrier's returning-echo
@@ -4352,6 +4356,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // the room must not kill the pitch (call 10544 streaming_energy at +3s).
     // Semantic + word-count barge-in still apply after greetingEchoHoldUntil.
     if (this.greetingPlaybackActive) return;
+    if (this.fillerPlaybackActive) return;
 
     // Streaming-STT carrier path (webcall has AEC; the batch path keeps its own
     // extended-hold protection). Only here do we measure RMS / self-calibrate.
@@ -6318,6 +6323,8 @@ export class OrchestrationPipeline implements VoiceSession {
     logPlaybackEvent(this.logFn, "Playback Started", { provider: this.agent.ttsProvider, turnNumber: _pbTurn });
     let _pacedMs: number | undefined;
     let _claimedMs: number | undefined;
+    const isFiller = job.sequenceId === FILLER_SEQUENCE_ID;
+    if (isFiller) this.fillerPlaybackActive = true;
     this.isSendingTtsAudio = true;
     try {
       const drain = await this.drainSentenceJob(job);
@@ -6325,6 +6332,7 @@ export class OrchestrationPipeline implements VoiceSession {
       _claimedMs = drain?.claimedMs ?? job.audioDurationMs;
     } finally {
       this.isSendingTtsAudio = false;
+      if (isFiller) this.fillerPlaybackActive = false;
       if (this._activePlaybackText === job.text) {
         this._activePlaybackText = null;
         this._activePlaybackStartedAt = null;
@@ -11500,7 +11508,9 @@ function stripBracketedInstructions(text: string): string {
  *
  * Improvements over the naive regex approach:
  *  • "!" and "?" are always boundaries (they don't appear in abbreviations).
- *  • "..." (ellipsis) is treated as a single boundary.
+ *  • "..." is NOT a sentence boundary. Tamil/English LLMs use it as a breath
+ *    ("அதுக்கு முன்னாடி...", "Time confirm பண்ணிக்கலாமா...") — flushing that
+ *    as its own Cartesia clip is the hitch you hear mid-reply (call 14276).
  *  • "." is a boundary ONLY when followed by whitespace + an uppercase letter,
  *    quote, or opening paren — this correctly skips:
  *      - Abbreviations:   "Dr. Smith", "Mr. Lee", "e.g. this"  (word before "." ≤ 4 letters)
@@ -11527,12 +11537,10 @@ export function extractSentences(text: string, minCommaClauseChars = 8): { sente
       segStart = i;
 
     } else if (ch === '.' && text[i + 1] === '.' && text[i + 2] === '.') {
-      // Ellipsis "..." — single boundary
-      const s = text.slice(segStart, i + 3).trim();
-      if (s.length >= 4) sentences.push(s);
+      // Ellipsis is a breath, not a clip. Skip the three dots and keep
+      // accumulating so "அதுக்கு முன்னாடி... உங்களுக்கு …" stays one sentence.
       i += 3;
-      while (i < text.length && text[i] === ' ') i++;
-      segStart = i;
+      continue;
 
     } else if (ch === '\u0964') {
       // Devanagari / Indic danda (।) — sentence boundary in Hindi, Tamil-mixed, etc.

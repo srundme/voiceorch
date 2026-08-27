@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { extractSentences, tryEarlyPhraseDispatch } from "./pipeline.js";
+
+process.env.DATABASE_URL ??= "postgres://test:test@127.0.0.1:5432/test";
+const { extractSentences, tryEarlyPhraseDispatch } = await import("./pipeline.js");
 
 // Regression test for the Tamil/Indic "duplicated opening clause" bug on the
 // telephony (pipeline.ts) path. The pipeline clause-split regex was missing the
@@ -75,6 +77,22 @@ describe("tryEarlyPhraseDispatch — streaming TTS starts before .!?", () => {
 
   it("does not dispatch very short buffers", () => {
     expect(tryEarlyPhraseDispatch("Sure I can", 15)).toBeNull();
+  });
+});
+
+describe("extractSentences — ellipsis is a breath, not a clip (call 14276)", () => {
+  it("keeps a Tamil trailing ... attached until the real sentence ends", () => {
+    const pending = "அதுக்கு முன்னாடி... உங்களுக்கு எந்த timezone-ல இருந்து call பண்ணா வசதியா இருக்கும்னு சொல்ல முடியுமா?";
+    const { sentences, remainder } = extractSentences(pending);
+    expect(sentences.join(" ")).toContain("அதுக்கு முன்னாடி");
+    expect(sentences.some((s) => s === "அதுக்கு முன்னாடி...")).toBe(false);
+    expect(norm(sentences.join(" ") + remainder)).toBe(norm(pending));
+  });
+
+  it("does not flush Time confirm பண்ணிக்கலாமா... as its own TTS job", () => {
+    const pending = "Time confirm பண்ணிக்கலாமா... நீங்க India timezone-ல தான இருக்கீங்க?";
+    const { sentences } = extractSentences(pending);
+    expect(sentences.some((s) => /^Time confirm/.test(s) && s.endsWith("..."))).toBe(false);
   });
 });
 
