@@ -27,6 +27,7 @@ import {
     clampSarvamSilenceMs,
     clampSarvamMinSpeechMs,
     clampSarvamVadThreshold,
+    clampSemanticTurnStopMs,
     hydrateSarvamRealtimeVad,
     clampInterruptWords,
   voiceSecondsFromInterruptWords,
@@ -119,6 +120,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     sarvamSttMode, sarvamSttStreamType, sarvamSttPrompt, kbBakedOnly, schedulingCalendarId, schedulingEventTypeId,
     sarvamHighVadSensitivity, sarvamSpeechEndFlushMs, sarvamIncompleteHoldMs,
     sarvamEndOfSpeechSilenceMs, sarvamFirstTurnMinSpeechMs, sarvamVadThreshold,
+    semanticTurnStopMs,
     voiceStack, geminiLiveVoiceName, geminiLiveThinkingLevel,
     agentComposition, agentSurfaces, meetingPrompt,
     meetingMaxDurationSeconds, meetingSilenceTimeoutSeconds, meetingSilenceHangupEnabled,
@@ -199,6 +201,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["sarvamEndOfSpeechSilenceMs"] = clampSarvamSilenceMs(sarvamEndOfSpeechSilenceMs);
   agentConfig["sarvamFirstTurnMinSpeechMs"] = clampSarvamMinSpeechMs(sarvamFirstTurnMinSpeechMs);
   agentConfig["sarvamVadThreshold"] = clampSarvamVadThreshold(sarvamVadThreshold);
+  agentConfig["semanticTurnStopMs"] = clampSemanticTurnStopMs(semanticTurnStopMs);
   if (kbBakedOnly) agentConfig["kbBakedOnly"] = true;
   // Always persist speed so Sarvam pace / Cartesia speed stay UI-owned (1.0 clears prior boost).
   agentConfig["ttsSpeed"] = ttsSpeed != null && Number.isFinite(ttsSpeed) ? ttsSpeed : 1;
@@ -514,6 +517,7 @@ export default function AgentEdit() {
       sarvamVadThreshold: 0.3,
       sarvamSpeechEndFlushMs: 0,
       sarvamIncompleteHoldMs: 0,
+      semanticTurnStopMs: 1200,
       kbBakedOnly: false,
       startSpeakingWaitSecs: 0,
       startSpeakingOnPunctuationSecs: 0,
@@ -826,6 +830,7 @@ export default function AgentEdit() {
       sarvamVadThreshold: sarvamVad.threshold,
       sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs((agent as any).agentConfig?.sarvamSpeechEndFlushMs as number | undefined),
       sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs((agent as any).agentConfig?.sarvamIncompleteHoldMs as number | undefined),
+      semanticTurnStopMs: clampSemanticTurnStopMs((agent as any).agentConfig?.semanticTurnStopMs as number | undefined),
       kbBakedOnly: ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       startSpeakingWaitSecs:            ((agent as any).agentConfig?.startSpeakingPlan?.waitSeconds as number | undefined)            ?? 0,
       startSpeakingOnPunctuationSecs:   ((agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds as number | undefined)   ?? 0,

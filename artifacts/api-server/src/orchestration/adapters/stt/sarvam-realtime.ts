@@ -347,7 +347,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
     let mode = this.mode;
     const primaryLanguage = this.primaryLanguage;
     const explicitMode = this.explicitMode;
-    const silenceDurationMs = this.silenceDurationMs;
+    let silenceDurationMs = this.silenceDurationMs;
     const minSpeechDurationMs = this.minSpeechDurationMs;
     const threshold = this.threshold;
     const streamType = this.streamType;
@@ -664,6 +664,17 @@ export class SarvamRealtimeSTT implements STTAdapter {
         mode = nextMode;
         logger.info({ to: nextLang, mode: nextMode }, "Sarvam STT realtime: config.update");
         sendJson(buildRealtimeConfigUpdate({ languageCode: nextLang, mode: nextMode }));
+      },
+      setSilenceDurationMs(ms: number): void {
+        if (usingLegacy) {
+          legacyStream?.setSilenceDurationMs?.(ms);
+          return;
+        }
+        const next = Math.max(150, Math.min(800, Math.round(ms)));
+        if (!Number.isFinite(next) || next === silenceDurationMs) return;
+        silenceDurationMs = next;
+        logger.info({ silenceDurationMs: next }, "Sarvam STT realtime: silence_duration_ms");
+        sendJson(buildRealtimeConfigUpdate({ silenceDurationMs: next }));
       },
       getRealtimeActive(): boolean {
         return !usingLegacy && sessionBegan;

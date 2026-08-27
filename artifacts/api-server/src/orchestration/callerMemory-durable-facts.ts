@@ -5,6 +5,8 @@
  * caller_facts. Only verified, schema-constrained identity facts persist.
  */
 
+import { sanitizeSpokenEmailAddress } from "./endpointing.js";
+
 /** Closed enum — LLM / regex may only fill these keys. */
 export const DURABLE_FACT_KEYS = [
   "name",
@@ -282,7 +284,7 @@ export function normalizeFactValue(key: DurableFactKey, raw: string): string | n
       return v.length >= 2 ? v : null;
     }
     case "email": {
-      const email = value.toLowerCase().replace(/\s+/g, "");
+      const email = sanitizeSpokenEmailAddress(value.toLowerCase().replace(/\s+/g, ""));
       return EMAIL_RE.test(email) ? email : null;
     }
     case "language_pref":

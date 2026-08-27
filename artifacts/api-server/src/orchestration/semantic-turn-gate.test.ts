@@ -4,6 +4,7 @@ import {
   clampSemanticTurnStopMs,
   resolveEouCommit,
   resolveSemanticTurnEnabled,
+  resolveSmartTurnEval,
 } from "./semantic-turn-gate.js";
 
 describe("resolveEouCommit", () => {
@@ -40,6 +41,57 @@ describe("resolveEouCommit", () => {
       action: "eligible",
       reason: "audio_complete",
     });
+  });
+
+  it("HOLDs a slow Smart Turn instead of fail-opening as complete", () => {
+    expect(resolveEouCommit({ eou: "timeout", textLooksIncomplete: false })).toEqual({
+      action: "hold",
+      reason: "eou_timeout",
+    });
+  });
+
+  it("still fail-opens a timed-out short ack so Fast yes/no stays snappy", () => {
+    expect(resolveEouCommit({
+      eou: "timeout",
+      textLooksIncomplete: false,
+      snapComplete: true,
+    })).toEqual({
+      action: "eligible",
+      reason: "eou_timeout_ack",
+    });
+  });
+
+  it("timeout still honours the text veto", () => {
+    expect(resolveEouCommit({ eou: "timeout", textLooksIncomplete: true })).toEqual({
+      action: "hold",
+      reason: "text_incomplete",
+    });
+  });
+});
+
+describe("resolveSmartTurnEval", () => {
+  it("treats a session that is still loading as missing, not as a slow eval", () => {
+    expect(resolveSmartTurnEval({
+      sessionReady: false,
+      timedOut: true,
+      verdict: null,
+    })).toBe("unavailable");
+  });
+
+  it("HOLDs only after the model is warm and the eval budget expires", () => {
+    expect(resolveSmartTurnEval({
+      sessionReady: true,
+      timedOut: true,
+      verdict: null,
+    })).toBe("timeout");
+  });
+
+  it("passes through a real verdict when the session is ready", () => {
+    expect(resolveSmartTurnEval({
+      sessionReady: true,
+      timedOut: false,
+      verdict: "complete",
+    })).toBe("complete");
   });
 });
 

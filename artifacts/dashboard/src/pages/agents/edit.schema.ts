@@ -164,6 +164,8 @@ export const agentFormSchema = z.object({
   sarvamSpeechEndFlushMs: z.number().min(0).max(200).optional(),
   /** ms hold for incomplete mid-thought fragments — default 220. */
   sarvamIncompleteHoldMs: z.number().min(0).max(1000).optional(),
+  /** Max extra silence after an incomplete Smart Turn HOLD before we answer. Default 1200. */
+  semanticTurnStopMs: z.number().min(400).max(4000).optional(),
 
   // Workspace calendar assigned to this agent for native scheduling tools
   schedulingCalendarId: z.number().optional().nullable(),
@@ -235,6 +237,7 @@ export function hydrateToolsForForm(tools: readonly AgentTool[]): AgentFormTool[
 /** Call Engine presets — Fast / Balanced / Patient write SnapServe barge knobs + Sarvam realtime VAD. */
 export const CALL_ENGINE_PRESETS = {
   // silence_duration_ms / min_speech_duration_ms / threshold match the realtime connect query.
+  // semanticTurnStopMs is the incomplete-thought cap after Smart Turn HOLD (not VAD).
   fast: {
     asrEndpointingSilenceMs: 150,
     linearDelayMs: 0,
@@ -243,6 +246,7 @@ export const CALL_ENGINE_PRESETS = {
     sarvamEndOfSpeechSilenceMs: 300,
     sarvamFirstTurnMinSpeechMs: 200,
     sarvamVadThreshold: 0.3,
+    semanticTurnStopMs: 800,
   },
   balanced: {
     asrEndpointingSilenceMs: 250,
@@ -252,6 +256,7 @@ export const CALL_ENGINE_PRESETS = {
     sarvamEndOfSpeechSilenceMs: 400,
     sarvamFirstTurnMinSpeechMs: 250,
     sarvamVadThreshold: 0.3,
+    semanticTurnStopMs: 1200,
   },
   patient: {
     asrEndpointingSilenceMs: 500,
@@ -261,6 +266,7 @@ export const CALL_ENGINE_PRESETS = {
     sarvamEndOfSpeechSilenceMs: 700,
     sarvamFirstTurnMinSpeechMs: 350,
     sarvamVadThreshold: 0.35,
+    semanticTurnStopMs: 1800,
   },
 } as const;
 
@@ -329,6 +335,12 @@ export function clampSarvamMinSpeechMs(value: number | null | undefined): number
 export function clampSarvamVadThreshold(value: number | null | undefined): number {
   const v = typeof value === "number" && Number.isFinite(value) ? value : 0.3;
   return Math.min(0.8, Math.max(0.1, Math.round(v * 100) / 100));
+}
+
+/** Incomplete-thought cap after Smart Turn HOLD. Adapter default 1200. */
+export function clampSemanticTurnStopMs(value: number | null | undefined): number {
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 1200;
+  return Math.max(400, Math.min(4000, Math.round(v)));
 }
 
 /**

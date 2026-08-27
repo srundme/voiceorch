@@ -40,7 +40,7 @@ import type { AgentVersion } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, hydrateSarvamRealtimeVad, clampInterruptWords, voiceSecondsFromInterruptWords, WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER } from "./edit.schema";
+import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, hydrateSarvamRealtimeVad, clampInterruptWords, voiceSecondsFromInterruptWords, clampSemanticTurnStopMs, WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER } from "./edit.schema";
 import { AgentWebsiteEmbedPanel } from "./website-embed";
 import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
@@ -2533,6 +2533,7 @@ function useCallEnginePreset(form: any): {
   const silenceMs = form.watch("sarvamEndOfSpeechSilenceMs") ?? 300;
   const minSpeechMs = form.watch("sarvamFirstTurnMinSpeechMs") ?? 250;
   const threshold = form.watch("sarvamVadThreshold") ?? 0.3;
+  const stopMs = form.watch("semanticTurnStopMs") ?? 1200;
 
   const matches = (key: CallEnginePreset): boolean => {
     const p = CALL_ENGINE_PRESETS[key];
@@ -2540,6 +2541,7 @@ function useCallEnginePreset(form: any): {
       endpointMs !== p.asrEndpointingSilenceMs
       || linearMs !== p.linearDelayMs
       || interruptWords !== p.stopSpeakingNumWords
+      || stopMs !== p.semanticTurnStopMs
     ) return false;
     if (realtime) {
       return (
@@ -2572,6 +2574,7 @@ function useCallEnginePreset(form: any): {
     form.setValue("sarvamEndOfSpeechSilenceMs", p.sarvamEndOfSpeechSilenceMs, { shouldDirty: true });
     form.setValue("sarvamFirstTurnMinSpeechMs", p.sarvamFirstTurnMinSpeechMs, { shouldDirty: true });
     form.setValue("sarvamVadThreshold", p.sarvamVadThreshold, { shouldDirty: true });
+    form.setValue("semanticTurnStopMs", p.semanticTurnStopMs, { shouldDirty: true });
     setPinned(key);
   };
 
@@ -6863,6 +6866,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       sarvamVadThreshold: 0.3,
       sarvamSpeechEndFlushMs: 0,
       sarvamIncompleteHoldMs: 0,
+      semanticTurnStopMs: 800,
       kbBakedOnly: false,
       autoRedialEnabled: true,
       autoRedialMaxAttempts: 3,
@@ -7017,6 +7021,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       sarvamHighVadSensitivity:        ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) !== false,
       sarvamSpeechEndFlushMs:          0,
       sarvamIncompleteHoldMs:          0,
+      semanticTurnStopMs:              clampSemanticTurnStopMs((agent as any).agentConfig?.semanticTurnStopMs),
       kbBakedOnly:                     ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       autoRedialEnabled:      (agent as any).agentConfig?.autoRedial?.enabled ?? false,
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,
