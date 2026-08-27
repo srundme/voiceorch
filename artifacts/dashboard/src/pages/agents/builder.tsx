@@ -104,8 +104,9 @@ import {
   DEFAULT_CARTESIA_VOICE_ID, DEFAULT_CARTESIA_VOICE_NAME,
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage, shouldClearVoiceForLanguage,
   getSarvamTtsVoices, isSarvamVoiceCompatible,
-  GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS,
+  GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS, VOICE_STACK_OPTIONS,
   geminiLiveModelLabel, isGeminiLiveAgent, voiceStackForLlmModel,
+  llmFieldsForVoiceStack,
   languagesForAgent, isSarvamRealtimeAsr,
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
@@ -1256,8 +1257,27 @@ function OverviewTab({
             onSave={savePipelineDialog}
             icon={<Brain />}
             title="Model"
-            description="Pick the LLM provider and model. Gemini Live is under Google Gemini → Model."
+            description="Choose Classic STT+LLM+TTS, or Gemini Live native speech-to-speech."
           >
+            <FormField control={form.control} name="voiceStack" render={({ field }) => (
+              <FormItem className="space-y-1">
+                <FormLabel className="text-[10px] text-muted-foreground">Voice stack</FormLabel>
+                <SmallSelect
+                  value={isGeminiLive ? "gemini_live" : (field.value ?? "classic")}
+                  onChange={(v) => {
+                    const stack = v === "gemini_live" ? "gemini_live" : "classic";
+                    field.onChange(stack);
+                    const next = llmFieldsForVoiceStack(stack, {
+                      llmProvider: form.getValues("llmProvider"),
+                      llmModel: form.getValues("llmModel"),
+                    });
+                    form.setValue("llmProvider", next.llmProvider, { shouldDirty: true });
+                    form.setValue("llmModel", next.llmModel, { shouldDirty: true });
+                  }}
+                  options={VOICE_STACK_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
+                />
+              </FormItem>
+            )} />
             {isGeminiLive && (
               <p className="text-[11px] text-muted-foreground rounded-md border border-border/60 bg-muted/30 px-3 py-2">
                 Gemini Live uses native speech-to-speech. Classic STT/TTS are skipped — set language in the Language card and pick a preset voice in Voice.
@@ -2118,6 +2138,25 @@ function VoiceTab({ form }: { form: any }) {
         bodyClassName="gap-3"
       >
         <div className="space-y-3">
+          <FormField control={form.control} name="voiceStack" render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel className="text-xs text-muted-foreground">Voice stack</FormLabel>
+              <SmallSelect
+                value={isGeminiLive ? "gemini_live" : (field.value ?? "classic")}
+                onChange={(v) => {
+                  const stack = v === "gemini_live" ? "gemini_live" : "classic";
+                  field.onChange(stack);
+                  const next = llmFieldsForVoiceStack(stack, {
+                    llmProvider: form.getValues("llmProvider"),
+                    llmModel: form.getValues("llmModel"),
+                  });
+                  form.setValue("llmProvider", next.llmProvider, { shouldDirty: true });
+                  form.setValue("llmModel", next.llmModel, { shouldDirty: true });
+                }}
+                options={VOICE_STACK_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
+              />
+            </FormItem>
+          )} />
           {isGeminiLive ? (
             <div className="space-y-3">
               <FormField control={form.control} name="geminiLiveVoiceName" render={({ field }) => (

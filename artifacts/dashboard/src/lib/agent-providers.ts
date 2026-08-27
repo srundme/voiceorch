@@ -630,15 +630,13 @@ export function voiceStackForLlmModel(model: string): "classic" | "gemini_live" 
   return isGeminiLiveLlmModel(model) ? "gemini_live" : "classic";
 }
 
-/**
- * @deprecated Live is chosen from Google → Model only (not a Voice stack picker).
- * Kept for any leftover imports; UI no longer renders these options.
- */
+/** Voice stack: classic STT+LLM+TTS vs Gemini native audio Live. */
 export const VOICE_STACK_OPTIONS = [
   { value: "classic", label: "Classic (STT + LLM + TTS)" },
+  { value: "gemini_live", label: "Gemini Live 3.1" },
 ] as const;
 
-/** @deprecated Prefer voiceStackForLlmModel — Voice stack UI was removed. */
+/** Provider + model to persist when the user picks a voice stack in the UI. */
 export function llmFieldsForVoiceStack(
   stack: "classic" | "gemini_live",
   current: { llmProvider?: string | null; llmModel?: string | null },

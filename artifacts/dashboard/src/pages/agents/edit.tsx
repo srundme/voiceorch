@@ -89,10 +89,12 @@ import {
   TTS_VOICES,
   GEMINI_LIVE_LLM_MODEL,
   GEMINI_LIVE_THINKING_LEVELS,
+  VOICE_STACK_OPTIONS,
   geminiLiveModelLabel,
   getModelError,
   isGeminiLiveAgent,
   isGeminiLiveLlmModel,
+  llmFieldsForVoiceStack,
   voiceStackForLlmModel,
   languagesForAgent,
   isGeminiLiveLanguage,
@@ -1520,8 +1522,34 @@ export default function AgentEdit() {
             onSave={savePipelineDialog}
             icon={<Brain />}
             title="Model"
-            description="Pick the LLM provider and model. Gemini Live is under Google Gemini → Model."
+            description="Choose Classic STT+LLM+TTS, or Gemini Live native speech-to-speech."
           >
+            <FormField control={form.control} name="voiceStack" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Voice stack</FormLabel>
+                <Select
+                  onValueChange={(v) => {
+                    const stack = v === "gemini_live" ? "gemini_live" : "classic";
+                    field.onChange(stack);
+                    const next = llmFieldsForVoiceStack(stack, {
+                      llmProvider: form.getValues("llmProvider"),
+                      llmModel: form.getValues("llmModel"),
+                    });
+                    form.setValue("llmProvider", next.llmProvider, { shouldDirty: true });
+                    form.setValue("llmModel", next.llmModel, { shouldDirty: true });
+                  }}
+                  value={isGeminiLive ? "gemini_live" : (field.value ?? "classic")}
+                >
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select stack" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    {VOICE_STACK_OPTIONS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
             {isGeminiLive && (
               <p className="text-[11px] text-muted-foreground rounded-md border border-border/60 bg-muted/30 px-3 py-2">
                 Gemini Live uses native speech-to-speech. Classic STT/TTS are skipped — set language in the Language card and pick a preset voice in Voice.
