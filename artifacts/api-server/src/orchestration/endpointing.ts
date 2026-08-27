@@ -146,8 +146,17 @@ export function isEmailCollectionContext(lastAgentText: string): boolean {
 
 export type CollectionKind = "none" | "digit" | "email";
 
-export function resolveCollectionKind(lastAgentText: string): CollectionKind {
-  if (isEmailCollectionContext(lastAgentText)) return "email";
+export function isCallerOfferingEmail(text: string): boolean {
+  const t = text.toLowerCase();
+  if (!t.trim()) return false;
+  return /(மெயில்\s*ஐடி|மின்னஞ்சல்|mail\s*id|email\s*id|என்னுடைய\s*மெயில்|my email)/i.test(t)
+    && /(சொல்|tell|share|note|நோட்|give)/i.test(t);
+}
+
+export function resolveCollectionKind(lastAgentText: string, lastUserText = ""): CollectionKind {
+  if (isEmailCollectionContext(lastAgentText) || isCallerOfferingEmail(lastUserText) || isCallerOfferingEmail(lastAgentText)) {
+    return "email";
+  }
   if (isDigitCollectionContext(lastAgentText)) return "digit";
   return "none";
 }
@@ -185,12 +194,12 @@ export function isDigitLikeUtterance(text: string): boolean {
   return digitish >= 1 && digitish >= tokens.length - 1;
 }
 
-const EMAIL_TLD_RE = /\b(com|in|co\.in|org|net|io|ai|co)\b/i;
-const EMAIL_AT_RE = /@|\b(at|attherate|at the rate)\b/i;
-const EMAIL_DOT_RE = /\b(dot|daat)\b/i;
+const EMAIL_TLD_RE = /\b(com|in|co\.in|org|net|io|ai|co)\b|காம்/i;
+const EMAIL_AT_RE = /@|\b(at|attherate|at the rate)\b|அட்\s*த\s*ரேட்|அட்\s*தரேட்|ஆட்\s*த\s*ரேட்/i;
+const EMAIL_DOT_RE = /\b(dot|daat)\b|டாட்/i;
 const EMAIL_ADDR_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
-const EMAIL_DOMAIN_WORD_RE = /\b(gmail|yahoo|hotmail|outlook|rediff|rediffmail|icloud|proton)\b/i;
-const EMAIL_PUNCT_WORD_RE = /\b(underscore|dash|hyphen|dot|at)\b/i;
+const EMAIL_DOMAIN_WORD_RE = /\b(gmail|yahoo|hotmail|outlook|rediff|rediffmail|icloud|proton)\b|ஜிமெயில்|ஜிமெய்ல்|ஜீமெயில்/i;
+const EMAIL_PUNCT_WORD_RE = /\b(underscore|dash|hyphen|dot|at)\b/;
 
 export function isCompleteEmailUtterance(text: string): boolean {
   const t = text.trim();
@@ -211,6 +220,7 @@ const EMAIL_HONORIFIC_RE = /^(madam|ma'?am|sir|ji|மேடம்|சார்)$
 export function isEmailLikeUtterance(text: string): boolean {
   const t = text.trim();
   if (!t) return true;
+  if (looksLikeSpokenEmailSpelling(t) && !isCompleteEmailUtterance(t)) return true;
   if (isCompleteEmailUtterance(t)) return false;
   if (EMAIL_ACK_RE.test(t)) return false;
   if (EMAIL_AT_RE.test(t) || EMAIL_DOT_RE.test(t) || EMAIL_DOMAIN_WORD_RE.test(t)) return true;
@@ -255,6 +265,117 @@ export function sanitizeSpokenEmailsInTranscript(text: string): string {
   return text.replace(EMAIL_ADDR_RE, (addr) => sanitizeSpokenEmailAddress(addr));
 }
 
+/** Tamil / English letter names used when callers spell an address aloud. */
+const SPOKEN_EMAIL_LETTER: Record<string, string> = {
+  "கே": "k", "ஆர்": "r", "பி": "b", "சி": "c", "டி": "d", "டீ": "t",
+  "ஈ": "e", "எஃப்": "f", "ஜி": "g", "எச்": "h", "ஐ": "i", "ஜே": "j",
+  "எல்": "l", "எம்": "m", "என்": "n", "ஓ": "o", "பீ": "p", "க்யூ": "q",
+  "எஸ்": "s", "யூ": "u", "வி": "v", "டபிள்யூ": "w", "எக்ஸ்": "x", "ஒய்": "y",
+  "இசட்": "z", "ஏய்": "a", "ஏ": "a",
+};
+
+const SPOKEN_EMAIL_DOMAIN: Record<string, string> = {
+  gmail: "gmail", yahoo: "yahoo", hotmail: "hotmail", outlook: "outlook",
+  "ஜிமெயில்": "gmail", "ஜிமெய்ல்": "gmail", "ஜீமெயில்": "gmail",
+};
+
+function spokenEmailLetter(tok: string): string | null {
+  const t = tok.replace(/[.,]/g, "");
+  if (SPOKEN_EMAIL_LETTER[t]) return SPOKEN_EMAIL_LETTER[t]!;
+  if (/^[a-z]$/i.test(t)) return t.toLowerCase();
+  return null;
+}
+
+export function looksLikeSpokenEmailSpelling(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (EMAIL_AT_RE.test(t) || EMAIL_DOT_RE.test(t) || EMAIL_DOMAIN_WORD_RE.test(t)) return true;
+  const tokens = t.split(/\s+/).filter(Boolean);
+  const letters = tokens.filter((tok) => spokenEmailLetter(tok) !== null);
+  return letters.length >= 3;
+}
+
+/**
+ * Turn "கே ஏ ஆர் … அட் த ரேட் ஜிமெயில் டாட் காம்" / "k a r at gmail dot com"
+ * into a compact address. Returns null when there is not enough to assemble one.
+ */
+export function reconstructSpokenEmail(text: string): string | null {
+  const compact = text.match(EMAIL_ADDR_RE);
+  if (compact && !looksLikeSpokenEmailSpelling(text.replace(compact[0], " "))) {
+    return sanitizeSpokenEmailAddress(compact[0]);
+  }
+  const tokens = text.replace(/@/g, " @ ").split(/\s+/).filter(Boolean);
+  let local = "";
+  let domain = "";
+  let tld = "";
+  let seenAt = false;
+  for (const raw of tokens) {
+    const tok = raw.replace(/[.,]/g, "");
+    const lower = tok.toLowerCase();
+    if (!tok) continue;
+    if (EMAIL_AT_RE.test(tok) || tok === "@" || tok === "அட்" || tok === "ஆட்") {
+      seenAt = true;
+      continue;
+    }
+    if (/ரேட்|rate/i.test(tok)) continue;
+    const letter = spokenEmailLetter(tok);
+    if (!seenAt) {
+      if (letter) local += letter;
+      else if (/^[a-z0-9._-]+$/i.test(tok) && tok.length > 1) local += tok.toLowerCase();
+      continue;
+    }
+    if (EMAIL_DOT_RE.test(tok) || tok === "டாட்") continue;
+    const dotted = tok.match(/^([a-z0-9-]+)\.([a-z]{2,})$/i);
+    if (dotted) {
+      domain = dotted[1]!.toLowerCase();
+      tld = dotted[2]!.toLowerCase();
+      continue;
+    }
+    const mappedDomain = SPOKEN_EMAIL_DOMAIN[tok] ?? SPOKEN_EMAIL_DOMAIN[lower];
+    if (mappedDomain) {
+      domain = mappedDomain;
+      continue;
+    }
+    if (EMAIL_TLD_RE.test(tok) || tok === "காம்") {
+      tld = /காம்/i.test(tok) ? "com" : lower.replace(/^co\.in$/i, "co.in");
+      continue;
+    }
+    if (letter && !domain) local += letter;
+  }
+  if (local.length >= 3 && domain && tld) return sanitizeSpokenEmailAddress(`${local}@${domain}.${tld}`);
+  if (compact) return sanitizeSpokenEmailAddress(compact[0]);
+  return null;
+}
+
+/**
+ * Saaras often compactifies Tamil spelling into a truncated local-part
+ * (call 13987: "ஏ ஏ ஒய் ஏ எல் அட் த ரேட் ஜிமெயில் டாட் காம்" → keyan@gmail.com).
+ * Prefer a reconstructed spelling when it is longer, otherwise keep both.
+ */
+export function preferEmailTranscript(partial: string | undefined, final: string): string {
+  const cleanedFinal = sanitizeSpokenEmailsInTranscript(final);
+  const fromFinal = reconstructSpokenEmail(cleanedFinal);
+  const fromPartial = partial?.trim() ? reconstructSpokenEmail(partial) : null;
+  if (fromPartial && fromFinal) {
+    const pLocal = fromPartial.slice(0, fromPartial.lastIndexOf("@"));
+    const fLocal = fromFinal.slice(0, fromFinal.lastIndexOf("@"));
+    if (pLocal === fLocal) return cleanedFinal.replace(EMAIL_ADDR_RE, fromFinal);
+    if (pLocal.length > fLocal.length + 1) {
+      return EMAIL_ADDR_RE.test(cleanedFinal)
+        ? cleanedFinal.replace(EMAIL_ADDR_RE, fromPartial)
+        : fromPartial;
+    }
+    if (pLocal !== fLocal) {
+      const compact = EMAIL_ADDR_RE.test(cleanedFinal)
+        ? cleanedFinal.replace(EMAIL_ADDR_RE, fromFinal)
+        : fromFinal;
+      return `${compact} (spelled ${fromPartial})`;
+    }
+  }
+  if (fromPartial && !fromFinal) return fromPartial;
+  return cleanedFinal;
+}
+
 /**
  * Timeout fail-open is only safe for already-finished short turns.
  * Long sentences and collection fragments wait for the incomplete-hold instead.
@@ -291,16 +412,23 @@ export type StreamingTurnHold = {
 export function resolveStreamingTurnHold(opts: {
   pending: string;
   lastAgentText: string;
+  lastUserText?: string;
   textLooksIncomplete: boolean;
 }): StreamingTurnHold {
-  const collectionKind = resolveCollectionKind(opts.lastAgentText);
+  let collectionKind = resolveCollectionKind(opts.lastAgentText, opts.lastUserText ?? "");
+  const pending = opts.pending.trim();
+  if (collectionKind === "none" && looksLikeSpokenEmailSpelling(pending)) {
+    collectionKind = "email";
+  }
   const digitCollection = collectionKind === "digit";
   const emailCollection = collectionKind === "email";
-  const pending = opts.pending.trim();
   const trailingDigit = pending.length > 0 && (/\d\s*$/.test(pending) || isDigitLikeUtterance(pending));
-  const trailingEmail = emailCollection && isEmailLikeUtterance(pending);
+  const spellingInProgress = looksLikeSpokenEmailSpelling(pending)
+    && !EMAIL_ADDR_RE.test(pending)
+    && !isCompleteEmailUtterance(pending);
+  const trailingEmail = emailCollection && (isEmailLikeUtterance(pending) || spellingInProgress);
   const trailingFragment = (digitCollection && isDigitLikeUtterance(pending)) || trailingEmail;
-  if (emailCollection && isEmailLikeUtterance(pending)) {
+  if (emailCollection && (isEmailLikeUtterance(pending) || spellingInProgress)) {
     return {
       incomplete: true,
       reason: "email_collection",
@@ -935,6 +1063,10 @@ export function computeEndpointMs(opts: {
 }): EndpointDecision {
   const { lastAgentText, partialTranscript, audioBufferMs, baseSilenceMs } =
     opts;
+
+  if (looksLikeSpokenEmailSpelling(partialTranscript) && !isCompleteEmailUtterance(partialTranscript)) {
+    return { ms: ENDPOINT_EMAIL_TRAIL_MS, reason: "email-collection:in-progress" };
+  }
 
   // ── 1. Email-collection context (highest priority) ─────────────────────────
   if (isEmailCollectionContext(lastAgentText)) {
