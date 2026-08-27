@@ -32,7 +32,7 @@ import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { CartesiaTTS } from "./adapters/tts/cartesia.js";
 import { encodeMulaw, upsample8to16, downsample16to8, createDownsampler16to8, decodeMulaw, hasSpeechEnergy, frameRms } from "./audio.js";
-import { resolveMicSensitivity, getMicSensitivityThresholds, isBackgroundTalkerUtterance, isIdleCancellingMicEnergy, type MicSensitivityThresholds } from "./mic-sensitivity.js";
+import { resolveMicSensitivity, getMicSensitivityThresholds, isIdleCancellingMicEnergy, type MicSensitivityThresholds } from "./mic-sensitivity.js";
 import { resolveSoftwareNoiseGate, envForceVobizSoftwareNc, type NoiseGateDecision } from "./noise-gate.js";
 import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, peekCachedPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
@@ -77,7 +77,7 @@ import {
   isAffirmationOnlyUtterance,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeBookingTimeAnswer, hasCallerAddressToken, isSubstantialCallerUtterance } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeBookingTimeAnswer, hasCallerAddressToken } from "./transcriptQuality.js";
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
@@ -330,10 +330,7 @@ const TTS_REBUFFER_MS      = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 1
 const TTS_REBUFFER_CAP_MS  = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 400));
 const TTS_UNDERRUN_COLD_MS = 8_000;
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
-const FILLER_THRESHOLD_MS     = 900;    // dead-air filler only when LLM TTFT is actually slow.
-                                        // 350ms fired a separate Cartesia clip on every Sarvam
-                                        // turn (TTFT 500–750ms) — "ஆஹா" then a gap then the
-                                        // real sentence (call 14351 voice-breaking).
+const FILLER_THRESHOLD_MS     = 900;    // second TTS job only if LLM TTFT is actually slow
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
 const FRAGMENT_COALESCE_MS_DEFAULT = 0;  // fallback when agentConfig omits playing coalesce — keep in sync with FRAGMENT_COALESCE_DEFAULTS.playingMs (lib/db)
@@ -1113,8 +1110,6 @@ export class OrchestrationPipeline implements VoiceSession {
   // never clears the echo bar, nothing but our own audio reached the mic during the
   // sentence — used to veto word_count barge-ins fired by garbled echo transcripts.
   private bargeInPeakRmsSinceSentence = 0;
-  /** Loudest RAW (pre-GTCRN) frame while we were listening this utterance. */
-  private utterancePeakRawRms = 0;
   // Throttle for the periodic "energy barge-in monitor" diagnostic log line.
   private lastEnergyMonitorLogAt = 0;
   /** Sarvam realtime session.end.audio_duration_s — billed STT audio. */
@@ -2181,10 +2176,6 @@ export class OrchestrationPipeline implements VoiceSession {
     };
     this.streamSTT.onSpeechStart = () => {
       this._vadSpeechStartAt = Date.now();
-      // Do NOT zero utterancePeakRawRms here. Sarvam VAD speech_start often
-      // fires late (call 14351); wiping the peak threw away the loud onset
-      // and background_talker then discarded the real Tamil reply. Peak is
-      // reset after the transcript is consumed (keep or discard).
       this.logExec("STT", "system", {
         status: "info",
         turnNumber: this._activeTurnIndex,
@@ -2753,8 +2744,7 @@ export class OrchestrationPipeline implements VoiceSession {
       | "end_call_in_progress"
       | "fragment_coalesce_hold"
       | "backchannel_during_playback"
-      | "agent_still_speaking"
-      | "background_talker",
+      | "agent_still_speaking",
   ): void {
     const now = Date.now();
     const reasonByGuard: Record<typeof guard, string> = {
@@ -2768,7 +2758,6 @@ export class OrchestrationPipeline implements VoiceSession {
       fragment_coalesce_hold: "short fragment held briefly for coalesce (not a drop)",
       backchannel_during_playback: "held ack fragment dropped — agent speaking at coalesce-timer fire (true backchannel)",
       agent_still_speaking: "final arrived during greeting/system playback and did not barge-in",
-      background_talker: "far-field / background talker — raw mic energy below near-talker floor",
     };
     this.logExec(EXEC_COMPONENTS.STT, "system", {
       status: "info",
@@ -2782,7 +2771,6 @@ export class OrchestrationPipeline implements VoiceSession {
         discardedText: transcript.slice(0, 300),
         isPlaying: this.isPlaying,
         msLeftInEchoWindow: Math.max(0, this.bargeInHoldUntil - now),
-        peakRawRms: Math.round(this.utterancePeakRawRms),
       },
     });
   }
@@ -3497,38 +3485,6 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.pendingVoiceLinkAck && !this.speakingVoiceLinkAck && !this.voiceHandoffActive) {
       void this.speakVoiceLinkAck(this.voiceLinkedName);
     }
-
-    // GTCRN is speech enhancement, not "ignore other people". A bystander a
-    // few metres away still transcribes; drop it when the RAW mic never
-    // reached near-talker level (telephony + Noise Cancellation on).
-    // Do NOT apply while we were still playing / in echo grace — peak RMS then
-    // is only the quiet tail, so a real "Hello" was thrown away (call 14315)
-    // and the caller sat in silence. Echo/self-echo guards below still run.
-    const attention = isCallerAttentionUtterance(transcript);
-    if (
-      this.noiseGate.enabled
-      && this.config.telephonyProvider !== "webcall"
-      && !this.isPlaying
-      && !this.greetingPlaybackActive
-      && Date.now() >= this.bargeInHoldUntil
-      && !attention
-      && !isSemanticInterrupt(transcript)
-      && !isAccidentalInterruptPhrase(transcript)
-      && !looksLikeBookingTimeAnswer(transcript)
-      && !isCallerClosingUtterance(transcript)
-      && !isSubstantialCallerUtterance(transcript)
-      && isBackgroundTalkerUtterance(this.utterancePeakRawRms)
-    ) {
-      logger.info(
-        { callId: this.config.callId, transcript: transcript.slice(0, 80), peakRawRms: Math.round(this.utterancePeakRawRms) },
-        "Discarding streaming final — far-field / background talker",
-      );
-      this.logDiscardedTranscript(transcript, "background_talker");
-      this.utterancePeakRawRms = 0;
-      this.safetyNet.beginListening();
-      return;
-    }
-    this.utterancePeakRawRms = 0;
 
     // The socket often re-sends queued audio after a reconnect, so an utterance we
     // already recovered through batch STT can arrive again as a streaming final.
@@ -4521,8 +4477,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // Opening greeting: mute energy only for greetingEchoHoldUntil (3s cap).
     // Muting the entire greet() playback locked barge-in for 21s (call 14345).
     if (this.greetingBargeLocked()) return;
-    // Fillers are a 0.6s dead-air clip — energy must still cut them (call 14351
-    // locked barge-in for the whole "ஆஹா" / "சரிங்க" and the caller could not).
+    if (this.fillerPlaybackActive) return;
 
     // Streaming-STT carrier path (webcall has AEC; the batch path keeps its own
     // extended-hold protection). Only here do we measure RMS / self-calibrate.
@@ -4710,12 +4665,6 @@ export class OrchestrationPipeline implements VoiceSession {
       : pcm16k;
     // GTCRN isolation has a 16 ms STFT hop; the first worker result can be empty.
     if (pcm8k.length < 2 && effectivePcm16k.length < 2) return;
-
-    // Score near-talker vs bystander on RAW mic energy. Isolation keeps a
-    // friend a few metres away as "speech" and would otherwise steal the turn.
-    if (!this.isPlaying && !this.isSendingTtsAudio && rawRms > this.utterancePeakRawRms) {
-      this.utterancePeakRawRms = rawRms;
-    }
 
     // ── IVR DTMF detection ──
     // Run on every incoming frame when an IVR interaction is active.
@@ -6643,10 +6592,6 @@ export class OrchestrationPipeline implements VoiceSession {
     // Strip bracketed, starred, or parenthesized non-verbal tags (e.g. [laughter], *laughs*, (sigh), [gasp])
     // so TTS engines do not read them literally.
     text = text.replace(/\[[a-zA-Z0-9_\-\s]+\]|\*+[a-zA-Z0-9_\-\s]+\*+|\([a-zA-Z0-9_\-\s]+\)/gi, "");
-    // Empty placeholders like [company] left "நான் -ல இருந்து பேசுறேன்" (call 14351).
-    text = text.replace(/\s+-\s*/g, " ");
-    text = text.replace(/நான்\s+ல\s+இருந்து\s+பேசுறேன்\.?/g, "");
-    text = text.replace(/\s{2,}/g, " ").trim();
 
     // Strip the ₹ currency symbol before synthesis. TTS engines (especially
     // Sarvam) expand it to the formal literary word: "ரூபாய்" (Tamil) /
@@ -7023,7 +6968,6 @@ export class OrchestrationPipeline implements VoiceSession {
       // (gaps/glitches) because audio delivery slows below real-time.
       let nextTick = Date.now() + 20;
       while (!this.closed && !this.bargeInRequested) {
-        if (job.sequenceId === FILLER_SEQUENCE_ID && this._skipPendingFillerPlayback) break;
         const emitStatus = this.audioSendStatus(job.sequenceId);
         if (emitStatus === "BLOCK" || !this.interruptionMgr.isValidSequence(job.sequenceId)) {
           break;
@@ -7129,7 +7073,6 @@ export class OrchestrationPipeline implements VoiceSession {
         const PCM_CHUNK = CHUNK_SIZE_MULAW * 2 * (outRate / 8000); // 20ms: 320B @8k, 640B @16k
         for (let i = 0; i < out8k.length; i += PCM_CHUNK) {
           if (this.closed || this.bargeInRequested) break;
-          if (job.sequenceId === FILLER_SEQUENCE_ID && this._skipPendingFillerPlayback) break;
           const emitStatus = this.audioSendStatus(job.sequenceId);
           if (emitStatus === "BLOCK" || !this.interruptionMgr.isValidSequence(job.sequenceId)) break;
           if (emitStatus === "WAIT") {
@@ -7156,7 +7099,6 @@ export class OrchestrationPipeline implements VoiceSession {
         const ttsMusaw = encodeMulaw(ttsPcm8k);
         for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
           if (this.closed || this.bargeInRequested) break;
-          if (job.sequenceId === FILLER_SEQUENCE_ID && this._skipPendingFillerPlayback) break;
           const emitStatus = this.audioSendStatus(job.sequenceId);
           if (emitStatus === "BLOCK" || !this.interruptionMgr.isValidSequence(job.sequenceId)) break;
           if (emitStatus === "WAIT") {

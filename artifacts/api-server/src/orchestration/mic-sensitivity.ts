@@ -91,9 +91,10 @@ export function resolveBargeInEnergyThreshold(explicit: unknown): number {
  * enhanced signal.
  *
  * 800 is empirical on VoBiz 8 kHz + GTCRN (far-field vs near-talker), not a
- * spec. Same bar as idle-cancel so background_talker and hangup-idle cannot
- * disagree. Owner: this constant. Call 14315: echo tails below this must not
- * look like a reply.
+ * spec. Same bar as idle-cancel so hangup-idle cannot disagree with barge-in.
+ * Owner: this constant. Call 14315: echo tails below this must not
+ * look like a reply. Call 14351: this bar is NOT a transcript-discard
+ * authority — listening finals go to processTurn.
  */
 export const BACKGROUND_TALKER_MIN_RAW_RMS = 800;
 
