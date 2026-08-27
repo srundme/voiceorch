@@ -96,3 +96,20 @@ export function isBackgroundTalkerUtterance(
   if (!(peakRawRms > 0)) return false;
   return peakRawRms < minRms;
 }
+
+/**
+ * Pipecat UserIdle analogue: local energy must not cancel idle / stall / silence
+ * hangup. Echo tails, ambient keepalive, and far-field noise trip `hasSpeech`
+ * (VAD floor ~110 RMS) and previously looked like the caller was still talking
+ * (call 14315: 30s dead air, no check-in). Only a near-talker frame outside
+ * echo grace counts. Provider VAD speech_start and STT partials are separate.
+ */
+export function isIdleCancellingMicEnergy(opts: {
+  hasSpeech: boolean;
+  rawRms: number;
+  inEchoGrace: boolean;
+  minRawRms?: number;
+}): boolean {
+  if (!opts.hasSpeech || opts.inEchoGrace) return false;
+  return opts.rawRms >= (opts.minRawRms ?? BACKGROUND_TALKER_MIN_RAW_RMS);
+}

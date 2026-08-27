@@ -32,7 +32,7 @@ import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { CartesiaTTS } from "./adapters/tts/cartesia.js";
 import { encodeMulaw, upsample8to16, downsample16to8, createDownsampler16to8, decodeMulaw, hasSpeechEnergy, frameRms } from "./audio.js";
-import { resolveMicSensitivity, getMicSensitivityThresholds, isBackgroundTalkerUtterance, type MicSensitivityThresholds } from "./mic-sensitivity.js";
+import { resolveMicSensitivity, getMicSensitivityThresholds, isBackgroundTalkerUtterance, isIdleCancellingMicEnergy, type MicSensitivityThresholds } from "./mic-sensitivity.js";
 import { resolveSoftwareNoiseGate, envForceVobizSoftwareNc, type NoiseGateDecision } from "./noise-gate.js";
 import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, peekCachedPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
@@ -2113,6 +2113,11 @@ export class OrchestrationPipeline implements VoiceSession {
         metadata: { event: "VAD Speech Start" },
       });
       this.armVadFlushBackstop();
+      // Pipecat UserStartedSpeaking: provider VAD (not local energy) cancels idle
+      // once echo grace has ended. Echo of our own TTS must not look like a reply.
+      if (!this.isPlaying && !this.isSendingTtsAudio && Date.now() >= this.bargeInHoldUntil) {
+        this.noteCallerTurnActivity("vad_start");
+      }
       if (!this.isPlaying && !this.isSendingTtsAudio) {
         const prevGen = this.semanticTurnGate.turnGeneration;
         const eouStart = this.semanticTurnGate.onSpeechStart();
@@ -2421,6 +2426,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // last word of the clarification isn't clipped. This short branch bypasses
     // playTask's drain, so it must replicate it (see drainPlaybackTail).
     await this.drainPlaybackTail();
+    this.onBotStoppedSpeaking("system");
   }
 
   /** Poll until post-utterance WAIT clears or timeout (Bolna incremental_delay grace). */
@@ -4152,17 +4158,27 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.closed || this.endCallInitiated) {
       return;
     }
-    if (this.isProcessing || this.isPlaying) {
-      // Activity resumed between expiry and handling — just re-arm.
+    // Skip only while audio is actually on the wire. isProcessing stays true
+    // through post-TTS bookkeeping (and would hang forever if processTurn
+    // wedged) — Pipecat idle still fires after BotStoppedSpeaking.
+    if (this.isPlaying || this.isSendingTtsAudio) {
       if (!this.closed && !this.endCallInitiated) this.safetyNet.beginListening();
       return;
     }
-    // Caller energy pulsed recently (VAD before STT) — don't say "can't hear".
+    // Caller energy pulsed recently (VAD / near-talker / STT) — don't say "can't hear".
     if (this.lastCallerActivityAt > 0 && Date.now() - this.lastCallerActivityAt < 2500) {
       logger.info(
         { callId: this.config.callId, msSinceActivity: Date.now() - this.lastCallerActivityAt },
         "Stall reprompt skipped — recent caller activity",
       );
+      this.logExec("STT", "system", {
+        status: "info",
+        turnNumber: this._activeTurnIndex,
+        metadata: {
+          event: "Stall Reprompt Skipped",
+          msSinceActivity: Date.now() - this.lastCallerActivityAt,
+        },
+      });
       if (!this.closed) this.safetyNet.beginListening();
       return;
     }
@@ -4196,11 +4212,7 @@ export class OrchestrationPipeline implements VoiceSession {
     this.audioBufferNative16k = [];
     this.pendingTranscriptQueue = [];
     if (!this.closed) {
-      this.safetyNet.beginListening();
-      // Reset the per-agent silence-hangup timer so the caller gets a full
-      // silenceTimeoutSeconds window to respond AFTER the reprompt, not just
-      // whatever is left from the previous turn's audio timestamp.
-      this.resetHangupTimer();
+      this.onBotStoppedSpeaking("system");
     }
   }
 
@@ -4667,18 +4679,17 @@ export class OrchestrationPipeline implements VoiceSession {
       // forever. Exception: when we just asked a question, count overlapping
       // caller energy too (callers often answer before our last word ends).
       if (
-        hasSpeech
+        isIdleCancellingMicEnergy({
+          hasSpeech,
+          rawRms,
+          inEchoGrace: Date.now() < this.bargeInHoldUntil,
+        })
         && (
           (!this.isPlaying && !this.isSendingTtsAudio)
           || Date.now() < this.expectingShortReplyUntil
         )
       ) {
-        this.lastCallerActivityAt = Date.now();
-        this.silenceWatchdog?.onSpeechEnergy();
-        // Push stall back when caller is vocalizing but Sarvam hasn't emitted a partial yet.
-        if (!this.isPlaying && !this.isProcessing) {
-          this.safetyNet.onActivityPulse();
-        }
+        this.noteCallerTurnActivity("near_talker_energy");
       }
       // Soft-cancel system TTS on caller energy (before STT catches up).
       if (hasSpeech && this.systemPlaybackActive && this.isPlaying) {
@@ -4714,7 +4725,15 @@ export class OrchestrationPipeline implements VoiceSession {
     this.speakerVerifier?.addSpeechChunk(pcm8k, hasSpeech);
 
     // Batch STT path with local VAD + barge-in detection
-    if (hasSpeech) this.silenceWatchdog?.onSpeechEnergy();
+    if (
+      isIdleCancellingMicEnergy({
+        hasSpeech,
+        rawRms,
+        inEchoGrace: Date.now() < this.bargeInHoldUntil,
+      })
+    ) {
+      this.noteCallerTurnActivity("near_talker_energy");
+    }
     // respectHoldUntil=true: the batch path is VAD-gated and its extended
     // bargeInHoldUntil (spanning the whole estimated sentence) is intentional here.
     this.tryEnergyBargeIn(pcm8k, hasSpeech, "energy", /* respectHoldUntil */ true, rawRms);
@@ -5752,9 +5771,10 @@ export class OrchestrationPipeline implements VoiceSession {
           this.switchStreamSTTLanguage(spokenLang);
         }
       }
-      // First entry into Listening — arm the stall backstop.
+      // First entry into Listening — arm the stall backstop and a full idle window
+      // (Pipecat starts user-idle on BotStoppedSpeaking, not leftover greeting time).
       if (!this.closed) {
-        this.safetyNet.beginListening();
+        this.onBotStoppedSpeaking("greeting");
         // So a VoBiz media WS drop while we wait for the first reply is labeled
         // media_disconnect instead of false "Caller hung up" (calls 3429/3432).
         this.expectingShortReplyUntil = Math.max(
@@ -6132,11 +6152,45 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /**
+   * Pipecat UserIdleController: the post-bot listen window starts when TTS
+   * actually finishes (BotStoppedSpeaking), not when the last user transcript
+   * arrived. Echo/ambient energy must not look like a reply (call 14315).
+   */
+  private onBotStoppedSpeaking(reason: "turn" | "greeting" | "system" | "tool_followup"): void {
+    if (this.closed || this.endCallInitiated) return;
+    this.logExec("Agent", "system", {
+      status: "info",
+      turnNumber: this._activeTurnIndex,
+      metadata: {
+        event: "Bot Stopped Speaking",
+        reason,
+        barged: this.bargeInRequested,
+      },
+    });
+    if (this.bargeInRequested) return;
+    this.resetHangupTimer();
+    this.safetyNet.beginListening();
+  }
+
+  /**
+   * Real caller activity that cancels idle — STT partial/final already call
+   * this indirectly; VAD speech_start and near-talker energy use it directly.
+   */
+  private noteCallerTurnActivity(_source: "vad_start" | "near_talker_energy"): void {
+    this.lastCallerActivityAt = Date.now();
+    this.silenceWatchdog?.onSpeechEnergy();
+    if (!this.isPlaying && !this.isSendingTtsAudio && !this.isProcessing) {
+      this.safetyNet.onActivityPulse();
+    }
+  }
+
+  /**
    * Reset (or start) the silence-hangup watchdog. On a legitimate expiry the
    * watchdog speaks an in-language "are you there?" check-in first and only
    * ends the call (via the inactivity path) if the caller stays silent for a
-   * further full window. Raw caller speech energy on either STT path keeps it
-   * alive even when streaming STT emits no partials (call 1915).
+   * further full window. Near-talker energy / provider VAD / STT keeps it
+   * alive even when streaming STT emits no partials (call 1915). Echo tails
+   * after TTS do not (call 14315).
    */
   private resetHangupTimer(): void {
     if (!this.agent.silenceTimeoutSeconds) return;
@@ -6164,6 +6218,11 @@ export class OrchestrationPipeline implements VoiceSession {
             { callId: this.config.callId, ...info },
             "Silence watchdog near-miss — re-armed instead of expiring",
           );
+          this.logExec("Agent", "system", {
+            status: "info",
+            turnNumber: this._activeTurnIndex,
+            metadata: { event: "Silence Watchdog Near-Miss", ...info },
+          });
         },
       });
     }
@@ -7976,6 +8035,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // last word of the canned response isn't clipped. This short branch
       // bypasses playTask's drain, so it must replicate it (see drainPlaybackTail).
       await this.drainPlaybackTail();
+      this.onBotStoppedSpeaking("system");
       return;
     }
 
@@ -8110,6 +8170,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // barge-in (the user is already speaking, so we must stop immediately) and
       // when closed. Mirrors the web path's per-turn tail-silence drain.
       await this.drainPlaybackTail();
+      this.onBotStoppedSpeaking("turn");
     };
 
     const playPromise = playTask();
@@ -10316,6 +10377,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // barge-in (the user is already speaking, so we must stop immediately) and
       // when closed. Mirrors the web path's per-turn tail-silence drain.
       await this.drainPlaybackTail();
+      this.onBotStoppedSpeaking("tool_followup");
     };
 
     const playPromise = playTask();
