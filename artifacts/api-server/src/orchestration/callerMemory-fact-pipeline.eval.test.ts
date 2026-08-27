@@ -132,6 +132,42 @@ const CASES: LabeledCase[] = [
       { key: "location", value: "Bangalore", confidence: 0.88, sentence_ids: [21] },
     ],
   },
+  {
+    id: "existing-product-caller-stated",
+    notes: "Named policy the caller said they already hold",
+    callerSentenceIds: [30],
+    expected: [{ key: "existing_product", value: "Galaxy Marvel" }],
+    candidates: [
+      { key: "policy_name", value: "Galaxy Marvel", confidence: 0.92, sentence_ids: [30] },
+    ],
+  },
+  {
+    id: "agent-pitch-not-a-fact",
+    notes: "Agent wellness pitch must not become existing_product",
+    callerSentenceIds: [31],
+    expected: [],
+    candidates: [
+      { key: "existing_product", value: "Gala Fit", confidence: 0.99, sentence_ids: [99] },
+      { key: "interested_in", value: "wellness add-on", confidence: 0.99, sentence_ids: [31] },
+    ],
+  },
+  {
+    id: "contact-identity-facts",
+    notes: "DOB / phone / WhatsApp / email the caller stated",
+    callerSentenceIds: [40, 41, 42, 43],
+    expected: [
+      { key: "date_of_birth", value: "1990-01-15" },
+      { key: "phone_number", value: "+919876543210" },
+      { key: "whatsapp_number", value: "+919876543210" },
+      { key: "email", value: "karthi@gmail.com" },
+    ],
+    candidates: [
+      { key: "dob", value: "15 January 1990", confidence: 0.93, sentence_ids: [40] },
+      { key: "mobile_number", value: "9876543210", confidence: 0.93, sentence_ids: [41] },
+      { key: "wtsp", value: "9876543210", confidence: 0.93, sentence_ids: [42] },
+      { key: "email", value: "karthi at gmail dot com", confidence: 0.93, sentence_ids: [43] },
+    ],
+  },
 ];
 
 function runCase(c: LabeledCase): Array<{ key: string; value: string }> {

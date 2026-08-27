@@ -56,6 +56,9 @@ import {
   validateFactCandidate,
   shouldSupersedeFact,
   canonicalizeFactKey,
+  extractDateOfBirthFactValue,
+  extractPhoneFactValue,
+  extractEmailFactValue,
 } from "./callerMemory-durable-facts.js";
 
 export {
@@ -251,11 +254,35 @@ export function formatSpeakerTranscript(history: ConversationTurn[]): string {
     .join("\n");
 }
 
+const EPISODE_SKIP_LINE =
+  /^(yes|yeah|yep|ok|okay|no|nah|hmm|uh|um|hi|hello|thanks|thank you|please|wait|சரி|ஆமா|ஆம்|இல்ல|இல்லை|ஹாய்|வணக்கம்)[.!?]*$/iu;
+
+const EPISODE_IMPORTANT_CUE =
+  /(?:\bname\b|பேரு|பேர்|பெயர்|\bperu\b|\bpeyar\b|\bage\b|வயசு|ஊர்|\boor\b|\bfrom\b|\blive\b|\bwork\b|வேலை|பணி|\bprofessor\b|\bpolicy\b|\bplan\b|\bproduct\b|\bemail\b|\bmail\b|\bdob\b|\bbirthday\b|date of birth|\bphone\b|\bmobile\b|\bwhatsapp\b|\bwtsp\b|கிடையாது|\bella\b|\bwant\b|\bneed\b|வேணும்|வேண்டும்|\benoda\b|\bennoda\b|நான்\s)/iu;
+
+/**
+ * Caller lines worth keeping on the episode card when the extract LLM is down.
+ * Identity / need cues first; otherwise the longest recent caller utterances.
+ */
+export function pickImportantCallerLines(
+  sentences: Array<{ speaker: string; text: string }>,
+  max = 3,
+): string[] {
+  const caller = sentences
+    .filter((s) => s.speaker === "caller")
+    .map((s) => s.text.replace(/\s+/g, " ").trim())
+    .filter((t) => t.length >= 8 && !EPISODE_SKIP_LINE.test(t));
+  const cued = caller.filter((t) => EPISODE_IMPORTANT_CUE.test(t));
+  const pool = (cued.length > 0 ? cued : caller.filter((t) => t.length >= 18)).slice(-max);
+  return pool.map((t) => (t.length > 180 ? `${t.slice(0, 177)}…` : t));
+}
+
 /** Readable episode blurb when the extract LLM omits / fails summary. */
 export function buildFallbackEpisodeSummary(opts: {
   name?: string | null;
   facts: Array<{ key: string; value: string }>;
   wasDropped?: boolean;
+  callerHighlights?: string[];
 }): string {
   const parts: string[] = [];
   const name = opts.name?.trim();
@@ -275,6 +302,10 @@ export function buildFallbackEpisodeSummary(opts: {
   let summary = parts.length > 0
     ? `${parts.join(" — ")}.`
     : "Call completed; limited caller details were captured.";
+  const highlights = (opts.callerHighlights ?? []).filter(Boolean);
+  if (highlights.length > 0) {
+    summary += ` Caller said: ${highlights.join(" / ")}`;
+  }
   if (opts.wasDropped) {
     summary += " Call dropped before a natural ending.";
   }
@@ -1189,9 +1220,9 @@ async function runLLMExtraction(opts: {
       content:
         `${priorContext}${priorFactsStr}` +
         `Analyze this call transcript and extract:\n` +
-        `1. A concise 1-3 sentence summary of what was discussed (merge with any prior context above)\n` +
+        `1. A 2-4 sentence episode summary of THIS call (see summary rules below)\n` +
         `2. The caller's emotional sentiment for THIS call\n` +
-        `3. DURABLE identity facts about the caller (see rules below)\n\n` +
+        `3. IMPORTANT durable facts the CALLER stated (see allowed keys)\n\n` +
         `Return ONLY valid JSON with exactly these fields:\n` +
         `{\n` +
         `  "name": "caller's first name if stated, otherwise null",\n` +
@@ -1214,7 +1245,7 @@ async function runLLMExtraction(opts: {
         `${durableFactsPromptBlock()}\n\n` +
         `Transcript:\n${annotatedTranscript.slice(0, 10000)}`,
     }],
-    "You extract DURABLE caller identity facts from voice call transcripts in ANY language (Tamil, Hindi, English, or mixed). Return only JSON with 'name', 'summary', 'sentiment', and 'facts' (each fact needs key, value, confidence, sentence_ids citing [cN] caller lines only). Never invent. Never store ephemeral sales intent as facts. Never treat questions like \"who's this\" as a name.",
+    "You extract important caller-stated facts and an episode summary from voice call transcripts in ANY language (Tamil, Hindi, English, romanized Tamil, or mixed). Return only JSON with 'name', 'summary', 'sentiment', and 'facts' (each fact needs key, value, confidence, sentence_ids citing [cN] caller lines only). Never invent. Never store agent pitches or ephemeral sales intent as facts. Never treat questions like \"who's this\" as a name.",
     () => {},
     (full) => { raw = full; },
   );
@@ -1798,6 +1829,7 @@ export async function updateCallerProfile(opts: {
       name: extracted.name ?? callerNameInCall ?? existing?.name ?? null,
       facts: uniqueFacts.map((f) => ({ key: f.key, value: f.value })),
       wasDropped,
+      callerHighlights: pickImportantCallerLines(parsedSentences),
     });
   }
   if (!extracted.sentiment?.trim()) {
@@ -1920,6 +1952,9 @@ export const NAME_PATTERNS: { pattern: RegExp; tier: NameLatchTier }[] = [
   // Tamil: "என் பேர் / பேரு / பெயர் <name>" / "என்னோட பேரு <name>"
   // Note: colloquial பேரு is பேர+ு (no pulli); literary பேர் is பேர+் — both needed.
   { pattern: /என்(?:னோட|னுடைய)?\s*(?:பேரு|பேர்|பெயர்)\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u, tier: "A" },
+  // Romanized Tamil (STT / typed): "enoda peru Karthi", "ennoda peyar Sivaram"
+  { pattern: /\ben+n?o(?:da|daya)?\s+(?:peru|per|peyar|peyer)\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/iu, tier: "A" },
+  { pattern: /\ben\s+(?:peru|per|peyar)\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/iu, tier: "A" },
   // Tamil: "நான் <name>" when followed by speaking cue (பேசுறேன் / speaking)
   // Avoid \\b after Tamil — JS word boundaries are ASCII-oriented even with /u.
   { pattern: /நான்\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)\s*(?:பேசுறேன்|பேசுகிறேன்|speaking|calling)(?=\s|$|[.!,])/u, tier: "A" },
@@ -1932,6 +1967,7 @@ const NAME_STOPWORDS = new Set([
   "sure", "sorry", "good", "fine", "here", "happy", "okay", "just",
   "calling", "speaking", "back", "checking", "looking", "trying",
   "not", "also", "right", "ready", "interested",
+  "a", "an",
   // Intensifiers / emotional-state words. "I am so confused" structurally
   // matches the "I am X" pattern and (pre-fix) latched "so confused" as the
   // caller's name. These are never part of a real human name.
@@ -1972,6 +2008,22 @@ const NAME_BLOCKLIST = new Set([
 const NAME_NEXT_TOKEN_REJECTS = new Set([
   "not", "no", "unable", "unsure", "just", "really", "so", "very", "still",
   "also", "trying", "going", "looking", "calling",
+  // Call 14222: "என்னோட பேரு ராஜேஸ்வரி கிடையாது … சிவராம்" — next token after
+  // the denied name is a negation, not a surname.
+  "கிடையாது", "இல்லை", "இல்ல", "அல்ல", "नहीं", "नही",
+  "ella", "illa", "illai",
+]);
+
+/** Words that mean "is not / no" — never part of a stored name (call 14222). */
+const NAME_NEGATION_WORDS = new Set([
+  "not", "no", "n't",
+  "கிடையாது", "இல்லை", "இல்ல", "அல்ல", "இல்லங்க",
+  "नहीं", "नही",
+]);
+
+/** Discourse fillers callers put between "my name is" and the actual name. */
+const NAME_FILLER_WORDS = new Set([
+  "வந்து", "தான்", "actually", "really", "just",
 ]);
 
 // Honorifics/titles that callers commonly attach around their name when
@@ -1999,6 +2051,8 @@ export function stripNameHonorifics(name: string): string {
   const words = name.trim().split(/\s+/);
   while (words.length && NAME_HONORIFICS.has(normalizeNameWord(words[words.length - 1]))) words.pop();
   while (words.length && NAME_HONORIFICS.has(normalizeNameWord(words[0]))) words.shift();
+  while (words.length && NAME_FILLER_WORDS.has(normalizeNameWord(words[0]))) words.shift();
+  while (words.length && NAME_FILLER_WORDS.has(normalizeNameWord(words[words.length - 1]))) words.pop();
   return words.join(" ");
 }
 
@@ -2017,8 +2071,12 @@ export function isPlausibleName(candidate: string): boolean {
   for (const w of words) {
     const lw = w.toLowerCase().replace(/[^\p{L}\p{M}]/gu, "");
     if (!lw) return false;
-    if (NAME_STOPWORDS.has(lw) || NAME_BLOCKLIST.has(lw)) return false;
+    if (NAME_STOPWORDS.has(lw) || NAME_BLOCKLIST.has(lw) || NAME_NEGATION_WORDS.has(lw)) return false;
   }
+  // Trailing romanized "ella"/"illa" is a denial, not a surname — but a lone
+  // name "Ella" must still be allowed.
+  const last = normalizeNameWord(words[words.length - 1]!);
+  if (words.length >= 2 && (last === "ella" || last === "illa" || last === "illai")) return false;
   return true;
 }
 
@@ -2029,21 +2087,31 @@ export function isPlausibleName(candidate: string): boolean {
  * check. Returns the detected name and its trust tier, or null.
  */
 export function detectNameLatch(transcript: string): { name: string; tier: NameLatchTier } | null {
+  let best: { name: string; tier: NameLatchTier; index: number } | null = null;
   for (const { pattern, tier } of NAME_PATTERNS) {
-    const match = transcript.match(pattern);
-    const candidate = stripNameHonorifics(match?.[1]?.trim() ?? "");
-    if (!candidate || !isPlausibleName(candidate)) continue;
-    // Next-token reject: the word immediately after the matched span reveals a
-    // sentence continuation, not a self-introduction ("I am Arjun Kumar trying
-    // to reach…"). Applies alongside the per-word stopword/blocklist checks.
-    if (typeof match!.index === "number") {
-      const after = transcript.slice(match!.index + match![0].length);
-      const nextToken = after.match(/[\p{L}\p{M}]+/u)?.[0]?.toLowerCase();
-      if (nextToken && NAME_NEXT_TOKEN_REJECTS.has(nextToken)) continue;
+    const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+    const re = new RegExp(pattern.source, flags);
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(transcript)) !== null) {
+      if (match[0].length === 0) {
+        re.lastIndex++;
+        continue;
+      }
+      const candidate = stripNameHonorifics(match[1]?.trim() ?? "");
+      if (!candidate || !isPlausibleName(candidate)) continue;
+      const after = transcript.slice((match.index ?? 0) + match[0].length);
+      const nextToken = after.match(/[\p{L}\p{M}]+/u)?.[0];
+      const nextNorm = nextToken ? normalizeNameWord(nextToken) : "";
+      if (nextNorm && (NAME_NEXT_TOKEN_REJECTS.has(nextNorm) || NAME_NEGATION_WORDS.has(nextNorm))) {
+        continue;
+      }
+      const index = match.index ?? 0;
+      if (!best || index >= best.index) {
+        best = { name: candidate, tier, index };
+      }
     }
-    return { name: candidate, tier };
   }
-  return null;
+  return best ? { name: best.name, tier: best.tier } : null;
 }
 
 export async function latchCallerName(opts: {
@@ -2126,6 +2194,7 @@ const OCCUPATION_BLOCKLIST = new Set([
   "friend", "regarding", "about", "for", "with", "the", "your", "our",
   "little", "bit", "lot", "way", "long", "time", "while",
   "managed", "byop", "plan", "provider", "agent", "service", "reseller",
+  "policy", "insurance", "product", "premium", "coverage",
 ]);
 
 function isPlausibleOccupation(candidate: string): boolean {
@@ -2189,7 +2258,9 @@ const FACT_PATTERNS: FactPattern[] = [
       /\bi live in ([A-Za-z][A-Za-z\s]{1,30}?)(?:\.|,|$)/i,
       /\b(?:calling from|based in)\s+([A-Za-z][A-Za-z\s]{1,30}?)(?:\.|,|$)/i,
       // Tamil / code-mixed: "என்னோட ஊர் Chennai" / "என் city is Chennai"
-      /(?:என்னோட|என்|எனக்கு)\s*(?:ஊர்|இடம்|address|city|location|place)\s*(?:is\s*|=\s*)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{1,28}?)/iu,
+      /(?:என்னோட|என்|எனக்கு)\s*(?:ஊர்|இடம்|address|city|location|place)\s*(?:is\s*|=\s*)?([\p{L}\p{M}A-Za-z]+(?:\s[\p{L}\p{M}A-Za-z]+){0,3})/iu,
+      // Romanized Tamil: "enoda oor Chennai" / "en city Chennai"
+      /\b(?:en+n?o(?:da|daya)?|en)\s+(?:ooru|oor|city|place)\s+([\p{L}\p{M}A-Za-z]+(?:\s[\p{L}\p{M}A-Za-z]+){0,3})/iu,
       // Tamil colloquial: "நான் Chennai-ல" / "சென்னையில இருக்கு"
       /(?:நான்|நா)\s+([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{1,28}?)\s*[- ]?(?:ல|இல்|யில)\b/u,
       /\b([\p{L}\p{M}A-Za-z]{3,24})\s*[- ]?ல\s+(?:இருக்கு|இருந்து|இருக்கேன்|இருக்குறேன்)/u,
@@ -2210,6 +2281,12 @@ const FACT_PATTERNS: FactPattern[] = [
       // Tamil: require explicit job cue (வேலை / பணி) — not generic பண்றேன் ("I do X")
       /(?:நான்|நா)\s+(?:ஒரு\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)\s*(?:வேலை|பணி)/u,
       /(?:என்|என்னோட)\s*(?:வேலை|job|occupation|profession)\s+(?:is\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)(?:\.|,|$)/iu,
+      // Call 14222: "நான் professor-ஆ இருக்கேன்" / "நான் டாக்டர் ஆ இருக்கேன்"
+      /(?:நான்|நா)\s+(?:ஒரு\s+)?([\p{L}\p{M}A-Za-z]{2,28})\s*[- ]?(?:ஆ|ஆக)\s*(?:இருக்கேன்|இருக்குறேன்|இருக்கிறேன்)/u,
+      // Romanized: "naan professor-a irukken"
+      /\bnaan\s+(?:oru\s+)?([A-Za-z]{2,28})\s*[- ]?a(?:aga)?\s+irukk(?:en|uren|iren)\b/i,
+      // English copula: "I am a professor" / "I'm a teacher."
+      /\bi(?:'m| am) a(?:n)? ([a-zA-Z][a-zA-Z\s]{1,28}?)(?:\.|,|$)/i,
       // Hindi: require job/work cue — not bare "मैं X हूँ" (too ambiguous with names)
       /(?:मेरा|मेरी)\s*(?:काम|नौकरी|पेशा)\s+([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)(?:\.|,|$)/u,
       /मैं\s+(?:एक\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)\s+(?:का\s*काम|की\s*नौकरी|बाय\s*प्रोफेशन)/u,
@@ -2217,6 +2294,67 @@ const FACT_PATTERNS: FactPattern[] = [
     extract: m => m[1]!.trim(),
     confidence: 0.4,
     isPlausible: isPlausibleOccupation,
+  },
+  {
+    key: "existing_product",
+    patterns: [
+      /\bi have (?:an? |the )?([A-Za-z][A-Za-z0-9\s&.-]{2,36}?)\s+(?:policy|plan|product)\b/i,
+      /\bmy (?:policy|plan|product)(?:\s+is|\s+name)?\s+(?:is\s+)?([A-Za-z][A-Za-z0-9\s&.-]{2,36}?)(?:\.|,|$)/i,
+      /(?:என்|என்னோட)\s*(?:policy|பாலிசி|plan|product)\s+(?:is\s+|வந்து\s+)?([\p{L}\p{M}A-Za-z0-9][\p{L}\p{M}A-Za-z0-9\s&.-]{1,36}?)(?:\.|,|$)/iu,
+      /\b(?:en+n?o(?:da|daya)?|en)\s+(?:policy|plan|product)\s+(?:is\s+)?([A-Za-z][A-Za-z0-9\s&.-]{2,36}?)(?:\.|,|$)/i,
+      /(?:मेरी|मेरा)\s*(?:policy|पॉलिसी|plan)\s+(?:है\s+)?([A-Za-z][A-Za-z0-9\s&.-]{2,36}?)(?:\.|,|$)/u,
+    ],
+    extract: m => m[1]!.trim(),
+    confidence: 0.4,
+    isPlausible: (v) => v.length >= 2 && !/^(insurance|policy|plan|product)$/i.test(v),
+  },
+  {
+    key: "email",
+    patterns: [
+      /\bmy e-?mail(?:\s+(?:id|address))?(?:\s+is)?\s+(.+)/i,
+      /(?:என்|என்னோட)\s*(?:e-?mail|மெயில்)\s*(?:id\s*)?(?:is\s+|வந்து\s+)?(.+)/iu,
+      /\b(?:en+n?o(?:da|daya)?|en)\s+e-?mail(?:\s+id)?\s+(?:is\s+)?(.+)/i,
+      /\b(?:mail id|email id)(?:\s+is)?\s+(.+)/i,
+    ],
+    extract: m => extractEmailFactValue(m[1]!) ?? "",
+    confidence: 0.4,
+  },
+  {
+    key: "date_of_birth",
+    patterns: [
+      /\b(?:my\s+)?(?:date of birth|d\.?o\.?b\.?|dob|birthday)(?:\s+is)?\s+(.+)/i,
+      /\bi was born (?:on\s+)?(.+)/i,
+      /(?:என்|என்னோட)\s*(?:dob|d\.o\.b|birthday|பிறந்த\s*தேதி)\s*(?:is\s+|வந்து\s+)?(.+)/iu,
+      /\b(?:en+n?o(?:da|daya)?|en)\s+(?:dob|birthday)\s+(?:is\s+)?(.+)/i,
+      /(?:मेरी|मेरा)\s*(?:dob|जन्म\s*तिथि|जन्मदिन)\s*(?:है\s+)?(.+)/u,
+    ],
+    extract: m => extractDateOfBirthFactValue(m[1]!) ?? "",
+    confidence: 0.4,
+  },
+  {
+    key: "phone_number",
+    patterns: [
+      /\bmy (?:phone|mobile|contact)(?: number)?(?:\s+is)?\s+(.+)/i,
+      /\b(?:phone|mobile) number(?:\s+is)?\s+(.+)/i,
+      /(?:என்|என்னோட)\s*(?:phone|mobile|number|போன்|மொபைல்)\s*(?:number\s*)?(?:is\s+|வந்து\s+)?(.+)/iu,
+      /\b(?:en+n?o(?:da|daya)?|en)\s+(?:phone|mobile|number)\s+(?:is\s+)?(.+)/i,
+      /(?:मेरा|मेरी)\s*(?:phone|mobile|नंबर)\s*(?:number\s*)?(?:है\s+)?(.+)/u,
+    ],
+    extract: m => extractPhoneFactValue(m[1]!) ?? "",
+    confidence: 0.4,
+  },
+  {
+    key: "whatsapp_number",
+    patterns: [
+      /\bmy whats(?:app)?(?: number)?(?:\s+is)?\s+(.+)/i,
+      /\bwhats(?:app)?(?: number)?(?:\s+is)?\s+(.+)/i,
+      /\b(?:wtsp|wa)(?: number)?(?:\s+is)?\s+(.+)/i,
+      /(?:என்|என்னோட)\s*(?:whatsapp|வாட்ஸ்அப்|வாட்சப்|wtsp)\s*(?:number\s*)?(?:is\s+|வந்து\s+)?(.+)/iu,
+      /\b(?:en+n?o(?:da|daya)?|en)\s+(?:whatsapp|wtsp)\s+(?:is\s+)?(.+)/i,
+      /(?:मेरा|मेरी)\s*(?:whatsapp|व्हाट्सएप)\s*(?:number\s*)?(?:है\s+)?(.+)/u,
+    ],
+    extract: m => extractPhoneFactValue(m[1]!) ?? "",
+    confidence: 0.4,
   },
   {
     key: "company_name",
@@ -2256,6 +2394,9 @@ const FACT_PATTERNS: FactPattern[] = [
   },
 ];
 
+const SAME_WHATSAPP_RE =
+  /(?:whats(?:app)?|wtsp|வாட்ஸ்அப்|व्हाट्सएप).{0,48}(?:same|இதே|वही)|(?:same as (?:my |this )?(?:phone|mobile|number))/iu;
+
 /** Pure matcher for unit tests + call-end gap-fill. Returns canonical key → value. */
 export function matchCallerFactPatterns(transcript: string): Map<string, string> {
   const found = new Map<string, string>();
@@ -2273,6 +2414,10 @@ export function matchCallerFactPatterns(transcript: string): Map<string, string>
       found.set(canonical, value);
       break;
     }
+  }
+  const phone = found.get("phone_number");
+  if (phone && !found.has("whatsapp_number") && SAME_WHATSAPP_RE.test(transcript)) {
+    found.set("whatsapp_number", phone);
   }
   return found;
 }
@@ -2298,6 +2443,15 @@ function collectRegexDurableFactCandidates(
         key,
         value,
         // Above MIN_FACT_CONFIDENCE (0.6); mid-call pending stays at 0.4.
+        confidence: 0.85,
+        sentence_ids: [sid],
+      });
+    }
+    if (SAME_WHATSAPP_RE.test(s.text) && byKey.has("phone_number") && !byKey.has("whatsapp_number")) {
+      const phone = byKey.get("phone_number")!;
+      byKey.set("whatsapp_number", {
+        key: "whatsapp_number",
+        value: phone.value,
         confidence: 0.85,
         sentence_ids: [sid],
       });
