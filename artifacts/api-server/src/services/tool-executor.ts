@@ -14,7 +14,7 @@ import {
   callExecutionsTable,
   type AgentConfig,
 } from "@workspace/db";
-import { eq, and, or, sql } from "drizzle-orm";
+import { eq, and, or, sql, desc, ne } from "drizzle-orm";
 import { getAvailableSlots } from "./scheduling/slot-engine.js";
 import { buildSlotLockKey } from "./scheduling/lock.js";
 import {
@@ -35,6 +35,7 @@ import { logger } from "../lib/logger.js";
 import { writeExecutionLog } from "./execution-log.js";
 import type { TimeSlot } from "./scheduling/slot-engine.js";
 import { sendChannelEmail } from "./email-channel.js";
+import { attachMeetLinkToEmailBody } from "../orchestration/booking-email-guard.js";
 import { sendMidCallWhatsapp } from "./whatsapp/outbound.js";
 import { resolveBookingLineageCallId } from "./meet-booking.js";
 import { normalizeBookingDatetimeArgs } from "./booking-tool-args.js";
@@ -337,7 +338,9 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
             (t.description || "Send an email to the caller using the configured Email channel.") +
             " Use this when the caller asks you to email them something (summary, brochure, confirmation)." +
             " You MUST have a real email address from the caller before calling — never invent one." +
-            " Optional subject/body override the channel default template; omit them to use the saved template with {{variables}}.",
+            " Optional subject/body override the channel default template; omit them to use the saved template with {{variables}}." +
+            " For a booking confirmation, do not write that a Meet link will be included unless you paste the real URL." +
+            " Use {{meet_link}} when a booking on this call has a Google Meet URL — SnapServe will also insert it.",
           parameters: {
             type: "object",
             properties: {
@@ -2099,11 +2102,23 @@ export async function executeSendEmail(opts: {
   const subject = typeof opts.args["subject"] === "string" ? opts.args["subject"].trim() : "";
   const body = typeof opts.args["body"] === "string" ? opts.args["body"].trim() : "";
 
+  const [booking] = await db
+    .select({ meetLink: bookingsTable.meetLink })
+    .from(bookingsTable)
+    .where(and(
+      eq(bookingsTable.callId, opts.callId),
+      ne(bookingsTable.status, "cancelled"),
+    ))
+    .orderBy(desc(bookingsTable.id))
+    .limit(1);
+  const meetLink = (booking?.meetLink ?? "").trim();
+  const bodyWithMeet = body ? attachMeetLinkToEmailBody(body, meetLink || null) : "";
+
   const template =
-    subject || body
+    subject || bodyWithMeet
       ? {
           ...(subject ? { subject } : {}),
-          ...(body ? { body } : {}),
+          ...(bodyWithMeet ? { body: bodyWithMeet } : {}),
         }
       : null;
 
@@ -2121,6 +2136,7 @@ export async function executeSendEmail(opts: {
       email: toEmail,
       summary,
       agent_name: opts.agentName || agent.name || "SnapServe",
+      meet_link: meetLink,
       call_id: opts.callId,
     },
     template,

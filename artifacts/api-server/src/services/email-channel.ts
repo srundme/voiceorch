@@ -20,6 +20,7 @@ import {
 import { encryptKey, decryptKey } from "../lib/crypto.js";
 import { logger } from "../lib/logger.js";
 import { interpolateTemplate, type TemplateContext } from "./template-vars.js";
+import { attachMeetLinkToEmailBody } from "../orchestration/booking-email-guard.js";
 import { compileEmailDesign, defaultEmailDesign } from "./email-design.js";
 import {
   getGoogleMailConnectionForUser,
@@ -28,13 +29,24 @@ import {
 
 const MANAGED_FROM = { fromName: "SnapServe", fromEmail: "noreply@snapserve.ai", name: "SnapServe", email: "noreply@snapserve.ai" };
 
-function wrapManagedShell(innerHtml: string, agentName?: string): string {
+function emailFooterLabel(context: TemplateContext): string {
+  const business = String(context["business_name"] ?? "").trim();
+  if (business) return business;
+  const agent = String(context["agent_name"] ?? "").trim();
+  if (!agent) return "";
+  // Internal all-caps labels (e.g. MULTILINGUAL) are not a customer-facing brand.
+  if (agent === agent.toUpperCase() && !/\s/.test(agent)) return "";
+  return agent;
+}
+
+function wrapManagedShell(innerHtml: string, brand?: string): string {
   const safe = innerHtml.includes("<") ? innerHtml : `<p>${innerHtml.replace(/\n/g, "<br/>")}</p>`;
+  const suffix = brand?.trim() ? ` · ${brand.trim()}` : "";
   return `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#111">
   <div style="max-width:560px;margin:0 auto;padding:24px">
     ${safe}
     <hr style="border:none;border-top:1px solid #e5e5e5;margin:28px 0"/>
-    <p style="font-size:12px;color:#888">Sent via SnapServe${agentName ? ` · ${agentName}` : ""}</p>
+    <p style="font-size:12px;color:#888">Sent via SnapServe${suffix}</p>
   </div>
 </body></html>`;
 }
@@ -591,11 +603,12 @@ export async function sendChannelEmail(opts: SendChannelEmailOpts): Promise<Send
 
   const subject = interpolateTemplate(tpl.subject, opts.context);
   let html = interpolateTemplate(tpl.body, opts.context);
+  html = attachMeetLinkToEmailBody(html, String(opts.context["meet_link"] ?? ""));
   if (!html.includes("<")) {
     html = `<p>${html.replace(/\n/g, "<br/>")}</p>`;
   }
   if (channel.mode === "managed" && tpl.wrapManagedShell !== false) {
-    html = wrapManagedShell(html, String(opts.context["agent_name"] ?? ""));
+    html = wrapManagedShell(html, emailFooterLabel(opts.context));
   }
 
   const [msg] = await db.insert(emailMessagesTable).values({
@@ -611,37 +624,43 @@ export async function sendChannelEmail(opts: SendChannelEmailOpts): Promise<Send
   }).returning();
 
   try {
-    // Managed mode has no verified sender of the customer's own, so mail used to
-    // leave as noreply@snapserve.ai. When they connected Google we send as that
-    // address instead, and only fall back to Brevo if Gmail refuses.
-    if (channel.mode === "managed") {
-      const googleConn = await getGoogleMailConnectionForUser(opts.userId);
-      if (googleConn) {
-        const sentAsUser = await sendMailFromGoogleConnection(googleConn.id, { to, subject, html });
-        if (sentAsUser) {
-          await db.update(emailMessagesTable).set({ status: "sent" }).where(eq(emailMessagesTable.id, msg!.id));
-          await db.update(emailChannelsTable).set({
-            lastSentAt: new Date(),
-            lastError: null,
-          }).where(eq(emailChannelsTable.id, channel.id));
-          logger.info(
-            { userId: opts.userId, to, mode: channel.mode, fromEmail: googleConn.email, transport: "google" },
-            "email-channel: sent as connected Google account",
-          );
-          return {
-            ok: true,
-            messageId: msg!.id,
-            providerMessageId: null,
-            fromEmail: googleConn.email,
-            mode: channel.mode,
-            transport: "google",
-          };
-        }
-        logger.warn(
-          { userId: opts.userId, to, fromEmail: googleConn.email },
-          "email-channel: Gmail send failed — falling back to Brevo",
+    // Always send as the Google Calendar connected account. Never SnapServe
+    // noreply — that is not the customer's identity and confuses the lead.
+    const googleConn = await getGoogleMailConnectionForUser(opts.userId);
+    if (googleConn) {
+      const sentAsUser = await sendMailFromGoogleConnection(googleConn.id, { to, subject, html });
+      if (sentAsUser) {
+        await db.update(emailMessagesTable).set({ status: "sent" }).where(eq(emailMessagesTable.id, msg!.id));
+        await db.update(emailChannelsTable).set({
+          lastSentAt: new Date(),
+          lastError: null,
+        }).where(eq(emailChannelsTable.id, channel.id));
+        logger.info(
+          { userId: opts.userId, to, mode: channel.mode, fromEmail: googleConn.email, transport: "google" },
+          "email-channel: sent as connected Google Calendar account",
+        );
+        return {
+          ok: true,
+          messageId: msg!.id,
+          providerMessageId: null,
+          fromEmail: googleConn.email,
+          mode: channel.mode,
+          transport: "google",
+        };
+      }
+      logger.warn(
+        { userId: opts.userId, to, fromEmail: googleConn.email },
+        "email-channel: Gmail send from calendar account failed",
+      );
+      if (channel.mode === "managed") {
+        throw new Error(
+          "Could not send as your connected Google Calendar account. Reconnect Google with Gmail permission.",
         );
       }
+    } else if (channel.mode === "managed") {
+      throw new Error(
+        "Connect Google Calendar to send this email from that account. SnapServe does not send as noreply@snapserve.ai.",
+      );
     }
 
     const from = await resolveFrom(channel, {
@@ -649,17 +668,10 @@ export async function sendChannelEmail(opts: SendChannelEmailOpts): Promise<Send
       template: stored,
     });
 
-    let apiKey: string;
-    if (channel.mode === "managed") {
-      const managedKey = process.env["BREVO_API_KEY"];
-      if (!managedKey) throw new Error("SnapServe managed email is not configured (BREVO_API_KEY)");
-      apiKey = managedKey;
-    } else {
-      if (!channel.brevoApiKeyEncrypted) {
-        throw new Error("BYO Brevo is missing API key");
-      }
-      apiKey = decryptKey(channel.brevoApiKeyEncrypted);
+    if (!channel.brevoApiKeyEncrypted) {
+      throw new Error("BYO Brevo is missing API key");
     }
+    const apiKey = decryptKey(channel.brevoApiKeyEncrypted);
 
     const providerMessageId = await sendViaBrevo({
       apiKey,
