@@ -7,6 +7,7 @@ import {
   isEmailLikeUtterance,
   isCompleteEmailUtterance,
   looksSnapComplete,
+  shouldSkipSmartTurnEval,
   sanitizeSpokenEmailAddress,
   sanitizeSpokenEmailsInTranscript,
   reconstructSpokenEmail,
@@ -187,6 +188,34 @@ describe("email collection helpers", () => {
     expect(looksSnapComplete("k a r")).toBe(false);
     expect(looksSnapComplete("nine")).toBe(false);
     expect(looksSnapComplete("I wanted to say")).toBe(false);
+  });
+});
+
+describe("shouldSkipSmartTurnEval", () => {
+  it("skips ONNX wait for a finished short ack (happy-path latency)", () => {
+    expect(shouldSkipSmartTurnEval({
+      pending: "சரி",
+      textLooksIncomplete: false,
+      collectionKind: "none",
+    })).toBe(true);
+    expect(shouldSkipSmartTurnEval({
+      pending: "yes",
+      textLooksIncomplete: false,
+      collectionKind: "none",
+    })).toBe(true);
+  });
+
+  it("never skips during digit/email collection or mid-thought text", () => {
+    expect(shouldSkipSmartTurnEval({
+      pending: "nine",
+      textLooksIncomplete: true,
+      collectionKind: "digit",
+    })).toBe(false);
+    expect(shouldSkipSmartTurnEval({
+      pending: "I wanted to say",
+      textLooksIncomplete: true,
+      collectionKind: "none",
+    })).toBe(false);
   });
 });
 

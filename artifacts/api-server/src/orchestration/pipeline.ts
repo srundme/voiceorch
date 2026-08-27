@@ -52,6 +52,7 @@ import {
   computeEndpointMs,
   resolveStreamingTurnHold,
   resolveIncompleteHoldMs,
+  shouldSkipSmartTurnEval,
   resolveCollectionKind,
   resolveCollectionVadSilenceMs,
   looksSnapComplete,
@@ -1169,6 +1170,13 @@ export class OrchestrationPipeline implements VoiceSession {
   private _turnCloseReason: TurnCloseReason = "stt_final";
   /** True when this turn reused speculative/eager LLM prefill (Bolna Flux analogue). */
   private _eagerLlmHitThisTurn = false;
+  private _specLlmLaunchedTotal = 0;
+  private _specLlmCommittedTotal = 0;
+  /** Last EOU decision — copied into turn_latency (HOLD is not on the happy path). */
+  private _eouEvalMs: number | null = null;
+  private _eouHoldMs: number | null = null;
+  private _eouAction: string | null = null;
+  private _eouSkipSmartTurn = false;
 
   // KB prefetch — fired on the first speech frame of a new utterance so the
   // result is ready by the time STT finishes and processTurn() starts.
@@ -1862,25 +1870,33 @@ export class OrchestrationPipeline implements VoiceSession {
     const pcm = this._eouBytes > 0 ? Buffer.concat(this._eouAudio) : Buffer.alloc(0);
     const sessionReady = isSmartTurnReady();
     if (!sessionReady) void warmSmartTurn();
+    const skipSmartTurn = shouldSkipSmartTurnEval({
+      pending,
+      textLooksIncomplete,
+      collectionKind: hold.collectionKind,
+    });
     const evalMs = hold.collectionKind === "none"
       ? envInt("SEMANTIC_TURN_EVAL_MS", SEMANTIC_TURN_EVAL_MS_DEFAULT, 100)
       : Math.max(
         envInt("SEMANTIC_TURN_EVAL_MS", SEMANTIC_TURN_EVAL_MS_DEFAULT, 100),
         SEMANTIC_TURN_EVAL_MS_COLLECTION,
       );
+    const evalStarted = performance.now();
     const timedOut = Symbol("smart-turn-timeout");
-    const pred = pcm.length > 0 && sessionReady
+    const pred = !skipSmartTurn && pcm.length > 0 && sessionReady
       ? await Promise.race([
         predictSmartTurn(pcm),
         new Promise<typeof timedOut>((resolve) => setTimeout(() => resolve(timedOut), evalMs)),
       ])
       : null;
     if (!this.semanticTurnGate.belongsTo(generation)) return;
-    const eou = resolveSmartTurnEval({
-      sessionReady,
-      timedOut: pred === timedOut,
-      verdict: pred === timedOut ? null : pred?.verdict,
-    });
+    const eou = skipSmartTurn
+      ? "complete"
+      : resolveSmartTurnEval({
+        sessionReady,
+        timedOut: pred === timedOut,
+        verdict: pred === timedOut ? null : pred?.verdict,
+      });
     const smartTurn = pred === timedOut ? null : pred;
     const resolved = resolveEouCommit({
       eou,
@@ -1889,6 +1905,10 @@ export class OrchestrationPipeline implements VoiceSession {
     });
     const action = this.semanticTurnGate.onEou(generation, resolved);
     if (action === "ignore") return;
+    this._eouEvalMs = Math.round(performance.now() - evalStarted);
+    this._eouSkipSmartTurn = skipSmartTurn;
+    this._eouAction = action;
+    this._eouHoldMs = 0;
     logger.info(
       {
         callId: this.config.callId,
@@ -1897,10 +1917,12 @@ export class OrchestrationPipeline implements VoiceSession {
         eou,
         probability: smartTurn?.probability,
         sessionReady,
+        skipSmartTurn,
         textLooksIncomplete,
         holdReason: hold.reason,
         collectionKind: hold.collectionKind,
         audioMs: Math.round((pcm.length / 2 / 16000) * 1000),
+        eouEvalMs: this._eouEvalMs,
       },
       "Semantic turn: end-of-turn decision",
     );
@@ -1914,7 +1936,9 @@ export class OrchestrationPipeline implements VoiceSession {
         eou,
         probability: smartTurn?.probability,
         sessionReady,
+        skipSmartTurn,
         collectionKind: hold.collectionKind,
+        eouEvalMs: this._eouEvalMs,
       },
     });
     if (action === "hold") {
@@ -1930,6 +1954,7 @@ export class OrchestrationPipeline implements VoiceSession {
         collectionKind: hold.collectionKind,
         trailingFragment: hold.trailingFragment,
       });
+      this._eouHoldMs = stopMs;
       this._eouTimer = setTimeout(() => {
         this._eouTimer = null;
         if (this.semanticTurnGate.onStopTimeout(gen) !== "await_final") return;
@@ -2565,6 +2590,7 @@ export class OrchestrationPipeline implements VoiceSession {
     };
     void run();
     this._specLlmState = state;
+    this._specLlmLaunchedTotal++;
     logger.info(
       {
         callId: this.config.callId,
@@ -9058,6 +9084,7 @@ export class OrchestrationPipeline implements VoiceSession {
       });
       if (recon.action === "commit") {
         this._eagerLlmHitThisTurn = true;
+        this._specLlmCommittedTotal++;
         this.logExec("LLM", "system", {
           status: "info", turnNumber: _currentTurnIndex,
           metadata: {
@@ -9788,6 +9815,11 @@ export class OrchestrationPipeline implements VoiceSession {
         event: "Turn Metrics",
         turnCloseReason: this._turnCloseReason,
         eagerLlmHit: this._eagerLlmHitThisTurn,
+        specLlmLaunchedTotal: this._specLlmLaunchedTotal,
+        specLlmCommittedTotal: this._specLlmCommittedTotal,
+        specLlmHitRate: this._specLlmLaunchedTotal > 0
+          ? Math.round((this._specLlmCommittedTotal / this._specLlmLaunchedTotal) * 100) / 100
+          : null,
         bargeInFiredTotal: this._bargeInFiredCount,
         bargeInRecoveryTotal: this._bargeInRecoveryCount,
         bargeInRecoveryRate: this._bargeInFiredCount > 0
@@ -9898,6 +9930,11 @@ export class OrchestrationPipeline implements VoiceSession {
         llmProvider:           this.agent.llmProvider,
         ttsProvider:           this.agent.ttsProvider,
         fillerPlayed:          this._fillerPlayedThisTurn,
+        eager_llm_hit:         this._eagerLlmHitThisTurn,
+        eou_eval_ms:           this._eouEvalMs,
+        eou_hold_ms:           this._eouHoldMs,
+        eou_action:            this._eouAction,
+        eou_skip_smart_turn:   this._eouSkipSmartTurn,
         turn_close_reason:     this._turnCloseReason,
       }, "turn_latency");
     }

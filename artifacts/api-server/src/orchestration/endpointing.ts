@@ -397,6 +397,22 @@ export function looksSnapComplete(text: string): boolean {
   return false;
 }
 
+/**
+ * Happy-path Fast turns ("yes" / "சரி" / a finished 10-digit number) must not
+ * wait out the Smart Turn eval budget. HOLD never runs on COMPLETE+veto-pass
+ * anyway — the remaining sequential cost on acks is ONNX. Collection fragments
+ * still go through Smart Turn + HOLD.
+ */
+export function shouldSkipSmartTurnEval(opts: {
+  pending: string;
+  textLooksIncomplete: boolean;
+  collectionKind: CollectionKind;
+}): boolean {
+  if (opts.textLooksIncomplete) return false;
+  if (opts.collectionKind !== "none") return false;
+  return looksSnapComplete(opts.pending);
+}
+
 export type StreamingTurnHold = {
   incomplete: boolean;
   reason: "text_continuation" | "digit_collection" | "email_collection" | null;
