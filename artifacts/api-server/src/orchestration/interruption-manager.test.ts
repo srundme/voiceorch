@@ -31,6 +31,13 @@ describe("InterruptionManager", () => {
     expect(m.getAudioSendStatus(FILLER_SEQUENCE_ID, 5)).toBe("SEND");
   });
 
+  it("filler still SEND while calleeSpeaking (echo VAD must not chop ம்ம்)", () => {
+    const m = new InterruptionManager();
+    m.beginAgentTurn();
+    m.onUserSpeechStart();
+    expect(m.getAudioSendStatus(FILLER_SEQUENCE_ID, 5)).toBe("SEND");
+  });
+
   it("WAIT while callee is speaking", () => {
     const m = new InterruptionManager();
     const id = m.beginAgentTurn();

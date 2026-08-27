@@ -2645,7 +2645,7 @@ export class OrchestrationPipeline implements VoiceSession {
       end_call_in_progress: "hangup already in progress",
       fragment_coalesce_hold: "short fragment held briefly for coalesce (not a drop)",
       backchannel_during_playback: "held ack fragment dropped — agent speaking at coalesce-timer fire (true backchannel)",
-      agent_still_speaking: "final arrived while agent was still speaking and did not barge-in (greeting/echo garbage)",
+      agent_still_speaking: "final arrived during greeting/system playback and did not barge-in",
     };
     this.logExec(EXEC_COMPONENTS.STT, "system", {
       status: "info",
@@ -3562,13 +3562,13 @@ export class OrchestrationPipeline implements VoiceSession {
     }
 
     // Call 14227: realtime skipped final-transcript barge-in, then still fed
-    // "Then you need to learn" (Tamil greeting echo) into the LLM. If we did
-    // not barge, this final is not a caller turn.
-    if (this.isPlaying && !this.bargeInRequested) {
+    // greeting echo into the LLM. Only drop during greeting/system playback —
+    // a blanket isPlaying discard ate overlapping caller speech (call 14235).
+    if (this.greetingPlaybackActive || this.systemPlaybackActive) {
       this.streamingBargeInWordCount = 0;
       logger.info(
         { callId: this.config.callId, transcript: transcript.slice(0, 80) },
-        "Streaming STT: discarding final while agent still speaking (no barge-in)",
+        "Streaming STT: discarding final during greeting/system playback (no barge-in)",
       );
       this.logDiscardedTranscript(transcript, "agent_still_speaking");
       return;
@@ -6393,7 +6393,10 @@ export class OrchestrationPipeline implements VoiceSession {
       text,
       turnNumber,
       sequenceId,
-      streaming: !!this.tts.synthesizeStream,
+      // Fillers always use one-shot PCM. If this stays true, drainSentenceJob
+      // walks the empty streaming queue, underruns, and logs audio_gated
+      // (call 14235: "புரிஞ்சுது" / "அப்படியா" chopped before the real sentence).
+      streaming: sequenceId !== FILLER_SEQUENCE_ID && !!this.tts.synthesizeStream,
       pcmQueue: [],
       synthDone: false,
       synthError: null,

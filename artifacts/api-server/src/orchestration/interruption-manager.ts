@@ -130,6 +130,9 @@ export class InterruptionManager {
    */
   getAudioSendStatus(sequenceId: number, historyLength: number): AudioSendStatus {
     if (!this.validSequenceIds.has(sequenceId)) return "BLOCK";
+    // Fillers must never WAIT on echo-VAD calleeSpeaking — that audio_gates
+    // "ம்ம்"/"புரிஞ்சுது" and the caller hears a chopped first word (call 14235).
+    if (sequenceId === FILLER_SEQUENCE_ID) return "SEND";
     if (this.calleeSpeaking) return "WAIT";
     if (historyLength > 2 && this.utteranceEndAt > 0) {
       const since = Date.now() - this.utteranceEndAt;
