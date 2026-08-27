@@ -20,6 +20,7 @@ import { filterVoicesByAgentGender } from "./vibe-agent-gender.js";
 import { getSarvamManagedKey, platformChatText, PLATFORM_CHAT_MODEL } from "../services/platform-chat-llm.js";
 import { SARVAM_FLAGSHIP_MODEL } from "../orchestration/adapters/llm/sarvam.js";
 import { resolveWorkspaceScope } from "../services/workspace-scope.js";
+import { attachVoiceNumberToAgent, PhoneAlreadyAssignedError } from "../services/voice-number-assign.js";
 
 const router = Router();
 
@@ -1671,36 +1672,35 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
       }
     }
 
-    // Inbound phone-number assignment (vibe phone_number phase) — mirrors
-    // PATCH /phone-numbers/:id/assign. Non-fatal: agent creation already succeeded.
-    // pickedNumberRow is validated against workspace-owned active numbers above.
+    // Inbound phone-number assignment (vibe phone_number phase).
+    // Never steal a number already on another agent — that made inbound die with no error.
     if (pickedNumberRow && pickedNumberRow.agentId !== insertedAgent.id) {
       try {
         const numberOwnerId = pickedNumberRow.userId ?? clerkId;
-        const [numRow] = await db.update(phoneNumbersTable)
-          .set({ agentId: insertedAgent.id })
-          .where(and(eq(phoneNumbersTable.id, pickedNumberRow.id), eq(phoneNumbersTable.userId, numberOwnerId)))
-          .returning();
-        if (numRow) {
-          await db.update(agentsTable)
-            .set({ inboundPhoneNumberId: numRow.id, outboundPhoneNumberId: numRow.id })
-            .where(eq(agentsTable.id, insertedAgent.id));
-          await logActivity({
-            userId:       clerkId,
-            eventType:    "phone_number.assigned",
-            resourceType: "phone_number",
-            resourceId:   String(numRow.id),
-            description:  `Phone number ${numRow.number} assigned to agent #${insertedAgent.id}`,
-          });
-          emit({ type: "field", key: "inbound_number", label: "Inbound Number", value: numRow.number, icon: "phone-incoming" });
-        }
+        const attached = await attachVoiceNumberToAgent({
+          phoneNumberId: pickedNumberRow.id,
+          agentId: insertedAgent.id,
+          numberOwnerUserId: numberOwnerId,
+          allowReassign: false,
+        });
+        await logActivity({
+          userId:       clerkId,
+          eventType:    "phone_number.assigned",
+          resourceType: "phone_number",
+          resourceId:   String(pickedNumberRow.id),
+          description:  `Phone number ${attached.number} assigned to agent #${insertedAgent.id}`,
+        });
+        emit({ type: "field", key: "inbound_number", label: "Inbound Number", value: attached.number, icon: "phone-incoming" });
       } catch (err) {
+        const taken = err instanceof PhoneAlreadyAssignedError;
         logger.warn({ err, numberId: pickedNumberRow.id, agentId: insertedAgent.id }, "vibe-chat: phone number assignment failed (non-fatal)");
         emit({
           type: "notice",
           noticeType: "phone_numbers",
           signature: `assign-failed-${pickedNumberRow.id}`,
-          message: `I couldn't connect ${pickedNumberRow.number} automatically — you can assign it from the Phone Numbers page.`,
+          message: taken
+            ? `${pickedNumberRow.number} is already on another agent. Unassign it from Phone Numbers if you want this new agent to use it.`
+            : `I couldn't connect ${pickedNumberRow.number} automatically — you can assign it from the Phone Numbers page.`,
         });
       }
     }

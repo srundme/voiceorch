@@ -295,6 +295,11 @@ function AssignDialog({
             {(number as { partnerAssigned?: boolean }).partnerAssigned
               ? <>Move <span className="font-mono text-foreground">{number.number}</span> between your agents, or remove it to return the line to your provider.</>
               : <>Pick which agent gets inbound + caller ID for <span className="font-mono text-foreground">{number.number}</span>. Leave unassigned to free it for another agent.</>}
+            {number.agentId && selectedAgentId !== "none" && Number(selectedAgentId) !== number.agentId ? (
+              <span className="mt-2 block text-amber-600 dark:text-amber-400">
+                Moving this number will stop incoming calls on the agent that has it now. That is the only way to change which agent owns the line.
+              </span>
+            ) : null}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-2">
