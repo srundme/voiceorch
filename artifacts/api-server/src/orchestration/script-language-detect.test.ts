@@ -21,6 +21,12 @@ describe("detectScriptLanguage", () => {
     expect(detectScriptLanguage("okay मला सांगा", "mr-IN")).toBe("mr-IN");
   });
 
+  it("pins Tamil on a mixed resume-drop greeting (call 14243)", () => {
+    expect(detectScriptLanguage(
+      "Call cut ஆயிடுச்சு, line சரியா வரல போல. சரி, அப்படியே continue பண்ணலாம்",
+    )).toBe("ta-IN");
+  });
+
   it("returns null for text with no letters", () => {
     expect(detectScriptLanguage("... ?!", "mr-IN")).toBeNull();
   });
