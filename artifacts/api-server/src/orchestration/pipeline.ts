@@ -2072,6 +2072,10 @@ export class OrchestrationPipeline implements VoiceSession {
         turnNumber: this._activeTurnIndex,
         metadata: { event: "VAD Speech End", segmentMs: this._lastVadSegmentMs || null },
       });
+      // Always release WAIT. Pickup/echo VAD during greet() (isProcessing=true)
+      // used to skip this and audio_gate the entire opener — 18s dead air
+      // (call 14251: answerToFirstAudioMs 18099).
+      this.interruptionMgr.onUserSpeechEnd();
       if (
         this.agent.semanticTurnDetection
         && !this.isPlaying
@@ -2412,12 +2416,19 @@ export class OrchestrationPipeline implements VoiceSession {
     return false;
   }
 
-  private canEmitAudio(sequenceId: number): boolean {
+  private audioSendStatus(sequenceId: number): "SEND" | "WAIT" | "BLOCK" {
     const status = this.interruptionMgr.getAudioSendStatus(
       sequenceId,
       this.conversationHistory.length,
     );
-    return status === "SEND" && this.interruptionMgr.isValidSequence(sequenceId);
+    if (status === "WAIT" && this.greetingPlaybackActive) return "SEND";
+    return status;
+  }
+
+  private canEmitAudio(sequenceId: number): boolean {
+    if (!this.interruptionMgr.isValidSequence(sequenceId)) return false;
+    const status = this.audioSendStatus(sequenceId);
+    return status === "SEND";
   }
 
   /** Track telemetry mark ACKs from telephony carriers for frame-level barge-in alignment. */
@@ -5615,6 +5626,7 @@ export class OrchestrationPipeline implements VoiceSession {
       this._currentTurnPlayedSentences = [];
       this.isPlaying = true;
       this.greetingPlaybackActive = true;
+      this.clearBargeWait();
       // Pickup VAD before answer arms force-finalize; clear it so a ringtone/
       // echo partial cannot become a caller turn mid-greeting (call 14227).
       this.safetyNet.clear();
@@ -6754,10 +6766,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // (gaps/glitches) because audio delivery slows below real-time.
       let nextTick = Date.now() + 20;
       while (!this.closed && !this.bargeInRequested) {
-        const emitStatus = this.interruptionMgr.getAudioSendStatus(
-          job.sequenceId,
-          this.conversationHistory.length,
-        );
+        const emitStatus = this.audioSendStatus(job.sequenceId);
         if (emitStatus === "BLOCK" || !this.interruptionMgr.isValidSequence(job.sequenceId)) {
           break;
         }
@@ -6862,10 +6871,7 @@ export class OrchestrationPipeline implements VoiceSession {
         const PCM_CHUNK = CHUNK_SIZE_MULAW * 2 * (outRate / 8000); // 20ms: 320B @8k, 640B @16k
         for (let i = 0; i < out8k.length; i += PCM_CHUNK) {
           if (this.closed || this.bargeInRequested) break;
-          const emitStatus = this.interruptionMgr.getAudioSendStatus(
-            job.sequenceId,
-            this.conversationHistory.length,
-          );
+          const emitStatus = this.audioSendStatus(job.sequenceId);
           if (emitStatus === "BLOCK" || !this.interruptionMgr.isValidSequence(job.sequenceId)) break;
           if (emitStatus === "WAIT") {
             const ok = await this.waitForAudioEmit(job.sequenceId, 5_000);
@@ -6891,10 +6897,7 @@ export class OrchestrationPipeline implements VoiceSession {
         const ttsMusaw = encodeMulaw(ttsPcm8k);
         for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
           if (this.closed || this.bargeInRequested) break;
-          const emitStatus = this.interruptionMgr.getAudioSendStatus(
-            job.sequenceId,
-            this.conversationHistory.length,
-          );
+          const emitStatus = this.audioSendStatus(job.sequenceId);
           if (emitStatus === "BLOCK" || !this.interruptionMgr.isValidSequence(job.sequenceId)) break;
           if (emitStatus === "WAIT") {
             const ok = await this.waitForAudioEmit(job.sequenceId, 5_000);
