@@ -121,9 +121,9 @@ export function inboundPurposeExamples(langKey: string, name: string | null): st
       ]);
     default:
       return withInboundGreeting("Hi", n, [
-        "how can I help you today?",
-        "what can I help you with?",
         "what are you calling about?",
+        "what can I help you with?",
+        "how can I help you today?",
         "how may I assist you?",
         "which service do you need help with?",
       ]);

@@ -81,7 +81,7 @@ describe("buildCallDirectionRule", () => {
       languageAutoDetect: true,
     });
     expect(rule).toContain("English");
-    expect(rule).toContain("how can I help you today");
+    expect(rule).toContain("what are you calling about");
   });
 });
 

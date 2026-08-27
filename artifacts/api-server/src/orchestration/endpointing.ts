@@ -1,4 +1,8 @@
 import { clampSemanticTurnStopMs } from "./semantic-turn-gate.js";
+import {
+  inboundPurposeExamples,
+  resolveOpeningLanguageKey,
+} from "./call-direction-rules.js";
 
 /**
  * Adaptive endpointing — replaces the flat VAD_SILENCE_MS constant with a
@@ -793,6 +797,10 @@ export function isMetaRefusalGreeting(text: string | null | undefined): boolean 
  * Instant returning-caller opener — no LLM round-trip.
  * Call 2636: Gemini recognition greeting blocked ~3.1s of silence before first TTS.
  *
+ * Must match inbound CALL DIRECTION intent (why they called) — NOT "how are you"
+ * (call reports: returning inbound instantly spoke "Hi! How are you?" / எப்படி இருக்கீங்க
+ * and skipped the purpose-of-call ask).
+ *
  * Not used for resume-after-drop callbacks — those go through the greeting LLM
  * with caller-memory / LAST EXCHANGES context (no hardcoded cut-call line).
  */
@@ -800,34 +808,13 @@ export function buildInstantReturningGreeting(
   name?: string | null,
   lang?: string | null,
 ): string {
-  const prefix = (lang ?? "en").split(/[-_]/)[0]?.toLowerCase() ?? "en";
-  const n = (name ?? "").trim().replace(/\s+/g, " ");
-
-  if (prefix === "hi") {
-    return n ? `नमस्ते, ${n} जी! कैसे हैं आप?` : "नमस्ते! कैसे हैं आप?";
-  }
-  if (prefix === "ta") {
-    return n ? `வணக்கம் ${n}! எப்படி இருக்கீங்க?` : "வணக்கம்! எப்படி இருக்கீங்க?";
-  }
-  if (prefix === "te") {
-    return n ? `నమస్కారం ${n} గారు! ఎలా ఉన్నారు?` : "నమస్కారం! ఎలా ఉన్నారు?";
-  }
-  if (prefix === "kn") {
-    return n ? `ನಮಸ್ಕಾರ ${n}! ಹೇಗಿದ್ದೀರಾ?` : "ನಮಸ್ಕಾರ! ಹೇಗಿದ್ದೀರಾ?";
-  }
-  if (prefix === "mr") {
-    return n ? `नमस्कार ${n}! कसे आहात?` : "नमस्कार! कसे आहात?";
-  }
-  if (prefix === "gu") {
-    return n ? `નમસ્તે ${n}! કેમ છો?` : "નમસ્તે! કેમ છો?";
-  }
-  if (prefix === "bn") {
-    return n ? `নমস্কার ${n}! কেমন আছেন?` : "নমস্কার! কেমন আছেন?";
-  }
-  if (prefix === "ml") {
-    return n ? `നമസ്കാരം ${n}! സുഖമാണോ?` : "നമസ്കാരം! സുഖമാണോ?";
-  }
-  return n ? `Hi ${n}! How are you?` : "Hi! How are you?";
+  const key = resolveOpeningLanguageKey(lang);
+  const n = (name ?? "").trim().replace(/\s+/g, " ") || null;
+  const examples = inboundPurposeExamples(key, n);
+  return (
+    examples[0]
+    ?? (n ? `Hi ${n}, what are you calling about?` : "Hi, what are you calling about?")
+  );
 }
 
 

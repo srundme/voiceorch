@@ -6,20 +6,25 @@ import {
 } from "./endpointing.js";
 
 describe("buildInstantReturningGreeting", () => {
-  it("builds Hindi recognition opener with name", () => {
-    expect(buildInstantReturningGreeting("Thirumugam", "hi-IN")).toContain("Thirumugam");
-    expect(buildInstantReturningGreeting("Thirumugam", "hi-IN")).toMatch(/^नमस्ते/);
+  it("builds Hindi purpose-of-call opener with name", () => {
+    const g = buildInstantReturningGreeting("Thirumugam", "hi-IN");
+    expect(g).toContain("Thirumugam");
+    expect(g).toMatch(/^नमस्ते/);
+    expect(g).not.toMatch(/कैसे हैं आप/);
   });
 
-  it("builds Tamil opener with name", () => {
-    expect(buildInstantReturningGreeting("Karthik", "ta")).toContain("Karthik");
-    expect(buildInstantReturningGreeting("Karthik", "ta")).toMatch(/^வணக்கம்/);
-    expect(buildInstantReturningGreeting("Karthik", "ta")).toContain("எப்படி இருக்கீங்க");
+  it("builds Tamil purpose-of-call opener with name (not how-are-you)", () => {
+    const g = buildInstantReturningGreeting("Karthik", "ta");
+    expect(g).toContain("Karthik");
+    expect(g).toMatch(/^வணக்கம்/);
+    expect(g).toMatch(/விஷயமா|எதற்காக|காரணமா/);
+    expect(g).not.toContain("எப்படி இருக்கீங்க");
   });
 
-  it("falls back without name", () => {
-    expect(buildInstantReturningGreeting(null, "en")).toBe("Hi! How are you?");
-    expect(buildInstantReturningGreeting("", "hi")).toBe("नमस्ते! कैसे हैं आप?");
+  it("falls back without name — asks why they called, not how are you", () => {
+    expect(buildInstantReturningGreeting(null, "en")).toBe("Hi, what are you calling about?");
+    expect(buildInstantReturningGreeting("", "hi")).toMatch(/किस बारे में कॉल|किस विषय/);
+    expect(buildInstantReturningGreeting(null, "en")).not.toMatch(/how are you/i);
   });
 });
 
