@@ -4006,16 +4006,15 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               let memLlmKey: string | null = memLlmProvs[0] ? decryptKey(memLlmProvs[0].apiKey) : null;
               let memLlmProvider = session.agentLlmProvider;
               let memLlmModel    = session.agentLlmModel;
-              // Managed plan: no BYOP key → fall back to platform managed key (Groq).
-              // IMPORTANT: the managed key is a Groq API key, so we must also switch
-              // the provider to "groq" and use a Groq-compatible model — otherwise
-              // createLLMAdapter("openai", groqKey, ...) would fail with 401.
+              // Managed plan: no BYOP key → fall back to platform Sarvam (same as
+              // post-call summary). Must switch provider+model with the key —
+              // createLLMAdapter("openai", sarvamKey, ...) would 401.
               if (!memLlmKey) {
-                const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
-                memLlmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
+                const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_sarvam_key"));
+                memLlmKey = row?.value?.trim() || process.env["SARVAM_API_KEY"] || null;
                 if (memLlmKey) {
-                  memLlmProvider = "groq";
-                  memLlmModel    = "llama-3.3-70b-versatile";
+                  memLlmProvider = "sarvam";
+                  memLlmModel    = "sarvam-105b";
                 }
               }
               if (memLlmKey) {
