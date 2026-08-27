@@ -50,6 +50,7 @@ export async function runLiveToolCall(
     const goodbye = resolveGoodbyeMessage(
       endCallTool?.type === "end_call" ? endCallTool.goodbyeMessage : undefined,
       agent.endCallPhrases,
+      agent.language,
     );
     onAgentText(goodbye);
     await speakText(goodbye);
@@ -265,7 +266,7 @@ async function executeLiveAgentTool(
     case "webhook":
       return await executeWebhookTool(callId, tool, args);
     case "end_call": {
-      const goodbye = resolveGoodbyeMessage(tool.goodbyeMessage, agent.endCallPhrases);
+      const goodbye = resolveGoodbyeMessage(tool.goodbyeMessage, agent.endCallPhrases, agent.language);
       onAgentText(goodbye);
       await speakText(goodbye);
       endCall();

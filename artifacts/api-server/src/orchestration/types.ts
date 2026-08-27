@@ -68,22 +68,47 @@ export interface EndCallTool {
  */
 export const DEFAULT_GOODBYE_MESSAGE = "Thank you for calling. Have a great day. Goodbye!";
 
+const STUB_GOODBYE_RE =
+  /^(thankyou|thank you|thanks|bye|goodbye|ok|okay|hello|hi|நன்றி|வணக்கம்)[!.,\s]*$/i;
+
+/**
+ * Dashboard End Call Phrases are hangup *detectors* ("thankyou", "bye").
+ * Speaking the first detector as the whole farewell (call 13981) is a stub.
+ */
+export function isStubGoodbye(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (t.length < 12) return true;
+  return STUB_GOODBYE_RE.test(t);
+}
+
+export function defaultGoodbyeMessage(language?: string | null): string {
+  const lang = (language ?? "en").split("-")[0]?.toLowerCase() ?? "en";
+  if (lang === "ta") return "நேரம் ஒதுக்கியதுக்கு நன்றி. நல்ல நாள். வணக்கம்.";
+  if (lang === "hi") return "कॉल करने के लिए धन्यवाद। आपका दिन शुभ हो।";
+  return DEFAULT_GOODBYE_MESSAGE;
+}
+
 /**
  * Resolve the spoken goodbye for an AI-driven end-call in a single, consistent
  * priority order so every end-call path behaves identically:
  *   1. The `end_call` tool's own `goodbyeMessage` (most specific — wins if set)
- *   2. The agent's first configured End Call Phrase (`endCallPhrases[0]`)
- *   3. `DEFAULT_GOODBYE_MESSAGE` (last resort — never hang up silently)
+ *   2. A non-stub End Call Phrase (skip detectors like "thankyou" / "bye")
+ *   3. Language-aware default (last resort — never hang up silently)
  */
 export function resolveGoodbyeMessage(
   goodbyeMessage: string | undefined | null,
   endCallPhrases: string[],
+  language?: string | null,
 ): string {
+  const fallback = defaultGoodbyeMessage(language);
   const explicit = goodbyeMessage?.trim();
-  if (explicit) return explicit;
-  const firstPhrase = endCallPhrases[0]?.trim();
-  if (firstPhrase) return firstPhrase;
-  return DEFAULT_GOODBYE_MESSAGE;
+  if (explicit && !isStubGoodbye(explicit)) return explicit;
+  for (const phrase of endCallPhrases) {
+    const t = phrase.trim();
+    if (t && !isStubGoodbye(t)) return t;
+  }
+  return fallback;
 }
 
 export interface CalComTool {
