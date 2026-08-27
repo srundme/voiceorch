@@ -180,6 +180,12 @@ export class CartesiaTTS implements TTSAdapter {
     this.language = lang.split("-")[0];
   }
 
+  setSpeed(speed: number | null): void {
+    this.speed = (speed != null && Number.isFinite(speed) && speed !== 1)
+      ? Math.min(1.5, Math.max(0.6, speed))
+      : null;
+  }
+
   /** Fire-and-forget WS pre-warm — called at session start so the greeting
    *  doesn't pay the TCP+TLS+WS handshake cost on first synthesis. */
   warmup(): void {

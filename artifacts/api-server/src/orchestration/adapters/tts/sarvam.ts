@@ -245,6 +245,12 @@ export class SarvamTTS implements TTSAdapter {
     });
   }
 
+  setSpeed(speed: number | null): void {
+    this.pace = (typeof speed === "number" && Number.isFinite(speed))
+      ? Math.min(2, Math.max(0.5, speed))
+      : null;
+  }
+
   warmup(): void {
     if (this.closed) return;
     void this.ensureWarmWs().catch((err) => {

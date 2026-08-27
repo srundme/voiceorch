@@ -731,6 +731,13 @@ export interface TTSAdapter {
    * so TTS does not keep speaking Tamil text with an English (or null) tag.
    */
   setLanguage?(lang: string): void;
+  /**
+   * Hot-swap speaking rate mid-call (Sarvam / Cartesia / ElevenLabs).
+   * Used to slow the inbound opening greeting slightly without changing
+   * the agent's configured speed for the rest of the call.
+   * Pass null to clear an override and use the provider default.
+   */
+  setSpeed?(speed: number | null): void;
   /** Optional teardown — close any persistent connections (e.g. WebSocket).
    *  Called by the pipeline's close() when the call ends. */
   close?(): void;

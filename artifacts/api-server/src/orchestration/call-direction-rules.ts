@@ -42,11 +42,26 @@ const LANG_LABEL: Record<string, string> = {
   pa: "Punjabi",
 };
 
-/** Prefix greeting (+ optional remembered name) onto purpose-of-call tails. */
+/** Prefix greeting (+ optional remembered name) onto purpose-of-call tails.
+ *  Use a period (not comma) so TTS plays two beats — greeting, then the
+ *  purpose question — instead of rushing one long line. */
 function withInboundGreeting(greet: string, name: string | null, tails: string[]): string[] {
   const n = name?.trim() || null;
-  const head = n ? `${greet} ${n}, ` : `${greet}, `;
-  return tails.map((t) => `${head}${t}`);
+  const head = n ? `${greet} ${n}. ` : `${greet}. `;
+  return tails.map((t) => {
+    const body = t.trim();
+    // Latin tails need a capital after the period ("Hi. What are you…").
+    const capped = /^[a-z]/.test(body) ? body[0]!.toUpperCase() + body.slice(1) : body;
+    return `${head}${capped}`;
+  });
+}
+
+/** Slightly slower TTS for the inbound opener only (sounds less rushed). */
+export function resolveInboundGreetingTtsSpeed(agentSpeed: number | null | undefined): number {
+  const base = typeof agentSpeed === "number" && Number.isFinite(agentSpeed) && agentSpeed > 0
+    ? agentSpeed
+    : 1;
+  return Math.round(Math.max(0.7, Math.min(1.2, base * 0.85)) * 100) / 100;
 }
 
 /** Purpose-of-call examples for inbound openers (with optional name). */
@@ -60,11 +75,7 @@ export function inboundPurposeExamples(langKey: string, name: string | null): st
         "சொல்லுங்க என்ன விஷயமா கால் பண்ணிருக்கீங்க?",
         "சொல்லுங்க எதற்காக கால் பண்ணிருக்கீங்க?",
         "என்ன விஷயம் சொல்லுங்க?",
-        "எப்படி உதவலாம்?",
-        "எந்த விஷயத்துக்கு உதவி வேணும்?",
-        "சொல்லுங்க, நான் எப்படி உதவலாம்?",
         "என்ன காரணமா கால் பண்ணிருக்கீங்க?",
-        "எந்த சேவைக்கு கால் பண்ணிருக்கீங்க?",
       ]);
     case "hi":
       return withInboundGreeting("नमस्ते", n, [
@@ -125,9 +136,9 @@ export function inboundPurposeExamples(langKey: string, name: string | null): st
       ]);
     default:
       return withInboundGreeting("Hi", n, [
-        "how can I help you today?",
-        "what can I help you with?",
         "what are you calling about?",
+        "what can I help you with?",
+        "how can I help you today?",
         "how may I assist you?",
         "which service do you need help with?",
       ]);

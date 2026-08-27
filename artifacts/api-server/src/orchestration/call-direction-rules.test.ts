@@ -3,6 +3,7 @@ import {
   buildCallDirectionRule,
   inboundPurposeExamples,
   resolveCallOpeningLanguage,
+  resolveInboundGreetingTtsSpeed,
   resolveOpeningLanguageKey,
 } from "./call-direction-rules.js";
 
@@ -57,7 +58,7 @@ describe("buildCallDirectionRule", () => {
     });
     expect(rule).toContain("CALL DIRECTION — INBOUND");
     expect(rule).toContain("Karthi");
-    expect(rule).toMatch(/என்ன விஷயமா|எப்படி உதவலாம்/);
+    expect(rule).toMatch(/என்ன விஷயமா|எதற்காக|என்ன காரணமா/);
     expect(rule).toContain("Tamil");
   });
 
@@ -81,7 +82,15 @@ describe("buildCallDirectionRule", () => {
       languageAutoDetect: true,
     });
     expect(rule).toContain("English");
-    expect(rule).toContain("how can I help you today");
+    expect(rule).toContain("What are you calling about");
+  });
+});
+
+describe("resolveInboundGreetingTtsSpeed", () => {
+  it("slows default pace for inbound openers", () => {
+    expect(resolveInboundGreetingTtsSpeed(1)).toBe(0.85);
+    expect(resolveInboundGreetingTtsSpeed(1.2)).toBe(1.02);
+    expect(resolveInboundGreetingTtsSpeed(0.7)).toBe(0.7);
   });
 });
 
@@ -89,14 +98,15 @@ describe("inboundPurposeExamples", () => {
   it("includes Tamil purpose phrase with name", () => {
     const examples = inboundPurposeExamples("ta", "சிவராம்");
     expect(examples.some((e) => e.includes("சிவராம்"))).toBe(true);
-    expect(examples.some((e) => /விஷயமா|உதவலாம்/.test(e))).toBe(true);
+    expect(examples.some((e) => /விஷயமா|காரணமா/.test(e))).toBe(true);
   });
 
   it("offers several related Tamil inbound openers", () => {
     const examples = inboundPurposeExamples("ta", null);
-    expect(examples.length).toBeGreaterThanOrEqual(6);
+    expect(examples.length).toBeGreaterThanOrEqual(4);
     expect(examples.some((e) => e.includes("என்ன விஷயமா கால் பண்ணிருக்கீங்க"))).toBe(true);
     expect(examples.some((e) => e.includes("எதற்காக கால் பண்ணிருக்கீங்க"))).toBe(true);
     expect(examples.some((e) => e.includes("என்ன காரணமா"))).toBe(true);
+    expect(examples.every((e) => !/உதவலாம்|சேவைக்கு|விஷயத்துக்கு உதவி/.test(e))).toBe(true);
   });
 });

@@ -27,6 +27,12 @@ export class ElevenLabsTTS implements TTSAdapter {
       : null;
   }
 
+  setSpeed(speed: number | null): void {
+    this.speed = (speed != null && Number.isFinite(speed) && speed !== 1)
+      ? Math.min(1.2, Math.max(0.7, speed))
+      : null;
+  }
+
   /** Build the full URL with output_format as a query parameter (required by ElevenLabs API). */
   private buildUrl(path: string): string {
     const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}${path}`);
