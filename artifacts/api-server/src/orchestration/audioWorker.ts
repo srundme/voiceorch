@@ -59,7 +59,13 @@ const noiseCancellers = new Map<string, NoiseCanceller>();
 const isolators = new Map<string, VoiceIsolator>();
 const callChains = new Map<string, Promise<void>>();
 
-void warmVoiceIsolator();
+// Stagger GTCRN warmup across workers. Eager parallel InferenceSession.create
+// on a large pool races the deploy healthcheck and can OOM the container.
+const warmDelayMs = 400 + Math.floor(Math.random() * 2_500);
+const warmTimer = setTimeout(() => {
+  void warmVoiceIsolator();
+}, warmDelayMs);
+warmTimer.unref?.();
 
 function getNoiseCanceller(callId: string, gateRatio: number): NoiseCanceller {
   let nc = noiseCancellers.get(callId);

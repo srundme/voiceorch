@@ -15,7 +15,25 @@ import { cpus } from "os";
 import { randomBytes } from "crypto";
 import { logger } from "../lib/logger.js";
 
-const POOL_SIZE = Math.max(2, cpus().length - 1);
+/**
+ * Cap the worker pool. Railway (and other hosts) often report a large shared
+ * CPU count; spawning cpus()-1 workers each loading GTCRN ONNX at boot OOMs the
+ * container right after "Server listening", so /api/healthz never stays up.
+ * Override with AUDIO_POOL_SIZE when you intentionally want a larger pool.
+ */
+const AUDIO_POOL_MAX = 8;
+export function resolveAudioPoolSize(
+  env: NodeJS.ProcessEnv = process.env,
+  cpuCount: number = cpus().length,
+): number {
+  const raw = env["AUDIO_POOL_SIZE"];
+  if (raw !== undefined && raw.trim() !== "") {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 1) return Math.min(64, Math.floor(n));
+  }
+  return Math.min(AUDIO_POOL_MAX, Math.max(2, cpuCount - 1));
+}
+const POOL_SIZE = resolveAudioPoolSize();
 
 export interface AudioProcessResult {
   pcm8k: Buffer;
@@ -113,7 +131,10 @@ export function initAudioPool(workerUrl: URL): void {
   for (let i = 0; i < POOL_SIZE; i++) {
     pool.push(new AudioWorkerThread(workerUrl));
   }
-  logger.info({ poolSize: POOL_SIZE }, "Audio worker pool initialised");
+  logger.info(
+    { poolSize: POOL_SIZE, cpus: cpus().length, envOverride: process.env["AUDIO_POOL_SIZE"] ?? null },
+    "Audio worker pool initialised",
+  );
 }
 
 /**
