@@ -3189,9 +3189,10 @@ export class OrchestrationPipeline implements VoiceSession {
               } else if (this.sarvamRealtimePartials()) {
                 // Realtime best practice: barge on early partials, not transcript.final.
                 // Call 14227: Tamil greeting echo transcribed as English "Then you
-                // need to learn" — isSelfEcho missed it, echo bar was still cold,
-                // and vad_partial launched a full LLM turn. Same greeting/echo-grace
-                // / cold-floor rules as vad.speech_start.
+                // need to learn" — greeting + echo-grace still block that. After
+                // those windows, a non-echo partial must cut TTS even if the echo
+                // floor is cold (call 14251: 2pm during the 4pm/9am offer never
+                // interrupted because we required a warm floor).
                 const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
                 this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
                 const charCount = [...text.trim()].length;
@@ -3202,12 +3203,15 @@ export class OrchestrationPipeline implements VoiceSession {
                 const energyAboveEchoBar =
                   interimEchoBar !== null
                   && this.bargeInPeakRmsSinceSentence > interimEchoBar;
+                const energyLooksLikeEcho =
+                  interimEchoBar !== null
+                  && this.bargeInPeakRmsSinceSentence <= interimEchoBar;
+                // Booking/slot answers ("2pm", "காலை") must still cut TTS even when
+                // inbound RMS is echo-dominated — that is the talk-over the caller
+                // is trying to make (call 14251).
                 const interimIsSelfEcho =
                   this.isSelfEcho(text)
-                  || (
-                    interimEchoBar !== null
-                    && this.bargeInPeakRmsSinceSentence <= interimEchoBar
-                  );
+                  || (energyLooksLikeEcho && !looksLikeBookingTimeAnswer(text));
                 if (shouldBargeOnRealtimePartial({
                   greetingOrSystem: this.greetingPlaybackActive || this.systemPlaybackActive,
                   inEchoGrace,
@@ -4328,8 +4332,9 @@ export class OrchestrationPipeline implements VoiceSession {
    * final-transcript word-count). On telephony with Sarvam the caller talking
    * OVER the agent rarely yields a timely final (Sarvam finalizes on endpointing,
    * which doesn't occur while the caller keeps talking), so ordinary interruptions
-   * ("actually…", "I have a question") never fired. This gives the streaming path a
-   * transcript-independent, energy-driven interrupt that matches the batch path.
+   * ("actually…", "I have a question") never fired. Realtime vad.speech_start /
+   * partials have the same hole (call 14251: 0 barge-ins until TTS finished).
+   * This gives the streaming path a transcript-independent, energy-driven interrupt.
    *
    * @param respectHoldUntil batch passes true (its bargeInHoldUntil is extended
    *   through the whole estimated sentence, which is fine for VAD-gated batch STT).
@@ -4446,10 +4451,11 @@ export class OrchestrationPipeline implements VoiceSession {
       // Filters out brief mic clicks/breaths while reacting promptly to human interruptions.
       let effectiveMinFrames = Math.max(15, BARGE_IN_STREAMING_MIN_FRAMES);
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {
-        if (this.sarvamRealtimePartials()) {
-          // Energy is echo evidence only. Barge-in is vad.speech_start / early partials.
-          return;
-        }
+        // Sarvam often withholds vad.speech_start / partials until TTS ends
+        // (call 14251: availability 4pm/9am finished in full, bargeInFiredTotal=0,
+        // then the caller's "2pm" was processed as the next turn). Energy is the
+        // only path that can cut playback during talk-over. Greeting + 600ms
+        // per-sentence grace + the adaptive echo bar still block self-echo.
         this.triggerBargeIn(source, undefined, {
           speculative: false,
           energyDetails: {

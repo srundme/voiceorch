@@ -275,10 +275,18 @@ describe("shouldBargeOnRealtimePartial", () => {
     expect(shouldBargeOnRealtimePartial({ ...base, inEchoGrace: true })).toBe(false);
   });
 
-  it("does not barge on PSTN while the echo floor is still cold", () => {
+  it("barges a real PSTN talk-over after greeting even if the echo floor is still cold (call 14251)", () => {
     expect(shouldBargeOnRealtimePartial({
       ...base,
       echoBarReady: false,
+      energyAboveEchoBar: false,
+    })).toBe(true);
+  });
+
+  it("does not barge a warm-floor PSTN partial that never rose above the echo bar", () => {
+    expect(shouldBargeOnRealtimePartial({
+      ...base,
+      echoBarReady: true,
       energyAboveEchoBar: false,
     })).toBe(false);
   });

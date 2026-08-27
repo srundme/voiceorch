@@ -608,7 +608,7 @@ export function looksLikeBookingTimeAnswer(text: string): boolean {
   ) {
     return true;
   }
-  return /(?:कल|परसों|आज|सुबह|दोपहर|शाम|बजे|टेन|थर्टी|इलेवन|ट्वेल्व)/u.test(t);
+  return /(?:कल|परसों|आज|सुबह|दोपहर|शाम|बजे|टेन|थर्टी|इलेवन|ट्वेल्व|நாளை|இன்னைக்கு|இன்று|காலை|மாலை|மதியம்|மணிக்கு|மணி)/u.test(t);
 }
 
 /**

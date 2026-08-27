@@ -235,8 +235,12 @@ export function shouldBargeOnRealtimeVadStart(opts: {
 
 /**
  * Early-partial barge-in (Sarvam transcript.partial while TTS is playing).
- * Stricter than vad.speech_start on PSTN: a cold echo floor must NOT barge.
- * Call 14227: greeting echo → "Then you need to learn" → eager LLM + tools turn.
+ * Greeting + per-sentence echo grace stay hard blocks (call 14227: Tamil
+ * greeting echo → English "Then you need to learn"). After that, a non-echo
+ * partial must cut TTS even if the echo floor is still cold — otherwise the
+ * agent finishes the whole availability sentence before answering "2pm"
+ * (call 14251: bargeInFiredTotal=0). When the floor IS ready, still require
+ * energy above it so garbled echo without extra RMS cannot cut her.
  */
 export function shouldBargeOnRealtimePartial(opts: {
   greetingOrSystem: boolean;
@@ -253,7 +257,7 @@ export function shouldBargeOnRealtimePartial(opts: {
   if (opts.greetingOrSystem) return false;
   if (opts.inEchoGrace) return false;
   if (opts.isWebcall) return true;
-  if (!opts.echoBarReady) return false;
+  if (!opts.echoBarReady) return true;
   return opts.energyAboveEchoBar;
 }
 
