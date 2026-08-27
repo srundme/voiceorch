@@ -8219,7 +8219,7 @@ export class OrchestrationPipeline implements VoiceSession {
         toolCalls: [{ id: _toolCallId, name: bookName, args: JSON.stringify(autoArgs) }],
       });
       const toolResult = await this.handleToolCall(bookName, autoArgs);
-      await this.continueWithToolResult(bookName, toolResult, 0, _toolCallId);
+      await this.continueWithToolResult(bookName, toolResult ?? "error: auto book failed", 0, _toolCallId);
       return;
     }
 
