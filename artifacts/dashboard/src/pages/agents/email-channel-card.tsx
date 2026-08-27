@@ -484,7 +484,7 @@ export function EmailChannelCard({
                     <div className="space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Send from</Label>
                       <select
-                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                        className="h-10 w-full rounded-[10px] border border-input bg-background px-3 text-[13px]"
                         value={tplFromId ?? ""}
                         onChange={(e) => setTplFromId(e.target.value ? Number(e.target.value) : null)}
                       >
@@ -623,7 +623,7 @@ export function EmailChannelCard({
                     <div className="space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Send from</Label>
                       <select
-                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                        className="h-10 w-full rounded-[10px] border border-input bg-background px-3 text-[13px]"
                         value={tplFromId ?? ""}
                         onChange={(e) => setTplFromId(e.target.value ? Number(e.target.value) : null)}
                       >
