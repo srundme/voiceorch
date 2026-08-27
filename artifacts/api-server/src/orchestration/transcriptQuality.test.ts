@@ -11,6 +11,7 @@ import {
   isAccidentalInterruptPhrase,
   isCallerAttentionUtterance,
   isBackchannelOnlyUtterance,
+  hasCallerAddressToken,
   normalizeSttPhonetics,
   coalescePendingTranscripts,
   signalsConversationalContinuation,
@@ -347,5 +348,12 @@ describe("isCallerAttentionUtterance", () => {
     expect(isCallerAttentionUtterance("Hello")).toBe(true);
     expect(isCallerAttentionUtterance("வணக்கம்")).toBe(true);
     expect(isCallerAttentionUtterance("காலைல 10 மணிக்கு சார்")).toBe(false);
+  });
+});
+
+describe("hasCallerAddressToken", () => {
+  it("treats நீங்க as the caller addressing the agent, not TTS echo (call 14345)", () => {
+    expect(hasCallerAddressToken(["ஒரு", "நிமிஷம்", "நீங்க"])).toBe(true);
+    expect(hasCallerAddressToken(["ஒரு", "நிமிஷம்", "time"])).toBe(false);
   });
 });

@@ -78,6 +78,11 @@ describe("tryEarlyPhraseDispatch — streaming TTS starts before .!?", () => {
   it("does not dispatch very short buffers", () => {
     expect(tryEarlyPhraseDispatch("Sure I can", 15)).toBeNull();
   });
+
+  it("does not comma-split a short Tamil clause (call 14345 choppy TTS)", () => {
+    const text = "புரியுது, இப்போ உங்களுக்கு time இல்ல. அப்புறமா ஒரு callback schedule பண்ணட்டுமா";
+    expect(tryEarlyPhraseDispatch(text, 8)).toBeNull();
+  });
 });
 
 describe("extractSentences — ellipsis is a breath, not a clip (call 14276)", () => {

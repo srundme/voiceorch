@@ -571,6 +571,17 @@ export function isAccidentalInterruptPhrase(text: string): boolean {
   return ACCIDENTAL_INTERRUPTION_PHRASES.has(compact);
 }
 
+/** Tokens that mean the speaker is addressing the other person — echo of our
+ *  own TTS almost never adds these. Call 14345: "ஒரு நிமிஷம் நீங்க" was dropped
+ *  as self-echo of the greeting's "ஒரு நிமிஷம் time கிடைக்குமா?". */
+const CALLER_ADDRESS_TOKENS = new Set([
+  "நீங்க", "நீங்கள்", "நான்", "நாங்க", "you", "i", "we", "me",
+]);
+
+export function hasCallerAddressToken(tokens: string[]): boolean {
+  return tokens.some((t) => CALLER_ADDRESS_TOKENS.has(t.toLowerCase()));
+}
+
 /** Short "hello" / "வணக்கம்" to get the agent's attention — never far-field-drop. */
 export function isCallerAttentionUtterance(text: string): boolean {
   const t = text.trim().toLowerCase().replace(/[.!?]+$/g, "");
