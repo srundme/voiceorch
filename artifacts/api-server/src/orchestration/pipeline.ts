@@ -6491,7 +6491,7 @@ export class OrchestrationPipeline implements VoiceSession {
             logger.warn({ callId: this.config.callId }, "TTS stream aborted");
           }
         } finally {
-          clearTimeout(ttsTimerId);
+          clearTimeout(ttsTimerId ?? undefined);
           clearInterval(closedWatcher);
           this.activeTtsAborts.delete(ttsAbort);
           flush(); // flush any leftover accumulator bytes after aborts
