@@ -14,6 +14,8 @@ import {
   useRetryCampaignLead, useGetBatchAnalytics,
   getListCampaignBatchesQueryKey,
   getListBatchLeadsQueryKey,
+  customFetch,
+  ApiError,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
@@ -275,12 +277,6 @@ type BatchHeader = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function apiFetch<T>(url: string): Promise<T> {
-  const r = await fetch(url, { credentials: "include" });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json() as Promise<T>;
-}
-
 function fmtDuration(s: number | null | undefined): string {
   if (!s) return "—";
   const m = Math.floor(s / 60);
@@ -425,7 +421,7 @@ function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onC
     queryFn: () => {
       const p = new URLSearchParams({ status, outcome, page: String(page), limit: String(LIMIT) });
       if (search) p.set("search", search);
-      return apiFetch<BatchLeadsPage>(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/leads?${p}`);
+      return customFetch<BatchLeadsPage>(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/leads?${p}`);
     },
     refetchInterval: 10000,
     placeholderData: prev => prev,
@@ -764,7 +760,7 @@ export default function BatchWorkspacePage() {
   // Header data (light, kept in sync with polling)
   const { data: header } = useQuery<BatchHeader>({
     queryKey: ["batch-ws-header", campaignId, batchId],
-    queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/header`),
+    queryFn: () => customFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/header`),
     refetchInterval: 10000,
     enabled: campaignId > 0 && batchId > 0,
   });
@@ -785,7 +781,7 @@ export default function BatchWorkspacePage() {
     isPending: kpisPending,
   } = useQuery<BatchWorkspaceKpis>({
     queryKey: ["batch-ws-kpis", campaignId, batchId],
-    queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/kpis`),
+    queryFn: () => customFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/kpis`),
     refetchInterval: 10000,
     enabled: campaignId > 0 && batchId > 0,
     retry: 2,
@@ -862,19 +858,10 @@ export default function BatchWorkspacePage() {
   async function handleStart() {
     setIsStarting(true);
     try {
-      const r = await fetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/start`, {
+      await customFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/start`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
       });
-      if (!r.ok) {
-        const body = (await r.json().catch(() => ({}))) as { error?: string; code?: string; missingItems?: unknown[] };
-        if (body.code === "IRDAI_BLOCKED") {
-          toast({ title: "Call blocked", description: body.error, variant: "destructive" });
-          return;
-        }
-        throw new Error(body.error ?? `HTTP ${r.status}`);
-      }
       await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
       await qc.invalidateQueries({ queryKey: ["batch-ws-header", campaignId, batchId] });
       toast({ title: "Batch started" });
@@ -882,6 +869,13 @@ export default function BatchWorkspacePage() {
       const irdai = getIrdaiBlockedError(err);
       if (irdai) {
         toast({ title: "Call blocked", description: irdai.message, variant: "destructive" });
+      } else if (err instanceof ApiError) {
+        const body = err.data as { error?: string; code?: string } | null;
+        if (body?.code === "IRDAI_BLOCKED") {
+          toast({ title: "Call blocked", description: body.error, variant: "destructive" });
+        } else {
+          toast({ title: body?.error ?? "Action failed", variant: "destructive" });
+        }
       } else {
         toast({ title: "Action failed", variant: "destructive" });
       }

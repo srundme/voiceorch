@@ -6,9 +6,10 @@
 
 import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
 import {
   Phone, CheckCircle2, Calendar, Download, RefreshCw,
-  AlertTriangle, Clock, CalendarCheck, RotateCcw,
+  AlertTriangle, Clock, CalendarCheck, RotateCcw, AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -59,12 +60,6 @@ type CallbacksPage = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, { credentials: "include", ...init });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json() as Promise<T>;
-}
 
 function fmtDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -138,21 +133,23 @@ export default function CallbacksTab({ campaignId }: { campaignId: number }) {
 
   const { data: metrics } = useQuery<CallbackMetrics>({
     queryKey: metricsKey,
-    queryFn:  () => apiFetch(`${BASE}/api/campaigns/${campaignId}/callbacks/metrics`),
+    queryFn:  () => customFetch(`${BASE}/api/campaigns/${campaignId}/callbacks/metrics`),
     refetchInterval: 10000,
+    enabled: campaignId > 0,
   });
 
-  const { data, isFetching } = useQuery<CallbacksPage>({
+  const { data, isFetching, isError, isLoading, refetch } = useQuery<CallbacksPage>({
     queryKey: listKey,
     queryFn: () => {
       const p = new URLSearchParams({
         status: tab, page: String(page), limit: String(LIMIT),
       });
       if (search) p.set("search", search);
-      return apiFetch<CallbacksPage>(`${BASE}/api/campaigns/${campaignId}/callbacks?${p}`);
+      return customFetch<CallbacksPage>(`${BASE}/api/campaigns/${campaignId}/callbacks?${p}`);
     },
     refetchInterval: 10000,
     placeholderData: prev => prev,
+    enabled: campaignId > 0,
   });
 
   const handleSearch = useCallback((v: string) => {
@@ -172,14 +169,14 @@ export default function CallbacksTab({ campaignId }: { campaignId: number }) {
 
   const completeMutation = useMutation({
     mutationFn: (callbackId: number) =>
-      apiFetch(`${BASE}/api/campaigns/${campaignId}/callbacks/${callbackId}/complete`, { method: "POST" }),
+      customFetch(`${BASE}/api/campaigns/${campaignId}/callbacks/${callbackId}/complete`, { method: "POST" }),
     onSuccess: () => { toast({ title: "Marked complete" }); invalidate(); },
     onError:   () => toast({ title: "Failed to complete", variant: "destructive" }),
   });
 
   const rescheduleMutation = useMutation({
     mutationFn: ({ callbackId, callbackAt }: { callbackId: number; callbackAt: string }) =>
-      apiFetch(`${BASE}/api/campaigns/${campaignId}/callbacks/${callbackId}/reschedule`, {
+      customFetch(`${BASE}/api/campaigns/${campaignId}/callbacks/${callbackId}/reschedule`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ callbackAt }),
@@ -190,7 +187,7 @@ export default function CallbacksTab({ campaignId }: { campaignId: number }) {
 
   const callNowMutation = useMutation({
     mutationFn: (leadId: number) =>
-      apiFetch(`${BASE}/api/campaigns/${campaignId}/live-queue/bulk-action`, {
+      customFetch(`${BASE}/api/campaigns/${campaignId}/live-queue/bulk-action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "retry", leadIds: [leadId] }),
@@ -201,7 +198,7 @@ export default function CallbacksTab({ campaignId }: { campaignId: number }) {
 
   const bulkMutation = useMutation({
     mutationFn: ({ action, callbackAt }: { action: string; callbackAt?: string }) =>
-      apiFetch<{ action: string; affected: number }>(`${BASE}/api/campaigns/${campaignId}/callbacks/bulk-action`, {
+      customFetch<{ action: string; affected: number }>(`${BASE}/api/campaigns/${campaignId}/callbacks/bulk-action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, callbackIds: Array.from(selectedIds), callbackAt }),
@@ -415,7 +412,18 @@ export default function CallbacksTab({ campaignId }: { campaignId: number }) {
 
       {/* ── Table ──────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        {items.length === 0 ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center h-48 gap-2">
+            <p className="text-sm text-muted-foreground/50">Loading callbacks…</p>
+          </div>
+        ) : isError ? (
+          <div className="flex flex-col items-center justify-center h-48 gap-3">
+            <AlertCircle className="h-8 w-8 text-amber-600" />
+            <p className="text-sm font-medium">Callbacks failed to load</p>
+            <p className="text-xs text-muted-foreground">This is not an empty list — retry or check your session.</p>
+            <Button size="sm" variant="outline" disabled={isFetching} onClick={() => void refetch()}>Retry</Button>
+          </div>
+        ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3">
             <Phone className="h-8 w-8 text-muted-foreground/20" />
             <p className="text-sm text-muted-foreground/50">

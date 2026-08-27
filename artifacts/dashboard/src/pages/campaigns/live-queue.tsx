@@ -7,6 +7,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,10 +15,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { getExecutionId } from "@/lib/execution-id";
+import { useToast } from "@/hooks/use-toast";
 import {
   Search, Download, RefreshCw, PauseCircle, RotateCcw,
   ChevronLeft, ChevronRight, User, Clock, Calendar,
-  Activity, Phone, BarChart2,
+  Activity, Phone, BarChart2, AlertCircle,
 } from "lucide-react";
 import { formatDistanceToNow, format, parseISO } from "date-fns";
 
@@ -95,14 +97,6 @@ type LeadDrawer = {
 type QueueTab =
   | "all" | "calling" | "queued" | "connected"
   | "retry" | "callback" | "nopickup" | "failed";
-
-// ── API helpers ───────────────────────────────────────────────────────────────
-
-async function apiFetch<T>(url: string): Promise<T> {
-  const r = await fetch(url, { credentials: "include" });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json() as Promise<T>;
-}
 
 // ── Status display maps ───────────────────────────────────────────────────────
 
@@ -233,9 +227,9 @@ function LeadDrawerPanel({
   onRetry: (id: number) => void;
   onPause: (id: number) => void;
 }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["lq-drawer", campaignId, leadId],
-    queryFn: () => apiFetch<LeadDrawer>(`${BASE}/api/campaigns/${campaignId}/leads/${leadId}/drawer`),
+    queryFn: () => customFetch<LeadDrawer>(`${BASE}/api/campaigns/${campaignId}/leads/${leadId}/drawer`),
     enabled: open && leadId != null,
     staleTime: 15_000,
   });
@@ -250,7 +244,19 @@ function LeadDrawerPanel({
           </SheetTitle>
         </SheetHeader>
 
-        {isLoading || !data ? (
+        {isLoading ? (
+          <div className="p-5 space-y-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-20 bg-muted/40 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : isError ? (
+          <div className="p-5 flex flex-col items-center gap-3 text-center">
+            <AlertCircle className="h-8 w-8 text-amber-600" />
+            <p className="text-sm font-medium">Lead detail failed to load</p>
+            <Button size="sm" variant="outline" disabled={isFetching} onClick={() => void refetch()}>Retry</Button>
+          </div>
+        ) : !data ? (
           <div className="p-5 space-y-3">
             {[1, 2, 3].map(i => (
               <div key={i} className="h-20 bg-muted/40 rounded-xl animate-pulse" />
@@ -426,6 +432,7 @@ const SUB_TABS: Array<{ key: QueueTab; label: string }> = [
 
 export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<QueueTab>("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -450,9 +457,10 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
 
   const metricsQuery = useQuery({
     queryKey: ["lq-metrics", campaignId],
-    queryFn: () => apiFetch<LiveQueueMetrics>(`${BASE}/api/campaigns/${campaignId}/live-queue/metrics`),
+    queryFn: () => customFetch<LiveQueueMetrics>(`${BASE}/api/campaigns/${campaignId}/live-queue/metrics`),
     refetchInterval: 10_000,
     staleTime: 8_000,
+    enabled: campaignId > 0,
   });
 
   const leadsQuery = useQuery({
@@ -460,30 +468,30 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
     queryFn: () => {
       const p = new URLSearchParams({ tab: activeTab, page: String(page), limit: "50" });
       if (debouncedSearch) p.set("search", debouncedSearch);
-      return apiFetch<LiveQueueLeadsPage>(`${BASE}/api/campaigns/${campaignId}/live-queue/leads?${p}`);
+      return customFetch<LiveQueueLeadsPage>(`${BASE}/api/campaigns/${campaignId}/live-queue/leads?${p}`);
     },
     refetchInterval: 10_000,
     staleTime: 8_000,
+    enabled: campaignId > 0,
   });
 
   // ── Bulk mutation ────────────────────────────────────────────────────────────
 
   const bulkMutation = useMutation({
-    mutationFn: async ({ action, leadIds }: { action: string; leadIds: number[] }) => {
-      const r = await fetch(`${BASE}/api/campaigns/${campaignId}/live-queue/bulk-action`, {
+    mutationFn: async ({ action, leadIds }: { action: string; leadIds: number[] }) =>
+      customFetch(`${BASE}/api/campaigns/${campaignId}/live-queue/bulk-action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ action, leadIds }),
-      });
-      if (!r.ok) throw new Error("Failed");
-      return r.json();
-    },
+      }),
     onSuccess: () => {
       setSelectedIds(new Set());
       void qc.invalidateQueries({ queryKey: ["lq-metrics", campaignId] });
       void qc.invalidateQueries({ queryKey: ["lq-leads", campaignId] });
       void qc.invalidateQueries({ queryKey: [`/api/campaigns/${campaignId}/analytics`] });
+    },
+    onError: () => {
+      toast({ title: "Bulk action failed", variant: "destructive" });
     },
   });
 
@@ -612,6 +620,15 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
                 <div className="ml-auto h-3 w-14 bg-muted/50 rounded animate-pulse" />
               </div>
             ))}
+          </div>
+        ) : leadsQuery.isError ? (
+          <div className="py-16 flex flex-col items-center gap-3 text-center">
+            <AlertCircle className="h-8 w-8 text-amber-600" />
+            <p className="text-sm font-medium">Live queue failed to load</p>
+            <p className="text-xs text-muted-foreground">This is not an empty queue — retry or check your session.</p>
+            <Button size="sm" variant="outline" disabled={leadsQuery.isFetching} onClick={() => void leadsQuery.refetch()}>
+              Retry
+            </Button>
           </div>
         ) : leads.length === 0 ? (
           <div className="py-16 flex flex-col items-center gap-3 text-center">
