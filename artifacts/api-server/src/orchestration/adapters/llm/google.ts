@@ -193,7 +193,7 @@ export class GoogleLLM implements LLMAdapter {
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: REQUEST_TIMEOUT_MS } });
-    this.model = model ?? "gemini-3.6-flash";
+    this.model = model ?? "gemini-2.5-flash";
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
     const mt = genParams?.maxTokens;

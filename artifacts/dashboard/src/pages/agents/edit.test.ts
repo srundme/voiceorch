@@ -134,6 +134,28 @@ describe("buildUpdateAgentPayload", () => {
     expect(result.data.ttsProvider).toBe("cartesia");
   });
 
+  it("preserves the selected Cartesia model and voice in the save payload", () => {
+    const payload = buildUpdateAgentPayload({
+      ...BASE,
+      ttsProvider: "cartesia",
+      ttsModel: "sonic-3.5",
+      ttsVoice: "janani-voice-id",
+    });
+    expect(payload.ttsProvider).toBe("cartesia");
+    expect(payload.ttsModel).toBe("sonic-3.5");
+    expect(payload.ttsVoice).toBe("janani-voice-id");
+  });
+
+  it("never includes stale phone assignments in an agent save", () => {
+    const payload = buildUpdateAgentPayload({
+      ...BASE,
+      inboundPhoneNumberId: 41,
+      outboundPhoneNumberId: 41,
+    });
+    expect(payload).not.toHaveProperty("inboundPhoneNumberId");
+    expect(payload).not.toHaveProperty("outboundPhoneNumberId");
+  });
+
   it.skip("disposition schema with choice options — placeholder until feature is completed", () => {
     // dispositionSchema field not yet in agentFormSchema; test preserved for re-enabling
   });
@@ -401,6 +423,17 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     if (result.success) return;
     const paths = result.error.issues.map(i => i.path.join("."));
     expect(paths).toContain("llmModel");
+  });
+
+  it("rejects a retired Google model before save", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      llmProvider: "google",
+      llmModel: "gemini-3.6-flash",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues.map(i => i.path.join("."))).toContain("llmModel");
   });
 
   it("mismatched TTS provider+model — reports error on ttsModel", () => {

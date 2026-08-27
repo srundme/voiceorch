@@ -4577,12 +4577,6 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       const domainFields = fields
         .map(toStoredDomainField)
         .filter((f): f is StoredDomainField => !!f);
-      // Don't persist empty after-call config on first save — that would gate off legacy always-on WhatsApp.
-      const persistAfterCall =
-        dispConfig?.afterCallMessages != null ||
-        afterCallMessages.universal.whatsapp ||
-        afterCallMessages.universal.email ||
-        afterCallMessages.rules.length > 0;
       const allowed = new Set<string>();
       for (const [primary, vals] of Object.entries(taxonomy)) {
         for (const v of vals ?? []) {
@@ -4606,7 +4600,9 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           rules,
           meaningMap,
           outcomeGuides: guides,
-          ...(persistAfterCall ? { afterCallMessages } : {}),
+          // Always persist the explicit toggle state. Omitting an all-off value
+          // makes the server use the legacy always-on WhatsApp behaviour.
+          afterCallMessages,
         }),
       });
     },

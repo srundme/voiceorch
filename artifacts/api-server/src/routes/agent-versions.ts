@@ -3,6 +3,7 @@ import { eq, and, count, desc, asc, inArray } from "drizzle-orm";
 import { db, agentsTable, agentVersionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
+import { unsupportedAgentModel } from "../services/agent-model-validation.js";
 
 const router: IRouter = Router();
 
@@ -84,6 +85,14 @@ router.post("/agents/:id/versions", requireAuth, clientContext, async (req, res)
     .from(agentsTable)
     .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  const unsupportedModel = unsupportedAgentModel(agent.llmProvider, agent.llmModel);
+  if (unsupportedModel) {
+    res.status(400).json({
+      error: `Cannot publish: unsupported Google model ${unsupportedModel}. Save a currently supported model first.`,
+      field: "llmModel",
+    });
+    return;
+  }
 
   // Pre-check the published version count (outside tx for early 422)
   const [{ publishedCnt }] = await db
