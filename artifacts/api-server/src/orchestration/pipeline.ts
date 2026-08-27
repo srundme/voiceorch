@@ -4465,6 +4465,8 @@ export class OrchestrationPipeline implements VoiceSession {
     const effectivePcm16k = this.nativePcm16kQueue.length > 0
       ? this.nativePcm16kQueue.shift()!
       : pcm16k;
+    // GTCRN isolation has a 16 ms STFT hop; the first worker result can be empty.
+    if (pcm8k.length < 2 && effectivePcm16k.length < 2) return;
 
     // ── IVR DTMF detection ──
     // Run on every incoming frame when an IVR interaction is active.

@@ -25,9 +25,10 @@ export interface AudioProcessResult {
 
 interface WorkerResponse {
   id: string;
-  pcm8k: ArrayBuffer;
-  pcm16kAb: ArrayBuffer;
-  hasSpeech: boolean;
+  pcm8k?: ArrayBuffer;
+  pcm16kAb?: ArrayBuffer;
+  hasSpeech?: boolean;
+  error?: string;
 }
 
 interface Pending {
@@ -48,10 +49,14 @@ class AudioWorkerThread {
       const p = this.pending.get(msg.id);
       if (!p) return;
       this.pending.delete(msg.id);
+      if (msg.error || !msg.pcm8k || !msg.pcm16kAb) {
+        p.reject(new Error(msg.error ?? "Audio worker returned empty audio"));
+        return;
+      }
       p.resolve({
         pcm8k:    Buffer.from(msg.pcm8k),
         pcm16k:   Buffer.from(msg.pcm16kAb),
-        hasSpeech: msg.hasSpeech,
+        hasSpeech: msg.hasSpeech ?? false,
       });
     });
     this.worker.on("error", (err) => {
@@ -150,7 +155,7 @@ export function processAudioIn(
   vadThreshold: number = VAD_THRESHOLD,
 ): Promise<AudioProcessResult> {
   // Fallback: if pool is not yet initialised (e.g. in tests), process inline
-  if (!ready) return processInline(mulawChunk, noiseCancel, false, gateRatio, vadThreshold);
+  if (!ready) return processInline(callId, mulawChunk, noiseCancel, false, gateRatio, vadThreshold);
   return workerFor(callId).process("PROCESS_MULAW", callId, mulawChunk, noiseCancel, gateRatio, vadThreshold);
 }
 
@@ -161,11 +166,13 @@ export function processRawPcm8kIn(
   gateRatio: number = GATE_RATIO_DEFAULT,
   vadThreshold: number = VAD_THRESHOLD,
 ): Promise<AudioProcessResult> {
-  if (!ready) return processInline(pcm8k, noiseCancel, true, gateRatio, vadThreshold);
+  if (!ready) return processInline(callId, pcm8k, noiseCancel, true, gateRatio, vadThreshold);
   return workerFor(callId).process("PROCESS_PCM8K", callId, pcm8k, noiseCancel, gateRatio, vadThreshold);
 }
 
 export function destroyAudioSession(callId: string): void {
+  fallbackNc.delete(callId);
+  fallbackIso.delete(callId);
   if (!ready) return;
   const worker = workerFor(callId);
   worker.destroySession(callId);
@@ -180,12 +187,15 @@ import {
   hasSpeechEnergy,
   NoiseCanceller,
 } from "./audio.js";
+import { VoiceIsolator, isVoiceIsolationEnabled } from "./voice-isolator.js";
 
 const VAD_THRESHOLD = 100;
 const GATE_RATIO_DEFAULT = 4.0;
 const fallbackNc = new Map<string, NoiseCanceller>();
+const fallbackIso = new Map<string, VoiceIsolator>();
 
 async function processInline(
+  callId: string,
   data: Buffer,
   noiseCancel: boolean,
   alreadyPcm = false,
@@ -193,14 +203,39 @@ async function processInline(
   vadThreshold: number = VAD_THRESHOLD,
 ): Promise<AudioProcessResult> {
   let pcm8k = alreadyPcm ? data : decodeMulaw(data);
+  let pcm16k: Buffer | null = null;
   if (noiseCancel) {
-    let nc = fallbackNc.get("default");
-    if (!nc) { nc = new NoiseCanceller(gateRatio); fallbackNc.set("default", nc); }
-    pcm8k = nc.process(pcm8k);
+    if (isVoiceIsolationEnabled()) {
+      let iso = fallbackIso.get(callId);
+      if (!iso) {
+        iso = new VoiceIsolator(callId);
+        fallbackIso.set(callId, iso);
+      }
+      const isolated = await iso.process8k(pcm8k);
+      if (isolated) {
+        pcm8k = isolated.pcm8k;
+        pcm16k = isolated.pcm16k;
+      } else {
+        let nc = fallbackNc.get(callId);
+        if (!nc) {
+          nc = new NoiseCanceller(gateRatio);
+          fallbackNc.set(callId, nc);
+        }
+        pcm8k = nc.process(pcm8k);
+      }
+    } else {
+      let nc = fallbackNc.get(callId);
+      if (!nc) {
+        nc = new NoiseCanceller(gateRatio);
+        fallbackNc.set(callId, nc);
+      }
+      pcm8k = nc.process(pcm8k);
+    }
   }
+  if (!pcm16k) pcm16k = upsample8to16(pcm8k);
   return {
     pcm8k,
-    pcm16k: upsample8to16(pcm8k),
-    hasSpeech: hasSpeechEnergy(pcm8k, vadThreshold),
+    pcm16k,
+    hasSpeech: pcm8k.length >= 2 && hasSpeechEnergy(pcm8k, vadThreshold),
   };
 }

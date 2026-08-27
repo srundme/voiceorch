@@ -1,9 +1,9 @@
 /**
  * Audio processing worker — runs in a dedicated worker thread.
  *
- * Each worker maintains per-session NoiseCanceller state so callers never have
- * to serialize that state across the thread boundary.  The pool in audioPool.ts
- * uses consistent hashing (callId % poolSize) so every chunk for the same call
+ * Each worker maintains per-session NoiseCanceller / VoiceIsolator state so
+ * callers never have to serialize that state across the thread boundary.  The
+ * pool in audioPool.ts uses sticky assignment so every chunk for the same call
  * always lands on the same worker, guaranteeing FIFO ordering and correct state.
  *
  * Message protocol (main → worker):
@@ -22,6 +22,7 @@ import {
   hasSpeechEnergy,
   NoiseCanceller,
 } from "./audio.js";
+import { VoiceIsolator, isVoiceIsolationEnabled, warmVoiceIsolator } from "./voice-isolator.js";
 
 const VAD_THRESHOLD = 100;
 const GATE_RATIO_DEFAULT = 4.0;
@@ -54,30 +55,35 @@ interface DestroySession {
 
 type InMsg = ProcessMulaw | ProcessPcm8k | DestroySession;
 
-// Per-session NoiseCanceller instances (keyed by callId string)
 const noiseCancellers = new Map<string, NoiseCanceller>();
+const isolators = new Map<string, VoiceIsolator>();
+const callChains = new Map<string, Promise<void>>();
+
+void warmVoiceIsolator();
 
 function getNoiseCanceller(callId: string, gateRatio: number): NoiseCanceller {
   let nc = noiseCancellers.get(callId);
   if (!nc) {
-    // gateRatio is fixed at creation (per-call state) — set on the FIRST chunk
-    // of the call, which always carries the agent's resolved sensitivity.
     nc = new NoiseCanceller(gateRatio);
     noiseCancellers.set(callId, nc);
   }
   return nc;
 }
 
+function getIsolator(callId: string): VoiceIsolator {
+  let iso = isolators.get(callId);
+  if (!iso) {
+    iso = new VoiceIsolator(callId);
+    isolators.set(callId, iso);
+  }
+  return iso;
+}
+
 function toTransferable(buf: Buffer): ArrayBuffer {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
 }
 
-parentPort!.on("message", (msg: InMsg) => {
-  if (msg.type === "DESTROY_SESSION") {
-    noiseCancellers.delete(msg.callId);
-    return;
-  }
-
+async function processChunk(msg: ProcessMulaw | ProcessPcm8k): Promise<void> {
   const { id, callId, noiseCancel, gateRatio, vadThreshold } = msg;
 
   let pcm8k =
@@ -85,18 +91,50 @@ parentPort!.on("message", (msg: InMsg) => {
       ? decodeMulaw(Buffer.from(msg.data))
       : Buffer.from(msg.data);
 
+  let pcm16k: Buffer | null = null;
+
   if (noiseCancel) {
-    pcm8k = getNoiseCanceller(callId, gateRatio ?? GATE_RATIO_DEFAULT).process(pcm8k);
+    if (isVoiceIsolationEnabled()) {
+      const isolated = await getIsolator(callId).process8k(pcm8k);
+      if (isolated) {
+        pcm8k = isolated.pcm8k;
+        pcm16k = isolated.pcm16k;
+      } else {
+        pcm8k = getNoiseCanceller(callId, gateRatio ?? GATE_RATIO_DEFAULT).process(pcm8k);
+      }
+    } else {
+      pcm8k = getNoiseCanceller(callId, gateRatio ?? GATE_RATIO_DEFAULT).process(pcm8k);
+    }
   }
 
-  const pcm16k = upsample8to16(pcm8k);
-  const hasSpeech = hasSpeechEnergy(pcm8k, vadThreshold ?? VAD_THRESHOLD);
+  if (!pcm16k) pcm16k = upsample8to16(pcm8k);
+  const hasSpeech = pcm8k.length >= 2 && hasSpeechEnergy(pcm8k, vadThreshold ?? VAD_THRESHOLD);
 
-  const pcm8kAb  = toTransferable(pcm8k);
+  const pcm8kAb = toTransferable(pcm8k);
   const pcm16kAb = toTransferable(pcm16k);
 
   parentPort!.postMessage(
     { id, pcm8k: pcm8kAb, pcm16kAb: pcm16kAb, hasSpeech },
-    [pcm8kAb, pcm16kAb]
+    [pcm8kAb, pcm16kAb],
   );
+}
+
+parentPort!.on("message", (msg: InMsg) => {
+  if (msg.type === "DESTROY_SESSION") {
+    noiseCancellers.delete(msg.callId);
+    isolators.delete(msg.callId);
+    callChains.delete(msg.callId);
+    return;
+  }
+
+  const prev = callChains.get(msg.callId) ?? Promise.resolve();
+  const next = prev
+    .then(() => processChunk(msg))
+    .catch((err) => {
+      parentPort!.postMessage({
+        id: msg.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  callChains.set(msg.callId, next);
 });
