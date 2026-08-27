@@ -27,11 +27,12 @@
  *    grace elapsed without final → flush, then batch STT fallback
       (batch may produce the authoritative final; it never answers from a partial)
  *
- * Fail-open (Smart Turn missing or >400ms) bypasses Smart Turn only.
- * It still runs the text veto and still requires transcript.final.
+ * Fail-open (Smart Turn *missing*) bypasses the audio model only.
+ * A slow eval (`timeout`) HOLDs instead of cutting the caller off.
+ * The text veto still runs. TTS still requires transcript.final.
  */
 
-export type EouVerdict = "complete" | "incomplete" | "unavailable";
+export type EouVerdict = "complete" | "incomplete" | "unavailable" | "timeout";
 /** idle | open | evaluating | holding | awaiting_final */
 export type SemanticTurnPhase = "idle" | "open" | "evaluating" | "holding" | "awaiting_final";
 export type SemanticTurnAction = "eligible" | "hold" | "await_final" | "ignore";
@@ -41,6 +42,10 @@ export const SEMANTIC_TURN_STOP_MS_MIN = 400;
 export const SEMANTIC_TURN_STOP_MS_MAX = 4000;
 /** After incomplete timeout / eligible, wait this long for transcript.final. */
 export const SEMANTIC_TURN_FINAL_MS_DEFAULT = 500;
+/** Default Smart Turn eval budget. Slow eval HOLDs; missing model still fail-opens. */
+export const SEMANTIC_TURN_EVAL_MS_DEFAULT = 400;
+/** Extra eval budget while collecting digits / email so we prefer HOLD over timeout. */
+export const SEMANTIC_TURN_EVAL_MS_COLLECTION = 700;
 
 export function clampSemanticTurnStopMs(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return SEMANTIC_TURN_STOP_MS_DEFAULT;
@@ -61,12 +66,22 @@ export function resolveSemanticTurnEnabled(raw: unknown): boolean {
 export function resolveEouCommit(opts: {
   eou: EouVerdict;
   textLooksIncomplete: boolean;
+  /** Short acks / finished emails / 10-digit numbers — timeout may still fail-open. */
+  snapComplete?: boolean;
 }): { action: "eligible" | "hold"; reason: string } {
   if (opts.eou === "incomplete") {
     return { action: "hold", reason: "audio_incomplete" };
   }
   if (opts.textLooksIncomplete) {
-    return { action: "hold", reason: opts.eou === "unavailable" ? "text_incomplete" : "text_veto" };
+    if (opts.eou === "unavailable") return { action: "hold", reason: "text_incomplete" };
+    if (opts.eou === "timeout") return { action: "hold", reason: "text_incomplete" };
+    return { action: "hold", reason: "text_veto" };
+  }
+  if (opts.eou === "timeout") {
+    // Slow ONNX: do not pretend the turn is complete unless the transcript
+    // is already a snap-finished ack / ID / email.
+    if (opts.snapComplete) return { action: "eligible", reason: "eou_timeout_ack" };
+    return { action: "hold", reason: "eou_timeout" };
   }
   if (opts.eou === "unavailable") {
     return { action: "eligible", reason: "eou_unavailable" };

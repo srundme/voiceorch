@@ -41,6 +41,31 @@ describe("resolveEouCommit", () => {
       reason: "audio_complete",
     });
   });
+
+  it("HOLDs a slow Smart Turn instead of fail-opening as complete", () => {
+    expect(resolveEouCommit({ eou: "timeout", textLooksIncomplete: false })).toEqual({
+      action: "hold",
+      reason: "eou_timeout",
+    });
+  });
+
+  it("still fail-opens a timed-out short ack so Fast yes/no stays snappy", () => {
+    expect(resolveEouCommit({
+      eou: "timeout",
+      textLooksIncomplete: false,
+      snapComplete: true,
+    })).toEqual({
+      action: "eligible",
+      reason: "eou_timeout_ack",
+    });
+  });
+
+  it("timeout still honours the text veto", () => {
+    expect(resolveEouCommit({ eou: "timeout", textLooksIncomplete: true })).toEqual({
+      action: "hold",
+      reason: "text_incomplete",
+    });
+  });
 });
 
 describe("SemanticTurnGate", () => {

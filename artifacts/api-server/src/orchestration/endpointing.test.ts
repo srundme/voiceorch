@@ -3,6 +3,12 @@ import {
   computeEndpointMs,
   isDigitCollectionContext,
   isDigitLikeUtterance,
+  isEmailCollectionContext,
+  isEmailLikeUtterance,
+  isCompleteEmailUtterance,
+  looksSnapComplete,
+  resolveCollectionKind,
+  resolveCollectionVadSilenceMs,
   resolveIncompleteHoldMs,
   resolveStreamingTurnHold,
 } from "./endpointing.js";
@@ -70,6 +76,70 @@ describe("resolveStreamingTurnHold", () => {
     expect(hold.incomplete).toBe(true);
     expect(hold.reason).toBe("text_continuation");
   });
+
+  it("holds the first email token even if Smart Turn would call it complete", () => {
+    const hold = resolveStreamingTurnHold({
+      pending: "karthik",
+      lastAgentText: "Could I have your email address?",
+      textLooksIncomplete: false,
+    });
+    expect(hold.incomplete).toBe(true);
+    expect(hold.reason).toBe("email_collection");
+    expect(hold.collectionKind).toBe("email");
+  });
+
+  it("does not hold a finished spoken email", () => {
+    const hold = resolveStreamingTurnHold({
+      pending: "karthik at gmail dot com",
+      lastAgentText: "What is your email?",
+      textLooksIncomplete: false,
+    });
+    expect(hold.incomplete).toBe(false);
+    expect(hold.reason).toBeNull();
+  });
+
+  it("does not hold a short ack after an email prompt", () => {
+    const hold = resolveStreamingTurnHold({
+      pending: "yes",
+      lastAgentText: "Could I have your email?",
+      textLooksIncomplete: false,
+    });
+    expect(hold.incomplete).toBe(false);
+  });
+});
+
+describe("email collection helpers", () => {
+  it("detects email prompts in English and Indic scripts", () => {
+    expect(isEmailCollectionContext("Could I have your email address?")).toBe(true);
+    expect(isEmailCollectionContext("Please share your mail id.")).toBe(true);
+    expect(isEmailCollectionContext("உங்கள் மின்னஞ்சல் என்ன?")).toBe(true);
+    expect(isEmailCollectionContext("आपका ईमेल क्या है?")).toBe(true);
+    expect(isEmailCollectionContext("What is your phone number?")).toBe(false);
+    expect(resolveCollectionKind("Please share your email.")).toBe("email");
+    expect(resolveCollectionKind("Please share the OTP.")).toBe("digit");
+  });
+
+  it("treats spelled / spoken fragments as in-progress emails", () => {
+    expect(isEmailLikeUtterance("k a r")).toBe(true);
+    expect(isEmailLikeUtterance("karthik at")).toBe(true);
+    expect(isEmailLikeUtterance("gmail dot")).toBe(true);
+    expect(isEmailLikeUtterance("karthikeyan")).toBe(true);
+    expect(isEmailLikeUtterance("yes")).toBe(false);
+    expect(isCompleteEmailUtterance("user@gmail.com")).toBe(true);
+    expect(isCompleteEmailUtterance("karthik at gmail dot com")).toBe(true);
+    expect(isEmailLikeUtterance("user@gmail.com")).toBe(false);
+    expect(isEmailLikeUtterance("karthik at gmail dot com")).toBe(false);
+  });
+
+  it("only fail-opens timeout on snap-finished turns", () => {
+    expect(looksSnapComplete("yes")).toBe(true);
+    expect(looksSnapComplete("சரி")).toBe(true);
+    expect(looksSnapComplete("9876543210")).toBe(true);
+    expect(looksSnapComplete("user@gmail.com")).toBe(true);
+    expect(looksSnapComplete("k a r")).toBe(false);
+    expect(looksSnapComplete("nine")).toBe(false);
+    expect(looksSnapComplete("I wanted to say")).toBe(false);
+  });
 });
 
 describe("resolveIncompleteHoldMs", () => {
@@ -88,6 +158,28 @@ describe("resolveIncompleteHoldMs", () => {
       trailingDigit: true,
     })).toBe(1600);
   });
+
+  it("stretches further for in-progress email spelling", () => {
+    expect(resolveIncompleteHoldMs({
+      baseStopMs: 800,
+      collectionKind: "email",
+      trailingFragment: true,
+    })).toBe(1800);
+  });
+});
+
+describe("resolveCollectionVadSilenceMs", () => {
+  it("stretches Fast 300 ms VAD during digit and email collection", () => {
+    expect(resolveCollectionVadSilenceMs(300, "none")).toBe(300);
+    expect(resolveCollectionVadSilenceMs(300, "digit")).toBe(700);
+    expect(resolveCollectionVadSilenceMs(300, "email")).toBe(800);
+  });
+
+  it("does not shrink Patient VAD, and never exceeds 800 ms", () => {
+    expect(resolveCollectionVadSilenceMs(700, "digit")).toBe(700);
+    expect(resolveCollectionVadSilenceMs(700, "email")).toBe(800);
+    expect(resolveCollectionVadSilenceMs(900, "none")).toBe(800);
+  });
 });
 
 describe("computeEndpointMs", () => {
@@ -99,6 +191,17 @@ describe("computeEndpointMs", () => {
       baseSilenceMs: 150,
     });
     expect(d.reason).toBe("digit-collection:trailing-digit");
+    expect(d.ms).toBe(900);
+  });
+
+  it("waits longer while the caller is spelling an email", () => {
+    const d = computeEndpointMs({
+      lastAgentText: "Could I have your email?",
+      partialTranscript: "k a r",
+      audioBufferMs: 400,
+      baseSilenceMs: 150,
+    });
+    expect(d.reason).toBe("email-collection:in-progress");
     expect(d.ms).toBe(900);
   });
 

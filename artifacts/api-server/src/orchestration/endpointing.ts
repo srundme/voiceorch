@@ -8,10 +8,11 @@ import { clampSemanticTurnStopMs } from "./semantic-turn-gate.js";
  * Used by both pipeline.ts (batch telephony path) and webcall.ts (browser WS).
  *
  * Priority order (highest wins):
- *  1. Digit-collection context  — agent asked for policy/phone/OTP → wait 800 ms+
- *  2. Partial transcript text   — streaming STT supplied a partial to analyse
- *  3. Audio duration proxy      — batch path: short burst → fast, long → base
- *  4. baseSilenceMs fallback    — agent-configured override or module default
+ *  1. Email-collection context  — agent asked for an address → wait 800 ms+
+ *  2. Digit-collection context  — agent asked for policy/phone/OTP → wait 800 ms+
+ *  3. Partial transcript text   — streaming STT supplied a partial to analyse
+ *  4. Audio duration proxy      — batch path: short burst → fast, long → base
+ *  5. baseSilenceMs fallback    — agent-configured override or module default
  */
 
 // ── Named threshold constants ─────────────────────────────────────────────────
@@ -25,6 +26,10 @@ export const ENDPOINT_LONG_MS = 600;
 export const ENDPOINT_DIGIT_MS = 800;
 /** Digit-collection AND partial transcript ends in a digit (still reading). */
 export const ENDPOINT_DIGIT_TRAIL_MS = 900;
+/** Email-collection: caller is spelling an address token-by-token. */
+export const ENDPOINT_EMAIL_MS = 800;
+/** Email-collection AND the partial still looks like an unfinished address. */
+export const ENDPOINT_EMAIL_TRAIL_MS = 900;
 
 export interface EndpointDecision {
   ms: number;
@@ -114,6 +119,30 @@ export function isDigitCollectionContext(lastAgentText: string): boolean {
   return false;
 }
 
+const EMAIL_KEYWORDS = [
+  "email", "e-mail", "e mail", "mail id", "mailid", "email id", "email address",
+  "email-id", "mail address", "your mail",
+  "ईमेल", "मेल आईडी", "मेल आई डी", "ई-मेल",
+  "மின்னஞ்சல்", "மெயில்", "இமெயில்", "ஈமெயில்",
+  "ఈమెయిల్", "ఇమెయిల్", "ಇಮೇಲ್", "ഇമെയിൽ", "ইমেইল", "ઈમેલ",
+];
+
+export function isEmailCollectionContext(lastAgentText: string): boolean {
+  const lower = lastAgentText.toLowerCase();
+  for (const kw of EMAIL_KEYWORDS) {
+    if (lower.includes(kw)) return true;
+  }
+  return false;
+}
+
+export type CollectionKind = "none" | "digit" | "email";
+
+export function resolveCollectionKind(lastAgentText: string): CollectionKind {
+  if (isEmailCollectionContext(lastAgentText)) return "email";
+  if (isDigitCollectionContext(lastAgentText)) return "digit";
+  return "none";
+}
+
 /** Spoken English/Hinglish digits and grouping words used when reading IDs aloud. */
 const SPELLED_DIGIT_RE =
   /^(zero|oh|o|nought|naught|one|two|three|four|five|six|seven|eight|nine|ten|double|triple|hundred|thousand|and)$/i;
@@ -147,33 +176,109 @@ export function isDigitLikeUtterance(text: string): boolean {
   return digitish >= 1 && digitish >= tokens.length - 1;
 }
 
+const EMAIL_TLD_RE = /\b(com|in|co\.in|org|net|io|ai|co)\b/i;
+const EMAIL_AT_RE = /@|\b(at|attherate|at the rate)\b/i;
+const EMAIL_DOT_RE = /\b(dot|daat)\b/i;
+const EMAIL_ADDR_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
+const EMAIL_DOMAIN_WORD_RE = /\b(gmail|yahoo|hotmail|outlook|rediff|rediffmail|icloud|proton)\b/i;
+const EMAIL_PUNCT_WORD_RE = /\b(underscore|dash|hyphen|dot|at)\b/i;
+
+export function isCompleteEmailUtterance(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (EMAIL_ADDR_RE.test(t)) return true;
+  if (EMAIL_AT_RE.test(t) && EMAIL_DOT_RE.test(t) && EMAIL_TLD_RE.test(t)) return true;
+  return false;
+}
+
+/**
+ * In-progress email spelling: "karthik at", "k a r", "gmail dot".
+ * A finished address (local@domain.tld or "at … dot com") is not in-progress.
+ */
+export function isEmailLikeUtterance(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (isCompleteEmailUtterance(t)) return false;
+  const lower = t.toLowerCase();
+  if (/^(yes|yeah|yep|ok|okay|no|nope|sure|haan|han|சரி|ஆமா)[\s,.!]*$/iu.test(t)) {
+    return false;
+  }
+  if (EMAIL_AT_RE.test(t) || EMAIL_DOT_RE.test(t) || EMAIL_DOMAIN_WORD_RE.test(t)) return true;
+  if (EMAIL_PUNCT_WORD_RE.test(lower)) return true;
+  const tokens = t.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 12) return false;
+  const spelled = tokens.filter((tok) => /^[a-z]$/i.test(tok.replace(/[,.]$/, "")));
+  if (spelled.length >= 1 && spelled.length >= tokens.length - 1) return true;
+  // Bare local-part while the agent asked for email: "karthikeyan" / "karthik sru"
+  if (tokens.length <= 3 && /^[a-z0-9._-]+$/i.test(t.replace(/\s+/g, ""))) return true;
+  return false;
+}
+
+/**
+ * Timeout fail-open is only safe for already-finished short turns.
+ * Long sentences and collection fragments wait for the incomplete-hold instead.
+ */
+export function looksSnapComplete(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (isCompleteEmailUtterance(t)) return true;
+  const compact = t.replace(/[\s\-./,]/g, "");
+  if ((compact.match(/\d/g) ?? []).length >= 10) return true;
+  if (/^(yes|yeah|yep|yup|no|nope|ok|okay|sure|right|haan|han|சரி|ஆமா|हां|हाँ)([,.]|\s+(madam|ma'?am|sir|there|ji|जी))?\.?$/iu.test(t)) {
+    return true;
+  }
+  if (/[.?!।]$/u.test(t) && !/[…]|\.{2,}/.test(t) && t.split(/\s+/).length <= 6) return true;
+  return false;
+}
+
 export type StreamingTurnHold = {
   incomplete: boolean;
-  reason: "text_continuation" | "digit_collection" | null;
+  reason: "text_continuation" | "digit_collection" | "email_collection" | null;
   digitCollection: boolean;
+  emailCollection: boolean;
+  collectionKind: CollectionKind;
   trailingDigit: boolean;
+  trailingFragment: boolean;
 };
 
 /**
  * Live-path turn hold — same adaptive rules as computeEndpointMs, applied to
  * Smart Turn + text veto. Batch silence flush already used digit-collection;
  * Saaras realtime did not, so "what is your phone number?" was answering after
- * the first digit.
+ * the first digit. Email spelling has the same pause-between-tokens problem.
  */
 export function resolveStreamingTurnHold(opts: {
   pending: string;
   lastAgentText: string;
   textLooksIncomplete: boolean;
 }): StreamingTurnHold {
-  const digitCollection = isDigitCollectionContext(opts.lastAgentText);
+  const collectionKind = resolveCollectionKind(opts.lastAgentText);
+  const digitCollection = collectionKind === "digit";
+  const emailCollection = collectionKind === "email";
   const pending = opts.pending.trim();
   const trailingDigit = pending.length > 0 && (/\d\s*$/.test(pending) || isDigitLikeUtterance(pending));
+  const trailingEmail = emailCollection && isEmailLikeUtterance(pending);
+  const trailingFragment = (digitCollection && isDigitLikeUtterance(pending)) || trailingEmail;
+  if (emailCollection && isEmailLikeUtterance(pending)) {
+    return {
+      incomplete: true,
+      reason: "email_collection",
+      digitCollection: false,
+      emailCollection: true,
+      collectionKind,
+      trailingDigit: false,
+      trailingFragment,
+    };
+  }
   if (digitCollection && isDigitLikeUtterance(pending)) {
     return {
       incomplete: true,
       reason: "digit_collection",
       digitCollection: true,
+      emailCollection: false,
+      collectionKind,
       trailingDigit,
+      trailingFragment,
     };
   }
   if (opts.textLooksIncomplete) {
@@ -181,30 +286,71 @@ export function resolveStreamingTurnHold(opts: {
       incomplete: true,
       reason: "text_continuation",
       digitCollection,
+      emailCollection,
+      collectionKind,
       trailingDigit: false,
+      trailingFragment: false,
     };
   }
   return {
     incomplete: false,
     reason: null,
     digitCollection,
+    emailCollection,
+    collectionKind,
     trailingDigit: false,
+    trailingFragment: false,
   };
 }
 
 /** Extra incomplete-hold after VAD when the caller is still reading digits. */
 const DIGIT_HOLD_MS = 1200;
 const DIGIT_TRAIL_HOLD_MS = 1600;
+/** Email spelling is slower than digits — "k a r … at gmail dot com". */
+const EMAIL_HOLD_MS = 1400;
+const EMAIL_TRAIL_HOLD_MS = 1800;
 
 export function resolveIncompleteHoldMs(opts: {
   baseStopMs: number;
-  digitCollection: boolean;
-  trailingDigit: boolean;
+  collectionKind?: CollectionKind;
+  /** @deprecated Prefer collectionKind. Kept so existing tests still compile. */
+  digitCollection?: boolean;
+  trailingDigit?: boolean;
+  trailingFragment?: boolean;
 }): number {
   const base = clampSemanticTurnStopMs(opts.baseStopMs);
-  if (!opts.digitCollection) return base;
-  const floor = opts.trailingDigit ? DIGIT_TRAIL_HOLD_MS : DIGIT_HOLD_MS;
-  return clampSemanticTurnStopMs(Math.max(base, floor));
+  const kind = opts.collectionKind ?? (opts.digitCollection ? "digit" : "none");
+  const trailing = opts.trailingFragment ?? opts.trailingDigit ?? false;
+  if (kind === "email") {
+    const floor = trailing ? EMAIL_TRAIL_HOLD_MS : EMAIL_HOLD_MS;
+    return clampSemanticTurnStopMs(Math.max(base, floor));
+  }
+  if (kind === "digit") {
+    const floor = trailing ? DIGIT_TRAIL_HOLD_MS : DIGIT_HOLD_MS;
+    return clampSemanticTurnStopMs(Math.max(base, floor));
+  }
+  return base;
+}
+
+/** Saaras Fast default is 300 ms; collection floors stretch VAD before the next pause. */
+export const COLLECTION_VAD_SILENCE_MIN_MS = 150;
+export const COLLECTION_VAD_SILENCE_MAX_MS = 800;
+export const COLLECTION_VAD_DIGIT_FLOOR_MS = 700;
+export const COLLECTION_VAD_EMAIL_FLOOR_MS = 800;
+
+export function resolveCollectionVadSilenceMs(baseMs: number, kind: CollectionKind): number {
+  const raw = Number.isFinite(baseMs) ? Math.round(baseMs) : 300;
+  const base = Math.max(
+    COLLECTION_VAD_SILENCE_MIN_MS,
+    Math.min(COLLECTION_VAD_SILENCE_MAX_MS, raw),
+  );
+  if (kind === "email") {
+    return Math.min(COLLECTION_VAD_SILENCE_MAX_MS, Math.max(base, COLLECTION_VAD_EMAIL_FLOOR_MS));
+  }
+  if (kind === "digit") {
+    return Math.min(COLLECTION_VAD_SILENCE_MAX_MS, Math.max(base, COLLECTION_VAD_DIGIT_FLOOR_MS));
+  }
+  return base;
 }
 
 // ── Dangling / mid-utterance words ────────────────────────────────────────────
@@ -749,7 +895,22 @@ export function computeEndpointMs(opts: {
   const { lastAgentText, partialTranscript, audioBufferMs, baseSilenceMs } =
     opts;
 
-  // ── 1. Digit-collection context (highest priority) ─────────────────────────
+  // ── 1. Email-collection context (highest priority) ─────────────────────────
+  if (isEmailCollectionContext(lastAgentText)) {
+    const emailPartial = partialTranscript.trim();
+    if (emailPartial.length > 0 && AFFIRMATIONS.has(emailPartial.toLowerCase())) {
+      return { ms: ENDPOINT_FAST_MS, reason: "affirmation" };
+    }
+    if (emailPartial.length > 0 && isCompleteEmailUtterance(emailPartial)) {
+      return { ms: ENDPOINT_FAST_MS, reason: "email-collection:complete" };
+    }
+    if (emailPartial.length > 0 && isEmailLikeUtterance(emailPartial)) {
+      return { ms: ENDPOINT_EMAIL_TRAIL_MS, reason: "email-collection:in-progress" };
+    }
+    return { ms: ENDPOINT_EMAIL_MS, reason: "email-collection" };
+  }
+
+  // ── 2. Digit-collection context ────────────────────────────────────────────
   if (isDigitCollectionContext(lastAgentText)) {
     const partial = partialTranscript.trim();
     if (partial.length > 0 && (/\d$/.test(partial) || isDigitLikeUtterance(partial))) {
@@ -762,7 +923,7 @@ export function computeEndpointMs(opts: {
     return { ms: ENDPOINT_DIGIT_MS, reason: "digit-collection" };
   }
 
-  // ── 2. Partial transcript analysis (streaming STT active) ──────────────────
+  // ── 3. Partial transcript analysis (streaming STT active) ──────────────────
   const partial = partialTranscript.trim().toLowerCase();
   if (partial.length > 0) {
     // Clearly complete: terminal punctuation added by STT smart_format

@@ -16,6 +16,8 @@ import {
   SemanticTurnGate,
   resolveEouCommit,
   SEMANTIC_TURN_FINAL_MS_DEFAULT,
+  SEMANTIC_TURN_EVAL_MS_DEFAULT,
+  SEMANTIC_TURN_EVAL_MS_COLLECTION,
 } from "./semantic-turn-gate.js";
 import { predictSmartTurn } from "./smart-turn.js";
 import type { SttFinalMetadata } from "./adapters/stt/base.js";
@@ -48,6 +50,9 @@ import {
   computeEndpointMs,
   resolveStreamingTurnHold,
   resolveIncompleteHoldMs,
+  resolveCollectionKind,
+  resolveCollectionVadSilenceMs,
+  looksSnapComplete,
   TurnSafetyNet,
   SilenceWatchdog,
   recoveryReprompt,
@@ -1825,17 +1830,31 @@ export class OrchestrationPipeline implements VoiceSession {
       textLooksIncomplete: signalsConversationalContinuation(pending),
     });
     const textLooksIncomplete = hold.incomplete;
+    this.syncCollectionVad(hold.collectionKind);
     const pcm = this._eouBytes > 0 ? Buffer.concat(this._eouAudio) : Buffer.alloc(0);
-    const evalMs = envInt("SEMANTIC_TURN_EVAL_MS", 400, 100);
+    const evalMs = hold.collectionKind === "none"
+      ? envInt("SEMANTIC_TURN_EVAL_MS", SEMANTIC_TURN_EVAL_MS_DEFAULT, 100)
+      : Math.max(
+        envInt("SEMANTIC_TURN_EVAL_MS", SEMANTIC_TURN_EVAL_MS_DEFAULT, 100),
+        SEMANTIC_TURN_EVAL_MS_COLLECTION,
+      );
+    const timedOut = Symbol("smart-turn-timeout");
     const pred = pcm.length > 0
       ? await Promise.race([
         predictSmartTurn(pcm),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), evalMs)),
+        new Promise<typeof timedOut>((resolve) => setTimeout(() => resolve(timedOut), evalMs)),
       ])
       : null;
     if (!this.semanticTurnGate.belongsTo(generation)) return;
-    const eou = pred?.verdict ?? "unavailable";
-    const resolved = resolveEouCommit({ eou, textLooksIncomplete });
+    const eou = pred === timedOut
+      ? "timeout"
+      : pred?.verdict ?? "unavailable";
+    const smartTurn = pred === timedOut ? null : pred;
+    const resolved = resolveEouCommit({
+      eou,
+      textLooksIncomplete,
+      snapComplete: looksSnapComplete(pending),
+    });
     const action = this.semanticTurnGate.onEou(generation, resolved);
     if (action === "ignore") return;
     logger.info(
@@ -1844,9 +1863,10 @@ export class OrchestrationPipeline implements VoiceSession {
         action,
         reason: resolved.reason,
         eou,
-        probability: pred?.probability,
+        probability: smartTurn?.probability,
         textLooksIncomplete,
         holdReason: hold.reason,
+        collectionKind: hold.collectionKind,
         audioMs: Math.round((pcm.length / 2 / 16000) * 1000),
       },
       "Semantic turn: end-of-turn decision",
@@ -1859,20 +1879,22 @@ export class OrchestrationPipeline implements VoiceSession {
         reason: resolved.reason,
         holdReason: hold.reason,
         eou,
-        probability: pred?.probability,
+        probability: smartTurn?.probability,
+        collectionKind: hold.collectionKind,
       },
     });
     if (action === "hold") {
       // Incomplete only: complete turns never sit in this wait window.
-      // Digit-collection stretches the cap so "nine … eight" is one turn.
-      // Caller resume cancels the timer via onSpeechStart; timeout is the cap.
+      // Digit/email collection stretches the cap so "nine … eight" or
+      // "k a r … at gmail" stay one turn. Caller resume cancels the timer
+      // via onSpeechStart; timeout is the cap.
       this.abortSpeculativeLlm("semantic_turn_hold");
       this.clearSemanticTurnTimer();
       const gen = generation;
       const stopMs = resolveIncompleteHoldMs({
         baseStopMs: this.agent.semanticTurnStopMs,
-        digitCollection: hold.digitCollection,
-        trailingDigit: hold.trailingDigit,
+        collectionKind: hold.collectionKind,
+        trailingFragment: hold.trailingFragment,
       });
       this._eouTimer = setTimeout(() => {
         this._eouTimer = null;
@@ -10683,6 +10705,24 @@ export class OrchestrationPipeline implements VoiceSession {
     // a multi-hundred-ms dead zone after TTS can look like End Of XML (4010)
     // and surface in the UI as "Caller hung up" even though the phone stayed up.
     this.lastTtsFrameAt = Date.now();
+    // Stretch Saaras VAD *before* the caller answers a number/email question.
+    // Waiting until speech_end is too late for that utterance's silence window.
+    this.syncCollectionVad();
+  }
+
+  /**
+   * Mid-call Sarvam `silence_duration_ms` so Fast (300 ms) does not fire
+   * between OTP digits or email letters. Restores the agent base when the
+   * last assistant turn is not a collection prompt.
+   */
+  private syncCollectionVad(kind?: ReturnType<typeof resolveCollectionKind>): void {
+    const setter = this.streamSTT?.setSilenceDurationMs;
+    if (!setter) return;
+    const lastAgentText = this.conversationHistory.findLast((t) => t.role === "assistant")?.content ?? "";
+    const collectionKind = kind ?? resolveCollectionKind(lastAgentText);
+    const base = this.agent.sarvamEndOfSpeechSilenceMs ?? 300;
+    const ms = resolveCollectionVadSilenceMs(base, collectionKind);
+    setter.call(this.streamSTT, ms);
   }
 
   /**

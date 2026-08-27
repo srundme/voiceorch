@@ -562,6 +562,13 @@ export interface StreamSTT {
    * don't support live switching simply omit this method.
    */
   setLanguage?(lang: string): void;
+  /**
+   * Provider-specific (optional): stretch or restore server VAD silence
+   * mid-call without reconnecting. Used while the agent is collecting a
+   * phone/OTP/email so Saaras Fast (300 ms) does not fire between tokens.
+   * Implementations should no-op when the value is unchanged.
+   */
+  setSilenceDurationMs?(ms: number): void;
   close(): void;
   /** True while saaras:v3-realtime is the live socket (false after legacy fallback). */
   getRealtimeActive?: () => boolean;

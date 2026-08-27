@@ -219,16 +219,13 @@ describe("resolveRealtimeStreamType", () => {
   });
 });
 
-describe("buildRealtimeConfigUpdate", () => {
-  it("sends language and mode without reconnect fields", () => {
-    const body = buildRealtimeConfigUpdate({ languageCode: "ta-IN", mode: "transcribe" });
+  it("sends silence_duration_ms for mid-call VAD stretch", () => {
+    const body = buildRealtimeConfigUpdate({ silenceDurationMs: 700 });
     expect(body).toEqual({
       event: "config.update",
-      language_code: "ta-IN",
-      mode: "transcribe",
+      silence_duration_ms: 700,
     });
   });
-});
 
 describe("shouldBargeOnRealtimeVadStart", () => {
   const base = {
