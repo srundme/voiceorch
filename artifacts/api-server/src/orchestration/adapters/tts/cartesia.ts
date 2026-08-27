@@ -156,6 +156,8 @@ export class CartesiaTTS implements TTSAdapter {
   private modelId: string;
   private language: string | null;
   private speed: number | null;
+  /** Native PCM rate Cartesia should emit — match the telephony wire to skip a second resample. */
+  readonly pcmSampleRate: 8000 | 16000;
 
   private ws: WebSocket | null = null;
   private wsConnecting: Promise<WebSocket> | null = null;
@@ -180,6 +182,7 @@ export class CartesiaTTS implements TTSAdapter {
     model: string | null,
     language?: string | null,
     speed?: number | null,
+    sampleRate?: number | null,
   ) {
     this.key = apiKey;
     // Treat null, undefined, and empty string the same — fall back to Arushi.
@@ -191,6 +194,11 @@ export class CartesiaTTS implements TTSAdapter {
       : null;
     this.modelId = resolveCartesiaModelId(model);
     this.language = language ? language.split("-")[0] : null;
+    this.pcmSampleRate = sampleRate === 8000 ? 8000 : 16000;
+  }
+
+  private outputFormat(): { container: "raw"; encoding: "pcm_s16le"; sample_rate: 8000 | 16000 } {
+    return { container: "raw", encoding: "pcm_s16le", sample_rate: this.pcmSampleRate };
   }
 
   setLanguage(lang: string): void {
@@ -266,7 +274,7 @@ export class CartesiaTTS implements TTSAdapter {
       transcript: text,
       model_id: this.modelId,
       voice: this.buildVoice(),
-      output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 16000 },
+      output_format: this.outputFormat(),
     };
     const gc = this.buildGenerationConfig(emotions);
     if (gc) body.generation_config = gc;
@@ -446,7 +454,7 @@ export class CartesiaTTS implements TTSAdapter {
         model_id: this.modelId,
         transcript,
         voice: this.buildVoice(),
-        output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 16000 },
+        output_format: this.outputFormat(),
         continue: true,
         max_buffer_delay_ms: 0,
       };
@@ -627,7 +635,7 @@ export class CartesiaTTS implements TTSAdapter {
         model_id: this.modelId,
         transcript: safeText,
         voice: this.buildVoice(),
-        output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 16000 },
+        output_format: this.outputFormat(),
         continue: false,
         max_buffer_delay_ms: 0,
       };

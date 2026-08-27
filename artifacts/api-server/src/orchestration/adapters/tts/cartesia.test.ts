@@ -100,6 +100,29 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
 
     expect(languages).toEqual(["en", "ta"]);
   });
+
+  it("requests native 8 kHz PCM when constructed for a telephony leg", async () => {
+    let sampleRate: number | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const body = JSON.parse(init.body as string) as {
+          output_format?: { sample_rate?: number };
+        };
+        sampleRate = body.output_format?.sample_rate;
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => new Uint8Array([1, 2]).buffer,
+        } as unknown as Response;
+      }),
+    );
+
+    const tts = new CartesiaTTS("test-key", null, null, null, null, 8000);
+    expect(tts.pcmSampleRate).toBe(8000);
+    await tts.synthesize("Hello");
+    expect(sampleRate).toBe(8000);
+  });
 });
 
 describe("joinContinuationTranscript", () => {

@@ -68,4 +68,11 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).not.toContain("isBackgroundTalkerUtterance(");
     expect(pipelineSrc).not.toContain("utterancePeakRawRms");
   });
+
+  it("does not WAIT-pause the TTS send pump while the agent is speaking (call 14351 voice break)", () => {
+    const body = methodBody("audioSendStatus");
+    expect(body).toContain("isPlaying");
+    expect(body).toContain("isSendingTtsAudio");
+    expect(body).toMatch(/status === "WAIT"/);
+  });
 });

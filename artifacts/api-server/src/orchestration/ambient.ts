@@ -269,6 +269,11 @@ export class AmbientNoiseStream {
     return mixAmbientIntoPcm16k(speechPcm16k, (n) => this.readPcm(n, this.speechVol));
   }
 
+  /** Mix ambient under native 8 kHz TTS (Cartesia telephony) without a 16 kHz round-trip. */
+  mixIntoPcm8k(speechPcm8k: Buffer): Buffer {
+    return mixAmbientIntoPcm8k(speechPcm8k, (n) => this.readPcm(n, this.speechVol));
+  }
+
   private readPcm(numSamples: number, vol: number): Buffer {
     const buf = Buffer.allocUnsafe(numSamples * 2);
     for (let i = 0; i < numSamples; i++) {
@@ -278,6 +283,21 @@ export class AmbientNoiseStream {
     }
     return buf;
   }
+}
+
+function mixAmbientIntoPcm8k(
+  speechPcm8k: Buffer,
+  readAmbient8k: (numSamples8k: number) => Buffer,
+): Buffer {
+  const samples = speechPcm8k.length >> 1;
+  const ambient = readAmbient8k(samples);
+  const out = Buffer.allocUnsafe(speechPcm8k.length);
+  for (let i = 0; i < samples; i++) {
+    const speech = speechPcm8k.readInt16LE(i * 2);
+    const amb = ambient.readInt16LE(i * 2);
+    out.writeInt16LE(Math.max(-32767, Math.min(32767, speech + amb)), i * 2);
+  }
+  return out;
 }
 
 /** Shared PCM16/16 kHz ambient mixing helper used by both ambient stream types. */
@@ -356,6 +376,11 @@ export class FileAmbientNoiseStream {
   /** See AmbientNoiseStream.mixIntoPcm16k. */
   mixIntoPcm16k(speechPcm16k: Buffer): Buffer {
     return mixAmbientIntoPcm16k(speechPcm16k, (n) => this.readPcm(n, this.speechVol));
+  }
+
+  /** See AmbientNoiseStream.mixIntoPcm8k. */
+  mixIntoPcm8k(speechPcm8k: Buffer): Buffer {
+    return mixAmbientIntoPcm8k(speechPcm8k, (n) => this.readPcm(n, this.speechVol));
   }
 
   private readPcm(numSamples: number, vol: number): Buffer {

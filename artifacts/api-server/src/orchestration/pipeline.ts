@@ -315,19 +315,19 @@ const CHUNK_SIZE_MULAW        = 160;    // 20ms @ 8kHz mulaw for paced batch pla
  *  Normal-tier floor, kept as the import-site default in audioPool/audioWorker.
  *  Owner: mic-sensitivity.ts. Empirical (calls 4842/4843), not a spec. */
 const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
-const STREAM_ACCUM_BYTES      = 640;    // 20ms of 16kHz PCM before forwarding a TTS stream chunk
 // TTS jitter buffer (see drainSentenceJob): runway of audio to queue before
 // starting/resuming the paced send pump, so momentary provider-stream hiccups
 // don't become audible mid-sentence gaps. Caps bound the added latency.
-// Warm sessions start on ~240 ms; cold / post-underrun uses a longer runway.
-const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 240));
+// Quality-first: wait for a healthy Cartesia runway before pacing to VoBiz
+// (call 14351 greeting underran 194 ms at the old 240/400 ms defaults).
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 400));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
-  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 320),
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 560),
 );
-const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 400));
-const TTS_REBUFFER_MS      = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 160));
-const TTS_REBUFFER_CAP_MS  = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 400));
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 800));
+const TTS_REBUFFER_MS      = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 320));
+const TTS_REBUFFER_CAP_MS  = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 800));
 const TTS_UNDERRUN_COLD_MS = 8_000;
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
 const FILLER_THRESHOLD_MS     = 900;    // second TTS job only if LLM TTFT is actually slow
@@ -915,7 +915,7 @@ type TtsSentenceJob = {
   sequenceId: number;
   /** True if this.tts.synthesizeStream was used (vs the one-shot synthesize()). */
   streaming: boolean;
-  /** Streaming path: 4-byte-aligned pcm16k blocks awaiting drain-time processing. */
+  /** Streaming path: 4-byte-aligned PCM blocks (16 kHz or Cartesia-native 8 kHz) awaiting drain. */
   pcmQueue: Buffer[];
   /** True once the TTS request has fully settled (success, error, or abort). */
   synthDone: boolean;
@@ -2516,7 +2516,16 @@ export class OrchestrationPipeline implements VoiceSession {
       sequenceId,
       this.conversationHistory.length,
     );
-    if (status === "WAIT" && this.greetingPlaybackActive) return "SEND";
+    // Echo of our own TTS trips Sarvam VAD → calleeSpeaking → WAIT, which
+    // stops the 20 ms send pump mid-sentence (calls 4852/4853/14351: chopped
+    // voice). Real barge-in invalidates the sequence (BLOCK). Keep sending
+    // while we are actually playing; fillers already skip WAIT in the manager.
+    if (
+      status === "WAIT" &&
+      (this.isPlaying || this.isSendingTtsAudio || this.greetingPlaybackActive)
+    ) {
+      return "SEND";
+    }
     return status;
   }
 
@@ -2993,7 +3002,11 @@ export class OrchestrationPipeline implements VoiceSession {
       : (keys.get(`${this.agent.ttsProvider}:extraConfig`) ?? null);
     this.tts = createTTSAdapter(
       this.agent.ttsProvider, ttsKey, this.agent.ttsVoice, this.agent.ttsModel,
-      ttsExtraConfig, ttsLanguage, this.agent.ttsSpeed
+      ttsExtraConfig, ttsLanguage, this.agent.ttsSpeed,
+      // Cartesia can emit native 8 kHz — match VoBiz/Twilio/Plivo so we do not
+      // FIR-downsample 16 kHz blocks (50 Hz grit on every 8 kHz leg). HD webcall
+      // stays 16 kHz. Other TTS adapters ignore this and keep 16 kHz.
+      this.agent.ttsProvider === "cartesia" && this.pcmOutRate() !== 16000 ? 8000 : 16000,
     );
     if (ttsLanguage) this.ttsLang = ttsLanguage;
     // Pre-warm any persistent TTS connections (e.g. Cartesia / Sarvam WebSocket) with a bounded 500ms wait.
@@ -5945,6 +5958,15 @@ export class OrchestrationPipeline implements VoiceSession {
     return this.config.rawPcmOutput ? (this.config.rawPcmOutputRate ?? 8000) : 8000;
   }
 
+  /** PCM rate coming out of the TTS adapter. Cartesia matches the wire; others stay 16 kHz. */
+  private ttsPcmRate(): 8000 | 16000 {
+    return this.tts.pcmSampleRate === 8000 ? 8000 : 16000;
+  }
+
+  private ttsDurationMs(pcmBytes: number): number {
+    return Math.round((pcmBytes / 2 / this.ttsPcmRate()) * 1000);
+  }
+
   async confirmAmdMachineThenBranch(): Promise<void> {
     if (this.closed) return;
     const action = this.amdConfirm?.action ?? "hangup";
@@ -6668,6 +6690,7 @@ export class OrchestrationPipeline implements VoiceSession {
         voice: this.agent.ttsVoice ?? "",
         model: this.agent.ttsModel ?? "",
         text,
+        sampleRate: this.ttsPcmRate(),
       };
       const cached = getCachedFillerPcm(cacheKey);
       void (async () => {
@@ -6675,7 +6698,7 @@ export class OrchestrationPipeline implements VoiceSession {
           if (cached) {
             job.streaming = false;
             job.nonStreamAudio = cached;
-            job.audioDurationMs = Math.round((cached.length / 2 / 16000) * 1000);
+            job.audioDurationMs = this.ttsDurationMs(cached.length);
             this.logExec("TTS", "response", {
               provider: this.agent.ttsProvider,
               status: "success",
@@ -6691,7 +6714,7 @@ export class OrchestrationPipeline implements VoiceSession {
           if (this.closed || this.bargeInRequested) return;
           job.streaming = false;
           job.nonStreamAudio = audio;
-          job.audioDurationMs = Math.round((audio.length / 2 / 16000) * 1000);
+          job.audioDurationMs = this.ttsDurationMs(audio.length);
           setCachedFillerPcm(cacheKey, audio);
           this.logExec("TTS", "response", {
             provider: this.agent.ttsProvider,
@@ -6720,9 +6743,10 @@ export class OrchestrationPipeline implements VoiceSession {
       // downsample16to8 never silently drops trailing PCM samples and
       // creates click artifacts at streaming chunk boundaries.
       let flushRemainder = Buffer.alloc(0);
-      let _ttsAccumBytes = 0; // raw PCM bytes accumulated before downsampling
+      let _ttsAccumBytes = 0; // raw PCM bytes accumulated (at ttsPcmRate)
       let _ttsTotalBytes = 0;
       let _ttsFirstByteMs: number | null = null;
+      const streamAccumBytes = (this.ttsPcmRate() / 1000) * 2 * 20; // 20 ms at native TTS rate
 
       // Aligns received bytes to a 4-byte boundary and buffers the result into
       // job.pcmQueue for later draining. Pure buffering, no recording/ambient/
@@ -6779,7 +6803,7 @@ export class OrchestrationPipeline implements VoiceSession {
             armTtsIdleTimer(); // re-arm idle watchdog after first byte and every later chunk
             accum.push(chunk);
             accumSize += chunk.length;
-            if (accumSize >= STREAM_ACCUM_BYTES) flush();
+            if (accumSize >= streamAccumBytes) flush();
           };
           const onTtsDone = (_characters: number): void => { flush(); };
           // Cartesia turn-level continuations: one context, no per-sentence flush.
@@ -6800,7 +6824,7 @@ export class OrchestrationPipeline implements VoiceSession {
           clearInterval(closedWatcher);
           this.activeTtsAborts.delete(ttsAbort);
           flush(); // flush any leftover accumulator bytes after aborts
-          job.audioDurationMs = Math.round((_ttsAccumBytes / 2 / 16000) * 1000);
+          job.audioDurationMs = this.ttsDurationMs(_ttsAccumBytes);
           if (!job.synthError) {
             this.logExec("TTS", "response", {
               provider: this.agent.ttsProvider,
@@ -6893,43 +6917,36 @@ export class OrchestrationPipeline implements VoiceSession {
     const noteSent = (chunk: Buffer) => { bytesSent += chunk.length; };
 
     if (job.streaming) {
-      // Producer-consumer pacing: pcm16k blocks buffered by startSentenceSynthesis
+      // Producer-consumer pacing: PCM blocks buffered by startSentenceSynthesis
       // are converted to wire-ready chunks here, on demand, then sent at exactly
-      // real-time rate (20 ms per 160-byte chunk). This prevents flooding Vobiz /
+      // real-time rate (20 ms per chunk). This prevents flooding Vobiz /
       // Twilio with a burst of messages that overwhelms their playback buffer.
       const wireQueue: Buffer[] = [];
       let pcmIdx = 0;
-      // Block-continuous decimators. The stateless downsample16to8 renormalizes
-      // its kernel wherever taps fall outside the buffer, so calling it per 20 ms
-      // block corrupts the first ~7 and last ~3 output samples of EVERY block —
-      // a defect repeating at 50 Hz that is audible as buzzy/gritty voice on
-      // every 8 kHz leg (carrier and webcall alike). Carrying the tail across
-      // blocks makes the filter identical to one run over the whole sentence.
-      // Speech and the ambient-mixed copy are separate signals, so each needs
-      // its own filter state.
-      const speechDecim = createDownsampler16to8();
-      const mixedDecim = this.ambientStream ? createDownsampler16to8() : null;
+      const srcRate = this.ttsPcmRate();
+      // Block-continuous decimators only when TTS is 16 kHz on an 8 kHz leg.
+      // Per-block stateless downsample16to8 repeats a kernel-edge defect at
+      // 50 Hz (buzzy/gritty voice). Cartesia telephony requests native 8 kHz
+      // and skips this path entirely.
+      const speechDecim = srcRate === 16000 ? createDownsampler16to8() : null;
+      const mixedDecim = srcRate === 16000 && this.ambientStream ? createDownsampler16to8() : null;
 
-      // Converts the next buffered pcm16k block into wire-ready chunks. This is
-      // where recording + ambient mixing happen — at real "now", right before
-      // the audio is due to be sent, never earlier (see startSentenceSynthesis).
       const processNextBlock = (): boolean => {
         if (pcmIdx >= job.pcmQueue.length) return false;
-        const pcm16k = job.pcmQueue[pcmIdx++];
-        const pcm8k = speechDecim.process(pcm16k);
-        // Record agent audio (downsampled to match recording sample rate).
-        // Recording stays clean — ambient is mixed only into the outbound copy.
+        const pcmBlock = job.pcmQueue[pcmIdx++];
+        const pcm8k = srcRate === 8000 ? pcmBlock : speechDecim!.process(pcmBlock);
         this.recording.addAgentChunk(pcm8k);
         if (this.config.rawPcmOutput) {
-          // Vobiz/web accept LINEAR16 PCM natively — skip mulaw encode to avoid
-          // lossy round-trip. Mix ambient under speech (at 16 kHz, where the
-          // ambient stream's mixIntoPcm16k operates). HD webcall (16k) keeps the
-          // full-bandwidth mix; carrier-grade legs downsample to 8 kHz.
           const rate = this.pcmOutRate();
-          const mixed16k = this.ambientStream ? this.ambientStream.mixIntoPcm16k(pcm16k) : pcm16k;
-          const out = rate === 16000
-            ? mixed16k
-            : (mixedDecim ? mixedDecim.process(mixed16k) : pcm8k);
+          let out: Buffer;
+          if (srcRate === 8000) {
+            out = this.ambientStream ? this.ambientStream.mixIntoPcm8k(pcmBlock) : pcmBlock;
+          } else {
+            const mixed16k = this.ambientStream ? this.ambientStream.mixIntoPcm16k(pcmBlock) : pcmBlock;
+            out = rate === 16000
+              ? mixed16k
+              : (mixedDecim ? mixedDecim.process(mixed16k) : pcm8k);
+          }
           const PCM_CHUNK = CHUNK_SIZE_MULAW * 2 * (rate / 8000); // 20ms: 320B @8k, 640B @16k
           for (let i = 0; i < out.length; i += PCM_CHUNK) {
             wireQueue.push(out.slice(i, i + PCM_CHUNK));
@@ -6943,11 +6960,12 @@ export class OrchestrationPipeline implements VoiceSession {
         return true;
       };
 
-      // Buffered-but-unsent audio in ms (16 kHz s16le pcmQueue = 32 bytes/ms).
+      // Buffered-but-unsent audio in ms (s16le: 16 bytes/ms @8k, 32 @16k).
+      const ttsBytesPerMs = (srcRate / 1000) * 2;
       const bufferedMs = () => {
         let bytes = 0;
         for (let i = pcmIdx; i < job.pcmQueue.length; i++) bytes += job.pcmQueue[i].length;
-        return bytes / 32 + (wireQueue.length * 20);
+        return bytes / ttsBytesPerMs + (wireQueue.length * 20);
       };
       // Jitter buffer: wait until targetMs of audio is queued (or synthesis
       // finishes / capMs passes) before (re)starting the send pump. Without
@@ -7076,20 +7094,22 @@ export class OrchestrationPipeline implements VoiceSession {
         const ok = await this.waitForAudioEmit(job.sequenceId);
         if (!ok || this.bargeInRequested) return;
       }
-      const ttsPcm16k = job.nonStreamAudio!;
-      const ttsPcm8k = downsample16to8(ttsPcm16k);
+      const ttsPcm = job.nonStreamAudio!;
+      const srcRate = this.ttsPcmRate();
+      const ttsPcm8k = srcRate === 8000 ? ttsPcm : downsample16to8(ttsPcm);
       this.recording.addAgentChunk(ttsPcm8k);
-      const claimedMs = Math.round((ttsPcm16k.length / 2 / 16000) * 1000);
+      const claimedMs = this.ttsDurationMs(ttsPcm.length);
       if (this.config.rawPcmOutput) {
-        // Mix ambient under speech at 16 kHz (mixIntoPcm16k's native rate).
-        // HD webcall (16k) sends the mix as-is; carrier-grade legs downsample
-        // to 8 kHz. When ambient is disabled the 8k path reuses ttsPcm8k
-        // unchanged, so the non-ambient path is untouched.
         const outRate = this.pcmOutRate();
-        const mixed16k = this.ambientStream ? this.ambientStream.mixIntoPcm16k(ttsPcm16k) : ttsPcm16k;
-        const out8k = outRate === 16000
-          ? mixed16k
-          : (this.ambientStream ? downsample16to8(mixed16k) : ttsPcm8k);
+        let out8k: Buffer;
+        if (srcRate === 8000) {
+          out8k = this.ambientStream ? this.ambientStream.mixIntoPcm8k(ttsPcm) : ttsPcm;
+        } else {
+          const mixed16k = this.ambientStream ? this.ambientStream.mixIntoPcm16k(ttsPcm) : ttsPcm;
+          out8k = outRate === 16000
+            ? mixed16k
+            : (this.ambientStream ? downsample16to8(mixed16k) : ttsPcm8k);
+        }
         const PCM_CHUNK = CHUNK_SIZE_MULAW * 2 * (outRate / 8000); // 20ms: 320B @8k, 640B @16k
         for (let i = 0; i < out8k.length; i += PCM_CHUNK) {
           if (this.closed || this.bargeInRequested) break;

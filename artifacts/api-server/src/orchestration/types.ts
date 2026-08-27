@@ -746,6 +746,12 @@ export interface TTSAdapter {
   /** Optional pre-warm — open persistent connections before the first synthesis
    *  request so the greeting doesn't pay the connection cost. Fire-and-forget. */
   warmup?(): void;
+  /**
+   * Native PCM sample rate of `synthesize` / `synthesizeStream` chunks.
+   * Cartesia matches the telephony wire (8 kHz) so the drain path does not
+   * FIR-downsample a second time. Unset means 16 kHz (Sarvam / ElevenLabs / etc.).
+   */
+  pcmSampleRate?: 8000 | 16000;
 }
 
 export type TelephonyProvider = "twilio" | "plivo" | "vobiz";
