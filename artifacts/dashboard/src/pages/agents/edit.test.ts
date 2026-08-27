@@ -429,11 +429,28 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     const result = agentFormSchema.safeParse({
       ...VALID_BASE,
       llmProvider: "google",
-      llmModel: "gemini-3.6-flash",
+      llmModel: "gemini-1.5-flash",
     });
     expect(result.success).toBe(false);
     if (result.success) return;
     expect(result.error.issues.map(i => i.path.join("."))).toContain("llmModel");
+  });
+
+  it("accepts current Google classic and Live models", () => {
+    for (const llmModel of [
+      "gemini-2.5-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-pro-preview",
+      "gemini-3.1-flash-live-preview",
+    ]) {
+      const result = agentFormSchema.safeParse({
+        ...VALID_BASE,
+        llmProvider: "google",
+        llmModel,
+      });
+      expect(result.success, llmModel).toBe(true);
+    }
   });
 
   it("mismatched TTS provider+model — reports error on ttsModel", () => {

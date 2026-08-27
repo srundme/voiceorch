@@ -105,7 +105,7 @@ import {
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage, shouldClearVoiceForLanguage,
   getSarvamTtsVoices, isSarvamVoiceCompatible,
   GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS, VOICE_STACK_OPTIONS,
-  geminiLiveModelLabel, isGeminiLiveAgent, isGeminiLiveLlmModel, voiceStackForLlmModel,
+  geminiLiveModelLabel, isGeminiLiveAgent, voiceStackForLlmModel,
   llmFieldsForVoiceStack,
   languagesForAgent, isSarvamRealtimeAsr,
 } from "@/lib/agent-providers";
@@ -1287,34 +1287,23 @@ function OverviewTab({
               <FormField control={form.control} name="llmProvider" render={({ field }) => (
                 <FormItem className="space-y-1">
                   <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
-                  {isGeminiLive ? (
-                    <p className="text-xs font-medium pt-1.5">Gemini Live (native audio)</p>
-                  ) : (
                   <SmallSelect value={field.value} onChange={(v) => {
                     field.onChange(v);
                     form.setValue("llmModel", "");
                     form.setValue("voiceStack", "classic");
                   }}
                     options={LLM_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
-                  )}
                 </FormItem>
               )} />
-              {isGeminiLive ? (
-                <div className="space-y-1">
-                  <p className="text-[10px] text-muted-foreground">Model</p>
-                  <p className="text-xs font-medium pt-1.5">{geminiLiveModelLabel()}</p>
-                </div>
-              ) : llmOptions.filter((m: { value: string }) => !isGeminiLiveLlmModel(m.value)).length > 0 && (
+              {llmOptions.length > 0 && (
                 <FormField control={form.control} name="llmModel" render={({ field }) => (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
                     <SmallSelect value={field.value ?? ""} onChange={(v) => {
                       field.onChange(v);
-                      form.setValue("voiceStack", "classic");
+                      form.setValue("voiceStack", voiceStackForLlmModel(v), { shouldDirty: true });
                     }}
-                      options={llmOptions
-                        .filter((m: { value: string }) => !isGeminiLiveLlmModel(m.value))
-                        .map((m: { value: string; label: string }) => ({ value: m.value, label: m.label }))} placeholder="Default" />
+                      options={llmOptions.map((m: { value: string; label: string }) => ({ value: m.value, label: m.label }))} placeholder="Default" />
                     <FormMessage className="text-[10px]" />
                   </FormItem>
                 )} />

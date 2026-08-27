@@ -95,6 +95,7 @@ import {
   isGeminiLiveAgent,
   isGeminiLiveLlmModel,
   llmFieldsForVoiceStack,
+  voiceStackForLlmModel,
   languagesForAgent,
   isGeminiLiveLanguage,
   isSarvamRealtimeAsr,
@@ -1557,9 +1558,6 @@ export default function AgentEdit() {
             <FormField control={form.control} name="llmProvider" render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-xs">Provider</FormLabel>
-                {isGeminiLive ? (
-                  <p className="text-sm font-medium pt-2">Gemini Live (native audio)</p>
-                ) : (
                 <Select onValueChange={(v) => {
                   field.onChange(v);
                   form.setValue("llmModel", "");
@@ -1570,7 +1568,6 @@ export default function AgentEdit() {
                     {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                )}
                 <FormMessage />
               </FormItem>
             )} />
@@ -1578,15 +1575,13 @@ export default function AgentEdit() {
               <FormItem>
                 <FormLabel className="text-xs">Model</FormLabel>
                 <FormControl>
-                  {isGeminiLive ? (
-                    <p className="text-sm font-medium pt-2">{geminiLiveModelLabel()}</p>
-                  ) : LLM_MODELS[llmProvider] ? (
+                  {LLM_MODELS[llmProvider] ? (
                     <ModelSelect
-                      options={LLM_MODELS[llmProvider]!.filter((m) => !isGeminiLiveLlmModel(m.value))}
+                      options={LLM_MODELS[llmProvider]!}
                       value={field.value}
                       onChange={(v) => {
                         field.onChange(v);
-                        form.setValue("voiceStack", "classic");
+                        form.setValue("voiceStack", voiceStackForLlmModel(v), { shouldDirty: true });
                       }}
                       placeholder="Select model"
                     />
