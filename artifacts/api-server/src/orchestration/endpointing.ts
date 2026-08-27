@@ -1,3 +1,5 @@
+import { clampSemanticTurnStopMs } from "./semantic-turn-gate.js";
+
 /**
  * Adaptive endpointing — replaces the flat VAD_SILENCE_MS constant with a
  * context-sensitive silence window that adapts to what the caller is saying
@@ -73,6 +75,12 @@ const DIGIT_KEYWORDS = [
   "case number",
   "folio number",
   "application number",
+  "verification code",
+  "otp code",
+  "last four",
+  "last 4",
+  "security code",
+  "cvv",
   // ── Indic native-script digit-collection keywords ─────────────────────────
   // Tamil
   "பாலிசி நம்பர்", "போன் நம்பர்", "மொபைல் நம்பர்", "ஆதார்", "ஓடிபி",
@@ -104,6 +112,99 @@ export function isDigitCollectionContext(lastAgentText: string): boolean {
     if (lower.includes(kw)) return true;
   }
   return false;
+}
+
+/** Spoken English/Hinglish digits and grouping words used when reading IDs aloud. */
+const SPELLED_DIGIT_RE =
+  /^(zero|oh|o|nought|naught|one|two|three|four|five|six|seven|eight|nine|ten|double|triple|hundred|thousand|and)$/i;
+
+/**
+ * True when the pending transcript looks like an in-progress number/ID, not a
+ * finished answer. Used so OTP / Aadhaar / phone readouts are not committed
+ * after the first syllable ("nine" / "9") just because Smart Turn heard a pause.
+ *
+ * A compact run of 10+ digits is treated as complete (Indian mobile). Empty
+ * text is "still collecting" only when the caller is in digit-collection context.
+ */
+export function isDigitLikeUtterance(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  const compact = t.replace(/[\s\-./,]/g, "");
+  const digitCount = (compact.match(/\d/g) ?? []).length;
+  if (digitCount >= 10) return false;
+  if (digitCount > 0 && /^[0-9A-Za-z]+$/.test(compact) && compact.length <= 16) {
+    const letters = (compact.match(/[A-Za-z]/g) ?? []).length;
+    if (letters <= 2) return true;
+  }
+  const tokens = t.toLowerCase().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 8) return false;
+  let digitish = 0;
+  for (const raw of tokens) {
+    const tok = raw.replace(/[,.]+$/u, "");
+    if (!tok) continue;
+    if (/^\d+$/.test(tok) || SPELLED_DIGIT_RE.test(tok)) digitish++;
+  }
+  return digitish >= 1 && digitish >= tokens.length - 1;
+}
+
+export type StreamingTurnHold = {
+  incomplete: boolean;
+  reason: "text_continuation" | "digit_collection" | null;
+  digitCollection: boolean;
+  trailingDigit: boolean;
+};
+
+/**
+ * Live-path turn hold — same adaptive rules as computeEndpointMs, applied to
+ * Smart Turn + text veto. Batch silence flush already used digit-collection;
+ * Saaras realtime did not, so "what is your phone number?" was answering after
+ * the first digit.
+ */
+export function resolveStreamingTurnHold(opts: {
+  pending: string;
+  lastAgentText: string;
+  textLooksIncomplete: boolean;
+}): StreamingTurnHold {
+  const digitCollection = isDigitCollectionContext(opts.lastAgentText);
+  const pending = opts.pending.trim();
+  const trailingDigit = pending.length > 0 && (/\d\s*$/.test(pending) || isDigitLikeUtterance(pending));
+  if (digitCollection && isDigitLikeUtterance(pending)) {
+    return {
+      incomplete: true,
+      reason: "digit_collection",
+      digitCollection: true,
+      trailingDigit,
+    };
+  }
+  if (opts.textLooksIncomplete) {
+    return {
+      incomplete: true,
+      reason: "text_continuation",
+      digitCollection,
+      trailingDigit: false,
+    };
+  }
+  return {
+    incomplete: false,
+    reason: null,
+    digitCollection,
+    trailingDigit: false,
+  };
+}
+
+/** Extra incomplete-hold after VAD when the caller is still reading digits. */
+const DIGIT_HOLD_MS = 1200;
+const DIGIT_TRAIL_HOLD_MS = 1600;
+
+export function resolveIncompleteHoldMs(opts: {
+  baseStopMs: number;
+  digitCollection: boolean;
+  trailingDigit: boolean;
+}): number {
+  const base = clampSemanticTurnStopMs(opts.baseStopMs);
+  if (!opts.digitCollection) return base;
+  const floor = opts.trailingDigit ? DIGIT_TRAIL_HOLD_MS : DIGIT_HOLD_MS;
+  return clampSemanticTurnStopMs(Math.max(base, floor));
 }
 
 // ── Dangling / mid-utterance words ────────────────────────────────────────────
@@ -651,7 +752,7 @@ export function computeEndpointMs(opts: {
   // ── 1. Digit-collection context (highest priority) ─────────────────────────
   if (isDigitCollectionContext(lastAgentText)) {
     const partial = partialTranscript.trim();
-    if (partial.length > 0 && /\d$/.test(partial)) {
+    if (partial.length > 0 && (/\d$/.test(partial) || isDigitLikeUtterance(partial))) {
       // Still actively reading digits — extend even further
       return {
         ms: ENDPOINT_DIGIT_TRAIL_MS,

@@ -354,11 +354,13 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
       sarvamEndOfSpeechSilenceMs: 300,
       sarvamFirstTurnMinSpeechMs: 200,
       sarvamVadThreshold: 0.35,
+      semanticTurnStopMs: 800,
     } as AgentFormValues);
     const cfg = payload.agentConfig as any;
     expect(cfg.sarvamEndOfSpeechSilenceMs).toBe(300);
     expect(cfg.sarvamFirstTurnMinSpeechMs).toBe(200);
     expect(cfg.sarvamVadThreshold).toBe(0.35);
+    expect(cfg.semanticTurnStopMs).toBe(800);
   });
 
   it("defaults Sarvam realtime VAD to 300 / 250 / 0.3 when unset", () => {
@@ -374,6 +376,7 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     expect(cfg.sarvamEndOfSpeechSilenceMs).toBe(300);
     expect(cfg.sarvamFirstTurnMinSpeechMs).toBe(250);
     expect(cfg.sarvamVadThreshold).toBe(0.3);
+    expect(cfg.semanticTurnStopMs).toBe(1200);
   });
 
   it("mismatched ASR provider+model — reports error on asrModel", () => {

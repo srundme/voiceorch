@@ -46,6 +46,8 @@ import { ConversationHistory } from "./conversation-history.js";
 import { performance } from "perf_hooks";
 import {
   computeEndpointMs,
+  resolveStreamingTurnHold,
+  resolveIncompleteHoldMs,
   TurnSafetyNet,
   SilenceWatchdog,
   recoveryReprompt,
@@ -1816,7 +1818,13 @@ export class OrchestrationPipeline implements VoiceSession {
     const pending = this.streamSTT?.getPendingTranscript?.()?.trim()
       ?? this._eouHeldFinal?.text.trim()
       ?? this.eagerPartialText.trim();
-    const textLooksIncomplete = signalsConversationalContinuation(pending);
+    const lastAgentText = this.conversationHistory.findLast((t) => t.role === "assistant")?.content ?? "";
+    const hold = resolveStreamingTurnHold({
+      pending,
+      lastAgentText,
+      textLooksIncomplete: signalsConversationalContinuation(pending),
+    });
+    const textLooksIncomplete = hold.incomplete;
     const pcm = this._eouBytes > 0 ? Buffer.concat(this._eouAudio) : Buffer.alloc(0);
     const evalMs = envInt("SEMANTIC_TURN_EVAL_MS", 400, 100);
     const pred = pcm.length > 0
@@ -1838,6 +1846,7 @@ export class OrchestrationPipeline implements VoiceSession {
         eou,
         probability: pred?.probability,
         textLooksIncomplete,
+        holdReason: hold.reason,
         audioMs: Math.round((pcm.length / 2 / 16000) * 1000),
       },
       "Semantic turn: end-of-turn decision",
@@ -1848,25 +1857,32 @@ export class OrchestrationPipeline implements VoiceSession {
       metadata: {
         event: action === "hold" ? "Semantic Turn Hold" : "Semantic Turn Eligible",
         reason: resolved.reason,
+        holdReason: hold.reason,
         eou,
         probability: pred?.probability,
       },
     });
     if (action === "hold") {
-      // Incomplete only: complete turns never sit in this 1.2s window.
+      // Incomplete only: complete turns never sit in this wait window.
+      // Digit-collection stretches the cap so "nine … eight" is one turn.
       // Caller resume cancels the timer via onSpeechStart; timeout is the cap.
       this.abortSpeculativeLlm("semantic_turn_hold");
       this.clearSemanticTurnTimer();
       const gen = generation;
+      const stopMs = resolveIncompleteHoldMs({
+        baseStopMs: this.agent.semanticTurnStopMs,
+        digitCollection: hold.digitCollection,
+        trailingDigit: hold.trailingDigit,
+      });
       this._eouTimer = setTimeout(() => {
         this._eouTimer = null;
         if (this.semanticTurnGate.onStopTimeout(gen) !== "await_final") return;
         logger.info(
-          { callId: this.config.callId, stopMs: this.agent.semanticTurnStopMs },
+          { callId: this.config.callId, stopMs },
           "Semantic turn: incomplete continuation window elapsed — wait for transcript.final",
         );
         this.becomeTurnEligible("incomplete_timeout");
-      }, this.agent.semanticTurnStopMs);
+      }, stopMs);
       return;
     }
     this.becomeTurnEligible("eou_eligible");
