@@ -449,8 +449,10 @@ export interface AgentConfig {
   /** Optional Sarvam realtime `prompt` — terminology hint on the final transcript. */
   sarvamSttPrompt: string | null;
   /**
-   * Sarvam WS `high_vad_sensitivity`. true ≈ 2 VAD frames (~128ms @8kHz silence
-   * boundary). false ≈ ~1s+ silence. Default true (snappy voice agents).
+   * Legacy Sarvam `/speech-to-text/ws` `high_vad_sensitivity`. Not sent on the
+   * saaras:v3-realtime socket (that uses `silence_duration_ms`). true ≈ 2 VAD
+   * frames (~128ms @8kHz). false ≈ ~1s+ silence. Fast/Balanced keep true for
+   * the legacy fallback; Patient sets false.
    */
   sarvamHighVadSensitivity: boolean;
   /**
@@ -470,7 +472,7 @@ export interface AgentConfig {
   sarvamFirstTurnMinSpeechMs: number | null;
   /**
    * Realtime connect `silence_duration_ms` — quiet time before the turn ends.
-   * Null uses the adapter default (500ms).
+   * Null uses the adapter default (300ms, Fast).
    */
   sarvamEndOfSpeechSilenceMs: number | null;
   /**
