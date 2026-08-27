@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { useRoute, useLocation, Link } from "wouter";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useRoute, useLocation, useSearch, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
   useDeleteCampaign, useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
@@ -1267,6 +1267,7 @@ export default function CampaignDetailPage() {
   const qc = useQueryClient();
 
   const [, setLocation] = useLocation();
+  const search = useSearch();
   const [deletingBatch,    setDeletingBatch]    = useState<CampaignBatch | null>(null);
   const [showDeleteCamp,   setShowDeleteCamp]   = useState(false);
   const [deleteNameInput,  setDeleteNameInput]  = useState("");
@@ -1326,11 +1327,11 @@ export default function CampaignDetailPage() {
   const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: campaign, isLoading: campLoading } = useGetCampaign(campaignId, { query: { refetchInterval: 15_000 } as any });
+  const { data: campaign, isLoading: campLoading } = useGetCampaign(campaignId, { query: { enabled: campaignId > 0, refetchInterval: 15_000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { refetchInterval: 10_000 } as any });
+  const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { enabled: campaignId > 0, refetchInterval: 10_000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: analytics, isPending: analyticsPending } = useGetCampaignAnalytics(campaignId, { query: { refetchInterval: 10_000 } as any });
+  const { data: analytics, isPending: analyticsPending } = useGetCampaignAnalytics(campaignId, { query: { enabled: campaignId > 0, refetchInterval: 10_000 } as any });
   const { data: liveQueueMetrics } = useQuery({
     queryKey: ["lq-metrics", campaignId],
     queryFn: () => customFetch<{
@@ -1342,6 +1343,7 @@ export default function CampaignDetailPage() {
       failed: number;
     }>(`/api/campaigns/${campaignId}/live-queue/metrics`),
     refetchInterval: 10_000,
+    enabled: campaignId > 0,
   });
   const isSheetAuto = (campaign as { leadSource?: string } | undefined)?.leadSource === "google_sheets";
   const { data: autoPipelines } = useQuery({
@@ -1359,7 +1361,18 @@ export default function CampaignDetailPage() {
   const [hoursEnd,   setHoursEnd]   = useState<string>("");
   const [hoursTz,    setHoursTz]    = useState<string>("Asia/Kolkata");
   const [hoursEnabled, setHoursEnabled] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<CampaignTab>("overview");
+  const tabFromUrl = useMemo(() => {
+    const raw = new URLSearchParams(search).get("tab");
+    return CAMPAIGN_TABS.some((t) => t.id === raw) ? (raw as CampaignTab) : "overview";
+  }, [search]);
+  const activeTab = tabFromUrl;
+  const setActiveTab = useCallback((id: CampaignTab) => {
+    const sp = new URLSearchParams(search);
+    if (id === "overview") sp.delete("tab");
+    else sp.set("tab", id);
+    const qs = sp.toString();
+    setLocation(`/app/campaigns/${campaignId}${qs ? `?${qs}` : ""}`);
+  }, [search, setLocation, campaignId]);
   const [leadTransferForm, setLeadTransferForm] = useState<LeadTransferForm>(EMPTY_LEAD_TRANSFER);
   const [savingTransfer, setSavingTransfer] = useState(false);
   const [actingDisposition, setActingDisposition] = useState<string | null>(null);

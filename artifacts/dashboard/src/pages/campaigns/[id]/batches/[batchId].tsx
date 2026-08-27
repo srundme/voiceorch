@@ -429,6 +429,7 @@ function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onC
     },
     refetchInterval: 10000,
     placeholderData: prev => prev,
+    enabled: campaignId > 0 && batchId > 0,
   });
 
   async function handleRetry(leadId: number) {
@@ -765,6 +766,7 @@ export default function BatchWorkspacePage() {
     queryKey: ["batch-ws-header", campaignId, batchId],
     queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/header`),
     refetchInterval: 10000,
+    enabled: campaignId > 0 && batchId > 0,
   });
 
   useEffect(() => {
@@ -775,25 +777,38 @@ export default function BatchWorkspacePage() {
     if (m["email"]) setRemapEmail(m["email"]);
   }, [header?.batch.batchFieldMapping]);
 
-  // KPIs
-  const { data: kpis } = useQuery<BatchWorkspaceKpis>({
+  // KPIs — Call Outcomes strip. Never fire with id=0 (route params still
+  // hydrating) or a failed response will stick as "—" while leads load fine.
+  const {
+    data: kpis,
+    isError: kpisError,
+    isPending: kpisPending,
+  } = useQuery<BatchWorkspaceKpis>({
     queryKey: ["batch-ws-kpis", campaignId, batchId],
     queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/kpis`),
     refetchInterval: 10000,
+    enabled: campaignId > 0 && batchId > 0,
+    retry: 2,
   });
 
   // The selected slice, shared between the KPI strip and the leads table.
   const [segment, setSegment] = useState("all");
 
+  const kpiOr = (n: number | undefined, fallback?: number) => {
+    if (typeof n === "number" && Number.isFinite(n)) return n;
+    if (typeof fallback === "number" && Number.isFinite(fallback)) return fallback;
+    return kpisPending ? "…" : "—";
+  };
+
   const coreSegments: KpiSegment[] = [
-    { key: "all",       label: "Total Leads", value: kpis?.total     ?? "—", icon: <Users className="h-3 w-3" />,          hint: "Every lead in this batch" },
-    { key: "pending",   label: "Pending",     value: kpis?.pending   ?? "—", icon: <Clock className="h-3 w-3" />,          color: "text-muted-foreground", hint: "Not called yet" },
-    { key: "connected", label: "Connected",   value: kpis?.connected ?? "—", icon: <PhoneCall className="h-3 w-3" />,      color: "text-emerald-600 dark:text-emerald-500", hint: "Calls the lead answered" },
-    { key: "voicemail", label: "Voicemail",   value: kpis?.voicemail ?? "—", icon: <Voicemail className="h-3 w-3" />,      color: "text-violet-600 dark:text-violet-400", hint: "Reached voicemail" },
+    { key: "all",       label: "Total Leads", value: kpiOr(kpis?.total, header?.batch.totalLeads), icon: <Users className="h-3 w-3" />,          hint: "Every lead in this batch" },
+    { key: "pending",   label: "Pending",     value: kpiOr(kpis?.pending),   icon: <Clock className="h-3 w-3" />,          color: "text-muted-foreground", hint: "Not called yet" },
+    { key: "connected", label: "Connected",   value: kpiOr(kpis?.connected), icon: <PhoneCall className="h-3 w-3" />,      color: "text-emerald-600 dark:text-emerald-500", hint: "Calls the lead answered" },
+    { key: "voicemail", label: "Voicemail",   value: kpiOr(kpis?.voicemail), icon: <Voicemail className="h-3 w-3" />,      color: "text-violet-600 dark:text-violet-400", hint: "Reached voicemail" },
     // Lead-level `transferred`, not the transfer-event count, so the number
     // always equals the rows the card filters to.
-    { key: "transfers", label: "Transferred", value: kpis?.transferred ?? "—", icon: <ArrowRightLeft className="h-3 w-3" />, color: "text-sky-600 dark:text-sky-400", hint: "Handed to a human agent" },
-    { key: "failed",    label: "Failed",      value: kpis?.failed    ?? "—", icon: <XCircle className="h-3 w-3" />,        color: "text-red-600 dark:text-red-500", hint: "Failed, busy, or no pickup" },
+    { key: "transfers", label: "Transferred", value: kpiOr(kpis?.transferred), icon: <ArrowRightLeft className="h-3 w-3" />, color: "text-sky-600 dark:text-sky-400", hint: "Handed to a human agent" },
+    { key: "failed",    label: "Failed",      value: kpiOr(kpis?.failed),    icon: <XCircle className="h-3 w-3" />,        color: "text-red-600 dark:text-red-500", hint: "Failed, busy, or no pickup" },
   ];
 
   // The API already merges the configured taxonomy with what leads actually
@@ -1033,6 +1048,11 @@ export default function BatchWorkspacePage() {
             <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground/40">Call outcomes</span>
             <span className="text-[10px] text-muted-foreground/40">Click any card to filter the list</span>
           </div>
+          {kpisError && (
+            <p className="mb-2 text-[11px] text-amber-700 dark:text-amber-400">
+              Outcome totals could not load. The lead list below is still live — refresh to retry the cards.
+            </p>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
             {coreSegments.map(({ key, ...card }) => (
               <KpiCard key={key} {...card} active={segment === key} onClick={() => setSegment(key)} />
