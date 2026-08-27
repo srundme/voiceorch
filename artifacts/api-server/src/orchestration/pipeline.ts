@@ -8727,6 +8727,8 @@ export class OrchestrationPipeline implements VoiceSession {
           `EMAIL ACCURACY (call-critical): never book on a half-heard email. If the address is incomplete (no domain, ends with @, or has spaces), ask the caller to spell it letter by letter.`,
           `EMAIL vs PHONE (call 14394): email local-parts often contain digits (e.g. ramsiva97465@gmail.com). While collecting email, NEVER say the caller is giving a phone number. If @ / gmail / mail / அட் is missing, ask them to say: username, then \"at gmail dot com\" — do not reclassify digits as a mobile number.`,
           `After you hear an email, ALWAYS spell it back with <spell>r a m … @ g m a i l . c o m</spell> and wait for an explicit yes/correct before calling "${bookName}" with email_confirmed=true.`,
+          `HARD RULE (call 14396): NEVER say you are booking / have booked / will book the meeting in spoken text unless you are ALSO calling "${bookName}" in that same turn. Phrases like "book பண்ணிடுறேன்", "I've booked", "scheduling now" without a tool call create NO calendar event and NO email.`,
+          `When the caller confirms the email AND a slot, call "${bookName}" immediately in that turn (with preferred_date ISO from "${checkName}" + email_confirmed=true). Do not change the subject to sales/policy talk until booking_confirmed is returned.`,
           `When reading available slots aloud, keep the whole list in ONE reply sentence — do not chop each time (9:00 AM / 9:15 AM) into separate fragments.`,
           `NEVER tell the caller their appointment is confirmed or scheduled unless you have received a booking_confirmed: result from "${bookName}".`,
           `Do NOT say "Your appointment has been scheduled" or any equivalent phrase before "${bookName}" returns a booking_confirmed: result.`,
@@ -8861,6 +8863,33 @@ export class OrchestrationPipeline implements VoiceSession {
           historyForLlm = [
             ...historyForLlm.slice(0, -1),
             { ...lastTurn, content: `${lastTurn.content}\n\n${emailHint}` },
+          ];
+        }
+      }
+    }
+
+    // Booking completion reminder (call 14396): model said "book பண்ணிடுறேன்"
+    // after check_availability but NEVER called book_appointment → no calendar/email.
+    if (historyForLlm.length > 0 && !this.schedulingActionConfirmed) {
+      const toolBlob = this.conversationHistory.messages
+        .filter((m) => m.role === "tool" || (m.role === "user" && m.content.startsWith("[Tool result for")))
+        .map((m) => m.content)
+        .join("\n");
+      const sawAvailability =
+        /requested_slot_available|requested_slot_unavailable|available_slots/.test(toolBlob);
+      if (sawAvailability) {
+        const lastTurn = historyForLlm[historyForLlm.length - 1]!;
+        if (lastTurn.role === "user") {
+          const bookName =
+            this.agent.tools.find((t) => t.type === "native_booking")?.name ?? "book_appointment";
+          const bookHint =
+            `[BOOKING INCOMPLETE] Availability was already checked. ` +
+            `Do NOT claim you are booking or have booked. ` +
+            `When name + email are confirmed and a slot is chosen, CALL "${bookName}" this turn ` +
+            `with email_confirmed=true and the ISO preferred_date. Calendar + confirmation email only happen after that tool returns booking_confirmed.`;
+          historyForLlm = [
+            ...historyForLlm.slice(0, -1),
+            { ...lastTurn, content: `${lastTurn.content}\n\n${bookHint}` },
           ];
         }
       }
