@@ -221,6 +221,9 @@ router.post("/agents/:id/versions/:versionId/restore", requireAuth, clientContex
       id: _id, userId: _uid, createdAt: _ca, updatedAt: _ua,
       totalCalls: _tc, successfulCalls: _sc,
       avgDurationSeconds: _ad, avgSttLatencyMs: _as, avgLlmLatencyMs: _al, avgTtsFirstChunkMs: _at,
+      // Phone routing is operational state managed from Phone Numbers. Restoring
+      // stale snapshot IDs can steal a number or create a ghost assignment.
+      inboundPhoneNumberId: _inboundPhone, outboundPhoneNumberId: _outboundPhone,
       ...restorableFields
     } = snap;
 
@@ -236,7 +239,12 @@ router.post("/agents/:id/versions/:versionId/restore", requireAuth, clientContex
     const draftNumber = Number(cnt) + 1;
     const versionNumber = `draft-${draftNumber}`;
 
-    const restoredAgentSnap = { ...snap, updatedAt: new Date().toISOString() };
+    const restoredAgentSnap = {
+      ...snap,
+      inboundPhoneNumberId: agent.inboundPhoneNumberId,
+      outboundPhoneNumberId: agent.outboundPhoneNumberId,
+      updatedAt: new Date().toISOString(),
+    };
 
     const [inserted] = await tx
       .insert(agentVersionsTable)

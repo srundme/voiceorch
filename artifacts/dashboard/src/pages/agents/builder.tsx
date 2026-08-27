@@ -7373,7 +7373,17 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
               <DropdownMenuItem className="sm:hidden" onClick={() => setShowWebcall((v) => !v)}>
                 <Mic className="mr-2 size-3.5" /> Live test
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setPublishModalOpen(true)}>
+              <DropdownMenuItem onClick={() => {
+                if (isDirty) {
+                  toast({
+                    title: "Save changes first",
+                    description: "Publish snapshots the saved agent configuration.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                setPublishModalOpen(true);
+              }}>
                 <Upload className="mr-2 size-3.5" /> Publish version
               </DropdownMenuItem>
               {!isManagedWorkspace && !embedded && (
