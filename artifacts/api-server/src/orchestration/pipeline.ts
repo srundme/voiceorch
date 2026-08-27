@@ -5,6 +5,7 @@ import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
 import { GenderDetectorChained } from "./genderDetectorChained.js";
 import { SpeakerVerifier, type VoiceMemoryEvent } from "./speakerVerifier.js";
 import { SCREENING_PICKUP_NOTE } from "./callScreening.js";
+import { buildCallDirectionRule } from "./call-direction-rules.js";
 import { buildDatetimeInjection, buildTurnClockBlock } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
@@ -634,7 +635,14 @@ function buildCompactGreetingPrompt(
   fullSystemPrompt: string,
   language: string,
   resumeDropped = false,
-  opts?: { callDirection?: "inbound" | "outbound" | string | null; agentName?: string | null },
+  opts?: {
+    callDirection?: "inbound" | "outbound" | string | null;
+    agentName?: string | null;
+    callerName?: string | null;
+    memoryLanguagePref?: string | null;
+    agentLanguage?: string | null;
+    languageAutoDetect?: boolean;
+  },
 ): string {
   const memoryMatch = fullSystemPrompt.match(
     /=== CALLER MEMORY[\s\S]*?={20,}/,
@@ -698,11 +706,14 @@ function buildCompactGreetingPrompt(
     "The agent/workspace display name is an internal label, NOT a company brand — never say " +
     `"thanks for calling <agent name>"` +
     (agentLabel ? ` (do not say "${agentLabel}" or a shortened form of it as the company).` : ".");
-  const directionRule =
-    opts?.callDirection === "outbound"
-      ? "[OUTBOUND] You placed this call. Do NOT say \"thanks for calling\" / \"thank you for calling\". " +
-        "Open as the caller (introduce yourself / your company from the script), not as an inbound receptionist."
-      : "";
+  const directionRule = buildCallDirectionRule({
+    direction: opts?.callDirection,
+    callerName: opts?.callerName ?? null,
+    memoryLanguagePref: opts?.memoryLanguagePref ?? null,
+    agentLanguage: opts?.agentLanguage ?? language,
+    languageAutoDetect: opts?.languageAutoDetect,
+    openingAlreadyDelivered: false,
+  });
   const returningCallerRule = memoryBlock && !resumeDropped
     ? "[RETURNING CALLER] If the CALLER MEMORY above contains actual facts about this caller (not just an empty template), " +
       "this is a repeat conversation: briefly acknowledge it naturally in ONE short clause and skip the first-time welcome. " +
@@ -5349,6 +5360,10 @@ export class OrchestrationPipeline implements VoiceSession {
               {
                 callDirection: this.callDirection,
                 agentName: this.agent.name,
+                callerName: this.config.returningCallerName ?? null,
+                memoryLanguagePref: this.config.callerMemoryLanguage ?? null,
+                agentLanguage: this.agent.language ?? greetLang,
+                languageAutoDetect: this.agent.languageAutoDetect === true,
               },
             ),
             this.salutationFor(null),
@@ -8710,6 +8725,16 @@ export class OrchestrationPipeline implements VoiceSession {
     if (openerAlreadySpoken && !this.pendingScreeningPickupNote) {
       systemPromptForTurn += `\n\n${OPENING_ALREADY_DELIVERED_NOTE}`;
     }
+
+    // Per-call inbound/outbound + opening-language rule (same agent may handle both).
+    systemPromptForTurn += `\n\n${buildCallDirectionRule({
+      direction: this.callDirection,
+      callerName: this.config.returningCallerName ?? null,
+      memoryLanguagePref: this.config.callerMemoryLanguage ?? null,
+      agentLanguage: this.agent.language ?? null,
+      languageAutoDetect: this.agent.languageAutoDetect === true,
+      openingAlreadyDelivered: openerAlreadySpoken,
+    })}`;
 
     // Voice Memory — handoff / cross-number notes live in the volatile per-turn
     // tail so Gemini / OpenAI cached prefixes stay byte-stable.

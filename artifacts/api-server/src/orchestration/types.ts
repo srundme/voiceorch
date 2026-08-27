@@ -821,6 +821,11 @@ export interface SessionConfig {
   memoryOwnerAgentId?: number;
   /** Returning caller's remembered name — used for an instant opener (no greeting-LLM wait). */
   returningCallerName?: string | null;
+  /**
+   * Caller memory language_pref (or mapped preferredLanguage) for opening-language rules.
+   * When missing, call-direction rules default to English for auto-detect agents.
+   */
+  callerMemoryLanguage?: string | null;
   /** Inbound vs outbound — used for post-greeting listen timing on telephony calls. */
   callDirection?: "inbound" | "outbound";
   /** Prior call dropped within the resume window — shorter opener + listen stall. */

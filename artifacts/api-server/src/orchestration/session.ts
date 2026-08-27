@@ -98,6 +98,7 @@ import {
   type CallerContext,
   type NameLatchTier,
 } from "./callerMemory.js";
+import { buildCallDirectionRule } from "./call-direction-rules.js";
 import { performSquadAgentHandoff } from "../services/squad-handoff.js";
 import { completeLiveSquadRun, ensureLiveSquadRunForCall } from "../services/squad-engine.js";
 import {
@@ -1149,6 +1150,19 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       );
     }
   }
+
+  // Per-call inbound/outbound rule (also covers Gemini Live, which uses systemPrompt as-is).
+  agentConfig.systemPrompt += `\n\n${buildCallDirectionRule({
+    direction: callDirection,
+    callerName: callerProfileSnapshot?.name ?? null,
+    memoryLanguagePref:
+      latchedFactsMap.get("language_pref")
+      ?? callerProfileSnapshot?.preferredLanguage
+      ?? null,
+    agentLanguage: agent.asrLanguage ?? agent.language ?? null,
+    languageAutoDetect: agentConfig.languageAutoDetect === true,
+    openingAlreadyDelivered: false,
+  })}`;
 
   // ── Inject DB-backed upcoming bookings (pre-fetched in parallel) ─────────────
   // Meet bots: also inject upcoming bookings when we have a contact phone so
@@ -2405,6 +2419,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // Returning caller (>=1 prior completed call) → instant name opener (no greeting LLM).
     isReturningCaller: (callerProfileSnapshot?.callCount ?? 0) >= 1,
     returningCallerName: callerProfileSnapshot?.name ?? null,
+    callerMemoryLanguage:
+      latchedFactsMap.get("language_pref")
+      ?? callerProfileSnapshot?.preferredLanguage
+      ?? null,
     callDirection,
     isResumeDroppedCall: resumeDroppedCall,
     // Carrier answer time — anchors the recording clock (see SessionConfig).
