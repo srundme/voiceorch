@@ -12,6 +12,7 @@ import {
   isCallerAttentionUtterance,
   isBackchannelOnlyUtterance,
   hasCallerAddressToken,
+  isSubstantialCallerUtterance,
   normalizeSttPhonetics,
   coalescePendingTranscripts,
   signalsConversationalContinuation,
@@ -355,5 +356,22 @@ describe("hasCallerAddressToken", () => {
   it("treats நீங்க as the caller addressing the agent, not TTS echo (call 14345)", () => {
     expect(hasCallerAddressToken(["ஒரு", "நிமிஷம்", "நீங்க"])).toBe(true);
     expect(hasCallerAddressToken(["ஒரு", "நிமிஷம்", "time"])).toBe(false);
+  });
+
+  it("treats சார் / sir as address (call 14351)", () => {
+    expect(hasCallerAddressToken(["ஆமா", "சார்", "சொல்லுங்க"])).toBe(true);
+    expect(hasCallerAddressToken(["sir"])).toBe(true);
+  });
+});
+
+describe("isSubstantialCallerUtterance — never far-field-drop a real reply (call 14351)", () => {
+  it("keeps multi-word Tamil tell-me replies", () => {
+    expect(isSubstantialCallerUtterance("ஆ ஆமா சார் சொல்லுங்க சார்")).toBe(true);
+    expect(isSubstantialCallerUtterance("Speech நான் sir சொல்லுங்க")).toBe(true);
+  });
+
+  it("still allows a tiny muffled fragment to be scored by RMS", () => {
+    expect(isSubstantialCallerUtterance("hmm")).toBe(false);
+    expect(isSubstantialCallerUtterance("TV")).toBe(false);
   });
 });

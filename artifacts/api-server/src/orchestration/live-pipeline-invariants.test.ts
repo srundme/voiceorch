@@ -62,4 +62,13 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(evalBody).toContain("logWarningEvent");
     expect(evalBody).toContain("smart_turn_fail_open");
   });
+
+  it("does not wipe near-talker RMS at VAD speech_start (call 14351)", () => {
+    const start = pipelineSrc.indexOf("this.streamSTT.onSpeechStart");
+    expect(start).toBeGreaterThan(-1);
+    const nextHandler = pipelineSrc.indexOf("this.streamSTT.", start + 10);
+    const body = pipelineSrc.slice(start, nextHandler > start ? nextHandler : start + 800);
+    expect(body).not.toMatch(/utterancePeakRawRms\s*=\s*0/);
+    expect(pipelineSrc).toContain("isSubstantialCallerUtterance");
+  });
 });

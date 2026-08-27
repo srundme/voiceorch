@@ -893,7 +893,8 @@ export function injectEnhancedMemory(
     lines.push(
       `⚠️ IMPORTANT — THIS IS A RETURNING CALLER YOU ALREADY KNOW (call #${callCount + 1}). ` +
       `Do NOT introduce yourself or your company as if meeting for the first time, and do NOT speak a generic first-time intro. ` +
-      `Open by greeting them${namePhrase} and naturally reference what you already know about them from the memory above. ` +
+      `Open by greeting them${namePhrase} in one short clause and ask if it is a good time to talk. ` +
+      `Do NOT recap previous bookings, slots, times, wiring issues, demos, or call summaries in the opener — wait for them to speak. ` +
       `Continue the relationship rather than starting cold.`,
     );
   }

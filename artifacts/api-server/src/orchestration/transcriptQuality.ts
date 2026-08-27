@@ -576,6 +576,7 @@ export function isAccidentalInterruptPhrase(text: string): boolean {
  *  as self-echo of the greeting's "ஒரு நிமிஷம் time கிடைக்குமா?". */
 const CALLER_ADDRESS_TOKENS = new Set([
   "நீங்க", "நீங்கள்", "நான்", "நாங்க", "you", "i", "we", "me",
+  "சார்", "sir", "madam", "மேடம்",
 ]);
 
 export function hasCallerAddressToken(tokens: string[]): boolean {
@@ -587,6 +588,26 @@ export function isCallerAttentionUtterance(text: string): boolean {
   const t = text.trim().toLowerCase().replace(/[.!?]+$/g, "");
   if (!t) return false;
   return /^(hello|hi|hey|vanakkam|வணக்கம்|ஹலோ)(\s+(sir|madam|சார்|மேடம்))?$/.test(t);
+}
+
+/**
+ * A real near-talker reply that RMS-only background_talker must not drop.
+ * Call 14351: "ஆ ஆமா சார் சொல்லுங்க சார்" and "Speech நான் sir சொல்லுங்க"
+ * were discarded because peak RAW RMS sat under 800 (late VAD + GTCRN line),
+ * so the caller had to repeat three times. TV bleed is short/muffled; a
+ * multi-word Indic sentence or an address token is the person on the phone.
+ */
+export function isSubstantialCallerUtterance(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (isCallerAttentionUtterance(t)) return true;
+  const tokens = t.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  if (hasCallerAddressToken(tokens)) return true;
+  const indic = (t.match(/[\u0900-\u0D7F]+/g) ?? []).join("");
+  if (indic.length >= 6) return true;
+  if (tokens.length >= 4) return true;
+  if (tokens.length >= 2 && /(சொல்லுங்க|tell me|ஆமா|haan|हाँ)/i.test(t)) return true;
+  return false;
 }
 
 /**

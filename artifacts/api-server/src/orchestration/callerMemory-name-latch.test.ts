@@ -22,6 +22,8 @@ import {
   isPlausibleName,
   NAME_PATTERNS,
   shouldLatchOverrideExtraction,
+  injectEnhancedMemory,
+  type CallerProfile,
 } from "./callerMemory.js";
 
 describe("detectNameLatch — rejections (no latch)", () => {
@@ -171,5 +173,32 @@ describe("call-end override guard (tier-conditional)", () => {
     const latch = detectNameLatch("I'm Divya")!;
     // No extraction ran — the latch's immediate DB write is the final state.
     expect(resolveFinalName(latch.name, latch.tier, null)).toBe("Divya");
+  });
+});
+
+describe("injectEnhancedMemory — returning-caller opener (call 14351)", () => {
+  it("does not tell the greeting LLM to recap bookings in the first line", () => {
+    const profile = {
+      id: 1,
+      agentId: 67,
+      phoneNumber: "917971543255",
+      name: "Karthik",
+      summary: "wiring issue and demo slot",
+      callCount: 15,
+      lastCalledAt: new Date("2026-08-27"),
+      lastCallDropped: false,
+      lastCallDroppedAt: null,
+      predictedIntent: null,
+      riskScore: null,
+      sentimentTrend: null,
+      preferredLanguage: "ta-IN",
+    } satisfies CallerProfile;
+    const out = injectEnhancedMemory("base prompt", {
+      profile,
+      facts: [],
+      recentCalls: [],
+    });
+    expect(out).not.toMatch(/naturally reference what you already know/);
+    expect(out).toMatch(/Do NOT recap previous bookings/);
   });
 });
