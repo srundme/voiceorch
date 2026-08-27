@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { logger } from "../../lib/logger.js";
+import { collectBookingMailRecipients } from "./booking-mail-recipients.js";
 import {
   getLinkedGoogleConnectionForBooking,
   sendMailFromGoogleConnection,
@@ -74,43 +75,13 @@ function buildEmailContent(subject: string, body: string): { subject: string; te
   };
 }
 
-/** Collect, dedupe and normalize hosts. Skip the attendee so they are not mailed twice. */
-function hostRecipients(data: {
-  hostEmail?: string | null;
-  additionalHosts?: string[] | null;
-  attendeeEmail?: string;
-}): string[] {
-  const all: string[] = [];
-  if (data.hostEmail) all.push(data.hostEmail);
-  if (data.additionalHosts) all.push(...data.additionalHosts);
-  const seen = new Set<string>();
-  if (data.attendeeEmail) seen.add(data.attendeeEmail.trim().toLowerCase());
-  const out: string[] = [];
-  for (const raw of all) {
-    const e = raw.trim();
-    if (!e) continue;
-    const key = e.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(e);
-  }
-  return out;
-}
-
-async function sendToAll(
+async function sendOneFromCalendar(
   to: string,
   content: { subject: string; text: string; html: string },
   bookingId: number,
   tag: string,
-) {
-  const conn = await getLinkedGoogleConnectionForBooking(bookingId);
-  if (!conn) {
-    logger.warn(
-      { bookingId, to, tag },
-      "Booking email skipped — calendar has no linked Google account (will not send as platform GMAIL_USER)",
-    );
-    return;
-  }
+  conn: { id: string; email: string },
+): Promise<boolean> {
   const ok = await sendMailFromGoogleConnection(conn.id, {
     to,
     subject: content.subject,
@@ -119,6 +90,53 @@ async function sendToAll(
   if (ok) {
     logger.info({ bookingId, email: to, from: conn.email, tag }, "Booking email sent");
   }
+  return ok;
+}
+
+/**
+ * Send booking mail as the linked Google Calendar account (From = calendar mail).
+ * Recipients: customer (spoken email) + organizer (hostEmail + calendar owner) + additional hosts.
+ */
+async function sendBookingPartyMails(opts: {
+  data: BookingEmailData;
+  customerContent: { subject: string; text: string; html: string };
+  hostContent: { subject: string; text: string; html: string };
+  tagPrefix: string;
+}): Promise<void> {
+  const { data, customerContent, hostContent, tagPrefix } = opts;
+  const conn = await getLinkedGoogleConnectionForBooking(data.bookingId);
+  if (!conn) {
+    logger.warn(
+      { bookingId: data.bookingId, tag: tagPrefix },
+      "Booking email skipped — calendar has no linked Google account (will not send as platform GMAIL_USER)",
+    );
+    return;
+  }
+
+  const { customer, hosts } = collectBookingMailRecipients({
+    attendeeEmail: data.attendeeEmail,
+    hostEmail: data.hostEmail,
+    additionalHosts: data.additionalHosts,
+    organizerEmail: conn.email,
+  });
+
+  if (customer) {
+    await sendOneFromCalendar(customer, customerContent, data.bookingId, `${tagPrefix}-customer`, conn);
+  }
+  for (const host of hosts) {
+    await sendOneFromCalendar(host, hostContent, data.bookingId, `${tagPrefix}-host`, conn);
+  }
+
+  logger.info(
+    {
+      bookingId: data.bookingId,
+      from: conn.email,
+      customer,
+      hosts,
+      tag: tagPrefix,
+    },
+    "Booking party mails dispatched from Google Calendar account",
+  );
 }
 
 /**
@@ -178,12 +196,7 @@ Booking Reference: #${data.bookingId}${selfServiceLines}
 
 We look forward to speaking with you!`;
 
-  const hosts = hostRecipients(data);
-  const content = buildEmailContent(`Appointment Confirmed: ${data.eventTypeName}`, attendeeBody);
-  await sendToAll(data.attendeeEmail, content, data.bookingId, "created");
-
-  if (hosts.length > 0) {
-    const hostBody = `New booking received.
+  const hostBody = `New booking received.
 
 Attendee: ${data.attendeeName} (${data.attendeeEmail})
 Event: ${data.eventTypeName}
@@ -191,9 +204,12 @@ Date & Time: ${from} – ${to} (${data.timezone})${meetLine}${data.notes ? `\nNo
 
 Booking Reference: #${data.bookingId}`;
 
-    const hostContent = buildEmailContent(`New Booking: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
-    await sendToAll(hosts.join(", "), hostContent, data.bookingId, "created-host");
-  }
+  await sendBookingPartyMails({
+    data,
+    customerContent: buildEmailContent(`Appointment Confirmed: ${data.eventTypeName}`, attendeeBody),
+    hostContent: buildEmailContent(`New Booking: ${data.attendeeName} — ${data.eventTypeName}`, hostBody),
+    tagPrefix: "created",
+  });
 }
 
 export async function sendBookingConfirmedEmail(data: BookingEmailData): Promise<void> {
@@ -210,21 +226,19 @@ Booking Reference: #${data.bookingId}
 
 See you then!`;
 
-  const content = buildEmailContent(`Appointment Confirmed: ${data.eventTypeName}`, body);
-  await sendToAll(data.attendeeEmail, content, data.bookingId, "confirmed");
-
-  const hosts = hostRecipients(data);
-  if (hosts.length > 0) {
-    const hostBody = `A booking has been confirmed.
+  const hostBody = `A booking has been confirmed.
 
 Attendee: ${data.attendeeName} (${data.attendeeEmail})
 Event: ${data.eventTypeName}
 Date & Time: ${from} – ${to} (${data.timezone})${meetLine}
 Booking Reference: #${data.bookingId}`;
 
-    const hostContent = buildEmailContent(`Booking Confirmed: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
-    await sendToAll(hosts.join(", "), hostContent, data.bookingId, "confirmed-host");
-  }
+  await sendBookingPartyMails({
+    data,
+    customerContent: buildEmailContent(`Appointment Confirmed: ${data.eventTypeName}`, body),
+    hostContent: buildEmailContent(`Booking Confirmed: ${data.attendeeName} — ${data.eventTypeName}`, hostBody),
+    tagPrefix: "confirmed",
+  });
 }
 
 export async function sendBookingCancelledEmail(data: BookingEmailData): Promise<void> {
@@ -238,57 +252,49 @@ Booking Reference: #${data.bookingId}
 
 If you have any questions, please reach out.`;
 
-  const content = buildEmailContent(`Appointment Cancelled: ${data.eventTypeName}`, attendeeBody);
-  await sendToAll(data.attendeeEmail, content, data.bookingId, "cancelled-attendee");
-
-  const hosts = hostRecipients(data);
-  if (hosts.length > 0) {
-    const hostBody = `A booking has been cancelled.
+  const hostBody = `A booking has been cancelled.
 
 Attendee: ${data.attendeeName} (${data.attendeeEmail})
 Event: ${data.eventTypeName}
 Originally scheduled: ${from} (${data.timezone})
 Booking Reference: #${data.bookingId}`;
 
-    const hostContent = buildEmailContent(`Booking Cancelled: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
-    await sendToAll(hosts.join(", "), hostContent, data.bookingId, "cancelled-host");
-  }
+  await sendBookingPartyMails({
+    data,
+    customerContent: buildEmailContent(`Appointment Cancelled: ${data.eventTypeName}`, attendeeBody),
+    hostContent: buildEmailContent(`Booking Cancelled: ${data.attendeeName} — ${data.eventTypeName}`, hostBody),
+    tagPrefix: "cancelled",
+  });
 }
 
 export async function sendBookingRescheduledEmail(data: BookingEmailData & { oldSlotStart?: Date }): Promise<void> {
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
   const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
-  const oldFrom = data.oldSlotStart ? formatDateTime(data.oldSlotStart, data.timezone) : "previous time";
-
-  const selfServiceLines = (data.cancelLink || data.rescheduleLink)
-    ? `\n\n── Manage your appointment ──${data.rescheduleLink ? `\nReschedule again: ${data.rescheduleLink}` : ""}${data.cancelLink ? `\nCancel: ${data.cancelLink}` : ""}`
+  const oldLine = data.oldSlotStart
+    ? `\nPrevious time: ${formatDateTime(data.oldSlotStart, data.timezone)}`
     : "";
 
   const attendeeBody = `Hi ${data.attendeeName},
 
 Your appointment "${data.eventTypeName}" has been rescheduled.
 
-Previous time: ${oldFrom}
-New Date & Time: ${from} – ${to} (${data.timezone})${meetLine}
-Booking Reference: #${data.bookingId}${selfServiceLines}
+New Date & Time: ${from} – ${to} (${data.timezone})${oldLine}${meetLine}
+Booking Reference: #${data.bookingId}
 
-If you did not request this change, please contact us.`;
+See you then!`;
 
-  const content = buildEmailContent(`Appointment Rescheduled: ${data.eventTypeName}`, attendeeBody);
-  await sendToAll(data.attendeeEmail, content, data.bookingId, "rescheduled-attendee");
-
-  const hosts = hostRecipients(data);
-  if (hosts.length > 0) {
-    const hostBody = `A booking has been rescheduled.
+  const hostBody = `A booking has been rescheduled.
 
 Attendee: ${data.attendeeName} (${data.attendeeEmail})
 Event: ${data.eventTypeName}
-Previous time: ${oldFrom}
-New Date & Time: ${from} – ${to} (${data.timezone})${meetLine}
+New Date & Time: ${from} – ${to} (${data.timezone})${oldLine}${meetLine}
 Booking Reference: #${data.bookingId}`;
 
-    const hostContent = buildEmailContent(`Booking Rescheduled: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
-    await sendToAll(hosts.join(", "), hostContent, data.bookingId, "rescheduled-host");
-  }
+  await sendBookingPartyMails({
+    data,
+    customerContent: buildEmailContent(`Appointment Rescheduled: ${data.eventTypeName}`, attendeeBody),
+    hostContent: buildEmailContent(`Booking Rescheduled: ${data.attendeeName} — ${data.eventTypeName}`, hostBody),
+    tagPrefix: "rescheduled",
+  });
 }
