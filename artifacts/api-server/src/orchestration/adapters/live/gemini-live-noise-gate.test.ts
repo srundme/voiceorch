@@ -117,17 +117,6 @@ describe("Gemini Live caller-audio noise gate", () => {
     spy.mockRestore();
   });
 
-  it("keeps Noise Cancellation on but skips isolation while the agent is speaking", async () => {
-    const spy = vi.spyOn(audioPool, "processRawPcm8kIn");
-    const pipeline = makePipeline(agentConfig({ noiseCancellationEnabled: true }));
-    (pipeline as unknown as { isPlayingOut: boolean }).isPlayingOut = true;
-    pipeline.onRawPcm8kIn(frame(4000));
-    await pipeline.flushCallerAudio();
-    expect(spy).not.toHaveBeenCalled();
-    pipeline.close();
-    spy.mockRestore();
-  });
-
   it("keeps the recording anchored to the raw caller audio, not the isolated copy", async () => {
     const pipeline = makePipeline(agentConfig({ noiseCancellationEnabled: true }));
     const tap = vi.fn();

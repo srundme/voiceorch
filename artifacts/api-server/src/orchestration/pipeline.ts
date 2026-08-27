@@ -25,7 +25,7 @@ import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
-import { shouldBargeOnRealtimeVadStart, parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
+import { shouldBargeOnRealtimeVadStart, shouldBargeOnRealtimePartial, parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
@@ -37,7 +37,6 @@ import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, peekCachedPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
-import { shouldEnhanceCallerAudio } from "./voice-isolator.js";
 import { RecordingBuffer, WEBCALL_GAP_RESYNC_MS } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMAdapter, LLMUsage, SessionConfig, StreamSTT, STTConfig, ToolDefinition } from "./types.js";
@@ -2632,7 +2631,8 @@ export class OrchestrationPipeline implements VoiceSession {
       | "transfer_in_progress"
       | "end_call_in_progress"
       | "fragment_coalesce_hold"
-      | "backchannel_during_playback",
+      | "backchannel_during_playback"
+      | "agent_still_speaking",
   ): void {
     const now = Date.now();
     const reasonByGuard: Record<typeof guard, string> = {
@@ -2645,6 +2645,7 @@ export class OrchestrationPipeline implements VoiceSession {
       end_call_in_progress: "hangup already in progress",
       fragment_coalesce_hold: "short fragment held briefly for coalesce (not a drop)",
       backchannel_during_playback: "held ack fragment dropped — agent speaking at coalesce-timer fire (true backchannel)",
+      agent_still_speaking: "final arrived while agent was still speaking and did not barge-in (greeting/echo garbage)",
     };
     this.logExec(EXEC_COMPONENTS.STT, "system", {
       status: "info",
@@ -3064,6 +3065,9 @@ export class OrchestrationPipeline implements VoiceSession {
       stallBackstopMs,
       onForceFinalize: (transcript) => {
         if (this.closed) return;
+        // Call 14227: pickup/echo partials armed this timer before the greeting;
+        // firing during TTS treated "Then you need to learn" as a real caller turn.
+        if (this.isPlaying || this.isSendingTtsAudio || this.greetingPlaybackActive) return;
         logger.warn(
           { callId: this.config.callId, chars: transcript.length },
           "Safety net: force-finalizing stuck turn from best partial",
@@ -3157,18 +3161,36 @@ export class OrchestrationPipeline implements VoiceSession {
                 // often about to continue (call 2967: "சரி" then the real question).
               } else if (this.sarvamRealtimePartials()) {
                 // Realtime best practice: barge on early partials, not transcript.final.
+                // Call 14227: Tamil greeting echo transcribed as English "Then you
+                // need to learn" — isSelfEcho missed it, echo bar was still cold,
+                // and vad_partial launched a full LLM turn. Same greeting/echo-grace
+                // / cold-floor rules as vad.speech_start.
                 const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
                 this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
                 const charCount = [...text.trim()].length;
                 const minChars = bargeInMinChars(this.currentLang || this.agent.language);
+                const inEchoGrace = Date.now() < this.greetingEchoHoldUntil
+                  || Date.now() < this.bargeInSentenceStartAt + Math.max(600, this.bargeInEchoGraceMs);
                 const interimEchoBar = this.echoBarRms();
+                const energyAboveEchoBar =
+                  interimEchoBar !== null
+                  && this.bargeInPeakRmsSinceSentence > interimEchoBar;
                 const interimIsSelfEcho =
                   this.isSelfEcho(text)
                   || (
                     interimEchoBar !== null
                     && this.bargeInPeakRmsSinceSentence <= interimEchoBar
                   );
-                if (charCount >= minChars && !interimIsSelfEcho) {
+                if (shouldBargeOnRealtimePartial({
+                  greetingOrSystem: this.greetingPlaybackActive || this.systemPlaybackActive,
+                  inEchoGrace,
+                  isWebcall: this.config.telephonyProvider === "webcall",
+                  isSelfEcho: interimIsSelfEcho,
+                  echoBarReady: interimEchoBar !== null,
+                  energyAboveEchoBar,
+                  charCount,
+                  minChars,
+                })) {
                   this.triggerBargeIn("vad_partial", text, { speculative: true });
                   logger.info(
                     {
@@ -3537,6 +3559,19 @@ export class OrchestrationPipeline implements VoiceSession {
       // agent is speaking, and the very first callback that arrives while
       // isPlaying=true will therefore always start from 0.
       this.streamingBargeInWordCount = 0;
+    }
+
+    // Call 14227: realtime skipped final-transcript barge-in, then still fed
+    // "Then you need to learn" (Tamil greeting echo) into the LLM. If we did
+    // not barge, this final is not a caller turn.
+    if (this.isPlaying && !this.bargeInRequested) {
+      this.streamingBargeInWordCount = 0;
+      logger.info(
+        { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+        "Streaming STT: discarding final while agent still speaking (no barge-in)",
+      );
+      this.logDiscardedTranscript(transcript, "agent_still_speaking");
+      return;
     }
 
     // Transfer in-flight guard (defense-in-depth). transferInitiated is set at
@@ -4094,19 +4129,6 @@ export class OrchestrationPipeline implements VoiceSession {
 
   // ── Audio input ─────────────────────────────────────────────────────────────
 
-  /**
-   * NC stays on for production listening. Skip GTCRN/gate while we are speaking
-   * or in echo-hold so carrier sidetone is not cleaned into a false barge-in.
-   */
-  private callerEnhanceOn(noiseCancellationOn: boolean): boolean {
-    const now = Date.now();
-    return shouldEnhanceCallerAudio({
-      noiseCancellationOn,
-      agentSpeaking: this.isPlaying || this.isSendingTtsAudio,
-      echoHoldActive: now < this.bargeInHoldUntil || now < this.greetingEchoHoldUntil,
-    });
-  }
-
   /** Incoming mulaw from Twilio / Plivo — offloads decode + noise-cancel + VAD to worker thread */
   onAudioIn(mulawChunk: Buffer): void {
     if (this.closed) return;
@@ -4119,7 +4141,7 @@ export class OrchestrationPipeline implements VoiceSession {
     processAudioIn(
       callId,
       mulawChunk,
-      this.callerEnhanceOn(this.noiseGate.enabled),
+      this.noiseGate.enabled,
       this.micThresholds.gateRatio,
       this.micThresholds.vadThreshold,
     )
@@ -4185,9 +4207,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // Caller-supplied `noiseCancel` wins when present; otherwise use the
     // per-call decision resolved in the constructor (provider bypass + agent
     // toggle + overrides — see noise-gate.ts).
-    const nc = this.callerEnhanceOn(
-      noiseCancel !== undefined ? noiseCancel : this.noiseGate.enabled,
-    );
+    const nc = noiseCancel !== undefined ? noiseCancel : this.noiseGate.enabled;
     // Queue the caller's TRUE 16k audio (before it was downsampled to 8k for
     // this call) so handleProcessedAudio can use it for STT instead of the
     // worker's upsample8to16 reconstruction, which cannot recover frequency
@@ -5584,6 +5604,9 @@ export class OrchestrationPipeline implements VoiceSession {
       this._currentTurnPlayedSentences = [];
       this.isPlaying = true;
       this.greetingPlaybackActive = true;
+      // Pickup VAD before answer arms force-finalize; clear it so a ringtone/
+      // echo partial cannot become a caller turn mid-greeting (call 14227).
+      this.safetyNet.clear();
       const bootLatencyMs = Date.now() - (this.config.sessionCreatedAtMs ?? Date.now());
       logger.info(
         { callId: this.config.callId, bootLatencyMs, greetingLen: greeting.length },
