@@ -1238,7 +1238,7 @@ export default function AgentEdit() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium leading-none">Noise Cancellation</p>
-                          <p className="text-xs text-muted-foreground mt-1">Neural voice isolation (GTCRN) on caller audio before VAD/STT. Greeting echo is ignored so the agent does not barge herself. Browser web calls still use the mic&apos;s own noise suppression.</p>
+                          <p className="text-xs text-muted-foreground mt-1">Removes fans, traffic, and hiss from caller audio. Does not ignore other people talking nearby — keep the phone close. Greeting echo is ignored so the agent does not barge herself. Browser web calls still use the mic&apos;s own noise suppression.</p>
                         </div>
                         <FormField control={form.control} name="noiseCancellationEnabled" render={({ field }) => (
                           <FormItem>

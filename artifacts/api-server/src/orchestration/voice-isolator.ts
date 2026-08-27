@@ -4,9 +4,11 @@
  * Model: Xiaobin-Rong/gtcrn `gtcrn_simple.onnx` (MIT), same weights sherpa-onnx
  * ships for telephony denoise. ~0.5 MB, CPU, hop 16 ms.
  *
- * This is real voice isolation (keep speech, suppress noise / non-speech), not
- * the energy gate in NoiseCanceller. Run BEFORE VAD / STT. Fail-open: if the
- * ONNX session is missing or VOICE_ISOLATION=0, callers keep the energy gate.
+ * This is speech enhancement (keep speech, suppress hiss / fans / traffic), not
+ * "ignore other people talking". A bystander a few metres away is still speech
+ * and must be rejected on RAW mic energy in the pipeline. Run BEFORE VAD / STT.
+ * Fail-open: if the ONNX session is missing or VOICE_ISOLATION=0, callers keep
+ * the energy gate.
  *
  * Recordings must stay on the RAW 8 kHz path (pipeline already records before
  * processAudioIn).

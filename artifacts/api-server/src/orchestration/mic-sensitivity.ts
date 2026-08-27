@@ -80,3 +80,19 @@ export function resolveBargeInEnergyThreshold(explicit: unknown): number {
   if (explicit === LEGACY_NORMAL_BARGE_IN_ENERGY) return lowBar;
   return explicit;
 }
+
+/**
+ * RAW (pre-GTCRN) RMS a telephony utterance must reach to count as the person
+ * on the phone. Neural isolation keeps ANY speech — including a friend a few
+ * metres away — so barge-in / turn-commit must score the mic energy, not the
+ * enhanced signal.
+ */
+export const BACKGROUND_TALKER_MIN_RAW_RMS = 800;
+
+export function isBackgroundTalkerUtterance(
+  peakRawRms: number,
+  minRms: number = BACKGROUND_TALKER_MIN_RAW_RMS,
+): boolean {
+  if (!(peakRawRms > 0)) return false;
+  return peakRawRms < minRms;
+}

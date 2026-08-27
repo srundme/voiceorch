@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getMicSensitivityThresholds,
+  isBackgroundTalkerUtterance,
   LEGACY_NORMAL_BARGE_IN_ENERGY,
   resolveBargeInEnergyThreshold,
   resolveMicSensitivity,
@@ -32,5 +33,16 @@ describe("resolveBargeInEnergyThreshold", () => {
   it("honours a non-legacy explicit override", () => {
     expect(resolveBargeInEnergyThreshold(2500)).toBe(2500);
     expect(resolveBargeInEnergyThreshold(900)).toBe(900);
+  });
+});
+
+describe("isBackgroundTalkerUtterance", () => {
+  it("does not drop when RMS was not measured", () => {
+    expect(isBackgroundTalkerUtterance(0)).toBe(false);
+  });
+
+  it("drops a quiet far-field talker and keeps a near-mic caller", () => {
+    expect(isBackgroundTalkerUtterance(400)).toBe(true);
+    expect(isBackgroundTalkerUtterance(2500)).toBe(false);
   });
 });

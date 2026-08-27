@@ -20,6 +20,7 @@ import {
   decodeMulaw,
   upsample8to16,
   hasSpeechEnergy,
+  frameRms,
   NoiseCanceller,
 } from "./audio.js";
 import { VoiceIsolator, isVoiceIsolationEnabled, warmVoiceIsolator } from "./voice-isolator.js";
@@ -90,6 +91,7 @@ async function processChunk(msg: ProcessMulaw | ProcessPcm8k): Promise<void> {
     msg.type === "PROCESS_MULAW"
       ? decodeMulaw(Buffer.from(msg.data))
       : Buffer.from(msg.data);
+  const rawRms = frameRms(pcm8k);
 
   let pcm16k: Buffer | null = null;
 
@@ -114,7 +116,7 @@ async function processChunk(msg: ProcessMulaw | ProcessPcm8k): Promise<void> {
   const pcm16kAb = toTransferable(pcm16k);
 
   parentPort!.postMessage(
-    { id, pcm8k: pcm8kAb, pcm16kAb: pcm16kAb, hasSpeech },
+    { id, pcm8k: pcm8kAb, pcm16kAb: pcm16kAb, hasSpeech, rawRms },
     [pcm8kAb, pcm16kAb],
   );
 }
