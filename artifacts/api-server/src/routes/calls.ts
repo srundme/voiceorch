@@ -962,6 +962,7 @@ router.get("/calls/:id/caller-memory", requireAuth, clientContext, async (req, r
     id:              ep.id,
     callId:          ep.callId,
     summary:         ep.summary,
+    sentiment:       ep.sentiment ?? null,
     durationSeconds: ep.durationSeconds,
     createdAt:       ep.createdAt,
     insightFactIds:  [] as number[],

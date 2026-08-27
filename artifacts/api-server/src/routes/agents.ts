@@ -750,6 +750,7 @@ router.get("/agents/:id/memory/episodes", requireAuth, clientContext, async (req
       id:              callerCallArchiveTable.id,
       callId:          callerCallArchiveTable.callId,
       summary:         callerCallArchiveTable.summary,
+      sentiment:       callerCallArchiveTable.sentiment,
       durationSeconds: callerCallArchiveTable.durationSeconds,
       createdAt:       callerCallArchiveTable.createdAt,
     })
@@ -939,6 +940,7 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async
     id:              ep.id,
     callId:          ep.callId,
     summary:         ep.summary,
+    sentiment:       ep.sentiment ?? null,
     durationSeconds: ep.durationSeconds,
     createdAt:       ep.createdAt,
     insightFactIds:  factIdsByEpisode.get(ep.id) ?? [],

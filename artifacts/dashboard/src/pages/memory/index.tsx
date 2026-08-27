@@ -43,7 +43,7 @@ import {
   useGetCallerDetail, getGetCallerDetailQueryKey,
 } from "@workspace/api-client-react";
 import type {
-  AgentMemorySummary, AgentMemoryEpisode, Agent, Call,
+  AgentMemorySummary, Agent, Call,
   CallerContact, CallerDetailFact, CallerDetailEpisode,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
@@ -357,31 +357,82 @@ function FactsGrid({
 }
 
 /* ─── Episodes ───────────────────────────────────────────────────────────── */
-function EpisodeTimeline({ episodes }: { episodes: AgentMemoryEpisode[] }) {
+function sentimentLabel(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
+  const v = raw.trim().toLowerCase();
+  if (["positive", "neutral", "negative", "frustrated", "resolved"].includes(v)) return v;
+  return raw.trim();
+}
+
+function EpisodeTimeline({ episodes }: { episodes: CallerDetailEpisode[] }) {
+  const [openId, setOpenId] = useState<number | null>(null);
+
   return (
     <ol className="relative">
-      {episodes.map((ep, i) => (
-        <li key={ep.id} className="relative pl-6 pb-5 last:pb-0">
-          {i < episodes.length - 1 && (
-            <span className="absolute left-[3.5px] top-3 bottom-0 w-px bg-border" />
-          )}
-          <span className="absolute left-0 top-1.5 w-2 h-2 rounded-full bg-muted-foreground ring-4 ring-muted-foreground/10" />
-          <p className="text-[12px] font-semibold text-foreground">{episodeTime(ep.createdAt)}</p>
-          {ep.summary ? (
-            <p className="text-[12px] text-muted-foreground leading-relaxed mt-1">{ep.summary}</p>
-          ) : (
-            <p className="text-[12px] text-muted-foreground/70 italic mt-1">No summary available.</p>
-          )}
-          {ep.callId != null && (
-            <Link
-              href={`/app/history/${ep.callId}`}
-              className="text-[11px] text-foreground/80 hover:text-foreground inline-flex items-center gap-1 mt-1.5"
-            >
-              View call <ChevronRight className="w-3 h-3" />
-            </Link>
-          )}
-        </li>
-      ))}
+      {episodes.map((ep, i) => {
+        const duration = ep.durationSeconds != null && ep.durationSeconds > 0
+          ? formatDuration(ep.durationSeconds)
+          : null;
+        const sentiment = sentimentLabel(ep.sentiment);
+        const sentences = [...(ep.sentences ?? [])].sort((a, b) => a.sequenceNum - b.sequenceNum);
+        const expanded = openId === ep.id;
+        return (
+          <li key={ep.id} className="relative pl-6 pb-5 last:pb-0">
+            {i < episodes.length - 1 && (
+              <span className="absolute left-[3.5px] top-3 bottom-0 w-px bg-border" />
+            )}
+            <span className="absolute left-0 top-1.5 w-2 h-2 rounded-full bg-muted-foreground ring-4 ring-muted-foreground/10" />
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <p className="text-[12px] font-semibold text-foreground">{episodeTime(ep.createdAt)}</p>
+              {duration && (
+                <span className="text-[10px] text-muted-foreground/80">{duration}</span>
+              )}
+              {sentiment && (
+                <span className="text-[9px] font-medium rounded-md border px-1.5 py-0.5 text-muted-foreground border-border/50 bg-muted/40 capitalize">
+                  {sentiment}
+                </span>
+              )}
+            </div>
+            {ep.summary ? (
+              <p className="text-[12px] text-muted-foreground leading-relaxed mt-1">{ep.summary}</p>
+            ) : (
+              <p className="text-[12px] text-muted-foreground/70 italic mt-1">No summary available.</p>
+            )}
+            {sentences.length > 0 && (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  className="text-[11px] text-foreground/80 hover:text-foreground inline-flex items-center gap-1"
+                  onClick={() => setOpenId(expanded ? null : ep.id)}
+                >
+                  {expanded ? "Hide transcript" : "Show transcript"}
+                  <ChevronRight className={cn("w-3 h-3 transition-transform", expanded && "rotate-90")} />
+                </button>
+                {expanded && (
+                  <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-border/50 bg-muted/20 px-3 py-2 space-y-1.5">
+                    {sentences.map((s) => (
+                      <p key={s.id} className="text-[11.5px] leading-relaxed text-muted-foreground">
+                        <span className="font-medium text-foreground/80">
+                          {s.speaker === "caller" ? "Caller" : "Agent"}:
+                        </span>{" "}
+                        {s.text}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {ep.callId != null && (
+              <Link
+                href={`/app/history/${ep.callId}`}
+                className="text-[11px] text-foreground/80 hover:text-foreground inline-flex items-center gap-1 mt-1.5"
+              >
+                View call <ChevronRight className="w-3 h-3" />
+              </Link>
+            )}
+          </li>
+        );
+      })}
     </ol>
   );
 }
@@ -389,13 +440,13 @@ function EpisodeTimeline({ episodes }: { episodes: AgentMemoryEpisode[] }) {
 /* ─── Unified Timeline (facts + episodes, chronological) ─────────────────── */
 type TimelineItem =
   | { kind: "fact"; id: string; createdAt: string; fact: CallerDetailFact }
-  | { kind: "episode"; id: string; createdAt: string; episode: AgentMemoryEpisode };
+  | { kind: "episode"; id: string; createdAt: string; episode: CallerDetailEpisode };
 
 function TimelineFeed({
   facts, episodes,
 }: {
   facts: CallerDetailFact[];
-  episodes: AgentMemoryEpisode[];
+  episodes: CallerDetailEpisode[];
 }) {
   const items = useMemo<TimelineItem[]>(() => {
     const f: TimelineItem[] = facts.map(x => ({ kind: "fact", id: `f${x.id}`, createdAt: x.createdAt, fact: x }));
@@ -430,6 +481,11 @@ function TimelineFeed({
               </p>
             ) : (
               <>
+                {it.episode.sentiment && (
+                  <span className="mt-1 inline-block text-[9px] font-medium rounded-md border px-1.5 py-0.5 text-muted-foreground border-border/50 bg-muted/40 capitalize">
+                    {it.episode.sentiment}
+                  </span>
+                )}
                 {it.episode.summary ? (
                   <p className="text-[12px] text-muted-foreground leading-relaxed mt-1">{it.episode.summary}</p>
                 ) : (
@@ -801,16 +857,10 @@ function CallerDetailView({
     queryClient.invalidateQueries({ queryKey: getListAgentMemorySummariesQueryKey() });
   }
 
-  const displayEpisodes: AgentMemoryEpisode[] = useMemo(
-    () => episodes
-      .map(ep => ({
-        id:              ep.id,
-        callId:          ep.callId ?? null,
-        summary:         ep.summary ?? null,
-        durationSeconds: ep.durationSeconds ?? null,
-        createdAt:       ep.createdAt,
-      }))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+  const displayEpisodes: CallerDetailEpisode[] = useMemo(
+    () => [...episodes].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    ),
     [episodes],
   );
 

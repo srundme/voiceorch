@@ -8322,6 +8322,9 @@ components:
           type: ["integer", "null"]
         summary:
           type: ["string", "null"]
+        sentiment:
+          type: ["string", "null"]
+          description: "positive | neutral | negative | frustrated | resolved"
         durationSeconds:
           type: ["integer", "null"]
         createdAt:
