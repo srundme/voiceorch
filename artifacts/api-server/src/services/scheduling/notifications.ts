@@ -74,12 +74,17 @@ function buildEmailContent(subject: string, body: string): { subject: string; te
   };
 }
 
-/** Collect, dedupe and normalize the full host recipient list (primary + additional). */
-function hostRecipients(data: { hostEmail?: string | null; additionalHosts?: string[] | null }): string[] {
+/** Collect, dedupe and normalize hosts. Skip the attendee so they are not mailed twice. */
+function hostRecipients(data: {
+  hostEmail?: string | null;
+  additionalHosts?: string[] | null;
+  attendeeEmail?: string;
+}): string[] {
   const all: string[] = [];
   if (data.hostEmail) all.push(data.hostEmail);
   if (data.additionalHosts) all.push(...data.additionalHosts);
   const seen = new Set<string>();
+  if (data.attendeeEmail) seen.add(data.attendeeEmail.trim().toLowerCase());
   const out: string[] = [];
   for (const raw of all) {
     const e = raw.trim();
@@ -155,14 +160,6 @@ We look forward to speaking with you!`;
 }
 
 export async function sendBookingCreatedEmail(data: BookingEmailData): Promise<void> {
-  if (data.calendarSyncStatus === "synced") {
-    logger.info(
-      { bookingId: data.bookingId, attendeeEmail: data.attendeeEmail },
-      "Skipping extra booking email: Google Calendar invitation was sent from the connected Google account",
-    );
-    return;
-  }
-
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
   const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
@@ -200,14 +197,6 @@ Booking Reference: #${data.bookingId}`;
 }
 
 export async function sendBookingConfirmedEmail(data: BookingEmailData): Promise<void> {
-  if (data.calendarSyncStatus === "synced") {
-    logger.info(
-      { bookingId: data.bookingId, attendeeEmail: data.attendeeEmail },
-      "Skipping extra booking email: Google Calendar invitation was sent from the connected Google account",
-    );
-    return;
-  }
-
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
   const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
@@ -223,17 +212,22 @@ See you then!`;
 
   const content = buildEmailContent(`Appointment Confirmed: ${data.eventTypeName}`, body);
   await sendToAll(data.attendeeEmail, content, data.bookingId, "confirmed");
+
+  const hosts = hostRecipients(data);
+  if (hosts.length > 0) {
+    const hostBody = `A booking has been confirmed.
+
+Attendee: ${data.attendeeName} (${data.attendeeEmail})
+Event: ${data.eventTypeName}
+Date & Time: ${from} – ${to} (${data.timezone})${meetLine}
+Booking Reference: #${data.bookingId}`;
+
+    const hostContent = buildEmailContent(`Booking Confirmed: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
+    await sendToAll(hosts.join(", "), hostContent, data.bookingId, "confirmed-host");
+  }
 }
 
 export async function sendBookingCancelledEmail(data: BookingEmailData): Promise<void> {
-  if (data.calendarSyncStatus === "synced") {
-    logger.info(
-      { bookingId: data.bookingId, attendeeEmail: data.attendeeEmail },
-      "Skipping extra booking cancel email: Google Calendar cancellation was sent from the connected Google account",
-    );
-    return;
-  }
-
   const from = formatDateTime(data.slotStart, data.timezone);
 
   const attendeeBody = `Hi ${data.attendeeName},
@@ -262,14 +256,6 @@ Booking Reference: #${data.bookingId}`;
 }
 
 export async function sendBookingRescheduledEmail(data: BookingEmailData & { oldSlotStart?: Date }): Promise<void> {
-  if (data.calendarSyncStatus === "synced") {
-    logger.info(
-      { bookingId: data.bookingId, attendeeEmail: data.attendeeEmail },
-      "Skipping extra booking reschedule email: Google Calendar notification was sent from the connected Google account",
-    );
-    return;
-  }
-
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
   const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
