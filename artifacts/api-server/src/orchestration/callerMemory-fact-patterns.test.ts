@@ -97,6 +97,39 @@ describe("matchCallerFactPatterns — occupation / company", () => {
     expect(matchCallerFactPatterns("my email is karthi@gmail.com").get("email"))
       .toBe("karthi@gmail.com");
   });
+
+  it("matches spoken email without @", () => {
+    expect(matchCallerFactPatterns("my email is karthi at gmail dot com").get("email"))
+      .toBe("karthi@gmail.com");
+  });
+});
+
+describe("matchCallerFactPatterns — DOB / phone / WhatsApp", () => {
+  it("matches date of birth", () => {
+    expect(matchCallerFactPatterns("my DOB is 15 January 1990").get("date_of_birth"))
+      .toBe("1990-01-15");
+    expect(matchCallerFactPatterns("I was born on 15/01/1990").get("date_of_birth"))
+      .toBe("1990-01-15");
+    expect(matchCallerFactPatterns("enoda dob 15 jan 1990").get("date_of_birth"))
+      .toBe("1990-01-15");
+  });
+
+  it("matches stated phone and WhatsApp numbers", () => {
+    expect(matchCallerFactPatterns("my phone number is 9876543210").get("phone_number"))
+      .toBe("+919876543210");
+    expect(matchCallerFactPatterns("my WhatsApp is 9876543210").get("whatsapp_number"))
+      .toBe("+919876543210");
+    expect(matchCallerFactPatterns("enoda phone 98765 43210").get("phone_number"))
+      .toBe("+919876543210");
+  });
+
+  it("copies WhatsApp from phone when the caller says they are the same", () => {
+    const facts = matchCallerFactPatterns(
+      "my phone number is 9876543210 and WhatsApp is the same",
+    );
+    expect(facts.get("phone_number")).toBe("+919876543210");
+    expect(facts.get("whatsapp_number")).toBe("+919876543210");
+  });
 });
 
 describe("matchCallerFactPatterns — romanized location", () => {

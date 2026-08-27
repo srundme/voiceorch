@@ -5,7 +5,9 @@
  * caller_facts. Only verified, schema-constrained identity facts persist.
  */
 
-import { sanitizeSpokenEmailAddress } from "./endpointing.js";
+import { reconstructSpokenEmail, sanitizeSpokenEmailAddress } from "./endpointing.js";
+import { expandSpokenDigits, preferIndianPhone } from "../lib/disposition/spoken-digits.js";
+import { normalizePhone } from "../lib/phone-normalize.js";
 
 /** Closed enum — LLM / regex may only fill these keys. */
 export const DURABLE_FACT_KEYS = [
@@ -18,6 +20,9 @@ export const DURABLE_FACT_KEYS = [
   "occupation",
   "company_name",
   "email",
+  "date_of_birth",
+  "phone_number",
+  "whatsapp_number",
   "language_pref",
   "preferred_contact_method",
   // Named policy/product the CALLER said they already hold (not an agent pitch).
@@ -97,6 +102,33 @@ const FACT_KEY_SYNONYMS: Record<string, DurableFactKey> = {
   email: "email",
   email_address: "email",
   e_mail: "email",
+  mail_id: "email",
+  mail: "email",
+
+  date_of_birth: "date_of_birth",
+  dob: "date_of_birth",
+  d_o_b: "date_of_birth",
+  birth_date: "date_of_birth",
+  birthdate: "date_of_birth",
+  dateofbirth: "date_of_birth",
+  born_on: "date_of_birth",
+  birthday: "date_of_birth",
+
+  phone_number: "phone_number",
+  mobile_number: "phone_number",
+  mobile: "phone_number",
+  contact_number: "phone_number",
+  alternate_phone: "phone_number",
+  alt_number: "phone_number",
+  phone_no: "phone_number",
+  phonenumber: "phone_number",
+
+  whatsapp_number: "whatsapp_number",
+  wa_number: "whatsapp_number",
+  whatsapp_no: "whatsapp_number",
+  whatsapp_phone: "whatsapp_number",
+  wtsp: "whatsapp_number",
+  wtsp_number: "whatsapp_number",
 
   language_pref: "language_pref",
   language: "language_pref",
@@ -277,6 +309,98 @@ function normalizeChildrenCount(raw: string): string | null {
   return String(n);
 }
 
+const MONTH_INDEX: Record<string, number> = {
+  january: 1, jan: 1,
+  february: 2, feb: 2,
+  march: 3, mar: 3,
+  april: 4, apr: 4,
+  may: 5,
+  june: 6, jun: 6,
+  july: 7, jul: 7,
+  august: 8, aug: 8,
+  september: 9, sep: 9, sept: 9,
+  october: 10, oct: 10,
+  november: 11, nov: 11,
+  december: 12, dec: 12,
+};
+
+function formatYmd(year: number, month: number, day: number): string | null {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  if (dt.getUTCFullYear() !== year || dt.getUTCMonth() !== month - 1 || dt.getUTCDate() !== day) {
+    return null;
+  }
+  const today = new Date();
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  if (dt.getTime() > todayUtc) return null;
+  const age = today.getUTCFullYear() - year;
+  if (year < 1905 || age > 120) return null;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/** Parse a caller-stated DOB into ISO YYYY-MM-DD, or null. */
+export function extractDateOfBirthFactValue(raw: string): string | null {
+  const t = String(raw ?? "").trim().replace(/[.,]/g, " ").replace(/\s+/g, " ");
+  if (!t) return null;
+
+  const iso = t.match(/\b((?:19|20)\d{2})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12]\d|3[01])\b/);
+  if (iso) return formatYmd(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+
+  const dmy = t.match(/\b(0?[1-9]|[12]\d|3[01])[/\-.](0?[1-9]|1[0-2])[/\-.]((?:19|20)\d{2})\b/);
+  if (dmy) return formatYmd(Number(dmy[3]), Number(dmy[2]), Number(dmy[1]));
+
+  const monthNames = Object.keys(MONTH_INDEX).join("|");
+  const dMonY = t.match(new RegExp(
+    `\\b(0?[1-9]|[12]\\d|3[01])(?:st|nd|rd|th)?\\s+(${monthNames})\\s+((?:19|20)\\d{2})\\b`,
+    "i",
+  ));
+  if (dMonY) {
+    const month = MONTH_INDEX[dMonY[2]!.toLowerCase()];
+    if (month) return formatYmd(Number(dMonY[3]), month, Number(dMonY[1]));
+  }
+  const monDY = t.match(new RegExp(
+    `\\b(${monthNames})\\s+(0?[1-9]|[12]\\d|3[01])(?:st|nd|rd|th)?(?:\\s+|\\s*,\\s*)((?:19|20)\\d{2})\\b`,
+    "i",
+  ));
+  if (monDY) {
+    const month = MONTH_INDEX[monDY[1]!.toLowerCase()];
+    if (month) return formatYmd(Number(monDY[3]), month, Number(monDY[2]));
+  }
+
+  const compact = t.replace(/\D/g, "");
+  if (compact.length === 8) {
+    const dmyCompact = formatYmd(Number(compact.slice(4)), Number(compact.slice(2, 4)), Number(compact.slice(0, 2)));
+    if (dmyCompact) return dmyCompact;
+    return formatYmd(Number(compact.slice(0, 4)), Number(compact.slice(4, 6)), Number(compact.slice(6, 8)));
+  }
+  return null;
+}
+
+/** India-first E.164 from digits or spoken digit words. */
+export function extractPhoneFactValue(raw: string): string | null {
+  const expanded = expandSpokenDigits(String(raw ?? ""));
+  const picked = preferIndianPhone(expanded) ?? preferIndianPhone(expanded.replace(/\D/g, ""));
+  if (!picked) return null;
+  const digits = picked.replace(/\D/g, "");
+  const ten = digits.length === 12 && digits.startsWith("91")
+    ? digits.slice(2)
+    : digits.length === 10
+      ? digits
+      : digits.slice(-10);
+  if (!/^[6-9]\d{9}$/.test(ten)) return null;
+  return normalizePhone(ten);
+}
+
+export function extractEmailFactValue(raw: string): string | null {
+  const text = String(raw ?? "").trim();
+  if (!text) return null;
+  const reconstructed = reconstructSpokenEmail(text);
+  const compact = text.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i)?.[0];
+  const candidate = reconstructed ?? compact ?? text;
+  const email = sanitizeSpokenEmailAddress(candidate.toLowerCase().replace(/\s+/g, ""));
+  return EMAIL_RE.test(email) ? email : null;
+}
+
 /** Per-key value normalizer. Returns null if the value is invalid for that key. */
 export function normalizeFactValue(key: DurableFactKey, raw: string): string | null {
   const value = String(raw ?? "").trim().slice(0, 512);
@@ -306,10 +430,13 @@ export function normalizeFactValue(key: DurableFactKey, raw: string): string | n
       const v = value.replace(/\s+/g, " ").trim().slice(0, 80);
       return v.length >= 2 ? v : null;
     }
-    case "email": {
-      const email = sanitizeSpokenEmailAddress(value.toLowerCase().replace(/\s+/g, ""));
-      return EMAIL_RE.test(email) ? email : null;
-    }
+    case "email":
+      return extractEmailFactValue(value);
+    case "date_of_birth":
+      return extractDateOfBirthFactValue(value);
+    case "phone_number":
+    case "whatsapp_number":
+      return extractPhoneFactValue(value);
     case "language_pref":
       return normalizeLanguage(value);
     case "preferred_contact_method":
@@ -466,6 +593,9 @@ export const DURABLE_FACT_LABELS: Record<DurableFactKey, string> = {
   occupation: "occupation",
   company_name: "company",
   email: "email",
+  date_of_birth: "date of birth",
+  phone_number: "phone number",
+  whatsapp_number: "WhatsApp number",
   language_pref: "language preference",
   preferred_contact_method: "preferred contact",
   existing_product: "existing product / policy",
@@ -484,7 +614,10 @@ export function durableFactsPromptBlock(): string {
     `- family_children_count: number of children if stated\n` +
     `- occupation: their job / profession\n` +
     `- company_name: employer / company they work for\n` +
-    `- email: email address if stated\n` +
+    `- email: email address if stated (including spoken "name at gmail dot com")\n` +
+    `- date_of_birth: date of birth as YYYY-MM-DD if they stated day+month+year\n` +
+    `- phone_number: a phone/mobile they stated (E.164, e.g. +919876543210) — not the agent's number\n` +
+    `- whatsapp_number: WhatsApp number they stated (E.164). If they said "same as my phone", copy phone_number\n` +
     `- language_pref: preferred spoken language (hi/en/ta/te/kn/ml/mr/bn/gu/pa)\n` +
     `- preferred_contact_method: call | sms | whatsapp | email if stated\n` +
     `- existing_product: named policy/product the CALLER said they already have (e.g. "Galaxy Marvel")\n\n` +
@@ -493,7 +626,7 @@ export function durableFactsPromptBlock(): string {
     `wellness upsells the AGENT mentioned, family_size, family_members.\n` +
     `Caller concerns MAY go in the episode summary, not as a fact key.\n\n` +
     `Episode summary (2-4 sentences) MUST include:\n` +
-    `- The affirmed caller name (after any denial), city, job, company, email if they stated them\n` +
+    `- The affirmed caller name (after any denial), city, job, company, email, DOB, phone, WhatsApp if they stated them\n` +
     `- Any existing_product they confirmed they already hold\n` +
     `- What they asked or needed, and how the call ended (completed / dropped / callback)\n` +
     `- Do NOT write agent pitches as if the caller said them\n\n` +
@@ -510,6 +643,8 @@ export function durableFactsPromptBlock(): string {
     `- If the caller DENIES a name then gives another ("என்னோட பேரு X கிடையாது என்னோட பேரு Y", "enoda peru Karthi, Rajeswari ella", "my name is not X, it's Y"), store Y only — never a negation word\n` +
     `- occupation includes code-mixed copulas ("நான் professor-ஆ இருக்கேன்", "I am a teacher")\n` +
     `- existing_product only if the CALLER named a product they already have — never copy the agent's script\n` +
+    `- Always store date_of_birth, phone_number, whatsapp_number, and email when the CALLER said them\n` +
+    `- Spoken digit phones ("nine eight seven…") and spoken emails must still be stored as digits / an address\n` +
     `- confidence: 0.9+ = direct statement; ~0.7 = clear but indirect; omit anything weaker\n` +
     `- Be concise with values (e.g. "4" not "four children"; "Bengaluru" not "I live in Bangalore")\n` +
     `- name is ONLY a personal human name — never a plan, product, topic, or question ("who's this")`

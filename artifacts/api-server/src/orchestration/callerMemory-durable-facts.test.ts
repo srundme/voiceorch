@@ -41,6 +41,9 @@ describe("durable fact keys", () => {
     expect(canonicalizeFactKey("employer")).toBe("company_name");
     expect(canonicalizeFactKey("policy_name")).toBe("existing_product");
     expect(canonicalizeFactKey("existing_policy")).toBe("existing_product");
+    expect(canonicalizeFactKey("dob")).toBe("date_of_birth");
+    expect(canonicalizeFactKey("mobile_number")).toBe("phone_number");
+    expect(canonicalizeFactKey("wtsp")).toBe("whatsapp_number");
   });
 
   it("rejects ephemeral / sales keys", () => {
@@ -81,6 +84,18 @@ describe("durable fact keys", () => {
     expect(normalizeFactValue("existing_product", "policy")).toBeNull();
   });
 
+  it("normalizes DOB, phone, WhatsApp, and spoken email", () => {
+    expect(normalizeFactValue("date_of_birth", "15 January 1990")).toBe("1990-01-15");
+    expect(normalizeFactValue("date_of_birth", "15/01/1990")).toBe("1990-01-15");
+    expect(normalizeFactValue("date_of_birth", "32")).toBeNull();
+    expect(normalizeFactValue("phone_number", "9876543210")).toBe("+919876543210");
+    expect(normalizeFactValue("phone_number", "nine eight seven six five four three two one zero"))
+      .toBe("+919876543210");
+    expect(normalizeFactValue("whatsapp_number", "98765 43210")).toBe("+919876543210");
+    expect(normalizeFactValue("phone_number", "12345")).toBeNull();
+    expect(normalizeFactValue("email", "karthi at gmail dot com")).toBe("karthi@gmail.com");
+  });
+
   it("validation gate requires caller citations", () => {
     const callerIds = new Set([10]);
     expect(validateFactCandidate({
@@ -115,6 +130,9 @@ describe("durable fact keys", () => {
     expect(isDurableFactKey("name")).toBe(true);
     expect(isDurableFactKey("family_children_count")).toBe(true);
     expect(isDurableFactKey("existing_product")).toBe(true);
+    expect(isDurableFactKey("date_of_birth")).toBe(true);
+    expect(isDurableFactKey("phone_number")).toBe(true);
+    expect(isDurableFactKey("whatsapp_number")).toBe(true);
     expect(isDurableFactKey("family_members")).toBe(false);
     expect(isDurableFactKey("budget_range")).toBe(false);
   });

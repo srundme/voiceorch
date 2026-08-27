@@ -56,6 +56,9 @@ import {
   validateFactCandidate,
   shouldSupersedeFact,
   canonicalizeFactKey,
+  extractDateOfBirthFactValue,
+  extractPhoneFactValue,
+  extractEmailFactValue,
 } from "./callerMemory-durable-facts.js";
 
 export {
@@ -255,7 +258,7 @@ const EPISODE_SKIP_LINE =
   /^(yes|yeah|yep|ok|okay|no|nah|hmm|uh|um|hi|hello|thanks|thank you|please|wait|சரி|ஆமா|ஆம்|இல்ல|இல்லை|ஹாய்|வணக்கம்)[.!?]*$/iu;
 
 const EPISODE_IMPORTANT_CUE =
-  /(?:\bname\b|பேரு|பேர்|பெயர்|\bperu\b|\bpeyar\b|\bage\b|வயசு|ஊர்|\boor\b|\bfrom\b|\blive\b|\bwork\b|வேலை|பணி|\bprofessor\b|\bpolicy\b|\bplan\b|\bproduct\b|\bemail\b|கிடையாது|\bella\b|\bwant\b|\bneed\b|வேணும்|வேண்டும்|\benoda\b|\bennoda\b|நான்\s)/iu;
+  /(?:\bname\b|பேரு|பேர்|பெயர்|\bperu\b|\bpeyar\b|\bage\b|வயசு|ஊர்|\boor\b|\bfrom\b|\blive\b|\bwork\b|வேலை|பணி|\bprofessor\b|\bpolicy\b|\bplan\b|\bproduct\b|\bemail\b|\bmail\b|\bdob\b|\bbirthday\b|date of birth|\bphone\b|\bmobile\b|\bwhatsapp\b|\bwtsp\b|கிடையாது|\bella\b|\bwant\b|\bneed\b|வேணும்|வேண்டும்|\benoda\b|\bennoda\b|நான்\s)/iu;
 
 /**
  * Caller lines worth keeping on the episode card when the extract LLM is down.
@@ -2308,11 +2311,49 @@ const FACT_PATTERNS: FactPattern[] = [
   {
     key: "email",
     patterns: [
-      /\bmy e-?mail(?: address)?(?:\s+is)?\s+([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})\b/i,
-      /(?:என்|என்னோட)\s*e-?mail\s*(?:is\s+|வந்து\s+)?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/iu,
-      /\b(?:en+n?o(?:da|daya)?|en)\s+e-?mail\s+(?:is\s+)?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})\b/i,
+      /\bmy e-?mail(?:\s+(?:id|address))?(?:\s+is)?\s+(.+)/i,
+      /(?:என்|என்னோட)\s*(?:e-?mail|மெயில்)\s*(?:id\s*)?(?:is\s+|வந்து\s+)?(.+)/iu,
+      /\b(?:en+n?o(?:da|daya)?|en)\s+e-?mail(?:\s+id)?\s+(?:is\s+)?(.+)/i,
+      /\b(?:mail id|email id)(?:\s+is)?\s+(.+)/i,
     ],
-    extract: m => m[1]!.trim(),
+    extract: m => extractEmailFactValue(m[1]!) ?? "",
+    confidence: 0.4,
+  },
+  {
+    key: "date_of_birth",
+    patterns: [
+      /\b(?:my\s+)?(?:date of birth|d\.?o\.?b\.?|dob|birthday)(?:\s+is)?\s+(.+)/i,
+      /\bi was born (?:on\s+)?(.+)/i,
+      /(?:என்|என்னோட)\s*(?:dob|d\.o\.b|birthday|பிறந்த\s*தேதி)\s*(?:is\s+|வந்து\s+)?(.+)/iu,
+      /\b(?:en+n?o(?:da|daya)?|en)\s+(?:dob|birthday)\s+(?:is\s+)?(.+)/i,
+      /(?:मेरी|मेरा)\s*(?:dob|जन्म\s*तिथि|जन्मदिन)\s*(?:है\s+)?(.+)/u,
+    ],
+    extract: m => extractDateOfBirthFactValue(m[1]!) ?? "",
+    confidence: 0.4,
+  },
+  {
+    key: "phone_number",
+    patterns: [
+      /\bmy (?:phone|mobile|contact)(?: number)?(?:\s+is)?\s+(.+)/i,
+      /\b(?:phone|mobile) number(?:\s+is)?\s+(.+)/i,
+      /(?:என்|என்னோட)\s*(?:phone|mobile|number|போன்|மொபைல்)\s*(?:number\s*)?(?:is\s+|வந்து\s+)?(.+)/iu,
+      /\b(?:en+n?o(?:da|daya)?|en)\s+(?:phone|mobile|number)\s+(?:is\s+)?(.+)/i,
+      /(?:मेरा|मेरी)\s*(?:phone|mobile|नंबर)\s*(?:number\s*)?(?:है\s+)?(.+)/u,
+    ],
+    extract: m => extractPhoneFactValue(m[1]!) ?? "",
+    confidence: 0.4,
+  },
+  {
+    key: "whatsapp_number",
+    patterns: [
+      /\bmy whats(?:app)?(?: number)?(?:\s+is)?\s+(.+)/i,
+      /\bwhats(?:app)?(?: number)?(?:\s+is)?\s+(.+)/i,
+      /\b(?:wtsp|wa)(?: number)?(?:\s+is)?\s+(.+)/i,
+      /(?:என்|என்னோட)\s*(?:whatsapp|வாட்ஸ்அப்|வாட்சப்|wtsp)\s*(?:number\s*)?(?:is\s+|வந்து\s+)?(.+)/iu,
+      /\b(?:en+n?o(?:da|daya)?|en)\s+(?:whatsapp|wtsp)\s+(?:is\s+)?(.+)/i,
+      /(?:मेरा|मेरी)\s*(?:whatsapp|व्हाट्सएप)\s*(?:number\s*)?(?:है\s+)?(.+)/u,
+    ],
+    extract: m => extractPhoneFactValue(m[1]!) ?? "",
     confidence: 0.4,
   },
   {
@@ -2353,6 +2394,9 @@ const FACT_PATTERNS: FactPattern[] = [
   },
 ];
 
+const SAME_WHATSAPP_RE =
+  /(?:whats(?:app)?|wtsp|வாட்ஸ்அப்|व्हाट्सएप).{0,48}(?:same|இதே|वही)|(?:same as (?:my |this )?(?:phone|mobile|number))/iu;
+
 /** Pure matcher for unit tests + call-end gap-fill. Returns canonical key → value. */
 export function matchCallerFactPatterns(transcript: string): Map<string, string> {
   const found = new Map<string, string>();
@@ -2370,6 +2414,10 @@ export function matchCallerFactPatterns(transcript: string): Map<string, string>
       found.set(canonical, value);
       break;
     }
+  }
+  const phone = found.get("phone_number");
+  if (phone && !found.has("whatsapp_number") && SAME_WHATSAPP_RE.test(transcript)) {
+    found.set("whatsapp_number", phone);
   }
   return found;
 }
@@ -2395,6 +2443,15 @@ function collectRegexDurableFactCandidates(
         key,
         value,
         // Above MIN_FACT_CONFIDENCE (0.6); mid-call pending stays at 0.4.
+        confidence: 0.85,
+        sentence_ids: [sid],
+      });
+    }
+    if (SAME_WHATSAPP_RE.test(s.text) && byKey.has("phone_number") && !byKey.has("whatsapp_number")) {
+      const phone = byKey.get("phone_number")!;
+      byKey.set("whatsapp_number", {
+        key: "whatsapp_number",
+        value: phone.value,
         confidence: 0.85,
         sentence_ids: [sid],
       });
