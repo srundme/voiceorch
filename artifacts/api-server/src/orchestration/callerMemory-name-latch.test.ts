@@ -54,6 +54,9 @@ describe("detectNameLatch — Tier A (explicit self-introductions)", () => {
     ["My name is Karthik", "Karthik"],
     ["This is Priya speaking", "Priya"],
     ["என் பேர் Arjun", "Arjun"],
+    ["என்னோட பேரு Murali", "Murali"],
+    ["என் பெயர் Kavitha", "Kavitha"],
+    ["நான் Ravi பேசுறேன்", "Ravi"],
     ["मेरा नाम Divya", "Divya"],
     ["You can call me Ravi", "Ravi"],
   ];
@@ -66,6 +69,11 @@ describe("detectNameLatch — Tier A (explicit self-introductions)", () => {
   it('keeps "this is X" gated on a speaker cue', () => {
     expect(detectNameLatch("this is regarding the managed plan")).toBeNull();
   });
+
+  it('rejects "who\'s this" style fragments as names', () => {
+    expect(detectNameLatch("my name is who")).toBeNull();
+    expect(detectNameLatch("I am this")).toBeNull();
+  });
 });
 
 describe("detectNameLatch — Tier B (ambiguous 'I am X')", () => {
@@ -74,6 +82,9 @@ describe("detectNameLatch — Tier B (ambiguous 'I am X')", () => {
   });
   it(`latches "I'm Divya" as Tier B`, () => {
     expect(detectNameLatch("I'm Divya")).toEqual({ name: "Divya", tier: "B" });
+  });
+  it('latches Hindi "मैं Anand हूँ" as Tier B', () => {
+    expect(detectNameLatch("मैं Anand हूँ")).toEqual({ name: "Anand", tier: "B" });
   });
 });
 
@@ -95,10 +106,11 @@ describe("isPlausibleName", () => {
 });
 
 describe("NAME_PATTERNS tiering", () => {
-  it("only the 'I am / I'm' pattern is Tier B", () => {
+  it("only ambiguous self-intros are Tier B (English I am / Hindi मैं हूँ)", () => {
     const tierB = NAME_PATTERNS.filter((p) => p.tier === "B");
-    expect(tierB).toHaveLength(1);
-    expect(tierB[0]!.pattern.source).toContain("i(?:'m| am)");
+    expect(tierB).toHaveLength(2);
+    expect(tierB.some((p) => p.pattern.source.includes("i(?:'m| am)"))).toBe(true);
+    expect(tierB.some((p) => p.pattern.source.includes("हूँ"))).toBe(true);
   });
 });
 
