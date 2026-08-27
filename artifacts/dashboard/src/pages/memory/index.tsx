@@ -357,14 +357,6 @@ function FactsGrid({
 }
 
 /* ─── Episodes ───────────────────────────────────────────────────────────── */
-function formatDuration(seconds: number | null | undefined): string | null {
-  if (seconds == null || seconds < 0) return null;
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  if (m <= 0) return `${s}s`;
-  return `${m}m ${s.toString().padStart(2, "0")}s`;
-}
-
 function sentimentLabel(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null;
   const v = raw.trim().toLowerCase();
@@ -378,7 +370,9 @@ function EpisodeTimeline({ episodes }: { episodes: CallerDetailEpisode[] }) {
   return (
     <ol className="relative">
       {episodes.map((ep, i) => {
-        const duration = formatDuration(ep.durationSeconds);
+        const duration = ep.durationSeconds != null && ep.durationSeconds > 0
+          ? formatDuration(ep.durationSeconds)
+          : null;
         const sentiment = sentimentLabel(ep.sentiment);
         const sentences = [...(ep.sentences ?? [])].sort((a, b) => a.sequenceNum - b.sequenceNum);
         const expanded = openId === ep.id;
