@@ -489,7 +489,8 @@ export default function CallbacksPage() {
     params.set("tab", "callbacks");
     if (tab !== "pending") params.set("cb", tab);
     else params.delete("cb");
-    params.delete("status"); // legacy inner param
+    // Do NOT delete `status` — that is History Calls' filter key and wiping it
+    // when opening Callbacks drops the Calls filter on the way back.
     if (reasonFilter !== "all") params.set("reason", reasonFilter);
     else params.delete("reason");
     const qs = params.toString();

@@ -429,6 +429,7 @@ function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onC
     },
     refetchInterval: 10000,
     placeholderData: prev => prev,
+    enabled: campaignId > 0 && batchId > 0,
   });
 
   async function handleRetry(leadId: number) {
@@ -765,6 +766,7 @@ export default function BatchWorkspacePage() {
     queryKey: ["batch-ws-header", campaignId, batchId],
     queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/header`),
     refetchInterval: 10000,
+    enabled: campaignId > 0 && batchId > 0,
   });
 
   useEffect(() => {

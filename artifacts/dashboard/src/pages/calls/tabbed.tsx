@@ -14,6 +14,11 @@ const TABS = [
   { key: "transfers", label: "Transfers" },
 ] as const;
 
+/** Calls-list filters — strip when leaving the Calls tab so they don't leak. */
+const CALLS_FILTER_KEYS = ["status", "agent", "disp", "q", "from", "to", "sort", "page"] as const;
+/** Nested Callbacks filters. */
+const CALLBACK_FILTER_KEYS = ["cb", "reason"] as const;
+
 export default function CallsTabPage() {
   const [, navigate] = useLocation();
   const search = useSearch();
@@ -22,8 +27,20 @@ export default function CallsTabPage() {
 
   const setTab = (key: string) => {
     const sp = new URLSearchParams(search);
-    sp.set("tab", key);
-    navigate(`${window.location.pathname}?${sp.toString()}`);
+    if (key === "all-calls") {
+      // Default Calls tab: omit tab= for clean share URLs.
+      sp.delete("tab");
+      for (const k of CALLBACK_FILTER_KEYS) sp.delete(k);
+    } else {
+      sp.set("tab", key);
+      for (const k of CALLS_FILTER_KEYS) sp.delete(k);
+      if (key !== "callbacks") {
+        for (const k of CALLBACK_FILTER_KEYS) sp.delete(k);
+      }
+    }
+    const qs = sp.toString();
+    // Canonicalize legacy /app/calls onto /app/history.
+    navigate(qs ? `/app/history?${qs}` : "/app/history");
   };
 
   return (

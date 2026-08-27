@@ -1,5 +1,8 @@
+import { useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRightLeft, Clock, CheckCircle2, PhoneIncoming, Users, AlertCircle } from "lucide-react";
+import { customFetch } from "@workspace/api-client-react";
+import { ArrowRightLeft, Clock, CheckCircle2, PhoneIncoming, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,12 +25,13 @@ interface Transfer {
 function useTransfers() {
   return useQuery<{ transfers: Transfer[] }>({
     queryKey: ["call-transfers"],
-    queryFn: async () => {
-      const r = await fetch("/api/transfers");
-      if (!r.ok) throw new Error("Failed to load transfers");
-      return r.json();
+    queryFn: () => customFetch<{ transfers: Transfer[] }>("/api/transfers"),
+    // Poll only while something is still in flight; idle completed lists do not need 10s churn.
+    refetchInterval: (query) => {
+      const list = query.state.data?.transfers ?? [];
+      const live = list.some((t) => t.status === "initiated" || t.status === "connected");
+      return live ? 10_000 : false;
     },
-    refetchInterval: 10_000,
   });
 }
 
@@ -61,18 +65,35 @@ function datePart(iso: string) {
 }
 
 export default function TransfersPage() {
-  const { data, isLoading } = useTransfers();
+  const { data, isLoading, isError, refetch, isFetching } = useTransfers();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
+
+  // Pin History shell tab + canonicalize path (same pattern as Callbacks).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", "transfers");
+    for (const k of ["status", "agent", "disp", "q", "from", "to", "sort", "page", "cb", "reason"]) {
+      params.delete(k);
+    }
+    const qs = params.toString();
+    const next = `/app/history?${qs}`;
+    const current = `${window.location.pathname}${window.location.search}`;
+    if (next !== current) navigate(next, { replace: true });
+  }, [navigate]);
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
-      const r = await fetch(`/api/transfers/${id}`, {
-        method:  "PATCH",
+      await customFetch(`/api/transfers/${id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ status, ...(status === "connected" ? { connectedAt: new Date().toISOString() } : {}), ...(status === "completed" ? { completedAt: new Date().toISOString() } : {}) }),
+        body: JSON.stringify({
+          status,
+          ...(status === "connected" ? { connectedAt: new Date().toISOString() } : {}),
+          ...(status === "completed" ? { completedAt: new Date().toISOString() } : {}),
+        }),
       });
-      if (!r.ok) throw new Error("Failed to update transfer");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["call-transfers"] });
@@ -82,11 +103,9 @@ export default function TransfersPage() {
 
   const transfers = data?.transfers ?? [];
   const active    = transfers.filter((t) => t.status === "initiated" || t.status === "connected");
-  const past      = transfers.filter((t) => t.status === "completed");
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
-      {/* Active transfers banner */}
       {active.length > 0 && (
         <Card className="border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20">
           <CardHeader className="pb-2">
@@ -138,15 +157,27 @@ export default function TransfersPage() {
         </Card>
       )}
 
-      {/* All transfers table */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Transfer History</CardTitle>
-          <CardDescription>{transfers.length} total transfers</CardDescription>
+          <CardDescription>
+            {isError ? "Could not load transfers" : `${transfers.length} total transfers`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : isError ? (
+            <div className="text-center py-12 space-y-3">
+              <AlertCircle className="w-10 h-10 text-amber-600 mx-auto" />
+              <p className="font-medium">Transfer history failed to load</p>
+              <p className="text-sm text-muted-foreground">
+                This is not an empty inbox — the request failed. Retry or check your session.
+              </p>
+              <Button size="sm" variant="outline" disabled={isFetching} onClick={() => void refetch()}>
+                Retry
+              </Button>
+            </div>
           ) : transfers.length === 0 ? (
             <div className="text-center py-12">
               <ArrowRightLeft className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
