@@ -9,6 +9,11 @@ import {
   bookingsTable,
 } from "@workspace/db";
 import { eq, and, lt, gt, or, sql } from "drizzle-orm";
+import {
+  mergeAvailabilityWindows,
+  isBookableSlotStart,
+  dedupeAndSortSlots,
+} from "./availability-windows.js";
 
 export interface TimeSlot {
   slotStart: Date;
@@ -29,7 +34,10 @@ export async function getAvailableSlots(
   eventTypeId: number,
   startDateStr: string,
   endDateStr: string,
+  opts: { now?: Date; leadMinutes?: number } = {},
 ): Promise<TimeSlot[]> {
+  const now = opts.now ?? new Date();
+  const leadMinutes = opts.leadMinutes ?? 0;
   const eventType = await db
     .select()
     .from(eventTypesTable)
@@ -125,6 +133,10 @@ export async function getAvailableSlots(
         .map((s) => ({ startTime: s.startTime, endTime: s.endTime }));
     }
 
+    // Duplicate or overlapping working-hour rows would otherwise each generate
+    // their own slot grid, offering the caller the same or overlapping times.
+    windows = mergeAvailabilityWindows(windows);
+
     for (const window of windows) {
       // Build window boundaries anchored to the calendar's IANA timezone.
       // NEVER use new Date() + setHours() — setHours writes hours in the JS
@@ -140,6 +152,13 @@ export async function getAvailableSlots(
         const slotEnd = addMinutes(slotStart, durationMins);
 
         if (isAfter(slotEnd, windowEndUTC)) break;
+
+        // A day scan reaches back to 00:00, so slots earlier today are still in
+        // the grid — never offer a time that has already passed.
+        if (!isBookableSlotStart(slotStart, now, leadMinutes)) {
+          cursor = addMinutes(cursor, durationMins + bufferAfter);
+          continue;
+        }
 
         // Effective window occupied by THIS slot (including its own buffers)
         const effectiveStart = addMinutes(slotStart, -bufferBefore);
@@ -177,7 +196,7 @@ export async function getAvailableSlots(
     }
   }
 
-  return slots;
+  return dedupeAndSortSlots(slots);
 }
 
 /**
