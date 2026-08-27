@@ -164,7 +164,11 @@ export function updateBookingFlowFromUserTurn(
   }
 
   // Name heuristic: short non-email utterance while agent asked for name.
-  if (
+  const nameMatch = /(?:my name is|name is|நான்|என் பெயர்|मेरा नाम)\s+([^\n,.]+)/iu.exec(userText);
+  if (nameMatch?.[1]) {
+    const name = nameMatch[1]!.trim().replace(/[^\p{L}\p{N}\s.'-]/gu, "");
+    if (name.length >= 2) next.pendingName = name;
+  } else if (
     /(?:name|பெயர்|नाम)/i.test(lastAssistantText)
     && !emails.length
     && !looksLikeEmailConfirmationYes(userText)
