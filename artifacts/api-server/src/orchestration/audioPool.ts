@@ -39,6 +39,8 @@ export interface AudioProcessResult {
   pcm8k: Buffer;
   pcm16k: Buffer;
   hasSpeech: boolean;
+  /** Pre-isolation frame RMS. Used to reject far-field bystanders; GTCRN keeps their speech. */
+  rawRms: number;
 }
 
 interface WorkerResponse {
@@ -46,6 +48,7 @@ interface WorkerResponse {
   pcm8k?: ArrayBuffer;
   pcm16kAb?: ArrayBuffer;
   hasSpeech?: boolean;
+  rawRms?: number;
   error?: string;
 }
 
@@ -75,6 +78,7 @@ class AudioWorkerThread {
         pcm8k:    Buffer.from(msg.pcm8k),
         pcm16k:   Buffer.from(msg.pcm16kAb),
         hasSpeech: msg.hasSpeech ?? false,
+        rawRms: msg.rawRms ?? 0,
       });
     });
     this.worker.on("error", (err) => {
@@ -206,6 +210,7 @@ import {
   decodeMulaw,
   upsample8to16,
   hasSpeechEnergy,
+  frameRms,
   NoiseCanceller,
 } from "./audio.js";
 import { VoiceIsolator, isVoiceIsolationEnabled } from "./voice-isolator.js";
@@ -224,6 +229,7 @@ async function processInline(
   vadThreshold: number = VAD_THRESHOLD,
 ): Promise<AudioProcessResult> {
   let pcm8k = alreadyPcm ? data : decodeMulaw(data);
+  const rawRms = frameRms(pcm8k);
   let pcm16k: Buffer | null = null;
   if (noiseCancel) {
     if (isVoiceIsolationEnabled()) {
@@ -258,5 +264,6 @@ async function processInline(
     pcm8k,
     pcm16k,
     hasSpeech: pcm8k.length >= 2 && hasSpeechEnergy(pcm8k, vadThreshold),
+    rawRms,
   };
 }

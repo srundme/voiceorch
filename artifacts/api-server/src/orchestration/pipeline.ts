@@ -32,7 +32,7 @@ import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { CartesiaTTS } from "./adapters/tts/cartesia.js";
 import { encodeMulaw, upsample8to16, downsample16to8, createDownsampler16to8, decodeMulaw, hasSpeechEnergy, frameRms } from "./audio.js";
-import { resolveMicSensitivity, getMicSensitivityThresholds, type MicSensitivityThresholds } from "./mic-sensitivity.js";
+import { resolveMicSensitivity, getMicSensitivityThresholds, isBackgroundTalkerUtterance, type MicSensitivityThresholds } from "./mic-sensitivity.js";
 import { resolveSoftwareNoiseGate, envForceVobizSoftwareNc, type NoiseGateDecision } from "./noise-gate.js";
 import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, peekCachedPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
@@ -1079,6 +1079,8 @@ export class OrchestrationPipeline implements VoiceSession {
   // never clears the echo bar, nothing but our own audio reached the mic during the
   // sentence — used to veto word_count barge-ins fired by garbled echo transcripts.
   private bargeInPeakRmsSinceSentence = 0;
+  /** Loudest RAW (pre-GTCRN) frame while we were listening this utterance. */
+  private utterancePeakRawRms = 0;
   // Throttle for the periodic "energy barge-in monitor" diagnostic log line.
   private lastEnergyMonitorLogAt = 0;
   /** Sarvam realtime session.end.audio_duration_s — billed STT audio. */
@@ -2104,6 +2106,7 @@ export class OrchestrationPipeline implements VoiceSession {
     };
     this.streamSTT.onSpeechStart = () => {
       this._vadSpeechStartAt = Date.now();
+      this.utterancePeakRawRms = 0;
       this.logExec("STT", "system", {
         status: "info",
         turnNumber: this._activeTurnIndex,
@@ -2663,7 +2666,8 @@ export class OrchestrationPipeline implements VoiceSession {
       | "end_call_in_progress"
       | "fragment_coalesce_hold"
       | "backchannel_during_playback"
-      | "agent_still_speaking",
+      | "agent_still_speaking"
+      | "background_talker",
   ): void {
     const now = Date.now();
     const reasonByGuard: Record<typeof guard, string> = {
@@ -2677,6 +2681,7 @@ export class OrchestrationPipeline implements VoiceSession {
       fragment_coalesce_hold: "short fragment held briefly for coalesce (not a drop)",
       backchannel_during_playback: "held ack fragment dropped — agent speaking at coalesce-timer fire (true backchannel)",
       agent_still_speaking: "final arrived during greeting/system playback and did not barge-in",
+      background_talker: "far-field / background talker — raw mic energy below near-talker floor",
     };
     this.logExec(EXEC_COMPONENTS.STT, "system", {
       status: "info",
@@ -3404,6 +3409,25 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.pendingVoiceLinkAck && !this.speakingVoiceLinkAck && !this.voiceHandoffActive) {
       void this.speakVoiceLinkAck(this.voiceLinkedName);
     }
+
+    // GTCRN is speech enhancement, not "ignore other people". A bystander a
+    // few metres away still transcribes; drop it when the RAW mic never
+    // reached near-talker level (telephony + Noise Cancellation on).
+    if (
+      this.noiseGate.enabled
+      && this.config.telephonyProvider !== "webcall"
+      && isBackgroundTalkerUtterance(this.utterancePeakRawRms)
+    ) {
+      logger.info(
+        { callId: this.config.callId, transcript: transcript.slice(0, 80), peakRawRms: Math.round(this.utterancePeakRawRms) },
+        "Discarding streaming final — far-field / background talker",
+      );
+      this.logDiscardedTranscript(transcript, "background_talker");
+      this.utterancePeakRawRms = 0;
+      this.safetyNet.beginListening();
+      return;
+    }
+    this.utterancePeakRawRms = 0;
 
     // The socket often re-sends queued audio after a reconnect, so an utterance we
     // already recovered through batch STT can arrive again as a streaming final.
@@ -4352,6 +4376,7 @@ export class OrchestrationPipeline implements VoiceSession {
     hasSpeech: boolean,
     source: "energy" | "streaming_energy",
     respectHoldUntil: boolean,
+    rawRms?: number,
   ): void {
     if (!hasSpeech) {
       // genuine VAD silence — reset the accumulator
@@ -4372,7 +4397,9 @@ export class OrchestrationPipeline implements VoiceSession {
     // Streaming-STT carrier path (webcall has AEC; the batch path keeps its own
     // extended-hold protection). Only here do we measure RMS / self-calibrate.
     const streamingCarrier = !respectHoldUntil && this.config.telephonyProvider !== "webcall";
-    const currentRms = streamingCarrier ? frameRms(pcm8k) : 0;
+    const currentRms = streamingCarrier
+      ? (rawRms && rawRms > 0 ? rawRms : frameRms(pcm8k))
+      : 0;
     // The adaptive anti-echo bar applies ONLY while we are ACTIVELY sending TTS — that
     // is the only time the carrier is echoing our audio back. Between sentences there is
     // no echo, so the configured Energy Threshold is honoured unchanged (a caller
@@ -4540,7 +4567,7 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /** Handles pre-processed audio returned by the audio worker pool. */
-  private handleProcessedAudio({ pcm8k, pcm16k, hasSpeech }: AudioProcessResult): void {
+  private handleProcessedAudio({ pcm8k, pcm16k, hasSpeech, rawRms = 0 }: AudioProcessResult): void {
     if (this.closed) return;
     // Prefer the TRUE native 16k chunk queued in onRawPcm8kIn (webcall) over
     // the worker's upsample8to16(pcm8k) reconstruction, which cannot recover
@@ -4553,6 +4580,12 @@ export class OrchestrationPipeline implements VoiceSession {
       : pcm16k;
     // GTCRN isolation has a 16 ms STFT hop; the first worker result can be empty.
     if (pcm8k.length < 2 && effectivePcm16k.length < 2) return;
+
+    // Score near-talker vs bystander on RAW mic energy. Isolation keeps a
+    // friend a few metres away as "speech" and would otherwise steal the turn.
+    if (!this.isPlaying && !this.isSendingTtsAudio && rawRms > this.utterancePeakRawRms) {
+      this.utterancePeakRawRms = rawRms;
+    }
 
     // ── IVR DTMF detection ──
     // Run on every incoming frame when an IVR interaction is active.
@@ -4614,7 +4647,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // respectHoldUntil=false: the extended bargeInHoldUntil spans the whole
       // sentence and would re-preserve the "can't interrupt Sarvam" bug, so we
       // rely only on the per-sentence echo grace + greeting hold (see helper).
-      this.tryEnergyBargeIn(pcm8k, hasSpeech, "streaming_energy", /* respectHoldUntil */ false);
+      this.tryEnergyBargeIn(pcm8k, hasSpeech, "streaming_energy", /* respectHoldUntil */ false, rawRms);
       // Raw caller speech energy keeps the silence-hangup watchdog alive even
       // when streaming STT goes quiet mid-speech (no partials/finals — call
       // 1915 dropped the caller mid-sentence). Gated on the agent not speaking
@@ -4672,7 +4705,7 @@ export class OrchestrationPipeline implements VoiceSession {
     if (hasSpeech) this.silenceWatchdog?.onSpeechEnergy();
     // respectHoldUntil=true: the batch path is VAD-gated and its extended
     // bargeInHoldUntil (spanning the whole estimated sentence) is intentional here.
-    this.tryEnergyBargeIn(pcm8k, hasSpeech, "energy", /* respectHoldUntil */ true);
+    this.tryEnergyBargeIn(pcm8k, hasSpeech, "energy", /* respectHoldUntil */ true, rawRms);
 
     if (this.isProcessing) return;
 
