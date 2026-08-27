@@ -4,36 +4,89 @@
  * Falls back to UTC when no timezone is configured so the LLM always knows
  * the real current date instead of guessing from its training data.
  */
-export function buildDatetimeInjection(timezone?: string | null): string {
+
+function ymdInZone(date: Date, tz: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function noonUtcFromYmd(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1, 12, 0, 0));
+}
+
+function formatDay(date: Date, tz: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatClock(date: Date, tz: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short",
+  }).format(date);
+}
+
+function calendarNeighbors(now: Date, tz: string): { today: string; yesterday: string; tomorrow: string } {
+  const todayYmd = ymdInZone(now, tz);
+  const noon = noonUtcFromYmd(todayYmd);
+  return {
+    today: formatDay(noon, "UTC"),
+    yesterday: formatDay(new Date(noon.getTime() - 86_400_000), "UTC"),
+    tomorrow: formatDay(new Date(noon.getTime() + 86_400_000), "UTC"),
+  };
+}
+
+function resolveZone(timezone?: string | null): string {
   const tz = timezone?.trim() || "UTC";
   try {
-    const now = new Date();
-    const formatted = new Intl.DateTimeFormat("en-US", {
-      timeZone: tz,
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-      timeZoneName: "short",
-    }).format(now);
-    return `[CURRENT DATE & TIME] ${formatted} (${tz})`;
+    formatClock(new Date(), tz);
+    return tz;
   } catch {
-    // If the timezone string is invalid, fall back to UTC
-    const now = new Date();
-    const formatted = new Intl.DateTimeFormat("en-US", {
-      timeZone: "UTC",
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-      timeZoneName: "short",
-    }).format(now);
-    return `[CURRENT DATE & TIME] ${formatted} (UTC)`;
+    return "UTC";
   }
+}
+
+export function buildDatetimeInjection(timezone?: string | null): string {
+  const tz = resolveZone(timezone);
+  const now = new Date();
+  const { today, yesterday, tomorrow } = calendarNeighbors(now, tz);
+  return (
+    `[CURRENT DATE & TIME] ${formatClock(now, tz)} (${tz}). ` +
+    `Today is ${today}. Yesterday was ${yesterday}. Tomorrow is ${tomorrow}. ` +
+    `Any calendar date before today is already past — do not treat it as an upcoming deadline.`
+  );
+}
+
+/**
+ * High-attention clock for the last user turn. System-prompt date sits at the
+ * end of a long prompt and Sarvam-105b-conversations often ignores it (call
+ * 13980 still pitched an 25 August deadline on 27 August).
+ */
+export function buildTurnClockBlock(timezone?: string | null): string {
+  const tz = resolveZone(timezone);
+  const now = new Date();
+  const { today, yesterday, tomorrow } = calendarNeighbors(now, tz);
+  return (
+    `[TODAY] ${formatClock(now, tz)} (${tz}). ` +
+    `Yesterday was ${yesterday}. Tomorrow is ${tomorrow}. ` +
+    `Today is ${today}. Dates before today are already past — do not pitch them as upcoming deadlines. ` +
+    `Read back emails and phone numbers exactly as written in the caller's last message.`
+  );
 }

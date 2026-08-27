@@ -120,15 +120,24 @@ export function isDigitCollectionContext(lastAgentText: string): boolean {
 }
 
 const EMAIL_KEYWORDS = [
-  "email", "e-mail", "e mail", "mail id", "mailid", "email id", "email address",
-  "email-id", "mail address", "your mail",
+  "email id", "email-id", "email address", "e-mail id", "e-mail address",
+  "mail id", "mailid", "mail address", "your email", "your mail", "your e-mail",
   "ईमेल", "मेल आईडी", "मेल आई डी", "ई-मेल",
-  "மின்னஞ்சல்", "மெயில்", "இமெயில்", "ஈமெயில்",
+  "மின்னஞ்சல்", "மெயில் ஐடி", "இமெயில்", "ஈமெயில்",
   "ఈమెయిల్", "ఇమెయిల్", "ಇಮೇಲ್", "ഇമെയിൽ", "ইমেইল", "ઈમેલ",
 ];
 
+/** Mentioning an already-collected address is not a request to spell a new one. */
+const EMAIL_MENTION_NOT_ASK_RE =
+  /\b(same email|that email|this email|the email|registered email|அந்த email|இந்த email|அந்த மெயில்|இந்த மெயில்)\b/i;
+const EMAIL_ASK_HINT_RE =
+  /(சொல்லு|share|what is|tell me|enter|give me|your email|email id|mail id|மின்னஞ்சல்)/i;
+
 export function isEmailCollectionContext(lastAgentText: string): boolean {
   const lower = lastAgentText.toLowerCase();
+  if (EMAIL_MENTION_NOT_ASK_RE.test(lower) && !EMAIL_ASK_HINT_RE.test(lower)) {
+    return false;
+  }
   for (const kw of EMAIL_KEYWORDS) {
     if (lower.includes(kw)) return true;
   }
@@ -191,6 +200,10 @@ export function isCompleteEmailUtterance(text: string): boolean {
   return false;
 }
 
+const EMAIL_ACK_RE =
+  /^(yes|yeah|yep|ok|okay|no|nope|sure|haan|han|aamaa?|ஆமா|சரி|clear|cleara)([\s,.!]+(madam|ma'?am|sir|ji|மேடம்|சார்))*[\s,.!]*$/iu;
+const EMAIL_HONORIFIC_RE = /^(madam|ma'?am|sir|ji|மேடம்|சார்)$/iu;
+
 /**
  * In-progress email spelling: "karthik at", "k a r", "gmail dot".
  * A finished address (local@domain.tld or "at … dot com") is not in-progress.
@@ -199,19 +212,47 @@ export function isEmailLikeUtterance(text: string): boolean {
   const t = text.trim();
   if (!t) return true;
   if (isCompleteEmailUtterance(t)) return false;
-  const lower = t.toLowerCase();
-  if (/^(yes|yeah|yep|ok|okay|no|nope|sure|haan|han|சரி|ஆமா)[\s,.!]*$/iu.test(t)) {
-    return false;
-  }
+  if (EMAIL_ACK_RE.test(t)) return false;
   if (EMAIL_AT_RE.test(t) || EMAIL_DOT_RE.test(t) || EMAIL_DOMAIN_WORD_RE.test(t)) return true;
-  if (EMAIL_PUNCT_WORD_RE.test(lower)) return true;
+  if (EMAIL_PUNCT_WORD_RE.test(t.toLowerCase())) return true;
   const tokens = t.split(/\s+/).filter(Boolean);
   if (tokens.length === 0 || tokens.length > 12) return false;
+  if (tokens.some((tok) => EMAIL_HONORIFIC_RE.test(tok.replace(/[,.]$/, "")))) return false;
   const spelled = tokens.filter((tok) => /^[a-z]$/i.test(tok.replace(/[,.]$/, "")));
   if (spelled.length >= 1 && spelled.length >= tokens.length - 1) return true;
-  // Bare local-part while the agent asked for email: "karthikeyan" / "karthik sru"
-  if (tokens.length <= 3 && /^[a-z0-9._-]+$/i.test(t.replace(/\s+/g, ""))) return true;
+  // Single token local-part while the agent asked for email: "karthikeyan"
+  if (tokens.length === 1 && /^[a-z0-9._-]{3,}$/i.test(tokens[0]!)) return true;
   return false;
+}
+
+/** Spoken fillers STT glues onto the local-part ("vandhukarthikeyan@gmail.com"). */
+const EMAIL_LOCAL_FILLERS = [
+  "vandhu", "vanthu", "vandu", "irukken", "irukku", "iruken",
+  "emailid", "mailid", "email", "mail", "enna", "naan", "seri", "sari",
+].sort((a, b) => b.length - a.length);
+
+export function sanitizeSpokenEmailAddress(addr: string): string {
+  const at = addr.lastIndexOf("@");
+  if (at <= 0) return addr;
+  let local = addr.slice(0, at);
+  const domain = addr.slice(at + 1);
+  let changed = true;
+  while (changed && local.length > 3) {
+    changed = false;
+    const lower = local.toLowerCase();
+    for (const filler of EMAIL_LOCAL_FILLERS) {
+      if (lower.startsWith(filler) && local.length - filler.length >= 3) {
+        local = local.slice(filler.length);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return `${local}@${domain}`;
+}
+
+export function sanitizeSpokenEmailsInTranscript(text: string): string {
+  return text.replace(EMAIL_ADDR_RE, (addr) => sanitizeSpokenEmailAddress(addr));
 }
 
 /**

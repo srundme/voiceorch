@@ -69,6 +69,7 @@ describe("durable fact keys", () => {
   it("normalizes city aliases and emails", () => {
     expect(normalizeFactValue("location", "Bangalore")).toBe("Bengaluru");
     expect(normalizeFactValue("email", "A@B.Co")).toBe("a@b.co");
+    expect(normalizeFactValue("email", "vandhukarthikeyan@gmail.com")).toBe("karthikeyan@gmail.com");
   });
 
   it("validation gate requires caller citations", () => {

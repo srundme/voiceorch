@@ -7,6 +7,8 @@ import {
   isEmailLikeUtterance,
   isCompleteEmailUtterance,
   looksSnapComplete,
+  sanitizeSpokenEmailAddress,
+  sanitizeSpokenEmailsInTranscript,
   resolveCollectionKind,
   resolveCollectionVadSilenceMs,
   resolveIncompleteHoldMs,
@@ -129,6 +131,31 @@ describe("email collection helpers", () => {
     expect(isCompleteEmailUtterance("karthik at gmail dot com")).toBe(true);
     expect(isEmailLikeUtterance("user@gmail.com")).toBe(false);
     expect(isEmailLikeUtterance("karthik at gmail dot com")).toBe(false);
+    expect(isEmailLikeUtterance("Aamaa madam.")).toBe(false);
+    expect(isEmailLikeUtterance("Aa cleara irukku madam.")).toBe(false);
+  });
+
+  it("does not treat login/same-email mentions as a new collection prompt", () => {
+    expect(isEmailCollectionContext(
+      "சரி, same email-ல தான் login பண்ணிருக்கீங்கன்னு தெரிஞ்சுக்கிட்டேன்.",
+    )).toBe(false);
+    expect(isEmailCollectionContext(
+      "நீங்க அந்த email வெச்சு SnapServe account-ல login பண்ணி பாத்தீங்களா?",
+    )).toBe(false);
+    expect(resolveStreamingTurnHold({
+      pending: "Aamaa madam.",
+      lastAgentText: "நீங்க அந்த email வெச்சு login பண்ணி பாத்தீங்களா?",
+      textLooksIncomplete: false,
+    }).incomplete).toBe(false);
+  });
+
+  it("strips spoken Tamil/English fillers glued onto the local-part", () => {
+    expect(sanitizeSpokenEmailAddress("vandhukarthikeyan@gmail.com")).toBe("karthikeyan@gmail.com");
+    expect(sanitizeSpokenEmailsInTranscript("So email id vandhukarthikeyan@gmail.com.")).toBe(
+      "So email id karthikeyan@gmail.com.",
+    );
+    expect(sanitizeSpokenEmailAddress("karthikeyan@gmail.com")).toBe("karthikeyan@gmail.com");
+    expect(sanitizeSpokenEmailAddress("idris@gmail.com")).toBe("idris@gmail.com");
   });
 
   it("only fail-opens timeout on snap-finished turns", () => {

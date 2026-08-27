@@ -5,7 +5,7 @@ import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
 import { GenderDetectorChained } from "./genderDetectorChained.js";
 import { SpeakerVerifier, type VoiceMemoryEvent } from "./speakerVerifier.js";
 import { SCREENING_PICKUP_NOTE } from "./callScreening.js";
-import { buildDatetimeInjection } from "./datetimeInject.js";
+import { buildDatetimeInjection, buildTurnClockBlock } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN } from "./conversationDiscipline.js";
@@ -54,6 +54,7 @@ import {
   resolveCollectionKind,
   resolveCollectionVadSilenceMs,
   looksSnapComplete,
+  sanitizeSpokenEmailsInTranscript,
   TurnSafetyNet,
   SilenceWatchdog,
   recoveryReprompt,
@@ -2430,6 +2431,7 @@ export class OrchestrationPipeline implements VoiceSession {
    * the first agent turn (no conversation history yet).
    */
   private _launchSpeculativeLlm(partialText: string, pendingTurnId?: number): void {
+    partialText = sanitizeSpokenEmailsInTranscript(normalizeSttPhonetics(partialText));
     // Only one speculative call per turn; don't start if session is closing.
     if (this._specLlmState || this.closed) return;
     // Need at least one prior assistant turn so the history has context.
@@ -3302,7 +3304,7 @@ export class OrchestrationPipeline implements VoiceSession {
    * Handles barge-in detection and queuing if a turn is already in progress.
    */
   private async handleStreamingTranscript(rawTranscript: string, sttEmittedAt = Date.now(), closeReason: TurnCloseReason = "stt_final"): Promise<void> {
-    let transcript = normalizeSttPhonetics(rawTranscript);
+    let transcript = sanitizeSpokenEmailsInTranscript(normalizeSttPhonetics(rawTranscript));
     this._turnCloseReason = closeReason;
     const _tStreamNow = performance.now();
     // For Azure streaming, use lastPartialToFinalMs to back-compute when the caller
@@ -7552,6 +7554,7 @@ export class OrchestrationPipeline implements VoiceSession {
   // ── Core turn logic ───────────────────────────────────────────────────────────
 
   private async processTurn(transcript: string, sttLatencyMs: number): Promise<void> {
+    transcript = sanitizeSpokenEmailsInTranscript(transcript);
     this._processTurnGeneration = this.semanticTurnGate.turnGeneration;
     this.bargeInRequested = false;
     this.bargeInSpeechFrames = 0;
@@ -8523,6 +8526,19 @@ export class OrchestrationPipeline implements VoiceSession {
         ];
       }
       this.pendingTopicClarificationNote = false;
+    }
+
+    // Clock last on the user turn (highest recency). System-prompt [CURRENT DATE
+    // & TIME] sits at the end of a 12k-token prompt and Sarvam-105b ignores it
+    // (call 13980 still pitched a 25 August deadline on 27 August).
+    if (historyForLlm.length > 0) {
+      const lastTurn = historyForLlm[historyForLlm.length - 1]!;
+      if (lastTurn.role === "user") {
+        historyForLlm = [
+          ...historyForLlm.slice(0, -1),
+          { ...lastTurn, content: `${lastTurn.content}\n\n${buildTurnClockBlock(this.agent.timezone)}` },
+        ];
+      }
     }
 
     // Layer 4: Staged Prompt — override system prompt with active stage block
