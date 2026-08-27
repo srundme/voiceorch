@@ -319,8 +319,8 @@ const STREAM_ACCUM_BYTES      = 640;    // 20ms of 16kHz PCM before forwarding a
 // TTS jitter buffer (see drainSentenceJob): runway of audio to queue before
 // starting/resuming the paced send pump, so momentary provider-stream hiccups
 // don't become audible mid-sentence gaps. Caps bound the added latency.
-// Warm sessions start on ~80 ms; cold / post-underrun uses a longer runway.
-const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 160));
+// Warm sessions start on ~240 ms; cold / post-underrun uses a longer runway.
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 240));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
   Number(process.env.TTS_PREBUFFER_COLD_MS ?? 320),
@@ -926,6 +926,8 @@ type TtsSentenceJob = {
   nonStreamAudio: Buffer | null;
   /** Resolves once synthDone is true. */
   ready: Promise<void>;
+  /** Continuation sentence: text was appended to the turn's Cartesia context; do not drain a second clip. */
+  skipDrain?: boolean;
 };
 
 /**
@@ -6465,15 +6467,30 @@ export class OrchestrationPipeline implements VoiceSession {
     if (sentences.length <= 1) return this.playSentence(text, emotions);
     const seqId = this.interruptionMgr.beginAgentTurn();
     this.activeAgentSequenceId = seqId;
-    let next = this.startSentenceSynthesis(sentences[0]!, this._activeTurnIndex, seqId, undefined, emotions);
-    for (let i = 0; i < sentences.length; i++) {
-      const job = next;
-      if (i + 1 < sentences.length) {
-        // Prefetch: kick off the next sentence's synthesis BEFORE awaiting playback.
-        next = this.startSentenceSynthesis(sentences[i + 1]!, this._activeTurnIndex, seqId, undefined, emotions);
+    const cartesiaTts = this.tts instanceof CartesiaTTS ? this.tts : null;
+    const turnContextId = cartesiaTts ? globalThis.crypto.randomUUID() : undefined;
+    try {
+      if (turnContextId && cartesiaTts) {
+        const jobs = sentences.map((s) =>
+          this.startSentenceSynthesis(s, this._activeTurnIndex, seqId, turnContextId, emotions),
+        );
+        await Promise.all(jobs.filter((j) => j.skipDrain).map((j) => j.ready));
+        cartesiaTts.finalizeTurnContext(turnContextId);
+        const owner = jobs.find((j) => !j.skipDrain) ?? jobs[0]!;
+        await this.playJob(owner);
+        return;
       }
-      await this.playJob(job);
-      if (this.closed || this.bargeInRequested || !this.interruptionMgr.isValidSequence(seqId)) break;
+      let next = this.startSentenceSynthesis(sentences[0]!, this._activeTurnIndex, seqId, undefined, emotions);
+      for (let i = 0; i < sentences.length; i++) {
+        const job = next;
+        if (i + 1 < sentences.length) {
+          next = this.startSentenceSynthesis(sentences[i + 1]!, this._activeTurnIndex, seqId, undefined, emotions);
+        }
+        await this.playJob(job);
+        if (this.closed || this.bargeInRequested || !this.interruptionMgr.isValidSequence(seqId)) break;
+      }
+    } finally {
+      if (turnContextId && cartesiaTts) cartesiaTts.finalizeTurnContext(turnContextId);
     }
   }
 
@@ -6638,7 +6655,11 @@ export class OrchestrationPipeline implements VoiceSession {
       audioDurationMs: undefined,
       nonStreamAudio: null,
       ready,
+      skipDrain: false,
     };
+    if (turnContextId && this.tts instanceof CartesiaTTS) {
+      job.skipDrain = !this.tts.claimTurnContext(turnContextId);
+    }
 
     // Dead-air / tool fillers: serve cached PCM (Bolna preset-WAV feel) or synthesize once and cache.
     if (sequenceId === FILLER_SEQUENCE_ID) {
@@ -6761,10 +6782,9 @@ export class OrchestrationPipeline implements VoiceSession {
             if (accumSize >= STREAM_ACCUM_BYTES) flush();
           };
           const onTtsDone = (_characters: number): void => { flush(); };
-          // Cartesia turn-level continuations: share one context_id per LLM
-          // turn with manual flushing to maintain prosody across sentences.
+          // Cartesia turn-level continuations: one context, no per-sentence flush.
           if (turnContextId && ttsAdapter instanceof CartesiaTTS) {
-            await ttsAdapter.synthesizeStreamInContext(turnContextId, text, onTtsChunk, onTtsDone, ttsAbort.signal, emotions);
+            await ttsAdapter.synthesizeStreamInContext(turnContextId, text, onTtsChunk, onTtsDone, ttsAbort.signal, emotions, !!job.skipDrain);
           } else {
             await synthesizeStream(text, onTtsChunk, onTtsDone, ttsAbort.signal);
           }
@@ -8189,6 +8209,11 @@ export class OrchestrationPipeline implements VoiceSession {
       while (true) {
         if (idx < sentenceQueue.length) {
           const job = sentenceQueue[idx++]!;
+          if (job.skipDrain) {
+            this.recordAgentSpeech(job.text);
+            await job.ready;
+            continue;
+          }
           this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       this.isPlaying = true;
           try {
@@ -10420,6 +10445,11 @@ export class OrchestrationPipeline implements VoiceSession {
       while (true) {
         if (idx < sentenceQueue.length) {
           const job = sentenceQueue[idx++]!;
+          if (job.skipDrain) {
+            this.recordAgentSpeech(job.text);
+            await job.ready;
+            continue;
+          }
           this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
           this.isPlaying = true;
           try { await this.playJob(job); } catch (err) {

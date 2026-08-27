@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { CartesiaTTS, resolveCartesiaModelId } from "./cartesia.js";
+import { CartesiaTTS, resolveCartesiaModelId, joinContinuationTranscript } from "./cartesia.js";
 
 /**
  * Regression test for the Cartesia emotion-voice-control bug: Cartesia can
@@ -99,6 +99,14 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
     await tts.synthesize("வணக்கம்");
 
     expect(languages).toEqual(["en", "ta"]);
+  });
+});
+
+describe("joinContinuationTranscript", () => {
+  it("inserts a space so Cartesia sees one valid transcript", () => {
+    expect(joinContinuationTranscript("Hello, world!", "How are you?")).toBe(" How are you?");
+    expect(joinContinuationTranscript("Hello, world!", " How are you?")).toBe(" How are you?");
+    expect(joinContinuationTranscript("", "Hello")).toBe("Hello");
   });
 });
 
