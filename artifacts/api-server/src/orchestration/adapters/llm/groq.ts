@@ -3,6 +3,7 @@ import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolD
 import { logger } from "../../../lib/logger.js";
 import { toOpenAIMessages } from "./openai-messages.js";
 import { drainOpenAICompatibleStream } from "./openai-compat.js";
+import { toOpenAiToolChoice } from "./tool-choice.js";
 
 /**
  * Groq — OpenAI-compatible API with ultra-fast LPU inference.
@@ -96,6 +97,7 @@ export class GroqLLM implements LLMAdapter {
     onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
+      toolChoice?: "auto" | "required" | { name: string };
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
       onUsage?: (usage: LLMUsage) => void;
     }
@@ -115,7 +117,7 @@ export class GroqLLM implements LLMAdapter {
         }))
       : undefined;
 
-    const toolChoice = groqTools ? "auto" : undefined;
+    const toolChoice = groqTools ? toOpenAiToolChoice(options?.toolChoice, options?.tools) : undefined;
 
     // Groq-specific tool guidance: explicitly instruct the model to use structured
     // function calling and NOT emit preamble or text-serialized tool calls.

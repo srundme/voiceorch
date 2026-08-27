@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toOpenAIMessages } from "./openai-messages.js";
 import { drainOpenAICompatibleStream } from "./openai-compat.js";
+import { toOpenAiToolChoice } from "./tool-choice.js";
 
 /**
  * Qwen LLM Adapter — supports Groq (gsk_...) and OpenRouter (sk-or-v1-...).
@@ -78,7 +79,7 @@ export class QwenLLM implements LLMAdapter {
         }))
       : undefined;
 
-    const toolChoice = qwenTools ? "auto" : undefined;
+    const toolChoice = qwenTools ? toOpenAiToolChoice(options?.toolChoice, options?.tools) : undefined;
 
     this.abortController?.abort();
     const abortController = new AbortController();

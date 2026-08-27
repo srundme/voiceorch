@@ -669,6 +669,8 @@ export interface LLMAdapter {
     onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
+      /** OpenAI-style tool forcing. Default "auto". Use { name } to require one tool. */
+      toolChoice?: "auto" | "required" | { name: string };
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
       /** Fired the moment the adapter recognises that the model output contains a
        *  tool call, BEFORE the name/args are fully parsed. `format` records which

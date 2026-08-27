@@ -36,6 +36,18 @@ import { resolveMicSensitivity, getMicSensitivityThresholds, isIdleCancellingMic
 import { resolveSoftwareNoiseGate, envForceVobizSoftwareNc, type NoiseGateDecision } from "./noise-gate.js";
 import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
 import { validateBookableEmail, isEmailConfirmedFlag } from "./booking-email-validate.js";
+import {
+  buildAutoBookArgs,
+  canAutoBook,
+  emptyBookingFlowState,
+  looksLikeFalseBookingClaim,
+  shouldForceBookAppointment,
+  shouldForceCheckAvailability,
+  updateBookingFlowFromAssistantText,
+  updateBookingFlowFromToolResult,
+  updateBookingFlowFromUserTurn,
+  type BookingFlowState,
+} from "./booking-flow-enforce.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, peekCachedPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
@@ -1337,6 +1349,8 @@ export class OrchestrationPipeline implements VoiceSession {
   /** Latched when scheduling has no calendar event type. Stops the LLM from
    * inventing slots or confirmations after a configuration failure. */
   private schedulingConfigurationFailed = false;
+  /** Product booking funnel state: demo → slots → email confirm → book/Meet. */
+  private bookingFlowState: BookingFlowState = emptyBookingFlowState();
   // All bookings returned by the most recent list_bookings call (used to infer
   // which booking the caller selected when count > 1 and reschedule/cancel fires).
   private pendingListedBookings: Array<{ bookingId: number; isoDate: string; timeLabel: string; eventName: string }> = [];
@@ -7433,6 +7447,11 @@ export class OrchestrationPipeline implements VoiceSession {
       return await this.executeCalCom(tool, args);
     } else if (tool.type === "native_booking") {
       const result = await this.executeNativeBooking(tool, args);
+      this.bookingFlowState = updateBookingFlowFromToolResult(
+        this.bookingFlowState,
+        tool.name || "book_appointment",
+        result,
+      );
       if (result.startsWith("booking_confirmed:")) this.schedulingActionConfirmed = true;
       if (result.includes("\"no_event_type\"")) this.schedulingConfigurationFailed = true;
       return result;
@@ -8066,6 +8085,23 @@ export class OrchestrationPipeline implements VoiceSession {
       }
     }
 
+    // Booking funnel: track email / confirm / demo intent from this user turn.
+    {
+      const lastAgent =
+        this.conversationHistory.findLast((t) => t.role === "assistant")?.content
+        ?? this.lastAssistantSpokenRaw
+        ?? "";
+      this.bookingFlowState = updateBookingFlowFromUserTurn(
+        this.bookingFlowState,
+        transcript,
+        lastAgent,
+      );
+      this.bookingFlowState = updateBookingFlowFromAssistantText(
+        this.bookingFlowState,
+        lastAgent,
+      );
+    }
+
     // ── Bolna-parity: caller speak chars metric ───────────────────────────────
     this._callerSpeakCharsTotal += transcript.length;
 
@@ -8159,6 +8195,67 @@ export class OrchestrationPipeline implements VoiceSession {
     // ── Build tool definitions from agent config ──
     const toolDefs = this.buildVoiceToolDefs();
 
+    // Hard booking enforce: when slot + confirmed email + name are ready, book
+    // in code (do not rely on the LLM remembering tool_choice).
+    const bookTool = this.agent.tools.find((t) => t.type === "native_booking");
+    const checkTool = this.agent.tools.find((t) => t.type === "native_check_availability");
+    if (
+      bookTool
+      && canAutoBook({ state: this.bookingFlowState, alreadyBooked: this.schedulingActionConfirmed })
+    ) {
+      const bookName = bookTool.name || "book_appointment";
+      const autoArgs = buildAutoBookArgs(this.bookingFlowState);
+      logger.info(
+        { callId: this.config.callId, bookName, autoArgs, evt: "booking_auto_book" },
+        "Pipeline: auto-invoking book_appointment (email confirmed + slot ready)",
+      );
+      this.logExec("Tool", "system", {
+        status: "info",
+        turnNumber: _currentTurnIndex,
+        metadata: { event: "Auto Book Appointment", tool: bookName, args: autoArgs },
+      });
+      const _toolCallId = `call_autobook_${Date.now()}`;
+      this.conversationHistory.appendAssistant("", {
+        toolCalls: [{ id: _toolCallId, name: bookName, args: JSON.stringify(autoArgs) }],
+      });
+      const toolResult = await this.handleToolCall(bookName, autoArgs);
+      await this.continueWithToolResult(bookName, toolResult, 0, _toolCallId);
+      return;
+    }
+
+    // Force tool_choice when demo intent (check) or email+slot ready (book).
+    let forcedToolChoice: "auto" | "required" | { name: string } = "auto";
+    if (
+      shouldForceCheckAvailability({
+        state: this.bookingFlowState,
+        userText: transcript,
+        hasCheckTool: !!checkTool,
+        alreadyBooked: this.schedulingActionConfirmed,
+      })
+    ) {
+      forcedToolChoice = { name: checkTool!.name || "check_availability" };
+    } else if (
+      shouldForceBookAppointment({
+        state: this.bookingFlowState,
+        userText: transcript,
+        hasBookTool: !!bookTool,
+        alreadyBooked: this.schedulingActionConfirmed,
+      })
+    ) {
+      forcedToolChoice = { name: bookTool!.name || "book_appointment" };
+    }
+    if (forcedToolChoice !== "auto") {
+      logger.info(
+        { callId: this.config.callId, forcedToolChoice, evt: "booking_force_tool_choice" },
+        "Pipeline: forcing booking-related tool_choice this turn",
+      );
+      this.logExec("Tool", "system", {
+        status: "info",
+        turnNumber: _currentTurnIndex,
+        metadata: { event: "Force Tool Choice", toolChoice: forcedToolChoice },
+      });
+    }
+
     const llmStart = Date.now();
     let llmFirstTokenAt: number | null = null;
 
@@ -8214,6 +8311,22 @@ export class OrchestrationPipeline implements VoiceSession {
 
     const enqueue = (text: string, sequenceId: number = this.activeAgentSequenceId): void => {
       if (this.bargeInRequested) return;
+      if (
+        !this.schedulingActionConfirmed
+        && looksLikeFalseBookingClaim(text)
+        && triggeredToolName == null
+      ) {
+        logger.info(
+          { callId: this.config.callId, evt: "false_booking_claim_suppressed", textSnippet: text.slice(0, 120) },
+          "Pipeline: suppressed spoken booking claim before tool confirmed booking",
+        );
+        this.logExec("Tool", "system", {
+          status: "info",
+          turnNumber: _currentTurnIndex,
+          metadata: { event: "False Booking Claim Suppressed", textSnippet: text.slice(0, 160) },
+        });
+        return;
+      }
       if (isLeakedMonologueClause(text)) {
         logger.info(
           { callId: this.config.callId, evt: "llm_monologue_clause_suppressed", textSnippet: text.slice(0, 120) },
@@ -8729,6 +8842,7 @@ export class OrchestrationPipeline implements VoiceSession {
           `After you hear an email, ALWAYS spell it back with <spell>r a m … @ g m a i l . c o m</spell> and wait for an explicit yes/correct before calling "${bookName}" with email_confirmed=true.`,
           `HARD RULE (call 14396): NEVER say you are booking / have booked / will book the meeting in spoken text unless you are ALSO calling "${bookName}" in that same turn. Phrases like "book பண்ணிடுறேன்", "I've booked", "scheduling now" without a tool call create NO calendar event and NO email.`,
           `When the caller confirms the email AND a slot, call "${bookName}" immediately in that turn (with preferred_date ISO from "${checkName}" + email_confirmed=true). Do not change the subject to sales/policy talk until booking_confirmed is returned.`,
+          `After "${bookName}" returns booking_confirmed, tell the caller the invite/meeting link was sent to their email when Google Meet is enabled on the event type. Never invent a Meet URL yourself.`,
           `When reading available slots aloud, keep the whole list in ONE reply sentence — do not chop each time (9:00 AM / 9:15 AM) into separate fragments.`,
           `NEVER tell the caller their appointment is confirmed or scheduled unless you have received a booking_confirmed: result from "${bookName}".`,
           `Do NOT say "Your appointment has been scheduled" or any equivalent phrase before "${bookName}" returns a booking_confirmed: result.`,
@@ -9434,6 +9548,7 @@ export class OrchestrationPipeline implements VoiceSession {
         toolDefs.length > 0
           ? {
               tools: toolDefs,
+              toolChoice: forcedToolChoice,
               onToolDetected: (info) => {
                 this.logExec("Tool", "system", {
                   status: "info",
@@ -10422,7 +10537,13 @@ export class OrchestrationPipeline implements VoiceSession {
       selected_booking_time: this.activeRescheduleBooking?.timeLabel ?? null,
       resolved_requested_datetime: args["preferred_date"] ?? null,
     }, "Pipeline: executeNativeCheckAvailability invoked");
-    return sharedExecuteNativeCheckAvailability(this.config.callId, this.agent.id, tool, args);
+    const result = await sharedExecuteNativeCheckAvailability(this.config.callId, this.agent.id, tool, args);
+    this.bookingFlowState = updateBookingFlowFromToolResult(
+      this.bookingFlowState,
+      tool.name || "check_availability",
+      result,
+    );
+    return result;
   }
 
   private async executeNativeListBookings(tool: AgentTool & { type: "native_list_bookings" }, args: Record<string, unknown>): Promise<string> {
@@ -10515,6 +10636,17 @@ export class OrchestrationPipeline implements VoiceSession {
 
     const enqueue = (text: string, sequenceId: number = this.activeAgentSequenceId): void => {
       if (this.bargeInRequested) return;
+      if (
+        !this.schedulingActionConfirmed
+        && looksLikeFalseBookingClaim(text)
+        && triggeredToolName == null
+      ) {
+        logger.info(
+          { callId: this.config.callId, evt: "false_booking_claim_suppressed", textSnippet: text.slice(0, 120) },
+          "Pipeline: suppressed spoken booking claim before tool confirmed booking (post-tool turn)",
+        );
+        return;
+      }
       if (isLeakedMonologueClause(text)) {
         logger.info(
           { callId: this.config.callId, evt: "llm_monologue_clause_suppressed", textSnippet: text.slice(0, 120) },
@@ -10697,6 +10829,18 @@ export class OrchestrationPipeline implements VoiceSession {
         attachTools
           ? {
               tools: toolDefs,
+              toolChoice:
+                !this.schedulingActionConfirmed
+                && this.bookingFlowState.emailConfirmed
+                && this.bookingFlowState.pendingEmail
+                && this.bookingFlowState.lastSlotIso
+                && this.agent.tools.some((t) => t.type === "native_booking")
+                  ? {
+                      name:
+                        this.agent.tools.find((t) => t.type === "native_booking")?.name
+                        || "book_appointment",
+                    }
+                  : "auto",
               onToolDetected: (info) => {
                 this.logExec("Tool", "system", {
                   status: "info",

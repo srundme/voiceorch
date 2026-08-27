@@ -3,6 +3,7 @@ import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolD
 import { toOpenAIMessages } from "./openai-messages.js";
 import { envInt } from "../../utils.js";
 import { logger } from "../../../lib/logger.js";
+import { toOpenAiToolChoice } from "./tool-choice.js";
 
 /**
  * Krutrim Cloud — OpenAI-compatible LLM gateway, Bangalore-hosted.
@@ -107,7 +108,7 @@ export class KrutrimLLM implements LLMAdapter {
         type: "function" as const,
         function: { name: t.name, description: t.description, parameters: t.parameters },
       }));
-      body.tool_choice = "auto";
+      body.tool_choice = toOpenAiToolChoice(options?.toolChoice, options.tools);
     }
 
     this.abortController?.abort();

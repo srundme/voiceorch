@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toOpenAIMessages } from "./openai-messages.js";
 import { drainOpenAICompatibleStream } from "./openai-compat.js";
+import { toOpenAiToolChoice } from "./tool-choice.js";
 
 /**
  * Together AI — OpenAI-compatible gateway to open-weight models.
@@ -86,7 +87,7 @@ export class TogetherLLM implements LLMAdapter {
         }))
       : undefined;
 
-    const toolChoice = togetherTools ? "auto" : undefined;
+    const toolChoice = togetherTools ? toOpenAiToolChoice(options?.toolChoice, options?.tools) : undefined;
 
     // Disable reasoning/thinking tokens — they add latency before first spoken word
     // and are never useful for a real-time voice call.
