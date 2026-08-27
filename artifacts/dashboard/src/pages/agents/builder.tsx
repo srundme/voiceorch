@@ -2654,7 +2654,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const schedulingCalendarId = form.watch("schedulingCalendarId");
   const schedulingEventTypeId = form.watch("schedulingEventTypeId");
   const agentCalendar = schedulingCalendarId != null
-    ? findBySchedulingId(calendarsData as Array<{ id: number }>, schedulingCalendarId)
+    ? findBySchedulingId(calendarsData ?? [], schedulingCalendarId)
     : agentId
       ? ((calendarsData ?? []).find((cal: any) => cal.agentId === agentId) ?? (calendarsData ?? [])[0])
       : (calendarsData ?? [])[0];

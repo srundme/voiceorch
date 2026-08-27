@@ -207,7 +207,13 @@ function titleCaseName(raw: string): string {
     .trim()
     .split(/\s+/)
     .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .map((w) => {
+      // Keep native-script tokens as spoken (Tamil/Hindi/etc.). Only title-case
+      // Latin words so "Murali" / "ARJUN" normalize cleanly without mangling
+      // "முரளி" via toLowerCase().
+      if (/[^\u0000-\u007f]/.test(w)) return w;
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    })
     .join(" ")
     .slice(0, 80);
 }
@@ -242,9 +248,17 @@ function normalizeAge(raw: string): string | null {
 
 function normalizeGender(raw: string): string | null {
   const v = raw.trim().toLowerCase();
-  if (["male", "m", "man", "boy"].includes(v)) return "male";
-  if (["female", "f", "woman", "girl"].includes(v)) return "female";
-  if (["other", "nonbinary", "non-binary"].includes(v)) return "other";
+  if (
+    ["male", "m", "man", "boy", "ஆண்", "ஆண்கள்", "पुरुष", "मर्द", "लड़का"].includes(v)
+  ) {
+    return "male";
+  }
+  if (
+    ["female", "f", "woman", "girl", "பெண்", "பெண்கள்", "महिला", "औरत", "लड़की"].includes(v)
+  ) {
+    return "female";
+  }
+  if (["other", "nonbinary", "non-binary", "மற்றவை", "अन्य"].includes(v)) return "other";
   return null;
 }
 
@@ -460,6 +474,11 @@ export function durableFactsPromptBlock(): string {
     `DO NOT store as facts (put in summary instead if relevant):\n` +
     `budget, interested_in, concerns, follow_up, timeline, policy/product preferences,\n` +
     `coverage amounts, quotes, temporary intent, objections, family_size, family_members.\n\n` +
+    `Multilingual / code-switch:\n` +
+    `- Transcripts may be Tamil, Hindi, English, or mixed (e.g. "என்னோட பேரு Murali", "मेरा नाम Ravi").\n` +
+    `- Extract the SAME durable keys regardless of language — do not skip because the line is not English.\n` +
+    `- Keep personal names as spoken (Latin or native script). Use male|female|other for gender,\n` +
+    `  language codes for language_pref, digits for age/children, canonical city names when clear.\n\n` +
     `Rules:\n` +
     `- Only facts the CALLER explicitly said about themselves — never the agent's speech, never inferred\n` +
     `- Every fact MUST include sentence_ids citing numbered CALLER lines from the transcript\n` +
@@ -467,6 +486,6 @@ export function durableFactsPromptBlock(): string {
     `- If the caller states the same key twice, keep only the LAST-stated value\n` +
     `- confidence: 0.9+ = direct statement; ~0.7 = clear but indirect; omit anything weaker\n` +
     `- Be concise with values (e.g. "4" not "four children"; "Bengaluru" not "I live in Bangalore")\n` +
-    `- name is ONLY a personal human name — never a plan, product, or topic`
+    `- name is ONLY a personal human name — never a plan, product, topic, or question ("who's this")`
   );
 }

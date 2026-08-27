@@ -1176,7 +1176,7 @@ async function runLLMExtraction(opts: {
         `${durableFactsPromptBlock()}\n\n` +
         `Transcript:\n${annotatedTranscript.slice(0, 10000)}`,
     }],
-    "You extract DURABLE caller identity facts from voice call transcripts. Return only JSON with 'name', 'summary', 'sentiment', and 'facts' (each fact needs key, value, confidence, sentence_ids citing [cN] caller lines only). Never invent. Never store ephemeral sales intent as facts.",
+    "You extract DURABLE caller identity facts from voice call transcripts in ANY language (Tamil, Hindi, English, or mixed). Return only JSON with 'name', 'summary', 'sentiment', and 'facts' (each fact needs key, value, confidence, sentence_ids citing [cN] caller lines only). Never invent. Never store ephemeral sales intent as facts. Never treat questions like \"who's this\" as a name.",
     () => {},
     (full) => { raw = full; },
   );
@@ -1613,10 +1613,26 @@ export async function updateCallerProfile(opts: {
   // ── Phase 3a: validation gate → supersession (only facts that pass) ───────
   // Promote top-level `name` when it can be grounded to any caller sentence
   // that contains the name (or when a Tier-A mid-call latch already confirmed it).
-  const nameFactCandidates = extracted.name?.trim()
+  // Prefer an explicit mid-call latch (Tier A) over a missing/weak LLM name so
+  // Facts still get `name` when the caller said e.g. "என்னோட பேரு Murali".
+  // Tier B ("I am X") does NOT force a name fact without LLM agreement — avoids
+  // turning casual phrases into durable Facts.
+  const latchedNameForFacts =
+    callerNameInCall?.trim() && shouldLatchOverrideExtraction(callerNameLatchTier)
+      ? callerNameInCall.trim()
+      : null;
+  const nameForFacts = (latchedNameForFacts || extracted.name?.trim() || "") || null;
+  if (latchedNameForFacts && extracted.name?.trim() &&
+      extracted.name.trim().toLowerCase() !== latchedNameForFacts.toLowerCase()) {
+    extracted.name = latchedNameForFacts;
+  } else if (!extracted.name?.trim() && latchedNameForFacts) {
+    extracted.name = latchedNameForFacts;
+  }
+
+  const nameFactCandidates = nameForFacts
     ? [{
         key: "name",
-        value: extracted.name.trim(),
+        value: nameForFacts,
         confidence: 0.95,
         sentence_ids: (extracted.facts ?? [])
           .filter((f) => canonicalizeFactKey(f.key) === "name")
@@ -1816,10 +1832,15 @@ export const NAME_PATTERNS: { pattern: RegExp; tier: NameLatchTier }[] = [
   { pattern: /\bthis is ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\s+(?:speaking|calling|here)\b/iu, tier: "A" },
   { pattern: /\bcall me ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu, tier: "A" },
   { pattern: /\bname(?:'s| is) ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu, tier: "A" },
-  // Tamil: "என் பேர் <name>" / "என்னோட பேர் <name>"
-  { pattern: /என்(?:னோட)?\s*பேர்\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u, tier: "A" },
-  // Hindi: "मेरा नाम <name>" / "मैं <name> हूँ"
+  // Tamil: "என் பேர் / பேரு / பெயர் <name>" / "என்னோட பேரு <name>"
+  // Note: colloquial பேரு is பேர+ு (no pulli); literary பேர் is பேர+் — both needed.
+  { pattern: /என்(?:னோட|னுடைய)?\s*(?:பேரு|பேர்|பெயர்)\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u, tier: "A" },
+  // Tamil: "நான் <name>" when followed by speaking cue (பேசுறேன் / speaking)
+  // Avoid \\b after Tamil — JS word boundaries are ASCII-oriented even with /u.
+  { pattern: /நான்\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)\s*(?:பேசுறேன்|பேசுகிறேன்|speaking|calling)(?=\s|$|[.!,])/u, tier: "A" },
+  // Hindi: "मेरा नाम <name>" (explicit) / "मैं <name> हूँ" (ambiguous like "I am X" → Tier B)
   { pattern: /मेरा\s*नाम\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u, tier: "A" },
+  { pattern: /मैं\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)\s+हूँ/u, tier: "B" },
 ];
 
 const NAME_STOPWORDS = new Set([
@@ -1853,6 +1874,10 @@ const NAME_BLOCKLIST = new Set([
   "cost", "billing", "payment", "regarding", "about", "for", "with", "the",
   "your", "our", "service", "services", "call", "calls", "issue", "problem",
   "question", "help", "support", "account", "number", "phone",
+  // Question / deixis fragments that STT sometimes captures after "hello"
+  // ("hello who's this" → must never become the caller's name).
+  "who", "whose", "whos", "what", "which", "where", "when", "why", "how",
+  "this", "that", "these", "those", "there", "here",
 ]);
 
 // Next-token reject list: if the word IMMEDIATELY following the matched span
@@ -1989,6 +2014,8 @@ const LOCATION_BLOCKLIST = new Set([
   "september", "october", "november", "december",
   "home", "work", "office", "here", "there", "abroad", "outside", "inside",
   "the", "your", "our", "my", "this", "that",
+  // Hindi fillers that can sit in "मैं X से हूँ" without being a city
+  "ठीक", "बस", "अभी", "बहुत", "सिर्फ", "केवल",
 ]);
 
 function isPlausibleLocation(candidate: string): boolean {
@@ -2023,9 +2050,10 @@ function isPlausibleOccupation(candidate: string): boolean {
   const words = trimmed.split(/\s+/);
   if (words.length > 4) return false;
   for (const w of words) {
-    const lw = w.toLowerCase().replace(/[^a-z]/g, "");
+    const lw = w.toLowerCase().replace(/[^\p{L}\p{M}]/gu, "");
     if (!lw) return false;
-    if (OCCUPATION_BLOCKLIST.has(lw)) return false;
+    // Blocklist is Latin-only; skip native-script tokens.
+    if (/^[a-z]+$/i.test(lw) && OCCUPATION_BLOCKLIST.has(lw)) return false;
   }
   return true;
 }
@@ -2039,6 +2067,12 @@ const FACT_PATTERNS: FactPattern[] = [
       /\bi(?:'m| am) (\d{1,3}) years? old\b/i,
       /\bmy age is (\d{1,3})\b/i,
       /\b(\d{1,3}) years? old\b/i,
+      // Tamil: "எனக்கு 32 வயசு" / "32 வயது"
+      /(?:எனக்கு|என்)\s*(\d{1,3})\s*(?:வயசு|வயது)/u,
+      /(\d{1,3})\s*(?:வயசு|வயது)/u,
+      // Hindi: "मेरी उम्र 32" / "32 साल"
+      /(?:मेरी\s*)?उम्र\s*(?:है\s*)?(\d{1,3})/u,
+      /(\d{1,3})\s*साल(?:\s*का|\s*की)?/u,
     ],
     extract: m => m[1]!,
     confidence: 0.4,
@@ -2049,6 +2083,10 @@ const FACT_PATTERNS: FactPattern[] = [
       /\b(\d+) (?:kids?|children)\b/i,
       /\bi have (\d+) (?:kids?|children|sons?|daughters?)\b/i,
       /\bfamily of (\d+)\b/i,
+      // Tamil: "2 பிள்ளை" / "இரண்டு குழந்தை"
+      /(\d+)\s*(?:பிள்ளை(?:கள்)?|குழந்தை(?:கள்)?)/u,
+      // Hindi: "2 बच्चे"
+      /(\d+)\s*(?:बच्चे|बच्ची|बच्चों)/u,
     ],
     extract: m => m[1]!,
     confidence: 0.4,
@@ -2058,6 +2096,12 @@ const FACT_PATTERNS: FactPattern[] = [
     patterns: [
       /\bi(?:'m| am) (?:from|in|based in|calling from) ([A-Z][a-zA-Z\s]{2,30}?)(?:\.|,|$)/,
       /\bi live in ([A-Z][a-zA-Z\s]{2,30}?)(?:\.|,|$)/,
+      // Tamil colloquial: "நான் Chennai-ல" / "சென்னையில இருக்கு"
+      /(?:நான்|நா)\s+([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{1,28}?)\s*[- ]?(?:ல|இல்|யில)\b/u,
+      /\b([\p{L}\p{M}A-Za-z]{3,24})\s*[- ]?ல\s+(?:இருக்கு|இருந்து|இருக்கேன்|இருக்குறேன்)/u,
+      // Hindi: "मैं दिल्ली से हूँ" / "बैंगलोर में रहता हूँ"
+      /मैं\s+([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{1,28}?)\s+से\s+(?:हूँ|हूं)/u,
+      /([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{1,28}?)\s+में\s+(?:रहता|रहती|रहते)\s+(?:हूँ|हूं|हैं)/u,
     ],
     extract: m => m[1]!.trim(),
     confidence: 0.4,
@@ -2068,10 +2112,40 @@ const FACT_PATTERNS: FactPattern[] = [
     patterns: [
       /\bi(?:'m| am) a(?:n)? ([a-zA-Z\s]{3,40}?) (?:by profession|by trade|working as)\b/i,
       /\bi work as (?:a(?:n)? )?([a-zA-Z\s]{3,40}?)\b(?:\.|,|$)/i,
+      // Tamil: require explicit job cue (வேலை / பணி) — not generic பண்றேன் ("I do X")
+      /(?:நான்|நா)\s+(?:ஒரு\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)\s*(?:வேலை|பணி)/u,
+      /(?:என்|என்னோட)\s*வேலை\s+([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)(?:\.|,|$)/u,
+      // Hindi: require job/work cue — not bare "मैं X हूँ" (too ambiguous with names)
+      /(?:मेरा|मेरी)\s*(?:काम|नौकरी|पेशा)\s+([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)(?:\.|,|$)/u,
+      /मैं\s+(?:एक\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)\s+(?:का\s*काम|की\s*नौकरी|बाय\s*प्रोफेशन)/u,
     ],
     extract: m => m[1]!.trim(),
     confidence: 0.4,
     isPlausible: isPlausibleOccupation,
+  },
+  {
+    key: "family_spouse_name",
+    patterns: [
+      /\bmy (?:wife|husband|spouse)(?:'s)?(?: name)? is ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu,
+      // Tamil: "மனைவி பேர் Priya" / "கணவர் பெயர்" (பேரு + பேர்)
+      /(?:மனைவி|கணவர்)\s*(?:பேரு|பேர்|பெயர்|name)?\s*(?:is\s+)?([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u,
+      // Hindi: "मेरी पत्नी का नाम Priya"
+      /(?:पत्नी|पति|बीवी)\s*(?:का\s*)?नाम\s+(?:है\s+)?([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u,
+    ],
+    extract: m => m[1]!.trim(),
+    confidence: 0.4,
+    isPlausible: isPlausibleName,
+  },
+  {
+    key: "gender",
+    patterns: [
+      /\bi(?:'m| am) (?:a )?(male|female|man|woman)\b/i,
+      /\bmy gender is (male|female|other)\b/i,
+      /நான்\s+(ஆண்|பெண்)/u,
+      /मैं\s+(पुरुष|महिला|लड़का|लड़की)\s*(?:हूँ|हूं)?/u,
+    ],
+    extract: m => m[1]!,
+    confidence: 0.4,
   },
 ];
 

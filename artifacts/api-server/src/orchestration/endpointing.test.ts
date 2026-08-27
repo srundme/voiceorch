@@ -9,6 +9,10 @@ import {
   looksSnapComplete,
   sanitizeSpokenEmailAddress,
   sanitizeSpokenEmailsInTranscript,
+  reconstructSpokenEmail,
+  preferEmailTranscript,
+  looksLikeSpokenEmailSpelling,
+  isCallerOfferingEmail,
   resolveCollectionKind,
   resolveCollectionVadSilenceMs,
   resolveIncompleteHoldMs,
@@ -156,6 +160,23 @@ describe("email collection helpers", () => {
     );
     expect(sanitizeSpokenEmailAddress("karthikeyan@gmail.com")).toBe("karthikeyan@gmail.com");
     expect(sanitizeSpokenEmailAddress("idris@gmail.com")).toBe("idris@gmail.com");
+  });
+
+  it("reconstructs Tamil letter-spelling and does not drop it when STT compactifies", () => {
+    expect(looksLikeSpokenEmailSpelling("ஏ ஏ ஒய் ஏ எல் அட் த ரேட் ஜிமெயில் டாட் காம்")).toBe(true);
+    expect(reconstructSpokenEmail("ஏ ஏ ஒய் ஏ எல் அட் த ரேட் ஜிமெயில் டாட் காம்")).toBe("aayal@gmail.com");
+    expect(preferEmailTranscript(
+      "ஏ ஏ ஒய் ஏ எல் அட் த ரேட் ஜிமெயில் டாட் காம்",
+      "keyan@gmail.com",
+    )).toBe("keyan@gmail.com (spelled aayal@gmail.com)");
+    expect(isCallerOfferingEmail("அண்ணா ஒரு நிமிஷம் நான் என்னுடைய மெயில் ஐடி சொல்றேன் நோட் பண்ணிக்கிறீங்களா?")).toBe(true);
+    expect(resolveCollectionKind("சரிங்க, மெதுவா சொல்லுங்க.", "மெயில் ஐடி சொல்றேன் நோட் பண்ணிக்கிறீங்களா?")).toBe("email");
+    expect(resolveStreamingTurnHold({
+      pending: "ஏ ஏ ஒய் ஏ எல் அட் த",
+      lastAgentText: "சரிங்க, மெதுவா சொல்லுங்க. நான் wait பண்றேன்.",
+      lastUserText: "நான் என்னுடைய மெயில் ஐடி சொல்றேன் நோட் பண்ணிக்கிறீங்களா?",
+      textLooksIncomplete: false,
+    }).reason).toBe("email_collection");
   });
 
   it("only fail-opens timeout on snap-finished turns", () => {
