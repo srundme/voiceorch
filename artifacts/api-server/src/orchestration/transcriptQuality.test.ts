@@ -329,6 +329,12 @@ describe("looksLikeBookingTimeAnswer", () => {
     expect(looksLikeBookingTimeAnswer("eleven AM")).toBe(true);
   });
 
+  it("accepts Tamil slot answers (call 14251 2pm talk-over)", () => {
+    expect(looksLikeBookingTimeAnswer("2 pm")).toBe(true);
+    expect(looksLikeBookingTimeAnswer("நாளைக்கு காலைல")).toBe(true);
+    expect(looksLikeBookingTimeAnswer("ரெண்டு மணிக்கு வேணும்")).toBe(true);
+  });
+
   it("rejects ordinary acks", () => {
     expect(looksLikeBookingTimeAnswer("हाँ।")).toBe(false);
     expect(looksLikeBookingTimeAnswer("okay madam")).toBe(false);
