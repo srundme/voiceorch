@@ -251,6 +251,36 @@ export function formatSpeakerTranscript(history: ConversationTurn[]): string {
     .join("\n");
 }
 
+/** Readable episode blurb when the extract LLM omits / fails summary. */
+export function buildFallbackEpisodeSummary(opts: {
+  name?: string | null;
+  facts: Array<{ key: string; value: string }>;
+  wasDropped?: boolean;
+}): string {
+  const parts: string[] = [];
+  const name = opts.name?.trim();
+  if (name) parts.push(`Caller ${name}`);
+
+  const skip = new Set(["name", "language_pref", PERSONA_HASH_FACT_KEY]);
+  const detailBits: string[] = [];
+  for (const f of opts.facts) {
+    if (skip.has(f.key)) continue;
+    const label = isDurableFactKey(f.key) ? DURABLE_FACT_LABELS[f.key] : f.key;
+    detailBits.push(`${label} ${f.value}`);
+  }
+  if (detailBits.length > 0) {
+    parts.push(parts.length ? `shared ${detailBits.join(", ")}` : `Caller shared ${detailBits.join(", ")}`);
+  }
+
+  let summary = parts.length > 0
+    ? `${parts.join(" — ")}.`
+    : "Call completed; limited caller details were captured.";
+  if (opts.wasDropped) {
+    summary += " Call dropped before a natural ending.";
+  }
+  return summary.slice(0, 800);
+}
+
 // BCP-47 → plain-name value stored in the language_pref fact. Reverse of the
 // LANG_PREF_TO_BCP47 map session.ts uses at call start to seed the STT/agent
 // language from this fact — keys/values MUST stay in sync with that map.
@@ -1082,6 +1112,9 @@ export async function archiveCall(opts: {
   sentiment?: string | null;
   sentences?: Array<{ speaker: "agent" | "caller"; text: string }>;
 }): Promise<{ archiveId: number | null; sentenceIds: number[] }> {
+  // Insert the episode row first and keep it even if sentence insert fails —
+  // otherwise Facts can land later while Episodes stays empty.
+  let archiveId: number | null = null;
   try {
     const [row] = await db
       .insert(callerCallArchiveTable)
@@ -1096,29 +1129,34 @@ export async function archiveCall(opts: {
         sentiment:       opts.sentiment ?? null,
       })
       .returning({ id: callerCallArchiveTable.id });
+    archiveId = row?.id ?? null;
+  } catch (err) {
+    logger.warn({ err, agentId: opts.agentId, phoneNumber: opts.phoneNumber }, "archiveCall episode insert failed");
+    return { archiveId: null, sentenceIds: [] };
+  }
 
-    const archiveId = row?.id ?? null;
-    let sentenceIds: number[] = [];
-
-    // Insert L2 sentence nodes with NEXT-edge ordering
-    if (archiveId && opts.sentences && opts.sentences.length > 0) {
+  let sentenceIds: number[] = [];
+  if (archiveId && opts.sentences && opts.sentences.length > 0) {
+    try {
       const inserted = await db
         .insert(callerSentencesTable)
         .values(opts.sentences.map((s, i) => ({
-          episodeId:   archiveId,
+          episodeId:   archiveId!,
           sequenceNum: i + 1,
           speaker:     s.speaker,
           text:        s.text.slice(0, 4000),
         })))
         .returning({ id: callerSentencesTable.id });
       sentenceIds = inserted.map(r => r.id);
+    } catch (err) {
+      logger.warn(
+        { err, agentId: opts.agentId, phoneNumber: opts.phoneNumber, archiveId },
+        "archiveCall sentence insert failed — episode row kept",
+      );
     }
-
-    return { archiveId, sentenceIds };
-  } catch (err) {
-    logger.warn({ err, agentId: opts.agentId, phoneNumber: opts.phoneNumber }, "archiveCall DB write failed");
-    return { archiveId: null, sentenceIds: [] };
   }
+
+  return { archiveId, sentenceIds };
 }
 
 // ── Extract and save structured facts via LLM ─────────────────────────────────
@@ -1594,8 +1632,13 @@ export async function updateCallerProfile(opts: {
   }
 
   if (!llmSucceeded) {
-    logger.error({ agentId, phoneNumber, callId }, "Caller memory LLM extraction failed after all retries");
-    return;
+    // Do NOT bail entirely — deterministic regex facts (age / location / etc.)
+    // must still land in Facts when the extract LLM is down.
+    logger.error(
+      { agentId, phoneNumber, callId },
+      "Caller memory LLM extraction failed after all retries — continuing with regex fact gap-fill only",
+    );
+    extracted = { name: null, summary: null, sentiment: null, facts: [] };
   }
 
   // Guard against the LLM hallucinating a "name" out of a topic/product phrase
@@ -1676,6 +1719,35 @@ export async function updateCallerProfile(opts: {
   // Deduplicate by canonical key (last wins — last-stated in transcript order)
   const byKey = new Map<string, (typeof validFacts)[number]>();
   for (const f of validFacts) byKey.set(f.key, f);
+
+  // Gap-fill: promote deterministic pattern matches from CALLER lines when the
+  // LLM omitted them (common for code-mixed Tamil/Hindi + English, e.g.
+  // "என்னோட age 25"). Never overrides an LLM/name fact already in byKey.
+  const regexFillKeys: string[] = [];
+  for (const cand of collectRegexDurableFactCandidates(parsedSentences, sentenceIds)) {
+    if (byKey.has(cand.key)) continue;
+    const result = validateFactCandidate({
+      key: cand.key,
+      value: cand.value,
+      confidence: cand.confidence,
+      sentenceIds: cand.sentence_ids,
+      callerSentenceIds,
+      requireCitation: true,
+    });
+    if (!result.ok || !result.fact) {
+      rejectReasons.push(`regex:${cand.key}:${result.reason ?? "rejected"}`);
+      continue;
+    }
+    byKey.set(result.fact.key, result.fact);
+    regexFillKeys.push(result.fact.key);
+  }
+  if (regexFillKeys.length > 0) {
+    logger.info(
+      { agentId, phoneNumber, callId, keys: regexFillKeys },
+      "Caller memory: regex durable facts gap-filled into Facts",
+    );
+  }
+
   const uniqueFacts = [...byKey.values()];
 
   const newFactIds: number[] = [];
@@ -1718,6 +1790,19 @@ export async function updateCallerProfile(opts: {
     },
     "Caller memory: durable fact extraction complete",
   );
+
+  // Prefer LLM summary; if missing (LLM down / empty), still leave a readable
+  // episode card so Memory → Episodes is never a blank timestamp.
+  if (!extracted.summary?.trim()) {
+    extracted.summary = buildFallbackEpisodeSummary({
+      name: extracted.name ?? callerNameInCall ?? existing?.name ?? null,
+      facts: uniqueFacts.map((f) => ({ key: f.key, value: f.value })),
+      wasDropped,
+    });
+  }
+  if (!extracted.sentiment?.trim()) {
+    extracted.sentiment = wasDropped ? "frustrated" : "neutral";
+  }
 
   // ── Phase 3b: update episode summary + sentiment + insight_facts edges ───
   if (archiveId) {
@@ -2067,8 +2152,13 @@ const FACT_PATTERNS: FactPattern[] = [
       /\bi(?:'m| am) (\d{1,3}) years? old\b/i,
       /\bmy age is (\d{1,3})\b/i,
       /\b(\d{1,3}) years? old\b/i,
-      // Tamil: "எனக்கு 32 வயசு" / "32 வயது"
-      /(?:எனக்கு|என்)\s*(\d{1,3})\s*(?:வயசு|வயது)/u,
+      // Code-mixed / terse: "age 25", "age is 25", "என்னோட age 25 madam"
+      /\bage\s*(?:is|=|:)?\s*(\d{1,3})\b/i,
+      /(?:என்னோட|என்|எனக்கு)\s*age\s*(?:is\s*)?(\d{1,3})/iu,
+      /(?:என்னோட|என்)\s*(\d{1,3})\s*age\b/iu,
+      // Tamil: "எனக்கு 32 வயசு" / "32 வயது" / "என்னோட வயசு 25"
+      /(?:எனக்கு|என்|என்னோட)\s*(\d{1,3})\s*(?:வயசு|வயது)/u,
+      /(?:எனக்கு|என்|என்னோட)\s*(?:வயசு|வயது)\s*(?:is\s*)?(\d{1,3})/u,
       /(\d{1,3})\s*(?:வயசு|வயது)/u,
       // Hindi: "मेरी उम्र 32" / "32 साल"
       /(?:मेरी\s*)?उम्र\s*(?:है\s*)?(\d{1,3})/u,
@@ -2094,8 +2184,12 @@ const FACT_PATTERNS: FactPattern[] = [
   {
     key: "location",
     patterns: [
-      /\bi(?:'m| am) (?:from|in|based in|calling from) ([A-Z][a-zA-Z\s]{2,30}?)(?:\.|,|$)/,
-      /\bi live in ([A-Z][a-zA-Z\s]{2,30}?)(?:\.|,|$)/,
+      // Case-insensitive — STT often lowercases city names ("chennai")
+      /\bi(?:'m| am) (?:from|in|based in|calling from) ([A-Za-z][A-Za-z\s]{1,30}?)(?:\.|,|$)/i,
+      /\bi live in ([A-Za-z][A-Za-z\s]{1,30}?)(?:\.|,|$)/i,
+      /\b(?:calling from|based in)\s+([A-Za-z][A-Za-z\s]{1,30}?)(?:\.|,|$)/i,
+      // Tamil / code-mixed: "என்னோட ஊர் Chennai" / "என் city is Chennai"
+      /(?:என்னோட|என்|எனக்கு)\s*(?:ஊர்|இடம்|address|city|location|place)\s*(?:is\s*|=\s*)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{1,28}?)/iu,
       // Tamil colloquial: "நான் Chennai-ல" / "சென்னையில இருக்கு"
       /(?:நான்|நா)\s+([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{1,28}?)\s*[- ]?(?:ல|இல்|யில)\b/u,
       /\b([\p{L}\p{M}A-Za-z]{3,24})\s*[- ]?ல\s+(?:இருக்கு|இருந்து|இருக்கேன்|இருக்குறேன்)/u,
@@ -2112,9 +2206,10 @@ const FACT_PATTERNS: FactPattern[] = [
     patterns: [
       /\bi(?:'m| am) a(?:n)? ([a-zA-Z\s]{3,40}?) (?:by profession|by trade|working as)\b/i,
       /\bi work as (?:a(?:n)? )?([a-zA-Z\s]{3,40}?)\b(?:\.|,|$)/i,
+      /\bmy (?:job|occupation|profession)(?:\s+is)?\s+([a-zA-Z\s]{3,40}?)(?:\.|,|$)/i,
       // Tamil: require explicit job cue (வேலை / பணி) — not generic பண்றேன் ("I do X")
       /(?:நான்|நா)\s+(?:ஒரு\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)\s*(?:வேலை|பணி)/u,
-      /(?:என்|என்னோட)\s*வேலை\s+([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)(?:\.|,|$)/u,
+      /(?:என்|என்னோட)\s*(?:வேலை|job|occupation|profession)\s+(?:is\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)(?:\.|,|$)/iu,
       // Hindi: require job/work cue — not bare "मैं X हूँ" (too ambiguous with names)
       /(?:मेरा|मेरी)\s*(?:काम|नौकरी|पेशा)\s+([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)(?:\.|,|$)/u,
       /मैं\s+(?:एक\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)\s+(?:का\s*काम|की\s*नौकरी|बाय\s*प्रोफेशन)/u,
@@ -2122,6 +2217,18 @@ const FACT_PATTERNS: FactPattern[] = [
     extract: m => m[1]!.trim(),
     confidence: 0.4,
     isPlausible: isPlausibleOccupation,
+  },
+  {
+    key: "company_name",
+    patterns: [
+      /\bi work (?:at|for|with)\s+([A-Za-z][A-Za-z0-9\s&.-]{1,40}?)(?:\.|,|$)/i,
+      /\bmy (?:company|employer|workplace)(?:\s+is)?\s+([A-Za-z][A-Za-z0-9\s&.-]{1,40}?)(?:\.|,|$)/i,
+      /(?:என்|என்னோட)\s*(?:company|கம்பெனி|நிறுவனம்|office)\s+(?:is\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z0-9\s&.-]{1,36}?)(?:\.|,|$)/iu,
+      /(?:मेरी|मेरा)\s*(?:कंपनी|कम्पनी|ऑफिस)\s+(?:है\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z0-9\s&.-]{1,36}?)(?:\.|,|$)/u,
+    ],
+    extract: m => m[1]!.trim(),
+    confidence: 0.4,
+    isPlausible: (v) => isPlausibleOccupation(v), // same length/blocklist guards
   },
   {
     key: "family_spouse_name",
@@ -2149,6 +2256,56 @@ const FACT_PATTERNS: FactPattern[] = [
   },
 ];
 
+/** Pure matcher for unit tests + call-end gap-fill. Returns canonical key → value. */
+export function matchCallerFactPatterns(transcript: string): Map<string, string> {
+  const found = new Map<string, string>();
+  for (const fp of FACT_PATTERNS) {
+    if (found.has(fp.key)) continue;
+    for (const pattern of fp.patterns) {
+      const match = transcript.match(pattern);
+      if (!match) continue;
+      let value: string;
+      try { value = fp.extract(match).trim(); } catch { continue; }
+      if (!value || value.length > 200) continue;
+      if (fp.isPlausible && !fp.isPlausible(value)) continue;
+      const canonical = canonicalizeFactKey(fp.key);
+      if (!canonical) continue;
+      found.set(canonical, value);
+      break;
+    }
+  }
+  return found;
+}
+
+/**
+ * Scan archived caller sentences and attach L2 sentence ids for citation-
+ * grounded promotion into caller_facts at call-end.
+ * Last matching caller utterance wins per key (most recent statement).
+ */
+function collectRegexDurableFactCandidates(
+  sentences: Array<{ speaker: "caller" | "agent"; text: string }>,
+  sentenceIds: Array<number | undefined | null>,
+): Array<{ key: string; value: string; confidence: number; sentence_ids: number[] }> {
+  const byKey = new Map<string, { key: string; value: string; confidence: number; sentence_ids: number[] }>();
+  for (let i = 0; i < sentences.length; i++) {
+    const s = sentences[i]!;
+    if (s.speaker !== "caller") continue;
+    const sid = sentenceIds[i];
+    if (typeof sid !== "number") continue;
+    const matches = matchCallerFactPatterns(s.text);
+    for (const [key, value] of matches) {
+      byKey.set(key, {
+        key,
+        value,
+        // Above MIN_FACT_CONFIDENCE (0.6); mid-call pending stays at 0.4.
+        confidence: 0.85,
+        sentence_ids: [sid],
+      });
+    }
+  }
+  return [...byKey.values()];
+}
+
 /**
  * Mid-call pattern latch — writes CANDIDATES to pending_caller_facts only
  * (design §2). Never trusted as ground truth; call-end extraction decides
@@ -2166,42 +2323,25 @@ export async function latchCallerFact(opts: {
   const phoneNumber = canonicalizeCallerKey(opts.phoneNumber) ?? opts.phoneNumber;
   const updated = new Map(existingFacts);
 
-  for (const fp of FACT_PATTERNS) {
-    // Within-call dedup: skip if already detected this call
-    if (updated.has(fp.key)) continue;
-
-    for (const pattern of fp.patterns) {
-      const match = transcript.match(pattern);
-      if (!match) continue;
-
-      let value: string;
-      try { value = fp.extract(match).trim(); } catch { continue; }
-      if (!value || value.length > 200) continue;
-      if (fp.isPlausible && !fp.isPlausible(value)) {
-        logger.warn({ callId, agentId, phoneNumber, key: fp.key, rejected: value }, "Caller fact latch failed plausibility check — discarding");
-        continue;
-      }
-
-      const canonical = canonicalizeFactKey(fp.key);
-      if (!canonical) continue;
-
-      updated.set(canonical, value);
-      try {
-        await db.insert(pendingCallerFactsTable).values({
-          callId,
-          agentId,
-          phoneNumber,
-          key: canonical,
-          valueRaw: value.slice(0, 512),
-          method: "regex",
-          confidence: fp.confidence,
-        });
-        logger.info({ callId, agentId, phoneNumber, key: canonical, value }, "Caller fact candidate staged (pending)");
-      } catch (err) {
-        // Table may not exist until schema push — personalization map still updated.
-        logger.warn({ err, callId, agentId, phoneNumber, key: canonical }, "pending_caller_facts insert failed");
-      }
-      break;
+  const matches = matchCallerFactPatterns(transcript);
+  for (const [canonical, value] of matches) {
+    if (updated.has(canonical)) continue;
+    updated.set(canonical, value);
+    const fp = FACT_PATTERNS.find((p) => canonicalizeFactKey(p.key) === canonical);
+    try {
+      await db.insert(pendingCallerFactsTable).values({
+        callId,
+        agentId,
+        phoneNumber,
+        key: canonical,
+        valueRaw: value.slice(0, 512),
+        method: "regex",
+        confidence: fp?.confidence ?? 0.4,
+      });
+      logger.info({ callId, agentId, phoneNumber, key: canonical, value }, "Caller fact candidate staged (pending)");
+    } catch (err) {
+      // Table may not exist until schema push — personalization map still updated.
+      logger.warn({ err, callId, agentId, phoneNumber, key: canonical }, "pending_caller_facts insert failed");
     }
   }
 

@@ -105,7 +105,7 @@ import {
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage, shouldClearVoiceForLanguage,
   getSarvamTtsVoices, isSarvamVoiceCompatible,
   GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS, VOICE_STACK_OPTIONS,
-  geminiLiveModelLabel, isGeminiLiveAgent, isGeminiLiveLlmModel, voiceStackForLlmModel,
+  geminiLiveModelLabel, isGeminiLiveAgent, voiceStackForLlmModel,
   llmFieldsForVoiceStack,
   languagesForAgent, isSarvamRealtimeAsr,
 } from "@/lib/agent-providers";
@@ -1287,34 +1287,23 @@ function OverviewTab({
               <FormField control={form.control} name="llmProvider" render={({ field }) => (
                 <FormItem className="space-y-1">
                   <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
-                  {isGeminiLive ? (
-                    <p className="text-xs font-medium pt-1.5">Gemini Live (native audio)</p>
-                  ) : (
                   <SmallSelect value={field.value} onChange={(v) => {
                     field.onChange(v);
                     form.setValue("llmModel", "");
                     form.setValue("voiceStack", "classic");
                   }}
                     options={LLM_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
-                  )}
                 </FormItem>
               )} />
-              {isGeminiLive ? (
-                <div className="space-y-1">
-                  <p className="text-[10px] text-muted-foreground">Model</p>
-                  <p className="text-xs font-medium pt-1.5">{geminiLiveModelLabel()}</p>
-                </div>
-              ) : llmOptions.filter((m: { value: string }) => !isGeminiLiveLlmModel(m.value)).length > 0 && (
+              {llmOptions.length > 0 && (
                 <FormField control={form.control} name="llmModel" render={({ field }) => (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
                     <SmallSelect value={field.value ?? ""} onChange={(v) => {
                       field.onChange(v);
-                      form.setValue("voiceStack", "classic");
+                      form.setValue("voiceStack", voiceStackForLlmModel(v), { shouldDirty: true });
                     }}
-                      options={llmOptions
-                        .filter((m: { value: string }) => !isGeminiLiveLlmModel(m.value))
-                        .map((m: { value: string; label: string }) => ({ value: m.value, label: m.label }))} placeholder="Default" />
+                      options={llmOptions.map((m: { value: string; label: string }) => ({ value: m.value, label: m.label }))} placeholder="Default" />
                     <FormMessage className="text-[10px]" />
                   </FormItem>
                 )} />
@@ -4577,12 +4566,6 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       const domainFields = fields
         .map(toStoredDomainField)
         .filter((f): f is StoredDomainField => !!f);
-      // Don't persist empty after-call config on first save — that would gate off legacy always-on WhatsApp.
-      const persistAfterCall =
-        dispConfig?.afterCallMessages != null ||
-        afterCallMessages.universal.whatsapp ||
-        afterCallMessages.universal.email ||
-        afterCallMessages.rules.length > 0;
       const allowed = new Set<string>();
       for (const [primary, vals] of Object.entries(taxonomy)) {
         for (const v of vals ?? []) {
@@ -4606,7 +4589,9 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           rules,
           meaningMap,
           outcomeGuides: guides,
-          ...(persistAfterCall ? { afterCallMessages } : {}),
+          // Always persist the explicit toggle state. Omitting an all-off value
+          // makes the server use the legacy always-on WhatsApp behaviour.
+          afterCallMessages,
         }),
       });
     },
@@ -7377,7 +7362,17 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
               <DropdownMenuItem className="sm:hidden" onClick={() => setShowWebcall((v) => !v)}>
                 <Mic className="mr-2 size-3.5" /> Live test
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setPublishModalOpen(true)}>
+              <DropdownMenuItem onClick={() => {
+                if (isDirty) {
+                  toast({
+                    title: "Save changes first",
+                    description: "Publish snapshots the saved agent configuration.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                setPublishModalOpen(true);
+              }}>
                 <Upload className="mr-2 size-3.5" /> Publish version
               </DropdownMenuItem>
               {!isManagedWorkspace && !embedded && (

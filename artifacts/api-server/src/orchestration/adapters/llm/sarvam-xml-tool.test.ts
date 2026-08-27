@@ -33,6 +33,22 @@ describe("parseXmlToolCall", () => {
   it("returns null for spoken prose", () => {
     expect(parseXmlToolCall("हाँ बिल्कुल हो जाएगी।")).toBeNull();
   });
+
+  it("parses XML that follows spoken text (call 14160)", () => {
+    const mixed = `वही है मैडम
+<tool_call>send_email
+<arg_key>to</arg_key>
+<arg_value>gopinwrk@gmail.com</arg_value>
+<arg_key>subject</arg_key>
+<arg_value>Demo Confirmation</arg_value>
+</tool_call>`;
+    const parsed = parseXmlToolCall(mixed);
+    expect(parsed?.name).toBe("send_email");
+    expect(parsed?.args).toEqual({
+      to: "gopinwrk@gmail.com",
+      subject: "Demo Confirmation",
+    });
+  });
 });
 
 describe("parseToolEnvelope", () => {

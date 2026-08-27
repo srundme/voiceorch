@@ -217,13 +217,23 @@ export interface SquadFollowupTool {
 
 export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendEmailTool | SendWhatsappTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
 
+/** One JSON-schema property on a tool argument object. */
+export interface ToolPropertySchema {
+  type: string;
+  description?: string;
+  enum?: string[];
+  items?: ToolPropertySchema;
+  properties?: Record<string, ToolPropertySchema>;
+  required?: string[];
+}
+
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
   name: string;
   description: string;
   parameters: {
     type: "object";
-    properties: Record<string, { type: string; description?: string; enum?: string[] }>;
+    properties: Record<string, ToolPropertySchema>;
     required?: string[];
   };
 }

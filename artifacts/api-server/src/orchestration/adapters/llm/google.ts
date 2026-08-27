@@ -1,7 +1,8 @@
-import { GoogleGenAI, Type, FunctionCallingConfigMode } from "@google/genai";
-import type { Content, Tool, FunctionDeclaration, Schema, GenerateContentConfig, CachedContent, GenerateContentResponseUsageMetadata } from "@google/genai";
+import { GoogleGenAI, FunctionCallingConfigMode } from "@google/genai";
+import type { Content, GenerateContentConfig, CachedContent, GenerateContentResponseUsageMetadata } from "@google/genai";
 import { logger } from "../../../lib/logger.js";
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
+import { toGeminiLiveTools } from "../live/gemini-tools.js";
 
 // ── Gemini-scoped reasoning/preamble backstop (GEMINI ONLY) ──────────────────
 /** A COMPLETE leading bracketed state/context line, e.g. "[DATE/TIME CONTEXT] …\n". */
@@ -193,38 +194,15 @@ export class GoogleLLM implements LLMAdapter {
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: REQUEST_TIMEOUT_MS } });
-    this.model = model ?? "gemini-3.6-flash";
+    this.model = model ?? "gemini-2.5-flash";
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
     const mt = genParams?.maxTokens;
     this.maxTokens = typeof mt === "number" && Number.isFinite(mt) && mt > 0 ? Math.floor(mt) : undefined;
   }
 
-  /**
-   * Convert our ToolDefinition[] to new SDK Tool[]/FunctionDeclaration[] format.
-   * New SDK Type enum: uppercase strings ("STRING", "OBJECT", "INTEGER", etc.)
-   */
-  private toGeminiTools(tools?: ToolDefinition[]): Tool[] | undefined {
-    if (!tools?.length) return undefined;
-    const declarations: FunctionDeclaration[] = tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      parameters: {
-        type: Type.OBJECT,
-        properties: Object.fromEntries(
-          Object.entries(t.parameters.properties).map(([key, val]) => [
-            key,
-            {
-              type: (Type as Record<string, Type>)[(val.type || "string").toUpperCase()] ?? Type.STRING,
-              description: val.description,
-              ...(val.enum ? { enum: val.enum, format: "enum" } : {}),
-            } as Schema,
-          ])
-        ),
-        required: t.parameters.required ?? [],
-      } as Schema,
-    }));
-    return [{ functionDeclarations: declarations }];
+  private toGeminiTools(tools?: ToolDefinition[]) {
+    return toGeminiLiveTools(tools);
   }
 
   private buildGenerationConfig(): Partial<GenerateContentConfig> {

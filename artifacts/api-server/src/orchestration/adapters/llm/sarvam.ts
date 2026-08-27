@@ -681,6 +681,25 @@ ${systemPrompt}`
 
           if (!sawRealContent && /^\s*$/.test(token)) return;
 
+          // Call 14160: the model spoke a few words, then dumped <tool_call> XML.
+          // Start-of-stream sniff had already committed to speech, so XML used to
+          // reach TTS, get stripped, and leave empty-LLM recovery ("I didn't hear you").
+          if (hasTools && jsonSniffDecided && !bufferingJson && !sawToolDelta) {
+            const hay = full + token;
+            const xmlAt = hay.search(/<tool_call\b/i);
+            if (xmlAt >= 0) {
+              const extraSpeech = xmlAt > full.length ? hay.slice(full.length, xmlAt) : "";
+              if (extraSpeech) {
+                sawRealContent = true;
+                full += extraSpeech;
+                onToken(extraSpeech);
+              }
+              bufferingJson = true;
+              jsonBuffer = hay.slice(xmlAt);
+              return;
+            }
+          }
+
           sawRealContent = true;
           full += token;
           onToken(token);
@@ -777,6 +796,20 @@ ${systemPrompt}`
         // JSON parse, and the caller heard nothing.
         onDone(jsonBuffer, usage);
         return;
+      }
+
+      if (!sawToolDelta && !bufferingJson && options?.onToolCall) {
+        const midStreamXml = parseToolEnvelope(full, validToolNames);
+        if (midStreamXml) {
+          options.onToolDetected?.({ format: midStreamXml.format });
+          options.onToolParsed?.({
+            name: midStreamXml.name,
+            format: midStreamXml.format,
+            args: midStreamXml.args,
+          });
+          options.onToolCall(midStreamXml.name, midStreamXml.args);
+          return;
+        }
       }
 
       if (!sawToolDelta && !bufferingJson && options?.onToolCall && validToolNames.size > 0) {

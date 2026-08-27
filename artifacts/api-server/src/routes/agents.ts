@@ -34,7 +34,7 @@ import {
   ListAgentMemoryEpisodesResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { clientContext, getManagingPartner } from "../middlewares/clientContext.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { logActivity } from "../lib/activity.js";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
 import {
@@ -46,6 +46,7 @@ import { sanitizeToolName } from "../services/tool-executor.js";
 import { checkIrdaiCompliance } from "../services/irdai/index.js";
 import { callEngineInsertDefaults } from "@workspace/db/call-engine-defaults";
 import { resolveWorkspaceScope } from "../services/workspace-scope.js";
+import { unsupportedAgentModel } from "../services/agent-model-validation.js";
 
 const router: IRouter = Router();
 
@@ -167,6 +168,14 @@ router.post("/agents", requireAuth, clientContext, async (req, res): Promise<voi
   }
   if (parsed.data.webhookUrl && !parsed.data.webhookUrl.startsWith("https://")) {
     res.status(400).json({ error: "webhookUrl must be a valid https:// URL" });
+    return;
+  }
+  const unsupportedModel = unsupportedAgentModel(parsed.data.llmProvider, parsed.data.llmModel);
+  if (unsupportedModel) {
+    res.status(400).json({
+      error: `Unsupported Google model: ${unsupportedModel}. Choose a model currently shown in the dashboard.`,
+      field: "llmModel",
+    });
     return;
   }
   // wizardInputs is an admin-managed pass-through (not in DB schema strict type)
@@ -391,6 +400,34 @@ router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promis
     res.status(400).json({ error: "webhookUrl must be a valid https:// URL" });
     return;
   }
+  if ("inboundPhoneNumberId" in parsed.data || "outboundPhoneNumberId" in parsed.data) {
+    res.status(400).json({
+      error: "Phone assignments cannot be changed through agent updates. Use the Phone Numbers assignment endpoint.",
+    });
+    return;
+  }
+  if (parsed.data.llmProvider !== undefined || parsed.data.llmModel !== undefined) {
+    const [currentModel] = await db
+      .select({ llmProvider: agentsTable.llmProvider, llmModel: agentsTable.llmModel })
+      .from(agentsTable)
+      .where(and(eq(agentsTable.id, params.data.id), (await workspaceOwned(clerkId)).owned))
+      .limit(1);
+    if (!currentModel) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    const unsupportedModel = unsupportedAgentModel(
+      parsed.data.llmProvider ?? currentModel.llmProvider,
+      parsed.data.llmModel ?? currentModel.llmModel,
+    );
+    if (unsupportedModel) {
+      res.status(400).json({
+        error: `Unsupported Google model: ${unsupportedModel}. Choose a model currently shown in the dashboard.`,
+        field: "llmModel",
+      });
+      return;
+    }
+  }
   const updateData: Record<string, unknown> = { ...parsed.data };
   normalizeToolNames(updateData);
   // knowledgeSourceIds is an M:N association, not an agents column — extract before update.
@@ -455,35 +492,6 @@ router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promis
   }
   if (updateSourceIds !== undefined) {
     await setAgentKnowledgeSources(agent.id, updateSourceIds);
-  }
-  // Sync phone_numbers.agent_id when inbound phone number assignment changes.
-  // Whenever a number becomes this agent's inbound number, it also becomes the
-  // agent's outbound caller ID automatically — inbound and outbound should stay
-  // the same number unless the user explicitly picks a different one.
-  if ("inboundPhoneNumberId" in parsed.data) {
-    await db.update(phoneNumbersTable)
-      .set({ agentId: null })
-      .where(eq(phoneNumbersTable.agentId, agent.id));
-    if (parsed.data.inboundPhoneNumberId && agent.userId) {
-      // Managed clients: the number may be owned by the managing partner
-      // (partner-assigned). Accept the agent owner OR their active partner as
-      // the number's owner — never anyone else's number.
-      const managingPartner = await getManagingPartner(agent.userId);
-      const allowedNumberOwners = managingPartner
-        ? [agent.userId, managingPartner.partnerUserId]
-        : [agent.userId];
-      await db.update(phoneNumbersTable)
-        .set({ agentId: agent.id })
-        .where(and(
-          eq(phoneNumbersTable.id, parsed.data.inboundPhoneNumberId as number),
-          inArray(phoneNumbersTable.userId, allowedNumberOwners),
-        ));
-      const [updatedAgent] = await db.update(agentsTable)
-        .set({ outboundPhoneNumberId: parsed.data.inboundPhoneNumberId as number })
-        .where(eq(agentsTable.id, agent.id))
-        .returning();
-      if (updatedAgent) Object.assign(agent, updatedAgent);
-    }
   }
   const sourceIdMap = await getKnowledgeSourceIdsByAgent([agent]);
   res.json(UpdateAgentResponse.parse(prepareAgentForResponse(agent, sourceIdMap.get(agent.id) ?? [])));
@@ -742,6 +750,7 @@ router.get("/agents/:id/memory/episodes", requireAuth, clientContext, async (req
       id:              callerCallArchiveTable.id,
       callId:          callerCallArchiveTable.callId,
       summary:         callerCallArchiveTable.summary,
+      sentiment:       callerCallArchiveTable.sentiment,
       durationSeconds: callerCallArchiveTable.durationSeconds,
       createdAt:       callerCallArchiveTable.createdAt,
     })
@@ -931,6 +940,7 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async
     id:              ep.id,
     callId:          ep.callId,
     summary:         ep.summary,
+    sentiment:       ep.sentiment ?? null,
     durationSeconds: ep.durationSeconds,
     createdAt:       ep.createdAt,
     insightFactIds:  factIdsByEpisode.get(ep.id) ?? [],

@@ -1,5 +1,5 @@
 import { format, addMinutes } from "date-fns";
-import { toZonedTime, fromZonedTime, formatInTimeZone } from "date-fns-tz";
+import { toZonedTime, formatInTimeZone } from "date-fns-tz";
 import {
   db,
   bookingsTable,
@@ -14,8 +14,9 @@ import {
   callExecutionsTable,
   type AgentConfig,
 } from "@workspace/db";
-import { eq, and, or, sql } from "drizzle-orm";
+import { eq, and, or, sql, desc, ne } from "drizzle-orm";
 import { getAvailableSlots } from "./scheduling/slot-engine.js";
+import { findExactAvailableSlot, parsePreferredInstant, extractIsoDateTime } from "./scheduling/slot-match.js";
 import { buildSlotLockKey } from "./scheduling/lock.js";
 import {
   sendBookingCreatedEmail,
@@ -35,6 +36,7 @@ import { logger } from "../lib/logger.js";
 import { writeExecutionLog } from "./execution-log.js";
 import type { TimeSlot } from "./scheduling/slot-engine.js";
 import { sendChannelEmail } from "./email-channel.js";
+import { attachMeetLinkToEmailBody } from "../orchestration/booking-email-guard.js";
 import { sendMidCallWhatsapp } from "./whatsapp/outbound.js";
 import { resolveBookingLineageCallId } from "./meet-booking.js";
 import { normalizeBookingDatetimeArgs } from "./booking-tool-args.js";
@@ -246,7 +248,7 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
               },
               timezone: {
                 type: "string",
-                description: "IANA timezone, e.g. 'America/New_York' or 'Asia/Kolkata'. Defaults to Asia/Kolkata if not provided.",
+                description: "Optional IANA timezone the caller mentioned, e.g. 'America/New_York'. Slots are always returned in the business's own timezone, which is reported in the 'timezone' field of the result — read times to the caller exactly as returned.",
               },
             },
             required: [],
@@ -337,7 +339,9 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
             (t.description || "Send an email to the caller using the configured Email channel.") +
             " Use this when the caller asks you to email them something (summary, brochure, confirmation)." +
             " You MUST have a real email address from the caller before calling — never invent one." +
-            " Optional subject/body override the channel default template; omit them to use the saved template with {{variables}}.",
+            " Optional subject/body override the channel default template; omit them to use the saved template with {{variables}}." +
+            " For a booking confirmation, do not write that a Meet link will be included unless you paste the real URL." +
+            " Use {{meet_link}} when a booking on this call has a Google Meet URL — SnapServe will also insert it.",
           parameters: {
             type: "object",
             properties: {
@@ -664,7 +668,10 @@ export async function executeNativeBooking(
     // produce the correct calendar-local date string (not the UTC-local date string
     // which would be wrong when the offset crosses midnight: e.g. 00:00+05:30 → "prev day" in UTC).
     let slots = await getAvailableSlots(eventType.id, formatInTimeZone(searchStart, calTz, "yyyy-MM-dd"), formatInTimeZone(searchEnd, calTz, "yyyy-MM-dd"));
-    if (minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
+    // Exact times must not be cut off by `>= minSlotStart`. A 1ms parse skew
+    // (or an ISO with the spoken label glued on) used to drop the slot we had
+    // just offered, and the agent then told the caller it was booked.
+    if (!isExactTime && minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
     if (timeFilter) slots = slots.filter(timeFilter);
     void appendBookingLog(callId, agentId, "Booking Request", {
       attendeeName,
@@ -692,16 +699,13 @@ export async function executeNativeBooking(
     // requested time is unavailable causes silent, wrong bookings.
     let chosenSlot: TimeSlot;
     if (isExactTime && minSlotStart) {
-      const EXACT_TOLERANCE_MS = 60_000; // 1-minute window to absorb rounding
-      const exactMatch = slots.find(
-        (s) => Math.abs(s.slotStart.getTime() - minSlotStart.getTime()) <= EXACT_TOLERANCE_MS,
-      );
+      const exactMatch = findExactAvailableSlot(slots, minSlotStart, calTz, preferredRaw ?? undefined);
 
       const tz = calendar.timezone || "UTC";
       const requestedLabel = formatInTimeZone(minSlotStart, tz, "EEEE, MMMM do 'at' h:mm a");
 
       logger.info(
-        { callId, requestedLabel, exactMatch: !!exactMatch, availableCount: slots.length },
+        { callId, requestedLabel, exactMatch: !!exactMatch, availableCount: slots.length, preferredRaw },
         "Native booking: exact-time slot check",
       );
 
@@ -809,7 +813,7 @@ export async function executeNativeBooking(
     }
     const confirmedBooking = booking;
 
-    const tz = (args["timezone"] as string | undefined) || calendar.timezone || "UTC";
+    const tz = calendar.timezone || "UTC";
     const dateStr = formatInTimeZone(slotStart, tz, "EEEE, MMMM do 'at' h:mm a zzz");
     logger.info(
       {
@@ -1149,7 +1153,7 @@ export async function executeNativeCheckAvailability(
     const calTz = calendar.timezone || "UTC";
     const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
     let slots = await getAvailableSlots(eventType.id, formatInTimeZone(searchStart, calTz, "yyyy-MM-dd"), formatInTimeZone(searchEnd, calTz, "yyyy-MM-dd"));
-    if (minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
+    if (!isExactTime && minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
     if (timeFilter) slots = slots.filter(timeFilter);
 
     if (slots.length === 0) {
@@ -1157,19 +1161,22 @@ export async function executeNativeCheckAvailability(
       return `no_availability: no available slots ${rangeDesc}`;
     }
 
-    const tz = (args["timezone"] != null && String(args["timezone"]).trim())
-      ? String(args["timezone"])
-      : (tool.timezone || calendar.timezone || "UTC");
+    // Slots are generated from the calendar's working hours, so they must be
+    // labelled in the calendar's timezone.  A model-supplied `timezone` argument
+    // is a guess (the schema advertises a default) and labelling with it made the
+    // agent speak times that did not match the slot the booking tool then used.
+    const tz = calendar.timezone || tool.timezone || "UTC";
+    const requestedTz = args["timezone"] != null ? String(args["timezone"]).trim() : "";
+    if (requestedTz && requestedTz !== tz) {
+      logger.info({ callId, requestedTz, tz }, "check_availability: ignoring model-supplied timezone in favour of calendar timezone");
+    }
 
     const slotLabel = (s: { slotStart: Date }) =>
       `${formatInTimeZone(s.slotStart, tz, "yyyy-MM-dd'T'HH:mm:ssxxx")} (${formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a")})`;
 
     // Exact-time branch: check whether the requested slot is available
     if (isExactTime && minSlotStart) {
-      const EXACT_TOLERANCE_MS = 60_000;
-      const exactMatch = slots.find(
-        (s) => Math.abs(s.slotStart.getTime() - minSlotStart.getTime()) <= EXACT_TOLERANCE_MS,
-      );
+      const exactMatch = findExactAvailableSlot(slots, minSlotStart, tz, preferredRaw ?? undefined);
       if (exactMatch) {
         return `requested_slot_available: slot="${formatInTimeZone(exactMatch.slotStart, tz, "yyyy-MM-dd'T'HH:mm:ssxxx")}", label="${formatInTimeZone(exactMatch.slotStart, tz, "EEE MMM d 'at' h:mm a")}", event="${eventType.name}", duration_mins=${eventType.durationMinutes}, timezone="${tz}"`;
       }
@@ -1388,7 +1395,7 @@ export async function executeNativeReschedule(
     const calTz = calendar.timezone || "UTC";
     const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
     let slots = await getAvailableSlots(eventType.id, formatInTimeZone(searchStart, calTz, "yyyy-MM-dd"), formatInTimeZone(searchEnd, calTz, "yyyy-MM-dd"));
-    if (minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
+    if (!isExactTime && minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
     if (timeFilter) slots = slots.filter(timeFilter);
     const filteredSlots = slots.filter((s) => s.slotStart.getTime() !== existing.slotStart.getTime());
     if (filteredSlots.length === 0) {
@@ -1402,16 +1409,13 @@ export async function executeNativeReschedule(
     // requested time is unavailable causes silent, wrong reschedules.
     let chosenSlot: TimeSlot;
     if (isExactTime && minSlotStart) {
-      const EXACT_TOLERANCE_MS = 60_000; // 1-minute window to absorb rounding
-      const exactMatch = filteredSlots.find(
-        (s) => Math.abs(s.slotStart.getTime() - minSlotStart.getTime()) <= EXACT_TOLERANCE_MS,
-      );
+      const exactMatch = findExactAvailableSlot(filteredSlots, minSlotStart, calTz, preferredRaw ?? undefined);
 
       const tz = calendar.timezone || "UTC";
       const requestedLabel = formatInTimeZone(minSlotStart, tz, "EEEE, MMMM do 'at' h:mm a");
 
       logger.info(
-        { callId, requestedLabel, exactMatch: !!exactMatch, availableCount: filteredSlots.length },
+        { callId, requestedLabel, exactMatch: !!exactMatch, availableCount: filteredSlots.length, preferredRaw },
         "Native reschedule: exact-time slot check",
       );
 
@@ -1751,7 +1755,7 @@ export async function executeNativeCancel(
         additionalHosts: calendar.additionalHosts,
         bookingId: existing.id,
         notes: existing.attendeeNotes,
-        calendarSyncStatus: existingGoogleEventId ? "synced" : null,
+        calendarSyncStatus: existing.googleEventId ? "synced" : null,
       }).catch((err) => logger.error({ callId, bookingId: existing.id, err }, "Native cancel: email send failed"));
       dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.cancelled", {
         booking: {
@@ -1911,20 +1915,24 @@ export function parsePreferredDate(
     }
   }
 
-  const parsed = new Date(raw);
-  if (!isNaN(parsed.getTime())) {
-    const hasTimeComponent = raw.includes("T") || raw.includes(":");
-    // When the string carries an explicit UTC offset (Z or ±HH:mm / ±HHmm) JS
-    // new Date() honours it correctly.  A bare datetime like "2026-06-22T15:00:00"
-    // has no offset and new Date() treats it as UTC, which shifts 3 PM IST to
-    // 8:30 PM IST.  Re-anchor bare datetimes to the calendar's IANA timezone.
-    const hasExplicitOffset = /Z$|[+-]\d{2}:?\d{2}$/.test(raw.trim());
-    const anchoredDate =
-      hasTimeComponent && !hasExplicitOffset ? fromZonedTime(raw, tz) : new Date(raw);
-    const effectiveStart = anchoredDate > now ? anchoredDate : now;
+  // Availability returns `ISO (spoken label)`. Models pass that whole string
+  // into book_appointment; Date.parse of the mixed form is Invalid and used
+  // to fall through to "first slot / not available".
+  const isoToken = extractIsoDateTime(raw);
+  const parseTarget = isoToken ?? raw.trim();
+  const anchoredFromHelper = parsePreferredInstant(parseTarget, tz);
+  const parsed = anchoredFromHelper ?? (() => {
+    const d = new Date(parseTarget);
+    return isNaN(d.getTime()) ? null : d;
+  })();
+  if (parsed) {
+    const hasTimeComponent = /T\d{2}:\d{2}|\d{1,2}:\d{2}/.test(parseTarget);
+    const searchStart = parsed > now ? parsed : now;
     return {
-      searchStart: effectiveStart,
-      minSlotStart: hasTimeComponent ? effectiveStart : undefined,
+      searchStart,
+      // Keep the actual requested clock. Clamping this to `now` made exact
+      // matching look for "right now" instead of the slot the caller picked.
+      minSlotStart: hasTimeComponent ? parsed : undefined,
       isExactTime: hasTimeComponent,
     };
   }
@@ -2099,11 +2107,23 @@ export async function executeSendEmail(opts: {
   const subject = typeof opts.args["subject"] === "string" ? opts.args["subject"].trim() : "";
   const body = typeof opts.args["body"] === "string" ? opts.args["body"].trim() : "";
 
+  const [booking] = await db
+    .select({ meetLink: bookingsTable.meetLink })
+    .from(bookingsTable)
+    .where(and(
+      eq(bookingsTable.callId, opts.callId),
+      ne(bookingsTable.status, "cancelled"),
+    ))
+    .orderBy(desc(bookingsTable.id))
+    .limit(1);
+  const meetLink = (booking?.meetLink ?? "").trim();
+  const bodyWithMeet = body ? attachMeetLinkToEmailBody(body, meetLink || null) : "";
+
   const template =
-    subject || body
+    subject || bodyWithMeet
       ? {
           ...(subject ? { subject } : {}),
-          ...(body ? { body } : {}),
+          ...(bodyWithMeet ? { body: bodyWithMeet } : {}),
         }
       : null;
 
@@ -2121,6 +2141,7 @@ export async function executeSendEmail(opts: {
       email: toEmail,
       summary,
       agent_name: opts.agentName || agent.name || "SnapServe",
+      meet_link: meetLink,
       call_id: opts.callId,
     },
     template,

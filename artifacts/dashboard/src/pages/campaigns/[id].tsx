@@ -1330,7 +1330,7 @@ export default function CampaignDetailPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { refetchInterval: 10_000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: analytics } = useGetCampaignAnalytics(campaignId, { query: { refetchInterval: 10_000 } as any });
+  const { data: analytics, isPending: analyticsPending } = useGetCampaignAnalytics(campaignId, { query: { refetchInterval: 10_000 } as any });
   const { data: liveQueueMetrics } = useQuery({
     queryKey: ["lq-metrics", campaignId],
     queryFn: () => customFetch<{
@@ -1505,7 +1505,7 @@ export default function CampaignDetailPage() {
     campaign,
     live: liveQueueMetrics,
   });
-  const { imported, called, failed } = overviewMetrics;
+  const { imported, called, failed, connected: connectedCalls, successRate: successRatePct } = overviewMetrics;
   const hasCsvSource = batches?.some(b => b.leadSource === "csv") ?? false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isContinuous = ["webhook", "meta_ads", "crm", "google_sheets"].includes((campaign as any)?.leadSource ?? "");
@@ -1562,8 +1562,6 @@ export default function CampaignDetailPage() {
       ? "Tracking..."
       : "0%";
 
-  const connectedCalls  = overviewMetrics.connected;
-  const successRatePct  = analytics?.successRate ?? 0;
   const leadsRemaining  = Math.max(imported - called, 0);
 
   // Campaign health: derived purely from already-fetched batch/analytics data.
@@ -2282,8 +2280,8 @@ export default function CampaignDetailPage() {
               </div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border/60">
-              <KpiCard icon={<PhoneCall className="h-3 w-3" />} label="Connected"       value={connectedCalls.toLocaleString()} color="text-sky-500" />
-              <KpiCard icon={<Target className="h-3 w-3" />}    label="Success Rate"    value={`${successRatePct}%`} color="text-emerald-500" />
+              <KpiCard icon={<PhoneCall className="h-3 w-3" />} label="Connected"       value={analyticsPending && !analytics ? "—" : connectedCalls.toLocaleString()} color="text-sky-500" />
+              <KpiCard icon={<Target className="h-3 w-3" />}    label="Success Rate"    value={analyticsPending && !analytics ? "—" : `${successRatePct}%`} color="text-emerald-500" />
               <KpiCard icon={<Users className="h-3 w-3" />}     label="Leads Remaining" value={leadsRemaining.toLocaleString()} color="text-amber-500" />
               <KpiCard icon={<XCircle className="h-3 w-3" />}   label="Failed"          value={failed.toLocaleString()} color="text-red-500" />
             </div>

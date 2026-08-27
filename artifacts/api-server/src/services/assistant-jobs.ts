@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { callEngineInsertDefaults, db, agentsTable, campaignsTable, phoneNumbersTable } from "@workspace/db";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { attachVoiceNumberToAgent, PhoneAlreadyAssignedError } from "./voice-number-assign.js";
 import { logger } from "../lib/logger.js";
 import { isCartesiaVoiceId, type JarvisVoice } from "./assistant-voice.js";
 import { buildCreatedAgentCopy, normalizeAgentLanguage } from "./assistant-copy.js";
@@ -219,16 +220,22 @@ export async function runAssistantJob(
     if (phone.service === "whatsapp") {
       return { success: false, message: "Adhu WhatsApp number da — voice DID venum." };
     }
-    await db.update(phoneNumbersTable).set({ agentId: agent.id }).where(eq(phoneNumbersTable.id, phone.id));
-    await db.update(agentsTable)
-      .set({ inboundPhoneNumberId: null })
-      .where(and(eq(agentsTable.inboundPhoneNumberId, phone.id), ne(agentsTable.id, agent.id)));
-    await db.update(agentsTable)
-      .set({ outboundPhoneNumberId: null })
-      .where(and(eq(agentsTable.outboundPhoneNumberId, phone.id), ne(agentsTable.id, agent.id)));
-    await db.update(agentsTable)
-      .set({ inboundPhoneNumberId: phone.id, outboundPhoneNumberId: phone.id, updatedAt: new Date() })
-      .where(eq(agentsTable.id, agent.id));
+    try {
+      await attachVoiceNumberToAgent({
+        phoneNumberId: phone.id,
+        agentId: agent.id,
+        numberOwnerUserId: clerkUserId,
+        allowReassign: false,
+      });
+    } catch (err) {
+      if (err instanceof PhoneAlreadyAssignedError) {
+        return {
+          success: false,
+          message: `${phone.number} is already on another agent. Unassign it from Phone Numbers first.`,
+        };
+      }
+      throw err;
+    }
     return {
       success: true,
       agentId: agent.id,

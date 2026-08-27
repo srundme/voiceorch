@@ -134,6 +134,28 @@ describe("buildUpdateAgentPayload", () => {
     expect(result.data.ttsProvider).toBe("cartesia");
   });
 
+  it("preserves the selected Cartesia model and voice in the save payload", () => {
+    const payload = buildUpdateAgentPayload({
+      ...BASE,
+      ttsProvider: "cartesia",
+      ttsModel: "sonic-3.5",
+      ttsVoice: "janani-voice-id",
+    });
+    expect(payload.ttsProvider).toBe("cartesia");
+    expect(payload.ttsModel).toBe("sonic-3.5");
+    expect(payload.ttsVoice).toBe("janani-voice-id");
+  });
+
+  it("never includes stale phone assignments in an agent save", () => {
+    const payload = buildUpdateAgentPayload({
+      ...BASE,
+      inboundPhoneNumberId: 41,
+      outboundPhoneNumberId: 41,
+    });
+    expect(payload).not.toHaveProperty("inboundPhoneNumberId");
+    expect(payload).not.toHaveProperty("outboundPhoneNumberId");
+  });
+
   it.skip("disposition schema with choice options — placeholder until feature is completed", () => {
     // dispositionSchema field not yet in agentFormSchema; test preserved for re-enabling
   });
@@ -401,6 +423,34 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     if (result.success) return;
     const paths = result.error.issues.map(i => i.path.join("."));
     expect(paths).toContain("llmModel");
+  });
+
+  it("rejects a retired Google model before save", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      llmProvider: "google",
+      llmModel: "gemini-1.5-flash",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues.map(i => i.path.join("."))).toContain("llmModel");
+  });
+
+  it("accepts current Google classic and Live models", () => {
+    for (const llmModel of [
+      "gemini-2.5-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-pro-preview",
+      "gemini-3.1-flash-live-preview",
+    ]) {
+      const result = agentFormSchema.safeParse({
+        ...VALID_BASE,
+        llmProvider: "google",
+        llmModel,
+      });
+      expect(result.success, llmModel).toBe(true);
+    }
   });
 
   it("mismatched TTS provider+model — reports error on ttsModel", () => {
