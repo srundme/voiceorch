@@ -310,6 +310,10 @@ const MEETING_SESSION_TOOL_DEFS: ToolDefinition[] = [
 const VAD_SILENCE_MS          = 150;    // default silence window before STT flush (per-agent tunable via vadSilenceMs)
 const MIN_SPEECH_BYTES        = 3200;   // ~200ms @ 8kHz PCM — skip noise bursts shorter than this
 const CHUNK_SIZE_MULAW        = 160;    // 20ms @ 8kHz mulaw for paced batch playback
+/** Fallback RMS for hasSpeechEnergy when mic-sensitivity Low is not yet applied.
+ *  Live calls use Low's 110 (mic-sensitivity.ts) — this 100 is the historical
+ *  Normal-tier floor, kept as the import-site default in audioPool/audioWorker.
+ *  Owner: mic-sensitivity.ts. Empirical (calls 4842/4843), not a spec. */
 const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
 const STREAM_ACCUM_BYTES      = 640;    // 20ms of 16kHz PCM before forwarding a TTS stream chunk
 // TTS jitter buffer (see drainSentenceJob): runway of audio to queue before
@@ -351,6 +355,11 @@ const BARGE_IN_ENERGY_THRESHOLD = 1200; // Much higher than normal VAD (300) —
                                          // loud caller speech should interrupt the agent.
                                          // Prevents phone echo, background TV, or ambient
                                          // conversation from cutting the AI off mid-sentence.
+/** PSTN round-trip + playback start. Human barge reaction is typically >300 ms,
+ *  so the first ~600 ms after a line starts is echo-dominated, not the caller.
+ *  Empirical on VoBiz/Twilio, not a carrier spec. Per-agent override:
+ *  agentConfig.bargeInEchoGraceMs (session.ts default 600). Owner: this constant
+ *  as module fallback; live path uses `this.bargeInEchoGraceMs`. */
 const BARGE_IN_ECHO_GRACE_MS  = 600;    // Suppress barge-in for 600 ms after playback starts —
                                          // gives audio time to reach the caller before we start
                                          // counting any returning echo as a real interruption.
@@ -914,6 +923,17 @@ type TtsSentenceJob = {
   ready: Promise<void>;
 };
 
+/**
+ * Telephony + webcall voice session. Intentionally a monolith: turn-taking,
+ * barge-in, idle, STT, LLM, TTS, and tools share one clock so the ten
+ * semantic-turn invariants cannot drift across processors.
+ *
+ * Architectural debt (named, not denied): ~11.7k lines, no abstraction
+ * boundary. Fine while the team holds `_eouTimer`'s floors in their heads.
+ * Next extraction is EOU / idle / barge as named stages *with regression
+ * tests* — not a Pipecat frame graph, and not a split that reintroduces
+ * STT gating (772→1320) or idle-from-the-wrong-clock (14315).
+ */
 export class OrchestrationPipeline implements VoiceSession {
   private config: SessionConfig;
   private readonly callDirection: "inbound" | "outbound";
@@ -1177,6 +1197,8 @@ export class OrchestrationPipeline implements VoiceSession {
   private _eouHoldMs: number | null = null;
   private _eouAction: string | null = null;
   private _eouSkipSmartTurn = false;
+  /** Once-per-call: missing Smart Turn model fail-opens to VAD+text veto. */
+  private _smartTurnFailOpenAlerted = false;
 
   // KB prefetch — fired on the first speech frame of a new utterance so the
   // result is ready by the time STT finishes and processTurn() starts.
@@ -1905,6 +1927,21 @@ export class OrchestrationPipeline implements VoiceSession {
     });
     const action = this.semanticTurnGate.onEou(generation, resolved);
     if (action === "ignore") return;
+    if (!sessionReady && !skipSmartTurn && !this._smartTurnFailOpenAlerted) {
+      this._smartTurnFailOpenAlerted = true;
+      logger.warn(
+        { callId: this.config.callId, sessionReady, eou, reason: resolved.reason },
+        "Smart Turn fail-open — EOU degraded to VAD + text veto",
+      );
+      logWarningEvent(this.logFn, EXEC_COMPONENTS.STT, "Smart Turn Fail-Open", ["smart_turn_fail_open"], {
+        turnNumber: this._activeTurnIndex,
+        detail: {
+          reason: "Smart Turn model missing or not ready — EOU is Sarvam-VAD + text veto only",
+          sessionReady,
+          eou,
+        },
+      });
+    }
     this._eouEvalMs = Math.round(performance.now() - evalStarted);
     this._eouSkipSmartTurn = skipSmartTurn;
     this._eouAction = action;

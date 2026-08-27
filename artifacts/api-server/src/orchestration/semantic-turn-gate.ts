@@ -30,6 +30,8 @@
  * Fail-open (Smart Turn *missing*) bypasses the audio model only.
  * A slow eval (`timeout`) HOLDs instead of cutting the caller off.
  * The text veto still runs. TTS still requires transcript.final.
+ * Missing-model fail-open is a degraded mode — pipeline.ts must warn
+ * once per call (`smart_turn_fail_open`) so it cannot go silent.
  */
 
 export type EouVerdict = "complete" | "incomplete" | "unavailable" | "timeout";

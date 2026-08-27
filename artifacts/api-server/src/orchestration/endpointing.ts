@@ -157,6 +157,16 @@ export function isCallerOfferingEmail(text: string): boolean {
     && /(சொல்|tell|share|note|நோட்|give)/i.test(t);
 }
 
+/**
+ * Collection kind is exclusive — never digit AND email at once.
+ *
+ * Precedence when prompts overlap (e.g. "phone or email", or an email
+ * local-part that looks like a number): **email wins**. Digit-like tokens are
+ * legal inside addresses; treating them as OTP would commit "98765" mid-gmail.
+ * Digit collection is only used when the agent is not in email context.
+ * A fourth collection type must declare where it sits in this list — do not
+ * add a parallel timer.
+ */
 export function resolveCollectionKind(lastAgentText: string, lastUserText = ""): CollectionKind {
   if (isEmailCollectionContext(lastAgentText) || isCallerOfferingEmail(lastUserText) || isCallerOfferingEmail(lastAgentText)) {
     return "email";
@@ -446,9 +456,13 @@ export function resolveStreamingTurnHold(opts: {
   const spellingInProgress = looksLikeSpokenEmailSpelling(pending)
     && !EMAIL_ADDR_RE.test(pending)
     && !isCompleteEmailUtterance(pending);
-  const trailingEmail = emailCollection && (isEmailLikeUtterance(pending) || spellingInProgress);
+  const trailingEmail = emailCollection && (
+    isEmailLikeUtterance(pending)
+    || spellingInProgress
+    || (isDigitLikeUtterance(pending) && !isCompleteEmailUtterance(pending) && !EMAIL_ACK_RE.test(pending))
+  );
   const trailingFragment = (digitCollection && isDigitLikeUtterance(pending)) || trailingEmail;
-  if (emailCollection && (isEmailLikeUtterance(pending) || spellingInProgress)) {
+  if (emailCollection && trailingEmail) {
     return {
       incomplete: true,
       reason: "email_collection",
@@ -499,6 +513,11 @@ const DIGIT_TRAIL_HOLD_MS = 1600;
 const EMAIL_HOLD_MS = 1400;
 const EMAIL_TRAIL_HOLD_MS = 1800;
 
+/**
+ * One HOLD clock (`_eouTimer`). Collection floors it; they never race.
+ * `collectionKind` is already exclusive (email > digit), so overlapping
+ * prompts take the email floor. Trailing fragments use the trail floor.
+ */
 export function resolveIncompleteHoldMs(opts: {
   baseStopMs: number;
   collectionKind?: CollectionKind;

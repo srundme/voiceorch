@@ -383,6 +383,8 @@ export interface AgentConfig {
   bargeInEnabled: boolean;
   bargeInEnergyThreshold: number;
   bargeInMinFrames: number;
+  /** Echo-suppression window after TTS starts. Default 600 ms — empirical
+   *  PSTN round-trip, not a spec. See pipeline.ts BARGE_IN_ECHO_GRACE_MS. */
   bargeInEchoGraceMs: number;
   /** "Mic Sensitivity" — single lever scaling the noise gate ratio, VAD floor, and
    *  barge-in energy bars together. "low" filters quiet background talkers more

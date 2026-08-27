@@ -722,6 +722,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // 1800 so existing agents pick it up without a UI re-save (call 5718).
     bargeInEnergyThreshold: resolveBargeInEnergyThreshold(agentCfg["bargeInEnergyThreshold"]),
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,
+    // Empirical PSTN echo window (VoBiz/Twilio), not a carrier spec. See
+    // pipeline.ts BARGE_IN_ECHO_GRACE_MS. Stop Speaking Plan may override.
     bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 600,
     micSensitivity:         resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined),
     // P1-E: Agent timezone

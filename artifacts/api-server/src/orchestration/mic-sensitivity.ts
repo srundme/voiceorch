@@ -39,6 +39,9 @@ const THRESHOLDS: Record<MicSensitivity, MicSensitivityThresholds> = {
   // while the speech-detection floor stays near Normal so soft replies still land
   // (calls 4842/4843: older uniform-1.5x "low" erased real speech).
   low: {
+    // Empirical, Aug 2026 (calls 4842/4843): uniform 1.5× "low" erased soft
+    // replies. Owner: this Low preset — product default, not a Sarvam spec.
+    // Do not "tune" 110 without a paired live-call RMS dump.
     gateRatio: 5.0,
     vadThreshold: 110,
     bargeInEnergyThreshold: 1800,
@@ -86,6 +89,11 @@ export function resolveBargeInEnergyThreshold(explicit: unknown): number {
  * on the phone. Neural isolation keeps ANY speech — including a friend a few
  * metres away — so barge-in / turn-commit must score the mic energy, not the
  * enhanced signal.
+ *
+ * 800 is empirical on VoBiz 8 kHz + GTCRN (far-field vs near-talker), not a
+ * spec. Same bar as idle-cancel so background_talker and hangup-idle cannot
+ * disagree. Owner: this constant. Call 14315: echo tails below this must not
+ * look like a reply.
  */
 export const BACKGROUND_TALKER_MIN_RAW_RMS = 800;
 

@@ -113,6 +113,56 @@ describe("resolveStreamingTurnHold", () => {
     });
     expect(hold.incomplete).toBe(false);
   });
+
+  it("email wins when the agent asks for phone or email", () => {
+    expect(resolveCollectionKind("Share your phone number or email address")).toBe("email");
+  });
+
+  it("HOLDs a digit-looking fragment during email collection (local-part)", () => {
+    const hold = resolveStreamingTurnHold({
+      pending: "98765",
+      lastAgentText: "What is your email?",
+      textLooksIncomplete: false,
+    });
+    expect(hold.incomplete).toBe(true);
+    expect(hold.reason).toBe("email_collection");
+    expect(hold.collectionKind).toBe("email");
+  });
+
+  it("HOLDs a spoken digit word during email collection", () => {
+    const hold = resolveStreamingTurnHold({
+      pending: "nine",
+      lastAgentText: "Could I have your email?",
+      textLooksIncomplete: false,
+    });
+    expect(hold.incomplete).toBe(true);
+    expect(hold.reason).toBe("email_collection");
+  });
+
+  it("HOLDs a single spoken digit during email collection (too short to look like a local-part)", () => {
+    const hold = resolveStreamingTurnHold({
+      pending: "9",
+      lastAgentText: "What is your email?",
+      textLooksIncomplete: false,
+    });
+    expect(hold.incomplete).toBe(true);
+    expect(hold.reason).toBe("email_collection");
+  });
+
+  it("overlapping phone-or-email prompt HOLDs a number as email, not OTP", () => {
+    const hold = resolveStreamingTurnHold({
+      pending: "98765",
+      lastAgentText: "Share your phone number or email address",
+      textLooksIncomplete: false,
+    });
+    expect(hold.collectionKind).toBe("email");
+    expect(hold.reason).toBe("email_collection");
+    expect(resolveIncompleteHoldMs({
+      baseStopMs: 800,
+      collectionKind: hold.collectionKind,
+      trailingFragment: hold.trailingFragment,
+    })).toBe(1800);
+  });
 });
 
 describe("email collection helpers", () => {
@@ -242,6 +292,19 @@ describe("resolveIncompleteHoldMs", () => {
       collectionKind: "email",
       trailingFragment: true,
     })).toBe(1800);
+  });
+
+  it("email floor wins over digit floor when kind is email", () => {
+    expect(resolveIncompleteHoldMs({
+      baseStopMs: 1200,
+      collectionKind: "email",
+      trailingFragment: false,
+    })).toBe(1400);
+    expect(resolveIncompleteHoldMs({
+      baseStopMs: 800,
+      collectionKind: "digit",
+      trailingFragment: true,
+    })).toBe(1600);
   });
 });
 
