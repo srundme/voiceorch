@@ -6900,10 +6900,12 @@ export class OrchestrationPipeline implements VoiceSession {
         // hanging up — never drop the connection silently.
         this.endCallInitiated = true;
         this.safetyNet?.clear();
+        this.prepareSystemPlayback();
         const endCallTool = this.agent.tools.find(t => t.type === "end_call");
         const goodbye = resolveGoodbyeMessage(
           endCallTool?.type === "end_call" ? endCallTool.goodbyeMessage : undefined,
           this.agent.endCallPhrases,
+          this.agent.language ?? this.currentLang,
         );
         this.conversationHistory.appendAssistant(goodbye);
         this.config.onTranscript("agent", goodbye);
@@ -7179,8 +7181,13 @@ export class OrchestrationPipeline implements VoiceSession {
     logger.info({ callId: this.config.callId }, "End Call tool invoked by LLM");
     this.endCallInitiated = true;
     this.safetyNet?.clear();
+    this.prepareSystemPlayback();
     {
-      const goodbye = resolveGoodbyeMessage(tool.goodbyeMessage, this.agent.endCallPhrases);
+      const goodbye = resolveGoodbyeMessage(
+        tool.goodbyeMessage,
+        this.agent.endCallPhrases,
+        this.agent.language ?? this.currentLang,
+      );
       this.conversationHistory.appendAssistant(goodbye);
       this.config.onTranscript("agent", goodbye);
       await this.speakRaw(goodbye);
@@ -9335,10 +9342,12 @@ export class OrchestrationPipeline implements VoiceSession {
       // report when asking the agent to move to the next slide. The tool itself
       // emits no audio, so only the spoken follow-up needs the playback barrier.
       //
-      // Exception: transfer_agent must wait for any in-flight TTS to drain first.
-      // The handoff then speaks a squad handoff announcement and swaps pipelines —
-      // starting it mid-playback is what cut the first agent mid-sentence.
-      const waitForPlaybackBeforeTool = triggeredToolName === "transfer_agent";
+      // Exception: transfer_agent and end_call must wait for in-flight TTS first.
+      // end_call speaks a goodbye via speakRaw; starting it while the turn's
+      // last clause is still draining invalidates the sequence and audio_gates
+      // the farewell (call 13981: "புரிஞ்சுது" then stub "thankyou" cancelled).
+      const waitForPlaybackBeforeTool =
+        triggeredToolName === "transfer_agent" || triggeredToolName === "end_call";
       let toolPromise: Promise<string | undefined> | null = null;
       if (!waitForPlaybackBeforeTool) {
         toolPromise = this.handleToolCall(triggeredToolName, triggeredToolArgs);
