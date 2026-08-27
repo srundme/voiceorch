@@ -1553,12 +1553,17 @@ export class OrchestrationPipeline implements VoiceSession {
    * and playJob no-ops → audioBytes:0 / audio_gated → silent hangup.
    */
   private prepareSystemPlayback(): void {
+    this.clearBargeWait();
+    this.systemPlaybackActive = true;
+  }
+
+  /** Clear barge WAIT without claiming a system line is on the wire. */
+  private clearBargeWait(): void {
     this.bargeInRequested = false;
     this.skipAgentPlaybackForHandoff = false;
     this.bargeInSpeechFrames = 0;
     this.streamingBargeInWordCount = 0;
     this.interruptionMgr.onUserSpeechEnd();
-    this.systemPlaybackActive = true;
   }
 
   /**
@@ -3564,7 +3569,13 @@ export class OrchestrationPipeline implements VoiceSession {
     // Call 14227: realtime skipped final-transcript barge-in, then still fed
     // greeting echo into the LLM. Only drop during greeting/system playback —
     // a blanket isPlaying discard ate overlapping caller speech (call 14235).
-    if (this.greetingPlaybackActive || this.systemPlaybackActive) {
+    // Only while greeting/system audio is actually on the wire. prepareSystemPlayback
+    // used to leave systemPlaybackActive=true after dropping "Hmm" with no TTS —
+    // every later "Hello" was discarded and the agent went silent (call 14243).
+    if (
+      (this.greetingPlaybackActive || this.systemPlaybackActive)
+      && (this.isPlaying || this.isSendingTtsAudio)
+    ) {
       this.streamingBargeInWordCount = 0;
       logger.info(
         { callId: this.config.callId, transcript: transcript.slice(0, 80) },
@@ -3873,7 +3884,7 @@ export class OrchestrationPipeline implements VoiceSession {
           "False interruption — ignoring scrap transcript",
         );
         this.logDiscardedTranscript(transcript, "false_interruption_scrap");
-        this.prepareSystemPlayback();
+        this.clearBargeWait();
         // Drop only this barge-linked scrap. Leaving the flag sticky used to
         // swallow every later short reply until the caller spoke 4+ words
         // (call 2632 felt like “STT only hears 3+ words”).
@@ -5634,6 +5645,16 @@ export class OrchestrationPipeline implements VoiceSession {
       // Drain the carrier's jitter buffer so the greeting's final word plays out
       // fully before we arm the stall backstop and enter Listening.
       await this.drainPlaybackTail();
+      // STT opened on sttConfig (often en-IN) while the greeting was Tamil
+      // (call 14243: "Will I get the meeting tomorrow?" for a Tamil line).
+      // maybeSwitchStreamingSttLang no-ops during echo-hold, so switch now.
+      {
+        const spokenLang = detectScriptLanguage(greeting) || greetLang;
+        if (spokenLang) {
+          this.currentLang = spokenLang;
+          this.switchStreamSTTLanguage(spokenLang);
+        }
+      }
       // First entry into Listening — arm the stall backstop.
       if (!this.closed) {
         this.safetyNet.beginListening();
@@ -7710,7 +7731,7 @@ export class OrchestrationPipeline implements VoiceSession {
         "Dropping ultra-short STT fragment — waiting for more speech",
       );
       this.logDiscardedTranscript(transcript, "ultra_short_fragment");
-      this.prepareSystemPlayback();
+      this.clearBargeWait();
       this.safetyNet.beginListening();
       return;
     }
