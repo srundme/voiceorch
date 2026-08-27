@@ -3,6 +3,8 @@ import {
   buildInstantReturningGreeting,
   neutralGreeting,
   isMetaRefusalGreeting,
+  isStubGreeting,
+  joinWelcomeAndOpener,
 } from "./endpointing.js";
 
 describe("buildInstantReturningGreeting", () => {
@@ -67,5 +69,35 @@ describe("isMetaRefusalGreeting", () => {
   it("treats empty text as not a refusal so the caller path still applies", () => {
     expect(isMetaRefusalGreeting("")).toBe(false);
     expect(isMetaRefusalGreeting(null)).toBe(false);
+  });
+});
+
+describe("joinWelcomeAndOpener", () => {
+  it("puts a stub Hello in front of the generated pitch", () => {
+    expect(
+      joinWelcomeAndOpener("Hello", "This is Infant from SnapServe. Got two minutes?"),
+    ).toBe("Hello. This is Infant from SnapServe. Got two minutes?");
+  });
+
+  it("does not double a greeting the opener already starts with", () => {
+    expect(joinWelcomeAndOpener("Hello", "Hello, this is Infant.")).toBe("Hello, this is Infant.");
+    expect(joinWelcomeAndOpener("Hello", "Hi, this is Infant from SnapServe.")).toBe(
+      "Hi, this is Infant from SnapServe.",
+    );
+  });
+
+  it("keeps a punctuated welcome as its own sentence", () => {
+    expect(joinWelcomeAndOpener("Hello!", "We're calling about Voice-a-thon.")).toBe(
+      "Hello! We're calling about Voice-a-thon.",
+    );
+  });
+});
+
+describe("isStubGreeting", () => {
+  it("treats Hello / Hi as stubs so outbound still generates the pitch", () => {
+    expect(isStubGreeting("Hello")).toBe(true);
+    expect(isStubGreeting("Hi!")).toBe(true);
+    expect(isStubGreeting("Hello there")).toBe(true);
+    expect(isStubGreeting("Hi, this is Infant from SnapServe. Got two minutes?")).toBe(false);
   });
 });

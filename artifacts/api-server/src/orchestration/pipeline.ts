@@ -69,6 +69,8 @@ import {
   meetingInactivityFarewell,
   neutralGreeting,
   isMetaRefusalGreeting,
+  isStubGreeting,
+  joinWelcomeAndOpener,
   buildInstantReturningGreeting,
   AFFIRMATIONS,
   STALL_BACKSTOP_MS,
@@ -612,6 +614,12 @@ const VOICE_MEMORY_PENDING_NOTE =
   "matching, or how recognition works. If CALLER MEMORY already has their name or history, ignore this note.";
 
 /**
+ * Prompts up to this size skip section-clipping and greet from the full system
+ * prompt. Clipping remains only for very large prompts (huge baked KB blocks).
+ */
+const GREETING_FULL_PROMPT_MAX_CHARS = 12_000;
+
+/**
  * Build a COMPACT system prompt for the greeting-only LLM call. Returning callers were
  * triggering a greeting generated against the full ~31k-token system prompt, adding
  * seconds of latency (and cost) before the first word. The opening line only needs the
@@ -622,24 +630,6 @@ const VOICE_MEMORY_PENDING_NOTE =
  * while greetingMessage stays a stub ("Hello"). Include those so the greeting LLM
  * can deliver the real pitch instead of a one-word opener that leaves dead air.
  */
-/** True when the static greeting is a one-word stub that should not open outbound calls. */
-function isStubGreeting(text: string): boolean {
-  const t = text.trim();
-  if (!t) return true;
-  if (t.length < 12) return true;
-  return /^(hi|hello|hey|hi there|hello there)[!.,\s]*$/i.test(t);
-}
-
-/**
- * Prompts up to this size skip section-clipping entirely and greet from the
- * FULL system prompt. The clipped compact prompt repeatedly starved the
- * greeting LLM of context (invented company call 5198; ignored caller memory
- * call 5246; translated "Fortune Trade Fairs" into an astrologer persona call
- * 5250). Full-prompt correctness beats the few hundred ms the clip saves;
- * clipping remains only for very large prompts (e.g. huge baked KB blocks).
- */
-const GREETING_FULL_PROMPT_MAX_CHARS = 12_000;
-
 function buildCompactGreetingPrompt(
   fullSystemPrompt: string,
   language: string,
@@ -5625,9 +5615,10 @@ export class OrchestrationPipeline implements VoiceSession {
         isReturningCaller && !resumeDropped && this.callDirection !== "outbound";
       const greetLang =
         this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
+      const typedWelcome = resumeDropped ? "" : (this.agent.greetingMessage ?? "").trim();
       let greeting = useInstantReturning
         ? buildInstantReturningGreeting(this.config.returningCallerName, greetLang)
-        : (resumeDropped ? "" : (this.agent.greetingMessage ?? ""));
+        : typedWelcome;
 
       // Stub static greetings ("Hello", "Hi!") on outbound leave the real pitch
       // trapped in the system prompt CALL FLOW — the callee hears one word then
@@ -5763,6 +5754,27 @@ export class OrchestrationPipeline implements VoiceSession {
             text: greeting.slice(0, 120),
           },
         });
+      }
+
+      // Welcome field is what callers hear first. Outbound still generates the
+      // CALL FLOW pitch (a lone "Hello" used to leave dead air), but we put a
+      // stub Welcome in front so it is not silently dropped. Long English
+      // welcomes on a non-English agent stay dropped so we don't re-anchor.
+      if (
+        typedWelcome &&
+        isStubGreeting(typedWelcome) &&
+        !useInstantReturning &&
+        greeting.trim() &&
+        greeting.trim() !== typedWelcome
+      ) {
+        const joined = joinWelcomeAndOpener(typedWelcome, greeting);
+        if (joined !== greeting) {
+          logger.info(
+            { callId: this.config.callId, welcome: typedWelcome.slice(0, 40) },
+            "Pipeline: speaking configured welcome before generated opener",
+          );
+          greeting = joined;
+        }
       }
 
       if (!greeting.trim() || this.closed) return;

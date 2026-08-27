@@ -75,4 +75,10 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(body).toContain("isSendingTtsAudio");
     expect(body).toMatch(/status === "WAIT"/);
   });
+
+  it("speaks the Welcome stub before a generated outbound opener (Hello was discarded)", () => {
+    expect(pipelineSrc).toContain("joinWelcomeAndOpener");
+    expect(pipelineSrc).toContain("typedWelcome");
+    expect(pipelineSrc).toContain("speaking configured welcome before generated opener");
+  });
 });

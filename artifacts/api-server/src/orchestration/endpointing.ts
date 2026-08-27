@@ -828,6 +828,39 @@ export function isMetaRefusalGreeting(text: string | null | undefined): boolean 
   return GREETING_META_REFUSAL.some(re => re.test(t));
 }
 
+/** True when the static Welcome is a one-word stub that cannot be the whole outbound opener. */
+export function isStubGreeting(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (t.length < 12) return true;
+  return /^(hi|hello|hey|hi there|hello there)[!.,\s]*$/i.test(t);
+}
+
+/**
+ * Speak the operator-typed Welcome first, then the generated opener.
+ * Outbound used to discard "Hello" so CALL FLOW could play — callers never
+ * heard the Welcome field. Keep the pitch; put Welcome in front unless the
+ * opener already starts with the same greeting.
+ */
+export function joinWelcomeAndOpener(welcome: string, opener: string): string {
+  const w = welcome.trim();
+  const o = opener.trim();
+  if (!w) return o;
+  if (!o) return w;
+  const oLead = o.replace(/^[\s"'“”‘’]+/, "");
+  const wBare = w.replace(/[!.,?…।॥\s]+$/g, "");
+  if (!wBare) return o;
+  if (oLead.toLowerCase().startsWith(wBare.toLowerCase())) return o;
+  if (
+    isStubGreeting(w) &&
+    /^(hi|hello|hey|hi there|hello there|வணக்கம்|नमस्ते|नमस्कार)\b/i.test(oLead)
+  ) {
+    return o;
+  }
+  const glue = /[.!?…।]$/.test(w) ? " " : ". ";
+  return `${w}${glue}${o}`;
+}
+
 /**
  * Instant returning-caller opener — no LLM round-trip.
  * Call 2636: Gemini recognition greeting blocked ~3.1s of silence before first TTS.
