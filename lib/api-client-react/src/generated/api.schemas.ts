@@ -1266,6 +1266,8 @@ export interface CallerDetailEpisode {
   /** @nullable */
   summary?: string | null;
   /** @nullable */
+  sentiment?: string | null;
+  /** @nullable */
   durationSeconds?: number | null;
   createdAt: string;
   insightFactIds: number[];

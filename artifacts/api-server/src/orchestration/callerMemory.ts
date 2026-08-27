@@ -251,6 +251,36 @@ export function formatSpeakerTranscript(history: ConversationTurn[]): string {
     .join("\n");
 }
 
+/** Readable episode blurb when the extract LLM omits / fails summary. */
+export function buildFallbackEpisodeSummary(opts: {
+  name?: string | null;
+  facts: Array<{ key: string; value: string }>;
+  wasDropped?: boolean;
+}): string {
+  const parts: string[] = [];
+  const name = opts.name?.trim();
+  if (name) parts.push(`Caller ${name}`);
+
+  const skip = new Set(["name", "language_pref", PERSONA_HASH_FACT_KEY]);
+  const detailBits: string[] = [];
+  for (const f of opts.facts) {
+    if (skip.has(f.key)) continue;
+    const label = isDurableFactKey(f.key) ? DURABLE_FACT_LABELS[f.key] : f.key;
+    detailBits.push(`${label} ${f.value}`);
+  }
+  if (detailBits.length > 0) {
+    parts.push(parts.length ? `shared ${detailBits.join(", ")}` : `Caller shared ${detailBits.join(", ")}`);
+  }
+
+  let summary = parts.length > 0
+    ? `${parts.join(" — ")}.`
+    : "Call completed; limited caller details were captured.";
+  if (opts.wasDropped) {
+    summary += " Call dropped before a natural ending.";
+  }
+  return summary.slice(0, 800);
+}
+
 // BCP-47 → plain-name value stored in the language_pref fact. Reverse of the
 // LANG_PREF_TO_BCP47 map session.ts uses at call start to seed the STT/agent
 // language from this fact — keys/values MUST stay in sync with that map.
@@ -1082,6 +1112,9 @@ export async function archiveCall(opts: {
   sentiment?: string | null;
   sentences?: Array<{ speaker: "agent" | "caller"; text: string }>;
 }): Promise<{ archiveId: number | null; sentenceIds: number[] }> {
+  // Insert the episode row first and keep it even if sentence insert fails —
+  // otherwise Facts can land later while Episodes stays empty.
+  let archiveId: number | null = null;
   try {
     const [row] = await db
       .insert(callerCallArchiveTable)
@@ -1096,29 +1129,34 @@ export async function archiveCall(opts: {
         sentiment:       opts.sentiment ?? null,
       })
       .returning({ id: callerCallArchiveTable.id });
+    archiveId = row?.id ?? null;
+  } catch (err) {
+    logger.warn({ err, agentId: opts.agentId, phoneNumber: opts.phoneNumber }, "archiveCall episode insert failed");
+    return { archiveId: null, sentenceIds: [] };
+  }
 
-    const archiveId = row?.id ?? null;
-    let sentenceIds: number[] = [];
-
-    // Insert L2 sentence nodes with NEXT-edge ordering
-    if (archiveId && opts.sentences && opts.sentences.length > 0) {
+  let sentenceIds: number[] = [];
+  if (archiveId && opts.sentences && opts.sentences.length > 0) {
+    try {
       const inserted = await db
         .insert(callerSentencesTable)
         .values(opts.sentences.map((s, i) => ({
-          episodeId:   archiveId,
+          episodeId:   archiveId!,
           sequenceNum: i + 1,
           speaker:     s.speaker,
           text:        s.text.slice(0, 4000),
         })))
         .returning({ id: callerSentencesTable.id });
       sentenceIds = inserted.map(r => r.id);
+    } catch (err) {
+      logger.warn(
+        { err, agentId: opts.agentId, phoneNumber: opts.phoneNumber, archiveId },
+        "archiveCall sentence insert failed — episode row kept",
+      );
     }
-
-    return { archiveId, sentenceIds };
-  } catch (err) {
-    logger.warn({ err, agentId: opts.agentId, phoneNumber: opts.phoneNumber }, "archiveCall DB write failed");
-    return { archiveId: null, sentenceIds: [] };
   }
+
+  return { archiveId, sentenceIds };
 }
 
 // ── Extract and save structured facts via LLM ─────────────────────────────────
@@ -1752,6 +1790,19 @@ export async function updateCallerProfile(opts: {
     },
     "Caller memory: durable fact extraction complete",
   );
+
+  // Prefer LLM summary; if missing (LLM down / empty), still leave a readable
+  // episode card so Memory → Episodes is never a blank timestamp.
+  if (!extracted.summary?.trim()) {
+    extracted.summary = buildFallbackEpisodeSummary({
+      name: extracted.name ?? callerNameInCall ?? existing?.name ?? null,
+      facts: uniqueFacts.map((f) => ({ key: f.key, value: f.value })),
+      wasDropped,
+    });
+  }
+  if (!extracted.sentiment?.trim()) {
+    extracted.sentiment = wasDropped ? "frustrated" : "neutral";
+  }
 
   // ── Phase 3b: update episode summary + sentiment + insight_facts edges ───
   if (archiveId) {
