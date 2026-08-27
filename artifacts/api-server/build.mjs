@@ -146,6 +146,9 @@ async function copyAssets(distDir) {
   const smartTurnSrc = path.resolve(artifactDir, "src/orchestration/smart-turn-v3.2-cpu.onnx");
   const smartTurnDest = path.resolve(distDir, "orchestration", "smart-turn-v3.2-cpu.onnx");
   await cp(smartTurnSrc, smartTurnDest);
+  const gtcrnSrc = path.resolve(artifactDir, "src/orchestration/gtcrn_simple.onnx");
+  const gtcrnDest = path.resolve(distDir, "orchestration", "gtcrn_simple.onnx");
+  await cp(gtcrnSrc, gtcrnDest);
 }
 
 buildAll().catch((err) => {

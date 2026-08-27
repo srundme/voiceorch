@@ -4,9 +4,11 @@
  *
  * Product rule: the agent's Noise Cancellation toggle is the only user-facing
  * control, and it applies to every LLM stack (classic Sarvam/OpenAI/Groq and
- * Gemini Live alike). Telephony audio (VoBiz, Twilio, Plivo) is gated when the
- * toggle is on. Browser webcall is the one exception: the mic already ran AEC/NS
- * and stacking our gate erases quiet speech, so webcall stays off.
+ * Gemini Live alike). When the toggle is on, the audio worker runs GTCRN
+ * neural voice isolation first (VOICE_ISOLATION=0 falls back to this energy
+ * gate). Telephony audio (VoBiz, Twilio, Plivo) is processed when the toggle
+ * is on. Browser webcall is the one exception: the mic already ran AEC/NS
+ * and stacking our isolator/gate erases quiet speech, so webcall stays off.
  *
  * Historically VoBiz calls skipped the software gate because the carrier also
  * denoises. That made the toggle a no-op for almost every agent. The extra

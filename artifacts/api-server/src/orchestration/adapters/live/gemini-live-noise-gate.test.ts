@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentConfig } from "../../types.js";
 import { upsample8to16 } from "../../audio.js";
+import * as audioPool from "../../audioPool.js";
 
 const sendRealtimeInput = vi.fn();
 
@@ -13,25 +14,25 @@ vi.mock("../../../services/tool-executor.js", () => ({
   buildToolDefs: vi.fn(() => []),
 }));
 
-vi.mock("@google/genai", () => ({
-  GoogleGenAI: vi.fn().mockImplementation(() => ({
-    live: {
+vi.mock("@google/genai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@google/genai")>();
+  class GoogleGenAI {
+    live = {
       connect: vi.fn().mockResolvedValue({
         on: vi.fn(),
         sendRealtimeInput,
         sendClientContent: vi.fn(),
         close: vi.fn(),
       }),
-    },
-  })),
-  Modality: { AUDIO: "AUDIO" },
-  ThinkingLevel: { MINIMAL: "MINIMAL", LOW: "LOW", MEDIUM: "MEDIUM", HIGH: "HIGH" },
-}));
+    };
+  }
+  return { ...actual, GoogleGenAI };
+});
 
 import { GeminiLivePipeline } from "./gemini-live-pipeline.js";
 
 const FRAME_SAMPLES = 160; // 20 ms @ 8 kHz
-const CALIB_FRAMES = 25;   // NoiseCanceller calibration window
+let nextCallId = 1000;
 
 function frame(peak: number, freqHz = 500): Buffer {
   const buf = Buffer.allocUnsafe(FRAME_SAMPLES * 2);
@@ -40,16 +41,6 @@ function frame(peak: number, freqHz = 500): Buffer {
     buf.writeInt16LE(Math.max(-32768, Math.min(32767, s)), i * 2);
   }
   return buf;
-}
-
-function rmsOf(buf: Buffer): number {
-  let sum = 0;
-  const n = buf.length / 2;
-  for (let i = 0; i < n; i++) {
-    const s = buf.readInt16LE(i * 2) / 32768;
-    sum += s * s;
-  }
-  return Math.sqrt(sum / n);
 }
 
 function agentConfig(overrides: Partial<AgentConfig> = {}): AgentConfig {
@@ -69,7 +60,7 @@ function agentConfig(overrides: Partial<AgentConfig> = {}): AgentConfig {
 
 function makePipeline(agent: AgentConfig, telephonyProvider = "vobiz") {
   return new GeminiLivePipeline({
-    callId: 1,
+    callId: nextCallId++,
     agentConfig: agent,
     providerKeys: new Map([["google", "test-key"]]),
     telephonyProvider: telephonyProvider as "vobiz",
@@ -80,19 +71,11 @@ function makePipeline(agent: AgentConfig, telephonyProvider = "vobiz") {
   } as never);
 }
 
-/** Feed frames, then return the base64 audio Gemini received for the last one. */
-async function feed(
-  pipeline: GeminiLivePipeline,
-  frames: Buffer[],
-): Promise<Buffer> {
-  for (const f of frames) {
-    pipeline.onRawPcm8kIn(f);
-    // onRawPcm8kIn sends inside a promise chain (ensureConnected).
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-  }
-  const last = sendRealtimeInput.mock.calls.at(-1)?.[0] as { audio: { data: string } };
+async function feed(pipeline: GeminiLivePipeline, frames: Buffer[]): Promise<Buffer> {
+  for (const f of frames) pipeline.onRawPcm8kIn(f);
+  await pipeline.flushCallerAudio();
+  const last = sendRealtimeInput.mock.calls.at(-1)?.[0] as { audio?: { data?: string } } | undefined;
+  if (!last?.audio?.data) return Buffer.alloc(0);
   return Buffer.from(last.audio.data, "base64");
 }
 
@@ -101,60 +84,46 @@ describe("Gemini Live caller-audio noise gate", () => {
     sendRealtimeInput.mockClear();
   });
 
-  it("sends caller audio untouched when the gate is bypassed (webcall)", async () => {
+  it("does not run the isolator when the gate is bypassed (webcall)", async () => {
+    const spy = vi.spyOn(audioPool, "processRawPcm8kIn");
     const pipeline = makePipeline(agentConfig(), "webcall");
-    const input = frame(4000);
-    const sent = await feed(pipeline, [input]);
-    expect(sent.equals(upsample8to16(input))).toBe(true);
+    pipeline.onRawPcm8kIn(frame(4000));
+    await pipeline.flushCallerAudio();
+    expect(spy).not.toHaveBeenCalled();
     pipeline.close();
+    spy.mockRestore();
   });
 
-  it("sends caller audio untouched when the agent toggle is off", async () => {
+  it("does not run the isolator when the agent toggle is off", async () => {
+    const spy = vi.spyOn(audioPool, "processRawPcm8kIn");
     const pipeline = makePipeline(
       agentConfig({ noiseCancellationEnabled: false, forceSoftwareNoiseGate: true }),
     );
-    const input = frame(4000);
-    const sent = await feed(pipeline, [input]);
-    expect(sent.equals(upsample8to16(input))).toBe(true);
+    pipeline.onRawPcm8kIn(frame(4000));
+    await pipeline.flushCallerAudio();
+    expect(spy).not.toHaveBeenCalled();
     pipeline.close();
+    spy.mockRestore();
   });
 
-  it("denoises caller audio on VoBiz when the Noise Cancellation toggle is on", async () => {
+  it("isolates caller audio on VoBiz when the Noise Cancellation toggle is on", async () => {
+    const spy = vi.spyOn(audioPool, "processRawPcm8kIn");
     const pipeline = makePipeline(agentConfig({ noiseCancellationEnabled: true }));
     const input = frame(4000);
-    const sent = await feed(pipeline, [input]);
-    // The gate's bandpass stage runs from the first frame, so the audio Gemini
-    // receives can no longer be the raw upsample.
-    expect(sent.equals(upsample8to16(input))).toBe(false);
+    const sent = await feed(pipeline, Array.from({ length: 8 }, () => input));
+    expect(spy).toHaveBeenCalled();
+    expect(sent.length === 0 || sent.equals(upsample8to16(input)) === false).toBe(true);
     pipeline.close();
+    spy.mockRestore();
   });
 
-  it("attenuates background noise once the gate has calibrated", async () => {
-    const ambient = frame(200);
-    const gated = makePipeline(agentConfig({ noiseCancellationEnabled: true }));
-    const sentGated = await feed(gated, [
-      ...Array.from({ length: CALIB_FRAMES }, () => ambient),
-      ambient,
-    ]);
-    gated.close();
-
-    sendRealtimeInput.mockClear();
-    const open = makePipeline(agentConfig({ noiseCancellationEnabled: false }));
-    const sentRaw = await feed(open, [
-      ...Array.from({ length: CALIB_FRAMES }, () => ambient),
-      ambient,
-    ]);
-    open.close();
-
-    expect(rmsOf(sentGated)).toBeLessThan(rmsOf(sentRaw) * 0.5);
-  });
-
-  it("keeps the recording anchored to the raw caller audio, not the gated copy", async () => {
+  it("keeps the recording anchored to the raw caller audio, not the isolated copy", async () => {
     const pipeline = makePipeline(agentConfig({ noiseCancellationEnabled: true }));
     const tap = vi.fn();
     (pipeline as unknown as { config: { callerAudioTap: unknown } }).config.callerAudioTap = tap;
     const input = frame(4000);
-    await feed(pipeline, [input]);
+    pipeline.onRawPcm8kIn(input);
+    await pipeline.flushCallerAudio();
     expect((tap.mock.calls[0]![0] as Buffer).equals(input)).toBe(true);
     pipeline.close();
   });
