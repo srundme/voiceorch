@@ -91,4 +91,12 @@ describe("inboundPurposeExamples", () => {
     expect(examples.some((e) => e.includes("சிவராம்"))).toBe(true);
     expect(examples.some((e) => /விஷயமா|உதவலாம்/.test(e))).toBe(true);
   });
+
+  it("offers several related Tamil inbound openers", () => {
+    const examples = inboundPurposeExamples("ta", null);
+    expect(examples.length).toBeGreaterThanOrEqual(6);
+    expect(examples.some((e) => e.includes("என்ன விஷயமா கால் பண்ணிருக்கீங்க"))).toBe(true);
+    expect(examples.some((e) => e.includes("எதற்காக கால் பண்ணிருக்கீங்க"))).toBe(true);
+    expect(examples.some((e) => e.includes("என்ன காரணமா"))).toBe(true);
+  });
 });
