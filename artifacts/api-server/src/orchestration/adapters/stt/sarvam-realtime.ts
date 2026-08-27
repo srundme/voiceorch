@@ -233,6 +233,30 @@ export function shouldBargeOnRealtimeVadStart(opts: {
   return opts.hasUsablePartial || opts.energyAboveEchoBar;
 }
 
+/**
+ * Early-partial barge-in (Sarvam transcript.partial while TTS is playing).
+ * Stricter than vad.speech_start on PSTN: a cold echo floor must NOT barge.
+ * Call 14227: greeting echo → "Then you need to learn" → eager LLM + tools turn.
+ */
+export function shouldBargeOnRealtimePartial(opts: {
+  greetingOrSystem: boolean;
+  inEchoGrace: boolean;
+  isWebcall: boolean;
+  isSelfEcho: boolean;
+  echoBarReady: boolean;
+  energyAboveEchoBar: boolean;
+  charCount: number;
+  minChars: number;
+}): boolean {
+  if (opts.charCount < opts.minChars) return false;
+  if (opts.isSelfEcho) return false;
+  if (opts.greetingOrSystem) return false;
+  if (opts.inEchoGrace) return false;
+  if (opts.isWebcall) return true;
+  if (!opts.echoBarReady) return false;
+  return opts.energyAboveEchoBar;
+}
+
 interface RealtimeMsg {
   event?: string;
   text?: string;

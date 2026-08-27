@@ -2408,7 +2408,7 @@ function VoiceTab({ form }: { form: any }) {
             <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
               <div>
                 <FormLabel className="text-sm">Noise Cancellation</FormLabel>
-                <FormDescription className="text-[10px]">Neural voice isolation (GTCRN) on caller audio before VAD/STT — every LLM including Gemini Live. Browser web calls still use the mic’s own suppression.</FormDescription>
+                <FormDescription className="text-[10px]">Neural isolation on caller audio before VAD/STT. Greeting echo is ignored so the agent does not cut herself. Browser web calls use the mic’s own suppression.</FormDescription>
               </div>
               <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>

@@ -12,6 +12,7 @@ import {
   resolveRealtimeSocketLanguage,
   resolveRealtimeStreamType,
   shouldBargeOnRealtimeVadStart,
+  shouldBargeOnRealtimePartial,
   toRealtimeLanguageCode,
 } from "./sarvam-realtime.js";
 
@@ -254,5 +255,49 @@ describe("shouldBargeOnRealtimeVadStart", () => {
   it("holds through greeting and echo grace", () => {
     expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true, greetingOrSystem: true })).toBe(false);
     expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true, inEchoGrace: true })).toBe(false);
+  });
+});
+
+describe("shouldBargeOnRealtimePartial", () => {
+  const base = {
+    greetingOrSystem: false,
+    inEchoGrace: false,
+    isWebcall: false,
+    isSelfEcho: false,
+    echoBarReady: true,
+    energyAboveEchoBar: true,
+    charCount: 22,
+    minChars: 4,
+  };
+
+  it("does not barge greeting echo even when the partial looks like English (call 14227)", () => {
+    expect(shouldBargeOnRealtimePartial({ ...base, greetingOrSystem: true })).toBe(false);
+    expect(shouldBargeOnRealtimePartial({ ...base, inEchoGrace: true })).toBe(false);
+  });
+
+  it("does not barge on PSTN while the echo floor is still cold", () => {
+    expect(shouldBargeOnRealtimePartial({
+      ...base,
+      echoBarReady: false,
+      energyAboveEchoBar: false,
+    })).toBe(false);
+  });
+
+  it("does not barge self-echo or short scraps", () => {
+    expect(shouldBargeOnRealtimePartial({ ...base, isSelfEcho: true })).toBe(false);
+    expect(shouldBargeOnRealtimePartial({ ...base, charCount: 3, minChars: 4 })).toBe(false);
+  });
+
+  it("barges a real PSTN talk-over once energy is above the echo bar", () => {
+    expect(shouldBargeOnRealtimePartial(base)).toBe(true);
+  });
+
+  it("barges webcall partials after greeting (browser AEC)", () => {
+    expect(shouldBargeOnRealtimePartial({
+      ...base,
+      isWebcall: true,
+      echoBarReady: false,
+      energyAboveEchoBar: false,
+    })).toBe(true);
   });
 });

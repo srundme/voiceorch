@@ -25,7 +25,7 @@ import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
-import { shouldBargeOnRealtimeVadStart, parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
+import { shouldBargeOnRealtimeVadStart, shouldBargeOnRealtimePartial, parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
@@ -2631,7 +2631,8 @@ export class OrchestrationPipeline implements VoiceSession {
       | "transfer_in_progress"
       | "end_call_in_progress"
       | "fragment_coalesce_hold"
-      | "backchannel_during_playback",
+      | "backchannel_during_playback"
+      | "agent_still_speaking",
   ): void {
     const now = Date.now();
     const reasonByGuard: Record<typeof guard, string> = {
@@ -2644,6 +2645,7 @@ export class OrchestrationPipeline implements VoiceSession {
       end_call_in_progress: "hangup already in progress",
       fragment_coalesce_hold: "short fragment held briefly for coalesce (not a drop)",
       backchannel_during_playback: "held ack fragment dropped — agent speaking at coalesce-timer fire (true backchannel)",
+      agent_still_speaking: "final arrived during greeting/system playback and did not barge-in",
     };
     this.logExec(EXEC_COMPONENTS.STT, "system", {
       status: "info",
@@ -3063,6 +3065,9 @@ export class OrchestrationPipeline implements VoiceSession {
       stallBackstopMs,
       onForceFinalize: (transcript) => {
         if (this.closed) return;
+        // Call 14227: pickup/echo partials armed this timer before the greeting;
+        // firing during TTS treated "Then you need to learn" as a real caller turn.
+        if (this.isPlaying || this.isSendingTtsAudio || this.greetingPlaybackActive) return;
         logger.warn(
           { callId: this.config.callId, chars: transcript.length },
           "Safety net: force-finalizing stuck turn from best partial",
@@ -3156,18 +3161,36 @@ export class OrchestrationPipeline implements VoiceSession {
                 // often about to continue (call 2967: "சரி" then the real question).
               } else if (this.sarvamRealtimePartials()) {
                 // Realtime best practice: barge on early partials, not transcript.final.
+                // Call 14227: Tamil greeting echo transcribed as English "Then you
+                // need to learn" — isSelfEcho missed it, echo bar was still cold,
+                // and vad_partial launched a full LLM turn. Same greeting/echo-grace
+                // / cold-floor rules as vad.speech_start.
                 const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
                 this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
                 const charCount = [...text.trim()].length;
                 const minChars = bargeInMinChars(this.currentLang || this.agent.language);
+                const inEchoGrace = Date.now() < this.greetingEchoHoldUntil
+                  || Date.now() < this.bargeInSentenceStartAt + Math.max(600, this.bargeInEchoGraceMs);
                 const interimEchoBar = this.echoBarRms();
+                const energyAboveEchoBar =
+                  interimEchoBar !== null
+                  && this.bargeInPeakRmsSinceSentence > interimEchoBar;
                 const interimIsSelfEcho =
                   this.isSelfEcho(text)
                   || (
                     interimEchoBar !== null
                     && this.bargeInPeakRmsSinceSentence <= interimEchoBar
                   );
-                if (charCount >= minChars && !interimIsSelfEcho) {
+                if (shouldBargeOnRealtimePartial({
+                  greetingOrSystem: this.greetingPlaybackActive || this.systemPlaybackActive,
+                  inEchoGrace,
+                  isWebcall: this.config.telephonyProvider === "webcall",
+                  isSelfEcho: interimIsSelfEcho,
+                  echoBarReady: interimEchoBar !== null,
+                  energyAboveEchoBar,
+                  charCount,
+                  minChars,
+                })) {
                   this.triggerBargeIn("vad_partial", text, { speculative: true });
                   logger.info(
                     {
@@ -3536,6 +3559,19 @@ export class OrchestrationPipeline implements VoiceSession {
       // agent is speaking, and the very first callback that arrives while
       // isPlaying=true will therefore always start from 0.
       this.streamingBargeInWordCount = 0;
+    }
+
+    // Call 14227: realtime skipped final-transcript barge-in, then still fed
+    // greeting echo into the LLM. Only drop during greeting/system playback —
+    // a blanket isPlaying discard ate overlapping caller speech (call 14235).
+    if (this.greetingPlaybackActive || this.systemPlaybackActive) {
+      this.streamingBargeInWordCount = 0;
+      logger.info(
+        { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+        "Streaming STT: discarding final during greeting/system playback (no barge-in)",
+      );
+      this.logDiscardedTranscript(transcript, "agent_still_speaking");
+      return;
     }
 
     // Transfer in-flight guard (defense-in-depth). transferInitiated is set at
@@ -4102,7 +4138,13 @@ export class OrchestrationPipeline implements VoiceSession {
     this.recording.addCallerChunk(pcm8k);
     // Voice-intelligence tap — runs outside the main audio pipeline
     this.config.callerAudioTap?.(pcm8k);
-    processAudioIn(callId, mulawChunk, this.noiseGate.enabled, this.micThresholds.gateRatio, this.micThresholds.vadThreshold)
+    processAudioIn(
+      callId,
+      mulawChunk,
+      this.noiseGate.enabled,
+      this.micThresholds.gateRatio,
+      this.micThresholds.vadThreshold,
+    )
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (mulaw)"));
   }
@@ -5562,6 +5604,9 @@ export class OrchestrationPipeline implements VoiceSession {
       this._currentTurnPlayedSentences = [];
       this.isPlaying = true;
       this.greetingPlaybackActive = true;
+      // Pickup VAD before answer arms force-finalize; clear it so a ringtone/
+      // echo partial cannot become a caller turn mid-greeting (call 14227).
+      this.safetyNet.clear();
       const bootLatencyMs = Date.now() - (this.config.sessionCreatedAtMs ?? Date.now());
       logger.info(
         { callId: this.config.callId, bootLatencyMs, greetingLen: greeting.length },
@@ -6348,7 +6393,10 @@ export class OrchestrationPipeline implements VoiceSession {
       text,
       turnNumber,
       sequenceId,
-      streaming: !!this.tts.synthesizeStream,
+      // Fillers always use one-shot PCM. If this stays true, drainSentenceJob
+      // walks the empty streaming queue, underruns, and logs audio_gated
+      // (call 14235: "புரிஞ்சுது" / "அப்படியா" chopped before the real sentence).
+      streaming: sequenceId !== FILLER_SEQUENCE_ID && !!this.tts.synthesizeStream,
       pcmQueue: [],
       synthDone: false,
       synthError: null,
