@@ -1,5 +1,5 @@
 /**
- * /app/providers — Voices | Provider keys
+ * /app/providers — Voices | Provider keys | My clones
  */
 import { useLocation, useSearch } from "wouter";
 import { StripeTabPage } from "@/components/stripe-tab-page";
@@ -10,6 +10,8 @@ import { useVoiceClones } from "./my-clones-panel";
 export default function ProvidersTabPage() {
   const [, navigate] = useLocation();
   const search = useSearch();
+  const activeTab = new URLSearchParams(search).get("tab") ?? "voices";
+  const showCloneActions = activeTab === "voices" || activeTab === "my-clones";
 
   const revealClones = () => {
     const sp = new URLSearchParams(search);
@@ -25,7 +27,7 @@ export default function ProvidersTabPage() {
         title="Providers"
         description="Voice library and LLM / TTS / STT provider keys."
         defaultTab="voices"
-        tabActions={clones.buttons}
+        tabActions={showCloneActions ? clones.buttons : undefined}
         tabs={[
           { key: "voices", label: "Voices", content: <VoicesPage /> },
           {
