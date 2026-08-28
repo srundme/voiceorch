@@ -79,6 +79,8 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
   it("speaks the Welcome stub before a generated outbound opener (Hello was discarded)", () => {
     expect(pipelineSrc).toContain("joinWelcomeAndOpener");
     expect(pipelineSrc).toContain("typedWelcome");
-    expect(pipelineSrc).toContain("speaking configured welcome before generated opener");
+    expect(pipelineSrc).toContain("playing welcome before greeting LLM");
+    expect(pipelineSrc).toContain("stripWelcomePrefix");
+    expect(pipelineSrc).toContain("Greeting LLM prewarm started (constructor entry)");
   });
 });

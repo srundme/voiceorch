@@ -5,6 +5,7 @@ import {
   isMetaRefusalGreeting,
   isStubGreeting,
   joinWelcomeAndOpener,
+  stripWelcomePrefix,
 } from "./endpointing.js";
 
 describe("buildInstantReturningGreeting", () => {
@@ -89,6 +90,23 @@ describe("joinWelcomeAndOpener", () => {
   it("keeps a punctuated welcome as its own sentence", () => {
     expect(joinWelcomeAndOpener("Hello!", "We're calling about Voice-a-thon.")).toBe(
       "Hello! We're calling about Voice-a-thon.",
+    );
+  });
+});
+
+describe("stripWelcomePrefix", () => {
+  it("drops a duplicated Hello after Welcome already played", () => {
+    expect(stripWelcomePrefix("Hello", "Hello, this is Infant from SnapServe.")).toBe(
+      "this is Infant from SnapServe.",
+    );
+    expect(stripWelcomePrefix("Hello", "Hi, this is Infant from SnapServe.")).toBe(
+      "this is Infant from SnapServe.",
+    );
+  });
+
+  it("leaves a pitch that does not start with a greeting", () => {
+    expect(stripWelcomePrefix("Hello", "This is Infant from SnapServe. Got two minutes?")).toBe(
+      "This is Infant from SnapServe. Got two minutes?",
     );
   });
 });

@@ -861,6 +861,28 @@ export function joinWelcomeAndOpener(welcome: string, opener: string): string {
   return `${w}${glue}${o}`;
 }
 
+const OPENING_GREETING_WORD =
+  /^(hi|hello|hey|hi there|hello there|வணக்கம்|नमस्ते|नमस्कार)\b[!,.?\s]*/i;
+
+/**
+ * After Welcome was already spoken, drop a duplicated Hello/Hi from the LLM opener
+ * so the caller does not hear "Hello. Hello, this is…".
+ */
+export function stripWelcomePrefix(welcome: string, opener: string): string {
+  const w = welcome.trim();
+  const o = opener.trim();
+  if (!w || !o) return o;
+  const wBare = w.replace(/[!.,?…।॥\s]+$/g, "");
+  const oLead = o.replace(/^[\s"'“”‘’]+/, "");
+  if (wBare && oLead.toLowerCase().startsWith(wBare.toLowerCase())) {
+    return oLead.slice(wBare.length).replace(/^[\s,!.?…।:-]+/, "").trim() || o;
+  }
+  if (isStubGreeting(w) && OPENING_GREETING_WORD.test(oLead)) {
+    return oLead.replace(OPENING_GREETING_WORD, "").trim() || o;
+  }
+  return o;
+}
+
 /**
  * Instant returning-caller opener — no LLM round-trip.
  * Call 2636: Gemini recognition greeting blocked ~3.1s of silence before first TTS.

@@ -71,6 +71,7 @@ import {
   isMetaRefusalGreeting,
   isStubGreeting,
   joinWelcomeAndOpener,
+  stripWelcomePrefix,
   buildInstantReturningGreeting,
   AFFIRMATIONS,
   STALL_BACKSTOP_MS,
@@ -320,16 +321,22 @@ const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
 // TTS jitter buffer (see drainSentenceJob): runway of audio to queue before
 // starting/resuming the paced send pump, so momentary provider-stream hiccups
 // don't become audible mid-sentence gaps. Caps bound the added latency.
-// Quality-first: wait for a healthy Cartesia runway before pacing to VoBiz
-// (call 14351 greeting underran 194 ms at the old 240/400 ms defaults).
-const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 400));
+// Greeting first-clip stays short so pickup isn't 3s of boot silence; later
+// sentences keep a longer runway. Native Cartesia 8 kHz made the voice worse —
+// we synthesize 16 kHz and FIR-downsample with the streaming decimator.
+const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 80));
+const TTS_PREBUFFER_GREETING_CAP_MS = Math.max(
+  TTS_PREBUFFER_GREETING_MS,
+  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 160),
+);
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 240));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
-  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 560),
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 320),
 );
-const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 800));
-const TTS_REBUFFER_MS      = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 320));
-const TTS_REBUFFER_CAP_MS  = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 800));
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 400));
+const TTS_REBUFFER_MS      = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 200));
+const TTS_REBUFFER_CAP_MS  = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 400));
 const TTS_UNDERRUN_COLD_MS = 8_000;
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
 const FILLER_THRESHOLD_MS     = 900;    // second TTS job only if LLM TTFT is actually slow
@@ -2966,9 +2973,10 @@ export class OrchestrationPipeline implements VoiceSession {
       : agentLanguage;
     if (seedLang) this.currentLang = seedLang;
 
-    // Launch greeting LLM prewarm IMMEDIATELY after LLM adapter creation so the 1-3s LLM round-trip
-    // gets maximum overlap with fallback LLM init, TTS setup, and noise cancellation.
-    if (!this.amdConfirm && this.greetingWillNeedLlm()) {
+    // Launch greeting LLM prewarm immediately so the 1–3s round-trip overlaps
+    // TTS setup, AMD confirm, and the spoken Welcome — not after the caller
+    // already heard 3s of boot silence.
+    if (this.greetingWillNeedLlm()) {
       const preLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
       this._greetingPrewarm = this.generateGreetingLlmText(this.isResumeDroppedCall, preLang).catch(() => "");
       logger.info({ callId: config.callId }, "Greeting LLM prewarm started (constructor entry)");
@@ -2993,10 +3001,13 @@ export class OrchestrationPipeline implements VoiceSession {
     this.tts = createTTSAdapter(
       this.agent.ttsProvider, ttsKey, this.agent.ttsVoice, this.agent.ttsModel,
       ttsExtraConfig, ttsLanguage, this.agent.ttsSpeed,
-      // Cartesia can emit native 8 kHz — match VoBiz/Twilio/Plivo so we do not
-      // FIR-downsample 16 kHz blocks (50 Hz grit on every 8 kHz leg). HD webcall
-      // stays 16 kHz. Other TTS adapters ignore this and keep 16 kHz.
-      this.agent.ttsProvider === "cartesia" && this.pcmOutRate() !== 16000 ? 8000 : 16000,
+      // Cartesia 16 kHz + streaming 16→8 FIR (native 8 kHz sounded broken on
+      // VoBiz). Set CARTESIA_NATIVE_8K=1 only as an experiment.
+      this.agent.ttsProvider === "cartesia"
+      && this.pcmOutRate() !== 16000
+      && process.env["CARTESIA_NATIVE_8K"] === "1"
+        ? 8000
+        : 16000,
     );
     if (ttsLanguage) this.ttsLang = ttsLanguage;
     // Pre-warm any persistent TTS connections (e.g. Cartesia / Sarvam WebSocket) with a bounded 500ms wait.
@@ -5561,6 +5572,46 @@ export class OrchestrationPipeline implements VoiceSession {
     return !greeting.trim();
   }
 
+  /**
+   * Arm greeting playback + boot log once. A second call only extends echo hold
+   * so Welcome-then-pitch does not reset firstAudioSentAt (answer→audio gap).
+   */
+  private beginOpeningGreetingPlayback(estChars: number): void {
+    if (this.greetingPlaybackActive) {
+      if (this.config.telephonyProvider !== "webcall") {
+        const extra = Math.round(Math.max(0, estChars) * 70);
+        this.greetingEchoHoldUntil = Math.max(
+          this.greetingEchoHoldUntil,
+          Date.now() + Math.min(extra + CARRIER_ECHO_LATENCY_MS, GREETING_ECHO_HOLD_CAP_MS),
+        );
+      }
+      return;
+    }
+    this.firstAudioSentAt = null;
+    this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+    if (this.config.telephonyProvider !== "webcall") {
+      const estGreetMs = Math.round(Math.max(1, estChars) * 70);
+      this.greetingEchoHoldUntil = Date.now() + Math.min(
+        estGreetMs + CARRIER_ECHO_LATENCY_MS,
+        GREETING_ECHO_HOLD_CAP_MS,
+      );
+    }
+    this._currentTurnPlayedSentences = [];
+    this.isPlaying = true;
+    this.greetingPlaybackActive = true;
+    this.clearBargeWait();
+    this.safetyNet.clear();
+    const bootLatencyMs = Date.now() - (this.config.sessionCreatedAtMs ?? Date.now());
+    logger.info(
+      { callId: this.config.callId, bootLatencyMs, greetingLen: estChars },
+      "Call pipeline boot complete — playing opening greeting",
+    );
+    this.logExec("Pipeline", "system", {
+      status: "info",
+      metadata: { bootLatencyMs, greetingLen: estChars },
+    });
+  }
+
   async greet(): Promise<void> {
     if (this.closed) return;
     // Prefer ambient ready before first speech so BG noise isn't silent for seconds
@@ -5660,6 +5711,7 @@ export class OrchestrationPipeline implements VoiceSession {
       }
 
       let greetingEmotions: string[] | undefined;
+      let welcomeAlreadySpoken = false;
 
       // Substitute {caller_salutation} in the greeting with the neutral salutation —
       // gender detection has not fired yet at greeting time.
@@ -5677,7 +5729,29 @@ export class OrchestrationPipeline implements VoiceSession {
         );
       }
 
-      if (!greeting.trim()) {
+      // Speak the typed Welcome immediately. Waiting for the greeting LLM first
+      // is the 3s boot silence after pickup (Hello sat in front of a pitch that
+      // had not been generated yet).
+      const speakWelcomeNow =
+        !greeting.trim()
+        && !!typedWelcome
+        && isStubGreeting(typedWelcome)
+        && !useInstantReturning;
+      if (speakWelcomeNow) {
+        this.beginOpeningGreetingPlayback(typedWelcome.length);
+        logger.info(
+          { callId: this.config.callId, welcome: typedWelcome.slice(0, 40) },
+          "Pipeline: playing welcome before greeting LLM",
+        );
+        await this.playTextAsSentences(typedWelcome);
+        welcomeAlreadySpoken = true;
+        if (this.closed || this.bargeInRequested) {
+          // fall through to disarm + heard-append
+          greeting = "";
+        }
+      }
+
+      if (!greeting.trim() && !this.closed && !this.bargeInRequested) {
         // Cold-caller path with empty static greeting: ask the LLM for a short opener.
         // The AMD confirmation window may have prewarmed this in parallel (outbound
         // dead-air fix: AMD window + greeting LLM used to stack serially).
@@ -5687,7 +5761,9 @@ export class OrchestrationPipeline implements VoiceSession {
         } else {
           greeting = await this.generateGreetingLlmText(resumeDropped, greetLang);
         }
-        if (this.closed) return;
+        if (this.closed) {
+          greeting = "";
+        } else {
         // Strip <think> reasoning blocks and markup. For Cartesia, extract the
         // leading <emotion> tag first so it can be forwarded to the voice controls
         // while TTS receives clean text (all other TTS engines ignore the emotion).
@@ -5743,6 +5819,10 @@ export class OrchestrationPipeline implements VoiceSession {
             },
           });
         }
+        if (welcomeAlreadySpoken && greeting.trim()) {
+          greeting = stripWelcomePrefix(typedWelcome, greeting);
+        }
+        }
       } else if (useInstantReturning) {
         this.logExec("Agent", "system", {
           status: "info",
@@ -5756,11 +5836,10 @@ export class OrchestrationPipeline implements VoiceSession {
         });
       }
 
-      // Welcome field is what callers hear first. Outbound still generates the
-      // CALL FLOW pitch (a lone "Hello" used to leave dead air), but we put a
-      // stub Welcome in front so it is not silently dropped. Long English
-      // welcomes on a non-English agent stay dropped so we don't re-anchor.
+      // If Welcome was not played early, still put a stub in front of a generated
+      // opener (inbound language-skip / resume paths).
       if (
+        !welcomeAlreadySpoken &&
         typedWelcome &&
         isStubGreeting(typedWelcome) &&
         !useInstantReturning &&
@@ -5777,40 +5856,9 @@ export class OrchestrationPipeline implements VoiceSession {
         }
       }
 
-      if (!greeting.trim() || this.closed) return;
-      logger.info({ callId: this.config.callId, greeting: greeting.slice(0, 80) }, "Sending greeting");
-      this.firstAudioSentAt = null;
-      this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
-      // Live Call (carrier) path: protect the FULL greeting from streaming-STT and
-      // energy self-echo. The per-sentence 600 ms grace is far too short for the
-      // carrier echo of a multi-second opening line (call 772: echo at +777 ms
-      // tripped a 1-word barge-in and killed the greeting). Web calls have browser
-      // AEC and must keep mid-greeting interruptibility, so this is telephony-only.
-      if (this.config.telephonyProvider !== "webcall") {
-        const estGreetMs = Math.round(greeting.length * 70);
-        // Cap the hold so a long estimated greeting can't lock the caller out of
-        // barging in for more than ~3s after the greeting starts.
-        this.greetingEchoHoldUntil = Date.now() + Math.min(
-          estGreetMs + CARRIER_ECHO_LATENCY_MS,
-          GREETING_ECHO_HOLD_CAP_MS,
-        );
-      }
-      this._currentTurnPlayedSentences = [];
-      this.isPlaying = true;
-      this.greetingPlaybackActive = true;
-      this.clearBargeWait();
-      // Pickup VAD before answer arms force-finalize; clear it so a ringtone/
-      // echo partial cannot become a caller turn mid-greeting (call 14227).
-      this.safetyNet.clear();
-      const bootLatencyMs = Date.now() - (this.config.sessionCreatedAtMs ?? Date.now());
-      logger.info(
-        { callId: this.config.callId, bootLatencyMs, greetingLen: greeting.length },
-        "Call pipeline boot complete — playing opening greeting",
-      );
-      this.logExec("Pipeline", "system", {
-        status: "info",
-        metadata: { bootLatencyMs, greetingLen: greeting.length },
-      });
+      if (!welcomeAlreadySpoken && (this.closed || !greeting.trim())) return;
+      this.beginOpeningGreetingPlayback((greeting.trim() || typedWelcome).length);
+      logger.info({ callId: this.config.callId, greeting: (greeting || typedWelcome).slice(0, 80) }, "Sending greeting");
       try {
         // Inbound openers feel rushed at full pace (especially long Tamil
         // purpose-of-call lines). Slow TTS slightly for this playback only.
@@ -5821,7 +5869,9 @@ export class OrchestrationPipeline implements VoiceSession {
           this.tts.setSpeed!(resolveInboundGreetingTtsSpeed(restoreSpeed));
         }
         try {
-          await this.playTextAsSentences(greeting, greetingEmotions);
+          if (greeting.trim() && !this.bargeInRequested) {
+            await this.playTextAsSentences(greeting, greetingEmotions);
+          }
         } finally {
           if (slowedInbound) {
             this.tts.setSpeed!(restoreSpeed === 1 ? null : restoreSpeed);
@@ -5995,7 +6045,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // Outbound dead-air fix: the greeting LLM (1–3s) used to start only AFTER
     // this confirmation window (1.2–3.2s). Prewarm it in parallel; greet()
     // consumes the promise. Wasted only when the verdict is machine + hangup.
-    if (this.greetingWillNeedLlm()) {
+    if (this.greetingWillNeedLlm() && !this._greetingPrewarm) {
       const preLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
       this._greetingPrewarm = this.generateGreetingLlmText(this.isResumeDroppedCall, preLang).catch(() => "");
       logger.info({ callId: this.config.callId }, "AMD confirm: greeting LLM prewarm started in parallel");
@@ -7001,10 +7051,14 @@ export class OrchestrationPipeline implements VoiceSession {
       let underrunWaitMs = 0;
       const recentlyUnderran = this.ttsLastUnderrunAt > 0
         && Date.now() - this.ttsLastUnderrunAt < TTS_UNDERRUN_COLD_MS;
-      const prebufferMs = (this.ttsWarmed && !recentlyUnderran)
-        ? TTS_PREBUFFER_WARM_MS
-        : TTS_PREBUFFER_COLD_MS;
-      await awaitPrebuffer(prebufferMs, TTS_PREBUFFER_CAP_MS);
+      const greetingFirstClip = this.greetingPlaybackActive && !this.ttsWarmed;
+      const prebufferMs = greetingFirstClip
+        ? TTS_PREBUFFER_GREETING_MS
+        : (this.ttsWarmed && !recentlyUnderran)
+          ? TTS_PREBUFFER_WARM_MS
+          : TTS_PREBUFFER_COLD_MS;
+      const prebufferCap = greetingFirstClip ? TTS_PREBUFFER_GREETING_CAP_MS : TTS_PREBUFFER_CAP_MS;
+      await awaitPrebuffer(prebufferMs, prebufferCap);
       // Re-anchor the per-sentence echo grace + adaptive echo-floor calibration
       // window to actual playback start: the prebuffer wait above would
       // otherwise consume the grace period before any audio is audible, and
