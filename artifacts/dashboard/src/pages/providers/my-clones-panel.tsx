@@ -155,7 +155,6 @@ export function useVoiceClones(onReveal?: () => void) {
         Clone (Cartesia)
       </Button>
       <Button
-        variant="outline"
         onClick={() => setSarvamCloneOpen(true)}
         className="gap-1.5 h-9 min-h-9 text-xs sm:text-[13px]"
       >

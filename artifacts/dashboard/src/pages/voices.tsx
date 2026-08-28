@@ -222,10 +222,6 @@ export default function VoicesPage() {
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-2 pt-2">
-          <h2 className="text-sm font-semibold tracking-tight">Library</h2>
-        </div>
-
         <div className="flex flex-col lg:flex-row gap-3">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
