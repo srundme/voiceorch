@@ -85,8 +85,15 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("_greetingPrewarmReady");
   });
 
-  it("asks Cartesia for native 8 kHz on telephony so VoBiz does not FIR-downsample", () => {
+  it("synthesizes Cartesia at 16 kHz by default; native 8 kHz is opt-in", () => {
+    expect(pipelineSrc).toContain("CARTESIA_TTS_8K");
     expect(pipelineSrc).toContain("CARTESIA_TTS_16K");
-    expect(pipelineSrc).toMatch(/\?\s*8000/);
+    expect(pipelineSrc).toMatch(/CARTESIA_TTS_8K"\] === "1"/);
+  });
+
+  it("does not punch a 200 ms rebuffer hole mid-sentence (call 14351)", () => {
+    expect(pipelineSrc).not.toMatch(/await awaitPrebuffer\(TTS_REBUFFER/);
+    expect(pipelineSrc).toContain("TTS_WIRE_LEAD_FRAMES");
+    expect(pipelineSrc).toContain("hold the last 20 ms");
   });
 });

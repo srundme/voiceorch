@@ -101,6 +101,11 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
     expect(languages).toEqual(["en", "ta"]);
   });
 
+  it("defaults to 16 kHz PCM (Cartesia voice-agent format)", () => {
+    const tts = new CartesiaTTS("test-key", null, null);
+    expect(tts.pcmSampleRate).toBe(16000);
+  });
+
   it("requests native 8 kHz PCM when constructed for a telephony leg", async () => {
     let sampleRate: number | undefined;
     vi.stubGlobal(
