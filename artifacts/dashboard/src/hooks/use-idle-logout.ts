@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth";
 
 /** Signed-in dashboard users are logged out after this much UI inactivity. */
-export const IDLE_LOGOUT_MS = 5 * 60 * 1000;
+export const IDLE_LOGOUT_MS = 10 * 60 * 1000;
 
 /** Shared across SnapServe tabs so activity in one tab keeps the session alive in all. */
 const LAST_ACTIVITY_KEY = "voiceorch:lastActivityAt";
@@ -42,7 +42,7 @@ function writeSharedActivityAt(at: number): void {
 
 /**
  * Auto sign-out only when the user has not moved the cursor / interacted
- * with ANY open SnapServe dashboard tab for `idleMs` (default 5 minutes).
+ * with ANY open SnapServe dashboard tab for `idleMs` (default 10 minutes).
  *
  * Activity is shared via localStorage so an idle background tab cannot clear
  * the session cookie while another tab is still being used.

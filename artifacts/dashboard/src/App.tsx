@@ -175,7 +175,7 @@ function SignInPage() {
     if (reason === "revoked") {
       setError("You've been signed out because your account access has changed. Please contact support if you believe this is a mistake.");
     } else if (reason === "idle") {
-      setError("You were signed out after 5 minutes of inactivity. Please sign in again.");
+      setError("You were signed out after 10 minutes of inactivity. Please sign in again.");
     }
   }, []);
 
