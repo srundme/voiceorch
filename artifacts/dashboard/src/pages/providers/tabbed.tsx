@@ -1,5 +1,5 @@
 /**
- * /app/providers — Voices | Provider keys | My clones
+ * /app/providers — Provider keys | Voices | My clones
  */
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
@@ -13,7 +13,7 @@ import { useVoiceClones } from "./my-clones-panel";
 export default function ProvidersTabPage() {
   const [, navigate] = useLocation();
   const search = useSearch();
-  const activeTab = new URLSearchParams(search).get("tab") ?? "voices";
+  const activeTab = new URLSearchParams(search).get("tab") ?? "provider-keys";
   const showCloneActions = activeTab === "voices" || activeTab === "my-clones";
   const showProviderActions = activeTab === "provider-keys";
   const [addProviderOpen, setAddProviderOpen] = useState(false);
@@ -42,7 +42,7 @@ export default function ProvidersTabPage() {
       <StripeTabPage
         title="Providers"
         description="Voice library and LLM / TTS / STT provider keys."
-        defaultTab="voices"
+        defaultTab="provider-keys"
         tabActions={
           showCloneActions
             ? clones.buttons
@@ -51,7 +51,6 @@ export default function ProvidersTabPage() {
               : undefined
         }
         tabs={[
-          { key: "voices", label: "Voices", content: <VoicesPage /> },
           {
             key: "provider-keys",
             label: "Provider keys",
@@ -63,6 +62,7 @@ export default function ProvidersTabPage() {
               />
             ),
           },
+          { key: "voices", label: "Voices", content: <VoicesPage /> },
           {
             key: "my-clones",
             label: "My clones",
