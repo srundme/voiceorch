@@ -102,7 +102,8 @@ import {
   LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, asrModelsForPicker, SARVAM_PRODUCT_ASR_MODEL,
   LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   DEFAULT_CARTESIA_VOICE_ID, DEFAULT_CARTESIA_VOICE_NAME,
-  filterVoicesForLanguage, isVoiceCompatibleWithLanguage, shouldClearVoiceForLanguage,
+  orderVoicesByLanguage, isVoiceCompatibleWithLanguage, shouldClearVoiceForLanguage,
+  baseLanguage,
   getSarvamTtsVoices, isSarvamVoiceCompatible,
   GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS, VOICE_STACK_OPTIONS,
   geminiLiveModelLabel, isGeminiLiveAgent, voiceStackForLlmModel,
@@ -681,13 +682,13 @@ function OverviewTab({
   const mySarvamClones = myClones.filter((c) => c.provider === "sarvam");
   const [sarvamCloneOpen, setSarvamCloneOpen] = useState(false);
 
-  // Curated Cartesia voice list: prefer admin whitelist (language-filtered),
-  // fall back to the static catalog when whitelist is empty so "Choose voice"
-  // always has options. Always append the current voice if it's missing so the
-  // select can display it. Always end with Paste-custom.
+  // Curated Cartesia voice list: show ALL admin-whitelisted voices, with
+  // language-matching (recommended) voices sorted to the top. Fall back to the
+  // static catalog when whitelist is empty. Always append the current voice if
+  // missing so the select can display it. Always end with Paste-custom.
   const cartesiaOverviewOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const filtered = filterVoicesForLanguage(all, language);
+    const ordered = orderVoicesByLanguage(all, language);
     const seen = new Set<string>();
     const opts: { value: string; label: string }[] = [];
     for (const c of myCartesiaClones) {
@@ -695,10 +696,15 @@ function OverviewTab({
       seen.add(c.id);
       opts.push({ value: c.id, label: `✦ ${c.name}` });
     }
-    for (const v of filtered) {
+    for (const v of ordered) {
       if (seen.has(v.id)) continue;
       seen.add(v.id);
-      opts.push({ value: v.id, label: v.name });
+      const recommended = isVoiceCompatibleWithLanguage(v.language, language)
+        && baseLanguage(language) !== "en";
+      opts.push({
+        value: v.id,
+        label: recommended ? `${v.name} · recommended` : v.name,
+      });
     }
     if (opts.length === 0 && Array.isArray(TTS_VOICES.cartesia)) {
       for (const v of TTS_VOICES.cartesia) {
@@ -795,8 +801,11 @@ function OverviewTab({
   const llmModelLabel  = llmOptions.find((m: any) => m.value === llmModel)?.label ?? llmModel;
   const curatedVoiceOpts = ttsVoiceOpts.filter(v => v.value !== "__custom__");
   const inCuratedList    = curatedVoiceOpts.some(v => v.value === ttsVoice);
-  // Languages like Marathi have no vendor-tagged voices, so the picker falls back
-  // to the full catalog instead of going empty — tell the user that's what happened.
+  // Languages with dedicated tags: recommended voices are sorted first.
+  // Languages with no tags: every voice is available (same full list).
+  const hasRecommendedVoicesForLanguage =
+    (whitelistedData?.voices ?? []).some(v => isVoiceCompatibleWithLanguage(v.language, language))
+    && baseLanguage(language) !== "en";
   const showingAllVoicesForLanguage =
     (whitelistedData?.voices ?? []).length > 0 &&
     (whitelistedData?.voices ?? []).every(v => !isVoiceCompatibleWithLanguage(v.language, language));
@@ -1441,6 +1450,11 @@ function OverviewTab({
                       </FormItem>
                     )} />
                   )}
+                  {ttsProvider === "cartesia" && hasRecommendedVoicesForLanguage && (
+                    <p className="text-[10px] text-muted-foreground leading-relaxed rounded-md border border-border bg-muted/40 px-2.5 py-2">
+                      Voices recommended for {langLabel} are listed first. You can still pick any other voice.
+                    </p>
+                  )}
                   {ttsProvider === "cartesia" && showingAllVoicesForLanguage && (
                     <p className="text-[10px] text-muted-foreground leading-relaxed rounded-md border border-border bg-muted/40 px-2.5 py-2">
                       No voices are tagged for {langLabel} — showing every available voice. Most multilingual voices speak it well; preview a few to pick one.
@@ -1846,12 +1860,11 @@ function VoiceTab({ form }: { form: any }) {
   const myCartesiaClonesV = myClones.filter((c) => (c.provider ?? "cartesia") === "cartesia");
   const mySarvamClonesV = myClones.filter((c) => c.provider === "sarvam");
 
-  // Shared language filter (single source of truth in agent-providers.ts):
-  // English agents see ALL whitelisted voices; non-English agents see only
-  // their language's voices. Identical to the Overview section's list.
+  // Show ALL whitelisted voices; language matches (recommended) sorted first.
+  // Identical to the Overview section's list.
   const cartesiaVoiceOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const filtered = filterVoicesForLanguage(all, agentLanguage);
+    const ordered = orderVoicesByLanguage(all, agentLanguage);
     const seen = new Set<string>();
     const opts: { value: string; label: string }[] = [];
     for (const c of myCartesiaClonesV) {
@@ -1859,10 +1872,15 @@ function VoiceTab({ form }: { form: any }) {
       seen.add(c.id);
       opts.push({ value: c.id, label: `✦ ${c.name}` });
     }
-    for (const v of filtered) {
+    for (const v of ordered) {
       if (seen.has(v.id)) continue;
       seen.add(v.id);
-      opts.push({ value: v.id, label: v.name });
+      const recommended = isVoiceCompatibleWithLanguage(v.language, agentLanguage)
+        && baseLanguage(agentLanguage) !== "en";
+      opts.push({
+        value: v.id,
+        label: recommended ? `${v.name} · recommended` : v.name,
+      });
     }
     if (opts.length === 0 && Array.isArray(TTS_VOICES.cartesia)) {
       for (const v of TTS_VOICES.cartesia) {
@@ -1943,6 +1961,9 @@ function VoiceTab({ form }: { form: any }) {
   const ttsModelOptsV = TTS_MODELS[ttsProvider] ?? [];
   const curatedVoiceOptsV = ttsVoiceOptsV.filter(v => v.value !== "__custom__");
   const inCuratedV        = curatedVoiceOptsV.some(v => v.value === ttsVoice);
+  const hasRecommendedVoicesForLanguageV =
+    (whitelistedData?.voices ?? []).some(v => isVoiceCompatibleWithLanguage(v.language, agentLanguage))
+    && baseLanguage(agentLanguage) !== "en";
   const showingAllVoicesForLanguageV =
     (whitelistedData?.voices ?? []).length > 0 &&
     (whitelistedData?.voices ?? []).every(v => !isVoiceCompatibleWithLanguage(v.language, agentLanguage));
@@ -2260,6 +2281,11 @@ function VoiceTab({ form }: { form: any }) {
               )} />
             )}
 
+            {ttsProvider === "cartesia" && hasRecommendedVoicesForLanguageV && (
+              <p className="text-xs text-muted-foreground leading-relaxed rounded-md border border-border bg-muted/40 px-3 py-2.5 col-span-2">
+                Voices recommended for this language are listed first. You can still pick any other voice.
+              </p>
+            )}
             {ttsProvider === "cartesia" && showingAllVoicesForLanguageV && (
               <p className="text-xs text-muted-foreground leading-relaxed rounded-md border border-border bg-muted/40 px-3 py-2.5 col-span-2">
                 No voices are tagged for this language — showing every available voice. Most multilingual voices speak it well; preview a few to pick one.
