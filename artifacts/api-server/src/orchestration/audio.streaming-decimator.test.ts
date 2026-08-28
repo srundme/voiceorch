@@ -48,12 +48,12 @@ describe("StreamingDecimator (16→8)", () => {
   it("matches a whole-buffer filter far more closely than per-block stateless calls", () => {
     const input = speech(16000, 16000); // 1s
     const reference = toSamples(downsample16to8(input));
-    const stateful = toSamples(chunked(input, FRAME_16K_BYTES, ((d) => (b: Buffer) => d.process(b))(createDownsampler16to8())));
+    const decim = createDownsampler16to8();
+    const stateful = toSamples(chunked(input, FRAME_16K_BYTES, ((d) => (b: Buffer) => d.process(b))(decim)));
     const stateless = toSamples(chunked(input, FRAME_16K_BYTES, downsample16to8));
 
-    // The stateful path lags by `half` input samples (7 @16k = 3.5 output
-    // samples), so compare against the reference shifted by that constant.
-    const LAG = 4;
+    // The stateful path lags by delaySamples (half the kernel, in output samples).
+    const LAG = createDownsampler16to8().delaySamples;
     const err = (xs: number[], lag: number) => {
       const n = Math.min(xs.length - lag, reference.length - lag) - 32;
       const diffs: number[] = [];

@@ -82,5 +82,11 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("playing welcome before greeting LLM");
     expect(pipelineSrc).toContain("stripWelcomePrefix");
     expect(pipelineSrc).toContain("Greeting LLM prewarm started (constructor entry)");
+    expect(pipelineSrc).toContain("_greetingPrewarmReady");
+  });
+
+  it("asks Cartesia for native 8 kHz on telephony so VoBiz does not FIR-downsample", () => {
+    expect(pipelineSrc).toContain("CARTESIA_TTS_16K");
+    expect(pipelineSrc).toMatch(/\?\s*8000/);
   });
 });

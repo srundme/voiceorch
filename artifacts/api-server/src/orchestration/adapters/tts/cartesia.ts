@@ -8,7 +8,9 @@ import type { TTSAdapter } from "../../types.js";
  * Primary path: WebSocket (`/tts/websockets`)
  *   - One persistent WS connection per call (lazy-opened on first sentence).
  *   - No per-sentence TCP/TLS handshake → saves ~30–80ms per sentence.
- *   - max_buffer_delay_ms: 0 → we send complete sentences (client-side buffering).
+ *   - max_buffer_delay_ms: 200 → Sonic can finish the last phoneme; 0 caused
+ *     chopped endings even on complete sentences (Cartesia docs default 3000).
+ *   - Telephony requests pcm_s16le @ 8 kHz so VoBiz does not get a second resample.
  *   - One context_id per LLM turn. Later sentences are continuations (continue:true,
  *     no flush) so Cartesia keeps prosody — a per-sentence flush was the audible seam.
  *
@@ -24,6 +26,8 @@ const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 300;
 const CARTESIA_VERSION = "2026-03-01";
 const WS_CONNECT_TIMEOUT_MS = 6_000;
+/** Let Sonic close the last phoneme. 0 was choppy; 3000 is too slow for live calls. */
+const CARTESIA_MAX_BUFFER_DELAY_MS = 200;
 
 /** Stable default. Sonic 3.6 is beta on `sonic-preview` until Cartesia GA. */
 export const CARTESIA_DEFAULT_MODEL = "sonic-3.5";
@@ -456,7 +460,7 @@ export class CartesiaTTS implements TTSAdapter {
         voice: this.buildVoice(),
         output_format: this.outputFormat(),
         continue: true,
-        max_buffer_delay_ms: 0,
+        max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS,
       };
       const gcCtx = this.buildGenerationConfig(emotions);
       if (gcCtx) transcriptMsg.generation_config = gcCtx;
@@ -637,7 +641,7 @@ export class CartesiaTTS implements TTSAdapter {
         voice: this.buildVoice(),
         output_format: this.outputFormat(),
         continue: false,
-        max_buffer_delay_ms: 0,
+        max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS,
       };
       const gcMsg = this.buildGenerationConfig(emotions);
       if (gcMsg) msg.generation_config = gcMsg;

@@ -109,8 +109,9 @@ function firAt(buf: Buffer, inSamples: number, center: number, kernel: Float64Ar
   return s > 32767 ? 32767 : s < -32768 ? -32768 : s;
 }
 
-// 16→8: cutoff 3.4 kHz (voice band top), 15 taps.
-const K16TO8 = buildSincKernel(15, 3400 / 16000);
+// 16→8: cutoff 3.4 kHz (voice band top), 63 taps (~45 dB stopband; 15 taps
+// still leaked grit on Cartesia sibilants after a second downsample).
+const K16TO8 = buildSincKernel(63, 3400 / 16000);
 // 24→8: steeper ratio needs a longer kernel; cutoff 3.4 kHz, 21 taps.
 const K24TO8 = buildSincKernel(21, 3400 / 24000);
 // 24→16: output Nyquist 8 kHz, cutoff 7.2 kHz for margin; alternate phases 0 / 0.5.

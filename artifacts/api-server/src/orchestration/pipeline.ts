@@ -1175,6 +1175,8 @@ export class OrchestrationPipeline implements VoiceSession {
   private amdResolved = false;
   // Greeting LLM prewarm launched during the AMD confirmation window (outbound dead-air fix).
   private _greetingPrewarm: Promise<string> | null = null;
+  /** True once `_greetingPrewarm` has settled — play Hello+pitch as one Cartesia clip. */
+  private _greetingPrewarmReady = false;
 
   // P1-D: Per-agent VAD / barge-in settings (set from agent config in constructor)
   private readonly vadSilenceMs: number;
@@ -2994,7 +2996,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // already heard 3s of boot silence.
     if (this.greetingWillNeedLlm()) {
       const preLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
-      this._greetingPrewarm = this.generateGreetingLlmText(this.isResumeDroppedCall, preLang).catch(() => "");
+      this.startGreetingLlmPrewarm(this.isResumeDroppedCall, preLang);
       logger.info({ callId: config.callId }, "Greeting LLM prewarm started (constructor entry)");
     }
 
@@ -3017,11 +3019,12 @@ export class OrchestrationPipeline implements VoiceSession {
     this.tts = createTTSAdapter(
       this.agent.ttsProvider, ttsKey, this.agent.ttsVoice, this.agent.ttsModel,
       ttsExtraConfig, ttsLanguage, this.agent.ttsSpeed,
-      // Cartesia 16 kHz + streaming 16→8 FIR (native 8 kHz sounded broken on
-      // VoBiz). Set CARTESIA_NATIVE_8K=1 only as an experiment.
+      // Cartesia docs: match the wire. VoBiz is LINEAR16 8 kHz — native 8 kHz
+      // skips a second FIR downsample (the remaining grit). CARTESIA_TTS_16K=1
+      // restores the old 16 kHz + downsample path.
       this.agent.ttsProvider === "cartesia"
       && this.pcmOutRate() !== 16000
-      && process.env["CARTESIA_NATIVE_8K"] === "1"
+      && process.env["CARTESIA_TTS_16K"] !== "1"
         ? 8000
         : 16000,
     );
@@ -5496,6 +5499,24 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /**
+   * Start the greeting LLM as soon as the session exists so Welcome+pitch can
+   * play as one Cartesia clip instead of two seamed generations.
+   */
+  private startGreetingLlmPrewarm(resumeDropped: boolean, greetLang: string): void {
+    if (this._greetingPrewarm) return;
+    this._greetingPrewarmReady = false;
+    this._greetingPrewarm = this.generateGreetingLlmText(resumeDropped, greetLang)
+      .then((text) => {
+        this._greetingPrewarmReady = true;
+        return text;
+      })
+      .catch(() => {
+        this._greetingPrewarmReady = true;
+        return "";
+      });
+  }
+
+  /**
    * Cold-caller LLM opener, extracted from greet() so the AMD confirmation
    * window can prewarm it in parallel. Never throws — falls back internally.
    */
@@ -5745,14 +5766,15 @@ export class OrchestrationPipeline implements VoiceSession {
         );
       }
 
-      // Speak the typed Welcome immediately. Waiting for the greeting LLM first
-      // is the 3s boot silence after pickup (Hello sat in front of a pitch that
-      // had not been generated yet).
+      // Speak Welcome immediately only when the pitch is NOT ready yet. If the
+      // greeting LLM already finished, play Hello+pitch as one Cartesia context
+      // so the caller does not hear a hard cut after "Hello".
       const speakWelcomeNow =
         !greeting.trim()
         && !!typedWelcome
         && isStubGreeting(typedWelcome)
-        && !useInstantReturning;
+        && !useInstantReturning
+        && !this._greetingPrewarmReady;
       if (speakWelcomeNow) {
         this.beginOpeningGreetingPlayback(typedWelcome.length);
         logger.info(
@@ -6063,7 +6085,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // consumes the promise. Wasted only when the verdict is machine + hangup.
     if (this.greetingWillNeedLlm() && !this._greetingPrewarm) {
       const preLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
-      this._greetingPrewarm = this.generateGreetingLlmText(this.isResumeDroppedCall, preLang).catch(() => "");
+      this.startGreetingLlmPrewarm(this.isResumeDroppedCall, preLang);
       logger.info({ callId: this.config.callId }, "AMD confirm: greeting LLM prewarm started in parallel");
     }
     const startedAt = Date.now();
