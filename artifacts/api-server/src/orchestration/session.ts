@@ -36,6 +36,8 @@ import {
 import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
 import { transcriptHasFarewellEnding } from "./callFarewell.js";
+import { shouldMarkCallVoicemail } from "../lib/voicemail-detect.js";
+import { looksLikeVoicemailOutcome } from "../services/sheet-auto-calls-helpers.js";
 import { capHandoffTranscript, mergeHandoffTranscript } from "./squad-transcript.js";
 import { buildLeadContextBlock, buildCallContextBlock, callVariablesFromMetadata, resolvePromptVariables } from "./prompt-vars.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
@@ -2397,6 +2399,15 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
         }
       : undefined,
+    // Always expose the configured After-the-call voicemail policy so mid-call
+    // transcript detection can leave a message when acoustic AMD misses.
+    voicemailPolicy: {
+      action: amdVoicemailAction,
+      message: (typeof agentCfg["voicemailMessage"] === "string" && (agentCfg["voicemailMessage"] as string).trim())
+        ? (agentCfg["voicemailMessage"] as string)
+        : "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
+      ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
+    },
     // Acoustic AMD confirmation: armed either by a synchronous machine hint
     // (legacy path) or UNCONDITIONALLY for AMD-enabled VoBiz outbound calls
     // (amdArmed — the real verdict arrives via the async machine_detection_url
@@ -2798,20 +2809,47 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
   const avgTtsMs = metricsAcc.count > 0 ? Math.round(metricsAcc.ttsTotal / metricsAcc.count) : null;
 
   try {
-    // A confirmed-machine voicemail (message delivered or confirmed-machine hangup)
-    // is a distinct terminal outcome — takes precedence over transferred/completed.
-    // A call where the agent had zero turns (no STT→LLM cycle completed) and ended
-    // quickly was effectively rejected or dropped before the conversation started.
-    // Mark it "no_pickup" instead of "completed" so the UI and campaign stats reflect
-    // the real outcome (e.g. callee rejected, line busy, VoBiz brief-connect-then-drop).
+    // Voicemail status: AMD action executed, OR amdResult=machine, OR transcript
+    // clearly shows a VM greeting (call 14439: STT heard "Voice mail..." and the
+    // agent said "reached the voicemail" but status stayed Completed).
+    let amdResultAtEnd: string | null = null;
+    try {
+      const [amdRow] = await db
+        .select({ amdResult: callsTable.amdResult })
+        .from(callsTable)
+        .where(eq(callsTable.id, session.callId))
+        .limit(1);
+      amdResultAtEnd = amdRow?.amdResult ?? null;
+    } catch { /* non-critical */ }
+
+    const markedVoicemail = shouldMarkCallVoicemail({
+      voicemailActionExecuted: session.voicemailActionExecuted,
+      amdResult: amdResultAtEnd,
+      transcript,
+    });
     const noTurnsDrop = metricsAcc.count === 0 && durationSeconds <= 15 && !session.wasTransferred;
-    const callStatus = session.voicemailActionExecuted
+    let callStatus = markedVoicemail
       ? "voicemail"
       : session.wasTransferred
         ? "transferred"
         : noTurnsDrop
           ? "no_pickup"
           : "completed";
+    if (markedVoicemail && !session.voicemailActionExecuted) {
+      logger.info(
+        {
+          sessionId,
+          callId: session.callId,
+          amdResult: amdResultAtEnd,
+          viaTranscript: shouldMarkCallVoicemail({
+            voicemailActionExecuted: false,
+            amdResult: null,
+            transcript,
+          }),
+        },
+        "endSession: marking call voicemail from AMD/transcript (action not latched)",
+      );
+    }
 
     // ── Upload call recording (async, non-blocking) ──────────────────────────
     // Only finalize/upload when the agent has Call Recording enabled, so disabled
@@ -2935,7 +2973,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       // let scheduleRetry decide whether attempts remain. Without this, dropped
       // campaign calls are silently marked "completed" and never retried.
       const midConvDrop =
-        !session.voicemailActionExecuted &&
+        !markedVoicemail &&
         !session.naturalEndTriggered &&
         !session.wasTransferred &&
         durationSeconds > 15;
@@ -2946,7 +2984,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       // once every configured attempt has ended in voicemail (scheduleRetry then
       // returns false). This mirrors the pre-connect webhook path, which already
       // treats voicemail/machine as retryable.
-      const isVoicemail = session.voicemailActionExecuted;
+      const isVoicemail = markedVoicemail || callStatus === "voicemail";
       const shouldRetry = midConvDrop || isVoicemail;
       const retryReason = isVoicemail ? "voicemail" : "network_drop";
 
@@ -3644,6 +3682,24 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 },
                 "Taxonomy disposition ready for webhook",
               );
+              // Disposition may detect voicemail after status was already written.
+              if (
+                callStatus !== "voicemail"
+                && looksLikeVoicemailOutcome(
+                  `${dispositionResult["primary"] ?? ""}: ${dispositionResult["sub"] ?? ""}`,
+                  dispositionResult,
+                  amdResultAtEnd,
+                )
+              ) {
+                callStatus = "voicemail";
+                await db.update(callsTable)
+                  .set({ status: "voicemail" })
+                  .where(eq(callsTable.id, session.callId));
+                logger.info(
+                  { sessionId, callId: session.callId, sub: dispositionResult["sub"] },
+                  "endSession: upgraded call status to voicemail from disposition",
+                );
+              }
             }
           } catch (dispErr) {
             logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");

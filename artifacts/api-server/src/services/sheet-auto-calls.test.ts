@@ -69,6 +69,8 @@ describe("do-not-dial / retry / friendly status", () => {
     expect(friendlySheetStatus("completed")).toBe("Completed");
     expect(friendlySheetStatus("busy")).toBe("Busy");
     expect(friendlySheetStatus("failed")).toBe("Failed");
+    expect(friendlySheetStatus("voicemail")).toBe("Voicemail");
+    expect(friendlySheetStatus("machine")).toBe("Voicemail");
   });
 });
 
@@ -109,6 +111,20 @@ describe("sheet disposition / status labels", () => {
     expect(resolveSheetStatusLabel("busy")).toBe("Busy");
     expect(resolveSheetStatusLabel("calling")).toBe("Calling");
     expect(resolveSheetStatusLabel("queued")).toBe("Queued");
+  });
+
+  it("promotes Status to Voicemail from call.status, AMD, or disposition", () => {
+    expect(resolveSheetStatusLabel("voicemail")).toBe("Voicemail");
+    expect(resolveSheetStatusLabel("completed", "OUTCOME: voicemail")).toBe("Voicemail");
+    expect(resolveSheetStatusLabel("completed", "NOT_CONNECTED: voicemail", null, {
+      dispositionRaw: { primary: "NOT_CONNECTED", sub: "voicemail" },
+    })).toBe("Voicemail");
+    expect(resolveSheetStatusLabel("completed", "Completed", null, {
+      amdResult: "machine",
+    })).toBe("Voicemail");
+    // Don't override hard telephony outcomes
+    expect(resolveSheetStatusLabel("busy", "OUTCOME: voicemail")).toBe("Busy");
+    expect(resolveSheetStatusLabel("failed", null, null, { amdResult: "machine" })).toBe("Failed");
   });
 });
 

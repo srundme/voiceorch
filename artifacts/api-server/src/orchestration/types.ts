@@ -888,6 +888,13 @@ export interface SessionConfig {
     /** Configured Lead-in Pause (seconds); forwarded to voicemail delivery. */
     leadInSeconds?: number;
   };
+  /** Configured After-the-call voicemail policy — always available for mid-call
+   *  transcript detection when acoustic AMD misses and STT hears the greeting. */
+  voicemailPolicy?: {
+    action: "leave_message" | "hangup" | "continue";
+    message: string;
+    leadInSeconds?: number;
+  };
   /** Called once with the acoustically-confirmed AMD verdict so the call record's
    *  `amd_result` reflects the confirmed outcome, not the raw untrusted provider flag. */
   onAmdResult?: (result: "human" | "machine") => void;

@@ -36,6 +36,7 @@ import { resolveMicSensitivity, getMicSensitivityThresholds, isIdleCancellingMic
 import { resolveSoftwareNoiseGate, envForceVobizSoftwareNc, type NoiseGateDecision } from "./noise-gate.js";
 import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
 import { validateBookableEmail, isEmailConfirmedFlag } from "./booking-email-validate.js";
+import { looksLikeVoicemailGreeting } from "../lib/voicemail-detect.js";
 import {
   buildAutoBookArgs,
   canAutoBook,
@@ -1139,7 +1140,14 @@ export class OrchestrationPipeline implements VoiceSession {
   // Voicemail-delivery mode (Vobiz AMD leave_message). When set, the conversation
   // pipeline is bypassed: inbound audio only drives greeting-end detection and
   // deliverVoicemail() speaks the configured message once the machine's greeting ends.
-  private readonly voicemailDelivery: { message: string; postSilenceMarginMs?: number; maxWaitMs?: number; leadInSeconds?: number } | null;
+  private voicemailDelivery: { message: string; postSilenceMarginMs?: number; maxWaitMs?: number; leadInSeconds?: number } | null;
+  private readonly voicemailPolicy: {
+    action: "leave_message" | "hangup" | "continue";
+    message: string;
+    leadInSeconds?: number;
+  } | null;
+  /** One-shot latch: mid-call transcript VM path already ran. */
+  private transcriptVoicemailHandled = false;
   private vmHeardSpeech = false;   // true once the machine's greeting has been heard
   private vmLastSpeechAt = 0;      // ms timestamp of the last energetic (greeting) frame
   // True only while deliverVoicemail() is actively listening/speaking. Gates the
@@ -2845,6 +2853,7 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     this.pipelineCreatedAtMs = Date.now();
     this.voicemailDelivery = config.voicemailDelivery ?? null;
+    this.voicemailPolicy = config.voicemailPolicy ?? null;
     this.amdConfirm = config.amdConfirm ?? null;
     this.bargeInCallback = config.onBargeIn ?? null;
     // P1-D: Per-agent VAD / barge-in tuning
@@ -6302,6 +6311,85 @@ export class OrchestrationPipeline implements VoiceSession {
     this.config.onCallEnd();
   }
 
+  /**
+   * Mid-call fallback when acoustic AMD missed (biased human) but STT hears a
+   * classic voicemail greeting — leave the configured message / hang up instead
+   * of continuing the sales script (call 14446).
+   */
+  private async maybeHandleTranscriptVoicemail(transcript: string): Promise<boolean> {
+    if (this.transcriptVoicemailHandled || this.closed) return false;
+    if (this.config.callDirection !== "outbound") return false;
+    if (this.turnIndex > 4) return false;
+    if (!looksLikeVoicemailGreeting(transcript)) return false;
+
+    const policy = this.voicemailPolicy
+      ?? (this.voicemailDelivery
+        ? {
+            action: "leave_message" as const,
+            message: this.voicemailDelivery.message,
+            leadInSeconds: this.voicemailDelivery.leadInSeconds,
+          }
+        : null);
+    if (!policy || policy.action === "continue") return false;
+
+    this.transcriptVoicemailHandled = true;
+    logger.info(
+      {
+        callId: this.config.callId,
+        action: policy.action,
+        turnIndex: this.turnIndex,
+        transcriptPreview: transcript.slice(0, 120),
+      },
+      "Transcript voicemail detected mid-call — enacting configured After-the-call action",
+    );
+    this.logExec("Tool", "system", {
+      status: "info",
+      turnNumber: this._activeTurnIndex,
+      metadata: {
+        event: "Transcript Voicemail Detected",
+        action: policy.action,
+        transcriptPreview: transcript.slice(0, 160),
+      },
+    });
+
+    // Stop any in-flight greeting / sales TTS before leaving the VM message.
+    for (const ac of this.activeTtsAborts) {
+      try { ac.abort(); } catch { /* noop */ }
+    }
+    this.activeTtsAborts.clear();
+    try { this.llm.cancelInFlight?.(); } catch { /* best-effort */ }
+    this.bargeInRequested = true;
+
+    if (policy.action === "leave_message") {
+      // Prefer the After-the-call message; keep any prior lead-in / wait tunables.
+      this.voicemailDelivery = {
+        message: policy.message,
+        ...(this.voicemailDelivery?.postSilenceMarginMs !== undefined
+          ? { postSilenceMarginMs: this.voicemailDelivery.postSilenceMarginMs }
+          : {}),
+        ...(this.voicemailDelivery?.maxWaitMs !== undefined
+          ? { maxWaitMs: this.voicemailDelivery.maxWaitMs }
+          : {}),
+        ...((policy.leadInSeconds ?? this.voicemailDelivery?.leadInSeconds) !== undefined
+          ? { leadInSeconds: policy.leadInSeconds ?? this.voicemailDelivery?.leadInSeconds }
+          : {}),
+      };
+      // Greeting was already heard (that's how we got the transcript). Seed
+      // energy so deliverVoicemail waits for silence/beep instead of max-wait.
+      this.vmHeardSpeech = true;
+      this.vmLastSpeechAt = Date.now();
+      try { this.config.onAmdResult?.("machine"); } catch { /* best-effort */ }
+      await this.deliverVoicemail();
+      return true;
+    }
+
+    // hangup
+    try { this.config.onAmdResult?.("machine"); } catch { /* best-effort */ }
+    try { this.config.onVoicemailAction?.(); } catch { /* best-effort */ }
+    this.config.onCallEnd();
+    return true;
+  }
+
   // ── VAD timers ──────────────────────────────────────────────────────────────
 
   private resetSilenceTimer(): void {
@@ -8211,6 +8299,12 @@ export class OrchestrationPipeline implements VoiceSession {
         this.bookingFlowState,
         lastAgent,
       );
+    }
+
+    // Mid-call: acoustic AMD missed but STT heard a voicemail greeting → leave
+    // the configured message (or hang up) instead of continuing the sales pitch.
+    if (await this.maybeHandleTranscriptVoicemail(transcript)) {
+      return;
     }
 
     // ── Bolna-parity: caller speak chars metric ───────────────────────────────

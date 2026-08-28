@@ -184,13 +184,50 @@ export function formatSheetDisposition(disp: unknown): string {
 /**
  * Status is telephony state only: Queued, Calling, Connected, Busy, Failed,
  * Completed (plus No answer / Voicemail / Skipped). Never Callback / Booked.
+ *
+ * Voicemail: prefer call.status === "voicemail", else promote when AMD said
+ * machine or disposition is voicemail (call often stays "completed" if AMD
+ * action is continue / message path did not latch voicemailActionExecuted).
  */
+export function looksLikeVoicemailOutcome(
+  dispositionLabel?: string | null,
+  dispositionRaw?: unknown,
+  amdResult?: string | null,
+): boolean {
+  const amd = (amdResult ?? "").trim().toLowerCase();
+  if (amd === "machine" || amd === "voicemail") return true;
+
+  const label = (dispositionLabel ?? "").trim().toLowerCase();
+  if (/(^|[:\s/|-])voicemail\b/.test(label) || /\bmachine\b/.test(label)) return true;
+
+  const obj = parseDispositionObject(dispositionRaw);
+  if (obj) {
+    for (const key of ["sub", "primary", "OUTCOME", "outcome", "status", "disposition"]) {
+      const v = obj[key];
+      if (typeof v !== "string") continue;
+      const s = v.trim().toLowerCase();
+      if (s === "voicemail" || s === "machine" || s.includes("voicemail")) return true;
+    }
+  }
+  return false;
+}
+
 export function resolveSheetStatusLabel(
   callStatus: string | null | undefined,
-  _dispositionLabel?: string,
+  dispositionLabel?: string | null,
   _reservedStatus?: string | null,
+  opts?: { dispositionRaw?: unknown; amdResult?: string | null },
 ): string {
-  return friendlySheetStatus(callStatus);
+  const operational = friendlySheetStatus(callStatus);
+  if (operational === "Voicemail") return "Voicemail";
+  // Soft terminals only — don't override Busy / Failed / No answer / Calling.
+  if (
+    (operational === "Completed" || operational === "Connected")
+    && looksLikeVoicemailOutcome(dispositionLabel, opts?.dispositionRaw, opts?.amdResult)
+  ) {
+    return "Voicemail";
+  }
+  return operational;
 }
 
 export function googleSheetUrl(spreadsheetId: string, gid?: number | null): string {

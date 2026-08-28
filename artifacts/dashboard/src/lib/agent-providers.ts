@@ -521,29 +521,25 @@ export function isVoiceCompatibleWithLanguage(
 }
 
 /**
- * Single source of truth for filtering the admin-whitelisted voice list by
- * agent language. English agents see ALL whitelisted voices (every language);
- * non-English agents see only their language's voices.
+ * Voices offered in the agent picker for a given language.
+ * Always returns EVERY curated voice; language matches are sorted first so
+ * Hindi (etc.) recommendations appear at the top without hiding the rest.
+ * English agents already treat every voice as compatible, so order is unchanged.
  *
- * Languages with no dedicated voices in the catalog (Marathi, Odia, Assamese …
- * are rarely tagged by TTS vendors) would otherwise leave the picker empty, so
- * the full list is returned instead of nothing — matching voices first.
+ * @deprecated Prefer {@link orderVoicesByLanguage} by name — same behavior.
  */
 export function filterVoicesForLanguage<T extends { language?: string | null }>(
   voices: readonly T[],
   agentLanguage: string | null | undefined,
 ): T[] {
-  const matching = voices.filter(v => isVoiceCompatibleWithLanguage(v.language, agentLanguage));
-  if (matching.length > 0) return matching;
-  return [...voices];
+  return orderVoicesByLanguage(voices, agentLanguage);
 }
 
 /**
  * Should a saved curated voice be cleared because the agent language changed?
  *
- * Membership of the OFFERED list is the test, never the raw language tag: for a
- * language no vendor tags (Marathi) the picker legitimately offers every voice,
- * and testing the tag would wipe the user's pick the instant they saved it.
+ * The picker always offers every curated voice (language matches sorted first),
+ * so a language change never removes a whitelisted voice from the list.
  * Voices absent from the whitelist are user-pasted IDs and are never cleared.
  */
 export function shouldClearVoiceForLanguage<T extends { id: string; language?: string | null }>(
@@ -554,12 +550,14 @@ export function shouldClearVoiceForLanguage<T extends { id: string; language?: s
   if (!ttsVoice || ttsVoice === "__custom__") return false;
   if (voices.length === 0) return false;
   if (!voices.some(v => v.id === ttsVoice)) return false;
-  return !filterVoicesForLanguage(voices, agentLanguage).some(v => v.id === ttsVoice);
+  // Full catalog is always offered — keep any curated selection.
+  void agentLanguage;
+  return false;
 }
 
 /**
  * Order voices so the agent language's own voices come first, without hiding
- * the rest. Used where the picker should still surface every option.
+ * the rest. Used by the voice picker so recommended voices surface at the top.
  */
 export function orderVoicesByLanguage<T extends { language?: string | null }>(
   voices: readonly T[],

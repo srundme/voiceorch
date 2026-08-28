@@ -397,7 +397,10 @@ export async function writeSheetsOutcome(
   const summary = opts?.callSummary ?? call.callSummary ?? "";
   const dispositionRaw = opts?.dispositionResult ?? call.dispositionResult ?? null;
   const disposition = formatDisposition(dispositionRaw);
-  const status = resolveSheetStatusLabel(call.status || "completed", disposition);
+  const status = resolveSheetStatusLabel(call.status || "completed", disposition, null, {
+    dispositionRaw,
+    amdResult: call.amdResult,
+  });
   const identity = await resolveCallerIdentity(callId, call.agentId, phone, dispositionRaw);
 
   const fields: Record<string, string | number | null | undefined> = {
@@ -723,7 +726,10 @@ export async function writeSheetAutoCallResults(
     logger.warn({ err, callId }, "sheet-auto-call: booking lookup for follow-up failed");
   }
 
-  const sheetStatusLabel = resolveSheetStatusLabel(status, disposition);
+  const sheetStatusLabel = resolveSheetStatusLabel(status, disposition, null, {
+    dispositionRaw,
+    amdResult: call.amdResult,
+  });
   const followUpHeader = followUpColumnName(cols.nextFollowUp);
 
   if ((mode === "same_sheet" || mode === "both") && sheetRowIndex != null) {

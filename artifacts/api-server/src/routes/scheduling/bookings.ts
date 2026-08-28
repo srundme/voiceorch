@@ -28,6 +28,7 @@ import {
   updateCalendarEvent,
   getFirstConnectionForUser,
 } from "../../services/scheduling/google-calendar.js";
+import { latinizeAttendeeName } from "../../orchestration/booking-attendee-name.js";
 import { dispatchSchedulingWebhooks } from "./webhooks.js";
 import { addMinutes, format } from "date-fns";
 import { logger } from "../../lib/logger.js";
@@ -159,7 +160,7 @@ router.post("/scheduling/bookings", requireAuth, clientContext, async (req, res)
       calendarId: calendar.id,
       callId: parsed.data.callId ?? null,
       userId: clerkId,
-      attendeeName: parsed.data.attendeeName,
+      attendeeName: latinizeAttendeeName(parsed.data.attendeeName, parsed.data.attendeeEmail),
       attendeeEmail: parsed.data.attendeeEmail,
       attendeeNotes: parsed.data.attendeeNotes ?? null,
       slotStart,

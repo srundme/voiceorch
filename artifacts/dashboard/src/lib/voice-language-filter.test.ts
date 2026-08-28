@@ -16,11 +16,11 @@ describe("filterVoicesForLanguage", () => {
     expect(filterVoicesForLanguage(VOICES, "en-US")).toHaveLength(3);
   });
 
-  it("narrows to the agent's language when voices exist for it", () => {
-    expect(filterVoicesForLanguage(VOICES, "ta-IN").map(v => v.id)).toEqual(["c"]);
+  it("shows every voice for a specific language, with matches first", () => {
+    expect(filterVoicesForLanguage(VOICES, "ta-IN").map(v => v.id)).toEqual(["c", "a", "b"]);
   });
 
-  it("falls back to every voice for languages with no tagged voices", () => {
+  it("shows every voice for languages with no tagged voices", () => {
     expect(filterVoicesForLanguage(VOICES, "mr-IN").map(v => v.id)).toEqual(["a", "b", "c"]);
   });
 
@@ -33,23 +33,18 @@ describe("orderVoicesByLanguage", () => {
   it("puts language matches first without dropping the rest", () => {
     expect(orderVoicesByLanguage(VOICES, "ta-IN").map(v => v.id)).toEqual(["c", "a", "b"]);
   });
+
+  it("puts Hindi matches first", () => {
+    expect(orderVoicesByLanguage(VOICES, "hi-IN").map(v => v.id)).toEqual(["a", "b", "c"]);
+  });
 });
 
 describe("shouldClearVoiceForLanguage", () => {
-  it("keeps a voice the picker offered for a language with no tagged voices", () => {
+  it("never clears a curated voice when the full catalog is offered", () => {
     expect(shouldClearVoiceForLanguage(VOICES, "a", "mr-IN")).toBe(false);
     expect(shouldClearVoiceForLanguage(VOICES, "b", "mr-IN")).toBe(false);
-  });
-
-  it("clears a voice the language does not offer", () => {
-    expect(shouldClearVoiceForLanguage(VOICES, "a", "ta-IN")).toBe(true);
-  });
-
-  it("keeps a voice the language does offer", () => {
+    expect(shouldClearVoiceForLanguage(VOICES, "a", "ta-IN")).toBe(false);
     expect(shouldClearVoiceForLanguage(VOICES, "c", "ta-IN")).toBe(false);
-  });
-
-  it("keeps every voice for English agents", () => {
     expect(shouldClearVoiceForLanguage(VOICES, "c", "en-US")).toBe(false);
   });
 
