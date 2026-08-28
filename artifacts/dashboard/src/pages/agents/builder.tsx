@@ -4,7 +4,7 @@ import { useLocation, useParams, useSearch, Link } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Trash2, Settings, FileText, Wrench,
-  TestTube2, ChevronRight, ChevronLeft,
+  TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Users, Sparkles, CopyPlus, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause, Copy,
@@ -15,7 +15,6 @@ import {
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { canGoBackInApp } from "@/lib/nav-history";
 import { EmptyState } from "@/components/empty-state";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
@@ -7293,21 +7292,6 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       {/* Single toolbar — agent identity + actions */}
       <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-5 sm:h-16 sm:px-8">
         <div className="flex min-w-0 items-center gap-2.5">
-          {!embedded && (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-8 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                if (canGoBackInApp()) window.history.back();
-                else navigate("/app/home");
-              }}
-            >
-              <ChevronLeft className="size-3.5" />
-              <span className="hidden sm:inline">Back</span>
-            </Button>
-          )}
           {!embedded && onOpenAgents && (
             <Button
               type="button"
@@ -7321,20 +7305,15 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
               <ChevronDown className="size-3 text-muted-foreground" />
             </Button>
           )}
-          {!embedded && <div className="h-4 w-px shrink-0 bg-border/80" />}
+          {!embedded && onOpenAgents && <div className="h-4 w-px shrink-0 bg-border/80" />}
           <button
             type="button"
             onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
-            className="group inline-flex min-w-0 max-w-[min(420px,52vw)] items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1 text-left shadow-sm hover:border-foreground/25 hover:bg-muted/40"
+            className="group inline-flex min-w-0 max-w-[min(420px,52vw)] items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 text-left shadow-sm hover:border-foreground/25 hover:bg-muted/40"
             title="Rename agent"
           >
-            <span className="min-w-0">
-              <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground leading-none">
-                Editing
-              </span>
-              <span className="mt-0.5 block truncate text-[15px] sm:text-[16px] font-semibold tracking-[-0.03em] text-foreground leading-tight">
-                {agent.name}
-              </span>
+            <span className="truncate text-[15px] sm:text-[16px] font-semibold tracking-[-0.03em] text-foreground leading-tight">
+              {agent.name}
             </span>
             <Pencil className="size-3.5 shrink-0 text-muted-foreground opacity-70 group-hover:opacity-100" />
           </button>
