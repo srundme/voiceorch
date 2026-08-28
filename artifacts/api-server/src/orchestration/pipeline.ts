@@ -336,25 +336,36 @@ const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
 // TTS jitter buffer (see drainSentenceJob): runway of audio to queue before
 // starting the paced send pump, so momentary provider-stream hiccups don't
 // become audible mid-sentence gaps. Caps bound the added latency.
-// Greeting prebuffer must exceed Cartesia max_buffer_delay_ms (200): 80 ms of
-// runway + a 200 ms Sonic hold produced call 14351's 194 ms mid-greeting hole.
+// Greeting prebuffer must exceed Cartesia max_buffer_delay_ms (200). Campaign
+// concurrency still underruns at 240/360 — bump defaults so live VoBiz legs
+// keep a longer runway (env overrides remain).
 // Native Cartesia 8 kHz made the voice worse — we synthesize 16 kHz and
 // FIR-downsample with the streaming decimator. CARTESIA_TTS_8K=1 opts back in.
-const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 240));
+const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 360));
 const TTS_PREBUFFER_GREETING_CAP_MS = Math.max(
   TTS_PREBUFFER_GREETING_MS,
-  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 320),
+  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 480),
 );
-const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 360));
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 520));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
-  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 480),
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 720),
 );
-const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 600));
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 900));
+/** On mid-sentence underrun: refill this much audio while holding the last
+ *  frame (keeps VoBiz alive). Prefer this over realtime pacing on an empty
+ *  queue — that is the audible "breaking" glitch on live calls. */
+const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 200));
+const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 400));
 const TTS_UNDERRUN_COLD_MS = 8_000;
 /** Burst this many 20 ms frames into VoBiz before realtime pacing so a 40–80 ms
  *  event-loop hitch does not empty the carrier jitter buffer (choppy voice). */
-const TTS_WIRE_LEAD_FRAMES = Math.max(0, Math.min(8, Number(process.env.TTS_WIRE_LEAD_FRAMES ?? 4)));
+const TTS_WIRE_LEAD_FRAMES = Math.max(0, Math.min(10, Number(process.env.TTS_WIRE_LEAD_FRAMES ?? 6)));
+
+/** Process-local count of in-flight TTS drains — when campaigns dial many
+ *  legs at once, each drain needs a longer prebuffer so Sonic/Sarvam lag
+ *  does not underrun the wire. */
+let activeTtsDrainCount = 0;
 
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
 const FILLER_THRESHOLD_MS     = 900;    // second TTS job only if LLM TTFT is actually slow
@@ -7083,6 +7094,17 @@ export class OrchestrationPipeline implements VoiceSession {
       if (!ok || this.bargeInRequested) return;
     }
 
+    activeTtsDrainCount++;
+    try {
+      return await this.drainSentenceJobInner(job);
+    } finally {
+      activeTtsDrainCount = Math.max(0, activeTtsDrainCount - 1);
+    }
+  }
+
+  private async drainSentenceJobInner(
+    job: TtsSentenceJob,
+  ): Promise<{ pacedMs: number; claimedMs?: number } | undefined> {
     // Extend echo-grace to cover estimated sentence playback duration.
     // ~70 ms/char covers Tamil/Indic and Latin at typical TTS speech rate
     // (observed: 56-char Tamil sentence ≈ 3600 ms = 64 ms/char). Without
@@ -7185,12 +7207,21 @@ export class OrchestrationPipeline implements VoiceSession {
       const recentlyUnderran = this.ttsLastUnderrunAt > 0
         && Date.now() - this.ttsLastUnderrunAt < TTS_UNDERRUN_COLD_MS;
       const greetingFirstClip = this.greetingPlaybackActive && !this.ttsWarmed;
-      const prebufferMs = greetingFirstClip
+      // Concurrent campaign legs share one Node process — each active drain
+      // adds runway so Sonic/Sarvam lag under load does not underrun the wire.
+      const concurrencyBoostMs =
+        activeTtsDrainCount >= 4 ? 240
+        : activeTtsDrainCount >= 3 ? 160
+        : activeTtsDrainCount >= 2 ? 80
+        : 0;
+      const basePrebufferMs = greetingFirstClip
         ? TTS_PREBUFFER_GREETING_MS
         : (this.ttsWarmed && !recentlyUnderran)
           ? TTS_PREBUFFER_WARM_MS
           : TTS_PREBUFFER_COLD_MS;
-      const prebufferCap = greetingFirstClip ? TTS_PREBUFFER_GREETING_CAP_MS : TTS_PREBUFFER_CAP_MS;
+      const prebufferMs = basePrebufferMs + concurrencyBoostMs;
+      const prebufferCap = (greetingFirstClip ? TTS_PREBUFFER_GREETING_CAP_MS : TTS_PREBUFFER_CAP_MS)
+        + concurrencyBoostMs;
       await awaitPrebuffer(prebufferMs, prebufferCap);
       // Re-anchor the per-sentence echo grace + adaptive echo-floor calibration
       // window to actual playback start: the prebuffer wait above would
@@ -7253,39 +7284,61 @@ export class OrchestrationPipeline implements VoiceSession {
         } else if (job.synthDone) {
           break; // no more buffered blocks and TTS finished — we're done
         } else {
-          // Underrun: do NOT pause 200 ms to rebuffer (call 14351: 194 ms hole
-          // mid-greeting). Spin up to one frame for the next block; if still
-          // dry, hold the last 20 ms so VoBiz's clock does not underrun.
+          // Underrun: synthesis fell behind realtime. Do NOT keep pacing an
+          // empty queue (audible glitches on live VoBiz). Hold the last frame
+          // to keep the carrier alive while we refill the jitter buffer.
           underrunCount++;
           this.ttsLastUnderrunAt = Date.now();
           const _uStart = Date.now();
+          let rebufferTick = Date.now();
           while (
             !this.closed && !this.bargeInRequested && !job.synthDone &&
-            pcmIdx >= job.pcmQueue.length && wireQueue.length === 0 &&
-            Date.now() - _uStart < 18
+            this.interruptionMgr.isValidSequence(job.sequenceId) &&
+            bufferedMs() < TTS_REBUFFER_MS &&
+            Date.now() - _uStart < TTS_REBUFFER_CAP_MS
           ) {
-            await new Promise<void>((r) => setTimeout(r, 4));
             processNextBlock();
+            if (wireQueue.length > 0) break;
+            const now = Date.now();
+            if (now >= rebufferTick) {
+              const hold = lastOutChunk ?? holdFrame;
+              this.config.onAudioOut(hold);
+              noteSent(hold);
+              this.lastTtsFrameAt = now;
+              rebufferTick = now + 20;
+            }
+            await new Promise<void>((r) => setTimeout(r, 4));
           }
           underrunWaitMs += Date.now() - _uStart;
-          if (wireQueue.length > 0) continue;
+          nextTick = Date.now() + 20;
+          if (wireQueue.length > 0) {
+            leadFrames = Math.max(leadFrames, Math.min(3, TTS_WIRE_LEAD_FRAMES));
+            continue;
+          }
           if (job.synthDone) {
             flushWireRemainder();
             continue;
           }
+          // Still dry after rebuffer cap — single hold frame, then retry loop.
           const hold = lastOutChunk ?? holdFrame;
           this.config.onAudioOut(hold);
           noteSent(hold);
           this.lastTtsFrameAt = Date.now();
-          nextTick += 20;
-          if (nextTick < Date.now() - 40) nextTick = Date.now() + 20;
           await new Promise<void>((r) => setTimeout(r, Math.max(0, nextTick - Date.now())));
         }
       }
       if (underrunCount > 0 && !this.closed) {
         this.ttsWarmed = false;
         logger.warn(
-          { callId: this.config.callId, underrunCount, underrunWaitMs, sentenceLen: job.text?.length ?? 0 },
+          {
+            callId: this.config.callId,
+            underrunCount,
+            underrunWaitMs,
+            sentenceLen: job.text?.length ?? 0,
+            concurrentDrains: activeTtsDrainCount,
+            prebufferMs,
+            provider: this.agent.ttsProvider,
+          },
           "TTS playback underruns — synthesis slower than realtime mid-sentence (audible glitches)",
         );
         this.logExec("TTS", "system", {
@@ -7294,6 +7347,7 @@ export class OrchestrationPipeline implements VoiceSession {
             event: "Playback underruns (audible glitch)",
             underrunCount,
             underrunWaitMs,
+            concurrentDrains: activeTtsDrainCount,
             provider: this.agent.ttsProvider,
           },
         });
