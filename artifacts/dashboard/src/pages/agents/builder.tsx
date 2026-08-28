@@ -10,7 +10,7 @@ import {
   Play, Pause, Copy,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle, Calendar, Star, Video, ExternalLink,
+  Upload, Archive, Info, AlertCircle, Calendar, Star, BadgeCheck, Video, ExternalLink,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -237,36 +237,16 @@ function sectionFromSearch(search: string): TabId {
 
 /* ── Small helpers ──────────────────────────────────────────────────────────── */
 
-/** Medal badge used instead of the word "recommended" on language-matched voices. */
-function RecommendedVoiceBadge({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 28"
-      className={cn("inline-block shrink-0 text-muted-foreground", className)}
-      aria-hidden
-      focusable="false"
-    >
-      {/* Disc + star cutout */}
-      <path
-        fill="currentColor"
-        fillRule="evenodd"
-        d="M12 1.2c4.86 0 8.8 3.94 8.8 8.8S16.86 18.8 12 18.8 3.2 14.86 3.2 10 7.14 1.2 12 1.2zm0 4.1 1.55 3.14 3.46.5-2.5 2.44.59 3.44L12 13.2l-3.1 1.62.59-3.44-2.5-2.44 3.46-.5L12 5.3z"
-      />
-      {/* Ribbon with fishtail notch */}
-      <path
-        fill="currentColor"
-        d="M8.2 17.6h7.6l-.55 2.7L12 18.9l-3.25 1.4-.55-2.7zm.35 3.45L12 19.55l3.45 1.5L14.2 26.8 12 25.35 9.8 26.8 8.55 21.05z"
-      />
-    </svg>
-  );
-}
-
 function VoiceOptionLabel({ label, recommended }: { label: string; recommended?: boolean }) {
   if (!recommended) return <>{label}</>;
   return (
     <span className="inline-flex items-center gap-1.5" title="Recommended for this language">
       <span>{label}</span>
-      <RecommendedVoiceBadge className="h-3.5 w-3" />
+      <BadgeCheck
+        className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+        aria-hidden
+        strokeWidth={2}
+      />
     </span>
   );
 }
