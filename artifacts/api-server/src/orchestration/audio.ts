@@ -478,6 +478,30 @@ export function hasSpeechEnergy(pcmBuffer: Buffer, threshold = 300): boolean {
   return frameRms(pcmBuffer) > threshold;
 }
 
+/** Pad a short telephony frame to exact 20 ms so VoBiz never sees a runt playAudio payload. */
+export function padWireFrame(chunk: Buffer, frameBytes: number): Buffer {
+  if (chunk.length === frameBytes) return chunk;
+  const padded = Buffer.alloc(frameBytes);
+  chunk.copy(padded);
+  return padded;
+}
+
+/** Split PCM into exact 20 ms frames, carrying a remainder across blocks. */
+export function enqueueExactFrames(
+  pcm: Buffer,
+  frameBytes: number,
+  queue: Buffer[],
+  rem: { buf: Buffer },
+): void {
+  const combined = rem.buf.length > 0 ? Buffer.concat([rem.buf, pcm]) : pcm;
+  let offset = 0;
+  while (offset + frameBytes <= combined.length) {
+    queue.push(combined.subarray(offset, offset + frameBytes));
+    offset += frameBytes;
+  }
+  rem.buf = offset < combined.length ? combined.subarray(offset) : Buffer.alloc(0);
+}
+
 // Build a minimal WAV header for PCM data (for REST-based STT APIs)
 export function pcmToWav(pcm: Buffer, sampleRate = 16000, channels = 1, bitsPerSample = 16): Buffer {
   const dataSize = pcm.length;

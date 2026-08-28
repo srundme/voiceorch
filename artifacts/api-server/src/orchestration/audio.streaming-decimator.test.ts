@@ -4,6 +4,8 @@ import {
   createDownsampler24to8,
   downsample16to8,
   downsample24to8,
+  enqueueExactFrames,
+  padWireFrame,
 } from "./audio.js";
 
 /** Speech-like tone stack (200 Hz fundamental + harmonics through the voice band). */
@@ -133,5 +135,28 @@ describe("StreamingDecimator (24→8)", () => {
     };
 
     expect(err(stateful, LAG)).toBeLessThan(err(stateless, 0) / 5);
+  });
+});
+
+describe("padWireFrame / enqueueExactFrames", () => {
+  it("pads a runt 8 kHz playAudio frame to exactly 20 ms", () => {
+    const runt = Buffer.alloc(80, 7);
+    const padded = padWireFrame(runt, 320);
+    expect(padded.length).toBe(320);
+    expect(padded.subarray(0, 80).equals(runt)).toBe(true);
+    expect(padded.subarray(80).every((b) => b === 0)).toBe(true);
+  });
+
+  it("does not emit short frames across block boundaries", () => {
+    const queue: Buffer[] = [];
+    const rem = { buf: Buffer.alloc(0) };
+    enqueueExactFrames(Buffer.alloc(500, 1), 320, queue, rem);
+    expect(queue).toHaveLength(1);
+    expect(queue[0]!.length).toBe(320);
+    expect(rem.buf.length).toBe(180);
+    enqueueExactFrames(Buffer.alloc(140, 2), 320, queue, rem);
+    expect(queue).toHaveLength(2);
+    expect(queue.every((f) => f.length === 320)).toBe(true);
+    expect(rem.buf.length).toBe(0);
   });
 });

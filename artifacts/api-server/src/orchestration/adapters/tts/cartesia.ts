@@ -10,7 +10,9 @@ import type { TTSAdapter } from "../../types.js";
  *   - No per-sentence TCP/TLS handshake → saves ~30–80ms per sentence.
  *   - max_buffer_delay_ms: 200 → Sonic can finish the last phoneme; 0 caused
  *     chopped endings even on complete sentences (Cartesia docs default 3000).
- *   - Telephony requests pcm_s16le @ 8 kHz so VoBiz does not get a second resample.
+ *   - Default pcm_s16le @ 16 kHz (Cartesia voice-agent format). The pipeline
+ *     FIR-downsamples to VoBiz 8 kHz. Pass sampleRate=8000 / CARTESIA_TTS_8K=1
+ *     only when you want native 8 kHz (lower quality).
  *   - One context_id per LLM turn. Later sentences are continuations (continue:true,
  *     no flush) so Cartesia keeps prosody — a per-sentence flush was the audible seam.
  *
@@ -160,7 +162,7 @@ export class CartesiaTTS implements TTSAdapter {
   private modelId: string;
   private language: string | null;
   private speed: number | null;
-  /** Native PCM rate Cartesia should emit — match the telephony wire to skip a second resample. */
+  /** Native PCM rate Cartesia should emit. 16 kHz unless telephony opts into 8 kHz. */
   readonly pcmSampleRate: 8000 | 16000;
 
   private ws: WebSocket | null = null;
