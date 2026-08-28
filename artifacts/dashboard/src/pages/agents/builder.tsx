@@ -237,10 +237,44 @@ function sectionFromSearch(search: string): TabId {
 
 /* ── Small helpers ──────────────────────────────────────────────────────────── */
 
+/** Medal badge used instead of the word "recommended" on language-matched voices. */
+function RecommendedVoiceBadge({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 28"
+      className={cn("inline-block shrink-0 text-muted-foreground", className)}
+      aria-hidden
+      focusable="false"
+    >
+      {/* Disc + star cutout */}
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        d="M12 1.2c4.86 0 8.8 3.94 8.8 8.8S16.86 18.8 12 18.8 3.2 14.86 3.2 10 7.14 1.2 12 1.2zm0 4.1 1.55 3.14 3.46.5-2.5 2.44.59 3.44L12 13.2l-3.1 1.62.59-3.44-2.5-2.44 3.46-.5L12 5.3z"
+      />
+      {/* Ribbon with fishtail notch */}
+      <path
+        fill="currentColor"
+        d="M8.2 17.6h7.6l-.55 2.7L12 18.9l-3.25 1.4-.55-2.7zm.35 3.45L12 19.55l3.45 1.5L14.2 26.8 12 25.35 9.8 26.8 8.55 21.05z"
+      />
+    </svg>
+  );
+}
+
+function VoiceOptionLabel({ label, recommended }: { label: string; recommended?: boolean }) {
+  if (!recommended) return <>{label}</>;
+  return (
+    <span className="inline-flex items-center gap-1.5" title="Recommended for this language">
+      <span>{label}</span>
+      <RecommendedVoiceBadge className="h-3.5 w-3" />
+    </span>
+  );
+}
+
 function SmallSelect({ value, onChange, options, placeholder }: {
   value: string | undefined;
   onChange: (v: string) => void;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; recommended?: boolean }[];
   placeholder?: string;
 }) {
   // Radix Select crashes if `value` is "" or not present in SelectItem list.
@@ -255,7 +289,9 @@ function SmallSelect({ value, onChange, options, placeholder }: {
       </SelectTrigger>
       <SelectContent position="popper" className="max-h-[280px] overflow-y-auto">
         {safeOptions.map((o) => (
-          <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+          <SelectItem key={o.value} value={o.value} className="text-xs">
+            <VoiceOptionLabel label={o.label} recommended={o.recommended} />
+          </SelectItem>
         ))}
       </SelectContent>
     </Select>
@@ -690,7 +726,7 @@ function OverviewTab({
     const all = whitelistedData?.voices ?? [];
     const ordered = orderVoicesByLanguage(all, language);
     const seen = new Set<string>();
-    const opts: { value: string; label: string }[] = [];
+    const opts: { value: string; label: string; recommended?: boolean }[] = [];
     for (const c of myCartesiaClones) {
       if (seen.has(c.id)) continue;
       seen.add(c.id);
@@ -703,7 +739,8 @@ function OverviewTab({
         && baseLanguage(language) !== "en";
       opts.push({
         value: v.id,
-        label: recommended ? `${v.name} · recommended` : v.name,
+        label: v.name,
+        recommended: recommended || undefined,
       });
     }
     if (opts.length === 0 && Array.isArray(TTS_VOICES.cartesia)) {
@@ -788,12 +825,12 @@ function OverviewTab({
     return opts;
   }, [mySarvamClones, ttsModel, ttsVoice]);
 
-  const ttsVoiceOpts: { value: string; label: string }[] =
+  const ttsVoiceOpts: { value: string; label: string; recommended?: boolean }[] =
     ttsProvider === "cartesia"
       ? cartesiaOverviewOpts
       : ttsProvider === "sarvam"
       ? sarvamOverviewOpts
-      : ((ttsVoiceRaw ?? []) as { value: string; label: string }[]);
+      : ((ttsVoiceRaw ?? []) as { value: string; label: string; recommended?: boolean }[]);
 
   const llmLabel       = LLM_PROVIDERS.find(p => p.value === llmProvider)?.label ?? llmProvider;
   const ttsLabel       = TTS_PROVIDERS.find(p => p.value === ttsProvider)?.label ?? ttsProvider;
@@ -1442,7 +1479,11 @@ function OverviewTab({
                               setVoiceCustomMode(false);
                               field.onChange(v);
                             }}
-                            options={ttsVoiceOpts.map(v => ({ value: v.value, label: v.label }))}
+                            options={ttsVoiceOpts.map(v => ({
+                              value: v.value,
+                              label: v.label,
+                              recommended: v.recommended,
+                            }))}
                             placeholder="Select a voice…"
                           />
                         </FormControl>
@@ -1866,7 +1907,7 @@ function VoiceTab({ form }: { form: any }) {
     const all = whitelistedData?.voices ?? [];
     const ordered = orderVoicesByLanguage(all, agentLanguage);
     const seen = new Set<string>();
-    const opts: { value: string; label: string }[] = [];
+    const opts: { value: string; label: string; recommended?: boolean }[] = [];
     for (const c of myCartesiaClonesV) {
       if (seen.has(c.id)) continue;
       seen.add(c.id);
@@ -1879,7 +1920,8 @@ function VoiceTab({ form }: { form: any }) {
         && baseLanguage(agentLanguage) !== "en";
       opts.push({
         value: v.id,
-        label: recommended ? `${v.name} · recommended` : v.name,
+        label: v.name,
+        recommended: recommended || undefined,
       });
     }
     if (opts.length === 0 && Array.isArray(TTS_VOICES.cartesia)) {
@@ -1951,12 +1993,12 @@ function VoiceTab({ form }: { form: any }) {
 
   // For non-Cartesia providers fall back to the hardcoded list
   const ttsVoiceRawV  = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
-  const ttsVoiceOptsV: { value: string; label: string }[] =
+  const ttsVoiceOptsV: { value: string; label: string; recommended?: boolean }[] =
     ttsProvider === "cartesia"
       ? cartesiaVoiceOpts
       : ttsProvider === "sarvam"
       ? sarvamVoiceOptsV
-      : ((ttsVoiceRawV ?? []) as { value: string; label: string }[]);
+      : ((ttsVoiceRawV ?? []) as { value: string; label: string; recommended?: boolean }[]);
 
   const ttsModelOptsV = TTS_MODELS[ttsProvider] ?? [];
   const curatedVoiceOptsV = ttsVoiceOptsV.filter(v => v.value !== "__custom__");
@@ -2271,7 +2313,7 @@ function VoiceTab({ form }: { form: any }) {
                     <SelectContent position="popper" className="max-h-[300px]">
                       {ttsVoiceOptsV.filter((v) => v.value !== "").map(v => (
                         <SelectItem key={v.value} value={v.value} className="text-sm">
-                          {v.label}
+                          <VoiceOptionLabel label={v.label} recommended={v.recommended} />
                         </SelectItem>
                       ))}
                     </SelectContent>
