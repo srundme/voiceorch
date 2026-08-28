@@ -183,7 +183,7 @@ export default function TransfersPage() {
               <ArrowRightLeft className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
               <p className="font-medium">No transfers yet</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Transfers appear here when your AI agents initiate a warm handoff to a human.
+                Transfers appear here when an AI agent hands off to a human — from normal or campaign calls.
               </p>
             </div>
           ) : (

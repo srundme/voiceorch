@@ -2294,6 +2294,21 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
 
       // wasTransferred / transferredTo were already set BEFORE the provider call
       // (see comment above) to win the WS-close race. Nothing to set here.
+      // Cold (and warm-fallback) transfers never hit the warm insert above — still
+      // log call_transfers so History → Transfers and campaign sync see the handoff.
+      if (!transferId && agent.userId) {
+        try {
+          await db.insert(callTransfersTable).values({
+            callId:     callRecord.id,
+            userId:     agent.userId,
+            transferTo: to,
+            summary:    operatorSummary ?? null,
+            status:     "initiated",
+          });
+        } catch (err) {
+          logger.warn({ callId: callRecord.id, err }, "Transfer: failed to log call_transfers row");
+        }
+      }
       logExec(EXEC_COMPONENTS.Tool, "system", {
         status: "success",
         metadata: {

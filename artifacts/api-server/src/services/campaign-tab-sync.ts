@@ -238,6 +238,36 @@ export async function reconcileCampaignTransfers(campaignId: number): Promise<vo
     join calls c on c.id = ce.call_id
     where lt.campaign_id = ${campaignId}
       and ce.call_id is not null
+      and c.user_id is not null
+      and not exists (
+        select 1 from call_transfers ct
+        where ct.call_id = ce.call_id and ct.transfer_to = lt.transferred_to
+      )
+  `);
+}
+
+/**
+ * Same lead_transfers → call_transfers backfill as campaign Transfers, but for the
+ * whole workspace. History → Transfers (GET /api/transfers) never joined campaign
+ * tabs, so rows that only lived in lead_transfers until a campaign page opened
+ * never appeared in History. Call this before listing History transfers.
+ */
+export async function reconcileTransfersForWorkspace(userIds: string[]): Promise<void> {
+  if (userIds.length === 0) return;
+  const ownerFilter = sql.join(userIds.map((id) => sql`${id}`), sql`, `);
+  await db.execute(sql`
+    insert into call_transfers (
+      call_id, user_id, transfer_to, summary, status,
+      initiated_at, connected_at, completed_at
+    )
+    select ce.call_id, c.user_id, lt.transferred_to, lt.summary, 'completed',
+           lt.transfer_time, lt.transfer_time, lt.transfer_time
+    from lead_transfers lt
+    join call_executions ce on ce.id = lt.call_execution_id
+    join calls c on c.id = ce.call_id
+    where c.user_id in (${ownerFilter})
+      and ce.call_id is not null
+      and c.user_id is not null
       and not exists (
         select 1 from call_transfers ct
         where ct.call_id = ce.call_id and ct.transfer_to = lt.transferred_to

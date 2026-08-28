@@ -9,6 +9,7 @@ import { db, callTransfersTable, callsTable, agentsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
 import { resolveWorkspaceScope } from "../services/workspace-scope.js";
+import { reconcileTransfersForWorkspace } from "../services/campaign-tab-sync.js";
 
 const router: IRouter = Router();
 
@@ -17,6 +18,10 @@ const router: IRouter = Router();
 router.get("/transfers", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const scope = await resolveWorkspaceScope(userId);
+
+  // Backfill campaign lead_transfers into call_transfers so History matches
+  // the campaign Transfers tab (which already reconciles on every list).
+  await reconcileTransfersForWorkspace(scope.userIds).catch(() => {});
 
   const rows = await db
     .select({
