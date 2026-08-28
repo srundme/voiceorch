@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
 import {
   ArrowRightLeft, CheckCircle2, XCircle, Clock, Download,
   RefreshCw, ExternalLink, RotateCcw, AlertCircle, Phone, User,
@@ -53,12 +54,6 @@ type TransfersPage = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, { credentials: "include", ...init });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json() as Promise<T>;
-}
 
 function fmtDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -127,18 +122,20 @@ export default function TransfersTab({ campaignId }: { campaignId: number }) {
 
   const { data: metrics } = useQuery<TransferMetrics>({
     queryKey: metricsKey,
-    queryFn:  () => apiFetch(`${BASE}/api/campaigns/${campaignId}/transfers/metrics`),
+    queryFn:  () => customFetch(`${BASE}/api/campaigns/${campaignId}/transfers/metrics`),
     refetchInterval: 10000,
+    enabled: campaignId > 0,
   });
 
-  const { data, isFetching } = useQuery<TransfersPage>({
+  const { data, isFetching, isError, isLoading, refetch } = useQuery<TransfersPage>({
     queryKey: listKey,
     queryFn: () => {
       const p = new URLSearchParams({ status: tab, page: String(page), limit: String(LIMIT) });
-      return apiFetch<TransfersPage>(`${BASE}/api/campaigns/${campaignId}/transfers?${p}`);
+      return customFetch<TransfersPage>(`${BASE}/api/campaigns/${campaignId}/transfers?${p}`);
     },
     refetchInterval: 10000,
     placeholderData: prev => prev,
+    enabled: campaignId > 0,
   });
 
   const invalidate = () => {
@@ -153,7 +150,7 @@ export default function TransfersTab({ campaignId }: { campaignId: number }) {
 
   const statusMutation = useMutation({
     mutationFn: ({ transferId, status }: { transferId: number; status: string }) =>
-      apiFetch(`${BASE}/api/campaigns/${campaignId}/transfers/${transferId}/status`, {
+      customFetch(`${BASE}/api/campaigns/${campaignId}/transfers/${transferId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
@@ -164,7 +161,7 @@ export default function TransfersTab({ campaignId }: { campaignId: number }) {
 
   const retryMutation = useMutation({
     mutationFn: (transferId: number) =>
-      apiFetch(`${BASE}/api/campaigns/${campaignId}/transfers/${transferId}/retry`, { method: "POST" }),
+      customFetch(`${BASE}/api/campaigns/${campaignId}/transfers/${transferId}/retry`, { method: "POST" }),
     onSuccess: () => { toast({ title: "Transfer re-queued" }); invalidate(); },
     onError: (e: Error) => toast({ title: e.message || "Failed to retry", variant: "destructive" }),
   });
@@ -293,7 +290,18 @@ export default function TransfersTab({ campaignId }: { campaignId: number }) {
 
       {/* ── Table ──────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        {items.length === 0 ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center h-48 gap-2">
+            <p className="text-sm text-muted-foreground/50">Loading transfers…</p>
+          </div>
+        ) : isError ? (
+          <div className="flex flex-col items-center justify-center h-48 gap-3">
+            <AlertCircle className="h-8 w-8 text-amber-600" />
+            <p className="text-sm font-medium">Transfers failed to load</p>
+            <p className="text-xs text-muted-foreground">This is not an empty list — retry or check your session.</p>
+            <Button size="sm" variant="outline" disabled={isFetching} onClick={() => void refetch()}>Retry</Button>
+          </div>
+        ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3">
             <ArrowRightLeft className="h-8 w-8 text-muted-foreground/20" />
             <p className="text-sm text-muted-foreground/50">

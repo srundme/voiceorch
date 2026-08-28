@@ -1,6 +1,7 @@
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toOpenAIMessages } from "./openai-messages.js";
 import { logger } from "../../../lib/logger.js";
+import { toOpenAiToolChoice } from "./tool-choice.js";
 
 /**
  * Gated raw-SSE diagnostic flag (OFF by default). When SARVAM_RAW_SSE_DEBUG is
@@ -493,7 +494,7 @@ ${systemPrompt}`
         type: "function",
         function: { name: t.name, description: t.description, parameters: t.parameters },
       }));
-      body["tool_choice"] = "auto";
+      body["tool_choice"] = toOpenAiToolChoice(options?.toolChoice, options.tools);
     }
 
     const endpoint = sarvamChatCompletionsUrl(this.model);

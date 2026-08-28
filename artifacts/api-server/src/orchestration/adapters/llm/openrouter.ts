@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toOpenAIMessages } from "./openai-messages.js";
 import { drainOpenAICompatibleStream } from "./openai-compat.js";
+import { toOpenAiToolChoice } from "./tool-choice.js";
 
 /**
  * OpenRouter — OpenAI-compatible gateway to third-party-hosted models.
@@ -70,7 +71,7 @@ export class OpenRouterLLM implements LLMAdapter {
         }))
       : undefined;
 
-    const toolChoice = orTools ? "auto" : undefined;
+    const toolChoice = orTools ? toOpenAiToolChoice(options?.toolChoice, options?.tools) : undefined;
 
     // Disable reasoning/thinking tokens — they add latency before first spoken word
     // and are never useful for a real-time voice call. Cast to any because the

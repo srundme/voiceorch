@@ -83,6 +83,12 @@ describe("tryEarlyPhraseDispatch — streaming TTS starts before .!?", () => {
     const text = "புரியுது, இப்போ உங்களுக்கு time இல்ல. அப்புறமா ஒரு callback schedule பண்ணட்டுமா";
     expect(tryEarlyPhraseDispatch(text, 8)).toBeNull();
   });
+
+  it("does not comma-split AM/PM slot lists (call 14390 choppy TTS)", () => {
+    const text =
+      "நாளைக்கு August 28 காலைல 9:00 AM, 9:15 AM, 9:30 AM, 9:45 AM அல்லது 10:00 AM-ல உங்களுக்கு எந்த time சரி வரும்?";
+    expect(tryEarlyPhraseDispatch(text, 8)).toBeNull();
+  });
 });
 
 describe("extractSentences — ellipsis is a breath, not a clip (call 14276)", () => {

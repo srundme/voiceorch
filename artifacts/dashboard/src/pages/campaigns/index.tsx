@@ -129,12 +129,6 @@ type DashboardData = {
   campaigns: DashboardCampaign[];
 };
 
-async function apiFetchDash<T>(url: string): Promise<T> {
-  const r = await fetch(url, { credentials: "include" });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json() as Promise<T>;
-}
-
 // ── Status helpers ─────────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<string, { label: string; dot: string; cls: string }> = {
@@ -1473,9 +1467,9 @@ export default function CampaignsPage() {
   });
   const zohoConnected = crmConnections.some(c => c.provider === "zoho");
 
-  const { data, isLoading, isFetching } = useQuery<DashboardData>({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery<DashboardData>({
     queryKey: ["campaigns-dashboard"],
-    queryFn: () => apiFetchDash<DashboardData>(`${BASE}/api/campaigns/dashboard`),
+    queryFn: () => customFetch<DashboardData>(`${BASE}/api/campaigns/dashboard`),
     refetchInterval: 10_000,
     staleTime: 8_000,
   });
@@ -1726,6 +1720,17 @@ export default function CampaignsPage() {
                       </div>
                     ))}
                   </div>
+                ) : isError ? (
+                  <EmptyState
+                    variant="inline"
+                    icon={<AlertTriangle />}
+                    title="Campaigns failed to load"
+                    description="This is not an empty list — retry or check your session."
+                    action={{
+                      label: "Retry",
+                      onClick: () => { void refetch(); },
+                    }}
+                  />
                 ) : filtered.length === 0 ? (
                   <EmptyState
                     variant="inline"
