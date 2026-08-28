@@ -2399,6 +2399,15 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
         }
       : undefined,
+    // Always expose the configured After-the-call voicemail policy so mid-call
+    // transcript detection can leave a message when acoustic AMD misses.
+    voicemailPolicy: {
+      action: amdVoicemailAction,
+      message: (typeof agentCfg["voicemailMessage"] === "string" && (agentCfg["voicemailMessage"] as string).trim())
+        ? (agentCfg["voicemailMessage"] as string)
+        : "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
+      ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
+    },
     // Acoustic AMD confirmation: armed either by a synchronous machine hint
     // (legacy path) or UNCONDITIONALLY for AMD-enabled VoBiz outbound calls
     // (amdArmed — the real verdict arrives via the async machine_detection_url

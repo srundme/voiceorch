@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { looksLikeVoicemailTranscript, shouldMarkCallVoicemail } from "./voicemail-detect.js";
+import { looksLikeVoicemailTranscript, looksLikeVoicemailGreeting, shouldMarkCallVoicemail } from "./voicemail-detect.js";
+
+describe("looksLikeVoicemailGreeting", () => {
+  it("detects carrier greetings without Voice mail prefix (call 14446)", () => {
+    expect(looksLikeVoicemailGreeting(
+      "The person you're trying to reach is not available. At the tone, please record your message. When you have finished recording you may hang up.",
+    )).toBe(true);
+  });
+
+  it("ignores normal caller speech", () => {
+    expect(looksLikeVoicemailGreeting("Hello, who is this?")).toBe(false);
+  });
+});
 
 describe("looksLikeVoicemailTranscript", () => {
   it("detects classic greeting + agent ack (call 14439)", () => {

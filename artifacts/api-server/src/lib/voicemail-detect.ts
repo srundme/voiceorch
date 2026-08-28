@@ -10,6 +10,24 @@ const AGENT_ACK_VM_RE =
   /\b(?:reached (?:the )?voicemail|got (?:their |the )?voicemail|hit (?:a |the )?voicemail|answering machine|seems like .{0,40}voicemail)\b/i;
 
 /**
+ * True when this utterance alone looks like a carrier voicemail greeting
+ * (mid-call AMD miss → leave configured message instead of pitching).
+ */
+export function looksLikeVoicemailGreeting(text: string | null | undefined): boolean {
+  const t = (text ?? "").trim();
+  if (!t || t.length > 500) return false;
+  const lower = t.toLowerCase();
+  // Require at least one strong greeting cue (not just "is not available" alone).
+  const strong =
+    /\b(?:voice\s*mail|voicemail)\b/.test(lower)
+    || /(?:the person you(?:'re| are) trying to reach)/.test(lower)
+    || /(?:record your message)/.test(lower)
+    || /(?:at the (?:tone|beep)|after the (?:tone|beep))/.test(lower)
+    || /(?:please leave (?:a |your )?message)/.test(lower);
+  return strong;
+}
+
+/**
  * True when the call transcript clearly shows a voicemail box, not a live human.
  * Conservative: requires a classic greeting and/or an explicit agent acknowledgment.
  */
@@ -27,7 +45,7 @@ export function looksLikeVoicemailTranscript(transcript: string | null | undefin
   // First caller-ish chunk is a classic greeting (short outbound VM dumps).
   if (hasGreeting) {
     const firstChunk = lower.slice(0, 400);
-    if (VM_GREETING_RE.test(firstChunk)) return true;
+    if (looksLikeVoicemailGreeting(firstChunk) || VM_GREETING_RE.test(firstChunk)) return true;
   }
   return false;
 }
