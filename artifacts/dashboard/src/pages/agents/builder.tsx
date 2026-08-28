@@ -6,7 +6,7 @@ import {
   Save, MoreHorizontal, Trash2, Settings, FileText, Wrench,
   TestTube2, ChevronRight, ChevronLeft,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
-  User2, Users, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
+  User2, Users, Sparkles, CopyPlus, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause, Copy,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
@@ -1422,7 +1422,7 @@ function OverviewTab({
                         className="h-7 text-[10px] gap-1 px-2"
                         onClick={() => setCloneOpen(true)}
                       >
-                        <Sparkles className="h-3 w-3" />
+                        <CopyPlus className="h-3 w-3" />
                         Clone voice
                       </Button>
                     )}
@@ -1434,7 +1434,7 @@ function OverviewTab({
                         className="h-7 text-[10px] gap-1 px-2"
                         onClick={() => setSarvamCloneOpen(true)}
                       >
-                        <Sparkles className="h-3 w-3" />
+                        <CopyPlus className="h-3 w-3" />
                         Add Sarvam clone
                       </Button>
                     )}
@@ -2250,7 +2250,7 @@ function VoiceTab({ form }: { form: any }) {
                         className="h-7 text-[10px] gap-1 px-2"
                         onClick={() => setCloneOpenV(true)}
                       >
-                        <Sparkles className="h-3 w-3" />
+                        <CopyPlus className="h-3 w-3" />
                         Clone voice
                       </Button>
                     )}
@@ -2262,7 +2262,7 @@ function VoiceTab({ form }: { form: any }) {
                         className="h-7 text-[10px] gap-1 px-2"
                         onClick={() => setSarvamCloneOpenV(true)}
                       >
-                        <Sparkles className="h-3 w-3" />
+                        <CopyPlus className="h-3 w-3" />
                         Add Sarvam clone
                       </Button>
                     )}
@@ -2323,7 +2323,7 @@ function VoiceTab({ form }: { form: any }) {
                   className="h-8 text-xs gap-1.5"
                   onClick={() => setCloneOpenV(true)}
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
+                  <CopyPlus className="h-3.5 w-3.5" />
                   Clone my voice
                 </Button>
               </div>
