@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { logger } from "../../lib/logger.js";
+import { latinizeAttendeeName } from "../../orchestration/booking-attendee-name.js";
 import { collectBookingMailRecipients } from "./booking-mail-recipients.js";
 import {
   getLinkedGoogleConnectionForBooking,
@@ -22,6 +23,14 @@ interface BookingEmailData {
   cancelLink?: string | null;
   rescheduleLink?: string | null;
   calendarSyncStatus?: string | null;
+}
+
+/** Ensure every booking email uses a Latin/English attendee name. */
+function latinizeEmailData(data: BookingEmailData): BookingEmailData {
+  return {
+    ...data,
+    attendeeName: latinizeAttendeeName(data.attendeeName, data.attendeeEmail),
+  };
 }
 
 function getTransporter() {
@@ -178,6 +187,7 @@ We look forward to speaking with you!`;
 }
 
 export async function sendBookingCreatedEmail(data: BookingEmailData): Promise<void> {
+  data = latinizeEmailData(data);
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
   const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
@@ -213,6 +223,7 @@ Booking Reference: #${data.bookingId}`;
 }
 
 export async function sendBookingConfirmedEmail(data: BookingEmailData): Promise<void> {
+  data = latinizeEmailData(data);
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
   const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
@@ -242,6 +253,7 @@ Booking Reference: #${data.bookingId}`;
 }
 
 export async function sendBookingCancelledEmail(data: BookingEmailData): Promise<void> {
+  data = latinizeEmailData(data);
   const from = formatDateTime(data.slotStart, data.timezone);
 
   const attendeeBody = `Hi ${data.attendeeName},
@@ -268,6 +280,7 @@ Booking Reference: #${data.bookingId}`;
 }
 
 export async function sendBookingRescheduledEmail(data: BookingEmailData & { oldSlotStart?: Date }): Promise<void> {
+  data = latinizeEmailData(data);
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
   const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";

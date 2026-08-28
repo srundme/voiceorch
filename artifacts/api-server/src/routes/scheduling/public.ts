@@ -25,6 +25,7 @@ import {
 } from "@workspace/api-zod";
 import { buildSlotLockKey } from "../../services/scheduling/lock.js";
 import { logger } from "../../lib/logger.js";
+import { latinizeAttendeeName } from "../../orchestration/booking-attendee-name.js";
 import { schedulingSlotsRateLimit, schedulingBookingRateLimit } from "../../lib/rate-limit.js";
 import {
   createCalendarEvent,
@@ -199,7 +200,7 @@ router.post("/scheduling/public/bookings", schedulingBookingRateLimit, async (re
       calendarId: calendar.id,
       callId: null,
       userId: calendar.userId,
-      attendeeName: parsed.data.attendeeName,
+      attendeeName: latinizeAttendeeName(parsed.data.attendeeName, parsed.data.attendeeEmail),
       attendeeEmail: parsed.data.attendeeEmail,
       attendeeNotes: parsed.data.attendeeNotes ?? null,
       slotStart,

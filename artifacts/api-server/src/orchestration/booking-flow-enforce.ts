@@ -6,6 +6,7 @@
 
 import { looksLikeBookingTimeAnswer } from "./transcriptQuality.js";
 import { sanitizeAttendeeEmail, validateBookableEmail } from "./booking-email-validate.js";
+import { latinizeAttendeeName } from "./booking-attendee-name.js";
 
 export type BookingFlowState = {
   availabilityChecked: boolean;
@@ -243,9 +244,10 @@ export function canAutoBook(opts: {
 }
 
 export function buildAutoBookArgs(state: BookingFlowState): Record<string, unknown> {
+  const email = sanitizeAttendeeEmail(state.pendingEmail ?? "");
   return {
-    attendee_name: state.pendingName ?? "Caller",
-    attendee_email: sanitizeAttendeeEmail(state.pendingEmail ?? ""),
+    attendee_name: latinizeAttendeeName(state.pendingName ?? "Caller", email),
+    attendee_email: email,
     email_confirmed: true,
     preferred_date: state.lastSlotIso,
   };
