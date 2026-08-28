@@ -105,7 +105,8 @@ export default function TransfersPage() {
   const active    = transfers.filter((t) => t.status === "initiated" || t.status === "connected");
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4">
       {active.length > 0 && (
         <Card className="border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20">
           <CardHeader className="pb-2">
@@ -231,6 +232,7 @@ export default function TransfersPage() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
