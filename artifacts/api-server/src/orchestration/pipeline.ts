@@ -6349,7 +6349,11 @@ export class OrchestrationPipeline implements VoiceSession {
     });
 
     // Stop any in-flight greeting / sales TTS before leaving the VM message.
-    try { this.tts.cancelInFlight?.(); } catch { /* best-effort */ }
+    for (const ac of this.activeTtsAborts) {
+      try { ac.abort(); } catch { /* noop */ }
+    }
+    this.activeTtsAborts.clear();
+    try { this.llm.cancelInFlight?.(); } catch { /* best-effort */ }
     this.bargeInRequested = true;
 
     if (policy.action === "leave_message") {
