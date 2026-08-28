@@ -142,7 +142,7 @@ const NAV_GROUPS: NavGroup[] = [
 
 const NAV_SETTINGS: NavItem[] = [
   { name: "Workspace",  href: "/app/settings",  icon: WorkspaceIcon },
-  { name: "Providers",  href: "/app/providers", icon: ProvidersIcon },
+  { name: "Providers",  href: "/app/providers?tab=provider-keys", icon: ProvidersIcon },
   { name: "Developers", href: "/app/api-keys",  icon: DevelopersIcon },
   { name: "Billing",    href: "/app/wallet",    icon: BillingIcon },
 ];
@@ -175,7 +175,7 @@ const MANAGED_NAV_SETTINGS: NavItem[] = [
   { name: "Billing",    href: "/app/wallet",   icon: BillingIcon },
 ];
 
-const SETTINGS_HREFS = NAV_SETTINGS.map(s => s.href);
+const SETTINGS_HREFS = NAV_SETTINGS.map(s => s.href.split("?")[0]);
 
 /* ─── Pending callbacks count (for sidebar badge) ────────────────────────── */
 const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -346,16 +346,17 @@ function UtilityStrip() {
 
 /* ─── Single nav item ────────────────────────────────────────────────────── */
 function navItemIsActive(location: string, href: string): boolean {
-  if (href === "/app") return false;
-  if (location.startsWith(href)) return true;
+  const path = href.split("?")[0];
+  if (path === "/app") return false;
+  if (location.startsWith(path)) return true;
   // Phase 4 aliases — old URLs still work; highlight the new home.
-  if (href === "/app/history" && (location.startsWith("/app/calls") || location.startsWith("/app/history"))) return true;
+  if (path === "/app/history" && (location.startsWith("/app/calls") || location.startsWith("/app/history"))) return true;
   if (
-    href === "/app/campaigns"
+    path === "/app/campaigns"
     && (location.startsWith("/app/campaigns") || location.startsWith("/app/automatic-calls"))
   ) return true;
   if (
-    href === "/app/connections"
+    path === "/app/connections"
     && (
       location.startsWith("/app/connections")
       || location.startsWith("/app/whatsapp")

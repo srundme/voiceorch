@@ -579,7 +579,7 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
         links={isManagedWorkspace
           ? [{ icon: Phone, label: "Phone Numbers", href: "/app/phone-numbers" }]
           : [
-              { icon: Layers, label: "Providers", href: "/app/providers" },
+              { icon: Layers, label: "Providers", href: "/app/providers?tab=provider-keys" },
               { icon: Phone, label: "Phone Numbers", href: "/app/phone-numbers" },
             ]}
       />
@@ -591,7 +591,7 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
         iconClassName="bg-muted text-muted-foreground"
         links={[
           { icon: Mic2, label: "Voices", href: "/app/voices" },
-          { icon: Layers, label: "AI Providers (BYOP)", href: "/app/providers" },
+          { icon: Layers, label: "AI Providers (BYOP)", href: "/app/providers?tab=provider-keys" },
         ]}
       />
       )}

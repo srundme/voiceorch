@@ -552,7 +552,7 @@ function AppRoutes() {
 
         <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
 
-        {/* ── Providers (tabbed — Voices + Provider keys) ── */}
+        {/* ── Providers (tabbed — Provider keys + Voices + My clones) ── */}
         <Route path="/app/providers" component={ProvidersTabPage} />
 
         {/* ── Voices → providers?tab=voices redirect ── */}

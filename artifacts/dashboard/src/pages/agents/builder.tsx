@@ -7429,7 +7429,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
               </DropdownMenuItem>
               )}
               {!isManagedWorkspace && (
-              <DropdownMenuItem onClick={() => navigate("/app/providers")}>
+              <DropdownMenuItem onClick={() => navigate("/app/providers?tab=provider-keys")}>
                 <Star className="mr-2 size-3.5" /> API keys
               </DropdownMenuItem>
               )}

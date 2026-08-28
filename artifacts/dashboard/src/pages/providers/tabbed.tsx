@@ -1,7 +1,7 @@
 /**
  * /app/providers — Provider keys | Voices | My clones
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { Plus } from "lucide-react";
 import { StripeTabPage } from "@/components/stripe-tab-page";
@@ -10,13 +10,24 @@ import VoicesPage from "@/pages/voices";
 import ProvidersList from "./index";
 import { useVoiceClones } from "./my-clones-panel";
 
+const DEFAULT_PROVIDERS_TAB = "provider-keys";
+
 export default function ProvidersTabPage() {
   const [, navigate] = useLocation();
   const search = useSearch();
-  const activeTab = new URLSearchParams(search).get("tab") ?? "provider-keys";
+  const tabParam = new URLSearchParams(search).get("tab");
+  const activeTab = tabParam ?? DEFAULT_PROVIDERS_TAB;
   const showCloneActions = activeTab === "voices" || activeTab === "my-clones";
   const showProviderActions = activeTab === "provider-keys";
   const [addProviderOpen, setAddProviderOpen] = useState(false);
+
+  // Bare /app/providers (no ?tab=) → Provider keys. Keeps side-nav and deep links consistent.
+  useEffect(() => {
+    if (tabParam) return;
+    const sp = new URLSearchParams(search);
+    sp.set("tab", DEFAULT_PROVIDERS_TAB);
+    navigate(`${window.location.pathname}?${sp.toString()}`, { replace: true });
+  }, [tabParam, search, navigate]);
 
   const revealClones = () => {
     const sp = new URLSearchParams(search);
@@ -42,7 +53,7 @@ export default function ProvidersTabPage() {
       <StripeTabPage
         title="Providers"
         description="Voice library and LLM / TTS / STT provider keys."
-        defaultTab="provider-keys"
+        defaultTab={DEFAULT_PROVIDERS_TAB}
         tabActions={
           showCloneActions
             ? clones.buttons
