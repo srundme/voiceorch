@@ -94,6 +94,10 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
   it("does not punch a 200 ms rebuffer hole mid-sentence (call 14351)", () => {
     expect(pipelineSrc).not.toMatch(/await awaitPrebuffer\(TTS_REBUFFER/);
     expect(pipelineSrc).toContain("TTS_WIRE_LEAD_FRAMES");
-    expect(pipelineSrc).toContain("hold the last 20 ms");
+    // An underrun is concealed with the last frame, never raw silence — but the
+    // repeat is faded, because looping it at full volume buzzes.
+    expect(pipelineSrc).toContain("concealFrame");
+    expect(pipelineSrc).toContain("attenuatePcm16");
+    expect(pipelineSrc).not.toMatch(/const hold = lastOutChunk \?\? holdFrame/);
   });
 });

@@ -13,6 +13,7 @@ import {
   createDownsampler24to8,
   decodeMulaw,
   encodeMulaw,
+  frameRms,
   upsample8to16,
 } from "../../audio.js";
 import { processRawPcm8kIn } from "../../audioPool.js";
@@ -21,7 +22,12 @@ import {
   resolveSoftwareNoiseGate,
   type NoiseGateDecision,
 } from "../../noise-gate.js";
-import { getMicSensitivityThresholds, resolveMicSensitivity, type MicSensitivityThresholds } from "../../mic-sensitivity.js";
+import {
+  getMicSensitivityThresholds,
+  resolveBargeInEnergyThreshold,
+  resolveMicSensitivity,
+  type MicSensitivityThresholds,
+} from "../../mic-sensitivity.js";
 import {
   AmbientNoiseStream,
   FileAmbientNoiseStream,
@@ -223,6 +229,26 @@ export class GeminiLivePipeline implements VoiceSession {
   private static readonly PREBUFFER_FRAMES = 8; // 160 ms
   private underruns = 0;
 
+  // ── Self-echo suppression ────────────────────────────────────────────────
+  // On a PSTN leg there is no AEC between our outbound audio and the caller
+  // audio the carrier returns, so the agent's own voice comes back as "caller
+  // speech". Gemini's server VAD then fires `interrupted` and we clear the
+  // reply — the agent cuts itself off ~200 ms after it starts talking. The
+  // classic pipeline defends with an echo grace + a measured echo floor
+  // (BARGE_IN_ECHO_* in pipeline.ts); Live forwarded every frame raw. Mirror
+  // that here: mute the caller leg while returning echo dominates, and after
+  // the grace require energy above the learned echo floor to pass through, so
+  // a genuinely loud caller can still barge in.
+  private agentAudioStartedAt = 0;
+  private echoFloorRms = 0;
+  private echoSamples = 0;
+  private echoSuppressedFrames = 0;
+  private static readonly ECHO_CALIBRATION_MS = 250;
+  private static readonly ECHO_MARGIN = 1.6;
+  private static readonly ECHO_MAX_BAR = 2500;
+  private static readonly ECHO_FLOOR_RISE_ALPHA = 0.05;
+  private static readonly ECHO_FLOOR_FALL_ALPHA = 0.3;
+
   // ── Carrier keepalive / ambient bed ──────────────────────────────────────
   // Gemini Live only emits audio while the model is actually speaking, so the
   // wait for the greeting and every conversational pause left the outbound leg
@@ -379,10 +405,22 @@ export class GeminiLivePipeline implements VoiceSession {
     const callId = String(this.config.callId);
     const pcm8kCopy = Buffer.from(pcm8k);
     const nativeCopy = nativePcm16k?.length ? Buffer.from(nativePcm16k) : undefined;
+    const muteEcho = this.isSelfEcho(pcm8k);
 
     this.audioInChain = this.audioInChain.then(async () => {
       if (this.closed) return;
       let pcm16k: Buffer;
+      if (muteEcho) {
+        // Send silence rather than nothing: a continuous stream keeps Gemini's
+        // VAD timing honest, it just has no echo to trigger on.
+        pcm16k = Buffer.alloc(pcm8kCopy.length * 2);
+        await this.ensureConnected();
+        if (this.closed || !this.session) return;
+        this.session.sendRealtimeInput({
+          audio: { data: pcm16k.toString("base64"), mimeType: "audio/pcm;rate=16000" },
+        });
+        return;
+      }
       if (gateOn) {
         const result = await processRawPcm8kIn(
           callId,
@@ -407,6 +445,50 @@ export class GeminiLivePipeline implements VoiceSession {
     }).catch((err) => {
       logger.error({ callId: this.config.callId, err }, "Gemini Live caller-audio path failed");
     });
+  }
+
+  /**
+   * True when this caller frame is most likely our own audio coming back off
+   * the carrier rather than the person on the line.
+   *
+   * Webcall legs are excluded: the browser already runs AEC, so there is no
+   * echo to reject and gating there would only cost real barge-ins.
+   */
+  private isSelfEcho(pcm8k: Buffer): boolean {
+    if (this.config.rawPcmOutput) return false;
+    if (!(this.isPlayingOut || this.outFrames8k.length > 0)) return false;
+
+    const rms = frameRms(pcm8k);
+    const sinceStart = Date.now() - this.agentAudioStartedAt;
+
+    // Right after a line starts, anything returning is echo — measure it.
+    if (sinceStart <= GeminiLivePipeline.ECHO_CALIBRATION_MS) {
+      const alpha = rms > this.echoFloorRms
+        ? GeminiLivePipeline.ECHO_FLOOR_RISE_ALPHA
+        : GeminiLivePipeline.ECHO_FLOOR_FALL_ALPHA;
+      this.echoFloorRms = this.echoSamples === 0
+        ? rms
+        : this.echoFloorRms + alpha * (rms - this.echoFloorRms);
+      this.echoSamples++;
+      this.echoSuppressedFrames++;
+      return true;
+    }
+    if (sinceStart <= this.agent.bargeInEchoGraceMs) {
+      this.echoSuppressedFrames++;
+      return true;
+    }
+
+    // Past the grace: a caller louder than the measured echo still gets through.
+    const bar = Math.min(
+      GeminiLivePipeline.ECHO_MAX_BAR,
+      Math.max(
+        resolveBargeInEnergyThreshold(this.agent.bargeInEnergyThreshold),
+        this.echoFloorRms * GeminiLivePipeline.ECHO_MARGIN,
+      ),
+    );
+    if (rms >= bar) return false;
+    this.echoSuppressedFrames++;
+    return true;
   }
 
   /** Test hook: wait until queued caller frames have been sent to Gemini. */
@@ -742,7 +824,16 @@ export class GeminiLivePipeline implements VoiceSession {
     // Commit what was already transcribed; drop only unplayed audio frames.
     this.flushOutputBuf();
     this.config.onBargeIn?.();
-    logger.info({ callId: this.config.callId, droppedMs }, "Gemini Live: interrupted — cleared queued audio");
+    logger.info(
+      {
+        callId: this.config.callId,
+        droppedMs,
+        sinceAgentAudioMs: this.agentAudioStartedAt ? Date.now() - this.agentAudioStartedAt : null,
+        echoFloorRms: Math.round(this.echoFloorRms),
+        echoSuppressedFrames: this.echoSuppressedFrames,
+      },
+      "Gemini Live: interrupted — cleared queued audio",
+    );
     // If we wiped real queued speech, nudge the model so "Hello"/barge-in does not
     // leave the caller in dead air with status completed and no agent reply.
     if (droppedMs >= 200 && this.session && !this.closed) {
@@ -831,6 +922,8 @@ export class GeminiLivePipeline implements VoiceSession {
     ) {
       const pcm8k = this.outFrames8k.shift()!;
       this.framesSent++;
+      // Anchor the echo grace to the moment a speech burst becomes audible.
+      if (!this.isPlayingOut) this.agentAudioStartedAt = Date.now();
       this.isPlayingOut = true;
       this.lastRealFrameAt = Date.now();
       if (!this.firstFrameLogged) {
