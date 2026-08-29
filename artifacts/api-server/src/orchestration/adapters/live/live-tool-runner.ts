@@ -32,6 +32,8 @@ export interface LiveToolRunnerDeps {
   onAgentText: (text: string) => void;
   speakText: (text: string) => Promise<void>;
   endCall: () => void;
+  /** Committed caller turns so far — gates booking on real engagement. */
+  genuineUserTurns: () => number;
 }
 
 /**
@@ -272,10 +274,19 @@ async function executeLiveAgentTool(
       endCall();
       return undefined;
     }
-    case "native_booking":
+    case "native_booking": {
+      // Mirrors the classic pipeline guard: Live can chain check_availability →
+      // book off a single "Hello", so a dead-air call ends up with a real
+      // calendar invite and confirmation email.
+      const userTurns = deps.genuineUserTurns();
+      if (userTurns < 2) {
+        logger.warn({ callId, userTurns }, "Live native booking blocked: fewer than 2 caller turns");
+        return "error: cannot book yet — you must first ask the caller for their name, email, and preferred slot. Do not call this tool until the caller has provided those details in the conversation.";
+      }
       return executeNativeBooking(callId, agentId, tool, args, {
         lineageCallId: config.bookingLineageCallId,
       });
+    }
     case "native_check_availability":
       return executeNativeCheckAvailability(callId, agentId, tool, args);
     case "native_list_bookings":

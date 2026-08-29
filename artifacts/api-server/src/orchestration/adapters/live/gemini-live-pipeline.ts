@@ -836,6 +836,8 @@ export class GeminiLivePipeline implements VoiceSession {
             this.endReasonHint = "end_call";
             this.config.onCallEnd();
           },
+          genuineUserTurns: () =>
+            this.history.filter((m) => m.role === "user" && m.content.trim().length > 0).length,
         },
         name,
         args,
