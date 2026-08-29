@@ -735,6 +735,19 @@ export class GeminiLivePipeline implements VoiceSession {
     this.flushOutputBuf();
     this.config.onBargeIn?.();
     logger.info({ callId: this.config.callId, droppedMs }, "Gemini Live: interrupted — cleared queued audio");
+    // If we wiped real queued speech, nudge the model so "Hello"/barge-in does not
+    // leave the caller in dead air with status completed and no agent reply.
+    if (droppedMs >= 200 && this.session && !this.closed) {
+      try {
+        this.session.sendRealtimeInput({
+          text:
+            "The caller just spoke or interrupted. Continue the conversation now — " +
+            "acknowledge them briefly and answer. Do not stay silent.",
+        });
+      } catch (err) {
+        logger.warn({ callId: this.config.callId, err }, "Gemini Live: interrupt recovery nudge failed");
+      }
+    }
   }
 
   private flushInputBuf(): void {

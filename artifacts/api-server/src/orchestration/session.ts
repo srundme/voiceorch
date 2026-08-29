@@ -2843,13 +2843,42 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       transcript,
     });
     const noTurnsDrop = metricsAcc.count === 0 && durationSeconds <= 15 && !session.wasTransferred;
+    // Silent agent with a real caller (or long idle with zero turns) must not look
+    // like a successful conversation — History used to show completed + no error.
+    const agentAudioSec = recording.getAgentCapturedSeconds();
+    const callerAudioSec = recording.getCallerCapturedSeconds();
+    const callerInTranscript = /\bCaller:\s*\S/.test(transcript);
+    const agentInTranscript = /\bAgent:\s*\S/.test(transcript);
+    const silentAgentFailure =
+      !markedVoicemail
+      && !session.wasTransferred
+      && agentAudioSec < 0.25
+      && !agentInTranscript
+      && (callerInTranscript || callerAudioSec >= 0.4)
+      && durationSeconds > 3;
     let callStatus = markedVoicemail
       ? "voicemail"
       : session.wasTransferred
         ? "transferred"
-        : noTurnsDrop
-          ? "no_pickup"
-          : "completed";
+        : silentAgentFailure
+          ? "failed"
+          : noTurnsDrop
+            ? "no_pickup"
+            : "completed";
+    const silentErrorMessage = silentAgentFailure ? "no_agent_audio" : null;
+    if (silentAgentFailure) {
+      logger.warn(
+        {
+          sessionId,
+          callId: session.callId,
+          durationSeconds,
+          agentAudioSec,
+          callerAudioSec,
+          turnCount: metricsAcc.count,
+        },
+        "endSession: marking failed — caller present but no agent audio",
+      );
+    }
     if (markedVoicemail && !session.voicemailActionExecuted) {
       logger.info(
         {
@@ -2967,6 +2996,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       endedAt,
       durationSeconds,
       transcript: transcript || null,
+      ...(silentErrorMessage ? { errorMessage: silentErrorMessage } : {}),
       sttLatencyMs: avgSttMs,
       llmLatencyMs: avgLlmMs,
       ttsFirstChunkMs: avgTtsMs,

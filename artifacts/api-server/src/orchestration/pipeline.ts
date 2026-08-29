@@ -6701,12 +6701,16 @@ export class OrchestrationPipeline implements VoiceSession {
         );
         const owner = jobs.find((j) => !j.skipDrain) ?? jobs[0]!;
         const continuations = jobs.filter((j) => j.skipDrain);
-        // Don't wait for later sentences to finish synthesizing before first audio —
-        // that stacked 30s+ dead air on multi-sentence Cartesia greetings.
-        void Promise.all(continuations.map((j) => j.ready)).finally(() => {
-          cartesiaTts.finalizeTurnContext(turnContextId);
-        });
+        // Start the first sentence immediately (no stacked dead air), but do NOT
+        // finalize the Cartesia turn until every continuation has been queued —
+        // early finalize used to send continue:false mid-greeting and produce
+        // truncated / zero greeting audio (silent completed calls).
         await this.playJob(owner);
+        for (const job of continuations) {
+          if (this.closed || this.bargeInRequested || !this.interruptionMgr.isValidSequence(seqId)) break;
+          this.recordAgentSpeech(job.text);
+          await job.ready;
+        }
         return;
       }
       let next = this.startSentenceSynthesis(sentences[0]!, this._activeTurnIndex, seqId, undefined, emotions);

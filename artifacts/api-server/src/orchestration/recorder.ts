@@ -163,6 +163,18 @@ export class RecordingBuffer {
     return maxBytes / (this.sampleRate * BYTES_PER_SAMPLE);
   }
 
+  /** Seconds of agent PCM captured (excludes keepalive silence). */
+  getAgentCapturedSeconds(): number {
+    if (this.agent.bytes <= 0) return 0;
+    return this.agent.bytes / (this.sampleRate * BYTES_PER_SAMPLE);
+  }
+
+  /** Seconds of caller PCM captured. */
+  getCallerCapturedSeconds(): number {
+    if (this.caller.bytes <= 0) return 0;
+    return this.caller.bytes / (this.sampleRate * BYTES_PER_SAMPLE);
+  }
+
   /**
    * Wall-clock epoch ms of the most recent caller or agent PCM write, or null
    * when nothing was captured yet.
