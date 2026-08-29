@@ -45,6 +45,17 @@ export function encodeMulaw(pcmBuffer: Buffer): Buffer {
   return mulaw;
 }
 
+/** Scales s16le samples by `gain` (clamped). Used to fade a concealment frame
+ *  out instead of looping it at full volume, which buzzes. */
+export function attenuatePcm16(pcm: Buffer, gain: number): Buffer {
+  const out = Buffer.allocUnsafe(pcm.length - (pcm.length % 2));
+  for (let i = 0; i < out.length; i += 2) {
+    const scaled = Math.round(pcm.readInt16LE(i) * gain);
+    out.writeInt16LE(Math.max(-32768, Math.min(32767, scaled)), i);
+  }
+  return out;
+}
+
 // Upsample from 8kHz to 16kHz (linear interpolation) for STT APIs
 export function upsample8to16(buf8k: Buffer): Buffer {
   const samples = buf8k.length / 2;

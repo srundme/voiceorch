@@ -31,7 +31,7 @@ import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { CartesiaTTS } from "./adapters/tts/cartesia.js";
-import { encodeMulaw, upsample8to16, downsample16to8, createDownsampler16to8, decodeMulaw, hasSpeechEnergy, frameRms, padWireFrame, enqueueExactFrames } from "./audio.js";
+import { encodeMulaw, upsample8to16, downsample16to8, createDownsampler16to8, decodeMulaw, attenuatePcm16, hasSpeechEnergy, frameRms, padWireFrame, enqueueExactFrames } from "./audio.js";
 import { resolveMicSensitivity, getMicSensitivityThresholds, isIdleCancellingMicEnergy, type MicSensitivityThresholds } from "./mic-sensitivity.js";
 import { resolveSoftwareNoiseGate, envForceVobizSoftwareNc, type NoiseGateDecision } from "./noise-gate.js";
 import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
@@ -7154,6 +7154,20 @@ export class OrchestrationPipeline implements VoiceSession {
         ? CHUNK_SIZE_MULAW * 2 * (this.pcmOutRate() / 8000)
         : CHUNK_SIZE_MULAW;
       const holdFrame = Buffer.alloc(wireFrameBytes, 0);
+      // Underrun concealment. Repeating the last speech frame verbatim keeps the
+      // carrier fed, but looping one 20 ms frame for hundreds of ms turns a
+      // synthesis stall into a periodic buzz — the "robotic / breaking" voice
+      // callers report. Fade the repeat out over ~5 frames so a stall sounds
+      // like a short pause instead.
+      let holdFrames = 0;
+      const concealFrame = (last: Buffer | null): Buffer => {
+        const gain = Math.pow(0.6, holdFrames);
+        holdFrames++;
+        if (!last || gain < 0.1) return holdFrame;
+        return this.config.rawPcmOutput
+          ? attenuatePcm16(last, gain)
+          : encodeMulaw(attenuatePcm16(decodeMulaw(last), gain));
+      };
       // Block-continuous decimators when TTS is 16 kHz on an 8 kHz leg.
       // Per-block stateless downsample16to8 repeats a kernel-edge defect at
       // 50 Hz (buzzy/gritty voice). CARTESIA_TTS_8K=1 skips this path.
@@ -7276,6 +7290,7 @@ export class OrchestrationPipeline implements VoiceSession {
           this.config.onAudioOut(outChunk);
           noteSent(outChunk);
           lastOutChunk = outChunk;
+          holdFrames = 0;
           this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
           // NOTE: do NOT re-arm the echo-grace window per chunk here (see armTailEchoGrace).
           // If TTS is already done and this was the last queued chunk, break
@@ -7312,7 +7327,7 @@ export class OrchestrationPipeline implements VoiceSession {
             if (wireQueue.length > 0) break;
             const now = Date.now();
             if (now >= rebufferTick) {
-              const hold = lastOutChunk ?? holdFrame;
+              const hold = concealFrame(lastOutChunk);
               this.config.onAudioOut(hold);
               noteSent(hold);
               this.lastTtsFrameAt = now;
@@ -7331,7 +7346,7 @@ export class OrchestrationPipeline implements VoiceSession {
             continue;
           }
           // Still dry after rebuffer cap — single hold frame, then retry loop.
-          const hold = lastOutChunk ?? holdFrame;
+          const hold = concealFrame(lastOutChunk);
           this.config.onAudioOut(hold);
           noteSent(hold);
           this.lastTtsFrameAt = Date.now();
