@@ -46,6 +46,7 @@ import {
 import { toGeminiLiveTools } from "./gemini-tools.js";
 import { runLiveToolCall } from "./live-tool-runner.js";
 import { mergeTranscriptFragment } from "./live-transcript-merge.js";
+import { CALL_SCREENING_WINDOW_MS, detectScreeningPrompt } from "../../callScreening.js";
 
 const SCHEDULE_CALLBACK_TOOL = {
   name: "schedule_callback",
@@ -277,6 +278,8 @@ export class GeminiLivePipeline implements VoiceSession {
   private reconnecting = false;
   private reconnectAttempts = 0;
   private static readonly MAX_LIVE_RECONNECTS = 2;
+  private screeningHangupDone = false;
+  private readonly screeningWindowStart = Date.now();
 
   constructor(config: SessionConfig) {
     const rawAudioOut = config.onAudioOut;
@@ -764,6 +767,7 @@ export class GeminiLivePipeline implements VoiceSession {
     // reliable `finished` flag. Buffer until a turn boundary, then commit.
     if (content?.inputTranscription?.text) {
       this.inputBuf = mergeTranscriptFragment(this.inputBuf, content.inputTranscription.text);
+      if (this.tryHangupCallScreening(this.inputBuf)) return;
     }
 
     if (content?.outputTranscription?.text) {
@@ -855,6 +859,44 @@ export class GeminiLivePipeline implements VoiceSession {
     if (!text) return;
     this.appendUser(text);
     this.config.onTranscript("user", text);
+    this.tryHangupCallScreening(text);
+  }
+
+  /**
+   * iPhone Ask Reason for Calling / Google Call Screen on outbound Live calls:
+   * hang up and mark voicemail instead of letting Gemini treat the robot as a human.
+   */
+  private tryHangupCallScreening(transcript: string): boolean {
+    if (this.screeningHangupDone || this.closed) return false;
+    if (this.config.callDirection !== "outbound") return false;
+    if (Date.now() - this.screeningWindowStart > CALL_SCREENING_WINDOW_MS) return false;
+    if (!detectScreeningPrompt(transcript)) return false;
+
+    this.screeningHangupDone = true;
+    const text = transcript.trim();
+    if (text && this.inputBuf.trim()) {
+      this.flushInputBuf();
+    }
+    logger.info(
+      { callId: this.config.callId, transcript: text.slice(0, 160) },
+      "Gemini Live: call screening bot detected — hanging up as voicemail",
+    );
+    createExecutionLogger(this.config.callId, null)(EXEC_COMPONENTS.STT, "system", {
+      provider: "gemini_live",
+      status: "info",
+      metadata: {
+        event: "Call Screening Detected",
+        action: "hangup_voicemail",
+        screenerPrompt: text.slice(0, 160),
+      },
+    });
+    this.pendingOut24k = Buffer.alloc(0);
+    this.outFrames8k.length = 0;
+    this.isPlayingOut = false;
+    try { this.config.onAmdResult?.("machine"); } catch { /* best-effort */ }
+    try { this.config.onVoicemailAction?.(); } catch { /* best-effort */ }
+    this.config.onCallEnd();
+    return true;
   }
 
   private flushOutputBuf(): void {
