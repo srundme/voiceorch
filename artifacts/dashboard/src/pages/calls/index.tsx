@@ -337,7 +337,7 @@ export default function CallsList() {
     if (next !== current) navigate(next, { replace: true });
   }, [statusFilter, agentFilter, dispositionFilter, searchQuery, dateFrom, dateTo, sortBy, currentPage, navigate]);
 
-  const { data: calls, isLoading: callsLoading } = useListCalls(
+  const { data: calls, isLoading: callsLoading, isError: callsError, refetch: refetchCalls } = useListCalls(
     {
       status: statusFilter !== "all" ? statusFilter : undefined,
       agentId: agentFilter !== "all" ? parseInt(agentFilter) : undefined,
@@ -723,6 +723,18 @@ export default function CallsList() {
                     <Skeleton className="h-3 w-full" />
                   </div>
                 ))
+              ) : callsError ? (
+                <EmptyState
+                  variant="inline"
+                  icon={<AlertTriangle />}
+                  title="Calls failed to load"
+                  description="History could not read the call list. Retry — this is not an empty log."
+                  action={{
+                    label: "Retry",
+                    onClick: () => { void refetchCalls(); },
+                    icon: <RefreshCw className="h-3 w-3" />,
+                  }}
+                />
               ) : pagedCalls.length > 0 ? (
                 pagedCalls.map((call) => (
                   <CallMobileCard key={call.id} call={call} onOpen={() => setSelectedCallId(call.id)} />
@@ -778,6 +790,22 @@ export default function CallsList() {
                       <TableCell className="px-4 py-0"><Skeleton className="h-3 w-10 ml-auto" /></TableCell>
                     </TableRow>
                   ))
+                ) : callsError ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="p-0 border-0">
+                      <EmptyState
+                        variant="inline"
+                        icon={<AlertTriangle />}
+                        title="Calls failed to load"
+                        description="History could not read the call list. Retry — this is not an empty log."
+                        action={{
+                          label: "Retry",
+                          onClick: () => { void refetchCalls(); },
+                          icon: <RefreshCw className="h-3 w-3" />,
+                        }}
+                      />
+                    </TableCell>
+                  </TableRow>
                 ) : pagedCalls.length > 0 ? (
                   pagedCalls.map((call) => {
                     const costCents = (call as any).costCents ?? 0;

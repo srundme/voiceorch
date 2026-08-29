@@ -15,6 +15,7 @@ import {
   EndCallParams,
   ListCallsQueryParams,
   ListCallsResponse,
+  ListCallsResponseItem,
   GetCallResponse,
   GetCallCallerMemoryResponse,
   UpdateCallResponse,
@@ -38,6 +39,31 @@ import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js"
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE } from "../services/irdai/gate.js";
 import { normalizeCallVariables } from "../orchestration/prompt-vars.js";
 import { canAccessWorkspaceCall, resolveWorkspaceScope, workspaceCallsWhere } from "../services/workspace-scope.js";
+import { logger } from "../lib/logger.js";
+
+const CALL_LIST_STATUSES = new Set([
+  "pending", "ringing", "in_progress", "connected", "completed", "failed",
+  "cancelled", "transferred", "no_pickup", "voicemail", "busy", "booked", "callback_scheduled",
+]);
+
+function sanitizeCallStatus(status: string): string {
+  if (CALL_LIST_STATUSES.has(status)) return status;
+  if (status === "error" || status === "ended") return "failed";
+  if (status === "no_answer" || status === "no-answer" || status === "noanswer") return "no_pickup";
+  return "completed";
+}
+
+/** Zod list/detail schemas reject null/array/object disposition values — one bad row 500s History. */
+function sanitizeDispositionResult(
+  raw: unknown,
+): Record<string, string | number | boolean> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const out: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
 
 function parseLatencyBody(body: unknown): { sttLatencyMs?: number; llmLatencyMs?: number; ttsFirstChunkMs?: number } {
   if (!body || typeof body !== "object") return {};
@@ -78,6 +104,8 @@ async function enrichCall(call: typeof callsTable.$inferSelect, campaignId?: num
   const recordingEnabled = agent?.agentConfig?.recordingEnabled ?? false;
   return {
     ...call,
+    status: sanitizeCallStatus(call.status),
+    dispositionResult: sanitizeDispositionResult(call.dispositionResult),
     agentName: agent?.name ?? "Unknown Agent",
     recordingEnabled,
     endedAt: call.endedAt?.toISOString() ?? null,
@@ -564,7 +592,19 @@ router.get("/calls", requireAuth, clientContext, async (req, res): Promise<void>
       campaignId: row.campaignId ?? null,
     })),
   );
-  res.json(ListCallsResponse.parse(enriched));
+  const valid = [];
+  for (const row of enriched) {
+    const parsed = ListCallsResponseItem.safeParse(row);
+    if (parsed.success) {
+      valid.push(parsed.data);
+      continue;
+    }
+    logger.warn(
+      { callId: (row as { id?: number }).id, issues: parsed.error.issues.slice(0, 8) },
+      "GET /calls skipped invalid row (would 500 History)",
+    );
+  }
+  res.json(ListCallsResponse.parse(valid));
 });
 
 router.post("/calls", requireAuth, clientContext, async (req, res): Promise<void> => {

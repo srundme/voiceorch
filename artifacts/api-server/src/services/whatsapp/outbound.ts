@@ -266,6 +266,13 @@ export async function dispatchWhatsappCallEnded(
     .limit(1);
 
   const booked = await loadCallWhatsappFill(callId);
+  const callerSpoke = /\bCaller:\s*\S/.test(call.transcript ?? "");
+  // Dead-air / greeting-only calls must not send appointment (or any) WhatsApp.
+  // A bookings row used to bypass the status gate and fire booking_confirmed.
+  if (!callerSpoke) {
+    logger.info({ callId, status: call.status, hadBooking: !!booked.slotStart }, "whatsapp: skipped — no caller speech");
+    return;
+  }
   const meetingTime = booked.slotStart;
   const meetLink = booked.meetLink || null;
 

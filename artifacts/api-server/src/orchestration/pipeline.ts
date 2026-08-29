@@ -6699,9 +6699,13 @@ export class OrchestrationPipeline implements VoiceSession {
         const jobs = sentences.map((s) =>
           this.startSentenceSynthesis(s, this._activeTurnIndex, seqId, turnContextId, emotions),
         );
-        await Promise.all(jobs.filter((j) => j.skipDrain).map((j) => j.ready));
-        cartesiaTts.finalizeTurnContext(turnContextId);
         const owner = jobs.find((j) => !j.skipDrain) ?? jobs[0]!;
+        const continuations = jobs.filter((j) => j.skipDrain);
+        // Don't wait for later sentences to finish synthesizing before first audio —
+        // that stacked 30s+ dead air on multi-sentence Cartesia greetings.
+        void Promise.all(continuations.map((j) => j.ready)).finally(() => {
+          cartesiaTts.finalizeTurnContext(turnContextId);
+        });
         await this.playJob(owner);
         return;
       }
