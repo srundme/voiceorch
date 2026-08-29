@@ -48,6 +48,18 @@ describe("pricePhonePurchase", () => {
     expect(p.promoLabel).toBe("Voiceathon 2026");
   });
 
+  it("prices ILOVESNAPSERVE at ₹0 including GST", () => {
+    const p = pricePhonePurchase(NUM_80, "ilovesnapserve");
+    expect(p.basePaise).toBe(0);
+    expect(p.gstPaise).toBe(0);
+    expect(p.payablePaise).toBe(0);
+    expect(p.promoCode).toBe("ILOVESNAPSERVE");
+    expect(p.discountPaise).toBe(phonePurchaseBasePaise(NUM_80));
+    const resolved = resolvePhonePromo("ILOVESNAPSERVE");
+    expect(resolved.ok).toBe(true);
+    if (resolved.ok) expect(resolved.promo.oncePerEmail).toBe(true);
+  });
+
   it("prices SNAPXHITECH at ₹249 + 18% GST = ₹293.82", () => {
     const p = pricePhonePurchase(NUM_80, "snapxhitech");
     expect(p.basePaise).toBe(24_900);

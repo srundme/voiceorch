@@ -401,6 +401,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   const STANDARD_BASE_PAISE = selectedNum?.monthlyRateCents ?? 0; // rental + setup, pre-GST
   const MONTHLY_PAISE = Math.max(STANDARD_BASE_PAISE - SETUP_PAISE, 0);
   const promoActive = promo?.valid === true;
+  const isFreeClaim = promoActive && (promo.payablePaise ?? 0) === 0;
   const BASE_PAISE = promoActive ? promo.basePaise : STANDARD_BASE_PAISE;
   const GST_PAISE = promoActive ? promo.gstPaise : Math.round(STANDARD_BASE_PAISE * 0.18);
   const TOTAL_PAISE = promoActive ? promo.payablePaise : STANDARD_BASE_PAISE + GST_PAISE;
@@ -451,7 +452,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   }
 
   async function handlePurchaseFromWallet() {
-    if (!selected || !canPayFromWallet) return;
+    if (!selected || (!canPayFromWallet && !isFreeClaim)) return;
     if (renewalMode === "autopay" && !mandateActive) {
       toast({
         title: "Card auto-pay required",
@@ -476,8 +477,10 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
       queryClient.invalidateQueries({ queryKey: getListPhoneNumbersQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
       toast({
-        title: "Phone number purchased!",
-        description: `${selected} was paid from your wallet and is now in your account.`,
+        title: isFreeClaim ? "Phone number added" : "Phone number purchased!",
+        description: isFreeClaim
+          ? `${selected} is on your account at ₹0 today. Renewals are billed at the normal rate.`
+          : `${selected} was paid from your wallet and is now in your account.`,
       });
       onClose();
     } catch (err: unknown) {
@@ -493,6 +496,12 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
         toast({
           title: "Card auto-pay required",
           description: "Open Wallet to set up a card mandate, then choose Autopay renewal.",
+          variant: "destructive",
+        });
+      } else if (code === "PROMO_ALREADY_USED" || code === "PROMO_NEEDS_EMAIL" || code === "PROMO_INVALID") {
+        toast({
+          title: "Promo code not valid",
+          description: formatApiError(err),
           variant: "destructive",
         });
       } else if (code === "WALLET_PURCHASE_NOT_ELIGIBLE" || code === "INSUFFICIENT_BALANCE") {
@@ -711,8 +720,9 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                     {promo.code} applied
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {inr(promo.discountPaise)} off — you pay {inr(TOTAL_PAISE)} today instead of{" "}
-                    {inr(RENEWAL_TOTAL_PAISE)}.
+                    {isFreeClaim
+                      ? "₹0 today — one use per email account. Renewals stay at the normal number price."
+                      : `${inr(promo.discountPaise)} off — you pay ${inr(TOTAL_PAISE)} today instead of ${inr(RENEWAL_TOTAL_PAISE)}.`}
                   </p>
                 </div>
                 <Button variant="ghost" size="sm" className="h-8 shrink-0 text-xs" onClick={handleRemovePromo}>
@@ -802,16 +812,18 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-foreground text-xs">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
-              {canPayFromWallet
+              {isFreeClaim
+                ? <>Today is ₹0 with this code (one use per email). KYC still applies. From day 30 the number renews at {inr(RENEWAL_TOTAL_PAISE)}.</>
+                : canPayFromWallet
                 ? <>You can pay {inr(TOTAL_PAISE)} from your wallet ({inr(BASE_PAISE)} + 18% GST), or pay by card / UPI.</>
                 : <>You&apos;ll pay {inr(TOTAL_PAISE)} now by card ({inr(BASE_PAISE)} + 18% GST).</>}
-              {promoActive
+              {!isFreeClaim && (promoActive
                 ? ` The ${promo.code} price covers this purchase only — from day 30 the number renews at ${inr(RENEWAL_TOTAL_PAISE)} every 30 days`
-                : ` Every 30 days the same amount (${inr(RENEWAL_TOTAL_PAISE)}) is charged`}
-              {renewalMode === "autopay"
+                : ` Every 30 days the same amount (${inr(RENEWAL_TOTAL_PAISE)}) is charged`)}
+              {!isFreeClaim && (renewalMode === "autopay"
                 ? " via Autopay (mandate → wallet → debit)."
-                : " from your wallet; unpaid past 7 days releases the number."}
-              {!canPayFromWallet && walletBalancePaise > 0 && (
+                : " from your wallet; unpaid past 7 days releases the number.")}
+              {!isFreeClaim && !canPayFromWallet && walletBalancePaise > 0 && (
                 <> Wallet pay unlocks above {inr(WALLET_PURCHASE_MIN_PAISE)} balance.</>
               )}
             </span>
@@ -820,6 +832,17 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           <DialogFooter className="shrink-0 border-t border-border bg-background px-6 py-4 flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={() => setConfirming(false)} disabled={purchaseBusy}>Back</Button>
             <div className="flex flex-col sm:flex-row gap-2 sm:ml-auto w-full sm:w-auto">
+              {isFreeClaim ? (
+                <Button
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto"
+                  onClick={() => void handlePurchaseFromWallet()}
+                  disabled={purchaseBusy || (renewalMode === "autopay" && !mandateActive)}
+                >
+                  {payingFromWallet ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                  Get this number free
+                </Button>
+              ) : (
+                <>
               {canPayFromWallet && (
                 <Button
                   variant="outline"
@@ -839,6 +862,8 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                 {payingViaCheckout ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
                 {canPayFromWallet ? `Pay ${inr(TOTAL_PAISE)} by card` : `Pay ${inr(TOTAL_PAISE)} & Get Number`}
               </Button>
+                </>
+              )}
             </div>
           </DialogFooter>
         </DialogContent>

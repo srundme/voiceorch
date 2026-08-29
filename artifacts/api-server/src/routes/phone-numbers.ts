@@ -19,6 +19,8 @@ import {
   gstPortionPaise,
 } from "../lib/money-inr.js";
 import { pricePhonePurchase, resolvePhonePromo } from "../lib/phone-promo.js";
+import { checkOncePerEmailPromo } from "../lib/phone-promo-once.js";
+import { emailPromoFingerprint } from "../lib/phone-promo-email.js";
 import {
   ListPhoneNumbersResponse,
   ListAvailablePhoneNumbersQueryParams,
@@ -689,19 +691,28 @@ router.post("/phone-numbers/promo/quote", requireAuth, async (req, res): Promise
   const parsed = QuotePhoneNumberPromoBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
   const { code, number } = parsed.data;
+  const clerkId = (req as any).clerkUserId as string;
 
   const resolved = resolvePhonePromo(code);
-  const pricing = pricePhonePurchase(number, resolved.ok ? code : null);
+  let rejectMessage: string | null = resolved.ok
+    ? null
+    : resolved.reason === "expired"
+      ? "This promo code has expired."
+      : "That promo code isn't valid.";
+
+  if (resolved.ok && resolved.promo.oncePerEmail) {
+    const [user] = await db.select({ email: usersTable.email }).from(usersTable).where(eq(usersTable.clerkId, clerkId));
+    const once = await checkOncePerEmailPromo(resolved.promo, clerkId, user?.email ?? null);
+    if (!once.ok) rejectMessage = once.message;
+  }
+
+  const pricing = pricePhonePurchase(number, rejectMessage ? null : (resolved.ok ? code : null));
 
   res.json({
     valid:   pricing.promoCode !== null,
     code:    pricing.promoCode,
     label:   pricing.promoLabel,
-    message: resolved.ok
-      ? null
-      : resolved.reason === "expired"
-        ? "This promo code has expired."
-        : "That promo code isn't valid.",
+    message: rejectMessage,
     basePaise:            pricing.basePaise,
     gstPaise:             pricing.gstPaise,
     payablePaise:         pricing.payablePaise,
@@ -730,15 +741,19 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
 
   const { number, countryCode, region, numberType, renewalMode, promoCode } = parsed.data;
 
-  // Reject a bad code loudly. Falling through at full price would charge the
-  // buyer several hundred rupees more than the total they were just shown.
-  if (promoCode && promoCode.trim() && !resolvePhonePromo(promoCode).ok) {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  const resolvedPromo = promoCode && promoCode.trim() ? resolvePhonePromo(promoCode) : null;
+  if (promoCode && promoCode.trim() && !resolvedPromo?.ok) {
     res.status(400).json({ error: "That promo code isn't valid.", code: "PROMO_INVALID" });
     return;
   }
-
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
-  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  const once = await checkOncePerEmailPromo(resolvedPromo?.ok ? resolvedPromo.promo : null, clerkId, user.email);
+  if (!once.ok) {
+    res.status(400).json({ error: once.message, code: once.code });
+    return;
+  }
 
   if (renewalMode === "autopay") {
     if (!user.razorpayCustomerId || !user.razorpayTokenId) {
@@ -784,6 +799,16 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
   // the amount charged is derived here, never taken from the request.
   const pricing = pricePhonePurchase(number, promoCode);
   const { basePaise, gstPaise, payablePaise, discountPaise } = pricing;
+
+  // Razorpay rejects ₹0 orders. Free promos are claimed via /purchase/wallet.
+  if (payablePaise <= 0) {
+    res.status(400).json({
+      error: "This offer is ₹0 — use Get number free instead of card checkout.",
+      code: "FREE_PROMO_CLAIM",
+    });
+    return;
+  }
+
   const razorpay = getRazorpay();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -912,15 +937,24 @@ router.post("/phone-numbers/purchase/wallet", requireAuth, clientContext, denyMa
 
   const { number, countryCode, region, numberType, renewalMode, promoCode } = parsed.data;
 
-  if (promoCode && promoCode.trim() && !resolvePhonePromo(promoCode).ok) {
-    res.status(400).json({ error: "That promo code isn't valid.", code: "PROMO_INVALID" });
-    return;
-  }
-
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-  if (user.walletBalanceCents <= PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE) {
+  const resolvedPromo = promoCode && promoCode.trim() ? resolvePhonePromo(promoCode) : null;
+  if (promoCode && promoCode.trim() && !resolvedPromo?.ok) {
+    res.status(400).json({ error: "That promo code isn't valid.", code: "PROMO_INVALID" });
+    return;
+  }
+  const oncePre = await checkOncePerEmailPromo(resolvedPromo?.ok ? resolvedPromo.promo : null, clerkId, user.email);
+  if (!oncePre.ok) {
+    res.status(400).json({ error: oncePre.message, code: oncePre.code });
+    return;
+  }
+
+  const pricingEarly = pricePhonePurchase(number, promoCode);
+  const isZeroPrice = pricingEarly.payablePaise <= 0;
+
+  if (!isZeroPrice && user.walletBalanceCents <= PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE) {
     res.status(403).json({
       error: `Pay from wallet is available when your balance is above ${formatInr(PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE)}. Top up or pay by card instead.`,
       code: "WALLET_PURCHASE_NOT_ELIGIBLE",
@@ -992,22 +1026,33 @@ router.post("/phone-numbers/purchase/wallet", requireAuth, clientContext, denyMa
         ));
       if (openNow) throw Object.assign(new Error("A pending purchase already exists for this number."), { status: 409 });
 
-      const [debited] = await tx
-        .update(usersTable)
-        .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} - ${payablePaise}` })
-        .where(and(
-          eq(usersTable.id, user.id),
-          sql`${usersTable.walletBalanceCents} > ${PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE}`,
-          sql`${usersTable.walletBalanceCents} >= ${payablePaise}`,
-        ))
-        .returning({ id: usersTable.id, walletBalanceCents: usersTable.walletBalanceCents });
-      if (!debited) {
-        throw Object.assign(new Error("Insufficient wallet balance or below the ₹20,000 wallet-purchase threshold."), {
-          status: 402,
-          code: "INSUFFICIENT_BALANCE",
-        });
+      if (resolvedPromo?.ok && resolvedPromo.promo.oncePerEmail) {
+        const fp = emailPromoFingerprint(user.email);
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`phone-promo:${resolvedPromo.promo.code}:${fp}`}))`);
+        const onceLocked = await checkOncePerEmailPromo(resolvedPromo.promo, clerkId, user.email, tx as typeof db);
+        if (!onceLocked.ok) {
+          throw Object.assign(new Error(onceLocked.message), { status: 400, code: onceLocked.code });
+        }
       }
-      debitOk = true;
+
+      if (payablePaise > 0) {
+        const [debited] = await tx
+          .update(usersTable)
+          .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} - ${payablePaise}` })
+          .where(and(
+            eq(usersTable.id, user.id),
+            sql`${usersTable.walletBalanceCents} > ${PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE}`,
+            sql`${usersTable.walletBalanceCents} >= ${payablePaise}`,
+          ))
+          .returning({ id: usersTable.id, walletBalanceCents: usersTable.walletBalanceCents });
+        if (!debited) {
+          throw Object.assign(new Error("Insufficient wallet balance or below the ₹20,000 wallet-purchase threshold."), {
+            status: 402,
+            code: "INSUFFICIENT_BALANCE",
+          });
+        }
+        debitOk = true;
+      }
 
       [orderRow] = await tx.insert(phoneNumberOrdersTable).values({
         userId: clerkId,
@@ -1105,13 +1150,15 @@ router.post("/phone-numbers/purchase/wallet", requireAuth, clientContext, denyMa
     .set({ status: "completed", phoneNumberId: row!.id })
     .where(eq(phoneNumberOrdersTable.id, orderRow.id));
 
-  await db.insert(walletTransactionsTable).values({
-    userId: user.id,
-    type: "debit",
-    amountCents: -payablePaise,
-    description: `Phone number ${number} purchased (${formatInr(basePaise)} + GST ${formatInr(gstPaise)} = ${formatInr(payablePaise)}, paid from wallet)${promoNote}`,
-    status: "completed",
-  });
+  if (payablePaise > 0) {
+    await db.insert(walletTransactionsTable).values({
+      userId: user.id,
+      type: "debit",
+      amountCents: -payablePaise,
+      description: `Phone number ${number} purchased (${formatInr(basePaise)} + GST ${formatInr(gstPaise)} = ${formatInr(payablePaise)}, paid from wallet)${promoNote}`,
+      status: "completed",
+    });
+  }
 
   await logActivity({
     userId: clerkId,
@@ -1121,22 +1168,24 @@ router.post("/phone-numbers/purchase/wallet", requireAuth, clientContext, denyMa
     description: `Phone number ${number} purchased (${formatInr(payablePaise)}, paid from wallet)`,
   });
 
-  void issueInvoice({
-    user: { id: user.id, name: user.name, email: user.email },
-    type: "phone_number",
-    description: `Phone number ${number} — provisioning & 1 month rental${promoNote}`,
-    hsnSac: "998411",
-    amountCents: basePaise,
-    gstInclusive: false,
-    razorpayPaymentId: `wallet:phone:${orderRow.id}`,
-    metadata: {
-      number,
-      phoneNumberId: row!.id,
-      paymentMethod: "wallet",
-      phoneOrderId: orderRow.id,
-      ...(pricing.promoCode ? { promoCode: pricing.promoCode } : {}),
-    },
-  });
+  if (payablePaise > 0) {
+    void issueInvoice({
+      user: { id: user.id, name: user.name, email: user.email },
+      type: "phone_number",
+      description: `Phone number ${number} — provisioning & 1 month rental${promoNote}`,
+      hsnSac: "998411",
+      amountCents: basePaise,
+      gstInclusive: false,
+      razorpayPaymentId: `wallet:phone:${orderRow.id}`,
+      metadata: {
+        number,
+        phoneNumberId: row!.id,
+        paymentMethod: "wallet",
+        phoneOrderId: orderRow.id,
+        ...(pricing.promoCode ? { promoCode: pricing.promoCode } : {}),
+      },
+    });
+  }
 
   req.log.info(
     { number, userId: clerkId, vobizId: vobizNumber.id, payablePaise, nextRenewalAt },

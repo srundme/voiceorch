@@ -23,6 +23,11 @@ export interface PhonePromo {
   label: string;
   /** Optional hard stop — the code stops working at this instant. */
   expiresAt?: Date;
+  /**
+   * When true, this code may complete at most one purchase per SnapServe
+   * account email (Gmail dots / plus-tags count as the same mailbox).
+   */
+  oncePerEmail?: boolean;
 }
 
 /**
@@ -39,6 +44,12 @@ const PROMOS: readonly PhonePromo[] = [
     code: "SNAPXHITECH",
     basePaise: 24_900, // ₹249 before GST → ₹293.82 payable
     label: "SnapX HiTech",
+  },
+  {
+    code: "ILOVESNAPSERVE",
+    basePaise: 0, // ₹0 + GST ₹0 — first DID only; renewals stay full price
+    label: "I Love SnapServe",
+    oncePerEmail: true,
   },
 ];
 
