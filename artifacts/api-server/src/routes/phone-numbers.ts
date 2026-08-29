@@ -730,16 +730,23 @@ router.post("/phone-numbers/promo/quote", requireAuth, async (req, res): Promise
 // a completed payment always precedes granting the number.
 
 router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
-  if (!process.env["RAZORPAY_KEY_ID"] || !process.env["RAZORPAY_KEY_SECRET"]) {
-    res.status(503).json({ error: "Payment gateway not configured" });
-    return;
-  }
-
   const clerkId = (req as any).clerkUserId as string;
   const parsed = InitiatePhoneNumberPurchaseBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
   const { number, countryCode, region, numberType, renewalMode, promoCode } = parsed.data;
+
+  // ₹0 promos cannot go through Razorpay (minimum charge is ₹1). Claim via the
+  // same provision path as wallet, with no debit.
+  if (pricePhonePurchase(number, promoCode).payablePaise <= 0) {
+    await handleWalletOrFreePhonePurchase(req, res);
+    return;
+  }
+
+  if (!process.env["RAZORPAY_KEY_ID"] || !process.env["RAZORPAY_KEY_SECRET"]) {
+    res.status(503).json({ error: "Payment gateway not configured" });
+    return;
+  }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
@@ -799,16 +806,6 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
   // the amount charged is derived here, never taken from the request.
   const pricing = pricePhonePurchase(number, promoCode);
   const { basePaise, gstPaise, payablePaise, discountPaise } = pricing;
-
-  // Razorpay rejects ₹0 orders. Free promos are claimed via /purchase/wallet.
-  if (payablePaise <= 0) {
-    res.status(400).json({
-      error: "This offer is ₹0 — use Get number free instead of card checkout.",
-      code: "FREE_PROMO_CLAIM",
-    });
-    return;
-  }
-
   const razorpay = getRazorpay();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -930,7 +927,7 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, clientContext, denyM
 // GST-inclusive total atomically, provisions via VoBiz, invoices as usual.
 // On provisioning failure the wallet is refunded.
 
-router.post("/phone-numbers/purchase/wallet", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
+async function handleWalletOrFreePhonePurchase(req: any, res: any): Promise<void> {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = InitiatePhoneNumberPurchaseBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
@@ -1029,7 +1026,7 @@ router.post("/phone-numbers/purchase/wallet", requireAuth, clientContext, denyMa
       if (resolvedPromo?.ok && resolvedPromo.promo.oncePerEmail) {
         const fp = emailPromoFingerprint(user.email);
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`phone-promo:${resolvedPromo.promo.code}:${fp}`}))`);
-        const onceLocked = await checkOncePerEmailPromo(resolvedPromo.promo, clerkId, user.email, tx as typeof db);
+        const onceLocked = await checkOncePerEmailPromo(resolvedPromo.promo, clerkId, user.email, tx);
         if (!onceLocked.ok) {
           throw Object.assign(new Error(onceLocked.message), { status: 400, code: onceLocked.code });
         }
@@ -1203,7 +1200,9 @@ router.post("/phone-numbers/purchase/wallet", requireAuth, clientContext, denyMa
     basePaise,
     gstPaise,
   });
-});
+}
+
+router.post("/phone-numbers/purchase/wallet", requireAuth, clientContext, denyManagedClient, handleWalletOrFreePhonePurchase);
 
 /** Best-effort refund of a failed/aborted phone-number purchase payment. */
 async function refundOrder(

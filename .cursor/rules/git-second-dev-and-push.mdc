@@ -18,10 +18,10 @@ Do **not** invent co-author trailers unless the user explicitly asks to co-autho
 
 ## Push to main
 
-If the user says **“push to main”** (or similar: push main alone, push to main only) **without** extra caveats:
+Do **not** push to `main` unless the user explicitly says **“push to main”** (or the same meaning, this turn).
 
-1. Push the current branch to `origin` as needed for the request.
-2. If they mean push **this** work onto **`main`**, push to `origin main` (after commit if they also asked to commit).
-3. Treat that phrase as explicit authorization to **push** — do not only prepare the push and stop.
+1. If they have **not** said that, **ask** whether they want it on `main`. Do not push yet.
+2. If they **did** say **push to main**: commit if needed, then push to `origin main`. That phrase is the permission.
+3. Never treat auto-commit, “ship it”, or ordinary coding as permission to push `main`.
 
 Still follow normal safety: no force-push to main/master unless they explicitly demand it; do not skip hooks unless they ask.

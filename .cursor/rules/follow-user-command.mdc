@@ -1,0 +1,13 @@
+---
+description: Follow the user’s command first; do not invent or fix unsolicited
+alwaysApply: true
+---
+
+# Follow the user’s command first
+
+1. **Listen to what they actually asked.** Do that first. Do not invent codes, prices, names, or extra features they did not specify. If a required value is missing, ask — do not decide it yourself.
+2. **If they say fix** (or clearly ask to implement a fix): fix it.
+3. **If they say find the issue / check / why / analyze** without saying fix: investigate and report. Do not change application code until they ask to fix — unless they said **find then fix** in the same request.
+4. **If they say find the issue then fix** (or find and fix): diagnose first, then apply the fix.
+5. Do not skip their sequence (e.g. analysis-only, wait for approval) to “be helpful.”
+---

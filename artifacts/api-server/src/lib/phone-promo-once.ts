@@ -9,6 +9,9 @@ export type OncePerEmailCheck =
   | { ok: true }
   | { ok: false; code: "PROMO_NEEDS_EMAIL" | "PROMO_ALREADY_USED"; message: string };
 
+/** Accepts either the pooled client or an open transaction. */
+export type PromoQueryExecutor = { select: typeof db.select };
+
 /**
  * True when this login (or the same mailbox fingerprint) already has a
  * consuming order for `promoCode`.
@@ -17,7 +20,7 @@ export async function hasUsedOncePerEmailPromo(
   promoCode: string,
   clerkId: string,
   email: string | null | undefined,
-  executor: typeof db | { select: typeof db.select } = db,
+  executor: PromoQueryExecutor = db,
 ): Promise<boolean> {
   const fp = emailPromoFingerprint(email);
   const rows = await executor
@@ -42,7 +45,7 @@ export async function checkOncePerEmailPromo(
   promo: PhonePromo | null | undefined,
   clerkId: string,
   email: string | null | undefined,
-  executor: typeof db | { select: typeof db.select } = db,
+  executor: PromoQueryExecutor = db,
 ): Promise<OncePerEmailCheck> {
   if (!promo?.oncePerEmail) return { ok: true };
   const fp = emailPromoFingerprint(email);

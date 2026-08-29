@@ -521,6 +521,10 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
 
   async function handlePurchase() {
     if (!selected) return;
+    if (isFreeClaim || TOTAL_PAISE <= 0) {
+      await handlePurchaseFromWallet();
+      return;
+    }
     if (renewalMode === "autopay" && !mandateActive) {
       toast({
         title: "Card auto-pay required",
@@ -973,7 +977,9 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             onClick={() => setConfirming(true)}
           >
             <Plus className="h-3.5 w-3.5" />
-            {selected && isPaidNumber
+            {selected && isFreeClaim
+              ? "Get number free"
+              : selected && isPaidNumber
               ? `Purchase — ${inr(TOTAL_PAISE)}`
               : "Purchase Number"}
           </Button>
