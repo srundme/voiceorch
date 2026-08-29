@@ -46,7 +46,7 @@ const PROMOS: readonly PhonePromo[] = [
     label: "SnapX HiTech",
   },
   {
-    code: "ILOVESNAPSERVE",
+    code: "ILUVSNAPSERVE",
     basePaise: 0, // ₹0 + GST ₹0 — first DID only; renewals stay full price
     label: "I Love SnapServe",
     oncePerEmail: true,
