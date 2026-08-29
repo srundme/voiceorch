@@ -216,6 +216,12 @@ export class GeminiLivePipeline implements VoiceSession {
   private framesSent = 0;
   private static readonly FRAME_MS = 20;
   private static readonly LEAD_MS = 240; // frames allowed ahead of real time (carrier jitter buffer)
+  // Gemini does not always deliver a reply faster than real time. Starting the
+  // pump on the very first 20 ms frame means one slow chunk drains the queue
+  // mid-word, and the caller hears the reply chopped into pieces. Hold a small
+  // jitter buffer before (re)starting playback so a slow chunk is absorbed.
+  private static readonly PREBUFFER_FRAMES = 8; // 160 ms
+  private underruns = 0;
 
   // ── Carrier keepalive / ambient bed ──────────────────────────────────────
   // Gemini Live only emits audio while the model is actually speaking, so the
@@ -716,6 +722,8 @@ export class GeminiLivePipeline implements VoiceSession {
     if (content?.turnComplete) {
       this.flushInputBuf();
       this.flushOutputBuf();
+      // Release a tail shorter than the prebuffer — no more audio is coming.
+      this.flushOutboundAudio(true);
       this.isPlayingOut = false;
       // Classic STT→LLM→TTS metrics don't apply; count a conversational turn
       // so History / wasDropped / no_turns logic treat Live calls as real.
@@ -766,7 +774,7 @@ export class GeminiLivePipeline implements VoiceSession {
     this.config.onTranscript("agent", text);
   }
 
-  private flushOutboundAudio(): void {
+  private flushOutboundAudio(force = false): void {
     // Slice into ~20ms frames at 24kHz (480 samples = 960 bytes) and queue them
     // for the paced pump — never forward faster than real time (see pump docs).
     const FRAME_BYTES_24K = 960;
@@ -775,7 +783,15 @@ export class GeminiLivePipeline implements VoiceSession {
       this.pendingOut24k = this.pendingOut24k.subarray(FRAME_BYTES_24K);
       this.outFrames8k.push(this.outDecim24to8.process(frame24k));
     }
-    if (this.outFrames8k.length) this.ensurePump();
+    if (!this.outFrames8k.length) return;
+    // Already streaming: keep feeding. Otherwise wait for the jitter buffer so a
+    // fresh (or post-underrun) start has cushion — force only on turn end, where
+    // no more audio is coming and a short tail must still be played.
+    const ready =
+      this.pumpTimer !== null
+      || force
+      || this.outFrames8k.length >= GeminiLivePipeline.PREBUFFER_FRAMES;
+    if (ready) this.ensurePump();
   }
 
   private ensurePump(): void {
@@ -796,6 +812,15 @@ export class GeminiLivePipeline implements VoiceSession {
     if (this.closed) { this.stopPump(); return; }
     if (this.outFrames8k.length === 0) {
       // Drained — stop; a fresh anchor starts with the next reply's audio.
+      // Draining while the model is still speaking is an underrun: the caller
+      // hears a gap, so surface it instead of failing silently.
+      if (this.isPlayingOut) {
+        this.underruns++;
+        logger.warn(
+          { callId: this.config.callId, underruns: this.underruns, framesSent: this.framesSent },
+          "Gemini Live: outbound audio underrun — reply audio arriving slower than real time",
+        );
+      }
       this.stopPump();
       return;
     }
