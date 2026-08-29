@@ -13,6 +13,27 @@ export function useBookInterns() {
   });
 }
 
+export type LandingPartnerLead = {
+  id: number;
+  name: string;
+  email: string;
+  phone: string | null;
+  company: string | null;
+  website: string | null;
+  role: string | null;
+  message: string | null;
+  source: string;
+  createdAt: string;
+};
+
+export function useLandingPartnerLeads() {
+  return useQuery({
+    queryKey: ["admin", "landing-leads"],
+    queryFn: () => adminFetch<LandingPartnerLead[]>("/landing-leads"),
+    refetchInterval: 30000,
+  });
+}
+
 // Real vs. test/internal user segmentation
 export type UserSegment = "real" | "test" | "all";
 

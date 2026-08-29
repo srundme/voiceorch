@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable, bookInternsTable, bookProgressTable, bookExamAttemptsTable, partnersTable, partnerPendingPromotionsTable, phoneNumberOrdersTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable, bookInternsTable, bookProgressTable, bookExamAttemptsTable, partnersTable, partnerPendingPromotionsTable, phoneNumberOrdersTable, landingPartnerLeadsTable } from "@workspace/db";
 import { invalidateMinuteRatesCache } from "../services/minute-rates.js";
 import { sendTestEmail } from "../services/scheduling/notifications.js";
 import { eq, sql, count, sum, desc, lt, gt, gte, and, inArray, ilike, like, type SQL, type AnyColumn } from "drizzle-orm";
@@ -2188,6 +2188,32 @@ router.get("/admin/book/interns", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "admin/book/interns failed");
     res.status(500).json({ error: "Failed to load book interns" });
+  }
+});
+
+// GET /api/admin/landing-leads — Partner with us submissions from the marketing site
+router.get("/admin/landing-leads", async (req, res): Promise<void> => {
+  try {
+    const rows = await db
+      .select()
+      .from(landingPartnerLeadsTable)
+      .orderBy(desc(landingPartnerLeadsTable.createdAt))
+      .limit(500);
+    res.json(rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      email: r.email,
+      phone: r.phone,
+      company: r.company,
+      website: r.website,
+      role: r.role,
+      message: r.message,
+      source: r.source,
+      createdAt: r.createdAt.toISOString(),
+    })));
+  } catch (err) {
+    req.log.error({ err }, "admin/landing-leads failed");
+    res.status(500).json({ error: "Failed to load partner inquiries" });
   }
 });
 

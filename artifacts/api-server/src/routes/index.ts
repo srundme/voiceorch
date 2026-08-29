@@ -51,6 +51,7 @@ import campaignsRouter from "./campaigns.js";
 import campaignDashboardRouter from "./campaign-dashboard.js";
 import campaignBatchesRouter from "./campaign-batches.js";
 import campaignWebhookRouter from "./campaign-webhook.js";
+import landingLeadsRouter from "./landing-leads.js";
 import campaignLeadsRouter from "./campaign-leads.js";
 import campaignAnalyticsRouter from "./campaign-analytics.js";
 import campaignReportsRouter from "./campaign-reports.js";
@@ -173,6 +174,9 @@ router.use(bookRouter);
 
 // Public workshop feedback form — anonymous students, no session required
 router.use(workshopRouter);
+
+// Public landing-page partner form (CORS + optional API key)
+router.use(landingLeadsRouter);
 
 // Public Voice-a-thon registration / judge / verify — no session required
 router.use(voiceathonPublicRouter);

@@ -68,8 +68,8 @@ app.use("/api/widget/call", (_req, res, next) => {
   next();
 });
 app.use(
-  ["/api/webhooks/lead", "/api/widget/lead-capture.js", "/api/widget.js", "/api/widget/call"],
-  cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"] }),
+  ["/api/webhooks/lead", "/api/widget/lead-capture.js", "/api/widget.js", "/api/widget/call", "/api/leads", "/api/landing/leads"],
+    cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"], allowedHeaders: ["Content-Type", "Authorization", "x-api-key", "x-leads-api-key"] }),
 );
 
 // Remote MCP + OAuth authorize page (Claude / MCP Inspector may preflight from browsers).

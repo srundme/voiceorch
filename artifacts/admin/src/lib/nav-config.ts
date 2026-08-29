@@ -185,6 +185,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/voiceathon", label: "Voiceathon", icon: TrophyIcon },
       { href: "/events", label: "Events", icon: WorkshopsIcon },
+      { href: "/landing-leads", label: "Partner inquiries", icon: PartnerIcon, keywords: "landing form partner with us leads" },
     ],
   },
   {
