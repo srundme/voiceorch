@@ -6847,6 +6847,13 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   const updateAgent = useUpdateAgent();
   const deleteAgent = useDeleteAgent();
   const initiateOutbound = useInitiateOutboundCall();
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "invalid" | "error">("idle");
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveHandlerRef = useRef<(() => Promise<void>) | null>(null);
+  const autoSaveRequestRef = useRef(false);
+  const saveInFlightRef = useRef(false);
+  const suppressAutoSaveRef = useRef(false);
+  const editRevisionRef = useRef(0);
 
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentFormSchema),
@@ -7100,9 +7107,14 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
 
   const onSave = form.handleSubmit(
     async (data) => {
+      const isAutoSave = autoSaveRequestRef.current;
+      const revisionAtStart = editRevisionRef.current;
+      saveInFlightRef.current = true;
+      if (isAutoSave) setAutoSaveStatus("saving");
       try {
         const payload = buildUpdateAgentPayload(data);
         const saved = await updateAgent.mutateAsync({ id: agentId, data: payload as any });
+        suppressAutoSaveRef.current = true;
         form.setValue("languageAutoDetect", (saved as any)?.agentConfig?.languageAutoDetect ?? false, { shouldDirty: false });
         form.setValue(
           "multilingualLanguages",
@@ -7118,18 +7130,35 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         const savedEt = normalizeSchedulingId((saved as any)?.agentConfig?.calendarCapability?.defaultEventTypeId);
         if (savedCal != null) form.setValue("schedulingCalendarId", savedCal, { shouldDirty: false });
         if (savedEt != null) form.setValue("schedulingEventTypeId", savedEt, { shouldDirty: false });
-        queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
+        const hasNewerEdits = editRevisionRef.current !== revisionAtStart;
+        if (!hasNewerEdits) {
+          form.reset(form.getValues(), { keepErrors: true });
+          queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
+        }
+        suppressAutoSaveRef.current = false;
         queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
-        toast({ title: "Saved", description: `${data.name} updated.` });
+        if (isAutoSave) {
+          setAutoSaveStatus(hasNewerEdits ? "pending" : "saved");
+        } else {
+          toast({ title: "Saved", description: `${data.name} updated.` });
+        }
         setSavedFlash(true);
         setTimeout(() => setSavedFlash(false), 2500);
       } catch (err) {
+        suppressAutoSaveRef.current = false;
+        if (isAutoSave) setAutoSaveStatus("error");
         const mapped = mapApiErrors(err);
         if (Object.keys(mapped).length > 0) { Object.entries(mapped).forEach(([k, v]) => form.setError(k as any, { message: v })); }
-        toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+        toast({ title: isAutoSave ? "Auto-save failed" : "Error", description: formatApiError(err), variant: "destructive" });
+      } finally {
+        saveInFlightRef.current = false;
       }
     },
     (errors) => {
+      if (autoSaveRequestRef.current) {
+        setAutoSaveStatus("invalid");
+        return;
+      }
       const fieldTabMap: Record<string, TabId> = {
         webhookUrl:               "settings",
         webhookSecret:            "settings",
@@ -7186,6 +7215,39 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       toast({ title: "Validation error", description: `${msg}${tabLabel}`, variant: "destructive" });
     }
   );
+
+  autoSaveHandlerRef.current = async () => {
+    autoSaveRequestRef.current = true;
+    try {
+      await onSave();
+    } finally {
+      autoSaveRequestRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    const runAutoSave = async () => {
+      if (saveInFlightRef.current) {
+        autoSaveTimerRef.current = setTimeout(runAutoSave, 300);
+        return;
+      }
+      await autoSaveHandlerRef.current?.();
+    };
+    const subscription = form.watch(() => {
+      if (suppressAutoSaveRef.current) return;
+      queueMicrotask(() => {
+        if (!form.formState.isDirty) return;
+        editRevisionRef.current += 1;
+        setAutoSaveStatus("pending");
+        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = setTimeout(runAutoSave, 1200);
+      });
+    });
+    return () => {
+      subscription.unsubscribe();
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [form]);
 
   const handleDelete = async () => {
     const agentName = form.getValues("name") || "this agent";
@@ -7338,7 +7400,18 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
           </span>
           {isDirty && (
             <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-              Unsaved
+              {autoSaveStatus === "saving"
+                ? "Auto-saving…"
+                : autoSaveStatus === "invalid"
+                  ? "Fix errors to save"
+                  : autoSaveStatus === "error"
+                    ? "Auto-save failed"
+                    : "Auto-save pending"}
+            </span>
+          )}
+          {!isDirty && autoSaveStatus === "saved" && (
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-400">
+              Auto-saved
             </span>
           )}
           <BuilderPipelineStatus form={form} />
@@ -7374,7 +7447,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
             disabled={updateAgent.isPending}
           >
             {savedFlash ? <Check className="size-3.5" /> : <Save className="size-3.5" />}
-            {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save"}
+            {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save now"}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -7551,7 +7624,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
                 disabled={updateAgent.isPending}
               >
                 {savedFlash ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-                {updateAgent.isPending ? "…" : savedFlash ? "Saved" : "Save"}
+                {updateAgent.isPending ? "…" : savedFlash ? "Saved" : "Save now"}
                 {isDirty && !updateAgent.isPending && !savedFlash && (
                   <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-400" />
                 )}
@@ -7690,7 +7763,7 @@ function PromptReadinessAside({
           </Button>
         )}
         <p className="text-[10.5px] leading-relaxed text-muted-foreground">
-          Save from the header when you are done. Overview shows phone, pipeline, and knowledge readiness.
+          Changes auto-save after you pause typing. Overview shows phone, pipeline, and knowledge readiness.
         </p>
       </div>
     </WorkspaceInspector>
