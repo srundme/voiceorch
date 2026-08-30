@@ -17,6 +17,8 @@ import {
 import { eq, and, or, sql, desc, ne } from "drizzle-orm";
 import { getAvailableSlots } from "./scheduling/slot-engine.js";
 import { findExactAvailableSlot, parsePreferredInstant, extractIsoDateTime } from "./scheduling/slot-match.js";
+import { parseRelativeDateTime, type PartOfDay } from "./scheduling/relative-datetime.js";
+import { parseCallbackDateTime } from "../lib/tz-datetime.js";
 import { buildSlotLockKey } from "./scheduling/lock.js";
 import {
   sendBookingCreatedEmail,
@@ -1891,6 +1893,20 @@ export async function executeWebhookTool(
 
 // ── parsePreferredDate (shared between pipeline.ts and webcall tool execution) ─
 
+const PART_OF_DAY_HOURS: Record<PartOfDay, [number, number]> = {
+  morning: [0, 12],
+  afternoon: [12, 17],
+  evening: [17, 24],
+};
+
+function partOfDaySlotFilter(part: PartOfDay, tz: string): (slot: TimeSlot) => boolean {
+  const [fromHour, toHour] = PART_OF_DAY_HOURS[part];
+  return (slot) => {
+    const h = toZonedTime(slot.slotStart, tz).getHours();
+    return h >= fromHour && h < toHour;
+  };
+}
+
 /**
  * Parse a natural-language or ISO preferred date string into a concrete search
  * start date, an optional minimum slot start instant for time-precision, and an
@@ -1906,60 +1922,34 @@ export function parsePreferredDate(
   tz = "UTC",
 ): { searchStart: Date; minSlotStart?: Date; timeFilter?: (slot: TimeSlot) => boolean; isExactTime?: boolean } {
   const now = new Date();
-  const lower = raw.trim().toLowerCase();
-
-  if (lower === "morning") {
-    return { searchStart: now, timeFilter: (s) => toZonedTime(s.slotStart, tz).getHours() < 12 };
-  }
-  if (lower === "afternoon") {
-    return {
-      searchStart: now,
-      timeFilter: (s) => {
-        const h = toZonedTime(s.slotStart, tz).getHours();
-        return h >= 12 && h < 17;
-      },
-    };
-  }
-  if (lower === "evening") {
-    return { searchStart: now, timeFilter: (s) => toZonedTime(s.slotStart, tz).getHours() >= 17 };
-  }
-
-  if (lower === "today") {
-    return { searchStart: now };
-  }
-  if (lower === "tomorrow") {
-    const d = new Date(now);
-    d.setDate(d.getDate() + 1);
-    d.setHours(0, 0, 0, 0);
-    return { searchStart: d };
-  }
-
-  const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  const dayMatch = lower.match(/^(?:(next|this)\s+)?(\w+)$/);
-  if (dayMatch) {
-    const modifier = dayMatch[1];
-    const dayName = dayMatch[2]!;
-    const dayIdx = DAY_NAMES.indexOf(dayName);
-    if (dayIdx !== -1) {
-      const d = new Date(now);
-      d.setHours(0, 0, 0, 0);
-      const currentDay = d.getDay();
-      let daysAhead = dayIdx - currentDay;
-      if (modifier === "next") {
-        if (daysAhead <= 0) daysAhead += 7;
-        else daysAhead += 7;
-      } else {
-        if (daysAhead <= 0) daysAhead += 7;
-      }
-      d.setDate(d.getDate() + daysAhead);
-      return { searchStart: d };
-    }
-  }
 
   // Availability returns `ISO (spoken label)`. Models pass that whole string
   // into book_appointment; Date.parse of the mixed form is Invalid and used
   // to fall through to "first slot / not available".
   const isoToken = extractIsoDateTime(raw);
+
+  // Relative phrasing is what callers say, and the model forwards it verbatim
+  // ("tomorrow 10:45 AM"). Without this the day AND the clock time were both
+  // dropped, so check_availability answered a different question — it listed
+  // the next week of slots, the agent read that as "yes, available", and
+  // book_appointment then rejected the time the caller had just been promised.
+  if (!isoToken) {
+    const relative = parseRelativeDateTime(raw, tz, now);
+    if (relative) {
+      const timeFilter = relative.partOfDay ? partOfDaySlotFilter(relative.partOfDay, tz) : undefined;
+      if (relative.date && relative.time) {
+        const at = parseCallbackDateTime(`${relative.date}T${relative.time}:00`, tz);
+        if (at) return { searchStart: at > now ? at : now, minSlotStart: at, isExactTime: true };
+      }
+      if (relative.date) {
+        const dayStart = parseCallbackDateTime(`${relative.date}T00:00:00`, tz);
+        const future = dayStart && dayStart > now ? dayStart : undefined;
+        return { searchStart: future ?? now, minSlotStart: future, timeFilter, isExactTime: false };
+      }
+      if (timeFilter) return { searchStart: now, timeFilter };
+    }
+  }
+
   const parseTarget = isoToken ?? raw.trim();
   const anchoredFromHelper = parsePreferredInstant(parseTarget, tz);
   const parsed = anchoredFromHelper ?? (() => {
