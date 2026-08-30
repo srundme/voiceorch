@@ -181,8 +181,12 @@ export class SarvamTTS implements TTSAdapter {
   private warmConnecting: Promise<WebSocket> | null = null;
   private warmPingTimer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
-  /** True while an utterance owns the warm/live WS — parallel prefetch must not steal it. */
-  private wsInUse = false;
+  /**
+   * Sarvam accepts many utterances on one configured socket, but only one
+   * flush cycle can own that socket at a time. Keep concurrent sentence
+   * prefetch ordered instead of moving sentence N+1 to the slower HTTP path.
+   */
+  private synthesisTail: Promise<void> = Promise.resolve();
 
   constructor(
     apiKey: string,
@@ -504,12 +508,14 @@ export class SarvamTTS implements TTSAdapter {
   }
 
   /**
-   * Streaming synthesis — WebSocket first (with backoff), HTTP stream fallback.
-   * Yields raw PCM s16le @ 16 kHz chunks.
+   * Streaming synthesis — serialised WebSocket flush cycles, with HTTP stream
+   * used only after genuine WS failure. Yields raw PCM s16le @ 16 kHz chunks.
    *
-   * Parallel sentence prefetch: if the warm WS is already synthesizing sentence N,
-   * sentence N+1 uses HTTP stream instead of stealing the socket (calls 4852/4853
-   * firstByteMs spikes up to ~1s when two utterances contended for one WS).
+   * The pipeline deliberately starts sentence N+1 while N is still playing.
+   * Sarvam cannot safely run two flush cycles on one socket, and mixing a
+   * parallel HTTP response into the next sentence caused uneven delivery and
+   * mid-sentence underruns. Queueing preserves one persistent WS and lets the
+   * pipeline's PCM jitter buffer absorb provider timing variation.
    */
   async synthesizeStream(
     text: string,
@@ -520,15 +526,14 @@ export class SarvamTTS implements TTSAdapter {
     if (signal?.aborted) throw abortError();
     if (this.closed) throw new Error("SarvamTTS: closed");
 
-    if (this.wsInUse) {
-      logger.info("SarvamTTS WS busy — parallel synth via HTTP stream");
-      await this.synthesizeViaHttpStream(text, onChunk, signal);
-      onDone(text.length);
-      return;
-    }
-
-    this.wsInUse = true;
+    const previous = this.synthesisTail;
+    let release!: () => void;
+    this.synthesisTail = new Promise<void>((resolve) => { release = resolve; });
     try {
+      await previous;
+      if (signal?.aborted) throw abortError();
+      if (this.closed) throw new Error("SarvamTTS: closed");
+
       let lastErr: unknown;
       for (let attempt = 0; attempt < WS_RETRY_MAX; attempt++) {
         if (signal?.aborted) throw abortError();
@@ -555,7 +560,7 @@ export class SarvamTTS implements TTSAdapter {
       await this.synthesizeViaHttpStream(text, onChunk, signal);
       onDone(text.length);
     } finally {
-      this.wsInUse = false;
+      release();
     }
   }
 

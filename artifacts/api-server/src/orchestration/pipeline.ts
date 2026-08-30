@@ -352,6 +352,15 @@ const TTS_PREBUFFER_COLD_MS = Math.max(
   Number(process.env.TTS_PREBUFFER_COLD_MS ?? 720),
 );
 const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 900));
+/**
+ * Sarvam Bulbul delivery is burstier than Cartesia Sonic under telephony load.
+ * Give it extra runway before playback instead of exposing each provider pause
+ * as a gap on the VoBiz media stream.
+ */
+const SARVAM_TTS_PREBUFFER_BOOST_MS = Math.max(
+  0,
+  Number(process.env.SARVAM_TTS_PREBUFFER_BOOST_MS ?? 300),
+);
 /** On mid-sentence underrun: refill this much audio while holding the last
  *  frame (keeps VoBiz alive). Prefer this over realtime pacing on an empty
  *  queue — that is the audible "breaking" glitch on live calls. */
@@ -7187,8 +7196,12 @@ export class OrchestrationPipeline implements VoiceSession {
         : (this.ttsWarmed && !recentlyUnderran)
           ? TTS_PREBUFFER_WARM_MS
           : TTS_PREBUFFER_COLD_MS;
-      const prebufferMs = basePrebufferMs + concurrencyBoostMs;
+      const providerBoostMs = this.agent.ttsProvider.toLowerCase() === "sarvam"
+        ? SARVAM_TTS_PREBUFFER_BOOST_MS
+        : 0;
+      const prebufferMs = basePrebufferMs + providerBoostMs + concurrencyBoostMs;
       const prebufferCap = (greetingFirstClip ? TTS_PREBUFFER_GREETING_CAP_MS : TTS_PREBUFFER_CAP_MS)
+        + providerBoostMs
         + concurrencyBoostMs;
       await awaitPrebuffer(prebufferMs, prebufferCap);
       // Re-anchor the per-sentence echo grace + adaptive echo-floor calibration
