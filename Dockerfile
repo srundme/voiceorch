@@ -1,5 +1,5 @@
 # Redeploy: skip @snapserveai/mcp tsc; build @snapserve/mcp for hosted Claude.
-FROM node:24-slim AS builder
+FROM node:24.20.0-bookworm-slim AS builder
 WORKDIR /workspace
 
 RUN npm install -g pnpm@10.26.1
@@ -40,7 +40,7 @@ RUN pnpm --filter @snapserveai/sdk build \
  && pnpm --filter @snapserve/mcp build \
  && pnpm --filter @workspace/api-server run build
 
-FROM node:24-slim
+FROM node:24.20.0-bookworm-slim
 WORKDIR /workspace
 
 # ffmpeg is a PATH fallback for the ambient-sound transcode (uploaded tracks).
@@ -67,6 +67,11 @@ COPY --from=builder /workspace/artifacts/dashboard/dist ./artifacts/dashboard/di
 COPY --from=builder /workspace/artifacts/admin/dist ./artifacts/admin/dist
 COPY --from=builder /workspace/artifacts/snapserve-book/dist ./artifacts/snapserve-book/dist
 COPY --from=builder /workspace/lib/db/drizzle ./lib/db/drizzle
+# Admin-only PDFs are served through /api/admin/team-guides with token auth.
+# Keep them outside either SPA's public directory so direct URLs cannot bypass it.
+COPY docs/webinar/SnapServe-Portal-Button-Guide.pdf ./docs/webinar/SnapServe-Portal-Button-Guide.pdf
+COPY docs/webinar/SnapServe-Team-QA-Prep.pdf ./docs/webinar/SnapServe-Team-QA-Prep.pdf
+COPY docs/webinar/SnapServe-Webinar-Architecture-Cheat-Sheet.pdf ./docs/webinar/SnapServe-Webinar-Architecture-Cheat-Sheet.pdf
 # Workspace packages are bundled into api-server dist; keep package roots so
 # pnpm's prod install graph for @snapserveai/* stays valid.
 COPY --from=builder /workspace/lib/sdk-node/dist ./lib/sdk-node/dist

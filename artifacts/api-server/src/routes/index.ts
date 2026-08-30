@@ -95,6 +95,7 @@ import voiceathonPublicRouter from "./voiceathon-public.js";
 import voiceathonEventsRouter from "./voiceathon-events.js";
 import adminEventFeedbackRouter from "./admin-event-feedback.js";
 import adminVoiceathonRouter from "./admin-voiceathon.js";
+import adminTeamGuidesRouter from "./admin-team-guides.js";
 import workflowsRouter from "./workflows.js";
 import workflowsPublicRouter from "./workflows-public.js";
 import journeysRouter from "./journeys.js";
@@ -141,6 +142,7 @@ router.use(adminV2VoiceRouter);
 router.use(adminV2RevenueRouter);
 router.use(adminEventFeedbackRouter);
 router.use(adminVoiceathonRouter);
+router.use(adminTeamGuidesRouter);
 
 // Public campaign lead webhook — must be before provisionUser (no Clerk session needed)
 router.use(campaignWebhookRouter);

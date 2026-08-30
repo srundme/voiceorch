@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SnapServe Webinar Architecture Cheat Sheet</title>
+<style>
+  :root{--ink:#0f172a;--muted:#5b6b7f;--paper:#f4f7fa;--white:#fff;--line:#dce4ec;--soft:#eef3f7;--danger:#8b1e2d;--warn:#8a5a00;--ok:#166534}
+  *{box-sizing:border-box} body{margin:0;background:var(--paper);color:var(--ink);font-family:"Segoe UI",Arial,sans-serif;font-size:15px;line-height:1.43}
+  .page{width:210mm;min-height:297mm;margin:10mm auto;background:var(--white);padding:14mm 15mm;position:relative;border:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:9px;font-size:19px}.bars{display:grid;gap:2px}.bars i{height:3px;background:var(--ink);display:block;border-radius:2px}.bars i:nth-child(1){width:23px}.bars i:nth-child(2){width:16px}.bars i:nth-child(3){width:10px}
+  h1{font-size:31px;line-height:1.1;margin:20mm 0 5mm;letter-spacing:-.7px}h2{font-size:22px;margin:0 0 4mm}h3{font-size:14px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin:6mm 0 3mm}
+  p{margin:0 0 3mm}.lede{font-size:18px;max-width:62ch;color:var(--muted)}.tag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 8px;margin:2px 4px 2px 0;font-size:11px;font-weight:700}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:4mm}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm}
+  .card{border:1px solid var(--line);border-radius:8px;padding:4mm;break-inside:avoid}.card strong{display:block;margin-bottom:1mm}.muted{color:var(--muted)}.small{font-size:11px}
+  .flow{display:flex;align-items:stretch;gap:2mm;margin:4mm 0;break-inside:avoid}.node{flex:1;border:1px solid var(--line);background:var(--soft);border-radius:7px;padding:3mm;text-align:center;font-weight:650;font-size:12px}.arrow{align-self:center;font-weight:800}
+  .page.dense{padding-top:8mm;padding-bottom:8mm;font-size:10.5px}.dense h2{font-size:19px;margin-bottom:2mm}.dense h3{font-size:10px;margin:1.8mm 0 1mm}.dense .flow{margin:1mm 0}.dense .node{padding:1.2mm;font-size:10px}.dense .warning{margin-top:1.5mm;padding:2mm 3mm;font-size:10px}.dense .grid{gap:2mm}.dense .card{padding:2mm}.dense .card p{margin:0 0 .5mm}
+  table{width:100%;border-collapse:collapse;font-size:11.5px}th{text-align:left;background:var(--ink);color:#fff;padding:2.2mm}td{border-bottom:1px solid var(--line);padding:2.1mm;vertical-align:top}tr{break-inside:avoid}
+  ol,ul{margin:2mm 0 0;padding-left:5mm}li{margin-bottom:1.6mm}.warning{border-left:4px solid var(--warn);background:#fff8e6;padding:3mm 4mm;margin:3mm 0;break-inside:avoid}.danger{border-left-color:var(--danger);background:#fff0f1}.ok{border-left-color:var(--ok);background:#f0fff4}
+  code{font-family:Consolas,monospace;font-size:10.5px;background:var(--soft);padding:1px 3px;border-radius:3px;overflow-wrap:anywhere}.footer{position:absolute;left:15mm;right:15mm;bottom:8mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:2mm;color:var(--muted);font-size:9px}
+  @page{size:A4;margin:0}@media print{body{background:#fff}.page{margin:0;border:0;width:210mm;height:296mm;min-height:296mm;overflow:hidden;page-break-after:always}.page:last-child{page-break-after:auto}}@media(max-width:900px){.page{width:100%;min-height:auto;margin:0;padding:22px}.grid,.grid3{grid-template-columns:1fr}.flow{flex-direction:column}.arrow{transform:rotate(90deg)}h1{margin-top:45px}}
+</style>
+</head>
+<body>
+
+<section class="page">
+  <div class="brand"><span class="bars"><i></i><i></i><i></i></span><b>Snap</b>Serve</div>
+  <h1>Webinar architecture<br>cheat sheet</h1>
+  <p class="lede">Short, code-verified answers for Agents, Webhooks, WhatsApp, Website Intake, Tools, APIs, security, and debugging.</p>
+  <div style="margin-top:12mm">
+    <span class="tag">Committed main: 8be029ce</span><span class="tag">August 2026</span><span class="tag">No generic claims</span>
+  </div>
+  <div class="warning ok" style="margin-top:18mm">
+    <strong>One-sentence architecture</strong>
+    The portal saves configuration through Express into PostgreSQL; a call enters through VoBiz, Plivo, Twilio, or Webcall; <code>createSession()</code> loads the live agent and runs either classic STT → LLM/tools → TTS or Gemini Live; call end writes outcome, billing, memory, and integrations.
+  </div>
+  <h3>The safest demo story</h3>
+  <div class="grid">
+    <div class="card"><strong>Input</strong>Website form, CSV, Google Sheet, Meta lead, inbound phone, API</div>
+    <div class="card"><strong>Conversation</strong>Sarvam/Deepgram STT, LLM, knowledge, tools, Cartesia/Sarvam TTS</div>
+    <div class="card"><strong>Action</strong>Booking, webhook API, email, WhatsApp, transfer, callback</div>
+    <div class="card"><strong>Output</strong>History, disposition, wallet usage, CRM/Sheet writeback, signed event webhook</div>
+  </div>
+  <div class="footer"><span>SnapServe webinar reference</span><span>1 / 8</span></div>
+</section>
+
+<section class="page dense">
+  <h2>Six architecture pictures</h2>
+  <div class="grid">
+    <div class="card"><strong>1 · Platform</strong><p>React dashboard</p><p>↓</p><p>Express /api · auth · tenant</p><p>↓</p><p>Services · PostgreSQL · providers</p></div>
+    <div class="card"><strong>2 · Voice call</strong><p>VoBiz / Plivo / Twilio / Webcall</p><p>↓</p><p>Media WebSocket · createSession</p><p>↓</p><p>Classic or Gemini Live</p></div>
+    <div class="card"><strong>3 · Classic voice turn</strong><p>Caller audio → STT</p><p>↓</p><p>LLM + knowledge + memory</p><p>↓</p><p>Tool result → TTS</p></div>
+    <div class="card"><strong>4 · Website Intake</strong><p>Website JSON → token/HMAC</p><p>↓</p><p>campaign_leads + live batch</p><p>↓</p><p>Dial now or queue</p></div>
+    <div class="card"><strong>5 · WhatsApp</strong><p>Agent rule / send_whatsapp</p><p>↓</p><p>BSP override → Meta direct</p><p>↓</p><p>Native VoBiz fallback</p></div>
+    <div class="card"><strong>6 · Tool call</strong><p>User → LLM function + args</p><p>↓</p><p>Backend / external API</p><p>↓</p><p>Result → LLM → voice</p></div>
+  </div>
+  <div class="warning"><strong>Runtime truth:</strong> calls load the current <code>agents</code> row. Save changes live behavior. Publish creates a labelled snapshot. Restore writes a snapshot back to the live row and creates a draft record.</div>
+  <div class="footer"><span>Architecture</span><span>2 / 8</span></div>
+</section>
+
+<section class="page">
+  <h2>Agent settings that matter</h2>
+  <table>
+    <thead><tr><th>Area</th><th>Stored</th><th>What changes at runtime</th></tr></thead>
+    <tbody>
+      <tr><td>Prompt, greeting, first speaker</td><td><code>agents</code> columns</td><td>LLM instructions and who starts</td></tr>
+      <tr><td>STT / LLM / TTS provider + model</td><td><code>agents</code> columns</td><td>Adapter factories and credentials required</td></tr>
+      <tr><td>Voice stack</td><td><code>agent_config.voiceStack</code></td><td>Classic three-stage pipeline or Gemini Live</td></tr>
+      <tr><td>Language, endpointing, VAD, barge-in</td><td>Columns + <code>agent_config</code></td><td>Recognition, turn end, interruption behavior</td></tr>
+      <tr><td>TTS voice/speed, ambient, prebuffer</td><td>Columns + <code>agent_config</code></td><td>Voice and playback feel</td></tr>
+      <tr><td>Knowledge source IDs</td><td><code>agent_knowledge_sources</code></td><td>Per-turn RAG; vector + FTS or FTS fallback</td></tr>
+      <tr><td>Tools</td><td><code>agents.tools</code> JSON</td><td>Functions visible to the LLM</td></tr>
+      <tr><td>Calendar capability</td><td><code>agent_config</code></td><td>Which booking calendar/event type is allowed</td></tr>
+      <tr><td>Silence, max duration, end phrases</td><td>Columns</td><td>Check-in and automatic hangup</td></tr>
+      <tr><td>Recording, voicemail/AMD, memory</td><td><code>agent_config</code></td><td>Audio storage, machine path, caller context</td></tr>
+      <tr><td>Post-call URL</td><td>Column + <code>agent_config</code></td><td>One agent-specific final HTTP POST</td></tr>
+      <tr><td>Outcomes / after-call messages</td><td><code>agent_dispositions</code></td><td>Extraction, funnel status, email/WhatsApp rules</td></tr>
+      <tr><td>Phone assignment</td><td><code>phone_numbers</code> + agent IDs</td><td>Inbound and outbound carrier routing</td></tr>
+    </tbody>
+  </table>
+  <div class="warning"><strong>Two separate saves:</strong> the Agent Save button writes agent configuration. The Outcomes tab has its own save API.</div>
+  <div class="warning"><strong>Auto Summarization nuance:</strong> the visible toggle enables post-call summarization from <code>agent_config</code>. Live token-context compression reads the separate <code>token_summarization_enabled</code> column.</div>
+  <h3>All runtime tool types</h3>
+  <p class="small">end_call · native_check_availability · native_booking · native_list_bookings · native_reschedule · native_cancel · call_transfer · transfer_cold · transfer_warm · transfer_agent · squad_followup · webhook · send_sms · send_email · send_whatsapp · cal_com</p>
+  <div class="footer"><span>Agent settings</span><span>3 / 8</span></div>
+</section>
+
+<section class="page">
+  <h2>Webhooks and Website Intake</h2>
+  <table>
+    <thead><tr><th>Webhook job</th><th>Actual route / behavior</th><th>Security</th></tr></thead>
+    <tbody>
+      <tr><td>Website/campaign lead</td><td><code>POST /api/webhooks/lead/:token</code> → lead + batch → dial/queue</td><td>Token; optional HMAC; Meta payload requires HMAC</td></tr>
+      <tr><td>WhatsApp request-a-call</td><td><code>POST /api/webhooks/whatsapp/:token</code> → 5-min dedupe → call</td><td>Token only</td></tr>
+      <tr><td>Telephony callbacks</td><td><code>/api/webhooks/{provider}/*</code> answer/status/AMD/recording</td><td>Twilio/Plivo signature; VoBiz differs</td></tr>
+      <tr><td>Workspace events</td><td>Customer URL receives <code>call.started/completed/failed</code></td><td>Timestamped HMAC; 10 s; 2 retries</td></tr>
+      <tr><td>Agent post-call URL</td><td>One URL receives final call payload</td><td>Optional HMAC; raw fetch path</td></tr>
+      <tr><td>Custom HTTP tool</td><td>GET/POST mid-call; result returned to LLM</td><td>Headers/secret; SSRF guard; 8 s; 1 retry</td></tr>
+    </tbody>
+  </table>
+  <h3>Website setup</h3>
+  <ol>
+    <li>Create a Campaign with Website/Webhook lead source and assign an Agent.</li>
+    <li>Open Connections; copy <code>/api/webhooks/lead/{token}</code>.</li>
+    <li>Map the real payload key to phone; optionally map name and email.</li>
+    <li>For production, set an HMAC secret and sign the exact raw request body.</li>
+    <li>Use Listen mode for a sample, then POST a controlled test lead.</li>
+    <li>Check <code>campaign_leads</code>, queued/calling status, provider callback, call History, and outcome.</li>
+  </ol>
+  <div class="warning danger"><strong>Duplicate risk:</strong> generic website submissions have no phone-level dedupe. Make the source form idempotent and disable repeated submits.</div>
+  <div class="warning"><strong>Queue reasons:</strong> campaign paused/stopped, outside business hours, DNC/TRAI, concurrency, attempts, wallet, or provider failure.</div>
+  <div class="footer"><span>Webhooks &amp; Website Intake</span><span>4 / 8</span></div>
+</section>
+
+<section class="page">
+  <h2>WhatsApp: what is really implemented</h2>
+  <div class="grid">
+    <div class="card"><strong>Meta direct · Implemented</strong>WABA ID + Phone Number ID + encrypted System User token. Template fetch and mid/post-call sends.</div>
+    <div class="card"><strong>Native VoBiz · Implemented</strong>Own or purchased WhatsApp channel, message log, status updates, chatbot, WhatsApp calling.</div>
+    <div class="card"><strong>BYO BSP · Implemented</strong>SnapServe signs a call.mid/call.ended POST; Wati/Zapier/customer BSP sends the message.</div>
+    <div class="card"><strong>Instant/shared · Partial</strong>Existing rows work. New enrollment returns HTTP 410 and must not be promised.</div>
+  </div>
+  <h3>Outbound precedence</h3>
+  <div class="flow"><div class="node">Agent has BSP URL?</div><div class="arrow">→</div><div class="node">Yes: BSP only</div><div class="arrow">→</div><div class="node">Else Meta direct</div><div class="arrow">→</div><div class="node">Else native VoBiz</div></div>
+  <h3>Setup</h3>
+  <ol>
+    <li>Meta path: enter Business, WABA ID, Phone Number ID, permanent token; connect to an Agent.</li>
+    <li>Fetch/pick an approved template; set Agent → After the call rule or add <code>send_whatsapp</code>.</li>
+    <li>Test with a call containing caller speech and a completed/booking outcome.</li>
+    <li>For request-a-call, configure the inbound token URL or native VoBiz inbound Agent.</li>
+  </ol>
+  <div class="warning"><strong>Status limitation:</strong> native VoBiz updates sent/delivered/read in <code>whatsapp_messages</code>. Meta-direct and BSP sends are not shown with the same delivery lifecycle.</div>
+  <div class="warning danger"><strong>Do not claim:</strong> Plivo WhatsApp, direct Meta inbound chatbot/status receiver, campaign-owned WhatsApp, or new Instant WhatsApp signup.</div>
+  <div class="footer"><span>WhatsApp</span><span>5 / 8</span></div>
+</section>
+
+<section class="page">
+  <h2>Top 20 likely questions</h2>
+  <table>
+    <thead><tr><th>#</th><th>Question</th><th>Short answer</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>How does SnapServe work?</td><td>Input → Agent session → voice/tools → outcome/integrations.</td></tr>
+      <tr><td>2</td><td>Does Publish make changes live?</td><td>Save does. Publish is a labelled snapshot; Restore applies it.</td></tr>
+      <tr><td>3</td><td>Where do I assign a number?</td><td>Phone Numbers, not Agent Save.</td></tr>
+      <tr><td>4</td><td>Live test vs phone call?</td><td>Same session core; browser Webcall vs real carrier.</td></tr>
+      <tr><td>5</td><td>What is a webhook?</td><td>An automatic HTTP request; identify its direction/job first.</td></tr>
+      <tr><td>6</td><td>How do I connect a website?</td><td>POST JSON to the Campaign lead token URL.</td></tr>
+      <tr><td>7</td><td>Can it call immediately?</td><td>Yes, unless hours/DNC/status/concurrency/wallet rules queue it.</td></tr>
+      <tr><td>8</td><td>How do I connect WhatsApp?</td><td>Meta direct, native VoBiz, or BYO BSP.</td></tr>
+      <tr><td>9</td><td>Is Instant WhatsApp available?</td><td>Not for new signup; endpoint returns 410.</td></tr>
+      <tr><td>10</td><td>Can it book Calendar?</td><td>Yes with scheduling tools and connected/configured calendar.</td></tr>
+      <tr><td>11</td><td>Can it use my API?</td><td>Yes through an HTTPS custom webhook tool.</td></tr>
+      <tr><td>12</td><td>How is API access authenticated?</td><td>sk_live_ API keys; dashboard uses HttpOnly JWT cookie.</td></tr>
+      <tr><td>13</td><td>Can I upload knowledge?</td><td>Yes; attach sources to an Agent for hybrid retrieval.</td></tr>
+      <tr><td>14</td><td>Does it remember callers?</td><td>Yes through caller facts/profiles when configured.</td></tr>
+      <tr><td>15</td><td>Which carriers?</td><td>VoBiz, Twilio, Plivo, Webcall; not Vonage/Exotel.</td></tr>
+      <tr><td>16</td><td>Which CRM?</td><td>HubSpot and Zoho; not Salesforce.</td></tr>
+      <tr><td>17</td><td>Which payment gateway?</td><td>Razorpay INR wallet; not Stripe.</td></tr>
+      <tr><td>18</td><td>Does it support Tamil/Hindi?</td><td>Yes, especially through Sarvam; verify selected language/model.</td></tr>
+      <tr><td>19</td><td>Can a caller interrupt?</td><td>Yes through configurable barge-in/VAD.</td></tr>
+      <tr><td>20</td><td>Where do I debug?</td><td>History → call detail/logs, then provider/webhook/DB path.</td></tr>
+    </tbody>
+  </table>
+  <div class="footer"><span>Top questions</span><span>6 / 8</span></div>
+</section>
+
+<section class="page">
+  <h2>Difficult questions and demo warnings</h2>
+  <div class="warning danger"><strong>Do not demo / promise</strong>
+    <ul><li>Vonage, Exotel/Tata, Salesforce, Stripe, AWS Polly adapter, OpenAI Realtime.</li><li>New Instant/shared WhatsApp enrollment.</li><li>Cal.com or full warm-transfer briefing on Gemini Live.</li></ul>
+  </div>
+  <div class="warning"><strong>Explain with caveat</strong>
+    <ul>
+      <li>Team workspace sharing: agents/calls are workspace-aware; campaigns/KB/squads are not uniformly shared.</li>
+      <li>Direct Meta WhatsApp: outbound works; native inbound/status/chatbot is not implemented for this path.</li>
+      <li>Knowledge: semantic vector search can fall back to full-text only.</li>
+      <li>Webhook delivery: retries exist, but these paths are not a durable outbound queue.</li>
+      <li>Connections Listen: in-memory and replica/restart sensitive.</li>
+    </ul>
+  </div>
+  <h3>Security answers</h3>
+  <table>
+    <tbody>
+      <tr><td>Session</td><td>Custom HS256 JWT, usually HttpOnly <code>vo_session</code>, 30-day expiry.</td></tr>
+      <tr><td>Developer API</td><td><code>sk_live_</code> raw key shown once; SHA-256 hash stored.</td></tr>
+      <tr><td>User provider/OAuth secrets</td><td>AES-256-GCM encrypted.</td></tr>
+      <tr><td>Managed platform keys</td><td>Plaintext in <code>platform_settings</code> — a real security gap.</td></tr>
+      <tr><td>Admin</td><td>Shared <code>X-Admin-Token</code>; no per-admin RBAC in middleware.</td></tr>
+      <tr><td>Website intake</td><td>Token-only unless HMAC configured.</td></tr>
+      <tr><td>WhatsApp request-call</td><td>Token-only; no Meta signature verification on that route.</td></tr>
+      <tr><td>VoBiz telephony</td><td>No provider-signature equivalent; sensitive status paths use correlation/HMAC tokens.</td></tr>
+    </tbody>
+  </table>
+  <div class="footer"><span>Risks &amp; security</span><span>7 / 8</span></div>
+</section>
+
+<section class="page">
+  <h2>Debugging and essential files</h2>
+  <h3>Five-step debugging pattern</h3>
+  <ol>
+    <li><b>Name the exact path:</b> provider, route, Agent ID, call/lead ID, and direction.</li>
+    <li><b>UI/request:</b> inspect payload, auth type, response, and client/workspace context.</li>
+    <li><b>Database:</b> confirm row/column changed—not just a success toast.</li>
+    <li><b>Runtime:</b> confirm <code>createSession</code> loaded the same Agent and provider keys.</li>
+    <li><b>External callback:</b> inspect provider response, status webhook, retries, timeout, and final History.</li>
+  </ol>
+  <div class="grid">
+    <div class="card"><strong>Agent silent</strong>Carrier/WS → key → STT final → LLM timeout/tool → TTS → wallet/logs.</div>
+    <div class="card"><strong>Tool fails</strong>Saved live tool → valid name/schema → provider support → HTTPS/SSRF → timeout.</div>
+    <div class="card"><strong>Lead but no call</strong>Campaign status → DNC/hours → concurrency → wallet → carrier callback.</div>
+    <div class="card"><strong>WhatsApp missing</strong>Provider path → BSP override → template → call gate → wallet/cap → lastError.</div>
+  </div>
+  <h3>Essential evidence</h3>
+  <table>
+    <tbody>
+      <tr><td>App/middleware</td><td><code>artifacts/api-server/src/app.ts</code></td></tr>
+      <tr><td>Routes</td><td><code>artifacts/api-server/src/routes/index.ts</code></td></tr>
+      <tr><td>Agent API / DB</td><td><code>routes/agents.ts</code> · <code>lib/db/src/schema/agents.ts</code></td></tr>
+      <tr><td>Session / voice</td><td><code>orchestration/session.ts</code> · <code>pipeline.ts</code></td></tr>
+      <tr><td>Tools / booking</td><td><code>services/tool-executor.ts</code></td></tr>
+      <tr><td>Website Intake</td><td><code>routes/campaign-webhook.ts</code> · <code>campaignCaller.ts</code></td></tr>
+      <tr><td>WhatsApp</td><td><code>routes/whatsapp.ts</code> · <code>whatsapp-native.ts</code> · <code>services/whatsapp/outbound.ts</code></td></tr>
+      <tr><td>Event subscriptions</td><td><code>routes/webhook-endpoints.ts</code></td></tr>
+      <tr><td>Dashboard Agent UI</td><td><code>artifacts/dashboard/src/pages/agents/builder.tsx</code></td></tr>
+    </tbody>
+  </table>
+  <p class="small muted" style="margin-top:6mm">Production-only environment values, provider dashboards, and live credentials were not available for this audit. Configuration-dependent claims must be verified in the deployed environment before the webinar.</p>
+  <div class="footer"><span>SnapServe · code-verified webinar reference</span><span>8 / 8</span></div>
+</section>
+
+</body>
+</html>

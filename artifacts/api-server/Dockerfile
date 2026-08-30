@@ -1,5 +1,5 @@
 # Build: 2026-06-18 — include all workspace package.json in builder; keep prod stage minimal
-FROM node:22-slim AS builder
+FROM node:24.20.0-bookworm-slim AS builder
 WORKDIR /workspace
 
 RUN npm install -g pnpm@10.26.1
@@ -40,11 +40,11 @@ RUN pnpm --filter @snapserveai/sdk build \
  && pnpm --filter @snapserve/mcp build \
  && pnpm --filter @workspace/api-server run build
 
-FROM node:22-slim
+FROM node:24.20.0-bookworm-slim
 WORKDIR /workspace
 
 # libgomp1 is required by onnxruntime-node's native CPU-execution addon at runtime.
-# node:22-slim (Debian Bookworm slim) doesn't ship it; without it the server crashes
+# node:*-bookworm-slim doesn't ship it; without it the server crashes
 # at startup with "libgomp.so.1: cannot open shared object file" before binding the port.
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
 
@@ -69,6 +69,9 @@ COPY --from=builder /workspace/artifacts/admin/dist ./artifacts/admin/dist
 COPY --from=builder /workspace/lib/sdk-node/dist ./lib/sdk-node/dist
 COPY --from=builder /workspace/lib/snapserve-mcp/dist ./lib/snapserve-mcp/dist
 COPY lib/db/drizzle ./lib/db/drizzle
+COPY docs/webinar/SnapServe-Portal-Button-Guide.pdf ./docs/webinar/SnapServe-Portal-Button-Guide.pdf
+COPY docs/webinar/SnapServe-Team-QA-Prep.pdf ./docs/webinar/SnapServe-Team-QA-Prep.pdf
+COPY docs/webinar/SnapServe-Webinar-Architecture-Cheat-Sheet.pdf ./docs/webinar/SnapServe-Webinar-Architecture-Cheat-Sheet.pdf
 
 ENV NODE_ENV=production
 ENV FRONTEND_DIST_PATH=artifacts/dashboard/dist/public

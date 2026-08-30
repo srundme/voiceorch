@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SnapServe Team Q&amp;A — How, Where, Integrations</title>
+<style>
+  :root {
+    --ink: #0F172A;
+    --paper: #F4F7FA;
+    --white: #FFFFFF;
+    --muted: #5B6B7F;
+    --line: #E2E8F0;
+    --chip: #0F172A;
+    --shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 8px 24px rgba(15, 23, 42, .06);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  header { background: var(--ink); color: var(--white); padding: 40px 24px 32px; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  .mark { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .bars { display: flex; flex-direction: column; gap: 3px; }
+  .bars i { display: block; height: 4px; border-radius: 2px; background: var(--white); }
+  .bars i:nth-child(1) { width: 26px; } .bars i:nth-child(2) { width: 19px; opacity: .7; } .bars i:nth-child(3) { width: 12px; opacity: .45; }
+  .wordmark { font-size: 20px; } .wordmark b { font-weight: 700; } .wordmark span { font-weight: 400; }
+  header h1 { font-size: 32px; line-height: 1.2; margin: 0 0 10px; letter-spacing: -.6px; }
+  header p { margin: 0; color: #C7D2DE; max-width: 68ch; }
+  .searchbar {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(244, 247, 250, .92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line); padding: 14px 24px;
+  }
+  .searchbar .wrap { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  #q {
+    flex: 1 1 320px; min-width: 0; padding: 12px 16px; font-size: 16px; font-family: inherit;
+    color: var(--ink); background: var(--white); border: 1px solid var(--line);
+    border-radius: 10px; box-shadow: var(--shadow);
+  }
+  #q:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
+  #count { color: var(--muted); font-size: 14px; white-space: nowrap; }
+  .layout { display: flex; gap: 40px; align-items: flex-start; padding: 32px 24px 80px; }
+  nav {
+    position: sticky; top: 78px; flex: 0 0 232px;
+    max-height: calc(100vh - 100px); overflow-y: auto; font-size: 14px;
+  }
+  nav h4 { margin: 0 0 10px; font-size: 12px; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+  nav a { display: block; padding: 6px 10px; color: var(--muted); text-decoration: none; border-radius: 6px; }
+  nav a:hover { background: var(--white); color: var(--ink); }
+  main { flex: 1 1 auto; min-width: 0; }
+  .section {
+    background: var(--white); border: 1px solid var(--line); border-radius: 14px;
+    padding: 26px 28px; margin-bottom: 22px; box-shadow: var(--shadow);
+  }
+  .section > h2 { font-size: 23px; margin: 0 0 4px; letter-spacing: -.3px; }
+  .section > .lede { margin: 0 0 20px; color: var(--muted); }
+  .section h3 {
+    font-size: 15px; margin: 26px 0 12px; text-transform: uppercase; letter-spacing: .7px;
+    color: var(--muted); border-top: 1px solid var(--line); padding-top: 18px;
+  }
+  .section h3:first-of-type { border-top: 0; padding-top: 0; margin-top: 18px; }
+  .row {
+    display: grid; grid-template-columns: minmax(160px, 280px) 1fr;
+    gap: 8px 20px; padding: 12px 0; border-bottom: 1px dashed var(--line); align-items: start;
+  }
+  .row:last-child { border-bottom: 0; }
+  .ask {
+    display: block; font-size: 14px; font-weight: 650; line-height: 1.4; color: var(--ink);
+  }
+  .row p { margin: 0; }
+  .where { display: block; margin-top: 6px; color: var(--muted); font-size: 14px; }
+  .where b { color: var(--ink); font-weight: 650; }
+  .note {
+    background: #F1F5F9; border-left: 3px solid var(--ink);
+    padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 18px 0 0; font-size: 15px;
+  }
+  .flow {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 13.5px; background: #F8FAFC; border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 16px; white-space: pre-wrap; line-height: 1.55; margin: 0 0 16px;
+  }
+  footer { padding: 0 24px 60px; color: var(--muted); font-size: 14px; }
+  #empty { display: none; padding: 40px 4px; color: var(--muted); }
+  @media (max-width: 900px) {
+    .layout { flex-direction: column; gap: 20px; padding: 20px 16px 60px; }
+    nav { position: static; max-height: none; width: 100%; background: var(--white);
+          border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+    nav div { display: flex; flex-wrap: wrap; gap: 4px; }
+    nav a { border: 1px solid var(--line); }
+    .section { padding: 20px 18px; }
+    .row { grid-template-columns: 1fr; }
+    header { padding: 28px 16px 24px; }
+    header h1 { font-size: 26px; }
+  }
+  @media print {
+    body { background: #fff; font-size: 11pt; }
+    .searchbar, nav { display: none !important; }
+    header { background: #fff; color: var(--ink); padding: 0 0 18pt; }
+    header p { color: var(--muted); }
+    .bars i { background: var(--ink); }
+    .layout { display: block; padding: 0; }
+    .section { box-shadow: none; border: 1px solid var(--line); margin-bottom: 12pt; }
+    .row { page-break-inside: avoid; break-inside: avoid; }
+    .section > h2, .section h3, .note, .flow { break-inside: avoid; }
+    a { color: var(--ink); text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="mark">
+      <span class="bars"><i></i><i></i><i></i></span>
+      <span class="wordmark"><b>Snap</b><span>Serve</span></span>
+    </div>
+    <h1>Team Q&amp;A prep — how, where, integrations</h1>
+    <p>For the webinar and Voiceathon. When a user or participant asks “how does this work?”, answer in one sentence, then tell them which screen to open. Search this page by the word they used.</p>
+  </div>
+</header>
+
+<div class="searchbar">
+  <div class="wrap">
+    <input id="q" type="search" placeholder="Type what they asked, for example: WhatsApp, Sheets, webhook, booking, squad" autocomplete="off" />
+    <span id="count"></span>
+  </div>
+</div>
+
+<div class="layout">
+<nav>
+  <h4>On this page</h4>
+  <div>
+    <a href="#answer">How to answer</a>
+    <a href="#picture">The one picture</a>
+    <a href="#how">How it works</a>
+    <a href="#start">First 15 minutes</a>
+    <a href="#agent">Agent and calls</a>
+    <a href="#campaign">Campaigns and lists</a>
+    <a href="#integrate">Integrations</a>
+    <a href="#webhook">Four kinds of webhook</a>
+    <a href="#voiceathon">Voiceathon questions</a>
+    <a href="#mixup">Do not mix these up</a>
+    <a href="#stuck">If you do not know</a>
+  </div>
+</nav>
+
+<main>
+
+<section class="section" id="answer">
+  <h2>How to answer</h2>
+  <p class="lede">Keep it short. Do not dump the whole product.</p>
+  <div class="row">
+    <span class="ask">1. One sentence</span>
+    <p>Say what it does in plain words. No jargon unless they used it first.</p>
+  </div>
+  <div class="row">
+    <span class="ask">2. Where to click</span>
+    <p>Name the left-menu item, then the tab. Example: Connections → WhatsApp. Then Agent → After the call.</p>
+  </div>
+  <div class="row">
+    <span class="ask">3. One proof</span>
+    <p>Tell them what they should see after: a test call in History, a WhatsApp on their phone, a new row in the sheet, a booking on Bookings.</p>
+  </div>
+  <div class="row">
+    <span class="ask">Do not</span>
+    <p>Do not invent Salesforce, Zapier, or Meta Business setup unless they already have it. For Voiceathon, Instant WhatsApp + Website or Sheets is enough.</p>
+  </div>
+</section>
+
+<section class="section" id="picture">
+  <h2>The one picture</h2>
+  <p class="lede">Say this once. Most “where do I click?” questions die here.</p>
+<pre class="flow">Connections bring leads in  →  Campaign dials  →  Agent talks
+                                    ↓
+                       After the call: Interested / Callback / DNC
+                                    ↓
+              WhatsApp or email (on the agent)   +   optional push to CRM / Sheet</pre>
+  <div class="row">
+    <span class="ask">Agent owns</span>
+    <p>What it says, the voice, knowledge, booking tools, call results, WhatsApp and email after the call.</p>
+  </div>
+  <div class="row">
+    <span class="ask">Campaign owns</span>
+    <p>The list of people, when to dial, retries, and pushing hot leads out to a webhook or Sheet.</p>
+  </div>
+  <div class="row">
+    <span class="ask">Connections own</span>
+    <p>The wires to the outside world: number, WhatsApp, email, Sheets, website form, Meta ads, calendar, meeting bots.</p>
+  </div>
+  <p class="note">Sentence to repeat: <b>Connections hold the keys. The agent only turns things on.</b> If WhatsApp is not connected, after-call rules save but nothing is sent.</p>
+</section>
+
+<section class="section" id="how">
+  <h2>How SnapServe works</h2>
+  <p class="lede">Users ask this first. Keep the five parts of a call.</p>
+  <div class="row">
+    <span class="ask">What is SnapServe?</span>
+    <p>Software that talks on a phone or in a meeting, then can book, label the result, and follow up on WhatsApp or email.<span class="where"><b>Open:</b> Agents → New agent. Prove it with Live test.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">How does a call work?</span>
+    <p>Number in → listen (speech to text) → think (the script + AI) → speak (voice) → do (book, transfer, end call). After hang-up: result + optional WhatsApp.<span class="where"><b>Open:</b> Agents → Overview for listen/think/speak. Actions for mid-call. After the call for follow-up.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">Do I need my own AI key?</span>
+    <p>No. SnapServe runs the voice stack. Add your own keys only if you want to use your own OpenAI, Sarvam, and so on.<span class="where"><b>Open:</b> Settings → Providers. Skip this for Voiceathon unless they insist.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">How is it billed?</span>
+    <p>Prepaid wallet. Calls and numbers come from that balance. Auto-pay can refill so a campaign does not stop.<span class="where"><b>Open:</b> Billing, or the wallet chip at the top.</span></p>
+  </div>
+</section>
+
+<section class="section" id="start">
+  <h2>First 15 minutes</h2>
+  <p class="lede">If they say “where do I start?”</p>
+  <div class="row">
+    <span class="ask">How do I make an agent?</span>
+    <p>Agents → New agent. Prefer Vibe Build if they want speed, Manual Build if they want every field. Write a greeting line. Live test 60 seconds. Fix the script. Then optionally assign a phone number.</p>
+  </div>
+  <div class="row">
+    <span class="ask">How do I hear it without a number?</span>
+    <p>Open the agent → Live test → Start call. Browser microphone. No telephony charge for that test.</p>
+  </div>
+  <div class="row">
+    <span class="ask">How do I call a real phone?</span>
+    <p>Buy or assign a number, then on the agent click Call and type the number. Wallet must have balance. India numbers need Verification (KYC) first.<span class="where"><b>Open:</b> Phone numbers → Get number. Then Agents → Call.</span></p>
+  </div>
+</section>
+
+<section class="section" id="agent">
+  <h2>Agent and call questions</h2>
+  <div class="row">
+    <span class="ask">How do I change what it says?</span>
+    <p>Agent → Script. Greeting is the first line on the call. The display name is only an internal label — put the company name in the greeting and the script.</p>
+  </div>
+  <div class="row">
+    <span class="ask">How do I change the voice / language?</span>
+    <p>Agent → Sound. Language and voice live there. Overview also shows transcriber, model, and voice in one place.</p>
+  </div>
+  <div class="row">
+    <span class="ask">Can it book a meeting?</span>
+    <p>Yes, if a calendar is connected and the agent has the check-availability and book tools on. It can only offer times that exist on the calendar grid (for a 30 minute meeting, 9:00, 9:30, 10:00 — not 10:45 unless you change duration or hours).<span class="where"><b>Open:</b> Connections → Bookings calendar. Agent → Actions. Bookings to see hours.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">Can it transfer to a human?</span>
+    <p>Yes. Mid-call transfer is an Action on the agent. Live handoff between two AI agents is Squads, not a campaign setting.<span class="where"><b>Open:</b> Agent → Actions. Or Squads. History → Transfers to see what happened.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">What is a disposition / outcome?</span>
+    <p>The label when the call ends: Interested, Not interested, Callback. The AI picks it. You map those labels to funnel meaning for analytics.<span class="where"><b>Open:</b> Agent → After the call. Proof: History on that call.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">How does memory work?</span>
+    <p>The agent can remember facts about a repeat caller. You can reset one caller if a fact is wrong.<span class="where"><b>Open:</b> Memory in the More menu.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">How does knowledge work?</span>
+    <p>Upload a PDF, paste text, or add Q&amp;A. Attach the pack to the agent so it looks up instead of guessing.<span class="where"><b>Open:</b> Knowledge → Add knowledge → Attach to the agent.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">Where is the recording?</span>
+    <p>History → click the call. Transcript and recording are on that page.</p>
+  </div>
+  <div class="row">
+    <span class="ask">How do I put it on my website?</span>
+    <p>Agent → Settings → Generate embed code. Paste on the site. Visitors talk in the browser. That is a webcall, not a phone DID.</p>
+  </div>
+</section>
+
+<section class="section" id="campaign">
+  <h2>Campaigns and lists</h2>
+  <div class="row">
+    <span class="ask">How do I call 500 people?</span>
+    <p>Campaigns → CSV file (or Sheets). Pick the agent, map the phone column, set hours, Create campaign. Pause / Resume / Stop from the list.<span class="where"><b>Proof:</b> Campaign → Live Queue, then History.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">What is a batch?</span>
+    <p>Another set of contacts added to the same campaign. Create Batch on the campaign page.</p>
+  </div>
+  <div class="row">
+    <span class="ask">What is Re-campaign?</span>
+    <p>Call the same people again, for example everyone who did not pick up. It does not create a new agent.</p>
+  </div>
+  <div class="row">
+    <span class="ask">Why did it not dial?</span>
+    <p>Check: campaign is not Paused/Stopped, calling hours, wallet balance, number assigned, KYC done, phone column mapped. Then look at Live Queue.</p>
+  </div>
+</section>
+
+<section class="section" id="integrate">
+  <h2>Integrations — what they ask, what you say</h2>
+  <p class="lede">All of these start at Connections unless noted. Do not send them hunting in Campaign Configuration for WhatsApp.</p>
+
+  <h3>WhatsApp</h3>
+  <div class="row">
+    <span class="ask">How do I send WhatsApp after a call?</span>
+    <p>Two places. First connect WhatsApp. Then on the agent, After the call, turn on WhatsApp for every call or for selected outcomes. Test with a real call, then check the phone.<span class="where"><b>Open:</b> Connections → WhatsApp → Instant. Then Agents → After the call → Save Outcomes.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">Do I need Meta Business / WABA?</span>
+    <p>Not for Voiceathon. Use Instant WhatsApp. Meta and BYON are extra. If an old custom webhook is still connected, Instant may not send — disconnect the old one.</p>
+  </div>
+  <div class="row">
+    <span class="ask">Can it WhatsApp during the call?</span>
+    <p>Possible as a mid-call Action, but for demos keep WhatsApp after the call. Mid-call messages often confuse the conversation.</p>
+  </div>
+
+  <h3>Google Sheets</h3>
+  <div class="row">
+    <span class="ask">How does Sheets calling work?</span>
+    <p>Connect Google. Start automatic calls: sheet URL, phone column, agent. A new row in the calling window starts a dial. Outcomes can write back to the sheet.<span class="where"><b>Open:</b> Connections → Google Sheets → Start automatic calls. Proof: add a test row, watch Live Queue.</span></p>
+  </div>
+
+  <h3>Website form</h3>
+  <div class="row">
+    <span class="ask">How do I call when someone fills my form?</span>
+    <p>Create a website campaign, paste the embed or webhook into the form. Submit a test lead. The campaign queue should pick it up.<span class="where"><b>Open:</b> Connections → Form intake, or Campaigns → Website.</span></p>
+  </div>
+
+  <h3>Meta Lead Ads</h3>
+  <div class="row">
+    <span class="ask">Can Facebook / Instagram leads get a call?</span>
+    <p>Yes. Connections → Meta Lead Ads, or Campaigns → Meta. Needs a Meta ad account. Skip for most Voiceathon teams unless they already run ads.</p>
+  </div>
+
+  <h3>Email</h3>
+  <div class="row">
+    <span class="ask">How do confirmation emails go out?</span>
+    <p>Connect Email (Brevo) under Connections. Then After the call on the agent, turn on email for the outcome you want. Booking confirmation can also follow a successful book_appointment — do not invent a send_email tool in the script.</p>
+  </div>
+
+  <h3>Calendar / bookings</h3>
+  <div class="row">
+    <span class="ask">How does calendar integration work?</span>
+    <p>Connect the bookings calendar, set event type (length) and availability hours. Enable check availability and book on the agent. The agent offers real free slots only.<span class="where"><b>Open:</b> Connections → Bookings calendar, then Bookings → Event Types and Availability.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">Is that the same as meeting bots?</span>
+    <p>No. Bookings calendar = book a slot on a phone call. Meeting bots = the agent joins Meet, Zoom or Teams. Different cards on Connections.</p>
+  </div>
+
+  <h3>Meeting bots</h3>
+  <div class="row">
+    <span class="ask">How do I put the agent in a Google Meet?</span>
+    <p>Enable Meetings on the agent. Open meeting bots, pick the agent, paste the link, Join. Admit the bot if the room asks.<span class="where"><b>Open:</b> Connections → Open meeting bots, or /app/meet.</span></p>
+  </div>
+
+  <h3>Zoho / CRM</h3>
+  <div class="row">
+    <span class="ask">Do you have Salesforce / HubSpot?</span>
+    <p>Native campaign source includes Zoho. For other CRMs: Event subscriptions or campaign Lead transfer to their webhook URL, or Agent Settings → Post-call notify. Do not promise Salesforce as a one-click card.</p>
+  </div>
+
+  <h3>API / developers</h3>
+  <div class="row">
+    <span class="ask">Can I trigger a call from my app?</span>
+    <p>Yes. Create an API key. Docs are at app.snapserve.ai/docs. Also MCP for coding agents.<span class="where"><b>Open:</b> Developers → New Key. Documentation in the sidebar.</span></p>
+  </div>
+</section>
+
+<section class="section" id="webhook">
+  <h2>Four kinds of “webhook”</h2>
+  <p class="lede">People say webhook for four different jobs. Ask which direction first: SnapServe calling them, or them sending leads to us.</p>
+  <div class="row">
+    <span class="ask">Event subscriptions</span>
+    <p>Workspace-wide: when a call finishes, we POST to their URL.<span class="where"><b>Open:</b> Developers → Event subscriptions → Add endpoint.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">Post-call notify</span>
+    <p>Same idea, but only for one agent.<span class="where"><b>Open:</b> Agent → Settings → Post-call notify.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">Form intake / website webhook</span>
+    <p>Their website sends a lead in. We dial.<span class="where"><b>Open:</b> Connections → Form intake, or Campaigns → Website.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">Lead transfer</span>
+    <p>After the call, hot dispositions get pushed to their CRM URL or a Sheet. This is not WhatsApp.<span class="where"><b>Open:</b> Campaign → Configuration.</span></p>
+  </div>
+  <div class="row">
+    <span class="ask">Mid-call HTTP tool</span>
+    <p>During the conversation the AI can call their API (check order, create ticket).<span class="where"><b>Open:</b> Agent → Actions / tools.</span></p>
+  </div>
+</section>
+
+<section class="section" id="voiceathon">
+  <h2>Voiceathon questions</h2>
+  <p class="lede">Participants want a working demo, not every feature.</p>
+  <div class="row">
+    <span class="ask">What should we build?</span>
+    <p>A real India problem + live call or meeting + at least three platform pieces + one data loop (website or Sheets or WhatsApp) + a 3-minute story.</p>
+  </div>
+  <div class="row">
+    <span class="ask">What is the fastest winning path?</span>
+    <p>Hour 1: agent + Live test. Hour 2: outcomes. Hour 3: Website or Sheets. Hour 4: Instant WhatsApp after the call. Optional: squad or meeting bot. Skip Meta WABA, BYON, Zapier unless a mentor asks.</p>
+  </div>
+  <div class="row">
+    <span class="ask">Do we need a phone number?</span>
+    <p>Webcall is enough to iterate. For judging, one real phone call or a meeting join is stronger. Keep wallet topped up.</p>
+  </div>
+  <div class="row">
+    <span class="ask">How do judges score?</span>
+    <p>Named problem, live demo, depth (three capabilities), conversation stays on script, integration visible (trigger → call → outcome), tight story. Have a 30-second recording if the network dies.</p>
+  </div>
+  <div class="row">
+    <span class="ask">Example demos</span>
+    <p>Healthcare: booking + WhatsApp + disposition. School: Hindi + Sheets + memory. Hiring: squad qualifier then scheduler. Local business: website form → call + Instant WhatsApp. Meetings track: bot joins Meet with a deck.</p>
+  </div>
+</section>
+
+<section class="section" id="mixup">
+  <h2>Do not mix these up</h2>
+  <div class="row">
+    <span class="ask">Callback vs transfer vs squad</span>
+    <p>Callback = call them later. Transfer = live pass to a human on this call. Squad = live pass from agent 1 to agent 2 on the same line.</p>
+  </div>
+  <div class="row">
+    <span class="ask">After-call WhatsApp vs lead transfer</span>
+    <p>WhatsApp is on the agent. Lead transfer is on the campaign and pushes data, it does not send WhatsApp.</p>
+  </div>
+  <div class="row">
+    <span class="ask">Bookings calendar vs Meet calendar</span>
+    <p>Bookings = slots the phone agent can offer. Meet page Google connect = auto-join a video event. Different screens.</p>
+  </div>
+  <div class="row">
+    <span class="ask">Live test vs Call</span>
+    <p>Live test = browser. Call = real phone number. Campaign = many numbers from a list.</p>
+  </div>
+  <div class="row">
+    <span class="ask">People / Call plans / Automation</span>
+    <p>Old names. They redirect to Campaigns or Home. Use the live menu: Home, Campaigns, Agents, Phone numbers, Connections, History, Analytics.</p>
+  </div>
+</section>
+
+<section class="section" id="stuck">
+  <h2>If you do not know</h2>
+  <div class="row">
+    <span class="ask">Button they are pointing at</span>
+    <p>Open the other PDF: SnapServe-Portal-Button-Guide. Search the button name.</p>
+  </div>
+  <div class="row">
+    <span class="ask">Still stuck</span>
+    <p>Do not guess a feature. Say “I will confirm” and open Documentation in the sidebar, or /docs. For Voiceathon, steer them back to Instant WhatsApp + one trigger + a live test.</p>
+  </div>
+  <div class="row">
+    <span class="ask">Useful links</span>
+    <p>Portal: app.snapserve.ai · Docs: app.snapserve.ai/docs · API: app.snapserve.ai/docs/api-reference · Connections: /app/connections</p>
+  </div>
+</section>
+
+<p id="empty">No match. Try WhatsApp, Sheets, webhook, booking, campaign, or squad.</p>
+</main>
+</div>
+
+<footer>
+  <div class="wrap">SnapServe team reference for webinar and Voiceathon. Pair with the Portal Button Guide. Print to PDF for WhatsApp.</div>
+</footer>
+
+<script>
+  (function () {
+    var box = document.getElementById("q");
+    var count = document.getElementById("count");
+    var empty = document.getElementById("empty");
+    var rows = Array.prototype.slice.call(document.querySelectorAll(".row"));
+    var sections = Array.prototype.slice.call(document.querySelectorAll(".section"));
+    var total = rows.length;
+    rows.forEach(function (row) { row.dataset.text = row.textContent.toLowerCase(); });
+    function reset() {
+      rows.forEach(function (r) { r.style.display = ""; });
+      sections.forEach(function (s) {
+        s.style.display = "";
+        s.querySelectorAll("h3").forEach(function (h) { h.style.display = ""; });
+      });
+      empty.style.display = "none";
+      count.textContent = total + " answers";
+    }
+    function run(term) {
+      if (!term) { reset(); return; }
+      var shown = 0;
+      rows.forEach(function (row) {
+        var hit = row.dataset.text.indexOf(term) !== -1;
+        row.style.display = hit ? "" : "none";
+        if (hit) shown++;
+      });
+      sections.forEach(function (section) {
+        var visible = section.querySelectorAll('.row:not([style*="none"])').length;
+        section.style.display = visible ? "" : "none";
+        section.querySelectorAll("h3").forEach(function (heading) {
+          var any = false;
+          var node = heading.nextElementSibling;
+          while (node && node.tagName !== "H3") {
+            if (node.classList.contains("row") && node.style.display !== "none") any = true;
+            node = node.nextElementSibling;
+          }
+          heading.style.display = any ? "" : "none";
+        });
+      });
+      empty.style.display = shown ? "none" : "block";
+      count.textContent = shown + " of " + total + " answers";
+    }
+    box.addEventListener("input", function () { run(box.value.trim().toLowerCase()); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "/" && document.activeElement !== box) { e.preventDefault(); box.focus(); }
+      if (e.key === "Escape") { box.value = ""; reset(); box.blur(); }
+    });
+    reset();
+  })();
+</script>
+</body>
+</html>

@@ -87,6 +87,7 @@ import VoiceathonEventDetailPage from "@/pages/voiceathon/[id]";
 import NewVoiceathonEventPage from "@/pages/voiceathon/new";
 import BookInternsPage from "@/pages/book-interns";
 import LandingLeadsPage from "@/pages/landing-leads";
+import TeamGuidesPage from "@/pages/team-guides";
 import FamilyCompaniesPage from "@/pages/family/companies";
 import FamilyCompanyDetailPage from "@/pages/family/company-detail";
 import PolicyKBPage from "@/pages/family/policy-kb";
@@ -216,6 +217,7 @@ function Router() {
       {/* Engineering Programme */}
       <ProtectedRoute path="/book-interns" component={BookInternsPage} />
       <ProtectedRoute path="/landing-leads" component={LandingLeadsPage} />
+      <ProtectedRoute path="/team-guides" component={TeamGuidesPage} />
 
       {/* Family module */}
       <ProtectedRoute path="/family/companies" component={FamilyCompaniesPage} />
