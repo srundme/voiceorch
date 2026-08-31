@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectScreeningPrompt, isScreeningHoldFragment, SCREENING_HOLD_HANGUP_MS } from "./callScreening.js";
+import { detectScreeningPrompt } from "./callScreening.js";
 
 describe("detectScreeningPrompt", () => {
   it("matches iPhone Ask Reason for Calling (call 15619)", () => {
@@ -35,19 +35,11 @@ describe("detectScreeningPrompt", () => {
     expect(detectScreeningPrompt("Why are you calling?")).toBe(false);
     expect(detectScreeningPrompt("Hi")).toBe(false);
     expect(detectScreeningPrompt("Thanks")).toBe(false);
+    expect(detectScreeningPrompt("thank you")).toBe(false);
   });
 
   it("matches classic voicemail greetings as voicemail too", () => {
     expect(detectScreeningPrompt("Please leave a message after the beep.")).toBe(true);
     expect(detectScreeningPrompt("You have reached the voicemail of Gopi.")).toBe(true);
-  });
-});
-
-describe("isScreeningHoldFragment", () => {
-  it("holds the iPhone 'Thanks' stub so we do not pitch it as a human", () => {
-    expect(isScreeningHoldFragment("Thanks")).toBe(true);
-    expect(isScreeningHoldFragment("thank you")).toBe(true);
-    expect(isScreeningHoldFragment("yes please")).toBe(false);
-    expect(SCREENING_HOLD_HANGUP_MS).toBe(2_500);
   });
 });
