@@ -298,8 +298,8 @@ function SignInPage() {
               {(branding?.companyName || "W").charAt(0).toUpperCase()}
             </div>
           ) : (
-            <span className="inline-flex">
-              <SnapServeIcon size={46} />
+            <span className="inline-flex text-white">
+              <SnapServeIcon size={46} className="text-white" />
             </span>
           )}
           <div className="flex flex-col items-center gap-1.5">

@@ -60,7 +60,7 @@ export function DocsBrandMark({
 }: BrandMarkProps) {
   return (
     <span className={`inline-flex items-center select-none ${gapClass} ${className}`}>
-      <SnapServeIcon size={iconSize} className="shrink-0" />
+      <SnapServeIcon size={iconSize} className="shrink-0 text-[#0f172a]" />
       <span
         className="leading-none"
         style={{
@@ -94,7 +94,7 @@ export function SnapServeIcon({ size = 24, className = "" }: IconProps) {
       viewBox="0 0 100 100"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={`text-foreground ${className}`}
+      className={className}
       aria-label="SnapServe"
       style={{ width: size, height: size }}
     >
@@ -200,7 +200,7 @@ export function SnapServeLoader() {
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white">
       <span className="mb-6 inline-flex">
-        <SnapServeIcon size={56} />
+        <SnapServeIcon size={56} className="text-[#111111]" />
       </span>
       <div className="flex flex-col items-center gap-1.5">
         <span
