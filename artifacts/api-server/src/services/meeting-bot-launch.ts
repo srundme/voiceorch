@@ -10,6 +10,7 @@ import {
   signMeetBotToken,
   meetBotTokenExp,
   createRecallBot,
+  normalizeMeetingUrl,
 } from "./meet-bots.js";
 import {
   bindMeetRosterBot,
@@ -30,7 +31,7 @@ export async function launchMeetingBotForAgent(opts: {
   configuredAgentId: number;
   meetingUrl: string;
 }): Promise<{ botId: string; runtimeAgentId: number }> {
-  const meetingUrl = opts.meetingUrl.trim();
+  const meetingUrl = normalizeMeetingUrl(opts.meetingUrl);
   if (!MEET_URL_RE.test(meetingUrl)) {
     throw new Error("meetingUrl must be a Google Meet, Zoom, or Teams link");
   }

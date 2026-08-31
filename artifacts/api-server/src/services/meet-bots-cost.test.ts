@@ -3,6 +3,8 @@ import {
   buildRecallAutomaticLeave,
   buildRecallRecordingRetention,
   detectMeetingPlatform,
+  normalizeMeetingUrl,
+  sanitizeRecallError,
   RECALL_EVERYONE_LEFT_TIMEOUT_SEC,
   RECALL_NOONE_JOINED_TIMEOUT_SEC,
   RECALL_WAITING_ROOM_TIMEOUT_SEC,
@@ -36,5 +38,20 @@ describe("Recall cost-control create payload", () => {
       "microsoft_teams",
     );
     expect(detectMeetingPlatform("https://example.com/room")).toBe("unknown");
+  });
+
+  it("strips Google Meet authuser query and keeps Zoom pwd", () => {
+    expect(normalizeMeetingUrl("https://meet.google.com/zjm-rgzu-xfu?authuser=0")).toBe(
+      "https://meet.google.com/zjm-rgzu-xfu",
+    );
+    expect(normalizeMeetingUrl("https://us05web.zoom.us/j/123?pwd=abc")).toBe(
+      "https://us05web.zoom.us/j/123?pwd=abc",
+    );
+  });
+
+  it("does not leak Cloudflare HTML in Recall errors", () => {
+    expect(
+      sanitizeRecallError("<!DOCTYPE html><!--[if lt IE 7]> <html class=\"no-js ie6 oldie\""),
+    ).toBe("Meeting bot service is temporarily unavailable. Try again in a moment.");
   });
 });

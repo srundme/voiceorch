@@ -20,6 +20,8 @@ import {
   getRecallBot,
   leaveRecallBot,
   getMeetBotIdentity,
+  normalizeMeetingUrl,
+  sanitizeRecallError,
 } from "../services/meet-bots.js";
 import {
   bindMeetRosterBot,
@@ -130,7 +132,9 @@ router.get("/meet-bots/identity", requireAuth, (_req, res) => {
 router.post("/meet-bots", requireAuth, async (req, res) => {
   const userId = (req as unknown as { clerkUserId: string }).clerkUserId;
   const agentId = Number(req.body?.agentId);
-  const meetingUrl = typeof req.body?.meetingUrl === "string" ? req.body.meetingUrl.trim() : "";
+  const meetingUrl = normalizeMeetingUrl(
+    typeof req.body?.meetingUrl === "string" ? req.body.meetingUrl : "",
+  );
   // Meet paste-link UI: honor the selected agent; skip booking "delegate" swap.
   const joinAsSelected = req.body?.joinAsSelected === true;
 
@@ -230,7 +234,9 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
     });
   } catch (err) {
     logger.error({ err, userId, agentId }, "Meeting bot creation failed");
-    res.status(502).json({ error: err instanceof Error ? err.message : "Failed to create meeting bot" });
+    res.status(502).json({
+      error: sanitizeRecallError(err instanceof Error ? err.message : "Failed to create meeting bot"),
+    });
   }
 });
 

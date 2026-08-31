@@ -20,6 +20,45 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 const RECALL_REGIONS = ["ap-northeast-1", "us-west-2", "us-east-1", "eu-central-1"];
 const RECALL_REGION = () => process.env["RECALL_REGION"] || "us-west-2";
+const RECALL_FETCH_TIMEOUT_MS = 20_000;
+const RECALL_REGION_PROBE_TIMEOUT_MS = 6_000;
+
+function looksLikeHtmlBody(s: string): boolean {
+  const t = s.trimStart();
+  return /^<!DOCTYPE/i.test(t) || /^<html[\s>]/i.test(t) || /<\/(?:html|body|head)>/i.test(s);
+}
+
+/** Strip tracking junk from Google Meet links (`?authuser=0`) so Recall gets a clean room URL. Keep Zoom `pwd`. */
+export function normalizeMeetingUrl(raw: string): string {
+  const trimmed = raw.trim();
+  try {
+    const u = new URL(trimmed);
+    const host = u.hostname.toLowerCase();
+    if (host === "meet.google.com" || host.endsWith(".meet.google.com")) {
+      u.search = "";
+      u.hash = "";
+      return u.toString().replace(/\/$/, "");
+    }
+    return trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
+export function sanitizeRecallError(raw: string): string {
+  if (!raw.trim() || looksLikeHtmlBody(raw)) {
+    return "Meeting bot service is temporarily unavailable. Try again in a moment.";
+  }
+  return raw.replace(/\s+/g, " ").trim().slice(0, 280);
+}
+
+function fetchSignal(init: RequestInit | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  if (init?.signal && typeof AbortSignal.any === "function") {
+    return AbortSignal.any([init.signal, timeout]);
+  }
+  return timeout;
+}
 
 function recallKey(): string {
   const k = (process.env["RECALL_API_KEY"] ?? "").trim();
@@ -51,6 +90,7 @@ export async function resolveRecallRegion(): Promise<string> {
     try {
       const res = await fetch(`https://${region}.recall.ai/api/v1/bot/?limit=1`, {
         headers: { accept: "application/json", authorization: recallKey() },
+        signal: AbortSignal.timeout(RECALL_REGION_PROBE_TIMEOUT_MS),
       });
       if (res.ok) {
         resolvedRegion = region;
@@ -79,15 +119,23 @@ export async function resolveRecallV2Base(): Promise<string> {
 export async function recallFetchV2(path: string, init?: RequestInit): Promise<Response> {
   const base = await resolveRecallV2Base();
   const p = path.startsWith("/") ? path : `/${path}`;
-  return fetch(`${base}${p}`, {
-    ...init,
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-      authorization: recallKey(),
-      ...(init?.headers ?? {}),
-    },
-  });
+  try {
+    return await fetch(`${base}${p}`, {
+      ...init,
+      signal: fetchSignal(init, RECALL_FETCH_TIMEOUT_MS),
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        authorization: recallKey(),
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (err) {
+    if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
+      throw new Error("Meeting bot service timed out. Try again.");
+    }
+    throw err;
+  }
 }
 
 // ── Signed page/WS token ─────────────────────────────────────────────────────
@@ -198,15 +246,23 @@ export interface RecallBotSummary {
 
 async function recallFetch(path: string, init?: RequestInit): Promise<Response> {
   const base = await resolveRecallBase();
-  return fetch(`${base}${path}`, {
-    ...init,
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-      authorization: recallKey(),
-      ...(init?.headers ?? {}),
-    },
-  });
+  try {
+    return await fetch(`${base}${path}`, {
+      ...init,
+      signal: fetchSignal(init, RECALL_FETCH_TIMEOUT_MS),
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        authorization: recallKey(),
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (err) {
+    if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
+      throw new Error("Meeting bot service timed out. Try again.");
+    }
+    throw err;
+  }
 }
 
 function summarizeBot(bot: any): RecallBotSummary {
@@ -411,7 +467,7 @@ export async function createRecallBot(opts: RecallBotCreateOpts): Promise<Recall
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Recall create bot failed (${res.status}): ${text.slice(0, 300)}`);
+    throw new Error(sanitizeRecallError(`Recall create bot failed (${res.status}): ${text.slice(0, 300)}`));
   }
   return summarizeBot(await res.json());
 }
