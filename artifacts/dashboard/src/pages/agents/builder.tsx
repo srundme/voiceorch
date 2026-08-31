@@ -99,7 +99,7 @@ import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import {
   LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, asrModelsForPicker, SARVAM_PRODUCT_ASR_MODEL,
-  LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
+  llmModelsForPicker, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   DEFAULT_CARTESIA_VOICE_ID, DEFAULT_CARTESIA_VOICE_NAME,
   orderVoicesByLanguage, isVoiceCompatibleWithLanguage, shouldClearVoiceForLanguage,
   baseLanguage,
@@ -676,7 +676,7 @@ function OverviewTab({
   const ttsModel              = form.watch("ttsModel");
   const language              = form.watch("language");
   const temperature           = form.watch("temperature") ?? 0.4;
-  const llmOptions    = LLM_MODELS[llmProvider]  ?? [];
+  const llmOptions    = llmModelsForPicker(llmProvider, llmModel);
   const ttsModelOpts  = TTS_MODELS[ttsProvider]  ?? [];
   const asrModelOpts  = asrModelsForPicker(asrProvider, asrModel);
 

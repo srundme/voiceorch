@@ -588,4 +588,13 @@ describe("Sarvam realtime builder catalog", () => {
       "saarika:v2.5",
     ]);
   });
+
+  it("Google LLM picker hides retired 2.5 Flash unless it is already saved", async () => {
+    const { llmModelsForPicker } = await import("@/lib/agent-providers");
+    expect(llmModelsForPicker("google").map((m) => m.value)).not.toContain("gemini-2.5-flash");
+    expect(llmModelsForPicker("google").map((m) => m.value)).toContain("gemini-3.6-flash");
+    expect(llmModelsForPicker("google", "gemini-2.5-flash").map((m) => m.value)).toEqual(
+      expect.arrayContaining(["gemini-3.6-flash", "gemini-2.5-flash"]),
+    );
+  });
 });

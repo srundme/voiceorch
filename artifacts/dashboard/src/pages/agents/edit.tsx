@@ -85,6 +85,7 @@ import {
   LANGUAGES,
   ASR_MODELS,
   LLM_MODELS,
+  llmModelsForPicker,
   TTS_MODELS,
   TTS_VOICES,
   GEMINI_LIVE_LLM_MODEL,
@@ -1577,7 +1578,7 @@ export default function AgentEdit() {
                 <FormControl>
                   {LLM_MODELS[llmProvider] ? (
                     <ModelSelect
-                      options={LLM_MODELS[llmProvider]!}
+                      options={llmModelsForPicker(llmProvider, field.value)}
                       value={field.value}
                       onChange={(v) => {
                         field.onChange(v);

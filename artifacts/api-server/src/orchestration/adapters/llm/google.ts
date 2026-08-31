@@ -156,6 +156,26 @@ const CACHE_WARM_WAIT_MS = Number(process.env.GEMINI_CACHE_WARM_WAIT_MS) || 250;
 const REQUEST_TIMEOUT_MS = Math.max(10000, Number(process.env.GEMINI_REQUEST_TIMEOUT_MS) || 12000);
 const GEMINI3_THINKING_HEADROOM = Number(process.env.GEMINI3_THINKING_HEADROOM) || 256;
 
+/** Google 404s `gemini-2.5-flash` / `*-8b` and tells callers to use 3.6 Flash. */
+export const DEFAULT_GOOGLE_LLM_MODEL = "gemini-3.6-flash";
+
+const RETIRED_GOOGLE_LLM: Record<string, string> = {
+  "gemini-2.5-flash": DEFAULT_GOOGLE_LLM_MODEL,
+  "gemini-2.5-flash-8b": DEFAULT_GOOGLE_LLM_MODEL,
+  "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
+  "gemini-2.5-flash-preview-05-20": DEFAULT_GOOGLE_LLM_MODEL,
+};
+
+/** Map a saved agent model id to one the current Gemini API still serves. */
+export function resolveGoogleLlmModel(raw: string | null | undefined): string {
+  const t = (raw ?? "").trim().replace(/^models\//, "");
+  if (!t) return DEFAULT_GOOGLE_LLM_MODEL;
+  const aliased = RETIRED_GOOGLE_LLM[t];
+  if (aliased) return aliased;
+  if (/^gemini-2\.5-flash(-8b)?(-preview|$)/i.test(t)) return DEFAULT_GOOGLE_LLM_MODEL;
+  return t;
+}
+
 /** Model-aware thinking config.
  *  Gemini 3.x: thinkingLevel:"minimal" (cannot fully disable).
  *  Gemini 2.x: thinkingBudget:0 (fully disables thinking). */
@@ -194,7 +214,7 @@ export class GoogleLLM implements LLMAdapter {
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: REQUEST_TIMEOUT_MS } });
-    this.model = model ?? "gemini-2.5-flash";
+    this.model = resolveGoogleLlmModel(model);
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
     const mt = genParams?.maxTokens;

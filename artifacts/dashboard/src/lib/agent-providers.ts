@@ -61,9 +61,9 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "gpt-4o-mini",  label: "GPT-4o Mini" },
   ],
   google: [
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (recommended — most stable for calls)" },
+    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash (recommended)" },
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (retired — not in picker)" },
     { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
     { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite (fastest)" },
     { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (preview)" },
     { value: GEMINI_LIVE_LLM_MODEL, label: "Gemini 3.1 Flash Live (Native Realtime Bidirectional Voice)" },
@@ -91,6 +91,42 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "gpt-oss-120b", label: "GPT-OSS 120B — highest quality, tool-capable" },
   ],
 };
+
+/** Google ids Google still serves for voice. 2.5 Flash 404s — not in the picker. */
+const GOOGLE_LLM_PICKER_IDS = new Set([
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-pro-preview",
+  "gemini-2.5-pro",
+  GEMINI_LIVE_LLM_MODEL,
+]);
+
+function withCurrentModel(
+  product: { value: string; label: string }[],
+  catalog: { value: string; label: string }[] | undefined,
+  current?: string | null,
+): { value: string; label: string }[] {
+  const cur = (current ?? "").trim();
+  if (!cur || product.some((m) => m.value === cur)) return product;
+  const known = catalog?.find((m) => m.value === cur);
+  return [...product, known ?? { value: cur, label: `${cur} (retired — pick a working model)` }];
+}
+
+/** Dropdown: only models that work on live calls. A retired saved id stays visible so the user can switch. */
+export function llmModelsForPicker(
+  provider: string,
+  current?: string | null,
+): { value: string; label: string }[] {
+  const catalog = LLM_MODELS[provider] ?? [];
+  if (provider === "google") {
+    return withCurrentModel(
+      catalog.filter((m) => GOOGLE_LLM_PICKER_IDS.has(m.value)),
+      catalog,
+      current,
+    );
+  }
+  return catalog;
+}
 
 export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
   cartesia: [
