@@ -251,9 +251,12 @@ export function shouldBargeOnRealtimePartial(opts: {
   energyAboveEchoBar: boolean;
   charCount: number;
   minChars: number;
+  /** Isolated hello/hi while TTS is playing — leftover greeting / echo (call 16832). */
+  isGreetingOnly?: boolean;
 }): boolean {
   if (opts.charCount < opts.minChars) return false;
   if (opts.isSelfEcho) return false;
+  if (opts.isGreetingOnly) return false;
   if (opts.greetingOrSystem) return false;
   if (opts.inEchoGrace) return false;
   if (opts.isWebcall) return true;

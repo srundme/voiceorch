@@ -296,6 +296,15 @@ describe("shouldBargeOnRealtimePartial", () => {
     expect(shouldBargeOnRealtimePartial({ ...base, charCount: 3, minChars: 4 })).toBe(false);
   });
 
+  it("does not barge an isolated hello while the agent is speaking (call 16832)", () => {
+    expect(shouldBargeOnRealtimePartial({
+      ...base,
+      charCount: 5,
+      minChars: 4,
+      isGreetingOnly: true,
+    })).toBe(false);
+  });
+
   it("barges a real PSTN talk-over once energy is above the echo bar", () => {
     expect(shouldBargeOnRealtimePartial(base)).toBe(true);
   });

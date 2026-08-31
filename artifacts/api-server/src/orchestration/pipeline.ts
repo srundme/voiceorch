@@ -2295,12 +2295,13 @@ export class OrchestrationPipeline implements VoiceSession {
     const pending = this.streamSTT?.getPendingTranscript?.()?.trim() ?? "";
     const usablePartial = pending.length > 0
       && !isBackchannelOnlyUtterance(pending)
+      && !isCallerAttentionUtterance(pending)
       && !this.isSelfEcho(pending);
     const echoBar = this.echoBarRms();
     const energyAboveEchoBar =
       echoBar !== null && this.bargeInPeakRmsSinceSentence > echoBar;
     const inEchoGrace = Date.now() < this.greetingEchoHoldUntil
-      || Date.now() < this.bargeInSentenceStartAt + Math.max(600, this.bargeInEchoGraceMs);
+      || Date.now() < this.bargeInSentenceStartAt + Math.max(1500, this.bargeInEchoGraceMs);
     if (!shouldBargeOnRealtimeVadStart({
       agentSpeaking: this.isPlaying || this.isSendingTtsAudio,
       greetingOrSystem: this.systemPlaybackActive || this.greetingBargeLocked(),
@@ -2746,7 +2747,10 @@ export class OrchestrationPipeline implements VoiceSession {
     // discarded as echo of the agent saying "okay?" / "right?" at turn end —
     // that bug ate "yes I have two minutes" style answers and looked like the
     // caller hung up when the call actually stalled listening.
-    if (tokens.length === 1 && AFFIRMATIONS.has(tokens[0]!)) return false;
+    if (tokens.length === 1 && AFFIRMATIONS.has(tokens[0]!)) {
+      if (this.isPlaying && isCallerAttentionUtterance(transcript)) return true;
+      return false;
+    }
     if (isAffirmationOnlyUtterance(tokens)) return false;
     if (Date.now() < this.expectingShortReplyUntil && tokens.length <= 8) {
       // Agent just asked a question — prefer accepting short replies over
@@ -3329,7 +3333,10 @@ export class OrchestrationPipeline implements VoiceSession {
               // the phrase is an accidental-interrupt / semantic stop cue.
               // Energy alone is secondary — Sarvam may not finalize during talk-over,
               // but it DOES emit interims once the caller overpowers carrier echo.
-              if (isSemanticInterrupt(text) || isAccidentalInterruptPhrase(text) || isHoldRequest(text)) {
+              if (
+                (isSemanticInterrupt(text) || isAccidentalInterruptPhrase(text) || isHoldRequest(text))
+                && !isCallerAttentionUtterance(text)
+              ) {
                 this.triggerBargeIn("semantic_interim", text);
                 logger.info(
                   { callId: this.config.callId, text: text.slice(0, 80) },
@@ -3349,8 +3356,9 @@ export class OrchestrationPipeline implements VoiceSession {
                 this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
                 const charCount = [...text.trim()].length;
                 const minChars = bargeInMinChars(this.currentLang || this.agent.language);
+                const sentenceGraceMs = Math.max(1500, this.bargeInEchoGraceMs);
                 const inEchoGrace = Date.now() < this.greetingEchoHoldUntil
-                  || Date.now() < this.bargeInSentenceStartAt + Math.max(600, this.bargeInEchoGraceMs);
+                  || Date.now() < this.bargeInSentenceStartAt + sentenceGraceMs;
                 const interimEchoBar = this.echoBarRms();
                 const energyAboveEchoBar =
                   interimEchoBar !== null
@@ -3360,7 +3368,9 @@ export class OrchestrationPipeline implements VoiceSession {
                   && this.bargeInPeakRmsSinceSentence <= interimEchoBar;
                 // Booking/slot answers ("2pm", "காலை") must still cut TTS even when
                 // inbound RMS is echo-dominated — that is the talk-over the caller
-                // is trying to make (call 14251).
+                // is trying to make (call 14251). Isolated "hello" while we are
+                // talking is leftover greeting / carrier echo (call 16832).
+                const greetingOnly = isCallerAttentionUtterance(text);
                 const interimIsSelfEcho =
                   this.isSelfEcho(text)
                   || (energyLooksLikeEcho && !looksLikeBookingTimeAnswer(text));
@@ -3373,6 +3383,7 @@ export class OrchestrationPipeline implements VoiceSession {
                   energyAboveEchoBar,
                   charCount,
                   minChars,
+                  isGreetingOnly: greetingOnly,
                 })) {
                   this.triggerBargeIn("vad_partial", text, { speculative: true });
                   logger.info(
@@ -3676,7 +3687,10 @@ export class OrchestrationPipeline implements VoiceSession {
       // P0-C: Semantic barge-in — certain keywords ("stop", "wait", …) bypass
       // BOTH the word-count gate AND the echo grace: our own audio never utters
       // them, so they are always a genuine caller interruption.
-      if (isSemanticInterrupt(transcript) || isHoldRequest(transcript)) {
+      if (
+        (isSemanticInterrupt(transcript) || isHoldRequest(transcript))
+        && !isCallerAttentionUtterance(transcript)
+      ) {
         this.triggerBargeIn("semantic", transcript);
         logger.info({ callId: this.config.callId, transcript }, "Semantic barge-in triggered (streaming STT)");
       } else if (isBackchannelOnlyUtterance(transcript)) {
@@ -3699,9 +3713,9 @@ export class OrchestrationPipeline implements VoiceSession {
           && !isBackchannelOnlyUtterance(transcript)
           && (
             isHoldRequest(transcript)
-            || isCallerAttentionUtterance(transcript)
             || charCount >= minChars
-          );
+          )
+          && !isCallerAttentionUtterance(transcript);
         if (lateGreetingTalkOver) {
           this.triggerBargeIn("word_count", transcript, { speculative: true });
           logger.info(
@@ -9460,7 +9474,6 @@ export class OrchestrationPipeline implements VoiceSession {
     if (
       this.agent.backchannelingEnabled
       && !backchanneledThisTurn
-      && !skipFillerForBackchannelAck
       && !this.closed
       && !this.bargeInRequested
     ) {
