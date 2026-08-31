@@ -124,7 +124,7 @@ function AppearanceCard() {
           Appearance
         </CardTitle>
         <CardDescription>
-          Choose how the dashboard looks. Your preference is synced to your account across devices.
+          Light is the default. Switch to dark anytime — your choice is saved to your account.
         </CardDescription>
       </CardHeader>
       <CardContent>

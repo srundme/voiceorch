@@ -298,7 +298,7 @@ function SignInPage() {
               {(branding?.companyName || "W").charAt(0).toUpperCase()}
             </div>
           ) : (
-            <span className="dark inline-flex">
+            <span className="inline-flex">
               <SnapServeIcon size={46} />
             </span>
           )}
@@ -748,7 +748,7 @@ function Router() {
 
 function App() {
   return (
-    <ThemeProvider defaultTheme="light" storageKey="snapserve-ui-theme-v2">
+    <ThemeProvider defaultTheme="light" storageKey="snapserve-ui-theme-v3">
       <TooltipProvider>
         <WouterRouter base={basePath}>
           <Router />

@@ -13,9 +13,9 @@ const FONT = "'Tex Gyre Heros', Helvetica, Arial, sans-serif";
 /** Raster mark for favicons / downloads (full black tile). In-app chrome uses SnapServeIcon SVG. */
 export const SNAPSERVE_MARK_SRC = "/brand/snapserve-mark.png";
 
-/* ── BrandMark (theme-proof lockup) ---------------------------------------
-   SVG mark: top bar flips to white under .dark so it never merges into dark chrome.
-   Light theme keeps the original black top bar. */
+/* ── BrandMark -----------------------------------------------------------
+   Official lockup: black rounded tile + three identical pills
+   (dark → mid → light, stepping down-right). Same mark on light and dark. */
 
 interface BrandMarkProps {
   /** Pixel size of the icon (height & width). */
@@ -98,11 +98,11 @@ export function SnapServeIcon({ size = 24, className = "" }: IconProps) {
       aria-label="SnapServe"
       style={{ width: size, height: size }}
     >
-      {/* Top bar — black in light UI; white only under .dark */}
-      <rect x="14" y="22" width="58" height="14" rx="7" className="fill-[#121212] dark:fill-white" />
-      {/* Mid / bottom — light-theme colors from brand reference */}
-      <rect x="22" y="43" width="58" height="14" rx="7" fill="#9B9B9B" />
-      <rect x="30" y="64" width="58" height="14" rx="7" fill="#686868" />
+      <rect width="100" height="100" rx="22" fill="#000000" />
+      {/* Original mark: identical capsules, dark → mid → light, stair to the right */}
+      <rect x="14" y="22" width="52" height="13" rx="6.5" fill="#2A2A2A" />
+      <rect x="26" y="43.5" width="52" height="13" rx="6.5" fill="#8A8A8A" />
+      <rect x="38" y="65" width="52" height="13" rx="6.5" fill="#D4D4D6" />
     </svg>
   );
 }
@@ -182,9 +182,9 @@ export function HostBrandMark({
 
 export function NeutralLoader() {
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ background: "#000" }}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white">
       <div
-        className="h-8 w-8 rounded-full border-2 border-white/15 border-t-white/80 animate-spin"
+        className="h-8 w-8 rounded-full border-2 border-black/10 border-t-black/70 animate-spin"
         aria-label="Loading"
       />
     </div>
@@ -199,18 +199,13 @@ export function AppLoader() {
 
 export function SnapServeLoader() {
   return (
-    <div
-      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
-      style={{ background: "#000" }}
-    >
-      {/* Force dark-variant top bar (white) on the black splash */}
-      <span className="dark mb-6 inline-flex">
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white">
+      <span className="mb-6 inline-flex">
         <SnapServeIcon size={56} />
       </span>
-
       <div className="flex flex-col items-center gap-1.5">
         <span
-          className="leading-none text-[15px] text-white"
+          className="leading-none text-[15px] text-[#111111]"
           style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
         >
           <span style={{ fontWeight: 700 }}>Snap</span>
