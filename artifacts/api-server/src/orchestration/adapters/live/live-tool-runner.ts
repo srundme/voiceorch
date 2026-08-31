@@ -48,6 +48,13 @@ export async function runLiveToolCall(
   const { config, agent, onAgentText, speakText, endCall } = deps;
 
   if (toolName === "end_call") {
+    if (deps.genuineUserTurns() < 1) {
+      logger.warn(
+        { callId: config.callId },
+        "Gemini Live: ignored end_call before the caller spoke",
+      );
+      return { output: "ignored_end_call_no_caller_turn" };
+    }
     const endCallTool = agent.tools.find((t) => t.type === "end_call");
     const goodbye = resolveGoodbyeMessage(
       endCallTool?.type === "end_call" ? endCallTool.goodbyeMessage : undefined,
@@ -268,6 +275,13 @@ async function executeLiveAgentTool(
     case "webhook":
       return await executeWebhookTool(callId, tool, args);
     case "end_call": {
+      if (deps.genuineUserTurns() < 1) {
+        logger.warn(
+          { callId: config.callId },
+          "Gemini Live: ignored end_call before the caller spoke",
+        );
+        return "ignored_end_call_no_caller_turn";
+      }
       const goodbye = resolveGoodbyeMessage(tool.goodbyeMessage, agent.endCallPhrases, agent.language);
       onAgentText(goodbye);
       await speakText(goodbye);
