@@ -5,7 +5,9 @@ import {
   detectMeetingPlatform,
   messageFromRecallBody,
   normalizeMeetingUrl,
+  pickRecallKeys,
   sanitizeRecallError,
+  shouldFailoverRecall,
   RECALL_EVERYONE_LEFT_TIMEOUT_SEC,
   RECALL_NOONE_JOINED_TIMEOUT_SEC,
   RECALL_WAITING_ROOM_TIMEOUT_SEC,
@@ -60,5 +62,27 @@ describe("Recall cost-control create payload", () => {
     expect(messageFromRecallBody(400, JSON.stringify({ detail: "Invalid meeting_url" }))).toBe(
       "Invalid meeting_url",
     );
+  });
+
+  it("prefers admin DB keys and skips a fallback that matches primary", () => {
+    expect(
+      pickRecallKeys({
+        envPrimary: "env-primary",
+        envFallback: "env-fallback",
+        dbPrimary: "db-primary",
+        dbFallback: "db-fallback",
+      }),
+    ).toEqual({ primary: "db-primary", fallback: "db-fallback" });
+    expect(
+      pickRecallKeys({
+        envPrimary: "same",
+        envFallback: "same",
+        dbPrimary: "",
+        dbFallback: "",
+      }),
+    ).toEqual({ primary: "same", fallback: null });
+    expect(shouldFailoverRecall(401)).toBe(true);
+    expect(shouldFailoverRecall(429)).toBe(true);
+    expect(shouldFailoverRecall(400)).toBe(false);
   });
 });

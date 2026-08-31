@@ -11,6 +11,7 @@ import {
   meetBotTokenExp,
   createRecallBot,
   normalizeMeetingUrl,
+  isRecallConfigured,
 } from "./meet-bots.js";
 import {
   bindMeetRosterBot,
@@ -35,7 +36,7 @@ export async function launchMeetingBotForAgent(opts: {
   if (!MEET_URL_RE.test(meetingUrl)) {
     throw new Error("meetingUrl must be a Google Meet, Zoom, or Teams link");
   }
-  if (!process.env["RECALL_API_KEY"]) {
+  if (!(await isRecallConfigured())) {
     throw new Error("Meeting bots are not configured (missing Recall API key)");
   }
 

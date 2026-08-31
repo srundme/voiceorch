@@ -49,6 +49,8 @@ export const MANAGED_KEY_CATALOG: Array<{
   { key: "managed_vobiz_auth_id", label: "VoBiz Auth ID", service: "telephony", provider: "vobiz", affects: ["Telephony", "Managed numbers"], testable: false },
   { key: "managed_vobiz_auth_token", label: "VoBiz Auth Token", service: "telephony", provider: "vobiz", affects: ["Telephony", "Managed numbers"], testable: true },
   { key: "zelto_api_key", label: "Zelto", service: "integrations", provider: "zelto", affects: ["Integrations"], testable: false },
+  { key: "recall_api_key", label: "Recall (meeting bots)", service: "integrations", provider: "recall", affects: ["Meeting bots"], testable: true },
+  { key: "recall_api_key_fallback", label: "Recall fallback", service: "integrations", provider: "recall", affects: ["Meeting bots"], testable: true },
 ];
 
 function maskSecret(v: string): string {
@@ -147,6 +149,16 @@ async function runHealthCheck(credentialKey: string, secretOverride?: string): P
         return { status: "failed", latencyMs, errorCode: String(r.status), errorMessageSafe: `Jina auth failed (${r.status})` };
       }
       return { status: "warning", latencyMs, errorCode: String(r.status), errorMessageSafe: `Jina HTTP ${r.status}` };
+    }
+    if (credentialKey === "recall_api_key" || credentialKey === "recall_api_key_fallback") {
+      const region = (process.env["RECALL_REGION"] || "us-west-2").trim();
+      const r = await fetch(`https://${region}.recall.ai/api/v1/bot/?limit=1`, {
+        headers: { accept: "application/json", authorization: secret },
+        signal: AbortSignal.timeout(8000),
+      });
+      const latencyMs = Date.now() - started;
+      if (r.ok) return { status: "healthy", latencyMs };
+      return { status: "failed", latencyMs, errorCode: String(r.status), errorMessageSafe: `Recall HTTP ${r.status}` };
     }
     if (credentialKey === "managed_vobiz_auth_token") {
       const authId = await getSecret("managed_vobiz_auth_id");

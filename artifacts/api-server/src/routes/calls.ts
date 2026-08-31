@@ -798,13 +798,13 @@ router.get("/calls/:id/meeting-recording", requireAuth, clientContext, async (re
     res.status(404).json({ error: "No meeting recording for this call" });
     return;
   }
-  if (!process.env["RECALL_API_KEY"]) {
+  const { fetchRecallBotMixedVideoUrl, isRecallConfigured } = await import("../services/meet-bots.js");
+  if (!(await isRecallConfigured())) {
     res.status(503).json({ error: "Meeting recording is not configured" });
     return;
   }
 
   try {
-    const { fetchRecallBotMixedVideoUrl } = await import("../services/meet-bots.js");
     const url = await fetchRecallBotMixedVideoUrl(botId);
     if (!url) {
       res.status(404).json({
@@ -862,13 +862,13 @@ router.get("/calls/:id/meeting-separate-audio", requireAuth, clientContext, asyn
     res.status(404).json({ error: "No meeting audio for this call" });
     return;
   }
-  if (!process.env["RECALL_API_KEY"]) {
+  const { fetchRecallBotSeparateAudioTracks, isRecallConfigured } = await import("../services/meet-bots.js");
+  if (!(await isRecallConfigured())) {
     res.status(503).json({ error: "Meeting recording is not configured" });
     return;
   }
 
   try {
-    const { fetchRecallBotSeparateAudioTracks } = await import("../services/meet-bots.js");
     const result = await fetchRecallBotSeparateAudioTracks(botId);
     if (!result?.tracks.length) {
       res.status(404).json({

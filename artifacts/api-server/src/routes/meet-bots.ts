@@ -22,6 +22,7 @@ import {
   getMeetBotIdentity,
   normalizeMeetingUrl,
   sanitizeRecallError,
+  isRecallConfigured,
 } from "../services/meet-bots.js";
 import {
   bindMeetRosterBot,
@@ -146,7 +147,7 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
     res.status(400).json({ error: "meetingUrl must be a Google Meet, Zoom, or Teams link" });
     return;
   }
-  if (!process.env["RECALL_API_KEY"]) {
+  if (!(await isRecallConfigured())) {
     // 422 (not 502/503): edge proxies replace origin 502/503 with an HTML error page.
     res.status(422).json({ error: "Meeting bots are not configured (missing Recall API key)" });
     return;

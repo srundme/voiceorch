@@ -790,7 +790,8 @@ async function doJoinMeeting(
     });
     return;
   }
-  if (!process.env["RECALL_API_KEY"]) {
+  const { isRecallConfigured } = await import("./meet-bots.js");
+  if (!(await isRecallConfigured())) {
     throw new Error("Meeting bots are not configured (missing Recall API key)");
   }
 

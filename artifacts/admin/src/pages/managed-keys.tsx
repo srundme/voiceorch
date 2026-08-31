@@ -253,6 +253,18 @@ const CATEGORIES: Category[] = [
         description: "Zelto call monitoring — transcript and metadata are pushed to Zelto after each call ends. Rotate here without redeploying.",
         placeholder: "zelto_...",
       },
+      {
+        key: "recall_api_key",
+        label: "Recall API Key",
+        description: "Primary Recall.ai key for Meet / Zoom / Teams meeting bots. Same as Railway RECALL_API_KEY.",
+        placeholder: "recall_...",
+      },
+      {
+        key: "recall_api_key_fallback",
+        label: "Recall API Key (fallback)",
+        description: "Used automatically if the primary key is rejected (401/403), out of credit (402), or rate-limited (429). Set Railway RECALL_API_KEY_FALLBACK or paste here.",
+        placeholder: "recall_...",
+      },
     ],
   },
 ];

@@ -19,6 +19,7 @@ import {
   signMeetBotToken,
   meetBotTokenExp,
   detectMeetingPlatform,
+  isRecallConfigured,
 } from "./meet-bots.js";
 import {
   bindMeetRosterBot,
@@ -509,7 +510,7 @@ export async function scheduleBotForCalendarEvent(opts: {
   if (!MEET_URL_RE.test(opts.meetingUrl)) {
     throw new Error("Event has no supported Meet / Zoom / Teams link");
   }
-  if (!process.env["RECALL_API_KEY"]) {
+  if (!(await isRecallConfigured())) {
     throw new Error("Meeting bots are not configured (missing Recall API key)");
   }
   // Prefer first-enabled owner: if another SnapServe user already enabled this event, block.
