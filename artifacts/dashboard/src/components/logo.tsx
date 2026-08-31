@@ -10,12 +10,12 @@ import { isDirectSnapServeHost, loadHostBrand, type HostBrand } from "@/lib/whit
 
 const FONT = "'Tex Gyre Heros', Helvetica, Arial, sans-serif";
 
-/** Raster mark for favicons / downloads (full black tile). In-app chrome uses SnapServeIcon SVG. */
+/** Raster mark for favicons / downloads. In-app chrome uses SnapServeIcon SVG. */
 export const SNAPSERVE_MARK_SRC = "/brand/snapserve-mark.png";
 
 /* ── BrandMark -----------------------------------------------------------
-   Official lockup: black rounded tile + three identical pills
-   (dark → mid → light, stepping down-right). Same mark on light and dark. */
+   Official lockup: three identical pills (dark → mid → light, stair down-right).
+   No tile — bars use currentColor so they read on light and dark chrome. */
 
 interface BrandMarkProps {
   /** Pixel size of the icon (height & width). */
@@ -94,15 +94,14 @@ export function SnapServeIcon({ size = 24, className = "" }: IconProps) {
       viewBox="0 0 100 100"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={className}
+      className={`text-foreground ${className}`}
       aria-label="SnapServe"
       style={{ width: size, height: size }}
     >
-      <rect width="100" height="100" rx="22" fill="#000000" />
-      {/* Original mark: identical capsules, dark → mid → light, stair to the right */}
-      <rect x="14" y="22" width="52" height="13" rx="6.5" fill="#2A2A2A" />
-      <rect x="26" y="43.5" width="52" height="13" rx="6.5" fill="#8A8A8A" />
-      <rect x="38" y="65" width="52" height="13" rx="6.5" fill="#D4D4D6" />
+      {/* Three capsules only — no black rounded tile. */}
+      <rect x="14" y="22" width="52" height="13" rx="6.5" fill="currentColor" />
+      <rect x="26" y="43.5" width="52" height="13" rx="6.5" fill="currentColor" opacity="0.5" />
+      <rect x="38" y="65" width="52" height="13" rx="6.5" fill="currentColor" opacity="0.28" />
     </svg>
   );
 }
