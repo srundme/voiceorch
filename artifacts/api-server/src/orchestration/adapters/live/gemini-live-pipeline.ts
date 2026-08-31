@@ -10,6 +10,7 @@ import type { AgentConfig, ConversationTurn, SessionConfig } from "../../types.j
 import type { VoiceSession } from "../../voice-session.js";
 import { RecordingBuffer, WEBCALL_GAP_RESYNC_MS } from "../../recorder.js";
 import {
+  attenuatePcm16,
   createDownsampler24to8,
   decodeMulaw,
   encodeMulaw,
@@ -227,8 +228,9 @@ export class GeminiLivePipeline implements VoiceSession {
   // pump on the very first 20 ms frame means one slow chunk drains the queue
   // mid-word, and the caller hears the reply chopped into pieces. Hold a small
   // jitter buffer before (re)starting playback so a slow chunk is absorbed.
-  private static readonly PREBUFFER_FRAMES = 8; // 160 ms
+  private static readonly PREBUFFER_FRAMES = 16; // 320 ms — do not start on the first 20 ms
   private underruns = 0;
+  private lastOutPcm8k: Buffer | null = null;
 
   // ── Self-echo suppression ────────────────────────────────────────────────
   // On a PSTN leg there is no AEC between our outbound audio and the caller
@@ -824,6 +826,7 @@ export class GeminiLivePipeline implements VoiceSession {
     const droppedMs = this.outFrames8k.length * GeminiLivePipeline.FRAME_MS;
     this.pendingOut24k = Buffer.alloc(0);
     this.outFrames8k.length = 0; // drop locally queued (unplayed) audio immediately
+    this.lastOutPcm8k = null;
     this.isPlayingOut = false;
     // Commit what was already transcribed; drop only unplayed audio frames.
     this.flushOutputBuf();
@@ -944,15 +947,26 @@ export class GeminiLivePipeline implements VoiceSession {
   private pumpTick(): void {
     if (this.closed) { this.stopPump(); return; }
     if (this.outFrames8k.length === 0) {
-      // Drained — stop; a fresh anchor starts with the next reply's audio.
-      // Draining while the model is still speaking is an underrun: the caller
-      // hears a gap, so surface it instead of failing silently.
-      if (this.isPlayingOut) {
+      // Mid-reply stall: hold a faded last frame so the carrier does not
+      // go silent. Pace at 20 ms like real frames. Stop when this reply ends.
+      if (this.isPlayingOut && this.lastOutPcm8k) {
+        const elapsedMs = Date.now() - this.pumpAnchorMs + GeminiLivePipeline.LEAD_MS;
+        if (this.framesSent * GeminiLivePipeline.FRAME_MS >= elapsedMs) return;
         this.underruns++;
-        logger.warn(
-          { callId: this.config.callId, underruns: this.underruns, framesSent: this.framesSent },
-          "Gemini Live: outbound audio underrun — reply audio arriving slower than real time",
-        );
+        const hold = attenuatePcm16(this.lastOutPcm8k, 0.35);
+        this.recording.addAgentChunk(hold);
+        const out = this.config.rawPcmOutput
+          ? (this.pcmOutRate() === 16000 ? upsample8to16(hold) : hold)
+          : encodeMulaw(hold);
+        this.config.onAudioOut(out);
+        this.framesSent++;
+        if (this.underruns === 1 || this.underruns % 25 === 0) {
+          logger.warn(
+            { callId: this.config.callId, underruns: this.underruns, framesSent: this.framesSent },
+            "Gemini Live: outbound audio underrun — concealing with last frame",
+          );
+        }
+        return;
       }
       this.stopPump();
       return;
@@ -985,6 +999,7 @@ export class GeminiLivePipeline implements VoiceSession {
           },
         });
       }
+      this.lastOutPcm8k = pcm8k;
       this.recording.addAgentChunk(pcm8k); // record at playback time, not arrival time
       const out = this.config.rawPcmOutput
         ? (this.pcmOutRate() === 16000 ? upsample8to16(pcm8k) : pcm8k)

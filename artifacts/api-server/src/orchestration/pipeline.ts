@@ -341,22 +341,26 @@ const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
 // keep a longer runway (env overrides remain).
 // Native Cartesia 8 kHz made the voice worse — we synthesize 16 kHz and
 // FIR-downsample with the streaming decimator. CARTESIA_TTS_8K=1 opts back in.
-const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 360));
+const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 480));
 const TTS_PREBUFFER_GREETING_CAP_MS = Math.max(
   TTS_PREBUFFER_GREETING_MS,
-  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 480),
+  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 720),
 );
-const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 520));
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 640));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
-  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 720),
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 880),
 );
-const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 900));
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 1200));
 /**
- * Sarvam Bulbul delivery is burstier than Cartesia Sonic under telephony load.
- * Give it extra runway before playback instead of exposing each provider pause
- * as a gap on the VoBiz media stream.
+ * Every streaming TTS (Cartesia, Sarvam, ElevenLabs, Deepgram) can stall
+ * mid-sentence. Extra runway before the wire, then a Sarvam-only bump
+ * because Bulbul is burstier than Sonic.
  */
+const STREAMING_TTS_PREBUFFER_BOOST_MS = Math.max(
+  0,
+  Number(process.env.STREAMING_TTS_PREBUFFER_BOOST_MS ?? 160),
+);
 const SARVAM_TTS_PREBUFFER_BOOST_MS = Math.max(
   0,
   Number(process.env.SARVAM_TTS_PREBUFFER_BOOST_MS ?? 300),
@@ -364,8 +368,8 @@ const SARVAM_TTS_PREBUFFER_BOOST_MS = Math.max(
 /** On mid-sentence underrun: refill this much audio while holding the last
  *  frame (keeps VoBiz alive). Prefer this over realtime pacing on an empty
  *  queue — that is the audible "breaking" glitch on live calls. */
-const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 200));
-const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 400));
+const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 280));
+const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 600));
 const TTS_UNDERRUN_COLD_MS = 8_000;
 /** Burst this many 20 ms frames into VoBiz before realtime pacing so a 40–80 ms
  *  event-loop hitch does not empty the carrier jitter buffer (choppy voice). */
@@ -7189,6 +7193,17 @@ export class OrchestrationPipeline implements VoiceSession {
         ) {
           await new Promise<void>((r) => setTimeout(r, 10));
         }
+        // Never start the wire on an empty queue while synthesis is still
+        // running — a cap expiry with 0 ms buffered is an instant underrun
+        // (any streaming TTS: Sarvam, Cartesia, ElevenLabs, Deepgram).
+        const firstByteDeadline = Date.now() + TTS_STREAM_TIMEOUT_MS;
+        while (
+          !this.closed && !this.bargeInRequested && !job.synthDone &&
+          this.interruptionMgr.isValidSequence(job.sequenceId) &&
+          bufferedMs() <= 0 && Date.now() < firstByteDeadline
+        ) {
+          await new Promise<void>((r) => setTimeout(r, 10));
+        }
       };
       // Underrun instrumentation: every mid-sentence buffer dry-out is an
       // audible glitch ("sticky/breaking" voice). Counted per sentence and
@@ -7201,18 +7216,19 @@ export class OrchestrationPipeline implements VoiceSession {
       // Concurrent campaign legs share one Node process — each active drain
       // adds runway so Sonic/Sarvam lag under load does not underrun the wire.
       const concurrencyBoostMs =
-        activeTtsDrainCount >= 4 ? 240
-        : activeTtsDrainCount >= 3 ? 160
-        : activeTtsDrainCount >= 2 ? 80
+        activeTtsDrainCount >= 4 ? 400
+        : activeTtsDrainCount >= 3 ? 240
+        : activeTtsDrainCount >= 2 ? 120
         : 0;
       const basePrebufferMs = greetingFirstClip
         ? TTS_PREBUFFER_GREETING_MS
         : (this.ttsWarmed && !recentlyUnderran)
           ? TTS_PREBUFFER_WARM_MS
           : TTS_PREBUFFER_COLD_MS;
-      const providerBoostMs = this.agent.ttsProvider.toLowerCase() === "sarvam"
-        ? SARVAM_TTS_PREBUFFER_BOOST_MS
-        : 0;
+      const ttsName = this.agent.ttsProvider.toLowerCase();
+      const providerBoostMs =
+        (job.streaming ? STREAMING_TTS_PREBUFFER_BOOST_MS : 0)
+        + (ttsName === "sarvam" ? SARVAM_TTS_PREBUFFER_BOOST_MS : 0);
       const prebufferMs = basePrebufferMs + providerBoostMs + concurrencyBoostMs;
       const prebufferCap = (greetingFirstClip ? TTS_PREBUFFER_GREETING_CAP_MS : TTS_PREBUFFER_CAP_MS)
         + providerBoostMs
@@ -9472,19 +9488,17 @@ export class OrchestrationPipeline implements VoiceSession {
     // the caller hears something rather than dead air.
     let fillerTimer: ReturnType<typeof setTimeout> | null = null;
     if (
-      this.agent.backchannelingEnabled
-      && !backchanneledThisTurn
+      !backchanneledThisTurn
       && !this.closed
       && !this.bargeInRequested
     ) {
       fillerTimer = setTimeout(() => {
         if (!llmFirstTokenAt && !this.bargeInRequested && !this.closed) {
-          // Strict, language-based fillers only — no hardcoded English fallback.
-          // Mirror the backchannel language resolution: prefer currentLang, fall back
-          // to sttConfig.language only for single-language agents (no auto-detect).
-          // This prevents the "en-IN" STT config from selecting English fillers in a
-          // Tamil conversation at the 800ms dead-air point.
+          // Cover slow TTFT on every LLM provider — backchanneling off still
+          // leaves 3–4s of silence after "Yes" (call 16832). Prefer conversation
+          // language; fall back to agent language so auto-detect is not mute.
           const fillerLang = this.currentLang
+            || this.agent.language
             || (this.agent.languageAutoDetect ? null : this.agent.sttConfig.language);
           if (!fillerLang) {
             logger.info(

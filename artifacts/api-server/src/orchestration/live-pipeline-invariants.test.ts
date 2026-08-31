@@ -99,5 +99,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("concealFrame");
     expect(pipelineSrc).toContain("attenuatePcm16");
     expect(pipelineSrc).not.toMatch(/const hold = lastOutChunk \?\? holdFrame/);
+    expect(pipelineSrc).toContain("Never start the wire on an empty queue");
+    expect(pipelineSrc).toContain("STREAMING_TTS_PREBUFFER_BOOST_MS");
   });
 });
