@@ -1,3 +1,5 @@
+import { looksLikeVoicemailGreeting } from "../lib/voicemail-detect.js";
+
 /**
  * Call-screening bot handling for OUTBOUND calls.
  *
@@ -11,6 +13,8 @@
 
 /** Detection window from pipeline start — screeners always speak first. */
 export const CALL_SCREENING_WINDOW_MS = 25_000;
+/** After a lone "Thanks" / hold stub, hang up as voicemail if no human turn arrives. */
+export const SCREENING_HOLD_HANGUP_MS = 2_500;
 
 /**
  * Near-fixed phrases used by iOS Call Screening / Live Voicemail and Google
@@ -38,13 +42,40 @@ const SCREENING_PATTERNS: RegExp[] = [
   /\brecord(?:ing)? this call.{0,40}screen/i,
   /\bwill (?:get|see) a copy of (?:this|the) (?:conversation|transcript)\b/i,
   /\bthey(?:'ll| will) (?:decide|choose) (?:whether|if) to (?:take|answer|accept) (?:the|your) call\b/i,
+  // iPhone Live Voicemail / Ask Reason (call 16959) — STT often catches only
+  // the tail ("Thanks") or "stay on the line", never "call screening".
+  /\bif you record your name\b/i,
+  /\bsee if this person is available\b/i,
+  /\bplease stay on the line\b/i,
+  /\bstay on the line\b/i,
+  /\bthis person is not available\b/i,
+  /\b(?:this|that) person (?:isn'?t|is not) available\b/i,
+  /\bleave an additional message\b/i,
+  /\breply after the tone\b/i,
+  /\bafter the (?:beep|tone)\b/i,
 ];
 
 export function detectScreeningPrompt(transcript: string): boolean {
   const text = transcript.trim();
-  // Screener prompts are full sentences; scraps and one-word finals never match.
-  if (text.length < 15) return false;
-  return SCREENING_PATTERNS.some((re) => re.test(text));
+  // Screener prompts are full sentences; scraps and one-word finals never match
+  // unless they are a known hold-line fragment joined with earlier text.
+  if (text.length < 12) return false;
+  if (SCREENING_PATTERNS.some((re) => re.test(text))) return true;
+  // Same hangup path for classic carrier voicemail greetings (leave a message / after the beep).
+  return looksLikeVoicemailGreeting(text);
+}
+
+/** Isolated courtesy the iPhone screener often finalizes first (call 16959). */
+export function isScreeningHoldFragment(transcript: string): boolean {
+  const text = transcript.trim().toLowerCase().replace(/[!.?,]+$/g, "");
+  return (
+    text === "thanks"
+    || text === "thank you"
+    || text === "thanks gopi"
+    || text === "please stay"
+    || text === "please hold"
+    || text === "stay on the line"
+  );
 }
 
 /**

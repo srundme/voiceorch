@@ -4,7 +4,13 @@ import { GenderDetectorML } from "./genderDetectorML.js";
 import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
 import { GenderDetectorChained } from "./genderDetectorChained.js";
 import { SpeakerVerifier, type VoiceMemoryEvent } from "./speakerVerifier.js";
-import { SCREENING_PICKUP_NOTE } from "./callScreening.js";
+import {
+  SCREENING_PICKUP_NOTE,
+  CALL_SCREENING_WINDOW_MS,
+  SCREENING_HOLD_HANGUP_MS,
+  detectScreeningPrompt,
+  isScreeningHoldFragment,
+} from "./callScreening.js";
 import { buildCallDirectionRule, resolveInboundGreetingTtsSpeed } from "./call-direction-rules.js";
 import { buildDatetimeInjection, buildTurnClockBlock } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
@@ -1469,6 +1475,9 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private screeningState: "idle" | "done" = "idle";
   private readonly screeningWindowStart = Date.now();
+  /** Joined outbound caller text in the screening window (STT often splits iPhone lines). */
+  private screeningHeard = "";
+  private screeningHoldHangupTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingScreeningPickupNote = false;
   /** Caller said they cannot hear the agent — next LLM turn must resume, not ask கேக்குதா. */
   private pendingAudioDifficultyNote = false;
@@ -2147,6 +2156,10 @@ export class OrchestrationPipeline implements VoiceSession {
 
   private maybeLaunchEagerOnPartial(text: string, metadata?: SttFinalMetadata): void {
     if (!text.trim() || this.isPlaying || this.isProcessing || this.closed || this._specLlmState) return;
+    if (this.callDirection === "outbound" && this.screeningState === "idle") {
+      void this.maybeHandleCallScreening(text);
+      if (detectScreeningPrompt(text) || isScreeningHoldFragment(text)) return;
+    }
     if (this.semanticTurnBlocksPrefill()) return;
     if (!this.conversationHistory.some((t) => t.role === "assistant")) return;
     const speechEnd = metadata?.speechEndReceived === true;
@@ -5070,27 +5083,27 @@ export class OrchestrationPipeline implements VoiceSession {
    * Outbound iPhone / Google call-screening: hang up and mark voicemail.
    * Returns true when the transcript was swallowed (not sent to the LLM).
    */
-  private async maybeHandleCallScreening(transcript: string): Promise<boolean> {
-    const { detectScreeningPrompt, CALL_SCREENING_WINDOW_MS } =
-      await import("./callScreening.js");
-
-    if (this.screeningState !== "idle") return false;
-    if (Date.now() - this.screeningWindowStart > CALL_SCREENING_WINDOW_MS) {
-      this.screeningState = "done";
-      return false;
+  private clearScreeningHoldHangup(): void {
+    if (this.screeningHoldHangupTimer) {
+      clearTimeout(this.screeningHoldHangupTimer);
+      this.screeningHoldHangupTimer = null;
     }
-    if (!detectScreeningPrompt(transcript)) return false;
+  }
 
+  private hangupCallScreeningVoicemail(reason: string): void {
+    if (this.screeningState === "done" || this.closed) return;
+    this.clearScreeningHoldHangup();
     this.screeningState = "done";
+    const heard = this.screeningHeard.slice(0, 160) || reason;
     logger.info(
-      { callId: this.config.callId, transcript: transcript.slice(0, 160) },
+      { callId: this.config.callId, transcript: heard, reason },
       "Call screening bot detected — hanging up as voicemail",
     );
     logWarningEvent(this.logFn, EXEC_COMPONENTS.STT, "Call Screening Detected", ["call_screening"], {
       turnNumber: this._activeTurnIndex,
-      detail: { screenerPrompt: transcript.slice(0, 160), action: "hangup_voicemail" },
+      detail: { screenerPrompt: heard, action: "hangup_voicemail", reason },
     });
-    this.conversationHistory.appendUser(`[call screening bot] ${transcript}`);
+    this.conversationHistory.appendUser(`[call screening bot] ${this.screeningHeard || reason}`);
 
     for (const ac of this.activeTtsAborts) {
       try { ac.abort(); } catch { /* noop */ }
@@ -5102,7 +5115,43 @@ export class OrchestrationPipeline implements VoiceSession {
     try { this.config.onAmdResult?.("machine"); } catch { /* best-effort */ }
     try { this.config.onVoicemailAction?.(); } catch { /* best-effort */ }
     this.config.onCallEnd();
-    return true;
+  }
+
+  private armScreeningHoldHangup(): void {
+    if (this.screeningHoldHangupTimer || this.screeningState !== "idle") return;
+    this.screeningHoldHangupTimer = setTimeout(() => {
+      this.screeningHoldHangupTimer = null;
+      if (this.closed || this.screeningState !== "idle") return;
+      this.hangupCallScreeningVoicemail("hold_fragment_timeout");
+    }, SCREENING_HOLD_HANGUP_MS);
+  }
+
+  private async maybeHandleCallScreening(transcript: string): Promise<boolean> {
+    if (this.screeningState !== "idle") return false;
+    if (Date.now() - this.screeningWindowStart > CALL_SCREENING_WINDOW_MS) {
+      this.clearScreeningHoldHangup();
+      this.screeningState = "done";
+      return false;
+    }
+    const piece = transcript.trim();
+    if (piece) {
+      this.screeningHeard = this.screeningHeard
+        ? `${this.screeningHeard} ${piece}`
+        : piece;
+    }
+    const hit =
+      detectScreeningPrompt(piece)
+      || detectScreeningPrompt(this.screeningHeard);
+    if (hit) {
+      this.hangupCallScreeningVoicemail("phrase_match");
+      return true;
+    }
+    if (isScreeningHoldFragment(piece)) {
+      this.armScreeningHoldHangup();
+      return true;
+    }
+    this.clearScreeningHoldHangup();
+    return false;
   }
 
   /**
