@@ -15,53 +15,46 @@ type CampaignMetrics = {
   calledLeads?: number;
 };
 
-type LiveMetrics = {
-  total?: number;
-  queued?: number;
-  nopickup?: number;
-  failed?: number;
-};
-
 function asCount(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function connectedFromBreakdown(breakdown?: Record<string, number>): number | undefined {
-  if (!breakdown) return undefined;
-  return (breakdown["connected"] ?? 0) + (breakdown["completed"] ?? 0) + (breakdown["transferred"] ?? 0);
+/** Must match api-server `campaign-lead-funnel.ts`. */
+const CONNECTED_CALL_STATUSES = ["connected", "completed", "transferred"] as const;
+const FAILED_CALL_STATUSES = ["failed", "busy", "no_pickup"] as const;
+
+function sumStatuses(breakdown: Record<string, number> | undefined, keys: readonly string[]): number {
+  if (!breakdown) return 0;
+  return keys.reduce((sum, key) => sum + (breakdown[key] ?? 0), 0);
 }
 
 /**
- * Campaign analytics is authoritative once loaded. In particular, a valid zero
- * must never fall through to a non-zero Live Queue estimate.
- *
- * OpenAPI required fields are `totalLeads` / `calledLeads`; `imported` /
- * `called` / `connected` are optional aliases. Read both so the overview tiles
- * cannot sit at 0 while the lead table already shows completed calls.
+ * Overview tiles follow GET /campaigns/:id/analytics (same buckets as batch
+ * workspace KPIs). Live Queue is not mixed in — that route uses different
+ * meanings (connected = in-progress, failed = exhausted).
  */
 export function resolveCampaignOverviewMetrics(input: {
   analytics?: AnalyticsMetrics | null;
   campaign?: CampaignMetrics | null;
-  live?: LiveMetrics | null;
 }) {
-  const liveTotal = input.live?.total ?? 0;
-  const liveQueued = input.live?.queued ?? 0;
-  const hasAnalytics = input.analytics != null;
   const a = input.analytics;
+  const breakdown = a?.statusBreakdown;
 
   const imported = asCount(a?.imported)
     ?? asCount(a?.totalLeads)
-    ?? (!hasAnalytics ? input.campaign?.totalLeads ?? liveTotal : 0);
+    ?? asCount(input.campaign?.totalLeads)
+    ?? 0;
 
   const called = asCount(a?.called)
     ?? asCount(a?.calledLeads)
-    ?? (!hasAnalytics ? input.campaign?.calledLeads ?? Math.max(0, liveTotal - liveQueued) : 0);
+    ?? asCount(input.campaign?.calledLeads)
+    ?? 0;
 
   const connected = asCount(a?.connected)
-    ?? (hasAnalytics ? connectedFromBreakdown(a?.statusBreakdown) ?? 0 : 0);
+    ?? (breakdown ? sumStatuses(breakdown, CONNECTED_CALL_STATUSES) : 0);
 
   const failed = asCount(a?.failed)
-    ?? (!hasAnalytics ? (input.live?.nopickup ?? 0) + (input.live?.failed ?? 0) : 0);
+    ?? (breakdown ? sumStatuses(breakdown, FAILED_CALL_STATUSES) : 0);
 
   const interested = asCount(a?.interested);
   const successRate = asCount(a?.successRate)

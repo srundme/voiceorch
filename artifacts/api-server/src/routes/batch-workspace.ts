@@ -21,6 +21,7 @@ import {
 import { eq, and, sql, desc, isNotNull, inArray, asc, or, ilike } from "drizzle-orm";
 import { canonicalDispositionBucket, dispositionBucketSql } from "../lib/disposition/canonical.js";
 import { logger } from "../lib/logger.js";
+import { campaignLeadFunnelSelect } from "../lib/campaign-lead-funnel.js";
 
 const router: IRouter = Router();
 
@@ -74,20 +75,8 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
     : null;
   const agentName = agentRow?.name ?? null;
 
-  // Lead-level counters (one pass) — all funnel fields
-  const [leadKpis] = await db.select({
-    total:       sql<number>`count(*)::int`,
-    called:      sql<number>`count(*) filter (where ${campaignLeadsTable.callAttempts} > 0)::int`,
-    connected:   sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('connected', 'completed', 'transferred'))::int`,
-    interested:  sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} in ('interest_confirmed','booking_created','transfer_completed'))::int`,
-    booked:      sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'booking_created')::int`,
-    transferred: sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'transfer_completed')::int`,
-    failed:      sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('failed', 'busy', 'no_pickup'))::int`,
-    voicemail:   sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'voicemail')::int`,
-    success:     sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} in ('interest_confirmed','booking_created','transfer_completed'))::int`,
-    pending:     sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'pending')::int`,
-    firstAttemptAt: sql<string | null>`min(last_attempt_at)::text`,
-  }).from(campaignLeadsTable)
+  const [leadKpis] = await db.select(campaignLeadFunnelSelect())
+    .from(campaignLeadsTable)
     .where(eq(campaignLeadsTable.batchId, batchId));
 
   // Secondary counters are best-effort. A failure here used to 500 the whole
@@ -208,9 +197,9 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
     logger.warn({ err, campaignId, batchId }, "batch workspace KPIs: disposition rollup failed — core funnel still returned");
   }
 
-  const total        = leadKpis?.total        ?? 0;
+  const total        = leadKpis?.imported     ?? 0;
   const called       = leadKpis?.called       ?? 0;
-  const successCount = leadKpis?.success      ?? 0;
+  const successCount = leadKpis?.interested   ?? 0;
   const successRate  = called > 0 ? Math.round((successCount / called) * 100) : 0;
 
   // Estimated Time Remaining (pace-based)

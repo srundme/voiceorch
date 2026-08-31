@@ -1479,7 +1479,6 @@ export default function CampaignDetailPage() {
   const overviewMetrics = resolveCampaignOverviewMetrics({
     analytics,
     campaign,
-    live: liveQueueMetrics,
   });
   const { imported, called, failed, connected: connectedCalls, successRate: successRatePct } = overviewMetrics;
   const hasCsvSource = batches?.some(b => b.leadSource === "csv") ?? false;
@@ -1530,7 +1529,7 @@ export default function CampaignDetailPage() {
 
   // Overall progress: leads processed vs imported. While running with no
   // progress yet, show "Tracking..." instead of a bare 0%.
-  const overallPct = imported > 0 ? Math.round((called / imported) * 100) : 0;
+  const overallPct = imported > 0 ? Math.min(100, Math.round((called / imported) * 100)) : 0;
   const campaignRunning = activeBatches > 0;
   const overallProgress = overallPct > 0
     ? `${overallPct}%`

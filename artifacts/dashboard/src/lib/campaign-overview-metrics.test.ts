@@ -2,29 +2,35 @@ import { describe, expect, it } from "vitest";
 import { resolveCampaignOverviewMetrics } from "./campaign-overview-metrics";
 
 describe("resolveCampaignOverviewMetrics", () => {
-  it("preserves authoritative zero analytics values", () => {
+  it("uses GET /campaigns/:id/analytics funnel fields", () => {
+    expect(resolveCampaignOverviewMetrics({
+      analytics: { imported: 151, called: 151, failed: 104, connected: 33, interested: 2, successRate: 1 },
+      campaign: { totalLeads: 57, calledLeads: 71 },
+    })).toEqual({ imported: 151, called: 151, failed: 104, connected: 33, successRate: 1 });
+  });
+
+  it("does not mix Live Queue or stale campaign counters over analytics zeros", () => {
     expect(resolveCampaignOverviewMetrics({
       analytics: { imported: 0, called: 0, failed: 0, connected: 0 },
       campaign: { totalLeads: 12, calledLeads: 8 },
-      live: { total: 12, queued: 2, nopickup: 3, failed: 2 },
     })).toEqual({ imported: 0, called: 0, failed: 0, connected: 0, successRate: 0 });
-  });
-
-  it("uses Live Queue estimates only before analytics loads", () => {
-    expect(resolveCampaignOverviewMetrics({
-      live: { total: 12, queued: 2, nopickup: 3, failed: 2 },
-    })).toEqual({ imported: 12, called: 10, failed: 5, connected: 0, successRate: 0 });
   });
 
   it("reads OpenAPI totalLeads/calledLeads/statusBreakdown when aliases are omitted", () => {
     expect(resolveCampaignOverviewMetrics({
       analytics: {
-        totalLeads: 2,
-        calledLeads: 2,
-        interested: 1,
-        statusBreakdown: { completed: 2 },
+        totalLeads: 151,
+        calledLeads: 151,
+        interested: 2,
+        statusBreakdown: { completed: 33, failed: 90, busy: 10, no_pickup: 4, voicemail: 14 },
       },
-      campaign: { totalLeads: 2, calledLeads: 2 },
-    })).toEqual({ imported: 2, called: 2, failed: 0, connected: 2, successRate: 50 });
+      campaign: { totalLeads: 57, calledLeads: 71 },
+    })).toEqual({ imported: 151, called: 151, failed: 104, connected: 33, successRate: 1 });
+  });
+
+  it("falls back to campaign row only when analytics has not loaded", () => {
+    expect(resolveCampaignOverviewMetrics({
+      campaign: { totalLeads: 151, calledLeads: 151 },
+    })).toEqual({ imported: 151, called: 151, failed: 0, connected: 0, successRate: 0 });
   });
 });

@@ -18,6 +18,7 @@ import { eq, and, count, sql, desc, isNotNull, inArray, ne, or } from "drizzle-o
 import { normalizePhone } from "../lib/phone-normalize.js";
 import { canonicalDispositionBucket, dispositionBucketSql } from "../lib/disposition/canonical.js";
 import { safelyReconcileCampaignTabs } from "../services/campaign-tab-sync.js";
+import { campaignLeadFunnelSelect, funnelFromRow } from "../lib/campaign-lead-funnel.js";
 
 const router: IRouter = Router();
 
@@ -138,19 +139,11 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
   if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
   await safelyReconcileCampaignTabs(campaignId);
 
-  // Single-pass funnel aggregation from campaign_leads
-  const [funnel] = await db.select({
-    imported:    sql<number>`count(*)::int`,
-    called:      sql<number>`count(*) filter (where ${campaignLeadsTable.callAttempts} > 0)::int`,
-    connected:   sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('connected','completed','transferred'))::int`,
-    interested:  sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} in ('interest_confirmed','booking_created','transfer_completed'))::int`,
-    booked:      sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'booking_created')::int`,
-    transferred: sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'transfer_completed')::int`,
-    failed:      sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('failed','busy','no_pickup','exhausted'))::int`,
-    voicemail:   sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'voicemail')::int`,
-    pending:     sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'pending')::int`,
-  }).from(campaignLeadsTable)
+  // Same funnel as GET .../batches/:batchId/workspace/kpis (campaign-wide).
+  const [funnelRow] = await db.select(campaignLeadFunnelSelect())
+    .from(campaignLeadsTable)
     .where(eq(campaignLeadsTable.campaignId, campaignId));
+  const funnel = funnelFromRow(funnelRow);
 
   // Disposition breakdown, grouped on the canonical bucket. Grouping the raw
   // label listed the same outcome several times ("no pickup: no pickup",
@@ -201,21 +194,18 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
     )
     .where(eq(campaignLeadsTable.campaignId, campaignId));
 
-  const imported    = funnel?.imported    ?? 0;
-  const called      = funnel?.called      ?? 0;
-  const connected   = funnel?.connected   ?? 0;
-  const interested  = funnel?.interested  ?? 0;
-  const booked      = funnel?.booked      ?? 0;
-  const transferred = funnel?.transferred ?? 0;
-  const failed      = funnel?.failed      ?? 0;
-  const voicemail   = funnel?.voicemail   ?? 0;
-  const pending     = funnel?.pending     ?? 0;
+  const imported    = funnel.imported;
+  const called      = funnel.called;
+  const connected   = funnel.connected;
+  const interested  = funnel.interested;
+  const booked      = funnel.booked;
+  const transferred = funnel.transferred;
+  const failed      = funnel.failed;
+  const voicemail   = funnel.voicemail;
+  const pending     = funnel.pending;
 
-  // successRate must mean the same thing as the batch workspace card, otherwise
-  // a campaign reads 0% while its only batch reads a real number. Both are now
-  // "leads that reached a positive outcome" — booked, transferred, or interested
-  // — not bookings alone.
-  const successRate    = called > 0 ? Math.round((interested / called) * 100) : 0;
+  // successRate matches batch workspace KPIs (interested / called).
+  const successRate    = funnel.successRate;
   const connectionRate = called > 0 ? Math.round((connected / called) * 100) : 0;
   const bookingRate    = connected > 0 ? Math.round((booked / connected) * 100) : 0;
   const totalCostCents = costDuration?.totalCostCents ?? 0;
