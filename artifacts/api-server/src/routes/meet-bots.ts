@@ -147,7 +147,8 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
     return;
   }
   if (!process.env["RECALL_API_KEY"]) {
-    res.status(503).json({ error: "Meeting bots are not configured (missing Recall API key)" });
+    // 422 (not 502/503): edge proxies replace origin 502/503 with an HTML error page.
+    res.status(422).json({ error: "Meeting bots are not configured (missing Recall API key)" });
     return;
   }
 
@@ -234,7 +235,7 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
     });
   } catch (err) {
     logger.error({ err, userId, agentId }, "Meeting bot creation failed");
-    res.status(502).json({
+    res.status(422).json({
       error: sanitizeRecallError(err instanceof Error ? err.message : "Failed to create meeting bot"),
     });
   }
@@ -257,7 +258,9 @@ router.get("/meet-bots/:botId", requireAuth, async (req, res) => {
     }
     res.json({ botId: bot.id, status: bot.statusCode });
   } catch (err) {
-    res.status(502).json({ error: err instanceof Error ? err.message : "Failed to fetch bot status" });
+    res.status(422).json({
+      error: sanitizeRecallError(err instanceof Error ? err.message : "Failed to fetch bot status"),
+    });
   }
 });
 
@@ -273,7 +276,9 @@ router.delete("/meet-bots/:botId", requireAuth, async (req, res) => {
     scheduleDiarizedTranscriptArchive(bot.id);
     res.json({ ok: true });
   } catch (err) {
-    res.status(502).json({ error: err instanceof Error ? err.message : "Failed to remove bot" });
+    res.status(422).json({
+      error: sanitizeRecallError(err instanceof Error ? err.message : "Failed to remove bot"),
+    });
   }
 });
 

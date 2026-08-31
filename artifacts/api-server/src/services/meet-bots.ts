@@ -20,8 +20,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 const RECALL_REGIONS = ["ap-northeast-1", "us-west-2", "us-east-1", "eu-central-1"];
 const RECALL_REGION = () => process.env["RECALL_REGION"] || "us-west-2";
-const RECALL_FETCH_TIMEOUT_MS = 20_000;
-const RECALL_REGION_PROBE_TIMEOUT_MS = 6_000;
+const RECALL_FETCH_TIMEOUT_MS = 15_000;
+const RECALL_REGION_PROBE_TIMEOUT_MS = 4_000;
 
 function looksLikeHtmlBody(s: string): boolean {
   const t = s.trimStart();
@@ -50,6 +50,31 @@ export function sanitizeRecallError(raw: string): string {
     return "Meeting bot service is temporarily unavailable. Try again in a moment.";
   }
   return raw.replace(/\s+/g, " ").trim().slice(0, 280);
+}
+
+/** Prefer Recall JSON `detail`/`error`; never leak Cloudflare HTML to the client. */
+export function messageFromRecallBody(status: number, text: string): string {
+  if (looksLikeHtmlBody(text)) {
+    return "Meeting bot service is temporarily unavailable. Try again in a moment.";
+  }
+  try {
+    const parsed = JSON.parse(text) as { detail?: unknown; message?: unknown; error?: unknown };
+    const detail =
+      typeof parsed.detail === "string"
+        ? parsed.detail
+        : typeof parsed.message === "string"
+          ? parsed.message
+          : typeof parsed.error === "string"
+            ? parsed.error
+            : null;
+    if (detail) return sanitizeRecallError(detail);
+  } catch {
+    /* not JSON */
+  }
+  if (status === 401 || status === 403) {
+    return "Meeting bot service rejected the API key. Check RECALL_API_KEY and RECALL_REGION.";
+  }
+  return sanitizeRecallError(`Recall request failed (${status}): ${text}`);
 }
 
 function fetchSignal(init: RequestInit | undefined, timeoutMs: number): AbortSignal {
@@ -82,23 +107,34 @@ export function isRecallDiarizedTranscriptEnabled(): boolean {
 // region first), then cache for the process lifetime.
 let resolvedRegion: string | null = null;
 
+async function probeRecallRegion(region: string): Promise<string | null> {
+  const res = await fetch(`https://${region}.recall.ai/api/v1/bot/?limit=1`, {
+    headers: { accept: "application/json", authorization: recallKey() },
+    signal: AbortSignal.timeout(RECALL_REGION_PROBE_TIMEOUT_MS),
+  });
+  return res.ok ? region : null;
+}
+
 /** Resolve working Recall region once (API keys are region-scoped). */
 export async function resolveRecallRegion(): Promise<string> {
   if (resolvedRegion) return resolvedRegion;
-  const candidates = [RECALL_REGION(), ...RECALL_REGIONS.filter((r) => r !== RECALL_REGION())];
-  for (const region of candidates) {
-    try {
-      const res = await fetch(`https://${region}.recall.ai/api/v1/bot/?limit=1`, {
-        headers: { accept: "application/json", authorization: recallKey() },
-        signal: AbortSignal.timeout(RECALL_REGION_PROBE_TIMEOUT_MS),
-      });
-      if (res.ok) {
-        resolvedRegion = region;
-        return region;
-      }
-    } catch {
-      /* network error — try next region */
+  const preferred = RECALL_REGION();
+  try {
+    const hit = await probeRecallRegion(preferred);
+    if (hit) {
+      resolvedRegion = hit;
+      return hit;
     }
+  } catch {
+    /* preferred region unreachable — try the rest in parallel */
+  }
+  const others = RECALL_REGIONS.filter((r) => r !== preferred);
+  const found = (await Promise.all(others.map((r) => probeRecallRegion(r).catch(() => null)))).find(
+    (r): r is string => Boolean(r),
+  );
+  if (found) {
+    resolvedRegion = found;
+    return found;
   }
   throw new Error(
     "Recall API key was rejected by every Recall region — verify RECALL_API_KEY is the API key from the Recall.ai dashboard (not a webhook secret)",
@@ -467,7 +503,7 @@ export async function createRecallBot(opts: RecallBotCreateOpts): Promise<Recall
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(sanitizeRecallError(`Recall create bot failed (${res.status}): ${text.slice(0, 300)}`));
+    throw new Error(messageFromRecallBody(res.status, text));
   }
   return summarizeBot(await res.json());
 }

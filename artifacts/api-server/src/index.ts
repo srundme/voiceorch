@@ -534,6 +534,11 @@ server.listen(port, () => {
   void warmSmartTurn(); // preload Smart Turn v3 so first speech_end doesn't pay load cost
   void warmVoiceIsolator(); // preload GTCRN so first noisy frame doesn't pay ONNX load
   void probeGenderService(); // loudly log the resolved gender-service URL + reachability so misconfig isn't silent
+  void import("./services/meet-bots.js")
+    .then((m) => m.resolveRecallRegion())
+    .catch((err: unknown) => {
+      logger.warn({ err }, "Recall region warmup failed — first Join may be slower");
+    });
 
   // Run DB migrations after the port is open so Railway's health-check passes
   // while the schema is being applied. Services that need tables will become

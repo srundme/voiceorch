@@ -243,6 +243,7 @@ export default function MeetPage() {
     mutationFn: async () =>
       customFetch<{ botId: string; status: string; agentId?: number; configuredAgentId?: number }>(`${API}/meet-bots`, {
         method: "POST",
+        timeoutMs: 45_000,
         body: JSON.stringify({
           agentId: Number(agentId),
           meetingUrl: meetingUrl.trim(),

@@ -3,6 +3,7 @@ import {
   buildRecallAutomaticLeave,
   buildRecallRecordingRetention,
   detectMeetingPlatform,
+  messageFromRecallBody,
   normalizeMeetingUrl,
   sanitizeRecallError,
   RECALL_EVERYONE_LEFT_TIMEOUT_SEC,
@@ -53,5 +54,11 @@ describe("Recall cost-control create payload", () => {
     expect(
       sanitizeRecallError("<!DOCTYPE html><!--[if lt IE 7]> <html class=\"no-js ie6 oldie\""),
     ).toBe("Meeting bot service is temporarily unavailable. Try again in a moment.");
+    expect(messageFromRecallBody(502, "<!DOCTYPE html><html>bad gateway</html>")).toBe(
+      "Meeting bot service is temporarily unavailable. Try again in a moment.",
+    );
+    expect(messageFromRecallBody(400, JSON.stringify({ detail: "Invalid meeting_url" }))).toBe(
+      "Invalid meeting_url",
+    );
   });
 });
