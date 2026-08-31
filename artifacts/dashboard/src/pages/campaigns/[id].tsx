@@ -41,7 +41,6 @@ import {
   TrendingUp, DollarSign, Target, MoreVertical, Eye,
   KeyRound, Link2, Link2Off, Loader2, Instagram,
   Download,
-  Sparkles,
   Table2,
   ExternalLink,
 } from "lucide-react";
@@ -1377,7 +1376,6 @@ export default function CampaignDetailPage() {
   const [savingTransfer, setSavingTransfer] = useState(false);
   const [actingDisposition, setActingDisposition] = useState<string | null>(null);
   const [recampaignOpen, setRecampaignOpen] = useState(false);
-  const [backfillingIntel, setBackfillingIntel] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1472,47 +1470,12 @@ export default function CampaignDetailPage() {
     }
   }
 
-  async function handleBackfillIntelligence() {
-    setBackfillingIntel(true);
-    try {
-      const result = await customFetch<{
-        scanned: number;
-        analysed: number;
-        skipped: number;
-        failed: number;
-        error?: string;
-      }>(`/api/campaigns/${campaignId}/intelligence/backfill`, {
-        method: "POST",
-        body: JSON.stringify({ limit: 500 }),
-      });
-      if (result.error && result.analysed === 0) {
-        toast({
-          title: "Analysis model unavailable",
-          description: result.error,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Outcome analysis updated",
-          description: `${result.analysed} analysed · ${result.skipped} skipped · ${result.failed} failed (of ${result.scanned} scanned)`
-            + (result.error ? ` — ${result.error}` : ""),
-        });
-      }
-      await qc.invalidateQueries({ queryKey: getGetCampaignAnalyticsQueryKey(campaignId) });
-    } catch {
-      toast({ title: "Could not analyse outcomes", variant: "destructive" });
-    } finally {
-      setBackfillingIntel(false);
-    }
-  }
-
   const webhookUrl = campaign
     ? `${window.location.origin}${BASE}/api/webhooks/lead/${campaign.webhookToken}`
     : "";
 
   const fm = campaign?.fieldMappings as Record<string, string> | undefined;
   const liveTotal = liveQueueMetrics?.total ?? 0;
-  const liveNoPickup = liveQueueMetrics?.nopickup ?? 0;
   const overviewMetrics = resolveCampaignOverviewMetrics({
     analytics,
     campaign,
@@ -1709,6 +1672,14 @@ export default function CampaignDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => setLocation(`/app/analytics?campaignId=${campaignId}`)}
+            >
+              <BarChart3 className="h-3 w-3" /> View Analytics
+            </Button>
             {/* Delete campaign — always visible */}
             <Button
               size="icon" variant="ghost"
@@ -1808,14 +1779,6 @@ export default function CampaignDetailPage() {
           {/* ── OVERVIEW tab ─────────────────────────────────────────────── */}
           {activeTab === "overview" && (<>
 
-          {/* View Analytics */}
-          <div className="flex items-center justify-end">
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
-              onClick={() => setLocation(`/app/analytics?campaignId=${campaignId}`)}>
-              <BarChart3 className="h-3 w-3" /> View Analytics
-            </Button>
-          </div>
-
           {isSheetAuto && (
             <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
               <div className="min-w-0 flex-1">
@@ -1840,153 +1803,6 @@ export default function CampaignDetailPage() {
               </div>
             </div>
           )}
-
-          {/* Conversation intelligence — sentiment / intent / topics */}
-          {(() => {
-            type Intel = {
-              analysed: number;
-              pendingAnalysis: number;
-              sentiment: Array<{ label: string; count: number }>;
-              intents: Array<{ label: string; count: number }>;
-              topTopics: Array<{ label: string; count: number }>;
-              hotLeads: number;
-            };
-            const intel = (analytics as { intelligence?: Intel } | undefined)?.intelligence;
-            const analysed = intel?.analysed ?? 0;
-            const pending = intel?.pendingAnalysis ?? 0;
-            const sentimentTotal = (intel?.sentiment ?? []).reduce((s, r) => s + r.count, 0) || 1;
-            const sentimentColor: Record<string, string> = {
-              positive: "bg-emerald-500",
-              neutral: "bg-zinc-400",
-              negative: "bg-rose-500",
-            };
-            return (
-              <div className="bg-card border border-border rounded-xl p-4 space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">
-                      Outcomes &amp; sentiment
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      AI reads each call transcript for tone, intent, and topics — works with your disposition labels.
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs gap-1.5"
-                    disabled={backfillingIntel || pending === 0}
-                    onClick={() => void handleBackfillIntelligence()}
-                  >
-                    {backfillingIntel
-                      ? <Loader2 className="h-3 w-3 animate-spin" />
-                      : <Sparkles className="h-3 w-3" />}
-                    {pending > 0
-                      ? `Analyse ${pending} call${pending === 1 ? "" : "s"}`
-                      : analysed > 0
-                        ? "Up to date"
-                        : "Analyse completed calls"}
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="rounded-lg border border-border/60 px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Analysed</p>
-                    <p className="text-lg font-semibold tabular-nums">{analysed}</p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Pending</p>
-                    <p className="text-lg font-semibold tabular-nums">{pending}</p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Hot leads</p>
-                    <p className="text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-500">
-                      {intel?.hotLeads ?? 0}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Topics tracked</p>
-                    <p className="text-lg font-semibold tabular-nums">{intel?.topTopics?.length ?? 0}</p>
-                  </div>
-                </div>
-
-                {analysed === 0 && pending === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    {liveNoPickup > 0 && analysed === 0
-                      ? "No pickup / no-answer dials have no transcript, so sentiment stays empty. Open Live Queue for those rows."
-                      : `No completed calls with transcripts yet. Sentiment and intent show up here after a caller actually talks${isSheetAuto ? "." : ". Use Analyse when pending calls appear."}`}
-                  </p>
-                ) : (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <p className="text-[11px] font-medium text-foreground/80">Sentiment</p>
-                      <div className="flex h-2 overflow-hidden rounded-full bg-muted">
-                        {(["positive", "neutral", "negative"] as const).map((label) => {
-                          const count = intel?.sentiment?.find((s) => s.label === label)?.count ?? 0;
-                          if (!count) return null;
-                          return (
-                            <div
-                              key={label}
-                              className={cn(sentimentColor[label], "h-full")}
-                              style={{ width: `${(count / sentimentTotal) * 100}%` }}
-                              title={`${label}: ${count}`}
-                            />
-                          );
-                        })}
-                      </div>
-                      <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-                        {(["positive", "neutral", "negative"] as const).map((label) => {
-                          const count = intel?.sentiment?.find((s) => s.label === label)?.count ?? 0;
-                          return (
-                            <span key={label} className="capitalize">
-                              <span className={cn("inline-block h-1.5 w-1.5 rounded-full mr-1 align-middle", sentimentColor[label])} />
-                              {label} {count}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <p className="text-[11px] font-medium text-foreground/80">Top intents</p>
-                      {(intel?.intents?.length ?? 0) === 0 ? (
-                        <p className="text-[11px] text-muted-foreground">Run Analyse to fill intents.</p>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {[...(intel?.intents ?? [])]
-                            .sort((a, b) => b.count - a.count)
-                            .slice(0, 5)
-                            .map((row) => (
-                              <div key={row.label} className="flex items-center justify-between gap-2 text-[11px]">
-                                <span className="truncate text-foreground/80">{row.label.replace(/_/g, " ")}</span>
-                                <span className="tabular-nums text-muted-foreground shrink-0">{row.count}</span>
-                              </div>
-                            ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {(intel?.topTopics?.length ?? 0) > 0 && (
-                      <div className="sm:col-span-2 space-y-2">
-                        <p className="text-[11px] font-medium text-foreground/80">Topics mentioned</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {intel!.topTopics.map((t) => (
-                            <span
-                              key={t.label}
-                              className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] text-foreground/80"
-                            >
-                              {t.label}
-                              <span className="tabular-nums text-muted-foreground">{t.count}</span>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
 
           {/* Disposition breakdown — act on slice */}
           {(analytics?.dispositions?.length ?? 0) > 0 && (
