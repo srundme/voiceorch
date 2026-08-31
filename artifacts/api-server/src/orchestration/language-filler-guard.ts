@@ -58,8 +58,11 @@ const FILLER_WORDS = new Set([
   // romanized Hindi/Indic "go ahead / tell me" replies (call 13340: "Aa boliye Ma'am")
   "aa", "boliye", "bolie", "bolo", "boli", "batao", "bataiye",
   "suniye", "suno", "bolna", "baat", "karo", "kijiye", "kripya",
-  // continuation / clarification requests (e.g. "please tell me", "tell me more")
-  "tell", "me", "more",
+  // continuation crumbs that appear with politeness fillers ("please … more")
+  // Do NOT list "tell" / "me" — "Tell me, I'm on the line" is a real prompt
+  // for the agent to speak (call 16986), and "please tell me" still holds
+  // because it has fewer than MIN_REAL_ENGLISH_WORDS content words.
+  "more",
   // hold-on fragments
   "wait", "hold", "on", "one", "sec", "second", "minute",
   // ── English grammatical function words ───────────────────────────────────

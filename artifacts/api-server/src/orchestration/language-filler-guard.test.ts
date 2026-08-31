@@ -45,6 +45,12 @@ describe("isRealEnglishUtterance", () => {
     expect(isRealEnglishUtterance("")).toBe(false);
     expect(isRealEnglishUtterance("   ")).toBe(false);
   });
+  it("treats 'tell me I'm on the line' as real English, not a borrowed filler", () => {
+    expect(isRealEnglishUtterance("Tell me, I'm on the line, tell me.")).toBe(true);
+    expect(isRealEnglishUtterance("please tell me")).toBe(false);
+    expect(isRealEnglishUtterance("tell me more")).toBe(false);
+  });
+
   it("rejects romanized Indic go-ahead replies (Latin script, not English)", () => {
     expect(isRealEnglishUtterance("Aa boliye Ma'am")).toBe(false);
     expect(isRealEnglishUtterance("boliye")).toBe(false);

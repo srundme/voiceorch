@@ -3906,9 +3906,12 @@ export class OrchestrationPipeline implements VoiceSession {
             { callId: this.config.callId, heldLang: this.currentLang, text: transcript.slice(0, 60) },
             "Auto-detect: English filler/backchannel — holding current language",
           );
-          // Task 4: count consecutive held-filler turns so the recovery
-          // message can be injected when ≥ 2 such turns accumulate.
-          this._consecutiveHeldFillerTurns++;
+          // Hello-only attention must not accumulate toward the language-
+          // confusion recovery note — that note was showing up as a fake
+          // CALLER line (call 16986) after two short English replies.
+          if (!isCallerAttentionUtterance(transcript)) {
+            this._consecutiveHeldFillerTurns++;
+          }
         } else {
           this._consecutiveHeldFillerTurns = 0;
         }
@@ -6945,6 +6948,7 @@ export class OrchestrationPipeline implements VoiceSession {
           // Prefer one-shot synthesize for cacheable fillers even when stream exists.
           const { audio } = await this.tts.synthesize(text);
           if (this.closed || this.bargeInRequested) return;
+          if (!audio?.length) throw new Error("TTS returned empty audio");
           job.streaming = false;
           job.nonStreamAudio = audio;
           job.audioDurationMs = this.ttsDurationMs(audio.length);
@@ -7051,6 +7055,27 @@ export class OrchestrationPipeline implements VoiceSession {
             job.synthError = err; // real TTS error — surfaced to the caller in drainSentenceJob
           } else {
             logger.warn({ callId: this.config.callId }, "TTS stream aborted");
+            // Idle timeout with zero bytes: retry once via REST/one-shot so the
+            // caller still hears the sentence (call 16986: greeting + follow-up
+            // streams hung, agent never spoke after "hello").
+            if (!this.closed && !this.bargeInRequested && _ttsTotalBytes === 0) {
+              try {
+                const { audio } = await this.tts.synthesize(text);
+                if (audio?.length && !this.closed && !this.bargeInRequested) {
+                  // Keep job.streaming true so an in-flight drain can play
+                  // these blocks from pcmQueue (switching to nonStreamAudio
+                  // after drain already entered the stream path is silent).
+                  job.pcmQueue.push(audio);
+                  job.audioDurationMs = this.ttsDurationMs(audio.length);
+                  logger.info(
+                    { callId: this.config.callId, textLength: text.length, audioBytes: audio.length },
+                    "TTS stream timed out empty — recovered with one-shot synthesize",
+                  );
+                }
+              } catch (fallbackErr) {
+                job.synthError = fallbackErr;
+              }
+            }
           }
         } finally {
           clearTimeout(ttsTimerId ?? undefined);
@@ -7082,6 +7107,7 @@ export class OrchestrationPipeline implements VoiceSession {
         try {
           const { audio } = await this.tts.synthesize(text);
           if (ttsAbort.signal.aborted || this.bargeInRequested || this.closed) return;
+          if (!audio?.length) throw new Error("TTS returned empty audio");
           job.nonStreamAudio = audio;
           this.logExec("TTS", "response", {
             provider: this.agent.ttsProvider,
@@ -7432,7 +7458,8 @@ export class OrchestrationPipeline implements VoiceSession {
         const ok = await this.waitForAudioEmit(job.sequenceId);
         if (!ok || this.bargeInRequested) return;
       }
-      const ttsPcm = job.nonStreamAudio!;
+      const ttsPcm = job.nonStreamAudio;
+      if (!ttsPcm?.length) return undefined;
       const srcRate = this.ttsPcmRate();
       const ttsPcm8k = srcRate === 8000 ? ttsPcm : downsample16to8(ttsPcm);
       this.recording.addAgentChunk(ttsPcm8k);
@@ -9611,10 +9638,8 @@ export class OrchestrationPipeline implements VoiceSession {
     // language (caller said English backchannels in a Tamil conversation),
     // the LLM may have lost track of the call flow and is looping on
     // "I'm speaking in Tamil / do you want another language?".
-    // Inject a one-shot system note before the LLM call so it resumes from
-    // the last content topic instead of restarting the call flow.
-    // The note is injected ONCE (counter resets immediately) and uses role
-    // "user" with a [SYSTEM NOTE] prefix so it works across all providers.
+    // Inject a one-shot note into the LLM request only — never into
+    // conversationHistory (that was saved as a CALLER transcript line).
     if (
       this._consecutiveHeldFillerTurns >= 2
       && !this._recoveryNoteInjected
@@ -9625,12 +9650,12 @@ export class OrchestrationPipeline implements VoiceSession {
         "Resume your call flow from the last content topic you were explaining before the confusion — " +
         "do not re-introduce yourself, do not restart the call from the beginning, " +
         "and do not ask about language preferences again. Continue from where you left off.";
-      this.conversationHistory.appendUser(recoveryNote);
+      historyForLlm = [...historyForLlm, { role: "user", content: recoveryNote }];
       this._recoveryNoteInjected = true;
       this._consecutiveHeldFillerTurns = 0;
       logger.info(
         { callId: this.config.callId, turnNumber: _currentTurnIndex },
-        "Language confusion recovery note injected into conversation history",
+        "Language confusion recovery note injected into LLM context (not transcript)",
       );
     }
 
