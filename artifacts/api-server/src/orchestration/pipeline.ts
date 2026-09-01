@@ -1132,10 +1132,17 @@ export class OrchestrationPipeline implements VoiceSession {
   // entire 21s opener — bargeInFiredTotal stayed 0. After the cap, treat the
   // rest of the greeting like any other TTS (echo bar + self-echo still apply).
   private greetingPlaybackActive = false;
+  /** After inbound greeting: drop one stale final so overlap during Hello does not start processTurn. */
+  private _discardInboundGreetingOverlapFinal = false;
 
-  /** First 3s of a carrier greeting — echo of our own opener, not the caller. */
+  /**
+   * Inbound: lock barge-in for the whole greeting (then listen, then prompt).
+   * Outbound: first 3s only — long pitches stay interruptible (call 14345).
+   */
   private greetingBargeLocked(): boolean {
-    return this.greetingPlaybackActive && Date.now() < this.greetingEchoHoldUntil;
+    if (!this.greetingPlaybackActive) return false;
+    if (this.callDirection === "inbound") return true;
+    return Date.now() < this.greetingEchoHoldUntil;
   }
   /** True while a dead-air filler (ம்ம் / ஆஹா) is on the wire. Energy barge-in
    *  of that clip's own echo chops the voice (call 14276: streaming_energy on
@@ -3581,6 +3588,36 @@ export class OrchestrationPipeline implements VoiceSession {
       { callId: this.config.callId, sttToProcessMs, queued: this.isProcessing },
       "Streaming STT transcript received"
     );
+    if (
+      this.callDirection === "inbound"
+      && this.greetingPlaybackActive
+      && !isSemanticInterrupt(transcript)
+      && !isHoldRequest(transcript)
+    ) {
+      logger.info(
+        { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+        "Inbound: ignoring STT during greeting",
+      );
+      this.logDiscardedTranscript(transcript, "inbound_greeting_hold");
+      return;
+    }
+    if (
+      this._discardInboundGreetingOverlapFinal
+      && !this.isPlaying
+      && !this._partialThisGeneration
+      && !isSemanticInterrupt(transcript)
+    ) {
+      this._discardInboundGreetingOverlapFinal = false;
+      logger.info(
+        { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+        "Inbound: dropping STT captured during greeting — waiting for caller",
+      );
+      this.logDiscardedTranscript(transcript, "inbound_greeting_overlap");
+      return;
+    }
+    if (this._discardInboundGreetingOverlapFinal && this._partialThisGeneration) {
+      this._discardInboundGreetingOverlapFinal = false;
+    }
     // A final transcript marks the end of the current speech segment — reset the
     // flag so the NEXT utterance triggers a fresh KB prefetch.
     this.inSpeechSegment = false;
@@ -5964,6 +6001,10 @@ export class OrchestrationPipeline implements VoiceSession {
         this.greetingPlaybackActive = false;
         this.isPlaying = false;
         this.armTailEchoGrace();
+        if (this.callDirection === "inbound") {
+          this._discardInboundGreetingOverlapFinal = true;
+          this._partialThisGeneration = false;
+        }
       }
       // Heard-only: never fall back to full greeting text after a barge mid-open.
       const heardGreeting = this.getHeardAgentText();
