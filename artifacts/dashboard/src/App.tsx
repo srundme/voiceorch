@@ -174,9 +174,8 @@ function SignInPage() {
     const reason = consumeSignOutReason();
     if (reason === "revoked") {
       setError("You've been signed out because your account access has changed. Please contact support if you believe this is a mistake.");
-    } else if (reason === "idle") {
-      setError("You were signed out after 10 minutes of inactivity. Please sign in again.");
     }
+    // Idle timeout still signs out; do not show a banner on the login page.
   }, []);
 
   useEffect(() => {
