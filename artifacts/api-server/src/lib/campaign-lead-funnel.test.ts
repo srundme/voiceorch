@@ -10,14 +10,18 @@ describe("funnelFromRow", () => {
       interested: 2,
       booked: 0,
       transferred: 0,
-      failed: 104,
+      failed: 71,
+      busy: 28,
+      noPickup: 5,
       voicemail: 14,
       pending: 0,
     })).toMatchObject({
       imported: 151,
       called: 151,
       connected: 33,
-      failed: 104,
+      failed: 71,
+      busy: 28,
+      noPickup: 5,
       successRate: 1,
     });
   });

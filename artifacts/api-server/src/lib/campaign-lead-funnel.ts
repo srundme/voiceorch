@@ -6,7 +6,6 @@
 import { sql } from "drizzle-orm";
 
 export const CONNECTED_CALL_STATUSES = ["connected", "completed", "transferred"] as const;
-export const FAILED_CALL_STATUSES = ["failed", "busy", "no_pickup"] as const;
 export const SUCCESS_OUTCOMES = ["interest_confirmed", "booking_created", "transfer_completed"] as const;
 
 /** Drizzle select shape — same expressions on campaign-wide and batch-scoped queries. */
@@ -18,7 +17,9 @@ export function campaignLeadFunnelSelect() {
     interested: sql<number>`count(*) filter (where operational_outcome in ('interest_confirmed','booking_created','transfer_completed'))::int`,
     booked: sql<number>`count(*) filter (where operational_outcome = 'booking_created')::int`,
     transferred: sql<number>`count(*) filter (where operational_outcome = 'transfer_completed')::int`,
-    failed: sql<number>`count(*) filter (where call_status in ('failed','busy','no_pickup'))::int`,
+    failed: sql<number>`count(*) filter (where call_status = 'failed')::int`,
+    busy: sql<number>`count(*) filter (where call_status = 'busy')::int`,
+    noPickup: sql<number>`count(*) filter (where call_status = 'no_pickup')::int`,
     voicemail: sql<number>`count(*) filter (where call_status = 'voicemail')::int`,
     pending: sql<number>`count(*) filter (where call_status = 'pending')::int`,
     firstAttemptAt: sql<string | null>`min(last_attempt_at)::text`,
@@ -33,6 +34,8 @@ export function funnelFromRow(row: {
   booked?: number;
   transferred?: number;
   failed?: number;
+  busy?: number;
+  noPickup?: number;
   voicemail?: number;
   pending?: number;
 } | undefined) {
@@ -47,6 +50,8 @@ export function funnelFromRow(row: {
     booked: row?.booked ?? 0,
     transferred: row?.transferred ?? 0,
     failed: row?.failed ?? 0,
+    busy: row?.busy ?? 0,
+    noPickup: row?.noPickup ?? 0,
     voicemail: row?.voicemail ?? 0,
     pending: row?.pending ?? 0,
     successRate: called > 0 ? Math.round((interested / called) * 100) : 0,

@@ -201,6 +201,8 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
   const booked      = funnel.booked;
   const transferred = funnel.transferred;
   const failed      = funnel.failed;
+  const busy        = funnel.busy;
+  const noPickup    = funnel.noPickup;
   const voicemail   = funnel.voicemail;
   const pending     = funnel.pending;
 
@@ -241,6 +243,8 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
     booked,
     transferred,
     failed,
+    busy,
+    noPickup,
     voicemail,
     pending,
     successRate,

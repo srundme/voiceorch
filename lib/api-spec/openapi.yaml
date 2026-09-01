@@ -10288,6 +10288,8 @@ components:
         booked:       { type: integer }
         transferred:  { type: integer }
         failed:       { type: integer }
+        busy:         { type: integer }
+        noPickup:     { type: integer }
         pending:      { type: integer }
         successRate:        { type: integer }
         connectionRate:     { type: integer }
@@ -11889,6 +11891,8 @@ components:
         booked:                    { type: integer }
         transferred:               { type: integer }
         failed:                    { type: integer }
+        busy:                      { type: integer }
+        noPickup:                  { type: integer }
         pending:                   { type: integer }
         callbacks:                 { type: integer }
         incoming:                  { type: integer }

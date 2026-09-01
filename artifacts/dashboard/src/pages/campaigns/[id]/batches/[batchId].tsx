@@ -22,7 +22,7 @@ import { DetailNav } from "@/components/detail-nav";
 import {
   ArrowLeft, Play, Pause, Square, RotateCcw, ChevronRight,
   Users, Phone, PhoneCall, Calendar, ArrowRightLeft, XCircle,
-  TrendingUp, Bell, PhoneIncoming, Voicemail,
+  TrendingUp, Bell, PhoneIncoming, Voicemail, PhoneOff, PhoneMissed,
   Eye, Database, RefreshCw, DollarSign,
   User, Search, X, CheckCircle2, Clock, Pencil,
   Info, ChevronDown, FileDown, Package, Lock, BarChart2, Tag,
@@ -237,7 +237,7 @@ function ScheduledInlineChip({
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type BatchWorkspaceKpis = {
-  total: number; connected: number; failed: number; pending: number;
+  total: number; connected: number; failed: number; busy: number; noPickup: number; pending: number;
   callbacks: number; incoming: number; bookings: number; transfers: number;
   voicemail: number; successRate: number; transferred: number;
   /**
@@ -329,6 +329,8 @@ function segmentToFilters(segment: string): { status: string; outcome: string } 
     case "connected": return { status: "connected", outcome: "all" };
     case "voicemail": return { status: "voicemail", outcome: "all" };
     case "failed":    return { status: "failed",    outcome: "all" };
+    case "busy":      return { status: "busy",      outcome: "all" };
+    case "no_pickup": return { status: "no_pickup", outcome: "all" };
     case "transfers": return { status: "all",       outcome: "transfer_completed" };
     default:          return { status: "all",       outcome: "all" };
   }
@@ -804,7 +806,9 @@ export default function BatchWorkspacePage() {
     // Lead-level `transferred`, not the transfer-event count, so the number
     // always equals the rows the card filters to.
     { key: "transfers", label: "Transferred", value: kpiOr(kpis?.transferred), icon: <ArrowRightLeft className="h-3 w-3" />, color: "text-sky-600 dark:text-sky-400", hint: "Handed to a human agent" },
-    { key: "failed",    label: "Failed",      value: kpiOr(kpis?.failed),    icon: <XCircle className="h-3 w-3" />,        color: "text-red-600 dark:text-red-500", hint: "Failed, busy, or no pickup" },
+    { key: "failed",    label: "Failed",      value: kpiOr(kpis?.failed),    icon: <XCircle className="h-3 w-3" />,        color: "text-red-600 dark:text-red-500", hint: "Carrier or dial failed" },
+    { key: "busy",      label: "Busy",        value: kpiOr(kpis?.busy),      icon: <PhoneOff className="h-3 w-3" />,       color: "text-orange-600 dark:text-orange-400", hint: "Line was busy" },
+    { key: "no_pickup", label: "No pickup",   value: kpiOr(kpis?.noPickup),  icon: <PhoneMissed className="h-3 w-3" />,    color: "text-amber-600 dark:text-amber-400", hint: "Rang out with no answer" },
   ];
 
   // The API already merges the configured taxonomy with what leads actually
@@ -1047,7 +1051,7 @@ export default function BatchWorkspacePage() {
               Outcome totals could not load. The lead list below is still live — refresh to retry the cards.
             </p>
           )}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
             {coreSegments.map(({ key, ...card }) => (
               <KpiCard key={key} {...card} active={segment === key} onClick={() => setSegment(key)} />
             ))}

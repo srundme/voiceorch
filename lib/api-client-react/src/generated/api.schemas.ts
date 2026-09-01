@@ -3133,6 +3133,8 @@ export interface CampaignAnalytics {
   booked?: number;
   transferred?: number;
   failed?: number;
+  busy?: number;
+  noPickup?: number;
   pending?: number;
   successRate?: number;
   connectionRate?: number;
@@ -4528,6 +4530,8 @@ export interface BatchWorkspaceKpis {
   booked?: number;
   transferred?: number;
   failed: number;
+  busy?: number;
+  noPickup?: number;
   pending: number;
   callbacks: number;
   incoming: number;

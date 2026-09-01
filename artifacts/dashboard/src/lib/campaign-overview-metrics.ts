@@ -2,6 +2,8 @@ type AnalyticsMetrics = {
   imported?: number;
   called?: number;
   failed?: number;
+  busy?: number;
+  noPickup?: number;
   connected?: number;
   totalLeads?: number;
   calledLeads?: number;
@@ -21,7 +23,6 @@ function asCount(value: unknown): number | undefined {
 
 /** Must match api-server `campaign-lead-funnel.ts`. */
 const CONNECTED_CALL_STATUSES = ["connected", "completed", "transferred"] as const;
-const FAILED_CALL_STATUSES = ["failed", "busy", "no_pickup"] as const;
 
 function sumStatuses(breakdown: Record<string, number> | undefined, keys: readonly string[]): number {
   if (!breakdown) return 0;
@@ -54,11 +55,15 @@ export function resolveCampaignOverviewMetrics(input: {
     ?? (breakdown ? sumStatuses(breakdown, CONNECTED_CALL_STATUSES) : 0);
 
   const failed = asCount(a?.failed)
-    ?? (breakdown ? sumStatuses(breakdown, FAILED_CALL_STATUSES) : 0);
+    ?? (breakdown ? (breakdown["failed"] ?? 0) : 0);
+  const busy = asCount(a?.busy)
+    ?? (breakdown ? (breakdown["busy"] ?? 0) : 0);
+  const noPickup = asCount(a?.noPickup)
+    ?? (breakdown ? (breakdown["no_pickup"] ?? 0) : 0);
 
   const interested = asCount(a?.interested);
   const successRate = asCount(a?.successRate)
     ?? (called > 0 && interested != null ? Math.round((interested / called) * 100) : 0);
 
-  return { imported, called, failed, connected, successRate };
+  return { imported, called, failed, busy, noPickup, connected, successRate };
 }

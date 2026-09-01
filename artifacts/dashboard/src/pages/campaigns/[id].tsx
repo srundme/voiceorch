@@ -37,7 +37,7 @@ import {
   CheckCircle2, X, BarChart3, PhoneCall, ArrowRight, Hash,
   Activity, PlayCircle, PauseCircle, XCircle, Info, Settings,
   Phone, Globe, Building2, Zap, ListFilter, Plus,
-  PhoneIncoming, ArrowRightLeft, Radio, Ban,
+  PhoneIncoming, ArrowRightLeft, Radio, Ban, PhoneOff, PhoneMissed,
   TrendingUp, DollarSign, Target, MoreVertical, Eye,
   KeyRound, Link2, Link2Off, Loader2, Instagram,
   Download,
@@ -869,6 +869,8 @@ function BatchKpiCard({ batch, index, campaignId }: {
     { label: "Booked",     value: kpis?.booked     ?? 0, cls: "text-emerald-500" },
     { label: "Interested", value: kpis?.interested ?? 0, cls: "text-emerald-400" },
     { label: "Failed",     value: kpis?.failed     ?? 0, cls: "text-red-500" },
+    { label: "Busy",       value: kpis?.busy       ?? 0, cls: "text-orange-500" },
+    { label: "No pickup",  value: kpis?.noPickup   ?? 0, cls: "text-amber-500" },
     { label: "Callbacks",  value: kpis?.callbacks  ?? 0, cls: "text-amber-500" },
   ];
   const lastActivity = kpis?.lastActivityAt
@@ -1480,7 +1482,7 @@ export default function CampaignDetailPage() {
     analytics,
     campaign,
   });
-  const { imported, called, failed, connected: connectedCalls, successRate: successRatePct } = overviewMetrics;
+  const { imported, called, failed, busy, noPickup, connected: connectedCalls, successRate: successRatePct } = overviewMetrics;
   const hasCsvSource = batches?.some(b => b.leadSource === "csv") ?? false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isContinuous = ["webhook", "meta_ads", "crm", "google_sheets"].includes((campaign as any)?.leadSource ?? "");
@@ -1540,7 +1542,7 @@ export default function CampaignDetailPage() {
   const leadsRemaining  = Math.max(imported - called, 0);
 
   // Campaign health: derived purely from already-fetched batch/analytics data.
-  const failureRate = called > 0 ? failed / called : 0;
+  const failureRate = called > 0 ? (failed + busy + noPickup) / called : 0;
   const campaignHealth: { label: string; accent: string; dotCls: string; icon: React.ReactNode } = (() => {
     const terminal = campaign?.status === "completed" || campaign?.status === "stopped";
     if (imported === 0 && called === 0) {
@@ -1550,7 +1552,7 @@ export default function CampaignDetailPage() {
       return { label: "Not started", accent: "text-muted-foreground", dotCls: "bg-muted-foreground/40", icon: <Info className="h-3.5 w-3.5" /> };
     }
     if (imported > 0 && called >= imported) {
-      if (connectedCalls === 0 && failed > 0) {
+      if (connectedCalls === 0 && (failed + busy + noPickup) > 0) {
         return { label: "Dialled — no answers", accent: "text-amber-500", dotCls: "bg-amber-500", icon: <AlertCircle className="h-3.5 w-3.5" /> };
       }
       return { label: "Healthy", accent: "text-emerald-500", dotCls: "bg-emerald-500", icon: <CheckCircle2 className="h-3.5 w-3.5" /> };
@@ -2107,11 +2109,13 @@ export default function CampaignDetailPage() {
                 <Progress value={overallPct} className="h-1.5" />
               </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border/60">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-border/60">
               <KpiCard icon={<PhoneCall className="h-3 w-3" />} label="Connected"       value={analyticsPending && !analytics ? "—" : connectedCalls.toLocaleString()} color="text-sky-500" />
               <KpiCard icon={<Target className="h-3 w-3" />}    label="Success Rate"    value={analyticsPending && !analytics ? "—" : `${successRatePct}%`} color="text-emerald-500" />
               <KpiCard icon={<Users className="h-3 w-3" />}     label="Leads Remaining" value={leadsRemaining.toLocaleString()} color="text-amber-500" />
-              <KpiCard icon={<XCircle className="h-3 w-3" />}   label="Failed"          value={failed.toLocaleString()} color="text-red-500" />
+              <KpiCard icon={<XCircle className="h-3 w-3" />}   label="Failed"          value={analyticsPending && !analytics ? "—" : failed.toLocaleString()} color="text-red-500" />
+              <KpiCard icon={<PhoneOff className="h-3 w-3" />}  label="Busy"            value={analyticsPending && !analytics ? "—" : busy.toLocaleString()} color="text-orange-500" />
+              <KpiCard icon={<PhoneMissed className="h-3 w-3" />} label="No pickup"     value={analyticsPending && !analytics ? "—" : noPickup.toLocaleString()} color="text-amber-500" />
             </div>
           </div>
 

@@ -223,6 +223,8 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
     booked:           leadKpis?.booked      ?? 0,
     transferred:      leadKpis?.transferred ?? 0,
     failed:           leadKpis?.failed      ?? 0,
+    busy:             leadKpis?.busy        ?? 0,
+    noPickup:         leadKpis?.noPickup    ?? 0,
     voicemail:        leadKpis?.voicemail   ?? 0,
     pending:          leadKpis?.pending     ?? 0,
     callbacks,
@@ -301,7 +303,9 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
     status === "pending"   ? eq(campaignLeadsTable.callStatus, "pending")   :
     status === "completed" ? eq(campaignLeadsTable.callStatus, "completed") :
     status === "voicemail" ? eq(campaignLeadsTable.callStatus, "voicemail") :
-    status === "failed"    ? inArray(campaignLeadsTable.callStatus, ["failed", "busy", "no_pickup"]) :
+    status === "failed"    ? eq(campaignLeadsTable.callStatus, "failed")    :
+    status === "busy"      ? eq(campaignLeadsTable.callStatus, "busy")      :
+    status === "no_pickup" ? eq(campaignLeadsTable.callStatus, "no_pickup") :
     status === "calling"   ? eq(campaignLeadsTable.callStatus, "calling")   :
     status === "connected" ? inArray(campaignLeadsTable.callStatus, ["connected", "completed", "transferred"]) :
     undefined;
