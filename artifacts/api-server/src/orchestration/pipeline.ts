@@ -9,7 +9,7 @@ import {
   CALL_SCREENING_WINDOW_MS,
   detectScreeningPrompt,
 } from "./callScreening.js";
-import { buildCallDirectionRule, resolveInboundGreetingTtsSpeed } from "./call-direction-rules.js";
+import { buildCallDirectionRule, INBOUND_GREETING, resolveInboundGreetingTtsSpeed } from "./call-direction-rules.js";
 import { buildDatetimeInjection, buildTurnClockBlock } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
@@ -1137,7 +1137,7 @@ export class OrchestrationPipeline implements VoiceSession {
 
   /**
    * Inbound: lock barge-in for the whole greeting (then listen, then prompt).
-   * Outbound: first 3s only — long pitches stay interruptible (call 14345).
+   * Outbound: first 3s only — long pitches stay interruptible.
    */
   private greetingBargeLocked(): boolean {
     if (!this.greetingPlaybackActive) return false;
@@ -2835,7 +2835,9 @@ export class OrchestrationPipeline implements VoiceSession {
       | "end_call_in_progress"
       | "fragment_coalesce_hold"
       | "backchannel_during_playback"
-      | "agent_still_speaking",
+      | "agent_still_speaking"
+      | "inbound_greeting_hold"
+      | "inbound_greeting_overlap",
   ): void {
     const now = Date.now();
     const reasonByGuard: Record<typeof guard, string> = {
@@ -2849,6 +2851,8 @@ export class OrchestrationPipeline implements VoiceSession {
       fragment_coalesce_hold: "short fragment held briefly for coalesce (not a drop)",
       backchannel_during_playback: "held ack fragment dropped — agent speaking at coalesce-timer fire (true backchannel)",
       agent_still_speaking: "final arrived during greeting/system playback and did not barge-in",
+      inbound_greeting_hold: "inbound greeting still playing — wait for caller after Welcome",
+      inbound_greeting_overlap: "STT captured during inbound greeting — wait for a new caller turn",
     };
     this.logExec(EXEC_COMPONENTS.STT, "system", {
       status: "info",
@@ -5827,6 +5831,14 @@ export class OrchestrationPipeline implements VoiceSession {
           "Pipeline: static greeting is not in the agent's language — generating a localized opener instead",
         );
         greeting = "";
+      }
+
+      if (
+        this.callDirection === "inbound"
+        && !useInstantReturning
+        && !resumeDropped
+      ) {
+        greeting = INBOUND_GREETING;
       }
 
       let greetingEmotions: string[] | undefined;

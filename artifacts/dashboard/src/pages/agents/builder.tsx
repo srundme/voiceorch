@@ -7935,7 +7935,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     language: "en-IN",
     telephonyProvider: "vobiz",
     systemPrompt: "You are a helpful AI voice assistant.",
-    greetingMessage: "Hello! How can I help you today?",
+    greetingMessage: "Hi, Tell me what you called about",
     tools: [
       { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
     ],
