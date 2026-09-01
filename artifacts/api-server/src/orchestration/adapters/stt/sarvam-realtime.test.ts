@@ -242,8 +242,12 @@ describe("shouldBargeOnRealtimeVadStart", () => {
     expect(shouldBargeOnRealtimeVadStart({ ...base, agentSpeaking: false, isWebcall: true })).toBe(false);
   });
 
-  it("barges on webcall VAD alone", () => {
-    expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true })).toBe(true);
+  it("does not barge on webcall VAD without a usable caller partial", () => {
+    expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true })).toBe(false);
+  });
+
+  it("barges on webcall VAD when a usable caller partial is present", () => {
+    expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true, hasUsablePartial: true })).toBe(true);
   });
 
   it("needs a partial or energy above the echo bar on PSTN", () => {

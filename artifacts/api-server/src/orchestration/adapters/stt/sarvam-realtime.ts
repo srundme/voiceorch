@@ -215,8 +215,9 @@ export function buildRealtimeConfigUpdate(opts: {
 
 /**
  * Barge-in while the agent is talking: Sarvam says drive off vad.speech_start
- * or early partials, not transcript.final. Webcall has AEC so VAD is enough.
- * PSTN echo also trips server VAD — require a partial or energy above the echo bar.
+ * or early partials, not transcript.final. Webcall AEC still false-triggers VAD
+ * on overlap — require a real caller partial before cutting TTS. PSTN echo
+ * also trips server VAD — require a partial or energy above the echo bar.
  */
 export function shouldBargeOnRealtimeVadStart(opts: {
   agentSpeaking: boolean;
@@ -229,7 +230,7 @@ export function shouldBargeOnRealtimeVadStart(opts: {
   if (!opts.agentSpeaking) return false;
   if (opts.greetingOrSystem) return false;
   if (opts.inEchoGrace) return false;
-  if (opts.isWebcall) return true;
+  if (opts.isWebcall) return opts.hasUsablePartial;
   return opts.hasUsablePartial || opts.energyAboveEchoBar;
 }
 

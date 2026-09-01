@@ -2300,17 +2300,27 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /**
+   * Pending STT that is real caller speech — not mm/okay, hello leftover, or our echo.
+   * Webcall energy/VAD must wait for this before cutting TTS (overlap false cuts).
+   */
+  private usablePendingBargeTranscript(): string {
+    const pending = this.streamSTT?.getPendingTranscript?.()?.trim() ?? "";
+    if (!pending) return "";
+    if (isBackchannelOnlyUtterance(pending)) return "";
+    if (isCallerAttentionUtterance(pending)) return "";
+    if (this.isSelfEcho(pending)) return "";
+    return pending;
+  }
+
+  /**
    * Drive barge-in off vad.speech_start (Sarvam realtime best practice), not
    * transcript.final. PSTN echo still needs a partial or energy corroboration.
    */
   private maybeBargeFromRealtimeVadStart(): void {
     if (!this.liveSarvamRealtime()) return;
     if (!this.bargeInEnabled || this.bargeInRequested) return;
-    const pending = this.streamSTT?.getPendingTranscript?.()?.trim() ?? "";
-    const usablePartial = pending.length > 0
-      && !isBackchannelOnlyUtterance(pending)
-      && !isCallerAttentionUtterance(pending)
-      && !this.isSelfEcho(pending);
+    const pending = this.usablePendingBargeTranscript();
+    const usablePartial = pending.length > 0;
     const echoBar = this.echoBarRms();
     const energyAboveEchoBar =
       echoBar !== null && this.bargeInPeakRmsSinceSentence > echoBar;
@@ -4669,25 +4679,40 @@ export class OrchestrationPipeline implements VoiceSession {
         // then the caller's "2pm" was processed as the next turn). Energy is the
         // only path that can cut playback during talk-over. Greeting + 600ms
         // per-sentence grace + the adaptive echo bar still block self-echo.
-        this.triggerBargeIn(source, undefined, {
-          speculative: false,
-          energyDetails: {
-            frames: this.bargeInSpeechFrames,
-            effectiveMinFrames,
-            effectiveThreshold,
-            configuredThreshold: this.bargeInEnergyThreshold,
-            echoFloor: Math.round(this.playbackEchoFloor),
-            currentRms: Math.round(isWebcallStreaming ? frameRms(pcm8k) : currentRms),
-          },
-        });
+        const energyDetails = {
+          frames: this.bargeInSpeechFrames,
+          effectiveMinFrames,
+          effectiveThreshold,
+          configuredThreshold: this.bargeInEnergyThreshold,
+          echoFloor: Math.round(this.playbackEchoFloor),
+          currentRms: Math.round(isWebcallStreaming ? frameRms(pcm8k) : currentRms),
+        };
+        // Webcall: energy only arms. Cut TTS when STT has real caller words.
+        // Energy-alone abort is what chopped overlap on webcall (AEC / bleed).
+        if (isWebcallStreaming) {
+          const pending = this.usablePendingBargeTranscript();
+          if (!pending) {
+            if (now - this.lastEnergyMonitorLogAt >= 700) {
+              this.lastEnergyMonitorLogAt = now;
+              logger.info(
+                { callId: this.config.callId, ...energyDetails },
+                "Barge-in energy held — waiting for caller transcript (webcall)",
+              );
+            }
+            return;
+          }
+          this.triggerBargeIn(source, pending, { speculative: true, energyDetails });
+        } else {
+          this.triggerBargeIn(source, undefined, {
+            speculative: false,
+            energyDetails,
+          });
+        }
         this.audioBuffer = [];
         this.audioBufferNative16k = [];
         logger.info(
           {
-            callId: this.config.callId, source, frames: this.bargeInSpeechFrames,
-            effectiveMinFrames, effectiveThreshold, configuredThreshold: this.bargeInEnergyThreshold,
-            echoFloor: Math.round(this.playbackEchoFloor),
-            currentRms: Math.round(isWebcallStreaming ? frameRms(pcm8k) : currentRms),
+            callId: this.config.callId, source, ...energyDetails,
           },
           "Barge-in detected (energy)",
         );
