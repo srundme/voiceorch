@@ -46,6 +46,7 @@ import {
 } from "./gemini-live-voices.js";
 import { toGeminiLiveTools } from "./gemini-tools.js";
 import { runLiveToolCall } from "./live-tool-runner.js";
+import { looksLikeFalseBookingClaim } from "../../booking-flow-enforce.js";
 import { mergeTranscriptFragment } from "./live-transcript-merge.js";
 import { CALL_SCREENING_WINDOW_MS, detectScreeningPrompt } from "../../callScreening.js";
 
@@ -537,9 +538,46 @@ export class GeminiLivePipeline implements VoiceSession {
     await this.ensureConnected();
     this.appendAgent(text);
     this.config.onTranscript("agent", text);
+    const spokenAfter = Date.now();
     this.session?.sendRealtimeInput({
       text: `Speak exactly the following to the caller: "${text}"`,
     });
+    // Classic speakRaw waits for TTS + drain. Live used to return here, then
+    // transfer/end_call tore the media down before Gemini audio reached the phone.
+    await this.waitUntilSpokenAudioDrained(spokenAfter, 10_000);
+  }
+
+  /**
+   * Wait until Gemini audio for a speakRaw prompt has been pumped, then a short
+   * quiet gap. Does not wait on msgChain (that deadlocks during tool calls).
+   */
+  private async waitUntilSpokenAudioDrained(startedAtMs: number, timeoutMs: number): Promise<void> {
+    const t0 = Date.now();
+    let heard = false;
+    while (Date.now() - t0 < timeoutMs) {
+      if (this.closed) return;
+      if (this.lastRealFrameAt >= startedAtMs) heard = true;
+      const idle =
+        this.outFrames8k.length === 0
+        && this.pendingOut24k.length === 0;
+      if (heard && idle && Date.now() - this.lastRealFrameAt >= 450) return;
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    if (!heard) {
+      logger.warn(
+        { callId: this.config.callId, timeoutMs },
+        "Gemini Live: speakRaw timed out with no outbound audio",
+      );
+    }
+  }
+
+  private ingestOutboundAudio(msg: LiveServerMessage): void {
+    if (this.closed) return;
+    const inlineAudio = msg.data;
+    if (!inlineAudio) return;
+    const pcm24k = Buffer.from(inlineAudio, "base64");
+    this.pendingOut24k = Buffer.concat([this.pendingOut24k, pcm24k]);
+    this.flushOutboundAudio();
   }
 
   getTranscript(): string {
@@ -725,6 +763,9 @@ export class GeminiLivePipeline implements VoiceSession {
           // long-running tool call inside the chain must never head-of-line
           // block the barge-in (queue clear + carrier clearAudio).
           if (msg.serverContent?.interrupted) this.handleInterrupted();
+          // Play audio immediately. Tool handlers await on msgChain; if audio
+          // waited there, speakRaw/transfer would hang and the caller hears silence.
+          this.ingestOutboundAudio(msg);
           this.msgChain = this.msgChain
             .then(() => this.onServerMessage(msg))
             .catch((err) => logger.error({ callId: this.config.callId, err }, "Gemini Live message handler error"));
@@ -776,13 +817,6 @@ export class GeminiLivePipeline implements VoiceSession {
       // Model started speaking → caller turn is done.
       if (this.inputBuf.trim()) this.flushInputBuf();
       this.outputBuf = mergeTranscriptFragment(this.outputBuf, content.outputTranscription.text);
-    }
-
-    const inlineAudio = msg.data;
-    if (inlineAudio) {
-      const pcm24k = Buffer.from(inlineAudio, "base64");
-      this.pendingOut24k = Buffer.concat([this.pendingOut24k, pcm24k]);
-      this.flushOutboundAudio();
     }
 
     if (msg.toolCall?.functionCalls?.length) {
@@ -1030,6 +1064,7 @@ export class GeminiLivePipeline implements VoiceSession {
         name,
         args,
       );
+      this.maybeCorrectFailedLiveBooking(name, result);
       responses.push({
         id: call.id,
         name,
@@ -1038,6 +1073,36 @@ export class GeminiLivePipeline implements VoiceSession {
       this.config.onConversationUpdate?.(this.getHistory());
     }
     this.session.sendToolResponse({ functionResponses: responses });
+  }
+
+  /** Live audio can claim "you're booked" before the tool result — drop that if save failed. */
+  private maybeCorrectFailedLiveBooking(toolName: string, result: Record<string, unknown>): void {
+    if (!/book_appointment|native_booking/i.test(toolName)) return;
+    const output = typeof result["output"] === "string" ? result["output"] : "";
+    const err = typeof result["error"] === "string" ? result["error"] : "";
+    const blob = `${output} ${err}`;
+    if (/booking_confirmed/.test(blob)) return;
+    const spoken = `${this.outputBuf} ${this.lastAgentText ?? ""}`;
+    if (looksLikeFalseBookingClaim(spoken)) {
+      this.pendingOut24k = Buffer.alloc(0);
+      this.outFrames8k.length = 0;
+      this.config.onBargeIn?.();
+      logger.warn(
+        { callId: this.config.callId, toolName, result: blob.slice(0, 160) },
+        "Gemini Live: dropped spoken booking claim after tool did not confirm",
+      );
+    }
+    if (this.session && !this.closed) {
+      try {
+        this.session.sendRealtimeInput({
+          text:
+            "The booking tool did not save an appointment. Do not tell the caller they are booked. " +
+            "Say the booking could not be completed and offer to transfer or try again.",
+        });
+      } catch (err) {
+        logger.warn({ callId: this.config.callId, err }, "Gemini Live: booking-fail correction prompt failed");
+      }
+    }
   }
 
   private appendUser(text: string): void {

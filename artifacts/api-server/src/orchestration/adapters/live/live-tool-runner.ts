@@ -25,6 +25,7 @@ import {
   executeMuteMeetingTool,
 } from "../../../services/meet-control.js";
 import { logger } from "../../../lib/logger.js";
+import { liveToolTimeoutMs } from "./live-tool-timeout.js";
 
 export interface LiveToolRunnerDeps {
   config: SessionConfig;
@@ -188,14 +189,15 @@ export async function runLiveToolCall(
       || tool.type === "transfer_warm"
       || tool.type === "transfer_agent";
     const resultPromise = executeLiveAgentTool(deps, tool, args);
+    const timeoutMs = liveToolTimeoutMs(tool.type);
     const result = skipTimeout
       ? await resultPromise
       : await Promise.race([
           resultPromise,
           new Promise<never>((_, reject) => {
             setTimeout(
-              () => reject(new Error(`tool timed out after ${LIVE_TOOL_TIMEOUT_MS}ms`)),
-              LIVE_TOOL_TIMEOUT_MS,
+              () => reject(new Error(`tool timed out after ${timeoutMs}ms`)),
+              timeoutMs,
             );
           }),
         ]);
@@ -208,7 +210,6 @@ export async function runLiveToolCall(
   }
 }
 
-const LIVE_TOOL_TIMEOUT_MS = 15_000;
 
 async function executeLiveAgentTool(
   deps: LiveToolRunnerDeps,
