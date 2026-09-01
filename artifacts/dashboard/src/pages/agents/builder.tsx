@@ -4477,6 +4477,12 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const [outcomeGuides, setOutcomeGuides] = useState<Record<string, string>>({});
   const [afterCallMessages, setAfterCallMessages] = useState<AfterCallMessagesState>(EMPTY_AFTER_CALL_MESSAGES);
   const [dirty, setDirty] = useState(false);
+  const [outcomesAutoStatus, setOutcomesAutoStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
+  const outcomesAutoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const outcomesEditRevRef = useRef(0);
+  const outcomesSaveRevRef = useRef(0);
+  const outcomesAutoSaveRef = useRef(false);
+  const mutateOutcomesRef = useRef<() => void>(() => {});
 
   const { data: dispConfig, isLoading: dispLoading } = useQuery<DispConfigRow | null>({
     queryKey: ["disposition-config", agentId],
@@ -4644,14 +4650,40 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       });
     },
     onSuccess: () => {
-      toast({ title: "Outcomes saved" });
+      const isAuto = outcomesAutoSaveRef.current;
+      outcomesAutoSaveRef.current = false;
+      if (outcomesEditRevRef.current !== outcomesSaveRevRef.current) {
+        setOutcomesAutoStatus("pending");
+        return;
+      }
       setDirty(false);
+      setOutcomesAutoStatus("saved");
+      if (!isAuto) toast({ title: "Outcomes saved" });
       void qc.invalidateQueries({ queryKey: ["disposition-config", agentId] });
     },
     onError: () => {
+      outcomesAutoSaveRef.current = false;
+      setOutcomesAutoStatus("error");
       toast({ title: "Failed to save", variant: "destructive" });
     },
   });
+  mutateOutcomesRef.current = saveMutation.mutate;
+
+  useEffect(() => {
+    if (!dirty) return;
+    outcomesEditRevRef.current += 1;
+    setOutcomesAutoStatus("pending");
+    if (outcomesAutoTimerRef.current) clearTimeout(outcomesAutoTimerRef.current);
+    outcomesAutoTimerRef.current = setTimeout(() => {
+      outcomesSaveRevRef.current = outcomesEditRevRef.current;
+      outcomesAutoSaveRef.current = true;
+      setOutcomesAutoStatus("saving");
+      mutateOutcomesRef.current();
+    }, 1200);
+    return () => {
+      if (outcomesAutoTimerRef.current) clearTimeout(outcomesAutoTimerRef.current);
+    };
+  }, [dirty, categories, fields, rules, meaningMap, outcomeGuides, afterCallMessages]);
 
   function applyPreset(presetId: string) {
     const preset = OUTCOME_PRESETS.find((p) => p.id === presetId);
@@ -5253,14 +5285,28 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
         </>
       )}
 
-      {(categories.length > 0 || fields.length > 0 || dirty || dispositionKeys.length > 0) && (
-        <div className="flex justify-end">
+      {(categories.length > 0 || fields.length > 0 || dirty || dispositionKeys.length > 0 || outcomesAutoStatus === "saved") && (
+        <div className="flex items-center justify-end gap-2">
+          {dirty && (
+            <span className="text-[11px] text-muted-foreground">
+              {outcomesAutoStatus === "saving" ? "Auto-saving…" : outcomesAutoStatus === "error" ? "Auto-save failed" : "Auto-save pending"}
+            </span>
+          )}
+          {!dirty && outcomesAutoStatus === "saved" && (
+            <span className="text-[11px] text-emerald-700 dark:text-emerald-400">Auto-saved</span>
+          )}
           <Button
             type="button"
             size="sm"
             className="h-8 text-xs gap-1.5"
             disabled={saveMutation.isPending || !dirty}
-            onClick={() => saveMutation.mutate()}
+            onClick={() => {
+              if (outcomesAutoTimerRef.current) clearTimeout(outcomesAutoTimerRef.current);
+              outcomesSaveRevRef.current = outcomesEditRevRef.current;
+              outcomesAutoSaveRef.current = false;
+              setOutcomesAutoStatus("saving");
+              saveMutation.mutate();
+            }}
           >
             <Save className="h-3.5 w-3.5" />
             {saveMutation.isPending ? "Saving…" : "Save Outcomes"}
