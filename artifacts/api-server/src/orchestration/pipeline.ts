@@ -5735,6 +5735,22 @@ export class OrchestrationPipeline implements VoiceSession {
     });
   }
 
+  /** Welcome / opener only — ~0.85× so outbound is not rushed. Restores Sound speed after. */
+  private async playOpeningGreetingText(text: string, emotions?: string[]): Promise<void> {
+    const restoreSpeed = this.agent.ttsSpeed ?? 1;
+    const canSlow = typeof this.tts.setSpeed === "function";
+    if (canSlow) {
+      this.tts.setSpeed!(resolveInboundGreetingTtsSpeed(restoreSpeed));
+    }
+    try {
+      await this.playTextAsSentences(text, emotions);
+    } finally {
+      if (canSlow) {
+        this.tts.setSpeed!(restoreSpeed === 1 ? null : restoreSpeed);
+      }
+    }
+  }
+
   async greet(): Promise<void> {
     if (this.closed) return;
     // Prefer ambient ready before first speech so BG noise isn't silent for seconds
@@ -5875,7 +5891,7 @@ export class OrchestrationPipeline implements VoiceSession {
           { callId: this.config.callId, welcome: typedWelcome.slice(0, 40) },
           "Pipeline: playing welcome before greeting LLM",
         );
-        await this.playTextAsSentences(typedWelcome);
+        await this.playOpeningGreetingText(typedWelcome);
         welcomeAlreadySpoken = true;
         if (this.closed || this.bargeInRequested) {
           // fall through to disarm + heard-append
@@ -5992,22 +6008,8 @@ export class OrchestrationPipeline implements VoiceSession {
       this.beginOpeningGreetingPlayback((greeting.trim() || typedWelcome).length);
       logger.info({ callId: this.config.callId, greeting: (greeting || typedWelcome).slice(0, 80) }, "Sending greeting");
       try {
-        // Inbound openers feel rushed at full pace (especially long Tamil
-        // purpose-of-call lines). Slow TTS slightly for this playback only.
-        const restoreSpeed = this.agent.ttsSpeed ?? 1;
-        const slowedInbound =
-          this.callDirection === "inbound" && typeof this.tts.setSpeed === "function";
-        if (slowedInbound) {
-          this.tts.setSpeed!(resolveInboundGreetingTtsSpeed(restoreSpeed));
-        }
-        try {
-          if (greeting.trim() && !this.bargeInRequested) {
-            await this.playTextAsSentences(greeting, greetingEmotions);
-          }
-        } finally {
-          if (slowedInbound) {
-            this.tts.setSpeed!(restoreSpeed === 1 ? null : restoreSpeed);
-          }
+        if (greeting.trim() && !this.bargeInRequested) {
+          await this.playOpeningGreetingText(greeting, greetingEmotions);
         }
       } finally {
         this.greetingPlaybackActive = false;

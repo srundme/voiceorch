@@ -59,7 +59,7 @@ function withInboundGreeting(greet: string, name: string | null, tails: string[]
 /** Inbound Welcome — spoken first, then the caller, then the prompt. */
 export const INBOUND_GREETING = "Hi, Tell me what you called about";
 
-/** Slightly slower TTS for the inbound opener only (sounds less rushed). */
+/** Slightly slower TTS for the opening Welcome (inbound and outbound). Later turns keep Sound speed. */
 export function resolveInboundGreetingTtsSpeed(agentSpeed: number | null | undefined): number {
   const base = typeof agentSpeed === "number" && Number.isFinite(agentSpeed) && agentSpeed > 0
     ? agentSpeed
