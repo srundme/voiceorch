@@ -3679,6 +3679,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   }, [form.formState.errors?.webhookUrl, form.formState.errors?.webhookSecret, form.formState.errors?.webhookPayloadTemplate]);
 
   const bargeIn = form.watch("bargeInEnabled");
+  const notifyAgentName = String(form.watch("name") ?? agent?.name ?? "").trim() || "this agent";
 
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
     { id: "engine",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"     },
@@ -4113,7 +4114,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
           <BuilderPanel
             title="Post-call notify"
             icon={<Webhook />}
-            description="POST JSON to your CRM after each call"
+            description={`POST JSON to your CRM after each call on ${notifyAgentName}`}
           >
             <div className="space-y-3">
               <FormField control={form.control} name="webhookUrl" render={({ field }) => {
