@@ -26,6 +26,7 @@ import {
 } from "../../../services/meet-control.js";
 import { logger } from "../../../lib/logger.js";
 import { liveToolTimeoutMs } from "./live-tool-timeout.js";
+import { LIVE_BOOKING_EMAIL_BLOCKED, liveBookingConfirmEmailBlocked } from "./live-booking-email.js";
 
 export interface LiveToolRunnerDeps {
   config: SessionConfig;
@@ -35,6 +36,8 @@ export interface LiveToolRunnerDeps {
   endCall: () => void;
   /** Committed caller turns so far — gates booking on real engagement. */
   genuineUserTurns: () => number;
+  /** True after booking_confirmed / reschedule_confirmed on this Live call. */
+  schedulingActionConfirmed: () => boolean;
 }
 
 /**
@@ -321,6 +324,13 @@ async function executeLiveAgentTool(
         messageTemplate: tool.messageTemplate,
       });
     case "send_email":
+      if (liveBookingConfirmEmailBlocked(args, deps.schedulingActionConfirmed())) {
+        logger.warn(
+          { callId, agentId: agent.id },
+          "Live: booking confirmation email blocked — no successful booking in this call",
+        );
+        return LIVE_BOOKING_EMAIL_BLOCKED;
+      }
       return executeSendEmail({
         agentId: agent.id,
         callId,

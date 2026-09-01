@@ -2381,6 +2381,34 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         onFatalError: (reason) => {
           void failSession(sessionId, reason);
         },
+        voicemailDelivery: (params.voicemailDelivery || ((params.amdMachineHint || params.amdArmed) && amdVoicemailAction === "leave_message"))
+          ? {
+              message: (typeof agentCfg["voicemailMessage"] === "string" && (agentCfg["voicemailMessage"] as string).trim())
+                ? (agentCfg["voicemailMessage"] as string)
+                : "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
+              ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
+            }
+          : undefined,
+        voicemailPolicy: {
+          action: amdVoicemailAction,
+          message: (typeof agentCfg["voicemailMessage"] === "string" && (agentCfg["voicemailMessage"] as string).trim())
+            ? (agentCfg["voicemailMessage"] as string)
+            : "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
+          ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
+        },
+        amdConfirm: (params.amdMachineHint || params.amdArmed)
+          ? {
+              action: amdVoicemailAction,
+              hint: !!params.amdMachineHint,
+              ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
+            }
+          : undefined,
+        onAmdResult: (result) => {
+          void withDbRetry("persist-amd-result", () =>
+            db.update(callsTable).set({ amdResult: result }).where(eq(callsTable.id, callRecord.id)),
+          ).catch((err) => logger.error({ callId: callRecord.id, err }, "Failed to persist AMD result"));
+        },
+        onVoicemailAction: () => { voicemailActionExecuted = true; },
         callDirection,
         answeredAt: params.answeredAt,
       })
@@ -2592,34 +2620,16 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   logger.info({ sessionId, callId: callRecord.id, agent: agent.name }, "Session created");
 
   if (params.amdMachineHint || params.amdArmed) {
-    if (agentConfig.voiceStack === "gemini_live") {
-      // v1: acoustic AMD / voicemail delivery stays on the classic stack only.
-      pipeline.greet().catch((err) => {
-        logger.error({ sessionId, err }, "Gemini Live greeting failed");
-      });
-    } else {
-      // Acoustic AMD confirmation — armed by an (unreliable) synchronous machine
-      // hint OR unconditionally for AMD-enabled VoBiz outbound calls (amdArmed;
-      // the async machine_detection_url callback corroborates mid-window). Open
-      // the normal stream but confirm the machine verdict acoustically BEFORE
-      // greeting — only a confirmed machine enacts the voicemail action; anything
-      // ambiguous falls through to a normal greeting so a live human is never harmed.
+      // Live: machine hint/callback enacts hangup or leave_message; no hint → greet.
+      // Classic: acoustic window before enacting.
       pipeline.confirmAmdMachineThenBranch().catch((err) => {
         logger.error({ sessionId, err }, "AMD acoustic confirmation failed");
       });
-    }
   } else if (params.voicemailDelivery) {
-    if (agentConfig.voiceStack === "gemini_live") {
-      pipeline.greet().catch((err) => {
-        logger.error({ sessionId, err }, "Gemini Live greeting failed");
-      });
-    } else {
-      // Voicemail-delivery mode: do NOT greet/run the conversation. Listen for the
-      // machine greeting to end, then speak the full message once and hang up.
+      // Voicemail-delivery mode: do NOT greet/run the conversation.
       pipeline.deliverVoicemail().catch((err) => {
         logger.error({ sessionId, err }, "Voicemail delivery failed");
       });
-    }
   } else {
     pipeline.greet().catch((err) => {
       logger.error({ sessionId, err }, "Greeting failed");

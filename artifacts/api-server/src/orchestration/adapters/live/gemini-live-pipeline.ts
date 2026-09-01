@@ -47,6 +47,7 @@ import {
 import { toGeminiLiveTools } from "./gemini-tools.js";
 import { runLiveToolCall } from "./live-tool-runner.js";
 import { looksLikeFalseBookingClaim } from "../../booking-flow-enforce.js";
+import { LIVE_BOOKING_TRUTH_RULE, liveToolResultConfirmedBooking } from "./live-booking-email.js";
 import { mergeTranscriptFragment } from "./live-transcript-merge.js";
 import { CALL_SCREENING_WINDOW_MS, detectScreeningPrompt } from "../../callScreening.js";
 
@@ -283,6 +284,9 @@ export class GeminiLivePipeline implements VoiceSession {
   private static readonly MAX_LIVE_RECONNECTS = 2;
   private screeningHangupDone = false;
   private readonly screeningWindowStart = Date.now();
+  private schedulingActionConfirmed = false;
+  private bookingTruthPromptSent = false;
+  private amdExternalVerdict: "human" | "machine" | null = null;
 
   constructor(config: SessionConfig) {
     const rawAudioOut = config.onAudioOut;
@@ -520,17 +524,68 @@ export class GeminiLivePipeline implements VoiceSession {
   }
 
   async confirmAmdMachineThenBranch(): Promise<void> {
-    // v1: AMD/voicemail paths are classic-only — fall through to normal greeting.
-    await this.greet();
+    if (this.closed) return;
+    const action = this.config.amdConfirm?.action ?? "hangup";
+    // amdArmed with no sync hint: wait briefly for the async machine_detection callback.
+    if (this.config.amdConfirm && this.config.amdConfirm.hint !== true && this.amdExternalVerdict == null) {
+      const waitMs = 2_500;
+      const t0 = Date.now();
+      while (!this.closed && Date.now() - t0 < waitMs && this.amdExternalVerdict == null) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+    const providerSaidMachine =
+      this.config.amdConfirm?.hint === true || this.amdExternalVerdict === "machine";
+    // No acoustic window on Live — do not hang up every AMD-armed outbound
+    // (that would drop humans). Enact voicemail only on a machine hint/callback.
+    if (!providerSaidMachine) {
+      await this.greet();
+      return;
+    }
+    try { this.config.onAmdResult?.("machine"); } catch { /* best-effort */ }
+    if (action === "continue") {
+      await this.greet();
+      return;
+    }
+    if (action === "leave_message") {
+      await this.deliverVoicemail();
+      return;
+    }
+    try { this.config.onVoicemailAction?.(); } catch { /* best-effort */ }
+    this.config.onCallEnd();
   }
 
   async deliverVoicemail(): Promise<void> {
-    await this.greet();
+    if (this.closed) return;
+    this.greetingSent = true;
+    const message = (
+      this.config.voicemailDelivery?.message
+      ?? this.config.voicemailPolicy?.message
+      ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you."
+    ).trim();
+    const leadSec =
+      this.config.voicemailDelivery?.leadInSeconds
+      ?? this.config.amdConfirm?.leadInSeconds
+      ?? this.config.voicemailPolicy?.leadInSeconds
+      ?? 0;
+    if (leadSec > 0 && !this.closed) {
+      await new Promise((r) => setTimeout(r, Math.round(leadSec * 1000)));
+    }
+    if (!this.closed && message) {
+      await this.speakRaw(message);
+    }
+    try { this.config.onVoicemailAction?.(); } catch { /* best-effort */ }
+    if (!this.closed) this.config.onCallEnd();
   }
 
   async finishSpeakingForMaxDuration(graceMs: number): Promise<void> {
-    if (graceMs <= 0) return;
-    await new Promise((r) => setTimeout(r, graceMs));
+    if (this.closed || graceMs <= 0) return;
+    const speaking =
+      this.isPlayingOut
+      || this.outFrames8k.length > 0
+      || this.pendingOut24k.length > 0;
+    if (!speaking) return;
+    await this.waitUntilSpokenAudioDrained(Date.now() - 80, graceMs);
   }
 
   async speakRaw(text: string): Promise<void> {
@@ -698,8 +753,8 @@ export class GeminiLivePipeline implements VoiceSession {
     // Live stack uses native VAD — no classic STT wait state.
   }
 
-  onExternalAmdSignal(_verdict: "machine" | "human", _source: string): void {
-    // v1: AMD corroboration is classic-only.
+  onExternalAmdSignal(verdict: "machine" | "human", _source: string): void {
+    this.amdExternalVerdict = verdict;
   }
 
   private async ensureConnected(): Promise<void> {
@@ -742,7 +797,7 @@ export class GeminiLivePipeline implements VoiceSession {
       model,
       config: {
         responseModalities: [Modality.AUDIO],
-        systemInstruction: this.agent.systemPrompt,
+        systemInstruction: this.liveSystemInstruction(),
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: { voiceName },
@@ -940,8 +995,40 @@ export class GeminiLivePipeline implements VoiceSession {
     const text = this.outputBuf.trim();
     this.outputBuf = "";
     if (!text) return;
+    if (!this.schedulingActionConfirmed && looksLikeFalseBookingClaim(text)) {
+      this.pendingOut24k = Buffer.alloc(0);
+      this.outFrames8k.length = 0;
+      this.config.onBargeIn?.();
+      logger.warn(
+        { callId: this.config.callId, text: text.slice(0, 120) },
+        "Gemini Live: suppressed spoken booking claim with no booking_confirmed",
+      );
+      this.nudgeBookingTruth();
+    }
     this.appendAgent(text);
     this.config.onTranscript("agent", text);
+  }
+
+  private liveSystemInstruction(): string {
+    const hasBook = this.agent.tools.some(
+      (t) => t.type === "native_booking" || t.type === "native_reschedule",
+    );
+    if (!hasBook) return this.agent.systemPrompt;
+    return `${this.agent.systemPrompt}\n\n${LIVE_BOOKING_TRUTH_RULE}`;
+  }
+
+  private nudgeBookingTruth(): void {
+    if (this.bookingTruthPromptSent || !this.session || this.closed) return;
+    this.bookingTruthPromptSent = true;
+    try {
+      this.session.sendRealtimeInput({
+        text:
+          "The booking was not saved. Do not tell the caller they are booked. " +
+          "Say the booking could not be completed and offer to transfer or try again.",
+      });
+    } catch (err) {
+      logger.warn({ callId: this.config.callId, err }, "Gemini Live: booking-truth nudge failed");
+    }
   }
 
   private flushOutboundAudio(force = false): void {
@@ -1060,10 +1147,12 @@ export class GeminiLivePipeline implements VoiceSession {
           },
           genuineUserTurns: () =>
             this.history.filter((m) => m.role === "user" && m.content.trim().length > 0).length,
+          schedulingActionConfirmed: () => this.schedulingActionConfirmed,
         },
         name,
         args,
       );
+      if (liveToolResultConfirmedBooking(result)) this.schedulingActionConfirmed = true;
       this.maybeCorrectFailedLiveBooking(name, result);
       responses.push({
         id: call.id,
@@ -1092,17 +1181,7 @@ export class GeminiLivePipeline implements VoiceSession {
         "Gemini Live: dropped spoken booking claim after tool did not confirm",
       );
     }
-    if (this.session && !this.closed) {
-      try {
-        this.session.sendRealtimeInput({
-          text:
-            "The booking tool did not save an appointment. Do not tell the caller they are booked. " +
-            "Say the booking could not be completed and offer to transfer or try again.",
-        });
-      } catch (err) {
-        logger.warn({ callId: this.config.callId, err }, "Gemini Live: booking-fail correction prompt failed");
-      }
-    }
+    this.nudgeBookingTruth();
   }
 
   private appendUser(text: string): void {
