@@ -25,11 +25,32 @@ export const DEFAULT_SQUAD_LIMITS: Required<SquadLimits> = {
 
 /** Spoken by the departing agent before every live teammate handoff. */
 export const DEFAULT_SQUAD_HANDOFF_MESSAGE =
-  "One moment — I'm connecting you to a teammate who can help with this.";
+  "Just a second — connecting you now.";
 
 /** Spoken by the receiving agent after a live handoff. */
 export const DEFAULT_SQUAD_HANDOFF_GREETING =
-  "Hi — I've been briefed on your conversation so far. How can I help?";
+  "Hi — I have what you just said. How can I help?";
+
+const LEGACY_SQUAD_HANDOFF_MESSAGES = new Set([
+  "One moment — I'm connecting you to a teammate who can help with this.",
+]);
+
+const LEGACY_SQUAD_HANDOFF_GREETINGS = new Set([
+  "Hi — I've been briefed on your conversation so far. How can I help?",
+]);
+
+/** Use saved custom copy; map the old stiff defaults to the spoken ones. */
+export function spokenSquadHandoffMessage(stored?: string | null): string {
+  const t = (stored ?? "").trim();
+  if (!t || LEGACY_SQUAD_HANDOFF_MESSAGES.has(t)) return DEFAULT_SQUAD_HANDOFF_MESSAGE;
+  return t;
+}
+
+export function spokenSquadHandoffGreeting(stored?: string | null): string {
+  const t = (stored ?? "").trim();
+  if (!t || LEGACY_SQUAD_HANDOFF_GREETINGS.has(t)) return DEFAULT_SQUAD_HANDOFF_GREETING;
+  return t;
+}
 
 export const squadsTable = pgTable("squads", {
   id: serial("id").primaryKey(),

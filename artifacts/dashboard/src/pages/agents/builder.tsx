@@ -7919,10 +7919,10 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
   const [agent2Name, setAgent2Name] = useState("");
   const [agent2Role, setAgent2Role] = useState("Meeting Scheduler");
   const [handoffMessage, setHandoffMessage] = useState(
-    "One moment — I'm connecting you to a teammate who can help with this.",
+    "Just a second — connecting you now.",
   );
   const [handoffGreeting, setHandoffGreeting] = useState(
-    "Hi — I've been briefed on your conversation so far. How can I help?",
+    "Hi — I have what you just said. How can I help?",
   );
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -7974,8 +7974,8 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     setAgent1Role("Lead Qualifier");
     setAgent2Name("");
     setAgent2Role("Meeting Scheduler");
-    setHandoffMessage("One moment — I'm connecting you to a teammate who can help with this.");
-    setHandoffGreeting("Hi — I've been briefed on your conversation so far. How can I help?");
+    setHandoffMessage("Just a second — connecting you now.");
+    setHandoffGreeting("Hi — I have what you just said. How can I help?");
     setCreateError(null);
     onClose();
   };
@@ -8025,10 +8025,10 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
               status: "active",
               handoffMessage:
                 handoffMessage.trim() ||
-                "One moment — I'm connecting you to a teammate who can help with this.",
+                "Just a second — connecting you now.",
               handoffGreeting:
                 handoffGreeting.trim() ||
-                "Hi — I've been briefed on your conversation so far. How can I help?",
+                "Hi — I have what you just said. How can I help?",
               members: [
                 {
                   agentId: agent1.id,
@@ -8271,7 +8271,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                   className="min-h-[60px] text-xs resize-none"
                   value={handoffMessage}
                   onChange={e => setHandoffMessage(e.target.value)}
-                  placeholder="One moment — I'm connecting you to a teammate who can help with this."
+                  placeholder="Just a second — connecting you now."
                 />
                 <p className="text-[11px] text-muted-foreground">
                   Spoken by Agent 1 every time before connecting Agent 2.
@@ -8307,7 +8307,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                   className="min-h-[60px] text-xs resize-none"
                   value={handoffGreeting}
                   onChange={e => setHandoffGreeting(e.target.value)}
-                  placeholder="Hi — I've been briefed on your conversation so far. How can I help?"
+                  placeholder="Hi — I have what you just said. How can I help?"
                 />
                 <p className="text-[11px] text-muted-foreground">
                   Spoken by Agent 2 after they take over the call.

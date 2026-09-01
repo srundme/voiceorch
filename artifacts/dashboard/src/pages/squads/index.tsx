@@ -25,9 +25,9 @@ import {
 const API = "/api";
 
 const DEFAULT_HANDOFF_MESSAGE =
-  "One moment — I'm connecting you to a teammate who can help with this.";
+  "Just a second — connecting you now.";
 const DEFAULT_HANDOFF_GREETING =
-  "Hi — I've been briefed on your conversation so far. How can I help?";
+  "Hi — I have what you just said. How can I help?";
 
 type SquadMember = {
   id?: number;

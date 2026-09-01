@@ -3,7 +3,7 @@
  * Keeps the carrier/webcall media transport open; swaps only the VoiceSession pipeline.
  */
 
-import { db, agentsTable, providersTable, platformSettingsTable, type Squad, DEFAULT_SQUAD_HANDOFF_MESSAGE, DEFAULT_SQUAD_HANDOFF_GREETING } from "@workspace/db";
+import { db, agentsTable, providersTable, platformSettingsTable, type Squad, spokenSquadHandoffMessage, spokenSquadHandoffGreeting } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { decryptKey } from "../lib/crypto.js";
 import { logger } from "../lib/logger.js";
@@ -400,9 +400,7 @@ export async function performSquadAgentHandoff(opts: {
   // Finish any in-flight TTS on the departing agent, then always speak the
   // squad's handoff announcement so the caller never hears a mid-sentence cut
   // when we swap pipelines / play the receiving greeting.
-  const announcement =
-    (opts.squad.handoffMessage && opts.squad.handoffMessage.trim()) ||
-    DEFAULT_SQUAD_HANDOFF_MESSAGE;
+  const announcement = spokenSquadHandoffMessage(opts.squad.handoffMessage);
   try {
     await opts.previousPipeline.finishSpeakingForMaxDuration(2_500);
   } catch (err) {
@@ -466,13 +464,13 @@ export async function performSquadAgentHandoff(opts: {
     return null;
   }
 
-  const greeting =
-    (opts.squad.handoffGreeting && opts.squad.handoffGreeting.trim()) ||
-    DEFAULT_SQUAD_HANDOFF_GREETING;
+  const greeting = spokenSquadHandoffGreeting(opts.squad.handoffGreeting);
 
   // Speak before the session swaps pointers — onAudioOut is shared, so the
   // caller hears the greeting even while inbound audio still hits the old
-  // pipeline for a moment.
+  // pipeline for a moment. A short gap after the departing line so two voices
+  // do not slam together.
+  await new Promise((r) => setTimeout(r, 650));
   try {
     await newPipeline.speakRaw(greeting);
   } catch (err) {
