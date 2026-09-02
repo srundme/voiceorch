@@ -7,6 +7,7 @@
 import { looksLikeBookingTimeAnswer } from "./transcriptQuality.js";
 import { sanitizeAttendeeEmail, validateBookableEmail } from "./booking-email-validate.js";
 import { latinizeAttendeeName } from "./booking-attendee-name.js";
+import { reconstructSpokenEmail } from "./endpointing.js";
 
 export type BookingFlowState = {
   availabilityChecked: boolean;
@@ -18,6 +19,8 @@ export type BookingFlowState = {
   pendingName: string | null;
   emailSpellPending: boolean;
   emailConfirmed: boolean;
+  /** Address we actually spelled to the caller — confirm applies only to this. */
+  lastSpelledEmail: string | null;
 };
 
 export function emptyBookingFlowState(): BookingFlowState {
@@ -30,6 +33,7 @@ export function emptyBookingFlowState(): BookingFlowState {
     pendingName: null,
     emailSpellPending: false,
     emailConfirmed: false,
+    lastSpelledEmail: null,
   };
 }
 
@@ -50,6 +54,7 @@ export function looksLikeDemoOrScheduleIntent(text: string): boolean {
 export function looksLikeEmailConfirmationYes(text: string): boolean {
   const t = text.trim().toLowerCase();
   if (!t) return false;
+  if (looksLikeEmailRejection(t)) return false;
   if (
     /^(yes|yeah|yep|yup|correct|right|ok|okay|sure|perfect|that's right|that is right|confirmed)\b/i.test(
       t,
@@ -57,8 +62,20 @@ export function looksLikeEmailConfirmationYes(text: string): boolean {
   ) {
     return true;
   }
+  // "Oh correct" / "okay correct" (call 17701) after a spell-back.
+  if (/^(oh|ok|okay|ya|yeah)\s+(correct|right|yes)\b/i.test(t)) return true;
   // Tamil/Hindi affirmations — avoid \\b (does not work reliably on Indic scripts).
   return /^(சரி|ஆமா|ஆம்|சரிய|ஓகே|ठीक|हाँ|हां|सही)([\s!.]|$)/iu.test(t);
+}
+
+/** Caller saying the spelled address is wrong. */
+export function looksLikeEmailRejection(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  return (
+    /\b(no no|it'?s wrong|that'?s wrong|not correct|incorrect|wrong email|illa illa)\b/i.test(t)
+    || /(?:இல்ல|தவறு|गलत|नहीं)/u.test(t)
+  );
 }
 
 /** Spoken claim that booking already happened / link already sent. */
@@ -80,15 +97,56 @@ const LOOSE_EMAIL_RE = /[a-z0-9][a-z0-9._%+-]{0,64}@[a-z0-9][a-z0-9.-]{0,126}\.[
 export function extractEmailsFromText(text: string): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const m of text.match(LOOSE_EMAIL_RE) ?? []) {
-    const check = validateBookableEmail(m);
-    if (!check.ok) continue;
+  const push = (raw: string) => {
+    const check = validateBookableEmail(raw);
+    if (!check.ok) return;
     const key = check.email.toLowerCase();
-    if (seen.has(key)) continue;
+    if (seen.has(key)) return;
     seen.add(key);
     out.push(check.email);
-  }
+  };
+  const reconstructed = reconstructSpokenEmail(text);
+  if (reconstructed) push(reconstructed);
+  for (const m of text.match(LOOSE_EMAIL_RE) ?? []) push(m);
   return out;
+}
+
+/** Collapse `<spell>k a r r a j @ g m a i l . c o m</spell>` to a bookable address. */
+export function emailFromSpellMarkup(text: string): string | null {
+  const m = /<spell>([\s\S]*?)<\/spell>/i.exec(text);
+  if (!m?.[1]) return null;
+  const joined = m[1].replace(/\s+/g, "");
+  const check = validateBookableEmail(joined);
+  return check.ok ? check.email : null;
+}
+
+export function formatEmailForSpell(email: string): string {
+  return email
+    .trim()
+    .toLowerCase()
+    .split("")
+    .map((ch) => (ch === "@" ? "@" : ch === "." ? "." : ch))
+    .join(" ");
+}
+
+export function buildEmailSpellLine(email: string): string {
+  return `Let me confirm your email. <spell>${formatEmailForSpell(email)}</spell> Is that correct?`;
+}
+
+export function shouldSpeakEmailSpell(state: BookingFlowState): boolean {
+  if (!state.pendingEmail || state.emailConfirmed) return false;
+  return state.lastSpelledEmail !== state.pendingEmail;
+}
+
+export function markEmailSpelled(state: BookingFlowState, email: string): BookingFlowState {
+  const check = validateBookableEmail(email);
+  if (!check.ok) return state;
+  return {
+    ...state,
+    lastSpelledEmail: check.email,
+    emailSpellPending: true,
+    emailConfirmed: false,
+  };
 }
 
 const ISO_SLOT_RE = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2}))/g;
@@ -186,8 +244,13 @@ export function updateBookingFlowFromAssistantText(
   if (/<spell>|@\s*[a-z]|gmail|mail/i.test(assistantText)) {
     next.emailSpellPending = true;
   }
-  const emails = extractEmailsFromText(assistantText.replace(/<[^>]+>/g, " "));
-  if (emails[0]) next.pendingEmail = emails[0]!;
+  // Do not copy an invented address out of the agent's mouth into pendingEmail
+  // (call 17701: model spelled karthik@gmail.com after the caller said karraj).
+  const spelled = emailFromSpellMarkup(assistantText);
+  if (spelled && next.pendingEmail && spelled === next.pendingEmail) {
+    next.lastSpelledEmail = spelled;
+    next.emailSpellPending = true;
+  }
   // One clock only — slot lists ("9:00 AM, 9:15 AM, 10:00 AM") must not
   // snap lastSlotIso back to the first offered time.
   const clockHits = assistantText.match(
@@ -210,10 +273,18 @@ export function updateBookingFlowFromUserTurn(
 ): BookingFlowState {
   const next = { ...state, candidateSlots: [...state.candidateSlots] };
   const emails = extractEmailsFromText(userText);
-  if (emails[0]) {
+  if (emails[0] && emails[0] !== next.pendingEmail) {
     next.pendingEmail = emails[0]!;
-    // Fresh email — wait for spell-back confirmation unless they also affirm.
+    // Fresh email — must spell THIS address; a yes on the old one does not count.
     next.emailConfirmed = false;
+    next.emailSpellPending = false;
+    next.lastSpelledEmail = null;
+  }
+
+  if (looksLikeEmailRejection(userText)) {
+    next.emailConfirmed = false;
+    next.emailSpellPending = false;
+    next.lastSpelledEmail = null;
   }
 
   // Name heuristic: short non-email utterance while agent asked for name.
@@ -236,13 +307,17 @@ export function updateBookingFlowFromUserTurn(
     state.emailSpellPending
     || /<spell>|is that correct|சரியா|சரி தான|ठीक है ना|gmail/i.test(lastAssistantText);
 
-  if (assistantAskedEmailConfirm && looksLikeEmailConfirmationYes(userText) && next.pendingEmail) {
-    next.emailConfirmed = true;
-    next.emailSpellPending = false;
-  }
+  const spelledMatches =
+    !!next.pendingEmail
+    && !!next.lastSpelledEmail
+    && next.lastSpelledEmail === next.pendingEmail;
 
-  // If user re-states a valid email and says yes in same breath.
-  if (emails[0] && looksLikeEmailConfirmationYes(userText)) {
+  if (
+    spelledMatches
+    && assistantAskedEmailConfirm
+    && looksLikeEmailConfirmationYes(userText)
+    && next.pendingEmail
+  ) {
     next.emailConfirmed = true;
     next.emailSpellPending = false;
   }
@@ -280,6 +355,9 @@ export function shouldForceBookAppointment(opts: {
   if (!opts.hasBookTool || opts.alreadyBooked) return false;
   if (!opts.state.availabilityChecked || !opts.state.lastSlotIso) return false;
   if (!opts.state.pendingEmail) return false;
+  if (!opts.state.lastSpelledEmail || opts.state.lastSpelledEmail !== opts.state.pendingEmail) {
+    return false;
+  }
   // Force when email just confirmed, or already confirmed and user is progressing.
   if (opts.state.emailConfirmed) return true;
   if (looksLikeEmailConfirmationYes(opts.userText) && opts.state.emailSpellPending) return true;
@@ -294,6 +372,7 @@ export function canAutoBook(opts: {
   const s = opts.state;
   if (!s.availabilityChecked || !s.lastSlotIso) return false;
   if (!s.pendingEmail || !s.emailConfirmed) return false;
+  if (!s.lastSpelledEmail || s.lastSpelledEmail !== s.pendingEmail) return false;
   if (!s.pendingName || s.pendingName.trim().length < 2) return false;
   return validateBookableEmail(s.pendingEmail).ok;
 }

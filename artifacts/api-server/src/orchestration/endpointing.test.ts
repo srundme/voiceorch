@@ -211,6 +211,11 @@ describe("email collection helpers", () => {
     );
     expect(sanitizeSpokenEmailAddress("karthikeyan@gmail.com")).toBe("karthikeyan@gmail.com");
     expect(sanitizeSpokenEmailAddress("idris@gmail.com")).toBe("idris@gmail.com");
+    expect(sanitizeSpokenEmailAddress("www.karraj@gmail.com")).toBe("karraj@gmail.com");
+    expect(reconstructSpokenEmail("R A J R gmail.com")).toBe("rajr@gmail.com");
+    expect(reconstructSpokenEmail("W A no no it's wrong A E R T H I www.karraj@gmail.com")).toBe(
+      "karraj@gmail.com",
+    );
   });
 
   it("reconstructs Tamil letter-spelling and does not drop it when STT compactifies", () => {

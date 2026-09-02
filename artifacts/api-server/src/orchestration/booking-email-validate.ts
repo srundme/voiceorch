@@ -17,6 +17,9 @@ export function sanitizeAttendeeEmail(raw: string): string {
   if (at > 0) {
     const local = s.slice(0, at).replace(/\s+/g, "");
     const domain = s.slice(at + 1).replace(/\s+/g, "").toLowerCase();
+    if (local.toLowerCase().startsWith("www.") && local.length > 7) {
+      local = local.slice(4);
+    }
     s = `${local}@${domain}`;
   }
   return s.trim();

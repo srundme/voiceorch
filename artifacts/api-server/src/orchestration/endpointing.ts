@@ -272,6 +272,10 @@ export function sanitizeSpokenEmailAddress(addr: string): string {
       }
     }
   }
+  // STT often prefixes "www." when the caller spells W / "double-u" (call 17701).
+  if (local.toLowerCase().startsWith("www.") && local.length > 7) {
+    local = local.slice(4);
+  }
   return `${local}@${domain}`;
 }
 
@@ -315,9 +319,22 @@ export function looksLikeSpokenEmailSpelling(text: string): boolean {
  */
 export function reconstructSpokenEmail(text: string): string | null {
   const compact = text.match(EMAIL_ADDR_RE);
-  if (compact && !looksLikeSpokenEmailSpelling(text.replace(compact[0], " "))) {
-    return sanitizeSpokenEmailAddress(compact[0]);
+  const assembled = assembleSpokenEmailTokens(text);
+  if (compact) {
+    const cleaned = sanitizeSpokenEmailAddress(compact[0]);
+    if (assembled) {
+      const aLocal = assembled.slice(0, assembled.lastIndexOf("@"));
+      const cLocal = cleaned.slice(0, cleaned.lastIndexOf("@"));
+      const aDom = assembled.slice(assembled.lastIndexOf("@"));
+      const cDom = cleaned.slice(cleaned.lastIndexOf("@"));
+      if (aDom === cDom && aLocal.length > cLocal.length + 1) return assembled;
+    }
+    return cleaned;
   }
+  return assembled;
+}
+
+function assembleSpokenEmailTokens(text: string): string | null {
   const tokens = text.replace(/@/g, " @ ").split(/\s+/).filter(Boolean);
   let local = "";
   let domain = "";
@@ -332,6 +349,19 @@ export function reconstructSpokenEmail(text: string): string | null {
       continue;
     }
     if (/ரேட்|rate/i.test(tok)) continue;
+    const dotted = tok.match(/^([a-z0-9-]+)\.([a-z]{2,})$/i);
+    if (dotted && (SPOKEN_EMAIL_DOMAIN[dotted[1]!.toLowerCase()] || seenAt)) {
+      seenAt = true;
+      domain = (SPOKEN_EMAIL_DOMAIN[dotted[1]!.toLowerCase()] ?? dotted[1]!.toLowerCase());
+      tld = dotted[2]!.toLowerCase();
+      continue;
+    }
+    const mappedDomain = SPOKEN_EMAIL_DOMAIN[tok] ?? SPOKEN_EMAIL_DOMAIN[lower];
+    if (mappedDomain && (seenAt || local.length >= 2)) {
+      seenAt = true;
+      domain = mappedDomain;
+      continue;
+    }
     const letter = spokenEmailLetter(tok);
     if (!seenAt) {
       if (letter) local += letter;
@@ -339,15 +369,9 @@ export function reconstructSpokenEmail(text: string): string | null {
       continue;
     }
     if (EMAIL_DOT_RE.test(tok) || tok === "டாட்") continue;
-    const dotted = tok.match(/^([a-z0-9-]+)\.([a-z]{2,})$/i);
     if (dotted) {
       domain = dotted[1]!.toLowerCase();
       tld = dotted[2]!.toLowerCase();
-      continue;
-    }
-    const mappedDomain = SPOKEN_EMAIL_DOMAIN[tok] ?? SPOKEN_EMAIL_DOMAIN[lower];
-    if (mappedDomain) {
-      domain = mappedDomain;
       continue;
     }
     if (EMAIL_TLD_RE.test(tok) || tok === "காம்") {
@@ -357,7 +381,6 @@ export function reconstructSpokenEmail(text: string): string | null {
     if (letter && !domain) local += letter;
   }
   if (local.length >= 3 && domain && tld) return sanitizeSpokenEmailAddress(`${local}@${domain}.${tld}`);
-  if (compact) return sanitizeSpokenEmailAddress(compact[0]);
   return null;
 }
 

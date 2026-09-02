@@ -12,6 +12,7 @@ describe("sanitizeAttendeeEmail", () => {
 
   it("trims", () => {
     expect(sanitizeAttendeeEmail("  a@b.com ")).toBe("a@b.com");
+    expect(sanitizeAttendeeEmail("www.karraj@gmail.com")).toBe("karraj@gmail.com");
   });
 });
 

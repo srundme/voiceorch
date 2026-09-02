@@ -30,6 +30,7 @@ import { isSmartTurnReady, predictSmartTurn, warmSmartTurn } from "./smart-turn.
 import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { extractEmotionTag, makeMarkupTagFilter, stripMarkupTags } from "./emotion-tag.js";
+import { languagePrefix, resolveToolFillerPhrase } from "./tool-fillers.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { shouldBargeOnRealtimeVadStart, shouldBargeOnRealtimePartial, shouldCommitStreamingEnergyBarge, parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
@@ -45,11 +46,14 @@ import { validateBookableEmail, isEmailConfirmedFlag } from "./booking-email-val
 import { looksLikeVoicemailGreeting } from "../lib/voicemail-detect.js";
 import {
   buildAutoBookArgs,
+  buildEmailSpellLine,
   canAutoBook,
   emptyBookingFlowState,
   looksLikeFalseBookingClaim,
+  markEmailSpelled,
   shouldForceBookAppointment,
   shouldForceCheckAvailability,
+  shouldSpeakEmailSpell,
   updateBookingFlowFromAssistantText,
   updateBookingFlowFromToolResult,
   updateBookingFlowFromUserTurn,
@@ -76,6 +80,7 @@ import {
   resolveCollectionKind,
   resolveCollectionVadSilenceMs,
   isEmailCollectionContext,
+  looksLikeSpokenEmailSpelling,
   looksSnapComplete,
   sanitizeSpokenEmailsInTranscript,
   preferEmailTranscript,
@@ -8526,6 +8531,30 @@ export class OrchestrationPipeline implements VoiceSession {
       );
     }
 
+    // Spell the captured address in code — do not let the LLM invent a
+    // different one and treat "okay correct" as yes (call 17701).
+    if (
+      this.agent.tools.some((t) => t.type === "native_booking")
+      && shouldSpeakEmailSpell(this.bookingFlowState)
+      && this.bookingFlowState.pendingEmail
+    ) {
+      const email = this.bookingFlowState.pendingEmail;
+      const line = buildEmailSpellLine(email);
+      this.bookingFlowState = markEmailSpelled(this.bookingFlowState, email);
+      this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+      this._currentTurnPlayedSentences = [];
+      this.isPlaying = true;
+      try { await this.playSentence(line); } finally { this.isPlaying = false; this.armTailEchoGrace(); }
+      const heard = this.getHeardAgentText() || line;
+      this.conversationHistory.appendAssistant(heard);
+      this.lastAssistantSpokenRaw = heard;
+      this.config.onTranscript("agent", heard);
+      this.config.onConversationUpdate?.(this.conversationHistory.messages);
+      await this.drainPlaybackTail();
+      this.onBotStoppedSpeaking("system");
+      return;
+    }
+
     // Mid-call: acoustic AMD missed but STT heard a voicemail greeting → leave
     // the configured message (or hang up) instead of continuing the sales pitch.
     if (await this.maybeHandleTranscriptVoicemail(transcript)) {
@@ -8566,7 +8595,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // P0-A: Garbled transcript recovery — catch noise/garbage before it reaches the LLM
     const sttLang = this.currentLang || this.agent.sttConfig.language;
     const { isGarbled, reason: garbledReason } = checkTranscriptQuality(transcript, { expectedLang: sttLang });
-    if (isGarbled) {
+    if (isGarbled && !looksLikeSpokenEmailSpelling(transcript)) {
       logger.warn({ callId: this.config.callId, transcript, garbledReason }, "Garbled transcript — responding with clarification");
       await this.respondWithClarification(sttLang);
       return;
@@ -8648,6 +8677,15 @@ export class OrchestrationPipeline implements VoiceSession {
       this.conversationHistory.appendAssistant("", {
         toolCalls: [{ id: _toolCallId, name: bookName, args: JSON.stringify(autoArgs) }],
       });
+      const autoBookHold = resolveToolFillerPhrase(
+        bookName,
+        this.currentLang || this.agent.language,
+      );
+      if (autoBookHold && !this.closed && !this.bargeInRequested) {
+        this._fillerPlayedThisTurn = true;
+        this.isPlaying = true;
+        try { await this.playSentence(autoBookHold); } finally { this.isPlaying = false; }
+      }
       const toolResult = await this.handleToolCall(bookName, autoArgs);
       await this.continueWithToolResult(bookName, toolResult ?? "error: auto book failed", 0, _toolCallId);
       return;
@@ -8991,12 +9029,35 @@ export class OrchestrationPipeline implements VoiceSession {
     // another filler before the real answer makes short turns feel like the
     // agent only said "okay" (call 2967).
     let backchanneledThisTurn = false;
+    let toolHoldSpokenThisTurn = false;
+    const forcedToolName = typeof forcedToolChoice === "object" ? forcedToolChoice.name : null;
+    if (forcedToolName && !this.closed && !this.bargeInRequested) {
+      const holdLang = this.currentLang || this.agent.language || this.agent.sttConfig.language;
+      const hold = resolveToolFillerPhrase(forcedToolName, holdLang);
+      if (hold) {
+        logger.info(
+          {
+            callId: this.config.callId,
+            fillerType: "tool_hold",
+            tool: forcedToolName,
+            language: holdLang,
+            selectedFiller: hold,
+            ttsText: hold,
+          },
+          "Tool hold spoken before LLM (forced booking tool)",
+        );
+        enqueue(hold, FILLER_SEQUENCE_ID);
+        this._fillerPlayedThisTurn = true;
+        toolHoldSpokenThisTurn = true;
+      }
+    }
     const skipFillerForBackchannelAck = isBackchannelOnlyUtterance(transcript);
     if (
       this.agent.backchannelingEnabled
       && !this.closed
       && !this.bargeInRequested
       && !skipFillerForBackchannelAck
+      && !toolHoldSpokenThisTurn
     ) {
       // Prefer conversation language; bootstrap from agent target / STT config so
       // auto-detect agents still backchannel on turn 1 instead of staying silent.
@@ -10285,65 +10346,16 @@ export class OrchestrationPipeline implements VoiceSession {
         toolCalls: [{ id: _toolCallId, name: triggeredToolName, args: JSON.stringify(triggeredToolArgs) }],
       });
 
-      // Enqueue a brief filler (language-aware) so the caller hears something while
-      // the tool runs (tool calls can take 1–3 s — without this there is dead silence).
-      const TOOL_FILLERS: Record<string, string> = {
-        en: "One moment…", hi: "एक क्षण…", ta: "ஒரு நிமிடம்…",
-        te: "ఒక్క నిమిషం…", kn: "ಒಂದು ಕ್ಷಣ…", mr: "एक क्षण…",
-        gu: "એક ક્ષણ…", bn: "একটু অপেক্ষা করুন…", ml: "ഒരു നിമിഷം…",
-        es: "Un momento…", fr: "Un instant…", de: "Einen Moment…", ar: "لحظة…",
-      };
-      const TOOL_FILLERS_BY_NAME: Record<string, Record<string, string>> = {
-        native_check_availability: {
-          en: "Let me check the available slots real quick…",
-          ta: "இருங்க, ஃப்ரீயா இருக்குற ஸ்லாட்ஸ் செக் பண்ணி பாக்குறேன்…",
-          hi: "एक मिनट, मैं स्लॉट्स चेक करके बताता हूँ…",
-          te: "ఒక్క నిమిషం, అవైలబుల్ స్లాట్స్ చెక్ చేస్తున్నాను…",
-          kn: "ಲಭ್ಯವಿರುವ ಸಮಯವನ್ನು ಪರಿಶೀಲಿಸುತ್ತಿದ್ದೇನೆ…",
-        },
-        native_booking: {
-          en: "Great, booking that in for you right now…",
-          ta: "சரிங்க, உங்க அப்பாயிண்ட்மென்ட் புக் பண்ணிடுறேன்…",
-          hi: "बस आपका अपॉइंटमेंट बुक कर रहा हूँ…",
-          te: "సరేనండి, మీ అపాయింట్‌మెంట్ బుక్ చేస్తున్నాను…",
-          kn: "ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಬುಕ್ ಮಾಡುತ್ತಿದ್ದೇನೆ…",
-        },
-        native_reschedule: {
-          en: "Got it, updating your appointment time now…",
-          ta: "ஒரு நிமிஷம், டைம் மாத்தி புக் பண்ணிடுறேன்…",
-          hi: "एक मिनट, अपॉइंटमेंट की टाइमिंग चेंज कर देता हूँ…",
-          te: "మీ అపాయింట్‌మెంట్‌ను రీషెడ్యూల్ చేస్తున్నాను…",
-        },
-        native_cancel: {
-          en: "Sure thing, cancelling that booking for you…",
-          ta: "சரிங்க, அந்த அப்பாயிண்ட்மென்ட் கேன்சல் பண்ணிடுறேன்…",
-          hi: "जी, वो अपॉइंटमेंट कैंसिल कर देता हूँ…",
-          te: "మీ అపాయింట్‌మెంట్‌ను రద్దు చేస్తున్నాను…",
-        },
-        native_list_bookings: {
-          en: "Let me pull up your upcoming bookings real quick…",
-          ta: "ஒரு நிமிஷம், உங்க புக் பண்ணுன ஸ்லாட்ஸ் பாக்குறேன்…",
-          hi: "एक मिनट, आपकी बुकिंग्स चेक कर लेता हूँ…",
-        },
-      };
-
-      const toolAliasMap: Record<string, string> = {
-        book_appointment: "native_booking",
-        check_availability: "native_check_availability",
-        reschedule_booking: "native_reschedule",
-        cancel_booking: "native_cancel",
-        list_bookings: "native_list_bookings",
-      };
-      const canonicalName = toolAliasMap[triggeredToolName] ?? triggeredToolName;
-      const langPrefix = ((this.currentLang || this.agent.language) ?? "en").split("-")[0] ?? "en";
-      const toolSpecific = TOOL_FILLERS_BY_NAME[triggeredToolName] ?? TOOL_FILLERS_BY_NAME[canonicalName];
-      // Slide navigation is a local in-memory state flip (~1 ms) that the viewer
-      // polls for, so "One moment…" only delays the visible slide change by the
-      // length of the filler audio. Fillers exist to cover slow network tools.
-      const filler = (triggeredToolName === "end_call" || triggeredToolName === "transfer_agent" || INSTANT_TOOLS.has(canonicalName))
-        ? undefined
-        : (toolSpecific?.[langPrefix] ?? TOOL_FILLERS[langPrefix]);
-      if (filler && !this.closed && !this.bargeInRequested) {
+      // Hold line while the tool runs. If we already spoke it at force-tool
+      // time (call 17706), do not say it again after the LLM returns.
+      const langPrefix = languagePrefix(this.currentLang || this.agent.language);
+      const filler = resolveToolFillerPhrase(triggeredToolName, this.currentLang || this.agent.language);
+      if (toolHoldSpokenThisTurn) {
+        logger.info(
+          { callId: this.config.callId, fillerType: "tool", tool: triggeredToolName },
+          "Tool filler skipped — hold already spoken this turn",
+        );
+      } else if (filler && !this.closed && !this.bargeInRequested) {
         logger.info(
           {
             callId: this.config.callId,

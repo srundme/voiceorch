@@ -10,8 +10,10 @@ import {
   pickSlotIsoFromSpokenTime,
   pickTimeSlotBySpokenClock,
   applyLockedSlotToBookArgs,
+  markEmailSpelled,
   shouldForceBookAppointment,
   shouldForceCheckAvailability,
+  shouldSpeakEmailSpell,
   updateBookingFlowFromAssistantText,
   updateBookingFlowFromToolResult,
   updateBookingFlowFromUserTurn,
@@ -51,8 +53,9 @@ describe("booking flow state machine", () => {
     )).toBe("2026-08-28T10:00:00+05:30");
 
     state = updateBookingFlowFromUserTurn(state, "ramsiva97465@gmail.com", "Please share your email");
+    state = markEmailSpelled(state, "ramsiva97465@gmail.com");
     state = updateBookingFlowFromUserTurn(state, "yes", "Is r a m … @ gmail.com correct?");
-    state = { ...state, pendingName: "Ram Siva", emailConfirmed: true };
+    state = { ...state, pendingName: "Ram Siva", emailConfirmed: true, lastSpelledEmail: "ramsiva97465@gmail.com" };
 
     expect(canAutoBook({ state, alreadyBooked: false })).toBe(true);
     expect(buildAutoBookArgs(state).email_confirmed).toBe(true);
@@ -102,6 +105,44 @@ describe("booking flow state machine", () => {
     expect(looksLikeFalseBookingClaim("இப்போ book பண்ணிடுறேன்")).toBe(true);
     expect(looksLikeFalseBookingClaim("what time works for you")).toBe(false);
     expect(looksLikeEmailConfirmationYes("yes that's right")).toBe(true);
+    expect(looksLikeEmailConfirmationYes("Oh correct")).toBe(true);
+    expect(looksLikeEmailConfirmationYes("Okay correct")).toBe(true);
     expect(looksLikeEmailConfirmationYes("சரி")).toBe(true);
+  });
+
+  it("does not confirm an invented email after the caller said a different one (call 17701)", () => {
+    let state = emptyBookingFlowState();
+    state = updateBookingFlowFromUserTurn(
+      state,
+      "W A no no it's wrong it's wrong A E R T H I www.karraj@gmail.com",
+      "Is KERTHIKWAREJ@gmail.com correct?",
+    );
+    expect(state.pendingEmail).toBe("karraj@gmail.com");
+    expect(state.emailConfirmed).toBe(false);
+    expect(shouldSpeakEmailSpell(state)).toBe(true);
+
+    state = updateBookingFlowFromAssistantText(
+      state,
+      "You said it is <spell>k a r t h i k @ g m a i l . c o m</spell> Is that correct?",
+    );
+    expect(state.pendingEmail).toBe("karraj@gmail.com");
+    expect(state.lastSpelledEmail).toBeNull();
+
+    state = updateBookingFlowFromUserTurn(
+      state,
+      "Okay correct",
+      "You said it is <spell>k a r t h i k @ g m a i l . c o m</spell> Is that correct?",
+    );
+    expect(state.emailConfirmed).toBe(false);
+    expect(canAutoBook({ state: { ...state, pendingName: "Aah Krithika" }, alreadyBooked: false })).toBe(false);
+
+    state = markEmailSpelled(state, "karraj@gmail.com");
+    state = updateBookingFlowFromUserTurn(
+      state,
+      "Okay correct",
+      "Let me confirm your email. <spell>k a r r a j @ g m a i l . c o m</spell> Is that correct?",
+    );
+    expect(state.emailConfirmed).toBe(true);
+    expect(state.lastSpelledEmail).toBe("karraj@gmail.com");
   });
 });

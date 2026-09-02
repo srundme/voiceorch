@@ -48,9 +48,11 @@ import { toGeminiLiveTools } from "./gemini-tools.js";
 import { runLiveToolCall } from "./live-tool-runner.js";
 import {
   applyLockedSlotToBookArgs,
+  buildEmailSpellLine,
   emptyBookingFlowState,
   looksLikeBookOrRescheduleTool,
   looksLikeFalseBookingClaim,
+  shouldSpeakEmailSpell,
   updateBookingFlowFromAssistantText,
   updateBookingFlowFromToolResult,
   updateBookingFlowFromUserTurn,
@@ -887,6 +889,7 @@ export class GeminiLivePipeline implements VoiceSession {
     if (msg.toolCall?.functionCalls?.length) {
       // Tool calls usually follow user speech with no output transcription yet.
       if (this.inputBuf.trim()) this.flushInputBuf();
+      this.nudgeExactEmailSpell();
       await this.handleToolCalls(msg.toolCall.functionCalls);
     }
 
@@ -908,6 +911,7 @@ export class GeminiLivePipeline implements VoiceSession {
 
     if (content?.turnComplete) {
       this.flushInputBuf();
+      this.nudgeExactEmailSpell();
       this.flushOutputBuf();
       // Release a tail shorter than the prebuffer — no more audio is coming.
       this.flushOutboundAudio(true);
@@ -952,6 +956,20 @@ export class GeminiLivePipeline implements VoiceSession {
       } catch (err) {
         logger.warn({ callId: this.config.callId, err }, "Gemini Live: interrupt recovery nudge failed");
       }
+    }
+  }
+
+  /** Ask Live to spell the captured address — do not invent a different one. */
+  private nudgeExactEmailSpell(): void {
+    if (!this.session || this.closed) return;
+    if (!shouldSpeakEmailSpell(this.bookingFlowState) || !this.bookingFlowState.pendingEmail) return;
+    const line = buildEmailSpellLine(this.bookingFlowState.pendingEmail);
+    try {
+      this.session.sendRealtimeInput({
+        text: `Speak exactly this and then wait: ${line} Do not invent a different email.`,
+      });
+    } catch (err) {
+      logger.warn({ callId: this.config.callId, err }, "Gemini Live: email-spell nudge failed");
     }
   }
 
