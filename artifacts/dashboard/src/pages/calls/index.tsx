@@ -564,7 +564,7 @@ export default function CallsList() {
 
           {/* Filters Bar */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative shrink-0 w-full sm:w-[340px] lg:w-[420px]">
+            <div className="relative min-w-[180px] flex-1 basis-[220px] max-w-[420px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
               <Input
                 type="search"
@@ -673,9 +673,9 @@ export default function CallsList() {
               </Popover>
             </div>
 
-            <div className="shrink-0 w-full sm:w-auto">
+            <div className="flex shrink-0 items-center gap-3">
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-full sm:w-[180px] h-9 text-xs">
+                <SelectTrigger className="w-[180px] h-9 text-xs">
                   <SelectValue placeholder="Sort" />
                 </SelectTrigger>
                 <SelectContent>
@@ -687,16 +687,10 @@ export default function CallsList() {
                   <SelectItem value="duration_low">Duration: Low to High</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="shrink-0">
               <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5" onClick={handleExport} disabled={!filteredCalls.length}>
                 <Download className="h-3.5 w-3.5" /> Export
               </Button>
-            </div>
-
-            {hasActiveFilters && (
-              <div className="shrink-0">
+              {hasActiveFilters && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -705,8 +699,8 @@ export default function CallsList() {
                 >
                   <RefreshCw className="h-3 w-3 mr-1" /> Clear
                 </Button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 

@@ -1542,10 +1542,7 @@ function OverviewTab({
 
 /* ── Tab: Prompt ────────────────────────────────────────────────────────────── */
 
-function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
-  const [, navigate] = useLocation();
-  const { teamByAgentId } = useAgentTeamMap();
-  const team = agentId != null ? teamByAgentId.get(agentId) : undefined;
+function PromptTab({ form }: { form: any }) {
   const { fields: pvFields, append: pvAppend, remove: pvRemove } = useFieldArray({ control: form.control, name: "promptVariables" });
   const [generateOpen, setGenerateOpen] = useState(false);
   const [promptSurface, setPromptSurface] = useState<"calls" | "meetings">("calls");
@@ -1579,38 +1576,6 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
           setPromptSurface("calls");
         }}
       />
-
-      {team && team.members.length >= 2 && (
-        <BuilderPanel
-          title="Team prompts"
-          icon={<Users />}
-          description="Handoffs use the specialist's prompt"
-        >
-          <div className="flex flex-wrap gap-1.5">
-            {team.members.map((m) => {
-              const active = m.agentId === agentId;
-              return (
-                <button
-                  key={m.agentId}
-                  type="button"
-                  disabled={active}
-                  onClick={() => navigate(agentPathWithSection(m.agentId, "prompt"))}
-                  className={cn(
-                    "inline-flex max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] transition-colors",
-                    active
-                      ? "border-foreground/25 bg-background font-medium text-foreground"
-                      : "border-border/70 bg-background/60 text-muted-foreground hover:border-foreground/20 hover:text-foreground",
-                  )}
-                  title={active ? `Editing ${m.agentName}'s prompt` : `Edit ${m.agentName}'s prompt`}
-                >
-                  <span className="truncate">{active ? `Editing ${m.agentName}` : m.agentName}</span>
-                  <span className="truncate text-muted-foreground">· {m.roleName}</span>
-                </button>
-              );
-            })}
-          </div>
-        </BuilderPanel>
-      )}
 
       <BuilderPanel
         title="Welcome"
@@ -7661,7 +7626,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
                     onGoToAnalytics={() => handleTabClick("analytics")}
                   />
                 )}
-                {activeTab === "prompt"    && <PromptTab form={form} agentId={agentId} />}
+                {activeTab === "prompt"    && <PromptTab form={form} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
                 {activeTab === "outcomes"  && (
