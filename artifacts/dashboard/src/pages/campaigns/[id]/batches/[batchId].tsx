@@ -21,8 +21,8 @@ import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
 import {
   ArrowLeft, Play, Pause, Square, RotateCcw, ChevronRight,
-  Users, Phone, PhoneCall, Calendar, ArrowRightLeft, XCircle,
-  TrendingUp, Bell, PhoneIncoming, Voicemail, PhoneOff, PhoneMissed,
+  Users, Phone, PhoneCall, ArrowRightLeft, XCircle,
+  Voicemail, PhoneOff, PhoneMissed,
   Eye, Database, RefreshCw, DollarSign,
   User, Search, X, CheckCircle2, Clock, Pencil,
   Info, ChevronDown, FileDown, Package, Lock, BarChart2, Tag,
@@ -39,7 +39,6 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNow, format, parseISO } from "date-fns";
 import { BATCH_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
-import CampaignAnalyticsTab from "../../campaign-analytics-tab";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -373,17 +372,6 @@ function KpiCard({ icon, label, value, color, active, onClick, hint }: {
       </div>
       <p className={cn("text-xl font-bold tabular-nums", color ?? "text-foreground")}>{value}</p>
     </button>
-  );
-}
-
-/** Secondary stat — shown inline because it doesn't slice the leads table. */
-function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number | string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
-      <span className="text-muted-foreground/40">{icon}</span>
-      {label}
-      <span className="font-semibold tabular-nums text-foreground/70">{value}</span>
-    </span>
   );
 }
 
@@ -757,7 +745,6 @@ export default function BatchWorkspacePage() {
   const [remapName, setRemapName] = useState("name");
   const [remapEmail, setRemapEmail] = useState("email");
   const [remapSaving, setRemapSaving] = useState(false);
-  const [showInsights, setShowInsights] = useState(false);
 
   // Header data (light, kept in sync with polling)
   const { data: header } = useQuery<BatchHeader>({
@@ -1058,50 +1045,13 @@ export default function BatchWorkspacePage() {
           </div>
         </div>
 
-        {dispositionSegments.length > 0 && (
-          <div>
-            <div className="flex items-baseline justify-between mb-1.5">
-              <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground/40">
-                Agent dispositions
-              </span>
-              <span className="text-[10px] text-muted-foreground/40">
-                {header?.campaign.agentName ?? "Agent"} taxonomy
-              </span>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
-              {dispositionSegments.map(({ key, ...card }) => (
-                <KpiCard key={key} {...card} active={segment === key} onClick={() => setSegment(key)} />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Secondary stats — informational, not filters */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-          <MiniStat icon={<TrendingUp className="h-3 w-3" />}    label="Success rate" value={kpis ? `${kpis.successRate}%` : "—"} />
-          <MiniStat icon={<Calendar className="h-3 w-3" />}      label="Bookings"     value={kpis?.bookings  ?? "—"} />
-          <MiniStat icon={<Bell className="h-3 w-3" />}          label="Callbacks"    value={kpis?.callbacks ?? "—"} />
-          <MiniStat icon={<PhoneIncoming className="h-3 w-3" />} label="Incoming"     value={kpis?.incoming  ?? "—"} />
-          <Button
-            size="sm"
-            variant={showInsights ? "secondary" : "ghost"}
-            className="h-7 text-[11px] gap-1.5 text-muted-foreground"
-            onClick={() => setShowInsights((v) => !v)}
-          >
-            <BarChart2 className="h-3 w-3" /> {showInsights ? "Hide insights" : "Insights / reports"}
-          </Button>
           <Button size="sm" variant="ghost" className="ml-auto h-7 text-[11px] gap-1.5 text-muted-foreground"
             onClick={() => setRemapOpen(true)}>
             <Pencil className="h-3 w-3" /> Remap pending fields
           </Button>
         </div>
       </div>
-
-      {showInsights && (
-        <div className="px-5 pb-4 shrink-0 border-b border-border">
-          <CampaignAnalyticsTab campaignId={campaignId} batchId={batchId} />
-        </div>
-      )}
 
       <Dialog open={remapOpen} onOpenChange={setRemapOpen}>
         <DialogContent className="sm:max-w-md">
