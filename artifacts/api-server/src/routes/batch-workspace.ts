@@ -19,7 +19,7 @@ import {
   agentDispositionsTable,
 } from "@workspace/db";
 import { eq, and, sql, desc, isNotNull, inArray, asc, or, ilike } from "drizzle-orm";
-import { canonicalDispositionBucket, dispositionBucketSql } from "../lib/disposition/canonical.js";
+import { canonicalDispositionBucket, dispositionBucketSql, splitDispositionLabel, normalizeDispositionToken } from "../lib/disposition/canonical.js";
 import { logger } from "../lib/logger.js";
 import { campaignLeadFunnelSelect } from "../lib/campaign-lead-funnel.js";
 
@@ -310,9 +310,16 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
     status === "connected" ? inArray(campaignLeadsTable.callStatus, ["connected", "completed", "transferred"]) :
     undefined;
 
-  // Fixed system outcomes filter on operationalOutcome; any other non-"all"
-  // value is a dynamic disposition, matched on the same canonical bucket the
-  // KPI cards are counted with so a card and its filtered list always agree.
+  // Fixed system outcomes filter on operationalOutcome. Agent-configured
+  // labels ("Interested" or "Interested: Hot") match the stored taxonomy
+  // string, not the rolled-up KPI bucket — otherwise a sub-value never
+  // finds its rows.
+  const configured = splitDispositionLabel(outcome);
+  const configuredPrimary = normalizeDispositionToken(configured.primary);
+  const configuredSub = normalizeDispositionToken(configured.sub);
+  const storedPrimary = sql`btrim(regexp_replace(regexp_replace(lower(split_part(${campaignLeadsTable.disposition}, ':', 1)), '[_-]+', ' ', 'g'), '\\s+', ' ', 'g'))`;
+  const storedSub = sql`btrim(regexp_replace(regexp_replace(lower(split_part(${campaignLeadsTable.disposition}, ':', 2)), '[_-]+', ' ', 'g'), '\\s+', ' ', 'g'))`;
+
   const outcomeFilter =
     outcome === "all"                ? undefined :
     outcome === "booking_created"    ? eq(campaignLeadsTable.operationalOutcome, "booking_created")    :
@@ -323,7 +330,12 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
           sql`${campaignLeadsTable.disposition} is null`,
           sql`btrim(${campaignLeadsTable.disposition}) = ''`,
         )
-      : sql`${DISPOSITION_BUCKET_SQL} = ${canonicalDispositionBucket(outcome, "")}`;
+      : configuredSub
+        ? and(sql`${storedPrimary} = ${configuredPrimary}`, sql`${storedSub} = ${configuredSub}`)
+        : or(
+            sql`${storedPrimary} = ${configuredPrimary}`,
+            sql`${DISPOSITION_BUCKET_SQL} = ${canonicalDispositionBucket(outcome, "")}`,
+          );
 
   const searchFilter = search
     ? or(

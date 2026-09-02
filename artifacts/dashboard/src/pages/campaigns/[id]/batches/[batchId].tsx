@@ -18,14 +18,17 @@ import {
   ApiError,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DetailNav } from "@/components/detail-nav";
 import {
   ArrowLeft, Play, Pause, Square, RotateCcw, ChevronRight,
   Users, Phone, PhoneCall, ArrowRightLeft, XCircle,
   Voicemail, PhoneOff, PhoneMissed,
   Eye, Database, RefreshCw, DollarSign,
-  User, Search, X, CheckCircle2, Clock, Pencil,
-  Info, ChevronDown, FileDown, Package, Lock, BarChart2, Tag, Maximize2,
+  User, Search, X, CheckCircle2, Clock, Pencil, Check,
+  Info, ChevronDown, FileDown, Package, Lock, BarChart2, Maximize2,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -285,10 +288,6 @@ function fmtRelative(iso: string): string {
   return formatDistanceToNow(new Date(iso), { addSuffix: true });
 }
 
-function titleCase(s: string): string {
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-}
-
 /** Leads store dispositions as "PRIMARY: sub" — split for two-line display. */
 function splitDisposition(label: string): { primary: string; sub: string } {
   const i = label.indexOf(":");
@@ -316,6 +315,79 @@ function BatchStatusBadge({ status }: { status: string }) {
 // on a card always matches the rows underneath.
 
 const DISPOSITION_SEGMENT = "disp:";
+
+type DispositionOption = { key: string; label: string };
+
+/** Flatten the agent's saved taxonomy into the same labels stored on leads. */
+function taxonomyDispositionOptions(taxonomy: Record<string, string[]> | null | undefined): DispositionOption[] {
+  if (!taxonomy) return [];
+  const out: DispositionOption[] = [];
+  for (const [primary, subs] of Object.entries(taxonomy)) {
+    const p = primary.trim();
+    if (!p) continue;
+    out.push({ key: `${DISPOSITION_SEGMENT}${p}`, label: p });
+    for (const sub of subs ?? []) {
+      const s = String(sub).trim();
+      if (!s || s === p) continue;
+      out.push({ key: `${DISPOSITION_SEGMENT}${p}: ${s}`, label: `${p}: ${s}` });
+    }
+  }
+  return out;
+}
+
+function DispositionHeaderFilter({
+  options,
+  segment,
+  onSelect,
+}: {
+  options: DispositionOption[];
+  segment: string;
+  onSelect: (key: string) => void;
+}) {
+  const active = segment.startsWith(DISPOSITION_SEGMENT);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wider",
+            active ? "text-foreground" : "text-muted-foreground/40 hover:text-foreground/70",
+          )}
+          title="Filter by the dispositions configured on this agent"
+        >
+          Disposition
+          <ChevronDown className="h-3 w-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[220px] max-h-[280px] overflow-y-auto">
+        <DropdownMenuItem
+          className="text-xs gap-2"
+          onClick={() => onSelect("all")}
+        >
+          <Check className={cn("h-3 w-3", active ? "opacity-0" : "opacity-100")} />
+          <span className="flex-1">All dispositions</span>
+        </DropdownMenuItem>
+        {options.length === 0 ? (
+          <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+            None configured yet
+          </DropdownMenuItem>
+        ) : (
+          options.map((o) => (
+            <DropdownMenuItem
+              key={o.key}
+              className="text-xs gap-2"
+              onClick={() => onSelect(o.key)}
+            >
+              <Check className={cn("h-3 w-3", segment === o.key ? "opacity-100" : "opacity-0")} />
+              <span className="flex-1 truncate">{o.label}</span>
+            </DropdownMenuItem>
+          ))
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 /** Segment → the `status` / `outcome` query params the leads endpoint expects. */
 function segmentToFilters(segment: string): { status: string; outcome: string } {
@@ -376,9 +448,11 @@ function KpiCard({ icon, label, value, color, active, onClick, hint }: {
 
 // ── Leads Tab ─────────────────────────────────────────────────────────────────
 
-function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onClearSegment, onFullScreen, fullscreen }: {
+function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onClearSegment, onSelectSegment, dispositionOptions, onFullScreen, fullscreen }: {
   campaignId: number; batchId: number; maxAttempts: number;
   segment: string; segmentLabel: string; onClearSegment: () => void;
+  onSelectSegment: (key: string) => void;
+  dispositionOptions: DispositionOption[];
   onFullScreen: () => void;
   fullscreen: boolean;
 }) {
@@ -553,7 +627,13 @@ function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onC
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Date & Time</th>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Call ID</th>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider">Status</th>
-                <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden sm:table-cell">Disposition</th>
+                <th className="px-3 py-2.5 text-left hidden sm:table-cell">
+                  <DispositionHeaderFilter
+                    options={dispositionOptions}
+                    segment={segment}
+                    onSelect={onSelectSegment}
+                  />
+                </th>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Attempts</th>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Duration</th>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Cost</th>
@@ -808,33 +888,27 @@ export default function BatchWorkspacePage() {
     { key: "no_pickup", label: "No pickup",   value: kpiOr(kpis?.noPickup),  icon: <PhoneMissed className="h-3 w-3" />,    color: "text-amber-600 dark:text-amber-400", hint: "Rang out with no answer" },
   ];
 
-  // The API already merges the configured taxonomy with what leads actually
-  // carry, into one canonical bucket per outcome. Re-deriving that here is what
-  // produced duplicate cards for the same outcome, so just render what it sends.
-  const dispositionSegments: KpiSegment[] = (kpis?.dispositions ?? []).map(d => ({
-    key:   `${DISPOSITION_SEGMENT}${d.key}`,
-    label: titleCase(d.key),
-    value: d.count,
-    icon:  <Tag className="h-3 w-3" />,
-    color: "text-amber-600 dark:text-amber-400",
-    hint:  `Leads dispositioned as "${d.key}"`,
-  }));
+  const agentId = header?.campaign.agentId ?? 0;
+  const { data: dispCfg } = useQuery<{ taxonomy?: Record<string, string[]> } | null>({
+    queryKey: ["disposition-config", agentId],
+    queryFn: async () => {
+      try {
+        return await customFetch<{ taxonomy?: Record<string, string[]> }>(`${BASE}/api/disposition/config/${agentId}`);
+      } catch {
+        return null;
+      }
+    },
+    enabled: agentId > 0,
+    staleTime: 60_000,
+  });
 
-  // Without this card the disposition row silently drops every lead the agent
-  // never labelled, so the row never adds up to the batch total.
-  if ((kpis?.undispositioned ?? 0) > 0) {
-    dispositionSegments.push({
-      key:   `${DISPOSITION_SEGMENT}__undispositioned__`,
-      label: "No disposition",
-      value: kpis?.undispositioned ?? 0,
-      icon:  <Tag className="h-3 w-3" />,
-      color: "text-muted-foreground",
-      hint:  "Calls that never produced an agent disposition",
-    });
-  }
+  const agentDispositionOptions = useMemo(
+    () => taxonomyDispositionOptions(dispCfg?.taxonomy),
+    [dispCfg?.taxonomy],
+  );
 
   const segmentLabel =
-    [...coreSegments, ...dispositionSegments].find(s => s.key === segment)?.label ?? "All leads";
+    [...coreSegments, ...agentDispositionOptions].find(s => s.key === segment)?.label ?? "All leads";
 
   const batchStatus = header?.batch.status ?? "draft";
   // A terminal batch (completed / stopped / cancelled) has no more work, so it
@@ -1079,6 +1153,8 @@ export default function BatchWorkspacePage() {
           segment={segment}
           segmentLabel={segmentLabel}
           onClearSegment={() => setSegment("all")}
+          onSelectSegment={setSegment}
+          dispositionOptions={agentDispositionOptions}
           onFullScreen={() => setFullscreen(true)}
           fullscreen={fullscreen}
         />
