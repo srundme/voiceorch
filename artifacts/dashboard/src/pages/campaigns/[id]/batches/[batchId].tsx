@@ -25,7 +25,7 @@ import {
   Voicemail, PhoneOff, PhoneMissed,
   Eye, Database, RefreshCw, DollarSign,
   User, Search, X, CheckCircle2, Clock, Pencil,
-  Info, ChevronDown, FileDown, Package, Lock, BarChart2, Tag,
+  Info, ChevronDown, FileDown, Package, Lock, BarChart2, Tag, Maximize2,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -268,7 +268,6 @@ type BatchHeader = {
     scheduledStartAt: string | null;
     timezone: string | null;
     maxAttempts: number; retryDelayMinutes: number;
-    batchFieldMapping?: Record<string, string> | null;
   };
   campaign: { id: number; name: string; agentId: number | null; agentName: string | null; fromNumber: string | null };
   source: { name: string; type: string } | null;
@@ -377,9 +376,11 @@ function KpiCard({ icon, label, value, color, active, onClick, hint }: {
 
 // ── Leads Tab ─────────────────────────────────────────────────────────────────
 
-function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onClearSegment }: {
+function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onClearSegment, onFullScreen, fullscreen }: {
   campaignId: number; batchId: number; maxAttempts: number;
   segment: string; segmentLabel: string; onClearSegment: () => void;
+  onFullScreen: () => void;
+  fullscreen: boolean;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -442,7 +443,7 @@ function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onC
     <div className="flex flex-col h-full">
 
       {/* ── What is a Batch? explainer strip ── */}
-      {infoOpen && (
+      {infoOpen && !fullscreen && (
         <div className="mx-4 mt-3 rounded-xl border border-blue-500/20 bg-blue-500/[0.04] overflow-hidden">
           <div className="flex items-start gap-3 px-4 py-3">
             <Info className="h-3.5 w-3.5 text-blue-400 shrink-0 mt-0.5" />
@@ -517,6 +518,13 @@ function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onC
             onClick={() => qc.invalidateQueries({ queryKey })}>
             <RefreshCw className={cn("h-3 w-3", isFetching && "animate-spin")} />
           </Button>
+          {!fullscreen && (
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-[11px] gap-1.5 text-muted-foreground"
+              title="Full screen"
+              onClick={onFullScreen}>
+              <Maximize2 className="h-3 w-3" /> Full screen
+            </Button>
+          )}
         </div>
       </div>
 
@@ -740,11 +748,21 @@ export default function BatchWorkspacePage() {
   const [isStarting, setIsStarting] = useState(false);
   const [editScheduleOpen, setEditScheduleOpen] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
-  const [remapOpen, setRemapOpen] = useState(false);
-  const [remapPhone, setRemapPhone] = useState("phone");
-  const [remapName, setRemapName] = useState("name");
-  const [remapEmail, setRemapEmail] = useState("email");
-  const [remapSaving, setRemapSaving] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [fullscreen]);
 
   // Header data (light, kept in sync with polling)
   const { data: header } = useQuery<BatchHeader>({
@@ -753,14 +771,6 @@ export default function BatchWorkspacePage() {
     refetchInterval: 10000,
     enabled: campaignId > 0 && batchId > 0,
   });
-
-  useEffect(() => {
-    const m = header?.batch.batchFieldMapping;
-    if (!m) return;
-    if (m["phone"]) setRemapPhone(m["phone"]);
-    if (m["name"]) setRemapName(m["name"]);
-    if (m["email"]) setRemapEmail(m["email"]);
-  }, [header?.batch.batchFieldMapping]);
 
   // KPIs — Call Outcomes strip. Never fire with id=0 (route params still
   // hydrating) or a failed response will stick as "—" while leads load fine.
@@ -916,9 +926,22 @@ export default function BatchWorkspacePage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <div className={cn(
+      "flex-1 flex flex-col h-full overflow-hidden",
+      fullscreen && "fixed inset-0 z-[45] bg-background",
+    )}>
+
+      {fullscreen && (
+        <div className="flex items-center justify-between gap-3 px-5 h-12 border-b border-border/40 shrink-0">
+          <p className="text-sm font-semibold truncate">{header?.batch.name ?? "Batch calls"}</p>
+          <Button size="sm" variant="outline" className="h-8 text-xs shrink-0" onClick={() => setFullscreen(false)}>
+            Exit
+          </Button>
+        </div>
+      )}
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
+      {!fullscreen && (
       <div className="px-6 pt-5 pb-3 border-b border-border/40 shrink-0">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
@@ -1013,6 +1036,7 @@ export default function BatchWorkspacePage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* ── Edit schedule dialog ────────────────────────────────────────────── */}
       {header?.batch.scheduledStartAt && (
@@ -1044,76 +1068,7 @@ export default function BatchWorkspacePage() {
             ))}
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-          <Button size="sm" variant="ghost" className="ml-auto h-7 text-[11px] gap-1.5 text-muted-foreground"
-            onClick={() => setRemapOpen(true)}>
-            <Pencil className="h-3 w-3" /> Remap pending fields
-          </Button>
-        </div>
       </div>
-
-      <Dialog open={remapOpen} onOpenChange={setRemapOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Remap pending leads</DialogTitle>
-          </DialogHeader>
-          <p className="text-xs text-muted-foreground">
-            Point phone / name / email at the correct CSV columns, then re-apply to all pending leads in this batch.
-          </p>
-          <div className="space-y-3 py-1">
-            <div className="space-y-1">
-              <Label className="text-xs">Phone column</Label>
-              <Input className="h-9 text-xs" value={remapPhone} onChange={(e) => setRemapPhone(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Name column</Label>
-              <Input className="h-9 text-xs" value={remapName} onChange={(e) => setRemapName(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Email column</Label>
-              <Input className="h-9 text-xs" value={remapEmail} onChange={(e) => setRemapEmail(e.target.value)} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setRemapOpen(false)}>Cancel</Button>
-            <Button
-              size="sm"
-              disabled={remapSaving || !remapPhone.trim()}
-              onClick={() => {
-                void (async () => {
-                  setRemapSaving(true);
-                  try {
-                    const mapping = {
-                      phone: remapPhone.trim(),
-                      ...(remapName.trim() ? { name: remapName.trim() } : {}),
-                      ...(remapEmail.trim() ? { email: remapEmail.trim() } : {}),
-                    };
-                    await update.mutateAsync({
-                      id: campaignId,
-                      batchId,
-                      data: {
-                        batchFieldMapping: mapping,
-                        rematerializePending: true,
-                      },
-                    });
-                    await qc.invalidateQueries({ queryKey: ["batch-ws-header", campaignId, batchId] });
-                    await qc.invalidateQueries({ queryKey: ["batch-ws-leads", campaignId, batchId] });
-                    toast({ title: "Pending leads remapped" });
-                    setRemapOpen(false);
-                  } catch {
-                    toast({ title: "Remap failed", variant: "destructive" });
-                  } finally {
-                    setRemapSaving(false);
-                  }
-                })();
-              }}
-            >
-              {remapSaving ? "Applying…" : "Apply to pending"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* ── Leads ───────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto min-h-0">
@@ -1124,6 +1079,8 @@ export default function BatchWorkspacePage() {
           segment={segment}
           segmentLabel={segmentLabel}
           onClearSegment={() => setSegment("all")}
+          onFullScreen={() => setFullscreen(true)}
+          fullscreen={fullscreen}
         />
       </div>
 
