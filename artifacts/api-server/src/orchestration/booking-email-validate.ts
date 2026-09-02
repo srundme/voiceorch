@@ -15,7 +15,7 @@ export function sanitizeAttendeeEmail(raw: string): string {
   // Remove spaces inside the local-part only (domain spaces already collapsed above).
   const at = s.indexOf("@");
   if (at > 0) {
-    const local = s.slice(0, at).replace(/\s+/g, "");
+    let local = s.slice(0, at).replace(/\s+/g, "");
     const domain = s.slice(at + 1).replace(/\s+/g, "").toLowerCase();
     if (local.toLowerCase().startsWith("www.") && local.length > 7) {
       local = local.slice(4);
