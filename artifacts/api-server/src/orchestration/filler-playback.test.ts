@@ -26,4 +26,8 @@ describe("shouldSkipImmediateBackchannel", () => {
   it("allows backchannel when no speculative LLM is in flight", () => {
     expect(shouldSkipImmediateBackchannel(false)).toBe(false);
   });
+
+  it("skips Understood. after a greeting-only Hello (call 17915)", () => {
+    expect(shouldSkipImmediateBackchannel(false, true)).toBe(true);
+  });
 });
