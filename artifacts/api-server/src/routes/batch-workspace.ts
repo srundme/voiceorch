@@ -426,6 +426,27 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
       .orderBy(callTransfersTable.id, desc(callTransfersTable.initiatedAt)),
   ]);
 
+  const execRows = await db.select({
+    leadId: callExecutionsTable.leadId,
+    callId: callExecutionsTable.callId,
+    attemptNumber: callExecutionsTable.attemptNumber,
+    createdAt: callExecutionsTable.createdAt,
+  }).from(callExecutionsTable)
+    .where(and(
+      inArray(callExecutionsTable.leadId, leadIds),
+      isNotNull(callExecutionsTable.callId),
+    ))
+    .orderBy(asc(callExecutionsTable.attemptNumber), asc(callExecutionsTable.createdAt));
+
+  const attemptsByLead = new Map<number, { attemptNumber: number; callId: number }[]>();
+  for (const r of execRows) {
+    if (r.callId == null) continue;
+    const list = attemptsByLead.get(r.leadId) ?? [];
+    if (list.some((a) => a.callId === r.callId)) continue;
+    list.push({ attemptNumber: r.attemptNumber, callId: r.callId });
+    attemptsByLead.set(r.leadId, list);
+  }
+
   // Index by leadId (first match per lead)
   const callbackMap = new Map<number, typeof callbacks[0]>();
   const bookingMap  = new Map<number, typeof bookings[0]>();
@@ -458,6 +479,17 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
       status:     transferMap.get(l.id)!.status,
       transferTo: transferMap.get(l.id)!.transferTo,
     } : null,
+    attempts: (() => {
+      const fromExec = attemptsByLead.get(l.id) ?? [];
+      if (fromExec.length > 0) {
+        if (l.callId && !fromExec.some((a) => a.callId === l.callId)) {
+          fromExec.push({ attemptNumber: fromExec.length + 1, callId: l.callId });
+        }
+        return fromExec;
+      }
+      if (l.callId) return [{ attemptNumber: 1, callId: l.callId }];
+      return [];
+    })(),
   }));
 
   res.json({ items, total, page, limit });

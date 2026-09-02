@@ -251,6 +251,8 @@ type BatchWorkspaceKpis = {
   undispositioned?: number;
 };
 
+type LeadAttemptCall = { attemptNumber: number; callId: number };
+
 type BatchWorkspaceLead = {
   id: number; name: string | null; phone: string;
   callStatus: string; operationalOutcome: string;
@@ -260,7 +262,17 @@ type BatchWorkspaceLead = {
   callback: { status: string; callbackAt: string | null } | null;
   booking: { meetingTime: string | null; meetingStatus: string; meetingLink: string | null } | null;
   transfer: { status: string; transferTo: string } | null;
+  attempts?: LeadAttemptCall[];
 };
+
+function leadAttemptCalls(lead: BatchWorkspaceLead): LeadAttemptCall[] {
+  const fromApi = (lead.attempts ?? []).filter((a) => a.callId > 0);
+  if (fromApi.length > 0) {
+    return [...fromApi].sort((a, b) => a.attemptNumber - b.attemptNumber || a.callId - b.callId);
+  }
+  if (lead.callId) return [{ attemptNumber: 1, callId: lead.callId }];
+  return [];
+}
 
 type BatchLeadsPage = { items: BatchWorkspaceLead[]; total: number; page: number; limit: number };
 
@@ -465,7 +477,7 @@ function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onC
   const [limit,       setLimit]       = useState(25);
   const [searchInput, setSearchInput] = useState("");
   const [search,      setSearch]      = useState("");
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [selectedCall, setSelectedCall] = useState<{ leadId: number; attemptIdx: number } | null>(null);
   const LIMIT = limit;
 
   const { status, outcome } = segmentToFilters(segment);
@@ -512,6 +524,17 @@ function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onC
     setSearchInput("");
     setPage(0);
   }
+
+  const selectedLead = selectedCall
+    ? items.find((l) => l.id === selectedCall.leadId) ?? null
+    : null;
+  const selectedAttempts = selectedLead ? leadAttemptCalls(selectedLead) : [];
+  const selectedAttemptIdx = selectedCall?.attemptIdx ?? 0;
+  const selectedAttempt = selectedAttempts[selectedAttemptIdx] ?? null;
+  const prevAttempt = selectedAttemptIdx > 0 ? selectedAttempts[selectedAttemptIdx - 1] : null;
+  const nextAttempt = selectedAttemptIdx < selectedAttempts.length - 1
+    ? selectedAttempts[selectedAttemptIdx + 1]
+    : null;
 
   return (
     <div className="flex flex-col h-full">
@@ -748,12 +771,11 @@ function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onC
                     {/* Actions */}
                     <td className="px-3 py-2.5">
                       <div className="flex items-center justify-end gap-1">
-                        {lead.callId && (
+                        {leadAttemptCalls(lead).length > 0 && (
                           <Button size="icon" variant="ghost" className="h-6 w-6"
-                            title="View Call"
+                            title="View attempt 1"
                             onClick={() => {
-                              const idx = items.findIndex(l => l.id === lead.id);
-                              setSelectedIdx(idx >= 0 ? idx : null);
+                              setSelectedCall({ leadId: lead.id, attemptIdx: 0 });
                             }}>
                             <Eye className="h-3 w-3 text-muted-foreground/60" />
                           </Button>
@@ -788,26 +810,21 @@ function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onC
         />
       </div>
 
-      {/* Call Detail Drawer */}
       <CallDetailDrawer
-        open={selectedIdx !== null && items[selectedIdx ?? -1]?.callId != null}
-        onClose={() => setSelectedIdx(null)}
-        callId={selectedIdx !== null ? (items[selectedIdx]?.callId ?? null) : null}
-        leadName={selectedIdx !== null ? (items[selectedIdx]?.name ?? items[selectedIdx]?.phone ?? null) : null}
-        currentIndex={selectedIdx ?? undefined}
-        totalCount={items.length}
-        onPrev={selectedIdx !== null && selectedIdx > 0
-          ? () => setSelectedIdx(i => Math.max(0, (i ?? 1) - 1))
+        open={selectedAttempt != null}
+        onClose={() => setSelectedCall(null)}
+        callId={selectedAttempt?.callId ?? null}
+        leadName={selectedLead?.name ?? selectedLead?.phone ?? null}
+        currentIndex={selectedAttempts.length > 0 ? selectedAttemptIdx : undefined}
+        totalCount={selectedAttempts.length > 0 ? selectedAttempts.length : undefined}
+        onPrev={prevAttempt
+          ? () => setSelectedCall((s) => s ? { ...s, attemptIdx: s.attemptIdx - 1 } : s)
           : undefined}
-        onNext={selectedIdx !== null && selectedIdx < items.length - 1
-          ? () => setSelectedIdx(i => Math.min(items.length - 1, (i ?? 0) + 1))
+        onNext={nextAttempt
+          ? () => setSelectedCall((s) => s ? { ...s, attemptIdx: s.attemptIdx + 1 } : s)
           : undefined}
-        prevLabel={selectedIdx !== null && selectedIdx > 0
-          ? (items[selectedIdx - 1]?.name ?? items[selectedIdx - 1]?.phone ?? null)
-          : null}
-        nextLabel={selectedIdx !== null && selectedIdx < items.length - 1
-          ? (items[selectedIdx + 1]?.name ?? items[selectedIdx + 1]?.phone ?? null)
-          : null}
+        prevLabel={prevAttempt ? `Attempt ${prevAttempt.attemptNumber}` : null}
+        nextLabel={nextAttempt ? `Attempt ${nextAttempt.attemptNumber}` : null}
       />
     </div>
   );
