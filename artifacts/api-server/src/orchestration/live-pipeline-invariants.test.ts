@@ -106,6 +106,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("Never start the wire on an empty queue");
     expect(pipelineSrc).not.toContain("STREAMING_TTS_PREBUFFER_BOOST_MS");
     expect(pipelineSrc).toMatch(/TTS_PREBUFFER_GREETING_MS \?\? 280\)/);
-    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 320\)/);
+    // Warm prebuffer raised 320 -> 480 (call 18679: mid-sentence clipping under load).
+    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 480\)/);
   });
 });

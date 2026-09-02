@@ -349,27 +349,30 @@ const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
 // TTS jitter buffer (see drainSentenceJob): wait for this much *real* PCM
 // before the paced send pump. 80 ms greeting (calls 17928/17931) underran on
 // Cartesia TTFB — callers heard "Voice break ஆகுது Madam". Waiting does not
-// stretch speech; silence padding mid-sentence does. Cap stays ≤480 ms.
+// stretch speech; silence padding mid-sentence does.
+// Warm/cold/cap raised (call 18679: choppy mid-sentence clipping under load) so
+// a Cartesia chunk stall no longer empties the carrier buffer mid-word. Greeting
+// prebuffer stays small (280) to keep the opening snappy. All env-overridable.
 // VoBiz is LINEAR16 8 kHz — Cartesia synthesizes at that rate unless CARTESIA_TTS_16K=1.
 const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 280));
 const TTS_PREBUFFER_GREETING_CAP_MS = Math.max(
   TTS_PREBUFFER_GREETING_MS,
   Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 400),
 );
-const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 320));
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 480));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
-  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 400),
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 600),
 );
-const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 480));
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 700));
 /** On mid-sentence underrun: refill this much real audio. Keep the carrier
  *  alive with silence, never by looping the last speech frame (robotic breakup). */
-const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 280));
-const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 400));
+const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 400));
+const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 700));
 const TTS_UNDERRUN_COLD_MS = 8_000;
 /** Burst this many 20 ms frames into VoBiz before realtime pacing so a 40–80 ms
  *  event-loop hitch does not empty the carrier jitter buffer. */
-const TTS_WIRE_LEAD_FRAMES = Math.max(0, Math.min(8, Number(process.env.TTS_WIRE_LEAD_FRAMES ?? 4)));
+const TTS_WIRE_LEAD_FRAMES = Math.max(0, Math.min(8, Number(process.env.TTS_WIRE_LEAD_FRAMES ?? 6)));
 
 /** Process-local in-flight TTS drains — logged on underrun, not used to inflate prebuffer. */
 let activeTtsDrainCount = 0;
@@ -394,7 +397,13 @@ const LOST_TURN_RECOVERY_ENABLED = process.env.STT_LOST_TURN_RECOVERY !== "0";
 const LOST_TURN_RECOVERY_POLL_MS = 200;
 const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
 const LLM_SLOW_TTFT_MS        = Number(process.env.LLM_SLOW_TTFT_MS ?? 1200);     // warn in execution logs
-const TTS_STREAM_TIMEOUT_MS   = 8000;   // abort TTS if no bytes for this long (re-armed on every chunk)
+// Max wait for the FIRST byte from a streaming TTS request (cold start / connect).
+const TTS_STREAM_TIMEOUT_MS   = Math.max(1000, Number(process.env.TTS_STREAM_TIMEOUT_MS ?? 8000));
+// Max gap allowed BETWEEN chunks once audio is already flowing. Lowered from the
+// 8s first-byte budget to 4s (call 18679) so a mid-stream Cartesia stall aborts
+// and recovers via one-shot synthesize sooner instead of dragging dead air.
+// Ops can drop to ~2500 for faster recovery, or raise if sentence tails cut early.
+const TTS_STREAM_IDLE_MS      = Math.max(500, Number(process.env.TTS_STREAM_IDLE_MS ?? 4000));
 const BARGE_IN_ENERGY_THRESHOLD = 1200; // Much higher than normal VAD (300) — only intentional,
                                          // loud caller speech should interrupt the agent.
                                          // Prevents phone echo, background TV, or ambient
@@ -7088,14 +7097,14 @@ export class OrchestrationPipeline implements VoiceSession {
       const ttsAbort = new AbortController();
       this.activeTtsAborts.add(ttsAbort);
       let ttsTimerId: ReturnType<typeof setTimeout> | null = null;
-      const armTtsIdleTimer = (): void => {
+      const armTtsIdleTimer = (ms: number): void => {
         if (ttsTimerId) clearTimeout(ttsTimerId);
         ttsTimerId = setTimeout(() => {
           logger.warn({ callId: this.config.callId }, "TTS streaming timed out — aborting fetch");
           ttsAbort.abort();
-        }, TTS_STREAM_TIMEOUT_MS);
+        }, ms);
       };
-      armTtsIdleTimer();
+      armTtsIdleTimer(TTS_STREAM_TIMEOUT_MS); // initial: wait for the first byte
       const closedWatcher = setInterval(() => {
         if (this.closed || this.bargeInRequested) ttsAbort.abort();
       }, 50);
@@ -7107,7 +7116,7 @@ export class OrchestrationPipeline implements VoiceSession {
             if (this._tTurnTtsFirstByte === null) this._tTurnTtsFirstByte = performance.now();
             if (_ttsFirstByteMs === null) _ttsFirstByteMs = Date.now() - _ttsReqStart;
             _ttsTotalBytes += chunk.length;
-            armTtsIdleTimer(); // re-arm idle watchdog after first byte and every later chunk
+            armTtsIdleTimer(TTS_STREAM_IDLE_MS); // re-arm idle watchdog after first byte and every later chunk
             accum.push(chunk);
             accumSize += chunk.length;
             if (accumSize >= streamAccumBytes) flush();
