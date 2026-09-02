@@ -30,7 +30,7 @@ import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
-import { shouldBargeOnRealtimeVadStart, shouldBargeOnRealtimePartial, parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
+import { shouldBargeOnRealtimeVadStart, shouldBargeOnRealtimePartial, shouldCommitStreamingEnergyBarge, parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
@@ -99,7 +99,7 @@ import {
   isAffirmationOnlyUtterance,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeBookingTimeAnswer, hasCallerAddressToken } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeBookingTimeAnswer, hasCallerAddressToken, isHardInterruptTranscript } from "./transcriptQuality.js";
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
@@ -2320,8 +2320,10 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /**
-   * Drive barge-in off vad.speech_start (Sarvam realtime best practice), not
-   * transcript.final. PSTN echo still needs a partial or energy corroboration.
+   * Drive barge-in off vad.speech_start, not transcript.final. The realtime
+   * adapter clears lastPartial on speech_start, so same-tick pending is empty —
+   * this only cuts once a usable (non-echo) partial is already in hand. Echo
+   * VAD without words must not clearAudio.
    */
   private maybeBargeFromRealtimeVadStart(): void {
     if (!this.liveSarvamRealtime()) return;
@@ -2340,6 +2342,7 @@ export class OrchestrationPipeline implements VoiceSession {
       isWebcall: this.config.telephonyProvider === "webcall",
       hasUsablePartial: usablePartial,
       energyAboveEchoBar,
+      isHardInterrupt: isHardInterruptTranscript(pending, this.isSelfEcho(pending)),
     })) return;
     this.triggerBargeIn("vad_speech_start", pending || undefined, {
       speculative: usablePartial,
@@ -3371,6 +3374,7 @@ export class OrchestrationPipeline implements VoiceSession {
               if (
                 (isSemanticInterrupt(text) || isAccidentalInterruptPhrase(text) || isHoldRequest(text))
                 && !isCallerAttentionUtterance(text)
+                && !this.isSelfEcho(text)
               ) {
                 this.triggerBargeIn("semantic_interim", text);
                 logger.info(
@@ -3419,6 +3423,8 @@ export class OrchestrationPipeline implements VoiceSession {
                   charCount,
                   minChars,
                   isGreetingOnly: greetingOnly,
+                  isHardInterrupt: isHardInterruptTranscript(text, interimIsSelfEcho),
+                  isBookingAnswer: looksLikeBookingTimeAnswer(text),
                 })) {
                   this.triggerBargeIn("vad_partial", text, { speculative: true });
                   logger.info(
@@ -3755,6 +3761,7 @@ export class OrchestrationPipeline implements VoiceSession {
       if (
         (isSemanticInterrupt(transcript) || isHoldRequest(transcript))
         && !isCallerAttentionUtterance(transcript)
+        && !this.isSelfEcho(transcript)
       ) {
         this.triggerBargeIn("semantic", transcript);
         logger.info({ callId: this.config.callId, transcript }, "Semantic barge-in triggered (streaming STT)");
@@ -3774,13 +3781,11 @@ export class OrchestrationPipeline implements VoiceSession {
           this.greetingPlaybackActive
           && !this.greetingBargeLocked()
           && !this.systemPlaybackActive
-          && !this.isSelfEcho(transcript)
-          && !isBackchannelOnlyUtterance(transcript)
+          && isHardInterruptTranscript(transcript, this.isSelfEcho(transcript))
           && (
             isHoldRequest(transcript)
             || charCount >= minChars
-          )
-          && !isCallerAttentionUtterance(transcript);
+          );
         if (lateGreetingTalkOver) {
           this.triggerBargeIn("word_count", transcript, { speculative: true });
           logger.info(
@@ -4636,7 +4641,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // is the only time the carrier is echoing our audio back. Between sentences there is
     // no echo, so the configured Energy Threshold is honoured unchanged (a caller
     // speaking into a gap must interrupt at their normal level, not an echo-inflated one).
-    const useAdaptive = streamingCarrier && this.isSendingTtsAudio;
+    const useAdaptive = streamingCarrier && (this.isSendingTtsAudio || this.isPlaying);
     // Webcall path: browser AEC cancels agent echo before it reaches us.
     // Used to apply a lower threshold and enable the streaming frame-count cap.
     const isWebcallStreaming = !respectHoldUntil && this.config.telephonyProvider === "webcall";
@@ -4715,11 +4720,11 @@ export class OrchestrationPipeline implements VoiceSession {
       // Filters out brief mic clicks/breaths while reacting promptly to human interruptions.
       let effectiveMinFrames = Math.max(15, BARGE_IN_STREAMING_MIN_FRAMES);
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {
-        // Sarvam often withholds vad.speech_start / partials until TTS ends
-        // (call 14251: availability 4pm/9am finished in full, bargeInFiredTotal=0,
-        // then the caller's "2pm" was processed as the next turn). Energy is the
-        // only path that can cut playback during talk-over. Greeting + 600ms
-        // per-sentence grace + the adaptive echo bar still block self-echo.
+        // Energy only *arms*. Carrier echo of our own TTS is loud enough to
+        // clear the adaptive bar for 200–300ms (log: Barge-in detected (energy)
+        // then discarding self-echo). Webcall already waited for caller words;
+        // PSTN streaming does the same. Batch STT still energy-cuts (no live
+        // pending transcript). Greeting + per-sentence grace still apply above.
         const energyDetails = {
           frames: this.bargeInSpeechFrames,
           effectiveMinFrames,
@@ -4728,16 +4733,25 @@ export class OrchestrationPipeline implements VoiceSession {
           echoFloor: Math.round(this.playbackEchoFloor),
           currentRms: Math.round(isWebcallStreaming ? frameRms(pcm8k) : currentRms),
         };
-        // Webcall: energy only arms. Cut TTS when STT has real caller words.
-        // Energy-alone abort is what chopped overlap on webcall (AEC / bleed).
-        if (isWebcallStreaming) {
+        if (isWebcallStreaming || streamingCarrier) {
           const pending = this.usablePendingBargeTranscript();
-          if (!pending) {
+          const echoBar = this.echoBarRms();
+          const energyAboveEchoBar =
+            echoBar !== null && this.bargeInPeakRmsSinceSentence > echoBar;
+          if (!shouldCommitStreamingEnergyBarge({
+            hasUsablePending: pending.length > 0,
+            isHardInterrupt: isHardInterruptTranscript(pending, this.isSelfEcho(pending)),
+            isBookingAnswer: looksLikeBookingTimeAnswer(pending),
+            echoBarReady: echoBar !== null,
+            energyAboveEchoBar,
+          })) {
             if (now - this.lastEnergyMonitorLogAt >= 700) {
               this.lastEnergyMonitorLogAt = now;
               logger.info(
-                { callId: this.config.callId, ...energyDetails },
-                "Barge-in energy held — waiting for caller transcript (webcall)",
+                { callId: this.config.callId, ...energyDetails, pending: pending.slice(0, 80) || null },
+                isWebcallStreaming
+                  ? "Barge-in energy held — waiting for caller transcript (webcall)"
+                  : "Barge-in energy held — waiting for hard interrupt (not echo)",
               );
             }
             return;
@@ -4792,7 +4806,9 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private echoBarRms(): number | null {
     if (this.config.telephonyProvider === "webcall") return null;
-    if (!this.isSendingTtsAudio) return null;
+    // Keep the bar while she is still in a turn (gap between sentences).
+    // isSendingTtsAudio-only let leftover echo look like a new caller.
+    if (!this.isSendingTtsAudio && !this.isPlaying) return null;
     if (this.playbackEchoFloorSamples < BARGE_IN_ECHO_FLOOR_MIN_SAMPLES) return null;
     return Math.min(
       this.playbackEchoFloor * BARGE_IN_ADAPTIVE_ECHO_MARGIN,

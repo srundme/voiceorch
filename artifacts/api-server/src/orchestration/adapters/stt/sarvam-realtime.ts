@@ -215,9 +215,11 @@ export function buildRealtimeConfigUpdate(opts: {
 
 /**
  * Barge-in while the agent is talking: Sarvam says drive off vad.speech_start
- * or early partials, not transcript.final. Webcall AEC still false-triggers VAD
- * on overlap — require a real caller partial before cutting TTS. PSTN echo
- * also trips server VAD — require a partial or energy above the echo bar.
+ * or early partials, not transcript.final. Webcall AEC and PSTN echo both trip
+ * server VAD on our own TTS — require a real caller partial before cutting.
+ * Energy-only interrupt must not clearAudio: tryEnergyBargeIn only arms until
+ * a usable caller partial exists. A peak-above-echo-bar here was cutting
+ * mid-sentence, then the final arrived as self-echo.
  */
 export function shouldBargeOnRealtimeVadStart(opts: {
   agentSpeaking: boolean;
@@ -226,12 +228,27 @@ export function shouldBargeOnRealtimeVadStart(opts: {
   isWebcall: boolean;
   hasUsablePartial: boolean;
   energyAboveEchoBar: boolean;
+  isHardInterrupt?: boolean;
 }): boolean {
   if (!opts.agentSpeaking) return false;
   if (opts.greetingOrSystem) return false;
   if (opts.inEchoGrace) return false;
-  if (opts.isWebcall) return opts.hasUsablePartial;
-  return opts.hasUsablePartial || opts.energyAboveEchoBar;
+  if (!opts.hasUsablePartial) return false;
+  if (opts.isWebcall) return true;
+  return opts.isHardInterrupt === true;
+}
+
+/** Streaming energy may arm, but PSTN must not clearAudio on echo-loud frames. */
+export function shouldCommitStreamingEnergyBarge(opts: {
+  hasUsablePending: boolean;
+  isHardInterrupt: boolean;
+  isBookingAnswer: boolean;
+  echoBarReady: boolean;
+  energyAboveEchoBar: boolean;
+}): boolean {
+  if (!opts.hasUsablePending || !opts.isHardInterrupt) return false;
+  if (opts.echoBarReady && !opts.energyAboveEchoBar && !opts.isBookingAnswer) return false;
+  return true;
 }
 
 /**
@@ -240,8 +257,11 @@ export function shouldBargeOnRealtimeVadStart(opts: {
  * greeting echo → English "Then you need to learn"). After that, a non-echo
  * partial must cut TTS even if the echo floor is still cold — otherwise the
  * agent finishes the whole availability sentence before answering "2pm"
- * (call 14251: bargeInFiredTotal=0). When the floor IS ready, still require
- * energy above it so garbled echo without extra RMS cannot cut her.
+ * (call 14251: bargeInFiredTotal=0). On PSTN a cold echo bar used to mean
+ * "barge anyway" — that cut her mid-call when the previous sentence was still
+ * echoing and isSendingTtsAudio had already flipped off. Talk-over then waits
+ * for a usable partial (energy only arms). When the floor IS ready, still
+ * require energy above it.
  */
 export function shouldBargeOnRealtimePartial(opts: {
   greetingOrSystem: boolean;
@@ -254,6 +274,9 @@ export function shouldBargeOnRealtimePartial(opts: {
   minChars: number;
   /** Isolated hello/hi while TTS is playing — leftover greeting / echo (call 16832). */
   isGreetingOnly?: boolean;
+  /** PSTN: only stop/wait or a slot answer — garbled echo must not cut. */
+  isHardInterrupt?: boolean;
+  isBookingAnswer?: boolean;
 }): boolean {
   if (opts.charCount < opts.minChars) return false;
   if (opts.isSelfEcho) return false;
@@ -261,8 +284,9 @@ export function shouldBargeOnRealtimePartial(opts: {
   if (opts.greetingOrSystem) return false;
   if (opts.inEchoGrace) return false;
   if (opts.isWebcall) return true;
-  if (!opts.echoBarReady) return true;
-  return opts.energyAboveEchoBar;
+  if (!opts.isHardInterrupt) return false;
+  if (!opts.echoBarReady) return Boolean(opts.isBookingAnswer);
+  return opts.energyAboveEchoBar || Boolean(opts.isBookingAnswer);
 }
 
 interface RealtimeMsg {
@@ -495,6 +519,8 @@ export class SarvamRealtimeSTT implements STTAdapter {
         return;
       }
       if (event === "vad.speech_start") {
+        // New utterance — drop the previous partial so barge-in cannot treat
+        // leftover echo text as "usable caller words" on this VAD tick.
         lastPartial = "";
         lastPartialLang = undefined;
         _onSpeechStart?.();

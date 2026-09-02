@@ -5,6 +5,11 @@ import { logger } from "../../lib/logger.js";
 import { db, scheduledCallbacksTable, callsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { startEarlyAmbientKeepalive } from "./early-ambient.js";
+import { decideVobizDuplicateStart } from "./vobiz-duplicate-stream.js";
+
+/** Serializes createSession for a VoBiz CallUUID so two answer-webhook retries
+ *  cannot both pass the live-session check before either session is registered. */
+const vobizCallUuidStartsInFlight = new Set<string>();
 
 /**
  * VoBiz also denoises in its media layer, but the agent's Noise Cancellation
@@ -187,24 +192,36 @@ export async function handleVobizWebSocket(
         // WS stream-session id and `corrToken` links back to the dial request_uuid.
         logger.info({ agentId, streamId, streamCallId: callId, resolvedCallId, urlCallUuid: urlCallUuid ?? null, corrToken: corrToken ?? null, fromNumber, toNumber, encoding: msg.start?.mediaFormat?.encoding }, "Vobiz start event");
 
-        // ── Duplicate-stream guard (AMD/voicemail path only) ─────────────────
+        // ── Duplicate-stream guard ───────────────────────────────────────────
         // A VoBiz answer-webhook retry can open a SECOND media WebSocket for the
         // same CallUUID. The session map is keyed by internal sessionId, so
-        // nothing else prevents two live sessions (= two frame senders + a
-        // second AMD confirmation / voicemail playback) for one call — a direct
-        // cause of overlapping "helicopter" audio on the delivered voicemail.
-        // Scoped strictly to the AMD-armed / voicemail-delivery path so normal
-        // VoBiz call handling is unchanged.
-        if (resolvedCallId && (amdArmed || amdMachineHint || voicemailDelivery)) {
+        // nothing else prevents two live sessions (= two greetings + two TTS
+        // senders). That overlapping audio is what callers hear as a "broken"
+        // voice. Squad live handoff reuses this socket and does not emit a
+        // second start — it is not blocked. A later reconnect is allowed once
+        // the previous session has left the map (endSession).
+        if (resolvedCallId) {
           const existing = getSessionByExternalCallId(resolvedCallId);
-          if (existing) {
+          const decision = decideVobizDuplicateStart({
+            callUuid: resolvedCallId,
+            hasLiveSession: !!existing,
+            startInFlight: vobizCallUuidStartsInFlight.has(resolvedCallId),
+          });
+          if (decision.close) {
             logger.warn(
-              { agentId, resolvedCallId, existingCallId: existing.callId, streamId },
-              "Vobiz start: live session already exists for this CallUUID (AMD/voicemail path) — closing duplicate media stream, no second playback",
+              {
+                agentId,
+                resolvedCallId,
+                existingCallId: existing?.callId ?? null,
+                streamId,
+                reason: decision.reason,
+              },
+              "Vobiz start: live session already exists for this CallUUID — closing duplicate media stream, no second playback",
             );
             ws.close();
             break;
           }
+          vobizCallUuidStartsInFlight.add(resolvedCallId);
         }
 
         // Measures the pre-pipeline setup window (WS start → session ready).
@@ -304,6 +321,8 @@ export async function handleVobizWebSocket(
             "Failed to create Vobiz session — closing socket before greeting",
           );
           ws.close();
+        } finally {
+          if (resolvedCallId) vobizCallUuidStartsInFlight.delete(resolvedCallId);
         }
         break;
       }

@@ -16,6 +16,7 @@ import {
   coalescePendingTranscripts,
   signalsConversationalContinuation,
   looksLikeBookingTimeAnswer,
+  isHardInterruptTranscript,
 } from "./transcriptQuality.js";
 import { isAffirmationOnlyUtterance } from "./endpointing.js";
 
@@ -340,6 +341,16 @@ describe("looksLikeBookingTimeAnswer", () => {
   it("rejects ordinary acks", () => {
     expect(looksLikeBookingTimeAnswer("हाँ।")).toBe(false);
     expect(looksLikeBookingTimeAnswer("okay madam")).toBe(false);
+  });
+});
+
+describe("isHardInterruptTranscript", () => {
+  it("allows stop / wait and booking slots, not garbled echo", () => {
+    expect(isHardInterruptTranscript("wait")).toBe(true);
+    expect(isHardInterruptTranscript("2 pm")).toBe(true);
+    expect(isHardInterruptTranscript("Then you need to learn")).toBe(false);
+    expect(isHardInterruptTranscript("okay madam")).toBe(false);
+    expect(isHardInterruptTranscript("wait", true)).toBe(false);
   });
 });
 

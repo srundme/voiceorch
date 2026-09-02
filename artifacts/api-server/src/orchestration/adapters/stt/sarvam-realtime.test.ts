@@ -13,6 +13,7 @@ import {
   resolveRealtimeStreamType,
   shouldBargeOnRealtimeVadStart,
   shouldBargeOnRealtimePartial,
+  shouldCommitStreamingEnergyBarge,
   toRealtimeLanguageCode,
 } from "./sarvam-realtime.js";
 
@@ -250,10 +251,11 @@ describe("shouldBargeOnRealtimeVadStart", () => {
     expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true, hasUsablePartial: true })).toBe(true);
   });
 
-  it("needs a partial or energy above the echo bar on PSTN", () => {
+  it("needs a usable hard-interrupt partial on PSTN — energy-only stays on the frame path", () => {
     expect(shouldBargeOnRealtimeVadStart(base)).toBe(false);
-    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true })).toBe(true);
-    expect(shouldBargeOnRealtimeVadStart({ ...base, energyAboveEchoBar: true })).toBe(true);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, energyAboveEchoBar: true })).toBe(false);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true })).toBe(false);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, isHardInterrupt: true })).toBe(true);
   });
 
   it("holds through greeting and echo grace", () => {
@@ -279,12 +281,12 @@ describe("shouldBargeOnRealtimePartial", () => {
     expect(shouldBargeOnRealtimePartial({ ...base, inEchoGrace: true })).toBe(false);
   });
 
-  it("barges a real PSTN talk-over after greeting even if the echo floor is still cold (call 14251)", () => {
+  it("does not barge a PSTN partial while the echo floor is still cold (mid-call leftover echo)", () => {
     expect(shouldBargeOnRealtimePartial({
       ...base,
       echoBarReady: false,
       energyAboveEchoBar: false,
-    })).toBe(true);
+    })).toBe(false);
   });
 
   it("does not barge a warm-floor PSTN partial that never rose above the echo bar", () => {
@@ -309,8 +311,12 @@ describe("shouldBargeOnRealtimePartial", () => {
     })).toBe(false);
   });
 
-  it("barges a real PSTN talk-over once energy is above the echo bar", () => {
-    expect(shouldBargeOnRealtimePartial(base)).toBe(true);
+  it("does not barge a generic PSTN partial even when energy is above the echo bar", () => {
+    expect(shouldBargeOnRealtimePartial(base)).toBe(false);
+  });
+
+  it("barges a PSTN stop/slot answer once energy is above the echo bar", () => {
+    expect(shouldBargeOnRealtimePartial({ ...base, isHardInterrupt: true })).toBe(true);
   });
 
   it("barges webcall partials after greeting (browser AEC)", () => {
@@ -318,6 +324,33 @@ describe("shouldBargeOnRealtimePartial", () => {
       ...base,
       isWebcall: true,
       echoBarReady: false,
+      energyAboveEchoBar: false,
+    })).toBe(true);
+  });
+});
+
+describe("shouldCommitStreamingEnergyBarge", () => {
+  const base = {
+    hasUsablePending: true,
+    isHardInterrupt: true,
+    isBookingAnswer: false,
+    echoBarReady: true,
+    energyAboveEchoBar: true,
+  };
+
+  it("does not cut on energy without a hard interrupt (echo of our own TTS)", () => {
+    expect(shouldCommitStreamingEnergyBarge({ ...base, isHardInterrupt: false })).toBe(false);
+    expect(shouldCommitStreamingEnergyBarge({ ...base, hasUsablePending: false })).toBe(false);
+  });
+
+  it("cuts on stop/wait when energy is above the echo bar", () => {
+    expect(shouldCommitStreamingEnergyBarge(base)).toBe(true);
+  });
+
+  it("still cuts a booking slot when energy never cleared the echo bar", () => {
+    expect(shouldCommitStreamingEnergyBarge({
+      ...base,
+      isBookingAnswer: true,
       energyAboveEchoBar: false,
     })).toBe(true);
   });

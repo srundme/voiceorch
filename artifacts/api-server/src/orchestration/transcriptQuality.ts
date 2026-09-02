@@ -607,6 +607,17 @@ export function isSemanticInterrupt(text: string): boolean {
  * still applies — if the transcript is the agent's own "three PM or four PM",
  * that path remains.
  */
+/**
+ * PSTN barge-in must only cut TTS on a clear interrupt (stop/wait) or a slot
+ * answer. Generic / garbled echo of our own pitch must not clearAudio.
+ */
+export function isHardInterruptTranscript(text: string, isSelfEcho = false): boolean {
+  const t = text.trim();
+  if (!t || isSelfEcho) return false;
+  if (isBackchannelOnlyUtterance(t) || isCallerAttentionUtterance(t)) return false;
+  return isSemanticInterrupt(t) || looksLikeBookingTimeAnswer(t);
+}
+
 export function looksLikeBookingTimeAnswer(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
