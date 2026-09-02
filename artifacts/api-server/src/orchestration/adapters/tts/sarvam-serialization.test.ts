@@ -73,6 +73,21 @@ describe("SarvamTTS sample rate", () => {
     tts.close();
   });
 
+  it("sends WS min_buffer_size as characters (30–200), not PCM bytes", () => {
+    const telephony = new SarvamTTS("test-key", "ritu", null, "en-IN", "bulbul:v3", null, 8000);
+    const webcall = new SarvamTTS("test-key", "ritu", null, "en-IN", "bulbul:v3", null, 16000);
+    const telCfg = (telephony as any).buildConfigPayload() as { min_buffer_size: number };
+    const webCfg = (webcall as any).buildConfigPayload() as { min_buffer_size: number };
+    expect(telCfg.min_buffer_size).toBeGreaterThanOrEqual(30);
+    expect(telCfg.min_buffer_size).toBeLessThanOrEqual(200);
+    expect(webCfg.min_buffer_size).toBeGreaterThanOrEqual(30);
+    expect(webCfg.min_buffer_size).toBeLessThanOrEqual(200);
+    // Byte-count of 10 ms s16le @ 16 kHz is 320 — that is out of range.
+    expect(webCfg.min_buffer_size).not.toBe(320);
+    telephony.close();
+    webcall.close();
+  });
+
   it("requests native 8 kHz PCM when constructed for a telephony leg", async () => {
     let sampleRate: number | undefined;
     vi.stubGlobal(

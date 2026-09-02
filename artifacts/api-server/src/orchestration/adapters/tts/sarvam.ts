@@ -306,10 +306,14 @@ export class SarvamTTS implements TTSAdapter {
     return parts.filter((p) => p.length > 0);
   }
 
-  /** ~10 ms of s16le at the synthesis rate. 100 (~3 ms @ 16 kHz) made Sarvam
-   *  flush tiny chunks — heavy JSON overhead and unstable accumulation. */
-  private minBufferBytes(): number {
-    return (this.pcmSampleRate / 1000) * 10 * 2;
+  /**
+   * Sarvam WS `min_buffer_size` is minimum *character* length that triggers
+   * a flush (integer 30–200, SDK default 50) — not PCM bytes. Sending
+   * `(sampleRate/1000)*10*2` (160 @ 8 kHz, 320 @ 16 kHz) made 16 kHz webcall
+   * fail with "Input parameters has to be a valid dictionary" (call 17933).
+   */
+  private minBufferChars(): number {
+    return 50;
   }
 
   private buildConfigPayload(): Record<string, unknown> {
@@ -319,7 +323,7 @@ export class SarvamTTS implements TTSAdapter {
       language_code: this.langCode,
       speech_sample_rate: this.pcmSampleRate,
       output_audio_codec: "linear16",
-      min_buffer_size: this.minBufferBytes(),
+      min_buffer_size: this.minBufferChars(),
       max_chunk_length: 500,
     };
     this.applyPace(data);
@@ -370,7 +374,7 @@ export class SarvamTTS implements TTSAdapter {
         this.dropWarmWs();
         return;
       }
-      try { ws.send(JSON.stringify({ type: "ping" })); } catch { this.dropWarmWs(); }
+      try { ws.send(JSON.stringify({ type: "ping", data: {} })); } catch { this.dropWarmWs(); }
     }, WS_PING_INTERVAL_MS);
     this.warmPingTimer.unref?.();
   }
@@ -699,7 +703,7 @@ export class SarvamTTS implements TTSAdapter {
           ws.send(JSON.stringify({ type: "text", data: { text: part } }));
         }
         // Flush so remaining buffer is processed even below min_buffer_size.
-        ws.send(JSON.stringify({ type: "flush" }));
+        ws.send(JSON.stringify({ type: "flush", data: {} }));
         armIdle();
       } catch (err) {
         settle(() => reject(err instanceof Error ? err : new Error(String(err))));

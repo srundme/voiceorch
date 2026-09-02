@@ -99,7 +99,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("this.config.onAudioOut(holdFrame)");
     expect(pipelineSrc).toContain("Never start the wire on an empty queue");
     expect(pipelineSrc).not.toContain("STREAMING_TTS_PREBUFFER_BOOST_MS");
-    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_GREETING_MS \?\? 80\)/);
-    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 240\)/);
+    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_GREETING_MS \?\? 280\)/);
+    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 320\)/);
   });
 });

@@ -346,25 +346,25 @@ const CHUNK_SIZE_MULAW        = 160;    // 20ms @ 8kHz mulaw for paced batch pla
  *  Normal-tier floor, kept as the import-site default in audioPool/audioWorker.
  *  Owner: mic-sensitivity.ts. Empirical (calls 4842/4843), not a spec. */
 const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
-// TTS jitter buffer (see drainSentenceJob): short runway before the paced
-// send pump so a provider hiccup is not an audible gap. Values are the
-// native-8 kHz Cartesia era (commit 3c93cbd74) — later 480–1200 ms stacks
-// stretched 800 ms of audio to ~2.5 s wall (call 17873). Env overrides remain.
+// TTS jitter buffer (see drainSentenceJob): wait for this much *real* PCM
+// before the paced send pump. 80 ms greeting (calls 17928/17931) underran on
+// Cartesia TTFB — callers heard "Voice break ஆகுது Madam". Waiting does not
+// stretch speech; silence padding mid-sentence does. Cap stays ≤480 ms.
 // VoBiz is LINEAR16 8 kHz — Cartesia synthesizes at that rate unless CARTESIA_TTS_16K=1.
-const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 80));
+const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 280));
 const TTS_PREBUFFER_GREETING_CAP_MS = Math.max(
   TTS_PREBUFFER_GREETING_MS,
-  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 160),
+  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 400),
 );
-const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 240));
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 320));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
-  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 320),
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 400),
 );
-const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 400));
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 480));
 /** On mid-sentence underrun: refill this much real audio. Keep the carrier
  *  alive with silence, never by looping the last speech frame (robotic breakup). */
-const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 200));
+const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 280));
 const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 400));
 const TTS_UNDERRUN_COLD_MS = 8_000;
 /** Burst this many 20 ms frames into VoBiz before realtime pacing so a 40–80 ms
