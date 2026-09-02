@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useManagedKeys, useSaveManagedKeys, useAzureSpeakerCheck, useManagedKeysStatus, useTestManagedKey, useRotateManagedKey } from "@/hooks/use-admin-api";
 import {
   Accordion,
@@ -32,6 +32,7 @@ import {
   XCircle,
   FlaskConical,
   Activity,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -90,8 +91,8 @@ const CATEGORIES: Category[] = [
       },
       {
         key: "managed_gemini_key",
-        label: "Google / Gemini API Key",
-        description: "Only needed for Gemini Live native audio (optional). Chat LLMs use Sarvam.",
+        label: "Google / Gemini API Keys",
+        description: "Add up to 20 Gemini keys. When key 1 hits quota or 429, the same Gemini model uses key 2, then 3. Does not switch LLM providers.",
         placeholder: "AIza...",
       },
       {
@@ -269,6 +270,26 @@ const CATEGORIES: Category[] = [
   },
 ];
 
+const GEMINI_POOL_MAX = 20;
+
+type GeminiSlot = { masked: string; next: string };
+
+function parseMaskedGeminiPool(currentKeys?: Record<string, string>): string[] {
+  const raw = currentKeys?.managed_gemini_pool;
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  const primary = currentKeys?.managed_gemini_key;
+  return primary ? [primary] : [];
+}
+
 export default function ManagedKeys() {
   const { data: currentKeys, isLoading, refetch } = useManagedKeys();
   const { data: statusData, refetch: refetchStatus } = useManagedKeysStatus();
@@ -278,6 +299,8 @@ export default function ManagedKeys() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const [geminiSlots, setGeminiSlots] = useState<GeminiSlot[]>([{ masked: "", next: "" }]);
+  const [geminiHydrated, setGeminiHydrated] = useState(false);
   const [openSections, setOpenSections] = useState<string[]>(["llm"]);
   const [testingKey, setTestingKey] = useState<string | null>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -287,6 +310,19 @@ export default function ManagedKeys() {
 
   const statusByKey = Object.fromEntries((statusData?.credentials ?? []).map((c) => [c.key, c]));
   const kpis = statusData?.kpis;
+
+  useEffect(() => {
+    if (!currentKeys || geminiHydrated) return;
+    const masks = parseMaskedGeminiPool(currentKeys);
+    setGeminiSlots(masks.length > 0 ? masks.map((masked) => ({ masked, next: "" })) : [{ masked: "", next: "" }]);
+    setGeminiHydrated(true);
+  }, [currentKeys, geminiHydrated]);
+
+  const savedGeminiMasks = parseMaskedGeminiPool(currentKeys);
+  const geminiDirty =
+    geminiSlots.some((s) => s.next.trim())
+    || geminiSlots.length !== savedGeminiMasks.length
+    || geminiSlots.some((s, i) => (s.masked || "") !== (savedGeminiMasks[i] ?? ""));
 
   function handleTestSpeakerRecognition() {
     queryClient.removeQueries({ queryKey: ["admin", "azure-speaker-check"] });
@@ -298,10 +334,16 @@ export default function ManagedKeys() {
   }
 
   function handleSave() {
-    saveKeys(formValues, {
+    const payload: Record<string, string> = { ...formValues };
+    if (geminiDirty) {
+      const pool = geminiSlots.map((s) => s.next.trim() || s.masked).filter(Boolean);
+      if (pool.length > 0) payload.managed_gemini_pool = JSON.stringify(pool);
+    }
+    saveKeys(payload, {
       onSuccess: (data) => {
         toast({ title: `Saved ${(data as any).saved} key(s) successfully` });
         setFormValues({});
+        setGeminiHydrated(false);
         refetch();
         refetchStatus();
       },
@@ -365,7 +407,7 @@ export default function ManagedKeys() {
     }, 50);
   }
 
-  const hasChanges = Object.values(formValues).some(v => v?.trim());
+  const hasChanges = Object.values(formValues).some(v => v?.trim()) || geminiDirty;
 
   return (
     <div className="space-y-6">
@@ -532,6 +574,91 @@ export default function ManagedKeys() {
                       <div className="col-span-4">New value / actions</div>
                     </div>
                     {category.fields.map(field => {
+                      if (field.key === "managed_gemini_key") {
+                        const st = statusByKey[field.key];
+                        const status = st?.status ?? (savedGeminiMasks.length > 0 ? "active" : "missing");
+                        return (
+                          <div
+                            key={field.key}
+                            className="grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4 px-4 py-3.5 items-start"
+                            data-testid="row-key-managed_gemini_key"
+                          >
+                            <div className="md:col-span-3">
+                              <div className="text-sm font-medium text-foreground">{field.label}</div>
+                              <p className="text-xs text-muted-foreground mt-0.5">{field.description}</p>
+                              <p className="text-[10px] text-muted-foreground mt-1">
+                                {geminiSlots.filter((s) => s.masked || s.next.trim()).length} / {GEMINI_POOL_MAX} keys
+                              </p>
+                            </div>
+                            <div className="md:col-span-2">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] capitalize",
+                                  status === "healthy" && "border-emerald-500/40 text-emerald-500",
+                                  status === "failed" && "border-red-500/40 text-red-500",
+                                  status === "warning" && "border-amber-500/40 text-amber-500",
+                                  status === "missing" && "text-muted-foreground",
+                                )}
+                              >
+                                {status}
+                              </Badge>
+                            </div>
+                            <div className="md:col-span-7 space-y-2">
+                              {geminiSlots.map((slot, index) => (
+                                <div key={`${slot.masked}-${index}`} className="flex flex-wrap items-center gap-2">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-12 shrink-0">
+                                    Key {index + 1}
+                                  </span>
+                                  {slot.masked ? (
+                                    <div className="font-mono text-xs text-muted-foreground rounded-md border border-border bg-muted/30 px-2.5 py-1.5 truncate min-w-[8rem] flex-1">
+                                      {slot.masked}
+                                    </div>
+                                  ) : (
+                                    <div className="font-mono text-xs text-muted-foreground/50 italic px-2.5 py-1.5 min-w-[8rem] flex-1">
+                                      not set
+                                    </div>
+                                  )}
+                                  <Input
+                                    type="password"
+                                    placeholder={slot.masked ? "Replace this key" : field.placeholder}
+                                    value={slot.next}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      setGeminiSlots((prev) => prev.map((s, i) => (i === index ? { ...s, next: value } : s)));
+                                    }}
+                                    className="font-mono text-xs bg-background/60 border-border flex-1 min-w-[10rem]"
+                                    data-testid={`input-gemini-key-${index}`}
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                    disabled={geminiSlots.length <= 1}
+                                    onClick={() => setGeminiSlots((prev) => prev.filter((_, i) => i !== index))}
+                                    aria-label={`Remove Gemini key ${index + 1}`}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              ))}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs gap-1"
+                                disabled={geminiSlots.length >= GEMINI_POOL_MAX}
+                                onClick={() => setGeminiSlots((prev) => [...prev, { masked: "", next: "" }])}
+                                data-testid="button-add-gemini-key"
+                              >
+                                <Plus className="h-3 w-3" />
+                                Add Gemini key
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      }
                       const masked = currentKeys?.[field.key];
                       const st = statusByKey[field.key];
                       const status = st?.status ?? (masked ? "active" : "missing");

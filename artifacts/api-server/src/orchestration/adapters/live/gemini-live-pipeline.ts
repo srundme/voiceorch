@@ -61,6 +61,7 @@ import {
 import { LIVE_BOOKING_TRUTH_RULE, liveToolResultConfirmedBooking } from "./live-booking-email.js";
 import { mergeTranscriptFragment } from "./live-transcript-merge.js";
 import { CALL_SCREENING_WINDOW_MS, detectScreeningPrompt } from "../../callScreening.js";
+import { isGeminiQuotaError, loadManagedGeminiKeys, markGeminiKeyExhausted, maskGeminiKey, pickGeminiKeyFromList } from "../../../lib/gemini-key-pool.js";
 
 const SCHEDULE_CALLBACK_TOOL = {
   name: "schedule_callback",
@@ -192,7 +193,7 @@ export class GeminiLivePipeline implements VoiceSession {
 
   private readonly config: SessionConfig;
   private readonly agent: AgentConfig;
-  private readonly apiKey: string;
+  private apiKey: string;
   private readonly recording: RecordingBuffer;
   private readonly history: ConversationTurn[] = [];
   private lastUserText: string | null = null;
@@ -778,7 +779,6 @@ export class GeminiLivePipeline implements VoiceSession {
   }
 
   private async connect(): Promise<void> {
-    const ai = new GoogleGenAI({ apiKey: this.apiKey });
     const liveCfg = this.agent.geminiLive;
     const model = resolveGeminiLiveModel(liveCfg?.model);
     const voiceName = resolveGeminiLiveVoice(liveCfg?.voiceName);
@@ -805,7 +805,9 @@ export class GeminiLivePipeline implements VoiceSession {
       // Empty object enables handle updates; pass the last handle on reconnect.
       sessionResumption: this.resumptionHandle ? { handle: this.resumptionHandle } : {},
     };
-    this.session = await ai.live.connect({
+    const openLive = async (apiKey: string) => {
+      const ai = new GoogleGenAI({ apiKey });
+      return ai.live.connect({
       model,
       config: {
         responseModalities: [Modality.AUDIO],
@@ -852,6 +854,24 @@ export class GeminiLivePipeline implements VoiceSession {
         },
       },
     });
+    };
+
+    try {
+      this.session = await openLive(this.apiKey);
+    } catch (err) {
+      if (!isGeminiQuotaError(err)) throw err;
+      const pool = await loadManagedGeminiKeys();
+      if (!pool.includes(this.apiKey)) throw err;
+      markGeminiKeyExhausted(this.apiKey);
+      const next = pickGeminiKeyFromList(pool);
+      if (!next || next === this.apiKey) throw err;
+      logger.warn(
+        { callId: this.config.callId, from: maskGeminiKey(this.apiKey), to: maskGeminiKey(next), evt: "gemini_key_rotated" },
+        "Gemini Live quota exhausted — switched to the next pool key",
+      );
+      this.apiKey = next;
+      this.session = await openLive(next);
+    }
 
     const connectMs = Date.now() - connectStarted;
     logger.info({ callId: this.config.callId, model, voiceName, connectMs }, "Gemini Live session connected");

@@ -1518,6 +1518,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // only need it as a fallback for providers the user hasn't configured.
   const settingsKeysNeeded = new Set<string>();
   settingsKeysNeeded.add("managed_gemini_key");
+  settingsKeysNeeded.add("managed_gemini_keys");
   for (const providerName of requiredProviders) {
     if (MANAGED[providerName] && (isManaged || !providerKeys.has(providerName))) {
       settingsKeysNeeded.add(MANAGED[providerName]!);
@@ -1540,10 +1541,18 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     for (const r of settingsRows) settingsMap.set(r.key, r.value);
   }
 
+  const { parseGeminiKeyList, pickGeminiKeyFromList } = await import("../lib/gemini-key-pool.js");
+  const pickedGeminiKey = pickGeminiKeyFromList(parseGeminiKeyList(
+    settingsMap.get("managed_gemini_key"),
+    settingsMap.get("managed_gemini_keys"),
+    process.env["GEMINI_API_KEY"] ?? process.env["GOOGLE_API_KEY"],
+  ));
+
   // Apply managed keys for required providers
   for (const providerName of requiredProviders) {
     if (MANAGED[providerName] && (isManaged || !providerKeys.has(providerName))) {
-      const managed = settingsMap.get(MANAGED[providerName]!)
+      const usesGeminiPool = MANAGED[providerName] === "managed_gemini_key";
+      const managed = (usesGeminiPool ? pickedGeminiKey : settingsMap.get(MANAGED[providerName]!))
         ?? (providerName === "sarvam" ? (process.env["SARVAM_API_KEY"] ?? "").trim() || undefined : undefined);
       if (managed) {
         providerKeys.set(providerName, managed);
@@ -1607,7 +1616,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     providerKeys.get("gemini_audio") ||
     providerKeys.get("google_speech") ||
     providerKeys.get("google_stt") ||
-    settingsMap.get("managed_gemini_key") ||
+    pickedGeminiKey ||
     process.env["GEMINI_API_KEY"] ||
     process.env["GOOGLE_API_KEY"];
   if (googleKey) {

@@ -29,7 +29,7 @@ export const MANAGED_KEY_CATALOG: Array<{
   { key: "managed_qwen_key", label: "Qwen / Groq", service: "llm", provider: "groq", affects: ["LLM", "Prompt gen", "Managed fallback"], testable: true },
   { key: "managed_groq_key", label: "Groq", service: "llm", provider: "groq", affects: ["LLM", "Summaries", "Managed fallback"], testable: true },
   { key: "managed_jina_key", label: "Jina", service: "llm", provider: "jina", affects: ["KB embeddings"], testable: true },
-  { key: "managed_gemini_key", label: "Gemini", service: "llm", provider: "gemini", affects: ["Gemini Live"], testable: false },
+  { key: "managed_gemini_key", label: "Gemini", service: "llm", provider: "gemini", affects: ["Gemini Live", "Key pool rotation"], testable: false },
   { key: "managed_openai_key", label: "OpenAI", service: "llm", provider: "openai", affects: ["LLM", "OpenAI TTS"], testable: true },
   { key: "managed_anthropic_key", label: "Anthropic", service: "llm", provider: "anthropic", affects: ["LLM"], testable: false },
   { key: "managed_mistral_key", label: "Mistral", service: "llm", provider: "mistral", affects: ["LLM"], testable: false },
@@ -227,22 +227,29 @@ router.get("/admin/managed-keys/status", async (_req, res): Promise<void> => {
       (latestChecks.rows as Array<Record<string, unknown>>).map((r) => [String(r.credential_key), r]),
     );
 
+    const { parseGeminiKeyList } = await import("../lib/gemini-key-pool.js");
     const credentials = MANAGED_KEY_CATALOG.map((c) => {
       const row = byKey.get(c.key);
-      const configured = !!(row?.value && row.value.trim());
+      let configured = !!(row?.value && row.value.trim());
+      let label = c.label;
+      if (c.key === "managed_gemini_key") {
+        const pool = parseGeminiKeyList(row?.value, byKey.get("managed_gemini_keys")?.value);
+        configured = pool.length > 0;
+        if (pool.length > 1) label = `Gemini (${pool.length} keys)`;
+      }
       const check = checkMap.get(c.key);
       let status: string = configured ? "active" : "missing";
       if (check?.status) status = String(check.status);
       else if (!configured) status = "missing";
       return {
         key: c.key,
-        label: c.label,
+        label,
         service: c.service,
         provider: c.provider,
         affects: c.affects,
         testable: c.testable,
         configured,
-        masked: configured ? maskSecret(row!.value) : null,
+        masked: configured && row?.value ? maskSecret(row.value) : configured ? "••••••••" : null,
         updatedAt: row?.updatedAt ?? null,
         status,
         lastCheckAt: check?.checked_at ?? null,

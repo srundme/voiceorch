@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, platformSettingsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
+import { pickManagedGeminiKey } from "../lib/gemini-key-pool.js";
 import { pcmToWav } from "../orchestration/audio.js";
 import {
   GEMINI_LIVE_VOICES,
@@ -13,11 +12,7 @@ import { synthesizeGeminiLiveVoicePreview } from "../orchestration/adapters/live
 const router: IRouter = Router();
 
 async function getGeminiKey(): Promise<string | null> {
-  const [row] = await db
-    .select()
-    .from(platformSettingsTable)
-    .where(eq(platformSettingsTable.key, "managed_gemini_key"));
-  return row?.value ?? process.env["GEMINI_API_KEY"] ?? null;
+  return pickManagedGeminiKey();
 }
 
 /** GET /gemini-live/voices — static catalog of 30 preset voices */

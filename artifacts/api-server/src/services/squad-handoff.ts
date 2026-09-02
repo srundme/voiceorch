@@ -90,10 +90,18 @@ export async function loadProviderKeysMap(userId: string | null): Promise<Map<st
     azure: "managed_azure_speech_key",
   };
   for (const [name, settingKey] of Object.entries(MANAGED)) {
-    if (providerKeys.has(name)) continue;
+    if (providerKeys.has(name) || settingKey === "managed_gemini_key") continue;
     const [row] = await db.select().from(platformSettingsTable)
       .where(eq(platformSettingsTable.key, settingKey)).limit(1);
     if (row?.value) providerKeys.set(name, row.value);
+  }
+  if (!providerKeys.has("google") || !providerKeys.has("gemini")) {
+    const { pickManagedGeminiKey } = await import("../lib/gemini-key-pool.js");
+    const geminiKey = await pickManagedGeminiKey();
+    if (geminiKey) {
+      if (!providerKeys.has("google")) providerKeys.set("google", geminiKey);
+      if (!providerKeys.has("gemini")) providerKeys.set("gemini", geminiKey);
+    }
   }
   return providerKeys;
 }

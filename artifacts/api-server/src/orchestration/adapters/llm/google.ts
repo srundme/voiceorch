@@ -3,6 +3,7 @@ import type { Content, GenerateContentConfig, CachedContent, GenerateContentResp
 import { logger } from "../../../lib/logger.js";
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toGeminiLiveTools } from "../live/gemini-tools.js";
+import { isGeminiQuotaError, loadManagedGeminiKeys, markGeminiKeyExhausted, maskGeminiKey, pickGeminiKeyFromList } from "../../../lib/gemini-key-pool.js";
 
 // ── Gemini-scoped reasoning/preamble backstop (GEMINI ONLY) ──────────────────
 /** A COMPLETE leading bracketed state/context line, e.g. "[DATE/TIME CONTEXT] …\n". */
@@ -194,6 +195,7 @@ export function geminiThinkingConfig(model: string): Record<string, unknown> {
  */
 export class GoogleLLM implements LLMAdapter {
   private ai: GoogleGenAI;
+  private apiKey: string;
   private model: string;
   private temperature: number | undefined;
   private maxTokens: number | undefined;
@@ -213,6 +215,7 @@ export class GoogleLLM implements LLMAdapter {
   private cacheCreatedLogged = false;
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
+    this.apiKey = apiKey;
     this.ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: REQUEST_TIMEOUT_MS } });
     this.model = resolveGoogleLlmModel(model);
     const t = genParams?.temperature;
@@ -412,6 +415,29 @@ export class GoogleLLM implements LLMAdapter {
     this.warmPromises.set(base, warm);
   }
 
+  private bindClient(apiKey: string): void {
+    this.apiKey = apiKey;
+    this.ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: REQUEST_TIMEOUT_MS } });
+    this.caches.clear();
+    this.warmPromises.clear();
+    this.cacheDisabled = false;
+  }
+
+  private async failoverIfQuota(err: unknown): Promise<boolean> {
+    if (!isGeminiQuotaError(err)) return false;
+    const pool = await loadManagedGeminiKeys();
+    if (!pool.includes(this.apiKey)) return false;
+    markGeminiKeyExhausted(this.apiKey);
+    const next = pickGeminiKeyFromList(pool);
+    if (!next || next === this.apiKey) return false;
+    logger.warn(
+      { from: maskGeminiKey(this.apiKey), to: maskGeminiKey(next), evt: "gemini_key_rotated" },
+      "Gemini quota exhausted — switched to the next pool key",
+    );
+    this.bindClient(next);
+    return true;
+  }
+
   private handleCacheError(e: unknown): void {
     this.cacheDisabled = true;
     this.caches.clear();
@@ -497,6 +523,7 @@ export class GoogleLLM implements LLMAdapter {
           return;
         } catch (e) {
           this.handleCacheError(e);
+          await this.failoverIfQuota(e);
           // Fall through to uncached path below.
         }
       }
@@ -508,7 +535,7 @@ export class GoogleLLM implements LLMAdapter {
       { role: "user", parts: [{ text: currentContent }] },
     ];
 
-    const stream = await this.ai.models.generateContentStream({
+    const request = {
       model: this.model,
       contents,
       config: {
@@ -517,7 +544,14 @@ export class GoogleLLM implements LLMAdapter {
         ...(geminiTools ? { tools: geminiTools } : {}),
         ...toolConfig,
       },
-    });
-    await this.drainStream(stream, onToken, onDone, options);
+    };
+    try {
+      const stream = await this.ai.models.generateContentStream(request);
+      await this.drainStream(stream, onToken, onDone, options);
+    } catch (e) {
+      if (!(await this.failoverIfQuota(e))) throw e;
+      const stream = await this.ai.models.generateContentStream(request);
+      await this.drainStream(stream, onToken, onDone, options);
+    }
   }
 }
