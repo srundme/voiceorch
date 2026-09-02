@@ -76,13 +76,12 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(body).toMatch(/status === "WAIT"/);
   });
 
-  it("speaks the Welcome stub before a generated outbound opener (Hello was discarded)", () => {
+  it("speaks typed outbound Welcome as-is and does not LLM-speak Talk (call 17455)", () => {
+    expect(pipelineSrc).toContain("outboundTypedWelcomeBlocksGreetingLlm");
+    expect(pipelineSrc).toContain("call 17455");
+    expect(pipelineSrc).not.toContain("outbound stub greeting — generating opener from system prompt instead");
     expect(pipelineSrc).toContain("joinWelcomeAndOpener");
     expect(pipelineSrc).toContain("typedWelcome");
-    expect(pipelineSrc).toContain("playing welcome before greeting LLM");
-    expect(pipelineSrc).toContain("stripWelcomePrefix");
-    expect(pipelineSrc).toContain("Greeting LLM prewarm started (constructor entry)");
-    expect(pipelineSrc).toContain("_greetingPrewarmReady");
   });
 
   it("synthesizes Cartesia at 16 kHz by default; native 8 kHz is opt-in", () => {

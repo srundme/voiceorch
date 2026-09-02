@@ -828,6 +828,22 @@ export function isMetaRefusalGreeting(text: string | null | undefined): boolean 
   return GREETING_META_REFUSAL.some(re => re.test(t));
 }
 
+/**
+ * Operator typed Welcome (even "Hello!"). Outbound must speak only that and
+ * wait — Talk/CALL FLOW is for later turns, not a second spoken greeting.
+ * Empty Welcome still needs the greeting LLM. Non-English agents with an
+ * English-only stub still localize.
+ */
+export function outboundTypedWelcomeBlocksGreetingLlm(
+  typedWelcome: string,
+  greetLang: string,
+): boolean {
+  const w = typedWelcome.trim();
+  if (!w) return false;
+  if (!greetLang.toLowerCase().startsWith("en") && !/[\u0900-\u0DFF]/.test(w)) return false;
+  return true;
+}
+
 /** True when the static Welcome is a one-word stub that cannot be the whole outbound opener. */
 export function isStubGreeting(text: string): boolean {
   const t = text.trim();

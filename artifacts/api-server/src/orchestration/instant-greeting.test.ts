@@ -4,6 +4,7 @@ import {
   neutralGreeting,
   isMetaRefusalGreeting,
   isStubGreeting,
+  outboundTypedWelcomeBlocksGreetingLlm,
   joinWelcomeAndOpener,
   stripWelcomePrefix,
 } from "./endpointing.js";
@@ -108,6 +109,22 @@ describe("stripWelcomePrefix", () => {
     expect(stripWelcomePrefix("Hello", "This is Infant from SnapServe. Got two minutes?")).toBe(
       "This is Infant from SnapServe. Got two minutes?",
     );
+  });
+});
+
+describe("outboundTypedWelcomeBlocksGreetingLlm", () => {
+  it("blocks a second spoken greeting when Welcome is just Hello (call 17455)", () => {
+    expect(outboundTypedWelcomeBlocksGreetingLlm("Hello!", "en-IN")).toBe(true);
+    expect(outboundTypedWelcomeBlocksGreetingLlm("Hi", "en")).toBe(true);
+  });
+
+  it("still generates an opener when Welcome is empty", () => {
+    expect(outboundTypedWelcomeBlocksGreetingLlm("", "en-IN")).toBe(false);
+    expect(outboundTypedWelcomeBlocksGreetingLlm("   ", "en-IN")).toBe(false);
+  });
+
+  it("still localizes an English Hello for a non-English agent", () => {
+    expect(outboundTypedWelcomeBlocksGreetingLlm("Hello!", "ta-IN")).toBe(false);
   });
 });
 

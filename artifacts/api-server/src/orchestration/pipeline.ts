@@ -89,6 +89,7 @@ import {
   neutralGreeting,
   isMetaRefusalGreeting,
   isStubGreeting,
+  outboundTypedWelcomeBlocksGreetingLlm,
   joinWelcomeAndOpener,
   stripWelcomePrefix,
   buildInstantReturningGreeting,
@@ -5706,7 +5707,13 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.config.isReturningCaller === true && !this.isResumeDroppedCall && this.callDirection !== "outbound") return false;
     const greetLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
     let greeting = this.isResumeDroppedCall ? "" : (this.agent.greetingMessage ?? "");
-    if (this.callDirection === "outbound" && isStubGreeting(greeting)) greeting = "";
+    if (
+      this.callDirection === "outbound"
+      && !this.isResumeDroppedCall
+      && outboundTypedWelcomeBlocksGreetingLlm(greeting, greetLang)
+    ) {
+      return false;
+    }
     if (greeting.trim() && !greetLang.toLowerCase().startsWith("en") && !/[\u0900-\u0DFF]/.test(greeting)) greeting = "";
     return !greeting.trim();
   }
@@ -5826,21 +5833,9 @@ export class OrchestrationPipeline implements VoiceSession {
         ? buildInstantReturningGreeting(this.config.returningCallerName, greetLang)
         : typedWelcome;
 
-      // Stub static greetings ("Hello", "Hi!") on outbound leave the real pitch
-      // trapped in the system prompt CALL FLOW — the callee hears one word then
-      // silence and the carrier often drops the media WS (mislabeled hangup).
-      if (
-        !useInstantReturning
-        && !resumeDropped
-        && this.callDirection === "outbound"
-        && isStubGreeting(greeting)
-      ) {
-        logger.info(
-          { callId: this.config.callId, stub: greeting.slice(0, 40) },
-          "Pipeline: outbound stub greeting — generating opener from system prompt instead",
-        );
-        greeting = "";
-      }
+      // Outbound typed Welcome (including "Hello!") is what they hear first.
+      // Do not empty a stub and let the greeting LLM speak Talk/CALL FLOW —
+      // that was call 17455 (Hello! then the admission pitch with no user turn).
 
       // Language-aware greeting: a non-English agent whose static welcome message
       // is still plain English (e.g. the builder default "Hello! How can I help
