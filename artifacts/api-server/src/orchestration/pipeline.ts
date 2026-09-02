@@ -29,6 +29,7 @@ import {
 import { isSmartTurnReady, predictSmartTurn, warmSmartTurn } from "./smart-turn.js";
 import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
+import { extractEmotionTag, makeMarkupTagFilter, stripMarkupTags } from "./emotion-tag.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { shouldBargeOnRealtimeVadStart, shouldBargeOnRealtimePartial, shouldCommitStreamingEnergyBarge, parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
@@ -8768,7 +8769,9 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       // Extract any leading <emotion value="…"/> tag so the clean sentence goes
       // to TTS while the emotion array is forwarded to Cartesia's voice controls.
+      // Skip markup-only leftovers (call 17666: truncated `<emotion value="c`).
       const { emotion, text: cleanText } = extractEmotionTag(text);
+      if (!cleanText) return;
       const emotions = emotion ? mapEmotionToCartesia(emotion) : undefined;
       if (emotion && emotions) {
         logger.info(
@@ -11098,6 +11101,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // Extract any leading <emotion value="…"/> tag so the clean sentence goes
       // to TTS while the emotion array is forwarded to Cartesia's voice controls.
       const { emotion, text: cleanText } = extractEmotionTag(text);
+      if (!cleanText) return;
       const emotions = emotion ? mapEmotionToCartesia(emotion) : undefined;
       if (emotion && emotions) {
         logger.info(
@@ -12026,39 +12030,6 @@ function stripToolArtifacts(text: string): string {
 }
 
 /**
- * Strips inline prosody/markup tags the LLM sometimes emits — `<emotion …>`,
- * `</emotion>`, and self-closing `<break …/>` — while KEEPING the speakable
- * text between them. Without this they reach TTS verbatim and get XML-escaped
- * (Azure) or spoken literally (Cartesia/ElevenLabs/Deepgram), mangling audio
- * and corrupting sentence splitting. Whole-string variant of makeMarkupTagFilter.
- * Used for transcript/history cleanup only — the streaming filter deliberately
- * passes <emotion …/> through so extractEmotionTag can read it at enqueue time.
- */
-function stripMarkupTags(text: string): string {
-  return text
-    .replace(/<\/?emotion\b[^>]*>/gi, "")
-    .replace(/<break\b[^>]*\/?>/gi, "")
-    .replace(/[^\S\r\n]{2,}/g, " ")
-    .trim();
-}
-
-/**
- * Extracts the first `<emotion value="…"/>` tag from the very beginning of a
- * sentence (leading whitespace is ignored). Returns the matched emotion value
- * (lowercased) and the sentence text with the tag stripped and leading space
- * trimmed. When no tag is present both fields reflect the original text.
- */
-function extractEmotionTag(text: string): { emotion: string | null; text: string } {
-  const match = /^\s*<emotion\s+(?:value|type)=["']([^"']+)["']\s*\/?>/i.exec(text);
-  const emotion = match ? match[1]!.toLowerCase() : null;
-  const cleanText = text
-    .replace(/<\/?emotion\b[^>]*>/gi, "")
-    .replace(/<break\b[^>]*\/?>/gi, "")
-    .trim();
-  return { emotion, text: cleanText };
-}
-
-/**
  * Maps a VoiceOrch LLM emotion value to Cartesia's `__experimental_controls.emotion`
  * array format. Returns an empty array for `calm` (explicit neutral reset) or
  * any unrecognised value (safe no-op — Cartesia omits the controls block when
@@ -12215,76 +12186,6 @@ function makeFunctionTagFilter(): (token: string) => string {
           buf = buf.slice(tail);
           break;
         }
-      }
-    }
-    return out;
-  };
-}
-
-/**
- * Stateful per-turn filter that strips `</emotion>` closing tags and
- * self-closing `<break …/>` from the LLM token stream while KEEPING all
- * speakable text (including any `<emotion value="…"/>` opening/self-closing
- * tags, which are passed through intentionally so extractEmotionTag can read
- * them at enqueue time). Buffers partial tags split across streaming chunks
- * and collapses double spaces so words aren't run together.
- */
-function makeMarkupTagFilter(): (token: string) => string {
-  // Lower-cased prefixes of the tags we strip (everything up to the attributes).
-  // NOTE: "<emotion" is deliberately absent — opening emotion tags flow through
-  // to the sentence accumulator so enqueue() can extract and forward them to
-  // Cartesia's __experimental_controls.emotion.  Only orphaned closing tags and
-  // <break/> are removed here.
-  const STRIP_PREFIXES = ["</emotion", "<break"];
-  let buf = "";
-  let prevEndedWithSpace = false;
-
-  return function filterMarkupToken(token: string): string {
-    buf += token;
-    let raw = "";
-
-    while (buf.length > 0) {
-      const lt = buf.indexOf("<");
-      if (lt === -1) {
-        raw += buf;
-        buf = "";
-        break;
-      }
-      // Emit any plain text preceding the "<"
-      raw += buf.slice(0, lt);
-      buf = buf.slice(lt);
-
-      const lower = buf.toLowerCase();
-      let matched = false;
-      let partial = false;
-      for (const p of STRIP_PREFIXES) {
-        if (lower.startsWith(p)) { matched = true; break; }
-        if (p.startsWith(lower)) { partial = true; }
-      }
-
-      if (matched) {
-        const gt = buf.indexOf(">");
-        if (gt === -1) break;        // tag not finished yet — wait for more tokens
-        buf = buf.slice(gt + 1);     // drop the whole tag, keep surrounding text
-      } else if (partial) {
-        break;                       // "<" might still grow into one of our tags
-      } else {
-        raw += "<";                  // a "<" that isn't our tag — keep it
-        buf = buf.slice(1);
-      }
-    }
-
-    // Collapse runs of spaces left where a tag was removed, including runs
-    // straddling streaming-chunk boundaries (one space already emitted last call).
-    let out = "";
-    for (const ch of raw) {
-      if (ch === " ") {
-        if (prevEndedWithSpace) continue;
-        prevEndedWithSpace = true;
-        out += ch;
-      } else {
-        prevEndedWithSpace = false;
-        out += ch;
       }
     }
     return out;
