@@ -352,6 +352,14 @@ describe("isHardInterruptTranscript", () => {
     expect(isHardInterruptTranscript("okay madam")).toBe(false);
     expect(isHardInterruptTranscript("wait", true)).toBe(false);
   });
+
+  it("does not treat a long pitch echo as a slot answer just because it says today/two", () => {
+    expect(
+      isHardInterruptTranscript(
+        "Hi Krithika this is Angel calling today about two minutes for admission",
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("isCallerAttentionUtterance", () => {

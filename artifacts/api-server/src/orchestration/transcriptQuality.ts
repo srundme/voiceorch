@@ -615,7 +615,12 @@ export function isHardInterruptTranscript(text: string, isSelfEcho = false): boo
   const t = text.trim();
   if (!t || isSelfEcho) return false;
   if (isBackchannelOnlyUtterance(t) || isCallerAttentionUtterance(t)) return false;
-  return isSemanticInterrupt(t) || looksLikeBookingTimeAnswer(t);
+  if (isSemanticInterrupt(t)) return true;
+  // Slot answers are short ("2 pm", "காலை"). A long echo of our pitch that
+  // merely contains "today" / "two" must not clearAudio mid-call.
+  const tokenCount = t.split(/\s+/).filter(Boolean).length;
+  if (tokenCount > 8 || [...t].length > 48) return false;
+  return looksLikeBookingTimeAnswer(t);
 }
 
 export function looksLikeBookingTimeAnswer(text: string): boolean {

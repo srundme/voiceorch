@@ -105,6 +105,7 @@ import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { getCachedFillerPcm, setCachedFillerPcm } from "./fillerPcmCache.js";
+import { shouldSkipImmediateBackchannel, ttsContextIdForSequence } from "./filler-playback.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager, bargeInMinChars } from "./interruption-manager.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
@@ -1785,7 +1786,7 @@ export class OrchestrationPipeline implements VoiceSession {
       this.activeTtsAborts.clear();
       logger.info(
         { callId: this.config.callId, msSinceFiller: Date.now() - this._deadAirFillerEnqueuedAt },
-        "Dead-air filler skipped — LLM first token arrived within cancel window",
+        "Filler skipped — LLM first token arrived within cancel window",
       );
     }
     this._deadAirFillerEnqueuedAt = null;
@@ -6982,7 +6983,7 @@ export class OrchestrationPipeline implements VoiceSession {
       ready,
       skipDrain: false,
     };
-    if (turnContextId && this.tts instanceof CartesiaTTS) {
+    if (turnContextId && sequenceId !== FILLER_SEQUENCE_ID && this.tts instanceof CartesiaTTS) {
       job.skipDrain = !this.tts.claimTurnContext(turnContextId);
     }
 
@@ -7389,6 +7390,7 @@ export class OrchestrationPipeline implements VoiceSession {
       let leadFrames = TTS_WIRE_LEAD_FRAMES;
       let lastOutChunk: Buffer | null = null;
       while (!this.closed && !this.bargeInRequested) {
+        if (job.sequenceId === FILLER_SEQUENCE_ID && this._skipPendingFillerPlayback) break;
         const emitStatus = this.audioSendStatus(job.sequenceId);
         if (emitStatus === "BLOCK" || !this.interruptionMgr.isValidSequence(job.sequenceId)) {
           break;
@@ -7520,6 +7522,7 @@ export class OrchestrationPipeline implements VoiceSession {
     } else {
       await job.ready;
       if (job.synthError) throw job.synthError;
+      if (job.sequenceId === FILLER_SEQUENCE_ID && this._skipPendingFillerPlayback) return;
       if (this.bargeInRequested) return;
       if (!this.canEmitAudio(job.sequenceId)) {
         const ok = await this.waitForAudioEmit(job.sequenceId);
@@ -7546,6 +7549,7 @@ export class OrchestrationPipeline implements VoiceSession {
         let leadFrames = TTS_WIRE_LEAD_FRAMES;
         for (let i = 0; i < out8k.length; i += PCM_CHUNK) {
           if (this.closed || this.bargeInRequested) break;
+          if (job.sequenceId === FILLER_SEQUENCE_ID && this._skipPendingFillerPlayback) break;
           const emitStatus = this.audioSendStatus(job.sequenceId);
           if (emitStatus === "BLOCK" || !this.interruptionMgr.isValidSequence(job.sequenceId)) break;
           if (emitStatus === "WAIT") {
@@ -7574,6 +7578,7 @@ export class OrchestrationPipeline implements VoiceSession {
         let leadFrames = TTS_WIRE_LEAD_FRAMES;
         for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
           if (this.closed || this.bargeInRequested) break;
+          if (job.sequenceId === FILLER_SEQUENCE_ID && this._skipPendingFillerPlayback) break;
           const emitStatus = this.audioSendStatus(job.sequenceId);
           if (emitStatus === "BLOCK" || !this.interruptionMgr.isValidSequence(job.sequenceId)) break;
           if (emitStatus === "WAIT") {
@@ -8761,7 +8766,13 @@ export class OrchestrationPipeline implements VoiceSession {
           "Emotion tag forwarded to TTS",
         );
       }
-      sentenceQueue.push(this.startSentenceSynthesis(cleanText, this._activeTurnIndex, sequenceId, turnContextId, emotions));
+      sentenceQueue.push(this.startSentenceSynthesis(
+        cleanText,
+        this._activeTurnIndex,
+        sequenceId,
+        ttsContextIdForSequence(sequenceId, turnContextId, FILLER_SEQUENCE_ID),
+        emotions,
+      ));
       if (wakePlayer) {
         const wake = wakePlayer;
         wakePlayer = null;
@@ -8990,7 +9001,17 @@ export class OrchestrationPipeline implements VoiceSession {
         // Honor the configured frequency for all languages (including Tamil).
         // The old 0.25 Tamil hard-cap made enabled backchanneling feel "broken".
         const freq = Math.max(0, Math.min(1, baseFreq));
-        if (Math.random() < freq) {
+        if (shouldSkipImmediateBackchannel(Boolean(this._specLlmState))) {
+          logger.info(
+            {
+              callId: this.config.callId,
+              fillerType: "backchannel",
+              language: fillerLang,
+              backchannelingEnabled: this.agent.backchannelingEnabled,
+            },
+            "Backchannel filler skipped — speculative LLM already in flight",
+          );
+        } else if (Math.random() < freq) {
           // Strict, language-based fillers only — no cross-language fallback.
           const fillerOpts = this.backchannelFillerOpts(transcript);
           const pool = getBackchannelFillers(fillerLang, fillerOpts);
@@ -9011,6 +9032,7 @@ export class OrchestrationPipeline implements VoiceSession {
               "Backchannel filler selected (language-aware)",
             );
             enqueue(phrase, FILLER_SEQUENCE_ID);
+            this._deadAirFillerEnqueuedAt = Date.now();
             backchanneledThisTurn = true;
           } else {
             logger.info(
@@ -11073,7 +11095,13 @@ export class OrchestrationPipeline implements VoiceSession {
           "Emotion tag forwarded to TTS",
         );
       }
-      sentenceQueue.push(this.startSentenceSynthesis(cleanText, this._activeTurnIndex, sequenceId, ctTurnContextId, emotions));
+      sentenceQueue.push(this.startSentenceSynthesis(
+        cleanText,
+        this._activeTurnIndex,
+        sequenceId,
+        ttsContextIdForSequence(sequenceId, ctTurnContextId, FILLER_SEQUENCE_ID),
+        emotions,
+      ));
       if (wakePlayer) { const w = wakePlayer; wakePlayer = null; w(); }
     };
 
