@@ -21,6 +21,7 @@ import {
   SemanticTurnGate,
   resolveEouCommit,
   resolveSmartTurnEval,
+  shouldAdvanceSemanticTurnOnVadStart,
   SEMANTIC_TURN_FINAL_MS_DEFAULT,
   SEMANTIC_TURN_EVAL_MS_DEFAULT,
   SEMANTIC_TURN_EVAL_MS_COLLECTION,
@@ -2257,7 +2258,11 @@ export class OrchestrationPipeline implements VoiceSession {
       if (!this.isPlaying && !this.isSendingTtsAudio && Date.now() >= this.bargeInHoldUntil) {
         this.noteCallerTurnActivity("vad_start");
       }
-      if (!this.isPlaying && !this.isSendingTtsAudio) {
+      if (shouldAdvanceSemanticTurnOnVadStart({
+        isPlaying: this.isPlaying,
+        isSendingTtsAudio: this.isSendingTtsAudio,
+        isProcessing: this.isProcessing,
+      })) {
         const prevGen = this.semanticTurnGate.turnGeneration;
         const eouStart = this.semanticTurnGate.onSpeechStart();
         this._partialThisGeneration = false;
@@ -5853,6 +5858,11 @@ export class OrchestrationPipeline implements VoiceSession {
         greeting.trim() &&
         !greetLang.toLowerCase().startsWith("en") &&
         !/[\u0900-\u0DFF]/.test(greeting)
+        && !(
+          this.callDirection === "outbound"
+          && !resumeDropped
+          && outboundTypedWelcomeBlocksGreetingLlm(typedWelcome, greetLang)
+        )
       ) {
         logger.info(
           { callId: this.config.callId, greetLang },

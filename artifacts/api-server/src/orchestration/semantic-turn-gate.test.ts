@@ -5,6 +5,7 @@ import {
   resolveEouCommit,
   resolveSemanticTurnEnabled,
   resolveSmartTurnEval,
+  shouldAdvanceSemanticTurnOnVadStart,
 } from "./semantic-turn-gate.js";
 
 describe("resolveEouCommit", () => {
@@ -174,6 +175,37 @@ describe("SemanticTurnGate", () => {
     const resume = g.onSpeechStart();
     expect(resume.wasAwaitingFinal).toBe(true);
     expect(g.belongsTo(generation)).toBe(false);
+  });
+});
+
+describe("shouldAdvanceSemanticTurnOnVadStart", () => {
+  it("advances when the agent is idle and listening", () => {
+    expect(shouldAdvanceSemanticTurnOnVadStart({
+      isPlaying: false,
+      isSendingTtsAudio: false,
+      isProcessing: false,
+    })).toBe(true);
+  });
+
+  it("does not bump generation while processTurn is in flight (TTS skip / voice break)", () => {
+    expect(shouldAdvanceSemanticTurnOnVadStart({
+      isPlaying: false,
+      isSendingTtsAudio: false,
+      isProcessing: true,
+    })).toBe(false);
+  });
+
+  it("does not bump generation while agent audio is on the wire", () => {
+    expect(shouldAdvanceSemanticTurnOnVadStart({
+      isPlaying: true,
+      isSendingTtsAudio: false,
+      isProcessing: false,
+    })).toBe(false);
+    expect(shouldAdvanceSemanticTurnOnVadStart({
+      isPlaying: false,
+      isSendingTtsAudio: true,
+      isProcessing: false,
+    })).toBe(false);
   });
 });
 

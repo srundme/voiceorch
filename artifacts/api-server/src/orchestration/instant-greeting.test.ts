@@ -123,8 +123,8 @@ describe("outboundTypedWelcomeBlocksGreetingLlm", () => {
     expect(outboundTypedWelcomeBlocksGreetingLlm("   ", "en-IN")).toBe(false);
   });
 
-  it("still localizes an English Hello for a non-English agent", () => {
-    expect(outboundTypedWelcomeBlocksGreetingLlm("Hello!", "ta-IN")).toBe(false);
+  it("keeps typed English Welcome even when start language is Indic (memory LID)", () => {
+    expect(outboundTypedWelcomeBlocksGreetingLlm("Hello!", "ta-IN")).toBe(true);
   });
 });
 

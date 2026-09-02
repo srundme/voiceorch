@@ -1,15 +1,17 @@
 import type { WebSocket } from "ws";
-import { createSession, getSession, getSessionByExternalCallId, endSession, failSession } from "../session.js";
+import { createSession, getSession, getSessionByCampaignLeadId, getSessionByExternalCallId, endSession, failSession } from "../session.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { db, scheduledCallbacksTable, callsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { startEarlyAmbientKeepalive } from "./early-ambient.js";
-import { decideVobizDuplicateStart } from "./vobiz-duplicate-stream.js";
+import { decideVobizDuplicateStart, vobizDuplicateLegKey } from "./vobiz-duplicate-stream.js";
 
 /** Serializes createSession for a VoBiz CallUUID so two answer-webhook retries
  *  cannot both pass the live-session check before either session is registered. */
 const vobizCallUuidStartsInFlight = new Set<string>();
+/** Same campaign dial can mint two CallUUIDs (two answer webhooks). */
+const vobizLegStartsInFlight = new Set<string>();
 
 /**
  * VoBiz also denoises in its media layer, but the agent's Noise Cancellation
@@ -200,29 +202,34 @@ export async function handleVobizWebSocket(
         // voice. Squad live handoff reuses this socket and does not emit a
         // second start — it is not blocked. A later reconnect is allowed once
         // the previous session has left the map (endSession).
-        if (resolvedCallId) {
-          const existing = getSessionByExternalCallId(resolvedCallId);
-          const decision = decideVobizDuplicateStart({
-            callUuid: resolvedCallId,
-            hasLiveSession: !!existing,
-            startInFlight: vobizCallUuidStartsInFlight.has(resolvedCallId),
-          });
-          if (decision.close) {
-            logger.warn(
-              {
-                agentId,
-                resolvedCallId,
-                existingCallId: existing?.callId ?? null,
-                streamId,
-                reason: decision.reason,
-              },
-              "Vobiz start: live session already exists for this CallUUID — closing duplicate media stream, no second playback",
-            );
-            ws.close();
-            break;
-          }
-          vobizCallUuidStartsInFlight.add(resolvedCallId);
+        const legKey = vobizDuplicateLegKey({ campaignLeadId, corrToken });
+        const existing = resolvedCallId ? getSessionByExternalCallId(resolvedCallId) : undefined;
+        const existingLeg = campaignLeadId != null ? getSessionByCampaignLeadId(campaignLeadId) : undefined;
+        const decision = decideVobizDuplicateStart({
+          callUuid: resolvedCallId,
+          hasLiveSession: !!existing,
+          startInFlight: resolvedCallId ? vobizCallUuidStartsInFlight.has(resolvedCallId) : false,
+          legKey,
+          hasLiveLeg: !!existingLeg,
+          legStartInFlight: legKey ? vobizLegStartsInFlight.has(legKey) : false,
+        });
+        if (decision.close) {
+          logger.warn(
+            {
+              agentId,
+              resolvedCallId,
+              existingCallId: existing?.callId ?? existingLeg?.callId ?? null,
+              campaignLeadId: campaignLeadId ?? null,
+              streamId,
+              reason: decision.reason,
+            },
+            "Vobiz start: live session already exists for this CallUUID — closing duplicate media stream, no second playback",
+          );
+          ws.close();
+          break;
         }
+        if (resolvedCallId) vobizCallUuidStartsInFlight.add(resolvedCallId);
+        if (legKey) vobizLegStartsInFlight.add(legKey);
 
         // Measures the pre-pipeline setup window (WS start → session ready).
         // Watch setupMs in prod for DB/setup latency; caller should hear ambient
@@ -323,6 +330,7 @@ export async function handleVobizWebSocket(
           ws.close();
         } finally {
           if (resolvedCallId) vobizCallUuidStartsInFlight.delete(resolvedCallId);
+          if (legKey) vobizLegStartsInFlight.delete(legKey);
         }
         break;
       }

@@ -69,6 +69,21 @@ export function clampSemanticTurnStopMs(value: unknown): number {
   return Math.max(SEMANTIC_TURN_STOP_MS_MIN, Math.min(SEMANTIC_TURN_STOP_MS_MAX, Math.round(value)));
 }
 
+/**
+ * Echo VAD during LLM/TTS must not bump turnGeneration. That is the
+ * "TTS skipped — turnGeneration moved before playback" break (Railway 07:41):
+ * processTurn is already running, isPlaying is still false, and a tail-echo
+ * speech_start invalidates the reply that is about to play.
+ */
+export function shouldAdvanceSemanticTurnOnVadStart(opts: {
+  isPlaying: boolean;
+  isSendingTtsAudio: boolean;
+  isProcessing: boolean;
+}): boolean {
+  if (opts.isPlaying || opts.isSendingTtsAudio || opts.isProcessing) return false;
+  return true;
+}
+
 export function resolveSemanticTurnEnabled(raw: unknown): boolean {
   if (process.env["SEMANTIC_TURN"] === "0") return false;
   if (raw === false) return false;

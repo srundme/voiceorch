@@ -2673,6 +2673,15 @@ export function getSessionByExternalCallId(externalCallId: string): ActiveSessio
   return undefined;
 }
 
+/** Second VoBiz media WS for the same campaign dial (two CallUUIDs). */
+export function getSessionByCampaignLeadId(campaignLeadId: number): ActiveSession | undefined {
+  if (!Number.isFinite(campaignLeadId)) return undefined;
+  for (const session of sessions.values()) {
+    if (session.campaignLeadId === campaignLeadId) return session;
+  }
+  return undefined;
+}
+
 export function getAllSessions(): Array<{ sessionId: string; callId: number; startedAt: Date }> {
   return Array.from(sessions.entries()).map(([sessionId, session]) => ({
     sessionId,
