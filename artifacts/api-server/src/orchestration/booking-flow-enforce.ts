@@ -73,9 +73,14 @@ export function looksLikeEmailRejection(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
   return (
-    /\b(no no|it'?s wrong|that'?s wrong|not correct|incorrect|wrong email|illa illa)\b/i.test(t)
+    /\b(no no|no again|nope|not that|not this|change (the |my )?e-?mail|different e-?mail|another e-?mail|wrong e-?mail|it'?s wrong|that'?s wrong|not correct|incorrect|illa illa)\b/i.test(t)
     || /(?:இல்ல|தவறு|गलत|नहीं)/u.test(t)
   );
+}
+
+/** Bare "no" after we just spelled an address — not "no I want 10 AM". */
+export function looksLikeBareEmailNo(text: string): boolean {
+  return /^(no|nope|nah|no thanks|no sir|no madam)([!.\s]*)$/i.test(text.trim());
 }
 
 /** Spoken claim that booking already happened / link already sent. */
@@ -105,10 +110,23 @@ export function extractEmailsFromText(text: string): string[] {
     seen.add(key);
     out.push(check.email);
   };
-  const reconstructed = reconstructSpokenEmail(text);
+  const afterCue = textAfterEmailCorrectionCue(text);
+  const reconstructed = reconstructSpokenEmail(afterCue !== text ? afterCue : text)
+    ?? (afterCue !== text ? reconstructSpokenEmail(text) : null);
   if (reconstructed) push(reconstructed);
   for (const m of text.match(LOOSE_EMAIL_RE) ?? []) push(m);
   return out;
+}
+
+/** Prefer the address spoken after "no / wrong / change email". */
+function textAfterEmailCorrectionCue(text: string): string {
+  const m =
+    /\b(no no|no again|nope|not that|not this|it'?s wrong|that'?s wrong|wrong e-?mail|change (the |my )?e-?mail|different e-?mail|another e-?mail)\b/i.exec(
+      text,
+    );
+  if (!m || m.index == null) return text;
+  const after = text.slice(m.index + m[0].length).trim();
+  return after.length >= 3 ? after : text;
 }
 
 /** Collapse `<spell>k a r r a j @ g m a i l . c o m</spell>` to a bookable address. */
@@ -272,19 +290,32 @@ export function updateBookingFlowFromUserTurn(
   lastAssistantText: string,
 ): BookingFlowState {
   const next = { ...state, candidateSlots: [...state.candidateSlots] };
+  const assistantAskedEmailConfirm =
+    state.emailSpellPending
+    || !!state.lastSpelledEmail
+    || /<spell>|is that correct|சரியா|சரி தான|ठीक है ना|gmail/i.test(lastAssistantText);
+  const rejected =
+    looksLikeEmailRejection(userText)
+    || (assistantAskedEmailConfirm && looksLikeBareEmailNo(userText));
+
   const emails = extractEmailsFromText(userText);
-  if (emails[0] && emails[0] !== next.pendingEmail) {
-    next.pendingEmail = emails[0]!;
+  // After "no" / when STT still contains the old address, keep the last one.
+  const pickedEmail = emails.length > 1 || rejected
+    ? emails[emails.length - 1]
+    : emails[0];
+  if (pickedEmail && pickedEmail !== next.pendingEmail) {
+    next.pendingEmail = pickedEmail;
     // Fresh email — must spell THIS address; a yes on the old one does not count.
     next.emailConfirmed = false;
     next.emailSpellPending = false;
     next.lastSpelledEmail = null;
   }
 
-  if (looksLikeEmailRejection(userText)) {
+  if (rejected) {
     next.emailConfirmed = false;
     next.emailSpellPending = false;
     next.lastSpelledEmail = null;
+    if (!pickedEmail) next.pendingEmail = null;
   }
 
   // Name heuristic: short non-email utterance while agent asked for name.
@@ -302,10 +333,6 @@ export function updateBookingFlowFromUserTurn(
     const name = userText.trim().replace(/[^\p{L}\p{N}\s.'-]/gu, "");
     if (name.length >= 2) next.pendingName = name;
   }
-
-  const assistantAskedEmailConfirm =
-    state.emailSpellPending
-    || /<spell>|is that correct|சரியா|சரி தான|ठीक है ना|gmail/i.test(lastAssistantText);
 
   const spelledMatches =
     !!next.pendingEmail

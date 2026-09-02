@@ -145,4 +145,40 @@ describe("booking flow state machine", () => {
     expect(state.emailConfirmed).toBe(true);
     expect(state.lastSpelledEmail).toBe("karraj@gmail.com");
   });
+
+  it("replaces the first email after the caller says no and gives a second address", () => {
+    let state = emptyBookingFlowState();
+    state = updateBookingFlowFromUserTurn(state, "ram@gmail.com", "Please share your email");
+    state = markEmailSpelled(state, "ram@gmail.com");
+    expect(state.pendingEmail).toBe("ram@gmail.com");
+
+    state = updateBookingFlowFromUserTurn(
+      state,
+      "no again use siva@gmail.com",
+      "Let me confirm your email. <spell>r a m @ g m a i l . c o m</spell> Is that correct?",
+    );
+    expect(state.pendingEmail).toBe("siva@gmail.com");
+    expect(state.emailConfirmed).toBe(false);
+    expect(state.lastSpelledEmail).toBeNull();
+    expect(shouldSpeakEmailSpell(state)).toBe(true);
+
+    state = markEmailSpelled(state, "ram@gmail.com");
+    state = updateBookingFlowFromUserTurn(
+      state,
+      "no not ram@gmail.com it's siva@gmail.com",
+      "Is r a m @ gmail.com correct?",
+    );
+    expect(state.pendingEmail).toBe("siva@gmail.com");
+
+    state = markEmailSpelled(state, "siva@gmail.com");
+    state = updateBookingFlowFromUserTurn(
+      state,
+      "no",
+      "Let me confirm your email. <spell>s i v a @ g m a i l . c o m</spell> Is that correct?",
+    );
+    expect(state.pendingEmail).toBeNull();
+    expect(state.emailConfirmed).toBe(false);
+    state = updateBookingFlowFromUserTurn(state, "karraj@gmail.com", "Please say the email again");
+    expect(state.pendingEmail).toBe("karraj@gmail.com");
+  });
 });
