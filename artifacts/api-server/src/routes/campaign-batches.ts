@@ -9,7 +9,7 @@ import {
 } from "@workspace/db";
 import { eq, and, count, desc, inArray, sql, isNull } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
-import { reopenCampaignIfCompleted } from "../services/batchScheduler.js";
+import { reopenCampaignIfCompleted, platformConcurrencyHeadroom } from "../services/batchScheduler.js";
 import { normalizePhone as normalizePhoneSimple } from "../lib/phone-normalize.js";
 import { normalizePhone as normalizePhoneService, INDIA_PHONE_CONFIG, type WorkspacePhoneConfig } from "../services/phone-normalization.js";
 
@@ -145,8 +145,17 @@ async function fireStartBatch(batch: BatchRow, campaign: CampaignRow): Promise<v
       eq(campaignLeadsTable.campaignId, campaign.id),
       inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
     ));
-  const slots = Math.max(0, limit - Number(active));
+  let slots = Math.max(0, limit - Number(active));
   if (slots <= 0) return;
+
+  // Platform-wide ceiling (server total across all campaigns/tenants) — see
+  // batchScheduler.platformConcurrencyHeadroom. Prevents a fresh batch from
+  // bursting past the server's sustainable live-call count (→ audio underruns).
+  const headroom = await platformConcurrencyHeadroom();
+  if (headroom !== null) {
+    if (headroom <= 0) return;
+    if (headroom < slots) slots = headroom;
+  }
 
   // Atomically pre-claim pending leads to 'calling' before scheduling them.
   // The AND call_status = 'pending' guard on the outer WHERE means that under
