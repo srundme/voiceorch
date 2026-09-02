@@ -185,7 +185,7 @@ router.post("/admin/voices/preview", requireAdmin, async (req, res): Promise<voi
       body: JSON.stringify({
         model_id: model,
         transcript: previewText,
-        voice: { mode: "id", id: voiceId },
+        voice: { id: voiceId },
         output_format: { container: "wav", encoding: "pcm_f32le", sample_rate: 22050 },
       }),
     });

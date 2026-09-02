@@ -84,21 +84,22 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("typedWelcome");
   });
 
-  it("synthesizes Cartesia at 16 kHz by default; native 8 kHz is opt-in", () => {
-    expect(pipelineSrc).toContain("CARTESIA_TTS_8K");
+  it("synthesizes Cartesia and Sarvam at native 8 kHz on 8 kHz legs; 16 kHz FIR is opt-in", () => {
     expect(pipelineSrc).toContain("CARTESIA_TTS_16K");
-    expect(pipelineSrc).toMatch(/CARTESIA_TTS_8K"\] === "1"/);
+    expect(pipelineSrc).toContain("SARVAM_TTS_16K");
+    expect(pipelineSrc).toMatch(/pcmOutRate\(\) === 8000/);
+    expect(pipelineSrc).toContain('ttsProvider === "sarvam"');
   });
 
   it("does not punch a 200 ms rebuffer hole mid-sentence (call 14351)", () => {
     expect(pipelineSrc).not.toMatch(/await awaitPrebuffer\(TTS_REBUFFER/);
     expect(pipelineSrc).toContain("TTS_WIRE_LEAD_FRAMES");
-    // An underrun is concealed with the last frame, never raw silence — but the
-    // repeat is faded, because looping it at full volume buzzes.
-    expect(pipelineSrc).toContain("concealFrame");
-    expect(pipelineSrc).toContain("attenuatePcm16");
-    expect(pipelineSrc).not.toMatch(/const hold = lastOutChunk \?\? holdFrame/);
+    // Underrun keeps the carrier alive with silence, never a looped speech frame.
+    expect(pipelineSrc).not.toContain("concealFrame");
+    expect(pipelineSrc).toContain("this.config.onAudioOut(holdFrame)");
     expect(pipelineSrc).toContain("Never start the wire on an empty queue");
-    expect(pipelineSrc).toContain("STREAMING_TTS_PREBUFFER_BOOST_MS");
+    expect(pipelineSrc).not.toContain("STREAMING_TTS_PREBUFFER_BOOST_MS");
+    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_GREETING_MS \?\? 80\)/);
+    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 240\)/);
   });
 });

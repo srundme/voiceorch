@@ -799,7 +799,7 @@ router.post("/assistant/tts", async (req: Request, res: Response): Promise<void>
         model_id: "sonic-3.5",
         transcript: text.slice(0, 700),
         language: ttsLanguageForText(text),
-        voice: { mode: "id", id: jarvisVoice },
+        voice: { id: jarvisVoice },
         output_format: { container: "wav", encoding: "pcm_f32le", sample_rate: 22050 },
       }),
     });

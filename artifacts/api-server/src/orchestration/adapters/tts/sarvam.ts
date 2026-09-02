@@ -188,6 +188,9 @@ export class SarvamTTS implements TTSAdapter {
    */
   private synthesisTail: Promise<void> = Promise.resolve();
 
+  /** Native PCM rate of returned chunks. 8 kHz on VoBiz; 16 kHz on HD webcall. */
+  readonly pcmSampleRate: 8000 | 16000;
+
   constructor(
     apiKey: string,
     voice: string | null,
@@ -195,8 +198,10 @@ export class SarvamTTS implements TTSAdapter {
     language?: string | null,
     model?: string | null,
     speed?: number | null,
+    sampleRate?: number | null,
   ) {
     this.key = apiKey;
+    this.pcmSampleRate = sampleRate === 8000 ? 8000 : 16000;
     this.model = (model && VALID_MODELS.has(model)) ? model : "bulbul:v3";
 
     let lang = language ?? null;
@@ -301,16 +306,20 @@ export class SarvamTTS implements TTSAdapter {
     return parts.filter((p) => p.length > 0);
   }
 
+  /** ~10 ms of s16le at the synthesis rate. 100 (~3 ms @ 16 kHz) made Sarvam
+   *  flush tiny chunks — heavy JSON overhead and unstable accumulation. */
+  private minBufferBytes(): number {
+    return (this.pcmSampleRate / 1000) * 10 * 2;
+  }
+
   private buildConfigPayload(): Record<string, unknown> {
     const data: Record<string, unknown> = {
       speaker: this.speaker,
       // WS wire format: language_code (required). REST uses target_language_code.
       language_code: this.langCode,
-      speech_sample_rate: 16000,
+      speech_sample_rate: this.pcmSampleRate,
       output_audio_codec: "linear16",
-      // 320 bytes = 10ms at 16k s16le. 100 (~3ms) made Sarvam flush tiny
-      // chunks — heavy JSON/base64 overhead per frame and unstable accumulation.
-      min_buffer_size: 320,
+      min_buffer_size: this.minBufferBytes(),
       max_chunk_length: 500,
     };
     this.applyPace(data);
@@ -475,7 +484,7 @@ export class SarvamTTS implements TTSAdapter {
       speaker: this.speaker,
       model: this.model,
       enable_preprocessing: this.enablePreprocessing,
-      speech_sample_rate: 16000,
+      speech_sample_rate: this.pcmSampleRate,
       output_audio_codec: "linear16",
     };
     this.applyPace(body);
@@ -720,7 +729,7 @@ export class SarvamTTS implements TTSAdapter {
       speaker: this.speaker,
       model: apiModel(this.model),
       enable_preprocessing: this.enablePreprocessing,
-      speech_sample_rate: 16000,
+      speech_sample_rate: this.pcmSampleRate,
       output_audio_codec: "linear16",
     };
     this.applyPace(body);

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SarvamTTS } from "./sarvam.js";
 
 describe("SarvamTTS stream serialization", () => {
@@ -58,6 +58,40 @@ describe("SarvamTTS stream serialization", () => {
     await first;
     await expect(second).rejects.toMatchObject({ name: "AbortError" });
     expect(starts).toEqual(["first"]);
+    tts.close();
+  });
+});
+
+describe("SarvamTTS sample rate", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+  it("defaults to 16 kHz PCM when no sample rate is passed (HD webcall / preview)", () => {
+    const tts = new SarvamTTS("test-key", "ritu", null, "en-IN", "bulbul:v3");
+    expect(tts.pcmSampleRate).toBe(16000);
+    tts.close();
+  });
+
+  it("requests native 8 kHz PCM when constructed for a telephony leg", async () => {
+    let sampleRate: number | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const body = JSON.parse(init.body as string) as { speech_sample_rate?: number };
+        sampleRate = body.speech_sample_rate;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ audios: [Buffer.alloc(4).toString("base64")] }),
+        } as unknown as Response;
+      }),
+    );
+
+    const tts = new SarvamTTS("test-key", "ritu", null, "en-IN", "bulbul:v3", null, 8000);
+    expect(tts.pcmSampleRate).toBe(8000);
+    await tts.synthesize("Hello");
+    expect(sampleRate).toBe(8000);
     tts.close();
   });
 });
