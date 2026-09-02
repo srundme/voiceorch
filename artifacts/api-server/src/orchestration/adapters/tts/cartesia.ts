@@ -5,14 +5,15 @@ import type { TTSAdapter } from "../../types.js";
 /**
  * Cartesia — Sonic TTS
  *
- * Primary path: WebSocket (`/tts/websockets`)
+ * Primary path: WebSocket (`/tts/websocket`)
  *   - One persistent WS connection per call (lazy-opened on first sentence).
  *   - No per-sentence TCP/TLS handshake → saves ~30–80ms per sentence.
- *   - max_buffer_delay_ms: 200 → Sonic can finish the last phoneme; 0 caused
- *     chopped endings even on complete sentences (Cartesia docs default 3000).
- *   - Default pcm_s16le @ 16 kHz (Cartesia voice-agent format). The pipeline
- *     FIR-downsamples to VoBiz 8 kHz. Pass sampleRate=8000 / CARTESIA_TTS_8K=1
- *     only when you want native 8 kHz (lower quality).
+ *   - max_buffer_delay_ms: 0 — we already send punctuated sentences (Cartesia
+ *     docs: only lower the 3000ms default when the client buffers itself).
+ *     A 200ms flush was chopping phonemes on live VoBiz (call 17873).
+ *   - pcm_s16le @ the leg rate: 8000 for VoBiz, 16000 for HD webcall.
+ *     Do not request 16 kHz and FIR-downsample for telephony — that stretched
+ *     and grit the voice (call 17873).
  *   - One context_id per LLM turn. Later sentences are continuations (continue:true,
  *     no flush) so Cartesia keeps prosody — a per-sentence flush was the audible seam.
  *
@@ -28,13 +29,13 @@ const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 300;
 const CARTESIA_VERSION = "2026-03-01";
 const WS_CONNECT_TIMEOUT_MS = 6_000;
-/** Let Sonic close the last phoneme. 0 was choppy; 3000 is too slow for live calls. */
-const CARTESIA_MAX_BUFFER_DELAY_MS = 200;
+/** We send punctuated sentences; Cartesia should not hold a second buffer. */
+const CARTESIA_MAX_BUFFER_DELAY_MS = 0;
 
-/** Stable default. Sonic 3.6 is beta on `sonic-preview` until Cartesia GA. */
+/** Stable default for existing agents. Sonic 3.6 is GA (`sonic-3.6`). */
 export const CARTESIA_DEFAULT_MODEL = "sonic-3.5";
-/** Cartesia's live API id for Sonic 3.6 (beta). `sonic-3.6` is accepted as an alias. */
-export const CARTESIA_SONIC_36_MODEL = "sonic-preview";
+/** Production Sonic 3.6 id. `sonic-preview` stays a separate beta snapshot. */
+export const CARTESIA_SONIC_36_MODEL = "sonic-3.6";
 
 const CARTESIA_MODEL_ALIASES: Record<string, string> = {
   "sonic-3.6": CARTESIA_SONIC_36_MODEL,
@@ -42,7 +43,7 @@ const CARTESIA_MODEL_ALIASES: Record<string, string> = {
 
 const CARTESIA_VALID_MODELS = new Set([
   CARTESIA_DEFAULT_MODEL, "sonic-3.5-2026-05-04", "sonic-latest",
-  CARTESIA_SONIC_36_MODEL,
+  CARTESIA_SONIC_36_MODEL, "sonic-3.6-2026-08-27", "sonic-preview",
   "sonic-3", "sonic-3-2026-01-12", "sonic-3-latest",
   "sonic-2", "sonic-2-2025-03-07", "sonic-2-2025-04-16", "sonic-2-2025-05-08", "sonic-2-2025-06-11",
   "sonic-turbo", "sonic-turbo-2025-03-07", "sonic-turbo-2025-06-04",
@@ -162,7 +163,7 @@ export class CartesiaTTS implements TTSAdapter {
   private modelId: string;
   private language: string | null;
   private speed: number | null;
-  /** Native PCM rate Cartesia should emit. 16 kHz unless telephony opts into 8 kHz. */
+  /** Native PCM rate Cartesia should emit. 8 kHz on VoBiz; 16 kHz on HD webcall. */
   readonly pcmSampleRate: 8000 | 16000;
 
   private ws: WebSocket | null = null;
@@ -251,11 +252,11 @@ export class CartesiaTTS implements TTSAdapter {
   }
 
   private buildWsUrl(): string {
-    return `${CARTESIA_WS_BASE}/tts/websockets?api_key=${encodeURIComponent(this.key)}&cartesia_version=${encodeURIComponent(CARTESIA_VERSION)}`;
+    return `${CARTESIA_WS_BASE}/tts/websocket?api_key=${encodeURIComponent(this.key)}&cartesia_version=${encodeURIComponent(CARTESIA_VERSION)}`;
   }
 
   private buildVoice(): Record<string, unknown> {
-    return { mode: "id", id: this.voiceId };
+    return { id: this.voiceId };
   }
 
   /**

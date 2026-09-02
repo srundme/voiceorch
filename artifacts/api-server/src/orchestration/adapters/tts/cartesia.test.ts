@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { CartesiaTTS, resolveCartesiaModelId, joinContinuationTranscript } from "./cartesia.js";
 
@@ -75,6 +76,11 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.audio.length).toBe(2);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as {
+      voice?: Record<string, unknown>;
+    };
+    expect(body.voice).toEqual({ id: expect.any(String) });
+    expect(body.voice).not.toHaveProperty("mode");
   });
 
   it("setLanguage() updates the language tag on subsequent synthesize() calls", async () => {
@@ -101,7 +107,7 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
     expect(languages).toEqual(["en", "ta"]);
   });
 
-  it("defaults to 16 kHz PCM (Cartesia voice-agent format)", () => {
+  it("defaults to 16 kHz PCM when no sample rate is passed (HD webcall)", () => {
     const tts = new CartesiaTTS("test-key", null, null);
     expect(tts.pcmSampleRate).toBe(16000);
   });
@@ -139,11 +145,22 @@ describe("joinContinuationTranscript", () => {
 });
 
 describe("resolveCartesiaModelId", () => {
-  it("keeps sonic-3.5 as the default and maps Sonic 3.6 to sonic-preview", () => {
+  it("keeps sonic-3.5 as the default and passes sonic-3.6 through as GA", () => {
     expect(resolveCartesiaModelId(null)).toBe("sonic-3.5");
     expect(resolveCartesiaModelId("sonic-3.5")).toBe("sonic-3.5");
     expect(resolveCartesiaModelId("sonic-preview")).toBe("sonic-preview");
-    expect(resolveCartesiaModelId("sonic-3.6")).toBe("sonic-preview");
+    expect(resolveCartesiaModelId("sonic-3.6")).toBe("sonic-3.6");
     expect(resolveCartesiaModelId("not-a-model")).toBe("sonic-3.5");
+  });
+});
+
+describe("Cartesia adaptor contract (source)", () => {
+  it("matches current Sonic docs: /tts/websocket, voice { id }, max_buffer_delay_ms 0", () => {
+    const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
+    expect(src).toContain("/tts/websocket?");
+    expect(src).not.toContain("/tts/websockets");
+    expect(src).toContain("return { id: this.voiceId }");
+    expect(src).toMatch(/CARTESIA_MAX_BUFFER_DELAY_MS = 0/);
+    expect(src).toContain('CARTESIA_SONIC_36_MODEL = "sonic-3.6"');
   });
 });

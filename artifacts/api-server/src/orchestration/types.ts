@@ -750,8 +750,8 @@ export interface TTSAdapter {
   warmup?(): void;
   /**
    * Native PCM sample rate of `synthesize` / `synthesizeStream` chunks.
-   * Cartesia matches the telephony wire (8 kHz) so the drain path does not
-   * FIR-downsample a second time. Unset means 16 kHz (Sarvam / ElevenLabs / etc.).
+   * Cartesia and Sarvam match the telephony wire (8 kHz) so the drain path
+   * does not FIR-downsample. Unset means 16 kHz (ElevenLabs / etc.).
    */
   pcmSampleRate?: 8000 | 16000;
 }

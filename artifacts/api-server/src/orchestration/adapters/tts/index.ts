@@ -24,7 +24,7 @@ export function createTTSAdapter(
     case "cartesia":
       return new CartesiaTTS(apiKey, voice, model, language, speed, sampleRate);
     case "sarvam":
-      return new SarvamTTS(apiKey, voice, extraConfig, language, model, speed);
+      return new SarvamTTS(apiKey, voice, extraConfig, language, model, speed, sampleRate);
     case "openai":
     case "openai_tts":
       return new OpenAITTS(apiKey, voice, model);

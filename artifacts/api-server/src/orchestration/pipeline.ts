@@ -38,7 +38,7 @@ import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { CartesiaTTS } from "./adapters/tts/cartesia.js";
-import { encodeMulaw, upsample8to16, downsample16to8, createDownsampler16to8, decodeMulaw, attenuatePcm16, hasSpeechEnergy, frameRms, padWireFrame, enqueueExactFrames } from "./audio.js";
+import { encodeMulaw, upsample8to16, downsample16to8, createDownsampler16to8, decodeMulaw, hasSpeechEnergy, frameRms, padWireFrame, enqueueExactFrames } from "./audio.js";
 import { resolveMicSensitivity, getMicSensitivityThresholds, isIdleCancellingMicEnergy, type MicSensitivityThresholds } from "./mic-sensitivity.js";
 import { resolveSoftwareNoiseGate, envForceVobizSoftwareNc, type NoiseGateDecision } from "./noise-gate.js";
 import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
@@ -346,51 +346,32 @@ const CHUNK_SIZE_MULAW        = 160;    // 20ms @ 8kHz mulaw for paced batch pla
  *  Normal-tier floor, kept as the import-site default in audioPool/audioWorker.
  *  Owner: mic-sensitivity.ts. Empirical (calls 4842/4843), not a spec. */
 const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
-// TTS jitter buffer (see drainSentenceJob): runway of audio to queue before
-// starting the paced send pump, so momentary provider-stream hiccups don't
-// become audible mid-sentence gaps. Caps bound the added latency.
-// Greeting prebuffer must exceed Cartesia max_buffer_delay_ms (200). Campaign
-// concurrency still underruns at 240/360 — bump defaults so live VoBiz legs
-// keep a longer runway (env overrides remain).
-// Native Cartesia 8 kHz made the voice worse — we synthesize 16 kHz and
-// FIR-downsample with the streaming decimator. CARTESIA_TTS_8K=1 opts back in.
-const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 480));
+// TTS jitter buffer (see drainSentenceJob): short runway before the paced
+// send pump so a provider hiccup is not an audible gap. Values are the
+// native-8 kHz Cartesia era (commit 3c93cbd74) — later 480–1200 ms stacks
+// stretched 800 ms of audio to ~2.5 s wall (call 17873). Env overrides remain.
+// VoBiz is LINEAR16 8 kHz — Cartesia synthesizes at that rate unless CARTESIA_TTS_16K=1.
+const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 80));
 const TTS_PREBUFFER_GREETING_CAP_MS = Math.max(
   TTS_PREBUFFER_GREETING_MS,
-  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 720),
+  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 160),
 );
-const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 640));
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 240));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
-  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 880),
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 320),
 );
-const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 1200));
-/**
- * Every streaming TTS (Cartesia, Sarvam, ElevenLabs, Deepgram) can stall
- * mid-sentence. Extra runway before the wire, then a Sarvam-only bump
- * because Bulbul is burstier than Sonic.
- */
-const STREAMING_TTS_PREBUFFER_BOOST_MS = Math.max(
-  0,
-  Number(process.env.STREAMING_TTS_PREBUFFER_BOOST_MS ?? 160),
-);
-const SARVAM_TTS_PREBUFFER_BOOST_MS = Math.max(
-  0,
-  Number(process.env.SARVAM_TTS_PREBUFFER_BOOST_MS ?? 300),
-);
-/** On mid-sentence underrun: refill this much audio while holding the last
- *  frame (keeps VoBiz alive). Prefer this over realtime pacing on an empty
- *  queue — that is the audible "breaking" glitch on live calls. */
-const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 280));
-const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 600));
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 400));
+/** On mid-sentence underrun: refill this much real audio. Keep the carrier
+ *  alive with silence, never by looping the last speech frame (robotic breakup). */
+const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 200));
+const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 400));
 const TTS_UNDERRUN_COLD_MS = 8_000;
 /** Burst this many 20 ms frames into VoBiz before realtime pacing so a 40–80 ms
- *  event-loop hitch does not empty the carrier jitter buffer (choppy voice). */
-const TTS_WIRE_LEAD_FRAMES = Math.max(0, Math.min(10, Number(process.env.TTS_WIRE_LEAD_FRAMES ?? 6)));
+ *  event-loop hitch does not empty the carrier jitter buffer. */
+const TTS_WIRE_LEAD_FRAMES = Math.max(0, Math.min(8, Number(process.env.TTS_WIRE_LEAD_FRAMES ?? 4)));
 
-/** Process-local count of in-flight TTS drains — when campaigns dial many
- *  legs at once, each drain needs a longer prebuffer so Sonic/Sarvam lag
- *  does not underrun the wire. */
+/** Process-local in-flight TTS drains — logged on underrun, not used to inflate prebuffer. */
 let activeTtsDrainCount = 0;
 
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
@@ -967,7 +948,7 @@ type TtsSentenceJob = {
   sequenceId: number;
   /** True if this.tts.synthesizeStream was used (vs the one-shot synthesize()). */
   streaming: boolean;
-  /** Streaming path: 4-byte-aligned PCM blocks (16 kHz, or native 8 kHz if CARTESIA_TTS_8K=1) awaiting drain. */
+  /** Streaming path: 4-byte-aligned PCM blocks (native TTS rate) awaiting drain. */
   pcmQueue: Buffer[];
   /** True once the TTS request has fully settled (success, error, or abort). */
   synthDone: boolean;
@@ -3105,13 +3086,14 @@ export class OrchestrationPipeline implements VoiceSession {
     this.tts = createTTSAdapter(
       this.agent.ttsProvider, ttsKey, this.agent.ttsVoice, this.agent.ttsModel,
       ttsExtraConfig, ttsLanguage, this.agent.ttsSpeed,
-      // Cartesia docs: pcm_s16le @ 16 kHz for voice agents. Native 8 kHz
-      // synthesis was the "breaking to the core" quality loss; VoBiz still
-      // gets 8 kHz via StreamingDecimator. CARTESIA_TTS_8K=1 restores native 8 kHz.
-      this.agent.ttsProvider === "cartesia"
-      && this.pcmOutRate() !== 16000
-      && process.env["CARTESIA_TTS_8K"] === "1"
-      && process.env["CARTESIA_TTS_16K"] !== "1"
+      // Cartesia / Sarvam: native PCM at the wire rate. VoBiz is 8 kHz L16;
+      // HD webcall is 16 kHz. CARTESIA_TTS_16K=1 / SARVAM_TTS_16K=1 restore FIR.
+      (this.agent.ttsProvider === "cartesia" || this.agent.ttsProvider === "sarvam")
+      && this.pcmOutRate() === 8000
+      && !(
+        (this.agent.ttsProvider === "cartesia" && process.env["CARTESIA_TTS_16K"] === "1")
+        || (this.agent.ttsProvider === "sarvam" && process.env["SARVAM_TTS_16K"] === "1")
+      )
         ? 8000
         : 16000,
     );
@@ -7283,23 +7265,9 @@ export class OrchestrationPipeline implements VoiceSession {
         ? CHUNK_SIZE_MULAW * 2 * (this.pcmOutRate() / 8000)
         : CHUNK_SIZE_MULAW;
       const holdFrame = Buffer.alloc(wireFrameBytes, 0);
-      // Underrun concealment. Repeating the last speech frame verbatim keeps the
-      // carrier fed, but looping one 20 ms frame for hundreds of ms turns a
-      // synthesis stall into a periodic buzz — the "robotic / breaking" voice
-      // callers report. Fade the repeat out over ~5 frames so a stall sounds
-      // like a short pause instead.
-      let holdFrames = 0;
-      const concealFrame = (last: Buffer | null): Buffer => {
-        const gain = Math.pow(0.6, holdFrames);
-        holdFrames++;
-        if (!last || gain < 0.1) return holdFrame;
-        return this.config.rawPcmOutput
-          ? attenuatePcm16(last, gain)
-          : encodeMulaw(attenuatePcm16(decodeMulaw(last), gain));
-      };
       // Block-continuous decimators when TTS is 16 kHz on an 8 kHz leg.
       // Per-block stateless downsample16to8 repeats a kernel-edge defect at
-      // 50 Hz (buzzy/gritty voice). CARTESIA_TTS_8K=1 skips this path.
+      // 50 Hz (buzzy/gritty voice). Native Cartesia/Sarvam 8 kHz skips this path.
       const speechDecim = srcRate === 16000 ? createDownsampler16to8() : null;
       const mixedDecim = srcRate === 16000 && this.ambientStream ? createDownsampler16to8() : null;
 
@@ -7372,26 +7340,12 @@ export class OrchestrationPipeline implements VoiceSession {
       const recentlyUnderran = this.ttsLastUnderrunAt > 0
         && Date.now() - this.ttsLastUnderrunAt < TTS_UNDERRUN_COLD_MS;
       const greetingFirstClip = this.greetingPlaybackActive && !this.ttsWarmed;
-      // Concurrent campaign legs share one Node process — each active drain
-      // adds runway so Sonic/Sarvam lag under load does not underrun the wire.
-      const concurrencyBoostMs =
-        activeTtsDrainCount >= 4 ? 400
-        : activeTtsDrainCount >= 3 ? 240
-        : activeTtsDrainCount >= 2 ? 120
-        : 0;
-      const basePrebufferMs = greetingFirstClip
+      const prebufferMs = greetingFirstClip
         ? TTS_PREBUFFER_GREETING_MS
         : (this.ttsWarmed && !recentlyUnderran)
           ? TTS_PREBUFFER_WARM_MS
           : TTS_PREBUFFER_COLD_MS;
-      const ttsName = this.agent.ttsProvider.toLowerCase();
-      const providerBoostMs =
-        (job.streaming ? STREAMING_TTS_PREBUFFER_BOOST_MS : 0)
-        + (ttsName === "sarvam" ? SARVAM_TTS_PREBUFFER_BOOST_MS : 0);
-      const prebufferMs = basePrebufferMs + providerBoostMs + concurrencyBoostMs;
-      const prebufferCap = (greetingFirstClip ? TTS_PREBUFFER_GREETING_CAP_MS : TTS_PREBUFFER_CAP_MS)
-        + providerBoostMs
-        + concurrencyBoostMs;
+      const prebufferCap = greetingFirstClip ? TTS_PREBUFFER_GREETING_CAP_MS : TTS_PREBUFFER_CAP_MS;
       await awaitPrebuffer(prebufferMs, prebufferCap);
       // Re-anchor the per-sentence echo grace + adaptive echo-floor calibration
       // window to actual playback start: the prebuffer wait above would
@@ -7404,7 +7358,6 @@ export class OrchestrationPipeline implements VoiceSession {
       // buffer absorbs a 40–80 ms event-loop hitch instead of chopping speech.
       let nextTick = Date.now() + 20;
       let leadFrames = TTS_WIRE_LEAD_FRAMES;
-      let lastOutChunk: Buffer | null = null;
       while (!this.closed && !this.bargeInRequested) {
         if (job.sequenceId === FILLER_SEQUENCE_ID && this._skipPendingFillerPlayback) break;
         const emitStatus = this.audioSendStatus(job.sequenceId);
@@ -7435,8 +7388,6 @@ export class OrchestrationPipeline implements VoiceSession {
           if (this._tTurnFirstAudioOut === null) this._tTurnFirstAudioOut = performance.now();
           this.config.onAudioOut(outChunk);
           noteSent(outChunk);
-          lastOutChunk = outChunk;
-          holdFrames = 0;
           this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
           // NOTE: do NOT re-arm the echo-grace window per chunk here (see armTailEchoGrace).
           // If TTS is already done and this was the last queued chunk, break
@@ -7456,9 +7407,8 @@ export class OrchestrationPipeline implements VoiceSession {
         } else if (job.synthDone) {
           break; // no more buffered blocks and TTS finished — we're done
         } else {
-          // Underrun: synthesis fell behind realtime. Do NOT keep pacing an
-          // empty queue (audible glitches on live VoBiz). Hold the last frame
-          // to keep the carrier alive while we refill the jitter buffer.
+          // Underrun: synthesis fell behind realtime. Keep VoBiz fed with
+          // silence (not a looped speech frame — that is the robotic breakup).
           underrunCount++;
           this.ttsLastUnderrunAt = Date.now();
           const _uStart = Date.now();
@@ -7473,9 +7423,8 @@ export class OrchestrationPipeline implements VoiceSession {
             if (wireQueue.length > 0) break;
             const now = Date.now();
             if (now >= rebufferTick) {
-              const hold = concealFrame(lastOutChunk);
-              this.config.onAudioOut(hold);
-              noteSent(hold);
+              this.config.onAudioOut(holdFrame);
+              noteSent(holdFrame);
               this.lastTtsFrameAt = now;
               rebufferTick = now + 20;
             }
@@ -7491,10 +7440,8 @@ export class OrchestrationPipeline implements VoiceSession {
             flushWireRemainder();
             continue;
           }
-          // Still dry after rebuffer cap — single hold frame, then retry loop.
-          const hold = concealFrame(lastOutChunk);
-          this.config.onAudioOut(hold);
-          noteSent(hold);
+          this.config.onAudioOut(holdFrame);
+          noteSent(holdFrame);
           this.lastTtsFrameAt = Date.now();
           await new Promise<void>((r) => setTimeout(r, Math.max(0, nextTick - Date.now())));
         }
