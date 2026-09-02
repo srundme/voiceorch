@@ -11,6 +11,8 @@ import { latinizeAttendeeName } from "./booking-attendee-name.js";
 export type BookingFlowState = {
   availabilityChecked: boolean;
   lastSlotIso: string | null;
+  /** True only after the caller (or a single-clock confirm) picked a slot. */
+  slotLocked: boolean;
   candidateSlots: string[];
   pendingEmail: string | null;
   pendingName: string | null;
@@ -22,6 +24,7 @@ export function emptyBookingFlowState(): BookingFlowState {
   return {
     availabilityChecked: false,
     lastSlotIso: null,
+    slotLocked: false,
     candidateSlots: [],
     pendingEmail: null,
     pendingName: null,
@@ -97,6 +100,38 @@ export function parseSlotIsoFromAvailabilityResult(result: string): string | nul
   return alts[0] ?? null;
 }
 
+const SPOKEN_CLOCK_RE = /(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)/i;
+
+export function parseSpokenClock(text: string): { hour24: number; minute: number } | null {
+  const m = SPOKEN_CLOCK_RE.exec(text);
+  if (!m) return null;
+  let hour = Number(m[1]);
+  const minute = m[2] ? Number(m[2]) : 0;
+  if (!Number.isFinite(hour) || hour < 1 || hour > 12 || minute > 59) return null;
+  const ap = m[3]!.replace(/\./g, "").toLowerCase();
+  if (hour === 12) hour = ap === "am" ? 0 : 12;
+  else if (ap === "pm") hour += 12;
+  return { hour24: hour, minute };
+}
+
+/** Match "10 AM" / "10:10 AM" to the nearest offered ISO slot (call 17701). */
+export function pickSlotIsoFromSpokenTime(
+  text: string,
+  candidateSlots: string[],
+): string | null {
+  if (!candidateSlots.length) return null;
+  const clock = parseSpokenClock(text);
+  if (!clock) return null;
+  let best: { iso: string; score: number } | null = null;
+  for (const iso of candidateSlots) {
+    const hm = /T(\d{2}):(\d{2})/.exec(iso);
+    if (!hm) continue;
+    const score = Math.abs(Number(hm[1]) - clock.hour24) * 60 + Math.abs(Number(hm[2]) - clock.minute);
+    if (!best || score < best.score) best = { iso, score };
+  }
+  return best && best.score <= 15 ? best.iso : null;
+}
+
 export function parseIsoSlotsFromAvailabilityResult(result: string): string[] {
   const available = /requested_slot_available:\s*slot="([^"]+)"/i.exec(result);
   if (available?.[1]) return [available[1]];
@@ -127,7 +162,12 @@ export function updateBookingFlowFromToolResult(
     const slots = parseIsoSlotsFromAvailabilityResult(result);
     if (slots.length) {
       next.candidateSlots = slots;
-      next.lastSlotIso = slots[0] ?? null;
+      if (next.slotLocked && next.lastSlotIso && slots.includes(next.lastSlotIso)) {
+        // Keep the caller's pick across a re-check.
+      } else {
+        next.lastSlotIso = slots[0] ?? null;
+        next.slotLocked = false;
+      }
     }
   }
   const bookedEmail = /email="([^"]+)"/i.exec(result)?.[1];
@@ -148,6 +188,18 @@ export function updateBookingFlowFromAssistantText(
   }
   const emails = extractEmailsFromText(assistantText.replace(/<[^>]+>/g, " "));
   if (emails[0]) next.pendingEmail = emails[0]!;
+  // One clock only — slot lists ("9:00 AM, 9:15 AM, 10:00 AM") must not
+  // snap lastSlotIso back to the first offered time.
+  const clockHits = assistantText.match(
+    new RegExp(SPOKEN_CLOCK_RE.source, "gi"),
+  )?.length ?? 0;
+  if (clockHits === 1) {
+    const spokenSlot = pickSlotIsoFromSpokenTime(assistantText, next.candidateSlots);
+    if (spokenSlot) {
+      next.lastSlotIso = spokenSlot;
+      next.slotLocked = true;
+    }
+  }
   return next;
 }
 
@@ -195,11 +247,14 @@ export function updateBookingFlowFromUserTurn(
     next.emailSpellPending = false;
   }
 
-  // Slot pick after alternatives: keep lastSlotIso if time answer matches a candidate label loosely.
+  // Slot pick: map "10 AM" onto the offered list. Do not keep slots[0]
+  // (call 17701: caller said 10 AM, auto-book used 9:00 AM).
   if (next.candidateSlots.length && looksLikeBookingTimeAnswer(userText)) {
-    // Prefer keeping exact requested slot; otherwise leave first candidate —
-    // forced book tool_choice lets the LLM pick the right ISO.
-    next.lastSlotIso = next.lastSlotIso ?? next.candidateSlots[0] ?? null;
+    const picked = pickSlotIsoFromSpokenTime(userText, next.candidateSlots);
+    if (picked) {
+      next.lastSlotIso = picked;
+      next.slotLocked = true;
+    }
   }
 
   return next;
@@ -251,4 +306,37 @@ export function buildAutoBookArgs(state: BookingFlowState): Record<string, unkno
     email_confirmed: true,
     preferred_date: state.lastSlotIso,
   };
+}
+
+/** Live / LLM book args: do not let a stale first-slot ISO override the caller's pick. */
+export function applyLockedSlotToBookArgs(
+  state: BookingFlowState,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!state.slotLocked || !state.lastSlotIso) return args;
+  if (String(args["preferred_date"] ?? "") === state.lastSlotIso) return args;
+  return { ...args, preferred_date: state.lastSlotIso };
+}
+
+export function looksLikeBookOrRescheduleTool(toolName: string): boolean {
+  const key = toolName.toLowerCase();
+  return (
+    key.includes("book_appointment")
+    || key === "native_booking"
+    || key.includes("reschedule")
+  );
+}
+
+/** Match a spoken clock on `preferred_date` to a concrete slot (book/reschedule fallback). */
+export function pickTimeSlotBySpokenClock<T>(
+  preferredRaw: string | null | undefined,
+  slots: T[],
+  toIso: (slot: T) => string,
+): T | undefined {
+  if (!preferredRaw || !slots.length) return undefined;
+  const isos = slots.map(toIso);
+  const picked = pickSlotIsoFromSpokenTime(preferredRaw, isos);
+  if (!picked) return undefined;
+  const i = isos.indexOf(picked);
+  return i >= 0 ? slots[i] : undefined;
 }

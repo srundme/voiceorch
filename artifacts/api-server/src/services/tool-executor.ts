@@ -17,6 +17,7 @@ import {
 import { eq, and, or, sql, desc, ne } from "drizzle-orm";
 import { getAvailableSlots } from "./scheduling/slot-engine.js";
 import { findExactAvailableSlot, parsePreferredInstant, extractIsoDateTime } from "./scheduling/slot-match.js";
+import { pickTimeSlotBySpokenClock } from "../orchestration/booking-flow-enforce.js";
 import { parseRelativeDateTime, type PartOfDay } from "./scheduling/relative-datetime.js";
 import { parseCallbackDateTime } from "../lib/tz-datetime.js";
 import { buildSlotLockKey } from "./scheduling/lock.js";
@@ -764,7 +765,12 @@ export async function executeNativeBooking(
       logger.info({ callId, confirmedSlot: exactMatch.slotStart }, "Native booking: exact slot confirmed");
       chosenSlot = exactMatch;
     } else {
-      chosenSlot = slots[0]!;
+      // Vague "tomorrow morning" stays first slot. A clock in the same string
+      // ("10 AM") must not silently book slots[0] (call 17701).
+      chosenSlot =
+        pickTimeSlotBySpokenClock(preferredRaw, slots, (s) =>
+          formatInTimeZone(s.slotStart, calTz, "yyyy-MM-dd'T'HH:mm:ssXXX"),
+        ) ?? slots[0]!;
     }
 
     // Post-selection availability guard — verify the chosen slot falls within
@@ -1475,8 +1481,10 @@ export async function executeNativeReschedule(
       logger.info({ callId, confirmedSlot: exactMatch.slotStart }, "Native reschedule: exact slot confirmed");
       chosenSlot = exactMatch;
     } else {
-      // Vague preference (morning / next Tuesday / etc.) — first available is fine
-      chosenSlot = filteredSlots[0]!;
+      chosenSlot =
+        pickTimeSlotBySpokenClock(preferredRaw, filteredSlots, (s) =>
+          formatInTimeZone(s.slotStart, calTz, "yyyy-MM-dd'T'HH:mm:ssXXX"),
+        ) ?? filteredSlots[0]!;
     }
 
     // Post-selection availability guard — verify the chosen slot falls within

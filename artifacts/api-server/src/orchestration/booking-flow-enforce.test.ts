@@ -7,8 +7,12 @@ import {
   looksLikeEmailConfirmationYes,
   looksLikeFalseBookingClaim,
   parseSlotIsoFromAvailabilityResult,
+  pickSlotIsoFromSpokenTime,
+  pickTimeSlotBySpokenClock,
+  applyLockedSlotToBookArgs,
   shouldForceBookAppointment,
   shouldForceCheckAvailability,
+  updateBookingFlowFromAssistantText,
   updateBookingFlowFromToolResult,
   updateBookingFlowFromUserTurn,
 } from "./booking-flow-enforce.js";
@@ -60,6 +64,37 @@ describe("booking flow state machine", () => {
         alreadyBooked: false,
       }),
     ).toBe(true);
+  });
+
+  it("locks the caller's 10 AM slot, not the first free 9 AM (call 17701)", () => {
+    const slots =
+      'available_slots: next="2026-09-03T09:00:00+05:30 (Thu Sep 3 at 9:00 AM); 2026-09-03T10:00:00+05:30 (Thu Sep 3 at 10:00 AM)"';
+    let state = updateBookingFlowFromToolResult(emptyBookingFlowState(), "check_availability", slots);
+    expect(state.lastSlotIso).toBe("2026-09-03T09:00:00+05:30");
+    expect(state.slotLocked).toBe(false);
+    expect(pickSlotIsoFromSpokenTime("10:10 AM 10 AM 10 AM", state.candidateSlots)).toBe(
+      "2026-09-03T10:00:00+05:30",
+    );
+    expect(
+      applyLockedSlotToBookArgs(state, { preferred_date: "2026-09-03T09:00:00+05:30" }).preferred_date,
+    ).toBe("2026-09-03T09:00:00+05:30");
+    state = updateBookingFlowFromUserTurn(state, "10:10 AM 10 AM 10 AM", "Which time works for you?");
+    expect(state.lastSlotIso).toBe("2026-09-03T10:00:00+05:30");
+    expect(state.slotLocked).toBe(true);
+    expect(
+      applyLockedSlotToBookArgs(state, { preferred_date: "2026-09-03T09:00:00+05:30" }).preferred_date,
+    ).toBe("2026-09-03T10:00:00+05:30");
+    const nine = { iso: "2026-09-03T09:00:00+05:30" };
+    const ten = { iso: "2026-09-03T10:00:00+05:30" };
+    expect(pickTimeSlotBySpokenClock("tomorrow morning 10 AM", [nine, ten], (s) => s.iso)).toEqual(ten);
+    expect(pickTimeSlotBySpokenClock("tomorrow morning", [nine, ten], (s) => s.iso)).toBeUndefined();
+    state = updateBookingFlowFromAssistantText(
+      state,
+      "Sir, tomorrow morning we have slots at 9:00 AM, 9:15 AM and 10:00 AM. Which time works for you?",
+    );
+    expect(state.lastSlotIso).toBe("2026-09-03T10:00:00+05:30");
+    state = updateBookingFlowFromAssistantText(state, "Perfect sir, 10:00 AM tomorrow is available.");
+    expect(state.lastSlotIso).toBe("2026-09-03T10:00:00+05:30");
   });
 
   it("detects false booking claims and email yes", () => {

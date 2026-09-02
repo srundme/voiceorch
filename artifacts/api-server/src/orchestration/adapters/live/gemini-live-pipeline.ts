@@ -46,7 +46,16 @@ import {
 } from "./gemini-live-voices.js";
 import { toGeminiLiveTools } from "./gemini-tools.js";
 import { runLiveToolCall } from "./live-tool-runner.js";
-import { looksLikeFalseBookingClaim } from "../../booking-flow-enforce.js";
+import {
+  applyLockedSlotToBookArgs,
+  emptyBookingFlowState,
+  looksLikeBookOrRescheduleTool,
+  looksLikeFalseBookingClaim,
+  updateBookingFlowFromAssistantText,
+  updateBookingFlowFromToolResult,
+  updateBookingFlowFromUserTurn,
+  type BookingFlowState,
+} from "../../booking-flow-enforce.js";
 import { LIVE_BOOKING_TRUTH_RULE, liveToolResultConfirmedBooking } from "./live-booking-email.js";
 import { mergeTranscriptFragment } from "./live-transcript-merge.js";
 import { CALL_SCREENING_WINDOW_MS, detectScreeningPrompt } from "../../callScreening.js";
@@ -285,6 +294,7 @@ export class GeminiLivePipeline implements VoiceSession {
   private screeningHangupDone = false;
   private readonly screeningWindowStart = Date.now();
   private schedulingActionConfirmed = false;
+  private bookingFlowState: BookingFlowState = emptyBookingFlowState();
   private bookingTruthPromptSent = false;
   private amdExternalVerdict: "human" | "machine" | null = null;
 
@@ -1134,7 +1144,10 @@ export class GeminiLivePipeline implements VoiceSession {
     const responses = [];
     for (const call of calls) {
       const name = call.name ?? "";
-      const args = (call.args ?? {}) as Record<string, unknown>;
+      const rawArgs = (call.args ?? {}) as Record<string, unknown>;
+      const args = looksLikeBookOrRescheduleTool(name)
+        ? applyLockedSlotToBookArgs(this.bookingFlowState, rawArgs)
+        : rawArgs;
       const result = await runLiveToolCall(
         {
           config: this.config,
@@ -1153,6 +1166,17 @@ export class GeminiLivePipeline implements VoiceSession {
         args,
       );
       if (liveToolResultConfirmedBooking(result)) this.schedulingActionConfirmed = true;
+      const toolBlob = [
+        typeof result["output"] === "string" ? result["output"] : "",
+        typeof result["error"] === "string" ? result["error"] : "",
+      ].join(" ").trim();
+      if (toolBlob) {
+        this.bookingFlowState = updateBookingFlowFromToolResult(
+          this.bookingFlowState,
+          name,
+          toolBlob,
+        );
+      }
       this.maybeCorrectFailedLiveBooking(name, result);
       responses.push({
         id: call.id,
@@ -1192,6 +1216,11 @@ export class GeminiLivePipeline implements VoiceSession {
     } else {
       this.history.push({ role: "user", content: text });
     }
+    this.bookingFlowState = updateBookingFlowFromUserTurn(
+      this.bookingFlowState,
+      text,
+      this.lastAgentText ?? "",
+    );
   }
 
   private appendAgent(text: string): void {
@@ -1204,6 +1233,7 @@ export class GeminiLivePipeline implements VoiceSession {
     } else {
       this.history.push({ role: "assistant", content: clean });
     }
+    this.bookingFlowState = updateBookingFlowFromAssistantText(this.bookingFlowState, clean);
   }
 
   private async tryResumeAfterDisconnect(reason: string): Promise<void> {
