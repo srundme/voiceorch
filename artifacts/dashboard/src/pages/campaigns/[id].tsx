@@ -16,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -35,10 +34,10 @@ import {
   ArrowLeft, Copy, Check, Megaphone, Upload, FileText, Layers,
   ChevronRight, ChevronDown, Calendar, Trash2, Users, Clock, AlertCircle,
   CheckCircle2, X, BarChart3, PhoneCall, ArrowRight, Hash,
-  Activity, PlayCircle, PauseCircle, XCircle, Info, Settings,
+  Activity, PlayCircle, PauseCircle, XCircle, Settings,
   Phone, Globe, Building2, Zap, ListFilter, Plus,
-  PhoneIncoming, ArrowRightLeft, Radio, Ban, PhoneOff, PhoneMissed,
-  TrendingUp, DollarSign, Target, MoreVertical, Eye,
+  PhoneIncoming, ArrowRightLeft, Radio, Ban,
+  MoreVertical, Eye,
   KeyRound, Link2, Link2Off, Loader2, Instagram,
   Download,
   Table2,
@@ -1243,22 +1242,6 @@ function MetaIntegrationCard({
   );
 }
 
-// ── Campaign summary KPI card (mirrors the Batch Workspace KpiCard) ───────────
-
-function KpiCard({ icon, label, value, color }: {
-  icon: React.ReactNode; label: string; value: number | string; color?: string;
-}) {
-  return (
-    <div className="bg-card px-3.5 py-3 flex flex-col gap-1.5">
-      <div className="flex items-center gap-1.5">
-        <span className={cn("text-muted-foreground/50", color)}>{icon}</span>
-        <span className="text-xs uppercase tracking-wider font-semibold text-muted-foreground/40 truncate">{label}</span>
-      </div>
-      <p className={cn("text-xl font-bold tabular-nums truncate", color ?? "text-foreground")}>{value}</p>
-    </div>
-  );
-}
-
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CampaignDetailPage() {
@@ -1332,7 +1315,7 @@ export default function CampaignDetailPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { enabled: campaignId > 0, refetchInterval: 10_000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: analytics, isPending: analyticsPending } = useGetCampaignAnalytics(campaignId, { query: { enabled: campaignId > 0, refetchInterval: 10_000 } as any });
+  const { data: analytics } = useGetCampaignAnalytics(campaignId, { query: { enabled: campaignId > 0, refetchInterval: 10_000 } as any });
   const { data: liveQueueMetrics } = useQuery({
     queryKey: ["lq-metrics", campaignId],
     queryFn: () => customFetch<{
@@ -1482,7 +1465,7 @@ export default function CampaignDetailPage() {
     analytics,
     campaign,
   });
-  const { imported, called, failed, busy, noPickup, connected: connectedCalls, successRate: successRatePct } = overviewMetrics;
+  const { failed } = overviewMetrics;
   const hasCsvSource = batches?.some(b => b.leadSource === "csv") ?? false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isContinuous = ["webhook", "meta_ads", "crm", "google_sheets"].includes((campaign as any)?.leadSource ?? "");
@@ -1490,12 +1473,6 @@ export default function CampaignDetailPage() {
   // ── Campaign-level summary metrics ────────────────────────────────────────
   const totalBatches     = batches?.length ?? 0;
   const activeBatches    = batches?.filter(b => b.status === "running").length ?? 0;
-  const completedBatches = batches?.filter(b => (b.status as string) === "completed").length ?? 0;
-  const stoppedBatches   = batches?.filter(b => b.status === "stopped").length ?? 0;
-
-  const campaignCreated = campaign?.createdAt
-    ? formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })
-    : "—";
 
   // ── Campaign "finished" detection (UI-only) ───────────────────────────────
   // A campaign is finished when it has at least one batch, every batch is in a
@@ -1528,43 +1505,6 @@ export default function CampaignDetailPage() {
   );
   const campaignFinished =
     preFinished && allAnalyticsLoaded && pendingRetriesTotal === 0;
-
-  // Overall progress: leads processed vs imported. While running with no
-  // progress yet, show "Tracking..." instead of a bare 0%.
-  const overallPct = imported > 0 ? Math.min(100, Math.round((called / imported) * 100)) : 0;
-  const campaignRunning = activeBatches > 0;
-  const overallProgress = overallPct > 0
-    ? `${overallPct}%`
-    : campaignRunning
-      ? "Tracking..."
-      : "0%";
-
-  const leadsRemaining  = Math.max(imported - called, 0);
-
-  // Campaign health: derived purely from already-fetched batch/analytics data.
-  const failureRate = called > 0 ? (failed + busy + noPickup) / called : 0;
-  const campaignHealth: { label: string; accent: string; dotCls: string; icon: React.ReactNode } = (() => {
-    const terminal = campaign?.status === "completed" || campaign?.status === "stopped";
-    if (imported === 0 && called === 0) {
-      if (terminal) {
-        return { label: "Stopped", accent: "text-muted-foreground", dotCls: "bg-muted-foreground/40", icon: <Info className="h-3.5 w-3.5" /> };
-      }
-      return { label: "Not started", accent: "text-muted-foreground", dotCls: "bg-muted-foreground/40", icon: <Info className="h-3.5 w-3.5" /> };
-    }
-    if (imported > 0 && called >= imported) {
-      if (connectedCalls === 0 && (failed + busy + noPickup) > 0) {
-        return { label: "Dialled — no answers", accent: "text-amber-500", dotCls: "bg-amber-500", icon: <AlertCircle className="h-3.5 w-3.5" /> };
-      }
-      return { label: "Healthy", accent: "text-emerald-500", dotCls: "bg-emerald-500", icon: <CheckCircle2 className="h-3.5 w-3.5" /> };
-    }
-    if (imported > called && activeBatches === 0) {
-      return { label: "Stalled", accent: "text-red-500", dotCls: "bg-red-500", icon: <AlertCircle className="h-3.5 w-3.5" /> };
-    }
-    if (activeBatches > 0 && (failureRate >= 0.3 || stoppedBatches > 0)) {
-      return { label: "Needs Attention", accent: "text-amber-500", dotCls: "bg-amber-500", icon: <AlertCircle className="h-3.5 w-3.5" /> };
-    }
-    return { label: "Healthy", accent: "text-emerald-500", dotCls: "bg-emerald-500", icon: <CheckCircle2 className="h-3.5 w-3.5" /> };
-  })();
 
   async function handleDeleteBatch() {
     if (!deletingBatch) return;
@@ -2087,37 +2027,8 @@ export default function CampaignDetailPage() {
           {activeTab === "transfers"  && <TransfersTab campaignId={campaignId} />}
           {activeTab === "bookings"   && <BookingsTab campaignId={campaignId} />}
 
-          {/* ── OVERVIEW continued: stats + batches ──────────────────────── */}
+          {/* ── OVERVIEW continued: batches ──────────────────────── */}
           {activeTab === "overview" && (<>
-
-          {/* Campaign-level summary — health + progress, then outcome metrics that
-              actually help judge performance (vs. flat administrative counts). */}
-          <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-8 px-4 py-3.5 border-b border-border/50">
-              <div className="flex items-center gap-2 shrink-0" title={campaignHealth.label}>
-                <span className={cn("h-2 w-2 rounded-full shrink-0", campaignHealth.dotCls)} />
-                <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold", campaignHealth.accent)}>
-                  {campaignHealth.icon}
-                  {campaignHealth.label}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground/40">Overall Progress</span>
-                  <span className="text-xs font-mono font-semibold text-foreground/80 tabular-nums">{overallProgress}</span>
-                </div>
-                <Progress value={overallPct} className="h-1.5" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-border/60">
-              <KpiCard icon={<PhoneCall className="h-3 w-3" />} label="Connected"       value={analyticsPending && !analytics ? "—" : connectedCalls.toLocaleString()} color="text-sky-500" />
-              <KpiCard icon={<Target className="h-3 w-3" />}    label="Success Rate"    value={analyticsPending && !analytics ? "—" : `${successRatePct}%`} color="text-emerald-500" />
-              <KpiCard icon={<Users className="h-3 w-3" />}     label="Leads Remaining" value={leadsRemaining.toLocaleString()} color="text-amber-500" />
-              <KpiCard icon={<XCircle className="h-3 w-3" />}   label="Failed"          value={analyticsPending && !analytics ? "—" : failed.toLocaleString()} color="text-red-500" />
-              <KpiCard icon={<PhoneOff className="h-3 w-3" />}  label="Busy"            value={analyticsPending && !analytics ? "—" : busy.toLocaleString()} color="text-orange-500" />
-              <KpiCard icon={<PhoneMissed className="h-3 w-3" />} label="No pickup"     value={analyticsPending && !analytics ? "—" : noPickup.toLocaleString()} color="text-amber-500" />
-            </div>
-          </div>
 
           {/* Batches — batch-mode campaigns only */}
           {(campaign as unknown as Record<string, unknown>)["triggerMode"] !== "instant" ? (
