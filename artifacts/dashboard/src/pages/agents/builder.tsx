@@ -84,6 +84,8 @@ import {
   DOMAIN_FIELD_QUICK_ADDS,
   taxonomyToCategories,
   categoriesToTaxonomy,
+  canCommitDispositionSave,
+  isDispositionCommitKey,
   fromStoredDomainField,
   toStoredDomainField,
   slugDispositionKey,
@@ -4478,11 +4480,14 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const [afterCallMessages, setAfterCallMessages] = useState<AfterCallMessagesState>(EMPTY_AFTER_CALL_MESSAGES);
   const [dirty, setDirty] = useState(false);
   const [outcomesAutoStatus, setOutcomesAutoStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
+  const [outcomesCommitTick, setOutcomesCommitTick] = useState(0);
   const outcomesAutoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outcomesEditRevRef = useRef(0);
   const outcomesSaveRevRef = useRef(0);
   const outcomesAutoSaveRef = useRef(false);
   const mutateOutcomesRef = useRef<() => void>(() => {});
+  const outcomesCommitSnapRef = useRef({ dirty: false, categories, fields });
+  outcomesCommitSnapRef.current = { dirty, categories, fields };
 
   const { data: dispConfig, isLoading: dispLoading } = useQuery<DispConfigRow | null>({
     queryKey: ["disposition-config", agentId],
@@ -4559,6 +4564,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
 
   useEffect(() => {
     if (!dispConfig) return;
+    // Keep an open empty row — refetch after auto-save used to wipe it.
+    if (dirty) return;
     setCategories(taxonomyToCategories(dispConfig.taxonomy ?? {}));
     setFields((dispConfig.domainFields ?? []).map(fromStoredDomainField));
     setRules(Array.isArray(dispConfig.rules) ? dispConfig.rules : []);
@@ -4578,7 +4585,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
     );
     setAfterCallMessages(readAfterCallMessages(dispConfig.afterCallMessages));
     setDirty(false);
-  }, [dispConfig]);
+  }, [dispConfig, dirty]);
 
   /** After-call rules: primary + primary:sub (matches dispositionMatchesAny). */
   const dispositionKeys = useMemo(() => {
@@ -4669,27 +4676,39 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   });
   mutateOutcomesRef.current = saveMutation.mutate;
 
+  function requestOutcomesCommit() {
+    setOutcomesCommitTick((n) => n + 1);
+  }
+
+  function onOutcomesFieldKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!isDispositionCommitKey(e.key, e.nativeEvent.isComposing)) return;
+    e.preventDefault();
+    e.currentTarget.blur();
+  }
+
   useEffect(() => {
     if (!dirty) return;
     outcomesEditRevRef.current += 1;
     setOutcomesAutoStatus("pending");
-    if (outcomesAutoTimerRef.current) clearTimeout(outcomesAutoTimerRef.current);
-    outcomesAutoTimerRef.current = setTimeout(() => {
-      outcomesSaveRevRef.current = outcomesEditRevRef.current;
-      outcomesAutoSaveRef.current = true;
-      setOutcomesAutoStatus("saving");
-      mutateOutcomesRef.current();
-    }, 1200);
-    return () => {
-      if (outcomesAutoTimerRef.current) clearTimeout(outcomesAutoTimerRef.current);
-    };
   }, [dirty, categories, fields, rules, meaningMap, outcomeGuides, afterCallMessages]);
+
+  useEffect(() => {
+    if (outcomesCommitTick === 0) return;
+    const snap = outcomesCommitSnapRef.current;
+    if (!canCommitDispositionSave(snap.dirty, snap.categories, snap.fields)) return;
+    if (outcomesAutoTimerRef.current) clearTimeout(outcomesAutoTimerRef.current);
+    outcomesSaveRevRef.current = outcomesEditRevRef.current;
+    outcomesAutoSaveRef.current = true;
+    setOutcomesAutoStatus("saving");
+    mutateOutcomesRef.current();
+  }, [outcomesCommitTick]);
 
   function applyPreset(presetId: string) {
     const preset = OUTCOME_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     setCategories(taxonomyToCategories(preset.taxonomy));
     setDirty(true);
+    requestOutcomesCommit();
   }
 
   function addCategory() {
@@ -4700,6 +4719,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   function removeCategory(id: string) {
     setCategories((prev) => prev.filter((c) => c.id !== id));
     setDirty(true);
+    requestOutcomesCommit();
   }
 
   function updateCategory(id: string, field: "name" | "values", value: string) {
@@ -4724,11 +4744,13 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       ];
     });
     setDirty(true);
+    if (label || key) requestOutcomesCommit();
   }
 
   function removeField(id: string) {
     setFields((prev) => prev.filter((f) => f.id !== id));
     setDirty(true);
+    requestOutcomesCommit();
   }
 
   function updateField(id: string, patch: Partial<UiDomainField>) {
@@ -4806,6 +4828,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                             placeholder="e.g. outcome"
                             value={cat.name}
                             onChange={(e) => updateCategory(cat.id, "name", e.target.value)}
+                            onBlur={() => requestOutcomesCommit()}
+                            onKeyDown={onOutcomesFieldKeyDown}
                           />
                         </div>
                         <div className="space-y-1">
@@ -4817,6 +4841,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                             placeholder="interested, callback, no_answer"
                             value={cat.values}
                             onChange={(e) => updateCategory(cat.id, "values", e.target.value)}
+                            onBlur={() => requestOutcomesCommit()}
+                            onKeyDown={onOutcomesFieldKeyDown}
                           />
                         </div>
                       </div>
@@ -4865,6 +4891,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                         });
                         setDirty(true);
                       }}
+                      onBlur={() => requestOutcomesCommit()}
                     />
                   </div>
                 ))}
@@ -4898,6 +4925,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                     ],
                   }));
                   setDirty(true);
+                  requestOutcomesCommit();
                 }}
               >
                 <Plus className="size-3" /> Add rule
@@ -5009,6 +5037,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                           universal: { ...prev.universal, whatsapp: v },
                         }));
                         setDirty(true);
+                        requestOutcomesCommit();
                       }}
                     />
                     WhatsApp
@@ -5022,6 +5051,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                           universal: { ...prev.universal, email: v },
                         }));
                         setDirty(true);
+                        requestOutcomesCommit();
                       }}
                     />
                     Email
@@ -5041,6 +5071,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                         universal: { ...prev.universal, whatsappTemplate: next },
                       }));
                       setDirty(true);
+                      requestOutcomesCommit();
                     }}
                   />
                 </div>
@@ -5052,6 +5083,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                     onCheckedChange={(v) => {
                       setAfterCallMessages((prev) => ({ ...prev, skipUniversalWhenMatched: v }));
                       setDirty(true);
+                      requestOutcomesCommit();
                     }}
                   />
                   Skip universal when a disposition rule matches
@@ -5091,6 +5123,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                                   }),
                                 }));
                                 setDirty(true);
+                                requestOutcomesCommit();
                               }}
                               className={cn(
                                 "rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors",
@@ -5115,6 +5148,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                             rules: prev.rules.filter((r) => r.id !== rule.id),
                           }));
                           setDirty(true);
+                          requestOutcomesCommit();
                         }}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -5132,6 +5166,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                               ),
                             }));
                             setDirty(true);
+                            requestOutcomesCommit();
                           }}
                         />
                         WhatsApp
@@ -5147,6 +5182,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                               ),
                             }));
                             setDirty(true);
+                            requestOutcomesCommit();
                           }}
                         />
                         Email
@@ -5167,6 +5203,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                               ),
                             }));
                             setDirty(true);
+                            requestOutcomesCommit();
                           }}
                         />
                       </div>
@@ -5224,6 +5261,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                             placeholder="WhatsApp number"
                             value={field.label}
                             onChange={(e) => updateField(field.id, { label: e.target.value })}
+                            onBlur={() => requestOutcomesCommit()}
+                            onKeyDown={onOutcomesFieldKeyDown}
                           />
                         </div>
                         <div className="space-y-1">
@@ -5233,13 +5272,18 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                             placeholder="whatsapp_number"
                             value={field.key}
                             onChange={(e) => updateField(field.id, { key: e.target.value })}
+                            onBlur={() => requestOutcomesCommit()}
+                            onKeyDown={onOutcomesFieldKeyDown}
                           />
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Type</label>
                           <Select
                             value={field.uiType}
-                            onValueChange={(v) => updateField(field.id, { uiType: v as UiDomainFieldType })}
+                            onValueChange={(v) => {
+                              updateField(field.id, { uiType: v as UiDomainFieldType });
+                              requestOutcomesCommit();
+                            }}
                           >
                             <SelectTrigger className="h-8 text-xs">
                               <SelectValue />
@@ -5274,6 +5318,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                           placeholder="yes, no, maybe"
                           value={field.optionsText ?? ""}
                           onChange={(e) => updateField(field.id, { optionsText: e.target.value })}
+                          onBlur={() => requestOutcomesCommit()}
+                          onKeyDown={onOutcomesFieldKeyDown}
                         />
                       </div>
                     )}
@@ -5289,7 +5335,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
         <div className="flex items-center justify-end gap-2">
           {dirty && (
             <span className="text-[11px] text-muted-foreground">
-              {outcomesAutoStatus === "saving" ? "Auto-saving…" : outcomesAutoStatus === "error" ? "Auto-save failed" : "Auto-save pending"}
+              {outcomesAutoStatus === "saving" ? "Auto-saving…" : outcomesAutoStatus === "error" ? "Auto-save failed" : "Saves when you leave the field"}
             </span>
           )}
           {!dirty && outcomesAutoStatus === "saved" && (
