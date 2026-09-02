@@ -31,10 +31,23 @@ describe("resolveCallOpeningLanguage", () => {
     })).toMatchObject({ key: "ta", source: "memory" });
   });
 
-  it("defaults to English when no memory and auto-detect", () => {
+  it("uses the STT language for multilingual when there is no memory", () => {
+    expect(resolveCallOpeningLanguage({
+      memoryLanguagePref: null,
+      agentLanguage: "hi-IN",
+      languageAutoDetect: true,
+    })).toMatchObject({ key: "hi", source: "agent" });
     expect(resolveCallOpeningLanguage({
       memoryLanguagePref: null,
       agentLanguage: "ta-IN",
+      languageAutoDetect: true,
+    })).toMatchObject({ key: "ta", source: "agent" });
+  });
+
+  it("defaults to English when multilingual and no agent language", () => {
+    expect(resolveCallOpeningLanguage({
+      memoryLanguagePref: null,
+      agentLanguage: null,
       languageAutoDetect: true,
     })).toMatchObject({ key: "en", source: "english_default" });
   });

@@ -5620,7 +5620,7 @@ export class OrchestrationPipeline implements VoiceSession {
                 agentName: this.agent.name,
                 callerName: this.config.returningCallerName ?? null,
                 memoryLanguagePref: this.config.callerMemoryLanguage ?? null,
-                agentLanguage: this.agent.language ?? greetLang,
+                agentLanguage: greetLang,
                 languageAutoDetect: this.agent.languageAutoDetect === true,
               },
             ),
@@ -5884,7 +5884,8 @@ export class OrchestrationPipeline implements VoiceSession {
         && !!typedWelcome
         && isStubGreeting(typedWelcome)
         && !useInstantReturning
-        && !this._greetingPrewarmReady;
+        && !this._greetingPrewarmReady
+        && greetLang.toLowerCase().startsWith("en");
       if (speakWelcomeNow) {
         this.beginOpeningGreetingPlayback(typedWelcome.length);
         logger.info(
@@ -5993,6 +5994,7 @@ export class OrchestrationPipeline implements VoiceSession {
         !useInstantReturning &&
         greeting.trim() &&
         greeting.trim() !== typedWelcome
+        && greetLang.toLowerCase().startsWith("en")
       ) {
         const joined = joinWelcomeAndOpener(typedWelcome, greeting);
         if (joined !== greeting) {
@@ -9542,7 +9544,7 @@ export class OrchestrationPipeline implements VoiceSession {
       direction: this.callDirection,
       callerName: this.config.returningCallerName ?? null,
       memoryLanguagePref: this.config.callerMemoryLanguage ?? null,
-      agentLanguage: this.agent.language ?? null,
+      agentLanguage: this.currentLang || this.agent.sttConfig.language || this.agent.language || null,
       languageAutoDetect: this.agent.languageAutoDetect === true,
       openingAlreadyDelivered: openerAlreadySpoken,
     })}`;

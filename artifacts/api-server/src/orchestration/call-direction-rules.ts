@@ -173,8 +173,12 @@ export function outboundOpenExamples(langKey: string, name: string | null): stri
 /**
  * Resolve opening language for this call.
  * - Prefer caller memory language_pref when present
- * - Else English when language auto-detect is on (or no agent language)
- * - Else the agent's configured language (fixed-language agents stay stable)
+ * - Else the agent's STT / Language dropdown (multilingual still opens there)
+ * - Else English when no language is set
+ *
+ * languageAutoDetect only means "follow the caller after they speak". It must
+ * not ignore an explicit Hindi/Tamil/… dropdown and cold-start in English
+ * (call 17431: STT hi-IN + multilingual → English "Hello" + English pitch).
  */
 export function resolveCallOpeningLanguage(opts: {
   memoryLanguagePref?: string | null;
@@ -186,11 +190,12 @@ export function resolveCallOpeningLanguage(opts: {
     const key = resolveOpeningLanguageKey(mem);
     return { key, label: LANG_LABEL[key] ?? key, source: "memory" };
   }
-  if (opts.languageAutoDetect || !(opts.agentLanguage ?? "").trim()) {
-    return { key: "en", label: "English", source: "english_default" };
+  const agentLang = (opts.agentLanguage ?? "").trim();
+  if (agentLang) {
+    const key = resolveOpeningLanguageKey(agentLang);
+    return { key, label: LANG_LABEL[key] ?? key, source: "agent" };
   }
-  const key = resolveOpeningLanguageKey(opts.agentLanguage);
-  return { key, label: LANG_LABEL[key] ?? key, source: "agent" };
+  return { key: "en", label: "English", source: "english_default" };
 }
 
 export function buildCallDirectionRule(opts: {

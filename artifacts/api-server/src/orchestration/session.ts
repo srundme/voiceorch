@@ -1163,7 +1163,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       latchedFactsMap.get("language_pref")
       ?? callerProfileSnapshot?.preferredLanguage
       ?? null,
-    agentLanguage: agent.asrLanguage ?? agent.language ?? null,
+    agentLanguage: effectiveAgentLang,
     languageAutoDetect: agentConfig.languageAutoDetect === true,
     openingAlreadyDelivered: false,
   })}`;
