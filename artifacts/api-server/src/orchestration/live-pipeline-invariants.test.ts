@@ -84,6 +84,12 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("typedWelcome");
   });
 
+  it("keeps typed Welcome on resume-drop so first audio is not blocked on the greeting LLM (call 18112)", () => {
+    expect(pipelineSrc).not.toContain('const typedWelcome = resumeDropped ? ""');
+    expect(pipelineSrc).toMatch(/resumeDropped \? "" : typedWelcome/);
+    expect(pipelineSrc).toContain("playing welcome before greeting LLM");
+  });
+
   it("synthesizes Cartesia and Sarvam at native 8 kHz on 8 kHz legs; 16 kHz FIR is opt-in", () => {
     expect(pipelineSrc).toContain("CARTESIA_TTS_16K");
     expect(pipelineSrc).toContain("SARVAM_TTS_16K");

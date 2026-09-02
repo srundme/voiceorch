@@ -5822,10 +5822,14 @@ export class OrchestrationPipeline implements VoiceSession {
         isReturningCaller && !resumeDropped && this.callDirection !== "outbound";
       const greetLang =
         this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
-      const typedWelcome = resumeDropped ? "" : (this.agent.greetingMessage ?? "").trim();
+      // Keep the agent's typed Welcome even on resume-drop so speakWelcomeNow
+      // can play a stub while the greeting LLM runs (call 18112: emptying
+      // typedWelcome blocked first audio for 5.9s). greeting itself stays
+      // empty on resume-drop so we still generate the resume opener.
+      const typedWelcome = (this.agent.greetingMessage ?? "").trim();
       let greeting = useInstantReturning
         ? buildInstantReturningGreeting(this.config.returningCallerName, greetLang)
-        : typedWelcome;
+        : (resumeDropped ? "" : typedWelcome);
 
       // Outbound typed Welcome (including "Hello!") is what they hear first.
       // Do not empty a stub and let the greeting LLM speak Talk/CALL FLOW —

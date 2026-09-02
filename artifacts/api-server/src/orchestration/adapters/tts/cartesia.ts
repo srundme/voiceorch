@@ -409,6 +409,12 @@ export class CartesiaTTS implements TTSAdapter {
       const b64 = msg["data"] as string | undefined;
       if (b64) ctx.onChunk(Buffer.from(b64, "base64"));
     } else if (type === "done") {
+      // Cartesia can emit `done` after the first continue:true clip when
+      // max_buffer_delay_ms is 0 (call 18112: sentence 2 audioBytes=0).
+      // Ignore that until we send continue:false via finalizeTurnContext.
+      if (this.claimedTurns.has(contextId) && !this.finalizedTurns.has(contextId)) {
+        return;
+      }
       this.pending.delete(contextId);
       ctx.resolve();
     } else if (type === "error") {

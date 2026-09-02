@@ -178,4 +178,11 @@ describe("Cartesia adaptor contract (source)", () => {
     expect(src).toMatch(/CARTESIA_MAX_BUFFER_DELAY_MS = 0/);
     expect(src).toContain('CARTESIA_SONIC_36_MODEL = "sonic-3.6"');
   });
+
+  it("ignores premature context done until finalizeTurnContext (call 18112 sentence-2 silence)", () => {
+    const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
+    expect(src).toContain("claimedTurns.has(contextId)");
+    expect(src).toContain("finalizedTurns.has(contextId)");
+    expect(src).toContain("Ignore that until we send continue:false via finalizeTurnContext");
+  });
 });
