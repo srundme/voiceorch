@@ -26,6 +26,7 @@ import {
   DeleteAgentParams,
   ToggleAgentParams,
   ListAgentsResponse,
+  ListAgentsResponseItem,
   GetAgentResponse,
   UpdateAgentResponse,
   ToggleAgentResponse,
@@ -47,6 +48,7 @@ import { checkIrdaiCompliance } from "../services/irdai/index.js";
 import { callEngineInsertDefaults } from "@workspace/db/call-engine-defaults";
 import { resolveWorkspaceScope } from "../services/workspace-scope.js";
 import { unsupportedAgentModel } from "../services/agent-model-validation.js";
+import { applyAsrSmartEndpointing, normalizeAsrSmartEndpointing } from "../lib/agent-response.js";
 
 const router: IRouter = Router();
 
@@ -97,6 +99,7 @@ function prepareAgentForResponse(
   const { generatedPrompt: _gp, promptTemplateVersion: _pv, wizardInputs: _wi, ...rest } = agent;
   return {
     ...rest,
+    asrSmartEndpointing: normalizeAsrSmartEndpointing(agent.asrSmartEndpointing),
     knowledgeSourceIds,
     leadSourceToken: maskLeadToken(agent.leadSourceToken),
     hasGeneratedPrompt: !!agent.generatedPrompt,
@@ -153,7 +156,20 @@ router.get("/agents", requireAuth, clientContext, async (req, res): Promise<void
     .where((await workspaceOwned(clerkId)).owned)
     .orderBy(agentsTable.createdAt);
   const sourceIdMap = await getKnowledgeSourceIdsByAgent(agents);
-  res.json(ListAgentsResponse.parse(agents.map((a) => prepareAgentForResponse(a, sourceIdMap.get(a.id) ?? []))));
+  const valid = [];
+  for (const a of agents) {
+    const row = prepareAgentForResponse(a, sourceIdMap.get(a.id) ?? []);
+    const parsed = ListAgentsResponseItem.safeParse(row);
+    if (parsed.success) {
+      valid.push(parsed.data);
+      continue;
+    }
+    logger.warn(
+      { agentId: a.id, issues: parsed.error.issues.slice(0, 8) },
+      "GET /agents skipped invalid row (would 500 Agents page)",
+    );
+  }
+  res.json(ListAgentsResponse.parse(valid));
 });
 
 router.post("/agents", requireAuth, clientContext, async (req, res): Promise<void> => {
@@ -184,6 +200,7 @@ router.post("/agents", requireAuth, clientContext, async (req, res): Promise<voi
 
   const insertData: Record<string, unknown> = { ...parsed.data, userId: clerkId };
   normalizeToolNames(insertData);
+  applyAsrSmartEndpointing(insertData);
   // knowledgeSourceIds is an M:N association, not an agents column — extract before insert.
   const createSourceIds = Array.isArray(insertData["knowledgeSourceIds"])
     ? (insertData["knowledgeSourceIds"] as number[])
@@ -430,6 +447,7 @@ router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promis
   }
   const updateData: Record<string, unknown> = { ...parsed.data };
   normalizeToolNames(updateData);
+  applyAsrSmartEndpointing(updateData);
   // knowledgeSourceIds is an M:N association, not an agents column — extract before update.
   const updateSourceIds = Array.isArray(updateData["knowledgeSourceIds"])
     ? (updateData["knowledgeSourceIds"] as number[])
@@ -1218,7 +1236,8 @@ router.patch("/agents/:id/toggle", requireAuth, clientContext, async (req, res):
     .where(and(eq(agentsTable.id, params.data.id), (await workspaceOwned(clerkId)).owned))
     .returning();
   await logActivity({ userId: clerkId, eventType: "agent.toggled", resourceType: "agent", resourceId: String(agent.id), description: `Agent "${agent.name}" set to ${newStatus}` });
-  res.json(ToggleAgentResponse.parse(agent));
+  const sourceIdMap = await getKnowledgeSourceIdsByAgent([agent]);
+  res.json(ToggleAgentResponse.parse(prepareAgentForResponse(agent, sourceIdMap.get(agent.id) ?? [])));
 });
 
 /* ── GET /agents/:id/latency-stats ─────────────────────────────────────────── */
