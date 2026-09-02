@@ -9022,15 +9022,20 @@ export class OrchestrationPipeline implements VoiceSession {
         // Honor the configured frequency for all languages (including Tamil).
         // The old 0.25 Tamil hard-cap made enabled backchanneling feel "broken".
         const freq = Math.max(0, Math.min(1, baseFreq));
-        if (shouldSkipImmediateBackchannel(Boolean(this._specLlmState))) {
+        const greetingOnlyCaller = isCallerAttentionUtterance(transcript);
+        if (shouldSkipImmediateBackchannel(Boolean(this._specLlmState), greetingOnlyCaller)) {
           logger.info(
             {
               callId: this.config.callId,
               fillerType: "backchannel",
               language: fillerLang,
               backchannelingEnabled: this.agent.backchannelingEnabled,
+              greetingOnly: greetingOnlyCaller,
+              speculativeLlm: Boolean(this._specLlmState),
             },
-            "Backchannel filler skipped — speculative LLM already in flight",
+            greetingOnlyCaller
+              ? "Backchannel filler skipped — greeting-only caller turn"
+              : "Backchannel filler skipped — speculative LLM already in flight",
           );
         } else if (Math.random() < freq) {
           // Strict, language-based fillers only — no cross-language fallback.

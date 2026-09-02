@@ -144,6 +144,21 @@ describe("joinContinuationTranscript", () => {
   });
 });
 
+describe("claimTurnContext (call 17915 — no second owner clip)", () => {
+  it("lets only the first sentence own the turn, even after finalize or WS-down", () => {
+    const tts = new CartesiaTTS("test-key", null, null);
+    expect(tts.claimTurnContext("turn-17915")).toBe(true);
+    expect(tts.claimTurnContext("turn-17915")).toBe(false);
+    tts.finalizeTurnContext("turn-17915");
+    expect(tts.claimTurnContext("turn-17915")).toBe(false);
+
+    const down = new CartesiaTTS("test-key", null, null);
+    (down as unknown as { wsFailedPermanently: boolean }).wsFailedPermanently = true;
+    expect(down.claimTurnContext("turn-ws-down")).toBe(true);
+    expect(down.claimTurnContext("turn-ws-down")).toBe(false);
+  });
+});
+
 describe("resolveCartesiaModelId", () => {
   it("keeps sonic-3.5 as the default and passes sonic-3.6 through as GA", () => {
     expect(resolveCartesiaModelId(null)).toBe("sonic-3.5");

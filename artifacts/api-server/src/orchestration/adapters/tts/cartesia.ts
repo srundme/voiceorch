@@ -422,8 +422,12 @@ export class CartesiaTTS implements TTSAdapter {
    * it (skipDrain) so one PCM stream plays instead of N clipped jobs.
    */
   claimTurnContext(turnContextId: string): boolean {
-    if (this.wsFailedPermanently) return true;
-    if (this.claimedTurns.has(turnContextId)) return false;
+    // Always one owner per turn. Returning true on WS-down (old behavior)
+    // made every sentence a new playJob — call 17915: two Playback Started
+    // rows and a 3s stall on the second clip.
+    if (this.claimedTurns.has(turnContextId) || this.finalizedTurns.has(turnContextId)) {
+      return false;
+    }
     this.claimedTurns.add(turnContextId);
     this.turnOpened.set(turnContextId, new Promise<void>((r) => {
       this.turnOpenedResolve.set(turnContextId, r);
@@ -476,7 +480,10 @@ export class CartesiaTTS implements TTSAdapter {
       const waitOpen = this.turnOpened.get(turnContextId);
       if (waitOpen) await waitOpen;
       if (!this.pending.has(turnContextId)) {
-        return this.synthesizeViaWs(ws, text, onChunk, onDone, signal, emotions);
+        // Owner already closed or fell back to REST. Do not open a fresh
+        // context_id — that is a second voice start (audible seam).
+        const owner = this.turnChunkHandlers.get(turnContextId) ?? onChunk;
+        return this.synthesizeViaRest(text, owner, onDone, signal, emotions);
       }
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
       const transcript = joinContinuationTranscript(
@@ -529,16 +536,28 @@ export class CartesiaTTS implements TTSAdapter {
     emotions?: string[],
     join = false,
   ): Promise<void> {
+    // Register the owner sink before awaiting WS so a later sentence can
+    // append into the same PCM queue even if this call falls back to REST.
+    if (!join) {
+      this.turnChunkHandlers.set(turnContextId, onChunk);
+    }
+    const sink = join
+      ? (this.turnChunkHandlers.get(turnContextId) ?? onChunk)
+      : onChunk;
+    const releaseOwnerWait = (): void => {
+      if (!join) this.turnOpenedResolve.get(turnContextId)?.();
+    };
+
     if (!this.wsFailedPermanently) {
       try {
         const ws = await this.getOrOpenWs();
-        return await this.synthesizeViaWsInContext(ws, turnContextId, text, onChunk, onDone, signal, emotions, join);
+        return await this.synthesizeViaWsInContext(ws, turnContextId, text, sink, onDone, signal, emotions, join);
       } catch (err) {
         if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
         if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(err)) {
           try {
             const ws = await this.getOrOpenWs();
-            return await this.synthesizeViaWsInContext(ws, turnContextId, text, onChunk, onDone, signal, undefined, join);
+            return await this.synthesizeViaWsInContext(ws, turnContextId, text, sink, onDone, signal, undefined, join);
           } catch (retryErr) {
             if (signal?.aborted || (retryErr instanceof DOMException && retryErr.name === "AbortError")) throw retryErr;
             this.wsFailedPermanently = true;
@@ -549,11 +568,13 @@ export class CartesiaTTS implements TTSAdapter {
       }
     }
     try {
-      return await this.synthesizeViaRest(text, onChunk, onDone, signal, emotions);
+      releaseOwnerWait();
+      return await this.synthesizeViaRest(text, sink, onDone, signal, emotions);
     } catch (err) {
+      releaseOwnerWait();
       if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
       if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(err)) {
-        return this.synthesizeViaRest(text, onChunk, onDone, signal, undefined);
+        return this.synthesizeViaRest(text, sink, onDone, signal, undefined);
       }
       throw err;
     }
@@ -566,7 +587,7 @@ export class CartesiaTTS implements TTSAdapter {
   finalizeTurnContext(turnContextId: string): void {
     if (this.finalizedTurns.has(turnContextId)) return;
     this.finalizedTurns.add(turnContextId);
-    this.claimedTurns.delete(turnContextId);
+    // Keep claimedTurns so a late flush cannot become a second owner clip.
     const sendClose = (): void => {
       this.turnFlushCounters.delete(turnContextId);
       this.turnLastTranscript.delete(turnContextId);
