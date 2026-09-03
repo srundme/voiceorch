@@ -3952,25 +3952,38 @@ export class OrchestrationPipeline implements VoiceSession {
       let sttLang = parseRealtimeDetectedLang(this._pendingSttLang) ?? null;
       this._pendingSttLang = null; // consume — prevent stale value leaking into force-finalize / queue-drain paths
       const lidConfidence = this._pendingSttMeta?.languageConfidence;
-      if (sttLang && lidConfidence != null && lidConfidence < 0.35) {
-        logger.info(
-          { callId: this.config.callId, sttLang, lidConfidence },
-          "STT language ignored — language_confidence too low",
-        );
-        sttLang = null;
+
+      // TRUST SAARAS V3 NATIVE DETECTION
+      // Saaras v3 documentation: "automatically detects the spoken language... follows along without
+      // losing accuracy... a single unified model that understands multilingual Indian speech as a
+      // continuous stream." We were building redundant confidence thresholds and script detection on
+      // top of what Saaras already handles natively. Calls 19992, 19994 issue was agent configuration
+      // (single-language Hindi instead of multilingual Tamil), NOT Saaras's detection.
+      //
+      // NEW APPROACH (minimal filtering):
+      //  • Multilingual (languageAutoDetect=true): Trust Saaras completely (no confidence filter)
+      //  • Single-language (languageAutoDetect=false): Very low bar (10%) to catch only garbage
+      if (this.agent.languageAutoDetect) {
+        // Multilingual: Trust Saaras v3's native detection completely
+        // No confidence filtering — Saaras handles code-mixing, transliteration, borrowed words
+        // No script detection — Saaras's unified model already knows the language
+      } else {
+        // Single-language: Only reject extremely uncertain detections (confidence < 10%)
+        // This catches actual noise/silence, not legitimate language switching
+        const MIN_CONFIDENCE = 0.1;
+        if (sttLang && lidConfidence != null && lidConfidence < MIN_CONFIDENCE) {
+          logger.info(
+            { callId: this.config.callId, sttLang, lidConfidence },
+            "STT language ignored — extremely low confidence (likely noise)",
+          );
+          sttLang = null;
+        }
       }
-      if (sttLang && !LANG_DISPLAY_NAMES[sttLang]) sttLang = null; // unknown code — fall through to script detection
+      if (sttLang && !LANG_DISPLAY_NAMES[sttLang]) sttLang = null; // unknown code — use fallback
 
       if (this.agent.languageAutoDetect) {
-        // Hindi, Marathi and Nepali share the Devanagari block, and Sarvam/Google
-        // LID collapses them all to Hindi. A Marathi agent would therefore flip to
-        // Hindi on its first Devanagari transcript, so the agent's own configured
-        // Devanagari language wins whenever the transcript is in that script.
-        const devLang = this.devanagariLang;
-        let detected = sttLang ?? detectScriptLanguage(transcript, devLang);
-        if (devLang !== "hi-IN" && detected === "hi-IN" && hasDevanagari(transcript)) {
-          detected = devLang;
-        }
+        // Multilingual: Use Saaras's detection directly (no script detection overlay)
+        let detected = sttLang;
         // Explicit language request (e.g. "speak in English", "Hindi me baat
         // karo") LATCHES the caller's chosen output language so it STICKS for
         // the rest of the call. Without the latch, the very next Indic-script
