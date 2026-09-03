@@ -5011,10 +5011,15 @@ export class OrchestrationPipeline implements VoiceSession {
       // transcripts or language auto-detection. Maintains the 772→1320 invariant
       // (never conditionally skip the send), but prevents enhanced bystander speech
       // from reaching STT. When rawRms=0 (no measurement), fail-open (send audio).
-      if (rawRms > 0 && rawRms < BACKGROUND_TALKER_MIN_RAW_RMS) {
+      //
+      // ONLY filter when agent is NOT speaking — during playback/TTS, ALL caller
+      // audio must reach STT for barge-in to work (calls 772→1320). The background
+      // talker filter applies only during the listening phase (after agent stops).
+      const agentSpeaking = this.isPlaying || this.isSendingTtsAudio;
+      if (!agentSpeaking && rawRms > 0 && rawRms < BACKGROUND_TALKER_MIN_RAW_RMS) {
         logger.info(
           { callId: this.config.callId, rawRms, threshold: BACKGROUND_TALKER_MIN_RAW_RMS },
-          "Background talker energy — replacing with silence for STT",
+          "Background talker energy (listening phase) — replacing with silence for STT",
         );
         const silentFrame = Buffer.alloc(sttFrame.length);
         this.streamSTT.sendAudio(silentFrame);
