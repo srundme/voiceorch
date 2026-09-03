@@ -169,8 +169,10 @@ export class CartesiaTTS implements TTSAdapter {
   private ws: WebSocket | null = null;
   private wsConnecting: Promise<WebSocket> | null = null;
   private wsFailedPermanently = false;
-  /** Log the WS→REST fallback only once per call to avoid per-sentence spam. */
+  /** Log handshake-level WS death only once per call. */
   private wsFallbackLogged = false;
+  /** Turns that already spoke via REST — do not also send WS continue:false (second voice). */
+  private readonly restFallbackTurns = new Set<string>();
   private readonly pending = new Map<string, PendingCtx>();
   /** Turn-level flush tracking: key = `${contextId}:${flushId}` */
   private readonly flushPending = new Map<string, FlushPendingCtx>();
@@ -228,24 +230,69 @@ export class CartesiaTTS implements TTSAdapter {
     });
   }
 
+  private errMsg(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+  }
+
+  private isAbortErr(err: unknown, signal?: AbortSignal): boolean {
+    if (signal?.aborted) return true;
+    if (err instanceof DOMException && err.name === "AbortError") return true;
+    return err instanceof Error && err.name === "AbortError";
+  }
+
   /**
-   * Mark the WebSocket path permanently failed for this call and fall back to
-   * REST /tts/bytes. Logged once so we can tell — from live logs — whether a
-   * call actually ran on the streaming WS path or silently degraded to REST
-   * (which behaves differently under load / concurrency limits).
+   * Handshake cannot be established — REST for the rest of this call.
+   * Do NOT use this for a single context/synthesis error: that was forcing
+   * every later sentence onto slow REST (timeouts / word-jump) and replaying
+   * the same text after WS already streamed audio (speaking twice).
    */
   private markWsFailed(err: unknown, where: string): void {
     this.wsFailedPermanently = true;
     if (!this.wsFallbackLogged) {
       this.wsFallbackLogged = true;
+      const msg = this.errMsg(err);
       logger.warn(
-        {
-          evt: "cartesia_ws_fallback_rest",
-          where,
-          err: err instanceof Error ? err.message : String(err),
-        },
-        "CartesiaTTS: WebSocket unavailable — falling back to REST /tts/bytes for the rest of this call",
+        { evt: "cartesia_ws_fallback_rest", where, err: msg },
+        `CartesiaTTS: WebSocket handshake failed (${msg.slice(0, 160)}) — REST for the rest of this call`,
       );
+    }
+  }
+
+  /** Finish this sentence on REST only when WS produced no PCM (no double-speak). */
+  private async restIfSilent(
+    text: string,
+    onChunk: (pcm16k: Buffer) => void,
+    onDone: (characters: number) => void,
+    signal: AbortSignal | undefined,
+    emotions: string[] | undefined,
+    wsBytes: number,
+    where: string,
+    err: unknown,
+    turnContextId?: string,
+  ): Promise<void> {
+    const msg = this.errMsg(err);
+    if (wsBytes > 0) {
+      logger.warn(
+        { evt: "cartesia_skip_rest_duplicate", where, wsBytes, err: msg },
+        `CartesiaTTS: WS already delivered audio (${wsBytes} bytes) — skipping REST replay (${msg.slice(0, 120)})`,
+      );
+      onDone(text.length);
+      return;
+    }
+    if (turnContextId) this.restFallbackTurns.add(turnContextId);
+    logger.warn(
+      { evt: "cartesia_rest_sentence", where, err: msg },
+      `CartesiaTTS: WS sentence failed with no audio (${msg.slice(0, 160)}) — REST this sentence only`,
+    );
+    try {
+      await this.synthesizeViaRest(text, onChunk, onDone, signal, emotions);
+    } catch (restErr) {
+      if (this.isAbortErr(restErr, signal)) throw restErr;
+      if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(restErr)) {
+        await this.synthesizeViaRest(text, onChunk, onDone, signal, undefined);
+        return;
+      }
+      throw restErr;
     }
   }
 
@@ -272,6 +319,7 @@ export class CartesiaTTS implements TTSAdapter {
     this.turnOpened.clear();
     this.turnOpenedResolve.clear();
     this.finalizedTurns.clear();
+    this.restFallbackTurns.clear();
   }
 
   private buildWsUrl(): string {
@@ -372,9 +420,25 @@ export class CartesiaTTS implements TTSAdapter {
 
       ws.addEventListener("close", () => {
         clearTimeout(timer);
+        // Only the *live* socket may clear singleton state. Warmup opens WS
+        // ~2–3s before greeting TTS (AMD + greeting LLM). If that idle socket
+        // closes while a newer socket is already open — or while greeting
+        // pending is registered — the old handler used to null `this.ws` and
+        // reject EVERY context (call 19742: ws_open then instant REST fallback).
+        if (!settled) {
+          settle(() => {
+            this.wsConnecting = null;
+            reject(new Error("CartesiaTTS: WS closed before open"));
+          });
+          return;
+        }
+        if (this.ws !== ws) return;
         this.ws = null;
         this.wsConnecting = null;
-        settle(() => reject(new Error("CartesiaTTS: WS closed before open")));
+        logger.warn(
+          { evt: "cartesia_ws_closed" },
+          "CartesiaTTS: live WebSocket closed — next sentence will reconnect",
+        );
         for (const [id, ctx] of this.pending) {
           ctx.reject(new Error("CartesiaTTS: WS closed mid-stream"));
           this.pending.delete(id);
@@ -389,14 +453,47 @@ export class CartesiaTTS implements TTSAdapter {
     return this.wsConnecting;
   }
 
+  private formatWsError(msg: Record<string, unknown>): string {
+    const bits = [
+      msg["error_code"],
+      msg["title"],
+      msg["message"],
+      msg["error"],
+      msg["status_code"] != null ? `status=${String(msg["status_code"])}` : null,
+    ].filter((v) => v != null && String(v).trim() !== "" && String(v) !== "undefined");
+    return bits.length > 0 ? bits.map(String).join(" — ") : "unknown";
+  }
+
   private handleWsMessage(raw: string): void {
     let msg: Record<string, unknown>;
     try { msg = JSON.parse(raw) as Record<string, unknown>; } catch { return; }
 
+    const type = msg["type"] as string | undefined;
     const contextId = msg["context_id"] as string | undefined;
+
+    // 2026-03-01 errors use { type, error_code, title, message, status_code }.
+    // `context_id` is optional — dropping those used to look like a silent WS death.
+    if (type === "error") {
+      const detail = this.formatWsError(msg);
+      logger.warn(
+        { evt: "cartesia_ws_error", contextId, errorCode: msg["error_code"], status: msg["status_code"], detail },
+        `CartesiaTTS: WebSocket error — ${detail.slice(0, 240)}`,
+      );
+      if (!contextId) {
+        for (const [id, ctx] of this.pending) {
+          ctx.reject(new Error(`Cartesia WS synthesis error: ${detail}`));
+          this.pending.delete(id);
+        }
+        for (const [key, flushCtx] of this.flushPending) {
+          flushCtx.reject(new Error(`Cartesia WS turn error: ${detail}`));
+          this.flushPending.delete(key);
+        }
+        return;
+      }
+    }
+
     if (!contextId) return;
 
-    const type = msg["type"] as string | undefined;
     const flushId = msg["flush_id"] as number | undefined;
 
     // Route to flush-tracked pending (turn-level contexts using manual flushing).
@@ -414,7 +511,7 @@ export class CartesiaTTS implements TTSAdapter {
           flushCtx.resolve();
         } else if (type === "error") {
           this.flushPending.delete(key);
-          flushCtx.reject(new Error(`Cartesia WS turn error: ${String(msg["error"] ?? "unknown")}`));
+          flushCtx.reject(new Error(`Cartesia WS turn error: ${this.formatWsError(msg)}`));
         }
         return;
       }
@@ -450,7 +547,7 @@ export class CartesiaTTS implements TTSAdapter {
       ctx.resolve();
     } else if (type === "error") {
       this.pending.delete(contextId);
-      ctx.reject(new Error(`Cartesia WS synthesis error: ${String(msg["error"] ?? "unknown")}`));
+      ctx.reject(new Error(`Cartesia WS synthesis error: ${this.formatWsError(msg)}`));
     }
   }
 
@@ -585,36 +682,41 @@ export class CartesiaTTS implements TTSAdapter {
       if (!join) this.turnOpenedResolve.get(turnContextId)?.();
     };
 
+    let wsBytes = 0;
+    const countedSink = (buf: Buffer): void => {
+      wsBytes += buf.length;
+      sink(buf);
+    };
+
     if (!this.wsFailedPermanently) {
       try {
         const ws = await this.getOrOpenWs();
-        return await this.synthesizeViaWsInContext(ws, turnContextId, text, sink, onDone, signal, emotions, join);
+        return await this.synthesizeViaWsInContext(ws, turnContextId, text, countedSink, onDone, signal, emotions, join);
       } catch (err) {
-        if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
+        if (this.isAbortErr(err, signal)) throw err;
         if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(err)) {
           try {
             const ws = await this.getOrOpenWs();
-            return await this.synthesizeViaWsInContext(ws, turnContextId, text, sink, onDone, signal, undefined, join);
+            return await this.synthesizeViaWsInContext(ws, turnContextId, text, countedSink, onDone, signal, undefined, join);
           } catch (retryErr) {
-            if (signal?.aborted || (retryErr instanceof DOMException && retryErr.name === "AbortError")) throw retryErr;
-            this.markWsFailed(retryErr, "streamInContext:retry");
+            if (this.isAbortErr(retryErr, signal)) throw retryErr;
+            if (/connect timeout|connection error|permanently failed|closed before open/i.test(this.errMsg(retryErr))) {
+              this.markWsFailed(retryErr, "streamInContext:retry");
+            }
+            releaseOwnerWait();
+            return await this.restIfSilent(text, sink, onDone, signal, undefined, wsBytes, "streamInContext:retry", retryErr, turnContextId);
           }
         } else {
-          this.markWsFailed(err, "streamInContext");
+          if (/connect timeout|connection error|permanently failed|closed before open/i.test(this.errMsg(err))) {
+            this.markWsFailed(err, "streamInContext");
+          }
+          releaseOwnerWait();
+          return await this.restIfSilent(text, sink, onDone, signal, emotions, wsBytes, "streamInContext", err, turnContextId);
         }
       }
     }
-    try {
-      releaseOwnerWait();
-      return await this.synthesizeViaRest(text, sink, onDone, signal, emotions);
-    } catch (err) {
-      releaseOwnerWait();
-      if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
-      if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(err)) {
-        return this.synthesizeViaRest(text, sink, onDone, signal, undefined);
-      }
-      throw err;
-    }
+    releaseOwnerWait();
+    return await this.restIfSilent(text, sink, onDone, signal, emotions, 0, "streamInContext:wsDown", new Error("WS permanently failed"), turnContextId);
   }
 
   /**
@@ -624,6 +726,8 @@ export class CartesiaTTS implements TTSAdapter {
   finalizeTurnContext(turnContextId: string): void {
     if (this.finalizedTurns.has(turnContextId)) return;
     this.finalizedTurns.add(turnContextId);
+    // REST already spoke this turn — a continue:false on WS would start a second clip.
+    if (this.restFallbackTurns.has(turnContextId)) return;
     // Keep claimedTurns so a late flush cannot become a second owner clip.
     const sendClose = (): void => {
       this.turnFlushCounters.delete(turnContextId);
@@ -798,35 +902,36 @@ export class CartesiaTTS implements TTSAdapter {
     signal?: AbortSignal,
     emotions?: string[],
   ): Promise<void> {
+    let wsBytes = 0;
+    const countedSink = (buf: Buffer): void => {
+      wsBytes += buf.length;
+      onChunk(buf);
+    };
     if (!this.wsFailedPermanently) {
       try {
         const ws = await this.getOrOpenWs();
-        return await this.synthesizeViaWs(ws, text, onChunk, onDone, signal, emotions);
+        return await this.synthesizeViaWs(ws, text, countedSink, onDone, signal, emotions);
       } catch (err) {
-        if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
-        // Cartesia rejected the emotion/voice controls — retry once on the same
-        // WS with plain (no-emotion) voice controls before falling back to REST.
+        if (this.isAbortErr(err, signal)) throw err;
         if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(err)) {
           try {
             const ws = await this.getOrOpenWs();
-            return await this.synthesizeViaWs(ws, text, onChunk, onDone, signal, undefined);
+            return await this.synthesizeViaWs(ws, text, countedSink, onDone, signal, undefined);
           } catch (retryErr) {
-            if (signal?.aborted || (retryErr instanceof DOMException && retryErr.name === "AbortError")) throw retryErr;
-            this.markWsFailed(retryErr, "stream:retry");
+            if (this.isAbortErr(retryErr, signal)) throw retryErr;
+            if (/connect timeout|connection error|permanently failed|closed before open/i.test(this.errMsg(retryErr))) {
+              this.markWsFailed(retryErr, "stream:retry");
+            }
+            return await this.restIfSilent(text, onChunk, onDone, signal, undefined, wsBytes, "stream:retry", retryErr);
           }
         } else {
-          this.markWsFailed(err, "stream");
+          if (/connect timeout|connection error|permanently failed|closed before open/i.test(this.errMsg(err))) {
+            this.markWsFailed(err, "stream");
+          }
+          return await this.restIfSilent(text, onChunk, onDone, signal, emotions, wsBytes, "stream", err);
         }
       }
     }
-    try {
-      return await this.synthesizeViaRest(text, onChunk, onDone, signal, emotions);
-    } catch (err) {
-      if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
-      if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(err)) {
-        return this.synthesizeViaRest(text, onChunk, onDone, signal, undefined);
-      }
-      throw err;
-    }
+    return await this.restIfSilent(text, onChunk, onDone, signal, emotions, 0, "stream:wsDown", new Error("WS permanently failed"));
   }
 }

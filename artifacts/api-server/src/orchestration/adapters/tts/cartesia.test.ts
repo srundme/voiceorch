@@ -185,4 +185,13 @@ describe("Cartesia adaptor contract (source)", () => {
     expect(src).toContain("finalizedTurns.has(contextId)");
     expect(src).toContain("Ignore that until we send continue:false via finalizeTurnContext");
   });
+
+  it("does not permanently kill WS after a single context error (call 19742 double-speak + jump)", () => {
+    const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
+    expect(src).toContain("cartesia_skip_rest_duplicate");
+    expect(src).toContain("REST this sentence only");
+    expect(src).toContain("restFallbackTurns");
+    expect(src).toContain("if (this.ws !== ws) return");
+    expect(src).toContain("formatWsError");
+  });
 });
