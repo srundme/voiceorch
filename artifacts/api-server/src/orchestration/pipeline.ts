@@ -431,17 +431,11 @@ const LOST_TURN_RECOVERY_POLL_MS = 200;
 const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
 const LLM_SLOW_TTFT_MS        = Number(process.env.LLM_SLOW_TTFT_MS ?? 1200);     // warn in execution logs
 // Max wait for the FIRST byte from a streaming TTS request (cold start / connect).
-const TTS_STREAM_TIMEOUT_MS   = Math.max(1000, Number(process.env.TTS_STREAM_TIMEOUT_MS ?? 8000));
-// Max gap allowed BETWEEN chunks once audio is already flowing. Kept at the 8s
-// budget: a mid-stream abort has ALREADY played some bytes, so the one-shot
-// recovery below (which only fires when _ttsTotalBytes === 0) does NOT run — the
-// abort simply drops the rest of the sentence = mid-word clipping. The earlier
-// 4s value (call 18679) made slow-but-alive Cartesia streams abort mid-sentence
-// under concurrency load (~4–8s chunk gaps) that used to survive at 8s and cut
-// words. Only truly-hung streams should abort here, so keep this generous.
-// Ops can raise via env if long tails still clip; do not drop below the first-byte
-// budget without also adding mid-stream (non-zero-byte) resynth recovery.
-const TTS_STREAM_IDLE_MS      = Math.max(500, Number(process.env.TTS_STREAM_IDLE_MS ?? 8000));
+const TTS_STREAM_TIMEOUT_MS   = Math.max(1000, Number(process.env.TTS_STREAM_TIMEOUT_MS ?? 15000));
+// Max gap allowed BETWEEN chunks once audio is already flowing. Increased from 8s to 12s
+// to tolerate Railway-to-Cartesia-India latency spikes (call 19895: streams timing out,
+// causing TTS playback underruns and voice breaking). Only truly-hung streams should abort.
+const TTS_STREAM_IDLE_MS      = Math.max(500, Number(process.env.TTS_STREAM_IDLE_MS ?? 12000));
 const BARGE_IN_ENERGY_THRESHOLD = 1200; // Much higher than normal VAD (300) — only intentional,
                                          // loud caller speech should interrupt the agent.
                                          // Prevents phone echo, background TV, or ambient

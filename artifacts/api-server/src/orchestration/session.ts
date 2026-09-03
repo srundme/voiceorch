@@ -3257,7 +3257,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               ctxLlmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
               if (ctxLlmKey) {
                 ctxLlmProvider = "groq";
-                ctxLlmModel    = "llama-3.3-70b-versatile";
+                ctxLlmModel    = "llama-3.1-70b-versatile";
               }
             }
             if (!ctxLlmKey) return;
@@ -3642,7 +3642,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   } else if (fallbackGroqKey) {
                     sumLlmProvider = "groq";
                     sumLlmKey = fallbackGroqKey;
-                    sumLlmModel = "llama-3.3-70b-versatile";
+                    sumLlmModel = "llama-3.1-70b-versatile";
                   }
                 }
                 if (sumLlmKey) {
@@ -3698,8 +3698,8 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   // Fallback 2: If Sarvam models produced no output, try Groq fallback key if available
                   if (!summary && fallbackGroqKey && sumLlmProvider !== "groq") {
                     try {
-                      logger.info({ sessionId, agentId: ag.id }, "Retrying summary with Groq (llama-3.3-70b-versatile)...");
-                      const groqLlm = createLLMAdapter("groq", fallbackGroqKey, "llama-3.3-70b-versatile");
+                      logger.info({ sessionId, agentId: ag.id }, "Retrying summary with Groq (llama-3.1-70b-versatile)...");
+                      const groqLlm = createLLMAdapter("groq", fallbackGroqKey, "llama-3.1-70b-versatile");
                       await groqLlm.chat(
                         [{ role: "user", content: userContent }],
                         "You are a call analyst. Write a concise, factual summary of the call as a single natural paragraph of 4 to 6 sentences. Do not use bullet points, numbered lists, or headings — write plain readable prose only.",
@@ -3801,7 +3801,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 llmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
                 if (llmKey) {
                   dispProvider = "groq";
-                  dispModel = "llama-3.3-70b-versatile";
+                  dispModel = "llama-3.1-70b-versatile";
                 }
               }
               if (llmKey) {
@@ -3909,7 +3909,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 evalLlmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
                 if (evalLlmKey) {
                   evalProvider = "groq";
-                  evalModel = "llama-3.3-70b-versatile";
+                  evalModel = "llama-3.1-70b-versatile";
                 }
               }
               if (evalLlmKey) {
