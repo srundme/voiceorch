@@ -20,6 +20,8 @@ export {
   expandSpokenDigits,
   mergeSpokenPhoneFragments,
   preferIndianPhone,
+  looksLikeSpokenNumber,
+  preferNumberTranscript,
 } from "./spoken-digits.js";
 export {
   slugDispositionKey,

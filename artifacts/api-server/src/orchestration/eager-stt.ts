@@ -12,6 +12,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { isCompleteEmailUtterance, looksLikeSpokenEmailSpelling } from "./endpointing.js";
 import { isBackchannelOnlyUtterance } from "./transcriptQuality.js";
 import { envInt } from "./utils.js";
 
@@ -70,24 +71,44 @@ export function isSpeculativeHit(partial: string, final: string): boolean {
 }
 
 /**
+ * Letter-salad / mid-number fragments change on the next STT event
+ * (call 20284: "for" → "For what sir?", "Three" → "3 PM").
+ */
+function looksLikeUnstableCollectionPartial(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (isCompleteEmailUtterance(t)) return false;
+  if (looksLikeSpokenEmailSpelling(t)) return true;
+  const tokens = t.split(/\s+/).filter(Boolean);
+  const singleLetters = tokens.filter((tok) => /^[a-z]$/i.test(tok.replace(/[.,]/g, ""))).length;
+  if (singleLetters >= 3) return true;
+  const digits = (t.match(/\d/g) ?? []).length;
+  if (digits >= 4 && digits < 10) return true;
+  return false;
+}
+
+function hasTerminalPunct(text: string): boolean {
+  return /[.?!।]$/u.test(text) && !/[…]|\.{2,}/.test(text);
+}
+
+function isCompleteDigitUtterance(text: string): boolean {
+  return (text.replace(/\D/g, "").length >= 10);
+}
+
+/**
  * Whether a partial is safe to start speculative LLM generation.
- * `speechEnd` relaxes gates when Sarvam VAD has already fired END_SPEECH.
+ * `speechEnd` still requires a stable clause — unfinished email/number
+ * spelling and 1–2 word scraps change on the provider final.
  */
 export function isEagerCommitReady(partial: string, opts?: { speechEnd?: boolean }): boolean {
   const t = partial.trim();
-  // speech_end IS the stabilization signal — Sarvam's VAD already declared the
-  // caller done. Launch on any real text. Pure backchannels stay excluded: their
-  // finals are held by the pipeline fragment-coalesce anyway, so a speculative
-  // launch on "okay"/"சரி" is always wasted work.
-  if (opts?.speechEnd) {
-    return t.length >= 2 && !isBackchannelOnlyUtterance(t);
-  }
-  if (t.length < 3) return false;
-  // Pure backchannels ("சரி", "okay") often precede a real question — wait for final/coalesce.
-  if (isBackchannelOnlyUtterance(t)) return false;
-  if (/[.?!।]$/.test(t)) return true;
+  if (!t || isBackchannelOnlyUtterance(t)) return false;
+  if (looksLikeUnstableCollectionPartial(t)) return false;
+  if (isCompleteEmailUtterance(t) || isCompleteDigitUtterance(t)) return true;
   const words = t.split(/\s+/).filter(Boolean);
+  if (hasTerminalPunct(t) && (opts?.speechEnd ? t.length >= 3 : true)) return true;
   if (words.length >= 3) return true;
+  if (opts?.speechEnd) return false;
   // Two-word Indic content replies ("எங்க எங்க") — Path A Bolna-feel
   if (words.length >= 2 && t.length >= 8) return true;
   return false;

@@ -408,31 +408,22 @@ function assembleSpokenEmailTokens(text: string): string | null {
 }
 
 /**
- * Saaras often compactifies Tamil spelling into a truncated local-part
- * (call 13987: "ஏ ஏ ஒய் ஏ எல் அட் த ரேட் ஜிமெயில் டாட் காம்" → keyan@gmail.com).
- * Prefer a reconstructed spelling when it is longer, otherwise keep both.
+ * Trust the committed STT final when it already has a real address.
+ * Call 20284: final `KARETHIAEYAN@gmail.com` must not lose to a longer
+ * letter-salad partial (`R T H I K E Y A N.@they might`), and
+ * `(spelled …)` dual addresses make the LLM pick the wrong one.
  */
 export function preferEmailTranscript(partial: string | undefined, final: string): string {
   const cleanedFinal = sanitizeSpokenEmailsInTranscript(final);
   const fromFinal = reconstructSpokenEmail(cleanedFinal);
-  const fromPartial = partial?.trim() ? reconstructSpokenEmail(partial) : null;
-  if (fromPartial && fromFinal) {
-    const pLocal = fromPartial.slice(0, fromPartial.lastIndexOf("@"));
-    const fLocal = fromFinal.slice(0, fromFinal.lastIndexOf("@"));
-    if (pLocal === fLocal) return cleanedFinal.replace(EMAIL_ADDR_RE, fromFinal);
-    if (pLocal.length > fLocal.length + 1) {
-      return EMAIL_ADDR_RE.test(cleanedFinal)
-        ? cleanedFinal.replace(EMAIL_ADDR_RE, fromPartial)
-        : fromPartial;
-    }
-    if (pLocal !== fLocal) {
-      const compact = EMAIL_ADDR_RE.test(cleanedFinal)
-        ? cleanedFinal.replace(EMAIL_ADDR_RE, fromFinal)
-        : fromFinal;
-      return `${compact} (spelled ${fromPartial})`;
-    }
+  if (fromFinal) {
+    return EMAIL_ADDR_RE.test(cleanedFinal)
+      ? cleanedFinal.replace(EMAIL_ADDR_RE, fromFinal)
+      : fromFinal;
   }
-  if (fromPartial && !fromFinal) return fromPartial;
+  if (EMAIL_ADDR_RE.test(cleanedFinal)) return cleanedFinal;
+  const fromPartial = partial?.trim() ? reconstructSpokenEmail(partial) : null;
+  if (fromPartial) return fromPartial;
   return cleanedFinal;
 }
 

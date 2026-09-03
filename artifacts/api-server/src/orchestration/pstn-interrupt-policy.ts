@@ -4,7 +4,7 @@
  */
 import { isHoldRequest } from "./conversationDiscipline.js";
 import { InterruptionManager } from "./interruption-manager.js";
-import { isAccidentalInterruptPhrase } from "./transcriptQuality.js";
+import { isAccidentalInterruptPhrase, isBackchannelOnlyUtterance } from "./transcriptQuality.js";
 
 export function isPstnStopHold(text: string, interruptionMgr: InterruptionManager): boolean {
   const t = text.trim();
@@ -36,6 +36,10 @@ export function shouldCutTtsFromCallerTranscript(opts: {
   if (!opts.agentSpeaking) return false;
   if (opts.isSelfEcho) return false;
   const welcomePlayed = !(opts.greetingPlaybackActive || !!opts.systemPlaybackActive);
+  // "yes" / "okay okay" are answers, not barges — unless they are hold/stop.
+  if (isBackchannelOnlyUtterance(t) && !isPstnStopHold(t, opts.interruptionMgr)) {
+    return false;
+  }
   const words = t.split(/\s+/).filter(Boolean).length;
   return opts.interruptionMgr.shouldTriggerInterruption(words, t, true, welcomePlayed);
 }

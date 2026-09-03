@@ -47,6 +47,7 @@ import { CartesiaTTS } from "./adapters/tts/cartesia.js";
 import { encodeMulaw, upsample8to16, downsample16to8, createDownsampler16to8, decodeMulaw, hasSpeechEnergy, frameRms, padWireFrame, enqueueExactFrames } from "./audio.js";
 import { resolveMicSensitivity, getMicSensitivityThresholds, isIdleCancellingMicEnergy, BACKGROUND_TALKER_MIN_RAW_RMS, type MicSensitivityThresholds } from "./mic-sensitivity.js";
 import { resolveSoftwareNoiseGate, envForceVobizSoftwareNc, type NoiseGateDecision } from "./noise-gate.js";
+import { preferNumberTranscript } from "../lib/disposition/spoken-digits.js";
 import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
 import { validateBookableEmail, isEmailConfirmedFlag } from "./booking-email-validate.js";
 import { looksLikeVoicemailGreeting } from "../lib/voicemail-detect.js";
@@ -427,6 +428,8 @@ let activeTtsDrainCount = 0;
 
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
 const FILLER_THRESHOLD_MS     = Number(process.env.FILLER_THRESHOLD_MS ?? 0); // 0 = no dead-air cover; Bolna does not inject this
+/** Play a backchannel only when the LLM is late — not on every turn. */
+const BACKCHANNEL_LATE_MS     = Math.max(0, Number(process.env.BACKCHANNEL_LATE_MS ?? 500));
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
 const FRAGMENT_COALESCE_MS_DEFAULT = 0;  // fallback when agentConfig omits playing coalesce — keep in sync with FRAGMENT_COALESCE_DEFAULTS.playingMs (lib/db)
@@ -2898,20 +2901,15 @@ export class OrchestrationPipeline implements VoiceSession {
     }
   }
 
-  /** Bolna: welcome_played + word floor. Not token-overlap. */
+  /** Bolna welcome mute only. Word floor is barge-in, not a discarded turn. */
   private isSelfEcho(transcript: string): boolean {
     const t = transcript.trim();
     if (!t) return false;
-    const override = isSemanticInterrupt(t)
-      || isHoldRequest(t)
-      || this.interruptionMgr.isImmediateInterruptPhrase(t)
-      || isCallerAudioDifficulty(t);
     return shouldIgnoreSelfEcho({
       transcript: t,
       agentSpeaking: this.isPlaying || this.isSendingTtsAudio,
       welcomePlayed: !(this.greetingFirstClipActive || this.systemPlaybackActive),
-      isOverridePhrase: override,
-      wordFloor: this.interruptionMgr.getWordsForInterruption(),
+      isOverridePhrase: false,
     }).ignore;
   }
 
@@ -3480,7 +3478,8 @@ export class OrchestrationPipeline implements VoiceSession {
               // Energy alone is secondary — Sarvam may not finalize during talk-over,
               // but it DOES emit interims once the caller overpowers carrier echo.
               if (
-                (isSemanticInterrupt(text) || isAccidentalInterruptPhrase(text) || isHoldRequest(text))
+                (isHoldRequest(text) || isAccidentalInterruptPhrase(text)
+                  || (isSemanticInterrupt(text) && !isBackchannelOnlyUtterance(text)))
                 && !this.isSelfEcho(text)
               ) {
                 this.triggerBargeIn("semantic_interim", text);
@@ -3624,12 +3623,15 @@ export class OrchestrationPipeline implements VoiceSession {
     
     const spellingHint = this.eagerPartialText.trim() || this._specLlmState?.partialSnapshot || "";
     const expectedLang = this.requestedLangLatch || this.currentLang || this.agent.sttConfig.language;
-    let transcript = preferEmailTranscript(
+    let transcript = preferNumberTranscript(
       spellingHint,
-      preferStableTranscript(
-        sanitizeSpokenEmailsInTranscript(normalizeSttPhonetics(rawTranscript)),
+      preferEmailTranscript(
         spellingHint,
-        expectedLang,
+        preferStableTranscript(
+          sanitizeSpokenEmailsInTranscript(normalizeSttPhonetics(rawTranscript)),
+          spellingHint,
+          expectedLang,
+        ),
       ),
     );
     this._turnCloseReason = closeReason;
@@ -3732,8 +3734,8 @@ export class OrchestrationPipeline implements VoiceSession {
       );
     }
 
-    // Bolna self-echo: welcome mute / below-floor while speaking.
-    // Stop/wait is never ignored. After TTS this is a no-op (floor is 0).
+    // Bolna welcome mute only. One-word answers ("yes") while TTS finishes
+    // queue as the next turn — they must not be dropped as self-echo.
     if (!isSemanticInterrupt(transcript) && this.isSelfEcho(transcript)) {
       this.streamingBargeInWordCount = 0;
       logger.info({ callId: this.config.callId, transcript }, "Streaming STT: discarding self-echo transcript (content match)");
@@ -8199,7 +8201,10 @@ export class OrchestrationPipeline implements VoiceSession {
   // ── Core turn logic ───────────────────────────────────────────────────────────
 
   private async processTurn(transcript: string, sttLatencyMs: number): Promise<void> {
-    transcript = sanitizeSpokenEmailsInTranscript(transcript);
+    transcript = preferNumberTranscript(
+      undefined,
+      sanitizeSpokenEmailsInTranscript(transcript),
+    );
     this._processTurnGeneration = this.semanticTurnGate.turnGeneration;
     // BARGE-IN FIX: Do NOT reset bargeInRequested at the START of the turn.
     // If we reset it here, a second transcript that arrives while this turn is
@@ -8573,6 +8578,7 @@ export class OrchestrationPipeline implements VoiceSession {
 
     const llmStart = Date.now();
     let llmFirstTokenAt: number | null = null;
+    let fillerTimer: ReturnType<typeof setTimeout> | null = null;
 
     let llmResponse = "";
     let pendingText  = "";
@@ -8978,13 +8984,14 @@ export class OrchestrationPipeline implements VoiceSession {
             },
             "Backchannel filler skipped — greeting-only caller turn",
           );
-        } else if (freq > 0) {
-          // Strict, language-based fillers only — no cross-language fallback.
+        } else if (freq > 0 && Math.random() < freq && BACKCHANNEL_LATE_MS > 0) {
+          // Cover only when the LLM is late. Immediate enqueue on every turn
+          // played a different speaker ("Hmm") before the first real token
+          // (call 20284). Frequency is a real roll — the log used to say
+          // "frequency roll" while freq>0 always played.
           const fillerOpts = this.backchannelFillerOpts(transcript);
           const pool = getBackchannelFillers(fillerLang, fillerOpts);
           if (pool.length > 0) {
-            const phrase = pickBackchannelFiller(fillerLang, this.recentFillerPhrases, fillerOpts)!;
-            rememberFillerPhrase(this.recentFillerPhrases, phrase);
             logger.info(
               {
                 callId: this.config.callId,
@@ -8992,15 +8999,34 @@ export class OrchestrationPipeline implements VoiceSession {
                 language: fillerLang,
                 backchannelingEnabled: this.agent.backchannelingEnabled,
                 frequency: freq,
+                lateMs: BACKCHANNEL_LATE_MS,
                 fillerListLength: pool.length,
-                selectedFiller: phrase,
-                ttsText: phrase,
               },
-              "Backchannel filler selected (language-aware)",
+              "Backchannel filler armed (late, language-aware)",
             );
-            enqueue(phrase, FILLER_SEQUENCE_ID);
-            this._deadAirFillerEnqueuedAt = Date.now();
-            backchanneledThisTurn = true;
+            fillerTimer = setTimeout(() => {
+              if (llmFirstTokenAt || this.bargeInRequested || this.closed) return;
+              const phrase = pickBackchannelFiller(fillerLang, this.recentFillerPhrases, fillerOpts);
+              if (!phrase) return;
+              rememberFillerPhrase(this.recentFillerPhrases, phrase);
+              logger.info(
+                {
+                  callId: this.config.callId,
+                  fillerType: "backchannel",
+                  language: fillerLang,
+                  backchannelingEnabled: this.agent.backchannelingEnabled,
+                  frequency: freq,
+                  selectedFiller: phrase,
+                  ttsText: phrase,
+                },
+                "Backchannel filler selected (language-aware, LLM late)",
+              );
+              enqueue(phrase, FILLER_SEQUENCE_ID);
+              this._deadAirFillerEnqueuedAt = Date.now();
+              backchanneledThisTurn = true;
+              this._fillerPlayedThisTurn = true;
+              this.fillerPlayedCount++;
+            }, BACKCHANNEL_LATE_MS);
           } else {
             logger.info(
               {
@@ -9619,9 +9645,9 @@ export class OrchestrationPipeline implements VoiceSession {
     // If the LLM has not returned a first token within FILLER_THRESHOLD_MS and
     // backchannel didn't already cover the silence, enqueue a filler phrase so
     // the caller hears something rather than dead air.
-    let fillerTimer: ReturnType<typeof setTimeout> | null = null;
     if (
       FILLER_THRESHOLD_MS > 0
+      && !fillerTimer
       && !backchanneledThisTurn
       && !this.closed
       && !this.bargeInRequested

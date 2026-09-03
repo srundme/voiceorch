@@ -18,25 +18,17 @@ describe("Bolna self-echo", () => {
     }).ignore).toBe(true);
   });
 
-  it("ignores word_count <= 3 while the agent is speaking", () => {
+  it("does not drop one-word answers while the agent is speaking", () => {
     expect(shouldIgnoreSelfEcho({
-      transcript: "yes okay",
+      transcript: "yes",
       agentSpeaking: true,
       welcomePlayed: true,
       isOverridePhrase: false,
       wordFloor: 3,
-    })).toEqual({ ignore: true, reason: "bolna_word_floor" });
+    })).toEqual({ ignore: false, reason: "none" });
 
     expect(shouldIgnoreSelfEcho({
-      transcript: "yes okay continue",
-      agentSpeaking: true,
-      welcomePlayed: true,
-      isOverridePhrase: false,
-      wordFloor: 3,
-    }).ignore).toBe(true);
-
-    expect(shouldIgnoreSelfEcho({
-      transcript: "yes okay continue please",
+      transcript: "okay",
       agentSpeaking: true,
       welcomePlayed: true,
       isOverridePhrase: false,

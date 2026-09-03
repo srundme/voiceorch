@@ -230,7 +230,11 @@ describe("email collection helpers", () => {
     expect(preferEmailTranscript(
       "ஏ ஏ ஒய் ஏ எல் அட் த ரேட் ஜிமெயில் டாட் காம்",
       "keyan@gmail.com",
-    )).toBe("keyan@gmail.com (spelled aayal@gmail.com)");
+    )).toBe("keyan@gmail.com");
+    expect(preferEmailTranscript(
+      "Yeah, yeah, R T H I K E Y A N.@they might",
+      "KARETHIAEYAN@gmail.com",
+    )).toBe("KARETHIAEYAN@gmail.com");
     expect(isCallerOfferingEmail("அண்ணா ஒரு நிமிஷம் நான் என்னுடைய மெயில் ஐடி சொல்றேன் நோட் பண்ணிக்கிறீங்களா?")).toBe(true);
     expect(resolveCollectionKind("சரிங்க, மெதுவா சொல்லுங்க.", "மெயில் ஐடி சொல்றேன் நோட் பண்ணிக்கிறீங்களா?")).toBe("email");
     expect(resolveStreamingTurnHold({

@@ -32,9 +32,14 @@ describe("isEagerCommitReady", () => {
     expect(isEagerCommitReady("I want to know how")).toBe(true);
   });
 
-  it("relaxes for speechEnd (Sarvam VAD committed) on content — not acks", () => {
+  it("speechEnd still needs a stable clause — not 1–2 word scraps or spelling", () => {
     expect(isEagerCommitReady("I want to know how", { speechEnd: true })).toBe(true);
-    expect(isEagerCommitReady("premium budget", { speechEnd: true })).toBe(true);
+    expect(isEagerCommitReady("premium budget", { speechEnd: true })).toBe(false);
+    expect(isEagerCommitReady("Three", { speechEnd: true })).toBe(false);
+    expect(isEagerCommitReady("For what sir?", { speechEnd: true })).toBe(true);
+    expect(isEagerCommitReady("R T H I K E Y A N.@they might", { speechEnd: true })).toBe(false);
+    expect(isEagerCommitReady("KARETHIAEYAN@gmail.com", { speechEnd: true })).toBe(true);
+    expect(isEagerCommitReady("9876543210", { speechEnd: true })).toBe(true);
   });
 });
 

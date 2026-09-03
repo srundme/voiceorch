@@ -368,9 +368,9 @@ export function hydrateSarvamRealtimeVad(cfg: {
 }
 
 export function clampInterruptWords(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 2;
-  // Legacy agents stored 0 = "off" — treat as PSTN default 2 while TTS plays.
-  if (v <= 0) return 2;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 3;
+  // Legacy agents stored 0 = "off" — treat as Bolna default 3 while TTS plays.
+  if (v <= 0) return 3;
   return Math.max(1, Math.min(6, Math.round(v)));
 }
 

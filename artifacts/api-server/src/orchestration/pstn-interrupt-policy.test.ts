@@ -66,6 +66,17 @@ describe("call 20257 — greeting + VAD + empty/partial must not start a turn", 
     expect(decide20257("Hello இங்க பாருங்க")).toEqual({ cutTts: false, processTurn: false });
   });
 
+  it("yes / okay okay never cut TTS (answers, not barges)", () => {
+    expect(decide20257("yes", { greetingPlaying: false }))
+      .toEqual({ cutTts: false, processTurn: true });
+    expect(decide20257("Yes, yes.", { greetingPlaying: false }))
+      .toEqual({ cutTts: false, processTurn: true });
+    expect(decide20257("Okay, okay", { greetingPlaying: false }))
+      .toEqual({ cutTts: false, processTurn: true });
+    expect(decide20257("Okay, okay, one minute", { greetingPlaying: false }))
+      .toEqual({ cutTts: true, processTurn: true });
+  });
+
   it("speech_start + yes okay stays below the Bolna 3-word floor", () => {
     expect(decide20257("yes okay")).toEqual({ cutTts: false, processTurn: false });
     expect(decide20257("yes okay", { greetingPlaying: false }))

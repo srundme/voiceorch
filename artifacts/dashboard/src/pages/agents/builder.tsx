@@ -6936,7 +6936,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       autoSwitchToEnglish: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0,
       startSpeakingOnNoPunctuationSecs: 0, startSpeakingOnNumberSecs: 0,
-      stopSpeakingNumWords: 1, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
+      stopSpeakingNumWords: 3, stopSpeakingVoiceSecs: 0.45, stopSpeakingBackOffSecs: 1,
       complianceIrdai: false, complianceDpdp: false, complianceTrai: false,
       knowledgeSourceIds: [],
       contextWindowTurns: undefined,
@@ -7089,7 +7089,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         const words = clampInterruptWords(
           (agent as any).agentConfig?.wordsForInterruption
             ?? (agent as any).agentConfig?.stopSpeakingPlan?.numWords
-            ?? 2,
+            ?? 3,
         );
         return voiceSecondsFromInterruptWords(words);
       })(),

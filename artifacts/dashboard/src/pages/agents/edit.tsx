@@ -525,8 +525,8 @@ export default function AgentEdit() {
       startSpeakingOnPunctuationSecs: 0,
       startSpeakingOnNoPunctuationSecs: 0,
       startSpeakingOnNumberSecs: 0,
-      stopSpeakingNumWords: 2,
-      stopSpeakingVoiceSecs: 0.3,
+      stopSpeakingNumWords: 3,
+      stopSpeakingVoiceSecs: 0.45,
       stopSpeakingBackOffSecs: 1,
       autoRedialEnabled: false,
       autoRedialMaxAttempts: 3,
@@ -847,7 +847,7 @@ export default function AgentEdit() {
         const words = clampInterruptWords(
           ((agent as any).agentConfig?.wordsForInterruption as number | undefined)
             ?? ((agent as any).agentConfig?.stopSpeakingPlan?.numWords as number | undefined)
-            ?? 2,
+            ?? 3,
         );
         return voiceSecondsFromInterruptWords(words);
       })(),
