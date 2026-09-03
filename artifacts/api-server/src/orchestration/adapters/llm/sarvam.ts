@@ -54,13 +54,14 @@ export function sarvamChatCompletionsUrl(model: string): string {
 /** Normalize playground / docs aliases to the wire model ids. */
 export function normalizeSarvamLlmModel(model: string | null | undefined): string {
   const ALIASES: Record<string, string> = {
-    "sarvam-m": SARVAM_FLAGSHIP_MODEL,
-    "sarvam-2b": SARVAM_FLAGSHIP_MODEL,
-    "sarvam-2b-v0.5": SARVAM_FLAGSHIP_MODEL,
-    "sarvam-m1": SARVAM_FLAGSHIP_MODEL,
-    "sarvam-30b-16k": SARVAM_FLAGSHIP_MODEL,
+    // Retired / playground aliases → voice conversations model (docs: voice agents).
+    "sarvam-m": SARVAM_CONVERSATIONS_MODEL,
+    "sarvam-2b": SARVAM_CONVERSATIONS_MODEL,
+    "sarvam-2b-v0.5": SARVAM_CONVERSATIONS_MODEL,
+    "sarvam-m1": SARVAM_CONVERSATIONS_MODEL,
+    "sarvam-30b-16k": SARVAM_CONVERSATIONS_MODEL,
     "sarvam-105b-32k": SARVAM_FLAGSHIP_MODEL,
-    "sarvam-30b": SARVAM_FLAGSHIP_MODEL,
+    "sarvam-30b": SARVAM_CONVERSATIONS_MODEL,
     // Conversational aliases
     "sarvam-105b-conversation": SARVAM_CONVERSATIONS_MODEL,
     "sarvam-105b-chat": SARVAM_CONVERSATIONS_MODEL,
@@ -73,7 +74,7 @@ export function normalizeSarvamLlmModel(model: string | null | undefined): strin
     "glm5-2": "glm5.2",
     "glm-5-2": "glm5.2",
   };
-  const raw = (model ?? SARVAM_FLAGSHIP_MODEL).trim();
+  const raw = (model ?? SARVAM_CONVERSATIONS_MODEL).trim();
   const key = raw.toLowerCase();
   return ALIASES[key] ?? ALIASES[raw] ?? raw;
 }

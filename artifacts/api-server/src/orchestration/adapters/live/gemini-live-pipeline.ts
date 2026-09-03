@@ -47,7 +47,7 @@ import {
 import { toGeminiLiveTools } from "./gemini-tools.js";
 import { runLiveToolCall } from "./live-tool-runner.js";
 import {
-  applyLockedSlotToBookArgs,
+  applyBookingEmailToBookArgs,
   buildEmailSpellLine,
   emptyBookingFlowState,
   looksLikeBookOrRescheduleTool,
@@ -1187,7 +1187,7 @@ export class GeminiLivePipeline implements VoiceSession {
       const name = call.name ?? "";
       const rawArgs = (call.args ?? {}) as Record<string, unknown>;
       const args = looksLikeBookOrRescheduleTool(name)
-        ? applyLockedSlotToBookArgs(this.bookingFlowState, rawArgs)
+        ? applyBookingEmailToBookArgs(this.bookingFlowState, rawArgs)
         : rawArgs;
       const result = await runLiveToolCall(
         {

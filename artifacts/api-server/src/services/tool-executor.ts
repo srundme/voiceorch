@@ -47,6 +47,7 @@ import {
   sanitizeAttendeeEmail,
   validateBookableEmail,
   isEmailConfirmedFlag,
+  preferCompleteEmail,
 } from "../orchestration/booking-email-validate.js";
 import { latinizeAttendeeName } from "../orchestration/booking-attendee-name.js";
 import { fetchUserConfiguredUrl } from "../lib/ssrf.js";
@@ -1150,6 +1151,93 @@ export async function executeNativeBooking(
   }
 }
 
+/**
+ * Caller asked to change the attendee email after the booking already landed
+ * (call 20113). Patch the row + GCal invite and resend confirmation.
+ */
+export async function executeUpdateBookingAttendeeEmail(
+  callId: number,
+  agentId: number,
+  bookingId: number,
+  newEmailRaw: string,
+): Promise<string> {
+  const emailCheck = validateBookableEmail(newEmailRaw);
+  if (!emailCheck.ok) {
+    return `error: ${emailCheck.detail}`;
+  }
+  const attendeeEmail = emailCheck.email;
+
+  try {
+    const [existing] = await db
+      .select()
+      .from(bookingsTable)
+      .where(and(eq(bookingsTable.id, bookingId), ne(bookingsTable.status, "cancelled")))
+      .limit(1);
+    if (!existing) {
+      return "error: could not find the booking to update the email.";
+    }
+    if (existing.attendeeEmail.toLowerCase() === attendeeEmail) {
+      return `email_updated: booking_id=${existing.id}, email="${attendeeEmail}" (already on file). Confirm briefly to the caller.`;
+    }
+
+    await db
+      .update(bookingsTable)
+      .set({ attendeeEmail, updatedAt: new Date() })
+      .where(eq(bookingsTable.id, existing.id));
+
+    const [eventType] = existing.eventTypeId
+      ? await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, existing.eventTypeId)).limit(1)
+      : [];
+    const [calendar] = existing.calendarId
+      ? await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, existing.calendarId)).limit(1)
+      : [];
+
+    if (calendar && existing.googleEventId) {
+      try {
+        const connectionId =
+          (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
+        if (connectionId) {
+          await updateCalendarEvent({
+            connectionId,
+            eventId: existing.googleEventId,
+            attendeeEmail,
+            attendeeName: existing.attendeeName,
+            timezone: calendar.timezone,
+            hostEmail: calendar.hostEmail,
+            additionalHosts: calendar.additionalHosts,
+          });
+        }
+      } catch (err) {
+        logger.warn({ callId, bookingId: existing.id, err }, "Update booking email: GCal attendee patch failed");
+      }
+    }
+
+    if (calendar && eventType) {
+      sendBookingCreatedEmail({
+        attendeeName: existing.attendeeName,
+        attendeeEmail,
+        eventTypeName: eventType.name,
+        slotStart: existing.slotStart,
+        slotEnd: existing.slotEnd,
+        timezone: calendar.timezone,
+        hostEmail: calendar.hostEmail,
+        additionalHosts: calendar.additionalHosts,
+        bookingId: existing.id,
+        notes: existing.attendeeNotes,
+        meetLink: existing.meetLink,
+      }).catch((err) => {
+        logger.error({ callId, bookingId: existing.id, err }, "Update booking email: confirmation resend failed");
+      });
+    }
+
+    logger.info({ callId, bookingId: existing.id, attendeeEmail, agentId }, "Booking attendee email updated");
+    return `email_updated: booking_id=${existing.id}, email="${attendeeEmail}". Confirmation is being sent to the new address. Tell the caller the invite is on its way.`;
+  } catch (err) {
+    logger.error({ callId, bookingId, err }, "Update booking email failed");
+    return "error: could not update the booking email due to a technical issue.";
+  }
+}
+
 export async function executeNativeCheckAvailability(
   callId: number,
   agentId: number,
@@ -2147,7 +2235,7 @@ export async function executeSendEmail(opts: {
   const body = typeof opts.args["body"] === "string" ? opts.args["body"].trim() : "";
 
   const [booking] = await db
-    .select({ meetLink: bookingsTable.meetLink })
+    .select({ meetLink: bookingsTable.meetLink, attendeeEmail: bookingsTable.attendeeEmail })
     .from(bookingsTable)
     .where(and(
       eq(bookingsTable.callId, opts.callId),
@@ -2156,6 +2244,10 @@ export async function executeSendEmail(opts: {
     .orderBy(desc(bookingsTable.id))
     .limit(1);
   const meetLink = (booking?.meetLink ?? "").trim();
+  // Call 20113: book used 307@gmail.com while send_email used the full address.
+  // Always prefer the completed local-part so calendar + inbox stay aligned.
+  const toEmailResolved = preferCompleteEmail(toEmail, booking?.attendeeEmail ?? "");
+  const toEmailFinal = toEmailResolved || toEmail;
   const bodyWithMeet = body ? attachMeetLinkToEmailBody(body, meetLink || null) : "";
 
   const template =
@@ -2167,17 +2259,17 @@ export async function executeSendEmail(opts: {
       : null;
 
   logger.info(
-    { callId: opts.callId, agentId: opts.agentId, toEmail, hasOverride: !!(subject || body) },
+    { callId: opts.callId, agentId: opts.agentId, toEmail: toEmailFinal, hasOverride: !!(subject || body) },
     "Executing Send Email tool (queued)",
   );
 
   void sendChannelEmail({
     userId: agent.userId,
-    toEmail,
+    toEmail: toEmailFinal,
     context: {
       name: recipientName || "there",
       phone: opts.callerPhone ?? "",
-      email: toEmail,
+      email: toEmailFinal,
       summary,
       agent_name: opts.agentName || agent.name || "SnapServe",
       meet_link: meetLink,
@@ -2197,7 +2289,7 @@ export async function executeSendEmail(opts: {
     logger.error({ callId: opts.callId, err }, "Send Email background delivery failed");
   });
 
-  return `email_queued: message is being sent to ${toEmail}. Confirm briefly to the caller that it is on its way.`;
+  return `email_queued: message is being sent to ${toEmailFinal}. Confirm briefly to the caller that it is on its way.`;
 }
 
 // ── Mid-call WhatsApp (BYO BSP webhook or native Instant/Business) ───────────

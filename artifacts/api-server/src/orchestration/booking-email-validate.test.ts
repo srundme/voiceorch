@@ -3,6 +3,9 @@ import {
   sanitizeAttendeeEmail,
   validateBookableEmail,
   isEmailConfirmedFlag,
+  isEmailLocalSuffixOf,
+  dropSuffixFragmentEmails,
+  preferCompleteEmail,
 } from "./booking-email-validate.js";
 
 describe("sanitizeAttendeeEmail", () => {
@@ -47,5 +50,28 @@ describe("isEmailConfirmedFlag", () => {
     expect(isEmailConfirmedFlag({ email_confirmed: true })).toBe(true);
     expect(isEmailConfirmedFlag({ email_confirmed: "yes" })).toBe(true);
     expect(isEmailConfirmedFlag({})).toBe(false);
+  });
+});
+
+describe("preferCompleteEmail — call 20113 fragment vs spelled local-part", () => {
+  it("detects a compact STT suffix of a reconstructed address", () => {
+    expect(isEmailLocalSuffixOf("307@gmail.com", "kishorekumarr307@gmail.com")).toBe(true);
+    expect(isEmailLocalSuffixOf("kishorekumarr307@gmail.com", "307@gmail.com")).toBe(false);
+    expect(isEmailLocalSuffixOf("ram@gmail.com", "siva@gmail.com")).toBe(false);
+  });
+
+  it("drops the compact fragment when both are present", () => {
+    expect(dropSuffixFragmentEmails(["kishorekumarr307@gmail.com", "307@gmail.com"])).toEqual([
+      "kishorekumarr307@gmail.com",
+    ]);
+  });
+
+  it("prefers the fully spelled address for booking and confirmation", () => {
+    expect(preferCompleteEmail("307@gmail.com", "kishorekumarr307@gmail.com")).toBe(
+      "kishorekumarr307@gmail.com",
+    );
+    expect(preferCompleteEmail("kishorekumarr307@gmail.com", "307@gmail.com")).toBe(
+      "kishorekumarr307@gmail.com",
+    );
   });
 });

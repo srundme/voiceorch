@@ -100,7 +100,7 @@ export async function runAssistantJob(
     const ttsVoice = female ? "priya" : (useJarvisVoice ? jarvisVoice.voiceId : "shubh");
     const ttsVoiceName = female ? "Priya" : (useJarvisVoice ? jarvisVoice.voiceName : "Shubh");
     const ttsProvider = isCartesiaVoiceId(ttsVoice) ? "cartesia" : "sarvam";
-    const ttsModel = ttsProvider === "cartesia" ? "sonic-3.5" : "bulbul:v3";
+    const ttsModel = ttsProvider === "cartesia" ? "sonic-3.6" : "bulbul:v3";
 
     const [row] = await db.insert(agentsTable).values({
       userId: clerkUserId,

@@ -13,9 +13,14 @@ import {
   isBackchannelOnlyUtterance,
   hasCallerAddressToken,
   normalizeSttPhonetics,
+  normalizeHinglishClock,
   coalescePendingTranscripts,
   signalsConversationalContinuation,
   looksLikeBookingTimeAnswer,
+  looksLikeShortContextualAnswer,
+  isDomainOrAcronymAnswer,
+  preferStableTranscript,
+  repairUnexpectedScriptLeak,
   isHardInterruptTranscript,
 } from "./transcriptQuality.js";
 import { isAffirmationOnlyUtterance } from "./endpointing.js";
@@ -196,6 +201,55 @@ describe("isUltraShortNoiseFragment", () => {
     expect(isUltraShortNoiseFragment("No, not yet.")).toBe(false);
     expect(isUltraShortNoiseFragment("ஆ Madam பேசலாம் சொல்லுங்க.")).toBe(false);
     expect(isUltraShortNoiseFragment("இல்ல Madam இப்பதான் தெரிஞ்சிருக்கு.")).toBe(false);
+    expect(isUltraShortNoiseFragment("Ji")).toBe(false);
+    expect(isUltraShortNoiseFragment("B2B")).toBe(false);
+    expect(isUltraShortNoiseFragment("CRM")).toBe(false);
+  });
+});
+
+describe("call 20094 STT quality — domain answers and Kannada leak", () => {
+  it("does not treat B2B/B2C/CRM as garbled all-caps noise", () => {
+    expect(checkTranscriptQuality("B2B", { expectedLang: "hi-IN" }).isGarbled).toBe(false);
+    expect(checkTranscriptQuality("B2C", { expectedLang: "hi-IN" }).isGarbled).toBe(false);
+    expect(checkTranscriptQuality("CRM", { expectedLang: "hi-IN" }).isGarbled).toBe(false);
+    expect(checkTranscriptQuality("API", { expectedLang: "en-IN" }).isGarbled).toBe(false);
+    expect(isDomainOrAcronymAnswer("B2B")).toBe(true);
+    expect(isDomainOrAcronymAnswer("बी टू बी")).toBe(true);
+  });
+
+  it("still flags spaced letter blobs as noise", () => {
+    expect(checkTranscriptQuality("Z Z Z", { expectedLang: "en-IN" }).reason).toBe("short-allcaps-noise");
+    expect(checkTranscriptQuality("QQ QQ", { expectedLang: "en-IN" }).reason).toBe("short-allcaps-noise");
+  });
+
+  it("keeps Ji and हाँ जी as real contextual answers", () => {
+    expect(checkTranscriptQuality("Ji", { expectedLang: "hi-IN" }).isGarbled).toBe(false);
+    expect(looksLikeShortContextualAnswer("Ji")).toBe(true);
+    expect(looksLikeShortContextualAnswer("हाँ जी")).toBe(true);
+    expect(looksLikeShortContextualAnswer("B2B")).toBe(true);
+  });
+
+  it("strips Kannada tokens from a Hindi-latched line", () => {
+    const mixed = "invest ಮಾಡ್ತಾ रहे हैं और फिर और में रहते हैं";
+    const repaired = repairUnexpectedScriptLeak(mixed, "hi-IN");
+    expect(repaired).not.toMatch(/[\u0C80-\u0CFF]/);
+    expect(repaired).toMatch(/invest/);
+    expect(repaired).toMatch(/रहे हैं/);
+  });
+
+  it("prefers the clean Hindi partial over a Kannada-contaminated final", () => {
+    expect(
+      preferStableTranscript(
+        "invest ಮಾಡ್ತಾ रहे हैं और फिर और में रहते हैं",
+        "इन्वेस्ट करते हैं ना",
+        "hi-IN",
+      ),
+    ).toBe("इन्वेस्ट करते हैं ना");
+  });
+
+  it("normalizes spoken B2B / B2C", () => {
+    expect(normalizeSttPhonetics("मुझे बी टू बी चाहिए")).toContain("B2B");
+    expect(normalizeSttPhonetics("b to c portal")).toContain("B2C");
   });
 });
 
@@ -367,6 +421,14 @@ describe("isCallerAttentionUtterance", () => {
     expect(isCallerAttentionUtterance("Hello")).toBe(true);
     expect(isCallerAttentionUtterance("வணக்கம்")).toBe(true);
     expect(isCallerAttentionUtterance("காலைல 10 மணிக்கு சார்")).toBe(false);
+  });
+});
+
+describe("normalizeHinglishClock — call 20113 Devanagari clock words", () => {
+  it("converts वन थर्टी पी and इलेवन थर्टी", () => {
+    expect(normalizeHinglishClock("वन थर्टी पी")).toBe("1:30 PM");
+    expect(normalizeHinglishClock("इलेवन थर्टी")).toBe("11:30");
+    expect(normalizeSttPhonetics("वन थर्टी पी")).toContain("1:30");
   });
 });
 

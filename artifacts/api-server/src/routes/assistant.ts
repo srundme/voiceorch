@@ -796,7 +796,7 @@ router.post("/assistant/tts", async (req: Request, res: Response): Promise<void>
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model_id: "sonic-3.5",
+        model_id: "sonic-3.6",
         transcript: text.slice(0, 700),
         language: ttsLanguageForText(text),
         voice: { id: jarvisVoice },

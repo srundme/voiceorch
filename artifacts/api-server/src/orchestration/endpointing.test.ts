@@ -218,6 +218,12 @@ describe("email collection helpers", () => {
     );
   });
 
+  it("reconstructs letter-spelling before a compact numeric local-part (call 20113)", () => {
+    expect(reconstructSpokenEmail("K I S H O R E K U M A R R 307@gmail.com")).toBe(
+      "kishorekumarr307@gmail.com",
+    );
+  });
+
   it("reconstructs Tamil letter-spelling and does not drop it when STT compactifies", () => {
     expect(looksLikeSpokenEmailSpelling("ஏ ஏ ஒய் ஏ எல் அட் த ரேட் ஜிமெயில் டாட் காம்")).toBe(true);
     expect(reconstructSpokenEmail("ஏ ஏ ஒய் ஏ எல் அட் த ரேட் ஜிமெயில் டாட் காம்")).toBe("aayal@gmail.com");

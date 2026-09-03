@@ -35,8 +35,8 @@ const WS_CONNECT_TIMEOUT_MS = 6_000;
 /** We send punctuated sentences; Cartesia should not hold a second buffer. */
 const CARTESIA_MAX_BUFFER_DELAY_MS = 0;
 
-/** Stable default for existing agents. Sonic 3.6 is GA (`sonic-3.6`). */
-export const CARTESIA_DEFAULT_MODEL = "sonic-3.5";
+/** Cartesia current TTS model (https://docs.cartesia.ai/build-with-cartesia/tts-models/latest). */
+export const CARTESIA_DEFAULT_MODEL = "sonic-3.6";
 /** Production Sonic 3.6 id. `sonic-preview` stays a separate beta snapshot. */
 export const CARTESIA_SONIC_36_MODEL = "sonic-3.6";
 
@@ -45,7 +45,7 @@ const CARTESIA_MODEL_ALIASES: Record<string, string> = {
 };
 
 const CARTESIA_VALID_MODELS = new Set([
-  CARTESIA_DEFAULT_MODEL, "sonic-3.5-2026-05-04", "sonic-latest",
+  CARTESIA_DEFAULT_MODEL, "sonic-3.5", "sonic-3.5-2026-05-04", "sonic-latest",
   CARTESIA_SONIC_36_MODEL, "sonic-3.6-2026-08-27", "sonic-preview",
   "sonic-3", "sonic-3-2026-01-12", "sonic-3-latest",
   "sonic-2", "sonic-2-2025-03-07", "sonic-2-2025-04-16", "sonic-2-2025-05-08", "sonic-2-2025-06-11",
@@ -53,7 +53,7 @@ const CARTESIA_VALID_MODELS = new Set([
   "sonic-english", "sonic-multilingual",
 ]);
 
-/** Map agent TTS model ids to a Cartesia `model_id`. Unknown ids fall back to 3.5. */
+/** Map agent TTS model ids to a Cartesia `model_id`. Unknown ids fall back to 3.6. */
 export function resolveCartesiaModelId(model: string | null | undefined): string {
   const raw = (model ?? "").trim();
   const id = CARTESIA_MODEL_ALIASES[raw] ?? raw;

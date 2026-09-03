@@ -159,12 +159,12 @@ describe("claimTurnContext (call 17915 — no second owner clip)", () => {
 });
 
 describe("resolveCartesiaModelId", () => {
-  it("keeps sonic-3.5 as the default and passes sonic-3.6 through as GA", () => {
-    expect(resolveCartesiaModelId(null)).toBe("sonic-3.5");
+  it("defaults to sonic-3.6 (Cartesia current model) and keeps explicit ids", () => {
+    expect(resolveCartesiaModelId(null)).toBe("sonic-3.6");
     expect(resolveCartesiaModelId("sonic-3.5")).toBe("sonic-3.5");
     expect(resolveCartesiaModelId("sonic-preview")).toBe("sonic-preview");
     expect(resolveCartesiaModelId("sonic-3.6")).toBe("sonic-3.6");
-    expect(resolveCartesiaModelId("not-a-model")).toBe("sonic-3.5");
+    expect(resolveCartesiaModelId("not-a-model")).toBe("sonic-3.6");
   });
 });
 

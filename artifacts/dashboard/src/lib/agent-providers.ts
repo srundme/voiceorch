@@ -130,8 +130,8 @@ export function llmModelsForPicker(
 
 export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
   cartesia: [
-    { value: "sonic-3.5",     label: "Sonic 3.5 — 42 languages, lowest latency (default)" },
-    { value: "sonic-3.6",     label: "Sonic 3.6 — Hinglish, Odia/Urdu" },
+    { value: "sonic-3.6",     label: "Sonic 3.6 — current (Hinglish, 44 languages)" },
+    { value: "sonic-3.5",     label: "Sonic 3.5 — previous snapshot" },
     { value: "sonic-preview", label: "Sonic preview (beta snapshot)" },
     { value: "sonic-3",     label: "Sonic 3" },
     { value: "sonic-2",     label: "Sonic 2 (stable)" },

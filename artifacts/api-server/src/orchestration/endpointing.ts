@@ -297,6 +297,13 @@ const SPOKEN_EMAIL_DOMAIN: Record<string, string> = {
   "ஜிமெயில்": "gmail", "ஜிமெய்ல்": "gmail", "ஜீமெயில்": "gmail",
 };
 
+const SPOKEN_EMAIL_DIGIT: Record<string, string> = {
+  zero: "0", one: "1", two: "2", three: "3", four: "4",
+  five: "5", six: "6", seven: "7", eight: "8", nine: "9",
+  "ज़ीरो": "0", "जीरो": "0", "वन": "1", "टू": "2", "थ्री": "3",
+  "फोर": "4", "फाइव": "5", "सिक्स": "6", "सेवन": "7", "नाइन": "9",
+};
+
 function spokenEmailLetter(tok: string): string | null {
   const t = tok.replace(/[.,]/g, "");
   if (SPOKEN_EMAIL_LETTER[t]) return SPOKEN_EMAIL_LETTER[t]!;
@@ -327,7 +334,12 @@ export function reconstructSpokenEmail(text: string): string | null {
       const cLocal = cleaned.slice(0, cleaned.lastIndexOf("@"));
       const aDom = assembled.slice(assembled.lastIndexOf("@"));
       const cDom = cleaned.slice(cleaned.lastIndexOf("@"));
-      if (aDom === cDom && aLocal.length > cLocal.length + 1) return assembled;
+      // Prefer assembled only when it *completes* the compact STT fragment
+      // (call 20113: kishorekumarr307 vs 307). A longer local that does not
+      // end with the compact address swallowed speech ("no no it's wrong").
+      if (aDom === cDom && aLocal.length > cLocal.length + 1 && aLocal.endsWith(cLocal)) {
+        return assembled;
+      }
     }
     return cleaned;
   }
@@ -341,16 +353,21 @@ function assembleSpokenEmailTokens(text: string): string | null {
   let tld = "";
   let seenAt = false;
   for (const raw of tokens) {
+    // Keep "gmail.com" intact — stripping "." turned the domain into "gmailcom"
+    // and assemble() returned null (call 20113 / "R A J R gmail.com").
+    const dotted = raw.match(/^([a-z0-9-]+)\.([a-z]{2,})$/i);
     const tok = raw.replace(/[.,]/g, "");
     const lower = tok.toLowerCase();
-    if (!tok) continue;
-    if (EMAIL_AT_RE.test(tok) || tok === "@" || tok === "அட்" || tok === "ஆட்") {
+    if (!tok && !dotted) continue;
+    // Single letters ("A") must not match the "at" alternative — that dropped
+    // the spelled local-part before 307@gmail.com (call 20113).
+    if (tok === "@" || tok === "அட்" || tok === "ஆட்" || (tok.length > 1 && EMAIL_AT_RE.test(tok))) {
       seenAt = true;
       continue;
     }
     if (/ரேட்|rate/i.test(tok)) continue;
-    const dotted = tok.match(/^([a-z0-9-]+)\.([a-z]{2,})$/i);
-    if (dotted && (SPOKEN_EMAIL_DOMAIN[dotted[1]!.toLowerCase()] || seenAt)) {
+    if (/^(no|nope|nah|wrong|it'?s|its|www|use|again|please|my|the|email|mail|id|is|and)$/i.test(tok)) continue;
+    if (dotted && (SPOKEN_EMAIL_DOMAIN[dotted[1]!.toLowerCase()] || seenAt || local.length >= 2)) {
       seenAt = true;
       domain = (SPOKEN_EMAIL_DOMAIN[dotted[1]!.toLowerCase()] ?? dotted[1]!.toLowerCase());
       tld = dotted[2]!.toLowerCase();
@@ -362,9 +379,11 @@ function assembleSpokenEmailTokens(text: string): string | null {
       domain = mappedDomain;
       continue;
     }
+    const spokenDigit = SPOKEN_EMAIL_DIGIT[lower] ?? SPOKEN_EMAIL_DIGIT[tok];
     const letter = spokenEmailLetter(tok);
     if (!seenAt) {
-      if (letter) local += letter;
+      if (spokenDigit) local += spokenDigit;
+      else if (letter) local += letter;
       else if (/^[a-z0-9._-]+$/i.test(tok) && tok.length > 1) local += tok.toLowerCase();
       continue;
     }
@@ -372,6 +391,10 @@ function assembleSpokenEmailTokens(text: string): string | null {
     if (dotted) {
       domain = dotted[1]!.toLowerCase();
       tld = dotted[2]!.toLowerCase();
+      continue;
+    }
+    if ((spokenDigit || /^[a-z0-9._-]+$/i.test(tok)) && !domain) {
+      local += spokenDigit ?? tok.toLowerCase();
       continue;
     }
     if (EMAIL_TLD_RE.test(tok) || tok === "காம்") {

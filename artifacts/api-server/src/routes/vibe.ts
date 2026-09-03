@@ -38,7 +38,7 @@ function looksLikeCartesiaVoiceId(id: string): boolean {
 /** SnapServe default stack is Sarvam; Cartesia UUIDs keep Cartesia TTS. */
 function resolveTtsStackForVoice(voiceId: string): { provider: string; model: string } {
   if (looksLikeCartesiaVoiceId(voiceId)) {
-    return { provider: "cartesia", model: "sonic-3.5" };
+    return { provider: "cartesia", model: "sonic-3.6" };
   }
   return { provider: DEFAULT_TTS_PROVIDER, model: DEFAULT_TTS_MODEL };
 }

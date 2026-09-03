@@ -51,7 +51,28 @@ const PHANTOM_UTTERANCE_RE =
 
 /** Complete short greetings, acks, and backchannels — never clarification-bait. */
 const VALID_COMPLETE_SHORT_UTTERANCE_RE =
-  /^(hi|hello|hey|hiya|yo|yes|yeah|yep|yup|no|nope|ok|okay|sure|right|fine|thanks|thank you|bye|goodbye|namaste|vanakkam)([,.]|\s+(madam|ma'?am|sir|there))?\.?$/i;
+  /^(hi|hello|hey|hiya|yo|yes|yeah|yep|yup|no|nope|ok|okay|sure|right|fine|thanks|thank you|bye|goodbye|namaste|vanakkam|ji|jee)([,.]|\s+(madam|ma'?am|sir|there|ji|jee))?\.?$/i;
+
+/**
+ * One-word product / portal answers callers actually say (call 20094: "B2B"
+ * was classified as short-allcaps-noise and triggered "I didn't hear you").
+ */
+const DOMAIN_ACRONYM_RE =
+  /^(b2b|b2c|b2g|b2b2c|crm|api|otp|upi|gst|sme|dmc|tbo|fd|ivr|sip|did|kyc|pan|gstin|whatsapp)$/i;
+
+/** Spoken Hindi/English forms of B2B / B2C that Saaras often writes instead of the acronym. */
+const SPOKEN_DOMAIN_TERM_RE =
+  /^(b\s*2\s*b|b\s*2\s*c|b\s*to\s*b|b\s*to\s*c|be\s*to\s*be|बी\s*टू\s*बी|बी\s*टू\s*सी)$/iu;
+
+export function isDomainOrAcronymAnswer(text: string): boolean {
+  const t = text.trim().replace(/[.,!।?]+$/g, "").trim();
+  if (!t) return false;
+  if (DOMAIN_ACRONYM_RE.test(t)) return true;
+  if (SPOKEN_DOMAIN_TERM_RE.test(t)) return true;
+  // Letter-digit-letter product codes: B2B, B2C, 4G
+  if (/^[A-Za-z]\d[A-Za-z]$/.test(t)) return true;
+  return false;
+}
 
 /** Reduplicated pure ack ("Okay Okay.") — treat as content-bearing, not noise. */
 const REDUPLICATED_ACK_RE =
@@ -59,11 +80,27 @@ const REDUPLICATED_ACK_RE =
 
 /** Indic one-word acks / negations — backchannel, not a standalone question. */
 const INDIC_SINGLE_ACK_RE =
-  /^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|ओके|अच्छा|जी|haan|han|theek|accha|hmm|hm|mm)[\s,.!]*$/iu;
+  /^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|ओके|अच्छा|जी|haan|han|theek|accha|hmm|hm|mm|ji|jee)[\s,.!]*$/iu;
 
 /** Indic/Hinglish ack + vocative chains ("ஆமா சார் ஆமா.", "okay sir", "अच्छा जी"). */
 const INDIC_ACK_VOCATIVE_RE =
   /^(ஆமா|ஆம்|சரி|ठीक|ओके|अच्छा|haan|ok(?:ay)?)([\s,.!]+(சார்|sir|जी|ji|madam|மா.?ம்|ஆமா|ஆம்|சரி|हां|हाँ|ठीक|ओके|अच्छा|haan|ok(?:ay)?)){0,4}[\s,.!]*$/iu;
+
+/**
+ * Short contextual replies that must reach the LLM even if they arrive while
+ * TTS is still draining (call 20094: "हाँ जी" discarded as self-echo; "B2B"
+ * then "clarified"). Content-echo still applies — this only skips energy-only discard.
+ */
+export function looksLikeShortContextualAnswer(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (isDomainOrAcronymAnswer(t)) return true;
+  if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) return true;
+  if (INDIC_SINGLE_ACK_RE.test(t)) return true;
+  if (INDIC_ACK_VOCATIVE_RE.test(t)) return true;
+  if (/^(जी|हाँ|हां|हां जी|हाँ जी|haan ji|han ji|ji|jee)[\s,.!]*$/iu.test(t)) return true;
+  return false;
+}
 
 /** English ack/backchannel only — excludes greetings/farewells (those are real turns). */
 const ENGLISH_BACKCHANNEL_ONLY_RE =
@@ -164,11 +201,13 @@ const ENGLISH_NOISE_STUB_RE =
 export function isUltraShortNoiseFragment(text: string): boolean {
   const t = text.trim();
   if (!t) return true;
+  if (isDomainOrAcronymAnswer(t)) return false;
   if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) return false;
   if (REDUPLICATED_ACK_RE.test(t)) return false;
   if (COMPLETE_SHORT_NEGATION_RE.test(t)) return false;
   // Common Indic one-word acks / negations — keep for flow control
-  if (/^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|ओके|अच्छा|जी|नहीं|nahi|haan|ha[a]?n)[\s,.!]*$/iu.test(t)) {
+  // Include romanized "ji" (call 20094 discarded "Ji" as a 2-grapheme stub).
+  if (/^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|ओके|अच्छा|जी|नहीं|nahi|haan|ha[a]?n|ji|jee)[\s,.!]*$/iu.test(t)) {
     return false;
   }
   if (/^(bye|goodbye|thanks|thank you|நன்றி|வணக்கம்|धन्यवाद)\b/i.test(t)) return false;
@@ -188,17 +227,106 @@ export function isUltraShortNoiseFragment(text: string): boolean {
   return false;
 }
 
-function countScriptLetters(text: string): { latin: number; devanagari: number; tamil: number; telugu: number; other: number } {
-  const counts = { latin: 0, devanagari: 0, tamil: 0, telugu: 0, other: 0 };
+function countScriptLetters(text: string): {
+  latin: number;
+  devanagari: number;
+  tamil: number;
+  telugu: number;
+  kannada: number;
+  other: number;
+} {
+  const counts = { latin: 0, devanagari: 0, tamil: 0, telugu: 0, kannada: 0, other: 0 };
   for (const ch of text) {
     const cp = ch.codePointAt(0) ?? 0;
     if ((cp >= 0x41 && cp <= 0x5a) || (cp >= 0x61 && cp <= 0x7a)) counts.latin++;
     else if (cp >= 0x0900 && cp <= 0x097f) counts.devanagari++;
     else if (cp >= 0x0b80 && cp <= 0x0bff) counts.tamil++;
     else if (cp >= 0x0c00 && cp <= 0x0c7f) counts.telugu++;
+    else if (cp >= 0x0c80 && cp <= 0x0cff) counts.kannada++;
     else if (/\p{L}/u.test(ch)) counts.other++;
   }
   return counts;
+}
+
+/** Unexpected Indic ranges for a latched language (LID drift, not a real switch). */
+function unexpectedScriptRanges(bareLang: string): Array<[number, number]> {
+  if (bareLang === "hi" || bareLang === "mr" || bareLang === "ne") {
+    return [
+      [0x0b80, 0x0bff], // Tamil
+      [0x0c00, 0x0c7f], // Telugu
+      [0x0c80, 0x0cff], // Kannada
+      [0x0d00, 0x0d7f], // Malayalam
+    ];
+  }
+  if (bareLang === "ta") {
+    return [
+      [0x0900, 0x097f],
+      [0x0c00, 0x0c7f],
+      [0x0c80, 0x0cff],
+      [0x0d00, 0x0d7f],
+    ];
+  }
+  return [];
+}
+
+export function hasUnexpectedScriptLeak(text: string, expectedLang?: string | null): boolean {
+  const bare = expectedLang?.split("-")[0]?.toLowerCase() ?? "";
+  const ranges = unexpectedScriptRanges(bare);
+  if (ranges.length === 0) return false;
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (ranges.some(([lo, hi]) => cp >= lo && cp <= hi)) return true;
+  }
+  return false;
+}
+
+/**
+ * Drop tokens written in a script that cannot be the latched language
+ * (call 20094: Hindi call leaked Kannada "ಮಾಡ್ತಾ" into an otherwise Hinglish line).
+ * Does not invent words — just removes the foreign-script tokens.
+ */
+export function repairUnexpectedScriptLeak(text: string, expectedLang?: string | null): string {
+  if (!text || !hasUnexpectedScriptLeak(text, expectedLang)) return text;
+  const ranges = unexpectedScriptRanges(expectedLang?.split("-")[0]?.toLowerCase() ?? "");
+  const cleaned = text
+    .split(/(\s+)/)
+    .map((tok) => {
+      if (/^\s+$/.test(tok)) return tok;
+      let leak = 0;
+      for (const ch of tok) {
+        const cp = ch.codePointAt(0) ?? 0;
+        if (ranges.some(([lo, hi]) => cp >= lo && cp <= hi)) leak++;
+      }
+      return leak > 0 ? "" : tok;
+    })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || text;
+}
+
+/**
+ * When the final is contaminated with a foreign script and the same-turn
+ * partial is clean Hindi/English, keep the partial (call 20094 eager
+ * "इन्वेस्ट करते हैं ना" vs final with Kannada).
+ */
+export function preferStableTranscript(
+  finalText: string,
+  hint: string,
+  expectedLang?: string | null,
+): string {
+  const repaired = repairUnexpectedScriptLeak(finalText, expectedLang);
+  const hintTrim = hint.trim();
+  if (!hintTrim) return repaired;
+  if (
+    hasUnexpectedScriptLeak(finalText, expectedLang)
+    && !hasUnexpectedScriptLeak(hintTrim, expectedLang)
+    && hintTrim.length >= 4
+    && !isBackchannelOnlyUtterance(hintTrim)
+  ) {
+    return hintTrim;
+  }
+  return repaired;
 }
 
 /**
@@ -209,7 +337,7 @@ function checkScriptMismatch(text: string, expectedLang?: string | null): { isGa
   if (!expectedLang) return { isGarbled: false, reason: "" };
   const bare = expectedLang.split("-")[0]?.toLowerCase() ?? "";
   const c = countScriptLetters(text);
-  const indic = c.devanagari + c.tamil + c.telugu + c.other;
+  const indic = c.devanagari + c.tamil + c.telugu + c.kannada + c.other;
   const total = c.latin + indic;
   if (total < 4) return { isGarbled: false, reason: "" };
 
@@ -222,7 +350,7 @@ function checkScriptMismatch(text: string, expectedLang?: string | null): { isGa
   if (bare === "ta" && c.tamil / total < 0.25 && c.devanagari / total >= 0.5) {
     return { isGarbled: true, reason: "script-mismatch-ta" };
   }
-  if (bare === "hi" && c.devanagari / total < 0.25 && c.tamil / total >= 0.5) {
+  if (bare === "hi" && c.devanagari / total < 0.25 && (c.tamil + c.kannada) / total >= 0.5) {
     return { isGarbled: true, reason: "script-mismatch-hi" };
   }
   return { isGarbled: false, reason: "" };
@@ -365,6 +493,12 @@ export function checkTranscriptQuality(
   // Empty after trim — caller might have been silent/muted
   if (t.length < 2) return { isGarbled: true, reason: "too-short" };
 
+  // Product codes / portal answers must never become "I didn't hear you"
+  // (call 20094: "B2B" matched short-allcaps-noise).
+  if (isDomainOrAcronymAnswer(t) || looksLikeShortContextualAnswer(t)) {
+    return { isGarbled: false, reason: "" };
+  }
+
   // Normal one-word greetings / acks ("Hi", "Hello", "Okay") — complete turns.
   if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) {
     return { isGarbled: false, reason: "" };
@@ -392,8 +526,12 @@ export function checkTranscriptQuality(
   if (/^(.)\1{4,}$/u.test(t)) return { isGarbled: true, reason: "single-char-repeat" };
 
   // Very short random-looking uppercase blobs (common Deepgram low-confidence output)
-  // e.g. "Bm bm", "Z Z Z", "QQ QQ"
+  // e.g. "Z Z Z", "QQ QQ". Do NOT flag digits (B2B) or a single 2–5 letter
+  // acronym without spaces (CRM, API, OTP) — those are real one-word answers.
   if (t.length <= 6 && /^[^a-z\u0900-\u097f]+$/u.test(t) && /[A-Z]/.test(t)) {
+    if (/\d/.test(t) || (!/\s/.test(t) && t.length >= 2 && t.length <= 5)) {
+      return { isGarbled: false, reason: "" };
+    }
     return { isGarbled: true, reason: "short-allcaps-noise" };
   }
 
@@ -825,11 +963,50 @@ export function normalizeSttPhonetics(text: string): string {
     if (/Futures-ல/i.test(match)) return "features-ல";
     return "features";
   });
-  // Strip stray single digit prefixing Indic words (e.g., "4 ஆமாம்" -> "ஆமாம்")
+  // Strip stray single digit prefixing Indic words (e.g. "4 ஆமாம்" -> "ஆமாம்")
   s = s.replace(/^\d\s+([\u0B80-\u0BFF\u0900-\u097F]+)/u, "$1");
+  // Spoken B2B / B2C so the LLM sees the same token the caller meant.
+  // No `\b` on Devanagari — JS word boundaries are ASCII-only, and
+  // normalizeHinglishClock would otherwise turn "टू" into "2:00".
+  s = s.replace(/बी\s*टू\s*बी/gu, "B2B");
+  s = s.replace(/बी\s*टू\s*सी/gu, "B2C");
+  s = s.replace(/\bb\s*to\s*b\b/gi, "B2B");
+  s = s.replace(/\bb\s*to\s*c\b/gi, "B2C");
+  s = s.replace(/\bbe\s*to\s*be\b/gi, "B2B");
   // Normalize spoken email tokens
   s = normalizeSpokenEmail(s);
+  s = normalizeHinglishClock(s);
   return s;
+}
+
+/**
+ * Sarvam often emits Devanagari number-words for clock answers
+ * (call 20113: "वन थर्टी पी" / "इलेवन थर्टी एट").
+ */
+export function normalizeHinglishClock(text: string): string {
+  if (!text) return text;
+  const hours: Record<string, string> = {
+    "वन": "1", "टू": "2", "थ्री": "3", "फोर": "4", "फाइव": "5",
+    "सिक्स": "6", "सेवन": "7", "नाइन": "9", "टेन": "10",
+    "इलेवन": "11", "ट्वेल्व": "12", "ट्वेलव": "12",
+  };
+  const minutes: Record<string, string> = {
+    "थर्टी": "30", "फिफटीन": "15", "फोर्टीफाइव": "45", "फोर्टी फाइव": "45",
+  };
+  return text.replace(
+    /(वन|टू|थ्री|फोर|फाइव|सिक्स|सेवन|नाइन|टेन|इलेवन|ट्वेल्व|ट्वेलव)\s*(थर्टी|फिफटीन|फोर्टी\s*फाइव|फोर्टीफाइव)?\s*(पी\.?एम?\.?|ए\.?एम\.?|पी|एएम)?/giu,
+    (full, hourWord: string, minuteWord?: string, mer?: string) => {
+      const h = hours[hourWord] ?? hours[hourWord.toLowerCase()];
+      if (!h) return full;
+      const minuteKey = (minuteWord ?? "").replace(/\s+/g, "");
+      const m = minuteKey ? (minutes[minuteWord!] ?? minutes[minuteKey] ?? "00") : "00";
+      const merNorm = !mer ? ""
+        : /पी|p/i.test(mer) ? " PM"
+        : /ए|a/i.test(mer) ? " AM"
+        : "";
+      return `${h}:${m}${merNorm}`;
+    },
+  );
 }
 
 /** Upper bound on how many queued finals get merged into the next turn. */

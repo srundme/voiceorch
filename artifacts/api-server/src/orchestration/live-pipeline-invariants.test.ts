@@ -42,9 +42,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(between).not.toMatch(/if\s*\(\s*!?\s*this\.isPlaying/);
     expect(between).not.toMatch(/if\s*\(\s*!?\s*this\.isSendingTtsAudio/);
     expect(between).not.toMatch(/AlwaysUserMute|muteUser|gateStt|sttGated/);
-    // Two sendAudio calls: one for background-talker silence, one for normal audio.
-    // The invariant is preserved: we ALWAYS send (never gate), just silence for low energy.
-    expect([...pipelineSrc.matchAll(/streamSTT\.sendAudio/g)]).toHaveLength(2);
+    // One unconditional sendAudio — energy no longer swaps in silence frames.
+    // The invariant is preserved: we ALWAYS send (never gate on TTS).
+    expect([...pipelineSrc.matchAll(/streamSTT\.sendAudio/g)]).toHaveLength(1);
   });
 
   it("starts idle when the bot stops speaking, not from leftover user-turn time (14315)", () => {
@@ -109,7 +109,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).not.toContain("STREAMING_TTS_PREBUFFER_BOOST_MS");
     // Greeting prebuffer raised 280 -> 400 (call 19718: cold LLM-opener underran the wire at the greeting).
     expect(pipelineSrc).toMatch(/TTS_PREBUFFER_GREETING_MS \?\? 400\)/);
-    // Warm prebuffer raised 320 -> 480 (call 18679: mid-sentence clipping under load).
-    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 480\)/);
+    // Warm prebuffer raised again after call 20094 (six underruns in <2 min).
+    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 1000\)/);
   });
 });

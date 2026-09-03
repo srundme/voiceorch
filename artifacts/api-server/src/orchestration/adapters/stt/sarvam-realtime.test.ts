@@ -3,10 +3,12 @@ import {
   buildRealtimeConfigUpdate,
   buildRealtimeWsUrl,
   clipRealtimePrompt,
+  buildSarvamTerminologyPrompt,
   isLidDriftFinal,
   isSarvamRealtimeModel,
   nextRealtimeLanguageOnSwitch,
   parseRealtimeDetectedLang,
+  resolveRealtimeVadDefaults,
   REALTIME_LANGUAGE_CODES,
   resolveRealtimeFinalText,
   resolveRealtimeSocketLanguage,
@@ -52,14 +54,39 @@ describe("resolveRealtimeSocketLanguage", () => {
 });
 
 describe("nextRealtimeLanguageOnSwitch", () => {
-  it("does not pin an auto socket to hi-IN mid-call", () => {
+  it("does not pin an auto socket on passive LID (call 13919)", () => {
     expect(nextRealtimeLanguageOnSwitch("auto", "hi-IN")).toBe("auto");
-    expect(nextRealtimeLanguageOnSwitch("auto", "en-IN")).toBe("auto");
+    expect(nextRealtimeLanguageOnSwitch("auto", "kn-IN")).toBe("auto");
+    expect(nextRealtimeLanguageOnSwitch("auto", "en-IN", false)).toBe("auto");
+  });
+
+  it("pins on an explicit language request (call 20094 Hindi latch)", () => {
+    expect(nextRealtimeLanguageOnSwitch("auto", "hi-IN", true)).toBe("hi-IN");
+    expect(nextRealtimeLanguageOnSwitch("auto", "ta-IN", true)).toBe("ta-IN");
+    expect(nextRealtimeLanguageOnSwitch("hi-IN", "en-IN", true)).toBe("en-IN");
   });
 
   it("still maps a pinned socket to a realtime code", () => {
     expect(nextRealtimeLanguageOnSwitch("hi-IN", "ta-IN")).toBe("ta-IN");
     expect(nextRealtimeLanguageOnSwitch("en-IN", "od-IN")).toBe("or-IN");
+  });
+});
+
+describe("resolveRealtimeVadDefaults", () => {
+  it("uses Sarvam's PSTN table on 8 kHz telephony", () => {
+    expect(resolveRealtimeVadDefaults(8000)).toEqual({
+      silenceDurationMs: 500,
+      minSpeechDurationMs: 200,
+      threshold: 0.7,
+    });
+  });
+
+  it("uses the headset table on 16 kHz webcall", () => {
+    expect(resolveRealtimeVadDefaults(16000)).toEqual({
+      silenceDurationMs: 300,
+      minSpeechDurationMs: 80,
+      threshold: 0.5,
+    });
   });
 });
 
@@ -205,6 +232,16 @@ describe("clipRealtimePrompt", () => {
     expect(clipRealtimePrompt("  ")).toBeUndefined();
     expect(clipRealtimePrompt("ok")).toBe("ok");
     expect(clipRealtimePrompt("x".repeat(600))?.length).toBe(500);
+  });
+});
+
+describe("buildSarvamTerminologyPrompt", () => {
+  it("includes B2B/CRM defaults and agent keyterms", () => {
+    const prompt = buildSarvamTerminologyPrompt(["TraviYo"], "GSTIN");
+    expect(prompt).toMatch(/B2B/);
+    expect(prompt).toMatch(/CRM/);
+    expect(prompt).toMatch(/TraviYo/);
+    expect(prompt).toMatch(/GSTIN/);
   });
 });
 

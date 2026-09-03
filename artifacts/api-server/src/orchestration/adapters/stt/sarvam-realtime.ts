@@ -17,12 +17,24 @@ import { resolveSarvamSttMode, type SarvamSttMode } from "./sarvam-mode.js";
 
 const WS_BASE = "wss://api.sarvam.ai/speech-to-text-realtime/ws";
 const PING_MS = 20_000;
-/** Voice default — Fast-preset EOS. 500 was the old Balanced factory default. */
-const DEFAULT_SILENCE_MS = 300;
-const DEFAULT_MIN_SPEECH_MS = 250;
-const DEFAULT_THRESHOLD = 0.3;
 /** Realtime API default. Pipecat: raise if the first syllable is clipped. */
 const DEFAULT_PREFIX_PADDING_MS = 300;
+
+/**
+ * Sarvam LiveKit production VAD table
+ * (https://docs.sarvam.ai/api/integration/livekit-production-best-practices).
+ * Telephony (8 kHz) needs a higher onset bar and longer EOS than headset audio.
+ */
+export function resolveRealtimeVadDefaults(sampleRate: 8000 | 16000): {
+  silenceDurationMs: number;
+  minSpeechDurationMs: number;
+  threshold: number;
+} {
+  if (sampleRate === 8000) {
+    return { silenceDurationMs: 500, minSpeechDurationMs: 200, threshold: 0.7 };
+  }
+  return { silenceDurationMs: 300, minSpeechDurationMs: 80, threshold: 0.5 };
+}
 
 export type SarvamRealtimeStreamType = "fast" | "balanced" | "simulated";
 
@@ -37,6 +49,32 @@ export function clipRealtimePrompt(raw: unknown): string | undefined {
   if (typeof raw !== "string") return undefined;
   const t = raw.trim().slice(0, 500);
   return t || undefined;
+}
+
+/** Default Indian B2B / travel terms so Saaras keeps B2B/CRM in Latin. */
+const DEFAULT_SARVAM_HINTS = [
+  "B2B", "B2C", "CRM", "integration", "travel portal",
+  "flight booking", "hotel booking", "GST", "UPI",
+];
+
+export function buildSarvamTerminologyPrompt(
+  keyterms: string[] | undefined,
+  extraPrompt?: string | null,
+): string | undefined {
+  const parts = [
+    ...DEFAULT_SARVAM_HINTS,
+    ...(keyterms ?? []),
+    ...(extraPrompt ? extraPrompt.split(/[,;]/).map((s) => s.trim()).filter(Boolean) : []),
+  ];
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const p of parts) {
+    const key = p.toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(p);
+  }
+  return clipRealtimePrompt(merged.join(" "));
 }
 
 const REALTIME_LANG = new Set([
@@ -94,10 +132,22 @@ export function resolveRealtimeSocketLanguage(
 }
 
 /**
- * Once the socket is on auto LID, never pin mid-call. Script-detection
- * switches to hi-IN are what silenced later mixed turns.
+ * Live `language_code` after a mid-call switch.
+ *
+ * Explicit pin (`pin=true`): caller asked for a language ("हिंदी से बोलना")
+ * or we restored a latch after reconnect — `config.update` to that BCP-47.
+ * Staying on `auto` here is what leaked Kannada into Hindi call 20094.
+ *
+ * Passive LID/script-detect (`pin` omitted/false): if the socket is still
+ * `auto`, stay on `auto`. Pinning those flips is what silenced mixed turns
+ * (call 13919).
  */
-export function nextRealtimeLanguageOnSwitch(current: string, requested: string): string {
+export function nextRealtimeLanguageOnSwitch(
+  current: string,
+  requested: string,
+  pin = false,
+): string {
+  if (pin) return toRealtimeLanguageCode(requested, false);
   if (current === "auto") return "auto";
   return toRealtimeLanguageCode(requested, false);
 }
@@ -346,25 +396,26 @@ export class SarvamRealtimeSTT implements STTAdapter {
     this.mode = resolveSarvamSttMode(cfg.language, this.explicitMode);
     this.languageCode = resolveRealtimeSocketLanguage(cfg.language, extra.languageAutoDetect);
     this.primaryLanguage = toRealtimeLanguageCode(cfg.language, false);
+    const vadDefaults = resolveRealtimeVadDefaults(this.sampleRate);
     this.silenceDurationMs = resolveMsSetting(
       extra.endOfSpeechSilenceMs,
       "SARVAM_END_OF_SPEECH_SILENCE_MS",
-      DEFAULT_SILENCE_MS,
+      vadDefaults.silenceDurationMs,
       { min: 150, max: 2000 },
     );
     this.minSpeechDurationMs = resolveMsSetting(
       extra.firstTurnMinSpeechMs,
       "SARVAM_FIRST_TURN_MIN_SPEECH_MS",
-      DEFAULT_MIN_SPEECH_MS,
+      vadDefaults.minSpeechDurationMs,
       { min: 80, max: 2000 },
     );
     const th = extra.vadThreshold;
     this.threshold =
       typeof th === "number" && Number.isFinite(th)
         ? Math.min(1, Math.max(0, th))
-        : DEFAULT_THRESHOLD;
+        : vadDefaults.threshold;
     this.streamType = resolveRealtimeStreamType(extra.streamType);
-    this.prompt = clipRealtimePrompt(extra.prompt);
+    this.prompt = buildSarvamTerminologyPrompt(cfg.keyterms, extra.prompt);
 
     logger.info(
       {
@@ -705,22 +756,25 @@ export class SarvamRealtimeSTT implements STTAdapter {
         });
         return true;
       },
-      setLanguage(lang: string): void {
+      setLanguage(lang: string, pin = false): void {
         if (usingLegacy) {
           legacyStream?.setLanguage?.(lang);
           return;
         }
-        const nextLang = nextRealtimeLanguageOnSwitch(languageCode, lang);
+        const nextLang = nextRealtimeLanguageOnSwitch(languageCode, lang, pin);
         const nextMode = resolveSarvamSttMode(nextLang, explicitMode);
         if (nextLang === languageCode && nextMode === mode) {
-          if (languageCode === "auto") {
-            logger.info({ requested: lang }, "Sarvam STT realtime: keeping language_code=auto (LID)");
+          if (languageCode === "auto" && !pin) {
+            logger.info({ requested: lang }, "Sarvam STT realtime: keeping language_code=auto (passive LID)");
           }
           return;
         }
         languageCode = nextLang;
         mode = nextMode;
-        logger.info({ to: nextLang, mode: nextMode }, "Sarvam STT realtime: config.update");
+        logger.info(
+          { to: nextLang, mode: nextMode, pin, requested: lang },
+          "Sarvam STT realtime: config.update language",
+        );
         sendJson(buildRealtimeConfigUpdate({ languageCode: nextLang, mode: nextMode }));
       },
       setSilenceDurationMs(ms: number): void {

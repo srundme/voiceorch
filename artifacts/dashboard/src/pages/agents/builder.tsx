@@ -6918,7 +6918,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
     defaultValues: {
       name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
       llmProvider: "sarvam", llmModel: "sarvam-105b-conversations", ttsProvider: "cartesia",
-      ttsVoice: DEFAULT_CARTESIA_VOICE_ID, ttsModel: "sonic-3.5", telephonyProvider: "vobiz",
+      ttsVoice: DEFAULT_CARTESIA_VOICE_ID, ttsModel: "sonic-3.6", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 480,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-IN", asrLanguage: "", backchannelingEnabled: true,
@@ -7999,7 +7999,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     llmProvider: "sarvam",
     llmModel: "sarvam-105b-conversations",
     ttsProvider: "cartesia",
-    ttsModel: "sonic-3.5",
+    ttsModel: "sonic-3.6",
     ttsVoice: DEFAULT_CARTESIA_VOICE_ID,
     ttsVoiceName: DEFAULT_CARTESIA_VOICE_NAME,
     // Attendance capacity is fixed by agent type:

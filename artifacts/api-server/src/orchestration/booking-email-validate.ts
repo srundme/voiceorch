@@ -86,3 +86,40 @@ export function isEmailConfirmedFlag(args: Record<string, unknown>): boolean {
   const v = args["email_confirmed"] ?? args["emailConfirmed"];
   return v === true || v === "true" || v === 1 || v === "1" || v === "yes";
 }
+
+/**
+ * True when `fragment` is the same domain as `complete` but only the tail of
+ * the local-part — the STT compact form of a letter-spelled address
+ * (call 20113: "K I S H O R E K U M A R R 307@gmail.com" → "307@gmail.com").
+ */
+export function isEmailLocalSuffixOf(fragment: string, complete: string): boolean {
+  const [fLocal, fDom] = fragment.toLowerCase().split("@");
+  const [cLocal, cDom] = complete.toLowerCase().split("@");
+  if (!fLocal || !cLocal || !fDom || !cDom || fDom !== cDom) return false;
+  if (fLocal === cLocal) return false;
+  return cLocal.endsWith(fLocal);
+}
+
+/** Drop compact STT fragments when a longer reconstructed address is also present. */
+export function dropSuffixFragmentEmails(emails: string[]): string[] {
+  return emails.filter((email, i) =>
+    !emails.some((other, j) => j !== i && isEmailLocalSuffixOf(email, other)),
+  );
+}
+
+/**
+ * Prefer the fully spelled address over a same-domain local-part suffix.
+ * Call 20113 booked `307@gmail.com` while confirmation used `kishorekumarr307@gmail.com`.
+ */
+export function preferCompleteEmail(a: string, b: string): string {
+  const va = validateBookableEmail(a);
+  const vb = validateBookableEmail(b);
+  if (va.ok && vb.ok) {
+    if (isEmailLocalSuffixOf(va.email, vb.email)) return vb.email;
+    if (isEmailLocalSuffixOf(vb.email, va.email)) return va.email;
+    return va.email;
+  }
+  if (vb.ok) return vb.email;
+  if (va.ok) return va.email;
+  return (a || b).trim();
+}

@@ -28,7 +28,9 @@ export const CONVERSATION_DISCIPLINE_BLOCK =
 - FOLLOW THE ORDER: Move through the flow in the exact order it is written. Never skip ahead, never jump to the closing, never end the call early. Progress naturally from the opening through each step to the closure, one turn per step.
 - ANSWER QUESTIONS FIRST: If the caller asks a question, you MUST answer it directly and completely FIRST — use the knowledge/context provided to give a real answer. Never brush a question off, never reply with only a filler like "okay" and move on, never continue the script as if the question was not asked. Only AFTER answering, resume from the exact point in the flow where you left off. Never restart the flow from the beginning, and never skip the steps you had not yet reached.
 - RESPECT HOLD REQUESTS: If the caller asks you to wait — "wait", "one minute", "hold on", "just a second", or any equivalent in their language — acknowledge briefly (e.g. "Sure, take your time") and STOP. Stay on the current step. Do NOT advance the flow, do NOT continue the pitch, do NOT repeat your last line. Wait for them to speak again.
-- NEVER REPEAT: Do not repeat a step, point, or benefit you have already delivered earlier in this conversation. Keep track of what you have already covered and only move forward.
+- NEVER REPEAT: Do not repeat a step, point, or benefit you have already delivered earlier in this conversation. Keep track of what you have already covered and only move forward. If the caller already answered (even briefly: "B2B", "start कर रहे हैं", "CRM integrations"), treat it as answered — do not re-ask the same qualification more than once.
+- COMPOUND TERMS: Treat "CRM integration(s)" as ONE requirement, not CRM plus a separate integration product. Confirm the combined term, then ask the next unanswered question.
+- EITHER/OR YES: If you asked B2B or B2C (or any two-option question) and the caller only says "हां"/"yes", re-ask ONLY those two options in one short sentence. Do not add a third choice.
 - AFTER INTERRUPTION: If your speech was cut off, resume from the unfinished sentence — never restart the opening, consent, or pitch from the top, and never ask whether the caller can hear you unless they said absolutely nothing.
 - NO FALSE "CUT OFF": After you have already opened this call, NEVER say that you got cut off, that the previous call dropped, or that you lost the connection — unless the caller themselves says the line dropped just now. If the caller asks you to explain or clarify something (even with a mangled product name), answer that question directly; do not restart the pitch with an apology about a cut-off.
 - CLARIFY ≠ RESTART: Phrases like "what was that about", "about the …", "explain again", "tell me more" mean explain the last topic you covered — answer in 1–2 short sentences, then ask if that helps. Do not replay the full scripted intro.`;
@@ -249,22 +251,50 @@ export function buildAntiRepeatNudge(opts: {
   lastUserText: string;
   prevLine: string;
   escalated: boolean;
+  alreadyAsked?: string[];
 }): string {
   const { lastUserText, prevLine, escalated } = opts;
+  const asked = opts.alreadyAsked?.length
+    ? ` You already asked: ${opts.alreadyAsked.map((q) => `"${q}"`).join("; ")}. Do NOT re-ask those topics or a paraphrase — treat garbled answers as answered and move FORWARD.`
+    : "";
   if (isHoldRequest(lastUserText)) {
     return `[CALLER ASKED TO WAIT] The caller asked you to wait. Do NOT advance the flow, do NOT continue the pitch, and do NOT repeat your previous line ("${prevLine}"). Reply with ONE short sentence confirming you are waiting (e.g. "Sure, take your time") and then stop.`;
   }
   if (isQuestionUtterance(lastUserText)) {
-    return `[ANSWER THE QUESTION FIRST] The caller just asked a question. Answer it directly and completely NOW, using the knowledge provided — do not skip it, do not reply with a filler and move on, do not continue the script until you have answered. Do not repeat your previous line ("${prevLine}"). After answering, resume the flow from where you left off.`;
+    return `[ANSWER THE QUESTION FIRST] The caller just asked a question. Answer it directly and completely NOW, using the knowledge provided — do not skip it, do not reply with a filler and move on, do not continue the script until you have answered. Do not repeat your previous line ("${prevLine}"). After answering, resume the flow from where you left off.${asked}`;
   }
   if (isBareAcknowledgement(lastUserText)) {
     return escalated
-      ? `[DO NOT REPEAT — CRITICAL] You have already repeated yourself. You said: "${prevLine}". Do NOT say this again in any form. The caller has responded — move the conversation FORWARD to the next step or question. Say something different now.`
-      : `[DO NOT REPEAT] You just said: "${prevLine}". Do not repeat this line verbatim. The caller acknowledged (e.g. "okay") — acknowledge briefly and advance to the next point — do not re-ask or restate.`;
+      ? `[DO NOT REPEAT — CRITICAL] You have already repeated yourself. You said: "${prevLine}". Do NOT say this again in any form. The caller has responded — move the conversation FORWARD to the next step or question. Say something different now.${asked}`
+      : `[DO NOT REPEAT] You just said: "${prevLine}". Do not repeat this line verbatim. The caller acknowledged (e.g. "okay") — acknowledge briefly and advance to the next point — do not re-ask or restate.${asked}`;
   }
   return escalated
-    ? `[DO NOT REPEAT — CRITICAL] You have already repeated yourself. You said: "${prevLine}". Do NOT say this again in any form. Respond directly to what the caller just said, then continue the flow.`
-    : `[DO NOT REPEAT] You just said: "${prevLine}". Do not repeat this line verbatim. Respond directly to what the caller just said, then continue the flow.`;
+    ? `[DO NOT REPEAT — CRITICAL] You have already repeated yourself. You said: "${prevLine}". Do NOT say this again in any form. Respond directly to what the caller just said, then continue the flow.${asked}`
+    : `[DO NOT REPEAT] You just said: "${prevLine}". Do not repeat this line verbatim. Respond directly to what the caller just said, then continue the flow.${asked}`;
+}
+
+/** Recent agent questions so the model cannot replay qualification (call 20113). */
+export function extractRecentAgentQuestions(
+  messages: ReadonlyArray<{ role: string; content: string }>,
+  limit = 6,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (let i = messages.length - 1; i >= 0 && out.length < limit; i--) {
+    const msg = messages[i];
+    if (msg?.role !== "assistant") continue;
+    const sentences = splitSpokenSentences(msg.content);
+    for (const s of sentences) {
+      if (!/[?？]/.test(s)) continue;
+      const compact = s.replace(/\s+/g, " ").trim().slice(0, 140);
+      const key = compact.toLowerCase();
+      if (seen.has(key) || compact.length < 8) continue;
+      seen.add(key);
+      out.push(compact);
+      if (out.length >= limit) break;
+    }
+  }
+  return out.reverse();
 }
 
 /** Lightweight sentence splitter for the output guard (TTS-oriented, not exact). */

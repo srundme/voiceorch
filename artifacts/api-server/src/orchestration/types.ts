@@ -599,8 +599,9 @@ export interface StreamSTT {
    * right script. Implementations should no-op when already on the requested
    * language and reconnect their underlying session as needed. Adapters that
    * don't support live switching simply omit this method.
+   * `pin` = explicit latch: realtime sockets must leave `language_code=auto`.
    */
-  setLanguage?(lang: string): void;
+  setLanguage?(lang: string, pin?: boolean): void;
   /**
    * Provider-specific (optional): stretch or restore server VAD silence
    * mid-call without reconnecting. Used while the agent is collecting a

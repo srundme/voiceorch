@@ -84,6 +84,19 @@ describe("tryEarlyPhraseDispatch — streaming TTS starts before .!?", () => {
     expect(tryEarlyPhraseDispatch(text, 8)).toBeNull();
   });
 
+  it("does not comma-split either/or questions (call 20094 underrun)", () => {
+    const en = tryEarlyPhraseDispatch(
+      "Are you already running a travel business, or are you looking to start a new one?",
+      15,
+    );
+    expect(en).toBeNull();
+    const hi = tryEarlyPhraseDispatch(
+      "क्या आप बी टू बी, बी टू सी या फिर कोई और पोर्टल बनवाना चाहते हैं?",
+      8,
+    );
+    expect(hi).toBeNull();
+  });
+
   it("does not comma-split AM/PM slot lists (call 14390 choppy TTS)", () => {
     const text =
       "நாளைக்கு August 28 காலைல 9:00 AM, 9:15 AM, 9:30 AM, 9:45 AM அல்லது 10:00 AM-ல உங்களுக்கு எந்த time சரி வரும்?";

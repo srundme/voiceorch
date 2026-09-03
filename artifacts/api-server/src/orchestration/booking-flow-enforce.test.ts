@@ -9,8 +9,13 @@ import {
   parseSlotIsoFromAvailabilityResult,
   pickSlotIsoFromSpokenTime,
   pickTimeSlotBySpokenClock,
+  applyBookingEmailToBookArgs,
+  applyBookingEmailToSendArgs,
   applyLockedSlotToBookArgs,
+  extractEmailsFromText,
+  looksLikeEmailRejection,
   markEmailSpelled,
+  shouldUpdateBookedEmail,
   shouldForceBookAppointment,
   shouldForceCheckAvailability,
   shouldSpeakEmailSpell,
@@ -180,5 +185,66 @@ describe("booking flow state machine", () => {
     expect(state.emailConfirmed).toBe(false);
     state = updateBookingFlowFromUserTurn(state, "karraj@gmail.com", "Please say the email again");
     expect(state.pendingEmail).toBe("karraj@gmail.com");
+  });
+
+  it("keeps the reconstructed full address, not the STT compact suffix (call 20113)", () => {
+    expect(extractEmailsFromText("K I S H O R E K U M A R R 307@gmail.com")).toEqual([
+      "kishorekumarr307@gmail.com",
+    ]);
+    expect(looksLikeEmailRejection("No K I S H O R E K U M A R R 307@gmail.com")).toBe(true);
+    expect(looksLikeEmailRejection("Change the mail. I don't need the mail.")).toBe(true);
+
+    let state = emptyBookingFlowState();
+    state = updateBookingFlowFromUserTurn(
+      state,
+      "K I S H O R E K U M A R R 307@gmail.com",
+      "And your email address, please?",
+    );
+    expect(state.pendingEmail).toBe("kishorekumarr307@gmail.com");
+
+    state = markEmailSpelled(state, "307@gmail.com");
+    state = { ...state, pendingEmail: "307@gmail.com", lastSpelledEmail: "307@gmail.com" };
+    state = updateBookingFlowFromUserTurn(
+      state,
+      "No K I S H O R E K U M A R R 307@gmail.com",
+      "Let me confirm your email. <spell>3 0 7 @ g m a i l . c o m</spell> Is that correct?",
+    );
+    expect(state.pendingEmail).toBe("kishorekumarr307@gmail.com");
+    expect(state.emailConfirmed).toBe(false);
+
+    state = updateBookingFlowFromAssistantText(
+      state,
+      "Your email address is <spell>k i s h o r e k u m a r r 3 0 7 @ g m a i l . c o m</spell>. Is that correct?",
+    );
+    expect(state.pendingEmail).toBe("kishorekumarr307@gmail.com");
+    expect(state.lastSpelledEmail).toBe("kishorekumarr307@gmail.com");
+
+    state = updateBookingFlowFromUserTurn(
+      state,
+      "सही है, सही है।",
+      "Your email address is <spell>k i s h o r e k u m a r r 3 0 7 @ g m a i l . c o m</spell>. Is that correct?",
+    );
+    expect(state.emailConfirmed).toBe(true);
+    expect(buildAutoBookArgs(state).attendee_email).toBe("kishorekumarr307@gmail.com");
+    expect(
+      applyBookingEmailToBookArgs(state, { attendee_email: "307@gmail.com" }).attendee_email,
+    ).toBe("kishorekumarr307@gmail.com");
+    expect(
+      applyBookingEmailToSendArgs(state, { to_email: "kishorekumarr307@gmail.com" }).to_email,
+    ).toBe("kishorekumarr307@gmail.com");
+  });
+
+  it("flags a post-booking email change after the new address is confirmed", () => {
+    let state = emptyBookingFlowState();
+    state = {
+      ...state,
+      lastBookingId: 396,
+      bookedEmail: "kishorekumarr307@gmail.com",
+      pendingEmail: "ramsiva97465@gmail.com",
+      lastSpelledEmail: "ramsiva97465@gmail.com",
+      emailConfirmed: true,
+    };
+    expect(shouldUpdateBookedEmail({ state, alreadyBooked: true })).toBe(true);
+    expect(shouldUpdateBookedEmail({ state, alreadyBooked: false })).toBe(false);
   });
 });

@@ -5,9 +5,16 @@
  */
 
 import { looksLikeBookingTimeAnswer } from "./transcriptQuality.js";
-import { sanitizeAttendeeEmail, validateBookableEmail } from "./booking-email-validate.js";
+import {
+  dropSuffixFragmentEmails,
+  isEmailConfirmedFlag,
+  isEmailLocalSuffixOf,
+  preferCompleteEmail,
+  sanitizeAttendeeEmail,
+  validateBookableEmail,
+} from "./booking-email-validate.js";
 import { latinizeAttendeeName } from "./booking-attendee-name.js";
-import { reconstructSpokenEmail } from "./endpointing.js";
+import { looksLikeSpokenEmailSpelling, reconstructSpokenEmail } from "./endpointing.js";
 
 export type BookingFlowState = {
   availabilityChecked: boolean;
@@ -21,6 +28,10 @@ export type BookingFlowState = {
   emailConfirmed: boolean;
   /** Address we actually spelled to the caller — confirm applies only to this. */
   lastSpelledEmail: string | null;
+  /** Native booking id after booking_confirmed / booking_pending. */
+  lastBookingId: number | null;
+  /** Address written on the calendar event (may lag pendingEmail after a change). */
+  bookedEmail: string | null;
 };
 
 export function emptyBookingFlowState(): BookingFlowState {
@@ -34,6 +45,8 @@ export function emptyBookingFlowState(): BookingFlowState {
     emailSpellPending: false,
     emailConfirmed: false,
     lastSpelledEmail: null,
+    lastBookingId: null,
+    bookedEmail: null,
   };
 }
 
@@ -73,8 +86,13 @@ export function looksLikeEmailRejection(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
   return (
-    /\b(no no|no again|nope|not that|not this|change (the |my )?e-?mail|different e-?mail|another e-?mail|wrong e-?mail|it'?s wrong|that'?s wrong|not correct|incorrect|illa illa)\b/i.test(t)
+    /\b(no no|no again|nope|not that|not this|change (the |my )?(e-?mail|mail(\s*id)?)|different e-?mail|another e-?mail|wrong e-?mail|it'?s wrong|that'?s wrong|not correct|incorrect|illa illa)\b/i.test(t)
+    || /\b(e-?mail|mail(\s*id)?)\s+(change|बदल)/i.test(t)
+    || /(?:मेल|ईमेल).{0,16}(?:बदल|चेंज|change)|(?:बदल|चेंज|change).{0,16}(?:मेल|ईमेल|mail)/iu.test(t)
     || /(?:இல்ல|தவறு|गलत|नहीं)/u.test(t)
+    // "No" + restated address: caller is rejecting the spelled-back fragment
+    // (call 20113: "No K I S H O R E K U M A R R 307@gmail.com").
+    || (/^(no|nah|nope)\b/i.test(t) && (/@/.test(t) || looksLikeSpokenEmailSpelling(t)))
   );
 }
 
@@ -115,13 +133,13 @@ export function extractEmailsFromText(text: string): string[] {
     ?? (afterCue !== text ? reconstructSpokenEmail(text) : null);
   if (reconstructed) push(reconstructed);
   for (const m of text.match(LOOSE_EMAIL_RE) ?? []) push(m);
-  return out;
+  return dropSuffixFragmentEmails(out);
 }
 
 /** Prefer the address spoken after "no / wrong / change email". */
 function textAfterEmailCorrectionCue(text: string): string {
   const m =
-    /\b(no no|no again|nope|not that|not this|it'?s wrong|that'?s wrong|wrong e-?mail|change (the |my )?e-?mail|different e-?mail|another e-?mail)\b/i.exec(
+    /\b(no no|no again|nope|not that|not this|it'?s wrong|that'?s wrong|wrong e-?mail|change (the |my )?(e-?mail|mail(\s*id)?)|different e-?mail|another e-?mail)\b/i.exec(
       text,
     );
   if (!m || m.index == null) return text;
@@ -247,9 +265,16 @@ export function updateBookingFlowFromToolResult(
     }
   }
   const bookedEmail = /email="([^"]+)"/i.exec(result)?.[1];
-  if (bookedEmail && /booking_confirmed|booking_pending/.test(result)) {
+  if (bookedEmail && /booking_confirmed|booking_pending|email_updated/.test(result)) {
     const check = validateBookableEmail(bookedEmail);
-    if (check.ok) next.pendingEmail = check.email;
+    if (check.ok) {
+      next.pendingEmail = check.email;
+      next.bookedEmail = check.email;
+    }
+  }
+  const bookingIdMatch = /booking_id=(\d+)/i.exec(result);
+  if (bookingIdMatch?.[1] && /booking_confirmed|booking_pending|email_updated/.test(result)) {
+    next.lastBookingId = Number(bookingIdMatch[1]);
   }
   return next;
 }
@@ -268,6 +293,13 @@ export function updateBookingFlowFromAssistantText(
   if (spelled && next.pendingEmail && spelled === next.pendingEmail) {
     next.lastSpelledEmail = spelled;
     next.emailSpellPending = true;
+  } else if (spelled && next.pendingEmail && isEmailLocalSuffixOf(next.pendingEmail, spelled)) {
+    // Agent spelled the completed address after STT compactified the local-part
+    // (call 20113: pending 307@gmail.com, spoken kishorekumarr307@gmail.com).
+    next.pendingEmail = spelled;
+    next.lastSpelledEmail = spelled;
+    next.emailSpellPending = true;
+    next.emailConfirmed = false;
   }
   // One clock only — slot lists ("9:00 AM, 9:15 AM, 10:00 AM") must not
   // snap lastSlotIso back to the first offered time.
@@ -299,11 +331,21 @@ export function updateBookingFlowFromUserTurn(
     || (assistantAskedEmailConfirm && looksLikeBareEmailNo(userText));
 
   const emails = extractEmailsFromText(userText);
-  // After "no" / when STT still contains the old address, keep the last one.
+  // After "no" / when STT still contains the old address, keep the last distinct one.
+  // Suffix fragments of a reconstructed address are already dropped.
   const pickedEmail = emails.length > 1 || rejected
     ? emails[emails.length - 1]
     : emails[0];
-  if (pickedEmail && pickedEmail !== next.pendingEmail) {
+  if (
+    pickedEmail
+    && next.pendingEmail
+    && isEmailLocalSuffixOf(next.pendingEmail, pickedEmail)
+  ) {
+    next.pendingEmail = pickedEmail;
+    next.emailConfirmed = false;
+    next.emailSpellPending = false;
+    next.lastSpelledEmail = null;
+  } else if (pickedEmail && pickedEmail !== next.pendingEmail) {
     next.pendingEmail = pickedEmail;
     // Fresh email — must spell THIS address; a yes on the old one does not count.
     next.emailConfirmed = false;
@@ -422,6 +464,44 @@ export function applyLockedSlotToBookArgs(
   if (!state.slotLocked || !state.lastSlotIso) return args;
   if (String(args["preferred_date"] ?? "") === state.lastSlotIso) return args;
   return { ...args, preferred_date: state.lastSlotIso };
+}
+
+/** Prefer the reconstructed full address over an STT/LLM local-part fragment. */
+export function applyBookingEmailToBookArgs(
+  state: BookingFlowState,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const raw = String(args["attendee_email"] ?? args["email"] ?? "");
+  const chosen = preferCompleteEmail(raw, state.pendingEmail ?? "");
+  const next = applyLockedSlotToBookArgs(state, chosen ? { ...args, attendee_email: chosen } : args);
+  if (state.emailConfirmed || isEmailConfirmedFlag(args)) {
+    return { ...next, email_confirmed: true };
+  }
+  return next;
+}
+
+/** Booking-confirm send_email must use the same address as the calendar event. */
+export function applyBookingEmailToSendArgs(
+  state: BookingFlowState,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const raw = String(args["to_email"] ?? args["email"] ?? "");
+  const chosen = preferCompleteEmail(raw, state.pendingEmail ?? state.bookedEmail ?? "");
+  if (!chosen) return args;
+  return { ...args, to_email: chosen };
+}
+
+/** Caller confirmed a different address after the booking already landed. */
+export function shouldUpdateBookedEmail(opts: {
+  state: BookingFlowState;
+  alreadyBooked: boolean;
+}): boolean {
+  if (!opts.alreadyBooked) return false;
+  const s = opts.state;
+  if (!s.lastBookingId || !s.pendingEmail || !s.emailConfirmed) return false;
+  if (!s.lastSpelledEmail || s.lastSpelledEmail !== s.pendingEmail) return false;
+  if (!validateBookableEmail(s.pendingEmail).ok) return false;
+  return !s.bookedEmail || s.pendingEmail !== s.bookedEmail;
 }
 
 export function looksLikeBookOrRescheduleTool(toolName: string): boolean {

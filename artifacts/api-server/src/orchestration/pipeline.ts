@@ -13,7 +13,7 @@ import { buildCallDirectionRule, INBOUND_GREETING, resolveInboundGreetingTtsSpee
 import { buildDatetimeInjection, buildTurnClockBlock } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
-import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN, isHoldRequest } from "./conversationDiscipline.js";
+import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, extractRecentAgentQuestions, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN, isHoldRequest } from "./conversationDiscipline.js";
 import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared, isCallerClosingUtterance } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
 import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
@@ -45,6 +45,8 @@ import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
 import { validateBookableEmail, isEmailConfirmedFlag } from "./booking-email-validate.js";
 import { looksLikeVoicemailGreeting } from "../lib/voicemail-detect.js";
 import {
+  applyBookingEmailToBookArgs,
+  applyBookingEmailToSendArgs,
   buildAutoBookArgs,
   buildEmailSpellLine,
   canAutoBook,
@@ -54,6 +56,7 @@ import {
   shouldForceBookAppointment,
   shouldForceCheckAvailability,
   shouldSpeakEmailSpell,
+  shouldUpdateBookedEmail,
   updateBookingFlowFromAssistantText,
   updateBookingFlowFromToolResult,
   updateBookingFlowFromUserTurn,
@@ -107,7 +110,7 @@ import {
   isAffirmationOnlyUtterance,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeBookingTimeAnswer, hasCallerAddressToken, isHardInterruptTranscript } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeBookingTimeAnswer, looksLikeShortContextualAnswer, isDomainOrAcronymAnswer, preferStableTranscript, hasCallerAddressToken, isHardInterruptTranscript } from "./transcriptQuality.js";
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
@@ -144,6 +147,7 @@ import {
   sanitizeToolName,
   executeNativeBooking as sharedExecuteNativeBooking,
   executeNativeCheckAvailability as sharedExecuteNativeCheckAvailability,
+  executeUpdateBookingAttendeeEmail as sharedExecuteUpdateBookingAttendeeEmail,
   executeNativeListBookings as sharedExecuteNativeListBookings,
   executeNativeReschedule as sharedExecuteNativeReschedule,
   executeNativeCancel as sharedExecuteNativeCancel,
@@ -365,16 +369,19 @@ const TTS_PREBUFFER_GREETING_CAP_MS = Math.max(
 // Increased from 480 → 600ms (call 20088: 4 underruns with 2 concurrent drains).
 // Higher Cartesia TTFB to India + event-loop lag under concurrency requires
 // more runway to keep playback glitch-free.
-const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 600));
+// Raised after call 20113 (15 underrun events, 3–5s waits, concurrentDrains=1):
+// Cartesia first-byte is fast (~120ms) but the rest of the sentence arrives
+// slower than realtime, so 600/800ms runway still emptied mid-word.
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 1000));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
-  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 700),
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 1200),
 );
-const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 800));
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 1600));
 /** On mid-sentence underrun: refill this much real audio. Keep the carrier
  *  alive with silence, never by looping the last speech frame (robotic breakup). */
-const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 400));
-const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 700));
+const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 600));
+const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 1100));
 const TTS_UNDERRUN_COLD_MS = 8_000;
 /**
  * Concurrency-aware prebuffer runway (restored — removed in a20aca3d).
@@ -1454,6 +1461,9 @@ export class OrchestrationPipeline implements VoiceSession {
   private schedulingConfigurationFailed = false;
   /** Product booking funnel state: demo → slots → email confirm → book/Meet. */
   private bookingFlowState: BookingFlowState = emptyBookingFlowState();
+  /** Same preferred_date must not re-hit calendar mid-call (call 20113). */
+  private lastAvailabilityKey: string | null = null;
+  private lastAvailabilityResult: string | null = null;
   // All bookings returned by the most recent list_bookings call (used to infer
   // which booking the caller selected when count > 1 and reschedule/cancel fires).
   private pendingListedBookings: Array<{ bookingId: number; isoDate: string; timeLabel: string; eventName: string }> = [];
@@ -2710,6 +2720,23 @@ export class OrchestrationPipeline implements VoiceSession {
    * a noise-stub transcript from a substantial stretch of speech.
    */
   private async respondWithClarification(sttLang: string | null | undefined): Promise<void> {
+    // Call 20094: "B2B" final landed in the same tick as this fallback. Wait one
+    // STT-finalization beat and abort if a usable transcript is now held.
+    await new Promise<void>((r) => setTimeout(r, 180));
+    if (this.closed) return;
+    // Only steal the held final when we are NOT already inside processTurn
+    // (garbled-path clarification). Re-entering handleStreamingTranscript
+    // while isProcessing would race the in-flight turn.
+    if (!this.isProcessing && this._eouHeldFinal?.text.trim()) {
+      const held = this._eouHeldFinal;
+      this._eouHeldFinal = null;
+      logger.info(
+        { callId: this.config.callId, transcript: held.text.slice(0, 80) },
+        "Clarification aborted — valid final transcript arrived",
+      );
+      void this.handleStreamingTranscript(held.text, held.emittedAt, held.closeReason);
+      return;
+    }
     const clarification = pickClarificationPhrase(sttLang, String(this.config.callId));
     this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
     this._currentTurnPlayedSentences = [];
@@ -3562,7 +3589,7 @@ export class OrchestrationPipeline implements VoiceSession {
                 const greetingOnly = isCallerAttentionUtterance(text);
                 const interimIsSelfEcho =
                   this.isSelfEcho(text)
-                  || (energyLooksLikeEcho && !looksLikeBookingTimeAnswer(text));
+                  || (energyLooksLikeEcho && !looksLikeBookingTimeAnswer(text) && !looksLikeShortContextualAnswer(text));
                 if (shouldBargeOnRealtimePartial({
                   greetingOrSystem: this.systemPlaybackActive || this.greetingBargeLocked(),
                   inEchoGrace,
@@ -3574,7 +3601,7 @@ export class OrchestrationPipeline implements VoiceSession {
                   minChars,
                   isGreetingOnly: greetingOnly,
                   isHardInterrupt: isHardInterruptTranscript(text, interimIsSelfEcho),
-                  isBookingAnswer: looksLikeBookingTimeAnswer(text),
+                  isBookingAnswer: looksLikeBookingTimeAnswer(text) || isDomainOrAcronymAnswer(text),
                 })) {
                   this.triggerBargeIn("vad_partial", text, { speculative: true });
                   logger.info(
@@ -3741,9 +3768,14 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     
     const spellingHint = this.eagerPartialText.trim() || this._specLlmState?.partialSnapshot || "";
+    const expectedLang = this.requestedLangLatch || this.currentLang || this.agent.sttConfig.language;
     let transcript = preferEmailTranscript(
       spellingHint,
-      sanitizeSpokenEmailsInTranscript(normalizeSttPhonetics(rawTranscript)),
+      preferStableTranscript(
+        sanitizeSpokenEmailsInTranscript(normalizeSttPhonetics(rawTranscript)),
+        spellingHint,
+        expectedLang,
+      ),
     );
     this._turnCloseReason = closeReason;
     const _tStreamNow = performance.now();
@@ -3888,7 +3920,10 @@ export class OrchestrationPipeline implements VoiceSession {
         // Call 14160: "कल टेन थर्टी मैडम" while the agent was still offering 3/4 PM.
         // Energy never cleared the echo bar, so a real slot answer was discarded.
         // Keep content self-echo above; only skip the energy-only discard.
-        if (looksLikeBookingTimeAnswer(transcript) && !this.isSelfEcho(transcript)) {
+        if (
+          (looksLikeBookingTimeAnswer(transcript) || looksLikeShortContextualAnswer(transcript) || isDomainOrAcronymAnswer(transcript))
+          && !this.isSelfEcho(transcript)
+        ) {
           logger.info(
             {
               callId: this.config.callId,
@@ -3896,7 +3931,7 @@ export class OrchestrationPipeline implements VoiceSession {
               peakRms: Math.round(this.bargeInPeakRmsSinceSentence),
               echoBar: Math.round(echoBar),
             },
-            "Streaming STT: energy echo guard skipped — time/slot answer",
+            "Streaming STT: energy echo guard skipped — contextual caller answer",
           );
         } else {
           this.streamingBargeInWordCount = 0;
@@ -8086,7 +8121,7 @@ export class OrchestrationPipeline implements VoiceSession {
         callId: this.config.callId,
         agentName: this.agent.name,
         callerPhone: this.config.callerPhone,
-        args,
+        args: applyBookingEmailToSendArgs(this.bookingFlowState, args),
       });
     } else if (tool.type === "send_whatsapp") {
       return await sharedExecuteSendWhatsapp({
@@ -8101,7 +8136,10 @@ export class OrchestrationPipeline implements VoiceSession {
     } else if (tool.type === "cal_com") {
       return await this.executeCalCom(tool, args);
     } else if (tool.type === "native_booking") {
-      const result = await this.executeNativeBooking(tool, args);
+      const result = await this.executeNativeBooking(
+        tool,
+        applyBookingEmailToBookArgs(this.bookingFlowState, args),
+      );
       this.bookingFlowState = updateBookingFlowFromToolResult(
         this.bookingFlowState,
         tool.name || "book_appointment",
@@ -8865,7 +8903,12 @@ export class OrchestrationPipeline implements VoiceSession {
     // P0-A: Garbled transcript recovery — catch noise/garbage before it reaches the LLM
     const sttLang = this.currentLang || this.agent.sttConfig.language;
     const { isGarbled, reason: garbledReason } = checkTranscriptQuality(transcript, { expectedLang: sttLang });
-    if (isGarbled && !looksLikeSpokenEmailSpelling(transcript)) {
+    if (
+      isGarbled
+      && !looksLikeSpokenEmailSpelling(transcript)
+      && !isDomainOrAcronymAnswer(transcript)
+      && !looksLikeShortContextualAnswer(transcript)
+    ) {
       logger.warn({ callId: this.config.callId, transcript, garbledReason }, "Garbled transcript — responding with clarification");
       await this.respondWithClarification(sttLang);
       return;
@@ -8958,6 +9001,40 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       const toolResult = await this.handleToolCall(bookName, autoArgs);
       await this.continueWithToolResult(bookName, toolResult ?? "error: auto book failed", 0, _toolCallId);
+      return;
+    }
+
+    if (
+      shouldUpdateBookedEmail({
+        state: this.bookingFlowState,
+        alreadyBooked: this.schedulingActionConfirmed,
+      })
+      && this.bookingFlowState.lastBookingId
+      && this.bookingFlowState.pendingEmail
+    ) {
+      const email = this.bookingFlowState.pendingEmail;
+      const bookingId = this.bookingFlowState.lastBookingId;
+      logger.info(
+        { callId: this.config.callId, bookingId, email, evt: "booking_email_update" },
+        "Pipeline: updating booked attendee email after caller change",
+      );
+      this.logExec("Tool", "system", {
+        status: "info",
+        turnNumber: _currentTurnIndex,
+        metadata: { event: "Update Booking Email", bookingId, email },
+      });
+      const toolResult = await sharedExecuteUpdateBookingAttendeeEmail(
+        this.config.callId,
+        this.agent.id,
+        bookingId,
+        email,
+      );
+      this.bookingFlowState = updateBookingFlowFromToolResult(
+        this.bookingFlowState,
+        "update_booking_email",
+        toolResult,
+      );
+      await this.continueWithToolResult("update_booking_email", toolResult, 0);
       return;
     }
 
@@ -9851,6 +9928,7 @@ export class OrchestrationPipeline implements VoiceSession {
           lastUserText: transcript,
           prevLine: this.lastAssistantSpokenRaw.slice(0, 180),
           escalated: this.consecutiveRepeats >= 1,
+          alreadyAsked: extractRecentAgentQuestions(this.conversationHistory.messages),
         });
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
@@ -11115,15 +11193,17 @@ export class OrchestrationPipeline implements VoiceSession {
    * doesn't support live switching (Deepgram/Azure keep current behavior) or
    * when already on the requested language (reconnect-loop guard).
    */
-  private switchStreamSTTLanguage(lang: string): void {
+  private switchStreamSTTLanguage(lang: string, pin = false): void {
     const stream = this.streamSTT;
     if (!stream?.setLanguage) return;
-    if (this.streamSTTLang === lang) return;
+    // When pinning an explicit latch, still call setLanguage even if we already
+    // recorded this BCP-47 — the realtime socket may still be on `auto`.
+    if (!pin && this.streamSTTLang === lang) return;
     try {
-      stream.setLanguage(lang);
+      stream.setLanguage(lang, pin);
       this.streamSTTLang = lang;
       logger.info(
-        { callId: this.config.callId, lang },
+        { callId: this.config.callId, lang, pin },
         "Streaming STT language switched",
       );
     } catch (err) {
@@ -11182,13 +11262,15 @@ export class OrchestrationPipeline implements VoiceSession {
       }
     }
     
-    // DO NOT reconnect or switch STT WebSocket while agent is speaking or during echo grace.
-    // Acoustic echo from the speaker during greeting/reply can trigger false LID and destroy the STT connection.
+    // Legacy STT reconnects on language switch — do not do that while we are
+    // speaking (echo can false-LID and tear the socket). Realtime `config.update`
+    // for an explicit latch is safe: it applies at the next utterance boundary.
+    const pinExplicit = immediate && !!this.requestedLangLatch && this.requestedLangLatch === targetLang;
     const isSpeaking =
       Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs ||
       Date.now() < this.greetingEchoHoldUntil ||
       Date.now() < this.bargeInHoldUntil;
-    if (isSpeaking) return;
+    if (isSpeaking && !pinExplicit) return;
 
     const { shouldSwitch, gate } = shouldSwitchSttLang(
       { pendingLang: this._pendingSttSwitchLang, pendingCount: this._pendingSttSwitchCount },
@@ -11198,7 +11280,9 @@ export class OrchestrationPipeline implements VoiceSession {
     );
     this._pendingSttSwitchLang = gate.pendingLang;
     this._pendingSttSwitchCount = gate.pendingCount;
-    if (shouldSwitch) this.switchStreamSTTLanguage(targetLang);
+    if (shouldSwitch || pinExplicit) {
+      this.switchStreamSTTLanguage(targetLang, pinExplicit);
+    }
   }
 
   /**
@@ -11342,7 +11426,21 @@ export class OrchestrationPipeline implements VoiceSession {
       selected_booking_time: this.activeRescheduleBooking?.timeLabel ?? null,
       resolved_requested_datetime: args["preferred_date"] ?? null,
     }, "Pipeline: executeNativeCheckAvailability invoked");
+    const preferredKey = String(args["preferred_date"] ?? args["preferredDate"] ?? "next7").trim().toLowerCase();
+    if (
+      this.lastAvailabilityKey === preferredKey
+      && this.lastAvailabilityResult
+      && /requested_slot_|available_slots|no_availability/.test(this.lastAvailabilityResult)
+    ) {
+      logger.info(
+        { callId: this.config.callId, preferredKey, evt: "availability_cached" },
+        "Pipeline: returning cached check_availability (same slot already checked)",
+      );
+      return `${this.lastAvailabilityResult} (already checked this slot — do not re-check; proceed with name and email)`;
+    }
     const result = await sharedExecuteNativeCheckAvailability(this.config.callId, this.agent.id, tool, args);
+    this.lastAvailabilityKey = preferredKey;
+    this.lastAvailabilityResult = result;
     this.bookingFlowState = updateBookingFlowFromToolResult(
       this.bookingFlowState,
       tool.name || "check_availability",
@@ -12858,6 +12956,14 @@ export function tryEarlyPhraseDispatch(
       // voice broke between every comma).
       const indic = /[\u0900-\u0D7F]/.test(clause);
       const minClause = indic ? Math.max(24, minChars) : 5;
+      // Either/or questions must stay one clip (call 20094 underran after
+      // "Are you already running a travel business" / "क्या आप बी टू बी").
+      if (/^(or|and|but|ya|या|और|अथवा|लेकिन|அல்லது|இல்ல)\b/iu.test(rest.trim())) {
+        return null;
+      }
+      if (/\b(or|या|अथवा|அல்லது)\b/iu.test(rest.slice(0, 48))) {
+        return null;
+      }
       if (clause.length >= minClause) {
         return { clause, rest };
       }
