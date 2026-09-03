@@ -76,4 +76,11 @@ describe("call 20257 — greeting + VAD + empty/partial must not start a turn", 
   it("speech_start + wait/stop/இருங்க is an immediate interrupt even during the opener", () => {
     expect(decide20257("wait stop இருங்க")).toEqual({ cutTts: true, processTurn: true });
   });
+
+  it("cuts TTS when the caller talks over a new clip (call 20274)", () => {
+    expect(decide20257("Start continue", { greetingPlaying: false }))
+      .toEqual({ cutTts: true, processTurn: true });
+    expect(decide20257("Hello, hello, are you there?", { greetingPlaying: false }))
+      .toEqual({ cutTts: true, processTurn: true });
+  });
 });

@@ -2332,6 +2332,11 @@ export class OrchestrationPipeline implements VoiceSession {
       // used to skip this and audio_gate the entire opener — 18s dead air
       // (call 14251: answerToFirstAudioMs 18099).
       this.interruptionMgr.onUserSpeechEnd();
+      // Call 20274: caller was already mid-utterance when TTS started, so we
+      // never got a fresh speech_start. Re-inspect on speech_end while playing.
+      if (this.isPlaying || this.isSendingTtsAudio) {
+        this.maybeBargeFromRealtimeVadStart();
+      }
       if (
         this.agent.semanticTurnDetection
         && !this.isPlaying
@@ -3536,21 +3541,15 @@ export class OrchestrationPipeline implements VoiceSession {
                 // interrupted because we required a warm floor).
                 const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
                 this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
-                const interimEchoBar = this.echoBarRms();
-                const energyLooksLikeEcho =
-                  interimEchoBar !== null
-                  && this.bargeInPeakRmsSinceSentence <= interimEchoBar;
-                // Booking/slot answers ("2pm", "காலை") must still cut TTS even when
-                // inbound RMS is echo-dominated — that is the talk-over the caller
-                // is trying to make (call 14251). Isolated "hello" while we are
-                // talking is leftover greeting / carrier echo (call 16832).
+                // Isolated "hello" while we are talking is leftover greeting /
+                // carrier echo (call 16832). RMS echo must not veto a usable
+                // non-echo partial (call 20274: "are you there?" never cut).
                 const greetingOnly = isCallerAttentionUtterance(text);
                 const interimIsSelfEcho =
                   this.isSelfEcho(text)
-                  || isLikelyCrosstalkUtterance(text)
-                  || (energyLooksLikeEcho && !looksLikeBookingTimeAnswer(text) && !looksLikeShortContextualAnswer(text));
+                  || isLikelyCrosstalkUtterance(text);
                 if (greetingOnly || interimIsSelfEcho) {
-                  // opener mute / echo / room crosstalk — inspect only
+                  // opener mute / content echo / room crosstalk — inspect only
                 } else if (this.shouldInterruptFromCallerTranscript(text)) {
                   this.triggerBargeIn("vad_partial", text, { speculative: true });
                   logger.info(
@@ -5805,8 +5804,9 @@ export class OrchestrationPipeline implements VoiceSession {
           const emitFirstSentence = (chunk: string) => {
             if (firstSentenceSent || !onFirstSentence) return;
             pendingSpeak += chunk;
-            const { sentences } = extractSentences(pendingSpeak, this.agent.ttsMinSentenceChars);
-            const first = sentences[0]?.trim();
+            // Call 20274: comma early-split played "Sorry" then 2.6s of dead air
+            // while the rest of the resume greeting was still in the LLM.
+            const first = pickStreamedGreetingHead(pendingSpeak);
             if (!first) return;
             firstSentenceSent = true;
             onFirstSentence(first);
@@ -5827,8 +5827,7 @@ export class OrchestrationPipeline implements VoiceSession {
             }
           );
           if (!firstSentenceSent && greeting.trim()) {
-            const { sentences, remainder } = extractSentences(greeting, this.agent.ttsMinSentenceChars);
-            onFirstSentence?.((sentences[0] || remainder || greeting).trim());
+            onFirstSentence?.(pickStreamedGreetingHead(greeting) || greeting.trim());
           }
           const greetingLlmMs = Date.now() - _greetLlmStartAt;
           logger.info(
@@ -7612,6 +7611,9 @@ export class OrchestrationPipeline implements VoiceSession {
       // caller audio during the wait could be sampled as "echo".
       this.bargeInSentenceStartAt = Date.now();
       this.bargeInPeakRmsSinceSentence = 0;
+      // Call 20274 turn 1/7: VAD started before this clip, so speech_start
+      // never inspected barge-in. Check pending STT now that we are on the wire.
+      this.maybeBargeFromRealtimeVadStart();
 
       // Drift-compensated pacing with a short send-ahead so VoBiz's jitter
       // buffer absorbs a 40–80 ms event-loop hitch instead of chopping speech.
@@ -9114,7 +9116,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // logic, so dropping standalone filler jobs does not lose content. If a filler
       // is the ONLY output (turn 1 pure "ஆமா"), it still plays (isBackchannelOnly
       // does not block a multi-word reply that STARTS with an ack).
-      if (isBackchannelOnlyUtterance(cleanText)) {
+      if (isBackchannelOnlyUtterance(cleanText) && sentenceQueue.length > 0) {
         logger.info(
           { callId: this.config.callId, evt: "standalone_filler_suppressed", textSnippet: cleanText.slice(0, 80) },
           "Pipeline: suppressed standalone ultra-short filler — will merge with next substantive sentence",
@@ -12761,6 +12763,20 @@ function stripBracketedInstructions(text: string): string {
  *      - Domain names:    "google.com" (period not followed by space)
  *  • Falls back to comma-clause dispatch for long responses with no boundary yet.
  */
+/**
+ * First audible greeting clause. Wait for a real sentence — comma early-split
+ * of "Sorry," left 2.6s of dead air on call 20274.
+ */
+export function pickStreamedGreetingHead(pending: string): string {
+  const t = pending.trim();
+  if (t.length < 24) return "";
+  const m = t.match(/^[\s\S]{24,}?[.!?…](?:\s|$)/);
+  if (!m) return "";
+  const head = m[0].trim();
+  if (/^(sorry|hello|hi|hey|okay|ok|right|thanks)[,.]?$/i.test(head)) return "";
+  return head;
+}
+
 export function extractSentences(text: string, minCommaClauseChars = 8): { sentences: string[]; remainder: string } {
   const sentences: string[] = [];
   let i = 0;

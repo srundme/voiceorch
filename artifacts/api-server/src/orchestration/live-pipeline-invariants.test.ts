@@ -107,6 +107,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(vadBody).toContain("shouldInterruptFromCallerTranscript");
     expect(vadBody.indexOf("shouldInterruptFromCallerTranscript"))
       .toBeLessThan(vadBody.indexOf("triggerBargeIn"));
+    const speechEndBody = methodBody("wireStreamSttCallbacks");
+    expect(speechEndBody).toContain("maybeBargeFromRealtimeVadStart");
+    expect(pipelineSrc).toContain("Call 20274: caller was already mid-utterance");
     const streamBody = methodBody("handleStreamingTranscript");
     expect(streamBody.indexOf("shouldDiscardOpenerTranscript"))
       .toBeLessThan(streamBody.indexOf("processTurn"));

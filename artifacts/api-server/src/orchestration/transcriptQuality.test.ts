@@ -259,6 +259,8 @@ describe("isCallerAudioDifficulty", () => {
     expect(isCallerAudioDifficulty("I can't hear you")).toBe(true);
     expect(isCallerAudioDifficulty("கேக்கல")).toBe(true);
     expect(isCallerAudioDifficulty("hello madam")).toBe(false);
+    expect(isCallerAudioDifficulty("Hello, hello, are you there?")).toBe(true);
+    expect(isCallerAudioDifficulty("are you there")).toBe(true);
   });
 });
 

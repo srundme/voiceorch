@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 process.env.DATABASE_URL ??= "postgres://test:test@127.0.0.1:5432/test";
-const { extractSentences, tryEarlyPhraseDispatch } = await import("./pipeline.js");
+const { extractSentences, tryEarlyPhraseDispatch, pickStreamedGreetingHead } = await import("./pipeline.js");
 
 // Regression test for the Tamil/Indic "duplicated opening clause" bug on the
 // telephony (pipeline.ts) path. The pipeline clause-split regex was missing the
@@ -133,5 +133,18 @@ describe("extractSentences — early dispatch during simulated stream", () => {
     expect(enqueued.length).toBeGreaterThan(0);
     expect(full.startsWith(enqueued.join(" "))).toBe(true);
     expect(pending.length).toBeGreaterThan(0);
+  });
+});
+
+describe("pickStreamedGreetingHead — call 20274", () => {
+  it("does not speak a lone Sorry comma-clause", () => {
+    expect(pickStreamedGreetingHead("Sorry,")).toBe("");
+    expect(pickStreamedGreetingHead("Sorry, the line cut out")).toBe("");
+  });
+
+  it("waits for the first real sentence of a resume greeting", () => {
+    expect(pickStreamedGreetingHead(
+      "Sorry, the line cut out there for a second. Picking up where we left off",
+    )).toBe("Sorry, the line cut out there for a second.");
   });
 });

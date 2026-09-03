@@ -152,6 +152,8 @@ export function isCallerAudioDifficulty(text: string): boolean {
     || /கேட்க(ல|வில்லை|முடியல)|கேக்க(ல|வில்லை)|கேட்குறது\s*(இல்ல|தெரியல)|சத்தம்\s*(கேக்க|இல்ல)/u.test(t)
     || /सुनाई\s*नहीं|आवाज़\s*नहीं|सुन\s*नहीं/u.test(t)
     || /கேட்டு\s*வேணாம்|கேட்கலைய்|கேட்கலை/u.test(t)
+    || /\b(are you there|can you hear(?:\s+me)?)\b/i.test(t)
+    || /^(hello[\s,]+)+hello\b/i.test(t)
   );
 }
 

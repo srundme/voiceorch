@@ -11,6 +11,7 @@ import { InterruptionManager } from "./interruption-manager.js";
 import {
   isAccidentalInterruptPhrase,
   isCallerAttentionUtterance,
+  isCallerAudioDifficulty,
   isDomainOrAcronymAnswer,
   isLikelyCrosstalkUtterance,
   isSemanticInterrupt,
@@ -32,7 +33,12 @@ export function shouldDiscardOpenerTranscript(
 ): boolean {
   const t = transcript.trim();
   if (!t) return true;
-  if (isSemanticInterrupt(t) || isHoldRequest(t) || interruptionMgr.isImmediateInterruptPhrase(t)) {
+  if (
+    isSemanticInterrupt(t)
+    || isHoldRequest(t)
+    || interruptionMgr.isImmediateInterruptPhrase(t)
+    || isCallerAudioDifficulty(t)
+  ) {
     return false;
   }
   return true;
@@ -51,8 +57,8 @@ export function shouldCutTtsFromCallerTranscript(opts: {
   if (!t) return false;
   if (!opts.agentSpeaking) return false;
   if (opts.isSelfEcho || isLikelyCrosstalkUtterance(t)) return false;
-  if (isCallerAttentionUtterance(t)) return false;
-  const stopHold = isPstnStopHold(t, opts.interruptionMgr);
+  if (isCallerAttentionUtterance(t) && !isCallerAudioDifficulty(t)) return false;
+  const stopHold = isPstnStopHold(t, opts.interruptionMgr) || isCallerAudioDifficulty(t);
   const booking = looksLikeBookingTimeAnswer(t) || isDomainOrAcronymAnswer(t);
   const inOpener = opts.greetingPlaybackActive || !!opts.systemPlaybackActive;
   if (!shouldBargeOnRealtimeVadStart({
