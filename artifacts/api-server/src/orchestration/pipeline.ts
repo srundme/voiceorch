@@ -1084,6 +1084,10 @@ export class OrchestrationPipeline implements VoiceSession {
   /** True after at least one sentence has played without a recent underrun. */
   private ttsWarmed = false;
   private ttsLastUnderrunAt = 0;
+  /** P0 fix (call 20094): Track outstanding TTS chunks to prevent premature playback completion.
+   *  Incremented when enqueue() adds a job, decremented when playJob() finishes.
+   *  playTask must not mark the turn complete while pendingTtsChunks > 0. */
+  private pendingTtsChunks = 0;
   /** Lost-turn backstop: one-shot force-flush timer armed on VAD speech_start (calls 4831/4833). */
   private _vadFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private _lastVadFlushAt = 0;
@@ -2166,11 +2170,27 @@ export class OrchestrationPipeline implements VoiceSession {
   /**
    * Eligible / hold-timeout with no transcript.final yet. Flush STT, then batch
    * recovery. Never synthesize from a pending partial.
+   * 
+   * P1 fix (call 20094): Extended with additional checks to prevent race condition
+   * where valid final transcript arrives while clarification is being prepared.
    */
   private async finalizeAwaitingTurn(generation: number, reason: string): Promise<void> {
     if (this.closed || this.isProcessing || this.isPlaying) return;
     if (this.semanticTurnGate.turnGeneration !== generation) return;
     if (!this.semanticTurnGate.isAwaitingFinal()) return;
+
+    // P1 fix (call 20094): Check if a final transcript just arrived before we proceed.
+    if (this._eouHeldFinal && this._eouHeldFinal.turnGeneration === generation) {
+      const held = this._eouHeldFinal;
+      this._eouHeldFinal = null;
+      this.semanticTurnGate.markCommitted();
+      logger.info(
+        { callId: this.config.callId, generation, transcript: held.text.slice(0, 80) },
+        "Semantic turn: final transcript arrived — processing instead of clarification",
+      );
+      void this.handleStreamingTranscript(held.text, held.emittedAt, held.closeReason);
+      return;
+    }
 
     logger.info(
       { callId: this.config.callId, generation, reason },
@@ -2179,6 +2199,12 @@ export class OrchestrationPipeline implements VoiceSession {
     try {
       this.streamSTT?.flush?.();
     } catch { /* adapter flush is best-effort */ }
+    
+    // P1 fix (call 20094): After flush, wait briefly for the final to arrive.
+    // STT finalization often arrives within 100-200ms of the flush.
+    await new Promise(r => setTimeout(r, 200));
+    
+    // Check AGAIN if generation or state changed, or if a final arrived during the wait.
     if (!this.semanticTurnGate.belongsTo(generation) || !this.semanticTurnGate.isAwaitingFinal()) return;
     if (this._eouHeldFinal) {
       if (this._eouHeldFinal.turnGeneration !== generation) {
@@ -2188,6 +2214,10 @@ export class OrchestrationPipeline implements VoiceSession {
       const held = this._eouHeldFinal;
       this._eouHeldFinal = null;
       this.semanticTurnGate.markCommitted();
+      logger.info(
+        { callId: this.config.callId, generation, transcript: held.text.slice(0, 80) },
+        "Semantic turn: final transcript arrived after flush — processing instead of clarification",
+      );
       void this.handleStreamingTranscript(held.text, held.emittedAt, held.closeReason);
       return;
     }
@@ -3696,8 +3726,20 @@ export class OrchestrationPipeline implements VoiceSession {
   /**
    * Called by the streaming STT callback when a final transcript arrives.
    * Handles barge-in detection and queuing if a turn is already in progress.
+   * 
+   * P1 fix (call 20094): Added cancellation of pending clarification timers.
    */
   private async handleStreamingTranscript(rawTranscript: string, sttEmittedAt = Date.now(), closeReason: TurnCloseReason = "stt_final"): Promise<void> {
+    // P1 fix (call 20094): Cancel any pending clarification timers when a valid final arrives.
+    if (this._eouFinalTimer) {
+      clearTimeout(this._eouFinalTimer);
+      this._eouFinalTimer = null;
+      logger.info(
+        { callId: this.config.callId, transcript: rawTranscript.slice(0, 80) },
+        "Cancelled pending clarification timer — valid final transcript arrived",
+      );
+    }
+    
     const spellingHint = this.eagerPartialText.trim() || this._specLlmState?.partialSnapshot || "";
     let transcript = preferEmailTranscript(
       spellingHint,
@@ -8573,6 +8615,8 @@ export class OrchestrationPipeline implements VoiceSession {
     // A second reset also happens in handleStreamingTranscript whenever a
     // transcript arrives while the agent is not playing (belt-and-suspenders).
     this.streamingBargeInWordCount = 0;
+    // P0 fix (call 20094): Reset pending TTS chunk counter at the start of each turn.
+    this.pendingTtsChunks = 0;
     // Reset per-turn sentence tracker. _interruptionHint is NOT reset here —
     // it was captured at the END of the previous turn and is consumed later in
     // this call's historyForLlm assembly before the LLM is invoked.
@@ -9063,6 +9107,8 @@ export class OrchestrationPipeline implements VoiceSession {
           "Emotion tag forwarded to TTS",
         );
       }
+      // P0 fix (call 20094): Increment pending TTS chunk counter when enqueueing.
+      this.pendingTtsChunks++;
       sentenceQueue.push(this.startSentenceSynthesis(
         cleanText,
         this._activeTurnIndex,
@@ -9089,6 +9135,8 @@ export class OrchestrationPipeline implements VoiceSession {
           if (job.skipDrain) {
             this.recordAgentSpeech(job.text);
             await job.ready;
+            // P0 fix (call 20094): Decrement pending counter for skipDrain jobs too.
+            this.pendingTtsChunks = Math.max(0, this.pendingTtsChunks - 1);
             continue;
           }
           this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
@@ -9105,14 +9153,28 @@ export class OrchestrationPipeline implements VoiceSession {
             const reason = toReadableError(err, "TTS error");
             logger.error({ callId: this.config.callId, err, text: job.text.slice(0, 40) }, reason);
             this.reportTtsFailure(reason, { where: "sentence", text: job.text.slice(0, 40) });
+          } finally {
+            // P0 fix (call 20094): Decrement pending TTS chunk counter after playback completes.
+            this.pendingTtsChunks = Math.max(0, this.pendingTtsChunks - 1);
           }
           if (this.bargeInRequested) break;
           // Max-duration graceful stop: the current sentence has finished playing,
           // so break BEFORE pulling the next one. The drain below still runs so the
           // final word is not clipped, then the caller tears the session down.
           if (this.endAfterCurrentSentence) break;
-        } else if (allEnqueued) {
+        } else if (allEnqueued && this.pendingTtsChunks === 0) {
+          // P0 fix (call 20094): Only break when BOTH conditions are met:
+          // 1. LLM has finished streaming (allEnqueued=true)
+          // 2. All enqueued TTS chunks have completed (pendingTtsChunks=0)
+          // This prevents marking playback complete before all TTS chunks arrive.
           break;
+        } else if (allEnqueued && this.pendingTtsChunks > 0) {
+          // P0 diagnostic (call 20094): Log when playback is waiting for pending chunks.
+          logger.info(
+            { callId: this.config.callId, pendingTtsChunks: this.pendingTtsChunks, queueIdx: idx, queueLen: sentenceQueue.length },
+            "TTS playback waiting for pending chunks to complete",
+          );
+          await new Promise<void>((r) => { wakePlayer = r; });
         } else {
           await new Promise<void>((r) => { wakePlayer = r; });
         }
@@ -11082,8 +11144,27 @@ export class OrchestrationPipeline implements VoiceSession {
   /**
    * Passive or explicit streaming-STT language switch with consecutive-detection
    * guard (2 finals) unless `immediate` (explicit caller language request).
+   * 
+   * P2 fix (call 20094): Once an explicit non-English language is latched,
+   * prevent STT from drifting to other languages on subsequent turns.
    */
   private maybeSwitchStreamingSttLang(targetLang: string, immediate = false): void {
+    // P2 fix (call 20094): If an explicit non-English language is latched and this
+    // is NOT another explicit request, keep STT locked to the latched language.
+    // Example: Caller says "जी, हिंदी से बोलना" → latch hi-IN. On subsequent
+    // turns, even if STT mis-detects Kannada or English, do NOT switch the socket.
+    // Only another explicit request (immediate=true) can change the locked language.
+    if (this.requestedLangLatch && !this.requestedLangLatch.startsWith("en-") && !immediate) {
+      // Non-English language explicitly requested and locked — do not drift to other languages.
+      if (targetLang !== this.requestedLangLatch) {
+        logger.info(
+          { callId: this.config.callId, lockedLang: this.requestedLangLatch, attemptedLang: targetLang },
+          "STT language locked — ignoring passive switch attempt",
+        );
+        return;
+      }
+    }
+    
     // DO NOT reconnect or switch STT WebSocket while agent is speaking or during echo grace.
     // Acoustic echo from the speaker during greeting/reply can trigger false LID and destroy the STT connection.
     const isSpeaking =
