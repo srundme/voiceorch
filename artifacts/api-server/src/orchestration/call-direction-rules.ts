@@ -42,6 +42,30 @@ const LANG_LABEL: Record<string, string> = {
   pa: "Punjabi",
 };
 
+const LANG_KEY_TO_BCP47: Record<string, string> = {
+  en: "en-IN",
+  ta: "ta-IN",
+  hi: "hi-IN",
+  te: "te-IN",
+  kn: "kn-IN",
+  ml: "ml-IN",
+  mr: "mr-IN",
+  bn: "bn-IN",
+  gu: "gu-IN",
+  pa: "pa-IN",
+};
+
+/**
+ * Memory language_pref is stored as a short code (`ta`, `hi`) by
+ * normalizeFactValue. Session start used to look up only English names
+ * (`tamil`), so `ta` never remapped STT (call 20257 stayed en-IN).
+ */
+export function mapLanguagePrefToBcp47(raw: string | null | undefined): string | undefined {
+  const v = (raw ?? "").trim();
+  if (!v) return undefined;
+  return LANG_KEY_TO_BCP47[resolveOpeningLanguageKey(v)];
+}
+
 /** Prefix greeting (+ optional remembered name) onto purpose-of-call tails.
  *  Use a period (not comma) so TTS plays two beats — greeting, then the
  *  purpose question — instead of rushing one long line. */

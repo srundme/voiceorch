@@ -85,16 +85,13 @@ export function resolveBargeInEnergyThreshold(explicit: unknown): number {
 }
 
 /**
- * RAW (pre-GTCRN) RMS a telephony utterance must reach to count as the person
- * on the phone. Neural isolation keeps ANY speech — including a friend a few
- * metres away — so barge-in / turn-commit must score the mic energy, not the
- * enhanced signal.
+ * RAW mic RMS a telephony utterance must reach to count as the person
+ * on the phone. Nearby bystanders can still trip VAD, so barge-in /
+ * turn-commit score the mic energy.
  *
  * Raised from 800 → 1200 after call 19901: user's friend speaking 1-2m away
- * was captured by STT, causing cross-talk transcripts. GTCRN enhances ALL speech,
- * so this RAW energy threshold must be high enough to distinguish phone-holder
- * from nearby bystanders. 1200 matches the legacy Normal barge-in bar and is
- * more conservative than original 800.
+ * was captured by STT, causing cross-talk transcripts. 1200 matches the
+ * legacy Normal barge-in bar and is more conservative than original 800.
  *
  * LOWERED TO 900 (2026-09-03): Call 20074 showed barge-in never triggering even
  * when user was actively trying to interrupt. 1200 was too high for some mic/

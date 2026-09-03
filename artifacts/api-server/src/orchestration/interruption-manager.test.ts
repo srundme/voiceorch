@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { FILLER_SEQUENCE_ID, InterruptionManager, bargeInMinChars } from "./interruption-manager.js";
+import {
+  FILLER_SEQUENCE_ID,
+  InterruptionManager,
+  bargeInMinChars,
+  resolvePlayingWordFloor,
+  PLAYING_INTERRUPT_WORD_FLOOR,
+  AMBIGUOUS_INTERRUPT_WORD_FLOOR,
+} from "./interruption-manager.js";
 
 describe("InterruptionManager", () => {
   afterEach(() => {
@@ -84,22 +91,36 @@ describe("InterruptionManager", () => {
     expect(m.isValidSequence(FILLER_SEQUENCE_ID)).toBe(true);
   });
 
-  it("shouldTriggerInterruption respects word count and accidental interruption phrases", () => {
-    const m = new InterruptionManager({ wordsForInterruption: 3 });
+  it("shouldTriggerInterruption uses a 2-word floor while TTS plays", () => {
+    const m = new InterruptionManager();
+    expect(m.getWordsForInterruption()).toBe(PLAYING_INTERRUPT_WORD_FLOOR);
 
-    // Not playing audio -> false
     expect(m.shouldTriggerInterruption(5, "one two three four five", false)).toBe(false);
-
-    // Playing audio + word count < 3 -> false
-    expect(m.shouldTriggerInterruption(2, "hello sir", true)).toBe(false);
-
-    // Playing audio + word count >= 3 -> true
+    expect(m.shouldTriggerInterruption(1, "hello", true)).toBe(false);
+    expect(m.shouldTriggerInterruption(2, "yes okay", true)).toBe(true);
+    expect(m.shouldTriggerInterruption(1, "uh", true)).toBe(false);
+    expect(m.shouldTriggerInterruption(2, "uh yes", true)).toBe(false);
     expect(m.shouldTriggerInterruption(3, "one two three", true)).toBe(true);
 
-    // Playing audio + keyword match ("stop", "wait", "நிறுத்து", "रुक") -> true even if 1 word
     expect(m.shouldTriggerInterruption(1, "stop", true)).toBe(true);
     expect(m.shouldTriggerInterruption(1, "நிறுத்து", true)).toBe(true);
     expect(m.shouldTriggerInterruption(1, "रुक", true)).toBe(true);
+    expect(m.shouldTriggerInterruption(3, "wait stop இருங்க", true)).toBe(true);
+  });
+
+  it("first-speech mute ignores room speech and still honors stop/hold", () => {
+    const m = new InterruptionManager();
+    expect(m.shouldTriggerInterruption(1, "Hello", true, false)).toBe(false);
+    expect(m.shouldTriggerInterruption(3, "Hello இங்க பாருங்க", true, false)).toBe(false);
+    expect(m.shouldTriggerInterruption(2, "yes okay", true, false)).toBe(false);
+    expect(m.shouldTriggerInterruption(1, "wait", true, false)).toBe(true);
+    expect(m.shouldTriggerInterruption(3, "wait stop இருங்க", true, false)).toBe(true);
+  });
+
+  it("raises the playing floor to 3 for ambiguous / low-confidence partials", () => {
+    expect(resolvePlayingWordFloor({ transcript: "yes okay" })).toBe(PLAYING_INTERRUPT_WORD_FLOOR);
+    expect(resolvePlayingWordFloor({ transcript: "uh yes" })).toBe(AMBIGUOUS_INTERRUPT_WORD_FLOOR);
+    expect(resolvePlayingWordFloor({ transcript: "Hello", lowConfidence: true })).toBe(AMBIGUOUS_INTERRUPT_WORD_FLOOR);
   });
 
   it("exposes wordsForInterruption from options", () => {

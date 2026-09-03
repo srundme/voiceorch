@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCallDirectionRule,
   inboundPurposeExamples,
+  mapLanguagePrefToBcp47,
   resolveCallOpeningLanguage,
   resolveInboundGreetingTtsSpeed,
   resolveOpeningLanguageKey,
@@ -19,6 +20,21 @@ describe("resolveOpeningLanguageKey", () => {
   it("defaults empty to english", () => {
     expect(resolveOpeningLanguageKey(null)).toBe("en");
     expect(resolveOpeningLanguageKey("")).toBe("en");
+  });
+});
+
+describe("mapLanguagePrefToBcp47", () => {
+  it("maps stored memory codes and names (call 20257: ta stayed en-IN)", () => {
+    expect(mapLanguagePrefToBcp47("ta")).toBe("ta-IN");
+    expect(mapLanguagePrefToBcp47("tamil")).toBe("ta-IN");
+    expect(mapLanguagePrefToBcp47("ta-IN")).toBe("ta-IN");
+    expect(mapLanguagePrefToBcp47("hi")).toBe("hi-IN");
+    expect(mapLanguagePrefToBcp47("english")).toBe("en-IN");
+  });
+
+  it("does not invent a language for empty memory", () => {
+    expect(mapLanguagePrefToBcp47(null)).toBeUndefined();
+    expect(mapLanguagePrefToBcp47("")).toBeUndefined();
   });
 });
 

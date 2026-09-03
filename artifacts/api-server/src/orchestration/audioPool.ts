@@ -17,8 +17,8 @@ import { logger } from "../lib/logger.js";
 
 /**
  * Cap the worker pool. Railway (and other hosts) often report a large shared
- * CPU count; spawning cpus()-1 workers each loading GTCRN ONNX at boot OOMs the
- * container right after "Server listening", so /api/healthz never stays up.
+ * CPU count; spawning cpus()-1 workers at boot can OOM the container right
+ * after "Server listening", so /api/healthz never stays up.
  * Override with AUDIO_POOL_SIZE when you intentionally want a larger pool.
  */
 const AUDIO_POOL_MAX = 8;
@@ -39,7 +39,7 @@ export interface AudioProcessResult {
   pcm8k: Buffer;
   pcm16k: Buffer;
   hasSpeech: boolean;
-  /** Pre-isolation frame RMS. Used to reject far-field bystanders; GTCRN keeps their speech. */
+  /** Pre-gate frame RMS. Used to reject far-field bystanders. */
   rawRms: number;
 }
 
@@ -197,7 +197,6 @@ export function processRawPcm8kIn(
 
 export function destroyAudioSession(callId: string): void {
   fallbackNc.delete(callId);
-  fallbackIso.delete(callId);
   if (!ready) return;
   const worker = workerFor(callId);
   worker.destroySession(callId);
@@ -213,12 +212,9 @@ import {
   frameRms,
   NoiseCanceller,
 } from "./audio.js";
-import { VoiceIsolator, isVoiceIsolationEnabled } from "./voice-isolator.js";
-
 const VAD_THRESHOLD = 100;
 const GATE_RATIO_DEFAULT = 4.0;
 const fallbackNc = new Map<string, NoiseCanceller>();
-const fallbackIso = new Map<string, VoiceIsolator>();
 
 async function processInline(
   callId: string,
@@ -232,32 +228,12 @@ async function processInline(
   const rawRms = frameRms(pcm8k);
   let pcm16k: Buffer | null = null;
   if (noiseCancel) {
-    if (isVoiceIsolationEnabled()) {
-      let iso = fallbackIso.get(callId);
-      if (!iso) {
-        iso = new VoiceIsolator(callId);
-        fallbackIso.set(callId, iso);
-      }
-      const isolated = await iso.process8k(pcm8k);
-      if (isolated) {
-        pcm8k = isolated.pcm8k;
-        pcm16k = isolated.pcm16k;
-      } else {
-        let nc = fallbackNc.get(callId);
-        if (!nc) {
-          nc = new NoiseCanceller(gateRatio);
-          fallbackNc.set(callId, nc);
-        }
-        pcm8k = nc.process(pcm8k);
-      }
-    } else {
-      let nc = fallbackNc.get(callId);
-      if (!nc) {
-        nc = new NoiseCanceller(gateRatio);
-        fallbackNc.set(callId, nc);
-      }
-      pcm8k = nc.process(pcm8k);
+    let nc = fallbackNc.get(callId);
+    if (!nc) {
+      nc = new NoiseCanceller(gateRatio);
+      fallbackNc.set(callId, nc);
     }
+    pcm8k = nc.process(pcm8k);
   }
   if (!pcm16k) pcm16k = upsample8to16(pcm8k);
   return {

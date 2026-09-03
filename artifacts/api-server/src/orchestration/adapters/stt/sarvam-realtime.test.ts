@@ -280,14 +280,21 @@ describe("shouldBargeOnRealtimeVadStart", () => {
     expect(shouldBargeOnRealtimeVadStart({ ...base, agentSpeaking: false, isWebcall: true })).toBe(false);
   });
 
-  it("cuts on Sarvam vad.speech_start while the agent is talking (Pipecat should_interrupt)", () => {
-    expect(shouldBargeOnRealtimeVadStart(base)).toBe(true);
-    expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true, hasUsablePartial: false })).toBe(true);
+  it("never interrupts from bare speech_start without a usable STT partial", () => {
+    expect(shouldBargeOnRealtimeVadStart(base)).toBe(false);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true, hasUsablePartial: false })).toBe(false);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true })).toBe(true);
   });
 
-  it("holds through greeting and echo grace", () => {
-    expect(shouldBargeOnRealtimeVadStart({ ...base, greetingOrSystem: true })).toBe(false);
-    expect(shouldBargeOnRealtimeVadStart({ ...base, inEchoGrace: true })).toBe(false);
+  it("holds through greeting and echo grace unless the caller said stop/wait", () => {
+    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, greetingOrSystem: true })).toBe(false);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, inEchoGrace: true })).toBe(false);
+    expect(shouldBargeOnRealtimeVadStart({
+      ...base,
+      hasUsablePartial: true,
+      greetingOrSystem: true,
+      isHardInterrupt: true,
+    })).toBe(true);
   });
 });
 

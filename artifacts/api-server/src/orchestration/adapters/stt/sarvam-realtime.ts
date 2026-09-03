@@ -264,11 +264,9 @@ export function buildRealtimeConfigUpdate(opts: {
 }
 
 /**
- * Official Sarvam realtime barge-in (Pipecat `should_interrupt=True`):
- * `vad.speech_start` while the agent is talking → clearAudio.
- * Greeting / system lines and the carrier echo-grace stay blocked.
- * Do not add energy or "hard interrupt" extras — server VAD already filtered
- * the onset (PSTN table: threshold 0.7, min_speech 200 ms).
+ * PSTN: vad.speech_start is a signal to inspect speech, not to interrupt.
+ * Require a usable STT partial. Greeting / echo-grace stay blocked unless
+ * the caller already passed a hard interrupt (stop/wait) into this gate.
  */
 export function shouldBargeOnRealtimeVadStart(opts: {
   agentSpeaking: boolean;
@@ -280,6 +278,8 @@ export function shouldBargeOnRealtimeVadStart(opts: {
   isHardInterrupt?: boolean;
 }): boolean {
   if (!opts.agentSpeaking) return false;
+  if (!opts.hasUsablePartial) return false;
+  if (opts.isHardInterrupt) return true;
   if (opts.greetingOrSystem) return false;
   if (opts.inEchoGrace) return false;
   return true;

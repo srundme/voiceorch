@@ -100,7 +100,7 @@ import {
   type CallerContext,
   type NameLatchTier,
 } from "./callerMemory.js";
-import { buildCallDirectionRule } from "./call-direction-rules.js";
+import { buildCallDirectionRule, mapLanguagePrefToBcp47 } from "./call-direction-rules.js";
 import { performSquadAgentHandoff } from "../services/squad-handoff.js";
 import { completeLiveSquadRun, ensureLiveSquadRunForCall } from "../services/squad-engine.js";
 import {
@@ -742,10 +742,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // Voice Memory — default OFF (opt-in). Remembers voiceprints + mid-call handoff.
     voiceMemoryEnabled:            (agentCfg["voiceMemoryEnabled"]            as boolean | undefined) ?? false,
     // P1-G: Engine — interruption & pacing
-    // Default 3: 2-word STT stubs ("call பண்ண", "Hello Madam" mid-cut) were
-    // false-firing word-count barge-in too often on telephony. Semantic
-    // interrupt keywords (stop/wait) still bypass the word count.
-    wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 3,
+    // PSTN default 2 while TTS plays; ambiguous partials raise to 3 in
+    // InterruptionManager. Bare VAD never cuts. Stop/wait still bypass.
+    wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 2,
     // Legacy form default was 350ms — rewrite in-memory so existing agents get
     // snappy turns without requiring a UI re-save. Intentional non-350 values keep.
     incrementalDelay: (() => {
@@ -1074,14 +1073,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // agent is in auto-detect mode. Strict fixed-language agents must not inherit
     // a remembered preference from a prior multilingual call.
     if (agentConfig.languageAutoDetect) {
-      const LANG_PREF_TO_BCP47: Record<string, string> = {
-        "english": "en-IN", "hindi": "hi-IN", "tamil": "ta-IN",
-        "telugu": "te-IN", "kannada": "kn-IN", "malayalam": "ml-IN",
-        "marathi": "mr-IN", "bengali": "bn-IN", "gujarati": "gu-IN",
-        "punjabi": "pa-IN", "odia": "or-IN", "urdu": "ur-IN",
-      };
       const langPrefRaw = latchedFactsMap.get("language_pref");
-      const mappedSttLang = langPrefRaw ? LANG_PREF_TO_BCP47[langPrefRaw.toLowerCase()] : undefined;
+      const mappedSttLang = mapLanguagePrefToBcp47(langPrefRaw);
       if (mappedSttLang && mappedSttLang !== agentConfig.sttConfig.language) {
         const prevSttLang = agentConfig.sttConfig.language;
         agentConfig.sttConfig.language = mappedSttLang;

@@ -7083,13 +7083,13 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       stopSpeakingNumWords: (() => {
         const fromWords = (agent as any).agentConfig?.wordsForInterruption;
         const fromPlan = (agent as any).agentConfig?.stopSpeakingPlan?.numWords;
-        return clampInterruptWords(fromWords ?? fromPlan ?? 3);
+        return clampInterruptWords(fromWords ?? fromPlan ?? 2);
       })(),
       stopSpeakingVoiceSecs: (() => {
         const words = clampInterruptWords(
           (agent as any).agentConfig?.wordsForInterruption
             ?? (agent as any).agentConfig?.stopSpeakingPlan?.numWords
-            ?? 3,
+            ?? 2,
         );
         return voiceSecondsFromInterruptWords(words);
       })(),

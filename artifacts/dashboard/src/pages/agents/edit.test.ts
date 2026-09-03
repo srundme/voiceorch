@@ -312,8 +312,8 @@ describe("buildUpdateAgentPayload", () => {
     });
     const cfg = payload.agentConfig as any;
     expect(cfg?.bargeInEnergyThreshold).toBe(800);
-    expect(cfg?.wordsForInterruption).toBe(3);
-    expect(cfg?.stopSpeakingPlan).toEqual({ numWords: 3, voiceSeconds: 0.45, backOffSeconds: 1 });
+    expect(cfg?.wordsForInterruption).toBe(2);
+    expect(cfg?.stopSpeakingPlan).toEqual({ numWords: 2, voiceSeconds: 0.3, backOffSeconds: 1 });
   });
 
   it("rejects energy below 800 in the form schema", () => {

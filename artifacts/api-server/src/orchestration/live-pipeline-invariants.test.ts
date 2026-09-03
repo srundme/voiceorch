@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -92,6 +92,29 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("playing welcome before greeting LLM");
   });
 
+  it("streams the first greeting sentence before the LLM finishes (call 20257 boot)", () => {
+    expect(pipelineSrc).toContain("_greetingFirstSentence");
+    expect(pipelineSrc).toContain("playing first greeting sentence before LLM done");
+  });
+
+  it("never interrupts TTS from bare VAD — Audio → STT → InterruptionManager (call 20257)", () => {
+    expect(pipelineSrc).toContain("shouldInterruptFromCallerTranscript");
+    expect(pipelineSrc).toContain("shouldCutTtsFromCallerTranscript");
+    expect(pipelineSrc).toContain("shouldDiscardOpenerTranscript");
+    expect(pipelineSrc).toContain("vad.speech_start only");
+    expect(pipelineSrc).toContain("maybeBargeFromRealtimeVadStart");
+    const vadBody = methodBody("maybeBargeFromRealtimeVadStart");
+    expect(vadBody).toContain("shouldInterruptFromCallerTranscript");
+    expect(vadBody.indexOf("shouldInterruptFromCallerTranscript"))
+      .toBeLessThan(vadBody.indexOf("triggerBargeIn"));
+    const streamBody = methodBody("handleStreamingTranscript");
+    expect(streamBody.indexOf("shouldDiscardOpenerTranscript"))
+      .toBeLessThan(streamBody.indexOf("processTurn"));
+    expect(pipelineSrc).toContain("room_crosstalk");
+    expect(pipelineSrc).toContain("first-speech mute");
+    expect(pipelineSrc).not.toContain("voice-isolator");
+  });
+
   it("synthesizes Cartesia and Sarvam at native 8 kHz on 8 kHz legs; 16 kHz FIR is opt-in", () => {
     expect(pipelineSrc).toContain("CARTESIA_TTS_16K");
     expect(pipelineSrc).toContain("SARVAM_TTS_16K");
@@ -111,5 +134,16 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toMatch(/TTS_PREBUFFER_GREETING_MS \?\? 400\)/);
     // Warm prebuffer raised again after call 20094 (six underruns in <2 min).
     expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 1000\)/);
+  });
+
+  it("does not ship GTCRN / voice-isolator on the live audio path (call 20257)", () => {
+    const orchDir = dirname(fileURLToPath(import.meta.url));
+    const workerSrc = readFileSync(resolve(orchDir, "audioWorker.ts"), "utf8");
+    expect(existsSync(resolve(orchDir, "voice-isolator.ts"))).toBe(false);
+    expect(existsSync(resolve(orchDir, "gtcrn-stft.ts"))).toBe(false);
+    expect(existsSync(resolve(orchDir, "gtcrn_simple.onnx"))).toBe(false);
+    expect(workerSrc).not.toContain("voice-isolator");
+    expect(workerSrc).not.toContain("gtcrn");
+    expect(pipelineSrc).not.toContain("voice-isolator");
   });
 });

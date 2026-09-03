@@ -249,7 +249,7 @@ async function buildTargetAgentConfig(
     genderDetectionFemaleSalutation: "Ma'am",
     genderDetectionNeutralSalutation: "",
     voiceMemoryEnabled: false,
-    wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 3,
+    wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 2,
     incrementalDelay: (() => {
       const v = agentCfg["incrementalDelay"];
       if (typeof v !== "number" || !Number.isFinite(v)) return 0;

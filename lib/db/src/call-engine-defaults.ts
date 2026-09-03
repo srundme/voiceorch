@@ -8,7 +8,7 @@ export const CALL_ENGINE_SAFE = {
   asrEndpointingSilenceMs: 250,
   /** Extra post-transcript wait before LLM — 0 keeps turn latency snappy. */
   incrementalDelay: 0,
-  wordsForInterruption: 3,
+  wordsForInterruption: 2,
   stopSpeakingVoiceFloor: 0.2,
   minEnergy: 800,
   minEndpointingMs: 100,

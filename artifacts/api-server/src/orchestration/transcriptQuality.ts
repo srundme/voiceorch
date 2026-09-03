@@ -6,6 +6,8 @@
  *   C) Semantic barge-in keyword detection → instant TTS interruption
  */
 
+import { isHoldRequest } from "./conversationDiscipline.js";
+
 export interface TranscriptQualityOptions {
   /** BCP-47 language the STT stream was configured for (e.g. en-IN, ta-IN). */
   expectedLang?: string | null;
@@ -725,6 +727,25 @@ export function isCallerAttentionUtterance(text: string): boolean {
   const t = text.trim().toLowerCase().replace(/[.!?]+$/g, "");
   if (!t) return false;
   return /^(hello|hi|hey|vanakkam|வணக்கம்|ஹலோ)(\s+(sir|madam|சார்|மேடம்))?$/.test(t);
+}
+
+/**
+ * Room / meeting talk aimed at someone else, not the agent.
+ * Call 20257: "Hello இங்க பாருங்க" barged the greeting; "Participants…" then
+ * "punishment… protocol" became a real turn. Transcript-side drop — not an
+ * RMS gate (call 14351).
+ */
+const CROSSTALK_RE =
+  /(?:இங்க\s*பாருங்க|இங்க\s*பார்|idhar\s*dekh|look\s*here|look\s*at\s*this|(?:^|[\s,.])participants?\b|\bunmute\b|share\s+(?:the\s+)?screen|punishment.{0,48}protocol|protocol.{0,48}punishment)/iu;
+
+export function isLikelyCrosstalkUtterance(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (isSemanticInterrupt(t) || isHoldRequest(t) || looksLikeBookingTimeAnswer(t)) {
+    return false;
+  }
+  if (looksLikeShortContextualAnswer(t) || isDomainOrAcronymAnswer(t)) return false;
+  return CROSSTALK_RE.test(t);
 }
 
 /**

@@ -22,6 +22,7 @@ import {
   preferStableTranscript,
   repairUnexpectedScriptLeak,
   isHardInterruptTranscript,
+  isLikelyCrosstalkUtterance,
 } from "./transcriptQuality.js";
 import { isAffirmationOnlyUtterance } from "./endpointing.js";
 
@@ -421,6 +422,21 @@ describe("isCallerAttentionUtterance", () => {
     expect(isCallerAttentionUtterance("Hello")).toBe(true);
     expect(isCallerAttentionUtterance("வணக்கம்")).toBe(true);
     expect(isCallerAttentionUtterance("காலைல 10 மணிக்கு சார்")).toBe(false);
+  });
+});
+
+describe("isLikelyCrosstalkUtterance", () => {
+  it("drops room / meeting talk from call 20257", () => {
+    expect(isLikelyCrosstalkUtterance("Hello இங்க பாருங்க")).toBe(true);
+    expect(isLikelyCrosstalkUtterance("Participants, okay. And, uh,")).toBe(true);
+    expect(isLikelyCrosstalkUtterance("punishment-க்கு இதுதான் நம்ம protocol சொல்லணும்")).toBe(true);
+  });
+
+  it("keeps real caller answers", () => {
+    expect(isLikelyCrosstalkUtterance("CRM")).toBe(false);
+    expect(isLikelyCrosstalkUtterance("yes")).toBe(false);
+    expect(isLikelyCrosstalkUtterance("WhatsApp and SMS add பண்ணுங்க")).toBe(false);
+    expect(isLikelyCrosstalkUtterance("wait one minute")).toBe(false);
   });
 });
 

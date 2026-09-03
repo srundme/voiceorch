@@ -33,7 +33,8 @@ import { extractEmotionTag, makeMarkupTagFilter, stripMarkupTags } from "./emoti
 import { languagePrefix, resolveToolFillerPhrase } from "./tool-fillers.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
-import { shouldBargeOnRealtimeVadStart, shouldBargeOnRealtimePartial, shouldCommitStreamingEnergyBarge, parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
+import { parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
+import { shouldCutTtsFromCallerTranscript, shouldDiscardOpenerTranscript } from "./pstn-interrupt-policy.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
@@ -110,13 +111,13 @@ import {
   isAffirmationOnlyUtterance,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeBookingTimeAnswer, looksLikeShortContextualAnswer, isDomainOrAcronymAnswer, preferStableTranscript, hasCallerAddressToken, isHardInterruptTranscript } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeBookingTimeAnswer, looksLikeShortContextualAnswer, isDomainOrAcronymAnswer, preferStableTranscript, hasCallerAddressToken, isLikelyCrosstalkUtterance } from "./transcriptQuality.js";
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { getCachedFillerPcm, setCachedFillerPcm } from "./fillerPcmCache.js";
 import { shouldSkipImmediateBackchannel, ttsContextIdForSequence } from "./filler-playback.js";
-import { FILLER_SEQUENCE_ID, InterruptionManager, bargeInMinChars } from "./interruption-manager.js";
+import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
@@ -1185,17 +1186,15 @@ export class OrchestrationPipeline implements VoiceSession {
   // entire 21s opener — bargeInFiredTotal stayed 0. After the cap, treat the
   // rest of the greeting like any other TTS (echo bar + self-echo still apply).
   private greetingPlaybackActive = false;
-  /** After inbound greeting: drop one stale final so overlap during Hello does not start processTurn. */
+  /** After the opener: drop one stale final captured while Hello was on the wire. */
   private _discardInboundGreetingOverlapFinal = false;
 
   /**
-   * Inbound: lock barge-in for the whole greeting (then listen, then prompt).
-   * Outbound: first 3s only — long pitches stay interruptible.
+   * First-speech mute for the complete opening greeting (PSTN, both directions).
+   * Stop/hold still cuts via InterruptionManager; energy must not.
    */
   private greetingBargeLocked(): boolean {
-    if (!this.greetingPlaybackActive) return false;
-    if (this.callDirection === "inbound") return true;
-    return Date.now() < this.greetingEchoHoldUntil;
+    return this.greetingPlaybackActive;
   }
   /** True while a dead-air filler (ம்ம் / ஆஹா) is on the wire. Energy barge-in
    *  of that clip's own echo chops the voice (call 14276: streaming_energy on
@@ -1278,6 +1277,9 @@ export class OrchestrationPipeline implements VoiceSession {
   private _greetingPrewarm: Promise<string> | null = null;
   /** True once `_greetingPrewarm` has settled — play Hello+pitch as one Cartesia clip. */
   private _greetingPrewarmReady = false;
+  /** First complete greeting sentence — speak this before the rest of the LLM finishes (call 20257). */
+  private _greetingFirstSentence: Promise<string> | null = null;
+  private _greetingFirstSentenceResolve: ((text: string) => void) | null = null;
 
   // P1-D: Per-agent VAD / barge-in settings (set from agent config in constructor)
   private readonly vadSilenceMs: number;
@@ -2360,23 +2362,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // partial (actual caller words) before committing the barge-in. This prevents
       // echo from triggering false barge-ins while still allowing real interruptions.
       if (this.isPlaying || this.isSendingTtsAudio) {
-        const pending = this.streamSTT?.getPendingTranscript?.() ?? "";
-        const inEchoGrace =
-          Date.now() < this.bargeInHoldUntil
-          || Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs;
-        if (!this.bargeInRequested && shouldBargeOnRealtimeVadStart({
-          agentSpeaking: true,
-          greetingOrSystem: this.systemPlaybackActive || this.greetingBargeLocked(),
-          inEchoGrace,
-        })) {
-          this.triggerBargeIn("vad_speech_start", pending || undefined, {
-            speculative: pending.trim().length > 0,
-          });
-          logger.info(
-            { callId: this.config.callId, pending: pending.slice(0, 80) },
-            "Barge-in detected (Sarvam vad.speech_start)",
-          );
-        }
+        this.maybeBargeFromRealtimeVadStart();
       }
       
       // Pipecat UserStartedSpeaking: provider VAD (not local energy) cancels idle
@@ -2409,8 +2395,6 @@ export class OrchestrationPipeline implements VoiceSession {
       if (!(agentAudioLive && this.streamingBargeInWordCount === 0)) {
         this.interruptionMgr.onUserSpeechStart();
       }
-      // NOTE: maybeBargeFromRealtimeVadStart() removed — barge-in logic now handled
-      // directly in the onSpeechStart callback above (trust Sarvam's VAD)
       this.handleSttSpeechResumed();
     };
     this.streamSTT.onSessionUsage = (info) => {
@@ -2447,37 +2431,43 @@ export class OrchestrationPipeline implements VoiceSession {
   private usablePendingBargeTranscript(): string {
     const pending = this.streamSTT?.getPendingTranscript?.()?.trim() ?? "";
     if (!pending) return "";
-    if (isBackchannelOnlyUtterance(pending)) return "";
     if (isCallerAttentionUtterance(pending)) return "";
     if (this.isSelfEcho(pending)) return "";
     return pending;
   }
 
   /**
-   * Official Sarvam/Pipecat path: vad.speech_start while speaking → clearAudio.
+   * Audio → STT → partial → InterruptionManager. vad.speech_start only
+   * inspects; empty transcript never cuts TTS.
    */
   private maybeBargeFromRealtimeVadStart(): void {
     if (!this.liveSarvamRealtime()) return;
     if (!this.bargeInEnabled || this.bargeInRequested) return;
     const pending = this.usablePendingBargeTranscript();
-    const usablePartial = pending.length > 0;
-    const echoBar = this.echoBarRms();
-    const energyAboveEchoBar =
-      echoBar !== null && this.bargeInPeakRmsSinceSentence > echoBar;
-    const inEchoGrace = Date.now() < this.greetingEchoHoldUntil
-      || Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs;
-    if (!shouldBargeOnRealtimeVadStart({
-      agentSpeaking: this.isPlaying || this.isSendingTtsAudio,
-      greetingOrSystem: this.systemPlaybackActive || this.greetingBargeLocked(),
-      inEchoGrace,
-    })) return;
-    this.triggerBargeIn("vad_speech_start", pending || undefined, {
-      speculative: usablePartial,
-    });
+    if (!this.shouldInterruptFromCallerTranscript(pending)) return;
+    this.triggerBargeIn("vad_speech_start", pending, { speculative: true });
     logger.info(
-      { callId: this.config.callId, pending: pending.slice(0, 80), energyAboveEchoBar },
-      "Barge-in detected (Sarvam vad.speech_start)",
+      { callId: this.config.callId, pending: pending.slice(0, 80) },
+      "Barge-in detected (Sarvam vad.speech_start + InterruptionManager)",
     );
+  }
+
+  /**
+   * Single PSTN interrupt policy.
+   * vad.speech_start inspects speech; only a usable transcript can interrupt.
+   * Opener = first-speech mute except explicit stop/hold.
+   */
+  private shouldInterruptFromCallerTranscript(text: string): boolean {
+    return shouldCutTtsFromCallerTranscript({
+      transcript: text,
+      agentSpeaking: this.isPlaying || this.isSendingTtsAudio,
+      greetingPlaybackActive: this.greetingPlaybackActive,
+      systemPlaybackActive: this.systemPlaybackActive,
+      inEchoGrace: Date.now() < this.greetingEchoHoldUntil
+        || Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs,
+      isSelfEcho: this.isSelfEcho(text.trim()),
+      interruptionMgr: this.interruptionMgr,
+    });
   }
 
   // ── Lost-turn backstop (calls 4831/4833) ────────────────────────────────────
@@ -2984,7 +2974,8 @@ export class OrchestrationPipeline implements VoiceSession {
       | "backchannel_during_playback"
       | "agent_still_speaking"
       | "inbound_greeting_hold"
-      | "inbound_greeting_overlap",
+      | "inbound_greeting_overlap"
+      | "room_crosstalk",
   ): void {
     const now = Date.now();
     const reasonByGuard: Record<typeof guard, string> = {
@@ -3000,6 +2991,7 @@ export class OrchestrationPipeline implements VoiceSession {
       agent_still_speaking: "final arrived during greeting/system playback and did not barge-in",
       inbound_greeting_hold: "inbound greeting still playing — wait for caller after Welcome",
       inbound_greeting_overlap: "STT captured during inbound greeting — wait for a new caller turn",
+      room_crosstalk: "room / meeting talk aimed at someone else — not a caller turn",
     };
     this.logExec(EXEC_COMPONENTS.STT, "system", {
       status: "info",
@@ -3101,7 +3093,7 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     this.interruptionMgr = new InterruptionManager({
       incrementalDelayMs: config.agentConfig.incrementalDelay ?? 0,
-      wordsForInterruption: config.agentConfig.wordsForInterruption ?? 3,
+      wordsForInterruption: config.agentConfig.wordsForInterruption ?? 2,
     });
     // Detection only makes sense when {caller_salutation} is actually in the prompt —
     // otherwise there is nothing to fill in and we must NOT call the gender service.
@@ -3535,9 +3527,6 @@ export class OrchestrationPipeline implements VoiceSession {
                   { callId: this.config.callId, text: text.slice(0, 80) },
                   "Semantic barge-in triggered (streaming STT interim)",
                 );
-              } else if (isBackchannelOnlyUtterance(text)) {
-                // Pure acks during agent speech are not interruptions — caller is
-                // often about to continue (call 2967: "சரி" then the real question).
               } else if (this.sarvamRealtimePartials()) {
                 // Realtime best practice: barge on early partials, not transcript.final.
                 // Call 14227: Tamil greeting echo transcribed as English "Then you
@@ -3547,14 +3536,7 @@ export class OrchestrationPipeline implements VoiceSession {
                 // interrupted because we required a warm floor).
                 const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
                 this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
-                const charCount = [...text.trim()].length;
-                const minChars = bargeInMinChars(this.currentLang || this.agent.language);
-                const inEchoGrace = Date.now() < this.greetingEchoHoldUntil
-                  || Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs;
                 const interimEchoBar = this.echoBarRms();
-                const energyAboveEchoBar =
-                  interimEchoBar !== null
-                  && this.bargeInPeakRmsSinceSentence > interimEchoBar;
                 const energyLooksLikeEcho =
                   interimEchoBar !== null
                   && this.bargeInPeakRmsSinceSentence <= interimEchoBar;
@@ -3565,26 +3547,16 @@ export class OrchestrationPipeline implements VoiceSession {
                 const greetingOnly = isCallerAttentionUtterance(text);
                 const interimIsSelfEcho =
                   this.isSelfEcho(text)
+                  || isLikelyCrosstalkUtterance(text)
                   || (energyLooksLikeEcho && !looksLikeBookingTimeAnswer(text) && !looksLikeShortContextualAnswer(text));
-                if (shouldBargeOnRealtimePartial({
-                  greetingOrSystem: this.systemPlaybackActive || this.greetingBargeLocked(),
-                  inEchoGrace,
-                  isWebcall: this.config.telephonyProvider === "webcall",
-                  isSelfEcho: interimIsSelfEcho,
-                  echoBarReady: interimEchoBar !== null,
-                  energyAboveEchoBar,
-                  charCount,
-                  minChars,
-                  isGreetingOnly: greetingOnly,
-                  isHardInterrupt: isHardInterruptTranscript(text, interimIsSelfEcho),
-                  isBookingAnswer: looksLikeBookingTimeAnswer(text) || isDomainOrAcronymAnswer(text),
-                })) {
+                if (greetingOnly || interimIsSelfEcho) {
+                  // opener mute / echo / room crosstalk — inspect only
+                } else if (this.shouldInterruptFromCallerTranscript(text)) {
                   this.triggerBargeIn("vad_partial", text, { speculative: true });
                   logger.info(
                     {
                       callId: this.config.callId,
                       words: this.streamingBargeInWordCount,
-                      charCount,
                       text: text.slice(0, 80),
                     },
                     "Barge-in detected (Sarvam realtime early partial)",
@@ -3599,12 +3571,6 @@ export class OrchestrationPipeline implements VoiceSession {
                 );
                 // Indic langs pack meaning into fewer whitespace tokens — also
                 // require a grapheme / char floor so short fragments don't barge.
-                const charCount = [...text.trim()].length;
-                const planNumWords = this.agent.stopSpeakingPlan?.numWords;
-                const threshold = (planNumWords && planNumWords > 0)
-                  ? planNumWords
-                  : this.interruptionMgr.getWordsForInterruption();
-                const minChars = bargeInMinChars(this.currentLang || this.agent.language);
                 // Energy corroboration (mirrors the final-transcript guard): on
                 // carrier legs our own TTS echoes back as a *garbled* interim that
                 // can carry enough words to trip word_count before any final lands
@@ -3618,31 +3584,7 @@ export class OrchestrationPipeline implements VoiceSession {
                 const interimIsSelfEcho =
                   interimEchoBar !== null
                   && this.bargeInPeakRmsSinceSentence <= interimEchoBar;
-                if (
-                  threshold > 0
-                  && this.streamingBargeInWordCount >= threshold
-                  && charCount >= minChars
-                  && !interimIsSelfEcho
-                ) {
-                  // Path A: launch speculative LLM from substantive barge partial
-                  // (energy-only barge stays non-speculative — see energy path).
-                  this.triggerBargeIn("word_count_interim", text, { speculative: true });
-                  logger.info(
-                    {
-                      callId: this.config.callId,
-                      words: this.streamingBargeInWordCount,
-                      threshold,
-                      charCount,
-                      text: text.slice(0, 80),
-                    },
-                    "Barge-in detected (streaming STT interim word-count — Bolna parity)",
-                  );
-                } else if (
-                  threshold > 0
-                  && this.streamingBargeInWordCount >= threshold
-                  && charCount >= minChars
-                  && interimIsSelfEcho
-                ) {
+                if (interimIsSelfEcho) {
                   logger.info(
                     {
                       callId: this.config.callId,
@@ -3651,6 +3593,16 @@ export class OrchestrationPipeline implements VoiceSession {
                       echoBar: Math.round(interimEchoBar ?? 0),
                     },
                     "Streaming STT interim: barge-in suppressed (no caller energy above echo bar — self-echo)",
+                  );
+                } else if (this.shouldInterruptFromCallerTranscript(text)) {
+                  this.triggerBargeIn("word_count_interim", text, { speculative: true });
+                  logger.info(
+                    {
+                      callId: this.config.callId,
+                      words: this.streamingBargeInWordCount,
+                      text: text.slice(0, 80),
+                    },
+                    "Barge-in detected (streaming STT interim + InterruptionManager)",
                   );
                 }
               }
@@ -3769,14 +3721,12 @@ export class OrchestrationPipeline implements VoiceSession {
       "Streaming STT transcript received"
     );
     if (
-      this.callDirection === "inbound"
-      && this.greetingPlaybackActive
-      && !isSemanticInterrupt(transcript)
-      && !isHoldRequest(transcript)
+      this.greetingPlaybackActive
+      && shouldDiscardOpenerTranscript(transcript, this.interruptionMgr)
     ) {
       logger.info(
         { callId: this.config.callId, transcript: transcript.slice(0, 80) },
-        "Inbound: ignoring STT during greeting",
+        "Opening greeting: discarding STT (first-speech mute)",
       );
       this.logDiscardedTranscript(transcript, "inbound_greeting_hold");
       return;
@@ -3938,32 +3888,15 @@ export class OrchestrationPipeline implements VoiceSession {
       ) {
         this.triggerBargeIn("semantic", transcript);
         logger.info({ callId: this.config.callId, transcript }, "Semantic barge-in triggered (streaming STT)");
-      } else if (isBackchannelOnlyUtterance(transcript)) {
-        // Pure ack finals must not cut TTS — often a lead-in to more speech.
-        logger.info(
-          { callId: this.config.callId, transcript: transcript.slice(0, 80) },
-          "Streaming STT: barge-in suppressed for backchannel-only transcript",
-        );
       } else if (this.sarvamRealtimePartials()) {
         // Realtime prefers VAD + partials. If those were locked for the greeting
         // (call 14345: 0 barge-ins while Hello/Telugu/wait were discarded), a
         // non-echo final after the 3s hold must still cut TTS.
-        const charCount = [...transcript.trim()].length;
-        const minChars = bargeInMinChars(this.currentLang || this.agent.language);
-        const lateGreetingTalkOver =
-          this.greetingPlaybackActive
-          && !this.greetingBargeLocked()
-          && !this.systemPlaybackActive
-          && isHardInterruptTranscript(transcript, this.isSelfEcho(transcript))
-          && (
-            isHoldRequest(transcript)
-            || charCount >= minChars
-          );
-        if (lateGreetingTalkOver) {
+        if (this.shouldInterruptFromCallerTranscript(transcript)) {
           this.triggerBargeIn("word_count", transcript, { speculative: true });
           logger.info(
             { callId: this.config.callId, transcript: transcript.slice(0, 80) },
-            "Barge-in detected (streaming STT final during leftover greeting)",
+            "Barge-in detected (streaming STT final + InterruptionManager)",
           );
         } else {
           logger.info(
@@ -3989,29 +3922,11 @@ export class OrchestrationPipeline implements VoiceSession {
         // past the threshold and cut the pitch). Match the interim Math.max path.
         const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
         this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
-        // Prefer the configured Stop Speaking Plan Min Words (UI-exposed) over the
-        // non-UI wordsForInterruption default so lowering/raising Min Words actually
-        // drives streaming-STT barge-in. Fall back to wordsForInterruption when no
-        // plan numWords is set.
-        const planNumWords = this.agent.stopSpeakingPlan?.numWords;
-        const threshold = (planNumWords && planNumWords > 0)
-          ? planNumWords
-          : this.interruptionMgr.getWordsForInterruption();
-        // Char floor (parity with the interim path): Indic packs meaning into few
-        // whitespace tokens, so a single short word ("இங்கிலீஷ்ல", call 4834) must
-        // not cut the agent — background speakers routinely produce these.
-        const charCount = [...transcript.trim()].length;
-        const minChars = bargeInMinChars(this.currentLang || this.agent.language);
-        if (this.streamingBargeInWordCount >= threshold && charCount >= minChars) {
+        if (this.shouldInterruptFromCallerTranscript(transcript)) {
           this.triggerBargeIn("word_count", transcript, { speculative: true });
           logger.info(
-            { callId: this.config.callId, words: this.streamingBargeInWordCount, threshold, charCount },
-            "Barge-in detected (streaming STT)",
-          );
-        } else if (this.streamingBargeInWordCount >= threshold) {
-          logger.info(
-            { callId: this.config.callId, charCount, minChars, transcript: transcript.slice(0, 60) },
-            "Barge-in suppressed — final under char floor (likely background/short ack)",
+            { callId: this.config.callId, words: this.streamingBargeInWordCount },
+            "Barge-in detected (streaming STT + InterruptionManager)",
           );
         }
       }
@@ -4031,8 +3946,9 @@ export class OrchestrationPipeline implements VoiceSession {
     // used to leave systemPlaybackActive=true after dropping "Hmm" with no TTS —
     // every later "Hello" was discarded and the agent went silent (call 14243).
     if (
-      (this.systemPlaybackActive || this.greetingBargeLocked())
+      (this.systemPlaybackActive || this.greetingPlaybackActive)
       && (this.isPlaying || this.isSendingTtsAudio)
+      && !this.bargeInRequested
     ) {
       this.streamingBargeInWordCount = 0;
       logger.info(
@@ -4063,6 +3979,19 @@ export class OrchestrationPipeline implements VoiceSession {
         "Streaming STT: discarding transcript — end_call already in progress",
       );
       this.logDiscardedTranscript(transcript, "end_call_in_progress");
+      return;
+    }
+    if (
+      isLikelyCrosstalkUtterance(transcript)
+      && !isSemanticInterrupt(transcript)
+      && !isHoldRequest(transcript)
+    ) {
+      logger.info(
+        { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+        "Streaming STT: discarding room / meeting crosstalk",
+      );
+      this.logDiscardedTranscript(transcript, "room_crosstalk");
+      this.safetyNet.beginListening();
       return;
     }
 
@@ -4931,16 +4860,7 @@ export class OrchestrationPipeline implements VoiceSession {
         };
         if (isWebcallStreaming || streamingCarrier) {
           const pending = this.usablePendingBargeTranscript();
-          const echoBar = this.echoBarRms();
-          const energyAboveEchoBar =
-            echoBar !== null && this.bargeInPeakRmsSinceSentence > echoBar;
-          if (!shouldCommitStreamingEnergyBarge({
-            hasUsablePending: pending.length > 0,
-            isHardInterrupt: isHardInterruptTranscript(pending, this.isSelfEcho(pending)),
-            isBookingAnswer: looksLikeBookingTimeAnswer(pending),
-            echoBarReady: echoBar !== null,
-            energyAboveEchoBar,
-          })) {
+          if (!this.shouldInterruptFromCallerTranscript(pending)) {
             if (now - this.lastEnergyMonitorLogAt >= 700) {
               this.lastEnergyMonitorLogAt = now;
               logger.info(
@@ -5037,7 +4957,6 @@ export class OrchestrationPipeline implements VoiceSession {
     const effectivePcm16k = this.nativePcm16kQueue.length > 0
       ? this.nativePcm16kQueue.shift()!
       : pcm16k;
-    // GTCRN isolation has a 16 ms STFT hop; the first worker result can be empty.
     if (pcm8k.length < 2 && effectivePcm16k.length < 2) return;
 
     // ── IVR DTMF detection ──
@@ -5821,22 +5740,40 @@ export class OrchestrationPipeline implements VoiceSession {
   private startGreetingLlmPrewarm(resumeDropped: boolean, greetLang: string): void {
     if (this._greetingPrewarm) return;
     this._greetingPrewarmReady = false;
-    this._greetingPrewarm = this.generateGreetingLlmText(resumeDropped, greetLang)
+    this._greetingFirstSentence = new Promise((resolve) => {
+      this._greetingFirstSentenceResolve = resolve;
+    });
+    this._greetingPrewarm = this.generateGreetingLlmText(resumeDropped, greetLang, (first) => {
+      this.resolveGreetingFirstSentence(first);
+    })
       .then((text) => {
         this._greetingPrewarmReady = true;
+        this.resolveGreetingFirstSentence(text);
         return text;
       })
       .catch(() => {
         this._greetingPrewarmReady = true;
+        this.resolveGreetingFirstSentence("");
         return "";
       });
+  }
+
+  private resolveGreetingFirstSentence(text: string): void {
+    const resolve = this._greetingFirstSentenceResolve;
+    if (!resolve) return;
+    this._greetingFirstSentenceResolve = null;
+    resolve(text.trim());
   }
 
   /**
    * Cold-caller LLM opener, extracted from greet() so the AMD confirmation
    * window can prewarm it in parallel. Never throws — falls back internally.
    */
-  private async generateGreetingLlmText(resumeDropped: boolean, greetLang: string): Promise<string> {
+  private async generateGreetingLlmText(
+    resumeDropped: boolean,
+    greetLang: string,
+    onFirstSentence?: (sentence: string) => void,
+  ): Promise<string> {
     let greeting = "";
         const greetingTrigger: import("./types.js").ConversationTurn[] = [];
         try {
@@ -5863,9 +5800,23 @@ export class OrchestrationPipeline implements VoiceSession {
             turnNumber: 0,
             requestPayload: { purpose: "greeting", promptChars: greetingSystemPrompt.length },
           });
+          let pendingSpeak = "";
+          let firstSentenceSent = false;
+          const emitFirstSentence = (chunk: string) => {
+            if (firstSentenceSent || !onFirstSentence) return;
+            pendingSpeak += chunk;
+            const { sentences } = extractSentences(pendingSpeak, this.agent.ttsMinSentenceChars);
+            const first = sentences[0]?.trim();
+            if (!first) return;
+            firstSentenceSent = true;
+            onFirstSentence(first);
+          };
           await this.llm.chat(
             greetingTrigger, greetingSystemPrompt,
-            (token) => { greeting += token; },
+            (token) => {
+              greeting += token;
+              emitFirstSentence(token);
+            },
             (full) => { greeting = full; },
             {
               onUsage: (usage) => {
@@ -5875,6 +5826,10 @@ export class OrchestrationPipeline implements VoiceSession {
               },
             }
           );
+          if (!firstSentenceSent && greeting.trim()) {
+            const { sentences, remainder } = extractSentences(greeting, this.agent.ttsMinSentenceChars);
+            onFirstSentence?.((sentences[0] || remainder || greeting).trim());
+          }
           const greetingLlmMs = Date.now() - _greetLlmStartAt;
           logger.info(
             { callId: this.config.callId, greetingLlmMs, promptChars: greetingSystemPrompt.length },
@@ -5910,6 +5865,7 @@ export class OrchestrationPipeline implements VoiceSession {
             responsePayload: { purpose: "greeting", error: reason, fallback: fallback.slice(0, 120) },
           });
           greeting = fallback;
+          onFirstSentence?.(fallback);
         }
     return greeting;
   }
@@ -6137,11 +6093,33 @@ export class OrchestrationPipeline implements VoiceSession {
         // Cold-caller path with empty static greeting: ask the LLM for a short opener.
         // The AMD confirmation window may have prewarmed this in parallel (outbound
         // dead-air fix: AMD window + greeting LLM used to stack serially).
-        if (this._greetingPrewarm) {
-          greeting = await this._greetingPrewarm;
+        if (!this._greetingPrewarm) {
+          this.startGreetingLlmPrewarm(resumeDropped, greetLang);
+        }
+        let streamedHead = "";
+        if (!this._greetingPrewarmReady && this._greetingFirstSentence) {
+          streamedHead = (await this._greetingFirstSentence).trim();
+          if (streamedHead && !this.closed && !this.bargeInRequested) {
+            this.beginOpeningGreetingPlayback(streamedHead.length);
+            logger.info(
+              { callId: this.config.callId, firstSentence: streamedHead.slice(0, 80) },
+              "Pipeline: playing first greeting sentence before LLM done",
+            );
+            const playingFirst = this.playOpeningGreetingText(streamedHead);
+            greeting = (await this._greetingPrewarm) ?? "";
+            this._greetingPrewarm = null;
+            await playingFirst;
+            welcomeAlreadySpoken = true;
+          } else {
+            streamedHead = "";
+          }
+        }
+        if (!streamedHead) {
+          greeting = (await this._greetingPrewarm) ?? "";
           this._greetingPrewarm = null;
-        } else {
-          greeting = await this.generateGreetingLlmText(resumeDropped, greetLang);
+        }
+        if (streamedHead && greeting.trim()) {
+          greeting = stripWelcomePrefix(streamedHead, greeting);
         }
         if (this.closed) {
           greeting = "";
@@ -6250,10 +6228,8 @@ export class OrchestrationPipeline implements VoiceSession {
         this.greetingPlaybackActive = false;
         this.isPlaying = false;
         this.armTailEchoGrace();
-        if (this.callDirection === "inbound") {
-          this._discardInboundGreetingOverlapFinal = true;
-          this._partialThisGeneration = false;
-        }
+        this._discardInboundGreetingOverlapFinal = true;
+        this._partialThisGeneration = false;
       }
       // Heard-only: never fall back to full greeting text after a barge mid-open.
       const heardGreeting = this.getHeardAgentText();

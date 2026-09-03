@@ -251,7 +251,7 @@ export const CALL_ENGINE_PRESETS = {
   balanced: {
     asrEndpointingSilenceMs: 250,
     linearDelayMs: 0,
-    stopSpeakingNumWords: 3,
+    stopSpeakingNumWords: 2,
     sarvamHighVadSensitivity: true,
     sarvamEndOfSpeechSilenceMs: 400,
     sarvamFirstTurnMinSpeechMs: 250,
@@ -384,9 +384,9 @@ export function hydrateSarvamRealtimeVad(cfg: {
 }
 
 export function clampInterruptWords(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 3;
-  // Legacy agents stored 0 = "off" — treat as Bolna default 3.
-  if (v <= 0) return 3;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 2;
+  // Legacy agents stored 0 = "off" — treat as PSTN default 2 while TTS plays.
+  if (v <= 0) return 2;
   return Math.max(1, Math.min(6, Math.round(v)));
 }
 

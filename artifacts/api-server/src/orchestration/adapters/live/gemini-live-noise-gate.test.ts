@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentConfig } from "../../types.js";
-import { upsample8to16 } from "../../audio.js";
 import * as audioPool from "../../audioPool.js";
 
 const sendRealtimeInput = vi.fn();
@@ -118,13 +117,13 @@ describe("Gemini Live caller-audio noise gate", () => {
     spy.mockRestore();
   });
 
-  it("isolates caller audio on VoBiz when the Noise Cancellation toggle is on", async () => {
+  it("runs the energy gate on VoBiz when the Noise Cancellation toggle is on", async () => {
     const spy = vi.spyOn(audioPool, "processRawPcm8kIn");
     const pipeline = makePipeline(agentConfig({ noiseCancellationEnabled: true }));
-    const input = frame(4000);
-    const sent = await feed(pipeline, Array.from({ length: 8 }, () => input));
+    pipeline.onRawPcm8kIn(frame(4000));
+    await pipeline.flushCallerAudio();
     expect(spy).toHaveBeenCalled();
-    expect(sent.length === 0 || sent.equals(upsample8to16(input)) === false).toBe(true);
+    expect(spy.mock.calls[0]?.[2]).toBe(true);
     pipeline.close();
     spy.mockRestore();
   });

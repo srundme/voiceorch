@@ -1,9 +1,9 @@
 /**
  * Audio processing worker — runs in a dedicated worker thread.
  *
- * Each worker maintains per-session NoiseCanceller / VoiceIsolator state so
- * callers never have to serialize that state across the thread boundary.  The
- * pool in audioPool.ts uses sticky assignment so every chunk for the same call
+ * Each worker maintains per-session NoiseCanceller state so callers never
+ * have to serialize that state across the thread boundary. The pool in
+ * audioPool.ts uses sticky assignment so every chunk for the same call
  * always lands on the same worker, guaranteeing FIFO ordering and correct state.
  *
  * Message protocol (main → worker):
@@ -23,7 +23,6 @@ import {
   frameRms,
   NoiseCanceller,
 } from "./audio.js";
-import { VoiceIsolator, isVoiceIsolationEnabled, warmVoiceIsolator } from "./voice-isolator.js";
 
 const VAD_THRESHOLD = 100;
 const GATE_RATIO_DEFAULT = 4.0;
@@ -57,16 +56,7 @@ interface DestroySession {
 type InMsg = ProcessMulaw | ProcessPcm8k | DestroySession;
 
 const noiseCancellers = new Map<string, NoiseCanceller>();
-const isolators = new Map<string, VoiceIsolator>();
 const callChains = new Map<string, Promise<void>>();
-
-// Stagger GTCRN warmup across workers. Eager parallel InferenceSession.create
-// on a large pool races the deploy healthcheck and can OOM the container.
-const warmDelayMs = 400 + Math.floor(Math.random() * 2_500);
-const warmTimer = setTimeout(() => {
-  void warmVoiceIsolator();
-}, warmDelayMs);
-warmTimer.unref?.();
 
 function getNoiseCanceller(callId: string, gateRatio: number): NoiseCanceller {
   let nc = noiseCancellers.get(callId);
@@ -75,15 +65,6 @@ function getNoiseCanceller(callId: string, gateRatio: number): NoiseCanceller {
     noiseCancellers.set(callId, nc);
   }
   return nc;
-}
-
-function getIsolator(callId: string): VoiceIsolator {
-  let iso = isolators.get(callId);
-  if (!iso) {
-    iso = new VoiceIsolator(callId);
-    isolators.set(callId, iso);
-  }
-  return iso;
 }
 
 function toTransferable(buf: Buffer): ArrayBuffer {
@@ -102,17 +83,7 @@ async function processChunk(msg: ProcessMulaw | ProcessPcm8k): Promise<void> {
   let pcm16k: Buffer | null = null;
 
   if (noiseCancel) {
-    if (isVoiceIsolationEnabled()) {
-      const isolated = await getIsolator(callId).process8k(pcm8k);
-      if (isolated) {
-        pcm8k = isolated.pcm8k;
-        pcm16k = isolated.pcm16k;
-      } else {
-        pcm8k = getNoiseCanceller(callId, gateRatio ?? GATE_RATIO_DEFAULT).process(pcm8k);
-      }
-    } else {
-      pcm8k = getNoiseCanceller(callId, gateRatio ?? GATE_RATIO_DEFAULT).process(pcm8k);
-    }
+    pcm8k = getNoiseCanceller(callId, gateRatio ?? GATE_RATIO_DEFAULT).process(pcm8k);
   }
 
   if (!pcm16k) pcm16k = upsample8to16(pcm8k);
@@ -130,7 +101,6 @@ async function processChunk(msg: ProcessMulaw | ProcessPcm8k): Promise<void> {
 parentPort!.on("message", (msg: InMsg) => {
   if (msg.type === "DESTROY_SESSION") {
     noiseCancellers.delete(msg.callId);
-    isolators.delete(msg.callId);
     callChains.delete(msg.callId);
     return;
   }

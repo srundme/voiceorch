@@ -217,8 +217,8 @@ export class GeminiLivePipeline implements VoiceSession {
   // ── Caller-audio isolation ───────────────────────────────────────────────
   // Live used to send caller audio straight to Gemini, which made the Noise
   // Cancellation toggle a no-op on this stack. Both Live and classic now share
-  // resolveSoftwareNoiseGate + the audio-worker GTCRN isolator (energy gate
-  // fallback) so the same toggle covers every LLM.
+  // resolveSoftwareNoiseGate + the audio-worker energy NoiseCanceller so the
+  // same toggle covers every LLM.
   private readonly noiseGate: NoiseGateDecision;
   private readonly micThresholds: MicSensitivityThresholds;
   private readonly gateRatio: number;

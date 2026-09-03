@@ -525,8 +525,8 @@ export default function AgentEdit() {
       startSpeakingOnPunctuationSecs: 0,
       startSpeakingOnNoPunctuationSecs: 0,
       startSpeakingOnNumberSecs: 0,
-      stopSpeakingNumWords: 3,
-      stopSpeakingVoiceSecs: 0.45,
+      stopSpeakingNumWords: 2,
+      stopSpeakingVoiceSecs: 0.3,
       stopSpeakingBackOffSecs: 1,
       autoRedialEnabled: false,
       autoRedialMaxAttempts: 3,
@@ -841,13 +841,13 @@ export default function AgentEdit() {
       stopSpeakingNumWords: (() => {
         const fromWords = (agent as any).agentConfig?.wordsForInterruption as number | undefined;
         const fromPlan = (agent as any).agentConfig?.stopSpeakingPlan?.numWords as number | undefined;
-        return clampInterruptWords(fromWords ?? fromPlan ?? 3);
+        return clampInterruptWords(fromWords ?? fromPlan ?? 2);
       })(),
       stopSpeakingVoiceSecs: (() => {
         const words = clampInterruptWords(
           ((agent as any).agentConfig?.wordsForInterruption as number | undefined)
             ?? ((agent as any).agentConfig?.stopSpeakingPlan?.numWords as number | undefined)
-            ?? 3,
+            ?? 2,
         );
         return voiceSecondsFromInterruptWords(words);
       })(),
