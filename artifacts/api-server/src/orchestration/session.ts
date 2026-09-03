@@ -726,7 +726,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,
     // Empirical PSTN echo window (VoBiz/Twilio), not a carrier spec. See
     // pipeline.ts BARGE_IN_ECHO_GRACE_MS. Stop Speaking Plan may override.
-    bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 600,
+    bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 0,
     micSensitivity:         resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined),
     // P1-E: Agent timezone
     timezone: agentTimezone,
@@ -794,9 +794,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     })(),
     telephonyTailDrainMs: (() => {
       const v = agentCfg["telephonyTailDrainMs"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 80;
+      if (typeof v !== "number" || !Number.isFinite(v)) return 0;
       const ms = Math.max(0, Math.min(2000, Math.round(v)));
-      return ms === 400 ? 80 : ms;
+      return ms === 400 || ms === 80 ? 0 : ms;
     })(),
     sarvamSttMode: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? resolveSarvamSttMode(
@@ -814,9 +814,14 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // Wall-clock VAD windows; the adapter converts them to frames at the live
     // sample rate. Null means "leave the provider default alone".
     sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
-    sarvamEndOfSpeechSilenceMs: optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]),
+    sarvamEndOfSpeechSilenceMs: (() => {
+      const v = optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]);
+      return v === 300 || v === 500 ? null : v;
+    })(),
     sarvamVadThreshold: optionalUnitInterval(agentCfg["sarvamVadThreshold"]),
-    semanticTurnDetection: resolveSemanticTurnEnabled(agentCfg["semanticTurnDetection"]),
+    semanticTurnDetection: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
+      ? false
+      : resolveSemanticTurnEnabled(agentCfg["semanticTurnDetection"]),
     semanticTurnStopMs: clampSemanticTurnStopMs(agentCfg["semanticTurnStopMs"]),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
     voiceStack: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined),

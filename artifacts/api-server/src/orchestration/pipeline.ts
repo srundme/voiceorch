@@ -115,7 +115,7 @@ import {
   RESUME_DROP_POST_GREETING_STALL_MS,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeBookingTimeAnswer, looksLikeShortContextualAnswer, isDomainOrAcronymAnswer, preferStableTranscript, isLikelyCrosstalkUtterance } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isCallerAudioDifficulty, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeShortContextualAnswer, isDomainOrAcronymAnswer, preferStableTranscript } from "./transcriptQuality.js";
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
@@ -365,25 +365,21 @@ const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
 // Greeting is the coldest clip (TTS just warmed, and for multilingual agents the
 // opener is LLM-generated first — first byte often lands ~450-500 ms). 280 ms of
 // runway underran the wire at the opening; 400/600 rides that cold start out.
-const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 400));
+const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 0));
 const TTS_PREBUFFER_GREETING_CAP_MS = Math.max(
   TTS_PREBUFFER_GREETING_MS,
-  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 600),
+  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 0),
 );
-// Warm happy path: Cartesia first-byte is ~120 ms. 1000 ms of prebuffer was a
-// blanket delay on every later turn. 250 ms is enough runway; if we underrun
-// we fall back to the cold path (see recentlyUnderran) instead of waiting 1s
-// on every sentence. Measure underruns before going below 200.
-const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 250));
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 0));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
-  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 600),
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 0),
 );
-const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 900));
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 0));
 /** On mid-sentence underrun only: refill this much real audio. Not on the
  *  happy path — keep the carrier alive with silence, never a looped frame. */
-const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 180));
-const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 400));
+const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 0));
+const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 0));
 const TTS_UNDERRUN_COLD_MS = 8_000;
 /**
  * Concurrency-aware prebuffer runway (restored — removed in a20aca3d).
@@ -401,9 +397,9 @@ const TTS_UNDERRUN_COLD_MS = 8_000;
  * With 2 concurrent drains: 600ms base + 300ms boost = 900ms total runway.
  * This covers the observed 1032ms gap with some margin for jitter.
  */
-const TTS_CONCURRENCY_BOOST_MS_2 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_2 ?? 80));
-const TTS_CONCURRENCY_BOOST_MS_3 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_3 ?? 120));
-const TTS_CONCURRENCY_BOOST_MS_4 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_4 ?? 160));
+const TTS_CONCURRENCY_BOOST_MS_2 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_2 ?? 0));
+const TTS_CONCURRENCY_BOOST_MS_3 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_3 ?? 0));
+const TTS_CONCURRENCY_BOOST_MS_4 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_4 ?? 0));
 /**
  * Mid-stream TTS abort recovery ("word jumping" fix).
  * When a streaming TTS aborts AFTER some audio already played (idle timeout /
@@ -418,20 +414,20 @@ const TTS_CONCURRENCY_BOOST_MS_4 = Math.max(0, Number(process.env.TTS_CONCURRENC
  * the last word) is far less jarring than skipping words. All env-tunable;
  * set TTS_MIDSTREAM_RESYNTH=0 to disable instantly if it ever sounds worse.
  */
-const TTS_MIDSTREAM_RESYNTH = process.env.TTS_MIDSTREAM_RESYNTH !== "0";
+const TTS_MIDSTREAM_RESYNTH = process.env.TTS_MIDSTREAM_RESYNTH === "1";
 const TTS_MIDSTREAM_MS_PER_CHAR = Math.max(10, Number(process.env.TTS_MIDSTREAM_MS_PER_CHAR ?? 60));
 const TTS_MIDSTREAM_SEAM_BACKOFF_CHARS = Math.max(0, Number(process.env.TTS_MIDSTREAM_SEAM_BACKOFF_CHARS ?? 8));
 const TTS_MIDSTREAM_MIN_REMAINDER_CHARS = Math.max(1, Number(process.env.TTS_MIDSTREAM_MIN_REMAINDER_CHARS ?? 10));
 /** Burst this many 20 ms frames into VoBiz before realtime pacing so a 40–80 ms
  *  event-loop hitch does not empty the carrier jitter buffer. */
-const TTS_WIRE_LEAD_FRAMES = Math.max(0, Math.min(8, Number(process.env.TTS_WIRE_LEAD_FRAMES ?? 6)));
+const TTS_WIRE_LEAD_FRAMES = Math.max(0, Math.min(8, Number(process.env.TTS_WIRE_LEAD_FRAMES ?? 0)));
 
 /** Process-local in-flight TTS drains — drives the concurrency-aware prebuffer
  *  boost above and is surfaced on underrun logs (concurrentDrains). */
 let activeTtsDrainCount = 0;
 
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
-const FILLER_THRESHOLD_MS     = Number(process.env.FILLER_THRESHOLD_MS ?? 1200); // dead-air cover only when LLM TTFT is actually slow — not the happy path
+const FILLER_THRESHOLD_MS     = Number(process.env.FILLER_THRESHOLD_MS ?? 0); // 0 = no dead-air cover; Bolna does not inject this
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
 const FRAGMENT_COALESCE_MS_DEFAULT = 0;  // fallback when agentConfig omits playing coalesce — keep in sync with FRAGMENT_COALESCE_DEFAULTS.playingMs (lib/db)
@@ -444,7 +440,7 @@ const VAD_FLUSH_COOLDOWN_MS   = 5000;   // min interval between backstop flushes
  *  Set STT_LOST_TURN_RECOVERY=0 to disable without a redeploy.
  *  All of its TIMINGS are resolved per-call in `this.sttTuning` (see stt-tuning.ts)
  *  so they track the agent's own turn-taking settings instead of being fixed here. */
-const LOST_TURN_RECOVERY_ENABLED = process.env.STT_LOST_TURN_RECOVERY !== "0";
+const LOST_TURN_RECOVERY_ENABLED = process.env.STT_LOST_TURN_RECOVERY === "1";
 /** How often to re-check whether the caller has stopped talking after a lost turn.
  *  Fine-grained because every poll interval is added dead air for the caller. */
 const LOST_TURN_RECOVERY_POLL_MS = 200;
@@ -465,7 +461,7 @@ const BARGE_IN_ENERGY_THRESHOLD = 1200; // Much higher than normal VAD (300) —
  *  Empirical on VoBiz/Twilio, not a carrier spec. Per-agent override:
  *  agentConfig.bargeInEchoGraceMs (session.ts default 600). Owner: this constant
  *  as module fallback; live path uses `this.bargeInEchoGraceMs`. */
-const BARGE_IN_ECHO_GRACE_MS  = 600;    // Suppress barge-in for 600 ms after playback starts —
+const BARGE_IN_ECHO_GRACE_MS  = 0;    // Bolna has no echo-grace overlay; welcome_played + word floor only.
                                          // gives audio time to reach the caller before we start
                                          // counting any returning echo as a real interruption.
 const BARGE_IN_MIN_FRAMES     = 3;      // Absolute floor on barge-in frames (~60 ms) so a single
@@ -479,7 +475,7 @@ const BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR = 1200; // COLD-START fallback 
                                          // line-specific. We now MEASURE the echo floor per call (see
                                          // playbackEchoFloor) and set the bar to echoFloor × margin. This
                                          // constant is used only before enough echo has been observed.
-const TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 80; // measured minimum to flush the last packet — not a blanket 400 ms delay
+const TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 0;
 // ── Adaptive (self-calibrating) energy barge-in for the streaming-STT carrier path ──
 // The barge-in bar during active TTS = max(configuredThreshold, measuredEchoFloor × MARGIN),
 // clamped to [configured, MAX]. This lets a NORMAL-volume caller interrupt on a quiet line
@@ -640,7 +636,7 @@ const LANG_SCRIPT_DIRECTIVE: Record<string, string> = {
   "si":    "CRITICAL: Write ALL Sinhala words in Sinhala Unicode script (e.g. ආයුබෝවන්, ස්තූතියි, හරි). NEVER romanize Sinhala into English/Latin letters — writing 'ayubowan', 'stuthi', 'hari' instead of Sinhala script is WRONG.",
 };
 
-const GREETING_ECHO_HOLD_CAP_MS = 3000;  // Hard cap on greetingEchoHoldUntil so the
+const GREETING_ECHO_HOLD_CAP_MS = 0;  // Bolna uses welcome_played, not a timed echo hold.
                                           // caller can barge in within ~3s of the greeting
                                           // start even if the estimated greeting is long —
                                           // never lock the caller out of interrupting.
@@ -2430,13 +2426,11 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /**
-   * Pending STT that is real caller speech — not mm/okay, hello leftover, or our echo.
-   * Webcall energy/VAD must wait for this before cutting TTS (overlap false cuts).
+   * Pending STT that is real caller speech — not below the Bolna word floor.
    */
   private usablePendingBargeTranscript(): string {
     const pending = this.streamSTT?.getPendingTranscript?.()?.trim() ?? "";
     if (!pending) return "";
-    if (isCallerAttentionUtterance(pending)) return "";
     if (this.isSelfEcho(pending)) return "";
     return pending;
   }
@@ -2460,7 +2454,7 @@ export class OrchestrationPipeline implements VoiceSession {
   /**
    * Single PSTN interrupt policy.
    * vad.speech_start inspects speech; only a usable transcript can interrupt.
-   * Opener = first-speech mute except explicit stop/hold.
+   * Opener = Bolna welcome mute (every transcript, including stop).
    */
   private shouldInterruptFromCallerTranscript(text: string): boolean {
     return shouldCutTtsFromCallerTranscript({
@@ -2496,6 +2490,7 @@ export class OrchestrationPipeline implements VoiceSession {
   private armVadFlushBackstop(): void {
     this.clearVadFlushBackstop();
     if (this.closed) return;
+    if (this.sttTuning.lostTurnBackstopMs <= 0) return;
     this._vadFlushTimer = setTimeout(() => {
       this._vadFlushTimer = null;
       if (this.closed || this.isProcessing || this.isPlaying || this.isSendingTtsAudio) return;
@@ -3058,7 +3053,6 @@ export class OrchestrationPipeline implements VoiceSession {
       const framesFromTime = sp.voiceSeconds > 0 ? Math.round(sp.voiceSeconds * 50) : 0; // 50 frames/s at 20ms
       const combinedFrames = Math.max(framesFromWords, framesFromTime);
       if (combinedFrames > 0) this.bargeInMinFrames = combinedFrames;
-      if (sp.backOffSeconds >= 0) this.bargeInEchoGraceMs = Math.round(sp.backOffSeconds * 1000);
     }
     this.interruptionMgr = new InterruptionManager({
       incrementalDelayMs: config.agentConfig.incrementalDelay ?? 0,
@@ -3488,7 +3482,6 @@ export class OrchestrationPipeline implements VoiceSession {
               // but it DOES emit interims once the caller overpowers carrier echo.
               if (
                 (isSemanticInterrupt(text) || isAccidentalInterruptPhrase(text) || isHoldRequest(text))
-                && !isCallerAttentionUtterance(text)
                 && !this.isSelfEcho(text)
               ) {
                 this.triggerBargeIn("semantic_interim", text);
@@ -3508,11 +3501,8 @@ export class OrchestrationPipeline implements VoiceSession {
                 // Isolated "hello" while we are talking is leftover greeting /
                 // carrier echo (call 16832). RMS echo must not veto a usable
                 // non-echo partial (call 20274: "are you there?" never cut).
-                const greetingOnly = isCallerAttentionUtterance(text);
-                const interimIsSelfEcho =
-                  this.isSelfEcho(text)
-                  || isLikelyCrosstalkUtterance(text);
-                if (greetingOnly || interimIsSelfEcho) {
+                const interimIsSelfEcho = this.isSelfEcho(text);
+                if (interimIsSelfEcho) {
                   // opener mute / content echo / room crosstalk — inspect only
                 } else if (this.shouldInterruptFromCallerTranscript(text)) {
                   this.triggerBargeIn("vad_partial", text, { speculative: true });
@@ -3532,32 +3522,7 @@ export class OrchestrationPipeline implements VoiceSession {
                   this.streamingBargeInWordCount,
                   wordCount,
                 );
-                // Indic langs pack meaning into fewer whitespace tokens — also
-                // require a grapheme / char floor so short fragments don't barge.
-                // Energy corroboration (mirrors the final-transcript guard): on
-                // carrier legs our own TTS echoes back as a *garbled* interim that
-                // can carry enough words to trip word_count before any final lands
-                // (call 5578: "How does today at 4" came back as "Why don't we
-                // panic?" and the agent cut itself off). If the inbound signal
-                // never rose above the measured echo bar this sentence, it is our
-                // own audio returning — suppress the self-barge. echoBarRms() is
-                // null on webcall / before the floor is warm, so a real caller is
-                // always given the benefit of the doubt there.
-                const interimEchoBar = this.echoBarRms();
-                const interimIsSelfEcho =
-                  interimEchoBar !== null
-                  && this.bargeInPeakRmsSinceSentence <= interimEchoBar;
-                if (interimIsSelfEcho) {
-                  logger.info(
-                    {
-                      callId: this.config.callId,
-                      text: text.slice(0, 80),
-                      peakRms: Math.round(this.bargeInPeakRmsSinceSentence),
-                      echoBar: Math.round(interimEchoBar ?? 0),
-                    },
-                    "Streaming STT interim: barge-in suppressed (no caller energy above echo bar — self-echo)",
-                  );
-                } else if (this.shouldInterruptFromCallerTranscript(text)) {
+                if (this.shouldInterruptFromCallerTranscript(text)) {
                   this.triggerBargeIn("word_count_interim", text, { speculative: true });
                   logger.info(
                     {
@@ -3781,58 +3746,12 @@ export class OrchestrationPipeline implements VoiceSession {
       return;
     }
 
-    // Energy corroboration (additive to both guards above). The content guard only
-    // catches echo that STT transcribed faithfully. On a carrier leg the ASR routinely
-    // returns *garbled* text for our own audio — call 8538 turned "Am I speaking with
-    // the owner…" into a caller turn reading "speaking in English." — which no textual
-    // comparison can match, so it fired word_count barge-in and the agent cut itself off
-    // five times in 31 seconds. Energy is the tiebreaker: if the inbound signal never
-    // rose above the measured echo bar for this entire sentence, the only thing that
-    // reached the mic was our own audio coming back.
-    if (!isSemanticInterrupt(transcript) && this.isPlaying && !this.bargeInRequested) {
-      const echoBar = this.echoBarRms();
-      if (echoBar !== null && this.bargeInPeakRmsSinceSentence <= echoBar) {
-        // Call 14160: "कल टेन थर्टी मैडम" while the agent was still offering 3/4 PM.
-        // Energy never cleared the echo bar, so a real slot answer was discarded.
-        // Keep content self-echo above; only skip the energy-only discard.
-        if (
-          (looksLikeBookingTimeAnswer(transcript) || looksLikeShortContextualAnswer(transcript) || isDomainOrAcronymAnswer(transcript))
-          && !this.isSelfEcho(transcript)
-        ) {
-          logger.info(
-            {
-              callId: this.config.callId,
-              transcript: transcript.slice(0, 80),
-              peakRms: Math.round(this.bargeInPeakRmsSinceSentence),
-              echoBar: Math.round(echoBar),
-            },
-            "Streaming STT: energy echo guard skipped — contextual caller answer",
-          );
-        } else {
-          this.streamingBargeInWordCount = 0;
-          logger.info(
-            {
-              callId: this.config.callId,
-              transcript: transcript.slice(0, 80),
-              peakRms: Math.round(this.bargeInPeakRmsSinceSentence),
-              echoBar: Math.round(echoBar),
-              echoFloor: Math.round(this.playbackEchoFloor),
-            },
-            "Streaming STT: discarding self-echo transcript (no caller energy above echo bar)",
-          );
-          this.logDiscardedTranscript(transcript, "self_echo_energy_guard");
-          return;
-        }
-      }
-    }
-
     if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
       // P0-C: Semantic barge-in — certain keywords ("stop", "wait", …) bypass
       // BOTH the word-count gate AND the echo grace: our own audio never utters
       // them, so they are always a genuine caller interruption.
       if (
         (isSemanticInterrupt(transcript) || isHoldRequest(transcript))
-        && !isCallerAttentionUtterance(transcript)
         && !this.isSelfEcho(transcript)
       ) {
         this.triggerBargeIn("semantic", transcript);
@@ -3930,20 +3849,6 @@ export class OrchestrationPipeline implements VoiceSession {
       this.logDiscardedTranscript(transcript, "end_call_in_progress");
       return;
     }
-    if (
-      isLikelyCrosstalkUtterance(transcript)
-      && !isSemanticInterrupt(transcript)
-      && !isHoldRequest(transcript)
-    ) {
-      logger.info(
-        { callId: this.config.callId, transcript: transcript.slice(0, 80) },
-        "Streaming STT: discarding room / meeting crosstalk",
-      );
-      this.logDiscardedTranscript(transcript, "room_crosstalk");
-      this.safetyNet.beginListening();
-      return;
-    }
-
     // Language auto-detection — runs AFTER all discard guards so echoed transcripts
     // can never drive language switching or increment the consecutive-detection counter.
     {
@@ -4218,49 +4123,6 @@ export class OrchestrationPipeline implements VoiceSession {
       );
     } else {
       this.clearFragmentCoalesce();
-    }
-
-    // Bolna parity: ignore false-interruption scraps after energy barge-in so we
-    // don't start an LLM turn on "சொல்லுங்க" / half-cuts that only appeared because
-    // TTS was cut mid-sentence. Accidental short finals while the agent was speaking
-    // are dropped in Bolna (`≤ number_of_words_for_interruption` ⇒ continue loop).
-    {
-      const wordsThreshold = this.interruptionMgr.getWordsForInterruption();
-      if (
-        (this._lastTurnWasBargedIn || this.bargeInRequested)
-        && !isSemanticInterrupt(transcript)
-        && isFalseInterruptionScrap(transcript, wordsThreshold)
-      ) {
-        logger.info(
-          { callId: this.config.callId, transcript: transcript.slice(0, 80), wordsThreshold },
-          "False interruption — ignoring scrap transcript",
-        );
-        this.logDiscardedTranscript(transcript, "false_interruption_scrap");
-        this.clearBargeWait();
-        // Drop only this barge-linked scrap. Leaving the flag sticky used to
-        // swallow every later short reply until the caller spoke 4+ words
-        // (call 2632 felt like “STT only hears 3+ words”).
-        this._lastTurnWasBargedIn = false;
-        this.streamingBargeInWordCount = 0;
-        this.safetyNet.onFinal();
-        this.clearEagerPartialTimer();
-        this.interruptionMgr.onUserSpeechEnd();
-        // Call 4839: a false (energy/echo) barge cut the reply mid-sentence AND
-        // the caller transcript was a scrap → both sides silent for 17s until
-        // the caller asked "are you there?". Resume the unheard remainder.
-        const remainder = this._bargedReplyRemainder;
-        if (
-          remainder
-          && Date.now() - this._bargedReplyAt < 15_000
-          && !this.isPlaying && !this.isProcessing && !this.closed
-        ) {
-          this._bargedReplyRemainder = null;
-          void this.resumeBargedReply(remainder);
-          return;
-        }
-        if (!this.closed) this.safetyNet.beginListening();
-        return;
-      }
     }
 
     // A real caller turn is being accepted — any pending barged-reply remainder
@@ -4684,168 +4546,13 @@ export class OrchestrationPipeline implements VoiceSession {
    *   greeting hold — mirroring the streaming transcript barge-in path.
    */
   private tryEnergyBargeIn(
-    pcm8k: Buffer,
-    hasSpeech: boolean,
-    source: "energy" | "streaming_energy",
-    respectHoldUntil: boolean,
-    rawRms?: number,
+    _pcm8k: Buffer,
+    _hasSpeech: boolean,
+    _source: "energy" | "streaming_energy",
+    _respectHoldUntil: boolean,
+    _rawRms?: number,
   ): void {
-    if (!hasSpeech) {
-      // genuine VAD silence — reset the accumulator
-      this.bargeInSpeechFrames = 0;
-      this.bargeInLowEnergyFrames = 0;
-      return;
-    }
-    if (!this.bargeInEnabled || !this.isPlaying || this.bargeInRequested) return;
-    // Never energy-barge system recovery / identity lines — word_count was doing
-    // that via interim; energy would recreate the call-2626 cascade.
-    if (this.systemPlaybackActive) return;
-    // Opening greeting: mute energy only for greetingEchoHoldUntil (3s cap).
-    // Muting the entire greet() playback locked barge-in for 21s (call 14345).
-    if (this.greetingBargeLocked()) return;
-    if (this.fillerPlaybackActive) return;
-
-    // Streaming-STT carrier path (webcall has AEC; the batch path keeps its own
-    // extended-hold protection). Only here do we measure RMS / self-calibrate.
-    const streamingCarrier = !respectHoldUntil && this.config.telephonyProvider !== "webcall";
-    const currentRms = streamingCarrier
-      ? (rawRms && rawRms > 0 ? rawRms : frameRms(pcm8k))
-      : 0;
-    // The adaptive anti-echo bar applies ONLY while we are ACTIVELY sending TTS — that
-    // is the only time the carrier is echoing our audio back. Between sentences there is
-    // no echo, so the configured Energy Threshold is honoured unchanged (a caller
-    // speaking into a gap must interrupt at their normal level, not an echo-inflated one).
-    const useAdaptive = streamingCarrier && (this.isSendingTtsAudio || this.isPlaying);
-    // Webcall path: browser AEC cancels agent echo before it reaches us.
-    // Used to apply a lower threshold and enable the streaming frame-count cap.
-    const isWebcallStreaming = !respectHoldUntil && this.config.telephonyProvider === "webcall";
-
-    // Track the sentence's loudest inbound frame even during the echo grace — the
-    // word_count path uses it to tell a real caller from a garbled echo transcript.
-    if (streamingCarrier && currentRms > this.bargeInPeakRmsSinceSentence) {
-      this.bargeInPeakRmsSinceSentence = currentRms;
-    }
-
-    const now = Date.now();
-    // 600ms per-sentence start grace protects initial spoken words from self-echo false cuts.
-    const startGraceMs = Math.max(600, this.bargeInEchoGraceMs);
-    if (
-      now < this.greetingEchoHoldUntil ||
-      now < this.bargeInSentenceStartAt + startGraceMs ||
-      (respectHoldUntil && now < this.bargeInHoldUntil)
-    ) {
-      if (useAdaptive && now <= this.bargeInSentenceStartAt + BARGE_IN_ECHO_CALIBRATION_MS) {
-        this.updateEchoFloor(currentRms);
-      }
-      this.bargeInSpeechFrames = 0;
-      return;
-    }
-
-    let effectiveThreshold = this.bargeInEnergyThreshold;
-    if (useAdaptive) {
-      const floorReady = this.playbackEchoFloorSamples >= BARGE_IN_ECHO_FLOOR_MIN_SAMPLES;
-      const echoBar = floorReady
-        ? this.playbackEchoFloor * BARGE_IN_ADAPTIVE_ECHO_MARGIN
-        : BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR;
-      effectiveThreshold = Math.max(
-        this.bargeInEnergyThreshold,
-        Math.min(echoBar, BARGE_IN_ADAPTIVE_MAX_THRESHOLD),
-      );
-    }
-    const webcallAecThreshold = this.micThresholds.webcallAecThreshold;
-    if (isWebcallStreaming && effectiveThreshold > webcallAecThreshold) {
-      effectiveThreshold = webcallAecThreshold;
-    }
-    if (streamingCarrier) {
-      effectiveThreshold = Math.max(effectiveThreshold, BARGE_IN_TELEPHONY_MIN_ENERGY);
-    }
-
-    if (useAdaptive && now - this.lastEnergyMonitorLogAt >= 700) {
-      this.lastEnergyMonitorLogAt = now;
-      logger.info(
-        {
-          callId: this.config.callId, currentRms: Math.round(currentRms),
-          echoFloor: Math.round(this.playbackEchoFloor),
-          effectiveThreshold: Math.round(effectiveThreshold),
-          configuredThreshold: this.bargeInEnergyThreshold, frames: this.bargeInSpeechFrames,
-        },
-        "energy barge-in monitor",
-      );
-    }
-    if (isWebcallStreaming && now - this.lastEnergyMonitorLogAt >= 700) {
-      this.lastEnergyMonitorLogAt = now;
-      logger.info(
-        {
-          callId: this.config.callId, currentRms: Math.round(frameRms(pcm8k)),
-          effectiveThreshold: Math.round(effectiveThreshold),
-          configuredThreshold: this.bargeInEnergyThreshold, frames: this.bargeInSpeechFrames,
-        },
-        "webcall energy barge-in monitor",
-      );
-    }
-
-    const aboveBar = useAdaptive
-      ? currentRms > effectiveThreshold
-      : hasSpeechEnergy(pcm8k, effectiveThreshold);
-
-    if (aboveBar) {
-      this.bargeInSpeechFrames++;
-      // ~15 frames (300 ms @ 20ms/frame) of sustained caller speech energy required.
-      // Filters out brief mic clicks/breaths while reacting promptly to human interruptions.
-      let effectiveMinFrames = Math.max(6, BARGE_IN_STREAMING_MIN_FRAMES);
-      if (this.bargeInSpeechFrames >= effectiveMinFrames) {
-        const energyDetails = {
-          frames: this.bargeInSpeechFrames,
-          effectiveMinFrames,
-          effectiveThreshold,
-          configuredThreshold: this.bargeInEnergyThreshold,
-          echoFloor: Math.round(this.playbackEchoFloor),
-          currentRms: Math.round(isWebcallStreaming ? frameRms(pcm8k) : currentRms),
-        };
-        if (isWebcallStreaming || streamingCarrier) {
-          // Bolna: energy only inspects. Word count / stop phrase cuts TTS.
-          const pending = this.usablePendingBargeTranscript();
-          if (!this.shouldInterruptFromCallerTranscript(pending)) {
-            if (now - this.lastEnergyMonitorLogAt >= 700) {
-              this.lastEnergyMonitorLogAt = now;
-              logger.info(
-                { callId: this.config.callId, ...energyDetails, pending: pending.slice(0, 80) || null },
-                "Barge-in energy held — waiting for Bolna word gate",
-              );
-            }
-            return;
-          }
-          this.triggerBargeIn(source, pending, { speculative: true, energyDetails });
-        } else {
-          this.triggerBargeIn(source, undefined, {
-            speculative: false,
-            energyDetails,
-          });
-        }
-        this.audioBuffer = [];
-        this.audioBufferNative16k = [];
-        logger.info(
-          {
-            callId: this.config.callId, source, ...energyDetails,
-          },
-          "Barge-in detected (energy)",
-        );
-      }
-      this.bargeInLowEnergyFrames = 0;
-    } else {
-      // Don't reset immediately on a single below-threshold frame — brief
-      // inter-syllable pauses would otherwise kill an accumulating run. Only reset
-      // after 5 consecutive low-energy frames (~100 ms). NOTE: we deliberately do NOT
-      // feed below-bar frames into the echo floor here. Because a normal caller can be
-      // BELOW the bar (that is the very bug we are fixing), treating below-bar frames as
-      // "echo" would let the caller's own voice raise the floor against themselves. The
-      // floor is learned ONLY from the caller-silent post-start calibration window.
-      this.bargeInLowEnergyFrames++;
-      if (this.bargeInLowEnergyFrames >= 5) {
-        this.bargeInSpeechFrames = 0;
-        this.bargeInLowEnergyFrames = 0;
-      }
-    }
+    // Bolna has no inbound RMS barge path. Words + stop phrases cut TTS.
   }
 
   /**
@@ -8550,44 +8257,6 @@ export class OrchestrationPipeline implements VoiceSession {
     this._lastEndpointReason = "";
 
     logger.info({ callId: this.config.callId, transcript, sttLatencyMs }, "Processing turn");
-
-    // Drop ultra-short STT stubs before history / LLM — they restart consent loops.
-    if (isUltraShortNoiseFragment(transcript)) {
-      // A stub only means "noise" if the caller barely spoke. When the VAD segment
-      // was substantial, STT mis-heard a real utterance, and dropping it silently
-      // leaves the caller waiting through dead air (call 5490: 1.36s → "Hmm").
-      const segmentMs = this._lastVadSegmentMs;
-      if (segmentMs >= this.sttTuning.substantiveSpeechMs) {
-        logger.warn(
-          { callId: this.config.callId, transcript: transcript.slice(0, 80), segmentMs },
-          "Noise-stub transcript from substantial speech — asking caller to repeat",
-        );
-        this.logExec(EXEC_COMPONENTS.STT, "system", {
-          status: "info",
-          provider: this.agent.asrProvider,
-          turnNumber: this._activeTurnIndex,
-          warningFlags: ["stt_misheard"],
-          metadata: {
-            event: "Utterance Misheard",
-            reason: "substantial speech transcribed as a noise stub — requesting repeat instead of dropping",
-            transcript: transcript.slice(0, 300),
-            segmentMs,
-          },
-        });
-        this._lastVadSegmentMs = 0;
-        await this.respondWithClarification(this.currentLang || this.agent.sttConfig.language);
-        return;
-      }
-      logger.info(
-        { callId: this.config.callId, transcript: transcript.slice(0, 80), segmentMs },
-        "Dropping ultra-short STT fragment — waiting for more speech",
-      );
-      this.logDiscardedTranscript(transcript, "ultra_short_fragment");
-      this.clearBargeWait();
-      this.safetyNet.beginListening();
-      return;
-    }
-    // Consume the segment measurement so it can't leak into a later turn.
     this._lastVadSegmentMs = 0;
 
     // STT execution-log row — the recognized caller utterance for this turn.
@@ -8601,24 +8270,6 @@ export class OrchestrationPipeline implements VoiceSession {
       responsePayload: { transcript, ...(_sttMeta ?? {}) },
     });
 
-    // P1-I: Start Speaking Plan — content-based delay before triggering LLM response
-    if (this.agent.startSpeakingPlan) {
-      const plan = this.agent.startSpeakingPlan;
-      const lastChar = transcript.trimEnd().slice(-1);
-      let delayMs = 0;
-      if (/[.?!।]/.test(lastChar)) {
-        delayMs = Math.round((plan.onPunctuationSeconds ?? 0) * 1000);
-      } else if (/[0-9]/.test(lastChar)) {
-        delayMs = Math.round((plan.onNumberSeconds ?? 0) * 1000);
-      } else {
-        delayMs = Math.round((plan.onNoPunctuationSeconds ?? 0) * 1000);
-      }
-      delayMs += Math.round((plan.waitSeconds ?? 0) * 1000);
-      // Honor Latency Tuning UI values as-is (schema max 5s). No silent hard cap.
-      if (delayMs > 0 && !this.bargeInRequested) {
-        await new Promise<void>((r) => setTimeout(r, delayMs));
-      }
-    }
     if (
       this._processTurnGeneration !== null
       && !this.semanticTurnGate.belongsTo(this._processTurnGeneration)
@@ -9987,7 +9638,8 @@ export class OrchestrationPipeline implements VoiceSession {
     // the caller hears something rather than dead air.
     let fillerTimer: ReturnType<typeof setTimeout> | null = null;
     if (
-      !backchanneledThisTurn
+      FILLER_THRESHOLD_MS > 0
+      && !backchanneledThisTurn
       && !this.closed
       && !this.bargeInRequested
     ) {
@@ -11548,7 +11200,8 @@ export class OrchestrationPipeline implements VoiceSession {
     let llmFirstSpeakableAt: number | null = null;
     let followUpFillerTimer: ReturnType<typeof setTimeout> | null = null;
     if (
-      this.agent.backchannelingEnabled
+      FILLER_THRESHOLD_MS > 0
+      && this.agent.backchannelingEnabled
       && !this.closed
       && !this.bargeInRequested
     ) {
@@ -12175,9 +11828,10 @@ export class OrchestrationPipeline implements VoiceSession {
   private syncCollectionVad(kind?: ReturnType<typeof resolveCollectionKind>): void {
     const setter = this.streamSTT?.setSilenceDurationMs;
     if (!setter) return;
+    const base = this.agent.sarvamEndOfSpeechSilenceMs;
+    if (base == null) return;
     const lastAgentText = this.conversationHistory.findLast((t) => t.role === "assistant")?.content ?? "";
     const collectionKind = kind ?? resolveCollectionKind(lastAgentText);
-    const base = this.agent.sarvamEndOfSpeechSilenceMs ?? 300;
     const ms = resolveCollectionVadSilenceMs(base, collectionKind);
     setter.call(this.streamSTT, ms);
   }

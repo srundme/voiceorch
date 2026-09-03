@@ -73,7 +73,7 @@ const SUBSTANTIVE_SPEECH_MS = 700;
  * Long enough to sit above an ordinary uninterrupted sentence, since Sarvam emits
  * nothing at all until end-of-speech and a talkative caller is not a failure.
  */
-const LOST_TURN_BACKSTOP_MS = 6_000;
+const LOST_TURN_BACKSTOP_MS = 0;
 
 /** Floor for the recovery silence gate, for agents configured with very short windows. */
 const RECOVERY_MIN_SILENCE_FLOOR_MS = 400;

@@ -200,9 +200,9 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["sarvamHighVadSensitivity"] = sarvamHighVadSensitivity !== false;
   agentConfig["sarvamSpeechEndFlushMs"] = 0;
   agentConfig["sarvamIncompleteHoldMs"] = 0;
-  agentConfig["sarvamEndOfSpeechSilenceMs"] = clampSarvamSilenceMs(sarvamEndOfSpeechSilenceMs);
-  agentConfig["sarvamFirstTurnMinSpeechMs"] = clampSarvamMinSpeechMs(sarvamFirstTurnMinSpeechMs);
-  agentConfig["sarvamVadThreshold"] = clampSarvamVadThreshold(sarvamVadThreshold);
+  agentConfig["sarvamEndOfSpeechSilenceMs"] = clampSarvamSilenceMs(sarvamEndOfSpeechSilenceMs) ?? null;
+  agentConfig["sarvamFirstTurnMinSpeechMs"] = clampSarvamMinSpeechMs(sarvamFirstTurnMinSpeechMs) ?? null;
+  agentConfig["sarvamVadThreshold"] = clampSarvamVadThreshold(sarvamVadThreshold) ?? null;
   agentConfig["semanticTurnStopMs"] = clampSemanticTurnStopMs(semanticTurnStopMs);
   if (kbBakedOnly) agentConfig["kbBakedOnly"] = true;
   // Always persist speed so Sarvam pace / Cartesia speed stay UI-owned (1.0 clears prior boost).
@@ -510,13 +510,13 @@ export default function AgentEdit() {
       linearDelayMs: 0,
       fragmentCoalesceListeningMs: 0,
       fragmentCoalescePlayingMs: 0,
-      telephonyTailDrainMs: 80,
+      telephonyTailDrainMs: 0,
       sarvamHighVadSensitivity: true,
       sarvamSttStreamType: "fast",
       sarvamSttPrompt: "",
-      sarvamEndOfSpeechSilenceMs: 300,
-      sarvamFirstTurnMinSpeechMs: 250,
-      sarvamVadThreshold: 0.3,
+      sarvamEndOfSpeechSilenceMs: undefined,
+      sarvamFirstTurnMinSpeechMs: undefined,
+      sarvamVadThreshold: undefined,
       sarvamSpeechEndFlushMs: 0,
       sarvamIncompleteHoldMs: 0,
       semanticTurnStopMs: 1200,
@@ -1907,10 +1907,14 @@ export default function AgentEdit() {
                         <FormLabel>End-of-speech silence</FormLabel>
                         <FormControl>
                           <Input type="number" min={150} max={800} step={25}
-                            value={field.value ?? 300}
-                            onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                            value={field.value ?? ""}
+                            placeholder="Saaras default"
+                            onChange={e => {
+                              const raw = e.target.value.trim();
+                              field.onChange(raw === "" ? undefined : parseInt(raw, 10));
+                            }} />
                         </FormControl>
-                        <FormDescription className="text-[11px]">Quiet time before the turn ends. Default 300ms. Fast 300 · Balanced 400 · Patient 700.</FormDescription>
+                        <FormDescription className="text-[11px]">Leave blank to trust Saaras VAD. Optional override: Balanced 400 · Patient 700.</FormDescription>
                       </FormItem>
                     )} />
                     <FormField control={form.control} name="sarvamFirstTurnMinSpeechMs" render={({ field }) => (

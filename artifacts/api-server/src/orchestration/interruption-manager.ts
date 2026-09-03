@@ -118,9 +118,9 @@ export class InterruptionManager {
   }
 
   /**
-   * PSTN interruption policy (Bolna word floor + stop phrases).
-   * vad.speech_start is not an argument — caller must pass a transcript.
-   * welcomePlayed=false: first-speech mute; only stop/hold phrases cut.
+   * Bolna `should_trigger_interruption`:
+   * no audio / welcome not played → never cut (including stop).
+   * Cut when `word_count > number_of_words` or an accidental phrase matches.
    */
   shouldTriggerInterruption(
     wordCount: number,
@@ -129,17 +129,16 @@ export class InterruptionManager {
     welcomePlayed = true,
     lowConfidence = false,
   ): boolean {
-    if (!isAudioPlaying) return false;
+    if (!isAudioPlaying || !welcomePlayed) return false;
     if (this.wordsForInterruption === 0) return false;
     if (this.isImmediateInterruptPhrase(transcript)) return true;
-    if (!welcomePlayed) return false;
     const words = wordCount > 0 ? wordCount : countTranscriptWords(transcript);
     const floor = resolvePlayingWordFloor({
       transcript,
       configuredFloor: this.wordsForInterruption,
       lowConfidence,
     });
-    return words >= floor;
+    return words > floor;
   }
 
   /** Start a new agent reply turn; returns the sequence id for TTS frames. */

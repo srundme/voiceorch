@@ -2533,7 +2533,7 @@ function useCallEnginePreset(form: any): {
   const linearMs = form.watch("linearDelayMs") ?? 0;
   const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
   const vad = form.watch("sarvamHighVadSensitivity") ?? false;
-  const silenceMs = form.watch("sarvamEndOfSpeechSilenceMs") ?? 300;
+  const silenceMs = form.watch("sarvamEndOfSpeechSilenceMs");
   const minSpeechMs = form.watch("sarvamFirstTurnMinSpeechMs") ?? 250;
   const threshold = form.watch("sarvamVadThreshold") ?? 0.3;
   const stopMs = form.watch("semanticTurnStopMs") ?? 1200;
@@ -6954,13 +6954,13 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       linearDelayMs: 0,
       fragmentCoalesceListeningMs: 0,
       fragmentCoalescePlayingMs: 0,
-      telephonyTailDrainMs: 80,
+      telephonyTailDrainMs: 0,
       sarvamHighVadSensitivity: true,
       sarvamSttStreamType: "fast",
       sarvamSttPrompt: "",
-      sarvamEndOfSpeechSilenceMs: 300,
-      sarvamFirstTurnMinSpeechMs: 200,
-      sarvamVadThreshold: 0.3,
+      sarvamEndOfSpeechSilenceMs: undefined,
+      sarvamFirstTurnMinSpeechMs: undefined,
+      sarvamVadThreshold: undefined,
       sarvamSpeechEndFlushMs: 0,
       sarvamIncompleteHoldMs: 0,
       semanticTurnStopMs: 800,

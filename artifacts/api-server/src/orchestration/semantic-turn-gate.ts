@@ -86,8 +86,8 @@ export function shouldAdvanceSemanticTurnOnVadStart(opts: {
 
 export function resolveSemanticTurnEnabled(raw: unknown): boolean {
   if (process.env["SEMANTIC_TURN"] === "0") return false;
-  if (raw === false) return false;
-  return true;
+  // Opt-in only. Default ON stacked Smart Turn on top of provider EOT.
+  return raw === true;
 }
 
 /**

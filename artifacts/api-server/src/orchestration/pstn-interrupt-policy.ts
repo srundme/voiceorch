@@ -1,14 +1,10 @@
 /**
- * Bolna interruption. Energy / VAD only inspects. Words + stop/wait cut TTS.
+ * Bolna interruption. Words + accidental phrases cut TTS.
  * Cancel is sequence_id: invalidate N, mute carrier, abort TTS/LLM.
  */
 import { isHoldRequest } from "./conversationDiscipline.js";
 import { InterruptionManager } from "./interruption-manager.js";
-import {
-  isAccidentalInterruptPhrase,
-  isCallerAudioDifficulty,
-  isSemanticInterrupt,
-} from "./transcriptQuality.js";
+import { isAccidentalInterruptPhrase } from "./transcriptQuality.js";
 
 export function isPstnStopHold(text: string, interruptionMgr: InterruptionManager): boolean {
   const t = text.trim();
@@ -18,21 +14,11 @@ export function isPstnStopHold(text: string, interruptionMgr: InterruptionManage
     || isAccidentalInterruptPhrase(t);
 }
 
-/** First-speech mute: discard opener-window STT unless the caller said stop/hold. */
+/** Bolna `discard_pre_welcome_utterance`: drop opener-window STT entirely. */
 export function shouldDiscardOpenerTranscript(
-  transcript: string,
-  interruptionMgr: InterruptionManager,
+  _transcript: string,
+  _interruptionMgr: InterruptionManager,
 ): boolean {
-  const t = transcript.trim();
-  if (!t) return true;
-  if (
-    isSemanticInterrupt(t)
-    || isHoldRequest(t)
-    || interruptionMgr.isImmediateInterruptPhrase(t)
-    || isCallerAudioDifficulty(t)
-  ) {
-    return false;
-  }
   return true;
 }
 

@@ -678,23 +678,20 @@ function envInt(name: string, def: number): number {
   const raw = process.env[name];
   if (!raw) return def;
   const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : def;
+  return Number.isFinite(n) && n >= 0 ? n : def;
 }
 /** Tight timer: partials arriving but no final → force-close using the best partial.
- *  Default 1800 ms — above the adaptive computeEndpointMs ceiling (900 ms), well
- *  below carrier drop. Override with env FORCE_FINALIZE_MS. */
-export const FORCE_FINALIZE_MS = envInt("FORCE_FINALIZE_MS", 1800);
+ *  Default 0 — trust provider finals. Override with env FORCE_FINALIZE_MS. */
+export const FORCE_FINALIZE_MS = envInt("FORCE_FINALIZE_MS", 0);
 /** Loose backstop: no usable transcript at all since we entered "Listening…" →
- *  recovery reprompt (not a hangup). Override with env STALL_BACKSTOP_MS.
- *  Default lowered from 15 000 ms to 10 000 ms so the first reprompt fires
- *  after ~10 s of silence, giving the caller two clear chances (at ~10 s and
- *  ~20 s) before the call ends. */
-export const STALL_BACKSTOP_MS = envInt("STALL_BACKSTOP_MS", 10000);
+ *  recovery reprompt. Default 0 — no SnapServe “I didn’t catch that”.
+ *  Override with env STALL_BACKSTOP_MS. */
+export const STALL_BACKSTOP_MS = envInt("STALL_BACKSTOP_MS", 0);
 /** Shorter stall window after greeting on outbound calls (caller may need a beat to respond).
  *  Kept closer to inbound so we don't rush "can't hear" / hangup after a stub opener. */
-export const OUTBOUND_POST_GREETING_STALL_MS = envInt("OUTBOUND_POST_GREETING_STALL_MS", 15000);
+export const OUTBOUND_POST_GREETING_STALL_MS = envInt("OUTBOUND_POST_GREETING_STALL_MS", 0);
 /** Even shorter when resuming a dropped callback — expect a quick "hello?" back. */
-export const RESUME_DROP_POST_GREETING_STALL_MS = envInt("RESUME_DROP_POST_GREETING_STALL_MS", 6000);
+export const RESUME_DROP_POST_GREETING_STALL_MS = envInt("RESUME_DROP_POST_GREETING_STALL_MS", 0);
 /** Max consecutive stall reprompts before ending the call. Override with env
  *  STALL_MAX_REPROMPTS. */
 export const STALL_MAX_REPROMPTS = envInt("STALL_MAX_REPROMPTS", 2);
@@ -1013,7 +1010,9 @@ export class TurnSafetyNet {
   beginListening(): void {
     this.clearTimers();
     this.bestPartial = "";
-    this.stallTimer = setTimeout(() => this.onStallExpire(), this.stallMs);
+    if (this.stallMs > 0) {
+      this.stallTimer = setTimeout(() => this.onStallExpire(), this.stallMs);
+    }
   }
 
   /**
@@ -1023,6 +1022,7 @@ export class TurnSafetyNet {
    */
   onActivityPulse(): void {
     this.repromptCount = 0;
+    if (this.stallMs <= 0) return;
     if (this.stallTimer) clearTimeout(this.stallTimer);
     this.stallTimer = setTimeout(() => this.onStallExpire(), this.stallMs);
   }
@@ -1032,8 +1032,10 @@ export class TurnSafetyNet {
     const t = text.trim();
     if (!t) return;
     this.bestPartial = t;
-    if (this.forceTimer) clearTimeout(this.forceTimer);
-    this.forceTimer = setTimeout(() => this.onForceExpire(), this.forceMs);
+    if (this.forceMs > 0) {
+      if (this.forceTimer) clearTimeout(this.forceTimer);
+      this.forceTimer = setTimeout(() => this.onForceExpire(), this.forceMs);
+    }
     // A streaming partial means the caller is ACTIVELY speaking — they are not
     // silent. Push the stall backstop forward and reset the accumulated reprompt
     // count so the give-up path can only ever fire on genuine sustained silence,

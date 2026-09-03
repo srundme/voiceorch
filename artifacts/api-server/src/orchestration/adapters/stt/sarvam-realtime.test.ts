@@ -73,19 +73,16 @@ describe("nextRealtimeLanguageOnSwitch", () => {
 });
 
 describe("resolveRealtimeVadDefaults", () => {
-  it("uses Sarvam's PSTN table on 8 kHz telephony", () => {
+  it("does not overlay Sarvam VAD milliseconds", () => {
     expect(resolveRealtimeVadDefaults(8000)).toEqual({
-      silenceDurationMs: 500,
-      minSpeechDurationMs: 200,
-      threshold: 0.7,
+      silenceDurationMs: null,
+      minSpeechDurationMs: null,
+      threshold: null,
     });
-  });
-
-  it("uses the headset table on 16 kHz webcall", () => {
     expect(resolveRealtimeVadDefaults(16000)).toEqual({
-      silenceDurationMs: 300,
-      minSpeechDurationMs: 80,
-      threshold: 0.5,
+      silenceDurationMs: null,
+      minSpeechDurationMs: null,
+      threshold: null,
     });
   });
 });
@@ -194,9 +191,21 @@ describe("buildRealtimeWsUrl", () => {
     expect(url).toContain("min_speech_duration_ms=250");
     expect(url).toContain("encoding=linear16");
     expect(url).toContain("threshold=0.3");
-    expect(url).toContain("prefix_padding_ms=300");
     expect(url).toContain("return_timestamps=true");
     expect(url).not.toContain("high_vad_sensitivity");
+    expect(url).not.toContain("prefix_padding_ms");
+  });
+
+  it("omits VAD millisecond overlays when unset so Saaras stands alone", () => {
+    const url = buildRealtimeWsUrl({
+      languageCode: "auto",
+      sampleRate: 8000,
+      mode: "transcribe",
+    });
+    expect(url).not.toContain("silence_duration_ms");
+    expect(url).not.toContain("min_speech_duration_ms");
+    expect(url).not.toContain("threshold");
+    expect(url).not.toContain("prefix_padding_ms");
   });
 
   it("adds a terminology prompt and never sends a bogus sample rate", () => {

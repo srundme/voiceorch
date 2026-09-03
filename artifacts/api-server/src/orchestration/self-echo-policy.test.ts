@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { shouldIgnoreSelfEcho } from "./self-echo-policy.js";
 
 describe("Bolna self-echo", () => {
-  it("welcome_played=false mutes the first utterance except stop/wait", () => {
+  it("welcome_played=false mutes every transcript including stop", () => {
     expect(shouldIgnoreSelfEcho({
       transcript: "Hello",
       agentSpeaking: true,
@@ -15,10 +15,10 @@ describe("Bolna self-echo", () => {
       agentSpeaking: true,
       welcomePlayed: false,
       isOverridePhrase: true,
-    }).ignore).toBe(false);
+    }).ignore).toBe(true);
   });
 
-  it("ignores below the 3-word floor while the agent is speaking", () => {
+  it("ignores word_count <= 3 while the agent is speaking", () => {
     expect(shouldIgnoreSelfEcho({
       transcript: "yes okay",
       agentSpeaking: true,
@@ -29,6 +29,14 @@ describe("Bolna self-echo", () => {
 
     expect(shouldIgnoreSelfEcho({
       transcript: "yes okay continue",
+      agentSpeaking: true,
+      welcomePlayed: true,
+      isOverridePhrase: false,
+      wordFloor: 3,
+    }).ignore).toBe(true);
+
+    expect(shouldIgnoreSelfEcho({
+      transcript: "yes okay continue please",
       agentSpeaking: true,
       welcomePlayed: true,
       isOverridePhrase: false,

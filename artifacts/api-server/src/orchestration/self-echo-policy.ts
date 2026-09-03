@@ -1,10 +1,8 @@
 /**
  * Bolna self-echo. They do not match TTS text to STT.
  *
- * While the agent is speaking, transcripts below
- * `number_of_words_for_interruption` are ignored ("yes", "hmm", "Hello").
- * stop/wait override phrases always pass.
- * `welcome_played=false` (first agent utterance) mutes everything except overrides.
+ * `welcome_played=false` mutes every transcript (including stop).
+ * While the agent is speaking, `word_count <= number_of_words` is ignored.
  * After the agent stops, the floor is 0.
  */
 
@@ -22,18 +20,18 @@ export function shouldIgnoreSelfEcho(opts: {
   isOverridePhrase: boolean;
   wordFloor?: number;
 }): { ignore: boolean; reason: SelfEchoReason } {
-  if (opts.isOverridePhrase) {
-    return { ignore: false, reason: "none" };
-  }
   if (!opts.welcomePlayed) {
     return { ignore: true, reason: "bolna_welcome" };
+  }
+  if (opts.isOverridePhrase) {
+    return { ignore: false, reason: "none" };
   }
   if (opts.agentSpeaking) {
     const floor = opts.wordFloor && opts.wordFloor > 0
       ? opts.wordFloor
       : PLAYING_INTERRUPT_WORD_FLOOR;
     const words = countTranscriptWords(opts.transcript);
-    if (words < floor) {
+    if (words <= floor) {
       return { ignore: true, reason: "bolna_word_floor" };
     }
   }

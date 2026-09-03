@@ -335,7 +335,7 @@ export class SarvamSTT implements STTAdapter {
   private readonly explicitMode: string | null;
   private readonly highVadSensitivity: boolean;
   /** Wall-clock VAD windows; converted to frames at connect time (see msToVadFrames). */
-  private readonly firstTurnMinSpeechMs: number;
+  private readonly firstTurnMinSpeechMs: number | null;
   private readonly endOfSpeechSilenceMs: number | null;
   private readonly cfg: STTConfig;
   /** Native sample rate to actually stream to Sarvam — 8000 for telephony, 16000 for webcall. */
@@ -387,10 +387,10 @@ export class SarvamSTT implements STTAdapter {
     // VAD windows are configured in milliseconds and converted to frames against
     // the live sample rate, so one value behaves identically on 8kHz telephony and
     // 16kHz webcall. Agent config wins; env is the deploy-wide override.
-    this.firstTurnMinSpeechMs = resolveMsSetting(
+    this.firstTurnMinSpeechMs = resolveOptionalMsSetting(
       extra.firstTurnMinSpeechMs,
       "SARVAM_FIRST_TURN_MIN_SPEECH_MS",
-      DEFAULT_FIRST_TURN_MIN_SPEECH_MS,
+      null,
       { min: 32, max: 2000 },
     );
     this.endOfSpeechSilenceMs = resolveOptionalMsSetting(
@@ -410,7 +410,9 @@ export class SarvamSTT implements STTAdapter {
         sampleRate: this.sampleRate,
         vadFrameMs: vadFrameMs(this.sampleRate),
         firstTurnMinSpeechMs: this.firstTurnMinSpeechMs,
-        firstTurnMinSpeechFrames: msToVadFrames(this.firstTurnMinSpeechMs, this.sampleRate),
+        firstTurnMinSpeechFrames: this.firstTurnMinSpeechMs
+          ? msToVadFrames(this.firstTurnMinSpeechMs, this.sampleRate)
+          : null,
         endOfSpeechSilenceMs: this.endOfSpeechSilenceMs,
         endOfSpeechFrames: this.endOfSpeechSilenceMs
           ? endOfSpeechFrames(this.endOfSpeechSilenceMs, this.sampleRate)
@@ -496,13 +498,13 @@ export class SarvamSTT implements STTAdapter {
         high_vad_sensitivity: this.highVadSensitivity ? "true" : "false",
         vad_signals: "true", // emit speech_start / speech_end events
         flush_signal: "true", // allow manual buffer flush via flush() call
-        // Converted from milliseconds at the live sample rate, so the window is the
-        // same wall-clock length on 8kHz telephony as on 16kHz — a raw frame count
-        // here would mean twice as long on telephony (lost short first replies).
-        first_turn_min_speech_frames: String(
-          msToVadFrames(this.firstTurnMinSpeechMs, sampleRate),
-        ),
       });
+      if (this.firstTurnMinSpeechMs !== null) {
+        params.set(
+          "first_turn_min_speech_frames",
+          String(msToVadFrames(this.firstTurnMinSpeechMs, sampleRate)),
+        );
+      }
       // Explicit end-of-speech boundary. Unset by default, which leaves Sarvam on
       // whichever preset high_vad_sensitivity selects; set it to escape that
       // two-position switch and choose a real silence window in milliseconds.

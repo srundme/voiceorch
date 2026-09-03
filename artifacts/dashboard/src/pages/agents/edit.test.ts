@@ -385,7 +385,7 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     expect(cfg.semanticTurnStopMs).toBe(800);
   });
 
-  it("defaults Sarvam realtime VAD to 300 / 250 / 0.3 when unset", () => {
+  it("omits Sarvam EOS silence when unset so Saaras VAD stands alone", () => {
     const payload = buildUpdateAgentPayload({
       ...VALID_BASE,
       asrProvider: "sarvam",
@@ -395,9 +395,9 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
       ttsVoice: "priya",
     } as AgentFormValues);
     const cfg = payload.agentConfig as any;
-    expect(cfg.sarvamEndOfSpeechSilenceMs).toBe(300);
-    expect(cfg.sarvamFirstTurnMinSpeechMs).toBe(250);
-    expect(cfg.sarvamVadThreshold).toBe(0.3);
+    expect(cfg.sarvamEndOfSpeechSilenceMs).toBeNull();
+    expect(cfg.sarvamFirstTurnMinSpeechMs).toBeNull();
+    expect(cfg.sarvamVadThreshold).toBeNull();
     expect(cfg.semanticTurnStopMs).toBe(1200);
   });
 
@@ -572,11 +572,11 @@ describe("Sarvam realtime builder catalog", () => {
     expect(isSarvamRealtimeAsr("saarika:v2.5")).toBe(false);
   });
 
-  it("hydrates unset VAD from Fast / Patient endpointing", async () => {
+  it("does not invent Sarvam VAD overlays when the agent left them unset", async () => {
     const { hydrateSarvamRealtimeVad } = await import("./edit.schema");
-    expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 150 }).silence).toBe(300);
-    expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 500 }).silence).toBe(700);
-    expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 250 }).silence).toBe(400);
+    expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 150 }).silence).toBeUndefined();
+    expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 500 }).silence).toBeUndefined();
+    expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 250 }).silence).toBeUndefined();
     expect(hydrateSarvamRealtimeVad({ sarvamEndOfSpeechSilenceMs: 400, asrEndpointingSilenceMs: 150 }).silence).toBe(400);
   });
 

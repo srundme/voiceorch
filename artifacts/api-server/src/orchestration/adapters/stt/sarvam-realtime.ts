@@ -12,28 +12,24 @@ import { WebSocket } from "ws";
 import type { STTAdapter, SttFinalMetadata } from "./base.js";
 import type { STTConfig, StreamSTT } from "../../types.js";
 import { logger } from "../../../lib/logger.js";
-import { SarvamSTT, resolveMsSetting } from "./sarvam.js";
+import { SarvamSTT, resolveOptionalMsSetting } from "./sarvam.js";
 import { resolveSarvamSttMode, type SarvamSttMode } from "./sarvam-mode.js";
 
 const WS_BASE = "wss://api.sarvam.ai/speech-to-text-realtime/ws";
 const PING_MS = 20_000;
-/** Realtime API default. Pipecat: raise if the first syllable is clipped. */
-const DEFAULT_PREFIX_PADDING_MS = 300;
 
 /**
  * Sarvam LiveKit production VAD table
  * (https://docs.sarvam.ai/api/integration/livekit-production-best-practices).
  * Telephony (8 kHz) needs a higher onset bar and longer EOS than headset audio.
  */
-export function resolveRealtimeVadDefaults(sampleRate: 8000 | 16000): {
-  silenceDurationMs: number;
-  minSpeechDurationMs: number;
-  threshold: number;
+export function resolveRealtimeVadDefaults(_sampleRate: 8000 | 16000): {
+  silenceDurationMs: number | null;
+  minSpeechDurationMs: number | null;
+  threshold: number | null;
 } {
-  if (sampleRate === 8000) {
-    return { silenceDurationMs: 500, minSpeechDurationMs: 200, threshold: 0.7 };
-  }
-  return { silenceDurationMs: 300, minSpeechDurationMs: 80, threshold: 0.5 };
+  // Bolna does not overlay VAD milliseconds. Omit unless the agent set them.
+  return { silenceDurationMs: null, minSpeechDurationMs: null, threshold: null };
 }
 
 export type SarvamRealtimeStreamType = "fast" | "balanced" | "simulated";
@@ -211,10 +207,10 @@ export function buildRealtimeWsUrl(opts: {
   sampleRate: 8000 | 16000;
   mode: SarvamSttMode;
   streamType?: SarvamRealtimeStreamType;
-  silenceDurationMs: number;
-  minSpeechDurationMs: number;
-  threshold: number;
-  prefixPaddingMs?: number;
+  silenceDurationMs?: number | null;
+  minSpeechDurationMs?: number | null;
+  threshold?: number | null;
+  prefixPaddingMs?: number | null;
   prompt?: string;
   returnTimestamps?: boolean;
 }): string {
@@ -230,12 +226,20 @@ export function buildRealtimeWsUrl(opts: {
     // We always decode carrier mulaw to PCM before this socket.
     encoding: "linear16",
     sample_rate: String(opts.sampleRate === 8000 ? 8000 : 16000),
-    silence_duration_ms: String(opts.silenceDurationMs),
-    min_speech_duration_ms: String(opts.minSpeechDurationMs),
-    threshold: String(opts.threshold),
-    prefix_padding_ms: String(opts.prefixPaddingMs ?? DEFAULT_PREFIX_PADDING_MS),
     return_timestamps: opts.returnTimestamps === false ? "false" : "true",
   });
+  if (opts.silenceDurationMs != null) {
+    params.set("silence_duration_ms", String(opts.silenceDurationMs));
+  }
+  if (opts.minSpeechDurationMs != null) {
+    params.set("min_speech_duration_ms", String(opts.minSpeechDurationMs));
+  }
+  if (opts.threshold != null) {
+    params.set("threshold", String(opts.threshold));
+  }
+  if (opts.prefixPaddingMs != null) {
+    params.set("prefix_padding_ms", String(opts.prefixPaddingMs));
+  }
   const prompt = clipRealtimePrompt(opts.prompt);
   if (prompt) params.set("prompt", prompt);
   return `${WS_BASE}?${params.toString()}`;
@@ -349,9 +353,9 @@ export class SarvamRealtimeSTT implements STTAdapter {
   private languageCode: string;
   /** Agent language, kept even when the socket opens on `auto`, for LID-drift recovery. */
   private readonly primaryLanguage: string;
-  private readonly silenceDurationMs: number;
-  private readonly minSpeechDurationMs: number;
-  private readonly threshold: number;
+  private readonly silenceDurationMs: number | null;
+  private readonly minSpeechDurationMs: number | null;
+  private readonly threshold: number | null;
   private readonly streamType: SarvamRealtimeStreamType;
   private readonly prompt?: string;
 
@@ -382,13 +386,13 @@ export class SarvamRealtimeSTT implements STTAdapter {
     this.languageCode = resolveRealtimeSocketLanguage(cfg.language, extra.languageAutoDetect);
     this.primaryLanguage = toRealtimeLanguageCode(cfg.language, false);
     const vadDefaults = resolveRealtimeVadDefaults(this.sampleRate);
-    this.silenceDurationMs = resolveMsSetting(
+    this.silenceDurationMs = resolveOptionalMsSetting(
       extra.endOfSpeechSilenceMs,
       "SARVAM_END_OF_SPEECH_SILENCE_MS",
       vadDefaults.silenceDurationMs,
       { min: 150, max: 2000 },
     );
-    this.minSpeechDurationMs = resolveMsSetting(
+    this.minSpeechDurationMs = resolveOptionalMsSetting(
       extra.firstTurnMinSpeechMs,
       "SARVAM_FIRST_TURN_MIN_SPEECH_MS",
       vadDefaults.minSpeechDurationMs,
@@ -408,7 +412,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
         primaryLanguage: this.primaryLanguage,
         mode: this.mode,
         streamType: this.streamType,
-        prefixPaddingMs: DEFAULT_PREFIX_PADDING_MS,
+        prefixPaddingMs: null,
         prompt: this.prompt ? this.prompt.slice(0, 40) : undefined,
         sampleRate: this.sampleRate,
         silenceDurationMs: this.silenceDurationMs,
@@ -674,7 +678,6 @@ export class SarvamRealtimeSTT implements STTAdapter {
         silenceDurationMs,
         minSpeechDurationMs,
         threshold,
-        prefixPaddingMs: DEFAULT_PREFIX_PADDING_MS,
         prompt,
         returnTimestamps: true,
       });

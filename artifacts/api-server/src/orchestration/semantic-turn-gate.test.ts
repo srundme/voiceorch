@@ -216,7 +216,9 @@ describe("config helpers", () => {
     expect(clampSemanticTurnStopMs("nope")).toBe(1200);
   });
 
-  it("SEMANTIC_TURN=0 disables even when agent config is on", () => {
+  it("is opt-in; SEMANTIC_TURN=0 disables even when agent config is on", () => {
+    expect(resolveSemanticTurnEnabled(undefined)).toBe(false);
+    expect(resolveSemanticTurnEnabled(true)).toBe(true);
     const prev = process.env["SEMANTIC_TURN"];
     process.env["SEMANTIC_TURN"] = "0";
     expect(resolveSemanticTurnEnabled(true)).toBe(false);

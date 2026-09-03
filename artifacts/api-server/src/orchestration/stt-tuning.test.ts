@@ -50,9 +50,10 @@ describe("resolveSttTuning — derivation from agent settings", () => {
     expect(resolveSttTuning({ ...DEFAULTS, stallBackstopMs: 6_000 }).recoveryMaxAudioMs).toBe(12_000);
   });
 
-  it("keeps the duplicate window wider than the backstop that triggers a recovery", () => {
+  it("does not invent a lost-turn flush window", () => {
     const t = resolveSttTuning(DEFAULTS);
-    expect(t.recoveryDedupMs).toBeGreaterThan(t.lostTurnBackstopMs);
+    expect(t.lostTurnBackstopMs).toBe(0);
+    expect(t.recoveryDedupMs).toBe(0);
   });
 
   it("never lets recovery fire before the caller could plausibly have finished", () => {

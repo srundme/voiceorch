@@ -240,7 +240,7 @@ async function buildTargetAgentConfig(
     bargeInEnabled: (agentCfg["bargeInEnabled"] as boolean | undefined) ?? true,
     bargeInEnergyThreshold: resolveBargeInEnergyThreshold(agentCfg["bargeInEnergyThreshold"]),
     bargeInMinFrames: (agentCfg["bargeInMinFrames"] as number | undefined) ?? 4,
-    bargeInEchoGraceMs: (agentCfg["bargeInEchoGraceMs"] as number | undefined) ?? 600,
+    bargeInEchoGraceMs: (agentCfg["bargeInEchoGraceMs"] as number | undefined) ?? 0,
     micSensitivity,
     timezone: (agentCfg["timezone"] as string | undefined) ?? "Asia/Kolkata",
     recordingEnabled: (agentCfg["recordingEnabled"] as boolean | undefined) ?? false,
@@ -289,9 +289,9 @@ async function buildTargetAgentConfig(
     })(),
     telephonyTailDrainMs: (() => {
       const v = agentCfg["telephonyTailDrainMs"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 80;
+      if (typeof v !== "number" || !Number.isFinite(v)) return 0;
       const ms = Math.max(0, Math.min(2000, Math.round(v)));
-      return ms === 400 ? 80 : ms;
+      return ms === 400 || ms === 80 ? 0 : ms;
     })(),
     sarvamSttMode: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? resolveSarvamSttMode(
@@ -309,9 +309,14 @@ async function buildTargetAgentConfig(
     // Wall-clock VAD windows; the adapter converts them to frames at the live
     // sample rate. Null means "leave the provider default alone".
     sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
-    sarvamEndOfSpeechSilenceMs: optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]),
+    sarvamEndOfSpeechSilenceMs: (() => {
+      const v = optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]);
+      return v === 300 || v === 500 ? null : v;
+    })(),
     sarvamVadThreshold: optionalUnitInterval(agentCfg["sarvamVadThreshold"]),
-    semanticTurnDetection: resolveSemanticTurnEnabled(agentCfg["semanticTurnDetection"]),
+    semanticTurnDetection: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
+      ? false
+      : resolveSemanticTurnEnabled(agentCfg["semanticTurnDetection"]),
     semanticTurnStopMs: clampSemanticTurnStopMs(agentCfg["semanticTurnStopMs"]),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
     voiceStack,

@@ -152,7 +152,7 @@ export const agentFormSchema = z.object({
   sarvamSttStreamType: z.enum(["fast", "balanced", "simulated"]).optional(),
   /** Terminology hint applied to the final transcript only. */
   sarvamSttPrompt: z.string().max(500).optional(),
-  /** Realtime connect `silence_duration_ms`. Default 300 (Fast). */
+  /** Realtime connect `silence_duration_ms`. Omit = Saaras VAD. */
   sarvamEndOfSpeechSilenceMs: z.number().min(150).max(800).optional(),
   /** Realtime connect `min_speech_duration_ms`. Default 250. */
   sarvamFirstTurnMinSpeechMs: z.number().min(80).max(800).optional(),
@@ -243,7 +243,7 @@ export const CALL_ENGINE_PRESETS = {
     linearDelayMs: 0,
     stopSpeakingNumWords: 1,
     sarvamHighVadSensitivity: true,
-    sarvamEndOfSpeechSilenceMs: 300,
+    sarvamEndOfSpeechSilenceMs: undefined as unknown as number,
     sarvamFirstTurnMinSpeechMs: 200,
     sarvamVadThreshold: 0.3,
     semanticTurnStopMs: 800,
@@ -305,9 +305,9 @@ export function clampFragmentCoalescePlayingMs(value: number | null | undefined)
 }
 
 export function clampTelephonyTailDrainMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 80;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 0;
   const ms = Math.max(0, Math.min(2000, Math.round(v)));
-  return ms === 400 ? 80 : ms;
+  return ms === 400 || ms === 80 ? 0 : ms;
 }
 
 export function clampSarvamSpeechEndFlushMs(value: number | null | undefined): number {
@@ -320,22 +320,22 @@ export function clampSarvamIncompleteHoldMs(value: number | null | undefined): n
   return Math.max(0, Math.min(1000, Math.round(v)));
 }
 
-/** Realtime `silence_duration_ms`. Adapter default 500. */
-export function clampSarvamSilenceMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 300;
-  return Math.max(150, Math.min(800, Math.round(v)));
+/** Realtime `silence_duration_ms`. Unset = omit (Saaras owns EOT). */
+export function clampSarvamSilenceMs(value: number | null | undefined): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.max(150, Math.min(800, Math.round(value)));
 }
 
-/** Realtime `min_speech_duration_ms`. Adapter default 250. */
-export function clampSarvamMinSpeechMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 250;
-  return Math.max(80, Math.min(800, Math.round(v)));
+/** Realtime `min_speech_duration_ms`. Unset = omit (Saaras owns onset). */
+export function clampSarvamMinSpeechMs(value: number | null | undefined): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.max(80, Math.min(800, Math.round(value)));
 }
 
-/** Realtime VAD `threshold`. Adapter default 0.3. */
-export function clampSarvamVadThreshold(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 0.3;
-  return Math.min(0.8, Math.max(0.1, Math.round(v * 100) / 100));
+/** Realtime VAD `threshold`. Unset = omit. */
+export function clampSarvamVadThreshold(value: number | null | undefined): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.min(0.8, Math.max(0.1, Math.round(value * 100) / 100));
 }
 
 /** Incomplete-thought cap after Smart Turn HOLD. Adapter default 1200. */
@@ -345,42 +345,25 @@ export function clampSemanticTurnStopMs(value: number | null | undefined): numbe
 }
 
 /**
- * Fill realtime VAD fields for the builder. If the agent never saved them,
- * map from endpointing so Fast / Balanced / Patient still look like themselves.
+ * Fill realtime VAD fields only when the agent saved them.
+ * Bolna does not overlay Fast / Balanced / Patient milliseconds on Saaras.
  */
 export function hydrateSarvamRealtimeVad(cfg: {
   sarvamEndOfSpeechSilenceMs?: unknown;
   sarvamFirstTurnMinSpeechMs?: unknown;
   sarvamVadThreshold?: unknown;
   asrEndpointingSilenceMs?: unknown;
-}): { silence: number; minSpeech: number; threshold: number } {
-  if (typeof cfg.sarvamEndOfSpeechSilenceMs === "number" && Number.isFinite(cfg.sarvamEndOfSpeechSilenceMs)) {
-    return {
-      silence: clampSarvamSilenceMs(cfg.sarvamEndOfSpeechSilenceMs),
-      minSpeech: clampSarvamMinSpeechMs(
-        typeof cfg.sarvamFirstTurnMinSpeechMs === "number" ? cfg.sarvamFirstTurnMinSpeechMs : undefined,
-      ),
-      threshold: clampSarvamVadThreshold(
-        typeof cfg.sarvamVadThreshold === "number" ? cfg.sarvamVadThreshold : undefined,
-      ),
-    };
-  }
-  const endpoint = clampEndpointingMs(
-    typeof cfg.asrEndpointingSilenceMs === "number" ? cfg.asrEndpointingSilenceMs : undefined,
-  );
-  const preset = endpoint <= 150
-    ? CALL_ENGINE_PRESETS.fast
-    : endpoint >= 500
-      ? CALL_ENGINE_PRESETS.patient
-      : CALL_ENGINE_PRESETS.balanced;
+}): { silence?: number; minSpeech?: number; threshold?: number } {
   return {
-    silence: preset.sarvamEndOfSpeechSilenceMs,
+    silence: typeof cfg.sarvamEndOfSpeechSilenceMs === "number"
+      ? clampSarvamSilenceMs(cfg.sarvamEndOfSpeechSilenceMs)
+      : undefined,
     minSpeech: typeof cfg.sarvamFirstTurnMinSpeechMs === "number"
       ? clampSarvamMinSpeechMs(cfg.sarvamFirstTurnMinSpeechMs)
-      : preset.sarvamFirstTurnMinSpeechMs,
+      : undefined,
     threshold: typeof cfg.sarvamVadThreshold === "number"
       ? clampSarvamVadThreshold(cfg.sarvamVadThreshold)
-      : preset.sarvamVadThreshold,
+      : undefined,
   };
 }
 

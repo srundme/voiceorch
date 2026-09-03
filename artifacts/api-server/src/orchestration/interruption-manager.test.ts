@@ -99,7 +99,8 @@ describe("InterruptionManager", () => {
     expect(m.shouldTriggerInterruption(2, "yes okay", true)).toBe(false);
     expect(m.shouldTriggerInterruption(1, "uh", true)).toBe(false);
     expect(m.shouldTriggerInterruption(2, "uh yes", true)).toBe(false);
-    expect(m.shouldTriggerInterruption(3, "one two three", true)).toBe(true);
+    expect(m.shouldTriggerInterruption(3, "one two three", true)).toBe(false);
+    expect(m.shouldTriggerInterruption(4, "one two three four", true)).toBe(true);
 
     expect(m.shouldTriggerInterruption(1, "stop", true)).toBe(true);
     expect(m.shouldTriggerInterruption(1, "நிறுத்து", true)).toBe(true);
@@ -107,13 +108,13 @@ describe("InterruptionManager", () => {
     expect(m.shouldTriggerInterruption(3, "wait stop இருங்க", true)).toBe(true);
   });
 
-  it("first-speech mute ignores room speech and still honors stop/hold", () => {
+  it("first-speech mute ignores every transcript including stop (Bolna welcome_played)", () => {
     const m = new InterruptionManager();
     expect(m.shouldTriggerInterruption(1, "Hello", true, false)).toBe(false);
     expect(m.shouldTriggerInterruption(3, "Hello இங்க பாருங்க", true, false)).toBe(false);
     expect(m.shouldTriggerInterruption(2, "yes okay", true, false)).toBe(false);
-    expect(m.shouldTriggerInterruption(1, "wait", true, false)).toBe(true);
-    expect(m.shouldTriggerInterruption(3, "wait stop இருங்க", true, false)).toBe(true);
+    expect(m.shouldTriggerInterruption(1, "wait", true, false)).toBe(false);
+    expect(m.shouldTriggerInterruption(3, "wait stop இருங்க", true, false)).toBe(false);
   });
 
   it("uses the configured Bolna floor with no messy/+1 bump", () => {

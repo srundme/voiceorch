@@ -45,13 +45,12 @@ export const SARVAM_STT_LATENCY_DEFAULTS = {
   /** Do not second-guess Saaras with mid-thought coalesce holds. */
   incompleteHoldMs: 0,
   /**
-   * Realtime `silence_duration_ms` for new agents / unset config.
-   * 300 matches the Fast call-engine preset. 500 was the accidental Balanced
-   * factory default that stacked ~200 ms of lag after every utterance.
+   * Omit `silence_duration_ms` unless the agent set it. Saaras owns EOT;
+   * 300/500 were SnapServe Fast/Balanced overlays on top of provider VAD.
    */
-  endOfSpeechSilenceMs: 300,
-  /** Previous builder/form default — rewritten to endOfSpeechSilenceMs. */
-  legacyEndOfSpeechSilenceMs: 500,
+  endOfSpeechSilenceMs: null as number | null,
+  /** Previous builder/form defaults — rewritten off so Saaras VAD stands alone. */
+  legacyEndOfSpeechSilenceMs: [300, 500] as const,
 } as const;
 
 /**
@@ -265,11 +264,12 @@ export function normalizeCallEngineAgentConfig(
   }
 
   const eos = cfg["sarvamEndOfSpeechSilenceMs"];
-  if (eos === SARVAM_STT_LATENCY_DEFAULTS.legacyEndOfSpeechSilenceMs) {
-    reasons.push(
-      `sarvamEndOfSpeechSilenceMs ${eos}→${SARVAM_STT_LATENCY_DEFAULTS.endOfSpeechSilenceMs}`,
-    );
-    cfg["sarvamEndOfSpeechSilenceMs"] = SARVAM_STT_LATENCY_DEFAULTS.endOfSpeechSilenceMs;
+  if (
+    typeof eos === "number"
+    && (SARVAM_STT_LATENCY_DEFAULTS.legacyEndOfSpeechSilenceMs as readonly number[]).includes(eos)
+  ) {
+    reasons.push(`sarvamEndOfSpeechSilenceMs ${eos}→∅ (Saaras VAD)`);
+    delete cfg["sarvamEndOfSpeechSilenceMs"];
   }
 
   const wordsLive = cfg["wordsForInterruption"];
@@ -292,9 +292,9 @@ export function normalizeCallEngineAgentConfig(
   }
 
   const tailDrain = cfg["telephonyTailDrainMs"];
-  if (tailDrain === 400) {
-    reasons.push("telephonyTailDrainMs 400→80");
-    cfg["telephonyTailDrainMs"] = 80;
+  if (tailDrain === 400 || tailDrain === 80) {
+    reasons.push(`telephonyTailDrainMs ${tailDrain}→0`);
+    cfg["telephonyTailDrainMs"] = 0;
   }
 
   const uniqueReasons = [...new Set(reasons)];
@@ -317,11 +317,10 @@ export function callEngineInsertDefaults(): Record<string, unknown> {
     ttsMinSentenceChars: TTS_STREAM_DEFAULTS.minSentenceChars,
     fragmentCoalesceListeningMs: FRAGMENT_COALESCE_DEFAULTS.listeningMs,
     fragmentCoalescePlayingMs: FRAGMENT_COALESCE_DEFAULTS.playingMs,
-    telephonyTailDrainMs: 80,
+    telephonyTailDrainMs: 0,
     sarvamHighVadSensitivity: SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity,
     sarvamSpeechEndFlushMs: SARVAM_STT_LATENCY_DEFAULTS.speechEndFlushMs,
     sarvamIncompleteHoldMs: SARVAM_STT_LATENCY_DEFAULTS.incompleteHoldMs,
-    sarvamEndOfSpeechSilenceMs: SARVAM_STT_LATENCY_DEFAULTS.endOfSpeechSilenceMs,
     stopSpeakingPlan: {
       numWords: CALL_ENGINE_SAFE.wordsForInterruption,
       voiceSeconds: voiceSecondsFromInterruptWords(CALL_ENGINE_SAFE.wordsForInterruption),
