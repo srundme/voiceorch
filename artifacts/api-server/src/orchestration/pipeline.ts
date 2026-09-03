@@ -2295,9 +2295,64 @@ export class OrchestrationPipeline implements VoiceSession {
       this.logExec("STT", "system", {
         status: "info",
         turnNumber: this._activeTurnIndex,
-        metadata: { event: "VAD Speech Start" },
+        metadata: { event: "VAD Speech Start (Sarvam native)" },
       });
       this.armVadFlushBackstop();
+      
+      // ── PRIMARY BARGE-IN SIGNAL (Industry Standard) ────────────────────────────
+      // Sarvam's VAD detected speech while agent is speaking → potential barge-in!
+      // This is the CORRECT way to detect interruptions (PipeCat, Bolna, LiveKit all
+      // use provider-side VAD events, not energy thresholds). Sarvam's model handles
+      // mic sensitivity, echo, noise, and far-field speech automatically.
+      //
+      // Echo guard: PSTN carriers echo the agent's TTS back, so we wait for a usable
+      // partial (actual caller words) before committing the barge-in. This prevents
+      // echo from triggering false barge-ins while still allowing real interruptions.
+      if (this.isPlaying || this.isSendingTtsAudio) {
+        const pending = this.streamSTT?.getPendingTranscript?.() ?? "";
+        const usablePartial = pending.trim().length >= bargeInMinChars(this.config.telephonyProvider);
+        const inEchoGrace = 
+          Date.now() < this.bargeInHoldUntil
+          || Date.now() < this.bargeInSentenceStartAt + Math.max(1500, this.bargeInEchoGraceMs);
+        const echoBar = this.echoBarRms();
+        const energyAboveEchoBar = echoBar !== null && this.bargeInPeakRmsSinceSentence > echoBar;
+        
+        // Trust Sarvam's VAD, but guard against echo with partial confirmation
+        if (!this.greetingBargeLocked() && !this.systemPlaybackActive && !inEchoGrace) {
+          if (usablePartial) {
+            // Real caller words confirmed → barge-in NOW
+            if (!this.bargeInRequested && shouldBargeOnRealtimeVadStart({
+              agentSpeaking: true,
+              greetingOrSystem: false,
+              inEchoGrace: false,
+              isWebcall: this.config.telephonyProvider === "webcall",
+              hasUsablePartial: true,
+              energyAboveEchoBar,
+              isHardInterrupt: isHardInterruptTranscript(pending, this.isSelfEcho(pending)),
+            })) {
+              this.triggerBargeIn("vad_speech_start", pending || undefined, {
+                speculative: true,
+              });
+              logger.info(
+                { 
+                  callId: this.config.callId, 
+                  pending: pending.slice(0, 80), 
+                  energyAboveEchoBar,
+                  partialLength: pending.length,
+                },
+                "Barge-in detected (Sarvam vad.speech_start + partial confirmation)",
+              );
+            }
+          } else {
+            // VAD detected speech but no partial yet → ARM barge-in, wait for partial
+            logger.info(
+              { callId: this.config.callId },
+              "VAD speech detected during playback — armed, awaiting partial confirmation",
+            );
+          }
+        }
+      }
+      
       // Pipecat UserStartedSpeaking: provider VAD (not local energy) cancels idle
       // once echo grace has ended. Echo of our own TTS must not look like a reply.
       if (!this.isPlaying && !this.isSendingTtsAudio && Date.now() >= this.bargeInHoldUntil) {
@@ -2328,7 +2383,8 @@ export class OrchestrationPipeline implements VoiceSession {
       if (!(agentAudioLive && this.streamingBargeInWordCount === 0)) {
         this.interruptionMgr.onUserSpeechStart();
       }
-      this.maybeBargeFromRealtimeVadStart();
+      // NOTE: maybeBargeFromRealtimeVadStart() removed — barge-in logic now handled
+      // directly in the onSpeechStart callback above (trust Sarvam's VAD)
       this.handleSttSpeechResumed();
     };
     this.streamSTT.onSessionUsage = (info) => {
@@ -5029,36 +5085,24 @@ export class OrchestrationPipeline implements VoiceSession {
       this.captureRecoveryAudio(sttFrame);
       this.captureEouAudio(effectivePcm16k);
       //
-      // GTCRN voice isolation enhances ALL speech (including far-field bystanders
-      // — see voice-isolator.ts:7-9). Reject low raw-energy frames by replacing
-      // them with SILENCE before STT, so background talkers (calls 19920-19926:
-      // friend speaking nearby switched the agent to Kannada/Telugu) cannot drive
-      // transcripts or language auto-detection. Maintains the 772→1320 invariant
-      // (never conditionally skip the send), but prevents enhanced bystander speech
-      // from reaching STT. When rawRms=0 (no measurement), fail-open (send audio).
+      // TRUST SARVAM'S VAD: Send all caller audio to Sarvam unconditionally and let
+      // their VAD model decide what is speech vs. noise. Energy-based pre-filtering
+      // (BACKGROUND_TALKER_MIN_RAW_RMS) was too crude — it blocked legitimate speech
+      // from quiet mics, far-field speakers, and phone earpiece mode, while still
+      // failing to distinguish echo from real interruptions. Sarvam's VAD model is
+      // trained on millions of audio samples and handles mic sensitivity, ambient
+      // noise, echo cancellation, and far-field speech automatically.
       //
-      // ONLY filter when agent is NOT speaking — during playback/TTS, ALL caller
-      // audio must reach STT for barge-in to work (calls 772→1320). The background
-      // talker filter applies only during the listening phase (after agent stops).
-      const agentSpeaking = this.isPlaying || this.isSendingTtsAudio;
-      if (!agentSpeaking && rawRms > 0 && rawRms < BACKGROUND_TALKER_MIN_RAW_RMS) {
-        logger.info(
-          { callId: this.config.callId, rawRms, threshold: BACKGROUND_TALKER_MIN_RAW_RMS },
-          "Background talker energy (listening phase) — replacing with silence for STT",
-        );
-        const silentFrame = Buffer.alloc(sttFrame.length);
-        this.streamSTT.sendAudio(silentFrame);
-      } else {
-        // Log energy during agent speech to diagnose barge-in sensitivity
-        if (agentSpeaking && rawRms > 500 && Date.now() - this._lastBargeInEnergyLogAt > 2000) {
-          this._lastBargeInEnergyLogAt = Date.now();
-          logger.info(
-            { callId: this.config.callId, rawRms, threshold: BACKGROUND_TALKER_MIN_RAW_RMS, agentSpeaking: true },
-            "Caller audio during agent speech (potential interruption attempt)",
-          );
-        }
-        this.streamSTT.sendAudio(sttFrame);
-      }
+      // Barge-in detection now uses Sarvam's native `vad.speech_start` event (see
+      // onSpeechStart callback below) instead of raw energy thresholds. This follows
+      // the industry standard (PipeCat, Bolna, LiveKit) and the "trust the provider"
+      // principle we applied to language detection and Azure STT confidence.
+      //
+      // Background speakers are now filtered on the TRANSCRIPT side (isSelfEcho(),
+      // semantic checks) rather than blocking audio before STT sees it. This maintains
+      // the 772→1320 invariant (never gate STT input during agent speech) while
+      // allowing Sarvam's VAD to properly detect caller interruptions.
+      this.streamSTT.sendAudio(sttFrame);
       return;
     }
 
