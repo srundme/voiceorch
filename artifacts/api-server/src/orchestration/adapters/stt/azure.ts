@@ -381,15 +381,15 @@ export class AzureSTT implements STTAdapter {
 
             if (!text) return;
 
-            // In streaming mode, apply confidence filter only as a soft gate.
-            // Use the configured threshold but floor it at 0.15 — Azure streaming
-            // confidence for Indic languages is naturally lower than Latin-script.
+            // TRUST AZURE SPEECH: Azure's STT model already handles confidence internally.
+            // We were adding a 15% minimum threshold assuming "Indic languages have lower confidence",
+            // but this is the same mistake as with Saaras v3 — we shouldn't second-guess the provider.
+            // Azure returns transcripts it's confident enough about; only filter extreme garbage (< 5%).
             const confidence = best?.Confidence ?? 1;
-            const effectiveThreshold = Math.min(this.cfg.confidenceThreshold, 0.15);
-            if (confidence < effectiveThreshold) {
+            if (confidence < 0.05) {
               logger.info(
-                { confidence, effectiveThreshold, configured: this.cfg.confidenceThreshold },
-                "Azure stream: transcript filtered by confidence",
+                { confidence },
+                "Azure stream: transcript filtered (extremely low confidence, likely noise)",
               );
               return;
             }
