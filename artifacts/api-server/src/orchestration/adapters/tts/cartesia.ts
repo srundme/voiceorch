@@ -326,8 +326,13 @@ export class CartesiaTTS implements TTSAdapter {
     return `${CARTESIA_WS_BASE}/tts/websocket?api_key=${encodeURIComponent(this.key)}&cartesia_version=${encodeURIComponent(CARTESIA_VERSION)}`;
   }
 
-  private buildVoice(): Record<string, unknown> {
-    return { id: this.voiceId };
+  /**
+   * Cartesia-Version 2026-03-01 WS requires `{ mode: "id", id }`.
+   * `{ id }` alone is rejected as "Voice ID required" (call 19760) after
+   * partial audio — that abort is the audible mid-sentence break.
+   */
+  private buildVoice(): { mode: "id"; id: string } {
+    return { mode: "id", id: this.voiceId };
   }
 
   /**
@@ -736,7 +741,10 @@ export class CartesiaTTS implements TTSAdapter {
         try {
           this.ws.send(JSON.stringify({
             context_id: turnContextId,
+            model_id: this.modelId,
             transcript: "",
+            voice: this.buildVoice(),
+            output_format: this.outputFormat(),
             continue: false,
           }));
         } catch { /* WS closing, fine */ }

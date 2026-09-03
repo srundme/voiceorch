@@ -79,8 +79,7 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as {
       voice?: Record<string, unknown>;
     };
-    expect(body.voice).toEqual({ id: expect.any(String) });
-    expect(body.voice).not.toHaveProperty("mode");
+    expect(body.voice).toEqual({ mode: "id", id: expect.any(String) });
   });
 
   it("setLanguage() updates the language tag on subsequent synthesize() calls", async () => {
@@ -170,13 +169,19 @@ describe("resolveCartesiaModelId", () => {
 });
 
 describe("Cartesia adaptor contract (source)", () => {
-  it("matches current Sonic docs: /tts/websocket, voice { id }, max_buffer_delay_ms 0", () => {
+  it("matches current Sonic docs: /tts/websocket, voice { mode: id, id }, max_buffer_delay_ms 0", () => {
     const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
     expect(src).toContain("/tts/websocket?");
     expect(src).not.toContain("/tts/websockets");
-    expect(src).toContain("return { id: this.voiceId }");
+    expect(src).toContain('return { mode: "id", id: this.voiceId }');
     expect(src).toMatch(/CARTESIA_MAX_BUFFER_DELAY_MS = 0/);
     expect(src).toContain('CARTESIA_SONIC_36_MODEL = "sonic-3.6"');
+  });
+
+  it("sends voice on continue:false finalize so Cartesia does not 400 Voice ID required mid-clip", () => {
+    const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
+    expect(src).toContain('transcript: ""');
+    expect(src).toMatch(/transcript: "",\s*\n\s*voice: this\.buildVoice\(\)/);
   });
 
   it("ignores premature context done until finalizeTurnContext (call 18112 sentence-2 silence)", () => {
