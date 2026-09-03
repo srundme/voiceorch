@@ -8608,7 +8608,12 @@ export class OrchestrationPipeline implements VoiceSession {
   private async processTurn(transcript: string, sttLatencyMs: number): Promise<void> {
     transcript = sanitizeSpokenEmailsInTranscript(transcript);
     this._processTurnGeneration = this.semanticTurnGate.turnGeneration;
-    this.bargeInRequested = false;
+    // BARGE-IN FIX: Do NOT reset bargeInRequested at the START of the turn.
+    // If we reset it here, a second transcript that arrives while this turn is
+    // processing will be queued (bargeInRequested=false), causing the "unrealistic
+    // call flow" where the user's interruption is heard AFTER the AI finishes.
+    // Instead, reset it at the END of playback (in playTask's finally block).
+    // this.bargeInRequested = false;  // ← MOVED to end of turn
     this.bargeInSpeechFrames = 0;
     // Reset the streaming word counter at this deterministic agent-turn
     // boundary so the accumulator never carries stale state into the new turn.
@@ -10550,6 +10555,8 @@ export class OrchestrationPipeline implements VoiceSession {
           const w = wakePlayer as (() => void) | null; wakePlayer = null;
           if (w) w();
           await playPromise;
+          // BARGE-IN FIX: Reset after error path playback.
+          this.bargeInRequested = false;
           throw fallbackErr;
         }
       } else {
@@ -10569,6 +10576,8 @@ export class OrchestrationPipeline implements VoiceSession {
         const w = wakePlayer as (() => void) | null; wakePlayer = null;
         if (w) w();
         await playPromise;
+        // BARGE-IN FIX: Reset after error path playback.
+        this.bargeInRequested = false;
         throw llmErr;
       }
     }
@@ -10820,6 +10829,14 @@ export class OrchestrationPipeline implements VoiceSession {
     );
 
     await playPromise;
+
+    // BARGE-IN FIX: Reset bargeInRequested AFTER playback completes, not at the start.
+    // This ensures that any transcripts arriving DURING this turn's playback are
+    // correctly identified as barge-ins and processed immediately (not queued).
+    // Resetting at the start (line 8611) caused a race: the first transcript processed
+    // immediately, but subsequent transcripts from the same interruption were queued
+    // because bargeInRequested was already reset to false.
+    this.bargeInRequested = false;
 
     // Bolna parity: store only what the caller actually heard (defer until playback ends).
     const heardOnly = this.getHeardAgentText();
@@ -11683,6 +11700,8 @@ export class OrchestrationPipeline implements VoiceSession {
       ctFinalizeTurnCtx();
       const wErr = wakePlayer as (() => void) | null; wakePlayer = null; if (wErr) wErr();
       await playPromise;
+      // BARGE-IN FIX: Reset after error path playback.
+      this.bargeInRequested = false;
       return;
     }
 
@@ -11765,6 +11784,9 @@ export class OrchestrationPipeline implements VoiceSession {
     ctFinalizeTurnCtx();
     const wFinal = wakePlayer as (() => void) | null; wakePlayer = null; if (wFinal) wFinal();
     await playPromise;
+
+    // BARGE-IN FIX: Reset bargeInRequested after tool-result playback completes.
+    this.bargeInRequested = false;
 
     // ── Chained tool call — the agent invoked another tool off the result ──
     if (triggeredToolName) {
