@@ -141,7 +141,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toMatch(/TTS_PREBUFFER_GREETING_MS \?\? 0\)/);
     expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 0\)/);
     expect(pipelineSrc).toMatch(/TTS_REBUFFER_MS \?\? 0\)/);
-    expect(pipelineSrc).toContain("loadPresetFillerPcm");
+    expect(pipelineSrc).not.toContain("loadPresetFillerPcm");
+    expect(pipelineSrc).not.toContain("preset-filler");
+    expect(pipelineSrc).toContain("job.streaming && this.tts.synthesizeStream");
     expect(pipelineSrc).toMatch(/TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 0/);
     expect(pipelineSrc).toMatch(/FILLER_THRESHOLD_MS \?\? 0/);
   });

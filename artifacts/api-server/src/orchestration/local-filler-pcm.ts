@@ -1,5 +1,6 @@
 /**
- * Bolna-style preset fillers: WAV on disk, sequence_id = -1, no live TTS.
+ * Disk WAV fillers. Not used on the live path — backchannels go through
+ * the agent's TTS so "Mm-hmm" matches the configured voice (call 20282).
  */
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";

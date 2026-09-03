@@ -40,7 +40,6 @@ import {
   extractSentences,
   pickStreamedGreetingHead,
 } from "./clause-stream.js";
-import { loadPresetFillerPcm, presetFillerDurationMs } from "./local-filler-pcm.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
@@ -6837,26 +6836,10 @@ export class OrchestrationPipeline implements VoiceSession {
       job.skipDrain = !this.tts.claimTurnContext(turnContextId);
     }
 
-    // Bolna fillers: preset WAV, sequence_id = -1. Never a live TTS request.
-    if (sequenceId === FILLER_SEQUENCE_ID) {
-      const audio = loadPresetFillerPcm(text, this.ttsPcmRate());
-      job.streaming = false;
-      job.nonStreamAudio = audio;
-      job.audioDurationMs = presetFillerDurationMs(audio.length, this.ttsPcmRate());
-      this.logExec("TTS", "response", {
-        provider: "preset-filler",
-        status: "success",
-        latencyMs: Date.now() - _ttsReqStart,
-        turnNumber,
-        durationMs: Date.now() - _ttsReqStart,
-        responsePayload: { audioBytes: audio.length, textLength: text.length, presetFiller: true },
-      });
-      job.synthDone = true;
-      resolveReady();
-      return job;
-    }
-
-    if (this.tts.synthesizeStream) {
+    // Backchannels use the agent's TTS voice (call 20282: preset WAVs were a
+    // different speaker — "Mm-hmm" / "ahamm" did not match Cartesia).
+    // Fillers stay one-shot and never claim the Cartesia turn context.
+    if (job.streaming && this.tts.synthesizeStream) {
       const ttsAdapter = this.tts;
       const synthesizeStream = ttsAdapter.synthesizeStream!.bind(ttsAdapter);
       let accum: Buffer[] = [];
