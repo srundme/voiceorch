@@ -1542,7 +1542,7 @@ function OverviewTab({
 
 /* ── Tab: Prompt ────────────────────────────────────────────────────────────── */
 
-function PromptTab({ form }: { form: any }) {
+function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }) {
   const { fields: pvFields, append: pvAppend, remove: pvRemove } = useFieldArray({ control: form.control, name: "promptVariables" });
   const [generateOpen, setGenerateOpen] = useState(false);
   const [promptSurface, setPromptSurface] = useState<"calls" | "meetings">("calls");
@@ -7626,7 +7626,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
                     onGoToAnalytics={() => handleTabClick("analytics")}
                   />
                 )}
-                {activeTab === "prompt"    && <PromptTab form={form} />}
+                {activeTab === "prompt"    && <PromptTab form={form} agentId={agentId} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
                 {activeTab === "outcomes"  && (
