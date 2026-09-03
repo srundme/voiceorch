@@ -169,6 +169,8 @@ export class CartesiaTTS implements TTSAdapter {
   private ws: WebSocket | null = null;
   private wsConnecting: Promise<WebSocket> | null = null;
   private wsFailedPermanently = false;
+  /** Log the WS→REST fallback only once per call to avoid per-sentence spam. */
+  private wsFallbackLogged = false;
   private readonly pending = new Map<string, PendingCtx>();
   /** Turn-level flush tracking: key = `${contextId}:${flushId}` */
   private readonly flushPending = new Map<string, FlushPendingCtx>();
@@ -224,6 +226,27 @@ export class CartesiaTTS implements TTSAdapter {
     void this.getOrOpenWs().catch(() => {
       // Failure here is fine — synthesizeStream will retry or fall back to REST.
     });
+  }
+
+  /**
+   * Mark the WebSocket path permanently failed for this call and fall back to
+   * REST /tts/bytes. Logged once so we can tell — from live logs — whether a
+   * call actually ran on the streaming WS path or silently degraded to REST
+   * (which behaves differently under load / concurrency limits).
+   */
+  private markWsFailed(err: unknown, where: string): void {
+    this.wsFailedPermanently = true;
+    if (!this.wsFallbackLogged) {
+      this.wsFallbackLogged = true;
+      logger.warn(
+        {
+          evt: "cartesia_ws_fallback_rest",
+          where,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        "CartesiaTTS: WebSocket unavailable — falling back to REST /tts/bytes for the rest of this call",
+      );
+    }
   }
 
   close(): void {
@@ -316,6 +339,10 @@ export class CartesiaTTS implements TTSAdapter {
       const timer = setTimeout(() => {
         settle(() => {
           this.wsConnecting = null;
+          logger.warn(
+            { evt: "cartesia_ws_connect_timeout", timeoutMs: WS_CONNECT_TIMEOUT_MS },
+            "CartesiaTTS: WebSocket handshake exceeded connect timeout — will fall back to REST",
+          );
           reject(new Error("CartesiaTTS: WS connect timeout"));
           try { ws.close(); } catch {}
         });
@@ -324,6 +351,10 @@ export class CartesiaTTS implements TTSAdapter {
       ws.addEventListener("open", () => {
         clearTimeout(timer);
         this.ws = ws;
+        logger.info(
+          { evt: "cartesia_ws_open" },
+          "CartesiaTTS: WebSocket connected — using streaming WS path",
+        );
         settle(() => { this.wsConnecting = null; resolve(ws); });
       });
 
@@ -566,10 +597,10 @@ export class CartesiaTTS implements TTSAdapter {
             return await this.synthesizeViaWsInContext(ws, turnContextId, text, sink, onDone, signal, undefined, join);
           } catch (retryErr) {
             if (signal?.aborted || (retryErr instanceof DOMException && retryErr.name === "AbortError")) throw retryErr;
-            this.wsFailedPermanently = true;
+            this.markWsFailed(retryErr, "streamInContext:retry");
           }
         } else {
-          this.wsFailedPermanently = true;
+          this.markWsFailed(err, "streamInContext");
         }
       }
     }
@@ -702,6 +733,12 @@ export class CartesiaTTS implements TTSAdapter {
 
     if (!resp.ok) {
       const err = await resp.text();
+      logger.warn(
+        { evt: "cartesia_rest_error", status: resp.status, body: err.slice(0, 300) },
+        resp.status === 429
+          ? "CartesiaTTS: REST /tts/bytes rate-limited (429 concurrency_limited/quota_exceeded)"
+          : "CartesiaTTS: REST /tts/bytes non-OK response",
+      );
       throw new Error(`Cartesia TTS stream error ${resp.status}: ${err}`);
     }
     if (!resp.body) throw new Error("Cartesia TTS: no response body");
@@ -730,6 +767,12 @@ export class CartesiaTTS implements TTSAdapter {
 
       if (!resp.ok) {
         const errText = await resp.text();
+        if (resp.status === 429) {
+          logger.warn(
+            { evt: "cartesia_rest_error", status: 429, body: errText.slice(0, 300) },
+            "CartesiaTTS: one-shot /tts/bytes rate-limited (429 concurrency_limited/quota_exceeded)",
+          );
+        }
         throw new Error(`Cartesia TTS error ${resp.status}: ${errText}`);
       }
 
@@ -769,10 +812,10 @@ export class CartesiaTTS implements TTSAdapter {
             return await this.synthesizeViaWs(ws, text, onChunk, onDone, signal, undefined);
           } catch (retryErr) {
             if (signal?.aborted || (retryErr instanceof DOMException && retryErr.name === "AbortError")) throw retryErr;
-            this.wsFailedPermanently = true;
+            this.markWsFailed(retryErr, "stream:retry");
           }
         } else {
-          this.wsFailedPermanently = true;
+          this.markWsFailed(err, "stream");
         }
       }
     }

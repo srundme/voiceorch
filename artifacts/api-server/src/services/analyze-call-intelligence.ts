@@ -480,6 +480,8 @@ export interface BackfillCampaignIntelligenceResult {
   failed: number;
   /** First error reason (e.g. model unavailable / billing) when failures occur. */
   error?: string;
+  /** True when the analysis model itself is down (auth/quota/rate-limit) — every call fails identically. */
+  modelDown?: boolean;
 }
 
 /**
@@ -600,6 +602,7 @@ export async function backfillCampaignIntelligence(
     skipped,
     failed,
     ...(firstError ? { error: firstError } : {}),
+    ...(abortAll ? { modelDown: true } : {}),
   };
 }
 
@@ -727,12 +730,30 @@ export async function getCampaignIntelligenceStats(campaignId: number): Promise<
 
 const INTELLIGENCE_SWEEP_MS = 60_000;
 const INTELLIGENCE_FAILURE_BACKOFF_MS = 15 * 60_000;
+// Global circuit-breaker: when the analysis model itself is down (missing key /
+// billing / quota / rate-limit) EVERY campaign fails identically, and each failed
+// attempt burns event-loop time + opens outbound HTTP sockets — which starves
+// live-call TTS/STT on the same shared dispatcher and manifests as broken/jumpy
+// audio. Once we see repeated model-down outcomes, trip the breaker so the worker
+// goes quiet instead of hammering every 60s across up to 10 campaigns.
+const INTELLIGENCE_GLOBAL_TRIP_THRESHOLD = Math.max(
+  1,
+  Number(process.env.INTELLIGENCE_GLOBAL_TRIP_THRESHOLD ?? 2),
+);
+const INTELLIGENCE_GLOBAL_BACKOFF_MS = Math.max(
+  60_000,
+  Number(process.env.INTELLIGENCE_GLOBAL_BACKOFF_MS ?? 30 * 60_000),
+);
 let intelligenceSweepRunning = false;
+let intelligenceGlobalBackoffUntil = 0;
+let intelligenceConsecutiveModelDown = 0;
 const campaignBackoffUntil = new Map<number, number>();
 
 /** Recover eligible calls missed by process restarts, inbound matching, or transient LLM failures. */
 export async function runPendingCallIntelligenceSweep(): Promise<void> {
   if (intelligenceSweepRunning) return;
+  // Breaker open: analysis model was repeatedly down — stay quiet to protect live calls.
+  if (intelligenceGlobalBackoffUntil > Date.now()) return;
   intelligenceSweepRunning = true;
   try {
     const result = await db.execute(sql`
@@ -775,6 +796,8 @@ export async function runPendingCallIntelligenceSweep(): Promise<void> {
     `);
     const campaigns = ((result as unknown as { rows?: Array<{ campaignId: number }> }).rows ?? []);
     for (const row of campaigns) {
+      // Breaker may trip mid-sweep once we detect the model is down — stop immediately.
+      if (intelligenceGlobalBackoffUntil > Date.now()) break;
       const campaignId = Number(row.campaignId);
       if ((campaignBackoffUntil.get(campaignId) ?? 0) > Date.now()) continue;
       const outcome = await backfillCampaignIntelligence(campaignId, {
@@ -785,6 +808,27 @@ export async function runPendingCallIntelligenceSweep(): Promise<void> {
         campaignBackoffUntil.set(campaignId, Date.now() + INTELLIGENCE_FAILURE_BACKOFF_MS);
       } else {
         campaignBackoffUntil.delete(campaignId);
+      }
+      if (outcome.modelDown) {
+        // Model-level failure (auth/quota/rate-limit) — repeats identically for every
+        // campaign. Count consecutive occurrences and trip the global breaker so we
+        // stop generating a socket/CPU storm that starves live-call audio.
+        intelligenceConsecutiveModelDown++;
+        if (intelligenceConsecutiveModelDown >= INTELLIGENCE_GLOBAL_TRIP_THRESHOLD) {
+          intelligenceGlobalBackoffUntil = Date.now() + INTELLIGENCE_GLOBAL_BACKOFF_MS;
+          logger.warn(
+            {
+              consecutiveModelDown: intelligenceConsecutiveModelDown,
+              backoffMs: INTELLIGENCE_GLOBAL_BACKOFF_MS,
+              lastError: outcome.error,
+            },
+            "call-intelligence: global breaker tripped — analysis model down, pausing worker to protect live-call TTS/STT",
+          );
+          break;
+        }
+      } else if (outcome.analysed > 0) {
+        // Real progress — the model is healthy again; reset the breaker counter.
+        intelligenceConsecutiveModelDown = 0;
       }
     }
   } catch (err) {
