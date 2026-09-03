@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { CartesiaTTS, resolveCartesiaModelId, joinContinuationTranscript } from "./cartesia.js";
+import { CartesiaTTS, resolveCartesiaModelId, joinContinuationTranscript, isCartesiaContextClosedError } from "./cartesia.js";
 
 /**
  * Regression test for the Cartesia emotion-voice-control bug: Cartesia can
@@ -184,11 +184,176 @@ describe("Cartesia adaptor contract (source)", () => {
     expect(src).toMatch(/transcript: "",\s*\n\s*voice: this\.buildVoice\(\)/);
   });
 
-  it("ignores premature context done until finalizeTurnContext (call 18112 sentence-2 silence)", () => {
+  it("ignores premature context done until leftover REST + finalizeTurnContext (call 18112 / 19809)", () => {
     const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
     expect(src).toContain("claimedTurns.has(contextId)");
     expect(src).toContain("finalizedTurns.has(contextId)");
-    expect(src).toContain("Ignore that until we send continue:false via finalizeTurnContext");
+    expect(src).toContain("cartesia_context_closed_after_first_clip");
+    expect(src).toContain("cartesia_leftover_rest");
+  });
+
+  it("does not arm the playJob idle timer on skipDrain leftover REST (call 19809)", () => {
+    const src = readFileSync(new URL("../../pipeline.ts", import.meta.url), "utf8");
+    expect(src).toContain("if (job.skipDrain) return;");
+    expect(src).toContain("&& !job.skipDrain");
+  });
+});
+
+describe("isCartesiaContextClosedError", () => {
+  it("matches Cartesia's delay=0 context-closed 400 wording (call 19809)", () => {
+    expect(isCartesiaContextClosedError(
+      new Error("Context has closed and is no longer accepting new inputs, use a new context ID. — Context closed — status=400"),
+    )).toBe(true);
+    expect(isCartesiaContextClosedError(
+      new Error("Cartesia WS synthesis error: Context has closed and is no longer accepting new inputs"),
+    )).toBe(true);
+    expect(isCartesiaContextClosedError(new Error("use a new context ID"))).toBe(true);
+    expect(isCartesiaContextClosedError(new Error("Cartesia WS synthesis error: unknown"))).toBe(false);
+    expect(isCartesiaContextClosedError(new Error("invalid voice controls"))).toBe(false);
+  });
+});
+
+/**
+ * Fake Cartesia WS: open on the next microtask, capture send(), emit messages.
+ * Call 19809: clip-1 `done` + 400 "Context has closed" while later sentences
+ * still need to play — they REST into the owner PCM sink.
+ */
+class FakeCartesiaWs {
+  static OPEN = 1;
+  static CONNECTING = 0;
+  readyState = FakeCartesiaWs.CONNECTING;
+  url: string;
+  sent: string[] = [];
+  private listeners = new Map<string, Array<(ev: { data?: string }) => void>>();
+
+  constructor(url: string) {
+    this.url = url;
+    queueMicrotask(() => {
+      this.readyState = FakeCartesiaWs.OPEN;
+      for (const fn of this.listeners.get("open") ?? []) fn({});
+    });
+  }
+
+  addEventListener(type: string, fn: (ev: { data?: string }) => void): void {
+    const arr = this.listeners.get(type) ?? [];
+    arr.push(fn);
+    this.listeners.set(type, arr);
+  }
+
+  send(payload: string): void {
+    this.sent.push(payload);
+  }
+
+  close(): void {
+    this.readyState = 3;
+  }
+
+  emit(msg: Record<string, unknown>): void {
+    const data = JSON.stringify(msg);
+    for (const fn of this.listeners.get("message") ?? []) fn({ data });
+  }
+}
+
+describe("Cartesia delay=0 leftover REST (call 19809 mid-sentence cut)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("plays remaining sentences via REST into the owner sink after Cartesia closes the context", async () => {
+    const sockets: FakeCartesiaWs[] = [];
+    vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
+      constructor(url: string) {
+        super(url);
+        sockets.push(this);
+      }
+    });
+
+    const restPcm = new Uint8Array([20, 21, 22, 23]);
+    const fetchMock = vi.fn(async () => {
+      let n = 0;
+      return {
+        ok: true,
+        status: 200,
+        body: {
+          getReader: () => ({
+            read: async () => (n++ === 0
+              ? { done: false, value: restPcm }
+              : { done: true, value: undefined }),
+            releaseLock: () => {},
+          }),
+        },
+      } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const tts = new CartesiaTTS("test-key", null, null);
+    const turnId = "turn-19809";
+    expect(tts.claimTurnContext(turnId)).toBe(true);
+
+    const ownerChunks: Buffer[] = [];
+    const joinChunks: Buffer[] = [];
+    let ownerDoneChars = 0;
+    let joinDoneChars = 0;
+
+    const ownerP = tts.synthesizeStreamInContext(
+      turnId,
+      "देखिए, आपकी गाड़ी पर एक pending traffic",
+      (pcm) => { ownerChunks.push(pcm); },
+      (n) => { ownerDoneChars = n; },
+      undefined,
+      undefined,
+      false,
+    );
+
+    await vi.waitFor(() => expect(sockets.length).toBe(1));
+    await vi.waitFor(() => expect(sockets[0]!.sent.length).toBeGreaterThan(0));
+
+    expect(tts.claimTurnContext(turnId)).toBe(false);
+
+    const joinP = tts.synthesizeStreamInContext(
+      turnId,
+      "challan है।",
+      (pcm) => { joinChunks.push(pcm); },
+      (n) => { joinDoneChars = n; },
+      undefined,
+      undefined,
+      true,
+    );
+
+    const wsPcm = Buffer.from([10, 11, 12, 13]);
+    sockets[0]!.emit({
+      type: "chunk",
+      context_id: turnId,
+      data: wsPcm.toString("base64"),
+    });
+    sockets[0]!.emit({ type: "done", context_id: turnId });
+    sockets[0]!.emit({
+      type: "error",
+      context_id: turnId,
+      status: 400,
+      errorCode: null,
+      detail: "Context has closed and is no longer accepting new inputs, use a new context ID. — Context closed — status=400",
+    });
+
+    await joinP;
+    tts.finalizeTurnContext(turnId);
+    await ownerP;
+
+    const ownerBytes = Buffer.concat(ownerChunks);
+    expect(ownerBytes.equals(Buffer.concat([wsPcm, Buffer.from(restPcm)]))).toBe(true);
+    expect(joinChunks).toEqual([]);
+    expect(ownerDoneChars).toBeGreaterThan(0);
+    expect(joinDoneChars).toBeGreaterThan(0);
+    expect(fetchMock).toHaveBeenCalled();
+    expect((fetchMock.mock.calls[0]![0] as string)).toContain("/tts/bytes");
+
+    const continueTrue = sockets[0]!.sent.filter((s) => {
+      const m = JSON.parse(s) as { continue?: boolean; transcript?: string };
+      return m.continue === true && (m.transcript?.includes("challan") ?? false);
+    });
+    expect(continueTrue).toEqual([]);
+    expect((tts as unknown as { wsFailedPermanently: boolean }).wsFailedPermanently).toBe(false);
   });
 
   it("does not permanently kill WS after a single context error (call 19742 double-speak + jump)", () => {

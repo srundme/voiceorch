@@ -6840,11 +6840,11 @@ export class OrchestrationPipeline implements VoiceSession {
         );
         const owner = jobs.find((j) => !j.skipDrain) ?? jobs[0]!;
         const continuations = jobs.filter((j) => j.skipDrain);
-        // Owner ready waits for Cartesia `done`, which only arrives after
-        // finalizeTurnContext (continue:false). So: start playback immediately,
-        // wait only until continuation transcripts are enqueued, finalize, then
-        // await playback. Never await playJob before finalize — that deadlocks
-        // until the 8s TTS idle abort (silent / truncated greetings).
+        // Owner pending stays open until leftover REST is queued and the turn
+        // is finalized (call 19809: Cartesia closes the WS context after clip 1).
+        // Start playback immediately, wait until continuation sentences have
+        // been synthesized into the owner PCM sink, finalize, then await
+        // playback. Never await playJob before finalize — that deadlocks.
         const playPromise = this.playJob(owner);
         for (const job of continuations) {
           if (this.closed || this.bargeInRequested || !this.interruptionMgr.isValidSequence(seqId)) break;
@@ -7136,13 +7136,17 @@ export class OrchestrationPipeline implements VoiceSession {
       this.activeTtsAborts.add(ttsAbort);
       let ttsTimerId: ReturnType<typeof setTimeout> | null = null;
       const armTtsIdleTimer = (ms: number): void => {
+        // Call 19809: skipDrain leftover REST waits for Cartesia clip 1 (can be
+        // >8s) and writes into the owner sink, so this job sees 0 bytes. Arming
+        // the idle timer here abort()s leftover audio mid-sentence.
+        if (job.skipDrain) return;
         if (ttsTimerId) clearTimeout(ttsTimerId);
         ttsTimerId = setTimeout(() => {
           logger.warn({ callId: this.config.callId }, "TTS streaming timed out — aborting fetch");
           ttsAbort.abort();
         }, ms);
       };
-      armTtsIdleTimer(TTS_STREAM_TIMEOUT_MS); // initial: wait for the first byte
+      if (!job.skipDrain) armTtsIdleTimer(TTS_STREAM_TIMEOUT_MS); // initial: wait for the first byte
       const closedWatcher = setInterval(() => {
         if (this.closed || this.bargeInRequested) ttsAbort.abort();
       }, 50);
@@ -7175,7 +7179,7 @@ export class OrchestrationPipeline implements VoiceSession {
             // Idle timeout with zero bytes: retry once via REST/one-shot so the
             // caller still hears the sentence (call 16986: greeting + follow-up
             // streams hung, agent never spoke after "hello").
-            if (!this.closed && !this.bargeInRequested && _ttsTotalBytes === 0) {
+            if (!this.closed && !this.bargeInRequested && _ttsTotalBytes === 0 && !job.skipDrain) {
               try {
                 const { audio } = await this.tts.synthesize(text);
                 if (audio?.length && !this.closed && !this.bargeInRequested) {
@@ -8814,8 +8818,9 @@ export class OrchestrationPipeline implements VoiceSession {
     const envelopeGuard = makeToolEnvelopeGuard(toolNamesOf(toolDefs));
 
     // Cartesia turn-level continuations: one context_id per LLM turn so
-    // prosody is maintained across all sentences. finalizeTurnCtx() sends
-    // {continue:false} after all sentences are queued.
+    // leftover sentences share the owner PCM sink. finalizeTurnCtx() closes
+    // the turn after all sentences are queued (continue:false when the WS
+    // context is still open; leftover REST when delay=0 already closed it).
     const cartesiaTts = this.tts instanceof CartesiaTTS ? this.tts : null;
     const turnContextId = cartesiaTts ? globalThis.crypto.randomUUID() : undefined;
     const finalizeTurnCtx = (): void => {
