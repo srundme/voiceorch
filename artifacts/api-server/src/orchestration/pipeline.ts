@@ -2361,46 +2361,21 @@ export class OrchestrationPipeline implements VoiceSession {
       // echo from triggering false barge-ins while still allowing real interruptions.
       if (this.isPlaying || this.isSendingTtsAudio) {
         const pending = this.streamSTT?.getPendingTranscript?.() ?? "";
-        const usablePartial = pending.trim().length >= bargeInMinChars(this.config.telephonyProvider);
-        const inEchoGrace = 
+        const inEchoGrace =
           Date.now() < this.bargeInHoldUntil
-          || Date.now() < this.bargeInSentenceStartAt + Math.max(1500, this.bargeInEchoGraceMs);
-        const echoBar = this.echoBarRms();
-        const energyAboveEchoBar = echoBar !== null && this.bargeInPeakRmsSinceSentence > echoBar;
-        
-        // Trust Sarvam's VAD, but guard against echo with partial confirmation
-        if (!this.greetingBargeLocked() && !this.systemPlaybackActive && !inEchoGrace) {
-          if (usablePartial) {
-            // Real caller words confirmed → barge-in NOW
-            if (!this.bargeInRequested && shouldBargeOnRealtimeVadStart({
-              agentSpeaking: true,
-              greetingOrSystem: false,
-              inEchoGrace: false,
-              isWebcall: this.config.telephonyProvider === "webcall",
-              hasUsablePartial: true,
-              energyAboveEchoBar,
-              isHardInterrupt: isHardInterruptTranscript(pending, this.isSelfEcho(pending)),
-            })) {
-              this.triggerBargeIn("vad_speech_start", pending || undefined, {
-                speculative: true,
-              });
-              logger.info(
-                { 
-                  callId: this.config.callId, 
-                  pending: pending.slice(0, 80), 
-                  energyAboveEchoBar,
-                  partialLength: pending.length,
-                },
-                "Barge-in detected (Sarvam vad.speech_start + partial confirmation)",
-              );
-            }
-          } else {
-            // VAD detected speech but no partial yet → ARM barge-in, wait for partial
-            logger.info(
-              { callId: this.config.callId },
-              "VAD speech detected during playback — armed, awaiting partial confirmation",
-            );
-          }
+          || Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs;
+        if (!this.bargeInRequested && shouldBargeOnRealtimeVadStart({
+          agentSpeaking: true,
+          greetingOrSystem: this.systemPlaybackActive || this.greetingBargeLocked(),
+          inEchoGrace,
+        })) {
+          this.triggerBargeIn("vad_speech_start", pending || undefined, {
+            speculative: pending.trim().length > 0,
+          });
+          logger.info(
+            { callId: this.config.callId, pending: pending.slice(0, 80) },
+            "Barge-in detected (Sarvam vad.speech_start)",
+          );
         }
       }
       
@@ -2479,10 +2454,7 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /**
-   * Drive barge-in off vad.speech_start, not transcript.final. The realtime
-   * adapter clears lastPartial on speech_start, so same-tick pending is empty —
-   * this only cuts once a usable (non-echo) partial is already in hand. Echo
-   * VAD without words must not clearAudio.
+   * Official Sarvam/Pipecat path: vad.speech_start while speaking → clearAudio.
    */
   private maybeBargeFromRealtimeVadStart(): void {
     if (!this.liveSarvamRealtime()) return;
@@ -2493,15 +2465,11 @@ export class OrchestrationPipeline implements VoiceSession {
     const energyAboveEchoBar =
       echoBar !== null && this.bargeInPeakRmsSinceSentence > echoBar;
     const inEchoGrace = Date.now() < this.greetingEchoHoldUntil
-      || Date.now() < this.bargeInSentenceStartAt + Math.max(1500, this.bargeInEchoGraceMs);
+      || Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs;
     if (!shouldBargeOnRealtimeVadStart({
       agentSpeaking: this.isPlaying || this.isSendingTtsAudio,
       greetingOrSystem: this.systemPlaybackActive || this.greetingBargeLocked(),
       inEchoGrace,
-      isWebcall: this.config.telephonyProvider === "webcall",
-      hasUsablePartial: usablePartial,
-      energyAboveEchoBar,
-      isHardInterrupt: isHardInterruptTranscript(pending, this.isSelfEcho(pending)),
     })) return;
     this.triggerBargeIn("vad_speech_start", pending || undefined, {
       speculative: usablePartial,
@@ -3310,6 +3278,15 @@ export class OrchestrationPipeline implements VoiceSession {
       },
       "Noise cancellation resolved",
     );
+    this.logExec("Pipeline", "system", {
+      status: "info",
+      metadata: {
+        event: "Noise Cancellation",
+        enabled: this.noiseGate.enabled,
+        reason: this.noiseGate.reason,
+        toggle: this.agent.noiseCancellationEnabled,
+      },
+    });
 
     // Ambient noise — start looping silence-fill interval
     if (this.agent.ambientNoiseEnabled && this.agent.ambientNoiseTrack) {
@@ -3572,9 +3549,8 @@ export class OrchestrationPipeline implements VoiceSession {
                 this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
                 const charCount = [...text.trim()].length;
                 const minChars = bargeInMinChars(this.currentLang || this.agent.language);
-                const sentenceGraceMs = Math.max(1500, this.bargeInEchoGraceMs);
                 const inEchoGrace = Date.now() < this.greetingEchoHoldUntil
-                  || Date.now() < this.bargeInSentenceStartAt + sentenceGraceMs;
+                  || Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs;
                 const interimEchoBar = this.echoBarRms();
                 const energyAboveEchoBar =
                   interimEchoBar !== null
@@ -4661,14 +4637,10 @@ export class OrchestrationPipeline implements VoiceSession {
     this.recording.addCallerChunk(pcm8k);
     // Voice-intelligence tap — runs outside the main audio pipeline
     this.config.callerAudioTap?.(pcm8k);
-    // PAUSE voice isolation + noise gate during agent speech so carrier echo
-    // is not cleaned into phantom caller speech (call 19809: isolation broke barge-in).
-    // The agent's own TTS echo must reach the transcript filter unmodified.
-    const pauseIsolation = this.isPlaying || this.isSendingTtsAudio;
     processAudioIn(
       callId,
       mulawChunk,
-      this.noiseGate.enabled && !pauseIsolation,
+      this.noiseGate.enabled,
       this.micThresholds.gateRatio,
       this.micThresholds.vadThreshold,
     )
@@ -4732,12 +4704,9 @@ export class OrchestrationPipeline implements VoiceSession {
       return;
     }
     // Caller-supplied `noiseCancel` wins when present; otherwise use the
-    // per-call decision resolved in the constructor (provider bypass + agent
-    // toggle + overrides — see noise-gate.ts).
-    // PAUSE voice isolation + noise gate during agent speech so carrier echo
-    // is not cleaned into phantom caller speech (call 19809: isolation broke barge-in).
-    const pauseIsolation = this.isPlaying || this.isSendingTtsAudio;
-    const nc = noiseCancel !== undefined ? noiseCancel : (this.noiseGate.enabled && !pauseIsolation);
+    // per-call decision (toggle + provider bypass). Stay on during agent
+    // speech — pausing it (call 19809) let room talkers into STT (call 20235).
+    const nc = noiseCancel !== undefined ? noiseCancel : this.noiseGate.enabled;
     // Queue the caller's TRUE 16k audio (before it was downsampled to 8k for
     // this call) so handleProcessedAudio can use it for STT instead of the
     // worker's upsample8to16 reconstruction, which cannot recover frequency

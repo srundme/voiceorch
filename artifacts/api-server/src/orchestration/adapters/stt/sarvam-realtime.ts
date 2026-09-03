@@ -264,28 +264,25 @@ export function buildRealtimeConfigUpdate(opts: {
 }
 
 /**
- * Barge-in while the agent is talking: Sarvam says drive off vad.speech_start
- * or early partials, not transcript.final. Webcall AEC and PSTN echo both trip
- * server VAD on our own TTS — require a real caller partial before cutting.
- * Energy-only interrupt must not clearAudio: tryEnergyBargeIn only arms until
- * a usable caller partial exists. A peak-above-echo-bar here was cutting
- * mid-sentence, then the final arrived as self-echo.
+ * Official Sarvam realtime barge-in (Pipecat `should_interrupt=True`):
+ * `vad.speech_start` while the agent is talking → clearAudio.
+ * Greeting / system lines and the carrier echo-grace stay blocked.
+ * Do not add energy or "hard interrupt" extras — server VAD already filtered
+ * the onset (PSTN table: threshold 0.7, min_speech 200 ms).
  */
 export function shouldBargeOnRealtimeVadStart(opts: {
   agentSpeaking: boolean;
   greetingOrSystem: boolean;
   inEchoGrace: boolean;
-  isWebcall: boolean;
-  hasUsablePartial: boolean;
-  energyAboveEchoBar: boolean;
+  isWebcall?: boolean;
+  hasUsablePartial?: boolean;
+  energyAboveEchoBar?: boolean;
   isHardInterrupt?: boolean;
 }): boolean {
   if (!opts.agentSpeaking) return false;
   if (opts.greetingOrSystem) return false;
   if (opts.inEchoGrace) return false;
-  if (!opts.hasUsablePartial) return false;
-  if (opts.isWebcall) return true;
-  return opts.isHardInterrupt === true;
+  return true;
 }
 
 /** Streaming energy may arm, but PSTN must not clearAudio on echo-loud frames. */
@@ -302,29 +299,20 @@ export function shouldCommitStreamingEnergyBarge(opts: {
 }
 
 /**
- * Early-partial barge-in (Sarvam transcript.partial while TTS is playing).
- * Greeting + per-sentence echo grace stay hard blocks (call 14227: Tamil
- * greeting echo → English "Then you need to learn"). After that, a non-echo
- * partial must cut TTS even if the echo floor is still cold — otherwise the
- * agent finishes the whole availability sentence before answering "2pm"
- * (call 14251: bargeInFiredTotal=0). On PSTN a cold echo bar used to mean
- * "barge anyway" — that cut her mid-call when the previous sentence was still
- * echoing and isSendingTtsAudio had already flipped off. Talk-over then waits
- * for a usable partial (energy only arms). When the floor IS ready, still
- * require energy above it.
+ * Official LiveKit recipe: first non-echo partial (`min_words` ≥ 1) cuts TTS.
+ * Greeting lock, echo grace, and self-echo stay. No energy / hard-interrupt extras.
  */
 export function shouldBargeOnRealtimePartial(opts: {
   greetingOrSystem: boolean;
   inEchoGrace: boolean;
-  isWebcall: boolean;
+  isWebcall?: boolean;
   isSelfEcho: boolean;
-  echoBarReady: boolean;
-  energyAboveEchoBar: boolean;
+  echoBarReady?: boolean;
+  energyAboveEchoBar?: boolean;
   charCount: number;
   minChars: number;
   /** Isolated hello/hi while TTS is playing — leftover greeting / echo (call 16832). */
   isGreetingOnly?: boolean;
-  /** PSTN: only stop/wait or a slot answer — garbled echo must not cut. */
   isHardInterrupt?: boolean;
   isBookingAnswer?: boolean;
 }): boolean {
@@ -333,10 +321,7 @@ export function shouldBargeOnRealtimePartial(opts: {
   if (opts.isGreetingOnly) return false;
   if (opts.greetingOrSystem) return false;
   if (opts.inEchoGrace) return false;
-  if (opts.isWebcall) return true;
-  if (!opts.isHardInterrupt) return false;
-  if (!opts.echoBarReady) return Boolean(opts.isBookingAnswer);
-  return opts.energyAboveEchoBar || Boolean(opts.isBookingAnswer);
+  return true;
 }
 
 interface RealtimeMsg {

@@ -199,7 +199,7 @@ async function buildTargetAgentConfig(
     backchannelingEnabled: agent.backchannelingEnabled ?? false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
-    noiseCancellationEnabled: agent.noiseCancellationEnabled ?? false,
+    noiseCancellationEnabled: agent.noiseCancellationEnabled !== false,
     forceSoftwareNoiseGate: agentCfg[FORCE_SOFTWARE_NOISE_GATE_KEY] === true,
     ambientNoiseEnabled: (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false,
     ambientNoiseTrack: (agentCfg["ambientNoiseTrack"] as string | undefined) ?? null,

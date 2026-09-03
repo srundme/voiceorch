@@ -422,12 +422,9 @@ export class GeminiLivePipeline implements VoiceSession {
     this.recording.addCallerChunk(pcm8k);
     this.config.callerAudioTap?.(pcm8k);
 
-    // An explicit caller-supplied flag wins (webcall passes false because the
-    // browser already ran AEC/NS); otherwise use the per-call decision.
-    // PAUSE voice isolation + noise gate during agent speech so carrier echo
-    // is not cleaned into phantom caller speech (matches classic pipeline fix).
-    const pauseIsolation = this.isPlayingOut || this.outFrames8k.length > 0;
-    const gateOn = noiseCancel !== undefined ? noiseCancel : (this.noiseGate.enabled && !pauseIsolation);
+    // Explicit caller flag wins (webcall passes false). Stay on during agent
+    // speech so room talkers are still gated (call 20235).
+    const gateOn = noiseCancel !== undefined ? noiseCancel : this.noiseGate.enabled;
     const callId = String(this.config.callId);
     const pcm8kCopy = Buffer.from(pcm8k);
     const nativeCopy = nativePcm16k?.length ? Buffer.from(nativePcm16k) : undefined;

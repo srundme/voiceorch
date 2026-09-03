@@ -280,24 +280,14 @@ describe("shouldBargeOnRealtimeVadStart", () => {
     expect(shouldBargeOnRealtimeVadStart({ ...base, agentSpeaking: false, isWebcall: true })).toBe(false);
   });
 
-  it("does not barge on webcall VAD without a usable caller partial", () => {
-    expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true })).toBe(false);
-  });
-
-  it("barges on webcall VAD when a usable caller partial is present", () => {
-    expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true, hasUsablePartial: true })).toBe(true);
-  });
-
-  it("needs a usable hard-interrupt partial on PSTN — energy-only stays on the frame path", () => {
-    expect(shouldBargeOnRealtimeVadStart(base)).toBe(false);
-    expect(shouldBargeOnRealtimeVadStart({ ...base, energyAboveEchoBar: true })).toBe(false);
-    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true })).toBe(false);
-    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, isHardInterrupt: true })).toBe(true);
+  it("cuts on Sarvam vad.speech_start while the agent is talking (Pipecat should_interrupt)", () => {
+    expect(shouldBargeOnRealtimeVadStart(base)).toBe(true);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true, hasUsablePartial: false })).toBe(true);
   });
 
   it("holds through greeting and echo grace", () => {
-    expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true, greetingOrSystem: true })).toBe(false);
-    expect(shouldBargeOnRealtimeVadStart({ ...base, isWebcall: true, inEchoGrace: true })).toBe(false);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, greetingOrSystem: true })).toBe(false);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, inEchoGrace: true })).toBe(false);
   });
 });
 
@@ -318,20 +308,17 @@ describe("shouldBargeOnRealtimePartial", () => {
     expect(shouldBargeOnRealtimePartial({ ...base, inEchoGrace: true })).toBe(false);
   });
 
-  it("does not barge a PSTN partial while the echo floor is still cold (mid-call leftover echo)", () => {
+  it("cuts a non-echo partial without energy or hard-interrupt extras (LiveKit min_words)", () => {
     expect(shouldBargeOnRealtimePartial({
       ...base,
       echoBarReady: false,
       energyAboveEchoBar: false,
-    })).toBe(false);
-  });
-
-  it("does not barge a warm-floor PSTN partial that never rose above the echo bar", () => {
+    })).toBe(true);
     expect(shouldBargeOnRealtimePartial({
       ...base,
       echoBarReady: true,
       energyAboveEchoBar: false,
-    })).toBe(false);
+    })).toBe(true);
   });
 
   it("does not barge self-echo or short scraps", () => {
@@ -348,11 +335,8 @@ describe("shouldBargeOnRealtimePartial", () => {
     })).toBe(false);
   });
 
-  it("does not barge a generic PSTN partial even when energy is above the echo bar", () => {
-    expect(shouldBargeOnRealtimePartial(base)).toBe(false);
-  });
-
-  it("barges a PSTN stop/slot answer once energy is above the echo bar", () => {
+  it("barges a real caller partial on PSTN and webcall", () => {
+    expect(shouldBargeOnRealtimePartial(base)).toBe(true);
     expect(shouldBargeOnRealtimePartial({ ...base, isHardInterrupt: true })).toBe(true);
   });
 
