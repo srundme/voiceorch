@@ -39,7 +39,7 @@ import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { CartesiaTTS } from "./adapters/tts/cartesia.js";
 import { encodeMulaw, upsample8to16, downsample16to8, createDownsampler16to8, decodeMulaw, hasSpeechEnergy, frameRms, padWireFrame, enqueueExactFrames } from "./audio.js";
-import { resolveMicSensitivity, getMicSensitivityThresholds, isIdleCancellingMicEnergy, type MicSensitivityThresholds } from "./mic-sensitivity.js";
+import { resolveMicSensitivity, getMicSensitivityThresholds, isIdleCancellingMicEnergy, BACKGROUND_TALKER_MIN_RAW_RMS, type MicSensitivityThresholds } from "./mic-sensitivity.js";
 import { resolveSoftwareNoiseGate, envForceVobizSoftwareNc, type NoiseGateDecision } from "./noise-gate.js";
 import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
 import { validateBookableEmail, isEmailConfirmedFlag } from "./booking-email-validate.js";
@@ -5003,7 +5003,24 @@ export class OrchestrationPipeline implements VoiceSession {
       // socket so a replay through batch STT matches the configured sample rate.
       this.captureRecoveryAudio(sttFrame);
       this.captureEouAudio(effectivePcm16k);
-      this.streamSTT.sendAudio(sttFrame);
+      //
+      // GTCRN voice isolation enhances ALL speech (including far-field bystanders
+      // — see voice-isolator.ts:7-9). Reject low raw-energy frames by replacing
+      // them with SILENCE before STT, so background talkers (calls 19920-19926:
+      // friend speaking nearby switched the agent to Kannada/Telugu) cannot drive
+      // transcripts or language auto-detection. Maintains the 772→1320 invariant
+      // (never conditionally skip the send), but prevents enhanced bystander speech
+      // from reaching STT. When rawRms=0 (no measurement), fail-open (send audio).
+      if (rawRms > 0 && rawRms < BACKGROUND_TALKER_MIN_RAW_RMS) {
+        logger.info(
+          { callId: this.config.callId, rawRms, threshold: BACKGROUND_TALKER_MIN_RAW_RMS },
+          "Background talker energy — replacing with silence for STT",
+        );
+        const silentFrame = Buffer.alloc(sttFrame.length);
+        this.streamSTT.sendAudio(silentFrame);
+      } else {
+        this.streamSTT.sendAudio(sttFrame);
+      }
       return;
     }
 

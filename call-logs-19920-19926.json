@@ -1,0 +1,412 @@
+[
+  {
+    "timestamp": "2025-01-14T06:22:26.301Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19920,
+      "rms": 504.27,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.341Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19920,
+      "rms": 491.22,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.381Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19920,
+      "rms": 419.76,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.421Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19920,
+      "rms": 369.44,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.461Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19920,
+      "rms": 341.63,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.501Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19920,
+      "rms": 352.72,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.541Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19920,
+      "rms": 394.63,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.581Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19921,
+      "rms": 380.29,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.621Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19921,
+      "rms": 375.52,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.661Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19921,
+      "rms": 383.08,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.701Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19921,
+      "rms": 388.67,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.741Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19922,
+      "rms": 391.24,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.781Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19922,
+      "rms": 397.15,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.821Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19922,
+      "rms": 396.53,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.861Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19922,
+      "rms": 377.94,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.901Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19922,
+      "rms": 357.11,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.941Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19922,
+      "rms": 338.18,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:26.981Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19923,
+      "rms": 334.35,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.021Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19923,
+      "rms": 335.38,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.061Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19923,
+      "rms": 336.13,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.101Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19923,
+      "rms": 347.14,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.141Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19923,
+      "rms": 344.05,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.181Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19923,
+      "rms": 356.19,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.221Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19923,
+      "rms": 376.74,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.261Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19924,
+      "rms": 382.15,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.301Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19924,
+      "rms": 390.35,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.341Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19924,
+      "rms": 408.35,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.381Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19924,
+      "rms": 439.04,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.421Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19924,
+      "rms": 452.76,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.461Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19924,
+      "rms": 467.58,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.501Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19924,
+      "rms": 472.23,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.541Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19925,
+      "rms": 469.63,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.581Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19925,
+      "rms": 471.16,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.621Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19925,
+      "rms": 463.52,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.661Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19925,
+      "rms": 452.99,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.701Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19925,
+      "rms": 443.05,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.741Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19925,
+      "rms": 443.57,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.781Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19925,
+      "rms": 433.44,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.821Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19926,
+      "rms": 426.71,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.861Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19926,
+      "rms": 416.53,
+      "gate": "below"
+    }
+  },
+  {
+    "timestamp": "2025-01-14T06:22:27.901Z",
+    "level": "info",
+    "message": "Raw mic energy",
+    "data": {
+      "callId": 19926,
+      "rms": 395.06,
+      "gate": "below"
+    }
+  }
+]

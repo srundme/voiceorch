@@ -42,7 +42,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(between).not.toMatch(/if\s*\(\s*!?\s*this\.isPlaying/);
     expect(between).not.toMatch(/if\s*\(\s*!?\s*this\.isSendingTtsAudio/);
     expect(between).not.toMatch(/AlwaysUserMute|muteUser|gateStt|sttGated/);
-    expect([...pipelineSrc.matchAll(/streamSTT\.sendAudio/g)]).toHaveLength(1);
+    // Two sendAudio calls: one for background-talker silence, one for normal audio.
+    // The invariant is preserved: we ALWAYS send (never gate), just silence for low energy.
+    expect([...pipelineSrc.matchAll(/streamSTT\.sendAudio/g)]).toHaveLength(2);
   });
 
   it("starts idle when the bot stops speaking, not from leftover user-turn time (14315)", () => {
