@@ -370,11 +370,23 @@ const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.
 const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 400));
 const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 700));
 const TTS_UNDERRUN_COLD_MS = 8_000;
+/**
+ * Concurrency-aware prebuffer runway (restored — removed in a20aca3d).
+ * All campaign legs share ONE Node process, so every extra in-flight TTS drain
+ * steals event-loop time and makes synthesis lag realtime. Adding runway per
+ * concurrent drain lets the jitter buffer ride out that lag instead of
+ * underrunning the wire mid-sentence (choppy / "kora kora"). Applied to both
+ * the prebuffer target and its cap. Env-tunable per step (0 = off for a step).
+ */
+const TTS_CONCURRENCY_BOOST_MS_2 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_2 ?? 120));
+const TTS_CONCURRENCY_BOOST_MS_3 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_3 ?? 240));
+const TTS_CONCURRENCY_BOOST_MS_4 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_4 ?? 400));
 /** Burst this many 20 ms frames into VoBiz before realtime pacing so a 40–80 ms
  *  event-loop hitch does not empty the carrier jitter buffer. */
 const TTS_WIRE_LEAD_FRAMES = Math.max(0, Math.min(8, Number(process.env.TTS_WIRE_LEAD_FRAMES ?? 6)));
 
-/** Process-local in-flight TTS drains — logged on underrun, not used to inflate prebuffer. */
+/** Process-local in-flight TTS drains — drives the concurrency-aware prebuffer
+ *  boost above and is surfaced on underrun logs (concurrentDrains). */
 let activeTtsDrainCount = 0;
 
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
@@ -7358,12 +7370,22 @@ export class OrchestrationPipeline implements VoiceSession {
       const recentlyUnderran = this.ttsLastUnderrunAt > 0
         && Date.now() - this.ttsLastUnderrunAt < TTS_UNDERRUN_COLD_MS;
       const greetingFirstClip = this.greetingPlaybackActive && !this.ttsWarmed;
-      const prebufferMs = greetingFirstClip
+      // Concurrency-aware runway (restored — removed in a20aca3d): the more calls
+      // draining TTS on this shared process, the more prebuffer we need so
+      // synthesis lag under load does not underrun the wire mid-sentence.
+      const concurrencyBoostMs =
+        activeTtsDrainCount >= 4 ? TTS_CONCURRENCY_BOOST_MS_4
+        : activeTtsDrainCount >= 3 ? TTS_CONCURRENCY_BOOST_MS_3
+        : activeTtsDrainCount >= 2 ? TTS_CONCURRENCY_BOOST_MS_2
+        : 0;
+      const basePrebufferMs = greetingFirstClip
         ? TTS_PREBUFFER_GREETING_MS
         : (this.ttsWarmed && !recentlyUnderran)
           ? TTS_PREBUFFER_WARM_MS
           : TTS_PREBUFFER_COLD_MS;
-      const prebufferCap = greetingFirstClip ? TTS_PREBUFFER_GREETING_CAP_MS : TTS_PREBUFFER_CAP_MS;
+      const prebufferMs = basePrebufferMs + concurrencyBoostMs;
+      const prebufferCap =
+        (greetingFirstClip ? TTS_PREBUFFER_GREETING_CAP_MS : TTS_PREBUFFER_CAP_MS) + concurrencyBoostMs;
       await awaitPrebuffer(prebufferMs, prebufferCap);
       // Re-anchor the per-sentence echo grace + adaptive echo-floor calibration
       // window to actual playback start: the prebuffer wait above would
