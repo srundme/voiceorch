@@ -1186,15 +1186,19 @@ export class OrchestrationPipeline implements VoiceSession {
   // entire 21s opener — bargeInFiredTotal stayed 0. After the cap, treat the
   // rest of the greeting like any other TTS (echo bar + self-echo still apply).
   private greetingPlaybackActive = false;
+  /** First greeting clip only — leftover pitch is interruptible (call 20275). */
+  private greetingFirstClipActive = false;
   /** After the opener: drop one stale final captured while Hello was on the wire. */
   private _discardInboundGreetingOverlapFinal = false;
+  /** 600 ms echo grace from the first clip of this agent turn, not every sentence. */
+  private turnEchoGraceAt = 0;
 
   /**
-   * First-speech mute for the complete opening greeting (PSTN, both directions).
-   * Stop/hold still cuts via InterruptionManager; energy must not.
+   * First-speech mute for the first greeting sentence only.
+   * Call 20257 room leftovers stay ignored; call 20275 can barge the recap.
    */
   private greetingBargeLocked(): boolean {
-    return this.greetingPlaybackActive;
+    return this.greetingFirstClipActive;
   }
   /** True while a dead-air filler (ம்ம் / ஆஹா) is on the wire. Energy barge-in
    *  of that clip's own echo chops the voice (call 14276: streaming_energy on
@@ -2466,7 +2470,7 @@ export class OrchestrationPipeline implements VoiceSession {
     return shouldCutTtsFromCallerTranscript({
       transcript: text,
       agentSpeaking: this.isPlaying || this.isSendingTtsAudio,
-      greetingPlaybackActive: this.greetingPlaybackActive,
+      greetingPlaybackActive: this.greetingFirstClipActive,
       systemPlaybackActive: this.systemPlaybackActive,
       inEchoGrace: Date.now() < this.greetingEchoHoldUntil
         || Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs,
@@ -3720,7 +3724,7 @@ export class OrchestrationPipeline implements VoiceSession {
       "Streaming STT transcript received"
     );
     if (
-      this.greetingPlaybackActive
+      this.greetingFirstClipActive
       && shouldDiscardOpenerTranscript(transcript, this.interruptionMgr)
     ) {
       logger.info(
@@ -5913,6 +5917,8 @@ export class OrchestrationPipeline implements VoiceSession {
     this._currentTurnPlayedSentences = [];
     this.isPlaying = true;
     this.greetingPlaybackActive = true;
+    this.greetingFirstClipActive = true;
+    this.turnEchoGraceAt = 0;
     this.clearBargeWait();
     this.safetyNet.clear();
     const bootLatencyMs = Date.now() - (this.config.sessionCreatedAtMs ?? Date.now());
@@ -5936,6 +5942,7 @@ export class OrchestrationPipeline implements VoiceSession {
     try {
       await this.playTextAsSentences(text, emotions);
     } finally {
+      this.greetingFirstClipActive = false;
       if (canSlow) {
         this.tts.setSpeed!(restoreSpeed === 1 ? null : restoreSpeed);
       }
@@ -7490,11 +7497,12 @@ export class OrchestrationPipeline implements VoiceSession {
       );
     }
 
-    // Record when this sentence starts so the streaming STT path can apply a
-    // per-sentence 600 ms echo grace (bargeInSentenceStartAt + bargeInEchoGraceMs)
-    // instead of the extended `bargeInHoldUntil` that protects the batch STT path.
-    this.bargeInSentenceStartAt = Date.now();
-    this.bargeInPeakRmsSinceSentence = 0;
+    // 600 ms echo grace is per agent turn, not per clause. Resetting it on
+    // every sentence (call 20275) blocked barge-in for most of a 10s pitch.
+    if (this.turnEchoGraceAt === 0) {
+      this.bargeInSentenceStartAt = Date.now();
+      this.bargeInPeakRmsSinceSentence = 0;
+    }
 
     /** Wire bytes actually sent (mulaw or PCM8k) — source of truth for pacedMs. */
     let bytesSent = 0;
@@ -7609,8 +7617,11 @@ export class OrchestrationPipeline implements VoiceSession {
       // window to actual playback start: the prebuffer wait above would
       // otherwise consume the grace period before any audio is audible, and
       // caller audio during the wait could be sampled as "echo".
-      this.bargeInSentenceStartAt = Date.now();
-      this.bargeInPeakRmsSinceSentence = 0;
+      if (this.turnEchoGraceAt === 0) {
+        this.turnEchoGraceAt = Date.now();
+        this.bargeInSentenceStartAt = this.turnEchoGraceAt;
+        this.bargeInPeakRmsSinceSentence = 0;
+      }
       // Call 20274 turn 1/7: VAD started before this clip, so speech_start
       // never inspected barge-in. Check pending STT now that we are on the wire.
       this.maybeBargeFromRealtimeVadStart();
@@ -8605,6 +8616,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // A second reset also happens in handleStreamingTranscript whenever a
     // transcript arrives while the agent is not playing (belt-and-suspenders).
     this.streamingBargeInWordCount = 0;
+    this.turnEchoGraceAt = 0;
     // P0 fix (call 20094): Reset pending TTS chunk counter at the start of each turn.
     this.pendingTtsChunks = 0;
     // Reset per-turn sentence tracker. _interruptionHint is NOT reset here —
@@ -9413,7 +9425,7 @@ export class OrchestrationPipeline implements VoiceSession {
         // The old 0.25 Tamil hard-cap made enabled backchanneling feel "broken".
         const freq = Math.max(0, Math.min(1, baseFreq));
         const greetingOnlyCaller = isCallerAttentionUtterance(transcript);
-        if (shouldSkipImmediateBackchannel(Boolean(this._specLlmState), greetingOnlyCaller)) {
+        if (shouldSkipImmediateBackchannel(false, greetingOnlyCaller)) {
           logger.info(
             {
               callId: this.config.callId,
@@ -9423,11 +9435,9 @@ export class OrchestrationPipeline implements VoiceSession {
               greetingOnly: greetingOnlyCaller,
               speculativeLlm: Boolean(this._specLlmState),
             },
-            greetingOnlyCaller
-              ? "Backchannel filler skipped — greeting-only caller turn"
-              : "Backchannel filler skipped — speculative LLM already in flight",
+            "Backchannel filler skipped — greeting-only caller turn",
           );
-        } else if (Math.random() < freq) {
+        } else if (freq > 0) {
           // Strict, language-based fillers only — no cross-language fallback.
           const fillerOpts = this.backchannelFillerOpts(transcript);
           const pool = getBackchannelFillers(fillerLang, fillerOpts);

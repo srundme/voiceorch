@@ -19,8 +19,8 @@ describe("ttsContextIdForSequence", () => {
 });
 
 describe("shouldSkipImmediateBackchannel", () => {
-  it("skips Mm-hmm when eager/speculative LLM is already generating (call 17487)", () => {
-    expect(shouldSkipImmediateBackchannel(true)).toBe(true);
+  it("still backchannels when eager/speculative LLM is already generating (call 20275)", () => {
+    expect(shouldSkipImmediateBackchannel(true)).toBe(false);
   });
 
   it("allows backchannel when no speculative LLM is in flight", () => {

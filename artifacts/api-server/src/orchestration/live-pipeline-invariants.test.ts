@@ -115,6 +115,8 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
       .toBeLessThan(streamBody.indexOf("processTurn"));
     expect(pipelineSrc).toContain("room_crosstalk");
     expect(pipelineSrc).toContain("first-speech mute");
+    expect(pipelineSrc).toContain("greetingFirstClipActive");
+    expect(pipelineSrc).toContain("turnEchoGraceAt");
     expect(pipelineSrc).not.toContain("voice-isolator");
   });
 

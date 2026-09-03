@@ -228,6 +228,8 @@ describe("call 20094 STT quality — domain answers and Kannada leak", () => {
     expect(looksLikeShortContextualAnswer("Ji")).toBe(true);
     expect(looksLikeShortContextualAnswer("हाँ जी")).toBe(true);
     expect(looksLikeShortContextualAnswer("B2B")).toBe(true);
+    expect(looksLikeShortContextualAnswer("Yes yes, just only.")).toBe(true);
+    expect(looksLikeShortContextualAnswer("Yeah, that's that's only.")).toBe(true);
   });
 
   it("strips Kannada tokens from a Hindi-latched line", () => {

@@ -16,15 +16,15 @@ export function ttsContextIdForSequence(
 }
 
 /**
- * Immediate backchannel is wasted (and overlays Talk) when eager/speculative
- * LLM is already generating this turn. Dead-air filler still covers a miss.
- *
  * A greeting-only "Hello" is not an ack — playing "Understood." before the
  * real opener is a stop/start clip (call 17915).
+ *
+ * Eager/speculative LLM must NOT skip the cover filler (call 20275: four
+ * eager launches, then 1s of dead air on every turn).
  */
 export function shouldSkipImmediateBackchannel(
-  speculativeLlmInFlight: boolean,
+  _speculativeLlmInFlight: boolean,
   greetingOnlyCaller = false,
 ): boolean {
-  return speculativeLlmInFlight || greetingOnlyCaller;
+  return greetingOnlyCaller;
 }

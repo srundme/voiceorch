@@ -101,6 +101,11 @@ export function looksLikeShortContextualAnswer(text: string): boolean {
   if (INDIC_SINGLE_ACK_RE.test(t)) return true;
   if (INDIC_ACK_VOCATIVE_RE.test(t)) return true;
   if (/^(जी|हाँ|हां|हां जी|हाँ जी|haan ji|han ji|ji|jee)[\s,.!]*$/iu.test(t)) return true;
+  // Call 20275: "Yes yes, just only." / "Yeah, that's that's only." must not
+  // become "I didn't get that" after a late barge.
+  if (/^(yes|yeah|yep)([\s,]+(yes|yeah|yep)){0,3}[\s,]+((just|that's|thats)\s+)*only\.?$/i.test(t)) {
+    return true;
+  }
   return false;
 }
 
