@@ -354,10 +354,13 @@ const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
 // a Cartesia chunk stall no longer empties the carrier buffer mid-word. Greeting
 // prebuffer stays small (280) to keep the opening snappy. All env-overridable.
 // VoBiz is LINEAR16 8 kHz — Cartesia synthesizes at that rate unless CARTESIA_TTS_16K=1.
-const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 280));
+// Greeting is the coldest clip (TTS just warmed, and for multilingual agents the
+// opener is LLM-generated first — first byte often lands ~450-500 ms). 280 ms of
+// runway underran the wire at the opening; 400/600 rides that cold start out.
+const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 400));
 const TTS_PREBUFFER_GREETING_CAP_MS = Math.max(
   TTS_PREBUFFER_GREETING_MS,
-  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 400),
+  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 600),
 );
 const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 480));
 const TTS_PREBUFFER_COLD_MS = Math.max(
@@ -381,6 +384,24 @@ const TTS_UNDERRUN_COLD_MS = 8_000;
 const TTS_CONCURRENCY_BOOST_MS_2 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_2 ?? 120));
 const TTS_CONCURRENCY_BOOST_MS_3 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_3 ?? 240));
 const TTS_CONCURRENCY_BOOST_MS_4 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_4 ?? 400));
+/**
+ * Mid-stream TTS abort recovery ("word jumping" fix).
+ * When a streaming TTS aborts AFTER some audio already played (idle timeout /
+ * hung stream under load), the earlier behavior dropped the rest of the
+ * sentence — the caller heard the sentence cut off and the agent "jumped" to
+ * the next line. Instead, estimate how much of `text` was already voiced (from
+ * the buffered audio duration) and resynthesize the REMAINING tail via one-shot
+ * synth, appending it to the play queue so the sentence finishes.
+ *
+ * The char↔time estimate is coarse and language-dependent, so we snap the seam
+ * back to a word boundary and back off a few chars — a tiny overlap (re-voicing
+ * the last word) is far less jarring than skipping words. All env-tunable;
+ * set TTS_MIDSTREAM_RESYNTH=0 to disable instantly if it ever sounds worse.
+ */
+const TTS_MIDSTREAM_RESYNTH = process.env.TTS_MIDSTREAM_RESYNTH !== "0";
+const TTS_MIDSTREAM_MS_PER_CHAR = Math.max(10, Number(process.env.TTS_MIDSTREAM_MS_PER_CHAR ?? 60));
+const TTS_MIDSTREAM_SEAM_BACKOFF_CHARS = Math.max(0, Number(process.env.TTS_MIDSTREAM_SEAM_BACKOFF_CHARS ?? 8));
+const TTS_MIDSTREAM_MIN_REMAINDER_CHARS = Math.max(1, Number(process.env.TTS_MIDSTREAM_MIN_REMAINDER_CHARS ?? 10));
 /** Burst this many 20 ms frames into VoBiz before realtime pacing so a 40–80 ms
  *  event-loop hitch does not empty the carrier jitter buffer. */
 const TTS_WIRE_LEAD_FRAMES = Math.max(0, Math.min(8, Number(process.env.TTS_WIRE_LEAD_FRAMES ?? 6)));
@@ -7170,6 +7191,52 @@ export class OrchestrationPipeline implements VoiceSession {
                 }
               } catch (fallbackErr) {
                 job.synthError = fallbackErr;
+              }
+            } else if (
+              TTS_MIDSTREAM_RESYNTH
+              && !this.closed
+              && !this.bargeInRequested
+              && _ttsAccumBytes > 0
+              && text.length > 0
+            ) {
+              // Mid-stream abort with audio already queued: resynth the tail so
+              // the sentence is not cut off ("word jumping"). The queued audio
+              // plays first, so the tail must begin where that audio ends.
+              try {
+                const spokenMs = this.ttsDurationMs(_ttsAccumBytes);
+                const spokenChars = Math.floor(spokenMs / TTS_MIDSTREAM_MS_PER_CHAR);
+                let startIdx = Math.min(
+                  text.length,
+                  Math.max(0, spokenChars - TTS_MIDSTREAM_SEAM_BACKOFF_CHARS),
+                );
+                // Snap back to a word boundary so we never resynth a partial word.
+                while (startIdx > 0 && !/\s/.test(text[startIdx - 1]!)) startIdx--;
+                const remainder = text.slice(startIdx).trim();
+                const remainderChars = remainder.replace(/\s+/g, "").length;
+                if (remainderChars >= TTS_MIDSTREAM_MIN_REMAINDER_CHARS) {
+                  const { audio } = await this.tts.synthesize(remainder);
+                  if (audio?.length && !this.closed && !this.bargeInRequested) {
+                    job.pcmQueue.push(audio);
+                    job.audioDurationMs = this.ttsDurationMs(_ttsAccumBytes + audio.length);
+                    logger.info(
+                      {
+                        callId: this.config.callId,
+                        textLength: text.length,
+                        spokenMs,
+                        spokenChars,
+                        startIdx,
+                        remainderChars,
+                        audioBytes: audio.length,
+                      },
+                      "TTS stream aborted mid-sentence — recovered remaining tail with one-shot synthesize",
+                    );
+                  }
+                }
+              } catch (midErr) {
+                logger.warn(
+                  { callId: this.config.callId, err: toReadableError(midErr, "mid-stream resynth") },
+                  "TTS mid-stream resynth recovery failed — sentence tail dropped",
+                );
               }
             }
           }
