@@ -1852,6 +1852,21 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     this.activeTtsAborts.clear();
     this.llm.cancelInFlight?.();
+    // FLUSH streaming STT immediately so Sarvam finalizes any held coalesce
+    // buffer — don't wait for TTS to stop (user report: STT only flushing after TTS ends).
+    if (this.streamSTT?.flush) {
+      try {
+        const flushed = this.streamSTT.flush();
+        if (flushed) {
+          logger.info(
+            { callId: this.config.callId, trigger },
+            "Flushed streaming STT on barge-in — forcing Sarvam finalization",
+          );
+        }
+      } catch (err) {
+        logger.warn({ callId: this.config.callId, err }, "STT flush on barge-in failed");
+      }
+    }
     if (this._specLlmState) {
       this._specLlmState.aborted = true;
       this._specLlmState = null;
@@ -4483,10 +4498,14 @@ export class OrchestrationPipeline implements VoiceSession {
     this.recording.addCallerChunk(pcm8k);
     // Voice-intelligence tap — runs outside the main audio pipeline
     this.config.callerAudioTap?.(pcm8k);
+    // PAUSE voice isolation + noise gate during agent speech so carrier echo
+    // is not cleaned into phantom caller speech (call 19809: isolation broke barge-in).
+    // The agent's own TTS echo must reach the transcript filter unmodified.
+    const pauseIsolation = this.isPlaying || this.isSendingTtsAudio;
     processAudioIn(
       callId,
       mulawChunk,
-      this.noiseGate.enabled,
+      this.noiseGate.enabled && !pauseIsolation,
       this.micThresholds.gateRatio,
       this.micThresholds.vadThreshold,
     )
@@ -4552,7 +4571,10 @@ export class OrchestrationPipeline implements VoiceSession {
     // Caller-supplied `noiseCancel` wins when present; otherwise use the
     // per-call decision resolved in the constructor (provider bypass + agent
     // toggle + overrides — see noise-gate.ts).
-    const nc = noiseCancel !== undefined ? noiseCancel : this.noiseGate.enabled;
+    // PAUSE voice isolation + noise gate during agent speech so carrier echo
+    // is not cleaned into phantom caller speech (call 19809: isolation broke barge-in).
+    const pauseIsolation = this.isPlaying || this.isSendingTtsAudio;
+    const nc = noiseCancel !== undefined ? noiseCancel : (this.noiseGate.enabled && !pauseIsolation);
     // Queue the caller's TRUE 16k audio (before it was downsampled to 8k for
     // this call) so handleProcessedAudio can use it for STT instead of the
     // worker's upsample8to16 reconstruction, which cannot recover frequency
