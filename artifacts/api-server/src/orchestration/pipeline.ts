@@ -8704,6 +8704,7 @@ export class OrchestrationPipeline implements VoiceSession {
         this.conversationHistory.findLast((t) => t.role === "assistant")?.content
         ?? this.lastAssistantSpokenRaw
         ?? "";
+      const prevPendingName = this.bookingFlowState.pendingName;
       this.bookingFlowState = updateBookingFlowFromUserTurn(
         this.bookingFlowState,
         transcript,
@@ -8713,6 +8714,42 @@ export class OrchestrationPipeline implements VoiceSession {
         this.bookingFlowState,
         lastAgent,
       );
+      
+      // P0 Fix (call 20088): Dynamic STT silence adjustment for name collection.
+      // Names have natural pauses between syllables (e.g., "Karthikeyan Sundaram").
+      // The default 300ms silence window triggers premature end-of-speech, causing
+      // STT to miss the second half of the name. Stretch to 600ms when the agent is
+      // actively collecting a name, then restore to 300ms once captured.
+      //
+      // Detection:
+      //   1. Agent asked for name: lastAgent contains "name|பெயர்|नाम"
+      //   2. Name not yet captured: prevPendingName was null
+      //   3. Name just captured: prevPendingName was null, now non-null
+      //
+      // This prevents the "Utterance Misheard" failure mode where substantial speech
+      // (1.6s) produces a noise stub because STT ends too early.
+      const agentAskingForName =
+        /(?:name|பெயர்|नाम|full\s+name|your\s+name|may\s+i\s+(?:have|know|get)\s+(?:your\s+)?name)/i.test(lastAgent);
+      const nameJustCaptured =
+        prevPendingName == null
+        && this.bookingFlowState.pendingName != null
+        && this.bookingFlowState.pendingName.trim().length >= 2;
+      
+      if (this.streamSTT && agentAskingForName && !prevPendingName) {
+        // Agent just asked for name → stretch silence window
+        this.streamSTT.setSilenceDurationMs?.(600);
+        logger.info(
+          { callId: this.config.callId },
+          "STT silence stretched to 600ms (collecting name)",
+        );
+      } else if (this.streamSTT && nameJustCaptured) {
+        // Name captured → restore normal silence window
+        this.streamSTT.setSilenceDurationMs?.(300);
+        logger.info(
+          { callId: this.config.callId, name: this.bookingFlowState.pendingName?.slice(0, 20) },
+          "STT silence restored to 300ms (name captured)",
+        );
+      }
     }
 
     // Spell the captured address in code — do not let the LLM invent a
