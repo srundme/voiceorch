@@ -4299,7 +4299,16 @@ export class OrchestrationPipeline implements VoiceSession {
     this.safetyNet.onFinal();
     this.clearEagerPartialTimer();
     this.interruptionMgr.onUserSpeechEnd();
-    if (this.isProcessing) {
+
+    // BARGE-IN FIX: If a barge-in was triggered (TTS stopped, clearAudio sent),
+    // the transcript MUST process immediately — not queue. Queueing causes the
+    // "unrealistic call flow" where the user interrupts but their speech is only
+    // heard AFTER the AI finishes speaking (even though TTS was already stopped).
+    // The barge-in flag proves the caller's speech overpowered the AI, so this
+    // transcript is the interruption that already cleared the audio buffer.
+    const bargeInActive = this.bargeInRequested || this._lastTurnWasBargedIn;
+
+    if (this.isProcessing && !bargeInActive) {
       this.pendingTranscriptQueue.push({ text: transcript, emittedAt: sttEmittedAt, closeReason });
       return;
     }
@@ -4307,7 +4316,8 @@ export class OrchestrationPipeline implements VoiceSession {
     // Greeting (and any other isProcessing window) can leave orphans in the queue
     // without draining. A fresh final must not jump ahead of those — that is how
     // call 5677 answered "ஆமா" while "ஹலோ"/"ambulance" sat 13–20s behind.
-    if (this.pendingTranscriptQueue.length > 0) {
+    // EXCEPTION: Barge-in transcripts jump the queue (they're the reason TTS stopped).
+    if (this.pendingTranscriptQueue.length > 0 && !bargeInActive) {
       this.pendingTranscriptQueue.push({ text: transcript, emittedAt: sttEmittedAt, closeReason });
       const merged = this.drainPendingTranscripts();
       if (!merged) return;
