@@ -362,12 +362,15 @@ const TTS_PREBUFFER_GREETING_CAP_MS = Math.max(
   TTS_PREBUFFER_GREETING_MS,
   Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 600),
 );
-const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 480));
+// Increased from 480 → 600ms (call 20088: 4 underruns with 2 concurrent drains).
+// Higher Cartesia TTFB to India + event-loop lag under concurrency requires
+// more runway to keep playback glitch-free.
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 600));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
-  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 600),
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 700),
 );
-const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 700));
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 800));
 /** On mid-sentence underrun: refill this much real audio. Keep the carrier
  *  alive with silence, never by looping the last speech frame (robotic breakup). */
 const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 400));
@@ -380,10 +383,18 @@ const TTS_UNDERRUN_COLD_MS = 8_000;
  * concurrent drain lets the jitter buffer ride out that lag instead of
  * underrunning the wire mid-sentence (choppy / "kora kora"). Applied to both
  * the prebuffer target and its cap. Env-tunable per step (0 = off for a step).
+ *
+ * Increased after call 20088 (underrunWaitMs: 1032ms with 2 concurrent drains):
+ *   TTS_CONCURRENCY_BOOST_MS_2 = 120 → 300ms (+180ms, 2.5x increase)
+ *   TTS_CONCURRENCY_BOOST_MS_3 = 240 → 400ms (+160ms, 1.67x increase)
+ *   TTS_CONCURRENCY_BOOST_MS_4 = 400 → 600ms (+200ms, 1.5x increase)
+ *
+ * With 2 concurrent drains: 600ms base + 300ms boost = 900ms total runway.
+ * This covers the observed 1032ms gap with some margin for jitter.
  */
-const TTS_CONCURRENCY_BOOST_MS_2 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_2 ?? 120));
-const TTS_CONCURRENCY_BOOST_MS_3 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_3 ?? 240));
-const TTS_CONCURRENCY_BOOST_MS_4 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_4 ?? 400));
+const TTS_CONCURRENCY_BOOST_MS_2 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_2 ?? 300));
+const TTS_CONCURRENCY_BOOST_MS_3 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_3 ?? 400));
+const TTS_CONCURRENCY_BOOST_MS_4 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_4 ?? 600));
 /**
  * Mid-stream TTS abort recovery ("word jumping" fix).
  * When a streaming TTS aborts AFTER some audio already played (idle timeout /
@@ -8984,6 +8995,30 @@ export class OrchestrationPipeline implements VoiceSession {
       // Skip markup-only leftovers (call 17666: truncated `<emotion value="c`).
       const { emotion, text: cleanText } = extractEmotionTag(text);
       if (!cleanText) return;
+      
+      // P0 Fix (call 20088): Don't generate separate TTS for ultra-short fillers.
+      // Fillers like "ओके", "अच्छा", "अच्छा जी" should be merged with the next
+      // substantive sentence, not played as standalone clips. Separate TTS jobs for
+      // bare fillers (a) create artificial concurrency that causes underruns, (b) can
+      // arrive out-of-order and overlap with real sentences, and (c) sound choppy.
+      //
+      // Fillers are already prepended to the NEXT LLM token by the streaming split
+      // logic, so dropping standalone filler jobs does not lose content. If a filler
+      // is the ONLY output (turn 1 pure "ஆமா"), it still plays (isBackchannelOnly
+      // does not block a multi-word reply that STARTS with an ack).
+      if (isBackchannelOnlyUtterance(cleanText)) {
+        logger.info(
+          { callId: this.config.callId, evt: "standalone_filler_suppressed", textSnippet: cleanText.slice(0, 80) },
+          "Pipeline: suppressed standalone ultra-short filler — will merge with next substantive sentence",
+        );
+        this.logExec("TTS", "system", {
+          status: "info",
+          turnNumber: _currentTurnIndex,
+          metadata: { event: "Standalone Filler Suppressed", textSnippet: cleanText.slice(0, 80) },
+        });
+        return;
+      }
+      
       const emotions = emotion ? mapEmotionToCartesia(emotion) : undefined;
       if (emotion && emotions) {
         logger.info(
