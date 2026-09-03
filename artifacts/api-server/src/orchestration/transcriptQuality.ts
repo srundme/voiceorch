@@ -55,15 +55,15 @@ const VALID_COMPLETE_SHORT_UTTERANCE_RE =
 
 /** Reduplicated pure ack ("Okay Okay.") — treat as content-bearing, not noise. */
 const REDUPLICATED_ACK_RE =
-  /^(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक)([\s,.!]+(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक)){0,2}[\s,.!]*$/i;
+  /^(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक|ओके|अच्छा)([\s,.!]+(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक|ओके|अच्छा)){0,2}[\s,.!]*$/i;
 
 /** Indic one-word acks / negations — backchannel, not a standalone question. */
 const INDIC_SINGLE_ACK_RE =
-  /^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|जी|haan|han|theek|accha|hmm|hm|mm)[\s,.!]*$/iu;
+  /^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|ओके|अच्छा|जी|haan|han|theek|accha|hmm|hm|mm)[\s,.!]*$/iu;
 
-/** Indic/Hinglish ack + vocative chains ("ஆமா சார் ஆமா.", "okay sir"). */
+/** Indic/Hinglish ack + vocative chains ("ஆமா சார் ஆமா.", "okay sir", "अच्छा जी"). */
 const INDIC_ACK_VOCATIVE_RE =
-  /^(ஆமா|ஆம்|சரி|haan|ok(?:ay)?)([\s,.!]+(சார்|sir|जी|ji|madam|மா.?ம்|ஆமா|ஆம்|சரி|हां|हाँ|haan|ok(?:ay)?)){0,4}[\s,.!]*$/iu;
+  /^(ஆமா|ஆம்|சரி|ठीक|ओके|अच्छा|haan|ok(?:ay)?)([\s,.!]+(சார்|sir|जी|ji|madam|மா.?ம்|ஆமா|ஆம்|சரி|हां|हाँ|ठीक|ओके|अच्छा|haan|ok(?:ay)?)){0,4}[\s,.!]*$/iu;
 
 /** English ack/backchannel only — excludes greetings/farewells (those are real turns). */
 const ENGLISH_BACKCHANNEL_ONLY_RE =
@@ -168,7 +168,7 @@ export function isUltraShortNoiseFragment(text: string): boolean {
   if (REDUPLICATED_ACK_RE.test(t)) return false;
   if (COMPLETE_SHORT_NEGATION_RE.test(t)) return false;
   // Common Indic one-word acks / negations — keep for flow control
-  if (/^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|जी|नहीं|nahi|haan|ha[a]?n)[\s,.!]*$/iu.test(t)) {
+  if (/^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|ओके|अच्छा|जी|नहीं|nahi|haan|ha[a]?n)[\s,.!]*$/iu.test(t)) {
     return false;
   }
   if (/^(bye|goodbye|thanks|thank you|நன்றி|வணக்கம்|धन्यवाद)\b/i.test(t)) return false;
