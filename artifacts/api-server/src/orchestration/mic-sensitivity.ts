@@ -90,13 +90,18 @@ export function resolveBargeInEnergyThreshold(explicit: unknown): number {
  * metres away — so barge-in / turn-commit must score the mic energy, not the
  * enhanced signal.
  *
- * 800 is empirical on VoBiz 8 kHz + GTCRN (far-field vs near-talker), not a
- * spec. Same bar as idle-cancel so hangup-idle cannot disagree with barge-in.
+ * Raised from 800 → 1200 after call 19901: user's friend speaking 1-2m away
+ * was captured by STT, causing cross-talk transcripts. GTCRN enhances ALL speech,
+ * so this RAW energy threshold must be high enough to distinguish phone-holder
+ * from nearby bystanders. 1200 matches the legacy Normal barge-in bar and is
+ * more conservative than original 800.
+ *
+ * Same bar as idle-cancel so hangup-idle cannot disagree with barge-in.
  * Owner: this constant. Call 14315: echo tails below this must not
  * look like a reply. Call 14351: this bar is NOT a transcript-discard
  * authority — listening finals go to processTurn.
  */
-export const BACKGROUND_TALKER_MIN_RAW_RMS = 800;
+export const BACKGROUND_TALKER_MIN_RAW_RMS = 1200;
 
 export function isBackgroundTalkerUtterance(
   peakRawRms: number,
