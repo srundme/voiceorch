@@ -1195,6 +1195,8 @@ export class OrchestrationPipeline implements VoiceSession {
   private bargeInPeakRmsSinceSentence = 0;
   // Throttle for the periodic "energy barge-in monitor" diagnostic log line.
   private lastEnergyMonitorLogAt = 0;
+  // Throttle for logging caller energy during agent speech (barge-in diagnostics).
+  private _lastBargeInEnergyLogAt = 0;
   /** Sarvam realtime session.end.audio_duration_s — billed STT audio. */
   private sarvamSttBilledAudioS: number | null = null;
   // Rolling record of text the agent recently synthesized (oldest first), with the
@@ -5047,6 +5049,14 @@ export class OrchestrationPipeline implements VoiceSession {
         const silentFrame = Buffer.alloc(sttFrame.length);
         this.streamSTT.sendAudio(silentFrame);
       } else {
+        // Log energy during agent speech to diagnose barge-in sensitivity
+        if (agentSpeaking && rawRms > 500 && Date.now() - this._lastBargeInEnergyLogAt > 2000) {
+          this._lastBargeInEnergyLogAt = Date.now();
+          logger.info(
+            { callId: this.config.callId, rawRms, threshold: BACKGROUND_TALKER_MIN_RAW_RMS, agentSpeaking: true },
+            "Caller audio during agent speech (potential interruption attempt)",
+          );
+        }
         this.streamSTT.sendAudio(sttFrame);
       }
       return;

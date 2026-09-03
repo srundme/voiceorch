@@ -96,12 +96,17 @@ export function resolveBargeInEnergyThreshold(explicit: unknown): number {
  * from nearby bystanders. 1200 matches the legacy Normal barge-in bar and is
  * more conservative than original 800.
  *
+ * LOWERED TO 900 (2026-09-03): Call 20074 showed barge-in never triggering even
+ * when user was actively trying to interrupt. 1200 was too high for some mic/
+ * environment combinations, blocking legitimate interruptions. 900 is a middle
+ * ground: still filters far-field bystanders but allows closer/quieter speakers.
+ *
  * Same bar as idle-cancel so hangup-idle cannot disagree with barge-in.
  * Owner: this constant. Call 14315: echo tails below this must not
  * look like a reply. Call 14351: this bar is NOT a transcript-discard
  * authority — listening finals go to processTurn.
  */
-export const BACKGROUND_TALKER_MIN_RAW_RMS = 1200;
+export const BACKGROUND_TALKER_MIN_RAW_RMS = 900;
 
 export function isBackgroundTalkerUtterance(
   peakRawRms: number,
