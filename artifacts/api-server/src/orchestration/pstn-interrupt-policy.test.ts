@@ -4,7 +4,6 @@ import { shouldBargeOnRealtimeVadStart } from "./adapters/stt/sarvam-realtime.js
 import {
   InterruptionManager,
   PLAYING_INTERRUPT_WORD_FLOOR,
-  AMBIGUOUS_INTERRUPT_WORD_FLOOR,
   resolvePlayingWordFloor,
 } from "./interruption-manager.js";
 import {
@@ -37,13 +36,13 @@ function decide20257(transcript: string, opts?: {
   return { cutTts, processTurn };
 }
 
-describe("PSTN interrupt policy — keep a 2-word default", () => {
-  it("does not raise the global floor to 3", () => {
-    expect(PLAYING_INTERRUPT_WORD_FLOOR).toBe(2);
-    expect(CALL_ENGINE_SAFE.wordsForInterruption).toBe(2);
-    expect(new InterruptionManager().getWordsForInterruption()).toBe(2);
-    expect(resolvePlayingWordFloor({ transcript: "yes okay" })).toBe(2);
-    expect(resolvePlayingWordFloor({ transcript: "uh yes" })).toBe(AMBIGUOUS_INTERRUPT_WORD_FLOOR);
+describe("Bolna interrupt policy — 3-word default", () => {
+  it("uses Bolna number_of_words_for_interruption = 3", () => {
+    expect(PLAYING_INTERRUPT_WORD_FLOOR).toBe(3);
+    expect(CALL_ENGINE_SAFE.wordsForInterruption).toBe(3);
+    expect(new InterruptionManager().getWordsForInterruption()).toBe(3);
+    expect(resolvePlayingWordFloor({ transcript: "yes okay" })).toBe(3);
+    expect(resolvePlayingWordFloor({ transcript: "uh yes" })).toBe(3);
   });
 });
 
@@ -67,9 +66,11 @@ describe("call 20257 — greeting + VAD + empty/partial must not start a turn", 
     expect(decide20257("Hello இங்க பாருங்க")).toEqual({ cutTts: false, processTurn: false });
   });
 
-  it("speech_start + yes okay evaluates after the opener at the 2-word floor", () => {
+  it("speech_start + yes okay stays below the Bolna 3-word floor", () => {
     expect(decide20257("yes okay")).toEqual({ cutTts: false, processTurn: false });
     expect(decide20257("yes okay", { greetingPlaying: false }))
+      .toEqual({ cutTts: false, processTurn: true });
+    expect(decide20257("yes okay continue", { greetingPlaying: false }))
       .toEqual({ cutTts: true, processTurn: true });
   });
 
@@ -78,9 +79,10 @@ describe("call 20257 — greeting + VAD + empty/partial must not start a turn", 
   });
 
   it("cuts TTS when the caller talks over a new clip (call 20274)", () => {
-    expect(decide20257("Start continue", { greetingPlaying: false }))
+    expect(decide20257("Start continue please", { greetingPlaying: false }))
       .toEqual({ cutTts: true, processTurn: true });
     expect(decide20257("Hello, hello, are you there?", { greetingPlaying: false }))
       .toEqual({ cutTts: true, processTurn: true });
   });
 });
+

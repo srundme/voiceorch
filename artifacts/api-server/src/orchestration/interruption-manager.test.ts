@@ -5,7 +5,6 @@ import {
   bargeInMinChars,
   resolvePlayingWordFloor,
   PLAYING_INTERRUPT_WORD_FLOOR,
-  AMBIGUOUS_INTERRUPT_WORD_FLOOR,
 } from "./interruption-manager.js";
 
 describe("InterruptionManager", () => {
@@ -91,13 +90,13 @@ describe("InterruptionManager", () => {
     expect(m.isValidSequence(FILLER_SEQUENCE_ID)).toBe(true);
   });
 
-  it("shouldTriggerInterruption uses a 2-word floor while TTS plays", () => {
+  it("shouldTriggerInterruption uses Bolna's 3-word floor while TTS plays", () => {
     const m = new InterruptionManager();
     expect(m.getWordsForInterruption()).toBe(PLAYING_INTERRUPT_WORD_FLOOR);
 
     expect(m.shouldTriggerInterruption(5, "one two three four five", false)).toBe(false);
     expect(m.shouldTriggerInterruption(1, "hello", true)).toBe(false);
-    expect(m.shouldTriggerInterruption(2, "yes okay", true)).toBe(true);
+    expect(m.shouldTriggerInterruption(2, "yes okay", true)).toBe(false);
     expect(m.shouldTriggerInterruption(1, "uh", true)).toBe(false);
     expect(m.shouldTriggerInterruption(2, "uh yes", true)).toBe(false);
     expect(m.shouldTriggerInterruption(3, "one two three", true)).toBe(true);
@@ -117,10 +116,10 @@ describe("InterruptionManager", () => {
     expect(m.shouldTriggerInterruption(3, "wait stop இருங்க", true, false)).toBe(true);
   });
 
-  it("raises the playing floor to 3 for ambiguous / low-confidence partials", () => {
+  it("uses the configured Bolna floor with no messy/+1 bump", () => {
     expect(resolvePlayingWordFloor({ transcript: "yes okay" })).toBe(PLAYING_INTERRUPT_WORD_FLOOR);
-    expect(resolvePlayingWordFloor({ transcript: "uh yes" })).toBe(AMBIGUOUS_INTERRUPT_WORD_FLOOR);
-    expect(resolvePlayingWordFloor({ transcript: "Hello", lowConfidence: true })).toBe(AMBIGUOUS_INTERRUPT_WORD_FLOOR);
+    expect(resolvePlayingWordFloor({ transcript: "uh yes" })).toBe(PLAYING_INTERRUPT_WORD_FLOOR);
+    expect(resolvePlayingWordFloor({ transcript: "Hello", lowConfidence: true })).toBe(PLAYING_INTERRUPT_WORD_FLOOR);
   });
 
   it("exposes wordsForInterruption from options", () => {

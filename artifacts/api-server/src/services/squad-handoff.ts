@@ -249,7 +249,12 @@ async function buildTargetAgentConfig(
     genderDetectionFemaleSalutation: "Ma'am",
     genderDetectionNeutralSalutation: "",
     voiceMemoryEnabled: false,
-    wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 2,
+    wordsForInterruption: (() => {
+      const v = agentCfg["wordsForInterruption"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 3;
+      const n = Math.max(0, Math.round(v));
+      return n === 2 ? 3 : n;
+    })(),
     incrementalDelay: (() => {
       const v = agentCfg["incrementalDelay"];
       if (typeof v !== "number" || !Number.isFinite(v)) return 0;
@@ -284,8 +289,9 @@ async function buildTargetAgentConfig(
     })(),
     telephonyTailDrainMs: (() => {
       const v = agentCfg["telephonyTailDrainMs"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 400;
-      return Math.max(0, Math.min(2000, Math.round(v)));
+      if (typeof v !== "number" || !Number.isFinite(v)) return 80;
+      const ms = Math.max(0, Math.min(2000, Math.round(v)));
+      return ms === 400 ? 80 : ms;
     })(),
     sarvamSttMode: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? resolveSarvamSttMode(

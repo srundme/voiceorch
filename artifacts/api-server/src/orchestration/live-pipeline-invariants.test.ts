@@ -101,6 +101,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("shouldInterruptFromCallerTranscript");
     expect(pipelineSrc).toContain("shouldCutTtsFromCallerTranscript");
     expect(pipelineSrc).toContain("shouldDiscardOpenerTranscript");
+    expect(pipelineSrc).toContain("waiting for Bolna word gate");
+    expect(pipelineSrc).toContain("shouldIgnoreSelfEcho");
+    expect(pipelineSrc).not.toContain("SELF_ECHO_MIN_OVERLAP");
     expect(pipelineSrc).toContain("vad.speech_start only");
     expect(pipelineSrc).toContain("maybeBargeFromRealtimeVadStart");
     const vadBody = methodBody("maybeBargeFromRealtimeVadStart");
@@ -135,10 +138,14 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("this.config.onAudioOut(holdFrame)");
     expect(pipelineSrc).toContain("Never start the wire on an empty queue");
     expect(pipelineSrc).not.toContain("STREAMING_TTS_PREBUFFER_BOOST_MS");
-    // Greeting prebuffer raised 280 -> 400 (call 19718: cold LLM-opener underran the wire at the greeting).
+    // Greeting prebuffer stays 400 (call 19718: cold LLM-opener underran the wire).
     expect(pipelineSrc).toMatch(/TTS_PREBUFFER_GREETING_MS \?\? 400\)/);
-    // Warm prebuffer raised again after call 20094 (six underruns in <2 min).
-    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 1000\)/);
+    // Warm happy-path prebuffer is 250 ms — not a 1s blanket delay.
+    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 250\)/);
+    expect(pipelineSrc).toMatch(/TTS_REBUFFER_MS \?\? 180\)/);
+    expect(pipelineSrc).toContain("loadPresetFillerPcm");
+    expect(pipelineSrc).toMatch(/TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 80/);
+    expect(pipelineSrc).toMatch(/FILLER_THRESHOLD_MS \?\? 1200/);
   });
 
   it("does not ship GTCRN / voice-isolator on the live audio path (call 20257)", () => {

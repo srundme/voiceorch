@@ -22,10 +22,8 @@ const INDIC_LANG_PREFIXES = new Set([
 const BARGE_IN_MIN_CHARS_DEFAULT = 4;
 const BARGE_IN_MIN_CHARS_INDIC = 10;
 
-/** Bolna / PSTN floor while TTS is playing. Bare VAD never cuts. */
-export const PLAYING_INTERRUPT_WORD_FLOOR = 2;
-/** Weak / low-confidence partials need one more word (architect sign-off). */
-export const AMBIGUOUS_INTERRUPT_WORD_FLOOR = 3;
+/** Bolna `number_of_words_for_interruption` default while TTS is playing. */
+export const PLAYING_INTERRUPT_WORD_FLOOR = 3;
 
 const DEFAULT_ACCIDENTAL_INTERRUPT_PHRASES = [
   "stop", "wait", "hold on", "hang up", "cancel", "pause", "shut up",
@@ -48,9 +46,8 @@ export function isAmbiguousInterruptTranscript(text: string): boolean {
 }
 
 /**
- * Word floor while the agent is speaking.
- * Default 2; ambiguous/low-confidence → 3; agent config can raise further.
- * Floor is 0 when the agent is not speaking (caller turn).
+ * Bolna word floor while the agent is speaking.
+ * After TTS stops the floor is 0 (caller turn). No messy/+1 bump.
  */
 export function resolvePlayingWordFloor(opts: {
   transcript: string;
@@ -60,8 +57,7 @@ export function resolvePlayingWordFloor(opts: {
   const configured = opts.configuredFloor && opts.configuredFloor > 0
     ? opts.configuredFloor
     : PLAYING_INTERRUPT_WORD_FLOOR;
-  const ambiguous = opts.lowConfidence === true || isAmbiguousInterruptTranscript(opts.transcript);
-  return ambiguous ? Math.max(configured, AMBIGUOUS_INTERRUPT_WORD_FLOOR) : Math.max(configured, PLAYING_INTERRUPT_WORD_FLOOR);
+  return configured;
 }
 
 /**

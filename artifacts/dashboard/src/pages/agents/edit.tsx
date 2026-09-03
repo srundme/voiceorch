@@ -510,7 +510,7 @@ export default function AgentEdit() {
       linearDelayMs: 0,
       fragmentCoalesceListeningMs: 0,
       fragmentCoalescePlayingMs: 0,
-      telephonyTailDrainMs: 400,
+      telephonyTailDrainMs: 80,
       sarvamHighVadSensitivity: true,
       sarvamSttStreamType: "fast",
       sarvamSttPrompt: "",
@@ -841,7 +841,7 @@ export default function AgentEdit() {
       stopSpeakingNumWords: (() => {
         const fromWords = (agent as any).agentConfig?.wordsForInterruption as number | undefined;
         const fromPlan = (agent as any).agentConfig?.stopSpeakingPlan?.numWords as number | undefined;
-        return clampInterruptWords(fromWords ?? fromPlan ?? 2);
+        return clampInterruptWords(fromWords ?? fromPlan ?? 3);
       })(),
       stopSpeakingVoiceSecs: (() => {
         const words = clampInterruptWords(

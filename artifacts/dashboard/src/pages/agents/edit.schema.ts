@@ -305,8 +305,9 @@ export function clampFragmentCoalescePlayingMs(value: number | null | undefined)
 }
 
 export function clampTelephonyTailDrainMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 400;
-  return Math.max(0, Math.min(2000, Math.round(v)));
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 80;
+  const ms = Math.max(0, Math.min(2000, Math.round(v)));
+  return ms === 400 ? 80 : ms;
 }
 
 export function clampSarvamSpeechEndFlushMs(value: number | null | undefined): number {

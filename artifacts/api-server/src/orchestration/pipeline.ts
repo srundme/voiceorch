@@ -35,6 +35,12 @@ import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
 import { shouldCutTtsFromCallerTranscript, shouldDiscardOpenerTranscript } from "./pstn-interrupt-policy.js";
+import { shouldIgnoreSelfEcho } from "./self-echo-policy.js";
+import {
+  extractSentences,
+  pickStreamedGreetingHead,
+} from "./clause-stream.js";
+import { loadPresetFillerPcm, presetFillerDurationMs } from "./local-filler-pcm.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
@@ -104,18 +110,15 @@ import {
   joinWelcomeAndOpener,
   stripWelcomePrefix,
   buildInstantReturningGreeting,
-  AFFIRMATIONS,
   STALL_BACKSTOP_MS,
   OUTBOUND_POST_GREETING_STALL_MS,
   RESUME_DROP_POST_GREETING_STALL_MS,
-  isAffirmationOnlyUtterance,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeBookingTimeAnswer, looksLikeShortContextualAnswer, isDomainOrAcronymAnswer, preferStableTranscript, hasCallerAddressToken, isLikelyCrosstalkUtterance } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeBookingTimeAnswer, looksLikeShortContextualAnswer, isDomainOrAcronymAnswer, preferStableTranscript, isLikelyCrosstalkUtterance } from "./transcriptQuality.js";
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
-import { getCachedFillerPcm, setCachedFillerPcm } from "./fillerPcmCache.js";
 import { shouldSkipImmediateBackchannel, ttsContextIdForSequence } from "./filler-playback.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
 import { logger } from "../lib/logger.js";
@@ -367,22 +370,20 @@ const TTS_PREBUFFER_GREETING_CAP_MS = Math.max(
   TTS_PREBUFFER_GREETING_MS,
   Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 600),
 );
-// Increased from 480 → 600ms (call 20088: 4 underruns with 2 concurrent drains).
-// Higher Cartesia TTFB to India + event-loop lag under concurrency requires
-// more runway to keep playback glitch-free.
-// Raised after call 20113 (15 underrun events, 3–5s waits, concurrentDrains=1):
-// Cartesia first-byte is fast (~120ms) but the rest of the sentence arrives
-// slower than realtime, so 600/800ms runway still emptied mid-word.
-const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 1000));
+// Warm happy path: Cartesia first-byte is ~120 ms. 1000 ms of prebuffer was a
+// blanket delay on every later turn. 250 ms is enough runway; if we underrun
+// we fall back to the cold path (see recentlyUnderran) instead of waiting 1s
+// on every sentence. Measure underruns before going below 200.
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 250));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
-  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 1200),
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 600),
 );
-const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 1600));
-/** On mid-sentence underrun: refill this much real audio. Keep the carrier
- *  alive with silence, never by looping the last speech frame (robotic breakup). */
-const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 600));
-const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 1100));
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 900));
+/** On mid-sentence underrun only: refill this much real audio. Not on the
+ *  happy path — keep the carrier alive with silence, never a looped frame. */
+const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 180));
+const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 400));
 const TTS_UNDERRUN_COLD_MS = 8_000;
 /**
  * Concurrency-aware prebuffer runway (restored — removed in a20aca3d).
@@ -400,9 +401,9 @@ const TTS_UNDERRUN_COLD_MS = 8_000;
  * With 2 concurrent drains: 600ms base + 300ms boost = 900ms total runway.
  * This covers the observed 1032ms gap with some margin for jitter.
  */
-const TTS_CONCURRENCY_BOOST_MS_2 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_2 ?? 300));
-const TTS_CONCURRENCY_BOOST_MS_3 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_3 ?? 400));
-const TTS_CONCURRENCY_BOOST_MS_4 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_4 ?? 600));
+const TTS_CONCURRENCY_BOOST_MS_2 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_2 ?? 80));
+const TTS_CONCURRENCY_BOOST_MS_3 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_3 ?? 120));
+const TTS_CONCURRENCY_BOOST_MS_4 = Math.max(0, Number(process.env.TTS_CONCURRENCY_BOOST_MS_4 ?? 160));
 /**
  * Mid-stream TTS abort recovery ("word jumping" fix).
  * When a streaming TTS aborts AFTER some audio already played (idle timeout /
@@ -430,7 +431,7 @@ const TTS_WIRE_LEAD_FRAMES = Math.max(0, Math.min(8, Number(process.env.TTS_WIRE
 let activeTtsDrainCount = 0;
 
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
-const FILLER_THRESHOLD_MS     = 900;    // second TTS job only if LLM TTFT is actually slow
+const FILLER_THRESHOLD_MS     = Number(process.env.FILLER_THRESHOLD_MS ?? 1200); // dead-air cover only when LLM TTFT is actually slow — not the happy path
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
 const FRAGMENT_COALESCE_MS_DEFAULT = 0;  // fallback when agentConfig omits playing coalesce — keep in sync with FRAGMENT_COALESCE_DEFAULTS.playingMs (lib/db)
@@ -478,7 +479,7 @@ const BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR = 1200; // COLD-START fallback 
                                          // line-specific. We now MEASURE the echo floor per call (see
                                          // playbackEchoFloor) and set the bar to echoFloor × margin. This
                                          // constant is used only before enough echo has been observed.
-const TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 400; // fallback when agentConfig omits tail drain
+const TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 80; // measured minimum to flush the last packet — not a blanket 400 ms delay
 // ── Adaptive (self-calibrating) energy barge-in for the streaming-STT carrier path ──
 // The barge-in bar during active TTS = max(configuredThreshold, measuredEchoFloor × MARGIN),
 // clamped to [configured, MAX]. This lets a NORMAL-volume caller interrupt on a quiet line
@@ -502,19 +503,11 @@ const BARGE_IN_ECHO_CALIBRATION_MS = Number(process.env.BARGE_IN_ECHO_CALIBRATIO
 // conservative cold-start fallback is used so returning echo can't self-trigger while
 // the estimate is still empty (≈ one sentence's calibration window to warm up).
 const BARGE_IN_ECHO_FLOOR_MIN_SAMPLES = Number(process.env.BARGE_IN_ECHO_FLOOR_MIN_SAMPLES ?? 10);
-const BARGE_IN_STREAMING_MIN_FRAMES = Number(process.env.BARGE_IN_STREAMING_MIN_FRAMES ?? 10); // ~200 ms of sustained above-bar speech to fire (streaming path)
+const BARGE_IN_STREAMING_MIN_FRAMES = Number(process.env.BARGE_IN_STREAMING_MIN_FRAMES ?? 6); // ~120 ms candidate (energy inspects; words still decide the cut)
 /** Floor for telephony energy barge-in — agents with bargeInEnergyThreshold=300 (VAD floor) false-trigger constantly. */
 const BARGE_IN_TELEPHONY_MIN_ENERGY = Number(process.env.BARGE_IN_TELEPHONY_MIN_ENERGY ?? 800);
-// ── Content-based self-echo rejection (carrier echo on the Live Call path) ─────
-// On the Vobiz telephony path the carrier echoes the agent's own TTS back to us
-// AFTER the time-based echo-grace windows expire, so STT finalizes it as a
-// phantom caller turn (call 772: echoed "Hello" + greeting words tripped a false
-// barge-in that killed the greeting). These tune the content-match guard that
-// recognizes the agent's own words coming back.
-const SELF_ECHO_TAIL_MS       = 2000;  // how long after a line's estimated end its carrier
-                                        // echo can still return and be matched as self-echo
-const SELF_ECHO_MIN_OVERLAP   = 0.6;   // fraction of transcript tokens that must appear in
-                                        // recent agent speech to classify it as our own echo
+// Heard-text window for interruption hints (not self-echo detection).
+const SELF_ECHO_TAIL_MS       = 2000;
 const CARRIER_ECHO_LATENCY_MS = 1500;  // margin added to the greeting echo-hold to cover the
                                         // round-trip carrier echo latency (observed ~777 ms)
 // Tail drain duration comes from agentConfig.telephonyTailDrainMs (Latency Tuning UI).
@@ -1868,6 +1861,9 @@ export class OrchestrationPipeline implements VoiceSession {
     opts?: { speculative?: boolean; energyDetails?: Record<string, unknown> },
   ): void {
     if (this.bargeInRequested) return;
+    // Cheap cancel: sequence_id is the hard boundary. Invalidate N first so
+    // in-flight TTS tagged N cannot emit, then mute the carrier, then abort
+    // synth / LLM. Do not wait for drainPlaybackTail.
     const invalidatedSeq = this.interruptionMgr.invalidateCurrentTurn();
     this.bargeInRequested = true;
     this._bargeInFiredCount++;
@@ -2908,57 +2904,21 @@ export class OrchestrationPipeline implements VoiceSession {
     }
   }
 
-  /** True when a streaming-STT transcript closely matches text the agent recently
-   *  spoke AND arrived within a plausible carrier-echo window of it — i.e. it is
-   *  the agent's own audio returning, not the caller. Tolerant of STT noise via
-   *  token overlap (not exact match). Conservative by design: requires high overlap
-   *  so a caller genuinely repeating a word or two is NOT suppressed, and only
-   *  matches inside the echo window so the same words later count as real input. */
+  /** Bolna: welcome_played + word floor. Not token-overlap. */
   private isSelfEcho(transcript: string): boolean {
-    if (this.recentAgentSpeech.length === 0) return false;
-    const norm = this.normalizeForRepeat(transcript);
-    if (!norm) return false;
-    const tokens = norm.split(" ").filter(Boolean);
-    if (tokens.length === 0) return false;
-    // Genuine short replies ("yes", "okay okay", "yes madam", …) must never be
-    // discarded as echo of the agent saying "okay?" / "right?" at turn end —
-    // that bug ate "yes I have two minutes" style answers and looked like the
-    // caller hung up when the call actually stalled listening.
-    if (tokens.length === 1 && AFFIRMATIONS.has(tokens[0]!)) {
-      if (this.isPlaying && isCallerAttentionUtterance(transcript)) return true;
-      return false;
-    }
-    if (isAffirmationOnlyUtterance(tokens)) return false;
-    if (Date.now() < this.expectingShortReplyUntil && tokens.length <= 8) {
-      // Agent just asked a question — prefer accepting short replies over
-      // echo-suppression (carrier echo of our own "?" rarely becomes a multi-word
-      // affirmation). Exact long overlaps still get suppressed below.
-      if (tokens.length <= 4) return false;
-    }
-    const now = Date.now();
-    for (const entry of this.recentAgentSpeech) {
-      if (now > entry.estEndAt + SELF_ECHO_TAIL_MS) continue;
-      let matched = 0;
-      for (const t of tokens) if (entry.tokens.has(t)) matched++;
-      // For very short transcripts (1-2 tokens) a ratio alone is too easy to
-      // saturate by chance overlap with common words — additionally require at
-      // least 2 matched tokens UNLESS the transcript itself has only 1 token, in
-      // which case require an exact single-token match against the agent's LAST
-      // spoken word (true echo bleeds in at the tail of our own audio, not from
-      // the middle of the sentence).
-      if (tokens.length <= 2) {
-        if (tokens.length === 1) {
-          const lastToken = entry.tokens.size > 0 ? [...entry.tokens].at(-1) : undefined;
-          if (lastToken !== tokens[0]) continue;
-        } else if (matched < 2) {
-          continue;
-        }
-      }
-      const unmatched = tokens.filter((t) => !entry.tokens.has(t));
-      if (hasCallerAddressToken(unmatched)) continue;
-      if (matched / tokens.length >= SELF_ECHO_MIN_OVERLAP) return true;
-    }
-    return false;
+    const t = transcript.trim();
+    if (!t) return false;
+    const override = isSemanticInterrupt(t)
+      || isHoldRequest(t)
+      || this.interruptionMgr.isImmediateInterruptPhrase(t)
+      || isCallerAudioDifficulty(t);
+    return shouldIgnoreSelfEcho({
+      transcript: t,
+      agentSpeaking: this.isPlaying || this.isSendingTtsAudio,
+      welcomePlayed: !(this.greetingFirstClipActive || this.systemPlaybackActive),
+      isOverridePhrase: override,
+      wordFloor: this.interruptionMgr.getWordsForInterruption(),
+    }).ignore;
   }
 
   /**
@@ -3102,7 +3062,7 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     this.interruptionMgr = new InterruptionManager({
       incrementalDelayMs: config.agentConfig.incrementalDelay ?? 0,
-      wordsForInterruption: config.agentConfig.wordsForInterruption ?? 2,
+      wordsForInterruption: config.agentConfig.wordsForInterruption ?? 3,
     });
     // Detection only makes sense when {caller_salutation} is actually in the prompt —
     // otherwise there is nothing to fill in and we must NOT call the gender service.
@@ -3786,17 +3746,9 @@ export class OrchestrationPipeline implements VoiceSession {
       return;
     }
 
-    // Tail-echo guard: a final transcript arriving shortly after the agent
-    // stopped speaking — when we did NOT detect a genuine barge-in — used to be
-    // discarded on TIME ALONE, which silently ate genuine one-word replies
-    // ("yes", "okay") spoken a beat after the agent's line ended (call 2039).
-    // The guard is now CONTENT-AWARE: inside the window (the echo grace re-armed
-    // at the end of playback via armTailEchoGrace(), mirroring the web path's
-    // end grace) we discard only when the transcript actually matches the
-    // agent's own recent speech (isSelfEcho token-overlap check — which itself
-    // exempts single-word AFFIRMATIONS, so a caller's quick "yes" passes).
-    // A true echo of our own closing words still matches and is dropped, so
-    // echo protection is preserved (calls 772/1320 must not regress).
+    // Bolna: after TTS the word floor is 0. Do not discard a post-playback
+    // transcript as self-echo by matching our own script. Pipecat handles
+    // trailing echo with AEC + energy cooldown (bargeInHoldUntil), not text.
     if (!this.isPlaying && !this.bargeInRequested && Date.now() < this.bargeInHoldUntil) {
       if (!isSemanticInterrupt(transcript) && this.isSelfEcho(transcript)) {
         this.streamingBargeInWordCount = 0;
@@ -3816,14 +3768,8 @@ export class OrchestrationPipeline implements VoiceSession {
       );
     }
 
-    // Content-based self-echo guard (additive to the time-window tail-echo guard
-    // above). On the Live Call path the carrier echoes our own TTS back AFTER the
-    // time windows expire, so a purely time-based guard misses it. If this
-    // transcript closely matches what the agent just spoke (token overlap, tolerant
-    // of STT noise) and arrived within a plausible echo window, it is our own audio
-    // returning — discard it so it neither starts a phantom turn nor fires a false
-    // barge-in. Semantic interrupts ("stop"/"wait") are exempt: our own audio never
-    // utters them, so they must always be allowed to interrupt.
+    // Bolna self-echo: welcome mute / below-floor while speaking.
+    // Stop/wait is never ignored. After TTS this is a no-op (floor is 0).
     if (!isSemanticInterrupt(transcript) && this.isSelfEcho(transcript)) {
       this.streamingBargeInWordCount = 0;
       logger.info({ callId: this.config.callId, transcript }, "Streaming STT: discarding self-echo transcript (content match)");
@@ -4846,13 +4792,8 @@ export class OrchestrationPipeline implements VoiceSession {
       this.bargeInSpeechFrames++;
       // ~15 frames (300 ms @ 20ms/frame) of sustained caller speech energy required.
       // Filters out brief mic clicks/breaths while reacting promptly to human interruptions.
-      let effectiveMinFrames = Math.max(15, BARGE_IN_STREAMING_MIN_FRAMES);
+      let effectiveMinFrames = Math.max(6, BARGE_IN_STREAMING_MIN_FRAMES);
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {
-        // Energy only *arms*. Carrier echo of our own TTS is loud enough to
-        // clear the adaptive bar for 200–300ms (log: Barge-in detected (energy)
-        // then discarding self-echo). Webcall already waited for caller words;
-        // PSTN streaming does the same. Batch STT still energy-cuts (no live
-        // pending transcript). Greeting + per-sentence grace still apply above.
         const energyDetails = {
           frames: this.bargeInSpeechFrames,
           effectiveMinFrames,
@@ -4862,15 +4803,14 @@ export class OrchestrationPipeline implements VoiceSession {
           currentRms: Math.round(isWebcallStreaming ? frameRms(pcm8k) : currentRms),
         };
         if (isWebcallStreaming || streamingCarrier) {
+          // Bolna: energy only inspects. Word count / stop phrase cuts TTS.
           const pending = this.usablePendingBargeTranscript();
           if (!this.shouldInterruptFromCallerTranscript(pending)) {
             if (now - this.lastEnergyMonitorLogAt >= 700) {
               this.lastEnergyMonitorLogAt = now;
               logger.info(
                 { callId: this.config.callId, ...energyDetails, pending: pending.slice(0, 80) || null },
-                isWebcallStreaming
-                  ? "Barge-in energy held — waiting for caller transcript (webcall)"
-                  : "Barge-in energy held — waiting for hard interrupt (not echo)",
+                "Barge-in energy held — waiting for Bolna word gate",
               );
             }
             return;
@@ -5808,8 +5748,8 @@ export class OrchestrationPipeline implements VoiceSession {
           const emitFirstSentence = (chunk: string) => {
             if (firstSentenceSent || !onFirstSentence) return;
             pendingSpeak += chunk;
-            // Call 20274: comma early-split played "Sorry" then 2.6s of dead air
-            // while the rest of the resume greeting was still in the LLM.
+            // First usable clause starts TTS. Tiny leads ("Sorry,") stay
+            // coalesced until a real clause exists (call 20274).
             const first = pickStreamedGreetingHead(pendingSpeak);
             if (!first) return;
             firstSentenceSent = true;
@@ -7190,55 +7130,22 @@ export class OrchestrationPipeline implements VoiceSession {
       job.skipDrain = !this.tts.claimTurnContext(turnContextId);
     }
 
-    // Dead-air / tool fillers: serve cached PCM (Bolna preset-WAV feel) or synthesize once and cache.
+    // Bolna fillers: preset WAV, sequence_id = -1. Never a live TTS request.
     if (sequenceId === FILLER_SEQUENCE_ID) {
-      const cacheKey = {
-        provider: this.agent.ttsProvider,
-        voice: this.agent.ttsVoice ?? "",
-        model: this.agent.ttsModel ?? "",
-        text,
-        sampleRate: this.ttsPcmRate(),
-      };
-      const cached = getCachedFillerPcm(cacheKey);
-      void (async () => {
-        try {
-          if (cached) {
-            job.streaming = false;
-            job.nonStreamAudio = cached;
-            job.audioDurationMs = this.ttsDurationMs(cached.length);
-            this.logExec("TTS", "response", {
-              provider: this.agent.ttsProvider,
-              status: "success",
-              latencyMs: Date.now() - _ttsReqStart,
-              turnNumber,
-              durationMs: Date.now() - _ttsReqStart,
-              responsePayload: { audioBytes: cached.length, textLength: text.length, fillerCacheHit: true },
-            });
-            return;
-          }
-          // Prefer one-shot synthesize for cacheable fillers even when stream exists.
-          const { audio } = await this.tts.synthesize(text);
-          if (this.closed || this.bargeInRequested) return;
-          if (!audio?.length) throw new Error("TTS returned empty audio");
-          job.streaming = false;
-          job.nonStreamAudio = audio;
-          job.audioDurationMs = this.ttsDurationMs(audio.length);
-          setCachedFillerPcm(cacheKey, audio);
-          this.logExec("TTS", "response", {
-            provider: this.agent.ttsProvider,
-            status: "success",
-            latencyMs: Date.now() - _ttsReqStart,
-            turnNumber,
-            durationMs: Date.now() - _ttsReqStart,
-            responsePayload: { audioBytes: audio.length, textLength: text.length, fillerCacheHit: false },
-          });
-        } catch (err) {
-          job.synthError = err;
-        } finally {
-          job.synthDone = true;
-          resolveReady();
-        }
-      })();
+      const audio = loadPresetFillerPcm(text, this.ttsPcmRate());
+      job.streaming = false;
+      job.nonStreamAudio = audio;
+      job.audioDurationMs = presetFillerDurationMs(audio.length, this.ttsPcmRate());
+      this.logExec("TTS", "response", {
+        provider: "preset-filler",
+        status: "success",
+        latencyMs: Date.now() - _ttsReqStart,
+        turnNumber,
+        durationMs: Date.now() - _ttsReqStart,
+        responsePayload: { audioBytes: audio.length, textLength: text.length, presetFiller: true },
+      });
+      job.synthDone = true;
+      resolveReady();
       return job;
     }
 
@@ -12758,201 +12665,8 @@ function stripBracketedInstructions(text: string): string {
   return text.replace(/\[[\s\S]{120,}?\]/g, "").replace(/[^\S\r\n]{2,}/g, " ");
 }
 
-/**
- * Splits accumulated LLM streaming text into complete sentences ready for TTS.
- *
- * Improvements over the naive regex approach:
- *  • "!" and "?" are always boundaries (they don't appear in abbreviations).
- *  • "..." is NOT a sentence boundary. Tamil/English LLMs use it as a breath
- *    ("அதுக்கு முன்னாடி...", "Time confirm பண்ணிக்கலாமா...") — flushing that
- *    as its own Cartesia clip is the hitch you hear mid-reply (call 14276).
- *  • "." is a boundary ONLY when followed by whitespace + an uppercase letter,
- *    quote, or opening paren — this correctly skips:
- *      - Abbreviations:   "Dr. Smith", "Mr. Lee", "e.g. this"  (word before "." ≤ 4 letters)
- *      - Decimal numbers: "$1,200.50"  (period not followed by space)
- *      - Domain names:    "google.com" (period not followed by space)
- *  • Falls back to comma-clause dispatch for long responses with no boundary yet.
- */
-/**
- * First audible greeting clause. Wait for a real sentence — comma early-split
- * of "Sorry," left 2.6s of dead air on call 20274.
- */
-export function pickStreamedGreetingHead(pending: string): string {
-  const t = pending.trim();
-  if (t.length < 24) return "";
-  const m = t.match(/^[\s\S]{24,}?[.!?…](?:\s|$)/);
-  if (!m) return "";
-  const head = m[0].trim();
-  if (/^(sorry|hello|hi|hey|okay|ok|right|thanks)[,.]?$/i.test(head)) return "";
-  return head;
-}
-
-export function extractSentences(text: string, minCommaClauseChars = 8): { sentences: string[]; remainder: string } {
-  const sentences: string[] = [];
-  let i = 0;
-  let segStart = 0;
-
-  while (i < text.length) {
-    const ch = text[i]!;
-
-    if (ch === '!' || ch === '?') {
-      // Consume run of consecutive !/?
-      while (i + 1 < text.length && (text[i + 1] === '!' || text[i + 1] === '?')) i++;
-      const s = text.slice(segStart, i + 1).trim();
-      // Min 10 chars (or minCommaClauseChars) so short Indic phrases accumulate smoothly without micro-chunking
-      if (s.length >= Math.min(10, minCommaClauseChars)) sentences.push(s);
-      i++;
-      while (i < text.length && text[i] === ' ') i++;
-      segStart = i;
-
-    } else if (ch === '.' && text[i + 1] === '.' && text[i + 2] === '.') {
-      // Ellipsis is a breath, not a clip. Skip the three dots and keep
-      // accumulating so "அதுக்கு முன்னாடி... உங்களுக்கு …" stays one sentence.
-      i += 3;
-      continue;
-
-    } else if (ch === '\u0964') {
-      // Devanagari / Indic danda (।) — sentence boundary in Hindi, Tamil-mixed, etc.
-      const s = text.slice(segStart, i + 1).trim();
-      if (s.length >= 4) sentences.push(s);
-      i++;
-      while (i < text.length && text[i] === ' ') i++;
-      segStart = i;
-
-    } else if (ch === '.') {
-      const next = i + 1;
-      if (next >= text.length) {
-        // Period at end of string
-        const s = text.slice(segStart, i + 1).trim();
-        if (s.length >= 4) sentences.push(s);
-        i++;
-        segStart = i;
-      } else if (text[next] === ' ' || text[next] === '\n') {
-        // Look at first non-space/newline character after the period
-        let j = next + 1;
-        while (j < text.length && (text[j] === ' ' || text[j] === '\n')) j++;
-        const afterSpace = j < text.length ? text[j] : undefined;
-
-        // Split when:
-        //  a) next real char is uppercase/quote (English sentence start), OR
-        //  b) nothing follows — period+whitespace is at the tail of the current
-        //     streaming chunk (handles Tamil/Indic responses that end with ". ")
-        // Indic range (\u0900-\u0D7F) mirrors webcall.ts: Indic scripts have no
-        // uppercase, so without it Tamil/Hindi mid-sentence boundaries never split
-        // here, and the end-of-stream flush re-enqueues an already-spoken opening
-        // clause (duplicated heads, e.g. "வணக்கம். வணக்கம். நான்…").
-        const shouldSplit = afterSpace === undefined || /[A-Z"'(\u2018\u201C\u0900-\u0D7F]/.test(afterSpace);
-
-        if (shouldSplit) {
-          // Only split when the full word before the period is NOT a short abbreviation.
-          // We match the complete trailing Latin word (all consecutive letters) and
-          // flag as abbreviation only if it is ≤2 chars (Mr, Dr, vs, St, No, etc.).
-          // The old heuristic matched a 1–4-char SUFFIX which incorrectly treated
-          // Romanised Hindi words like "kare" (4 chars) or the suffix "rega" of
-          // "karega" as abbreviations, blocking the sentence split.
-          // Digits/punctuation before "." mean we're NOT in an abbreviation
-          // (e.g. "cost $1,200.50. Next…").
-          // Non-Latin scripts (Tamil, Hindi etc.) won't match the Latin regex so
-          // isAbbrev will be false — they always split correctly.
-          const wordBefore = text.slice(segStart, i).match(/([A-Za-z]+)$/)?.[1];
-          const isAbbrev = wordBefore !== undefined && wordBefore.length <= 2;
-          if (!isAbbrev) {
-            const s = text.slice(segStart, i + 1).trim();
-            if (s.length >= 4) sentences.push(s);
-            segStart = j;
-            i = j;
-          } else {
-            i++;
-          }
-        } else {
-          i++;
-        }
-      } else {
-        i++; // period not followed by space (decimal, URL, etc.)
-      }
-    } else {
-      i++;
-    }
-  }
-
-  let remainder = text.slice(segStart);
-
-  // Early phrase dispatch (Vapi/Bolna-style): start TTS on the first speakable
-  // clause while the LLM is still streaming — don't wait for .!? boundaries.
-  const early = tryEarlyPhraseDispatch(remainder, minCommaClauseChars);
-  if (early) {
-    sentences.push(early.clause);
-    remainder = early.rest;
-  }
-
-  return { sentences, remainder };
-}
-
-/**
- * Emit the first speakable clause from streaming LLM text before a sentence
- * boundary (.!?) arrives. Uses comma/semicolon breaks first, then a word
- * boundary once the buffer is long enough for natural prosody.
- */
-/** Clock / slot tokens — never early-split a comma between these (call 14390 choppy TTS). */
-const TIME_SLOT_TOKEN = /\b\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)\b/;
-
-function isTimeListComma(clause: string, rest: string): boolean {
-  const head = clause.slice(-48);
-  const tail = rest.slice(0, 48);
-  if (TIME_SLOT_TOKEN.test(head) && TIME_SLOT_TOKEN.test(tail)) return true;
-  // "...9:00 AM, 9:15..." — rest opens with another clock
-  if (/\b(?:AM|PM)\s*$/i.test(clause.trim()) && /^\s*\d{1,2}\s*(?::\d{2})?\s*(?:AM|PM)?/i.test(rest)) {
-    return true;
-  }
-  return false;
-}
-
-export function tryEarlyPhraseDispatch(
-  remainder: string,
-  minChars: number,
-): { clause: string; rest: string } | null {
-  const minBuffer = minChars + 6;
-  if (remainder.length < minBuffer) return null;
-
-  const firstComma = remainder.indexOf(", ");
-  if (firstComma !== -1 && remainder.length >= minBuffer) {
-    const clause = remainder.slice(0, firstComma).trim();
-    const rest = remainder.slice(firstComma + 2);
-    // Keep slot offers as one Cartesia clip: "9:00 AM, 9:15 AM, 9:30 AM…"
-    if (isTimeListComma(clause, rest)) {
-      // fall through to semicolon / dash breaks only
-    } else {
-      // Latin: "Hello Gopi," can start TTS early. Indic commas are mid-clause
-      // breaths (call 14345: "புரியுது," became its own Cartesia clip and the
-      // voice broke between every comma).
-      const indic = /[\u0900-\u0D7F]/.test(clause);
-      const minClause = indic ? Math.max(24, minChars) : 5;
-      // Either/or questions must stay one clip (call 20094 underran after
-      // "Are you already running a travel business" / "क्या आप बी टू बी").
-      if (/^(or|and|but|ya|या|और|अथवा|लेकिन|அல்லது|இல்ல)\b/iu.test(rest.trim())) {
-        return null;
-      }
-      if (/\b(or|या|अथवा|அல்லது)\b/iu.test(rest.slice(0, 48))) {
-        return null;
-      }
-      if (clause.length >= minClause) {
-        return { clause, rest };
-      }
-    }
-  }
-
-  for (const sep of ["; ", " — ", " - "] as const) {
-    const idx = remainder.lastIndexOf(sep);
-    if (idx >= minChars - 1) {
-      const clause = remainder.slice(0, idx).trim();
-      if (clause.length >= minChars) {
-        return { clause, rest: remainder.slice(idx + sep.length) };
-      }
-    }
-  }
-
-  // No word-boundary split here — micro-clauses were consuming the 2-sentence
-  // per-turn cap and silencing the final flush (call 2541). Comma/semicolon
-  // breaks are enough for early TTS without starving the tail.
-  return null;
-}
+export {
+  extractSentences,
+  pickStreamedGreetingHead,
+  tryEarlyPhraseDispatch,
+} from "./clause-stream.js";

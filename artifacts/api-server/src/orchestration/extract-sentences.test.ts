@@ -70,9 +70,12 @@ describe("tryEarlyPhraseDispatch — streaming TTS starts before .!?", () => {
     expect(r?.rest).toMatch(/^I'm Aisha/);
   });
 
-  it("does not word-split without a comma or semicolon", () => {
-    const text = "Sure I can help you with that appointment";
-    expect(tryEarlyPhraseDispatch(text, 15)).toBeNull();
+  it("word-splits a long clause so TTS can start before .!?", () => {
+    const text = "Sure I can help you with that appointment today";
+    const r = tryEarlyPhraseDispatch(text, 15);
+    expect(r).not.toBeNull();
+    expect(r!.clause.split(/\s+/).length).toBeGreaterThanOrEqual(4);
+    expect(text.startsWith(r!.clause)).toBe(true);
   });
 
   it("does not dispatch very short buffers", () => {
@@ -139,10 +142,14 @@ describe("extractSentences — early dispatch during simulated stream", () => {
 describe("pickStreamedGreetingHead — call 20274", () => {
   it("does not speak a lone Sorry comma-clause", () => {
     expect(pickStreamedGreetingHead("Sorry,")).toBe("");
-    expect(pickStreamedGreetingHead("Sorry, the line cut out")).toBe("");
+    expect(pickStreamedGreetingHead("Hello,")).toBe("");
   });
 
-  it("waits for the first real sentence of a resume greeting", () => {
+  it("starts TTS on the first usable resume clause before the period", () => {
+    expect(pickStreamedGreetingHead("Sorry, the line cut out")).toBe("Sorry, the line cut out");
+  });
+
+  it("prefers the first real sentence of a resume greeting when it has arrived", () => {
     expect(pickStreamedGreetingHead(
       "Sorry, the line cut out there for a second. Picking up where we left off",
     )).toBe("Sorry, the line cut out there for a second.");

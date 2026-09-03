@@ -8,7 +8,7 @@ export const CALL_ENGINE_SAFE = {
   asrEndpointingSilenceMs: 250,
   /** Extra post-transcript wait before LLM — 0 keeps turn latency snappy. */
   incrementalDelay: 0,
-  wordsForInterruption: 2,
+  wordsForInterruption: 3,
   stopSpeakingVoiceFloor: 0.2,
   minEnergy: 800,
   minEndpointingMs: 100,
@@ -272,6 +272,16 @@ export function normalizeCallEngineAgentConfig(
     cfg["sarvamEndOfSpeechSilenceMs"] = SARVAM_STT_LATENCY_DEFAULTS.endOfSpeechSilenceMs;
   }
 
+  const wordsLive = cfg["wordsForInterruption"];
+  if (wordsLive === 2) {
+    reasons.push("wordsForInterruption 2→3");
+    cfg["wordsForInterruption"] = 3;
+    const ssp = cfg["stopSpeakingPlan"];
+    if (ssp && typeof ssp === "object") {
+      cfg["stopSpeakingPlan"] = { ...(ssp as Record<string, unknown>), numWords: 3 };
+    }
+  }
+
   const ttsMin = cfg["ttsMinSentenceChars"];
   if (
     typeof ttsMin === "number"
@@ -279,6 +289,12 @@ export function normalizeCallEngineAgentConfig(
   ) {
     reasons.push(`ttsMinSentenceChars ${ttsMin}→${TTS_STREAM_DEFAULTS.minSentenceChars}`);
     cfg["ttsMinSentenceChars"] = TTS_STREAM_DEFAULTS.minSentenceChars;
+  }
+
+  const tailDrain = cfg["telephonyTailDrainMs"];
+  if (tailDrain === 400) {
+    reasons.push("telephonyTailDrainMs 400→80");
+    cfg["telephonyTailDrainMs"] = 80;
   }
 
   const uniqueReasons = [...new Set(reasons)];
@@ -301,7 +317,7 @@ export function callEngineInsertDefaults(): Record<string, unknown> {
     ttsMinSentenceChars: TTS_STREAM_DEFAULTS.minSentenceChars,
     fragmentCoalesceListeningMs: FRAGMENT_COALESCE_DEFAULTS.listeningMs,
     fragmentCoalescePlayingMs: FRAGMENT_COALESCE_DEFAULTS.playingMs,
-    telephonyTailDrainMs: 400,
+    telephonyTailDrainMs: 80,
     sarvamHighVadSensitivity: SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity,
     sarvamSpeechEndFlushMs: SARVAM_STT_LATENCY_DEFAULTS.speechEndFlushMs,
     sarvamIncompleteHoldMs: SARVAM_STT_LATENCY_DEFAULTS.incompleteHoldMs,

@@ -744,7 +744,12 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // P1-G: Engine — interruption & pacing
     // PSTN default 2 while TTS plays; ambiguous partials raise to 3 in
     // InterruptionManager. Bare VAD never cuts. Stop/wait still bypass.
-    wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 2,
+    wordsForInterruption: (() => {
+      const v = agentCfg["wordsForInterruption"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 3;
+      const n = Math.max(0, Math.round(v));
+      return n === 2 ? 3 : n;
+    })(),
     // Legacy form default was 350ms — rewrite in-memory so existing agents get
     // snappy turns without requiring a UI re-save. Intentional non-350 values keep.
     incrementalDelay: (() => {
@@ -789,8 +794,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     })(),
     telephonyTailDrainMs: (() => {
       const v = agentCfg["telephonyTailDrainMs"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 400;
-      return Math.max(0, Math.min(2000, Math.round(v)));
+      if (typeof v !== "number" || !Number.isFinite(v)) return 80;
+      const ms = Math.max(0, Math.min(2000, Math.round(v)));
+      return ms === 400 ? 80 : ms;
     })(),
     sarvamSttMode: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? resolveSarvamSttMode(

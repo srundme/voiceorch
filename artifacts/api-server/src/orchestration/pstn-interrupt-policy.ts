@@ -1,21 +1,13 @@
 /**
- * PSTN interruption policy (no carrier AEC).
- *
- * vad.speech_start inspects speech. Only a usable STT partial can cut TTS.
- * Default floor is 2 words while the agent is speaking; ambiguous/low-confidence
- * rises to 3; stop/hold is immediate. Do not raise the global floor to 3.
+ * Bolna interruption. Energy / VAD only inspects. Words + stop/wait cut TTS.
+ * Cancel is sequence_id: invalidate N, mute carrier, abort TTS/LLM.
  */
-import { shouldBargeOnRealtimeVadStart } from "./adapters/stt/sarvam-realtime.js";
 import { isHoldRequest } from "./conversationDiscipline.js";
 import { InterruptionManager } from "./interruption-manager.js";
 import {
   isAccidentalInterruptPhrase,
-  isCallerAttentionUtterance,
   isCallerAudioDifficulty,
-  isDomainOrAcronymAnswer,
-  isLikelyCrosstalkUtterance,
   isSemanticInterrupt,
-  looksLikeBookingTimeAnswer,
 } from "./transcriptQuality.js";
 
 export function isPstnStopHold(text: string, interruptionMgr: InterruptionManager): boolean {
@@ -56,19 +48,8 @@ export function shouldCutTtsFromCallerTranscript(opts: {
   const t = opts.transcript.trim();
   if (!t) return false;
   if (!opts.agentSpeaking) return false;
-  if (opts.isSelfEcho || isLikelyCrosstalkUtterance(t)) return false;
-  if (isCallerAttentionUtterance(t) && !isCallerAudioDifficulty(t)) return false;
-  const stopHold = isPstnStopHold(t, opts.interruptionMgr) || isCallerAudioDifficulty(t);
-  const booking = looksLikeBookingTimeAnswer(t) || isDomainOrAcronymAnswer(t);
-  const inOpener = opts.greetingPlaybackActive || !!opts.systemPlaybackActive;
-  if (!shouldBargeOnRealtimeVadStart({
-    agentSpeaking: true,
-    greetingOrSystem: inOpener,
-    inEchoGrace: !!opts.inEchoGrace,
-    hasUsablePartial: true,
-    isHardInterrupt: stopHold || (!inOpener && booking),
-  })) return false;
-  if (stopHold) return true;
+  if (opts.isSelfEcho) return false;
+  const welcomePlayed = !(opts.greetingPlaybackActive || !!opts.systemPlaybackActive);
   const words = t.split(/\s+/).filter(Boolean).length;
-  return opts.interruptionMgr.shouldTriggerInterruption(words, t, true, !inOpener);
+  return opts.interruptionMgr.shouldTriggerInterruption(words, t, true, welcomePlayed);
 }
