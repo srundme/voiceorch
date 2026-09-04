@@ -556,7 +556,7 @@ export async function createSession(params: {
     language: effectiveAgentLang,
     languageAutoDetect: isMultilingual,
     autoSwitchToEnglish: agentCfg["autoSwitchToEnglish"] === true,
-    backchannelingEnabled: agent.backchannelingEnabled ?? false,
+    backchannelingEnabled: agent.backchannelingEnabled !== false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
     noiseCancellationEnabled: agent.noiseCancellationEnabled !== false,
@@ -1712,7 +1712,10 @@ export async function createSession(params: {
     llmProvider: agent.llmProvider,
     ttsProvider: agent.ttsProvider,
     ttsVoice: agent.ttsVoice ?? null,
-    extra: { telephonyProvider: params.telephonyProvider },
+    extra: {
+      telephonyProvider: params.telephonyProvider,
+      backchannelingEnabled: agent.backchannelingEnabled !== false,
+    },
   });
 
   // ── Setup-time execution-log rows (mirror the web-call timeline) ─────────────

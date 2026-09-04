@@ -153,8 +153,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("Do not wait on incrementalDelay / calleeSpeaking before first audio");
     expect(pipelineSrc).toMatch(/FILLER_THRESHOLD_MS \?\? 0/);
     expect(pipelineSrc).toMatch(/BACKCHANNEL_LATE_MS \?\? 500/);
-    expect(pipelineSrc).toContain("Math.random() < freq");
+    expect(pipelineSrc).not.toContain("Math.random() < freq");
     expect(pipelineSrc).toContain("Backchannel filler armed (late, language-aware)");
+    expect(pipelineSrc).toContain("} else if (BACKCHANNEL_LATE_MS > 0) {");
     expect(pipelineSrc).toContain("firstSpeakableEnqueued || this.bargeInRequested || this.closed");
     expect(pipelineSrc).toContain("event: \"Backchannel Armed\"");
     expect(pipelineSrc).toContain("if (sequenceId !== FILLER_SEQUENCE_ID) firstSpeakableEnqueued = true");

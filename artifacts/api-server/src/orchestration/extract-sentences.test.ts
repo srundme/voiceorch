@@ -131,6 +131,14 @@ describe("extractSentences — Cartesia sentence mode (Sonic 3.5/3.6)", () => {
     expect(remainder).toBe(pending);
   });
 
+  it("splits on an em-dash clause without comma-clipping (call 21264)", () => {
+    const pending =
+      "I'd be happy to help, but just to clarify — earlier we were talking about a campus visit";
+    const { sentences, remainder } = extractSentences(pending, 15, { earlyClause: false });
+    expect(sentences[0]).toBe("I'd be happy to help, but just to clarify");
+    expect(remainder.startsWith("earlier")).toBe(true);
+  });
+
   it("still splits on a real sentence end", () => {
     const pending = "I can help you schedule that appointment. Just tell me your preferred time.";
     const { sentences, remainder } = extractSentences(pending, 15, { earlyClause: false });

@@ -38,6 +38,14 @@ describe("clause-level dispatch", () => {
     );
   });
 
+  it("Cartesia sentence mode splits on em-dash, not comma (call 21264)", () => {
+    const pending =
+      "I'd be happy to help, but just to clarify — earlier we were talking about a campus visit";
+    const { sentences, remainder } = extractSentences(pending, 15, { earlyClause: false });
+    expect(sentences[0]).toBe("I'd be happy to help, but just to clarify");
+    expect(remainder).toMatch(/^earlier we were talking/);
+  });
+
   it("Cartesia sentence mode keeps commas until .!?", () => {
     const pending = "Hello Gopi, I'm Aisha from ILCC and I can help you today";
     const { sentences, remainder } = extractSentences(pending, 8, { earlyClause: false });

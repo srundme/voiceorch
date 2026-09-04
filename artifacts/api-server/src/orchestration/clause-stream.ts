@@ -134,6 +134,27 @@ export function tryEarlyPhraseDispatch(
 }
 
 /**
+ * Cartesia keeps commas inside one sentence (Sonic pause), but an em-dash /
+ * semicolon is a real clause break. Waiting for `.!?` on a 160-char opener
+ * left 2s of silence (call 21264).
+ */
+export function tryDashClauseDispatch(
+  remainder: string,
+  minChars: number,
+): { clause: string; rest: string } | null {
+  for (const sep of [" — ", " – ", "; "] as const) {
+    const idx = remainder.indexOf(sep);
+    if (idx >= minChars) {
+      const clause = remainder.slice(0, idx).trim();
+      if (clause.length >= minChars && !isTinyLeadFragment(clause) && isUsableSpeakableClause(clause)) {
+        return { clause, rest: remainder.slice(idx + sep.length) };
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Splits accumulated LLM streaming text into speakable clauses for TTS.
  *
  *  • "!" and "?" are always boundaries.
@@ -211,6 +232,12 @@ export function extractSentences(
     if (early) {
       sentences.push(early.clause);
       remainder = early.rest;
+    }
+  } else {
+    const dash = tryDashClauseDispatch(remainder, minCommaClauseChars);
+    if (dash) {
+      sentences.push(dash.clause);
+      remainder = dash.rest;
     }
   }
 

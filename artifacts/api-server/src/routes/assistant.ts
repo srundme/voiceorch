@@ -396,7 +396,7 @@ async function executeTool(cmd: string, args: Record<string, unknown>, clerkUser
         systemPrompt: agent.systemPrompt ?? "",
         vadSilenceMs: config.vadSilenceMs ?? 350,
         bargeInEnabled: config.bargeInEnabled ?? false,
-        backchannelingEnabled: agent.backchannelingEnabled ?? false,
+        backchannelingEnabled: agent.backchannelingEnabled !== false,
         contextWindowTurns: agent.contextWindowTurns,
         performance: {
           totalCalls: agent.totalCalls ?? 0,

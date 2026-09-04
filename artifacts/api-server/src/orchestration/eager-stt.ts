@@ -46,6 +46,20 @@ export function isLastTokenCompletion(partial: string, final: string): boolean {
   return fLast.startsWith(pLast) && fLast !== pLast;
 }
 
+/**
+ * STT often prepends a leading ack on the final ("Yes, can you…") after eager
+ * launched on the question alone (call 21264). Same utterance — extra content
+ * after the partial still misses.
+ */
+export function isLeadingAckPrefix(partial: string, final: string): boolean {
+  const p = normalizeSpeculativeInput(partial);
+  const f = normalizeSpeculativeInput(final);
+  if (!p || !f || p === f || !f.endsWith(p)) return false;
+  const prefix = f.slice(0, f.length - p.length).trim();
+  if (!prefix) return false;
+  return prefix.split(" ").every((tok) => isBackchannelOnlyUtterance(tok));
+}
+
 /** Identity of the text the speculative LLM was launched on. */
 export function speculativeInputHash(text: string): string {
   return createHash("sha256").update(normalizeSpeculativeInput(text), "utf8").digest("hex");
@@ -83,6 +97,9 @@ export function reconcileSpeculativePrefill(opts: {
   if (opts.partialSnapshot && isLastTokenCompletion(opts.partialSnapshot, opts.finalTranscript)) {
     return { action: "commit", reason: "last_token_completion", finalHash };
   }
+  if (opts.partialSnapshot && isLeadingAckPrefix(opts.partialSnapshot, opts.finalTranscript)) {
+    return { action: "commit", reason: "leading_ack_prefix", finalHash };
+  }
   return { action: "discard", reason: "transcript_changed", finalHash };
 }
 
@@ -91,6 +108,7 @@ export function isSpeculativeHit(partial: string, final: string): boolean {
   return (
     speculativeInputHash(partial) === speculativeInputHash(final)
     || isLastTokenCompletion(partial, final)
+    || isLeadingAckPrefix(partial, final)
   );
 }
 

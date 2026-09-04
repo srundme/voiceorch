@@ -59,6 +59,14 @@ describe("isSpeculativeHit", () => {
     expect(isSpeculativeHit("I want to participate in the", "I want to participate in theater")).toBe(false);
   });
 
+  it("matches a leading ack prepended on the final (call 21264)", () => {
+    expect(isSpeculativeHit("Can you schedule me a demo?", "Yes, can you schedule me a demo?")).toBe(true);
+    expect(isSpeculativeHit(
+      "Yeah, yeah, yeah, I want, yeah, I want to go.",
+      "Yeah, yeah, yeah, I want to. Yeah, I want to go.",
+    )).toBe(false);
+  });
+
   it("matches comma / case-only STT variants (call 20686)", () => {
     expect(isSpeculativeHit("Hello, sir.", "Hello Sir")).toBe(true);
     expect(isSpeculativeHit("Hello, sir.", "hello sir")).toBe(true);

@@ -218,7 +218,7 @@ async function buildTargetAgentConfig(
     language: effectiveAgentLang,
     languageAutoDetect: agentCfg["languageMode"] === "multilingual" || agentCfg["languageAutoDetect"] === true,
     autoSwitchToEnglish: agentCfg["autoSwitchToEnglish"] === true,
-    backchannelingEnabled: agent.backchannelingEnabled ?? false,
+    backchannelingEnabled: agent.backchannelingEnabled !== false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
     noiseCancellationEnabled: agent.noiseCancellationEnabled !== false,

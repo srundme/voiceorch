@@ -8787,13 +8787,10 @@ export class OrchestrationPipeline implements VoiceSession {
       }
     }
     const skipFillerForBackchannelAck = isBackchannelOnlyUtterance(transcript);
-    if (!this.agent.backchannelingEnabled) {
-      this.logExec("TTS", "system", {
-        status: "info",
-        turnNumber: _currentTurnIndex,
-        metadata: { event: "Backchannel Skipped", reason: "disabled" },
-      });
-    } else if (skipFillerForBackchannelAck) {
+    // Late cover is dead-air, not a personality roll. Agent 864 stored
+    // backchanneling_enabled=false (schema default) so calls 21189/21264 never
+    // armed a filler — and a 50% frequency roll would skip the rest.
+    if (skipFillerForBackchannelAck) {
       this.logExec("TTS", "system", {
         status: "info",
         turnNumber: _currentTurnIndex,
@@ -8801,8 +8798,7 @@ export class OrchestrationPipeline implements VoiceSession {
       });
     }
     if (
-      this.agent.backchannelingEnabled
-      && !this.closed
+      !this.closed
       && !this.bargeInRequested
       && !skipFillerForBackchannelAck
       && !toolHoldSpokenThisTurn
@@ -8841,7 +8837,7 @@ export class OrchestrationPipeline implements VoiceSession {
             turnNumber: _currentTurnIndex,
             metadata: { event: "Backchannel Skipped", reason: "greeting_only" },
           });
-        } else if (freq > 0 && Math.random() < freq && BACKCHANNEL_LATE_MS > 0) {
+        } else if (BACKCHANNEL_LATE_MS > 0) {
           // Cover only when the LLM is late. Immediate enqueue on every turn
           // played a different speaker ("Hmm") before the first real token
           // (call 20284). Frequency is a real roll — the log used to say
@@ -12071,4 +12067,5 @@ export {
   extractSentences,
   pickStreamedGreetingHead,
   tryEarlyPhraseDispatch,
+  tryDashClauseDispatch,
 } from "./clause-stream.js";
