@@ -1398,9 +1398,9 @@ export class OrchestrationPipeline implements VoiceSession {
   private baselineInputTokensEstimate = 0; // what full-history would have cost
   private currentStageIndex = 0;           // for staged prompt layer
 
-  // Recording — stereo WAV of both sides (caller=L, agent=R). Gap threshold is
-  // set in the constructor: webcall caller frames arrive every ~128 ms, above
-  // the 120 ms telephony default (see WEBCALL_GAP_RESYNC_MS in recorder.ts).
+  // Recording — dual-mono WAV (caller + agent mixed on both channels). Gap
+  // threshold is set in the constructor: webcall caller frames arrive every
+  // ~128 ms, above the 120 ms telephony default (see WEBCALL_GAP_RESYNC_MS).
   private recording: RecordingBuffer;
 
   private conversationHistory = new ConversationHistory();
