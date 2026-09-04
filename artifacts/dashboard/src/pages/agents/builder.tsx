@@ -1607,6 +1607,10 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
               />
             </FormControl>
             <FormMessage className="text-[10px]" />
+            <p className="pt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+              Spoken first on inbound and outbound. What you type here is what they hear — including a short “Hello”.
+              If this is empty, inbound falls back to asking why they called.
+            </p>
           </FormItem>
         )} />
       </BuilderPanel>
@@ -2823,6 +2827,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             type: type as any,
             name: NATIVE_DEFAULT_NAMES[type] ?? "",
             description: "",
+            ...(type === "native_booking" ? { collectAttendeeEmail: false } : {}),
           })),
       ];
       replace(next);
@@ -2987,6 +2992,67 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   </Link>
                 )}
               </div>
+
+              {(() => {
+                const bookIdx = nativeToolIndex("native_booking");
+                if (bookIdx < 0) return null;
+                const askEmail = form.watch(`tools.${bookIdx}.collectAttendeeEmail`) === true;
+                return (
+              <div className="space-y-3 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[12px] font-medium text-foreground">Ask caller for email</p>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                      {askEmail
+                        ? "On — she collects an email on the call, spells it back, and only books after the caller says yes."
+                        : "Off — she will not ask the caller to give an email."}
+                    </p>
+                  </div>
+                  <Switch
+                    className="mt-0.5 shrink-0"
+                    checked={askEmail}
+                    onCheckedChange={(on) => {
+                      form.setValue(`tools.${bookIdx}.collectAttendeeEmail` as any, on, { shouldDirty: true });
+                    }}
+                  />
+                </div>
+                <div className="rounded-md border border-border/70 bg-background/70 px-2.5 py-2">
+                  <p className="text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">How email is used</p>
+                  <ol className="mt-1.5 list-decimal space-y-1.5 pl-4 text-[11px] leading-relaxed text-muted-foreground">
+                    <li>
+                      <span className="font-medium text-foreground">Lead, sheet, or prompt already has an email</span>
+                      {" "}({`{{email}}`}, lead source, CRM) — that address is put on the booking. To have her read it back, write that in the agent prompt. It is not forced here.
+                    </li>
+                    <li>
+                      <span className="font-medium text-foreground">No email on the lead or prompt</span>
+                      {askEmail
+                        ? " — she asks the caller, confirms it, then books."
+                        : " — she does not ask. She uses the default calendar email below, or a guest address if that field is empty."}
+                    </li>
+                  </ol>
+                </div>
+                {!askEmail && (
+                  <FormField control={form.control} name={`tools.${bookIdx}.defaultAttendeeEmail` as any} render={({ field: f }) => (
+                    <FormItem>
+                      <FormLabel className="text-[11px]">Default calendar email</FormLabel>
+                      <FormControl>
+                        <Input
+                          className="h-9 bg-background text-xs"
+                          type="email"
+                          placeholder="ops@yourcompany.com"
+                          value={f.value ?? ""}
+                          onChange={f.onChange}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-[10.5px]">
+                        Used only when the lead and prompt have no email. Invite still goes out so the calendar event can be created.
+                      </FormDescription>
+                    </FormItem>
+                  )} />
+                )}
+              </div>
+                );
+              })()}
 
               <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
                 <div className="min-w-0">

@@ -35,6 +35,7 @@ import {
 import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
 import type { AgentConfig as _AgentConfig } from "../orchestration/types.js";
 import type { AgentTool, ToolDefinition } from "../orchestration/types.js";
+import { bookingAsksCallerForEmail, resolveBookingAttendeeEmail } from "../orchestration/booking-email-policy.js";
 import { logger } from "../lib/logger.js";
 import { writeExecutionLog } from "./execution-log.js";
 import type { TimeSlot } from "./scheduling/slot-engine.js";
@@ -162,17 +163,23 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
     ...builtInEndCall,
     ...tools.map((t): ToolDefinition => {
       if (t.type === "native_booking") {
+        const askEmail = bookingAsksCallerForEmail(t);
         return {
           name: t.name,
           description:
             t.description +
             " Call this tool to create the actual booking." +
-            " CRITICAL RULES — violating any of these will cause an error:" +
-            " (1) NEVER call this tool with placeholder, example, or test values — attendee_name must be the caller's real full name in English/Latin letters (romanize Hindi/Tamil/Marathi/etc.) and attendee_email must be their real email address (not @example.com, @test.com, or similar fake domains)." +
-            " (2) You MUST have the caller's real name AND real email address explicitly stated in the conversation before calling — do NOT fabricate or guess these details." +
-            " (3) Only book ONE slot per conversation turn — present available slots to the caller, wait for them to choose one, then book only that ONE slot. Do NOT call this tool multiple times in a row." +
-            " (4) Required fields: attendee_name (ask the caller if not yet provided) and attendee_email (ask the caller if not yet provided)." +
-            " (5) EMAIL CONFIRMATION (mandatory): after the caller gives an email, spell it back with <spell>…</spell> character-by-character, wait for an explicit yes/correct, THEN call this tool with email_confirmed=true. Never book on a half-heard address (e.g. missing domain or spaces in the local-part).",
+            (askEmail
+              ? " CRITICAL RULES — violating any of these will cause an error:" +
+                " (1) NEVER call this tool with placeholder, example, or test values — attendee_name must be the caller's real full name in English/Latin letters (romanize Hindi/Tamil/Marathi/etc.) and attendee_email must be their real email address (not @example.com, @test.com, or similar fake domains)." +
+                " (2) You MUST have the caller's real name AND real email address explicitly stated in the conversation before calling — do NOT fabricate or guess these details." +
+                " (3) Only book ONE slot per conversation turn — present available slots to the caller, wait for them to choose one, then book only that ONE slot. Do NOT call this tool multiple times in a row." +
+                " (4) Required fields: attendee_name (ask the caller if not yet provided) and attendee_email (ask the caller if not yet provided)." +
+                " (5) EMAIL CONFIRMATION (mandatory): after the caller gives an email, spell it back with <spell>…</spell> character-by-character, wait for an explicit yes/correct, THEN call this tool with email_confirmed=true. Never book on a half-heard address (e.g. missing domain or spaces in the local-part)."
+              : " CRITICAL RULES:" +
+                " (1) attendee_name must be the caller's real full name in English/Latin letters (romanize Hindi/Tamil/Marathi/etc.)." +
+                " (2) Do NOT ask the caller to give an email if you do not already have one from LEAD CONTEXT, sheet lookup, or prompt variables. If you already have one, pass it as attendee_email. Confirming a known address is only if the agent instructions say to. Otherwise omit attendee_email — a preconfigured or guest address is used." +
+                " (3) Only book ONE slot per conversation turn — present available slots, wait for them to choose one, then book only that ONE slot."),
           parameters: {
             type: "object",
             properties: {
@@ -181,12 +188,22 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
                 description:
                   "Caller's full name in English / Latin letters ONLY (e.g. 'Kishore Kumar'). If they spoke Hindi, Tamil, Marathi, or another language, romanize the name — never pass Devanagari, Tamil, or other native scripts.",
               },
-              attendee_email: { type: "string", description: "Email address of the person being booked" },
-              email_confirmed: {
-                type: "boolean",
-                description:
-                  "Must be true only after you spelled the email back with <spell> tags and the caller explicitly confirmed it is correct.",
-              },
+              ...(askEmail
+                ? {
+                    attendee_email: { type: "string", description: "Email address of the person being booked" },
+                    email_confirmed: {
+                      type: "boolean",
+                      description:
+                        "Must be true only after you spelled the email back with <spell> tags and the caller explicitly confirmed it is correct.",
+                    },
+                  }
+                : {
+                    attendee_email: {
+                      type: "string",
+                      description:
+                        "Optional. Pass if this email is already in LEAD CONTEXT, sheet lookup, or prompt variables. Do not ask the caller to invent one.",
+                    },
+                  }),
               preferred_date: {
                 type: "string",
                 description:
@@ -208,7 +225,7 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
                   "The physical address for the meeting. Required only when meeting_type is 'in_person'. Ask the caller for the address before booking.",
               },
             },
-            required: ["attendee_name", "attendee_email"],
+            required: askEmail ? ["attendee_name", "attendee_email"] : ["attendee_name"],
           },
         };
       }
@@ -247,15 +264,20 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
         };
       }
       if (t.type === "native_check_availability") {
+        const bookTool = tools.find((x) => x.type === "native_booking");
+        const askEmail = bookingAsksCallerForEmail(bookTool);
+        const afterSlot = askEmail
+          ? "collect their full name and email and call book_appointment"
+          : "collect their full name (do not ask for an email unless it is already in lead/prompt/variables) and call book_appointment";
         return {
           name: t.name,
           description:
             t.description +
             " This tool ONLY checks availability — it does NOT create a booking." +
             " The response has three possible formats:" +
-            " (1) requested_slot_available: the 'slot' field contains the ISO 8601 string for the exact time the caller requested — tell the caller that time is available, then immediately collect their full name and email and call book_appointment with that ISO string verbatim as preferred_date." +
-            " (2) requested_slot_unavailable: the requested time is not open — tell the caller and present the slots from the 'alternatives' field (each slot is shown as an ISO string followed by a human label in parentheses); once the caller chooses one, collect their name and email and call book_appointment with the chosen ISO string verbatim as preferred_date." +
-            " (3) available_slots: the 'next' field lists up to 5 slots, each formatted as an ISO 8601 string followed by a human-readable label in parentheses, e.g. '2026-06-22T15:00:00+05:30 (Sun Jun 22 at 3:00 PM)' — present these to the caller, then after they choose one collect name and email and call book_appointment with the ISO string verbatim." +
+            ` (1) requested_slot_available: the 'slot' field contains the ISO 8601 string for the exact time the caller requested — tell the caller that time is available, then immediately ${afterSlot} with that ISO string verbatim as preferred_date.` +
+            ` (2) requested_slot_unavailable: the requested time is not open — tell the caller and present the slots from the 'alternatives' field (each slot is shown as an ISO string followed by a human label in parentheses); once the caller chooses one, ${afterSlot} with the chosen ISO string verbatim as preferred_date.` +
+            ` (3) available_slots: the 'next' field lists up to 5 slots, each formatted as an ISO 8601 string followed by a human-readable label in parentheses, e.g. '2026-06-22T15:00:00+05:30 (Sun Jun 22 at 3:00 PM)' — present these to the caller, then after they choose one ${afterSlot} with the ISO string verbatim.` +
             " Always pass ISO strings verbatim to book_appointment — do NOT convert or reformat them." +
             " Never confirm to the caller that an appointment is booked without first calling the booking tool and receiving a booking_confirmed result.",
           parameters: {
@@ -590,16 +612,24 @@ export async function executeNativeBooking(
   agentId: number,
   tool: AgentTool & { type: "native_booking" },
   args: Record<string, unknown>,
-  opts?: { lineageCallId?: number | null },
+  opts?: { lineageCallId?: number | null; knownEmail?: string | null; knownSourceText?: string | null },
 ): Promise<string> {
   args = normalizeBookingDatetimeArgs(args);
   logger.info({ callId, eventTypeId: tool.eventTypeId }, "Native booking tool invoked");
   const bookingCallId = await resolveBookingLineageCallId(callId, opts?.lineageCallId);
   const attendeeNameRaw = String(args["attendee_name"] ?? args["name"] ?? "Guest");
-  const attendeeEmailRaw = String(args["attendee_email"] ?? args["email"] ?? "");
+  const askEmail = bookingAsksCallerForEmail(tool);
+  const resolved = resolveBookingAttendeeEmail({
+    tool,
+    args,
+    callId,
+    knownEmail: opts?.knownEmail,
+    knownSourceText: opts?.knownSourceText,
+  });
+  const attendeeEmailRaw = resolved.email;
   const preferredRaw = args["preferred_date"] != null ? String(args["preferred_date"]) : null;
 
-  if (!attendeeEmailRaw.trim()) {
+  if (askEmail && !attendeeEmailRaw.trim()) {
     logger.warn({ callId }, "Native booking: no attendee email — cannot book");
     return "error: attendee_email is required to complete the booking";
   }
@@ -619,7 +649,7 @@ export async function executeNativeBooking(
   // STT captured Hindi/Tamil/Marathi (etc.) native script on the call.
   const attendeeName = latinizeAttendeeName(attendeeNameRaw, attendeeEmail);
 
-  if (!isEmailConfirmedFlag(args)) {
+  if (askEmail && !isEmailConfirmedFlag(args)) {
     logger.warn({ callId, attendeeEmail }, "Native booking blocked: email not confirmed by caller");
     void appendBookingLog(callId, agentId, "Booking Blocked", {
       reason: "email_not_confirmed",
@@ -635,7 +665,7 @@ export async function executeNativeBooking(
   const emailDomain = emailParts[1]?.toLowerCase() ?? "";
   const isBlockedDomain = BLOCKED_EMAIL_DOMAINS.includes(emailDomain);
   const isBlockedLocalPart = BLOCKED_EMAIL_LOCAL_PARTS.has(emailLocalPart);
-  if (isBlockedDomain || isBlockedLocalPart) {
+  if (askEmail && (isBlockedDomain || isBlockedLocalPart)) {
     logger.warn({ callId, attendeeEmail, isBlockedDomain, isBlockedLocalPart }, "Native booking blocked: placeholder email");
     void appendBookingLog(callId, agentId, "Booking Blocked", {
       reason: "placeholder_email",

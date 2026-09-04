@@ -134,6 +134,13 @@ export interface NativeBookingTool {
   taskName?: string;
   /** Optional message spoken to the caller right before the booking executes (advisory; LLM-driven) */
   preToolMessage?: string;
+  /**
+   * Opt-in: ask the caller for an email and require spell-back confirmation.
+   * Default is off — prompt/description text cannot override a required schema field.
+   */
+  collectAttendeeEmail?: boolean;
+  /** Calendar invite address when collectAttendeeEmail is off. */
+  defaultAttendeeEmail?: string;
 }
 
 export interface NativeRescheduleTool {
@@ -368,6 +375,8 @@ export interface AgentConfig {
 
   // P1-A: User-defined prompt variables resolved at call start
   promptVariables: Array<{ key: string; defaultValue: string; description?: string }>;
+  /** Email already on the lead / {{email}} / sheet — use for booking, never ask. */
+  knownAttendeeEmail?: string | null;
 
   // P1-B: Knowledge Base RAG
   knowledgeBaseId: number | null;

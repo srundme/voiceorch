@@ -635,7 +635,7 @@ export default function AgentEdit() {
   };
 
   const BOOKING_TOOLS = [
-    { type: "native_booking", fnName: "book_appointment", icon: <BookOpen className="h-4 w-4" />, color: "emerald", label: "Book Appointment", description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live." },
+    { type: "native_booking", fnName: "book_appointment", icon: <BookOpen className="h-4 w-4" />, color: "emerald", label: "Book Appointment", description: "Lets the agent book a meeting slot for the caller. Uses a lead/prompt email if one exists; asks the caller only when Ask caller for email is on." },
     { type: "native_check_availability", fnName: "check_availability", icon: <Sparkles className="h-4 w-4" />, color: "sky", label: "Check Availability", description: "Enables the agent to look up open slots before suggesting a time. Use alongside Book Appointment for a natural booking flow." },
     { type: "native_list_bookings", fnName: "list_bookings", icon: <List className="h-4 w-4" />, color: "violet", label: "List Bookings", description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows." },
     { type: "native_reschedule", fnName: "reschedule_booking", icon: <Pencil className="h-4 w-4" />, color: "amber", label: "Reschedule Booking", description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller." },
@@ -669,12 +669,11 @@ export default function AgentEdit() {
         type: "object",
         properties: {
           attendee_name: { type: "string", description: "Full name of the person being booked" },
-          attendee_email: { type: "string", description: "Email address of the person being booked" },
           preferred_date: { type: "string", description: "Optional preferred date/time, e.g. 'next Tuesday' or '2026-06-10'" },
           meeting_type: { type: "string", enum: ["google_meet", "in_person"], description: "Meeting format" },
           meeting_address: { type: "string", description: "Physical address (required when meeting_type is in_person)" },
         },
-        required: ["attendee_name", "attendee_email"],
+        required: ["attendee_name"],
       },
     },
     native_check_availability: {

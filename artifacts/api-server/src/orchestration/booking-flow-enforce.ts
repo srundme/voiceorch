@@ -415,14 +415,25 @@ export function shouldForceCheckAvailability(opts: {
   return looksLikeDemoOrScheduleIntent(opts.userText);
 }
 
+/** True when the caller picked a time, or only one slot was offered. */
+export function hasChosenBookingSlot(state: BookingFlowState): boolean {
+  if (!state.availabilityChecked || !state.lastSlotIso) return false;
+  return state.slotLocked || state.candidateSlots.length === 1;
+}
+
 export function shouldForceBookAppointment(opts: {
   state: BookingFlowState;
   userText: string;
   hasBookTool: boolean;
   alreadyBooked: boolean;
+  requireEmail?: boolean;
 }): boolean {
   if (!opts.hasBookTool || opts.alreadyBooked) return false;
   if (!opts.state.availabilityChecked || !opts.state.lastSlotIso) return false;
+  if (opts.requireEmail === false) {
+    return hasChosenBookingSlot(opts.state)
+      && Boolean(opts.state.pendingName && opts.state.pendingName.trim().length >= 2);
+  }
   if (!opts.state.pendingEmail) return false;
   if (!opts.state.lastSpelledEmail || opts.state.lastSpelledEmail !== opts.state.pendingEmail) {
     return false;
@@ -436,10 +447,15 @@ export function shouldForceBookAppointment(opts: {
 export function canAutoBook(opts: {
   state: BookingFlowState;
   alreadyBooked: boolean;
+  requireEmail?: boolean;
 }): boolean {
   if (opts.alreadyBooked) return false;
   const s = opts.state;
   if (!s.availabilityChecked || !s.lastSlotIso) return false;
+  if (opts.requireEmail === false) {
+    return hasChosenBookingSlot(s)
+      && Boolean(s.pendingName && s.pendingName.trim().length >= 2);
+  }
   if (!s.pendingEmail || !s.emailConfirmed) return false;
   if (!s.lastSpelledEmail || s.lastSpelledEmail !== s.pendingEmail) return false;
   if (!s.pendingName || s.pendingName.trim().length < 2) return false;

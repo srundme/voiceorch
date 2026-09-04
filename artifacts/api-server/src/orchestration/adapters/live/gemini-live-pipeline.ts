@@ -58,7 +58,8 @@ import {
   updateBookingFlowFromUserTurn,
   type BookingFlowState,
 } from "../../booking-flow-enforce.js";
-import { LIVE_BOOKING_TRUTH_RULE, liveToolResultConfirmedBooking } from "./live-booking-email.js";
+import { bookingAsksCallerForEmail } from "../../booking-email-policy.js";
+import { liveBookingTruthRule, liveToolResultConfirmedBooking } from "./live-booking-email.js";
 import { mergeTranscriptFragment } from "./live-transcript-merge.js";
 import { CALL_SCREENING_WINDOW_MS, detectScreeningPrompt } from "../../callScreening.js";
 import { isGeminiQuotaError, loadManagedGeminiKeys, markGeminiKeyExhausted, maskGeminiKey, pickGeminiKeyFromList } from "../../../lib/gemini-key-pool.js";
@@ -982,6 +983,7 @@ export class GeminiLivePipeline implements VoiceSession {
   /** Ask Live to spell the captured address — do not invent a different one. */
   private nudgeExactEmailSpell(): void {
     if (!this.session || this.closed) return;
+    if (!bookingAsksCallerForEmail(this.agent.tools.find((t) => t.type === "native_booking"))) return;
     if (!shouldSpeakEmailSpell(this.bookingFlowState) || !this.bookingFlowState.pendingEmail) return;
     const line = buildEmailSpellLine(this.bookingFlowState.pendingEmail);
     try {
@@ -1062,7 +1064,8 @@ export class GeminiLivePipeline implements VoiceSession {
       (t) => t.type === "native_booking" || t.type === "native_reschedule",
     );
     if (!hasBook) return this.agent.systemPrompt;
-    return `${this.agent.systemPrompt}\n\n${LIVE_BOOKING_TRUTH_RULE}`;
+    const askEmail = bookingAsksCallerForEmail(this.agent.tools.find((t) => t.type === "native_booking"));
+    return `${this.agent.systemPrompt}\n\n${liveBookingTruthRule(askEmail)}`;
   }
 
   private nudgeBookingTruth(): void {

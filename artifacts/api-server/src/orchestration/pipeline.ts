@@ -50,6 +50,7 @@ import { resolveSoftwareNoiseGate, envForceVobizSoftwareNc, type NoiseGateDecisi
 import { preferNumberTranscript } from "../lib/disposition/spoken-digits.js";
 import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
 import { validateBookableEmail, isEmailConfirmedFlag } from "./booking-email-validate.js";
+import { bookingAsksCallerForEmail, resolveBookingAttendeeEmail } from "./booking-email-policy.js";
 import { looksLikeVoicemailGreeting } from "../lib/voicemail-detect.js";
 import {
   applyBookingEmailToBookArgs,
@@ -5528,6 +5529,13 @@ export class OrchestrationPipeline implements VoiceSession {
     const greetLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
     let greeting = this.isResumeDroppedCall ? "" : (this.agent.greetingMessage ?? "");
     if (
+      this.callDirection === "inbound"
+      && !this.isResumeDroppedCall
+      && !greeting.trim()
+    ) {
+      return false;
+    }
+    if (
       this.callDirection === "outbound"
       && !this.isResumeDroppedCall
       && outboundTypedWelcomeBlocksGreetingLlm(greeting, greetLang)
@@ -5647,8 +5655,6 @@ export class OrchestrationPipeline implements VoiceSession {
       // Outbound (campaign / sheet / WhatsApp dial) must use the agent greeting /
       // LLM opener — never the inbound "Hi! How are you?" returning-caller shortcut
       // (call 3419: QuickBooks Betty pitch skipped for a prior callCount ≥ 1).
-      const useInstantReturning =
-        isReturningCaller && !resumeDropped && this.callDirection !== "outbound";
       const greetLang =
         this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
       // Keep the agent's typed Welcome even on resume-drop so speakWelcomeNow
@@ -5656,6 +5662,14 @@ export class OrchestrationPipeline implements VoiceSession {
       // typedWelcome blocked first audio for 5.9s). greeting itself stays
       // empty on resume-drop so we still generate the resume opener.
       const typedWelcome = (this.agent.greetingMessage ?? "").trim();
+      // Instant returning opener is only when Welcome is empty. A typed Welcome
+      // (even "Hello") must be spoken — callers were hearing the hardcoded
+      // "what are you calling about" instead of the Welcome field.
+      const useInstantReturning =
+        isReturningCaller
+        && !resumeDropped
+        && this.callDirection !== "outbound"
+        && !typedWelcome;
       let greeting = useInstantReturning
         ? buildInstantReturningGreeting(this.config.returningCallerName, greetLang)
         : (resumeDropped ? "" : typedWelcome);
@@ -5696,6 +5710,7 @@ export class OrchestrationPipeline implements VoiceSession {
         this.callDirection === "inbound"
         && !useInstantReturning
         && !resumeDropped
+        && !typedWelcome
       ) {
         greeting = INBOUND_GREETING;
       }
@@ -8347,7 +8362,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // Spell the captured address in code — do not let the LLM invent a
     // different one and treat "okay correct" as yes (call 17701).
     if (
-      this.agent.tools.some((t) => t.type === "native_booking")
+      bookingAsksCallerForEmail(this.agent.tools.find((t) => t.type === "native_booking"))
       && shouldSpeakEmailSpell(this.bookingFlowState)
       && this.bookingFlowState.pendingEmail
     ) {
@@ -8478,10 +8493,33 @@ export class OrchestrationPipeline implements VoiceSession {
     const checkTool = this.agent.tools.find((t) => t.type === "native_check_availability");
     if (
       bookTool
-      && canAutoBook({ state: this.bookingFlowState, alreadyBooked: this.schedulingActionConfirmed })
+      && canAutoBook({
+        state: this.bookingFlowState,
+        alreadyBooked: this.schedulingActionConfirmed,
+        requireEmail: bookingAsksCallerForEmail(bookTool),
+      })
     ) {
       const bookName = bookTool.name || "book_appointment";
-      const autoArgs = buildAutoBookArgs(this.bookingFlowState);
+      const autoArgs = bookingAsksCallerForEmail(bookTool)
+        ? buildAutoBookArgs(this.bookingFlowState)
+        : (() => {
+            const known = resolveBookingAttendeeEmail({
+              tool: bookTool,
+              args: {},
+              callId: this.config.callId,
+              knownEmail: this.agent.knownAttendeeEmail,
+              knownSourceText: this.agent.systemPrompt,
+            }).email;
+            return {
+              ...buildAutoBookArgs({
+                ...this.bookingFlowState,
+                pendingEmail: known,
+                emailConfirmed: true,
+                lastSpelledEmail: known,
+              }),
+              email_confirmed: true,
+            };
+          })();
       logger.info(
         { callId: this.config.callId, bookName, autoArgs, evt: "booking_auto_book" },
         "Pipeline: auto-invoking book_appointment (email confirmed + slot ready)",
@@ -8560,6 +8598,7 @@ export class OrchestrationPipeline implements VoiceSession {
         userText: transcript,
         hasBookTool: !!bookTool,
         alreadyBooked: this.schedulingActionConfirmed,
+        requireEmail: bookingAsksCallerForEmail(bookTool),
       })
     ) {
       forcedToolChoice = { name: bookTool!.name || "book_appointment" };
@@ -9251,13 +9290,17 @@ export class OrchestrationPipeline implements VoiceSession {
         `CRITICAL: NEVER invent, guess, or assume any available slot times. You MUST call "${checkName}" before telling the caller any available times. Only relay times you received directly from a "${checkName}" tool result.`,
         `TIMEZONE RULE: The calendar is configured for timezone "${calDefaultTz}". Always pass timezone="${calDefaultTz}" in every tool call. NEVER ask the caller what timezone they are in — default silently to "${calDefaultTz}" unless the caller explicitly asks about a different timezone, in which case use that IANA timezone string.`,
       ];
+      const askEmail = bookingAsksCallerForEmail(bookTool);
       if (hasCheckAvailabilityTool) {
+        const afterPick = askEmail
+          ? `collect their name and email and call "${bookName}"`
+          : `collect their name (do not ask for an email unless it is already in LEAD CONTEXT, sheet lookup, or prompt variables) and call "${bookName}"`;
         lines.push(
           `"${checkName}" ONLY checks available slots — it does NOT create a booking.`,
           `"${checkName}" returns one of three result types:`,
-          `  • requested_slot_available — the exact time the caller asked for is open. Tell the caller the time is available, then immediately ask for their full name and email and call "${bookName}" with the ISO string from the 'slot' field verbatim as preferred_date.`,
-          `  • requested_slot_unavailable — the requested time is not open. Tell the caller and read out the slots from the 'alternatives' field. Once the caller picks one, collect their name and email and call "${bookName}" with the chosen ISO string verbatim as preferred_date.`,
-          `  • available_slots — a general list of upcoming slots. Each entry in 'next' is an ISO 8601 string followed by a human label in parentheses. Present them to the caller. After the caller picks one, collect name and email and call "${bookName}" with the ISO string verbatim as preferred_date.`,
+          `  • requested_slot_available — the exact time the caller asked for is open. Tell the caller the time is available, then immediately ${afterPick} with the ISO string from the 'slot' field verbatim as preferred_date.`,
+          `  • requested_slot_unavailable — the requested time is not open. Tell the caller and read out the slots from the 'alternatives' field. Once the caller picks one, ${afterPick} with the chosen ISO string verbatim as preferred_date.`,
+          `  • available_slots — a general list of upcoming slots. Each entry in 'next' is an ISO 8601 string followed by a human label in parentheses. Present them to the caller. After the caller picks one, ${afterPick} with the ISO string verbatim as preferred_date.`,
           `Always pass ISO strings to "${bookName}" exactly as returned — never reformat or convert them.`,
           `When the caller names a day and/or time (tomorrow, 10:30, eleven AM, कल टेन थर्टी), call "${checkName}" in THAT turn. Do not keep asking कल या परसों or Google Meet vs in-person after they already answered.`,
           `NEVER invent slot times. NEVER emit XML or <tool_call> text. NEVER invent send_email — a confirmation email is sent automatically after "${bookName}" succeeds.`,
@@ -9265,13 +9308,21 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       if (hasBookingTool) {
         lines.push(
-          `Before calling "${bookName}", you MUST collect the caller's full name and email address. Ask for them if not yet provided.`,
-          `EMAIL ACCURACY (call-critical): never book on a half-heard email. If the address is incomplete (no domain, ends with @, or has spaces), ask the caller to spell it letter by letter.`,
-          `EMAIL vs PHONE (call 14394): email local-parts often contain digits (e.g. ramsiva97465@gmail.com). While collecting email, NEVER say the caller is giving a phone number. If @ / gmail / mail / அட் is missing, ask them to say: username, then \"at gmail dot com\" — do not reclassify digits as a mobile number.`,
-          `After you hear an email, ALWAYS spell it back with <spell>r a m … @ g m a i l . c o m</spell> and wait for an explicit yes/correct before calling "${bookName}" with email_confirmed=true.`,
+          askEmail
+            ? `Before calling "${bookName}", you MUST collect the caller's full name and email address. Ask for them if not yet provided.`
+            : `Before calling "${bookName}", collect the caller's full name if you do not have it. Do not ask the caller to provide an email if you do not already have one from LEAD CONTEXT, sheet lookup, or prompt variables — pass that known address as attendee_email. Confirming a known email with the caller is only if your agent instructions say to; the system does not require it. Otherwise omit attendee_email.`,
+          ...(askEmail
+            ? [
+                `EMAIL ACCURACY (call-critical): never book on a half-heard email. If the address is incomplete (no domain, ends with @, or has spaces), ask the caller to spell it letter by letter.`,
+                `EMAIL vs PHONE (call 14394): email local-parts often contain digits (e.g. ramsiva97465@gmail.com). While collecting email, NEVER say the caller is giving a phone number. If @ / gmail / mail / அட் is missing, ask them to say: username, then \"at gmail dot com\" — do not reclassify digits as a mobile number.`,
+                `After you hear an email, ALWAYS spell it back with <spell>r a m … @ g m a i l . c o m</spell> and wait for an explicit yes/correct before calling "${bookName}" with email_confirmed=true.`,
+                `When the caller confirms the email AND a slot, call "${bookName}" immediately in that turn (with preferred_date ISO from "${checkName}" + email_confirmed=true). Do not change the subject to sales/policy talk until booking_confirmed is returned.`,
+              ]
+            : [
+                `When you have the caller's name AND a chosen slot, call "${bookName}" immediately in that turn with preferred_date ISO from "${checkName}" (and attendee_email if it is already in the lead/prompt). Do not change the subject to sales/policy talk until booking_confirmed is returned.`,
+              ]),
           `HARD RULE (call 14396): NEVER say you are booking / have booked / will book the meeting in spoken text unless you are ALSO calling "${bookName}" in that same turn. Phrases like "book பண்ணிடுறேன்", "I've booked", "scheduling now" without a tool call create NO calendar event and NO email.`,
-          `When the caller confirms the email AND a slot, call "${bookName}" immediately in that turn (with preferred_date ISO from "${checkName}" + email_confirmed=true). Do not change the subject to sales/policy talk until booking_confirmed is returned.`,
-          `After "${bookName}" returns booking_confirmed, tell the caller the invite/meeting link was sent to their email when Google Meet is enabled on the event type. Never invent a Meet URL yourself.`,
+          `After "${bookName}" returns booking_confirmed, tell the caller the invite/meeting link was sent${askEmail ? " to their email" : ""} when Google Meet is enabled on the event type. Never invent a Meet URL yourself.`,
           `When reading available slots aloud, keep the whole list in ONE reply sentence — do not chop each time (9:00 AM / 9:15 AM) into separate fragments.`,
           `NEVER tell the caller their appointment is confirmed or scheduled unless you have received a booking_confirmed: result from "${bookName}".`,
           `Do NOT say "Your appointment has been scheduled" or any equivalent phrase before "${bookName}" returns a booking_confirmed: result.`,
@@ -9392,7 +9443,10 @@ export class OrchestrationPipeline implements VoiceSession {
 
     // Email-collection turn reminder (call 14394): STT often drops "@gmail.com"
     // so "ramsiva97465" looks like a phone. Keep the model in email mode.
-    if (historyForLlm.length > 0) {
+    if (
+      historyForLlm.length > 0
+      && bookingAsksCallerForEmail(this.agent.tools.find((t) => t.type === "native_booking"))
+    ) {
       const lastAgentText =
         this.conversationHistory.findLast((t) => t.role === "assistant")?.content ?? "";
       if (isEmailCollectionContext(lastAgentText)) {
@@ -9423,13 +9477,18 @@ export class OrchestrationPipeline implements VoiceSession {
       if (sawAvailability) {
         const lastTurn = historyForLlm[historyForLlm.length - 1]!;
         if (lastTurn.role === "user") {
-          const bookName =
-            this.agent.tools.find((t) => t.type === "native_booking")?.name ?? "book_appointment";
-          const bookHint =
-            `[BOOKING INCOMPLETE] Availability was already checked. ` +
-            `Do NOT claim you are booking or have booked. ` +
-            `When name + email are confirmed and a slot is chosen, CALL "${bookName}" this turn ` +
-            `with email_confirmed=true and the ISO preferred_date. Calendar + confirmation email only happen after that tool returns booking_confirmed.`;
+          const bookTool = this.agent.tools.find((t) => t.type === "native_booking");
+          const bookName = bookTool?.name ?? "book_appointment";
+          const askEmail = bookingAsksCallerForEmail(bookTool);
+          const bookHint = askEmail
+            ? `[BOOKING INCOMPLETE] Availability was already checked. ` +
+              `Do NOT claim you are booking or have booked. ` +
+              `When name + email are confirmed and a slot is chosen, CALL "${bookName}" this turn ` +
+              `with email_confirmed=true and the ISO preferred_date. Calendar + confirmation email only happen after that tool returns booking_confirmed.`
+            : `[BOOKING INCOMPLETE] Availability was already checked. ` +
+              `Do NOT claim you are booking or have booked. Do NOT ask for an email. ` +
+              `When you have the caller's name and a chosen slot, CALL "${bookName}" this turn ` +
+              `with the ISO preferred_date (pass attendee_email if it is already in the lead/prompt). Calendar + confirmation email only happen after that tool returns booking_confirmed.`;
           historyForLlm = [
             ...historyForLlm.slice(0, -1),
             { ...lastTurn, content: `${lastTurn.content}\n\n${bookHint}` },
@@ -10919,10 +10978,14 @@ export class OrchestrationPipeline implements VoiceSession {
           attendeeEmail: String(args["attendee_email"] ?? args["email"] ?? ""),
         },
       });
-      return "error: cannot book yet — you must first ask the caller for their name, email, and preferred slot. Do not call this tool until the caller has provided those details in the conversation.";
+      return bookingAsksCallerForEmail(tool)
+        ? "error: cannot book yet — you must first ask the caller for their name, email, and preferred slot. Do not call this tool until the caller has provided those details in the conversation."
+        : "error: cannot book yet — you must first ask the caller for their name and preferred slot. Do not ask for an email. Do not call this tool until the caller has provided those details in the conversation.";
     }
     return sharedExecuteNativeBooking(this.config.callId, this.agent.id, tool, args, {
       lineageCallId: this.config.bookingLineageCallId,
+      knownEmail: this.agent.knownAttendeeEmail,
+      knownSourceText: this.agent.systemPrompt,
     });
   }
 
@@ -10961,7 +11024,7 @@ export class OrchestrationPipeline implements VoiceSession {
         { callId: this.config.callId, preferredKey, evt: "availability_cached" },
         "Pipeline: returning cached check_availability (same slot already checked)",
       );
-      return `${this.lastAvailabilityResult} (already checked this slot — do not re-check; proceed with name and email)`;
+      return `${this.lastAvailabilityResult} (already checked this slot — do not re-check; proceed with name${bookingAsksCallerForEmail(this.agent.tools.find((t) => t.type === "native_booking")) ? " and email" : " — do not ask for a new email; pass attendee_email if already in lead/prompt"})`;
     }
     const result = await sharedExecuteNativeCheckAvailability(this.config.callId, this.agent.id, tool, args);
     this.lastAvailabilityKey = preferredKey;

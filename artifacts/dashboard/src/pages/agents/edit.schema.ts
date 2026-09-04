@@ -78,6 +78,8 @@ export const agentFormSchema = z.object({
     calendarId: z.preprocess(v => (v === "" || v == null ? undefined : Number(v)), z.number().optional()),
     eventTypeId: z.preprocess(v => (v === "" || v == null ? undefined : Number(v)), z.number().optional()),
     timezone: z.string().optional(),
+    collectAttendeeEmail: z.boolean().optional(),
+    defaultAttendeeEmail: z.string().optional(),
     goodbyeMessage: z.string().optional(),
     targetNumber: z.string().optional(),
     holdMessage: z.string().optional(),

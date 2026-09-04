@@ -80,7 +80,7 @@ function withInboundGreeting(greet: string, name: string | null, tails: string[]
   });
 }
 
-/** Inbound Welcome — spoken first, then the caller, then the prompt. */
+/** Inbound fallback only when Welcome is empty. A typed Welcome is spoken as-is. */
 export const INBOUND_GREETING = "Hi, Tell me what you called about";
 
 /** Slightly slower TTS for the opening Welcome (inbound and outbound). Later turns keep Sound speed. */

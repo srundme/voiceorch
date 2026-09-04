@@ -12,7 +12,7 @@ export const BOOKING_TOOLS: BookingToolMeta[] = [
     fnName:      "book_appointment",
     color:       "emerald",
     label:       "Book Appointment",
-    description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live.",
+    description: "Lets the agent book a meeting slot for the caller. Uses a lead/prompt email if one exists; asks the caller only when Ask caller for email is on.",
   },
   {
     type:        "native_check_availability",

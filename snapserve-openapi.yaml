@@ -6885,6 +6885,12 @@ components:
         preToolMessage:
           type: string
           description: (native_booking) Optional sentence the agent should say just before invoking the booking tool
+        collectAttendeeEmail:
+          type: boolean
+          description: (native_booking) If true, the agent asks the caller for an email and must confirm it before booking. Default false — do not ask.
+        defaultAttendeeEmail:
+          type: string
+          description: (native_booking) Calendar invite address used when collectAttendeeEmail is false
         targetNumber:
           type: string
           description: (transfer_cold / transfer_warm) E.164 phone number to transfer the call to (e.g. +12125551234)

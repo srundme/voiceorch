@@ -182,6 +182,33 @@ describe("buildUpdateAgentPayload", () => {
     expect(result.data.tools![0].transferTo).toBe("+12125551234");
   });
 
+  it("native booking email policy — survives UpdateAgentBody (not stripped)", () => {
+    const data: AgentFormValues = {
+      ...BASE,
+      schedulingCalendarId: 12,
+      schedulingEventTypeId: 34,
+      tools: [
+        {
+          type: "native_booking",
+          name: "book_appointment",
+          description: "Book an appointment. Do not ask for email.",
+          collectAttendeeEmail: false,
+          defaultAttendeeEmail: "ops@acme.com",
+        },
+      ],
+    };
+    const payload = buildUpdateAgentPayload(data);
+    const result = UpdateAgentBody.safeParse(payload);
+    expect(result.success, JSON.stringify(result)).toBe(true);
+    if (!result.success) return;
+    const tool = result.data.tools![0] as {
+      collectAttendeeEmail?: boolean;
+      defaultAttendeeEmail?: string;
+    };
+    expect(tool.collectAttendeeEmail).toBe(false);
+    expect(tool.defaultAttendeeEmail).toBe("ops@acme.com");
+  });
+
   it("webhook secret — placed in agentConfig, not at top-level", () => {
     const data: AgentFormValues = {
       ...BASE,

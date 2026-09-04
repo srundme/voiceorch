@@ -40,6 +40,7 @@ import { shouldMarkCallVoicemail } from "../lib/voicemail-detect.js";
 import { looksLikeVoicemailOutcome } from "../services/sheet-auto-calls-helpers.js";
 import { capHandoffTranscript, mergeHandoffTranscript } from "./squad-transcript.js";
 import { buildLeadContextBlock, buildCallContextBlock, callVariablesFromMetadata, resolvePromptVariables } from "./prompt-vars.js";
+import { pickKnownBookingEmail } from "./booking-email-policy.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "./mic-sensitivity.js";
 import { FORCE_SOFTWARE_NOISE_GATE_KEY } from "./noise-gate.js";
@@ -1402,6 +1403,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   };
 
   agentConfig.systemPrompt = resolvePromptVariables(agentConfig.systemPrompt, dynVars);
+  agentConfig.knownAttendeeEmail = pickKnownBookingEmail(dynVars);
 
   // Apply the SAME resolution to the static greeting so it addresses the caller
   // by their prompt variables (e.g. {{customer_name}} → "krithika"). Static
@@ -1747,6 +1749,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         agentConfig.systemPrompt = `${callBlock}\n\n${agentConfig.systemPrompt}`;
       }
       agentConfig.systemPrompt = resolvePromptVariables(agentConfig.systemPrompt, dynVars);
+      agentConfig.knownAttendeeEmail = pickKnownBookingEmail(dynVars);
       if (agentConfig.greetingMessage) {
         agentConfig.greetingMessage = resolvePromptVariables(agentConfig.greetingMessage, dynVars);
       }

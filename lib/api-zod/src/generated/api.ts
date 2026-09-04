@@ -168,6 +168,8 @@ export const ListAgentsResponseItem = zod.object({
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_reschedule \/ native_check_availability \/ native_cancel \/ native_list_bookings) Default timezone for bookings (e.g. America\/New_York)'),
   "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
   "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool'),
+  "collectAttendeeEmail": zod.boolean().optional().describe('(native_booking) If true, the agent asks the caller for an email and must confirm it before booking. Default false — do not ask.'),
+  "defaultAttendeeEmail": zod.string().optional().describe('(native_booking) Calendar invite address used when collectAttendeeEmail is false'),
   "targetNumber": zod.string().optional().describe('(transfer_cold \/ transfer_warm) E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "holdMessage": zod.string().optional().describe('(transfer_cold \/ transfer_warm) Optional message spoken to the caller before the transfer is initiated'),
   "targetAgentId": zod.number().optional().describe('(transfer_agent) ID of the specialist agent to transfer the call to')
@@ -284,6 +286,8 @@ export const CreateAgentBody = zod.object({
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_reschedule \/ native_check_availability \/ native_cancel \/ native_list_bookings) Default timezone for bookings (e.g. America\/New_York)'),
   "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
   "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool'),
+  "collectAttendeeEmail": zod.boolean().optional().describe('(native_booking) If true, the agent asks the caller for an email and must confirm it before booking. Default false — do not ask.'),
+  "defaultAttendeeEmail": zod.string().optional().describe('(native_booking) Calendar invite address used when collectAttendeeEmail is false'),
   "targetNumber": zod.string().optional().describe('(transfer_cold \/ transfer_warm) E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "holdMessage": zod.string().optional().describe('(transfer_cold \/ transfer_warm) Optional message spoken to the caller before the transfer is initiated'),
   "targetAgentId": zod.number().optional().describe('(transfer_agent) ID of the specialist agent to transfer the call to')
@@ -395,6 +399,8 @@ export const GetAgentResponse = zod.object({
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_reschedule \/ native_check_availability \/ native_cancel \/ native_list_bookings) Default timezone for bookings (e.g. America\/New_York)'),
   "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
   "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool'),
+  "collectAttendeeEmail": zod.boolean().optional().describe('(native_booking) If true, the agent asks the caller for an email and must confirm it before booking. Default false — do not ask.'),
+  "defaultAttendeeEmail": zod.string().optional().describe('(native_booking) Calendar invite address used when collectAttendeeEmail is false'),
   "targetNumber": zod.string().optional().describe('(transfer_cold \/ transfer_warm) E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "holdMessage": zod.string().optional().describe('(transfer_cold \/ transfer_warm) Optional message spoken to the caller before the transfer is initiated'),
   "targetAgentId": zod.number().optional().describe('(transfer_agent) ID of the specialist agent to transfer the call to')
@@ -516,6 +522,8 @@ export const UpdateAgentBody = zod.object({
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_reschedule \/ native_check_availability \/ native_cancel \/ native_list_bookings) Default timezone for bookings (e.g. America\/New_York)'),
   "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
   "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool'),
+  "collectAttendeeEmail": zod.boolean().optional().describe('(native_booking) If true, the agent asks the caller for an email and must confirm it before booking. Default false — do not ask.'),
+  "defaultAttendeeEmail": zod.string().optional().describe('(native_booking) Calendar invite address used when collectAttendeeEmail is false'),
   "targetNumber": zod.string().optional().describe('(transfer_cold \/ transfer_warm) E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "holdMessage": zod.string().optional().describe('(transfer_cold \/ transfer_warm) Optional message spoken to the caller before the transfer is initiated'),
   "targetAgentId": zod.number().optional().describe('(transfer_agent) ID of the specialist agent to transfer the call to')
@@ -630,6 +638,8 @@ export const UpdateAgentResponse = zod.object({
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_reschedule \/ native_check_availability \/ native_cancel \/ native_list_bookings) Default timezone for bookings (e.g. America\/New_York)'),
   "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
   "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool'),
+  "collectAttendeeEmail": zod.boolean().optional().describe('(native_booking) If true, the agent asks the caller for an email and must confirm it before booking. Default false — do not ask.'),
+  "defaultAttendeeEmail": zod.string().optional().describe('(native_booking) Calendar invite address used when collectAttendeeEmail is false'),
   "targetNumber": zod.string().optional().describe('(transfer_cold \/ transfer_warm) E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "holdMessage": zod.string().optional().describe('(transfer_cold \/ transfer_warm) Optional message spoken to the caller before the transfer is initiated'),
   "targetAgentId": zod.number().optional().describe('(transfer_agent) ID of the specialist agent to transfer the call to')
@@ -756,6 +766,8 @@ export const ToggleAgentResponse = zod.object({
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_reschedule \/ native_check_availability \/ native_cancel \/ native_list_bookings) Default timezone for bookings (e.g. America\/New_York)'),
   "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
   "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool'),
+  "collectAttendeeEmail": zod.boolean().optional().describe('(native_booking) If true, the agent asks the caller for an email and must confirm it before booking. Default false — do not ask.'),
+  "defaultAttendeeEmail": zod.string().optional().describe('(native_booking) Calendar invite address used when collectAttendeeEmail is false'),
   "targetNumber": zod.string().optional().describe('(transfer_cold \/ transfer_warm) E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "holdMessage": zod.string().optional().describe('(transfer_cold \/ transfer_warm) Optional message spoken to the caller before the transfer is initiated'),
   "targetAgentId": zod.number().optional().describe('(transfer_agent) ID of the specialist agent to transfer the call to')

@@ -38,7 +38,11 @@ export default function CalendarPage() {
       <h2 id="agent-tools">3. Link the agent</h2>
       <ol>
         <li>Connect Google Calendar under Connections (once for the workspace).</li>
-        <li>Open the agent builder → Actions → Booking and pick the meeting callers can book.</li>
+        <li>
+          Open the agent builder → Actions → Bookings and pick the meeting callers can book.
+          Email: a lead or <code>{"{{email}}"}</code> is used if present (confirm in the agent
+          prompt if you want). The agent asks the caller only when <strong>Ask caller for email</strong> is on.
+        </li>
         <li>
           <strong>Save the agent first</strong> before enabling calendar tools if the UI prompts
           you.

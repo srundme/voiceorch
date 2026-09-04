@@ -3,6 +3,7 @@ import {
   buildAutoBookArgs,
   canAutoBook,
   emptyBookingFlowState,
+  hasChosenBookingSlot,
   looksLikeDemoOrScheduleIntent,
   looksLikeEmailConfirmationYes,
   looksLikeFalseBookingClaim,
@@ -63,6 +64,7 @@ describe("booking flow state machine", () => {
     state = { ...state, pendingName: "Ram Siva", emailConfirmed: true, lastSpelledEmail: "ramsiva97465@gmail.com" };
 
     expect(canAutoBook({ state, alreadyBooked: false })).toBe(true);
+    expect(canAutoBook({ state, alreadyBooked: false, requireEmail: true })).toBe(true);
     expect(buildAutoBookArgs(state).email_confirmed).toBe(true);
     expect(
       shouldForceBookAppointment({
@@ -72,6 +74,39 @@ describe("booking flow state machine", () => {
         alreadyBooked: false,
       }),
     ).toBe(true);
+  });
+
+  it("without caller email, auto-books only after a chosen or single slot", () => {
+    let list = updateBookingFlowFromToolResult(
+      emptyBookingFlowState(),
+      "check_availability",
+      'available_slots: next="2026-09-03T09:00:00+05:30 (Thu Sep 3 at 9:00 AM); 2026-09-03T10:00:00+05:30 (Thu Sep 3 at 10:00 AM)"',
+    );
+    list = { ...list, pendingName: "Ram Siva" };
+    expect(hasChosenBookingSlot(list)).toBe(false);
+    expect(canAutoBook({ state: list, alreadyBooked: false, requireEmail: false })).toBe(false);
+    expect(
+      shouldForceBookAppointment({
+        state: list,
+        userText: "Ram Siva",
+        hasBookTool: true,
+        alreadyBooked: false,
+        requireEmail: false,
+      }),
+    ).toBe(false);
+
+    list = { ...list, lastSlotIso: "2026-09-03T10:00:00+05:30", slotLocked: true };
+    expect(hasChosenBookingSlot(list)).toBe(true);
+    expect(canAutoBook({ state: list, alreadyBooked: false, requireEmail: false })).toBe(true);
+
+    let exact = updateBookingFlowFromToolResult(
+      emptyBookingFlowState(),
+      "check_availability",
+      'requested_slot_available: slot="2026-09-03T10:00:00+05:30", label="Thu Sep 3 at 10:00 AM"',
+    );
+    exact = { ...exact, pendingName: "Ram Siva" };
+    expect(hasChosenBookingSlot(exact)).toBe(true);
+    expect(canAutoBook({ state: exact, alreadyBooked: false, requireEmail: false })).toBe(true);
   });
 
   it("locks the caller's 10 AM slot, not the first free 9 AM (call 17701)", () => {

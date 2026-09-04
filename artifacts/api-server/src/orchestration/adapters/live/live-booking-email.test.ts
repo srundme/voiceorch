@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  LIVE_BOOKING_TRUTH_RULE,
   liveBookingConfirmEmailBlocked,
+  liveBookingTruthRule,
   liveToolResultConfirmedBooking,
 } from "./live-booking-email.js";
 
@@ -30,6 +32,20 @@ describe("liveBookingConfirmEmailBlocked", () => {
         false,
       ),
     ).toBe(false);
+  });
+});
+
+describe("liveBookingTruthRule", () => {
+  it("omits the email spell-back when collection is off", () => {
+    const off = liveBookingTruthRule(false);
+    expect(off).toContain("Do not ask the caller to provide an email");
+    expect(off).toContain("agent instructions");
+    expect(off).not.toContain("email_confirmed=true");
+  });
+
+  it("keeps the spell-back rule when collection is on", () => {
+    expect(liveBookingTruthRule(true)).toBe(LIVE_BOOKING_TRUTH_RULE);
+    expect(LIVE_BOOKING_TRUTH_RULE).toContain("email_confirmed=true");
   });
 });
 
