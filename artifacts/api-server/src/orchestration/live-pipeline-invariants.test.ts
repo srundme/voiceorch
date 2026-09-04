@@ -189,6 +189,23 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("playbackTooFreshForPartialBarge");
   });
 
+  it("barge recovery waits out an open VAD instead of answering a fragment (call 21628)", () => {
+    // The 800ms backstop used to win the race against the caller finishing:
+    // it committed "No, no" 1.29s into a 4.28s segment, then the real sentence
+    // landed seconds later as a duplicate turn. The tick must re-arm while VAD
+    // is open, refresh the armed text, and keep a stuck-VAD ceiling.
+    const tick = methodBody("scheduleBargeRecoveryTick");
+    expect(tick).toContain("this._vadSpeechStartAt !== 0");
+    expect(tick).toContain("BARGE_RECOVERY_MAX_WAIT_MS");
+    expect(tick).toContain("this.scheduleBargeRecoveryTick()");
+    expect(tick).toContain("getPendingTranscript");
+    expect(tick).toContain("vad_stuck");
+    // speech_end must stay the primary commit path.
+    expect(pipelineSrc).toContain('this.flushBargeRecovery("speech_end")');
+    // The cover masks our latency — it must never talk over the caller.
+    expect(pipelineSrc).toContain("Cover masks OUR latency; it must not talk over the caller.");
+  });
+
   it("does not ship GTCRN / voice-isolator on the live audio path (call 20257)", () => {
     const orchDir = dirname(fileURLToPath(import.meta.url));
     const workerSrc = readFileSync(resolve(orchDir, "audioWorker.ts"), "utf8");
