@@ -4100,7 +4100,10 @@ export class OrchestrationPipeline implements VoiceSession {
     // transcript is the interruption that already cleared the audio buffer.
     const bargeInActive = this.bargeInRequested || this._lastTurnWasBargedIn;
 
-    if (this.isProcessing && !bargeInActive) {
+    if (this.isProcessing) {
+      // Never start a second processTurn. Barge already stopped playback;
+      // playPromise ends and this final drains next. A concurrent turn would
+      // either stay muted (flag still set) or double-speak (call 21426).
       this.pendingTranscriptQueue.push({ text: transcript, emittedAt: sttEmittedAt, closeReason });
       return;
     }
@@ -8036,12 +8039,11 @@ export class OrchestrationPipeline implements VoiceSession {
       sanitizeSpokenEmailsInTranscript(transcript),
     );
     this._processTurnGeneration = this.semanticTurnGate.turnGeneration;
-    // BARGE-IN FIX: Do NOT reset bargeInRequested at the START of the turn.
-    // If we reset it here, a second transcript that arrives while this turn is
-    // processing will be queued (bargeInRequested=false), causing the "unrealistic
-    // call flow" where the user's interruption is heard AFTER the AI finishes.
-    // Instead, reset it at the END of playback (in playTask's finally block).
-    // this.bargeInRequested = false;  // ← MOVED to end of turn
+    // This turn IS the reply to the barge. Leaving bargeInRequested=true
+    // drops every onToken / enqueue (call 21426: LLM wrote 387 chars, 0 TTS).
+    // A later transcript while we are still in processTurn is queued below
+    // (isProcessing), not spoken on top of this reply.
+    this.clearBargeWait();
     this.bargeInSpeechFrames = 0;
     // Reset the streaming word counter at this deterministic agent-turn
     // boundary so the accumulator never carries stale state into the new turn.

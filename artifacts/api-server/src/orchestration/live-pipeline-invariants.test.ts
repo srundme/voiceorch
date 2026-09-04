@@ -151,6 +151,8 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("earlyClause: this.agent.ttsProvider !== \"cartesia\"");
     expect(pipelineSrc).toContain("extractSpeakable");
     expect(pipelineSrc).toContain("Do not wait on incrementalDelay / calleeSpeaking before first audio");
+    expect(methodBody("processTurn")).toContain("this.clearBargeWait()");
+    expect(methodBody("handleStreamingTranscript")).toContain("if (this.isProcessing) {");
     expect(pipelineSrc).toMatch(/FILLER_THRESHOLD_MS \?\? 0/);
     expect(pipelineSrc).toMatch(/BACKCHANNEL_LATE_MS \?\? 500/);
     expect(pipelineSrc).not.toContain("Math.random() < freq");
