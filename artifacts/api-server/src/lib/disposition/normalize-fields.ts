@@ -155,3 +155,47 @@ export const DISPOSITION_EXTRACT_SYSTEM =
   "Never put a summary sentence or paragraph into a field. " +
   "For phone / WhatsApp / mobile fields: return digits only (optional leading country code), never prose like \"the caller said their WhatsApp is…\". " +
   "If a field was not clearly collected, use null.";
+
+/** JSON Schema for DispositionLLM.extract — keys match agents.dispositionSchema. */
+export function jsonSchemaFromDispositionFields(
+  schema: DispositionSchemaField[],
+): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  for (const f of schema) {
+    const phone = isPhoneLikeDispositionField(f.key, f.label, f.type);
+    if (f.type === "boolean") {
+      properties[f.key] = { type: ["boolean", "null"], description: f.label };
+    } else if (f.type === "number" && !phone) {
+      properties[f.key] = { type: ["number", "null"], description: f.label };
+    } else if (f.type === "choice" && f.options?.length) {
+      properties[f.key] = {
+        type: ["string", "null"],
+        enum: [...f.options, null],
+        description: f.label,
+      };
+    } else {
+      properties[f.key] = {
+        type: ["string", "null"],
+        description: phone ? `${f.label} (digits only)` : f.label,
+      };
+    }
+  }
+  return {
+    type: "object",
+    properties,
+    additionalProperties: false,
+  };
+}
+
+/** True when any configured schema key is still empty on the stored result. */
+export function schemaFieldsNeedFill(
+  existing: Record<string, unknown> | null | undefined,
+  schema: DispositionSchemaField[],
+): boolean {
+  if (!schema.length) return false;
+  if (!existing || typeof existing !== "object") return true;
+  return schema.some((f) => {
+    const v = existing[f.key];
+    return v == null || v === "";
+  });
+}

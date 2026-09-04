@@ -97,5 +97,12 @@ describe("call 20257 — greeting + VAD + empty/partial must not start a turn", 
     expect(decide20257("Hello, hello, are you there?", { greetingPlaying: false }))
       .toEqual({ cutTts: true, processTurn: true });
   });
+
+  it("echo grace blocks non-stop barges; stop/hold still cut (call 21450)", () => {
+    expect(decide20257("So a good doctor should", { greetingPlaying: false, inEchoGrace: true }))
+      .toEqual({ cutTts: false, processTurn: true });
+    expect(decide20257("wait", { greetingPlaying: false, inEchoGrace: true }))
+      .toEqual({ cutTts: true, processTurn: true });
+  });
 });
 

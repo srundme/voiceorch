@@ -11,6 +11,8 @@ export {
   formatDispositionFieldList,
   DISPOSITION_EXTRACT_SYSTEM,
   clampDispositionText,
+  jsonSchemaFromDispositionFields,
+  schemaFieldsNeedFill,
 } from "./normalize-fields.js";
 export {
   fillMissingPhoneFields,

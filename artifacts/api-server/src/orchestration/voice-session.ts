@@ -24,6 +24,8 @@ export interface VoiceSession {
   getHistory(): ConversationTurn[];
   getLastTurnTexts(): { lastUser: string | null; lastAgent: string | null };
   getPreferredCallerLang(): string;
+  /** Language the live call is speaking now — for squad handoff, not memory. */
+  getLiveHandoffLanguage(): string;
   getExplicitLangRequestForMemory(): string | null;
   getRecording(): RecordingBuffer;
 

@@ -692,7 +692,8 @@ export type TurnCloseReason =
   | "stt_final"
   | "force_finalized"
   | "stall_reprompt"
-  | "coalesced_fragment";
+  | "coalesced_fragment"
+  | "barge_recovery";
 
 // Language-aware recovery reprompt spoken when the stall backstop fires.
 const RECOVERY_REPROMPTS: Record<string, string> = {

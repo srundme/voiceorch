@@ -16,7 +16,7 @@ import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
 import { isHoldRequest } from "./conversationDiscipline.js";
 import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared, isCallerClosingUtterance } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
-import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
+import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isSameUtteranceContinuation, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
 import {
   SemanticTurnGate,
   resolveEouCommit,
@@ -34,7 +34,7 @@ import { languagePrefix, resolveToolFillerPhrase } from "./tool-fillers.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
-import { shouldCutTtsFromCallerTranscript, shouldDiscardOpenerTranscript } from "./pstn-interrupt-policy.js";
+import { isPstnStopHold, shouldCutTtsFromCallerTranscript, shouldDiscardOpenerTranscript } from "./pstn-interrupt-policy.js";
 import { shouldIgnoreSelfEcho } from "./self-echo-policy.js";
 import {
   extractSentences,
@@ -465,6 +465,10 @@ const BARGE_IN_ENERGY_THRESHOLD = 1200; // Much higher than normal VAD (300) —
 const BARGE_IN_ECHO_GRACE_MS  = 0;    // Bolna has no echo-grace overlay; welcome_played + word floor only.
                                          // gives audio time to reach the caller before we start
                                          // counting any returning echo as a real interruption.
+/** First ~400 ms of a new TTS clip is echo-dominated on PSTN (call 21450: 127 ms vad_partial). */
+const PARTIAL_BARGE_MIN_PLAY_MS = 400;
+/** After a barge with no STT final, speak from the last partial instead of going mute. */
+const BARGE_RECOVERY_MS = 800;
 const BARGE_IN_MIN_FRAMES     = 3;      // Absolute floor on barge-in frames (~60 ms) so a single
                                          // loud frame can't cut the agent off, even when a Stop
                                          // Speaking Plan configures very low sensitivity.
@@ -1352,6 +1356,9 @@ export class OrchestrationPipeline implements VoiceSession {
   private _bargeInRecoveryCount = 0;
   /** Whether the immediately-preceding agent turn was interrupted by a barge-in. */
   private _lastTurnWasBargedIn = false;
+  /** Last barge preview — used if Sarvam never emits a final (call 21450 mute). */
+  private _bargeRecoveryText: string | null = null;
+  private _bargeRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
   /**
    * After the agent asks a question, short caller replies ("yes ma'am", "okay okay",
    * "go on") must never be swallowed by self-echo — they are the expected next turn.
@@ -1793,9 +1800,10 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     this.activeTtsAborts.clear();
     this.llm.cancelInFlight?.();
-    // FLUSH streaming STT immediately so Sarvam finalizes any held coalesce
-    // buffer — don't wait for TTS to stop (user report: STT only flushing after TTS ends).
-    if (this.streamSTT?.flush) {
+    // Legacy / batch STT: flush a held coalesce buffer. Live Sarvam realtime
+    // flush() fabricates a final from lastPartial and CLEARS it (call 21450:
+    // no later transcript.final, then mute until hangup). Keep lastPartial.
+    if (this.streamSTT?.flush && !this.liveSarvamRealtime()) {
       try {
         const flushed = this.streamSTT.flush();
         if (flushed) {
@@ -1808,6 +1816,7 @@ export class OrchestrationPipeline implements VoiceSession {
         logger.warn({ callId: this.config.callId, err }, "STT flush on barge-in failed");
       }
     }
+    this.armBargeRecovery(partial);
     if (this._specLlmState) {
       this._specLlmState.aborted = true;
       this._specLlmState = null;
@@ -2265,6 +2274,7 @@ export class OrchestrationPipeline implements VoiceSession {
         return;
       }
       this.handleSttSpeechEnd();
+      this.flushBargeRecovery("speech_end");
     };
     this.streamSTT.onSpeechStart = () => {
       this._vadSpeechStartAt = Date.now();
@@ -2378,8 +2388,29 @@ export class OrchestrationPipeline implements VoiceSession {
    * vad.speech_start inspects speech; only a usable transcript can interrupt.
    * Opener = Bolna welcome mute (every transcript, including stop).
    */
+  private lastUserTurnText(): string {
+    const last = [...this.conversationHistory.messages].reverse().find((t) => t.role === "user");
+    return last?.content ?? "";
+  }
+
+  /**
+   * Caller is still finishing the utterance we already started answering
+   * (call 21450: "So, a good doctor should" → "…should be considered").
+   */
+  private isSameUtteranceStillArriving(text: string): boolean {
+    return isSameUtteranceContinuation(this.lastUserTurnText(), text);
+  }
+
+  /** First ~400 ms of a new clip is echo, not a talk-over. Stop/hold still cut. */
+  private playbackTooFreshForPartialBarge(text: string): boolean {
+    if (isPstnStopHold(text, this.interruptionMgr)) return false;
+    const started = this._activePlaybackStartedAt ?? this.firstAudioSentAt ?? this.bargeInSentenceStartAt;
+    if (!started) return false;
+    return Date.now() - started < PARTIAL_BARGE_MIN_PLAY_MS;
+  }
+
   private shouldInterruptFromCallerTranscript(text: string): boolean {
-    return shouldCutTtsFromCallerTranscript({
+    if (!shouldCutTtsFromCallerTranscript({
       transcript: text,
       agentSpeaking: this.isPlaying || this.isSendingTtsAudio,
       greetingPlaybackActive: this.greetingFirstClipActive,
@@ -2388,7 +2419,67 @@ export class OrchestrationPipeline implements VoiceSession {
         || Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs,
       isSelfEcho: this.isSelfEcho(text.trim()),
       interruptionMgr: this.interruptionMgr,
+    })) {
+      return false;
+    }
+    if (isPstnStopHold(text, this.interruptionMgr)) return true;
+    if (this.isSameUtteranceStillArriving(text)) return false;
+    if (this.playbackTooFreshForPartialBarge(text)) return false;
+    return true;
+  }
+
+  private clearBargeRecovery(): void {
+    if (this._bargeRecoveryTimer) {
+      clearTimeout(this._bargeRecoveryTimer);
+      this._bargeRecoveryTimer = null;
+    }
+    this._bargeRecoveryText = null;
+  }
+
+  private armBargeRecovery(partial?: string): void {
+    const text = partial?.trim();
+    if (!text) return;
+    this._bargeRecoveryText = text;
+    if (this._bargeRecoveryTimer) clearTimeout(this._bargeRecoveryTimer);
+    this._bargeRecoveryTimer = setTimeout(() => {
+      this._bargeRecoveryTimer = null;
+      this.flushBargeRecovery("timer");
+    }, BARGE_RECOVERY_MS);
+  }
+
+  /**
+   * Call 21450: vad_partial barge, then VAD speech_end with no transcript.final.
+   * Speak from the last barge preview instead of staying mute until hangup.
+   */
+  private flushBargeRecovery(reason: string): void {
+    const text = this._bargeRecoveryText?.trim() ?? "";
+    if (!text || this.closed) return;
+    if (this.isPlaying || this.isSendingTtsAudio) {
+      this.clearBargeRecovery();
+      return;
+    }
+    if (this.isProcessing) {
+      if (reason === "timer" || reason === "speech_end") {
+        if (this._bargeRecoveryTimer) clearTimeout(this._bargeRecoveryTimer);
+        this._bargeRecoveryTimer = setTimeout(() => {
+          this._bargeRecoveryTimer = null;
+          this.flushBargeRecovery("retry");
+        }, 400);
+      }
+      return;
+    }
+    this.clearBargeRecovery();
+    this.logExec("STT", "system", {
+      status: "info",
+      turnNumber: this._activeTurnIndex,
+      warningFlags: ["barge_recovery"],
+      metadata: { event: "Barge Recovery", reason, transcriptPreview: text.slice(0, 80) },
     });
+    logger.info(
+      { callId: this.config.callId, reason, text: text.slice(0, 80) },
+      "Barge recovery — no STT final after interrupt; answering last partial",
+    );
+    void this.handleStreamingTranscript(text, Date.now(), "barge_recovery");
   }
 
   // ── Lost-turn backstop (calls 4831/4833) ────────────────────────────────────
@@ -4002,6 +4093,7 @@ export class OrchestrationPipeline implements VoiceSession {
     const coalesceLang = this.currentLang || this.agent.sttConfig.language;
     if (
       closeReason !== "coalesced_fragment"
+      && closeReason !== "barge_recovery"
       && shouldHoldFragmentForCoalesce(transcript, { expectedLang: coalesceLang })
     ) {
       if (this._fragmentCoalesce) {
@@ -4099,6 +4191,8 @@ export class OrchestrationPipeline implements VoiceSession {
     // The barge-in flag proves the caller's speech overpowered the AI, so this
     // transcript is the interruption that already cleared the audio buffer.
     const bargeInActive = this.bargeInRequested || this._lastTurnWasBargedIn;
+    // A real final (or queued barge transcript) replaces the mute-recovery timer.
+    this.clearBargeRecovery();
 
     if (this.isProcessing) {
       // Never start a second processTurn. Barge already stopped playback;
@@ -8044,6 +8138,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // A later transcript while we are still in processTurn is queued below
     // (isProcessing), not spoken on top of this reply.
     this.clearBargeWait();
+    this.clearBargeRecovery();
     this.bargeInSpeechFrames = 0;
     // Reset the streaming word counter at this deterministic agent-turn
     // boundary so the accumulator never carries stale state into the new turn.
@@ -10432,6 +10527,18 @@ export class OrchestrationPipeline implements VoiceSession {
     return this.requestedLangLatch || this.lastNonEnglishLang || this.currentLang;
   }
 
+  /**
+   * Live squad handoff language. Prefer what this call is speaking now.
+   * getPreferredCallerLang() keeps lastNonEnglish / memory latch so an English
+   * "thanks bye" does not wipe Tamil for the NEXT call — that same preference
+   * was sending the specialist to Tamil after the caller confirmed English.
+   */
+  getLiveHandoffLanguage(): string {
+    if (this.currentLang) return this.currentLang;
+    if (this.requestedLangLatch) return this.requestedLangLatch;
+    return this.agent.language || this.agent.sttConfig.language || "en-IN";
+  }
+
   /** Related people learned on this call (for durable family_members fact). */
 
 
@@ -11637,6 +11744,7 @@ export class OrchestrationPipeline implements VoiceSession {
   close(): void {
     this.closed = true;
     this.clearVadFlushBackstop();
+    this.clearBargeRecovery();
     this.cancelLostTurnRecovery();
     // Persist the refined full-call voiceprint (fire-and-forget; DB/HTTP only).
     void this.speakerVerifier?.finalize();

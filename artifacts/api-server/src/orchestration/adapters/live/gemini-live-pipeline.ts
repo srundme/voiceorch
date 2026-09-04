@@ -678,6 +678,10 @@ export class GeminiLivePipeline implements VoiceSession {
     return this.agent.language ?? this.agent.sttConfig.language ?? "en-IN";
   }
 
+  getLiveHandoffLanguage(): string {
+    return this.getPreferredCallerLang();
+  }
+
   getExplicitLangRequestForMemory(): string | null {
     return null;
   }

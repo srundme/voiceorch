@@ -60,6 +60,19 @@ export function isLeadingAckPrefix(partial: string, final: string): boolean {
   return prefix.split(" ").every((tok) => isBackchannelOnlyUtterance(tok));
 }
 
+/**
+ * Caller is still finishing the utterance we already started answering
+ * (call 21450: "So, a good doctor should" → "…should be considered").
+ * Barging that continuation cuts TTS and often leaves no STT final.
+ */
+export function isSameUtteranceContinuation(prev: string, next: string): boolean {
+  const p = normalizeSpeculativeInput(prev);
+  const n = normalizeSpeculativeInput(next);
+  if (!p || !n) return false;
+  if (p === n) return true;
+  return n.startsWith(`${p} `) || p.startsWith(`${n} `);
+}
+
 /** Identity of the text the speculative LLM was launched on. */
 export function speculativeInputHash(text: string): string {
   return createHash("sha256").update(normalizeSpeculativeInput(text), "utf8").digest("hex");

@@ -13,6 +13,14 @@ import {
 } from "../lib/disposition/index.js";
 import { fillMissingPhoneFields } from "../lib/disposition/fill-phone-fields.js";
 import { getDispositionLLMChain, isRetryableProviderError } from "./disposition-llm.js";
+import {
+  DISPOSITION_EXTRACT_SYSTEM,
+  formatDispositionFieldList,
+  jsonSchemaFromDispositionFields,
+  normalizeDispositionSchemaResult,
+  schemaFieldsNeedFill,
+  type DispositionSchemaField,
+} from "../lib/disposition/normalize-fields.js";
 
 // ── Config cache (60-second TTL) ─────────────────────────────────────────────
 
@@ -228,4 +236,82 @@ async function persistResult(
   } catch (err) {
     logger.error({ agentId, callId, err }, "disposition: failed to persist flat result onto call");
   }
+}
+
+/**
+ * Legacy agents.dispositionSchema — no Builder taxonomy required, no extra toggle.
+ * Uses the same managed-key chain as taxonomy (Sarvam first). The old session
+ * path only tried BYOP + Groq/Qwen, so Sarvam-only agents never wrote
+ * calls.disposition_result (clinic doctor / department stayed null).
+ */
+export async function extractFlatDispositionSchema(opts: {
+  agentId: number;
+  callId: number;
+  transcript: string | null | undefined;
+  schema: DispositionSchemaField[];
+  existing?: Record<string, unknown> | null;
+}): Promise<Record<string, unknown> | null> {
+  const schema = Array.isArray(opts.schema) ? opts.schema.filter((f) => f?.key) : [];
+  const transcript = (opts.transcript ?? "").trim();
+  if (!schemaFieldsNeedFill(opts.existing ?? null, schema)) return opts.existing ?? null;
+  if (schema.length === 0) return opts.existing ?? null;
+  if (transcript.length < 20) {
+    logger.info(
+      { agentId: opts.agentId, callId: opts.callId, transcriptLen: transcript.length },
+      "disposition schema skipped: transcript too short",
+    );
+    return opts.existing ?? null;
+  }
+
+  const chain = await getDispositionLLMChain();
+  if (chain.length === 0) {
+    logger.warn(
+      { agentId: opts.agentId, callId: opts.callId },
+      "disposition schema skipped: no managed LLM key (sarvam/openai/groq)",
+    );
+    return opts.existing ?? null;
+  }
+
+  const jsonSchema = jsonSchemaFromDispositionFields(schema);
+  const system = `${DISPOSITION_EXTRACT_SYSTEM}\n\nFields:\n${formatDispositionFieldList(schema)}`;
+  let rawOut: Record<string, unknown> | null = null;
+  for (const { provider, client } of chain) {
+    try {
+      rawOut = await Promise.race([
+        client.extract(system, jsonSchema, transcript.slice(0, 8000)),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("disposition schema extract timed out after 15000ms")), 15_000);
+        }),
+      ]);
+      break;
+    } catch (err) {
+      logger.error(
+        { agentId: opts.agentId, callId: opts.callId, provider, err },
+        "disposition schema LLM extract failed",
+      );
+      if (!isRetryableProviderError(err)) break;
+    }
+  }
+  if (!rawOut || typeof rawOut !== "object" || Array.isArray(rawOut)) return opts.existing ?? null;
+
+  const extracted = normalizeDispositionSchemaResult(schema, rawOut);
+  if (Object.keys(extracted).length === 0) {
+    logger.warn({ agentId: opts.agentId, callId: opts.callId }, "disposition schema extract returned no usable fields");
+    return opts.existing ?? null;
+  }
+
+  const merged: Record<string, unknown> = { ...(opts.existing ?? {}), ...extracted };
+  try {
+    await db
+      .update(callsTable)
+      .set({ dispositionResult: merged as Record<string, string | number | boolean> })
+      .where(eq(callsTable.id, opts.callId));
+    logger.info(
+      { agentId: opts.agentId, callId: opts.callId, keys: Object.keys(extracted) },
+      "disposition: persisted schema extraction onto call",
+    );
+  } catch (err) {
+    logger.error({ agentId: opts.agentId, callId: opts.callId, err }, "disposition: failed to persist schema result");
+  }
+  return merged;
 }

@@ -165,6 +165,21 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("preferNumberTranscript");
     expect(pipelineSrc).toContain("initialLanguage wins even in strict mode");
     expect(pipelineSrc).toContain("this.requestedLangLatch || this.lastNonEnglishLang || this.currentLang");
+    expect(pipelineSrc).toContain("getLiveHandoffLanguage(): string");
+    expect(pipelineSrc).toContain("Live squad handoff language");
+  });
+
+  it("does not mute after a mid-sentence false barge (call 21450)", () => {
+    expect(pipelineSrc).toContain("isSameUtteranceContinuation");
+    expect(pipelineSrc).toContain("isSameUtteranceStillArriving");
+    expect(pipelineSrc).toContain("PARTIAL_BARGE_MIN_PLAY_MS");
+    expect(pipelineSrc).toContain("armBargeRecovery");
+    expect(pipelineSrc).toContain("flushBargeRecovery");
+    expect(pipelineSrc).toContain("if (this.streamSTT?.flush && !this.liveSarvamRealtime())");
+    expect(pipelineSrc).toContain("this.armBargeRecovery(partial)");
+    expect(methodBody("processTurn")).toContain("this.clearBargeRecovery()");
+    expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("isSameUtteranceStillArriving");
+    expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("playbackTooFreshForPartialBarge");
   });
 
   it("does not ship GTCRN / voice-isolator on the live audio path (call 20257)", () => {

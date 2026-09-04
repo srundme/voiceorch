@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isEagerCommitReady,
+  isSameUtteranceContinuation,
   isSpeculativeHit,
   reconcileSpeculativePrefill,
   speculativeInputHash,
@@ -89,6 +90,27 @@ describe("isSpeculativeHit", () => {
 
   it("misses when final diverges", () => {
     expect(isSpeculativeHit("Explain பண்ணுங்க", "ஒரு short English letter")).toBe(false);
+  });
+});
+
+describe("isSameUtteranceContinuation", () => {
+  it("treats a longer partial as the same unfinished utterance (call 21450)", () => {
+    expect(isSameUtteranceContinuation(
+      "So, a good doctor should",
+      "So, a good doctor should be considered",
+    )).toBe(true);
+    expect(isSameUtteranceContinuation(
+      "So, a good doctor should be considered",
+      "So, a good doctor should",
+    )).toBe(true);
+  });
+
+  it("does not treat a new thought as a continuation", () => {
+    expect(isSameUtteranceContinuation(
+      "So, a good doctor should",
+      "Wait, I need to stop you",
+    )).toBe(false);
+    expect(isSameUtteranceContinuation("yes", "no I want to book")).toBe(false);
   });
 });
 

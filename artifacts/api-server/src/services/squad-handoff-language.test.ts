@@ -38,7 +38,25 @@ describe("buildHandoffPromptBlock", () => {
     });
     expect(block).toContain("Tamil");
     expect(block).toContain("MUST continue this live call in Tamil");
+    expect(block).toContain("overrides any other language rule");
+    expect(block).not.toMatch(/Do not restart in English/);
     expect(block).not.toMatch(/Caller language preference: ta-IN\s*$/m);
+  });
+
+  it("orders agent 2 to stay in English when that is what agent 1 was speaking", () => {
+    const block = buildHandoffPromptBlock({
+      fromMemberId: 1,
+      toMemberId: 2,
+      fromAgentId: 10,
+      toAgentId: 20,
+      reason: "booking",
+      goal: "book",
+      transcriptSummary: "Caller confirmed English and asked for a cardiologist.",
+      language: "en-IN",
+    });
+    expect(block).toContain("English");
+    expect(block).toContain("MUST continue this live call in English");
+    expect(block).not.toContain("Do not restart in English");
   });
 
   it("omits a language order when none was captured", () => {

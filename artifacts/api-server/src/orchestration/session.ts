@@ -54,12 +54,8 @@ import {
   removeSession,
 } from "./sessionStore.js";
 import { destroyAudioSession } from "./audioPool.js";
-import { disposeCall } from "../services/disposition.js";
-import {
-  DISPOSITION_EXTRACT_SYSTEM,
-  formatDispositionFieldList,
-  normalizeDispositionSchemaResult,
-} from "../lib/disposition/normalize-fields.js";
+import { disposeCall, extractFlatDispositionSchema } from "../services/disposition.js";
+import { schemaFieldsNeedFill } from "../lib/disposition/normalize-fields.js";
 import {
   buildCallEndedWebhookPayload,
   dispatchWebhooks,
@@ -621,7 +617,7 @@ export async function createSession(params: {
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,
     // Empirical PSTN echo window (VoBiz/Twilio), not a carrier spec. See
     // pipeline.ts BARGE_IN_ECHO_GRACE_MS. Stop Speaking Plan may override.
-    bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 0,
+    bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 600,
     micSensitivity:         resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined),
     // P1-E: Agent timezone
     timezone: agentTimezone,
@@ -1972,8 +1968,8 @@ export async function createSession(params: {
             for (const f of ctx.facts.slice(0, 25)) {
               durableFacts[f.key] = f.value;
             }
-            const livePref = live.pipeline.getPreferredCallerLang();
-            if (livePref && !durableFacts["language_pref"]) {
+            const livePref = live.pipeline.getLiveHandoffLanguage();
+            if (livePref) {
               durableFacts["language_pref"] = livePref;
             }
           }
@@ -1990,7 +1986,7 @@ export async function createSession(params: {
         reason: operatorSummary?.trim() || "Specialist handoff",
         goal: runRow?.goal ?? "Live squad call",
         transcriptSummary,
-        language: live.pipeline.getPreferredCallerLang() || live.configuredLanguage || null,
+        language: live.pipeline.getLiveHandoffLanguage() || live.configuredLanguage || null,
         durableFacts,
         squad,
         previousPipeline: live.pipeline,
@@ -3678,67 +3674,17 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");
           }
 
-          if (
-            !dispositionResult &&
-            dispositionSchema.length > 0 &&
-            transcript &&
-            transcript.length > 50 &&
-            ag.userId
-          ) {
+          if (schemaFieldsNeedFill(dispositionResult, dispositionSchema)) {
             try {
-              const llmProvs = await db.select().from(providersTable).where(
-                and(
-                  eq(providersTable.isActive, true),
-                  eq(providersTable.userId, ag.userId!),
-                  eq(providersTable.providerName, ag.llmProvider)
-                )
-              );
-              let llmKey: string | null = llmProvs[0] ? decryptKey(llmProvs[0].apiKey) : null;
-              let dispProvider = ag.llmProvider;
-              let dispModel = ag.llmModel;
-              if (!llmKey) {
-                const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
-                llmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
-                if (llmKey) {
-                  dispProvider = "groq";
-                  dispModel = "llama-3.1-70b-versatile";
-                }
-              }
-              if (llmKey) {
-                const llm = createLLMAdapter(dispProvider, llmKey, dispModel);
-                const fieldList = formatDispositionFieldList(dispositionSchema);
-                let raw = "";
-                await llm.chat(
-                  [{
-                    role: "user",
-                    content:
-                      `Extract disposition fields from this call transcript. Return valid JSON only.\n\n` +
-                      `Fields:\n${fieldList}\n\n` +
-                      `Transcript:\n${transcript.slice(0, 8000)}`,
-                  }],
-                  DISPOSITION_EXTRACT_SYSTEM,
-                  () => {},
-                  (full) => { raw = full; },
-                );
-                if (raw) {
-                  try {
-                    const jsonStr = raw.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "").trim();
-                    const parsed = JSON.parse(jsonStr);
-                    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-                      const result = normalizeDispositionSchemaResult(
-                        dispositionSchema,
-                        parsed as Record<string, unknown>,
-                      );
-                      dispositionResult = result;
-                      await db.update(callsTable).set({ dispositionResult: result as Record<string, string | number | boolean> }).where(eq(callsTable.id, session.callId));
-                    }
-                  } catch {
-                    logger.warn({ sessionId }, "Disposition JSON parse failed");
-                  }
-                }
-              }
+              dispositionResult = await extractFlatDispositionSchema({
+                agentId: call.agentId,
+                callId: session.callId,
+                transcript,
+                schema: dispositionSchema,
+                existing: dispositionResult,
+              });
             } catch (dispErr) {
-              logger.warn({ sessionId, dispErr }, "Post-call disposition extraction failed");
+              logger.warn({ sessionId, dispErr }, "Post-call disposition schema extraction failed");
             }
           }
 

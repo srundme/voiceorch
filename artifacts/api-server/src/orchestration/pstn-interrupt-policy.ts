@@ -36,6 +36,9 @@ export function shouldCutTtsFromCallerTranscript(opts: {
   if (!opts.agentSpeaking) return false;
   if (opts.isSelfEcho) return false;
   const welcomePlayed = !(opts.greetingPlaybackActive || !!opts.systemPlaybackActive);
+  if (opts.inEchoGrace) {
+    return welcomePlayed && isPstnStopHold(t, opts.interruptionMgr);
+  }
   // "yes" / "okay okay" are answers, not barges — unless they are hold/stop.
   if (isBackchannelOnlyUtterance(t) && !isPstnStopHold(t, opts.interruptionMgr)) {
     return false;

@@ -34,7 +34,8 @@ import {
   readWebhookPayloadTemplate,
   serializeAgentWebhookBody,
 } from "../lib/webhook-payload-template.js";
-import { disposeCall } from "../services/disposition.js";
+import { disposeCall, extractFlatDispositionSchema } from "../services/disposition.js";
+import { schemaFieldsNeedFill } from "../lib/disposition/normalize-fields.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE } from "../services/irdai/gate.js";
 import { normalizeCallVariables } from "../orchestration/prompt-vars.js";
@@ -1374,6 +1375,18 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
           calledNumber: call.toNumber ?? null,
         });
         dispositionResult = flatDispositionFromTaxonomy(taxResult) ?? dispositionResult;
+      }
+      const hangupSchema = Array.isArray(agent?.dispositionSchema)
+        ? (agent.dispositionSchema as Array<{ key: string; label: string; type: string; required?: boolean; options?: string[] }>)
+        : [];
+      if (schemaFieldsNeedFill(dispositionResult, hangupSchema)) {
+        dispositionResult = await extractFlatDispositionSchema({
+          agentId: call.agentId,
+          callId: call.id,
+          transcript: call.transcript ?? null,
+          schema: hangupSchema,
+          existing: dispositionResult,
+        }) ?? dispositionResult;
       }
     } catch {
       /* disposition optional */

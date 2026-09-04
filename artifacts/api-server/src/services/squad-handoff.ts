@@ -73,7 +73,7 @@ export function buildHandoffPromptBlock(packet: HandoffPacket): string {
     `Squad goal: ${packet.goal}`,
     `Prior conversation summary:\n${packet.transcriptSummary || "(none)"}`,
     lang
-      ? `Caller language preference: ${lang.label} (${lang.bcp47}).\nYou MUST continue this live call in ${lang.label}. The caller already chose this language with your teammate. Do not restart in English and do not ask which language they want unless they switch.`
+      ? `Caller language preference: ${lang.label} (${lang.bcp47}).\nYou MUST continue this live call in ${lang.label}. This overrides any other language rule in your prompt. The caller already chose this language with your teammate. Do not greet or reply in a different language and do not ask which language they want unless they switch.`
       : null,
     packet.durableFacts && Object.keys(packet.durableFacts).length
       ? `Known facts: ${JSON.stringify(packet.durableFacts)}`
@@ -262,7 +262,7 @@ async function buildTargetAgentConfig(
     bargeInEnabled: (agentCfg["bargeInEnabled"] as boolean | undefined) ?? true,
     bargeInEnergyThreshold: resolveBargeInEnergyThreshold(agentCfg["bargeInEnergyThreshold"]),
     bargeInMinFrames: (agentCfg["bargeInMinFrames"] as number | undefined) ?? 4,
-    bargeInEchoGraceMs: (agentCfg["bargeInEchoGraceMs"] as number | undefined) ?? 0,
+    bargeInEchoGraceMs: (agentCfg["bargeInEchoGraceMs"] as number | undefined) ?? 600,
     micSensitivity,
     timezone: (agentCfg["timezone"] as string | undefined) ?? "Asia/Kolkata",
     recordingEnabled: (agentCfg["recordingEnabled"] as boolean | undefined) ?? false,
@@ -520,7 +520,14 @@ export async function performSquadAgentHandoff(opts: {
 
   await recordSquadHandoff({ runId: opts.runId, packet, outcome: "success" });
   logger.info(
-    { callId: hooks.callId, from: opts.fromAgentId, to: opts.toAgentId, runId: opts.runId },
+    {
+      callId: hooks.callId,
+      from: opts.fromAgentId,
+      to: opts.toAgentId,
+      runId: opts.runId,
+      handoffLanguage: packet.language ?? null,
+      teammateLanguage: agentConfig.language,
+    },
     "Squad live handoff completed",
   );
   // Caller (session) must: live.pipeline = result.pipeline, THEN close the old one.
