@@ -59,6 +59,8 @@ import {
   canAutoBook,
   emptyBookingFlowState,
   looksLikeFalseBookingClaim,
+  looksLikeImmediateToolIntent,
+  shouldInjectSchedulingPhrasebook,
   shouldForceBookAppointment,
   shouldForceCheckAvailability,
   shouldUpdateBookedEmail,
@@ -9007,11 +9009,19 @@ export class OrchestrationPipeline implements VoiceSession {
       );
     }
 
+    // Booking/scheduling phrasebooks only on booking or reschedule turns —
+    // not on hello / pitch / FAQ (every-turn copies added uncached tokens).
+    const needSchedulingGuides = shouldInjectSchedulingPhrasebook({
+      transcript,
+      bookingFlow: this.bookingFlowState,
+      activeReschedule: !!this.activeRescheduleBooking,
+    });
+
     // Inject scheduling tool usage guide when the agent has cancel/reschedule/list-bookings tools
     const hasSchedulingNav = this.agent.tools.some(
       (t) => t.type === "native_cancel" || t.type === "native_reschedule" || t.type === "native_list_bookings",
     );
-    if (hasSchedulingNav) {
+    if (hasSchedulingNav && needSchedulingGuides) {
       const listTool = this.agent.tools.find((t) => t.type === "native_list_bookings");
       const checkTool = this.agent.tools.find((t) => t.type === "native_check_availability");
       const cancelTool = this.agent.tools.find((t) => t.type === "native_cancel");
@@ -9050,7 +9060,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // Inject booking/availability guide when the agent has a native_booking or native_check_availability tool
     const hasBookingTool = this.agent.tools.some((t) => t.type === "native_booking");
     const hasCheckAvailabilityTool = this.agent.tools.some((t) => t.type === "native_check_availability");
-    if (hasBookingTool || hasCheckAvailabilityTool) {
+    if ((hasBookingTool || hasCheckAvailabilityTool) && needSchedulingGuides) {
       const bookTool = this.agent.tools.find((t) => t.type === "native_booking");
       const checkTool = this.agent.tools.find((t) => t.type === "native_check_availability");
       const bookName = bookTool?.name ?? "book_appointment";
@@ -9068,7 +9078,7 @@ export class OrchestrationPipeline implements VoiceSession {
         `If "${bookName}" returns booking_pending or booking_failed, say scheduling could not be completed and offer to try again. Do not mention internal calendar errors.`,
       ];
       systemPromptForTurn += lines.join("\n");
-      if (this.schedulingConfigurationFailed) {
+      if (this.schedulingConfigurationFailed && needSchedulingGuides) {
         systemPromptForTurn += [
           "",
           "",
@@ -9079,7 +9089,7 @@ export class OrchestrationPipeline implements VoiceSession {
           "Tell the caller briefly that scheduling could not be completed right now and that the team will follow up.",
         ].join("\n");
       }
-    } else {
+    } else if (needSchedulingGuides) {
       // No booking/availability tool is configured for this agent. Without this
       // guard the LLM cheerfully "confirms" a meeting and promises a calendar
       // link that will never be sent (call 5578: agent said "I've locked in your
@@ -9103,7 +9113,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // committed to a text response and will NOT call the tool in that turn.
     // This instruction block tells the model to skip the preamble and call the
     // tool directly so the pipeline's onToolCall fires in the same turn.
-    if (toolDefs.length > 0) {
+    if (toolDefs.length > 0 && (needSchedulingGuides || looksLikeImmediateToolIntent(transcript))) {
       systemPromptForTurn += [
         "",
         "",

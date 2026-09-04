@@ -50,6 +50,56 @@ export function emptyBookingFlowState(): BookingFlowState {
   };
 }
 
+/** Mid-funnel: slots / email / a booking id are already in play. */
+export function bookingFlowNeedsGuides(state: BookingFlowState): boolean {
+  return (
+    state.availabilityChecked
+    || state.slotLocked
+    || !!state.pendingEmail
+    || state.emailSpellPending
+    || !!state.lastBookingId
+    || state.candidateSlots.length > 0
+  );
+}
+
+/** Cancel / change an existing appointment (EN + common Indian). */
+export function looksLikeCancelOrRescheduleIntent(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  return (
+    /\b(cancel|reschedule|postpone|change\s+(my\s+)?(appointment|booking|meeting|slot|demo)|existing\s+(appointment|booking)|my\s+(appointment|booking))\b/i.test(
+      t,
+    )
+    || /(?:ரத்து|ரீஷெட்யூல்|மாத்து|कैंसल|रद्द|रीशेड्यूल|रिसकेड्यूल)/iu.test(t)
+  );
+}
+
+/**
+ * Booking/scheduling phrasebooks belong on this turn only — not on hello / pitch / FAQ.
+ */
+export function shouldInjectSchedulingPhrasebook(opts: {
+  transcript: string;
+  bookingFlow: BookingFlowState;
+  activeReschedule?: boolean;
+}): boolean {
+  if (opts.activeReschedule) return true;
+  if (bookingFlowNeedsGuides(opts.bookingFlow)) return true;
+  return looksLikeDemoOrScheduleIntent(opts.transcript)
+    || looksLikeCancelOrRescheduleIntent(opts.transcript);
+}
+
+/** Callback / transfer / book — tool-preamble note only when a tool is likely. */
+export function looksLikeImmediateToolIntent(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (looksLikeDemoOrScheduleIntent(t) || looksLikeCancelOrRescheduleIntent(t)) return true;
+  return (
+    /\b(call\s+me\s+back|call\s+back|call\s+me\s+later|callback|call\s+me\s+tomorrow|call\s+me\s+at)\b/i.test(t)
+    || /\b(transfer|connect\s+me|speak\s+to\s+(a\s+)?(human|person|agent|someone))\b/i.test(t)
+    || /(?:திரும்ப\s+கால்|கால்பேக்|वापस\s+कॉल|कॉलबैक)/iu.test(t)
+  );
+}
+
 /** Demo / meeting / appointment intent (EN + common Indian). */
 export function looksLikeDemoOrScheduleIntent(text: string): boolean {
   const t = text.trim();

@@ -5,6 +5,9 @@ import {
   emptyBookingFlowState,
   hasChosenBookingSlot,
   looksLikeDemoOrScheduleIntent,
+  looksLikeCancelOrRescheduleIntent,
+  looksLikeImmediateToolIntent,
+  shouldInjectSchedulingPhrasebook,
   looksLikeEmailConfirmationYes,
   looksLikeFalseBookingClaim,
   parseSlotIsoFromAvailabilityResult,
@@ -31,6 +34,40 @@ describe("looksLikeDemoOrScheduleIntent", () => {
     expect(looksLikeDemoOrScheduleIntent("call for demo")).toBe(true);
     expect(looksLikeDemoOrScheduleIntent("book a meeting")).toBe(true);
     expect(looksLikeDemoOrScheduleIntent("hello how are you")).toBe(false);
+  });
+});
+
+describe("shouldInjectSchedulingPhrasebook", () => {
+  const idle = emptyBookingFlowState();
+
+  it("skips hello / pitch turns", () => {
+    expect(shouldInjectSchedulingPhrasebook({ transcript: "hello how are you", bookingFlow: idle }))
+      .toBe(false);
+    expect(shouldInjectSchedulingPhrasebook({ transcript: "tell me about your product", bookingFlow: idle }))
+      .toBe(false);
+  });
+
+  it("attaches on book / cancel / mid-funnel / active reschedule", () => {
+    expect(shouldInjectSchedulingPhrasebook({ transcript: "book a meeting", bookingFlow: idle }))
+      .toBe(true);
+    expect(looksLikeCancelOrRescheduleIntent("cancel my appointment")).toBe(true);
+    expect(shouldInjectSchedulingPhrasebook({ transcript: "cancel my appointment", bookingFlow: idle }))
+      .toBe(true);
+    expect(shouldInjectSchedulingPhrasebook({
+      transcript: "yes",
+      bookingFlow: { ...idle, availabilityChecked: true, lastSlotIso: "2026-08-28T10:00:00+05:30" },
+    })).toBe(true);
+    expect(shouldInjectSchedulingPhrasebook({
+      transcript: "okay",
+      bookingFlow: idle,
+      activeReschedule: true,
+    })).toBe(true);
+  });
+
+  it("attaches the tool-preamble note for callback, not for hello", () => {
+    expect(looksLikeImmediateToolIntent("hello")).toBe(false);
+    expect(looksLikeImmediateToolIntent("call me back tomorrow")).toBe(true);
+    expect(looksLikeImmediateToolIntent("book a demo")).toBe(true);
   });
 });
 
