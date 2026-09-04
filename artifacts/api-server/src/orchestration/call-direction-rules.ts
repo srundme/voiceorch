@@ -80,6 +80,11 @@ export function mapLanguagePrefToBcp47(raw: string | null | undefined): string |
   return LANG_KEY_TO_BCP47[resolveOpeningLanguageKey(v)];
 }
 
+export function languageDisplayName(raw: string | null | undefined): string {
+  const key = resolveOpeningLanguageKey(raw);
+  return LANG_LABEL[key] ?? key;
+}
+
 /** Slightly slower TTS for the opening Welcome. Later turns keep Sound speed. */
 export function resolveInboundGreetingTtsSpeed(agentSpeed: number | null | undefined): number {
   const base = typeof agentSpeed === "number" && Number.isFinite(agentSpeed) && agentSpeed > 0

@@ -3075,13 +3075,19 @@ export class OrchestrationPipeline implements VoiceSession {
     // English and cold-starts the call into English (call 13340).
     // Strict mode: always lock from the configured agent language.
     const agentLanguage = this.agent.language ?? null;
-    const seedLang = this.agent.languageAutoDetect
-      ? (this.agent.initialLanguage
-          ?? this.agent.sttConfig.language
-          ?? agentLanguage
-          ?? null)
-      : agentLanguage;
+    // initialLanguage wins even in strict mode — squad handoff and caller
+    // memory must not reset to the teammate's configured English.
+    const seedLang = this.agent.initialLanguage
+      ?? (this.agent.languageAutoDetect
+        ? (this.agent.sttConfig.language ?? agentLanguage ?? null)
+        : agentLanguage);
     if (seedLang) this.currentLang = seedLang;
+    if (this.agent.initialLanguage) {
+      if (!this.agent.initialLanguage.toLowerCase().startsWith("en")) {
+        this.lastNonEnglishLang = this.agent.initialLanguage;
+      }
+      this.requestedLangLatch = this.agent.initialLanguage;
+    }
 
     // Launch greeting LLM prewarm immediately so the 1–3s round-trip overlaps
     // TTS setup, AMD confirm, and the spoken Welcome — not after the caller
@@ -10380,7 +10386,7 @@ export class OrchestrationPipeline implements VoiceSession {
    *  doesn't wipe out their Tamil/Hindi preference), falling back to
    *  currentLang only when the caller spoke nothing but English all call. */
   getPreferredCallerLang(): string {
-    return this.lastNonEnglishLang || this.currentLang;
+    return this.requestedLangLatch || this.lastNonEnglishLang || this.currentLang;
   }
 
   /** Related people learned on this call (for durable family_members fact). */

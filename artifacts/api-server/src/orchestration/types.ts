@@ -334,10 +334,9 @@ export interface AgentConfig {
    */
   isMeetingSession?: boolean;
   language: string | null;
-  /** When set, overrides the initial currentLang in the pipeline for this specific call.
-   *  Used by session.ts to seed the caller's preferred language from memory so the
-   *  agent starts the call in the language the caller used last time. Only respected
-   *  when languageAutoDetect=true. */
+  /** When set, overrides the initial currentLang (and language latch) for this
+   *  call — returning-caller memory and mid-call squad handoff. Wins even when
+   *  languageAutoDetect is false so a teammate does not reset to English. */
   initialLanguage?: string | null;
   /** When true, pipeline updates currentLang from STT's detectedLanguage on each
    *  final transcript so the per-turn LLM instruction follows the caller's language.

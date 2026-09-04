@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildOpeningLanguageRule,
+  languageDisplayName,
   mapLanguagePrefToBcp47,
   openingHello,
   resolveCallOpeningLanguage,
@@ -35,6 +36,14 @@ describe("mapLanguagePrefToBcp47", () => {
   it("does not invent a language for empty memory", () => {
     expect(mapLanguagePrefToBcp47(null)).toBeUndefined();
     expect(mapLanguagePrefToBcp47("")).toBeUndefined();
+  });
+});
+
+describe("languageDisplayName", () => {
+  it("names Tamil from codes used on live handoff", () => {
+    expect(languageDisplayName("ta")).toBe("Tamil");
+    expect(languageDisplayName("ta-IN")).toBe("Tamil");
+    expect(languageDisplayName("tamil")).toBe("Tamil");
   });
 });
 

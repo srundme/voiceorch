@@ -45,10 +45,26 @@ import {
   buildSquadPromptBlock,
   buildSharedCallerFactsBlock,
 } from "./squad-teamwork.js";
+import { languageDisplayName, mapLanguagePrefToBcp47 } from "../orchestration/call-direction-rules.js";
 
 const DEFAULT_SILENCE_TIMEOUT_SECONDS = 45;
 
-function buildHandoffPromptBlock(packet: HandoffPacket): string {
+/** Live caller language from agent 1 — STT/TTS/prompt for agent 2. */
+export function resolveSquadHandoffLanguage(
+  packetLang: string | null | undefined,
+  agentLang: string,
+): { bcp47: string; label: string; fromCaller: boolean } {
+  const mapped = mapLanguagePrefToBcp47(packetLang);
+  if (mapped) {
+    return { bcp47: mapped, label: languageDisplayName(mapped), fromCaller: true };
+  }
+  return { bcp47: agentLang, label: languageDisplayName(agentLang), fromCaller: false };
+}
+
+export function buildHandoffPromptBlock(packet: HandoffPacket): string {
+  const lang = packet.language?.trim()
+    ? resolveSquadHandoffLanguage(packet.language, packet.language)
+    : null;
   return [
     "[SQUAD HANDOFF — CONFIDENTIAL CONTEXT]",
     "You are taking over this live call from a teammate. The customer is still on the line.",
@@ -56,7 +72,9 @@ function buildHandoffPromptBlock(packet: HandoffPacket): string {
     `Reason for handoff: ${packet.reason}`,
     `Squad goal: ${packet.goal}`,
     `Prior conversation summary:\n${packet.transcriptSummary || "(none)"}`,
-    packet.language ? `Caller language preference: ${packet.language}` : null,
+    lang
+      ? `Caller language preference: ${lang.label} (${lang.bcp47}).\nYou MUST continue this live call in ${lang.label}. The caller already chose this language with your teammate. Do not restart in English and do not ask which language they want unless they switch.`
+      : null,
     packet.durableFacts && Object.keys(packet.durableFacts).length
       ? `Known facts: ${JSON.stringify(packet.durableFacts)}`
       : null,
@@ -142,11 +160,13 @@ async function buildTargetAgentConfig(
     logger.warn({ err, agentId, squadId }, "Squad teamwork injection failed for handoff target");
   }
 
-  const effectiveAgentLang =
+  const configuredLang =
     (typeof agentCfg["language"] === "string" && (agentCfg["language"] as string)) ||
     agent.asrLanguage ||
     agent.language ||
     "en-IN";
+  const handoffLang = resolveSquadHandoffLanguage(packet.language, configuredLang);
+  const effectiveAgentLang = handoffLang.bcp47;
 
   const voiceStack = resolveVoiceStack(agentCfg["voiceStack"] as string | undefined);
   const micSensitivity = resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined);
@@ -190,7 +210,9 @@ async function buildTargetAgentConfig(
     ttsSpeed: (agentCfg["ttsSpeed"] as number | undefined) ?? 1.0,
     telephonyProvider: agent.telephonyProvider,
     greetingMessage: null,
-    firstSpeaker: "assistant",
+    // Teammate continues the live call — do not generate a cold English opener.
+    firstSpeaker: "user",
+    initialLanguage: handoffLang.fromCaller ? handoffLang.bcp47 : undefined,
     endCallPhrases,
     silenceTimeoutSeconds: agent.silenceTimeoutSeconds ?? DEFAULT_SILENCE_TIMEOUT_SECONDS,
     language: effectiveAgentLang,
@@ -453,6 +475,7 @@ export async function performSquadAgentHandoff(opts: {
           onBargeIn: hooks.onBargeIn,
           callDirection: hooks.callDirection,
           memoryOwnerAgentId: hooks.memoryOwnerAgentId,
+          callerMemoryLanguage: packet.language ?? null,
         })
       : new OrchestrationPipeline({
           callId: hooks.callId,
@@ -469,6 +492,7 @@ export async function performSquadAgentHandoff(opts: {
           onBargeIn: hooks.onBargeIn,
           callDirection: hooks.callDirection,
           memoryOwnerAgentId: hooks.memoryOwnerAgentId,
+          callerMemoryLanguage: packet.language ?? null,
         });
   } catch (err) {
     logger.error({ err, callId: hooks.callId }, "Failed to create handoff pipeline — keeping previous agent");

@@ -156,6 +156,8 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("Math.random() < freq");
     expect(pipelineSrc).toContain("Backchannel filler armed (late, language-aware)");
     expect(pipelineSrc).toContain("preferNumberTranscript");
+    expect(pipelineSrc).toContain("initialLanguage wins even in strict mode");
+    expect(pipelineSrc).toContain("this.requestedLangLatch || this.lastNonEnglishLang || this.currentLang");
   });
 
   it("does not ship GTCRN / voice-isolator on the live audio path (call 20257)", () => {

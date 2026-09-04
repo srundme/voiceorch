@@ -1969,6 +1969,10 @@ export async function createSession(params: {
             for (const f of ctx.facts.slice(0, 25)) {
               durableFacts[f.key] = f.value;
             }
+            const livePref = live.pipeline.getPreferredCallerLang();
+            if (livePref && !durableFacts["language_pref"]) {
+              durableFacts["language_pref"] = livePref;
+            }
           }
         } catch (factErr) {
           logger.warn({ err: factErr, callId: callRecord.id }, "Failed to load durable facts for handoff");
@@ -1983,7 +1987,7 @@ export async function createSession(params: {
         reason: operatorSummary?.trim() || "Specialist handoff",
         goal: runRow?.goal ?? "Live squad call",
         transcriptSummary,
-        language: live.pipeline.getPreferredCallerLang() ?? live.configuredLanguage,
+        language: live.pipeline.getPreferredCallerLang() || live.configuredLanguage || null,
         durableFacts,
         squad,
         previousPipeline: live.pipeline,
