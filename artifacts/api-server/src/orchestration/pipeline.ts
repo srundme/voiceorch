@@ -2441,6 +2441,20 @@ export class OrchestrationPipeline implements VoiceSession {
     return true;
   }
 
+  // #region agent log
+  private _dbgWhyNoCut(text: string): Record<string, unknown> {
+    return {
+      agentSpeaking: this.isPlaying || this.isSendingTtsAudio,
+      greetingPlaybackActive: this.greetingFirstClipActive,
+      systemPlaybackActive: this.systemPlaybackActive,
+      inEchoGrace: Date.now() < this.greetingEchoHoldUntil
+        || Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs,
+      isSelfEcho: this.isSelfEcho(text.trim()),
+      backchannelOnly: isBackchannelOnlyUtterance(text),
+    };
+  }
+  // #endregion
+
   private clearBargeRecovery(): void {
     if (this._bargeRecoveryTimer) {
       clearTimeout(this._bargeRecoveryTimer);
@@ -3823,6 +3837,23 @@ export class OrchestrationPipeline implements VoiceSession {
             "Barge-in detected (streaming STT final + InterruptionManager)",
           );
         } else {
+          // #region agent log
+          fetch('http://127.0.0.1:7286/ingest/ab04c6e0-81df-464e-888b-caba19c2a968',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7332cf'},body:JSON.stringify({sessionId:'7332cf',hypothesisId:'B',location:'pipeline.ts:bargeSkipped',message:'BARGE NOT TRIGGERED for caller final while agent speaking',data:{callId:this.config.callId,transcript:transcript.slice(0,120),backchannelOnly:isBackchannelOnlyUtterance(transcript),selfEcho:this.isSelfEcho(transcript.trim()),stillArriving:this.isSameUtteranceStillArriving(transcript),tooFresh:this.playbackTooFreshForPartialBarge(transcript),isPlaying:this.isPlaying,isSendingTtsAudio:this.isSendingTtsAudio},timestamp:Date.now()})}).catch(()=>{});
+          this.logExec("Agent", "system", {
+            status: "info",
+            turnNumber: this._activeTurnIndex,
+            metadata: {
+              event: "DBG Barge Skipped",
+              hypothesis: "B",
+              transcript: transcript.slice(0, 120),
+              backchannelOnly: isBackchannelOnlyUtterance(transcript),
+              selfEcho: this.isSelfEcho(transcript.trim()),
+              stillArriving: this.isSameUtteranceStillArriving(transcript),
+              tooFresh: this.playbackTooFreshForPartialBarge(transcript),
+              ...this._dbgWhyNoCut(transcript),
+            },
+          });
+          // #endregion
           logger.info(
             { callId: this.config.callId, transcript: transcript.slice(0, 80) },
             "Streaming STT: skipping final-transcript barge-in (realtime uses VAD + partials)",
@@ -4240,6 +4271,22 @@ export class OrchestrationPipeline implements VoiceSession {
     this.clearBargeRecovery();
 
     if (this.isProcessing) {
+      // #region agent log
+      fetch('http://127.0.0.1:7286/ingest/ab04c6e0-81df-464e-888b-caba19c2a968',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7332cf'},body:JSON.stringify({sessionId:'7332cf',hypothesisId:'A',location:'pipeline.ts:queueOnIsProcessing',message:'transcript QUEUED behind isProcessing (barge exception not applied here)',data:{callId:this.config.callId,transcript:transcript.slice(0,120),bargeInActive,bargeInRequested:this.bargeInRequested,lastTurnWasBargedIn:this._lastTurnWasBargedIn,isPlaying:this.isPlaying,isSendingTtsAudio:this.isSendingTtsAudio,queueLenBefore:this.pendingTranscriptQueue.length,backchannelOnly:isBackchannelOnlyUtterance(transcript),closeReason},timestamp:Date.now()})}).catch(()=>{});
+      this.logExec("STT", "system", {
+        status: "info",
+        turnNumber: this._activeTurnIndex,
+        metadata: {
+          event: "DBG Transcript Queued",
+          hypothesis: "A",
+          transcript: transcript.slice(0, 120),
+          bargeInActive,
+          isPlaying: this.isPlaying,
+          queueLenBefore: this.pendingTranscriptQueue.length,
+          backchannelOnly: isBackchannelOnlyUtterance(transcript),
+        },
+      });
+      // #endregion
       // Never start a second processTurn. Barge already stopped playback;
       // playPromise ends and this final drains next. A concurrent turn would
       // either stay muted (flag still set) or double-speak (call 21426).
@@ -4252,6 +4299,9 @@ export class OrchestrationPipeline implements VoiceSession {
     // call 5677 answered "ஆமா" while "ஹலோ"/"ambulance" sat 13–20s behind.
     // EXCEPTION: Barge-in transcripts jump the queue (they're the reason TTS stopped).
     if (this.pendingTranscriptQueue.length > 0 && !bargeInActive) {
+      // #region agent log
+      fetch('http://127.0.0.1:7286/ingest/ab04c6e0-81df-464e-888b-caba19c2a968',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7332cf'},body:JSON.stringify({sessionId:'7332cf',hypothesisId:'E',location:'pipeline.ts:queueNonEmpty',message:'merging into non-empty queue',data:{callId:this.config.callId,transcript:transcript.slice(0,120),queued:this.pendingTranscriptQueue.map(q=>({t:q.text.slice(0,60),ageMs:Date.now()-q.emittedAt}))},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       this.pendingTranscriptQueue.push({ text: transcript, emittedAt: sttEmittedAt, closeReason });
       const merged = this.drainPendingTranscripts();
       if (!merged) return;
@@ -4260,6 +4310,22 @@ export class OrchestrationPipeline implements VoiceSession {
       closeReason = merged.closeReason;
     }
 
+    // #region agent log
+    fetch('http://127.0.0.1:7286/ingest/ab04c6e0-81df-464e-888b-caba19c2a968',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7332cf'},body:JSON.stringify({sessionId:'7332cf',hypothesisId:'C+D',location:'pipeline.ts:beforeProcessTurn',message:'about to answer this transcript',data:{callId:this.config.callId,transcript:transcript.slice(0,140),ageSinceSttMs:Date.now()-sttEmittedAt,closeReason,backchannelOnly:isBackchannelOnlyUtterance(transcript),dupOfLastUserTurn:isNearDuplicateUtterance(transcript,this.lastUserTurnText()),lastUserTurn:this.lastUserTurnText().slice(0,80),bargeInActive},timestamp:Date.now()})}).catch(()=>{});
+    this.logExec("STT", "system", {
+      status: "info",
+      turnNumber: this._activeTurnIndex,
+      metadata: {
+        event: "DBG Answering Transcript",
+        hypothesis: "C+D",
+        transcript: transcript.slice(0, 140),
+        ageSinceSttMs: Date.now() - sttEmittedAt,
+        closeReason,
+        backchannelOnly: isBackchannelOnlyUtterance(transcript),
+        dupOfLastUserTurn: isNearDuplicateUtterance(transcript, this.lastUserTurnText()),
+      },
+    });
+    // #endregion
     this.isProcessing = true;
     try {
       await this.processTurn(transcript, 0);
@@ -4299,6 +4365,9 @@ export class OrchestrationPipeline implements VoiceSession {
     if (queued.length === 0) return null;
     this.pendingTranscriptQueue = [];
     const coalesced = coalescePendingTranscripts(queued);
+    // #region agent log
+    fetch('http://127.0.0.1:7286/ingest/ab04c6e0-81df-464e-888b-caba19c2a968',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7332cf'},body:JSON.stringify({sessionId:'7332cf',hypothesisId:'E',location:'pipeline.ts:drainPendingTranscripts',message:'draining queue',data:{callId:this.config.callId,queuedCount:queued.length,entries:queued.map(q=>({t:q.text.slice(0,60),ageMs:Date.now()-q.emittedAt,reason:q.closeReason})),merged:coalesced?.text?.slice(0,140)??null,oldestAgeMs:queued.length?Date.now()-queued[0]!.emittedAt:null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!coalesced) return null;
     if (queued.length > 1) {
       logger.info(
