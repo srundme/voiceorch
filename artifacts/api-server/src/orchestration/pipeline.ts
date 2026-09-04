@@ -468,6 +468,8 @@ const BARGE_IN_ECHO_GRACE_MS  = 0;    // Bolna has no echo-grace overlay; welcom
 const PARTIAL_BARGE_MIN_PLAY_MS = 400;
 /** After a barge with no STT final, speak from the last partial instead of going mute. */
 const BARGE_RECOVERY_MS = 800;
+/** Ceiling for waiting out an open VAD before the backstop commits anyway. */
+const BARGE_RECOVERY_MAX_WAIT_MS = 8000;
 const BARGE_IN_MIN_FRAMES     = 3;      // Absolute floor on barge-in frames (~60 ms) so a single
                                          // loud frame can't cut the agent off, even when a Stop
                                          // Speaking Plan configures very low sensitivity.
@@ -1374,7 +1376,11 @@ export class OrchestrationPipeline implements VoiceSession {
   /** Whether the immediately-preceding agent turn was interrupted by a barge-in. */
   private _lastTurnWasBargedIn = false;
   /** Last barge preview — used if Sarvam never emits a final (call 21450 mute). */
+  // #region agent log
+  private _dbgLastBargeAt = 0;
+  // #endregion
   private _bargeRecoveryText: string | null = null;
+  private _bargeRecoveryArmedAt = 0;
   private _bargeRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
   /**
    * After the agent asks a question, short caller replies ("yes ma'am", "okay okay",
@@ -1826,6 +1832,10 @@ export class OrchestrationPipeline implements VoiceSession {
     if (opts?.speculative !== false && partial?.trim()) {
       this._launchSpeculativeLlm(partial);
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7286/ingest/ab04c6e0-81df-464e-888b-caba19c2a968',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7332cf'},body:JSON.stringify({sessionId:'7332cf',hypothesisId:'B',location:'pipeline.ts:triggerBargeIn',message:'barge-in fired (storm check)',data:{callId:this.config.callId,trigger,partial:partial?.slice(0,120)??null,heardPreview:heard.slice(0,80)||null,msSincePlaybackStart:this._activePlaybackStartedAt?Date.now()-this._activePlaybackStartedAt:null,msSinceLastBarge:this._dbgLastBargeAt?Date.now()-this._dbgLastBargeAt:null,bargeCount:this._bargeInFiredCount,vadOpen:this._vadSpeechStartAt!==0},timestamp:Date.now()})}).catch(()=>{});
+    this._dbgLastBargeAt = Date.now();
+    // #endregion
     this.logExec("Agent", "system", {
       status: "info",
       turnNumber: this._activeTurnIndex,
@@ -2284,6 +2294,9 @@ export class OrchestrationPipeline implements VoiceSession {
         return;
       }
       this.handleSttSpeechEnd();
+      // #region agent log
+      fetch('http://127.0.0.1:7286/ingest/ab04c6e0-81df-464e-888b-caba19c2a968',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7332cf'},body:JSON.stringify({sessionId:'7332cf',hypothesisId:'A',location:'pipeline.ts:onSpeechEnd',message:'VAD speech end — was recovery already consumed by timer?',data:{callId:this.config.callId,segmentMs:this._lastVadSegmentMs,recoveryTextStillPending:this._bargeRecoveryText,recoveryTimerStillArmed:!!this._bargeRecoveryTimer,alreadyFlushedByTimer:this._bargeRecoveryText===null&&!this._bargeRecoveryTimer},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       this.flushBargeRecovery("speech_end");
     };
     this.streamSTT.onSpeechStart = () => {
@@ -2444,16 +2457,56 @@ export class OrchestrationPipeline implements VoiceSession {
       this._bargeRecoveryTimer = null;
     }
     this._bargeRecoveryText = null;
+    this._bargeRecoveryArmedAt = 0;
   }
 
   private armBargeRecovery(partial?: string): void {
     const text = partial?.trim();
     if (!text) return;
     this._bargeRecoveryText = text;
+    this._bargeRecoveryArmedAt = Date.now();
+    // #region agent log
+    fetch('http://127.0.0.1:7286/ingest/ab04c6e0-81df-464e-888b-caba19c2a968',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7332cf'},body:JSON.stringify({sessionId:'7332cf',hypothesisId:'A',location:'pipeline.ts:armBargeRecovery',message:'barge recovery armed',data:{callId:this.config.callId,armedText:text,vadOpen:this._vadSpeechStartAt!==0,msSinceVadStart:this._vadSpeechStartAt?Date.now()-this._vadSpeechStartAt:null,recoveryMs:BARGE_RECOVERY_MS},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    this.scheduleBargeRecoveryTick();
+  }
+
+  /**
+   * The backstop covers a MISSING speech_end (call 21450) — not a sentence in
+   * progress. Firing while Sarvam's VAD is still open truncates the caller
+   * mid-utterance and answers the fragment (call 21628: committed "No, no"
+   * 1.29s into a 4.28s segment, then the real final landed as a second turn).
+   * So each tick only commits once VAD has closed, bounded by a stuck-VAD
+   * ceiling, and refreshes the armed text so a forced commit uses the fullest
+   * transcript rather than the stale barge preview.
+   */
+  private scheduleBargeRecoveryTick(): void {
     if (this._bargeRecoveryTimer) clearTimeout(this._bargeRecoveryTimer);
     this._bargeRecoveryTimer = setTimeout(() => {
       this._bargeRecoveryTimer = null;
-      this.flushBargeRecovery("timer");
+      // #region agent log
+      fetch('http://127.0.0.1:7286/ingest/ab04c6e0-81df-464e-888b-caba19c2a968',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7332cf'},body:JSON.stringify({sessionId:'7332cf',hypothesisId:'A',location:'pipeline.ts:armBargeRecovery:timer',message:'RECOVERY TIMER FIRED — is caller still speaking?',data:{callId:this.config.callId,vadStillOpen:this._vadSpeechStartAt!==0,msSinceVadStart:this._vadSpeechStartAt?Date.now()-this._vadSpeechStartAt:null,armedText:this._bargeRecoveryText,livePartial:this.streamSTT?.getPendingTranscript?.()?.slice(0,120)??null,armedVsLiveDiffer:(this.streamSTT?.getPendingTranscript?.()?.trim()??'')!==(this._bargeRecoveryText??'')},timestamp:Date.now()})}).catch(()=>{});
+      this.logExec("STT", "system", {
+        status: "info",
+        turnNumber: this._activeTurnIndex,
+        metadata: {
+          event: "DBG Recovery Timer Fired",
+          hypothesis: "A",
+          vadStillOpen: this._vadSpeechStartAt !== 0,
+          msSinceVadStart: this._vadSpeechStartAt ? Date.now() - this._vadSpeechStartAt : null,
+          armedText: this._bargeRecoveryText,
+          livePartial: this.streamSTT?.getPendingTranscript?.()?.slice(0, 120) ?? null,
+        },
+      });
+      // #endregion
+      const waitedMs = Date.now() - (this._bargeRecoveryArmedAt || Date.now());
+      if (this._vadSpeechStartAt !== 0 && waitedMs < BARGE_RECOVERY_MAX_WAIT_MS) {
+        const live = this.streamSTT?.getPendingTranscript?.()?.trim();
+        if (live) this._bargeRecoveryText = live;
+        this.scheduleBargeRecoveryTick();
+        return;
+      }
+      this.flushBargeRecovery(this._vadSpeechStartAt !== 0 ? "vad_stuck" : "timer");
     }, BARGE_RECOVERY_MS);
   }
 
@@ -2463,6 +2516,9 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private flushBargeRecovery(reason: string): void {
     const text = this._bargeRecoveryText?.trim() ?? "";
+    // #region agent log
+    fetch('http://127.0.0.1:7286/ingest/ab04c6e0-81df-464e-888b-caba19c2a968',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7332cf'},body:JSON.stringify({sessionId:'7332cf',hypothesisId:'A+E',location:'pipeline.ts:flushBargeRecovery',message:'flushBargeRecovery entry',data:{callId:this.config.callId,reason,text,hasText:!!text,vadOpen:this._vadSpeechStartAt!==0,msSinceVadStart:this._vadSpeechStartAt?Date.now()-this._vadSpeechStartAt:null,isPlaying:this.isPlaying,isSendingTtsAudio:this.isSendingTtsAudio,isProcessing:this.isProcessing,stillArrivingGuard:text?this.isSameUtteranceStillArriving(text):null,willCommit:!!text&&!this.closed&&!this.isPlaying&&!this.isSendingTtsAudio&&!this.isProcessing},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!text || this.closed) return;
     if (this.isPlaying || this.isSendingTtsAudio) {
       this.clearBargeRecovery();
@@ -8977,7 +9033,26 @@ export class OrchestrationPipeline implements VoiceSession {
             );
           } else {
             const playCover = (): void => {
+              // #region agent log
+              fetch('http://127.0.0.1:7286/ingest/ab04c6e0-81df-464e-888b-caba19c2a968',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7332cf'},body:JSON.stringify({sessionId:'7332cf',hypothesisId:'D',location:'pipeline.ts:playCover',message:'cover filler about to play — is caller still speaking?',data:{callId:this.config.callId,vadOpen:this._vadSpeechStartAt!==0,msSinceVadStart:this._vadSpeechStartAt?Date.now()-this._vadSpeechStartAt:null,transcript:transcript?.slice(0,120)??null,fromBargeRecovery:this._lastTurnWasBargedIn,suppressed:firstSpeakableEnqueued||this.bargeInRequested||this.closed},timestamp:Date.now()})}).catch(()=>{});
+              this.logExec("TTS", "system", {
+                status: "info",
+                turnNumber: _currentTurnIndex,
+                metadata: {
+                  event: "DBG Cover At VAD",
+                  hypothesis: "D",
+                  vadOpen: this._vadSpeechStartAt !== 0,
+                  msSinceVadStart: this._vadSpeechStartAt ? Date.now() - this._vadSpeechStartAt : null,
+                  fromBargeRecovery: this._lastTurnWasBargedIn,
+                },
+              });
+              // #endregion
               if (firstSpeakableEnqueued || this.bargeInRequested || this.closed) return;
+              // Cover masks OUR latency; it must not talk over the caller.
+              // Call 21628: 5/5 covers landed inside an open VAD segment
+              // (1.0-2.8s in, up to 3.0s of speech still coming), and each one
+              // drew a fresh barge-in that cut the agent again.
+              if (this._vadSpeechStartAt !== 0) return;
               const phrase = pickBackchannelFiller(fillerLang, this.recentFillerPhrases, fillerOpts);
               if (!phrase) return;
               rememberFillerPhrase(this.recentFillerPhrases, phrase);
@@ -9587,6 +9662,25 @@ export class OrchestrationPipeline implements VoiceSession {
       );
     }
 
+    // #region agent log
+    {
+      const mem = /=== CALLER MEMORY[\s\S]*?={20,}/.exec(systemPromptForTurn)?.[0] ?? "";
+      const lastUser = [...historyForLlm].reverse().find((m) => m.role === "user")?.content ?? "";
+      fetch('http://127.0.0.1:7286/ingest/ab04c6e0-81df-464e-888b-caba19c2a968',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7332cf'},body:JSON.stringify({sessionId:'7332cf',hypothesisId:'C',location:'pipeline.ts:llmRequest',message:'memory vs live caller correction',data:{callId:this.config.callId,turn:_currentTurnIndex,lastUserTranscript:String(lastUser).slice(0,160),memoryBlockLen:mem.length,memoryHasCorrectionRule:/caller (says|corrects|contradicts)|live correction|caller overrides/i.test(systemPromptForTurn),memoryAssertsStandard:(/(eighth|8th|twelfth|12th)\s+standard/gi.exec(mem)||[null])[0],callerAssertsStandard:(/(eighth|8th|twelfth|12th)\s+standard/gi.exec(String(lastUser))||[null])[0]},timestamp:Date.now()})}).catch(()=>{});
+      this.logExec("LLM", "system", {
+        status: "info",
+        turnNumber: _currentTurnIndex,
+        metadata: {
+          event: "DBG Memory Vs Caller",
+          hypothesis: "C",
+          lastUserTranscript: String(lastUser).slice(0, 160),
+          memoryHasCorrectionRule: /caller (says|corrects|contradicts)|live correction|caller overrides/i.test(systemPromptForTurn),
+          memoryAssertsStandard: (/(eighth|8th|twelfth|12th)\s+standard/gi.exec(mem) || [null])[0],
+          callerAssertsStandard: (/(eighth|8th|twelfth|12th)\s+standard/gi.exec(String(lastUser)) || [null])[0],
+        },
+      });
+    }
+    // #endregion
     this.logExec("LLM", "request", {
       provider: this.agent.llmProvider,
       status: "info",

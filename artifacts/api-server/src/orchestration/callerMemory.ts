@@ -771,6 +771,17 @@ export function injectEnhancedMemory(
         "date/time given elsewhere in your instructions before saying them aloud (e.g. a meeting " +
         'stored as "tomorrow" may actually be today).',
     );
+    // Call 21628: memory said the child was in eighth standard (itself recorded
+    // as a "correction" from a prior call). The caller said twelfth four times
+    // and the agent kept re-asserting eighth, ending with "you're saying eighth
+    // or twelfth — which one should I update?" until the caller asked to be
+    // called back. Stored facts are stale by definition; the live caller is not.
+    lines.push(
+      "[LIVE CORRECTION WINS] If the caller says anything in THIS call that contradicts a fact " +
+        "above, the caller is right and the memory is out of date. Accept it immediately, use the " +
+        "new value for the rest of the call, and do NOT argue, repeat the old value back, or ask " +
+        "the caller to choose between the stored value and what they just told you.",
+    );
   }
 
   // ── Previous call summary (single line — most recent call only) ───────────
