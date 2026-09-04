@@ -53,6 +53,11 @@ describe("isSpeculativeHit", () => {
     expect(isSpeculativeHit("Hello.", "Hello")).toBe(true);
   });
 
+  it("matches comma / case-only STT variants (call 20686)", () => {
+    expect(isSpeculativeHit("Hello, sir.", "Hello Sir")).toBe(true);
+    expect(isSpeculativeHit("Hello, sir.", "hello sir")).toBe(true);
+  });
+
   it("discards when the final extends the truncated partial (hackathon)", () => {
     expect(
       isSpeculativeHit("I want to participate in the...", "I want to participate in the hackathon."),

@@ -13,7 +13,7 @@ import { resolveInboundGreetingTtsSpeed } from "./call-direction-rules.js";
 import { buildDatetimeInjection, buildTurnClockBlock } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
-import { buildAntiRepeatNudge, extractRecentAgentQuestions, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN, isHoldRequest } from "./conversationDiscipline.js";
+import { isHoldRequest } from "./conversationDiscipline.js";
 import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared, isCallerClosingUtterance } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
 import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
@@ -607,61 +607,10 @@ const LANG_DISPLAY_NAMES: Record<string, string> = {
   "si-LK": "Sinhala", "si": "Sinhala",
 };
 
-/**
- * For non-Latin-script languages, append an explicit directive telling the LLM
- * to write in the native Unicode script — NOT in romanized/transliterated form.
- * Weaker models (e.g. Qwen on Krutrim) default to Tanglish, Hinglish-script, etc.
- * when the language rule only says "Respond in Tamil/Hindi/…".
- */
-const LANG_SCRIPT_DIRECTIVE: Record<string, string> = {
-  "ta-IN": "CRITICAL: Write ALL Tamil words in Tamil Unicode script (e.g. வணக்கம், நன்றி, சரி). NEVER romanize Tamil into English/Latin letters — writing 'vanakkam', 'nandri', 'seri' instead of Tamil script is WRONG. " +
-    "COLLOQUIAL GRAMMAR — use everyday spoken Tamil verb forms, NOT formal/literary ones. Key contrasts: " +
-    "✓ வேணும் (not வேண்டும்) | ✓ இல்ல (not இல்லை) | ✓ ஆயிடுச்சு (not ஆகிவிட்டது) | ✓ சொல்றேன் (not சொல்கிறேன்) | ✓ வர்றேன் (not வருகிறேன்) | ✓ பண்றேன் (not செய்கிறேன்) | ✓ போயிடுது (not போகிறது) | ✓ பேசிட்டு இருக்கேன் (not பேசிக்கொண்டிருக்கிறேன்) | ✓ சொல்லுங்க or சொல்லுவீங்களா (not சொல்லுங்கள்). " +
-    "EXAMPLES of correct spoken Tamil: 'Sori, call cut ஆயிடுச்சு' | 'demo எப்போ வேணும்னு சொல்லுங்க' | 'நீங்க ready-ஆ இருக்கீங்களா?' | 'நான் confirm பண்றேன்' | 'OK-வா, நாளைக்கு பேசலாம்'. " +
-    "NEVER use: தொடரலாமா (→ use 'continue பண்ணலாமா' or 'பேசலாம்'), முடியுமான்னு (→ use 'வேணுமா?'), நிறுத்தியதோ (→ use 'நின்னோ' or 'விட்டோமோ'), தேன்றேன் (→ use 'தேடுறேன்'), செய்கின்றேன் (→ use 'பண்றேன்'), வருகின்றேன் (→ use 'வர்றேன்'). " +
-    "Keep 'call', 'demo', 'confirm', 'schedule', 'ok', 'ready' in English — they are everyday spoken words in Tamil. " +
-    "NUMBERS, TIME & DURATION in English: Tamil speakers say these in English naturally. ALWAYS say 'ten to fifteen minutes' (not '10 முதல் 15 நிமிஷத்துல'), 'three o'clock' (not 'மூன்று மணி'), 'tomorrow morning 9' (not 'நாளைக்கு காலை 9 மணி'), 'five minutes' (not 'ஐந்து நிமிஷம்'). Digits like '10', '15', '3' and time expressions must be spoken as English words embedded in Tamil sentences.",
-  "hi-IN": "CRITICAL: Write ALL Hindi words in Devanagari Unicode script (e.g. नमस्ते, धन्यवाद, ठीक है). NEVER romanize Hindi into English/Latin letters — writing 'namaste', 'shukriya' instead of Devanagari is WRONG.",
-  "te-IN": "CRITICAL: Write ALL Telugu words in Telugu Unicode script (e.g. నమస్కారం, ధన్యవాదాలు). NEVER romanize Telugu into English/Latin letters.",
-  "kn-IN": "CRITICAL: Write ALL Kannada words in Kannada Unicode script (e.g. ನಮಸ್ಕಾರ, ಧನ್ಯವಾದ). NEVER romanize Kannada into English/Latin letters.",
-  "ml-IN": "CRITICAL: Write ALL Malayalam words in Malayalam Unicode script (e.g. നമസ്കാരം, നന്ദി). NEVER romanize Malayalam into English/Latin letters.",
-  "mr-IN": "CRITICAL: Write ALL Marathi words in Devanagari Unicode script (e.g. नमस्कार, धन्यवाद). NEVER romanize Marathi into English/Latin letters.",
-  "bn-IN": "CRITICAL: Write ALL Bengali words in Bengali Unicode script (e.g. নমস্কার, ধন্যবাদ). NEVER romanize Bengali into English/Latin letters.",
-  "gu-IN": "CRITICAL: Write ALL Gujarati words in Gujarati Unicode script (e.g. નમસ્તે, આભાર). NEVER romanize Gujarati into English/Latin letters.",
-  "pa-IN": "CRITICAL: Write ALL Punjabi words in Gurmukhi Unicode script (e.g. ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਧੰਨਵਾਦ). NEVER romanize Punjabi into English/Latin letters.",
-  "or-IN": "CRITICAL: Write ALL Odia words in Odia Unicode script (e.g. ନମସ୍କାର, ଧନ୍ୟବାଦ). NEVER romanize Odia into English/Latin letters.",
-  "ur-IN": "CRITICAL: Write ALL Urdu words in Urdu/Nastaliq Unicode script (e.g. سلام, شکریہ). NEVER romanize Urdu into English/Latin letters.",
-  "si-LK": "CRITICAL: Write ALL Sinhala words in Sinhala Unicode script (e.g. ආයුබෝවන්, ස්තූතියි, හරි). NEVER romanize Sinhala into English/Latin letters — writing 'ayubowan', 'stuthi', 'hari' instead of Sinhala script is WRONG.",
-  "si":    "CRITICAL: Write ALL Sinhala words in Sinhala Unicode script (e.g. ආයුබෝවන්, ස්තූතියි, හරි). NEVER romanize Sinhala into English/Latin letters — writing 'ayubowan', 'stuthi', 'hari' instead of Sinhala script is WRONG.",
-};
-
 const GREETING_ECHO_HOLD_CAP_MS = 0;  // Bolna uses welcome_played, not a timed echo hold.
                                           // caller can barge in within ~3s of the greeting
                                           // start even if the estimated greeting is long —
                                           // never lock the caller out of interrupting.
-
-/**
- * One-shot note marking the opening as already spoken. Appended to the volatile
- * per-turn tail once ANY assistant opener exists in conversation history, so the
- * LLM does not re-deliver the intro the greeting path already spoke.
- *
- * Applies to ALL agents (not only returning-caller / resume prompts): wizard and
- * vibe templates put "Greet the caller / Always introduce yourself" in CALL FLOW,
- * and without this note the first real reply re-greets after greet() already did.
- * Deliberately preserves the persistent rules (NAME PRIORITY, DO NOT RE-ASK).
- */
-const OPENING_ALREADY_DELIVERED_NOTE =
-  "[OPENING ALREADY DELIVERED] The opening line of this call has ALREADY been spoken " +
-  "(it is the first assistant message in the conversation). This OVERRIDES any GREETING / " +
-  "CALL FLOW step 1 / \"introduce yourself\" / \"greet the caller\" / RESUME / LAST CALL DROPPED / " +
-  "\"acknowledge the interruption\" instruction above. Do NOT greet again, do NOT re-introduce " +
-  "yourself or your company, do NOT restart the scripted pitch from the top, do NOT " +
-  "re-state that you remember them or summarize the previous call unprompted, and do NOT apologize for or " +
-  "mention a dropped/cut/lost call. Forbidden unless the caller just said it RIGHT NOW: கால் கட், कॉल कट, " +
-  "\"call cut\", \"call dropped\", \"got cut off\", \"ஆயிடுச்சு\" about the call. Simply respond to the " +
-  "caller's latest message and move the conversation forward. " +
-  "The NAME PRIORITY rule and the DO NOT RE-ASK KNOWN INFORMATION rule above remain in force for the " +
-  "entire call — keep using known details instead of re-asking, and switch names if the caller states their own.";
 
 /** Soft mid-call handoff — new voice on the same phone; do not hang up. */
 const SPEAKER_HANDOFF_SUPPRESS_NOTE =
@@ -5188,102 +5137,9 @@ export class OrchestrationPipeline implements VoiceSession {
    * share ONE source of truth — the cached prefix must match the turn prefix
    * byte-for-byte or the Gemini CachedContent is not reused.
    */
+  /** Language / filler essays live in the Talk prompt + [OPENING LANGUAGE], not here. */
   private buildLangGuard(): string {
-    let langGuard = "";
-    if (this.currentLang) {
-      const langName = LANG_DISPLAY_NAMES[this.currentLang] ?? this.currentLang;
-      if (this.agent.languageAutoDetect) {
-        if (this.requestedLangLatch === "en-IN") {
-          // English gets a stronger OVERRIDE guard because many system prompts instruct
-          // the agent to speak Hinglish/Hindi by default. When the caller explicitly
-          // switches to English we must tell the LLM to supersede that instruction.
-          // Only an EXPLICIT latched request gets this override — a transcript that
-          // merely happens to be in Latin script (script-detected English, no latch)
-          // must NOT claim "the caller has requested English"; it falls through to
-          // the softer follow-the-caller rule below (call 1881: "Speak in Tamil."
-          // in Latin script falsely triggered this and flipped the agent to English).
-          langGuard =
-            `[LANGUAGE RULE — OVERRIDE] The caller is now speaking English and has requested English. ` +
-            `Respond in clear, plain English ONLY for this entire response. ` +
-            `IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hinglish, Hindi, ` +
-            `or any other language — the caller has explicitly asked for English. ` +
-            `Do not mix Hindi or regional words into your reply. ` +
-            `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
-            `EXACTLY as written in your instructions; never translate or transliterate them.`;
-        } else if (this.requestedLangLatch) {
-          // A latched explicit NON-English request (e.g. "Speak in Tamil") gets the
-          // same strength of override so it supersedes system prompts that instruct
-          // Hindi/Hinglish — mirroring the English override above.
-          const reqName = LANG_DISPLAY_NAMES[this.requestedLangLatch] ?? this.requestedLangLatch;
-          langGuard =
-            `LANGUAGE OVERRIDE: The caller has explicitly asked you to speak ${reqName}. ` +
-            `Respond ONLY in ${reqName} for this entire response, and keep responding in ${reqName} ` +
-            `unless the caller explicitly asks for another language. ` +
-            `IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, ` +
-            `English, or any other language — the caller has explicitly asked for ${reqName}.`;
-        } else {
-          langGuard =
-            `LANGUAGE DIRECTIVE: The caller is currently speaking in ${langName}. ` +
-            `Respond in ${langName}. If the caller switches to a different language (Tamil, Hindi, English, etc.), ` +
-            `immediately switch your response to match their new language. ` +
-            `If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. ` +
-            `IMPORTANT — borrowed English words and fillers from the caller ("okay", "ok", "thank you", "yes", "no", "right", "fine") ` +
-            `are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. ` +
-            `Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English.`;
-        }
-      } else if (this.requestedLangLatch === "en-IN" || (this.agent.autoSwitchToEnglish && this.currentLang === "en-IN")) {
-        // Strict single-language mode, but the caller explicitly asked for English and
-        // the operator enabled auto-switch-to-English. Override the ABSOLUTE RULE for
-        // this reply so the agent actually answers in English instead of staying locked
-        // to its base language.
-        langGuard =
-          `LANGUAGE OVERRIDE: The caller has explicitly requested English. ` +
-          `Respond in clear, plain English ONLY for this entire response. ` +
-          `IMPORTANT: Ignore any STRICT/ABSOLUTE LANGUAGE RULE in your system prompt that tells you to speak ` +
-          `Tamil, Hindi, Hinglish, or any other language — the caller has asked for English. ` +
-          `Do not mix other languages into your reply. ` +
-          `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
-          `EXACTLY as written in your instructions; never translate or transliterate them.`;
-      } else if (this.requestedLangLatch && this.requestedLangLatch !== "en-IN") {
-        // Strict mode, but caller explicitly requested a different Indic language (e.g. Tamil → Telugu).
-        const requestedName = LANG_DISPLAY_NAMES[this.requestedLangLatch] ?? this.requestedLangLatch;
-        langGuard =
-          `LANGUAGE OVERRIDE: The caller has explicitly requested ${requestedName}. ` +
-          `Respond in ${requestedName} ONLY for this entire response. ` +
-          `IMPORTANT: Ignore any STRICT/ABSOLUTE LANGUAGE RULE in your system prompt that tells you to speak ` +
-          `a different language — the caller has asked for ${requestedName}.`;
-      } else {
-        langGuard =
-          `LANGUAGE ABSOLUTE RULE: You MUST respond ONLY in ${langName}. ` +
-          `This applies to EVERY reply without exception — including when you are confused, ` +
-          `do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. ` +
-          `Never switch to English or any other language under any circumstances.`;
-      }
-    }
-
-    // Append Unicode script directive for non-Latin languages so weaker models
-    // write actual script characters instead of romanizing (Tanglish, Hinglish-script, etc.).
-    if (langGuard) {
-      const effectiveLang = (this.requestedLangLatch && this.requestedLangLatch !== "en-IN" && this.requestedLangLatch !== "en-US")
-        ? this.requestedLangLatch
-        : (this.currentLang ?? "");
-      const scriptNote = LANG_SCRIPT_DIRECTIVE[effectiveLang];
-      if (scriptNote) langGuard += " " + scriptNote;
-
-      // Constrain LLM-generated acknowledgment fillers — models otherwise larden
-      // every reply with a translated "got it" / "I see" / "oh I see" style opener,
-      // which sounds scripted and repetitive over a whole call (Tamil especially:
-      // only "seri" sounds natural, and even that should be used sparingly).
-      // Task 5b: exactly two permitted tokens, language-matched; all others forbidden.
-      const allowedFiller = effectiveLang.startsWith("ta") ? `"சரி" (seri)` : effectiveLang.startsWith("si") ? `"හරි" (hari)` : `"Okay"`;
-      langGuard +=
-        ` ACKNOWLEDGMENT FILLERS: The ONLY permitted acknowledgment/filler token is ${allowedFiller}. ` +
-        `Do NOT use "Sure", "Got it", "I see", "Oh I see", "Mm-hmm", "Right", "Understood", "Great", ` +
-        `or ANY other acknowledgment phrase — in any language. ` +
-        `Most replies must have NO filler at all. Never open two consecutive replies with a filler.`;
-    }
-
-    return langGuard;
+    return "";
   }
 
   /**
@@ -8543,7 +8399,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // One-step output guard: suppresses any second question (and everything
     // after it) so a turn that runs through multiple flow steps is truncated at
     // the first natural yield point. Mirrored into stored history below.
-    const stepGuard = makeFlowStepGuard({ maxSentences: VOICE_MAX_SENTENCES_PER_TURN });
+    const stepGuard = { push: (sentence: string) => sentence, truncated: () => false };
     let allEnqueued  = false;
     // Leading-ack suppression: when a dead-air or backchannel filler was already
     // spoken this turn, the first LLM sentence is checked and dropped if it is a
@@ -9291,46 +9147,6 @@ export class OrchestrationPipeline implements VoiceSession {
       }
     }
 
-    // Per-turn language reminder: append a compact reminder to the last user turn.
-    // This is the strongest enforcement point — it sits immediately before the LLM
-    // generates, so it can't be pushed out of attention by a long system prompt.
-    if (langGuard && historyForLlm.length > 0) {
-      const lastTurn = historyForLlm[historyForLlm.length - 1]!;
-      if (lastTurn.role === "user") {
-        const langName = LANG_DISPLAY_NAMES[this.currentLang!] ?? this.currentLang!;
-        const reminder = this.agent.languageAutoDetect
-          ? `[Language: caller is speaking ${langName} — respond in ${langName}; switch immediately if they change language]`
-          : `[Reminder: reply in ${langName} only]`;
-        historyForLlm = [
-          ...historyForLlm.slice(0, -1),
-          { ...lastTurn, content: `${lastTurn.content}\n\n${reminder}` },
-        ];
-      }
-    }
-
-    // Per-turn anti-repeat nudge (call 548), intent-scoped (call 1915): quote the
-    // agent's previous line onto the last user turn and forbid a verbatim repeat.
-    // The directive is scoped to the caller's actual intent — hold-requests get a
-    // "confirm you're waiting, do NOT advance" directive, questions get an
-    // "answer it first" directive, and only genuine bare acknowledgements get the
-    // original "advance to the next point" push (which used to steamroll callers
-    // who asked to wait or asked a question). Escalates after a detected repeat.
-    if (this.lastAssistantSpokenRaw && historyForLlm.length > 0) {
-      const lastTurn = historyForLlm[historyForLlm.length - 1]!;
-      if (lastTurn.role === "user") {
-        const antiRepeat = buildAntiRepeatNudge({
-          lastUserText: transcript,
-          prevLine: this.lastAssistantSpokenRaw.slice(0, 180),
-          escalated: this.consecutiveRepeats >= 1,
-          alreadyAsked: extractRecentAgentQuestions(this.conversationHistory.messages),
-        });
-        historyForLlm = [
-          ...historyForLlm.slice(0, -1),
-          { ...lastTurn, content: `${lastTurn.content}\n\n${antiRepeat}` },
-        ];
-      }
-    }
-
     // Interruption hint: if the previous agent turn was cut short by barge-in,
     // tell the LLM exactly what the caller already heard so it continues (or asks
     // one short question) instead of restarting consent / greeting / pitch.
@@ -9427,11 +9243,6 @@ export class OrchestrationPipeline implements VoiceSession {
     // It is appended BEFORE the per-minute [CURRENT DATE & TIME] block and its
     // text is constant, so once it first appears the prefix stays stable for
     // OpenAI-style prompt caching (at most one cache-miss turn when it appears).
-    const openerAlreadySpoken = this.conversationHistory.messages.some((t) => t.role === "assistant");
-    if (openerAlreadySpoken && !this.pendingScreeningPickupNote) {
-      systemPromptForTurn += `\n\n${OPENING_ALREADY_DELIVERED_NOTE}`;
-    }
-
     // Voice Memory — handoff / cross-number notes live in the volatile per-turn
     // tail so Gemini / OpenAI cached prefixes stay byte-stable.
     if (this.voiceHandoffActive) {
@@ -10193,7 +10004,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // Computed BEFORE the final flush so the spoken tail and the stored history
     // are derived from the exact same fully-cleaned text.
     const cleanResponse = stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
-    const baseSpokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
+    const baseSpokenResponse = cleanResponse;
 
     // Silent-turn recovery: the LLM produced no speakable text and no tool call.
     // Call 8745: empty content (no tokens). Call 12705: tokens streamed but they
@@ -10882,7 +10693,7 @@ export class OrchestrationPipeline implements VoiceSession {
     let pendingText = "";
     // One-step output guard (same as the main turn path) — truncate at the first
     // natural yield point if the post-tool reply runs through multiple steps.
-    const stepGuard = makeFlowStepGuard({ maxSentences: VOICE_MAX_SENTENCES_PER_TURN });
+    const stepGuard = { push: (sentence: string) => sentence, truncated: () => false };
     let allEnqueued = false;
 
     // Keep tools attached on follow-up turns so the agent can chain calls in a
@@ -11359,7 +11170,7 @@ export class OrchestrationPipeline implements VoiceSession {
     }
 
     if (cleanResponse) {
-      const baseSpokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
+      const baseSpokenResponse = cleanResponse;
       const heardOnly = this.getHeardAgentText();
       const spokenResponse = resolveSpokenForHistory({
         barged: this.bargeInRequested,

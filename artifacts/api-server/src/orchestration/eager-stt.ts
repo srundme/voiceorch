@@ -19,13 +19,13 @@ import { envInt } from "./utils.js";
 /** Stable-partial timer before launching eager LLM (Path A Bolna-feel: 180ms). */
 export const EAGER_PARTIAL_STABLE_MS = envInt("EAGER_PARTIAL_STABLE_MS", 60, 30);
 
-/** Strip case, extra space, and trailing punctuation so "Hello." matches "Hello". */
+/** Strip case, extra space, and punctuation so "Hello, sir." matches "Hello Sir". */
 export function normalizeSpeculativeInput(text: string): string {
   return text
     .trim()
     .toLowerCase()
+    .replace(/[.?!…,،।'"‘’“”]/gu, " ")
     .replace(/\s+/g, " ")
-    .replace(/[.?!…,।]+$/u, "")
     .trim();
 }
 

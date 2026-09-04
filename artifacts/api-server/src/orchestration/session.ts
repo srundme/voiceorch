@@ -365,60 +365,7 @@ export async function createSession(params: {
   const amdLeadInSeconds =
     typeof rawAmdLeadIn === "number" && Number.isFinite(rawAmdLeadIn) && rawAmdLeadIn > 0 ? rawAmdLeadIn : undefined;
 
-  // Build effective system prompt with date/time context + strict language enforcement
-  const LANG_NAMES: Record<string, string> = {
-    "en-US": "English", "en-GB": "English", "en-IN": "English", "en": "English",
-    "hi": "Hindi", "hi-IN": "Hindi", "ta": "Tamil", "ta-IN": "Tamil",
-    "te": "Telugu", "te-IN": "Telugu", "kn": "Kannada", "kn-IN": "Kannada",
-    "mr": "Marathi", "mr-IN": "Marathi", "gu": "Gujarati", "gu-IN": "Gujarati",
-    "bn": "Bengali", "bn-IN": "Bengali", "bn-BD": "Bengali", "ml": "Malayalam", "ml-IN": "Malayalam",
-    "pa": "Punjabi", "pa-IN": "Punjabi", "ur": "Urdu", "ur-IN": "Urdu",
-    "si": "Sinhala", "si-LK": "Sinhala",
-    "es": "Spanish", "es-MX": "Spanish (Mexico)", "es-US": "Spanish", "fr": "French", "fr-FR": "French", "de": "German", "de-DE": "German",
-    "it": "Italian", "it-IT": "Italian", "pt-BR": "Portuguese (Brazil)", "ja": "Japanese", "ja-JP": "Japanese",
-    "ko": "Korean", "ko-KR": "Korean", "zh": "Mandarin Chinese", "ar": "Arabic",
-    "id": "Indonesian", "id-ID": "Indonesian", "th": "Thai", "th-TH": "Thai",
-    "vi": "Vietnamese", "vi-VN": "Vietnamese", "tr": "Turkish", "tr-TR": "Turkish",
-    "ru": "Russian", "ru-RU": "Russian", "nl": "Dutch", "nl-NL": "Dutch",
-    "pl": "Polish", "pl-PL": "Polish", "uk": "Ukrainian", "uk-UA": "Ukrainian",
-    "ro": "Romanian", "ro-RO": "Romanian",
-  };
-  // Script directive for non-Latin languages — tells weaker models to write in
-  // native Unicode script, not romanized form (Tanglish, Hinglish-script, etc.).
-  const LANG_SCRIPT_DIRECTIVE: Record<string, string> = {
-    "ta-IN": "CRITICAL: Write ALL Tamil words in Tamil Unicode script (e.g. வணக்கம், நன்றி, சரி). NEVER romanize Tamil into English/Latin letters. " +
-      "COLLOQUIAL GRAMMAR — use everyday spoken Tamil verb forms, NOT formal/literary ones. Key contrasts: " +
-      "✓ வேணும் (not வேண்டும்) | ✓ இல்ல (not இல்லை) | ✓ ஆயிடுச்சு (not ஆகிவிட்டது) | ✓ சொல்றேன் (not சொல்கிறேன்) | ✓ வர்றேன் (not வருகிறேன்) | ✓ பண்றேன் (not செய்கிறேன்) | ✓ போயிடுது (not போகிறது) | ✓ பேசிட்டு இருக்கேன் (not பேசிக்கொண்டிருக்கிறேன்) | ✓ சொல்லுங்க or சொல்லுவீங்களா (not சொல்லுங்கள்). " +
-      "EXAMPLES of correct spoken Tamil: 'Sori, call cut ஆயிடுச்சு' | 'demo எப்போ வேணும்னு சொல்லுங்க' | 'நீங்க ready-ஆ இருக்கீங்களா?' | 'நான் confirm பண்றேன்' | 'OK-வா, நாளைக்கு பேசலாம்'. " +
-      "NEVER use: தொடரலாமா (→ use 'continue பண்ணலாமா' or 'பேசலாம்'), முடியுமான்னு (→ use 'வேணுமா?'), நிறுத்தியதோ (→ use 'விட்டோமோ'), தேன்றேன் (→ use 'தேடுறேன்'), செய்கின்றேன் (→ use 'பண்றேன்'), வருகின்றேன் (→ use 'வர்றேன்'). " +
-      "Keep 'call', 'demo', 'confirm', 'schedule', 'ok', 'ready' in English — they are everyday spoken words in Tamil. " +
-      "NUMBERS, TIME & DURATION in English: Tamil speakers say these in English naturally. ALWAYS say 'ten to fifteen minutes' (not '10 முதல் 15 நிமிஷத்துல'), 'three o'clock' (not 'மூன்று மணி'), 'tomorrow morning 9' (not 'நாளைக்கு காலை 9 மணி'), 'five minutes' (not 'ஐந்து நிமிஷம்'). Digits like '10', '15', '3' and time expressions must be spoken as English words embedded in Tamil sentences. " +
-      "MONEY & AMOUNTS: NEVER use the ₹ symbol — TTS reads it as formal 'ரூபாய்' which sounds unnatural. Say amounts as English words: 'ten lakhs' (not '₹10 lakhs' or 'பத்து லட்சம்'), 'five lakhs' (not '₹5 lakhs' or 'ஐந்து லட்சம்'), 'one crore' (not '₹1 crore' or 'ஒரு கோடி'). Colloquial spoken Tamil uses English for amounts naturally.",
-    "ta":    "CRITICAL: Write ALL Tamil words in Tamil Unicode script (e.g. வணக்கம், நன்றி, சரி). NEVER romanize Tamil into English/Latin letters. " +
-      "COLLOQUIAL GRAMMAR — use everyday spoken Tamil verb forms, NOT formal/literary ones. Key contrasts: " +
-      "✓ வேணும் (not வேண்டும்) | ✓ இல்ல (not இல்லை) | ✓ ஆயிடுச்சு (not ஆகிவிட்டது) | ✓ சொல்றேன் (not சொல்கிறேன்) | ✓ வர்றேன் (not வருகிறேன்) | ✓ பண்றேன் (not செய்கிறேன்) | ✓ போயிடுது (not போகிறது) | ✓ பேசிட்டு இருக்கேன் (not பேசிக்கொண்டிருக்கிறேன்) | ✓ சொல்லுங்க or சொல்லுவீங்களா (not சொல்லுங்கள்). " +
-      "EXAMPLES of correct spoken Tamil: 'Sori, call cut ஆயிடுச்சு' | 'demo எப்போ வேணும்னு சொல்லுங்க' | 'நீங்க ready-ஆ இருக்கீங்களா?' | 'நான் confirm பண்றேன்' | 'OK-வா, நாளைக்கு பேசலாம்'. " +
-      "NEVER use: தொடரலாமா (→ use 'continue பண்ணலாமா' or 'பேசலாம்'), முடியுமான்னு (→ use 'வேணுமா?'), நிறுத்தியதோ (→ use 'விட்டோமோ'), தேன்றேன் (→ use 'தேடுறேன்'), செய்கின்றேன் (→ use 'பண்றேன்'), வருகின்றேன் (→ use 'வர்றேன்'). " +
-      "Keep 'call', 'demo', 'confirm', 'schedule', 'ok', 'ready' in English — they are everyday spoken words in Tamil. " +
-      "NUMBERS, TIME & DURATION in English: Tamil speakers say these in English naturally. ALWAYS say 'ten to fifteen minutes' (not '10 முதல் 15 நிமிஷத்துல'), 'three o'clock' (not 'மூன்று மணி'), 'tomorrow morning 9' (not 'நாளைக்கு காலை 9 மணி'), 'five minutes' (not 'ஐந்து நிமிஷம்'). Digits like '10', '15', '3' and time expressions must be spoken as English words embedded in Tamil sentences. " +
-      "MONEY & AMOUNTS: NEVER use the ₹ symbol — TTS reads it as formal 'ரூபாய்' which sounds unnatural. Say amounts as English words: 'ten lakhs' (not '₹10 lakhs' or 'பத்து லட்சம்'), 'five lakhs' (not '₹5 lakhs' or 'ஐந்து லட்சம்'), 'one crore' (not '₹1 crore' or 'ஒரு கோடி'). Colloquial spoken Tamil uses English for amounts naturally.",
-    "hi-IN": "CRITICAL: Write ALL Hindi words in Devanagari Unicode script (e.g. नमस्ते, धन्यवाद, ठीक है). NEVER romanize Hindi into English/Latin letters.",
-    "hi":    "CRITICAL: Write ALL Hindi words in Devanagari Unicode script (e.g. नमस्ते, धन्यवाद, ठीक है). NEVER romanize Hindi into English/Latin letters.",
-    "te-IN": "CRITICAL: Write ALL Telugu words in Telugu Unicode script (e.g. నమస్కారం, ధన్యవాదాలు). NEVER romanize Telugu into English/Latin letters.",
-    "te":    "CRITICAL: Write ALL Telugu words in Telugu Unicode script (e.g. నమస్కారం, ధన్యవాదాలు). NEVER romanize Telugu into English/Latin letters.",
-    "kn-IN": "CRITICAL: Write ALL Kannada words in Kannada Unicode script (e.g. ನಮಸ್ಕಾರ, ಧನ್ಯವಾದ). NEVER romanize Kannada into English/Latin letters.",
-    "kn":    "CRITICAL: Write ALL Kannada words in Kannada Unicode script (e.g. ನಮಸ್ಕಾರ, ಧನ್ಯವಾದ). NEVER romanize Kannada into English/Latin letters.",
-    "ml-IN": "CRITICAL: Write ALL Malayalam words in Malayalam Unicode script (e.g. നമസ്കാരം, നന്ദി). NEVER romanize Malayalam into English/Latin letters.",
-    "ml":    "CRITICAL: Write ALL Malayalam words in Malayalam Unicode script (e.g. നമസ്കാരം, നന്ദി). NEVER romanize Malayalam into English/Latin letters.",
-    "mr-IN": "CRITICAL: Write ALL Marathi words in Devanagari Unicode script (e.g. नमस्कार, धन्यवाद). NEVER romanize Marathi into English/Latin letters.",
-    "mr":    "CRITICAL: Write ALL Marathi words in Devanagari Unicode script (e.g. नमस्कार, धन्यवाद). NEVER romanize Marathi into English/Latin letters.",
-    "bn-IN": "CRITICAL: Write ALL Bengali words in Bengali Unicode script (e.g. নমস্কার, ধন্যবাদ). NEVER romanize Bengali into English/Latin letters.",
-    "bn":    "CRITICAL: Write ALL Bengali words in Bengali Unicode script (e.g. নমস্কার, ধন্যবাদ). NEVER romanize Bengali into English/Latin letters.",
-    "gu-IN": "CRITICAL: Write ALL Gujarati words in Gujarati Unicode script (e.g. નમસ્તે, આભાર). NEVER romanize Gujarati into English/Latin letters.",
-    "gu":    "CRITICAL: Write ALL Gujarati words in Gujarati Unicode script (e.g. નમસ્તે, આભાર). NEVER romanize Gujarati into English/Latin letters.",
-    "si-LK": "CRITICAL: Write ALL Sinhala words in Sinhala Unicode script (e.g. ආයුබෝවන්, ස්තූතියි, හරි). NEVER romanize Sinhala into English/Latin letters — writing 'ayubowan', 'stuthi', 'hari' instead of Sinhala script is WRONG.",
-    "si":    "CRITICAL: Write ALL Sinhala words in Sinhala Unicode script (e.g. ආයුබෝවන්, ස්තූතියි, හරි). NEVER romanize Sinhala into English/Latin letters — writing 'ayubowan', 'stuthi', 'hari' instead of Sinhala script is WRONG.",
-  };
+  // Talk / prompt owns language and TTS style. Platform only adds clock + memory later.
   const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
   const nowForCtx = new Date();
   const dateCtxParts = nowForCtx.toLocaleDateString("en-IN", {
@@ -488,54 +435,6 @@ export async function createSession(params: {
     }
     return L || A || null;
   })();
-
-  {
-    const agentLang = effectiveAgentLang;
-    if (agentLang) {
-      const langName = LANG_NAMES[agentLang] ?? agentLang;
-      const scriptNote = LANG_SCRIPT_DIRECTIVE[agentLang] ?? "";
-      if (isMultilingual) {
-        // Auto-detect mode: follow the caller's language; switch seamlessly when they do.
-        effectiveSystemPrompt += `\n\n[LANGUAGE] Primary language is ${langName}. Follow the caller if they switch.${scriptNote ? " " + scriptNote : ""}`;
-      } else {
-        // Strict mode: single language, no switching.
-        effectiveSystemPrompt += `\n\n[LANGUAGE] Respond in ${langName}.${scriptNote ? " " + scriptNote : ""}`;
-      }
-    }
-  }
-
-  // Auto-switch to English: when enabled, allow the agent to move to English mid-call on request.
-  if (agentCfg["autoSwitchToEnglish"] === true) {
-    effectiveSystemPrompt += `\n\nIf the caller asks you to speak in English, switch immediately and continue in English.`;
-  }
-
-  // TTS output formatting — provider-aware.
-  // Cartesia Sonic understands SSML-like tags and nonverbalisms; other TTS engines
-  // speak them aloud literally, so we forbid them for every non-Cartesia provider.
-  const isCartesiaTts = agent.ttsProvider?.toLowerCase() === "cartesia";
-  if (isCartesiaTts) {
-    effectiveSystemPrompt += `\n\n[TTS OUTPUT RULES — MANDATORY] Your responses are spoken aloud by Cartesia Sonic TTS. Follow these rules strictly:
-- Write plain prose in full sentences. End every response with . ? or !
-- Send complete phrases. Never reply with a bare number, code, or fragment — keep it inside a sentence.
-- Never use abbreviated place names with periods. Write "T Nagar" not "T. Nagar", "RK Salai" not "R.K. Salai", "MG Road" not "M.G. Road".
-- Use normal capitalization. Standard acronyms (USA, NASA, ATM) stay as they are; never put an ordinary word in ALL-CAPS for emphasis — it will be read out letter by letter.
-- Leave numbers, currency, percentages, dates, times, phone numbers, addresses and emails in their conventional written form (1,234,567 · $19.99 · 12% · 04/20/2026 · 7:00 PM · (415) 555-1212 · 123 Main St · user@example.com). The engine speaks them naturally — do not spell them out yourself.
-- Never use markdown: no asterisks, hashes, bullet points, numbered lists, or underscores.
-- Write hesitation sounds in standard form set off by commas ("uh", "um", "hmm"), sparingly. Never stretch them ("Sooooo", "ummmm").
-- The ONLY markup allowed is the four delivery signals listed below. Every other XML or SSML tag is spoken aloud literally — never use <prosody>, <say-as>, <phoneme>, or any tag not listed here.
-CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
-- EMOTION: Optionally place <emotion value="VALUE"/> at the very start of a sentence — never mid-sentence, never mid-word, and never more than once per sentence. Supported values: enthusiastic (genuinely good news), sympathetic (empathy for a problem), calm (reset to neutral after an emotional moment), curious (when gathering information), content (successful resolution), sad (delivering bad news). Example: "<emotion value="sympathetic"/> I completely understand that, and I'm sorry to hear that."
-- LAUGHTER: Insert [laughter] at a natural moment where a brief, warm laugh fits — do not force it. Example: "That's actually a great question! [laughter] Let me check that for you."
-- SPELL: Wrap confirmation codes, reference IDs, or anything that must be read character by character in <spell> tags, inside a full sentence. Example: "Your booking ID is <spell>AB12CD</spell>." Without a spell tag, separate the characters with spaces (A B C 1 2 3) or commas for a slower read (A, B, C, 1, 2, 3) — never with full stops.
-- BREAK: Use <break time="500ms"/> for a deliberate pause before an important point. Do not chain multiple break tags in a row, and do not chain a break tag with a spell tag. Ordinary commas and full stops already give natural pauses.`;
-  } else {
-    effectiveSystemPrompt += `\n\n[TTS OUTPUT RULES — MANDATORY] Your responses are spoken aloud by a TTS engine. Follow these rules strictly:
-- Never use abbreviated place names with periods. Write "T Nagar" not "T. Nagar", "RK Salai" not "R.K. Salai", "MG Road" not "M.G. Road".
-- Never use ALL-CAPS words or acronyms (AMD, STT, LLM etc.) — write them in lowercase or spell them out naturally.
-- Never use markdown: no asterisks, hashes, bullet points, numbered lists, or underscores.
-- NEVER use XML or SSML markup tags of any kind. Do NOT write <emotion>, </emotion>, <break>, <prosody>, or any similar tags — the TTS engine will speak them aloud literally as "less-than emotion greater-than".
-- Use only plain conversational sentences suitable for speech.`;
-  }
 
   // P1-K: Inject regulatory compliance disclosures into the system prompt
   const complianceCfg = agentCfg["compliance"] as { irdai?: boolean; dpdp?: boolean; trai?: boolean } | undefined;
