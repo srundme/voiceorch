@@ -2982,6 +2982,8 @@ export class OrchestrationPipeline implements VoiceSession {
       | "end_call_in_progress"
       | "fragment_coalesce_hold"
       | "backchannel_during_playback"
+      | "false_interruption"
+      | "queued_duplicate_user_turn"
       | "agent_still_speaking"
       | "inbound_greeting_hold"
       | "inbound_greeting_overlap"
@@ -2998,6 +3000,8 @@ export class OrchestrationPipeline implements VoiceSession {
       end_call_in_progress: "hangup already in progress",
       fragment_coalesce_hold: "short fragment held briefly for coalesce (not a drop)",
       backchannel_during_playback: "held ack fragment dropped — agent speaking at coalesce-timer fire (true backchannel)",
+      false_interruption: "Bolna is_false_interruption — short talk-over while TTS is playing is chatter, not a later turn",
+      queued_duplicate_user_turn: "Bolna is_duplicate_user — queued STT final duplicates the user turn we already answered",
       agent_still_speaking: "final arrived during greeting/system playback and did not barge-in",
       inbound_greeting_hold: "inbound greeting still playing — wait for caller after Welcome",
       inbound_greeting_overlap: "STT captured during inbound greeting — wait for a new caller turn",
@@ -4240,9 +4244,40 @@ export class OrchestrationPipeline implements VoiceSession {
     this.clearBargeRecovery();
 
     if (this.isProcessing) {
-      // Never start a second processTurn. Barge already stopped playback;
-      // playPromise ends and this final drains next. A concurrent turn would
-      // either stay muted (flag still set) or double-speak (call 21426).
+      // Bolna `_listen_transcriber`: never start a second concurrent turn
+      // (their kickoff_llm_generation cancels the in-flight LLM; we cannot —
+      // that double-spoke on call 21426). Two halves of the same gate:
+      //   is_false_interruption → drop (do not queue for after playback)
+      //   should_trigger_interruption → teardown now, then drain in finally
+      const playing = this.isPlaying || this.isSendingTtsAudio;
+      const welcomePlayed = !(this.greetingFirstClipActive || this.systemPlaybackActive);
+      if (
+        this.interruptionMgr.isFalseInterruption(
+          transcript.trim().split(/\s+/).filter(Boolean).length,
+          transcript,
+          playing,
+          welcomePlayed,
+        )
+      ) {
+        this.logDiscardedTranscript(transcript, "false_interruption");
+        logger.info(
+          { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+          "Ignoring transcript — false interruption while agent is speaking (Bolna)",
+        );
+        return;
+      }
+      if (
+        this.bargeInEnabled
+        && playing
+        && !this.bargeInRequested
+        && this.shouldInterruptFromCallerTranscript(transcript)
+      ) {
+        this.triggerBargeIn("queued_final", transcript, { speculative: true });
+        logger.info(
+          { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+          "Barge-in from queued final — current turn must yield (Bolna cleanup_downstream)",
+        );
+      }
       this.pendingTranscriptQueue.push({ text: transcript, emittedAt: sttEmittedAt, closeReason });
       return;
     }
@@ -4298,7 +4333,20 @@ export class OrchestrationPipeline implements VoiceSession {
     const queued = this.pendingTranscriptQueue;
     if (queued.length === 0) return null;
     this.pendingTranscriptQueue = [];
-    const coalesced = coalescePendingTranscripts(queued);
+    const lastUserTurn = this.lastUserTurnText();
+    const kept = queued.filter((entry) => {
+      if (lastUserTurn && isNearDuplicateUtterance(entry.text, lastUserTurn)) {
+        this.logDiscardedTranscript(entry.text, "queued_duplicate_user_turn");
+        logger.info(
+          { callId: this.config.callId, transcript: entry.text.slice(0, 80) },
+          "Dropped queued STT final — duplicate of the user turn already answered (Bolna is_duplicate_user)",
+        );
+        return false;
+      }
+      return true;
+    });
+    if (kept.length === 0) return null;
+    const coalesced = coalescePendingTranscripts(kept);
     if (!coalesced) return null;
     if (queued.length > 1) {
       logger.info(

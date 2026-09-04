@@ -153,6 +153,10 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("Do not wait on incrementalDelay / calleeSpeaking before first audio");
     expect(methodBody("processTurn")).toContain("this.clearBargeWait()");
     expect(methodBody("handleStreamingTranscript")).toContain("if (this.isProcessing) {");
+    // Call 21803: do not start a second processTurn (21426 double-speak), but
+    // cut current audio for a real queued final and drop stale acks at drain.
+    expect(methodBody("handleStreamingTranscript")).toContain("queued_final");
+    expect(methodBody("handleStreamingTranscript")).toContain("isFalseInterruption");
     expect(pipelineSrc).toMatch(/FILLER_THRESHOLD_MS \?\? 0/);
     expect(pipelineSrc).toMatch(/BACKCHANNEL_LATE_MS \?\? 0/);
     expect(pipelineSrc).not.toContain("Math.random() < freq");

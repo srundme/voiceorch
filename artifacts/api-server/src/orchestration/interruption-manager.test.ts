@@ -108,6 +108,38 @@ describe("InterruptionManager", () => {
     expect(m.shouldTriggerInterruption(3, "wait stop இருங்க", true)).toBe(true);
   });
 
+  it("isFalseInterruption is the other half of Bolna's barge gate", () => {
+    const m = new InterruptionManager();
+    // Short chatter while TTS plays — ignore, do not queue for later.
+    expect(m.isFalseInterruption(1, "Okay", true)).toBe(true);
+    expect(m.isFalseInterruption(2, "ஆமா ஆமா", true)).toBe(true);
+    expect(m.isFalseInterruption(1, "ஆ", true)).toBe(true);
+    expect(m.isFalseInterruption(2, "uh huh", true)).toBe(true);
+    // Real utterance while TTS plays — interrupt now.
+    expect(m.isFalseInterruption(8, "I want a bigger coverage plan", true)).toBe(false);
+    expect(m.shouldTriggerInterruption(8, "I want a bigger coverage plan", true)).toBe(true);
+    // Stop/wait still cut even at 1 word.
+    expect(m.isFalseInterruption(1, "stop", true)).toBe(false);
+    // Nothing playing → ordinary turn, neither verdict.
+    expect(m.isFalseInterruption(1, "Okay", false)).toBe(false);
+    expect(m.shouldTriggerInterruption(1, "Okay", false)).toBe(false);
+    // Welcome not played → neither.
+    expect(m.isFalseInterruption(8, "a long sentence here", true, false)).toBe(false);
+  });
+
+  it("the two Bolna verdicts never both hold", () => {
+    const m = new InterruptionManager();
+    for (const [words, text] of [
+      [8, "a genuinely long request"],
+      [2, "uh huh"],
+      [1, "stop"],
+    ] as const) {
+      const triggers = m.shouldTriggerInterruption(words, text, true, true);
+      const ignored = m.isFalseInterruption(words, text, true, true);
+      expect(triggers && ignored).toBe(false);
+    }
+  });
+
   it("first-speech mute ignores every transcript including stop (Bolna welcome_played)", () => {
     const m = new InterruptionManager();
     expect(m.shouldTriggerInterruption(1, "Hello", true, false)).toBe(false);

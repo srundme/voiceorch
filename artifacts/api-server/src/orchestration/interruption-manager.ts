@@ -141,6 +141,30 @@ export class InterruptionManager {
     return words > floor;
   }
 
+  /**
+   * Bolna `is_false_interruption` — the other half of `should_trigger_interruption`.
+   * Short talk-over while TTS is playing is chatter: drop it, never queue it
+   * to answer after the current dialogue (call 21803). Opposite of
+   * `shouldTriggerInterruption`; both must never be true together.
+   */
+  isFalseInterruption(
+    wordCount: number,
+    transcript: string,
+    isAudioPlaying: boolean,
+    welcomePlayed = true,
+    lowConfidence = false,
+  ): boolean {
+    if (!isAudioPlaying || !welcomePlayed) return false;
+    if (this.wordsForInterruption === 0) return false;
+    return !this.shouldTriggerInterruption(
+      wordCount,
+      transcript,
+      isAudioPlaying,
+      welcomePlayed,
+      lowConfidence,
+    );
+  }
+
   /** Start a new agent reply turn; returns the sequence id for TTS frames. */
   beginAgentTurn(): number {
     this.turnId++;
