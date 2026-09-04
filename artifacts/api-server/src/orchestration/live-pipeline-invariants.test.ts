@@ -145,6 +145,8 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).not.toContain("preset-filler");
     expect(pipelineSrc).toContain("job.streaming && this.tts.synthesizeStream");
     expect(pipelineSrc).toMatch(/TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 0/);
+    expect(pipelineSrc).toContain("incrementalDelayMs: 0");
+    expect(pipelineSrc).toContain("Do not wait on incrementalDelay / calleeSpeaking before first audio");
     expect(pipelineSrc).toMatch(/FILLER_THRESHOLD_MS \?\? 0/);
     expect(pipelineSrc).toMatch(/BACKCHANNEL_LATE_MS \?\? 500/);
     expect(pipelineSrc).toContain("Math.random() < freq");

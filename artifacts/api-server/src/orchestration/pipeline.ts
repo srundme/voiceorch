@@ -2973,7 +2973,7 @@ export class OrchestrationPipeline implements VoiceSession {
       if (combinedFrames > 0) this.bargeInMinFrames = combinedFrames;
     }
     this.interruptionMgr = new InterruptionManager({
-      incrementalDelayMs: config.agentConfig.incrementalDelay ?? 0,
+      incrementalDelayMs: 0,
       wordsForInterruption: config.agentConfig.wordsForInterruption ?? 3,
     });
     // Detection only makes sense when {caller_salutation} is actually in the prompt —
@@ -6872,10 +6872,9 @@ export class OrchestrationPipeline implements VoiceSession {
   ): Promise<{ pacedMs: number; claimedMs?: number } | undefined> {
     if (job.sequenceId === FILLER_SEQUENCE_ID && this._skipPendingFillerPlayback) return;
     if (this.bargeInRequested) return;
-    if (!this.canEmitAudio(job.sequenceId)) {
-      const ok = await this.waitForAudioEmit(job.sequenceId);
-      if (!ok || this.bargeInRequested) return;
-    }
+    // Do not wait on incrementalDelay / calleeSpeaking before first audio.
+    // That post-utterance WAIT was ~0.5–1.2s of dead air every turn (call 20737).
+    // Mid-sentence WAIT already becomes SEND while we are playing.
 
     activeTtsDrainCount++;
     try {
@@ -9291,9 +9290,6 @@ export class OrchestrationPipeline implements VoiceSession {
       const notes = this.pendingMeetingNotes.splice(0, this.pendingMeetingNotes.length);
       systemPromptForTurn += `\n\n[MEETING UPDATE] ${notes.join(" ")} Acknowledge only if natural — do not interrupt the current topic.`;
     }
-
-
-
     // ── [CURRENT DATE & TIME] — appended LAST for prompt-cache stability ──────
     // This is the only element that changes on every single turn (down to the
     // minute). Appending it here — after the base prompt, KB context, gender

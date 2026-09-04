@@ -90,7 +90,7 @@ export class InterruptionManager {
   private bargeInCount = 0;
 
   constructor(opts: InterruptionManagerOptions = {}) {
-    this.incrementalDelayMs = opts.incrementalDelayMs ?? 500;
+    this.incrementalDelayMs = opts.incrementalDelayMs ?? 0;
     this.wordsForInterruption = opts.wordsForInterruption ?? PLAYING_INTERRUPT_WORD_FLOOR;
     this.accidentalInterruptionPhrases = new Set(
       (opts.accidentalInterruptionPhrases ?? DEFAULT_ACCIDENTAL_INTERRUPT_PHRASES)

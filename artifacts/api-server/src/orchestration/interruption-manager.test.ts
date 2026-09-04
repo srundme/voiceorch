@@ -50,7 +50,7 @@ describe("InterruptionManager", () => {
     m.onUserSpeechStart();
     expect(m.getAudioSendStatus(id, 5)).toBe("WAIT");
     m.onUserSpeechEnd();
-    expect(m.getAudioSendStatus(id, 5)).toBe("WAIT");
+    expect(m.getAudioSendStatus(id, 5)).toBe("SEND");
   });
 
   it("SEND after incremental delay elapses post-utterance", () => {

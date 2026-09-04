@@ -645,13 +645,9 @@ export async function createSession(params: {
       const n = Math.max(0, Math.round(v));
       return n === 2 ? 3 : n;
     })(),
-    // Legacy form default was 350ms — rewrite in-memory so existing agents get
-    // snappy turns without requiring a UI re-save. Intentional non-350 values keep.
-    incrementalDelay: (() => {
-      const v = agentCfg["incrementalDelay"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 0;
-      return v === 350 ? 0 : Math.max(0, Math.min(1500, Math.round(v)));
-    })(),
+    // Post-utterance WAIT before TTS. Always 0 — saved 350/500/900 values
+    // added ~1s of dead air every turn (call 20737).
+    incrementalDelay: 0,
     ttsSpeed:             (agentCfg["ttsSpeed"]             as number | undefined) ?? 1.0,
     sarvamIndicNumbers:   agentCfg["sarvamIndicNumbers"] !== false,
     // P1-H: Call lifecycle

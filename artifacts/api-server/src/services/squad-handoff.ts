@@ -255,11 +255,7 @@ async function buildTargetAgentConfig(
       const n = Math.max(0, Math.round(v));
       return n === 2 ? 3 : n;
     })(),
-    incrementalDelay: (() => {
-      const v = agentCfg["incrementalDelay"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 0;
-      return v === 350 ? 0 : Math.max(0, Math.min(1500, Math.round(v)));
-    })(),
+    incrementalDelay: 0,
     hangupAfterLlmCall: false,
     startSpeakingPlan: resolveStartSpeakingPlan(
       agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"] | undefined,
