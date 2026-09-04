@@ -53,6 +53,12 @@ describe("isSpeculativeHit", () => {
     expect(isSpeculativeHit("Hello.", "Hello")).toBe(true);
   });
 
+  it("matches last-word STT completion (call 21189 continu → continue)", () => {
+    expect(isSpeculativeHit("Yes sir, you can continu", "Yes sir you can continue")).toBe(true);
+    expect(isSpeculativeHit("Uh, sir, maybe day after tom", "Uh, sir, maybe day after tomorrow.")).toBe(false);
+    expect(isSpeculativeHit("I want to participate in the", "I want to participate in theater")).toBe(false);
+  });
+
   it("matches comma / case-only STT variants (call 20686)", () => {
     expect(isSpeculativeHit("Hello, sir.", "Hello Sir")).toBe(true);
     expect(isSpeculativeHit("Hello, sir.", "hello sir")).toBe(true);
@@ -79,6 +85,20 @@ describe("isSpeculativeHit", () => {
 });
 
 describe("reconcileSpeculativePrefill", () => {
+  it("commits last-token completion when the snapshot is the same clause (call 21189)", () => {
+    const hit = reconcileSpeculativePrefill({
+      aborted: false,
+      hasToolCall: false,
+      langAtLaunch: "en-IN",
+      langNow: "en-IN",
+      inputHash: speculativeInputHash("Yes sir, you can continu"),
+      finalTranscript: "Yes sir you can continue",
+      partialSnapshot: "Yes sir, you can continu",
+    });
+    expect(hit.action).toBe("commit");
+    expect(hit.reason).toBe("last_token_completion");
+  });
+
   it("commits only when the final hash matches the speculative input", () => {
     const partial = "I want to participate in the hackathon.";
     const hit = reconcileSpeculativePrefill({

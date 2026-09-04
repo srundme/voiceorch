@@ -29,6 +29,23 @@ export function normalizeSpeculativeInput(text: string): string {
     .trim();
 }
 
+/**
+ * STT often finalizes by completing the last word ("continu" → "continue").
+ * That is the same utterance — not a new thought. Extra tokens still miss
+ * (call 21189: "day after tom" → "tomorrow" is too open to commit).
+ */
+export function isLastTokenCompletion(partial: string, final: string): boolean {
+  const p = normalizeSpeculativeInput(partial).split(" ").filter(Boolean);
+  const f = normalizeSpeculativeInput(final).split(" ").filter(Boolean);
+  if (p.length < 2 || p.length !== f.length) return false;
+  if (p.slice(0, -1).join(" ") !== f.slice(0, -1).join(" ")) return false;
+  const pLast = p[p.length - 1]!;
+  const fLast = f[f.length - 1]!;
+  if (pLast.length < 3) return false;
+  if (fLast.length - pLast.length > 3) return false;
+  return fLast.startsWith(pLast) && fLast !== pLast;
+}
+
 /** Identity of the text the speculative LLM was launched on. */
 export function speculativeInputHash(text: string): string {
   return createHash("sha256").update(normalizeSpeculativeInput(text), "utf8").digest("hex");
@@ -43,6 +60,7 @@ export function reconcileSpeculativePrefill(opts: {
   langNow: string;
   inputHash: string;
   finalTranscript: string;
+  partialSnapshot?: string;
   pendingTurnId?: number;
   turnGeneration?: number;
 }): { action: SpeculativeReconcileAction; reason: string; finalHash: string } {
@@ -59,15 +77,21 @@ export function reconcileSpeculativePrefill(opts: {
   if (opts.langAtLaunch !== opts.langNow) {
     return { action: "discard", reason: "language_switched", finalHash };
   }
-  if (opts.inputHash !== finalHash) {
-    return { action: "discard", reason: "transcript_changed", finalHash };
+  if (opts.inputHash === finalHash) {
+    return { action: "commit", reason: "hash_match", finalHash };
   }
-  return { action: "commit", reason: "hash_match", finalHash };
+  if (opts.partialSnapshot && isLastTokenCompletion(opts.partialSnapshot, opts.finalTranscript)) {
+    return { action: "commit", reason: "last_token_completion", finalHash };
+  }
+  return { action: "discard", reason: "transcript_changed", finalHash };
 }
 
 /** True only when the final is the same utterance the prefill was built from. */
 export function isSpeculativeHit(partial: string, final: string): boolean {
-  return speculativeInputHash(partial) === speculativeInputHash(final);
+  return (
+    speculativeInputHash(partial) === speculativeInputHash(final)
+    || isLastTokenCompletion(partial, final)
+  );
 }
 
 /**

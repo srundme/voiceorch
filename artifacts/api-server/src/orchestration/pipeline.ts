@@ -8412,6 +8412,10 @@ export class OrchestrationPipeline implements VoiceSession {
 
     const llmStart = Date.now();
     let llmFirstTokenAt: number | null = null;
+    /** First Talk sentence queued — not first LLM token. Tokens arrive ~280ms;
+     *  audible TTS is often 0.6–2s later (call 21189). Late backchannel must
+     *  cover that gap, so it cancels on enqueue, not on TTFT. */
+    let firstSpeakableEnqueued = false;
     let fillerTimer: ReturnType<typeof setTimeout> | null = null;
 
     let llmResponse = "";
@@ -8538,6 +8542,7 @@ export class OrchestrationPipeline implements VoiceSession {
         ttsContextIdForSequence(sequenceId, turnContextId, FILLER_SEQUENCE_ID),
         emotions,
       ));
+      if (sequenceId !== FILLER_SEQUENCE_ID) firstSpeakableEnqueued = true;
       if (wakePlayer) {
         const wake = wakePlayer;
         wakePlayer = null;
@@ -8782,6 +8787,19 @@ export class OrchestrationPipeline implements VoiceSession {
       }
     }
     const skipFillerForBackchannelAck = isBackchannelOnlyUtterance(transcript);
+    if (!this.agent.backchannelingEnabled) {
+      this.logExec("TTS", "system", {
+        status: "info",
+        turnNumber: _currentTurnIndex,
+        metadata: { event: "Backchannel Skipped", reason: "disabled" },
+      });
+    } else if (skipFillerForBackchannelAck) {
+      this.logExec("TTS", "system", {
+        status: "info",
+        turnNumber: _currentTurnIndex,
+        metadata: { event: "Backchannel Skipped", reason: "caller_ack_only" },
+      });
+    }
     if (
       this.agent.backchannelingEnabled
       && !this.closed
@@ -8818,6 +8836,11 @@ export class OrchestrationPipeline implements VoiceSession {
             },
             "Backchannel filler skipped — greeting-only caller turn",
           );
+          this.logExec("TTS", "system", {
+            status: "info",
+            turnNumber: _currentTurnIndex,
+            metadata: { event: "Backchannel Skipped", reason: "greeting_only" },
+          });
         } else if (freq > 0 && Math.random() < freq && BACKCHANNEL_LATE_MS > 0) {
           // Cover only when the LLM is late. Immediate enqueue on every turn
           // played a different speaker ("Hmm") before the first real token
@@ -8838,8 +8861,20 @@ export class OrchestrationPipeline implements VoiceSession {
               },
               "Backchannel filler armed (late, language-aware)",
             );
+            this.logExec("TTS", "system", {
+              status: "info",
+              turnNumber: _currentTurnIndex,
+              metadata: {
+                event: "Backchannel Armed",
+                language: fillerLang,
+                lateMs: BACKCHANNEL_LATE_MS,
+                frequency: freq,
+              },
+            });
             fillerTimer = setTimeout(() => {
-              if (llmFirstTokenAt || this.bargeInRequested || this.closed) return;
+              // Cancel only when Talk audio is actually queued — first token
+              // is too early (call 21189: TTFT 282ms, first clip 2021ms).
+              if (firstSpeakableEnqueued || this.bargeInRequested || this.closed) return;
               const phrase = pickBackchannelFiller(fillerLang, this.recentFillerPhrases, fillerOpts);
               if (!phrase) return;
               rememberFillerPhrase(this.recentFillerPhrases, phrase);
@@ -8860,6 +8895,15 @@ export class OrchestrationPipeline implements VoiceSession {
               backchanneledThisTurn = true;
               this._fillerPlayedThisTurn = true;
               this.fillerPlayedCount++;
+              this.logExec("TTS", "system", {
+                status: "info",
+                turnNumber: _currentTurnIndex,
+                metadata: {
+                  event: "Backchannel Played",
+                  selectedFiller: phrase,
+                  language: fillerLang,
+                },
+              });
             }, BACKCHANNEL_LATE_MS);
           } else {
             logger.info(
@@ -9345,7 +9389,7 @@ export class OrchestrationPipeline implements VoiceSession {
       && !this.bargeInRequested
     ) {
       fillerTimer = setTimeout(() => {
-        if (!llmFirstTokenAt && !this.bargeInRequested && !this.closed) {
+        if (!firstSpeakableEnqueued && !this.bargeInRequested && !this.closed) {
           // Cover slow TTFT on every LLM provider — backchanneling off still
           // leaves 3–4s of silence after "Yes" (call 16832). Prefer conversation
           // language; fall back to agent language so auto-detect is not mute.
@@ -9465,6 +9509,7 @@ export class OrchestrationPipeline implements VoiceSession {
         langNow: this.currentLang,
         inputHash: _spec.inputHash,
         finalTranscript: transcript,
+        partialSnapshot: _spec.partialSnapshot,
         pendingTurnId: _spec.pendingTurnId,
         turnGeneration: this.semanticTurnGate.turnGeneration,
       });
