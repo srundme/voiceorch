@@ -785,7 +785,10 @@ export class GeminiLivePipeline implements VoiceSession {
     const voiceName = resolveGeminiLiveVoice(liveCfg?.voiceName);
     const thinkingLevel = resolveGeminiLiveThinkingLevel(liveCfg?.thinkingLevel);
 
-    const toolDefs = buildToolDefs(this.agent.tools);
+    const toolDefs = buildToolDefs(this.agent.tools, {
+      systemPrompt: this.agent.systemPrompt,
+      knownEmail: this.agent.knownAttendeeEmail,
+    });
     toolDefs.push(SCHEDULE_CALLBACK_TOOL);
     if (this.agent.isMeetingSession) {
       toolDefs.push(SCHEDULE_MEET_REJOIN_TOOL, ...MEETING_PRESENTATION_TOOLS);
@@ -1064,8 +1067,7 @@ export class GeminiLivePipeline implements VoiceSession {
       (t) => t.type === "native_booking" || t.type === "native_reschedule",
     );
     if (!hasBook) return this.agent.systemPrompt;
-    const askEmail = bookingAsksCallerForEmail(this.agent.tools.find((t) => t.type === "native_booking"));
-    return `${this.agent.systemPrompt}\n\n${liveBookingTruthRule(askEmail)}`;
+    return `${this.agent.systemPrompt}\n\n${liveBookingTruthRule()}`;
   }
 
   private nudgeBookingTruth(): void {

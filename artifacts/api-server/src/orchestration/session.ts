@@ -34,7 +34,6 @@ import {
   resolveTtsMinSentenceChars,
 } from "@workspace/db/call-engine-defaults";
 import { withDbRetry } from "./db-retry.js";
-import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
 import { transcriptHasFarewellEnding } from "./callFarewell.js";
 import { shouldMarkCallVoicemail } from "../lib/voicemail-detect.js";
 import { looksLikeVoicemailOutcome } from "../services/sheet-auto-calls-helpers.js";
@@ -101,7 +100,7 @@ import {
   type CallerContext,
   type NameLatchTier,
 } from "./callerMemory.js";
-import { buildCallDirectionRule, mapLanguagePrefToBcp47 } from "./call-direction-rules.js";
+import { buildOpeningLanguageRule, mapLanguagePrefToBcp47 } from "./call-direction-rules.js";
 import { performSquadAgentHandoff } from "../services/squad-handoff.js";
 import { completeLiveSquadRun, ensureLiveSquadRunForCall } from "../services/squad-engine.js";
 import {
@@ -497,10 +496,10 @@ export async function createSession(params: {
       const scriptNote = LANG_SCRIPT_DIRECTIVE[agentLang] ?? "";
       if (isMultilingual) {
         // Auto-detect mode: follow the caller's language; switch seamlessly when they do.
-        effectiveSystemPrompt += `\n\n[LANGUAGE RULE] Your primary language is ${langName}. Always follow the caller's language — if they speak Tamil, reply in Tamil; if they switch to English, reply in English; if they mix languages (e.g. Hinglish), match their mix naturally. REGISTER — always speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into ${langName} is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — keep all proper nouns (brand names, product names, company names, people's names) EXACTLY as written in your instructions; never translate or transliterate them.${scriptNote ? " " + scriptNote : ""}`;
+        effectiveSystemPrompt += `\n\n[LANGUAGE] Primary language is ${langName}. Follow the caller if they switch.${scriptNote ? " " + scriptNote : ""}`;
       } else {
         // Strict mode: single language, no switching.
-        effectiveSystemPrompt += `\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in ${langName} at ALL times. Never switch to any other language under any circumstances, even if the caller speaks a different language. Always reply in ${langName} regardless of what language the caller uses. REGISTER — always speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into your ${langName} speech is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages, and "ONLY in ${langName}" does NOT mean avoiding these everyday English loanwords. EXCEPTION — keep all proper nouns (brand names, product names, company names, and people's names) EXACTLY as written in your instructions; never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.${scriptNote ? " " + scriptNote : ""}`;
+        effectiveSystemPrompt += `\n\n[LANGUAGE] Respond in ${langName}.${scriptNote ? " " + scriptNote : ""}`;
       }
     }
   }
@@ -537,10 +536,6 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
 - NEVER use XML or SSML markup tags of any kind. Do NOT write <emotion>, </emotion>, <break>, <prosody>, or any similar tags — the TTS engine will speak them aloud literally as "less-than emotion greater-than".
 - Use only plain conversational sentences suitable for speech.`;
   }
-
-  // Conversation discipline — force one-step-at-a-time delivery, turn yielding
-  // on "wait for response" markers, and resume-after-objection place-keeping.
-  effectiveSystemPrompt += `\n\n${CONVERSATION_DISCIPLINE_BLOCK}`;
 
   // P1-K: Inject regulatory compliance disclosures into the system prompt
   const complianceCfg = agentCfg["compliance"] as { irdai?: boolean; dpdp?: boolean; trai?: boolean } | undefined;
@@ -1160,17 +1155,13 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     }
   }
 
-  // Per-call inbound/outbound rule (also covers Gemini Live, which uses systemPrompt as-is).
-  agentConfig.systemPrompt += `\n\n${buildCallDirectionRule({
-    direction: callDirection,
-    callerName: callerProfileSnapshot?.name ?? null,
+  agentConfig.systemPrompt += `\n\n${buildOpeningLanguageRule({
     memoryLanguagePref:
       latchedFactsMap.get("language_pref")
       ?? callerProfileSnapshot?.preferredLanguage
       ?? null,
     agentLanguage: effectiveAgentLang,
     languageAutoDetect: agentConfig.languageAutoDetect === true,
-    openingAlreadyDelivered: false,
   })}`;
 
   // ── Inject DB-backed upcoming bookings (pre-fetched in parallel) ─────────────
@@ -1403,7 +1394,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   };
 
   agentConfig.systemPrompt = resolvePromptVariables(agentConfig.systemPrompt, dynVars);
-  agentConfig.knownAttendeeEmail = pickKnownBookingEmail(dynVars);
+  agentConfig.knownAttendeeEmail = pickKnownBookingEmail(dynVars, agentConfig.systemPrompt);
 
   // Apply the SAME resolution to the static greeting so it addresses the caller
   // by their prompt variables (e.g. {{customer_name}} → "krithika"). Static
@@ -1749,7 +1740,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         agentConfig.systemPrompt = `${callBlock}\n\n${agentConfig.systemPrompt}`;
       }
       agentConfig.systemPrompt = resolvePromptVariables(agentConfig.systemPrompt, dynVars);
-      agentConfig.knownAttendeeEmail = pickKnownBookingEmail(dynVars);
+      agentConfig.knownAttendeeEmail = pickKnownBookingEmail(dynVars, agentConfig.systemPrompt);
       if (agentConfig.greetingMessage) {
         agentConfig.greetingMessage = resolvePromptVariables(agentConfig.greetingMessage, dynVars);
       }

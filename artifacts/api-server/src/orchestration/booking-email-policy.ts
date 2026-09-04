@@ -1,12 +1,11 @@
 /**
- * Whether book_appointment must collect a caller email.
+ * Booking attendee email — prompt + lead only.
  *
- * The LLM schema used to require attendee_email + a spell-back ritual. Agents
- * that never want that could not override it from the prompt or tool
- * description (call 20423). Collecting is now opt-in on the booking tool.
+ * 1. Lead source / {{email}} / an address written in the prompt → book with it.
+ * 2. Else if the prompt says to collect email → take the address the caller gave.
+ * 3. Else use a silent guest address so the calendar API can still create the event.
  *
- * When collection is off, a known email from lead source / prompt variables /
- * the resolved prompt is still used — the agent just must not ask for one.
+ * No builder toggle. No default-email box. No spell-back ritual.
  */
 
 import { validateBookableEmail } from "./booking-email-validate.js";
@@ -19,6 +18,7 @@ const PLACEHOLDER_EMAIL_DOMAINS = new Set([
   "placeholder.com",
   "example.org",
   "test.org",
+  "yourcompany.com",
 ]);
 
 const PLACEHOLDER_EMAIL_LOCAL_PARTS = new Set([
@@ -37,15 +37,20 @@ const PREFERRED_EMAIL_VAR_KEYS = [
   "e_mail",
 ];
 
+const PROMPT_EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+
+const COLLECT_EMAIL_RE =
+  /(?:collect|ask(?:\s+for)?|get|take|capture|need|require)\s+(?:the\s+|their\s+|his\s+|her\s+|caller'?s\s+|customer'?s\s+)?(?:e-?mail|mail(?:\s*id)?|மெயில்|ஈமெயில்|ईमेल)|(?:e-?mail|mail)\s+address|(?:ask|collect).{0,32}(?:e-?mail|mail\s*id|மெயில்|ஈமெயில்|ईमेल)/i;
+
 export type BookingEmailToolConfig = {
   collectAttendeeEmail?: boolean;
   defaultAttendeeEmail?: string | null;
 };
 
-/** True only when the agent explicitly opted into asking the caller. */
-export function bookingAsksCallerForEmail(tool?: BookingEmailToolConfig | null): boolean {
-  return tool?.collectAttendeeEmail === true;
-}
+export type BookingEmailAskCtx = {
+  prompt?: string | null;
+  knownEmail?: string | null;
+};
 
 export function isPlaceholderBookingEmail(email: string): boolean {
   const parts = email.toLowerCase().split("@");
@@ -65,24 +70,58 @@ function usableKnownEmail(raw: string | null | undefined): string | null {
   return check.email;
 }
 
-/**
- * Prefer lead / sheet / {{email}} variable values. Does not scan free-form
- * prompt text (that can pick example.com from instructions).
- */
+/** True when the Talk/prompt text tells the agent to collect an email. */
+export function promptAsksToCollectEmail(text?: string | null): boolean {
+  if (!text) return false;
+  return COLLECT_EMAIL_RE.test(text);
+}
+
+/** Real addresses written in the prompt (not example.com / placeholders). */
+export function extractPromptBookingEmails(text?: string | null): string[] {
+  if (!text) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of text.match(PROMPT_EMAIL_RE) ?? []) {
+    const found = usableKnownEmail(raw);
+    if (!found) continue;
+    const key = found.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(found);
+  }
+  return out;
+}
+
 export function pickKnownBookingEmail(
   vars?: Record<string, string | null | undefined> | null,
+  sourceText?: string | null,
 ): string | null {
-  if (!vars) return null;
-  for (const key of PREFERRED_EMAIL_VAR_KEYS) {
-    const found = usableKnownEmail(vars[key]);
-    if (found) return found;
+  if (vars) {
+    for (const key of PREFERRED_EMAIL_VAR_KEYS) {
+      const found = usableKnownEmail(vars[key]);
+      if (found) return found;
+    }
+    for (const [key, value] of Object.entries(vars)) {
+      if (!/mail/i.test(key)) continue;
+      const found = usableKnownEmail(value);
+      if (found) return found;
+    }
   }
-  for (const [key, value] of Object.entries(vars)) {
-    if (!/mail/i.test(key)) continue;
-    const found = usableKnownEmail(value);
-    if (found) return found;
-  }
-  return null;
+  return extractPromptBookingEmails(sourceText)[0] ?? null;
+}
+
+/**
+ * Ask the caller only when the prompt says to collect AND no lead/prompt
+ * address already exists. The old collectAttendeeEmail toggle is ignored.
+ */
+export function bookingAsksCallerForEmail(
+  tool?: BookingEmailToolConfig | null,
+  ctx?: BookingEmailAskCtx,
+): boolean {
+  void tool;
+  const known = usableKnownEmail(ctx?.knownEmail) ?? extractPromptBookingEmails(ctx?.prompt)[0] ?? null;
+  if (known) return false;
+  return promptAsksToCollectEmail(ctx?.prompt);
 }
 
 export function resolveDefaultBookingEmail(
@@ -98,12 +137,7 @@ function argsEmail(args: Record<string, unknown>): string | null {
   return usableKnownEmail(String(args["attendee_email"] ?? args["email"] ?? ""));
 }
 
-function emailAppearsInText(email: string, text?: string | null): boolean {
-  if (!text) return false;
-  return text.toLowerCase().includes(email.toLowerCase());
-}
-
-/** Fill attendee_email: spoken (opt-in) → lead/vars/prompt → tool default → guest. */
+/** Fill attendee_email: lead/prompt → caller (if prompt collects) → saved default → guest. */
 export function resolveBookingAttendeeEmail(opts: {
   tool?: BookingEmailToolConfig | null;
   args: Record<string, unknown>;
@@ -111,18 +145,16 @@ export function resolveBookingAttendeeEmail(opts: {
   knownEmail?: string | null;
   knownSourceText?: string | null;
 }): { email: string; fromCaller: boolean } {
-  if (bookingAsksCallerForEmail(opts.tool)) {
-    return {
-      email: String(opts.args["attendee_email"] ?? opts.args["email"] ?? ""),
-      fromCaller: true,
-    };
-  }
-
-  const known = usableKnownEmail(opts.knownEmail);
-  const fromArgs = argsEmail(opts.args);
-  if (fromArgs && (fromArgs === known || emailAppearsInText(fromArgs, opts.knownSourceText))) {
-    return { email: fromArgs, fromCaller: false };
-  }
+  const known =
+    usableKnownEmail(opts.knownEmail)
+    ?? extractPromptBookingEmails(opts.knownSourceText)[0]
+    ?? null;
   if (known) return { email: known, fromCaller: false };
+
+  const fromArgs = argsEmail(opts.args);
+  const collecting = promptAsksToCollectEmail(opts.knownSourceText);
+  if (collecting && fromArgs) return { email: fromArgs, fromCaller: true };
+  if (collecting) return { email: "", fromCaller: true };
+
   return { email: resolveDefaultBookingEmail(opts.tool, opts.callId), fromCaller: false };
 }

@@ -1,6 +1,6 @@
 import { clampSemanticTurnStopMs } from "./semantic-turn-gate.js";
 import {
-  inboundPurposeExamples,
+  openingHello,
   resolveOpeningLanguageKey,
 } from "./call-direction-rules.js";
 
@@ -932,26 +932,15 @@ export function stripWelcomePrefix(welcome: string, opener: string): string {
 
 /**
  * Instant returning-caller opener — no LLM round-trip.
- * Call 2636: Gemini recognition greeting blocked ~3.1s of silence before first TTS.
- *
- * Must match inbound CALL DIRECTION intent (why they called) — NOT "how are you"
- * (call reports: returning inbound instantly spoke "Hi! How are you?" / எப்படி இருக்கீங்க
- * and skipped the purpose-of-call ask).
- *
- * Not used for resume-after-drop callbacks — those go through the greeting LLM
- * with caller-memory / LAST EXCHANGES context (no hardcoded cut-call line).
+ * Memory name + opening language only. What to ask next is the agent prompt.
  */
 export function buildInstantReturningGreeting(
   name?: string | null,
   lang?: string | null,
 ): string {
-  const key = resolveOpeningLanguageKey(lang);
+  const greet = openingHello(lang);
   const n = (name ?? "").trim().replace(/\s+/g, " ") || null;
-  const examples = inboundPurposeExamples(key, n);
-  return (
-    examples[0]
-    ?? (n ? `Hi ${n}, what are you calling about?` : "Hi, what are you calling about?")
-  );
+  return n ? `${greet} ${n}.` : `${greet}.`;
 }
 
 

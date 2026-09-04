@@ -21,26 +21,37 @@ const check: AgentTool = {
 };
 
 describe("buildToolDefs booking email schema", () => {
-  it("does not require attendee_email unless the tool opts in (call 20423)", () => {
+  it("does not require attendee_email unless the prompt says to collect one", () => {
     const def = buildToolDefs([book(), check]).find((t) => t.name === "book_appointment")!;
     expect(def.parameters.required).toEqual(["attendee_name"]);
     expect(def.parameters.properties).toHaveProperty("attendee_email");
     expect(def.parameters.properties).not.toHaveProperty("email_confirmed");
-    expect(String((def.parameters.properties as Record<string, { description?: string }>)["attendee_email"]?.description))
-      .toMatch(/Do not ask the caller to invent one/);
-    expect(def.description).toMatch(/Do NOT ask the caller to give an email/);
-    expect(def.description).toMatch(/agent instructions/);
-    expect(def.description).not.toMatch(/EMAIL CONFIRMATION/);
+    expect(def.description).not.toMatch(/CRITICAL RULES|EMAIL CONFIRMATION/);
 
     const checkDef = buildToolDefs([book(), check]).find((t) => t.name === "check_availability")!;
-    expect(checkDef.description).toMatch(/do not ask for an email unless it is already/);
+    expect(checkDef.description).toMatch(/call book_appointment/);
+    expect(checkDef.description).not.toMatch(/do not ask for an email/);
   });
 
-  it("requires attendee_email only when collectAttendeeEmail is true", () => {
-    const def = buildToolDefs([book({ collectAttendeeEmail: true })]).find((t) => t.name === "book_appointment")!;
+  it("requires attendee_email when the prompt says collect and no email is known", () => {
+    const def = buildToolDefs([book()], {
+      systemPrompt: "Collect the email and book the slot.",
+    }).find((t) => t.name === "book_appointment")!;
     expect(def.parameters.required).toEqual(["attendee_name", "attendee_email"]);
-    expect(def.parameters.properties).toHaveProperty("attendee_email");
-    expect(def.parameters.properties).toHaveProperty("email_confirmed");
-    expect(def.description).toMatch(/EMAIL CONFIRMATION/);
+    expect(def.parameters.properties).not.toHaveProperty("email_confirmed");
+  });
+
+  it("does not require attendee_email when a lead/prompt address already exists", () => {
+    const def = buildToolDefs([book()], {
+      systemPrompt: "Collect the email. Book to ops@acme.com.",
+      knownEmail: "ops@acme.com",
+    }).find((t) => t.name === "book_appointment")!;
+    expect(def.parameters.required).toEqual(["attendee_name"]);
+  });
+
+  it("ignores the leftover collectAttendeeEmail toggle", () => {
+    const def = buildToolDefs([book({ collectAttendeeEmail: true })]).find((t) => t.name === "book_appointment")!;
+    expect(def.parameters.required).toEqual(["attendee_name"]);
+    expect(def.parameters.properties).not.toHaveProperty("email_confirmed");
   });
 });

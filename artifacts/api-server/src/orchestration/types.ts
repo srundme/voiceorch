@@ -134,12 +134,9 @@ export interface NativeBookingTool {
   taskName?: string;
   /** Optional message spoken to the caller right before the booking executes (advisory; LLM-driven) */
   preToolMessage?: string;
-  /**
-   * Opt-in: ask the caller for an email and require spell-back confirmation.
-   * Default is off — prompt/description text cannot override a required schema field.
-   */
+  /** @deprecated Ignored. Collect email only if the Talk prompt says to. */
   collectAttendeeEmail?: boolean;
-  /** Calendar invite address when collectAttendeeEmail is off. */
+  /** @deprecated Hidden. Still used if an old agent already saved a value. */
   defaultAttendeeEmail?: string;
 }
 

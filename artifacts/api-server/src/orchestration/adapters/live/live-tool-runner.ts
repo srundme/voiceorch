@@ -27,7 +27,6 @@ import {
 import { logger } from "../../../lib/logger.js";
 import { liveToolTimeoutMs } from "./live-tool-timeout.js";
 import { LIVE_BOOKING_EMAIL_BLOCKED, liveBookingConfirmEmailBlocked } from "./live-booking-email.js";
-import { bookingAsksCallerForEmail } from "../../booking-email-policy.js";
 
 export interface LiveToolRunnerDeps {
   config: SessionConfig;
@@ -300,9 +299,7 @@ async function executeLiveAgentTool(
       const userTurns = deps.genuineUserTurns();
       if (userTurns < 2) {
         logger.warn({ callId, userTurns }, "Live native booking blocked: fewer than 2 caller turns");
-        return bookingAsksCallerForEmail(tool)
-          ? "error: cannot book yet — you must first ask the caller for their name, email, and preferred slot. Do not call this tool until the caller has provided those details in the conversation."
-          : "error: cannot book yet — you must first ask the caller for their name and preferred slot. Do not ask for an email. Do not call this tool until the caller has provided those details in the conversation.";
+        return "error: cannot book yet — wait until the caller has given their name and chosen a slot.";
       }
       return executeNativeBooking(callId, agentId, tool, args, {
         lineageCallId: config.bookingLineageCallId,

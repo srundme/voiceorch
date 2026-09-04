@@ -14,8 +14,7 @@ describe("buildLeadContextBlock", () => {
     expect(block).toContain("=== LEAD CONTEXT ===");
     expect(block).toContain("Name: gopi");
     expect(block).toContain("Phone: 918904887300");
-    expect(block).toMatch(/already know this caller's name is gopi/i);
-    expect(block).toMatch(/Do NOT ask for their name/i);
+    expect(block).toMatch(/Known lead fields for this caller \(name is gopi\)/i);
     expect(block).not.toContain("Caller Name");
     expect(block).not.toContain("Sheet Pipeline");
     expect(block).not.toContain("abc");
@@ -33,7 +32,7 @@ describe("buildLeadContextBlock", () => {
     });
     expect(block).toContain("Operator Update: Refund of 1200 approved");
     expect(block).toContain("Order Status: shipped");
-    expect(block).toMatch(/Do NOT ask for their name/i);
+    expect(block).toMatch(/Known lead fields for this caller \(name is Priya\)/i);
   });
 });
 

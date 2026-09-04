@@ -9,11 +9,11 @@ import {
   CALL_SCREENING_WINDOW_MS,
   detectScreeningPrompt,
 } from "./callScreening.js";
-import { buildCallDirectionRule, INBOUND_GREETING, resolveInboundGreetingTtsSpeed } from "./call-direction-rules.js";
+import { resolveInboundGreetingTtsSpeed } from "./call-direction-rules.js";
 import { buildDatetimeInjection, buildTurnClockBlock } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
-import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, extractRecentAgentQuestions, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN, isHoldRequest } from "./conversationDiscipline.js";
+import { buildAntiRepeatNudge, extractRecentAgentQuestions, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN, isHoldRequest } from "./conversationDiscipline.js";
 import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared, isCallerClosingUtterance } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
 import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
@@ -49,21 +49,18 @@ import { resolveMicSensitivity, getMicSensitivityThresholds, isIdleCancellingMic
 import { resolveSoftwareNoiseGate, envForceVobizSoftwareNc, type NoiseGateDecision } from "./noise-gate.js";
 import { preferNumberTranscript } from "../lib/disposition/spoken-digits.js";
 import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
-import { validateBookableEmail, isEmailConfirmedFlag } from "./booking-email-validate.js";
+import { validateBookableEmail } from "./booking-email-validate.js";
 import { bookingAsksCallerForEmail, resolveBookingAttendeeEmail } from "./booking-email-policy.js";
 import { looksLikeVoicemailGreeting } from "../lib/voicemail-detect.js";
 import {
   applyBookingEmailToBookArgs,
   applyBookingEmailToSendArgs,
   buildAutoBookArgs,
-  buildEmailSpellLine,
   canAutoBook,
   emptyBookingFlowState,
   looksLikeFalseBookingClaim,
-  markEmailSpelled,
   shouldForceBookAppointment,
   shouldForceCheckAvailability,
-  shouldSpeakEmailSpell,
   shouldUpdateBookedEmail,
   updateBookingFlowFromAssistantText,
   updateBookingFlowFromToolResult,
@@ -90,7 +87,6 @@ import {
   shouldSkipSmartTurnEval,
   resolveCollectionKind,
   resolveCollectionVadSilenceMs,
-  isEmailCollectionContext,
   looksLikeSpokenEmailSpelling,
   looksSnapComplete,
   sanitizeSpokenEmailsInTranscript,
@@ -765,20 +761,7 @@ function buildCompactGreetingPrompt(
     scriptBlock = body.trim().slice(0, 1500);
   }
   const langName = LANG_DISPLAY_NAMES[language] ?? language;
-  const isEnglish = language.startsWith("en");
-  // For non-English target languages, mirror the colloquial REGISTER + proper-noun
-  // rule that buildLangGuard applies to every normal turn. Without it the greeting
-  // LLM defaults to a formal/literary/bookish register for the very first spoken
-  // line while the rest of the conversation stays colloquial. English openers stay
-  // plain English (buildLangGuard likewise adds no register rule for English).
-  const languageInstruction = isEnglish
-    ? `[LANGUAGE] Respond ONLY in ${langName}.`
-    : `[LANGUAGE] Respond ONLY in ${langName}. ` +
-      `REGISTER — speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; ` +
-      `NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) ` +
-      `into ${langName} is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. ` +
-      `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
-      `EXACTLY as written in your instructions; never translate or transliterate them.`;
+  const languageInstruction = `[LANGUAGE] Respond in ${langName}.`;
   const openingLengthRule = resumeDropped
     ? "[OPENING — RESUME AFTER DROP] The previous call with this caller dropped mid-conversation. " +
       "Speak 1–2 short colloquial sentences only: (1) briefly acknowledge the call got cut/dropped " +
@@ -800,23 +783,12 @@ function buildCompactGreetingPrompt(
     "The agent/workspace display name is an internal label, NOT a company brand — never say " +
     `"thanks for calling <agent name>"` +
     (agentLabel ? ` (do not say "${agentLabel}" or a shortened form of it as the company).` : ".");
-  const directionRule = buildCallDirectionRule({
-    direction: opts?.callDirection,
-    callerName: opts?.callerName ?? null,
-    memoryLanguagePref: opts?.memoryLanguagePref ?? null,
-    agentLanguage: opts?.agentLanguage ?? language,
-    languageAutoDetect: opts?.languageAutoDetect,
-    openingAlreadyDelivered: false,
-  });
   const returningCallerRule = memoryBlock && !resumeDropped
     ? "[RETURNING CALLER] If CALLER MEMORY has a real person name, greet with that name in ONE short clause and skip the first-time welcome. " +
       "Do NOT recap previous bookings, slots, times, or call summaries in the opener — wait for them to speak. " +
       "Never use a relative-time word as a name (நாளைக்கு, tomorrow, today, yesterday). " +
       "Reference ONLY facts explicitly written in the memory — never invent or infer details."
     : "";
-  const greetingHardCap =
-    "[HARD CAP] Two short sentences maximum. Greeting + one question. " +
-    "Do not list prior appointments or dump CALLER MEMORY into speech.";
   if (fullSystemPrompt.length <= GREETING_FULL_PROMPT_MAX_CHARS) {
     // Full-prompt greeting: the model sees exactly what it sees on every
     // later turn, so the opener can no longer contradict the conversation.
@@ -828,8 +800,6 @@ function buildCompactGreetingPrompt(
       fullSystemPrompt,
       languageInstruction,
       fullOpeningRule,
-      greetingHardCap,
-      directionRule,
       returningCallerRule,
       antiInventionRule,
     ].filter(Boolean).join("\n\n");
@@ -839,8 +809,6 @@ function buildCompactGreetingPrompt(
     scriptBlock,
     languageInstruction,
     openingLengthRule,
-    greetingHardCap,
-    directionRule,
     returningCallerRule,
     antiInventionRule,
   ].filter(Boolean);
@@ -2762,7 +2730,10 @@ export class OrchestrationPipeline implements VoiceSession {
 
   /** Same tool list as processTurn / continueWithToolResult / Gemini cache warm. */
   private buildVoiceToolDefs(): ToolDefinition[] {
-    const toolDefs = buildToolDefs(this.agent.tools);
+    const toolDefs = buildToolDefs(this.agent.tools, {
+      systemPrompt: this.agent.systemPrompt,
+      knownEmail: this.agent.knownAttendeeEmail,
+    });
     toolDefs.push(SCHEDULE_CALLBACK_TOOL_DEF);
     if (this.agent.isMeetingSession) {
       toolDefs.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_SESSION_TOOL_DEFS);
@@ -5249,12 +5220,7 @@ export class OrchestrationPipeline implements VoiceSession {
             `Respond ONLY in ${reqName} for this entire response, and keep responding in ${reqName} ` +
             `unless the caller explicitly asks for another language. ` +
             `IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, ` +
-            `English, or any other language — the caller has explicitly asked for ${reqName}. ` +
-            `REGISTER — speak in natural, everyday colloquial spoken ${reqName}, the way real people talk in casual conversation; ` +
-            `NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) ` +
-            `into ${reqName} is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. ` +
-            `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
-            `EXACTLY as written in your instructions; never translate or transliterate them.`;
+            `English, or any other language — the caller has explicitly asked for ${reqName}.`;
         } else {
           langGuard =
             `LANGUAGE DIRECTIVE: The caller is currently speaking in ${langName}. ` +
@@ -5263,12 +5229,7 @@ export class OrchestrationPipeline implements VoiceSession {
             `If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. ` +
             `IMPORTANT — borrowed English words and fillers from the caller ("okay", "ok", "thank you", "yes", "no", "right", "fine") ` +
             `are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. ` +
-            `Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. ` +
-            `REGISTER — speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; ` +
-            `NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) ` +
-            `into ${langName} is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. ` +
-            `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
-            `EXACTLY as written in your instructions; never translate or transliterate them.`;
+            `Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English.`;
         }
       } else if (this.requestedLangLatch === "en-IN" || (this.agent.autoSwitchToEnglish && this.currentLang === "en-IN")) {
         // Strict single-language mode, but the caller explicitly asked for English and
@@ -5290,22 +5251,13 @@ export class OrchestrationPipeline implements VoiceSession {
           `LANGUAGE OVERRIDE: The caller has explicitly requested ${requestedName}. ` +
           `Respond in ${requestedName} ONLY for this entire response. ` +
           `IMPORTANT: Ignore any STRICT/ABSOLUTE LANGUAGE RULE in your system prompt that tells you to speak ` +
-          `a different language — the caller has asked for ${requestedName}. ` +
-          `REGISTER — speak in natural, everyday colloquial spoken ${requestedName}. ` +
-          `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
-          `EXACTLY as written in your instructions; never translate or transliterate them.`;
+          `a different language — the caller has asked for ${requestedName}.`;
       } else {
         langGuard =
           `LANGUAGE ABSOLUTE RULE: You MUST respond ONLY in ${langName}. ` +
           `This applies to EVERY reply without exception — including when you are confused, ` +
           `do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. ` +
-          `Never switch to English or any other language under any circumstances. ` +
-          `REGISTER — speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; ` +
-          `NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) ` +
-          `into your ${langName} speech is normal spoken usage — keep such words in English as people naturally say them; ` +
-          `this does NOT count as switching languages, and "ONLY in ${langName}" does NOT mean avoiding these everyday English loanwords. ` +
-          `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. ` +
-          `Never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.`;
+          `Never switch to English or any other language under any circumstances.`;
       }
     }
 
@@ -5529,13 +5481,6 @@ export class OrchestrationPipeline implements VoiceSession {
     const greetLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
     let greeting = this.isResumeDroppedCall ? "" : (this.agent.greetingMessage ?? "");
     if (
-      this.callDirection === "inbound"
-      && !this.isResumeDroppedCall
-      && !greeting.trim()
-    ) {
-      return false;
-    }
-    if (
       this.callDirection === "outbound"
       && !this.isResumeDroppedCall
       && outboundTypedWelcomeBlocksGreetingLlm(greeting, greetLang)
@@ -5704,15 +5649,6 @@ export class OrchestrationPipeline implements VoiceSession {
           "Pipeline: static greeting is not in the agent's language — generating a localized opener instead",
         );
         greeting = "";
-      }
-
-      if (
-        this.callDirection === "inbound"
-        && !useInstantReturning
-        && !resumeDropped
-        && !typedWelcome
-      ) {
-        greeting = INBOUND_GREETING;
       }
 
       let greetingEmotions: string[] | undefined;
@@ -7845,19 +7781,22 @@ export class OrchestrationPipeline implements VoiceSession {
   private async executeCalCom(tool: AgentTool & { type: "cal_com" }, args: Record<string, unknown>): Promise<string> {
     logger.info({ callId: this.config.callId, eventTypeId: tool.eventTypeId }, "Cal.com booking tool invoked");
     const attendeeName  = String(args["attendee_name"]  ?? args["name"]  ?? "Guest");
-    const attendeeEmailRaw = String(args["attendee_email"] ?? args["email"] ?? "");
+    const resolvedCalEmail = resolveBookingAttendeeEmail({
+      args,
+      callId: this.config.callId,
+      knownEmail: this.agent.knownAttendeeEmail,
+      knownSourceText: this.agent.systemPrompt,
+    });
+    const attendeeEmailRaw = resolvedCalEmail.email;
     const timezone      = String(args["timezone"]       ?? tool.timezone  ?? "UTC");
 
     if (!attendeeEmailRaw.trim()) {
       logger.warn({ callId: this.config.callId }, "Cal.com: no attendee email provided — cannot book");
-      return "error: attendee_email is required to complete the Cal.com booking. Ask the caller for their email.";
+      return "error: attendee_email is required to complete the Cal.com booking.";
     }
     const emailCheck = validateBookableEmail(attendeeEmailRaw);
     if (!emailCheck.ok) {
       return `error: ${emailCheck.detail}`;
-    }
-    if (!isEmailConfirmedFlag(args)) {
-      return "error: email_confirmed must be true. Spell the email back with <spell>…</spell>, get an explicit yes, then retry with email_confirmed=true.";
     }
     const attendeeEmail = emailCheck.email;
     try {
@@ -8359,30 +8298,6 @@ export class OrchestrationPipeline implements VoiceSession {
       }
     }
 
-    // Spell the captured address in code — do not let the LLM invent a
-    // different one and treat "okay correct" as yes (call 17701).
-    if (
-      bookingAsksCallerForEmail(this.agent.tools.find((t) => t.type === "native_booking"))
-      && shouldSpeakEmailSpell(this.bookingFlowState)
-      && this.bookingFlowState.pendingEmail
-    ) {
-      const email = this.bookingFlowState.pendingEmail;
-      const line = buildEmailSpellLine(email);
-      this.bookingFlowState = markEmailSpelled(this.bookingFlowState, email);
-      this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
-      this._currentTurnPlayedSentences = [];
-      this.isPlaying = true;
-      try { await this.playSentence(line); } finally { this.isPlaying = false; this.armTailEchoGrace(); }
-      const heard = this.getHeardAgentText() || line;
-      this.conversationHistory.appendAssistant(heard);
-      this.lastAssistantSpokenRaw = heard;
-      this.config.onTranscript("agent", heard);
-      this.config.onConversationUpdate?.(this.conversationHistory.messages);
-      await this.drainPlaybackTail();
-      this.onBotStoppedSpeaking("system");
-      return;
-    }
-
     // Mid-call: acoustic AMD missed but STT heard a voicemail greeting → leave
     // the configured message (or hang up) instead of continuing the sales pitch.
     if (await this.maybeHandleTranscriptVoicemail(transcript)) {
@@ -8491,16 +8406,20 @@ export class OrchestrationPipeline implements VoiceSession {
     // in code (do not rely on the LLM remembering tool_choice).
     const bookTool = this.agent.tools.find((t) => t.type === "native_booking");
     const checkTool = this.agent.tools.find((t) => t.type === "native_check_availability");
+    const bookingAskEmail = bookingAsksCallerForEmail(bookTool, {
+      prompt: this.agent.systemPrompt,
+      knownEmail: this.agent.knownAttendeeEmail,
+    });
     if (
       bookTool
       && canAutoBook({
         state: this.bookingFlowState,
         alreadyBooked: this.schedulingActionConfirmed,
-        requireEmail: bookingAsksCallerForEmail(bookTool),
+        requireEmail: bookingAskEmail,
       })
     ) {
       const bookName = bookTool.name || "book_appointment";
-      const autoArgs = bookingAsksCallerForEmail(bookTool)
+      const autoArgs = bookingAskEmail
         ? buildAutoBookArgs(this.bookingFlowState)
         : (() => {
             const known = resolveBookingAttendeeEmail({
@@ -8598,7 +8517,7 @@ export class OrchestrationPipeline implements VoiceSession {
         userText: transcript,
         hasBookTool: !!bookTool,
         alreadyBooked: this.schedulingActionConfirmed,
-        requireEmail: bookingAsksCallerForEmail(bookTool),
+        requireEmail: bookingAskEmail,
       })
     ) {
       forcedToolChoice = { name: bookTool!.name || "book_appointment" };
@@ -9286,50 +9205,13 @@ export class OrchestrationPipeline implements VoiceSession {
       const lines = [
         "",
         "",
-        "[BOOKING TOOL GUIDE]",
-        `CRITICAL: NEVER invent, guess, or assume any available slot times. You MUST call "${checkName}" before telling the caller any available times. Only relay times you received directly from a "${checkName}" tool result.`,
-        `TIMEZONE RULE: The calendar is configured for timezone "${calDefaultTz}". Always pass timezone="${calDefaultTz}" in every tool call. NEVER ask the caller what timezone they are in — default silently to "${calDefaultTz}" unless the caller explicitly asks about a different timezone, in which case use that IANA timezone string.`,
+        "[BOOKING TOOLS]",
+        `Call "${checkName}" before offering any times. Pass times and ISO strings exactly as the tool returned them.`,
+        `Pass timezone="${calDefaultTz}" on tool calls. Do not ask the caller their timezone.`,
+        `"${checkName}" only lists slots — it does not book. Call "${bookName}" to create the calendar event.`,
+        `Never say a meeting is booked, scheduled, or that an invite was sent until "${bookName}" returns booking_confirmed.`,
+        `If "${bookName}" returns booking_pending or booking_failed, say scheduling could not be completed and offer to try again. Do not mention internal calendar errors.`,
       ];
-      const askEmail = bookingAsksCallerForEmail(bookTool);
-      if (hasCheckAvailabilityTool) {
-        const afterPick = askEmail
-          ? `collect their name and email and call "${bookName}"`
-          : `collect their name (do not ask for an email unless it is already in LEAD CONTEXT, sheet lookup, or prompt variables) and call "${bookName}"`;
-        lines.push(
-          `"${checkName}" ONLY checks available slots — it does NOT create a booking.`,
-          `"${checkName}" returns one of three result types:`,
-          `  • requested_slot_available — the exact time the caller asked for is open. Tell the caller the time is available, then immediately ${afterPick} with the ISO string from the 'slot' field verbatim as preferred_date.`,
-          `  • requested_slot_unavailable — the requested time is not open. Tell the caller and read out the slots from the 'alternatives' field. Once the caller picks one, ${afterPick} with the chosen ISO string verbatim as preferred_date.`,
-          `  • available_slots — a general list of upcoming slots. Each entry in 'next' is an ISO 8601 string followed by a human label in parentheses. Present them to the caller. After the caller picks one, ${afterPick} with the ISO string verbatim as preferred_date.`,
-          `Always pass ISO strings to "${bookName}" exactly as returned — never reformat or convert them.`,
-          `When the caller names a day and/or time (tomorrow, 10:30, eleven AM, कल टेन थर्टी), call "${checkName}" in THAT turn. Do not keep asking कल या परसों or Google Meet vs in-person after they already answered.`,
-          `NEVER invent slot times. NEVER emit XML or <tool_call> text. NEVER invent send_email — a confirmation email is sent automatically after "${bookName}" succeeds.`,
-        );
-      }
-      if (hasBookingTool) {
-        lines.push(
-          askEmail
-            ? `Before calling "${bookName}", you MUST collect the caller's full name and email address. Ask for them if not yet provided.`
-            : `Before calling "${bookName}", collect the caller's full name if you do not have it. Do not ask the caller to provide an email if you do not already have one from LEAD CONTEXT, sheet lookup, or prompt variables — pass that known address as attendee_email. Confirming a known email with the caller is only if your agent instructions say to; the system does not require it. Otherwise omit attendee_email.`,
-          ...(askEmail
-            ? [
-                `EMAIL ACCURACY (call-critical): never book on a half-heard email. If the address is incomplete (no domain, ends with @, or has spaces), ask the caller to spell it letter by letter.`,
-                `EMAIL vs PHONE (call 14394): email local-parts often contain digits (e.g. ramsiva97465@gmail.com). While collecting email, NEVER say the caller is giving a phone number. If @ / gmail / mail / அட் is missing, ask them to say: username, then \"at gmail dot com\" — do not reclassify digits as a mobile number.`,
-                `After you hear an email, ALWAYS spell it back with <spell>r a m … @ g m a i l . c o m</spell> and wait for an explicit yes/correct before calling "${bookName}" with email_confirmed=true.`,
-                `When the caller confirms the email AND a slot, call "${bookName}" immediately in that turn (with preferred_date ISO from "${checkName}" + email_confirmed=true). Do not change the subject to sales/policy talk until booking_confirmed is returned.`,
-              ]
-            : [
-                `When you have the caller's name AND a chosen slot, call "${bookName}" immediately in that turn with preferred_date ISO from "${checkName}" (and attendee_email if it is already in the lead/prompt). Do not change the subject to sales/policy talk until booking_confirmed is returned.`,
-              ]),
-          `HARD RULE (call 14396): NEVER say you are booking / have booked / will book the meeting in spoken text unless you are ALSO calling "${bookName}" in that same turn. Phrases like "book பண்ணிடுறேன்", "I've booked", "scheduling now" without a tool call create NO calendar event and NO email.`,
-          `After "${bookName}" returns booking_confirmed, tell the caller the invite/meeting link was sent${askEmail ? " to their email" : ""} when Google Meet is enabled on the event type. Never invent a Meet URL yourself.`,
-          `When reading available slots aloud, keep the whole list in ONE reply sentence — do not chop each time (9:00 AM / 9:15 AM) into separate fragments.`,
-          `NEVER tell the caller their appointment is confirmed or scheduled unless you have received a booking_confirmed: result from "${bookName}".`,
-          `Do NOT say "Your appointment has been scheduled" or any equivalent phrase before "${bookName}" returns a booking_confirmed: result.`,
-          `When "${bookName}" returns booking_pending: — the booking was received but NOT confirmed. Tell the caller ONLY: "Your appointment request has been received and is pending confirmation — we'll follow up to confirm it." Do NOT say it is booked, scheduled, or confirmed. NEVER mention internal reasons like "Google Calendar", "calendar event creation failed", or any technical system error to the caller — just say it is pending confirmation.`,
-          `When "${bookName}" returns booking_failed: — the booking could not be created. Tell the caller the booking could not be completed and ask them to try again or call back. Do NOT mention technical errors or system details.`,
-        );
-      }
       systemPromptForTurn += lines.join("\n");
       if (this.schedulingConfigurationFailed) {
         systemPromptForTurn += [
@@ -9423,77 +9305,6 @@ export class OrchestrationPipeline implements VoiceSession {
           ...historyForLlm.slice(0, -1),
           { ...lastTurn, content: `${lastTurn.content}\n\n${reminder}` },
         ];
-      }
-    }
-
-    // Per-turn conversation-discipline reminder: appended to the last user turn so
-    // it sits at the highest-attention point (just before generation) and survives
-    // both long prompts and the staged-prompt override below (which replaces the
-    // system prompt but not the history). Enforces one-step delivery, wait-for-
-    // response turn yielding, and resume-after-objection place-keeping.
-    if (historyForLlm.length > 0) {
-      const lastTurn = historyForLlm[historyForLlm.length - 1]!;
-      if (lastTurn.role === "user") {
-        historyForLlm = [
-          ...historyForLlm.slice(0, -1),
-          { ...lastTurn, content: `${lastTurn.content}\n\n${CONVERSATION_DISCIPLINE_TURN_REMINDER}` },
-        ];
-      }
-    }
-
-    // Email-collection turn reminder (call 14394): STT often drops "@gmail.com"
-    // so "ramsiva97465" looks like a phone. Keep the model in email mode.
-    if (
-      historyForLlm.length > 0
-      && bookingAsksCallerForEmail(this.agent.tools.find((t) => t.type === "native_booking"))
-    ) {
-      const lastAgentText =
-        this.conversationHistory.findLast((t) => t.role === "assistant")?.content ?? "";
-      if (isEmailCollectionContext(lastAgentText)) {
-        const lastTurn = historyForLlm[historyForLlm.length - 1]!;
-        if (lastTurn.role === "user") {
-          const emailHint =
-            "[EMAIL COLLECTION] Digits in an email username are normal. " +
-            "Do NOT say this sounds like a phone number. " +
-            "If @/gmail/domain is missing, ask them to say: username at gmail dot com, " +
-            "or spell letter-by-letter — then spell it back with <spell>…</spell>.";
-          historyForLlm = [
-            ...historyForLlm.slice(0, -1),
-            { ...lastTurn, content: `${lastTurn.content}\n\n${emailHint}` },
-          ];
-        }
-      }
-    }
-
-    // Booking completion reminder (call 14396): model said "book பண்ணிடுறேன்"
-    // after check_availability but NEVER called book_appointment → no calendar/email.
-    if (historyForLlm.length > 0 && !this.schedulingActionConfirmed) {
-      const toolBlob = this.conversationHistory.messages
-        .filter((m) => m.role === "tool" || (m.role === "user" && m.content.startsWith("[Tool result for")))
-        .map((m) => m.content)
-        .join("\n");
-      const sawAvailability =
-        /requested_slot_available|requested_slot_unavailable|available_slots/.test(toolBlob);
-      if (sawAvailability) {
-        const lastTurn = historyForLlm[historyForLlm.length - 1]!;
-        if (lastTurn.role === "user") {
-          const bookTool = this.agent.tools.find((t) => t.type === "native_booking");
-          const bookName = bookTool?.name ?? "book_appointment";
-          const askEmail = bookingAsksCallerForEmail(bookTool);
-          const bookHint = askEmail
-            ? `[BOOKING INCOMPLETE] Availability was already checked. ` +
-              `Do NOT claim you are booking or have booked. ` +
-              `When name + email are confirmed and a slot is chosen, CALL "${bookName}" this turn ` +
-              `with email_confirmed=true and the ISO preferred_date. Calendar + confirmation email only happen after that tool returns booking_confirmed.`
-            : `[BOOKING INCOMPLETE] Availability was already checked. ` +
-              `Do NOT claim you are booking or have booked. Do NOT ask for an email. ` +
-              `When you have the caller's name and a chosen slot, CALL "${bookName}" this turn ` +
-              `with the ISO preferred_date (pass attendee_email if it is already in the lead/prompt). Calendar + confirmation email only happen after that tool returns booking_confirmed.`;
-          historyForLlm = [
-            ...historyForLlm.slice(0, -1),
-            { ...lastTurn, content: `${lastTurn.content}\n\n${bookHint}` },
-          ];
-        }
       }
     }
 
@@ -9595,10 +9406,6 @@ export class OrchestrationPipeline implements VoiceSession {
       if (stage) {
         const core = this.agent.stagedPromptCoreIdentity?.trim() ?? "";
         systemPromptForTurn = core ? `${core}\n\n${stage.content}` : stage.content;
-        // The staged block fully replaces the base system prompt (and its
-        // discipline block), so re-append the discipline rules to keep one-step
-        // delivery / wait-for-response / resume-after-objection active per turn.
-        systemPromptForTurn += `\n\n${CONVERSATION_DISCIPLINE_BLOCK}`;
         logger.debug({ callId: this.config.callId, stage: stage.name, idx: this.currentStageIndex }, "Staged prompt active");
       }
     }
@@ -9624,16 +9431,6 @@ export class OrchestrationPipeline implements VoiceSession {
     if (openerAlreadySpoken && !this.pendingScreeningPickupNote) {
       systemPromptForTurn += `\n\n${OPENING_ALREADY_DELIVERED_NOTE}`;
     }
-
-    // Per-call inbound/outbound + opening-language rule (same agent may handle both).
-    systemPromptForTurn += `\n\n${buildCallDirectionRule({
-      direction: this.callDirection,
-      callerName: this.config.returningCallerName ?? null,
-      memoryLanguagePref: this.config.callerMemoryLanguage ?? null,
-      agentLanguage: this.currentLang || this.agent.sttConfig.language || this.agent.language || null,
-      languageAutoDetect: this.agent.languageAutoDetect === true,
-      openingAlreadyDelivered: openerAlreadySpoken,
-    })}`;
 
     // Voice Memory — handoff / cross-number notes live in the volatile per-turn
     // tail so Gemini / OpenAI cached prefixes stay byte-stable.
@@ -10978,9 +10775,7 @@ export class OrchestrationPipeline implements VoiceSession {
           attendeeEmail: String(args["attendee_email"] ?? args["email"] ?? ""),
         },
       });
-      return bookingAsksCallerForEmail(tool)
-        ? "error: cannot book yet — you must first ask the caller for their name, email, and preferred slot. Do not call this tool until the caller has provided those details in the conversation."
-        : "error: cannot book yet — you must first ask the caller for their name and preferred slot. Do not ask for an email. Do not call this tool until the caller has provided those details in the conversation.";
+      return "error: cannot book yet — wait until the caller has given their name and chosen a slot.";
     }
     return sharedExecuteNativeBooking(this.config.callId, this.agent.id, tool, args, {
       lineageCallId: this.config.bookingLineageCallId,
@@ -11024,7 +10819,7 @@ export class OrchestrationPipeline implements VoiceSession {
         { callId: this.config.callId, preferredKey, evt: "availability_cached" },
         "Pipeline: returning cached check_availability (same slot already checked)",
       );
-      return `${this.lastAvailabilityResult} (already checked this slot — do not re-check; proceed with name${bookingAsksCallerForEmail(this.agent.tools.find((t) => t.type === "native_booking")) ? " and email" : " — do not ask for a new email; pass attendee_email if already in lead/prompt"})`;
+      return `${this.lastAvailabilityResult} (already checked this slot — do not re-check; call book_appointment with the chosen ISO slot)`;
     }
     const result = await sharedExecuteNativeCheckAvailability(this.config.callId, this.agent.id, tool, args);
     this.lastAvailabilityKey = preferredKey;

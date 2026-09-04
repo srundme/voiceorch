@@ -78,12 +78,8 @@ export function buildLeadContextBlock(
   if (lines.length === 0) return "";
 
   const directive = knownName
-    ? `DIRECTIVE (overrides any "ask for name" steps in the script below): ` +
-      `You already know this caller's name is ${knownName}. Greet and address them as ${knownName}. ` +
-      `Do NOT ask for their name or any other field listed above unless they correct you.`
-    : `DIRECTIVE (overrides collection steps in the script below): ` +
-      `These lead fields are already known. Use them naturally. ` +
-      `Do NOT re-ask for any field listed above unless the caller corrects you.`;
+    ? `Known lead fields for this caller (name is ${knownName}).`
+    : `Known lead fields for this caller.`;
 
   return `=== LEAD CONTEXT ===\n${lines.join("\n")}\n\n${directive}\n===================`;
 }

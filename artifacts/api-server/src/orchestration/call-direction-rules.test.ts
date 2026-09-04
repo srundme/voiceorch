@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildCallDirectionRule,
-  inboundPurposeExamples,
+  buildOpeningLanguageRule,
   mapLanguagePrefToBcp47,
+  openingHello,
   resolveCallOpeningLanguage,
   resolveInboundGreetingTtsSpeed,
   resolveOpeningLanguageKey,
@@ -77,41 +77,24 @@ describe("resolveCallOpeningLanguage", () => {
   });
 });
 
-describe("buildCallDirectionRule", () => {
-  it("inbound with name + Tamil memory asks purpose of call", () => {
-    const rule = buildCallDirectionRule({
-      direction: "inbound",
-      callerName: "Karthi",
+describe("buildOpeningLanguageRule", () => {
+  it("states the opening language from memory and has no inbound/outbound script", () => {
+    const rule = buildOpeningLanguageRule({
       memoryLanguagePref: "ta",
       languageAutoDetect: true,
     });
-    expect(rule).toContain("CALL DIRECTION — INBOUND");
-    expect(rule).toContain("Karthi");
-    expect(rule).toMatch(/என்ன விஷயமா|எதற்காக|என்ன காரணமா/);
+    expect(rule).toContain("[OPENING LANGUAGE]");
     expect(rule).toContain("Tamil");
+    expect(rule).not.toContain("CALL DIRECTION");
+    expect(rule).not.toMatch(/what they called|why they called|என்ன விஷயமா/);
   });
+});
 
-  it("outbound forbids inbound purpose-of-call phrasing", () => {
-    const rule = buildCallDirectionRule({
-      direction: "outbound",
-      callerName: "Karthi",
-      memoryLanguagePref: "en",
-    });
-    expect(rule).toContain("CALL DIRECTION — OUTBOUND");
-    expect(rule).toContain("YOU placed this call");
-    expect(rule).toContain("என்ன விஷயமா கால் பண்ணிருக்கீங்க");
-    expect(rule).toContain("Never ask why they called");
-  });
-
-  it("inbound English default when no memory language", () => {
-    const rule = buildCallDirectionRule({
-      direction: "inbound",
-      callerName: null,
-      memoryLanguagePref: null,
-      languageAutoDetect: true,
-    });
-    expect(rule).toContain("English");
-    expect(rule).toContain("What are you calling about");
+describe("openingHello", () => {
+  it("returns a short hello in the opening language", () => {
+    expect(openingHello("ta")).toBe("வணக்கம்");
+    expect(openingHello("hi-IN")).toBe("नमस्ते");
+    expect(openingHello("en")).toBe("Hi");
   });
 });
 
@@ -120,22 +103,5 @@ describe("resolveInboundGreetingTtsSpeed", () => {
     expect(resolveInboundGreetingTtsSpeed(1)).toBe(0.85);
     expect(resolveInboundGreetingTtsSpeed(1.2)).toBe(1.02);
     expect(resolveInboundGreetingTtsSpeed(0.7)).toBe(0.7);
-  });
-});
-
-describe("inboundPurposeExamples", () => {
-  it("includes Tamil purpose phrase with name", () => {
-    const examples = inboundPurposeExamples("ta", "சிவராம்");
-    expect(examples.some((e) => e.includes("சிவராம்"))).toBe(true);
-    expect(examples.some((e) => /விஷயமா|காரணமா/.test(e))).toBe(true);
-  });
-
-  it("offers several related Tamil inbound openers", () => {
-    const examples = inboundPurposeExamples("ta", null);
-    expect(examples.length).toBeGreaterThanOrEqual(4);
-    expect(examples.some((e) => e.includes("என்ன விஷயமா கால் பண்ணிருக்கீங்க"))).toBe(true);
-    expect(examples.some((e) => e.includes("எதற்காக கால் பண்ணிருக்கீங்க"))).toBe(true);
-    expect(examples.some((e) => e.includes("என்ன காரணமா"))).toBe(true);
-    expect(examples.every((e) => !/உதவலாம்|சேவைக்கு|விஷயத்துக்கு உதவி/.test(e))).toBe(true);
   });
 });

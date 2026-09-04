@@ -36,16 +36,12 @@ describe("liveBookingConfirmEmailBlocked", () => {
 });
 
 describe("liveBookingTruthRule", () => {
-  it("omits the email spell-back when collection is off", () => {
-    const off = liveBookingTruthRule(false);
-    expect(off).toContain("Do not ask the caller to provide an email");
-    expect(off).toContain("agent instructions");
-    expect(off).not.toContain("email_confirmed=true");
-  });
-
-  it("keeps the spell-back rule when collection is on", () => {
+  it("only states calendar truth — no email ritual", () => {
+    expect(liveBookingTruthRule(false)).toBe(LIVE_BOOKING_TRUTH_RULE);
     expect(liveBookingTruthRule(true)).toBe(LIVE_BOOKING_TRUTH_RULE);
-    expect(LIVE_BOOKING_TRUTH_RULE).toContain("email_confirmed=true");
+    expect(LIVE_BOOKING_TRUTH_RULE).toContain("booking_confirmed");
+    expect(LIVE_BOOKING_TRUTH_RULE).not.toContain("email_confirmed");
+    expect(LIVE_BOOKING_TRUTH_RULE).not.toContain("Do not ask the caller to provide an email");
   });
 });
 
