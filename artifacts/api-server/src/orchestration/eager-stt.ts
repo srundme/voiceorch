@@ -13,6 +13,7 @@
 
 import { createHash } from "node:crypto";
 import { isCompleteEmailUtterance, looksLikeSpokenEmailSpelling } from "./endpointing.js";
+import { isRealEnglishUtterance } from "./language-filler-guard.js";
 import { isBackchannelOnlyUtterance } from "./transcriptQuality.js";
 import { envInt } from "./utils.js";
 
@@ -151,14 +152,50 @@ function isCompleteDigitUtterance(text: string): boolean {
 }
 
 /**
+ * Sarvam English-decoder leftovers on Tamil audio (call 21546):
+ * "I mean, even, even, even, even" / "Next question. Next question".
+ */
+export function looksLikeRepeatedSttHallucination(text: string): boolean {
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z\u0b80-\u0bff\u0900-\u097f\s]/gu, "")
+    .split(/\s+/)
+    .filter((w) => w.length >= 3);
+  if (words.length < 3) return false;
+  const counts = new Map<string, number>();
+  for (const w of words) {
+    const n = (counts.get(w) ?? 0) + 1;
+    if (n >= 3) return true;
+    counts.set(w, n);
+  }
+  return false;
+}
+
+function isLatinOnly(text: string): boolean {
+  return !/[^\u0000-\u00ff]/.test(text) && /[a-zA-Z]/.test(text);
+}
+
+/**
  * Whether a partial is safe to start speculative LLM generation.
  * `speechEnd` still requires a stable clause — unfinished email/number
  * spelling and 1–2 word scraps change on the provider final.
  */
-export function isEagerCommitReady(partial: string, opts?: { speechEnd?: boolean }): boolean {
+export function isEagerCommitReady(partial: string, opts?: {
+  speechEnd?: boolean;
+  /** Tamil/Hindi agent: do not prefill on English-decoder scraps. */
+  indicPinned?: boolean;
+}): boolean {
   const t = partial.trim();
   if (!t || isBackchannelOnlyUtterance(t)) return false;
   if (looksLikeUnstableCollectionPartial(t)) return false;
+  if (looksLikeRepeatedSttHallucination(t)) return false;
+  if (
+    opts?.indicPinned
+    && isLatinOnly(t)
+    && !isRealEnglishUtterance(t)
+  ) {
+    return false;
+  }
   if (isCompleteEmailUtterance(t) || isCompleteDigitUtterance(t)) return true;
   const words = t.split(/\s+/).filter(Boolean);
   if (hasTerminalPunct(t) && (opts?.speechEnd ? t.length >= 3 : true)) return true;

@@ -115,6 +115,43 @@ describe("resolveAutoDetectLanguage", () => {
     expect(r.heldFiller).toBe(false);
   });
 
+  it("keeps a Tamil agent on Tamil when LID writes Latin — no word list (call 21546)", () => {
+    const r = resolveAutoDetectLanguage({
+      detected: "en-IN",
+      latchedLang: null,
+      currentLang: "en-IN",
+      text: "Neenga yaaru enga irundhu call pannittu irukkeenga?",
+      agentLang: "ta-IN",
+    });
+    expect(r.lang).toBe("ta-IN");
+    expect(r.heldFiller).toBe(true);
+  });
+
+  it("still allows an explicit English latch on a Tamil agent", () => {
+    const r = resolveAutoDetectLanguage({
+      detected: "en-IN",
+      latchedLang: "en-IN",
+      currentLang: "ta-IN",
+      text: "please speak in English from now",
+      agentLang: "ta-IN",
+    });
+    expect(r.lang).toBe("en-IN");
+    expect(r.heldFiller).toBe(false);
+  });
+
+  it("allows passive English only when autoSwitchToEnglish is on", () => {
+    const r = resolveAutoDetectLanguage({
+      detected: "en-IN",
+      latchedLang: null,
+      currentLang: "ta-IN",
+      text: "how much does the premium cost?",
+      agentLang: "ta-IN",
+      allowPassiveEnglish: true,
+    });
+    expect(r.lang).toBe("en-IN");
+    expect(r.heldFiller).toBe(false);
+  });
+
   it("explicit latch always wins — even over a filler", () => {
     const r = resolveAutoDetectLanguage({
       detected: "ta-IN",

@@ -427,10 +427,9 @@ let activeTtsDrainCount = 0;
 
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
 const FILLER_THRESHOLD_MS     = Number(process.env.FILLER_THRESHOLD_MS ?? 0); // 0 = no dead-air cover; Bolna does not inject this
-/** Play a backchannel only when the LLM is late — not on every turn. */
-const BACKCHANNEL_LATE_MS     = Math.max(0, Number(process.env.BACKCHANNEL_LATE_MS ?? 500));
-const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
-                                        // arrives within this window after filler was enqueued
+/** 0 = cover immediately. A 500ms "late" wait was cleared on first token
+ *  (~280ms), so the filler never played and every turn sat in 1s dead air. */
+const BACKCHANNEL_LATE_MS     = Math.max(0, Number(process.env.BACKCHANNEL_LATE_MS ?? 0));
 const FRAGMENT_COALESCE_MS_DEFAULT = 0;  // fallback when agentConfig omits playing coalesce — keep in sync with FRAGMENT_COALESCE_DEFAULTS.playingMs (lib/db)
 /** Listening-side hold for ack fragments ("Yes Ma'am") — was 150ms; call 4856
  *  flushed before the caller finished "…how are you?" → zigzag replies. */
@@ -570,11 +569,25 @@ const KB_PREFETCH_MAX_CHARS   = 8000;
  * present) keeps FTS.
  */
 /**
- * Returns true when an LLM-streamed sentence is a pure acknowledgment word or
- * short phrase (e.g. "சரி.", "சரிங்க.", "okay.", "Got it.") that carries no
- * information and would double the filler already spoken this turn.
- * Conservative list — only exact single-word/short-phrase acks that the LLM
- * typically emits as openers in Tamil/English conversations.
+ * Acknowledgment words the LLM typically emits as openers in Tamil/English
+ * conversations. Keep minimal and exact — only phrases that convey zero new
+ * information when a filler word of the same type was already spoken.
+ */
+const ACK_WORDS = new Set([
+  // Tamil
+  "சரி", "சரிங்க", "சரிங்கம்", "ஆமா", "ஆம்", "நல்லது",
+  // English
+  "okay", "ok", "got it", "i see", "sure", "right", "alright",
+  "understood", "great", "perfect", "mm-hmm", "mhm", "mmhm", "yes", "yeah",
+  // Hindi (occasional)
+  "हाँ", "अच्छा", "ठीक है",
+  // Telugu/Kannada/Malayalam common acks
+  "సరే", "ಸರಿ", "ശരി",
+]);
+
+/**
+ * True when an LLM-streamed sentence is a pure acknowledgment ("சரி.",
+ * "okay.", "Got it.") that would double the filler already spoken this turn.
  */
 function isLlmLeadingAck(sentence: string): boolean {
   const t = sentence
@@ -582,20 +595,25 @@ function isLlmLeadingAck(sentence: string): boolean {
     .toLowerCase()
     .replace(/[.!?,\s]+$/g, "") // strip trailing punctuation/whitespace
     .trim();
-  // Keep this list minimal and exact — only phrases that convey zero new
-  // information when a filler word of the same type was already spoken.
-  const ACK_WORDS = new Set([
-    // Tamil
-    "சரி", "சரிங்க", "சரிங்கம்", "ஆமா", "ஆம்", "நல்லது",
-    // English
-    "okay", "ok", "got it", "i see", "sure", "right", "alright",
-    "understood", "great", "perfect", "mm-hmm", "mhm", "mmhm", "yes", "yeah",
-    // Hindi (occasional)
-    "हाँ", "अच्छा", "ठीक है",
-    // Telugu/Kannada/Malayalam common acks
-    "సరే", "ಸರಿ", "ശരി",
-  ]);
   return ACK_WORDS.has(t);
+}
+
+/**
+ * Drop a leading ack CLAUSE ("சரி, real estate business." → "real estate
+ * business.") when a cover filler already said the same word.
+ *
+ * The cover only helps if it is not immediately echoed: on call 21546, 20 of
+ * 23 first sentences opened with "சரி," so playing the cover without this
+ * would double the ack on nearly every turn. isLlmLeadingAck only matches a
+ * whole bare-ack sentence, which would throw the content away instead.
+ */
+export function stripLeadingAckClause(sentence: string): string {
+  const m = /^\s*([^,،]{1,14})[,،]\s+(\S.*)$/su.exec(sentence);
+  if (!m) return sentence;
+  const head = m[1]!.trim().toLowerCase();
+  if (!ACK_WORDS.has(head)) return sentence;
+  const rest = m[2]!.trim();
+  return rest.length >= 4 ? rest : sentence;
 }
 
 /** BCP-47 locale → display name used in LLM language-switch instructions. */
@@ -1298,7 +1316,6 @@ export class OrchestrationPipeline implements VoiceSession {
   private _fragmentCoalesce: { text: string; timer: ReturnType<typeof setTimeout> } | null = null;
   /** When set, skip dead-air filler jobs still in the play queue. */
   private _skipPendingFillerPlayback = false;
-  private _deadAirFillerEnqueuedAt: number | null = null;
   // ── Language-confusion recovery (Task 4) ──────────────────────────────────
   // Counts consecutive turns where the filler guard held the current language
   // (caller spoke a short English phrase in a non-English conversation). When
@@ -1753,25 +1770,6 @@ export class OrchestrationPipeline implements VoiceSession {
     };
   }
 
-  /** Skip dead-air filler still in the play queue when LLM responds immediately after. */
-  private onLlmFirstTokenReceived(): void {
-    if (
-      this._deadAirFillerEnqueuedAt !== null
-      && Date.now() - this._deadAirFillerEnqueuedAt < DEAD_AIR_FILLER_CANCEL_MS
-    ) {
-      this._skipPendingFillerPlayback = true;
-      for (const ac of this.activeTtsAborts) {
-        try { ac.abort(); } catch { /* noop */ }
-      }
-      this.activeTtsAborts.clear();
-      logger.info(
-        { callId: this.config.callId, msSinceFiller: Date.now() - this._deadAirFillerEnqueuedAt },
-        "Filler skipped — LLM first token arrived within cancel window",
-      );
-    }
-    this._deadAirFillerEnqueuedAt = null;
-  }
-
   /**
    * Bolna-style natural barge teardown:
    * 1) invalidate sequence + set barge flag (drain loops stop)
@@ -1865,7 +1863,7 @@ export class OrchestrationPipeline implements VoiceSession {
     this.eagerPartialTimer = setTimeout(() => {
       this.eagerPartialTimer = null;
       if (this.eagerPartialText !== partial) return;
-      if (!isEagerCommitReady(partial)) return;
+      if (!this.isEagerPartialReady(partial)) return;
       if (this.isPlaying || this.isProcessing || this.closed || this._specLlmState) return;
       if (this.semanticTurnBlocksPrefill()) return;
       this.launchEagerLlmFromPartial(partial, "stable_partial");
@@ -1885,8 +1883,20 @@ export class OrchestrationPipeline implements VoiceSession {
     const text = this.streamSTT?.getPendingTranscript?.()?.trim() ?? this.eagerPartialText.trim();
     if (!text) return;
     this.clearEagerPartialTimer();
-    if (!isEagerCommitReady(text, { speechEnd: true })) return;
+    if (!this.isEagerPartialReady(text, true)) return;
     this.launchEagerLlmFromPartial(text, "eou_commit", pendingTurnId);
+  }
+
+  /**
+   * Tamil/Hindi agents: refuse English-decoder scraps ("I want to win.")
+   * so speculative LLM does not burn a turn on LID garbage (call 21546).
+   */
+  private isEagerPartialReady(text: string, speechEnd = false): boolean {
+    const pin = this.agent.language || this.agent.sttConfig.language || "";
+    return isEagerCommitReady(text, {
+      speechEnd,
+      indicPinned: Boolean(pin && !pin.startsWith("en")),
+    });
   }
 
   /** VAD ≠ turn complete: do not prefetch LLM while Smart Turn is deciding / holding. */
@@ -2195,7 +2205,7 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.semanticTurnBlocksPrefill()) return;
     if (!this.conversationHistory.some((t) => t.role === "assistant")) return;
     const speechEnd = metadata?.speechEndReceived === true;
-    if (speechEnd && isEagerCommitReady(text, { speechEnd: true })) {
+    if (speechEnd && this.isEagerPartialReady(text, true)) {
       this.clearEagerPartialTimer();
       this.launchEagerLlmFromPartial(text, "speech_end_partial");
       return;
@@ -3943,6 +3953,8 @@ export class OrchestrationPipeline implements VoiceSession {
           latchedLang: this.requestedLangLatch,
           currentLang: this.currentLang,
           text: transcript,
+          agentLang: this.agent.language || this.agent.sttConfig.language || null,
+          allowPassiveEnglish: this.agent.autoSwitchToEnglish === true,
         });
         if (resolved.heldFiller) {
           logger.info(
@@ -3962,7 +3974,15 @@ export class OrchestrationPipeline implements VoiceSession {
         if (detected) {
           const explicitLatch = !!requested && requested === detected;
           const coldStart = !this.currentLang;
-          let commitLang = coldStart || explicitLatch || detected === this.currentLang;
+          const agentPin = this.agent.language || this.agent.sttConfig.language || "";
+          const restoringAgentPin = Boolean(
+            detected
+            && !detected.startsWith("en-")
+            && this.currentLang.startsWith("en-")
+            && agentPin
+            && detected === agentPin
+          );
+          let commitLang = coldStart || explicitLatch || detected === this.currentLang || restoringAgentPin;
           if (!commitLang) {
             if (detected === this._pendingLangConfirm) {
               this._pendingLangConfirmCount++;
@@ -8162,7 +8182,6 @@ export class OrchestrationPipeline implements VoiceSession {
     this._fillerPlayedThisTurn = false;
     this._skipPendingFillerPlayback = false;
     this._eagerLlmHitThisTurn = false;
-    this._deadAirFillerEnqueuedAt = null;
     this.clearFragmentCoalesce();
     // Capture adaptive endpoint decision for this turn (set by scheduleSilenceFlush);
     // null when turn was triggered by streaming STT (Deepgram handles endpointing there).
@@ -8639,7 +8658,15 @@ export class OrchestrationPipeline implements VoiceSession {
         ttsContextIdForSequence(sequenceId, turnContextId, FILLER_SEQUENCE_ID),
         emotions,
       ));
-      if (sequenceId !== FILLER_SEQUENCE_ID) firstSpeakableEnqueued = true;
+      if (sequenceId !== FILLER_SEQUENCE_ID) {
+        firstSpeakableEnqueued = true;
+        if (fillerTimer) {
+          clearTimeout(fillerTimer);
+          fillerTimer = null;
+        }
+        // Talk is queued — drop a filler that has not reached the wire yet.
+        if (!this.fillerPlaybackActive) this._skipPendingFillerPlayback = true;
+      }
       if (wakePlayer) {
         const wake = wakePlayer;
         wakePlayer = null;
@@ -8934,39 +8961,22 @@ export class OrchestrationPipeline implements VoiceSession {
             turnNumber: _currentTurnIndex,
             metadata: { event: "Backchannel Skipped", reason: "greeting_only" },
           });
-        } else if (BACKCHANNEL_LATE_MS > 0) {
-          // Cover only when the LLM is late. Immediate enqueue on every turn
-          // played a different speaker ("Hmm") before the first real token
-          // (call 20284). Frequency is a real roll — the log used to say
-          // "frequency roll" while freq>0 always played.
+        } else {
           const fillerOpts = this.backchannelFillerOpts(transcript);
           const pool = getBackchannelFillers(fillerLang, fillerOpts);
-          if (pool.length > 0) {
+          if (pool.length === 0) {
             logger.info(
               {
                 callId: this.config.callId,
                 fillerType: "backchannel",
                 language: fillerLang,
                 backchannelingEnabled: this.agent.backchannelingEnabled,
-                frequency: freq,
-                lateMs: BACKCHANNEL_LATE_MS,
-                fillerListLength: pool.length,
+                fillerListLength: 0,
               },
-              "Backchannel filler armed (late, language-aware)",
+              "Backchannel filler skipped — no filler set for language",
             );
-            this.logExec("TTS", "system", {
-              status: "info",
-              turnNumber: _currentTurnIndex,
-              metadata: {
-                event: "Backchannel Armed",
-                language: fillerLang,
-                lateMs: BACKCHANNEL_LATE_MS,
-                frequency: freq,
-              },
-            });
-            fillerTimer = setTimeout(() => {
-              // Cancel only when Talk audio is actually queued — first token
-              // is too early (call 21189: TTFT 282ms, first clip 2021ms).
+          } else {
+            const playCover = (): void => {
               if (firstSpeakableEnqueued || this.bargeInRequested || this.closed) return;
               const phrase = pickBackchannelFiller(fillerLang, this.recentFillerPhrases, fillerOpts);
               if (!phrase) return;
@@ -8981,10 +8991,9 @@ export class OrchestrationPipeline implements VoiceSession {
                   selectedFiller: phrase,
                   ttsText: phrase,
                 },
-                "Backchannel filler selected (language-aware, LLM late)",
+                "Backchannel filler selected (language-aware)",
               );
               enqueue(phrase, FILLER_SEQUENCE_ID);
-              this._deadAirFillerEnqueuedAt = Date.now();
               backchanneledThisTurn = true;
               this._fillerPlayedThisTurn = true;
               this.fillerPlayedCount++;
@@ -8997,30 +9006,37 @@ export class OrchestrationPipeline implements VoiceSession {
                   language: fillerLang,
                 },
               });
-            }, BACKCHANNEL_LATE_MS);
-          } else {
+            };
             logger.info(
               {
                 callId: this.config.callId,
                 fillerType: "backchannel",
                 language: fillerLang,
                 backchannelingEnabled: this.agent.backchannelingEnabled,
-                fillerListLength: 0,
+                frequency: freq,
+                lateMs: BACKCHANNEL_LATE_MS,
+                fillerListLength: pool.length,
               },
-              "Backchannel filler skipped — no filler set for language",
+              BACKCHANNEL_LATE_MS > 0
+                ? "Backchannel filler armed (late, language-aware)"
+                : "Backchannel filler armed (immediate, language-aware)",
             );
+            this.logExec("TTS", "system", {
+              status: "info",
+              turnNumber: _currentTurnIndex,
+              metadata: {
+                event: "Backchannel Armed",
+                language: fillerLang,
+                lateMs: BACKCHANNEL_LATE_MS,
+                frequency: freq,
+              },
+            });
+            if (BACKCHANNEL_LATE_MS > 0) {
+              fillerTimer = setTimeout(playCover, BACKCHANNEL_LATE_MS);
+            } else {
+              playCover();
+            }
           }
-        } else {
-          logger.info(
-            {
-              callId: this.config.callId,
-              fillerType: "backchannel",
-              language: fillerLang,
-              frequency: freq,
-              backchannelingEnabled: true,
-            },
-            "Backchannel filler skipped — frequency roll",
-          );
         }
       }
     }
@@ -9526,7 +9542,6 @@ export class OrchestrationPipeline implements VoiceSession {
             "Dead-air filler enqueued (language-aware, LLM > filler threshold)",
           );
           enqueue(phrase, FILLER_SEQUENCE_ID);
-          this._deadAirFillerEnqueuedAt = Date.now();
           this.fillerPlayedCount++;
           this._fillerPlayedThisTurn = true;
         }
@@ -9748,9 +9763,9 @@ export class OrchestrationPipeline implements VoiceSession {
             llmFirstTokenAt = Date.now();
             this._tTurnLlmFirstToken = performance.now();
             clearTtftFallbackTimer();
-            this.onLlmFirstTokenReceived();
-            // LLM responded in time — cancel the dead-air filler before it fires
-            if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
+            // The first token is not audible TTS — Cartesia needs a full
+            // sentence, which lands 0.3–1.5s later. The cover filler must stay
+            // up until enqueue() actually queues Talk audio (call 21546).
             const ttftMs = llmFirstTokenAt - llmStart;
             const slowTtft = ttftMs >= LLM_SLOW_TTFT_MS;
             this.logExec("LLM", "system", {
@@ -9783,20 +9798,31 @@ export class OrchestrationPipeline implements VoiceSession {
           for (const s of sentences) {
             const g = stepGuard.push(s);
             if (!g) continue;
-            // Suppress the very first LLM sentence if a filler (backchannel or
-            // dead-air) was already played this turn AND the sentence is a pure
-            // acknowledgment — avoids the double-ack "சரி … சரி." pattern.
+            // A filler (backchannel or dead-air) already spoke this turn, so
+            // the first LLM sentence must not repeat it: drop it outright when
+            // it is a bare ack, else strip just the leading ack clause.
+            // Avoids the double-ack "சரி … சரி," pattern.
+            let speakable = g;
             if (!llmFirstSentenceProcessed) {
               llmFirstSentenceProcessed = true;
-              if ((backchanneledThisTurn || this._fillerPlayedThisTurn) && isLlmLeadingAck(g)) {
-                logger.info(
-                  { callId: this.config.callId, suppressed: g, turnNumber: _currentTurnIndex, evt: "llm_leading_ack_suppressed" },
-                  "Pipeline: LLM leading ack suppressed (filler already played this turn)",
-                );
-                continue;
+              if (backchanneledThisTurn || this._fillerPlayedThisTurn) {
+                if (isLlmLeadingAck(g)) {
+                  logger.info(
+                    { callId: this.config.callId, suppressed: g, turnNumber: _currentTurnIndex, evt: "llm_leading_ack_suppressed" },
+                    "Pipeline: LLM leading ack suppressed (filler already played this turn)",
+                  );
+                  continue;
+                }
+                speakable = stripLeadingAckClause(g);
+                if (speakable !== g) {
+                  logger.info(
+                    { callId: this.config.callId, from: g, to: speakable, turnNumber: _currentTurnIndex, evt: "llm_leading_ack_clause_stripped" },
+                    "Pipeline: leading ack clause stripped (cover filler already said it)",
+                  );
+                }
               }
             }
-            enqueue(g);
+            enqueue(speakable);
           }
           pendingText = remainder;
         },
@@ -9927,7 +9953,6 @@ export class OrchestrationPipeline implements VoiceSession {
               if (!llmFirstTokenAt) {
                 llmFirstTokenAt = Date.now();
                 this._tTurnLlmFirstToken = performance.now();
-                this.onLlmFirstTokenReceived();
               }
               llmResponse += token;
               const afterThink = filterThinkToken(token);
@@ -11071,7 +11096,6 @@ export class OrchestrationPipeline implements VoiceSession {
           "Post-tool dead-air filler enqueued",
         );
         enqueue(phrase, FILLER_SEQUENCE_ID);
-        this._deadAirFillerEnqueuedAt = Date.now();
         this.fillerPlayedCount++;
         this._fillerPlayedThisTurn = true;
       }, FILLER_THRESHOLD_MS);

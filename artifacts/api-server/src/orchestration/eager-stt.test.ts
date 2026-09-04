@@ -3,6 +3,7 @@ import {
   isEagerCommitReady,
   isSameUtteranceContinuation,
   isSpeculativeHit,
+  looksLikeRepeatedSttHallucination,
   reconcileSpeculativePrefill,
   speculativeInputHash,
 } from "./eager-stt.js";
@@ -41,6 +42,22 @@ describe("isEagerCommitReady", () => {
     expect(isEagerCommitReady("R T H I K E Y A N.@they might", { speechEnd: true })).toBe(false);
     expect(isEagerCommitReady("KARETHIAEYAN@gmail.com", { speechEnd: true })).toBe(true);
     expect(isEagerCommitReady("9876543210", { speechEnd: true })).toBe(true);
+  });
+
+  it("rejects repeated English STT hallucinations (call 21546)", () => {
+    expect(looksLikeRepeatedSttHallucination("Right, next question. Next question, next question.")).toBe(true);
+    expect(looksLikeRepeatedSttHallucination("I mean, even, even, even, even, even, even,")).toBe(true);
+    expect(looksLikeRepeatedSttHallucination("I want to know about the policy")).toBe(false);
+    expect(isEagerCommitReady("Right, next question. Next question, next question.", { speechEnd: true })).toBe(false);
+    expect(isEagerCommitReady("I mean, even, even, even, even, even, even,", { speechEnd: true })).toBe(false);
+  });
+
+  it("on an Indic-pinned agent, refuses English-decoder scraps but keeps real English and Tanglish", () => {
+    expect(isEagerCommitReady("I want to win.", { speechEnd: true, indicPinned: true })).toBe(false);
+    expect(isEagerCommitReady("Well, tell me,", { speechEnd: true, indicPinned: true })).toBe(false);
+    expect(isEagerCommitReady("Welcome, madam.", { speechEnd: true, indicPinned: true })).toBe(false);
+    expect(isEagerCommitReady("I want to know about the policy", { speechEnd: true, indicPinned: true })).toBe(true);
+    expect(isEagerCommitReady("Aa Madam enakku oru 3 kodi thevaipaduthu", { speechEnd: true, indicPinned: true })).toBe(true);
   });
 });
 

@@ -154,13 +154,20 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(methodBody("processTurn")).toContain("this.clearBargeWait()");
     expect(methodBody("handleStreamingTranscript")).toContain("if (this.isProcessing) {");
     expect(pipelineSrc).toMatch(/FILLER_THRESHOLD_MS \?\? 0/);
-    expect(pipelineSrc).toMatch(/BACKCHANNEL_LATE_MS \?\? 500/);
+    expect(pipelineSrc).toMatch(/BACKCHANNEL_LATE_MS \?\? 0/);
     expect(pipelineSrc).not.toContain("Math.random() < freq");
-    expect(pipelineSrc).toContain("Backchannel filler armed (late, language-aware)");
-    expect(pipelineSrc).toContain("} else if (BACKCHANNEL_LATE_MS > 0) {");
+    expect(pipelineSrc).toContain("Backchannel filler armed (immediate, language-aware)");
+    // The cover must survive the first LLM token — Cartesia only speaks once a
+    // whole sentence exists (call 21546: 0.3–1.5s later). Assert on behaviour,
+    // not prose: no first-token filler hook, no cancel window.
+    expect(pipelineSrc).not.toContain("onLlmFirstTokenReceived");
+    expect(pipelineSrc).not.toContain("DEAD_AIR_FILLER_CANCEL_MS");
+    expect(pipelineSrc).toContain("The first token is not audible TTS");
     expect(pipelineSrc).toContain("firstSpeakableEnqueued || this.bargeInRequested || this.closed");
+    // A played cover must not be echoed by the LLM's own leading "சரி,".
+    expect(pipelineSrc).toContain("stripLeadingAckClause");
     expect(pipelineSrc).toContain("event: \"Backchannel Armed\"");
-    expect(pipelineSrc).toContain("if (sequenceId !== FILLER_SEQUENCE_ID) firstSpeakableEnqueued = true");
+    expect(pipelineSrc).toContain("if (sequenceId !== FILLER_SEQUENCE_ID) {");
     expect(pipelineSrc).toContain("partialSnapshot: _spec.partialSnapshot");
     expect(pipelineSrc).toContain("preferNumberTranscript");
     expect(pipelineSrc).toContain("initialLanguage wins even in strict mode");
