@@ -113,7 +113,7 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
     await tts.synthesize("வணக்கம்");
 
     expect(languages).toEqual(["en", "ta"]);
-    expect(locales).toEqual(["en-IN", "ta-IN"]);
+    expect(locales).toEqual([undefined, undefined]);
     expect(models).toEqual(["sonic-3.5", "sonic-3.5"]);
   });
 
@@ -196,6 +196,34 @@ describe("parseCartesiaLang", () => {
   });
 });
 
+describe("Cartesia language vs locale", () => {
+  it("never sends language and locale together (Cartesia 400 → silent call)", async () => {
+    const bodies: Array<{ language?: string; locale?: string; model_id?: string }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(init.body as string) as { language?: string; locale?: string; model_id?: string });
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => new Uint8Array([1]).buffer,
+        } as unknown as Response;
+      }),
+    );
+
+    await new CartesiaTTS("k", null, "sonic-3.6", "en-IN").synthesize("Hello");
+    await new CartesiaTTS("k", null, "sonic-3.5", "ta-IN").synthesize("வணக்கம்");
+
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toMatchObject({ model_id: "sonic-3.6", language: "en" });
+    expect(bodies[1]).toMatchObject({ model_id: "sonic-3.5", language: "ta" });
+    for (const b of bodies) {
+      expect(b.locale).toBeUndefined();
+      expect(Boolean(b.language) && Boolean(b.locale)).toBe(false);
+    }
+  });
+});
+
 describe("ensureTerminalPunctuation", () => {
   it("adds a period only when the sentence has no terminal mark", () => {
     expect(CartesiaTTS.ensureTerminalPunctuation("How can I help you?")).toBe("How can I help you?");
@@ -216,6 +244,8 @@ describe("Cartesia adaptor contract (source)", () => {
     expect(src).toContain('return { mode: "id", id: this.voiceId }');
     expect(src).toMatch(/CARTESIA_MAX_BUFFER_DELAY_MS = 0/);
     expect(src).toContain('CARTESIA_SONIC_36_MODEL = "sonic-3.6"');
+    expect(src).toContain("never both");
+    expect(src).toMatch(/if \(this\.language\) msg\.language = this\.language;/);
   });
 
   it("sends voice on continue:false finalize so Cartesia does not 400 Voice ID required mid-clip", () => {

@@ -442,9 +442,13 @@ export class CartesiaTTS implements TTSAdapter {
     return JSON.stringify(body);
   }
 
+  /**
+   * Cartesia: `language` OR `locale`, never both (docs: TTSRequest). Sending
+   * both 400s every clip — silent call. `locale` is Sonic 3.6+ only; the India
+   * endpoint we use still speaks `language` (`en`). Keep locale off the wire.
+   */
   private applyLang(msg: Record<string, unknown>): void {
     if (this.language) msg.language = this.language;
-    if (this.locale) msg.locale = this.locale;
   }
 
   private get restHeaders() {
