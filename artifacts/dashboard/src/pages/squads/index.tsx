@@ -24,10 +24,19 @@ import {
 
 const API = "/api";
 
-const DEFAULT_HANDOFF_MESSAGE =
-  "Just a second — connecting you now.";
-const DEFAULT_HANDOFF_GREETING =
-  "Hi — I have what you just said. How can I help?";
+const STOCK_HANDOFF_MESSAGES = new Set([
+  "Just a second — connecting you now.",
+  "One moment — I'm connecting you to a teammate who can help with this.",
+]);
+const STOCK_HANDOFF_GREETINGS = new Set([
+  "Hi — I have what you just said. How can I help?",
+  "Hi — I've been briefed on your conversation so far. How can I help?",
+]);
+
+function stockHandoffLine(stored: string | null | undefined, stockSet: Set<string>): string {
+  const t = (stored ?? "").trim();
+  return !t || stockSet.has(t) ? "" : t;
+}
 
 type SquadMember = {
   id?: number;
@@ -269,16 +278,16 @@ function CreateSquadDialog({
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [handoffMessage, setHandoffMessage] = useState(DEFAULT_HANDOFF_MESSAGE);
-  const [handoffGreeting, setHandoffGreeting] = useState(DEFAULT_HANDOFF_GREETING);
+  const [handoffMessage, setHandoffMessage] = useState("");
+  const [handoffGreeting, setHandoffGreeting] = useState("");
   const [drafts, setDrafts] = useState<MemberDraft[]>(blankDrafts);
 
   useEffect(() => {
     if (!open) return;
     setName("");
     setDescription("");
-    setHandoffMessage(DEFAULT_HANDOFF_MESSAGE);
-    setHandoffGreeting(DEFAULT_HANDOFF_GREETING);
+    setHandoffMessage("");
+    setHandoffGreeting("");
     setDrafts(seeded ? seededDrafts() : blankDrafts());
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when dialog opens / seed changes
   }, [open, seedAgentId, seeded]);
@@ -370,10 +379,10 @@ function CreateSquadDialog({
                     value={handoffMessage}
                     onChange={(e) => setHandoffMessage(e.target.value)}
                     rows={2}
-                    placeholder={DEFAULT_HANDOFF_MESSAGE}
+                    placeholder="Optional. Leave empty to stay silent."
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Spoken by this agent every time before connecting a teammate.
+                    Optional. Empty stays silent — no extra voice before the teammate.
                   </p>
                 </div>
               ) : null}
@@ -386,10 +395,10 @@ function CreateSquadDialog({
                     value={handoffGreeting}
                     onChange={(e) => setHandoffGreeting(e.target.value)}
                     rows={2}
-                    placeholder={DEFAULT_HANDOFF_GREETING}
+                    placeholder="Optional. Leave empty — they continue from their prompt."
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Spoken by this agent after they take over the call.
+                    Optional. Empty stays silent — they follow their own prompt.
                   </p>
                 </div>
               ) : null}
@@ -417,8 +426,8 @@ function CreateSquadDialog({
                 name: name.trim(),
                 description: description.trim() || null,
                 status: "active",
-                handoffMessage: handoffMessage.trim() || DEFAULT_HANDOFF_MESSAGE,
-                handoffGreeting: handoffGreeting.trim() || DEFAULT_HANDOFF_GREETING,
+                handoffMessage: handoffMessage.trim(),
+                handoffGreeting: handoffGreeting.trim(),
                 members: filled.map((d, i) => ({
                   agentId: parseInt(d.agentId, 10),
                   roleName: d.roleName.trim()
@@ -457,16 +466,20 @@ function EditSquadDialog({
 }) {
   const [name, setName] = useState(squad.name);
   const [description, setDescription] = useState(squad.description ?? "");
-  const [handoffMessage, setHandoffMessage] = useState(squad.handoffMessage ?? DEFAULT_HANDOFF_MESSAGE);
-  const [handoffGreeting, setHandoffGreeting] = useState(squad.handoffGreeting ?? DEFAULT_HANDOFF_GREETING);
+  const [handoffMessage, setHandoffMessage] = useState(
+    stockHandoffLine(squad.handoffMessage, STOCK_HANDOFF_MESSAGES),
+  );
+  const [handoffGreeting, setHandoffGreeting] = useState(
+    stockHandoffLine(squad.handoffGreeting, STOCK_HANDOFF_GREETINGS),
+  );
   const [drafts, setDrafts] = useState<MemberDraft[]>([]);
 
   useEffect(() => {
     if (!open) return;
     setName(squad.name);
     setDescription(squad.description ?? "");
-    setHandoffMessage(squad.handoffMessage?.trim() || DEFAULT_HANDOFF_MESSAGE);
-    setHandoffGreeting(squad.handoffGreeting?.trim() || DEFAULT_HANDOFF_GREETING);
+    setHandoffMessage(stockHandoffLine(squad.handoffMessage, STOCK_HANDOFF_MESSAGES));
+    setHandoffGreeting(stockHandoffLine(squad.handoffGreeting, STOCK_HANDOFF_GREETINGS));
     setDrafts(
       squad.members.map((m) => ({
         agentId: String(m.agentId),
@@ -558,10 +571,10 @@ function EditSquadDialog({
                     value={handoffMessage}
                     onChange={(e) => setHandoffMessage(e.target.value)}
                     rows={2}
-                    placeholder={DEFAULT_HANDOFF_MESSAGE}
+                    placeholder="Optional. Leave empty to stay silent."
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Spoken by this agent every time before connecting a teammate.
+                    Optional. Empty stays silent — no extra voice before the teammate.
                   </p>
                 </div>
               ) : null}
@@ -574,10 +587,10 @@ function EditSquadDialog({
                     value={handoffGreeting}
                     onChange={(e) => setHandoffGreeting(e.target.value)}
                     rows={2}
-                    placeholder={DEFAULT_HANDOFF_GREETING}
+                    placeholder="Optional. Leave empty — they continue from their prompt."
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Spoken by this agent after they take over the call.
+                    Optional. Empty stays silent — they follow their own prompt.
                   </p>
                 </div>
               ) : null}
@@ -600,8 +613,8 @@ function EditSquadDialog({
               onSubmit({
                 name: name.trim(),
                 description: description.trim() || null,
-                handoffMessage: handoffMessage.trim() || DEFAULT_HANDOFF_MESSAGE,
-                handoffGreeting: handoffGreeting.trim() || DEFAULT_HANDOFF_GREETING,
+                handoffMessage: handoffMessage.trim(),
+                handoffGreeting: handoffGreeting.trim(),
                 members: filled.map((d, i) => ({
                   agentId: parseInt(d.agentId, 10),
                   roleName: d.roleName.trim()
@@ -762,7 +775,7 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
                       <PhoneForwarded className="w-3 h-3" /> Handoff announcement
                     </p>
                     <p className="text-xs text-foreground/90 mt-0.5">
-                      {squad.handoffMessage?.trim() || DEFAULT_HANDOFF_MESSAGE}
+                      {stockHandoffLine(squad.handoffMessage, STOCK_HANDOFF_MESSAGES) || "Silent — teammate continues from their prompt"}
                     </p>
                   </div>
                 ) : null}
@@ -772,7 +785,7 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
                       <PhoneForwarded className="w-3 h-3" /> Receiving agent greeting
                     </p>
                     <p className="text-xs text-foreground/90 mt-0.5">
-                      {squad.handoffGreeting?.trim() || DEFAULT_HANDOFF_GREETING}
+                      {stockHandoffLine(squad.handoffGreeting, STOCK_HANDOFF_GREETINGS) || "Silent — they follow their own prompt"}
                     </p>
                   </div>
                 ) : null}

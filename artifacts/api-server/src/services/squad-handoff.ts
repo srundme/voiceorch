@@ -416,19 +416,21 @@ export async function performSquadAgentHandoff(opts: {
     return null;
   }
 
-  // Finish any in-flight TTS on the departing agent, then always speak the
-  // squad's handoff announcement so the caller never hears a mid-sentence cut
-  // when we swap pipelines / play the receiving greeting.
+  // Finish any in-flight TTS on the departing agent. Speak a custom
+  // announcement only — stock / empty stay silent so we do not inject
+  // a second hardcoded voice before the teammate continues.
   const announcement = spokenSquadHandoffMessage(opts.squad.handoffMessage);
   try {
     await opts.previousPipeline.finishSpeakingForMaxDuration(2_500);
   } catch (err) {
     logger.warn({ err, callId: opts.hooks.callId }, "Handoff: finishSpeaking before announcement failed");
   }
-  try {
-    await opts.previousPipeline.speakRaw(announcement);
-  } catch (err) {
-    logger.warn({ err, callId: opts.hooks.callId }, "Handoff announcement speakRaw failed");
+  if (announcement) {
+    try {
+      await opts.previousPipeline.speakRaw(announcement);
+    } catch (err) {
+      logger.warn({ err, callId: opts.hooks.callId }, "Handoff announcement speakRaw failed");
+    }
   }
 
   // Build the new pipeline WHILE the previous one is still alive.
@@ -485,15 +487,15 @@ export async function performSquadAgentHandoff(opts: {
 
   const greeting = spokenSquadHandoffGreeting(opts.squad.handoffGreeting);
 
-  // Speak before the session swaps pointers — onAudioOut is shared, so the
-  // caller hears the greeting even while inbound audio still hits the old
-  // pipeline for a moment. A short gap after the departing line so two voices
-  // do not slam together.
-  await new Promise((r) => setTimeout(r, 650));
-  try {
-    await newPipeline.speakRaw(greeting);
-  } catch (err) {
-    logger.warn({ err, callId: hooks.callId }, "Handoff greeting speakRaw failed");
+  // Custom greeting only. Stock copy used to be spoken on a freshly built
+  // pipeline (often Gemini Live default "Kore") — a second robotic voice.
+  if (greeting) {
+    await new Promise((r) => setTimeout(r, 650));
+    try {
+      await newPipeline.speakRaw(greeting);
+    } catch (err) {
+      logger.warn({ err, callId: hooks.callId }, "Handoff greeting speakRaw failed");
+    }
   }
 
   await recordSquadHandoff({ runId: opts.runId, packet, outcome: "success" });

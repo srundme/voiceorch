@@ -23,32 +23,33 @@ export const DEFAULT_SQUAD_LIMITS: Required<SquadLimits> = {
   maxRuntimeMinutes: 60,
 };
 
-/** Spoken by the departing agent before every live teammate handoff. */
+/** Stock copy we used to force-speak. Kept so old squads that saved it stay silent. */
 export const DEFAULT_SQUAD_HANDOFF_MESSAGE =
   "Just a second — connecting you now.";
 
-/** Spoken by the receiving agent after a live handoff. */
 export const DEFAULT_SQUAD_HANDOFF_GREETING =
   "Hi — I have what you just said. How can I help?";
 
-const LEGACY_SQUAD_HANDOFF_MESSAGES = new Set([
+const STOCK_SQUAD_HANDOFF_MESSAGES = new Set([
+  DEFAULT_SQUAD_HANDOFF_MESSAGE,
   "One moment — I'm connecting you to a teammate who can help with this.",
 ]);
 
-const LEGACY_SQUAD_HANDOFF_GREETINGS = new Set([
+const STOCK_SQUAD_HANDOFF_GREETINGS = new Set([
+  DEFAULT_SQUAD_HANDOFF_GREETING,
   "Hi — I've been briefed on your conversation so far. How can I help?",
 ]);
 
-/** Use saved custom copy; map the old stiff defaults to the spoken ones. */
+/** Custom announcement only. Stock / empty → silent (receiving agent uses their prompt). */
 export function spokenSquadHandoffMessage(stored?: string | null): string {
   const t = (stored ?? "").trim();
-  if (!t || LEGACY_SQUAD_HANDOFF_MESSAGES.has(t)) return DEFAULT_SQUAD_HANDOFF_MESSAGE;
+  if (!t || STOCK_SQUAD_HANDOFF_MESSAGES.has(t)) return "";
   return t;
 }
 
 export function spokenSquadHandoffGreeting(stored?: string | null): string {
   const t = (stored ?? "").trim();
-  if (!t || LEGACY_SQUAD_HANDOFF_GREETINGS.has(t)) return DEFAULT_SQUAD_HANDOFF_GREETING;
+  if (!t || STOCK_SQUAD_HANDOFF_GREETINGS.has(t)) return "";
   return t;
 }
 
@@ -63,12 +64,12 @@ export const squadsTable = pgTable("squads", {
   entryMemberId: integer("entry_member_id"),
   limits: jsonb("limits").$type<SquadLimits>().notNull().default({}),
   /**
-   * Line spoken by the *current* agent before a live teammate handoff.
-   * Always played (and drained) so the caller never hears a mid-sentence cut.
+   * Optional line spoken by the *current* agent before a live teammate handoff.
+   * Empty / stock defaults stay silent — only operator-written copy is spoken.
    */
-  handoffMessage: text("handoff_message").default(DEFAULT_SQUAD_HANDOFF_MESSAGE),
-  /** Warm line spoken by the receiving agent after a live handoff. */
-  handoffGreeting: text("handoff_greeting").default(DEFAULT_SQUAD_HANDOFF_GREETING),
+  handoffMessage: text("handoff_message").default(""),
+  /** Optional warm line spoken by the receiving agent. Empty / stock stay silent. */
+  handoffGreeting: text("handoff_greeting").default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [
