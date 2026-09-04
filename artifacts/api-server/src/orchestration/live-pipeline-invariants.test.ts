@@ -157,6 +157,8 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     // cut current audio for a real queued final and drop stale acks at drain.
     expect(methodBody("handleStreamingTranscript")).toContain("queued_final");
     expect(methodBody("handleStreamingTranscript")).toContain("isFalseInterruption");
+    expect(methodBody("handleStreamingTranscript")).toContain("interruptReplyArmed");
+    expect(pipelineSrc).toContain("this.wakePlayTask()");
     expect(pipelineSrc).toMatch(/FILLER_THRESHOLD_MS \?\? 0/);
     expect(pipelineSrc).toMatch(/BACKCHANNEL_LATE_MS \?\? 0/);
     expect(pipelineSrc).not.toContain("Math.random() < freq");

@@ -1245,6 +1245,13 @@ export class OrchestrationPipeline implements VoiceSession {
   private streamSTT: StreamSTT | null = null;
   /** Queue of streaming STT final transcripts that arrived while a turn is still processing. */
   private pendingTranscriptQueue: Array<{ text: string; emittedAt: number; closeReason: TurnCloseReason }> = [];
+  /**
+   * After a real barge, only the interrupting utterance is kept. Pre-barge
+   * leftovers would otherwise drain as a second zigzag reply.
+   */
+  private interruptReplyArmed = false;
+  /** Wakes playTask if it is parked between sentences so barge can unwind now. */
+  private _wakePlayTask: (() => void) | null = null;
   private streamSTTReconnectAttempts = 0;
   private streamSTTReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -1679,6 +1686,12 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /** Clear barge WAIT without claiming a system line is on the wire. */
+  private wakePlayTask(): void {
+    const wake = this._wakePlayTask;
+    this._wakePlayTask = null;
+    if (wake) wake();
+  }
+
   private clearBargeWait(): void {
     this.bargeInRequested = false;
     this.skipAgentPlaybackForHandoff = false;
@@ -1801,6 +1814,7 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     this.activeTtsAborts.clear();
     this.llm.cancelInFlight?.();
+    this.wakePlayTask();
     // Legacy / batch STT: flush a held coalesce buffer. Live Sarvam realtime
     // flush() fabricates a final from lastPartial and CLEARS it (call 21450:
     // no later transcript.final, then mute until hangup). Keep lastPartial.
@@ -4244,11 +4258,6 @@ export class OrchestrationPipeline implements VoiceSession {
     this.clearBargeRecovery();
 
     if (this.isProcessing) {
-      // Bolna `_listen_transcriber`: never start a second concurrent turn
-      // (their kickoff_llm_generation cancels the in-flight LLM; we cannot —
-      // that double-spoke on call 21426). Two halves of the same gate:
-      //   is_false_interruption → drop (do not queue for after playback)
-      //   should_trigger_interruption → teardown now, then drain in finally
       const playing = this.isPlaying || this.isSendingTtsAudio;
       const welcomePlayed = !(this.greetingFirstClipActive || this.systemPlaybackActive);
       if (
@@ -4273,12 +4282,14 @@ export class OrchestrationPipeline implements VoiceSession {
         && this.shouldInterruptFromCallerTranscript(transcript)
       ) {
         this.triggerBargeIn("queued_final", transcript, { speculative: true });
-        logger.info(
-          { callId: this.config.callId, transcript: transcript.slice(0, 80) },
-          "Barge-in from queued final — current turn must yield (Bolna cleanup_downstream)",
-        );
+      }
+      const answeringInterrupt = this.bargeInRequested || this._lastTurnWasBargedIn;
+      if (answeringInterrupt && !this.interruptReplyArmed) {
+        this.pendingTranscriptQueue = [];
+        this.interruptReplyArmed = true;
       }
       this.pendingTranscriptQueue.push({ text: transcript, emittedAt: sttEmittedAt, closeReason });
+      if (answeringInterrupt) this.wakePlayTask();
       return;
     }
 
@@ -4302,6 +4313,7 @@ export class OrchestrationPipeline implements VoiceSession {
       logger.error({ callId: this.config.callId, err }, "Turn error (streaming STT)");
     } finally {
       this.isProcessing = false;
+      this.interruptReplyArmed = false;
       this._processTurnGeneration = null;
       if (!this.speakingSpeakerHandoffChallenge && !this.speakingVoiceLinkAck) {
         this.skipAgentPlaybackForHandoff = false;
@@ -8743,6 +8755,7 @@ export class OrchestrationPipeline implements VoiceSession {
       if (wakePlayer) {
         const wake = wakePlayer;
         wakePlayer = null;
+        this._wakePlayTask = null;
         // Post-utterance grace (Bolna incremental_delay) is enforced once in
         // drainSentenceJob via waitForAudioEmit — do not also delay the player
         // wake here or agents with incrementalDelay>0 hear an extra silent gap
@@ -8754,6 +8767,7 @@ export class OrchestrationPipeline implements VoiceSession {
     const playTask = async (): Promise<void> => {
       let idx = 0;
       while (true) {
+        if (this.bargeInRequested) break;
         if (idx < sentenceQueue.length) {
           const job = sentenceQueue[idx++]!;
           if (job.skipDrain) {
@@ -8798,9 +8812,15 @@ export class OrchestrationPipeline implements VoiceSession {
             { callId: this.config.callId, pendingTtsChunks: this.pendingTtsChunks, queueIdx: idx, queueLen: sentenceQueue.length },
             "TTS playback waiting for pending chunks to complete",
           );
-          await new Promise<void>((r) => { wakePlayer = r; });
+          await new Promise<void>((r) => {
+            wakePlayer = r;
+            this._wakePlayTask = r;
+          });
         } else {
-          await new Promise<void>((r) => { wakePlayer = r; });
+          await new Promise<void>((r) => {
+            wakePlayer = r;
+            this._wakePlayTask = r;
+          });
         }
       }
       this.isPlaying = false;
@@ -10121,6 +10141,14 @@ export class OrchestrationPipeline implements VoiceSession {
     // (e.g. pure tool-call response that never invokes onToken)
     if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
 
+    if (this.bargeInRequested && this.pendingTranscriptQueue.length > 0) {
+      allEnqueued = true;
+      finalizeTurnCtx();
+      this.wakePlayTask();
+      await playPromise;
+      return;
+    }
+
     // Defense-in-depth anomaly: the LLM streamed a serialized tool envelope as
     // text (it should have been resolved by the adapter's onToolCall path). The
     // guard withheld it from TTS so it was never spoken — record it for triage.
@@ -11053,6 +11081,7 @@ export class OrchestrationPipeline implements VoiceSession {
     const playTask = async (): Promise<void> => {
       let idx = 0;
       while (true) {
+        if (this.bargeInRequested) break;
         if (idx < sentenceQueue.length) {
           const job = sentenceQueue[idx++]!;
           if (job.skipDrain) {
@@ -11074,7 +11103,10 @@ export class OrchestrationPipeline implements VoiceSession {
         } else if (allEnqueued) {
           break;
         } else {
-          await new Promise<void>((r) => { wakePlayer = r; });
+          await new Promise<void>((r) => {
+            wakePlayer = r;
+            this._wakePlayTask = r;
+          });
         }
       }
       this.isPlaying = false;
