@@ -37,4 +37,16 @@ describe("clause-level dispatch", () => {
       "Sorry, the line cut out",
     );
   });
+
+  it("Cartesia sentence mode keeps commas until .!?", () => {
+    const pending = "Hello Gopi, I'm Aisha from ILCC and I can help you today";
+    const { sentences, remainder } = extractSentences(pending, 8, { earlyClause: false });
+    expect(sentences).toEqual([]);
+    expect(remainder).toBe(pending);
+    expect(pickStreamedGreetingHead(pending, { earlyClause: false })).toBe("");
+    expect(pickStreamedGreetingHead(
+      "Sorry, the line cut out there for a second.",
+      { earlyClause: false },
+    )).toBe("Sorry, the line cut out there for a second.");
+  });
 });

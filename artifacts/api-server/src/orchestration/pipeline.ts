@@ -5269,7 +5269,7 @@ export class OrchestrationPipeline implements VoiceSession {
             pendingSpeak += chunk;
             // First usable clause starts TTS. Tiny leads ("Sorry,") stay
             // coalesced until a real clause exists (call 20274).
-            const first = pickStreamedGreetingHead(pendingSpeak);
+            const first = pickStreamedGreetingHead(pendingSpeak, this.ttsExtractOpts());
             if (!first) return;
             firstSentenceSent = true;
             onFirstSentence(first);
@@ -5290,7 +5290,7 @@ export class OrchestrationPipeline implements VoiceSession {
             }
           );
           if (!firstSentenceSent && greeting.trim()) {
-            onFirstSentence?.(pickStreamedGreetingHead(greeting) || greeting.trim());
+            onFirstSentence?.(pickStreamedGreetingHead(greeting, this.ttsExtractOpts()) || greeting.trim());
           }
           const greetingLlmMs = Date.now() - _greetLlmStartAt;
           logger.info(
@@ -6421,6 +6421,19 @@ export class OrchestrationPipeline implements VoiceSession {
    * playback (greeting, turns, stall reprompts, goodbye) funnels through here,
    * mirroring the web-call playback lifecycle.
    */
+  /**
+   * Cartesia Sonic 3.5/3.6: wait for a real sentence (`.!?।`). Comma-clause
+   * dispatch turns "Hello Gopi, I'm Aisha…" into two clips plus a forced
+   * period — Sonic then speaks each fragment as a full stop, not a pause.
+   */
+  private ttsExtractOpts(): { earlyClause: boolean } {
+    return { earlyClause: this.agent.ttsProvider !== "cartesia" };
+  }
+
+  private extractSpeakable(text: string) {
+    return extractSentences(text, this.agent.ttsMinSentenceChars, this.ttsExtractOpts());
+  }
+
   private playSentence(text: string, emotions?: string[]): Promise<void> {
     const seqId = this.interruptionMgr.beginAgentTurn();
     this.activeAgentSequenceId = seqId;
@@ -6437,7 +6450,7 @@ export class OrchestrationPipeline implements VoiceSession {
    * and absorb the next sentence's latency inside current playback.
    */
   private async playTextAsSentences(text: string, emotions?: string[]): Promise<void> {
-    const { sentences, remainder } = extractSentences(text, this.agent.ttsMinSentenceChars);
+    const { sentences, remainder } = this.extractSpeakable(text);
     if (remainder.trim()) sentences.push(remainder.trim());
     if (sentences.length <= 1) return this.playSentence(text, emotions);
     const seqId = this.interruptionMgr.beginAgentTurn();
@@ -9622,7 +9635,7 @@ export class OrchestrationPipeline implements VoiceSession {
           const afterEnvelope = envelopeGuard.filter(afterBrackets);
           if (!afterEnvelope) return;
           pendingText += afterEnvelope;
-          const { sentences, remainder } = extractSentences(pendingText, this.agent.ttsMinSentenceChars);
+          const { sentences, remainder } = this.extractSpeakable(pendingText);
           for (const s of sentences) {
             const g = stepGuard.push(s);
             if (!g) continue;
@@ -9784,7 +9797,7 @@ export class OrchestrationPipeline implements VoiceSession {
               const afterBrackets = filterBrackets(filtered);
               if (!afterBrackets) return;
               pendingText += afterBrackets;
-              const { sentences, remainder } = extractSentences(pendingText, this.agent.ttsMinSentenceChars);
+              const { sentences, remainder } = this.extractSpeakable(pendingText);
               for (const s of sentences) {
                 const g = stepGuard.push(s);
                 if (!g) continue;
@@ -10056,7 +10069,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // Case C — 60-char comma-split fired mid-sentence: pendingText is a mid-sentence
     //   FRAGMENT (e.g. "எது பார்க்குற" after split emitted "நீங்க...வில்லா"). Not a
     //   prefix of allSentences[-1], but IS a substring of it — emit the suffix.
-    const { sentences: allSentences, remainder: trueRemainder } = extractSentences(cleanResponse, this.agent.ttsMinSentenceChars);
+    const { sentences: allSentences, remainder: trueRemainder } = this.extractSpeakable(cleanResponse);
     const pendingTrim = pendingText.trim();
     let flushText: string;
     if (trueRemainder.trim().length > pendingTrim.length) {
@@ -10932,7 +10945,7 @@ export class OrchestrationPipeline implements VoiceSession {
             if (followUpFillerTimer) { clearTimeout(followUpFillerTimer); followUpFillerTimer = null; }
           }
           pendingText += afterEnvelope;
-          const { sentences, remainder } = extractSentences(pendingText, this.agent.ttsMinSentenceChars);
+          const { sentences, remainder } = this.extractSpeakable(pendingText);
           for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
           pendingText = remainder;
         },
@@ -11033,7 +11046,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // truncated pendingText, and enqueue any non-empty trailing text — a length
     // gate would silently drop very short final fragments.
     // Universal final-flush (mirrors processTurn logic — see Case A/B/C comment there).
-    const { sentences: allSentences, remainder: trueRemainder } = extractSentences(cleanResponse, this.agent.ttsMinSentenceChars);
+    const { sentences: allSentences, remainder: trueRemainder } = this.extractSpeakable(cleanResponse);
     const pendingTrim = pendingText.trim();
     let flushText: string;
     if (trueRemainder.trim().length > pendingTrim.length) {

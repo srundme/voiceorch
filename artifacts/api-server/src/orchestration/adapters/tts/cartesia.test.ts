@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { CartesiaTTS, resolveCartesiaModelId, joinContinuationTranscript, isCartesiaContextClosedError } from "./cartesia.js";
+import { CartesiaTTS, resolveCartesiaModelId, parseCartesiaLang, joinContinuationTranscript, isCartesiaContextClosedError } from "./cartesia.js";
 
 /**
  * Regression test for the Cartesia emotion-voice-control bug: Cartesia can
@@ -85,11 +85,19 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
   it("setLanguage() updates the language tag on subsequent synthesize() calls", async () => {
     const audioBytes = new Uint8Array([1]).buffer;
     const languages: Array<string | undefined> = [];
+    const locales: Array<string | undefined> = [];
+    const models: string[] = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (_url: string, init: RequestInit) => {
-        const body = JSON.parse(init.body as string) as { language?: string };
+        const body = JSON.parse(init.body as string) as {
+          language?: string;
+          locale?: string;
+          model_id?: string;
+        };
         languages.push(body.language);
+        locales.push(body.locale);
+        if (body.model_id) models.push(body.model_id);
         return {
           ok: true,
           status: 200,
@@ -98,12 +106,15 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
       }),
     );
 
-    const tts = new CartesiaTTS("test-key", null, null, "en-IN", null);
+    const tts = new CartesiaTTS("test-key", null, "sonic-3.5", "en-IN", null);
+    expect(tts.resolvedModelId).toBe("sonic-3.5");
     await tts.synthesize("Hello");
     tts.setLanguage("ta-IN");
     await tts.synthesize("வணக்கம்");
 
     expect(languages).toEqual(["en", "ta"]);
+    expect(locales).toEqual(["en-IN", "ta-IN"]);
+    expect(models).toEqual(["sonic-3.5", "sonic-3.5"]);
   });
 
   it("defaults to 16 kHz PCM when no sample rate is passed (HD webcall)", () => {
@@ -162,9 +173,38 @@ describe("resolveCartesiaModelId", () => {
   it("defaults to sonic-3.6 (Cartesia current model) and keeps explicit ids", () => {
     expect(resolveCartesiaModelId(null)).toBe("sonic-3.6");
     expect(resolveCartesiaModelId("sonic-3.5")).toBe("sonic-3.5");
+    expect(resolveCartesiaModelId("Sonic 3.5")).toBe("sonic-3.5");
+    expect(resolveCartesiaModelId("3.5")).toBe("sonic-3.5");
     expect(resolveCartesiaModelId("sonic-preview")).toBe("sonic-preview");
     expect(resolveCartesiaModelId("sonic-3.6")).toBe("sonic-3.6");
+    expect(resolveCartesiaModelId("Sonic 3.6")).toBe("sonic-3.6");
     expect(resolveCartesiaModelId("not-a-model")).toBe("sonic-3.6");
+  });
+
+  it("does not remap a selected 3.5 agent onto 3.6", () => {
+    const tts = new CartesiaTTS("test-key", null, "sonic-3.5");
+    expect(tts.resolvedModelId).toBe("sonic-3.5");
+    expect(new CartesiaTTS("test-key", null, "sonic-3.6").resolvedModelId).toBe("sonic-3.6");
+  });
+});
+
+describe("parseCartesiaLang", () => {
+  it("splits en-IN into language + locale for Sonic 3.6", () => {
+    expect(parseCartesiaLang("en-IN")).toEqual({ language: "en", locale: "en-IN" });
+    expect(parseCartesiaLang("hi")).toEqual({ language: "hi", locale: null });
+    expect(parseCartesiaLang(null)).toEqual({ language: null, locale: null });
+  });
+});
+
+describe("ensureTerminalPunctuation", () => {
+  it("adds a period only when the sentence has no terminal mark", () => {
+    expect(CartesiaTTS.ensureTerminalPunctuation("How can I help you?")).toBe("How can I help you?");
+    expect(CartesiaTTS.ensureTerminalPunctuation("Hello there")).toBe("Hello there.");
+  });
+
+  it("does not turn a comma pause into a full stop", () => {
+    expect(CartesiaTTS.ensureTerminalPunctuation("Hello Gopi,")).toBe("Hello Gopi,");
+    expect(CartesiaTTS.ensureTerminalPunctuation("Wait a second;")).toBe("Wait a second;");
   });
 });
 

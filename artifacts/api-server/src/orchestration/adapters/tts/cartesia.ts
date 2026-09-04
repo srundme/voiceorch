@@ -42,6 +42,11 @@ export const CARTESIA_SONIC_36_MODEL = "sonic-3.6";
 
 const CARTESIA_MODEL_ALIASES: Record<string, string> = {
   "sonic-3.6": CARTESIA_SONIC_36_MODEL,
+  "sonic3.6": CARTESIA_SONIC_36_MODEL,
+  "3.6": CARTESIA_SONIC_36_MODEL,
+  "sonic-3.5": "sonic-3.5",
+  "sonic3.5": "sonic-3.5",
+  "3.5": "sonic-3.5",
 };
 
 const CARTESIA_VALID_MODELS = new Set([
@@ -53,11 +58,27 @@ const CARTESIA_VALID_MODELS = new Set([
   "sonic-english", "sonic-multilingual",
 ]);
 
-/** Map agent TTS model ids to a Cartesia `model_id`. Unknown ids fall back to 3.6. */
+/** Map agent TTS model ids to a Cartesia `model_id`. 3.5 stays 3.5; 3.6 stays 3.6. */
 export function resolveCartesiaModelId(model: string | null | undefined): string {
   const raw = (model ?? "").trim();
-  const id = CARTESIA_MODEL_ALIASES[raw] ?? raw;
+  if (!raw) return CARTESIA_DEFAULT_MODEL;
+  const key = raw.toLowerCase().replace(/\s+/g, "-");
+  const id = CARTESIA_MODEL_ALIASES[key] ?? raw;
   return CARTESIA_VALID_MODELS.has(id) ? id : CARTESIA_DEFAULT_MODEL;
+}
+
+/** `en-IN` → language `en` + locale `en-IN` (Sonic 3.6 date/number reading). */
+export function parseCartesiaLang(tag: string | null | undefined): {
+  language: string | null;
+  locale: string | null;
+} {
+  const raw = (tag ?? "").trim();
+  if (!raw) return { language: null, locale: null };
+  const [lang, region] = raw.split(/[-_]/);
+  const language = (lang ?? "").toLowerCase() || null;
+  if (!language) return { language: null, locale: null };
+  if (region) return { language, locale: `${language}-${region.toUpperCase()}` };
+  return { language, locale: null };
 }
 
 /** India endpoint by default for lowest latency; override via CARTESIA_BASE_URL env var. */
@@ -178,6 +199,8 @@ export class CartesiaTTS implements TTSAdapter {
   private voiceId: string;
   private modelId: string;
   private language: string | null;
+  /** Sonic 3.6 locale (`en-IN`, `en-GB`) — dates/numbers read the local way. */
+  private locale: string | null;
   private speed: number | null;
   /** Native PCM rate Cartesia should emit. 8 kHz on VoBiz; 16 kHz on HD webcall. */
   readonly pcmSampleRate: 8000 | 16000;
@@ -231,8 +254,15 @@ export class CartesiaTTS implements TTSAdapter {
       ? Math.min(1.5, Math.max(0.6, speed))
       : null;
     this.modelId = resolveCartesiaModelId(model);
-    this.language = language ? language.split("-")[0] : null;
+    const parsedLang = parseCartesiaLang(language);
+    this.language = parsedLang.language;
+    this.locale = parsedLang.locale;
     this.pcmSampleRate = sampleRate === 8000 ? 8000 : 16000;
+  }
+
+  /** Cartesia `model_id` actually sent (3.5 or 3.6 as selected). */
+  get resolvedModelId(): string {
+    return this.modelId;
   }
 
   private outputFormat(): { container: "raw"; encoding: "pcm_s16le"; sample_rate: 8000 | 16000 } {
@@ -240,7 +270,9 @@ export class CartesiaTTS implements TTSAdapter {
   }
 
   setLanguage(lang: string): void {
-    this.language = lang.split("-")[0];
+    const parsed = parseCartesiaLang(lang);
+    this.language = parsed.language;
+    this.locale = parsed.locale;
   }
 
   setSpeed(speed: number | null): void {
@@ -406,8 +438,13 @@ export class CartesiaTTS implements TTSAdapter {
     };
     const gc = this.buildGenerationConfig(emotions);
     if (gc) body.generation_config = gc;
-    if (this.language) body.language = this.language;
+    this.applyLang(body);
     return JSON.stringify(body);
+  }
+
+  private applyLang(msg: Record<string, unknown>): void {
+    if (this.language) msg.language = this.language;
+    if (this.locale) msg.locale = this.locale;
   }
 
   private get restHeaders() {
@@ -836,7 +873,7 @@ export class CartesiaTTS implements TTSAdapter {
       };
       const gcCtx = this.buildGenerationConfig(emotions);
       if (gcCtx) transcriptMsg.generation_config = gcCtx;
-      if (this.language) transcriptMsg.language = this.language;
+      this.applyLang(transcriptMsg);
       ws.send(JSON.stringify(transcriptMsg));
       this.turnLastTranscript.set(turnContextId, transcript);
     };
@@ -1016,7 +1053,10 @@ export class CartesiaTTS implements TTSAdapter {
     if (!trimmed) return text;
     // Check the trimmed form — no need to strip tags, just look at the last char.
     const last = trimmed[trimmed.length - 1]!;
-    if (last === "." || last === "?" || last === "!" || last === "…") return text;
+    if (last === "." || last === "?" || last === "!" || last === "…" || last === "।") return text;
+    // Sonic 3.5/3.6: a comma is a pause, not a missing period. Adding "." here
+    // makes "Hello Gopi," speak as a full stop ("Hello Gopi.") — robotic cadence.
+    if (last === "," || last === ";" || last === ":") return text;
     return trimmed + ".";
   }
 
@@ -1065,7 +1105,7 @@ export class CartesiaTTS implements TTSAdapter {
       };
       const gcMsg = this.buildGenerationConfig(emotions);
       if (gcMsg) msg.generation_config = gcMsg;
-      if (this.language) msg.language = this.language;
+      this.applyLang(msg);
 
       try {
         ws.send(JSON.stringify(msg));

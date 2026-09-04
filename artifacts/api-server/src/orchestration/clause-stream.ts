@@ -40,7 +40,16 @@ function isTimeListComma(clause: string, rest: string): boolean {
  * First audible greeting clause. Coalesce "Sorry," until a usable clause exists.
  * A 4-word resume fragment may start TTS before the period arrives.
  */
-export function pickStreamedGreetingHead(pending: string): string {
+export type ExtractSentencesOpts = {
+  /**
+   * Start TTS on a comma / word-boundary before `.!?` arrives.
+   * Cartesia Sonic 3.5/3.6 must keep this off: a comma is a pause inside one
+   * sentence, not a clip break (docs: pass full punctuated sentences).
+   */
+  earlyClause?: boolean;
+};
+
+export function pickStreamedGreetingHead(pending: string, opts?: ExtractSentencesOpts): string {
   const t = pending.trim();
   if (!t || isTinyLeadFragment(t)) return "";
 
@@ -49,6 +58,8 @@ export function pickStreamedGreetingHead(pending: string): string {
     const head = m[0].trim();
     if (isUsableSpeakableClause(head)) return head;
   }
+
+  if (opts?.earlyClause === false) return "";
 
   const early = tryEarlyPhraseDispatch(t, 12);
   if (early && isUsableSpeakableClause(early.clause)) return early.clause;
@@ -130,7 +141,11 @@ export function tryEarlyPhraseDispatch(
  *  • "." splits on whitespace + uppercase / Indic / quote.
  *  • Falls back to comma / word-boundary dispatch before the sentence ends.
  */
-export function extractSentences(text: string, minCommaClauseChars = 8): { sentences: string[]; remainder: string } {
+export function extractSentences(
+  text: string,
+  minCommaClauseChars = 8,
+  opts?: ExtractSentencesOpts,
+): { sentences: string[]; remainder: string } {
   const sentences: string[] = [];
   let i = 0;
   let segStart = 0;
@@ -191,10 +206,12 @@ export function extractSentences(text: string, minCommaClauseChars = 8): { sente
 
   let remainder = text.slice(segStart);
 
-  const early = tryEarlyPhraseDispatch(remainder, minCommaClauseChars);
-  if (early) {
-    sentences.push(early.clause);
-    remainder = early.rest;
+  if (opts?.earlyClause !== false) {
+    const early = tryEarlyPhraseDispatch(remainder, minCommaClauseChars);
+    if (early) {
+      sentences.push(early.clause);
+      remainder = early.rest;
+    }
   }
 
   return { sentences, remainder };

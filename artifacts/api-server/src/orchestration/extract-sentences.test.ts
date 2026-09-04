@@ -123,6 +123,22 @@ describe("extractSentences — ellipsis is a breath, not a clip (call 14276)", (
   });
 });
 
+describe("extractSentences — Cartesia sentence mode (Sonic 3.5/3.6)", () => {
+  it("does not clip at a comma before the period arrives", () => {
+    const pending = "I can help you schedule that appointment, just tell me your preferred time";
+    const { sentences, remainder } = extractSentences(pending, 15, { earlyClause: false });
+    expect(sentences).toEqual([]);
+    expect(remainder).toBe(pending);
+  });
+
+  it("still splits on a real sentence end", () => {
+    const pending = "I can help you schedule that appointment. Just tell me your preferred time.";
+    const { sentences, remainder } = extractSentences(pending, 15, { earlyClause: false });
+    expect(sentences[0]).toMatch(/appointment\.$/);
+    expect(sentences.join(" ") + remainder).toContain("preferred time");
+  });
+});
+
 describe("extractSentences — early dispatch during simulated stream", () => {
   it("enqueues first clause at comma before period arrives", () => {
     const full = "I can help you schedule that appointment, just tell me your preferred time.";
