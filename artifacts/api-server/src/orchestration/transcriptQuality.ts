@@ -487,6 +487,74 @@ export function signalsConversationalContinuation(text: string): boolean {
 }
 
 /**
+ * Short talk-over that is not an ack and has no sentence end — a sentence
+ * start, not chatter. Used while TTS is playing so we hold for the rest of
+ * the utterance instead of dropping it (call 21818: "எனக்கு இப்போ").
+ * Structure only: punctuation + length + not-a-backchannel. No word lists.
+ */
+export function looksLikeIncompleteClauseStart(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (isBackchannelOnlyUtterance(t) || isUltraShortNoiseFragment(t)) return false;
+  if (isSemanticInterrupt(t) || isAccidentalInterruptPhrase(t) || isHardInterruptTranscript(t)) {
+    return false;
+  }
+  if (/[?？]$/u.test(t)) return false;
+  if (/[.।!]$/u.test(t) && !/[…]|\.{2,}/.test(t)) return false;
+  const wordCount = t.split(/\s+/).filter(Boolean).length;
+  return wordCount >= 1 && wordCount <= 6;
+}
+
+/**
+ * STT sometimes loops a short phrase for the whole VAD window
+ * ("I said, I said, I said, …"). Collapse to one copy. Language-agnostic.
+ */
+export function collapseRepeatedUtterance(text: string): string {
+  const t = text.trim();
+  if (!t) return t;
+
+  const norm = (s: string) => s.toLowerCase().replace(/[,.!?।;:]+$/g, "").trim();
+  const clauses = t.split(/[,.!।;]+\s*|\s{2,}/).map((s) => s.trim()).filter(Boolean);
+  if (clauses.length >= 3) {
+    const first = norm(clauses[0]);
+    if (first) {
+      const same = clauses.filter((c) => norm(c) === first);
+      if (same.length >= 3 && same.length / clauses.length >= 0.7) {
+        return clauses[0];
+      }
+    }
+  }
+
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length >= 6) {
+    const low = words.map((w) => w.replace(/[,.!?।;:]+$/g, "").toLowerCase());
+    for (const n of [1, 2, 3, 4]) {
+      const unit = low.slice(0, n).join(" ");
+      if (!unit) continue;
+      let reps = 0;
+      let i = 0;
+      while (i + n <= low.length && low.slice(i, i + n).join(" ") === unit) {
+        reps++;
+        i += n;
+      }
+      if (reps >= 3 && i >= words.length * 0.7) {
+        return words.slice(0, n).join(" ");
+      }
+    }
+  }
+  return t;
+}
+
+/** Collapsed a long STT loop into a thin scrap — not a caller turn. */
+export function isStutterLoopTranscript(original: string, collapsed: string): boolean {
+  const o = original.trim();
+  const c = collapsed.trim();
+  if (!o || !c || o === c) return false;
+  const words = c.split(/\s+/).filter(Boolean);
+  return words.length <= 4 && o.length >= c.length * 3;
+}
+
+/**
  * Heuristic quality check on a raw STT transcript.
  * Catches noise, very short non-meaningful outputs, heavy repetition, and
  * mid-sentence truncations (VAD cut the caller off before they finished).

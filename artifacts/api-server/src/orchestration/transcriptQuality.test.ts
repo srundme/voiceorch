@@ -16,6 +16,9 @@ import {
   normalizeHinglishClock,
   coalescePendingTranscripts,
   signalsConversationalContinuation,
+  looksLikeIncompleteClauseStart,
+  collapseRepeatedUtterance,
+  isStutterLoopTranscript,
   looksLikeBookingTimeAnswer,
   looksLikeShortContextualAnswer,
   isDomainOrAcronymAnswer,
@@ -152,6 +155,38 @@ describe("signalsConversationalContinuation", () => {
     expect(signalsConversationalContinuation("Okay.")).toBe(false);
     expect(signalsConversationalContinuation("சரி")).toBe(false);
     expect(signalsConversationalContinuation("हाँ Sir")).toBe(false);
+  });
+});
+
+describe("looksLikeIncompleteClauseStart — call 21818 sentence-start hold", () => {
+  it("holds a short clause with no sentence end (not an ack)", () => {
+    expect(looksLikeIncompleteClauseStart("எனக்கு இப்போ")).toBe(true);
+    expect(isBackchannelOnlyUtterance("எனக்கு இப்போ")).toBe(false);
+    expect(looksLikeIncompleteClauseStart("I said")).toBe(true);
+  });
+
+  it("does not hold acks, questions, or finished sentences", () => {
+    expect(looksLikeIncompleteClauseStart("ஆ")).toBe(false);
+    expect(looksLikeIncompleteClauseStart("சரி")).toBe(false);
+    expect(looksLikeIncompleteClauseStart("Okay.")).toBe(false);
+    expect(looksLikeIncompleteClauseStart("என்னோட age 27?")).toBe(false);
+    expect(looksLikeIncompleteClauseStart("Yes, that works for me.")).toBe(false);
+    expect(looksLikeIncompleteClauseStart("stop")).toBe(false);
+  });
+});
+
+describe("collapseRepeatedUtterance — STT stutter loops", () => {
+  it("collapses I said x20 to one copy and flags it as a loop", () => {
+    const loop = Array.from({ length: 20 }, () => "I said").join(", ");
+    const collapsed = collapseRepeatedUtterance(loop);
+    expect(collapsed.toLowerCase()).toBe("i said");
+    expect(isStutterLoopTranscript(loop, collapsed)).toBe(true);
+  });
+
+  it("leaves a real sentence alone", () => {
+    const real = "I said I already told you my age is 27.";
+    expect(collapseRepeatedUtterance(real)).toBe(real);
+    expect(isStutterLoopTranscript(real, real)).toBe(false);
   });
 });
 

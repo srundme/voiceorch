@@ -797,10 +797,12 @@ export function injectEnhancedMemory(
     // caller agreed twice. Tell the model how to ACT on the summary, not just
     // what it says.
     lines.push(
-      "HOW TO USE THIS SUMMARY: open the pending topic yourself with a concrete question or the " +
-        "next substantive step. Ask at most ONE short \"shall we continue?\"-style question for the " +
-        "whole call — once the caller agrees (any yes/okay), or if you already asked once, go " +
-        "straight into the substance. Never re-ask permission to continue.",
+      "HOW TO USE THIS SUMMARY: On the OPENING of this call only, continue the pending topic. " +
+        "After the caller has spoken on THIS call, answer what they just said — memory is background, " +
+        "not a script. Do not re-open the prior-call pitch or re-ask a question already asked in this " +
+        "conversation. Ask at most ONE short \"shall we continue?\"-style question for the whole call — " +
+        "once the caller agrees (any yes/okay), or if you already asked once, go straight into the " +
+        "substance. Never re-ask permission to continue.",
     );
   }
 
@@ -894,10 +896,11 @@ export function injectEnhancedMemory(
       "briefly acknowledge the drop in natural colloquial language, then immediately continue the topic " +
       "from LAST EXCHANGES BEFORE THE CALL DROPPED above — mid-thread, not from the beginning. " +
       "If an opening was ALREADY spoken on this call, do NOT acknowledge any drop/cut again — answer the " +
-      "caller's latest message only. Never invent a drop apology unless this is the opening OR the caller just said the call dropped. " +
+      "caller's latest message only. LAST EXCHANGES are background after the opening, not a script to replay. " +
+      "Never invent a drop apology unless this is the opening OR the caller just said the call dropped. " +
       (hasResumeTail
-        ? "Pick up exactly where those exchanges left off."
-        : "Continue naturally from the prior context above."),
+        ? "On the opening only, pick up where those exchanges left off."
+        : "On the opening only, continue naturally from the prior context above."),
     );
   } else if (!suppressDomain && callCount >= 1) {
     const namePhrase = namePart !== "unknown" ? ` by name (${namePart})` : " by name if known";

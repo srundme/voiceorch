@@ -158,6 +158,14 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(methodBody("handleStreamingTranscript")).toContain("queued_final");
     expect(methodBody("handleStreamingTranscript")).toContain("isFalseInterruption");
     expect(methodBody("handleStreamingTranscript")).toContain("interruptReplyArmed");
+    // Call 21818: sentence-start talk-over is held, not dropped; a real final
+    // while isProcessing barges even after playback ended so the old monologue
+    // cannot finish first.
+    expect(methodBody("handleStreamingTranscript")).toContain("looksLikeIncompleteClauseStart");
+    expect(methodBody("handleStreamingTranscript")).toContain("fragment_coalesce_hold");
+    expect(methodBody("handleStreamingTranscript")).toContain("collapseRepeatedUtterance");
+    expect(methodBody("processTurn")).toContain("interruptReplyArmed");
+    expect(pipelineSrc).toContain("THIS_TURN_INSTRUCTION");
     expect(pipelineSrc).toContain("this.wakePlayTask()");
     expect(pipelineSrc).toMatch(/FILLER_THRESHOLD_MS \?\? 0/);
     expect(pipelineSrc).toMatch(/BACKCHANNEL_LATE_MS \?\? 0/);
@@ -206,6 +214,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(tick).toContain("this.scheduleBargeRecoveryTick()");
     expect(tick).toContain("getPendingTranscript");
     expect(tick).toContain("vad_stuck");
+    // Call 21818: do not vad_stuck while the pending transcript is still growing.
+    expect(tick).toContain("this._bargeRecoveryStableText");
+    expect(tick).toContain("frozenMs");
     // speech_end must stay the primary commit path.
     expect(pipelineSrc).toContain('this.flushBargeRecovery("speech_end")');
     // The cover masks our latency — it must never talk over the caller.

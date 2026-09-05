@@ -10,7 +10,7 @@ import {
   detectScreeningPrompt,
 } from "./callScreening.js";
 import { resolveInboundGreetingTtsSpeed } from "./call-direction-rules.js";
-import { buildDatetimeInjection, buildTurnClockBlock } from "./datetimeInject.js";
+import { buildDatetimeInjection, buildTurnClockBlock, THIS_TURN_INSTRUCTION } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
 import { isHoldRequest } from "./conversationDiscipline.js";
@@ -114,7 +114,7 @@ import {
   RESUME_DROP_POST_GREETING_STALL_MS,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isCallerAudioDifficulty, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeShortContextualAnswer, isDomainOrAcronymAnswer, preferStableTranscript } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isCallerAudioDifficulty, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeShortContextualAnswer, isDomainOrAcronymAnswer, preferStableTranscript, looksLikeIncompleteClauseStart, collapseRepeatedUtterance, isStutterLoopTranscript } from "./transcriptQuality.js";
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
@@ -1386,6 +1386,11 @@ export class OrchestrationPipeline implements VoiceSession {
   private _bargeRecoveryText: string | null = null;
   private _bargeRecoveryArmedAt = 0;
   private _bargeRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Last pending barge-recovery text + when it last changed. vad_stuck only
+   *  fires if this stays frozen — growing text means the caller is still talking
+   *  (call 21818: 8s cap committed a fragment 4s before VAD closed). */
+  private _bargeRecoveryStableText = "";
+  private _bargeRecoveryStableSince = 0;
   /**
    * After the agent asks a question, short caller replies ("yes ma'am", "okay okay",
    * "go on") must never be swallowed by self-echo — they are the expected next turn.
@@ -1769,6 +1774,16 @@ export class OrchestrationPipeline implements VoiceSession {
         { callId: this.config.callId, fragment: pending.slice(0, 80) },
         "Held ack fragment dropped — agent speaking at coalesce-timer fire",
       );
+      return;
+    }
+    // Sentence-start held during playback: keep waiting for the rest of the
+    // utterance. Re-emitting now would drop it as false_interruption or
+    // answer the fragment after the monologue (call 21818).
+    if (
+      (this.isPlaying || this.isSendingTtsAudio)
+      && looksLikeIncompleteClauseStart(pending)
+    ) {
+      this.armFragmentCoalesce(pending);
       return;
     }
     void this.handleStreamingTranscript(pending, Date.now(), "coalesced_fragment");
@@ -2462,6 +2477,8 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     this._bargeRecoveryText = null;
     this._bargeRecoveryArmedAt = 0;
+    this._bargeRecoveryStableText = "";
+    this._bargeRecoveryStableSince = 0;
   }
 
   private armBargeRecovery(partial?: string): void {
@@ -2469,6 +2486,8 @@ export class OrchestrationPipeline implements VoiceSession {
     if (!text) return;
     this._bargeRecoveryText = text;
     this._bargeRecoveryArmedAt = Date.now();
+    this._bargeRecoveryStableText = text;
+    this._bargeRecoveryStableSince = Date.now();
     this.scheduleBargeRecoveryTick();
   }
 
@@ -2477,20 +2496,29 @@ export class OrchestrationPipeline implements VoiceSession {
    * progress. Firing while Sarvam's VAD is still open truncates the caller
    * mid-utterance and answers the fragment (call 21628: committed "No, no"
    * 1.29s into a 4.28s segment, then the real final landed as a second turn).
-   * So each tick only commits once VAD has closed, bounded by a stuck-VAD
-   * ceiling, and refreshes the armed text so a forced commit uses the fullest
-   * transcript rather than the stale barge preview.
+   * Each tick refreshes the armed text. While VAD is open, only a frozen
+   * pending transcript for BARGE_RECOVERY_MAX_WAIT_MS is "stuck" (call 21818:
+   * growing text for 13s was committed at 8s). speech_end is the primary commit.
    */
   private scheduleBargeRecoveryTick(): void {
     if (this._bargeRecoveryTimer) clearTimeout(this._bargeRecoveryTimer);
     this._bargeRecoveryTimer = setTimeout(() => {
       this._bargeRecoveryTimer = null;
-      const waitedMs = Date.now() - (this._bargeRecoveryArmedAt || Date.now());
-      if (this._vadSpeechStartAt !== 0 && waitedMs < BARGE_RECOVERY_MAX_WAIT_MS) {
-        const live = this.streamSTT?.getPendingTranscript?.()?.trim();
-        if (live) this._bargeRecoveryText = live;
-        this.scheduleBargeRecoveryTick();
-        return;
+      const live = this.streamSTT?.getPendingTranscript?.()?.trim();
+      if (live) this._bargeRecoveryText = live;
+      if (this._vadSpeechStartAt !== 0) {
+        const current = (this._bargeRecoveryText || "").trim();
+        if (current !== this._bargeRecoveryStableText) {
+          this._bargeRecoveryStableText = current;
+          this._bargeRecoveryStableSince = Date.now();
+        }
+        const frozenMs = Date.now() - (this._bargeRecoveryStableSince || Date.now());
+        // Open VAD + growing text = still talking. Only force-commit when the
+        // pending transcript has been frozen for the ceiling (true stuck VAD).
+        if (frozenMs < BARGE_RECOVERY_MAX_WAIT_MS) {
+          this.scheduleBargeRecoveryTick();
+          return;
+        }
       }
       this.flushBargeRecovery(this._vadSpeechStartAt !== 0 ? "vad_stuck" : "timer");
     }, BARGE_RECOVERY_MS);
@@ -2997,6 +3025,7 @@ export class OrchestrationPipeline implements VoiceSession {
       | "fragment_coalesce_hold"
       | "backchannel_during_playback"
       | "false_interruption"
+      | "stutter_loop"
       | "queued_duplicate_user_turn"
       | "agent_still_speaking"
       | "inbound_greeting_hold"
@@ -3015,6 +3044,7 @@ export class OrchestrationPipeline implements VoiceSession {
       fragment_coalesce_hold: "short fragment held briefly for coalesce (not a drop)",
       backchannel_during_playback: "held ack fragment dropped — agent speaking at coalesce-timer fire (true backchannel)",
       false_interruption: "Bolna is_false_interruption — short talk-over while TTS is playing is chatter, not a later turn",
+      stutter_loop: "STT looped the same short phrase — not a caller turn",
       queued_duplicate_user_turn: "Bolna is_duplicate_user — queued STT final duplicates the user turn we already answered",
       agent_still_speaking: "final arrived during greeting/system playback and did not barge-in",
       inbound_greeting_hold: "inbound greeting still playing — wait for caller after Welcome",
@@ -4214,6 +4244,23 @@ export class OrchestrationPipeline implements VoiceSession {
     // is now stale (the caller moved the conversation on); never resume it.
     this._bargedReplyRemainder = null;
 
+    {
+      const collapsed = collapseRepeatedUtterance(transcript);
+      if (isStutterLoopTranscript(transcript, collapsed)) {
+        this.logDiscardedTranscript(transcript, "stutter_loop");
+        logger.info(
+          { callId: this.config.callId, preview: transcript.slice(0, 80) },
+          "Ignoring transcript — STT stutter loop, not a caller turn",
+        );
+        this.safetyNet.onFinal();
+        this.clearEagerPartialTimer();
+        this.interruptionMgr.onUserSpeechEnd();
+        if (!this.closed) this.safetyNet.beginListening();
+        return;
+      }
+      transcript = collapsed;
+    }
+
     // Outbound call-screening bots (iPhone Ask Reason for Calling / Google
     // Call Screen): hang up and record voicemail — do not pitch the robot.
     if (this.callDirection === "outbound" && this.screeningState !== "done") {
@@ -4268,6 +4315,26 @@ export class OrchestrationPipeline implements VoiceSession {
           welcomePlayed,
         )
       ) {
+        // Acks while we talk are chatter. A sentence-start is not — hold it
+        // so the rest of the utterance can merge (call 21818: "எனக்கு இப்போ").
+        const canHold =
+          closeReason !== "coalesced_fragment"
+          && !isBackchannelOnlyUtterance(transcript)
+          && (
+            shouldHoldFragmentForCoalesce(transcript, { expectedLang: coalesceLang })
+            || signalsConversationalContinuation(transcript)
+            || looksLikeIncompleteClauseStart(transcript)
+            || Date.now() < this.expectingShortReplyUntil
+          );
+        if (canHold) {
+          this.armFragmentCoalesce(transcript);
+          this.logDiscardedTranscript(transcript, "fragment_coalesce_hold");
+          logger.info(
+            { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+            "Holding short talk-over — incomplete clause, not false interruption",
+          );
+          return;
+        }
         this.logDiscardedTranscript(transcript, "false_interruption");
         logger.info(
           { callId: this.config.callId, transcript: transcript.slice(0, 80) },
@@ -4275,21 +4342,19 @@ export class OrchestrationPipeline implements VoiceSession {
         );
         return;
       }
-      if (
-        this.bargeInEnabled
-        && playing
-        && !this.bargeInRequested
-        && this.shouldInterruptFromCallerTranscript(transcript)
-      ) {
+      // Call 21818: playback already ended (or between sentences) but this
+      // processTurn is still running. Queueing without cutting leftover LLM/TTS
+      // waits for the old monologue. After the false-interruption filter, this
+      // transcript is the next thing to answer — barge even if audio already stopped.
+      if (this.bargeInEnabled && !this.bargeInRequested) {
         this.triggerBargeIn("queued_final", transcript, { speculative: true });
       }
-      const answeringInterrupt = this.bargeInRequested || this._lastTurnWasBargedIn;
-      if (answeringInterrupt && !this.interruptReplyArmed) {
+      if (!this.interruptReplyArmed) {
         this.pendingTranscriptQueue = [];
         this.interruptReplyArmed = true;
       }
       this.pendingTranscriptQueue.push({ text: transcript, emittedAt: sttEmittedAt, closeReason });
-      if (answeringInterrupt) this.wakePlayTask();
+      this.wakePlayTask();
       return;
     }
 
@@ -8237,6 +8302,18 @@ export class OrchestrationPipeline implements VoiceSession {
       undefined,
       sanitizeSpokenEmailsInTranscript(transcript),
     );
+    {
+      const collapsed = collapseRepeatedUtterance(transcript);
+      if (isStutterLoopTranscript(transcript, collapsed)) {
+        this.logDiscardedTranscript(transcript, "stutter_loop");
+        logger.info(
+          { callId: this.config.callId, preview: transcript.slice(0, 80) },
+          "processTurn skipped — STT stutter loop, not a caller turn",
+        );
+        return;
+      }
+      transcript = collapsed;
+    }
     this._processTurnGeneration = this.semanticTurnGate.turnGeneration;
     // This turn IS the reply to the barge. Leaving bargeInRequested=true
     // drops every onToken / enqueue (call 21426: LLM wrote 387 chars, 0 TTS).
@@ -9490,7 +9567,7 @@ export class OrchestrationPipeline implements VoiceSession {
       if (lastTurn.role === "user") {
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
-          { ...lastTurn, content: `${lastTurn.content}\n\n${buildTurnClockBlock(this.agent.timezone)}` },
+          { ...lastTurn, content: `${lastTurn.content}\n\n${THIS_TURN_INSTRUCTION}\n\n${buildTurnClockBlock(this.agent.timezone)}` },
         ];
       }
     }
@@ -10141,7 +10218,10 @@ export class OrchestrationPipeline implements VoiceSession {
     // (e.g. pure tool-call response that never invokes onToken)
     if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
 
-    if (this.bargeInRequested && this.pendingTranscriptQueue.length > 0) {
+    if (
+      (this.bargeInRequested || this.interruptReplyArmed)
+      && this.pendingTranscriptQueue.length > 0
+    ) {
       allEnqueued = true;
       finalizeTurnCtx();
       this.wakePlayTask();

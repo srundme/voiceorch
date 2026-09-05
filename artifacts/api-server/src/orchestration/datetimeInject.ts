@@ -90,3 +90,13 @@ export function buildTurnClockBlock(timezone?: string | null): string {
     `Read back emails and phone numbers exactly as written in the caller's last message.`
   );
 }
+
+/**
+ * Last-user-turn recency pin. Caller memory + the agent script sit in the
+ * system prefix and weak models treat them as this-turn homework
+ * (call 21818: every reply restarted the prior-call WhatsApp / plan pitch).
+ */
+export const THIS_TURN_INSTRUCTION =
+  "[THIS TURN] Answer only the caller's latest utterance above. " +
+  "Prior-call memory and the agent script are background, not a checklist. " +
+  "Do not restart a prior-call pitch or re-ask a question already asked in THIS conversation unless the caller asked you to.";
