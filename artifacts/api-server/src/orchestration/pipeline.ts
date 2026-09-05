@@ -11,6 +11,7 @@ import {
 } from "./callScreening.js";
 import { resolveInboundGreetingTtsSpeed } from "./call-direction-rules.js";
 import { buildDatetimeInjection, buildTurnClockBlock, THIS_TURN_INSTRUCTION } from "./datetimeInject.js";
+import { demoteResumeMemoryAfterOpening } from "./callerMemory.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
 import { isHoldRequest, buildAntiRepeatNudge, extractRecentAgentQuestions } from "./conversationDiscipline.js";
@@ -8923,6 +8924,12 @@ export class OrchestrationPipeline implements VoiceSession {
     // If no prefetch is available (agent has no KB, or prefetch wasn't triggered),
     // fall back to launching it here so it still overlaps with backchannel TTS.
     let systemPromptForTurn = this.agent.systemPrompt;
+    // Opening already spoke the drop-ack / LAST EXCHANGES pickup. Keeping that
+    // block in the system prefix makes every later "continue" recap the prior
+    // call (21828: three turns restated school + 12th + AI courses).
+    if (this.conversationHistory.messages.some((m) => m.role === "assistant" && m.content.trim())) {
+      systemPromptForTurn = demoteResumeMemoryAfterOpening(systemPromptForTurn);
+    }
     const dtInjection = buildDatetimeInjection(this.agent.timezone);
     // Resolve the caller gender up-front (before the Gemini cache base is
     // captured) so {caller_salutation} in the base prompt is substituted INSIDE

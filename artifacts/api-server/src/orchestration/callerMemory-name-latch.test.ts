@@ -24,6 +24,7 @@ import {
   shouldLatchOverrideExtraction,
   injectEnhancedMemory,
   isAbruptEnd,
+  demoteResumeMemoryAfterOpening,
   type CallerProfile,
 } from "./callerMemory.js";
 
@@ -237,5 +238,34 @@ describe("isAbruptEnd — completed call must not keep resume-drop (call 21824)"
       lastCallDropped: true,
       lastCallDroppedAt: droppedAt,
     })).toBe(false);
+  });
+});
+
+describe("demoteResumeMemoryAfterOpening — call 21828 recap loop", () => {
+  it("keeps name/facts and drops LAST EXCHANGES after the opening", () => {
+    const raw = [
+      "=== CALLER MEMORY ===",
+      "Name: Karthik  |  Calls: 12  |  ⚠️ LAST CALL DROPPED",
+      "",
+      "Previous call summary: Discussed AI courses for daughter in 12th.",
+      "HOW TO USE THIS SUMMARY: On the OPENING of this call only, continue the pending topic.",
+      "",
+      "LAST EXCHANGES BEFORE THE CALL DROPPED (resume from here):",
+      "Caller: from which school you are calling?",
+      "You: I'm calling from our school admissions office.",
+      "",
+      "⚠️ NAME PRIORITY RULE: keep the self-stated name.",
+      "⚠️ IMPORTANT — RESUME, DO NOT RESTART: pick up LAST EXCHANGES mid-thread.",
+      "=====================================",
+      "",
+      "You are a school admissions agent.",
+    ].join("\n");
+    const live = demoteResumeMemoryAfterOpening(raw);
+    expect(live).toContain("Name: Karthik");
+    expect(live).toContain("You are a school admissions agent.");
+    expect(live).not.toContain("LAST EXCHANGES BEFORE THE CALL DROPPED");
+    expect(live).not.toContain("LAST CALL DROPPED");
+    expect(live).not.toContain("RESUME, DO NOT RESTART");
+    expect(live).toMatch(/Background only/);
   });
 });

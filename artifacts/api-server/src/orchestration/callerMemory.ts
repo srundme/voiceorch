@@ -937,10 +937,9 @@ export function injectEnhancedMemory(
       "questions (e.g. asking for the caller's name, what they're calling about, or other " +
       "details) written as if this were a brand-new caller. If the answer to any such question " +
       "is already present above (Name, Previous call summary, or Known details), treat it as " +
-      "already answered — do NOT ask that question again. Instead, confirm it naturally in " +
-      "passing if needed (e.g. \"I see you were asking about X earlier, want to pick that back " +
-      "up?\") and move the conversation forward. Only ask a scripted question if its answer is " +
-      "genuinely missing from the memory above.",
+      "already answered — do NOT ask that question again. Use the known fact and move forward. " +
+      "Do not ask permission to continue or recap the prior call. Only ask a scripted question " +
+      "if its answer is genuinely missing from the memory above.",
     );
   }
   if (operatorFacts.length > 0) {
@@ -955,6 +954,38 @@ export function injectEnhancedMemory(
   lines.push("=====================================");
 
   return `${lines.join("\n")}\n\n${systemPrompt}`;
+}
+
+/**
+ * After the opening has been spoken, LAST EXCHANGES + the resume-drop banner
+ * must not stay in the live system prompt. Weak models treat them as this-turn
+ * homework and recap the prior call on every "continue" / "we already discussed"
+ * (call 21828). Facts and name stay; the resume agenda does not.
+ */
+export function demoteResumeMemoryAfterOpening(systemPrompt: string): string {
+  if (!systemPrompt.includes("=== CALLER MEMORY ===")) return systemPrompt;
+  if (
+    !systemPrompt.includes("LAST EXCHANGES BEFORE THE CALL DROPPED")
+    && !systemPrompt.includes("RESUME, DO NOT RESTART")
+    && !systemPrompt.includes("LAST CALL DROPPED")
+  ) {
+    return systemPrompt;
+  }
+
+  let out = systemPrompt.replace(/\s*\|\s*⚠️ LAST CALL DROPPED/g, "");
+  out = out.replace(
+    /\nLAST EXCHANGES BEFORE THE CALL DROPPED \(resume from here\):[\s\S]*?(?=\n⚠️ NAME PRIORITY RULE:)/,
+    "\n",
+  );
+  out = out.replace(
+    /\n⚠️ IMPORTANT — RESUME, DO NOT RESTART:[\s\S]*?(?=\n⚠️ |\n=====)/,
+    "\n",
+  );
+  out = out.replace(
+    /\nHOW TO USE THIS SUMMARY:[\s\S]*?(?=\n\n|\nLikely reason|\nKNOWN DETAILS|\n⚠️ )/,
+    "\nHOW TO USE THIS SUMMARY: Background only — the opening already happened. Do not recap or re-ask permission to continue.\n",
+  );
+  return out;
 }
 
 // ── Graph helper: supersede or insert a fact (L0 conflict resolution) ─────────
