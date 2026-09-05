@@ -46,14 +46,32 @@ describe("backchannel fillers — okay / hmm / mmm only", () => {
       .toEqual(["Hmm.", "Mmm."]);
   });
 
-  it("avoids the last few spoken fillers", () => {
-    const recent = ["Hmm.", "Mmm."];
-    for (let i = 0; i < 20; i++) {
-      const phrase = pickBackchannelFiller("en-IN", recent, {
+  it("picks Okay 80% and Hmm/Mmm 20% on safe statements", () => {
+    const rolls = [
+      0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.79, // 8× Okay
+      0.8, 0.0, // listening → Hmm
+      0.95, 0.9, // listening → Mmm
+    ];
+    let i = 0;
+    const rng = () => rolls[Math.min(i++, rolls.length - 1)]!;
+    const picks: string[] = [];
+    for (let n = 0; n < 10; n++) {
+      picks.push(pickBackchannelFiller("en-IN", [], {
         callerTranscript: "I live in Chennai",
-      });
-      expect(phrase).toBe("Okay.");
+        rng,
+      })!);
     }
+    expect(picks.filter((p) => p === "Okay.")).toHaveLength(8);
+    expect(picks.filter((p) => p === "Hmm." || p === "Mmm.")).toHaveLength(2);
+    expect(picks).toContain("Hmm.");
+    expect(picks).toContain("Mmm.");
+  });
+
+  it("never says Okay on a question even when the roll would pick it", () => {
+    expect(pickBackchannelFiller("en-IN", [], {
+      callerTranscript: "Can you help?",
+      rng: () => 0,
+    })).not.toBe("Okay.");
   });
 
   it("rememberFillerPhrase keeps a ring of 3", () => {

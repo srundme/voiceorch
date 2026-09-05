@@ -1,12 +1,17 @@
 // Backchannel bank is only okay / hmm / mmm — no language-specific acks,
 // "I see", "Got it", "Mm-hmm", சரி, etc. Fillers play BEFORE the LLM reply
 // is known, so "Okay" stays off questions / refusals (sounds like agreement).
+// On safe statements: 80% Okay, 20% Hmm/Mmm so it sounds like a person, not a
+// coin flip among three words.
 
 /** Pure listening sounds — safe before any answer polarity. */
 const LISTENING_FILLERS = ["Hmm.", "Mmm."];
 
 /** Soft ack — only when the caller turn is not a question / risk turn. */
 const SOFT_ACK_FILLERS = ["Okay.", "Hmm.", "Mmm."];
+
+/** Share of safe-statement backchannels that should be "Okay." */
+export const SOFT_ACK_OKAY_WEIGHT = 0.8;
 
 /** How many recent fillers to avoid repeating (ring buffer). */
 export const FILLER_RECENT_AVOID = 3;
@@ -18,6 +23,8 @@ export interface BackchannelFillerOptions {
   customFillers?: string[];
   /** Latest caller transcript text for semantic context filtering */
   callerTranscript?: string | null;
+  /** Test hook — defaults to Math.random. */
+  rng?: () => number;
 }
 
 /**
@@ -73,9 +80,22 @@ export function getBackchannelFillers(
   return [...SOFT_ACK_FILLERS];
 }
 
+function nextRandom(opts?: BackchannelFillerOptions): number {
+  return opts?.rng?.() ?? Math.random();
+}
+
+function pickFrom(choices: string[], opts?: BackchannelFillerOptions): string {
+  return choices[Math.floor(nextRandom(opts) * choices.length)]!;
+}
+
+function pickListeningFiller(recent: string[], opts?: BackchannelFillerOptions): string {
+  const filtered = LISTENING_FILLERS.filter((p) => !recent.includes(p.trim().toLowerCase()));
+  return pickFrom(filtered.length > 0 ? filtered : LISTENING_FILLERS, opts);
+}
+
 /**
  * Pick one filler for the language, or null when none is available.
- * Avoids the last few phrases so Tamil/Indic calls don't loop the same sound.
+ * Safe statements: 80% Okay, 20% Hmm/Mmm. Questions / refusals stay listening-only.
  */
 export function pickBackchannelFiller(
   language: string | null | undefined,
@@ -90,12 +110,18 @@ export function pickBackchannelFiller(
     .map((p) => p.trim().toLowerCase())
     .filter(Boolean);
 
+  const usingCustom = Boolean(opts?.customFillers && opts.customFillers.length > 0);
+  if (!usingCustom && pool.includes("Okay.")) {
+    if (nextRandom(opts) < SOFT_ACK_OKAY_WEIGHT) return "Okay.";
+    return pickListeningFiller(recent, opts);
+  }
+
   let choices = pool;
   if (recent.length > 0) {
     const filtered = pool.filter((p) => !recent.includes(p.trim().toLowerCase()));
     if (filtered.length > 0) choices = filtered;
   }
-  return choices[Math.floor(Math.random() * choices.length)]!;
+  return pickFrom(choices, opts);
 }
 
 /** Push a spoken filler into a recent-avoid ring (mutates `recent`, returns it). */
