@@ -1,46 +1,18 @@
-// Language-keyed backchannel filler bank with context-safe acknowledgments.
-//
-// Fillers play BEFORE the LLM reply is known. Affirmative acks ("சரி", "Okay",
-// "Sure") before a refusal/negative answer kill the feel — so the default bank
-// is listening-only. Soft acks are allowed only when the caller's turn looks
-// like a safe, non-polar statement (not a question / complaint / refusal).
-//
-// Never use polar yes/no (ஆமா / हाँ / yes) as fillers.
+// Backchannel bank is only okay / hmm / mmm — no language-specific acks,
+// "I see", "Got it", "Mm-hmm", சரி, etc. Fillers play BEFORE the LLM reply
+// is known, so "Okay" stays off questions / refusals (sounds like agreement).
 
 /** Pure listening sounds — safe before any answer polarity. */
-const LISTENING_FILLERS: Record<string, string[]> = {
-  ta: ["ம்ம்", "ஆஹா", "அப்படியா", "ஹ்ம்"],
-  hi: ["हम्म", "अच्छा", "उम्म"],
-  en: ["Mm-hmm.", "I see.", "Hmm."],
-  te: ["ఓహో", "అలాగా", "hmm"],
-  kn: ["ಓಹ್", "ಅಲ್ವಾ", "hmm"],
-  ml: ["ഉം", "ഓഹ്", "okay"],
-  mr: ["अच्छा", "हम्म", "hmm"],
-  bn: ["আচ্ছা", "হুম", "hmm"],
-  gu: ["અચ્છા", "હમ્", "hmm"],
-};
+const LISTENING_FILLERS = ["Hmm.", "Mmm."];
 
-/**
- * Soft acknowledgments — imply "I heard you", not agreement.
- * Only used when caller turn is not a question / risk turn.
- */
-const SOFT_ACK_FILLERS: Record<string, string[]> = {
-  ta: ["சரிங்க", "புரிஞ்சுது", "ஓகேங்க", "சரி"],
-  hi: ["समझ गया", "ठीक है", "अच्छा जी", "ओके"],
-  en: ["Got it.", "Understood.", "Okay.", "Right."],
-  te: ["సరే", "ఓకే"],
-  kn: ["ಸರಿ", "ಓಕೆ"],
-  ml: ["ശരി", "ഓക്കേ"],
-  mr: ["बरं", "ठीक आहे", "ओके"],
-  bn: ["বুঝলাম", "ঠিক আছে", "ওকে"],
-  gu: ["સમજાયું", "ઠીક", "ઓકે"],
-};
+/** Soft ack — only when the caller turn is not a question / risk turn. */
+const SOFT_ACK_FILLERS = ["Okay.", "Hmm.", "Mmm."];
 
 /** How many recent fillers to avoid repeating (ring buffer). */
 export const FILLER_RECENT_AVOID = 3;
 
 export interface BackchannelFillerOptions {
-  /** When caller explicitly requested English, only "Okay." is permitted. */
+  /** Kept for callers; the spoken bank is okay / hmm / mmm in every language. */
   englishStrictAck?: boolean;
   /** Custom fillers configured on the agent */
   customFillers?: string[];
@@ -79,12 +51,8 @@ export function isRiskyFillerContext(transcript: string): boolean {
   return false;
 }
 
-function languageBase(language: string): string {
-  return language.toLowerCase().split(/[-_]/)[0]!;
-}
-
 /**
- * Resolve the predefined backchannel filler set for an agent's language.
+ * Resolve the backchannel filler set (okay / hmm / mmm only).
  */
 export function getBackchannelFillers(
   language: string | null | undefined,
@@ -95,21 +63,14 @@ export function getBackchannelFillers(
   }
 
   if (!language) return [];
-  const base = languageBase(language);
-  if (base === "en" && opts?.englishStrictAck) return ["Okay."];
-
-  const listening = LISTENING_FILLERS[base] ?? [];
-  const soft = SOFT_ACK_FILLERS[base] ?? [];
   const transcript = opts?.callerTranscript?.trim() || "";
 
   // Unknown next-sentence polarity → listening only (safe before "no").
   if (!transcript || isRiskyFillerContext(transcript)) {
-    return listening.length > 0 ? listening : soft;
+    return [...LISTENING_FILLERS];
   }
 
-  // Safe statement from caller — allow soft acks + listening for variety.
-  const merged = [...listening, ...soft];
-  return merged.length > 0 ? merged : [];
+  return [...SOFT_ACK_FILLERS];
 }
 
 /**

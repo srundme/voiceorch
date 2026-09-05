@@ -6,51 +6,63 @@ import {
   rememberFillerPhrase,
 } from "./backchannel.js";
 
-describe("Tamil backchannel fillers", () => {
-  it("uses listening-only fillers for questions (no soft சரி/ஓகே)", () => {
+const ONLY_OKAY_HMM_MMM = ["Okay.", "Hmm.", "Mmm."];
+
+describe("backchannel fillers — okay / hmm / mmm only", () => {
+  it("uses hmm/mmm only for questions (no Okay, no language acks)", () => {
     const pool = getBackchannelFillers("ta-IN", {
       callerTranscript: "என்ன விலை?",
     });
-    expect(pool.length).toBeGreaterThanOrEqual(2);
-    expect(pool).toContain("ம்ம்");
+    expect(pool).toEqual(["Hmm.", "Mmm."]);
+    expect(pool).not.toContain("Okay.");
     expect(pool).not.toContain("சரி");
-    expect(pool).not.toContain("ஓகே");
+    expect(pool).not.toContain("I see.");
+    expect(pool).not.toContain("Mm-hmm.");
   });
 
-  it("uses listening-only for refusal / cancel turns", () => {
+  it("uses hmm/mmm only for refusal / cancel turns", () => {
     const pool = getBackchannelFillers("ta-IN", {
-      callerTranscript: "வேண்டாம் ரத்து பண்ணுங்க",
+      callerTranscript: "I don't want this, cancel it",
     });
+    expect(pool).toEqual(["Hmm.", "Mmm."]);
     expect(pool).not.toContain("சரி");
-    expect(pool).toContain("ம்ம்");
+    expect(pool).not.toContain("Okay.");
   });
 
-  it("allows soft acks on safe statements", () => {
-    const pool = getBackchannelFillers("ta-IN", {
+  it("allows Okay on safe statements, still only the three words", () => {
+    const pool = getBackchannelFillers("hi-IN", {
       callerTranscript: "நான் சென்னையில இருக்கேன்",
     });
-    expect(pool).toContain("சரிங்க");
-    expect(pool).toContain("ம்ம்");
+    expect(pool.sort()).toEqual([...ONLY_OKAY_HMM_MMM].sort());
+    expect(pool).not.toContain("சரிங்க");
+    expect(pool).not.toContain("Got it.");
+    expect(pool).not.toContain("अच्छा");
+  });
+
+  it("same three-word bank in English", () => {
+    expect(getBackchannelFillers("en-IN", { callerTranscript: "I live in Chennai" }).sort())
+      .toEqual([...ONLY_OKAY_HMM_MMM].sort());
+    expect(getBackchannelFillers("en-IN", { callerTranscript: "Can you help?" }))
+      .toEqual(["Hmm.", "Mmm."]);
   });
 
   it("avoids the last few spoken fillers", () => {
-    const recent = ["ம்ம்", "ஆஹா", "அப்படியா"];
+    const recent = ["Hmm.", "Mmm."];
     for (let i = 0; i < 20; i++) {
-      const phrase = pickBackchannelFiller("ta-IN", recent, {
-        callerTranscript: "என்ன விலை?",
+      const phrase = pickBackchannelFiller("en-IN", recent, {
+        callerTranscript: "I live in Chennai",
       });
-      expect(phrase).toBeTruthy();
-      expect(recent.map((r) => r.toLowerCase())).not.toContain(phrase!.toLowerCase());
+      expect(phrase).toBe("Okay.");
     }
   });
 
   it("rememberFillerPhrase keeps a ring of 3", () => {
     const recent: string[] = [];
-    rememberFillerPhrase(recent, "ம்ம்");
-    rememberFillerPhrase(recent, "ஆஹா");
-    rememberFillerPhrase(recent, "அப்படியா");
-    rememberFillerPhrase(recent, "ஹ்ம்");
-    expect(recent).toEqual(["ஆஹா", "அப்படியா", "ஹ்ம்"]);
+    rememberFillerPhrase(recent, "Okay.");
+    rememberFillerPhrase(recent, "Hmm.");
+    rememberFillerPhrase(recent, "Mmm.");
+    rememberFillerPhrase(recent, "Okay.");
+    expect(recent).toEqual(["Hmm.", "Mmm.", "Okay."]);
   });
 });
 

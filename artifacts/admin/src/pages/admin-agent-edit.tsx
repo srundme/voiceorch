@@ -972,7 +972,7 @@ export default function AdminAgentEdit() {
                     <FormItem className="flex items-center justify-between">
                       <div>
                         <FormLabel>Enabled</FormLabel>
-                        <FormDescription className="text-xs">Agent says "I see", "Got it" while thinking.</FormDescription>
+                        <FormDescription className="text-xs">Agent says "okay", "hmm", or "mmm" while thinking.</FormDescription>
                       </div>
                       <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
                     </FormItem>

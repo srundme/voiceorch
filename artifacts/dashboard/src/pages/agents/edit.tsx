@@ -1258,7 +1258,7 @@ export default function AgentEdit() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium leading-none">Backchanneling</p>
-                          <p className="text-xs text-muted-foreground mt-1">Agent says "I see", "Got it" etc. while thinking</p>
+                          <p className="text-xs text-muted-foreground mt-1">Agent says "okay", "hmm", or "mmm" while thinking</p>
                         </div>
                         <FormField control={form.control} name="backchannelingEnabled" render={({ field }) => (
                           <FormItem>

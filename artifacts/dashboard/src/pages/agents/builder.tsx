@@ -2435,7 +2435,7 @@ function VoiceTab({ form }: { form: any }) {
             <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
               <div>
                 <FormLabel className="text-sm">Backchanneling</FormLabel>
-                <FormDescription className="text-[10px]">Agent says &quot;mm-hmm&quot;, &quot;I see&quot; while listening</FormDescription>
+                <FormDescription className="text-[10px]">Agent says &quot;okay&quot;, &quot;hmm&quot;, or &quot;mmm&quot; while listening</FormDescription>
               </div>
               <FormControl><Switch checked={field.value ?? false} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
