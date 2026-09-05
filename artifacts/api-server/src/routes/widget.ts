@@ -357,7 +357,8 @@ const WEBCALL_WIDGET_JS = `(function () {
     var src = audioCtx.createBufferSource();
     src.buffer = abuf;
     src.connect(audioCtx.destination);
-    nextPlayAt = Math.max(audioCtx.currentTime + 0.02, nextPlayAt);
+    var lead = nextPlayAt - audioCtx.currentTime;
+    nextPlayAt = lead > 0.12 ? audioCtx.currentTime : Math.max(audioCtx.currentTime + 0.02, nextPlayAt);
     src.start(nextPlayAt);
     nextPlayAt += abuf.duration;
     activeSrcs.push(src);

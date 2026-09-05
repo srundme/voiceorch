@@ -853,6 +853,13 @@ export interface SessionConfig {
   callDirection?: "inbound" | "outbound";
   /** Prior call dropped within the resume window — shorter opener + listen stall. */
   isResumeDroppedCall?: boolean;
+  /**
+   * Mid-call squad teammate takeover. The receiving agent must speak a short
+   * continuity line (not wait silently, not replay Welcome / CALL FLOW).
+   */
+  isSquadHandoffTakeover?: boolean;
+  /** Prior pipeline turns — Gemini Live seeds these so the teammate can continue. */
+  handoffSeedTurns?: ConversationTurn[];
   /** Carrier answer/bridge time (epoch ms), captured at the telephony answer
    *  webhook. When set, the recording timeline is anchored here so the gap
    *  between carrier answer and the first media frame is padded as leading

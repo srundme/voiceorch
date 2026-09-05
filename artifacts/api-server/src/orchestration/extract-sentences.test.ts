@@ -125,10 +125,19 @@ describe("extractSentences — ellipsis is a breath, not a clip (call 14276)", (
 
 describe("extractSentences — Cartesia sentence mode (Sonic 3.5/3.6)", () => {
   it("does not clip at a comma before the period arrives", () => {
-    const pending = "I can help you schedule that appointment, just tell me your preferred time";
+    const pending = "I can help you, just tell me";
     const { sentences, remainder } = extractSentences(pending, 15, { earlyClause: false });
     expect(sentences).toEqual([]);
     expect(remainder).toBe(pending);
+  });
+
+  it("starts TTS on a long Cartesia clause before the period (webcall + phone)", () => {
+    const pending = "I can help you schedule that appointment, just tell me your preferred time";
+    const { sentences, remainder } = extractSentences(pending, 15, { earlyClause: false });
+    expect(sentences[0]).toMatch(/^I can help you schedule/);
+    expect(sentences[0]).not.toBe("I can help you schedule that appointment");
+    expect((sentences.join(" ") + " " + remainder).replace(/\s+/g, " ").trim())
+      .toContain("preferred time");
   });
 
   it("splits on an em-dash clause without comma-clipping (call 21264)", () => {

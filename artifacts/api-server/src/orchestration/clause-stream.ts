@@ -113,8 +113,18 @@ export function tryEarlyPhraseDispatch(
     }
   }
 
-  // Word-boundary only while the LLM is still mid-clause (no .!? yet).
-  // Do not slice finished sentences, either/or questions, or time lists.
+  return tryWordBoundaryDispatch(remainder, minChars);
+}
+
+/**
+ * Start TTS on a 4-word chunk before `.!?` arrives. Cartesia cannot split on
+ * commas (those are Sonic pauses), but waiting for the period left 1–2s of
+ * dead air on every webcall and phone turn (call 21264-class openers).
+ */
+export function tryWordBoundaryDispatch(
+  remainder: string,
+  minChars: number,
+): { clause: string; rest: string } | null {
   if (/[.!?…]/.test(remainder)) return null;
   if (/\b(or|या|अथवा|அல்லது)\b/iu.test(remainder)) return null;
   const indic = /[\u0900-\u0D7F]/.test(remainder);
@@ -129,7 +139,6 @@ export function tryEarlyPhraseDispatch(
       }
     }
   }
-
   return null;
 }
 
@@ -238,6 +247,12 @@ export function extractSentences(
     if (dash) {
       sentences.push(dash.clause);
       remainder = dash.rest;
+    } else {
+      const words = tryWordBoundaryDispatch(remainder, minCommaClauseChars);
+      if (words) {
+        sentences.push(words.clause);
+        remainder = words.rest;
+      }
     }
   }
 

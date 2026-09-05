@@ -127,7 +127,10 @@ export function WebcallPanel({
     const src = ctx.createBufferSource();
     src.buffer = audioBuf;
     src.connect(ctx.destination);
-    const start = Math.max(ctx.currentTime, nextStartRef.current);
+    // Keepalive / TTS bursts used to schedule seconds ahead of currentTime, so
+    // the next real sentence waited behind a growing silence queue.
+    const lead = nextStartRef.current - ctx.currentTime;
+    const start = lead > 0.12 ? ctx.currentTime : Math.max(ctx.currentTime, nextStartRef.current);
     src.start(start);
     nextStartRef.current = start + audioBuf.duration;
     activeSources.current.push(src);

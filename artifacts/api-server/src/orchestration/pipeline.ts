@@ -709,6 +709,7 @@ function buildCompactGreetingPrompt(
     memoryLanguagePref?: string | null;
     agentLanguage?: string | null;
     languageAutoDetect?: boolean;
+    squadHandoffTakeover?: boolean;
   },
 ): string {
   const memoryMatch = fullSystemPrompt.match(
@@ -739,6 +740,10 @@ function buildCompactGreetingPrompt(
   }
   const langName = LANG_DISPLAY_NAMES[language] ?? language;
   const languageInstruction = `[LANGUAGE] Respond in ${langName}.`;
+  const handoffTakeover = opts?.squadHandoffTakeover === true;
+  const squadHandoffMatch = fullSystemPrompt.match(
+    /\[SQUAD HANDOFF[\s\S]*?(?=\n\[YOUR TEAM\]|\n===|$)/,
+  );
   const openingLengthRule = resumeDropped
     ? "[OPENING — RESUME AFTER DROP] The previous call with this caller dropped mid-conversation. " +
       "Speak 1–2 short colloquial sentences only: (1) briefly acknowledge the call got cut/dropped " +
@@ -746,6 +751,11 @@ function buildCompactGreetingPrompt(
       "as if starting fresh), (2) immediately continue from LAST EXCHANGES BEFORE THE CALL DROPPED " +
       "in CALLER MEMORY above — pick up the same topic mid-thread. Do NOT re-introduce yourself, " +
       "your company, or restart the sales pitch from the beginning."
+    : handoffTakeover
+      ? "[OPENING — SQUAD HANDOFF] You just took over this live call from a teammate. The caller is still on the line. " +
+        "Speak 1–2 short colloquial sentences only: briefly acknowledge you are here and continue the pending topic. " +
+        "Do NOT restart Welcome / CALL FLOW / GREETING. Do NOT introduce yourself as a new call. " +
+        "Do NOT ask their name if it is already known."
     : scriptBlock
       ? "[OPENING] Speak the GREETING / opening from CALL FLOW above as a single uninterrupted turn. " +
         "Use the caller's company/contact name when present. Do not replace the scripted pitch with a one-word Hello."
@@ -760,7 +770,7 @@ function buildCompactGreetingPrompt(
     "The agent/workspace display name is an internal label, NOT a company brand — never say " +
     `"thanks for calling <agent name>"` +
     (agentLabel ? ` (do not say "${agentLabel}" or a shortened form of it as the company).` : ".");
-  const returningCallerRule = memoryBlock && !resumeDropped
+  const returningCallerRule = memoryBlock && !resumeDropped && !handoffTakeover
     ? "[RETURNING CALLER] If CALLER MEMORY has a real person name, greet with that name in ONE short clause and skip the first-time welcome. " +
       "Do NOT recap previous bookings, slots, times, or call summaries in the opener — wait for them to speak. " +
       "Never use a relative-time word as a name (நாளைக்கு, tomorrow, today, yesterday). " +
@@ -769,8 +779,8 @@ function buildCompactGreetingPrompt(
   if (fullSystemPrompt.length <= GREETING_FULL_PROMPT_MAX_CHARS) {
     // Full-prompt greeting: the model sees exactly what it sees on every
     // later turn, so the opener can no longer contradict the conversation.
-    const fullOpeningRule = resumeDropped
-      ? openingLengthRule // resume-after-drop instructions apply unchanged
+    const fullOpeningRule = resumeDropped || handoffTakeover
+      ? openingLengthRule // resume-after-drop / squad takeover apply unchanged
       : "[OPENING] Produce ONLY your first spoken line of this call, following the opening/greeting " +
         "instructions in your prompt above. Keep it short and natural — do not continue past the opener.";
     return [
@@ -783,6 +793,7 @@ function buildCompactGreetingPrompt(
   }
   const parts = [
     memoryBlock,
+    squadHandoffMatch?.[0] ?? "",
     scriptBlock,
     languageInstruction,
     openingLengthRule,
@@ -5526,6 +5537,7 @@ export class OrchestrationPipeline implements VoiceSession {
                 memoryLanguagePref: this.config.callerMemoryLanguage ?? null,
                 agentLanguage: greetLang,
                 languageAutoDetect: this.agent.languageAutoDetect === true,
+                squadHandoffTakeover: this.config.isSquadHandoffTakeover === true,
               },
             ),
             this.salutationFor(null),
@@ -5730,6 +5742,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // (call 2683) — never a hardcoded cut-call phrase.
       const isReturningCaller = this.config.isReturningCaller === true;
       const resumeDropped = this.isResumeDroppedCall;
+      const handoffTakeover = this.config.isSquadHandoffTakeover === true;
       // Outbound (campaign / sheet / WhatsApp dial) must use the agent greeting /
       // LLM opener — never the inbound "Hi! How are you?" returning-caller shortcut
       // (call 3419: QuickBooks Betty pitch skipped for a prior callCount ≥ 1).
@@ -5744,7 +5757,8 @@ export class OrchestrationPipeline implements VoiceSession {
       // (even "Hello") must be spoken — callers were hearing the hardcoded
       // "what are you calling about" instead of the Welcome field.
       const useInstantReturning =
-        isReturningCaller
+        !handoffTakeover
+        && isReturningCaller
         && !resumeDropped
         && this.callDirection !== "outbound"
         && !typedWelcome;
@@ -5767,6 +5781,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // operator actually wrote in the target script (\u0900-\u0DFF) — and all
       // English agents — are left untouched.
       if (
+        !handoffTakeover &&
         !useInstantReturning &&
         greeting.trim() &&
         !greetLang.toLowerCase().startsWith("en") &&
@@ -5807,7 +5822,8 @@ export class OrchestrationPipeline implements VoiceSession {
       // greeting LLM already finished, play Hello+pitch as one Cartesia context
       // so the caller does not hear a hard cut after "Hello".
       const speakWelcomeNow =
-        !greeting.trim()
+        !handoffTakeover
+        && !greeting.trim()
         && !!typedWelcome
         && isStubGreeting(typedWelcome)
         && !useInstantReturning
@@ -5937,6 +5953,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // If Welcome was not played early, still put a stub in front of a generated
       // opener (inbound language-skip / resume paths).
       if (
+        !handoffTakeover &&
         !welcomeAlreadySpoken &&
         typedWelcome &&
         isStubGreeting(typedWelcome) &&

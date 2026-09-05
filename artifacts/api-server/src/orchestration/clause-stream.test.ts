@@ -47,7 +47,7 @@ describe("clause-level dispatch", () => {
   });
 
   it("Cartesia sentence mode keeps commas until .!?", () => {
-    const pending = "Hello Gopi, I'm Aisha from ILCC and I can help you today";
+    const pending = "Hello Gopi, I can help";
     const { sentences, remainder } = extractSentences(pending, 8, { earlyClause: false });
     expect(sentences).toEqual([]);
     expect(remainder).toBe(pending);
@@ -56,5 +56,13 @@ describe("clause-level dispatch", () => {
       "Sorry, the line cut out there for a second.",
       { earlyClause: false },
     )).toBe("Sorry, the line cut out there for a second.");
+  });
+
+  it("Cartesia still starts TTS on a long clause before the period (webcall + phone latency)", () => {
+    const pending = "Hello Gopi, I'm Aisha from ILCC and I can help you today with admissions";
+    const { sentences, remainder } = extractSentences(pending, 8, { earlyClause: false });
+    expect(sentences[0]).toMatch(/^Hello Gopi,/);
+    expect(sentences[0]).not.toBe("Hello Gopi");
+    expect(sentences.join(" ") + " " + remainder).toContain("admissions");
   });
 });

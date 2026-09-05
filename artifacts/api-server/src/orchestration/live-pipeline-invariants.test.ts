@@ -149,6 +149,10 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("shouldInjectSchedulingPhrasebook");
     expect(pipelineSrc).toContain("needSchedulingGuides");
     expect(pipelineSrc).toContain("earlyClause: this.agent.ttsProvider !== \"cartesia\"");
+    expect(readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "clause-stream.ts"),
+      "utf8",
+    )).toContain("tryWordBoundaryDispatch");
     expect(pipelineSrc).toContain("extractSpeakable");
     expect(pipelineSrc).toContain("Do not wait on incrementalDelay / calleeSpeaking before first audio");
     expect(methodBody("processTurn")).toContain("this.clearBargeWait()");
@@ -192,6 +196,8 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("this.requestedLangLatch || this.lastNonEnglishLang || this.currentLang");
     expect(pipelineSrc).toContain("getLiveHandoffLanguage(): string");
     expect(pipelineSrc).toContain("Live squad handoff language");
+    expect(pipelineSrc).toContain("[OPENING — SQUAD HANDOFF]");
+    expect(pipelineSrc).toContain("squadHandoffTakeover");
   });
 
   it("does not mute after a mid-sentence false barge (call 21450)", () => {

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 process.env.DATABASE_URL ??= "postgres://test:test@127.0.0.1:5432/test";
@@ -70,5 +73,29 @@ describe("buildHandoffPromptBlock", () => {
       transcriptSummary: "hello",
     });
     expect(block).not.toContain("MUST continue this live call");
+  });
+});
+
+describe("squad live handoff takeover wiring", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const handoffSrc = readFileSync(resolve(here, "squad-handoff.ts"), "utf8");
+  const sessionSrc = readFileSync(resolve(here, "../orchestration/session.ts"), "utf8");
+  const teamworkSrc = readFileSync(resolve(here, "squad-teamwork.ts"), "utf8");
+
+  it("builds the teammate as assistant-first with a takeover flag", () => {
+    expect(handoffSrc).toContain('firstSpeaker: "assistant"');
+    expect(handoffSrc).not.toMatch(/firstSpeaker:\s*"user"/);
+    expect(handoffSrc).toContain("isSquadHandoffTakeover: true");
+    expect(handoffSrc).toContain("handoffSeedTurns: opts.previousPipeline.getHistory()");
+  });
+
+  it("greets on the receiving pipeline after the pointer swap", () => {
+    expect(sessionSrc).toContain("result.pipeline.greet()");
+    expect(sessionSrc).toContain("Squad handoff: receiving agent greet failed");
+  });
+
+  it("does not tell the departing agent the system will announce for them", () => {
+    expect(teamworkSrc).not.toContain("the system speaks a handoff announcement for you");
+    expect(teamworkSrc).toContain("briefly tell them you are connecting a teammate");
   });
 });

@@ -210,8 +210,9 @@ async function buildTargetAgentConfig(
     ttsSpeed: (agentCfg["ttsSpeed"] as number | undefined) ?? 1.0,
     telephonyProvider: agent.telephonyProvider,
     greetingMessage: null,
-    // Teammate continues the live call — do not generate a cold English opener.
-    firstSpeaker: "user",
+    // Receiving agent must take the floor after the swap. firstSpeaker=user
+    // plus a skipped greet() left dead air (caller waiting for the teammate).
+    firstSpeaker: "assistant",
     initialLanguage: handoffLang.fromCaller ? handoffLang.bcp47 : undefined,
     endCallPhrases,
     silenceTimeoutSeconds: agent.silenceTimeoutSeconds ?? DEFAULT_SILENCE_TIMEOUT_SECONDS,
@@ -456,6 +457,8 @@ export async function performSquadAgentHandoff(opts: {
   // dropped inbound audio during the gap before session swapped pointers.
   const { agentConfig, providerKeys } = built;
   const hooks = opts.hooks;
+  const greeting = spokenSquadHandoffGreeting(opts.squad.handoffGreeting);
+  if (greeting) agentConfig.greetingMessage = greeting;
 
   let newPipeline: VoiceSession;
   try {
@@ -476,6 +479,8 @@ export async function performSquadAgentHandoff(opts: {
           callDirection: hooks.callDirection,
           memoryOwnerAgentId: hooks.memoryOwnerAgentId,
           callerMemoryLanguage: packet.language ?? null,
+          isSquadHandoffTakeover: true,
+          handoffSeedTurns: opts.previousPipeline.getHistory(),
         })
       : new OrchestrationPipeline({
           callId: hooks.callId,
@@ -493,6 +498,8 @@ export async function performSquadAgentHandoff(opts: {
           callDirection: hooks.callDirection,
           memoryOwnerAgentId: hooks.memoryOwnerAgentId,
           callerMemoryLanguage: packet.language ?? null,
+          isSquadHandoffTakeover: true,
+          handoffSeedTurns: opts.previousPipeline.getHistory(),
         });
   } catch (err) {
     logger.error({ err, callId: hooks.callId }, "Failed to create handoff pipeline — keeping previous agent");
@@ -503,19 +510,6 @@ export async function performSquadAgentHandoff(opts: {
       error: err instanceof Error ? err.message : String(err),
     });
     return null;
-  }
-
-  const greeting = spokenSquadHandoffGreeting(opts.squad.handoffGreeting);
-
-  // Custom greeting only. Stock copy used to be spoken on a freshly built
-  // pipeline (often Gemini Live default "Kore") — a second robotic voice.
-  if (greeting) {
-    await new Promise((r) => setTimeout(r, 650));
-    try {
-      await newPipeline.speakRaw(greeting);
-    } catch (err) {
-      logger.warn({ err, callId: hooks.callId }, "Handoff greeting speakRaw failed");
-    }
   }
 
   await recordSquadHandoff({ runId: opts.runId, packet, outcome: "success" });

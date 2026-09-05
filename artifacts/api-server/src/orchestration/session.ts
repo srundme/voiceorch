@@ -2035,6 +2035,11 @@ export async function createSession(params: {
       } catch (closeErr) {
         logger.warn({ err: closeErr, callId: callRecord.id }, "Error closing previous pipeline after handoff swap");
       }
+      // Receiving pipeline was never greet()'d — firstSpeaker=user + silent
+      // stock lines left the caller in dead air after the swap.
+      result.pipeline.greet().catch((err) => {
+        logger.error({ err, callId: callRecord.id }, "Squad handoff: receiving agent greet failed");
+      });
 
       logExec(EXEC_COMPONENTS.Tool, "system", {
         status: "success",

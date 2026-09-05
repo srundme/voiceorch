@@ -238,12 +238,11 @@ export class GeminiLivePipeline implements VoiceSession {
   private pumpAnchorMs = 0;
   private framesSent = 0;
   private static readonly FRAME_MS = 20;
-  private static readonly LEAD_MS = 240; // frames allowed ahead of real time (carrier jitter buffer)
+  private static readonly LEAD_MS = 80; // frames allowed ahead of real time (carrier jitter buffer)
   // Gemini does not always deliver a reply faster than real time. Starting the
   // pump on the very first 20 ms frame means one slow chunk drains the queue
-  // mid-word, and the caller hears the reply chopped into pieces. Hold a small
-  // jitter buffer before (re)starting playback so a slow chunk is absorbed.
-  private static readonly PREBUFFER_FRAMES = 16; // 320 ms — do not start on the first 20 ms
+  // mid-word. 16 frames (320 ms) made every webcall and PSTN reply late.
+  private static readonly PREBUFFER_FRAMES = 5; // 100 ms jitter — do not start on the first 20 ms
   private underruns = 0;
   private lastOutPcm8k: Buffer | null = null;
 
@@ -523,18 +522,54 @@ export class GeminiLivePipeline implements VoiceSession {
   async greet(): Promise<void> {
     if (this.closed || this.greetingSent) return;
     await this.ensureConnected();
-    if (this.agent.firstSpeaker === "user") {
+    const takeover = this.config.isSquadHandoffTakeover === true;
+    if (this.agent.firstSpeaker === "user" && !takeover) {
       logger.info({ callId: this.config.callId }, "Gemini Live: first speaker = user — waiting for caller");
       return;
     }
 
     this.greetingSent = true;
     const greeting = (this.agent.greetingMessage ?? "").trim();
+    if (takeover) {
+      await this.beginSquadHandoffTakeover(greeting);
+      return;
+    }
     const prompt = greeting
       ? `Begin the call by speaking this greeting naturally: "${greeting}"`
       : "Begin the call with a brief, friendly greeting and ask how you can help.";
 
     this.session?.sendRealtimeInput({ text: prompt });
+  }
+
+  /**
+   * Gemini Live only starts a spoken turn when a client turn completes.
+   * sendRealtimeInput({ text }) does not close VAD, so a takeover prompt sat
+   * there forever and the teammate never spoke. Seed the prior call, then
+   * force turnComplete.
+   */
+  private async beginSquadHandoffTakeover(customGreeting: string): Promise<void> {
+    const seed = toLiveHandoffTurns(this.config.handoffSeedTurns);
+    const cue =
+      "You just took over this live call from a teammate. The customer is still on the line. " +
+      "Do not start a new greeting. Speak 1-2 short sentences: acknowledge continuity and continue.";
+    if (!this.session || this.closed) return;
+
+    if (customGreeting) {
+      if (seed.length > 0) {
+        this.session.sendClientContent({ turns: seed, turnComplete: false });
+      }
+      await this.speakRaw(customGreeting);
+      return;
+    }
+
+    const turns = seed.length > 0
+      ? [...seed, { role: "user" as const, parts: [{ text: cue }] }]
+      : [{ role: "user" as const, parts: [{ text: cue }] }];
+    this.session.sendClientContent({ turns, turnComplete: true });
+    logger.info(
+      { callId: this.config.callId, seedTurns: seed.length },
+      "Gemini Live: squad handoff takeover — seeded prior turns and forced a spoken reply",
+    );
   }
 
   async confirmAmdMachineThenBranch(): Promise<void> {
@@ -1232,6 +1267,10 @@ export class GeminiLivePipeline implements VoiceSession {
       });
       this.config.onConversationUpdate?.(this.getHistory());
     }
+    // Squad handoff closes this Live socket from inside the transfer tool.
+    // Sending the tool result after that would throw and (worse) let the
+    // departing model keep talking over the teammate.
+    if (this.closed || !this.session) return;
     this.session.sendToolResponse({ functionResponses: responses });
   }
 
@@ -1317,6 +1356,22 @@ export class GeminiLivePipeline implements VoiceSession {
     logger.error({ callId: this.config.callId, reason }, "Gemini Live fatal error");
     this.config.onFatalError?.(reason);
   }
+}
+
+const HANDOFF_SEED_MAX_TURNS = 16;
+
+/** Map classic/Live history into Gemini Live client-content turns. */
+export function toLiveHandoffTurns(
+  turns: ConversationTurn[] | undefined,
+): Array<{ role: "user" | "model"; parts: Array<{ text: string }> }> {
+  if (!turns?.length) return [];
+  return turns
+    .filter((t) => (t.role === "user" || t.role === "assistant") && t.content.trim())
+    .slice(-HANDOFF_SEED_MAX_TURNS)
+    .map((t) => ({
+      role: t.role === "assistant" ? "model" as const : "user" as const,
+      parts: [{ text: t.content.trim() }],
+    }));
 }
 
 /** Strip TTS prosody markup so Live transcripts stay human-readable. */
