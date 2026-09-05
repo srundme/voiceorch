@@ -13,7 +13,7 @@ import { resolveInboundGreetingTtsSpeed } from "./call-direction-rules.js";
 import { buildDatetimeInjection, buildTurnClockBlock, THIS_TURN_INSTRUCTION } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
-import { isHoldRequest } from "./conversationDiscipline.js";
+import { isHoldRequest, buildAntiRepeatNudge, extractRecentAgentQuestions } from "./conversationDiscipline.js";
 import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared, isCallerClosingUtterance } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
 import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isSameUtteranceContinuation, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
@@ -580,7 +580,8 @@ const ACK_WORDS = new Set([
   "சரி", "சரிங்க", "சரிங்கம்", "ஆமா", "ஆம்", "நல்லது",
   // English
   "okay", "ok", "got it", "i see", "sure", "right", "alright",
-  "understood", "great", "perfect", "mm-hmm", "mhm", "mmhm", "yes", "yeah",
+  "understood", "great", "perfect", "mm-hmm", "mhm", "mmhm", "hmm", "mmm", "mm",
+  "yes", "yeah",
   // Hindi (occasional)
   "हाँ", "अच्छा", "ठीक है",
   // Telugu/Kannada/Malayalam common acks
@@ -610,7 +611,7 @@ function isLlmLeadingAck(sentence: string): boolean {
  * whole bare-ack sentence, which would throw the content away instead.
  */
 export function stripLeadingAckClause(sentence: string): string {
-  const m = /^\s*([^,،]{1,14})[,،]\s+(\S.*)$/su.exec(sentence);
+  const m = /^\s*([^,،.!?]{1,14})[,،.!?]\s+(\S.*)$/su.exec(sentence);
   if (!m) return sentence;
   const head = m[1]!.trim().toLowerCase();
   if (!ACK_WORDS.has(head)) return sentence;
@@ -9092,10 +9093,13 @@ export class OrchestrationPipeline implements VoiceSession {
       });
     }
     if (
-      !this.closed
+      this.agent.backchannelingEnabled
+      && !this.closed
       && !this.bargeInRequested
       && !skipFillerForBackchannelAck
       && !toolHoldSpokenThisTurn
+      && !this.fillerPlaybackActive
+      && !this._lastTurnWasBargedIn
     ) {
       // Prefer conversation language; bootstrap from agent target / STT config so
       // auto-detect agents still backchannel on turn 1 instead of staying silent.
@@ -9113,8 +9117,19 @@ export class OrchestrationPipeline implements VoiceSession {
         // Honor the configured frequency for all languages (including Tamil).
         // The old 0.25 Tamil hard-cap made enabled backchanneling feel "broken".
         const freq = Math.max(0, Math.min(1, baseFreq));
+        // Deterministic rate (not Math.random): play until covered-turns / turn
+        // index reaches freq. freq=0.5 → cover ~every other turn, not every one
+        // (call 21824: frequency was logged then ignored → Hmm on every reply).
+        const dueForCover = freq >= 1
+          || (freq > 0 && this.fillerPlayedCount < Math.ceil(Math.max(1, this.turnIndex) * freq));
         const greetingOnlyCaller = isCallerAttentionUtterance(transcript);
-        if (shouldSkipImmediateBackchannel(false, greetingOnlyCaller)) {
+        if (!dueForCover) {
+          this.logExec("TTS", "system", {
+            status: "info",
+            turnNumber: _currentTurnIndex,
+            metadata: { event: "Backchannel Skipped", reason: "frequency", frequency: freq },
+          });
+        } else if (shouldSkipImmediateBackchannel(false, greetingOnlyCaller)) {
           logger.info(
             {
               callId: this.config.callId,
@@ -9565,9 +9580,27 @@ export class OrchestrationPipeline implements VoiceSession {
     if (historyForLlm.length > 0) {
       const lastTurn = historyForLlm[historyForLlm.length - 1]!;
       if (lastTurn.role === "user") {
+        const prevLine = this.lastAssistantSpokenRaw.trim();
+        const asked = extractRecentAgentQuestions(historyForLlm);
+        const nudge = prevLine
+          ? buildAntiRepeatNudge({
+              lastUserText: lastTurn.content,
+              prevLine,
+              escalated: this.consecutiveRepeats > 0,
+              alreadyAsked: asked,
+            })
+          : "";
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
-          { ...lastTurn, content: `${lastTurn.content}\n\n${THIS_TURN_INSTRUCTION}\n\n${buildTurnClockBlock(this.agent.timezone)}` },
+          {
+            ...lastTurn,
+            content: [
+              lastTurn.content,
+              THIS_TURN_INSTRUCTION,
+              nudge,
+              buildTurnClockBlock(this.agent.timezone),
+            ].filter(Boolean).join("\n\n"),
+          },
         ];
       }
     }

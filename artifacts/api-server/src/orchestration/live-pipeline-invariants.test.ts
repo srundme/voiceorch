@@ -170,6 +170,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toMatch(/FILLER_THRESHOLD_MS \?\? 0/);
     expect(pipelineSrc).toMatch(/BACKCHANNEL_LATE_MS \?\? 0/);
     expect(pipelineSrc).not.toContain("Math.random() < freq");
+    expect(methodBody("processTurn")).toContain("dueForCover");
+    expect(methodBody("processTurn")).toContain("buildAntiRepeatNudge");
+    expect(methodBody("processTurn")).toContain("this.agent.backchannelingEnabled");
     expect(pipelineSrc).toContain("Backchannel filler armed (immediate, language-aware)");
     // The cover must survive the first LLM token — Cartesia only speaks once a
     // whole sentence exists (call 21546: 0.3–1.5s later). Assert on behaviour,

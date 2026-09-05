@@ -23,6 +23,7 @@ import {
   NAME_PATTERNS,
   shouldLatchOverrideExtraction,
   injectEnhancedMemory,
+  isAbruptEnd,
   type CallerProfile,
 } from "./callerMemory.js";
 
@@ -200,5 +201,41 @@ describe("injectEnhancedMemory — returning-caller opener (call 14351)", () => 
     });
     expect(out).not.toMatch(/naturally reference what you already know/);
     expect(out).toMatch(/Do NOT recap previous bookings/);
+  });
+});
+
+describe("isAbruptEnd — completed call must not keep resume-drop (call 21824)", () => {
+  const base = {
+    id: 1,
+    agentId: 1113,
+    phoneNumber: "918904887300",
+    name: "Yashwanth",
+    summary: null,
+    callCount: 1,
+    predictedIntent: null,
+    riskScore: null,
+    sentimentTrend: null,
+    preferredLanguage: "ta-IN",
+  };
+
+  it("resumes only when the drop stamp is the latest call event", () => {
+    const droppedAt = new Date();
+    expect(isAbruptEnd({
+      ...base,
+      lastCalledAt: droppedAt,
+      lastCallDropped: true,
+      lastCallDroppedAt: droppedAt,
+    })).toBe(true);
+  });
+
+  it("does not resume after a later completed call left a stale drop flag", () => {
+    const droppedAt = new Date(Date.now() - 90_000);
+    const completedAt = new Date();
+    expect(isAbruptEnd({
+      ...base,
+      lastCalledAt: completedAt,
+      lastCallDropped: true,
+      lastCallDroppedAt: droppedAt,
+    })).toBe(false);
   });
 });

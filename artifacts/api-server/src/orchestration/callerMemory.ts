@@ -365,11 +365,23 @@ const DROPPED_CALL_WINDOW_MS = 60 * 60 * 1000;
 const ABRUPT_END_TAIL_SIZE = 6;
 
 export function isAbruptEnd(profile: CallerProfile | null): boolean {
-  return (
-    profile?.lastCallDropped === true &&
-    profile.lastCallDroppedAt != null &&
-    Date.now() - profile.lastCallDroppedAt.getTime() < DROPPED_CALL_WINDOW_MS
-  );
+  if (
+    profile?.lastCallDropped !== true
+    || profile.lastCallDroppedAt == null
+    || Date.now() - profile.lastCallDroppedAt.getTime() >= DROPPED_CALL_WINDOW_MS
+  ) {
+    return false;
+  }
+  // A later completed call updates lastCalledAt but may fail to clear the
+  // sticky drop flag (call 21824 resumed a finished 21822). The drop is stale
+  // once lastCalledAt is after the drop stamp.
+  if (
+    profile.lastCalledAt
+    && profile.lastCalledAt.getTime() > profile.lastCallDroppedAt.getTime() + 1000
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /** True when this call should resume a recently dropped thread (not cold-start). */

@@ -14,6 +14,15 @@ describe("stripLeadingAckClause", () => {
     expect(stripLeadingAckClause("Okay, I will send the statement.")).toBe(
       "I will send the statement.",
     );
+    expect(stripLeadingAckClause("Hmm. Hi Karthik, this is the admissions office.")).toBe(
+      "Hi Karthik, this is the admissions office.",
+    );
+    expect(stripLeadingAckClause("Mmm. I can arrange a callback for you.")).toBe(
+      "I can arrange a callback for you.",
+    );
+    expect(stripLeadingAckClause("Okay. I'm calling from the school admissions office.")).toBe(
+      "I'm calling from the school admissions office.",
+    );
     expect(stripLeadingAckClause("ठीक है, मैं भेज दूंगा.")).toBe("मैं भेज दूंगा.");
   });
 
