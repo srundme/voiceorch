@@ -8,6 +8,7 @@ export function isDirectSnapServeHost(hostname: string): boolean {
   const h = normalizeDomain(hostname);
   if (!h) return true;
   if (h === "app.snapserve.ai" || h === "www.snapserve.ai" || h === "snapserve.ai") return true;
+  if (h === "voiceorch-development.up.railway.app") return true;
   if (h === "localhost" || h === "127.0.0.1" || h.endsWith(".localhost")) return true;
   if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) return true;
   return false;

@@ -32,6 +32,7 @@ describe("partnerHostCandidates", () => {
 describe("isDirectSnapServeHost", () => {
   it("recognizes main SnapServe hosts", () => {
     expect(isDirectSnapServeHost("app.snapserve.ai")).toBe(true);
+    expect(isDirectSnapServeHost("voiceorch-development.up.railway.app")).toBe(true);
     expect(isDirectSnapServeHost("app.gopikrish.in")).toBe(false);
   });
 });
