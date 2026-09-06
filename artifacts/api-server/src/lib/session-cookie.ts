@@ -10,13 +10,30 @@ import type { CookieOptions, Response } from "express";
 export const SESSION_COOKIE_NAME = "vo_session";
 export const SESSION_TTL_SEC = 60 * 60 * 24 * 30;
 
+/** HTTPS public URLs need Secure cookies even when NODE_ENV=development (Railway staging). */
+export function useSecureCookies(): boolean {
+  if (process.env["NODE_ENV"] === "production") return true;
+  const base = process.env["APP_BASE_URL"] ?? "";
+  return base.startsWith("https://");
+}
+
 export function sessionCookieOptions(ttlSec: number = SESSION_TTL_SEC): CookieOptions {
   return {
     httpOnly: true,
-    secure: process.env["NODE_ENV"] !== "development",
+    secure: useSecureCookies(),
     sameSite: "lax",
     path: "/",
     maxAge: ttlSec * 1000,
+  };
+}
+
+export function oauthTempCookieOptions(): CookieOptions {
+  return {
+    httpOnly: true,
+    secure: useSecureCookies(),
+    sameSite: "lax",
+    path: "/",
+    maxAge: 10 * 60 * 1000,
   };
 }
 
@@ -27,7 +44,7 @@ export function setSessionCookie(res: Response, token: string, ttlSec: number = 
 export function clearSessionCookie(res: Response): void {
   res.clearCookie(SESSION_COOKIE_NAME, {
     httpOnly: true,
-    secure: process.env["NODE_ENV"] !== "development",
+    secure: useSecureCookies(),
     sameSite: "lax",
     path: "/",
   });

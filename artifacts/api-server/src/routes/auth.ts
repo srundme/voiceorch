@@ -23,7 +23,7 @@ import { db, linkLegacyIdentitiesAtLogin } from "@workspace/db";
 import { usersTable, walletTransactionsTable, passwordResetOtpsTable, platformSettingsTable } from "@workspace/db/schema";
 import { eq, and, isNull, gt, desc, sql } from "drizzle-orm";
 import { createSessionToken, verifySessionToken } from "../lib/session.js";
-import { setSessionCookie, clearSessionCookie } from "../lib/session-cookie.js";
+import { setSessionCookie, clearSessionCookie, oauthTempCookieOptions } from "../lib/session-cookie.js";
 import { hashPassword, verifyPassword } from "../lib/password.js";
 import { logger } from "../lib/logger.js";
 import { sendBrevoEmail } from "../services/brevo.js";
@@ -733,12 +733,7 @@ router.get("/auth/google/connect", async (req, res): Promise<void> => {
   const state = randomBytes(24).toString("hex");
   const redirectUri = deriveRedirectUri(req, LOGIN_CALLBACK_PATH);
 
-  res.cookie("google_login_state", state, {
-    httpOnly: true,
-    secure: process.env["NODE_ENV"] !== "development",
-    sameSite: "lax",
-    maxAge: 10 * 60 * 1000, // 10 minutes
-  });
+  res.cookie("google_login_state", state, oauthTempCookieOptions());
 
   // Partner white-label: after OAuth (which always callbacks on the primary
   // app host), send the user back to the brand domain they started on.
@@ -748,12 +743,7 @@ router.get("/auth/google/connect", async (req, res): Promise<void> => {
       const u = new URL(returnToRaw);
       const origin = u.origin;
       if (isTrustedOrigin(origin)) {
-        res.cookie("google_login_return", origin, {
-          httpOnly: true,
-          secure: process.env["NODE_ENV"] !== "development",
-          sameSite: "lax",
-          maxAge: 10 * 60 * 1000,
-        });
+        res.cookie("google_login_return", origin, oauthTempCookieOptions());
       }
     } catch { /* ignore bad return_to */ }
   }
@@ -773,8 +763,8 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
 
   if (error || !code || !state) {
     logger.warn({ error }, "Google Sign-In callback: missing params or user denied access");
-    res.clearCookie("google_login_return");
-    res.redirect(errorRedirect);
+    res.clearCookie("google_login_return", oauthTempCookieOptions());
+    res.redirect(`${base}/?google_error=true&reason=oauth`);
     return;
   }
 
@@ -783,14 +773,14 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
   const cookieState = (req as any).cookies?.["google_login_state"] as string | undefined;
   if (!cookieState || cookieState !== state) {
     logger.warn({ hasCookie: !!cookieState }, "Google Sign-In callback: CSRF state mismatch or missing cookie");
-    res.clearCookie("google_login_return");
-    res.redirect(errorRedirect);
+    res.clearCookie("google_login_return", oauthTempCookieOptions());
+    res.redirect(`${base}/?google_error=true&reason=csrf`);
     return;
   }
 
   // Clear the one-time state cookie immediately
-  res.clearCookie("google_login_state");
-  res.clearCookie("google_login_return");
+  res.clearCookie("google_login_state", oauthTempCookieOptions());
+  res.clearCookie("google_login_return", oauthTempCookieOptions());
 
   try {
     const redirectUri = deriveRedirectUri(req, LOGIN_CALLBACK_PATH);
@@ -975,7 +965,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     }
   } catch (err) {
     logger.error({ err }, "Google Sign-In callback: unexpected error");
-    res.redirect(errorRedirect);
+    res.redirect(`${base}/?google_error=true&reason=exception`);
   }
 });
 
