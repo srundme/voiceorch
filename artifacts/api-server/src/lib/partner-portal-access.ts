@@ -13,6 +13,7 @@ import {
   type PartnerBrandPublic,
 } from "../services/partner-domains.js";
 import {
+  isDirectSnapServeHost,
   managedClientSnapServeDeniedMessage,
   partnerHostCandidates,
   partnerPortalDeniedMessage,
@@ -33,6 +34,7 @@ export async function resolvePartnerHostFromRequest(
   bodyHost?: string,
 ): Promise<PartnerBrandPublic | null> {
   for (const host of partnerHostCandidates(req, bodyHost)) {
+    if (isDirectSnapServeHost(host)) continue;
     const brand = await resolvePartnerByHost(host);
     if (brand) return brand;
   }

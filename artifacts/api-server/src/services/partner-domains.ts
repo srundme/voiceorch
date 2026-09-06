@@ -10,6 +10,7 @@ import { resolve4, resolve6, resolveCname, resolveTxt } from "node:dns/promises"
 import { and, eq, or } from "drizzle-orm";
 import { db, partnersTable } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { isDirectSnapServeHost } from "../lib/partner-portal-access-host.js";
 import {
   customDomainDnsGuide,
   getPartnerCnameTarget,
@@ -98,7 +99,9 @@ function toBrand(row: {
 export async function resolvePartnerByHost(rawHost: string): Promise<PartnerBrandPublic | null> {
   const host = normalizeDomain(rawHost);
   if (!host) return null;
+  if (isDirectSnapServeHost(host)) return null;
 
+  try {
   const root = getPartnerSubdomainRoot();
   if (host.endsWith(`.${root}`) && host !== `www.${root}` && host !== `app.${root}` && host !== `api.${root}`) {
     const slug = host.slice(0, -(root.length + 1));
@@ -158,6 +161,10 @@ export async function resolvePartnerByHost(rawHost: string): Promise<PartnerBran
     .limit(1);
   if (byCustom) return toBrand(byCustom);
   return null;
+  } catch (err) {
+    logger.warn({ err, host }, "resolvePartnerByHost query failed");
+    return null;
+  }
 }
 
 export async function listTrustedPartnerHosts(): Promise<string[]> {
