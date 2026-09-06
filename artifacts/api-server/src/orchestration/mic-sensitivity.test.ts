@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   getMicSensitivityThresholds,
+  isBackgroundTalkerUtterance,
+  isIdleCancellingMicEnergy,
   LEGACY_NORMAL_BARGE_IN_ENERGY,
   resolveBargeInEnergyThreshold,
   resolveMicSensitivity,
@@ -32,5 +34,28 @@ describe("resolveBargeInEnergyThreshold", () => {
   it("honours a non-legacy explicit override", () => {
     expect(resolveBargeInEnergyThreshold(2500)).toBe(2500);
     expect(resolveBargeInEnergyThreshold(900)).toBe(900);
+  });
+});
+
+describe("isBackgroundTalkerUtterance", () => {
+  it("does not drop when RMS was not measured", () => {
+    expect(isBackgroundTalkerUtterance(0)).toBe(false);
+  });
+
+  it("drops a quiet far-field talker and keeps a near-mic caller", () => {
+    expect(isBackgroundTalkerUtterance(400)).toBe(true);
+    expect(isBackgroundTalkerUtterance(2500)).toBe(false);
+  });
+});
+
+describe("isIdleCancellingMicEnergy", () => {
+  it("ignores echo-grace and sub-floor energy so idle can fire after TTS (call 14315)", () => {
+    expect(isIdleCancellingMicEnergy({ hasSpeech: true, rawRms: 2500, inEchoGrace: true })).toBe(false);
+    expect(isIdleCancellingMicEnergy({ hasSpeech: true, rawRms: 200, inEchoGrace: false })).toBe(false);
+    expect(isIdleCancellingMicEnergy({ hasSpeech: false, rawRms: 2500, inEchoGrace: false })).toBe(false);
+  });
+
+  it("counts a near-talker frame once echo grace has ended", () => {
+    expect(isIdleCancellingMicEnergy({ hasSpeech: true, rawRms: 1200, inEchoGrace: false })).toBe(true);
   });
 });

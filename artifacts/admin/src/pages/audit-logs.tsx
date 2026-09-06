@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { format } from "date-fns";
-import { useAuditLogs } from "@/hooks/use-admin-api";
+import { useAuditLogs, useAuditOpsSummary } from "@/hooks/use-admin-api";
 import {
   Table,
   TableBody,
@@ -14,6 +14,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, ClipboardList } from "lucide-react";
 import { Link } from "wouter";
+import { SectionSubNav } from "@/components/section-subnav";
+import { OPERATIONS_TABS } from "@/lib/nav-config";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const ACTION_COLORS: Record<string, string> = {
   set_status_suspended: "destructive",
@@ -37,6 +40,7 @@ export default function AuditLogsPage() {
   const [applied, setApplied] = useState<{ userId?: string; action?: string }>({});
 
   const { data, isLoading } = useAuditLogs({ ...applied, page });
+  const { data: summary } = useAuditOpsSummary(30);
 
   const rows: any[] = data?.data ?? [];
   const total: number = data?.total ?? 0;
@@ -57,10 +61,24 @@ export default function AuditLogsPage() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={OPERATIONS_TABS} />
       <div className="flex items-center gap-3">
         <ClipboardList className="h-6 w-6 text-muted-foreground" />
         <h1 className="text-3xl font-bold tracking-tight">Audit Logs</h1>
         <Badge variant="outline" className="ml-2 font-mono">{total.toLocaleString()} entries</Badge>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Sensitive (30d)</CardTitle></CardHeader>
+          <CardContent className="text-xl font-bold font-mono">{summary?.sensitiveActions ?? "…"}</CardContent>
+        </Card>
+        {(summary?.byAction ?? []).slice(0, 3).map((a: any) => (
+          <Card key={a.action}>
+            <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase truncate">{a.action}</CardTitle></CardHeader>
+            <CardContent className="text-xl font-bold font-mono">{a.count}</CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Filters */}

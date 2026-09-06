@@ -1,3 +1,9 @@
+import { clampSemanticTurnStopMs } from "./semantic-turn-gate.js";
+import {
+  openingHello,
+  resolveOpeningLanguageKey,
+} from "./call-direction-rules.js";
+
 /**
  * Adaptive endpointing — replaces the flat VAD_SILENCE_MS constant with a
  * context-sensitive silence window that adapts to what the caller is saying
@@ -6,10 +12,11 @@
  * Used by both pipeline.ts (batch telephony path) and webcall.ts (browser WS).
  *
  * Priority order (highest wins):
- *  1. Digit-collection context  — agent asked for policy/phone/OTP → wait 800 ms+
- *  2. Partial transcript text   — streaming STT supplied a partial to analyse
- *  3. Audio duration proxy      — batch path: short burst → fast, long → base
- *  4. baseSilenceMs fallback    — agent-configured override or module default
+ *  1. Email-collection context  — agent asked for an address → wait 800 ms+
+ *  2. Digit-collection context  — agent asked for policy/phone/OTP → wait 800 ms+
+ *  3. Partial transcript text   — streaming STT supplied a partial to analyse
+ *  4. Audio duration proxy      — batch path: short burst → fast, long → base
+ *  5. baseSilenceMs fallback    — agent-configured override or module default
  */
 
 // ── Named threshold constants ─────────────────────────────────────────────────
@@ -23,6 +30,10 @@ export const ENDPOINT_LONG_MS = 600;
 export const ENDPOINT_DIGIT_MS = 800;
 /** Digit-collection AND partial transcript ends in a digit (still reading). */
 export const ENDPOINT_DIGIT_TRAIL_MS = 900;
+/** Email-collection: caller is spelling an address token-by-token. */
+export const ENDPOINT_EMAIL_MS = 800;
+/** Email-collection AND the partial still looks like an unfinished address. */
+export const ENDPOINT_EMAIL_TRAIL_MS = 900;
 
 export interface EndpointDecision {
   ms: number;
@@ -73,6 +84,12 @@ const DIGIT_KEYWORDS = [
   "case number",
   "folio number",
   "application number",
+  "verification code",
+  "otp code",
+  "last four",
+  "last 4",
+  "security code",
+  "cvv",
   // ── Indic native-script digit-collection keywords ─────────────────────────
   // Tamil
   "பாலிசி நம்பர்", "போன் நம்பர்", "மொபைல் நம்பர்", "ஆதார்", "ஓடிபி",
@@ -104,6 +121,481 @@ export function isDigitCollectionContext(lastAgentText: string): boolean {
     if (lower.includes(kw)) return true;
   }
   return false;
+}
+
+const EMAIL_KEYWORDS = [
+  "email id", "email-id", "email address", "e-mail id", "e-mail address",
+  "mail id", "mailid", "mail address", "your email", "your mail", "your e-mail",
+  "ईमेल", "मेल आईडी", "मेल आई डी", "ई-मेल",
+  "மின்னஞ்சல்", "மெயில் ஐடி", "இமெயில்", "ஈமெயில்",
+  "ఈమెయిల్", "ఇమెయిల్", "ಇಮೇಲ್", "ഇമെയിൽ", "ইমেইল", "ઈમેલ",
+];
+
+/** Mentioning an already-collected address is not a request to spell a new one. */
+const EMAIL_MENTION_NOT_ASK_RE =
+  /\b(same email|that email|this email|the email|registered email|அந்த email|இந்த email|அந்த மெயில்|இந்த மெயில்)\b/i;
+const EMAIL_ASK_HINT_RE =
+  /(சொல்லு|share|what is|tell me|enter|give me|your email|email id|mail id|மின்னஞ்சல்)/i;
+
+export function isEmailCollectionContext(lastAgentText: string): boolean {
+  const lower = lastAgentText.toLowerCase();
+  if (EMAIL_MENTION_NOT_ASK_RE.test(lower) && !EMAIL_ASK_HINT_RE.test(lower)) {
+    return false;
+  }
+  for (const kw of EMAIL_KEYWORDS) {
+    if (lower.includes(kw)) return true;
+  }
+  return false;
+}
+
+export type CollectionKind = "none" | "digit" | "email";
+
+export function isCallerOfferingEmail(text: string): boolean {
+  const t = text.toLowerCase();
+  if (!t.trim()) return false;
+  return /(மெயில்\s*ஐடி|மின்னஞ்சல்|mail\s*id|email\s*id|என்னுடைய\s*மெயில்|my email)/i.test(t)
+    && /(சொல்|tell|share|note|நோட்|give)/i.test(t);
+}
+
+/**
+ * Collection kind is exclusive — never digit AND email at once.
+ *
+ * Precedence when prompts overlap (e.g. "phone or email", or an email
+ * local-part that looks like a number): **email wins**. Digit-like tokens are
+ * legal inside addresses; treating them as OTP would commit "98765" mid-gmail.
+ * Digit collection is only used when the agent is not in email context.
+ * A fourth collection type must declare where it sits in this list — do not
+ * add a parallel timer.
+ */
+export function resolveCollectionKind(lastAgentText: string, lastUserText = ""): CollectionKind {
+  if (isEmailCollectionContext(lastAgentText) || isCallerOfferingEmail(lastUserText) || isCallerOfferingEmail(lastAgentText)) {
+    return "email";
+  }
+  if (isDigitCollectionContext(lastAgentText)) return "digit";
+  return "none";
+}
+
+/** Spoken English/Hinglish digits and grouping words used when reading IDs aloud. */
+const SPELLED_DIGIT_RE =
+  /^(zero|oh|o|nought|naught|one|two|three|four|five|six|seven|eight|nine|ten|double|triple|hundred|thousand|and)$/i;
+
+/**
+ * True when the pending transcript looks like an in-progress number/ID, not a
+ * finished answer. Used so OTP / Aadhaar / phone readouts are not committed
+ * after the first syllable ("nine" / "9") just because Smart Turn heard a pause.
+ *
+ * A compact run of 10+ digits is treated as complete (Indian mobile). Empty
+ * text is "still collecting" only when the caller is in digit-collection context.
+ */
+export function isDigitLikeUtterance(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  const compact = t.replace(/[\s\-./,]/g, "");
+  const digitCount = (compact.match(/\d/g) ?? []).length;
+  if (digitCount >= 10) return false;
+  if (digitCount > 0 && /^[0-9A-Za-z]+$/.test(compact) && compact.length <= 16) {
+    const letters = (compact.match(/[A-Za-z]/g) ?? []).length;
+    if (letters <= 2) return true;
+  }
+  const tokens = t.toLowerCase().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 8) return false;
+  let digitish = 0;
+  for (const raw of tokens) {
+    const tok = raw.replace(/[,.]+$/u, "");
+    if (!tok) continue;
+    if (/^\d+$/.test(tok) || SPELLED_DIGIT_RE.test(tok)) digitish++;
+  }
+  return digitish >= 1 && digitish >= tokens.length - 1;
+}
+
+const EMAIL_TLD_RE = /\b(com|in|co\.in|org|net|io|ai|co)\b|காம்/i;
+const EMAIL_AT_RE = /@|\b(at|attherate|at the rate)\b|அட்\s*த\s*ரேட்|அட்\s*தரேட்|ஆட்\s*த\s*ரேட்/i;
+const EMAIL_DOT_RE = /\b(dot|daat)\b|டாட்/i;
+const EMAIL_ADDR_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
+const EMAIL_DOMAIN_WORD_RE = /\b(gmail|yahoo|hotmail|outlook|rediff|rediffmail|icloud|proton)\b|ஜிமெயில்|ஜிமெய்ல்|ஜீமெயில்/i;
+const EMAIL_PUNCT_WORD_RE = /\b(underscore|dash|hyphen|dot|at)\b/;
+
+export function isCompleteEmailUtterance(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (EMAIL_ADDR_RE.test(t)) return true;
+  if (EMAIL_AT_RE.test(t) && EMAIL_DOT_RE.test(t) && EMAIL_TLD_RE.test(t)) return true;
+  return false;
+}
+
+const EMAIL_ACK_RE =
+  /^(yes|yeah|yep|ok|okay|no|nope|sure|haan|han|aamaa?|ஆமா|சரி|clear|cleara)([\s,.!]+(madam|ma'?am|sir|ji|மேடம்|சார்))*[\s,.!]*$/iu;
+const EMAIL_HONORIFIC_RE = /^(madam|ma'?am|sir|ji|மேடம்|சார்)$/iu;
+
+/**
+ * In-progress email spelling: "karthik at", "k a r", "gmail dot".
+ * A finished address (local@domain.tld or "at … dot com") is not in-progress.
+ */
+export function isEmailLikeUtterance(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (looksLikeSpokenEmailSpelling(t) && !isCompleteEmailUtterance(t)) return true;
+  if (isCompleteEmailUtterance(t)) return false;
+  if (EMAIL_ACK_RE.test(t)) return false;
+  if (EMAIL_AT_RE.test(t) || EMAIL_DOT_RE.test(t) || EMAIL_DOMAIN_WORD_RE.test(t)) return true;
+  if (EMAIL_PUNCT_WORD_RE.test(t.toLowerCase())) return true;
+  const tokens = t.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 12) return false;
+  if (tokens.some((tok) => EMAIL_HONORIFIC_RE.test(tok.replace(/[,.]$/, "")))) return false;
+  const spelled = tokens.filter((tok) => /^[a-z]$/i.test(tok.replace(/[,.]$/, "")));
+  if (spelled.length >= 1 && spelled.length >= tokens.length - 1) return true;
+  // Single token local-part while the agent asked for email: "karthikeyan"
+  if (tokens.length === 1 && /^[a-z0-9._-]{3,}$/i.test(tokens[0]!)) return true;
+  return false;
+}
+
+/** Spoken fillers STT glues onto the local-part ("vandhukarthikeyan@gmail.com"). */
+const EMAIL_LOCAL_FILLERS = [
+  "vandhu", "vanthu", "vandu", "irukken", "irukku", "iruken",
+  "emailid", "mailid", "email", "mail", "enna", "naan", "seri", "sari",
+].sort((a, b) => b.length - a.length);
+
+export function sanitizeSpokenEmailAddress(addr: string): string {
+  const at = addr.lastIndexOf("@");
+  if (at <= 0) return addr;
+  let local = addr.slice(0, at);
+  const domain = addr.slice(at + 1);
+  let changed = true;
+  while (changed && local.length > 3) {
+    changed = false;
+    const lower = local.toLowerCase();
+    for (const filler of EMAIL_LOCAL_FILLERS) {
+      if (lower.startsWith(filler) && local.length - filler.length >= 3) {
+        local = local.slice(filler.length);
+        changed = true;
+        break;
+      }
+    }
+  }
+  // STT often prefixes "www." when the caller spells W / "double-u" (call 17701).
+  if (local.toLowerCase().startsWith("www.") && local.length > 7) {
+    local = local.slice(4);
+  }
+  return `${local}@${domain}`;
+}
+
+export function sanitizeSpokenEmailsInTranscript(text: string): string {
+  return text.replace(EMAIL_ADDR_RE, (addr) => sanitizeSpokenEmailAddress(addr));
+}
+
+/** Tamil / English letter names used when callers spell an address aloud. */
+const SPOKEN_EMAIL_LETTER: Record<string, string> = {
+  "கே": "k", "ஆர்": "r", "பி": "b", "சி": "c", "டி": "d", "டீ": "t",
+  "ஈ": "e", "எஃப்": "f", "ஜி": "g", "எச்": "h", "ஐ": "i", "ஜே": "j",
+  "எல்": "l", "எம்": "m", "என்": "n", "ஓ": "o", "பீ": "p", "க்யூ": "q",
+  "எஸ்": "s", "யூ": "u", "வி": "v", "டபிள்யூ": "w", "எக்ஸ்": "x", "ஒய்": "y",
+  "இசட்": "z", "ஏய்": "a", "ஏ": "a",
+};
+
+const SPOKEN_EMAIL_DOMAIN: Record<string, string> = {
+  gmail: "gmail", yahoo: "yahoo", hotmail: "hotmail", outlook: "outlook",
+  "ஜிமெயில்": "gmail", "ஜிமெய்ல்": "gmail", "ஜீமெயில்": "gmail",
+};
+
+const SPOKEN_EMAIL_DIGIT: Record<string, string> = {
+  zero: "0", one: "1", two: "2", three: "3", four: "4",
+  five: "5", six: "6", seven: "7", eight: "8", nine: "9",
+  "ज़ीरो": "0", "जीरो": "0", "वन": "1", "टू": "2", "थ्री": "3",
+  "फोर": "4", "फाइव": "5", "सिक्स": "6", "सेवन": "7", "नाइन": "9",
+};
+
+function spokenEmailLetter(tok: string): string | null {
+  const t = tok.replace(/[.,]/g, "");
+  if (SPOKEN_EMAIL_LETTER[t]) return SPOKEN_EMAIL_LETTER[t]!;
+  if (/^[a-z]$/i.test(t)) return t.toLowerCase();
+  return null;
+}
+
+export function looksLikeSpokenEmailSpelling(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (EMAIL_AT_RE.test(t) || EMAIL_DOT_RE.test(t) || EMAIL_DOMAIN_WORD_RE.test(t)) return true;
+  const tokens = t.split(/\s+/).filter(Boolean);
+  const letters = tokens.filter((tok) => spokenEmailLetter(tok) !== null);
+  return letters.length >= 3;
+}
+
+/**
+ * Turn "கே ஏ ஆர் … அட் த ரேட் ஜிமெயில் டாட் காம்" / "k a r at gmail dot com"
+ * into a compact address. Returns null when there is not enough to assemble one.
+ */
+export function reconstructSpokenEmail(text: string): string | null {
+  const compact = text.match(EMAIL_ADDR_RE);
+  const assembled = assembleSpokenEmailTokens(text);
+  if (compact) {
+    const cleaned = sanitizeSpokenEmailAddress(compact[0]);
+    if (assembled) {
+      const aLocal = assembled.slice(0, assembled.lastIndexOf("@"));
+      const cLocal = cleaned.slice(0, cleaned.lastIndexOf("@"));
+      const aDom = assembled.slice(assembled.lastIndexOf("@"));
+      const cDom = cleaned.slice(cleaned.lastIndexOf("@"));
+      // Prefer assembled only when it *completes* the compact STT fragment
+      // (call 20113: kishorekumarr307 vs 307). A longer local that does not
+      // end with the compact address swallowed speech ("no no it's wrong").
+      if (aDom === cDom && aLocal.length > cLocal.length + 1 && aLocal.endsWith(cLocal)) {
+        return assembled;
+      }
+    }
+    return cleaned;
+  }
+  return assembled;
+}
+
+function assembleSpokenEmailTokens(text: string): string | null {
+  const tokens = text.replace(/@/g, " @ ").split(/\s+/).filter(Boolean);
+  let local = "";
+  let domain = "";
+  let tld = "";
+  let seenAt = false;
+  for (const raw of tokens) {
+    // Keep "gmail.com" intact — stripping "." turned the domain into "gmailcom"
+    // and assemble() returned null (call 20113 / "R A J R gmail.com").
+    const dotted = raw.match(/^([a-z0-9-]+)\.([a-z]{2,})$/i);
+    const tok = raw.replace(/[.,]/g, "");
+    const lower = tok.toLowerCase();
+    if (!tok && !dotted) continue;
+    // Single letters ("A") must not match the "at" alternative — that dropped
+    // the spelled local-part before 307@gmail.com (call 20113).
+    if (tok === "@" || tok === "அட்" || tok === "ஆட்" || (tok.length > 1 && EMAIL_AT_RE.test(tok))) {
+      seenAt = true;
+      continue;
+    }
+    if (/ரேட்|rate/i.test(tok)) continue;
+    if (/^(no|nope|nah|wrong|it'?s|its|www|use|again|please|my|the|email|mail|id|is|and)$/i.test(tok)) continue;
+    if (dotted && (SPOKEN_EMAIL_DOMAIN[dotted[1]!.toLowerCase()] || seenAt || local.length >= 2)) {
+      seenAt = true;
+      domain = (SPOKEN_EMAIL_DOMAIN[dotted[1]!.toLowerCase()] ?? dotted[1]!.toLowerCase());
+      tld = dotted[2]!.toLowerCase();
+      continue;
+    }
+    const mappedDomain = SPOKEN_EMAIL_DOMAIN[tok] ?? SPOKEN_EMAIL_DOMAIN[lower];
+    if (mappedDomain && (seenAt || local.length >= 2)) {
+      seenAt = true;
+      domain = mappedDomain;
+      continue;
+    }
+    const spokenDigit = SPOKEN_EMAIL_DIGIT[lower] ?? SPOKEN_EMAIL_DIGIT[tok];
+    const letter = spokenEmailLetter(tok);
+    if (!seenAt) {
+      if (spokenDigit) local += spokenDigit;
+      else if (letter) local += letter;
+      else if (/^[a-z0-9._-]+$/i.test(tok) && tok.length > 1) local += tok.toLowerCase();
+      continue;
+    }
+    if (EMAIL_DOT_RE.test(tok) || tok === "டாட்") continue;
+    if (dotted) {
+      domain = dotted[1]!.toLowerCase();
+      tld = dotted[2]!.toLowerCase();
+      continue;
+    }
+    if ((spokenDigit || /^[a-z0-9._-]+$/i.test(tok)) && !domain) {
+      local += spokenDigit ?? tok.toLowerCase();
+      continue;
+    }
+    if (EMAIL_TLD_RE.test(tok) || tok === "காம்") {
+      tld = /காம்/i.test(tok) ? "com" : lower.replace(/^co\.in$/i, "co.in");
+      continue;
+    }
+    if (letter && !domain) local += letter;
+  }
+  if (local.length >= 3 && domain && tld) return sanitizeSpokenEmailAddress(`${local}@${domain}.${tld}`);
+  return null;
+}
+
+/**
+ * Trust the committed STT final when it already has a real address.
+ * Call 20284: final `KARETHIAEYAN@gmail.com` must not lose to a longer
+ * letter-salad partial (`R T H I K E Y A N.@they might`), and
+ * `(spelled …)` dual addresses make the LLM pick the wrong one.
+ */
+export function preferEmailTranscript(partial: string | undefined, final: string): string {
+  const cleanedFinal = sanitizeSpokenEmailsInTranscript(final);
+  const fromFinal = reconstructSpokenEmail(cleanedFinal);
+  if (fromFinal) {
+    return EMAIL_ADDR_RE.test(cleanedFinal)
+      ? cleanedFinal.replace(EMAIL_ADDR_RE, fromFinal)
+      : fromFinal;
+  }
+  if (EMAIL_ADDR_RE.test(cleanedFinal)) return cleanedFinal;
+  const fromPartial = partial?.trim() ? reconstructSpokenEmail(partial) : null;
+  if (fromPartial) return fromPartial;
+  return cleanedFinal;
+}
+
+/**
+ * Timeout fail-open is only safe for already-finished short turns.
+ * Long sentences and collection fragments wait for the incomplete-hold instead.
+ */
+export function looksSnapComplete(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (isCompleteEmailUtterance(t)) return true;
+  const compact = t.replace(/[\s\-./,]/g, "");
+  if ((compact.match(/\d/g) ?? []).length >= 10) return true;
+  if (/^(yes|yeah|yep|yup|no|nope|ok|okay|sure|right|haan|han|சரி|ஆமா|हां|हाँ)([,.]|\s+(madam|ma'?am|sir|there|ji|जी))?\.?$/iu.test(t)) {
+    return true;
+  }
+  if (/[.?!।]$/u.test(t) && !/[…]|\.{2,}/.test(t) && t.split(/\s+/).length <= 6) return true;
+  return false;
+}
+
+/**
+ * Happy-path Fast turns ("yes" / "சரி" / a finished 10-digit number) must not
+ * wait out the Smart Turn eval budget. HOLD never runs on COMPLETE+veto-pass
+ * anyway — the remaining sequential cost on acks is ONNX. Collection fragments
+ * still go through Smart Turn + HOLD.
+ */
+export function shouldSkipSmartTurnEval(opts: {
+  pending: string;
+  textLooksIncomplete: boolean;
+  collectionKind: CollectionKind;
+}): boolean {
+  if (opts.textLooksIncomplete) return false;
+  if (opts.collectionKind !== "none") return false;
+  return looksSnapComplete(opts.pending);
+}
+
+export type StreamingTurnHold = {
+  incomplete: boolean;
+  reason: "text_continuation" | "digit_collection" | "email_collection" | null;
+  digitCollection: boolean;
+  emailCollection: boolean;
+  collectionKind: CollectionKind;
+  trailingDigit: boolean;
+  trailingFragment: boolean;
+};
+
+/**
+ * Live-path turn hold — same adaptive rules as computeEndpointMs, applied to
+ * Smart Turn + text veto. Batch silence flush already used digit-collection;
+ * Saaras realtime did not, so "what is your phone number?" was answering after
+ * the first digit. Email spelling has the same pause-between-tokens problem.
+ */
+export function resolveStreamingTurnHold(opts: {
+  pending: string;
+  lastAgentText: string;
+  lastUserText?: string;
+  textLooksIncomplete: boolean;
+}): StreamingTurnHold {
+  let collectionKind = resolveCollectionKind(opts.lastAgentText, opts.lastUserText ?? "");
+  const pending = opts.pending.trim();
+  if (collectionKind === "none" && looksLikeSpokenEmailSpelling(pending)) {
+    collectionKind = "email";
+  }
+  const digitCollection = collectionKind === "digit";
+  const emailCollection = collectionKind === "email";
+  const trailingDigit = pending.length > 0 && (/\d\s*$/.test(pending) || isDigitLikeUtterance(pending));
+  const spellingInProgress = looksLikeSpokenEmailSpelling(pending)
+    && !EMAIL_ADDR_RE.test(pending)
+    && !isCompleteEmailUtterance(pending);
+  const trailingEmail = emailCollection && (
+    isEmailLikeUtterance(pending)
+    || spellingInProgress
+    || (isDigitLikeUtterance(pending) && !isCompleteEmailUtterance(pending) && !EMAIL_ACK_RE.test(pending))
+  );
+  const trailingFragment = (digitCollection && isDigitLikeUtterance(pending)) || trailingEmail;
+  if (emailCollection && trailingEmail) {
+    return {
+      incomplete: true,
+      reason: "email_collection",
+      digitCollection: false,
+      emailCollection: true,
+      collectionKind,
+      trailingDigit: false,
+      trailingFragment,
+    };
+  }
+  if (digitCollection && isDigitLikeUtterance(pending)) {
+    return {
+      incomplete: true,
+      reason: "digit_collection",
+      digitCollection: true,
+      emailCollection: false,
+      collectionKind,
+      trailingDigit,
+      trailingFragment,
+    };
+  }
+  if (opts.textLooksIncomplete) {
+    return {
+      incomplete: true,
+      reason: "text_continuation",
+      digitCollection,
+      emailCollection,
+      collectionKind,
+      trailingDigit: false,
+      trailingFragment: false,
+    };
+  }
+  return {
+    incomplete: false,
+    reason: null,
+    digitCollection,
+    emailCollection,
+    collectionKind,
+    trailingDigit: false,
+    trailingFragment: false,
+  };
+}
+
+/** Extra incomplete-hold after VAD when the caller is still reading digits. */
+const DIGIT_HOLD_MS = 1200;
+const DIGIT_TRAIL_HOLD_MS = 1600;
+/** Email spelling is slower than digits — "k a r … at gmail dot com". */
+const EMAIL_HOLD_MS = 1400;
+const EMAIL_TRAIL_HOLD_MS = 1800;
+
+/**
+ * One HOLD clock (`_eouTimer`). Collection floors it; they never race.
+ * `collectionKind` is already exclusive (email > digit), so overlapping
+ * prompts take the email floor. Trailing fragments use the trail floor.
+ */
+export function resolveIncompleteHoldMs(opts: {
+  baseStopMs: number;
+  collectionKind?: CollectionKind;
+  /** @deprecated Prefer collectionKind. Kept so existing tests still compile. */
+  digitCollection?: boolean;
+  trailingDigit?: boolean;
+  trailingFragment?: boolean;
+}): number {
+  const base = clampSemanticTurnStopMs(opts.baseStopMs);
+  const kind = opts.collectionKind ?? (opts.digitCollection ? "digit" : "none");
+  const trailing = opts.trailingFragment ?? opts.trailingDigit ?? false;
+  if (kind === "email") {
+    const floor = trailing ? EMAIL_TRAIL_HOLD_MS : EMAIL_HOLD_MS;
+    return clampSemanticTurnStopMs(Math.max(base, floor));
+  }
+  if (kind === "digit") {
+    const floor = trailing ? DIGIT_TRAIL_HOLD_MS : DIGIT_HOLD_MS;
+    return clampSemanticTurnStopMs(Math.max(base, floor));
+  }
+  return base;
+}
+
+/** Saaras Fast default is 300 ms; collection floors stretch VAD before the next pause. */
+export const COLLECTION_VAD_SILENCE_MIN_MS = 150;
+export const COLLECTION_VAD_SILENCE_MAX_MS = 800;
+export const COLLECTION_VAD_DIGIT_FLOOR_MS = 700;
+export const COLLECTION_VAD_EMAIL_FLOOR_MS = 800;
+
+export function resolveCollectionVadSilenceMs(baseMs: number, kind: CollectionKind): number {
+  const raw = Number.isFinite(baseMs) ? Math.round(baseMs) : 300;
+  const base = Math.max(
+    COLLECTION_VAD_SILENCE_MIN_MS,
+    Math.min(COLLECTION_VAD_SILENCE_MAX_MS, raw),
+  );
+  if (kind === "email") {
+    return Math.min(COLLECTION_VAD_SILENCE_MAX_MS, Math.max(base, COLLECTION_VAD_EMAIL_FLOOR_MS));
+  }
+  if (kind === "digit") {
+    return Math.min(COLLECTION_VAD_SILENCE_MAX_MS, Math.max(base, COLLECTION_VAD_DIGIT_FLOOR_MS));
+  }
+  return base;
 }
 
 // ── Dangling / mid-utterance words ────────────────────────────────────────────
@@ -177,23 +669,20 @@ function envInt(name: string, def: number): number {
   const raw = process.env[name];
   if (!raw) return def;
   const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : def;
+  return Number.isFinite(n) && n >= 0 ? n : def;
 }
 /** Tight timer: partials arriving but no final → force-close using the best partial.
- *  Default 1800 ms — above the adaptive computeEndpointMs ceiling (900 ms), well
- *  below carrier drop. Override with env FORCE_FINALIZE_MS. */
-export const FORCE_FINALIZE_MS = envInt("FORCE_FINALIZE_MS", 1800);
+ *  Default 0 — trust provider finals. Override with env FORCE_FINALIZE_MS. */
+export const FORCE_FINALIZE_MS = envInt("FORCE_FINALIZE_MS", 0);
 /** Loose backstop: no usable transcript at all since we entered "Listening…" →
- *  recovery reprompt (not a hangup). Override with env STALL_BACKSTOP_MS.
- *  Default lowered from 15 000 ms to 10 000 ms so the first reprompt fires
- *  after ~10 s of silence, giving the caller two clear chances (at ~10 s and
- *  ~20 s) before the call ends. */
-export const STALL_BACKSTOP_MS = envInt("STALL_BACKSTOP_MS", 10000);
+ *  recovery reprompt. Default 0 — no SnapServe “I didn’t catch that”.
+ *  Override with env STALL_BACKSTOP_MS. */
+export const STALL_BACKSTOP_MS = envInt("STALL_BACKSTOP_MS", 0);
 /** Shorter stall window after greeting on outbound calls (caller may need a beat to respond).
  *  Kept closer to inbound so we don't rush "can't hear" / hangup after a stub opener. */
-export const OUTBOUND_POST_GREETING_STALL_MS = envInt("OUTBOUND_POST_GREETING_STALL_MS", 15000);
+export const OUTBOUND_POST_GREETING_STALL_MS = envInt("OUTBOUND_POST_GREETING_STALL_MS", 0);
 /** Even shorter when resuming a dropped callback — expect a quick "hello?" back. */
-export const RESUME_DROP_POST_GREETING_STALL_MS = envInt("RESUME_DROP_POST_GREETING_STALL_MS", 6000);
+export const RESUME_DROP_POST_GREETING_STALL_MS = envInt("RESUME_DROP_POST_GREETING_STALL_MS", 0);
 /** Max consecutive stall reprompts before ending the call. Override with env
  *  STALL_MAX_REPROMPTS. */
 export const STALL_MAX_REPROMPTS = envInt("STALL_MAX_REPROMPTS", 2);
@@ -203,7 +692,8 @@ export type TurnCloseReason =
   | "stt_final"
   | "force_finalized"
   | "stall_reprompt"
-  | "coalesced_fragment";
+  | "coalesced_fragment"
+  | "barge_recovery";
 
 // Language-aware recovery reprompt spoken when the stall backstop fires.
 const RECOVERY_REPROMPTS: Record<string, string> = {
@@ -241,28 +731,28 @@ export function speakerHandoffChallenge(lang?: string | null): string {
   return SPEAKER_HANDOFF_CHALLENGES[prefix] ?? SPEAKER_HANDOFF_CHALLENGES["en"]!;
 }
 
-/** Mid-call acknowledgment when a new number's voice matches a known caller. */
+/** Mid-call address when a new number's voice matches a known caller. */
 const VOICE_LINK_ACK_NAMED: Record<string, (name: string) => string> = {
-  en: (n) => `Wait — is this ${n}? We spoke just a little while ago.`,
-  hi: (n) => `रुकिए — क्या आप ${n} हैं? हमने अभी कुछ देर पहले बात की थी।`,
-  ta: (n) => `சொல்லிக்கோங்க — நீங்க ${n} தானே? கொஞ்ச நேரம் முன்னாடி பேசினோம்.`,
-  te: (n) => `ఆగండి — మీరు ${n} నా? మనం కొద్దిసేపటి క్రితం మాట్లాడాం.`,
-  kn: (n) => `ನಿಲ್ಲಿ — ನೀವು ${n} ಅಲ್ವಾ? ಸ್ವಲ್ಪ ಹಿಂದೆ ಮಾತನಾಡಿದ್ದೇವೆ.`,
-  mr: (n) => `थांबा — तुम्ही ${n} आहात का? आपण थोड्या वेळापूर्वी बोललो होतो.`,
-  gu: (n) => `રહેજો — તમે ${n} છો? આપણે થોડી વાર પહેલાં વાત કરી હતી.`,
-  bn: (n) => `থামুন — আপনি কি ${n}? আমরা কিছুক্ষণ আগেই কথা বলেছি।`,
-  ml: (n) => `നിൽക്കൂ — നിങ്ങൾ ${n} അല്ലേ? നമ്മൾ അൽപ്പം മുമ്പ് സംസാരിച്ചതാണ്.`,
+  en: (n) => `Hi ${n} — good to hear from you again.`,
+  hi: (n) => `${n} जी, आपसे फिर बात करके अच्छा लगा।`,
+  ta: (n) => `ஹாய் ${n} — மீண்டும் பேசறதுல சந்தோஷம்.`,
+  te: (n) => `హాయ్ ${n} — మళ్లీ మాట్లాడడం బాగుంది.`,
+  kn: (n) => `ಹಾಯ್ ${n} — ನಿಮ್ಮೊಂದಿಗೆ ಮತ್ತೆ ಮಾತನಾಡಲು ಸಂತೋಷ.`,
+  mr: (n) => `हाय ${n} — पुन्हा बोलून आनंद झाला.`,
+  gu: (n) => `હાય ${n} — તમારી સાથે ફરી વાત કરીને આનંદ થયો.`,
+  bn: (n) => `হাই ${n} — আবার কথা বলে ভালো লাগল।`,
+  ml: (n) => `ഹായ് ${n} — വീണ്ടും സംസാരിക്കാൻ സന്തോഷം.`,
 };
 const VOICE_LINK_ACK_GENERIC: Record<string, string> = {
-  en: "Wait — I think we've spoken before. Sorry, it took me a moment.",
-  hi: "रुकिए — लगता है हम पहले बात कर चुके हैं। पहचानने में थोड़ी देर लगी।",
-  ta: "சொல்லிக்கோங்க — நம்ம முன்னாடி பேசிருக்கோம் போல. இப்பதான் தெரிஞ்சுது.",
-  te: "ఆగండి — మనం ఇంతకు ముందు మాట్లాడినట్టు అనిపిస్తోంది. కాసేపు పట్టింది.",
-  kn: "ನಿಲ್ಲಿ — ನಾವು ಮೊದಲು ಮಾತನಾಡಿದ್ದೇವೆ ಅನಿಸುತ್ತೆ. ಗುರುತಿಸಲು ಸ್ವಲ್ಪ ಸಮಯ ಬೇಕಾಯಿತು.",
-  mr: "थांबा — आपण आधी बोललो आहोत असे वाटते. ओळखायला थोडा वेळ लागला.",
-  gu: "રહેજો — લાગે છે આપણે પહેલાં વાત કરી છે. ઓળખવામાં થોડો સમય લાગ્યો.",
-  bn: "থামুন — মনে হচ্ছে আমরা আগে কথা বলেছি। চিনতে একটু সময় লেগেছে।",
-  ml: "നിൽക്കൂ — നമ്മൾ മുമ്പ് സംസാരിച്ചതായി തോന്നുന്നു. തിരിച്ചറിയാൻ അല്പസമയം വേണ്ടിവന്നു.",
+  en: "Hi — good to hear from you again. I remember we spoke before.",
+  hi: "नमस्ते — आपसे फिर बात करके अच्छा लगा। हम पहले भी बात कर चुके हैं।",
+  ta: "ஹாய் — மீண்டும் பேசறதுல சந்தோஷம். நம்ம முன்னாடி பேசிருக்கோம்.",
+  te: "హాయ్ — మళ్లీ మాట్లాడడం బాగుంది. మనం ఇంతకు ముందు మాట్లాడాం.",
+  kn: "ಹಾಯ್ — ನಿಮ್ಮೊಂದಿಗೆ ಮತ್ತೆ ಮಾತನಾಡಲು ಸಂತೋಷ. ನಾವು ಮೊದಲು ಮಾತನಾಡಿದ್ದೇವೆ.",
+  mr: "हाय — पुन्हा बोलून आनंद झाला. आपण आधीही बोललो आहोत.",
+  gu: "હાય — તમારી સાથે ફરી વાત કરીને આનંદ થયો. આપણે પહેલાં પણ વાત કરી છે.",
+  bn: "হাই — আবার কথা বলে ভালো লাগল। আমরা আগেও কথা বলেছি।",
+  ml: "ഹായ് — വീണ്ടും സംസാരിക്കാൻ സന്തോഷം. നമ്മൾ മുമ്പും സംസാരിച്ചിട്ടുണ്ട്.",
 };
 export function voiceLinkAckPhrase(lang?: string | null, name?: string | null): string {
   const prefix = (lang ?? "en").split("-")[0] ?? "en";
@@ -374,44 +864,84 @@ export function isMetaRefusalGreeting(text: string | null | undefined): boolean 
 }
 
 /**
+ * Operator typed Welcome (even "Hello!"). Outbound must speak only that and
+ * wait — Talk/CALL FLOW is for later turns, not a second spoken greeting.
+ * Empty Welcome still needs the greeting LLM. Memory-seeded Indic start
+ * language must not discard an English Welcome (Railway 07:41 / call 17618).
+ */
+export function outboundTypedWelcomeBlocksGreetingLlm(
+  typedWelcome: string,
+  _greetLang?: string,
+): boolean {
+  return typedWelcome.trim().length > 0;
+}
+
+/** True when the static Welcome is a one-word stub that cannot be the whole outbound opener. */
+export function isStubGreeting(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (t.length < 12) return true;
+  return /^(hi|hello|hey|hi there|hello there)[!.,\s]*$/i.test(t);
+}
+
+/**
+ * Speak the operator-typed Welcome first, then the generated opener.
+ * Outbound used to discard "Hello" so CALL FLOW could play — callers never
+ * heard the Welcome field. Keep the pitch; put Welcome in front unless the
+ * opener already starts with the same greeting.
+ */
+export function joinWelcomeAndOpener(welcome: string, opener: string): string {
+  const w = welcome.trim();
+  const o = opener.trim();
+  if (!w) return o;
+  if (!o) return w;
+  const oLead = o.replace(/^[\s"'“”‘’]+/, "");
+  const wBare = w.replace(/[!.,?…।॥\s]+$/g, "");
+  if (!wBare) return o;
+  if (oLead.toLowerCase().startsWith(wBare.toLowerCase())) return o;
+  if (
+    isStubGreeting(w) &&
+    /^(hi|hello|hey|hi there|hello there|வணக்கம்|नमस्ते|नमस्कार)\b/i.test(oLead)
+  ) {
+    return o;
+  }
+  const glue = /[.!?…।]$/.test(w) ? " " : ". ";
+  return `${w}${glue}${o}`;
+}
+
+const OPENING_GREETING_WORD =
+  /^(hi|hello|hey|hi there|hello there|வணக்கம்|नमस्ते|नमस्कार)\b[!,.?\s]*/i;
+
+/**
+ * After Welcome was already spoken, drop a duplicated Hello/Hi from the LLM opener
+ * so the caller does not hear "Hello. Hello, this is…".
+ */
+export function stripWelcomePrefix(welcome: string, opener: string): string {
+  const w = welcome.trim();
+  const o = opener.trim();
+  if (!w || !o) return o;
+  const wBare = w.replace(/[!.,?…।॥\s]+$/g, "");
+  const oLead = o.replace(/^[\s"'“”‘’]+/, "");
+  if (wBare && oLead.toLowerCase().startsWith(wBare.toLowerCase())) {
+    return oLead.slice(wBare.length).replace(/^[\s,!.?…।:-]+/, "").trim() || o;
+  }
+  if (isStubGreeting(w) && OPENING_GREETING_WORD.test(oLead)) {
+    return oLead.replace(OPENING_GREETING_WORD, "").trim() || o;
+  }
+  return o;
+}
+
+/**
  * Instant returning-caller opener — no LLM round-trip.
- * Call 2636: Gemini recognition greeting blocked ~3.1s of silence before first TTS.
- *
- * Not used for resume-after-drop callbacks — those go through the greeting LLM
- * with caller-memory / LAST EXCHANGES context (no hardcoded cut-call line).
+ * Memory name + opening language only. What to ask next is the agent prompt.
  */
 export function buildInstantReturningGreeting(
   name?: string | null,
   lang?: string | null,
 ): string {
-  const prefix = (lang ?? "en").split(/[-_]/)[0]?.toLowerCase() ?? "en";
-  const n = (name ?? "").trim().replace(/\s+/g, " ");
-
-  if (prefix === "hi") {
-    return n ? `नमस्ते, ${n} जी! कैसे हैं आप?` : "नमस्ते! कैसे हैं आप?";
-  }
-  if (prefix === "ta") {
-    return n ? `வணக்கம் ${n}! எப்படி இருக்கீங்க?` : "வணக்கம்! எப்படி இருக்கீங்க?";
-  }
-  if (prefix === "te") {
-    return n ? `నమస్కారం ${n} గారు! ఎలా ఉన్నారు?` : "నమస్కారం! ఎలా ఉన్నారు?";
-  }
-  if (prefix === "kn") {
-    return n ? `ನಮಸ್ಕಾರ ${n}! ಹೇಗಿದ್ದೀರಾ?` : "ನಮಸ್ಕಾರ! ಹೇಗಿದ್ದೀರಾ?";
-  }
-  if (prefix === "mr") {
-    return n ? `नमस्कार ${n}! कसे आहात?` : "नमस्कार! कसे आहात?";
-  }
-  if (prefix === "gu") {
-    return n ? `નમસ્તે ${n}! કેમ છો?` : "નમસ્તે! કેમ છો?";
-  }
-  if (prefix === "bn") {
-    return n ? `নমস্কার ${n}! কেমন আছেন?` : "নমস্কার! কেমন আছেন?";
-  }
-  if (prefix === "ml") {
-    return n ? `നമസ്കാരം ${n}! സുഖമാണോ?` : "നമസ്കാരം! സുഖമാണോ?";
-  }
-  return n ? `Hi ${n}! How are you?` : "Hi! How are you?";
+  const greet = openingHello(lang);
+  const n = (name ?? "").trim().replace(/\s+/g, " ") || null;
+  return n ? `${greet} ${n}.` : `${greet}.`;
 }
 
 
@@ -461,7 +991,9 @@ export class TurnSafetyNet {
   beginListening(): void {
     this.clearTimers();
     this.bestPartial = "";
-    this.stallTimer = setTimeout(() => this.onStallExpire(), this.stallMs);
+    if (this.stallMs > 0) {
+      this.stallTimer = setTimeout(() => this.onStallExpire(), this.stallMs);
+    }
   }
 
   /**
@@ -471,6 +1003,7 @@ export class TurnSafetyNet {
    */
   onActivityPulse(): void {
     this.repromptCount = 0;
+    if (this.stallMs <= 0) return;
     if (this.stallTimer) clearTimeout(this.stallTimer);
     this.stallTimer = setTimeout(() => this.onStallExpire(), this.stallMs);
   }
@@ -480,8 +1013,10 @@ export class TurnSafetyNet {
     const t = text.trim();
     if (!t) return;
     this.bestPartial = t;
-    if (this.forceTimer) clearTimeout(this.forceTimer);
-    this.forceTimer = setTimeout(() => this.onForceExpire(), this.forceMs);
+    if (this.forceMs > 0) {
+      if (this.forceTimer) clearTimeout(this.forceTimer);
+      this.forceTimer = setTimeout(() => this.onForceExpire(), this.forceMs);
+    }
     // A streaming partial means the caller is ACTIVELY speaking — they are not
     // silent. Push the stall backstop forward and reset the accumulated reprompt
     // count so the give-up path can only ever fire on genuine sustained silence,
@@ -648,10 +1183,29 @@ export function computeEndpointMs(opts: {
   const { lastAgentText, partialTranscript, audioBufferMs, baseSilenceMs } =
     opts;
 
-  // ── 1. Digit-collection context (highest priority) ─────────────────────────
+  if (looksLikeSpokenEmailSpelling(partialTranscript) && !isCompleteEmailUtterance(partialTranscript)) {
+    return { ms: ENDPOINT_EMAIL_TRAIL_MS, reason: "email-collection:in-progress" };
+  }
+
+  // ── 1. Email-collection context (highest priority) ─────────────────────────
+  if (isEmailCollectionContext(lastAgentText)) {
+    const emailPartial = partialTranscript.trim();
+    if (emailPartial.length > 0 && AFFIRMATIONS.has(emailPartial.toLowerCase())) {
+      return { ms: ENDPOINT_FAST_MS, reason: "affirmation" };
+    }
+    if (emailPartial.length > 0 && isCompleteEmailUtterance(emailPartial)) {
+      return { ms: ENDPOINT_FAST_MS, reason: "email-collection:complete" };
+    }
+    if (emailPartial.length > 0 && isEmailLikeUtterance(emailPartial)) {
+      return { ms: ENDPOINT_EMAIL_TRAIL_MS, reason: "email-collection:in-progress" };
+    }
+    return { ms: ENDPOINT_EMAIL_MS, reason: "email-collection" };
+  }
+
+  // ── 2. Digit-collection context ────────────────────────────────────────────
   if (isDigitCollectionContext(lastAgentText)) {
     const partial = partialTranscript.trim();
-    if (partial.length > 0 && /\d$/.test(partial)) {
+    if (partial.length > 0 && (/\d$/.test(partial) || isDigitLikeUtterance(partial))) {
       // Still actively reading digits — extend even further
       return {
         ms: ENDPOINT_DIGIT_TRAIL_MS,
@@ -661,7 +1215,7 @@ export function computeEndpointMs(opts: {
     return { ms: ENDPOINT_DIGIT_MS, reason: "digit-collection" };
   }
 
-  // ── 2. Partial transcript analysis (streaming STT active) ──────────────────
+  // ── 3. Partial transcript analysis (streaming STT active) ──────────────────
   const partial = partialTranscript.trim().toLowerCase();
   if (partial.length > 0) {
     // Clearly complete: terminal punctuation added by STT smart_format

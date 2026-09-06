@@ -31,16 +31,17 @@ interface AuthState {
   userId: string | null;
   user: SessionUser | null;
   getToken: () => Promise<string | null>;
-  signIn: (token?: string) => void;
+  /** Resolves true when a session is established. */
+  signIn: (token?: string) => Promise<boolean>;
   signOut: (reason?: SignOutReason) => void;
 }
 
 /**
  * Why the session ended, so the sign-in page can show a helpful message.
  * `revoked` covers both a server-side 401 (e.g. suspended/deleted account)
- * and an expired token.
+ * and an expired token. `idle` is client-side inactivity logout (dashboard only).
  */
-export type SignOutReason = "revoked";
+export type SignOutReason = "revoked" | "idle";
 
 const SIGNOUT_REASON_KEY = "voiceorch:signoutReason";
 
@@ -61,13 +62,22 @@ async function adoptToken(token: string): Promise<SessionUser | null> {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({
+      token,
+      host: typeof window !== "undefined" ? window.location.host : undefined,
+    }),
   });
   if (!res.ok) return null;
   return userFromMe(await res.json());
 }
 
 const AuthContext = createContext<AuthState | null>(null);
+
+function isImpersonatePath(): boolean {
+  if (typeof window === "undefined") return false;
+  const path = window.location.pathname.replace(/\/$/, "") || "/";
+  return path === `${basePath}/impersonate` || path.endsWith("/impersonate");
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -77,6 +87,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     (async () => {
+      // Login-as-user lands here before the exchange cookie exists. Skipping the
+      // bootstrap /auth/me avoids a race that overwrites the session with null
+      // after ImpersonatePage redeems the one-time code.
+      if (isImpersonatePath()) {
+        if (!cancelled) setIsLoaded(true);
+        return;
+      }
+
       let captured: string | null = null;
       const match = window.location.hash.match(/session=([^&]+)/);
       if (match && match[1]) {
@@ -141,22 +159,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   }, []);
 
-  const signIn = useCallback((token?: string) => {
-    void (async () => {
-      if (token) {
-        const adopted = await adoptToken(token);
-        try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
-        if (adopted) {
-          setUser(adopted);
-          return;
-        }
-        window.location.href = `${basePath}/sign-in`;
-        return;
+  const signIn = useCallback(async (token?: string): Promise<boolean> => {
+    if (token) {
+      const adopted = await adoptToken(token);
+      try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+      if (adopted) {
+        setUser(adopted);
+        setIsLoaded(true);
+        return true;
       }
-      const me = await fetchMe();
-      if (me) setUser(me);
-      else window.location.href = `${basePath}/sign-in`;
-    })();
+      window.location.href = `${basePath}/sign-in`;
+      return false;
+    }
+    const me = await fetchMe();
+    if (me) {
+      setUser(me);
+      setIsLoaded(true);
+      return true;
+    }
+    window.location.href = `${basePath}/sign-in`;
+    return false;
   }, []);
 
   const signOut = useCallback((reason?: SignOutReason) => {

@@ -4,6 +4,7 @@ export const ASR_PROVIDERS = [
 
 export const LLM_PROVIDERS = [
   { value: "sarvam",   label: "Sarvam AI (India-hosted)" },
+  { value: "google",   label: "Google Gemini" },
   { value: "openai",   label: "OpenAI" },
   { value: "groq",     label: "Groq" },
   { value: "krutrim",  label: "Krutrim Cloud (India-hosted)" },
@@ -21,13 +22,33 @@ export const TELEPHONY_PROVIDERS = [
   { value: "vobiz",  label: "Vobiz" },
 ];
 
+/** Full catalog for validation / existing agents. The builder picker is `asrModelsForPicker`. */
 export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   sarvam: [
-    { value: "saaras:v3",    label: "Saaras v3 — real-time streaming (recommended)" },
-    { value: "saaras:v4",    label: "Saaras v4 — new (drops turns on live calls, avoid for now)" },
-    { value: "saarika:v2.5", label: "Saarika v2.5 — real-time streaming (legacy)" },
+    { value: "saaras:v3",          label: "Saaras v3" },
+    { value: "saaras:v3-realtime", label: "Saaras v3 (legacy id)" },
+    { value: "saarika:v2.5",       label: "Saarika v2.5 (legacy)" },
+    { value: "saaras:v4",          label: "Saaras v4 (not for live calls)" },
   ],
 };
+
+export const SARVAM_PRODUCT_ASR_MODEL = "saaras:v3";
+
+/** Product picker: only Saaras v3. A non-product saved model stays visible so the agent can be migrated. */
+export function asrModelsForPicker(
+  provider: string,
+  current?: string | null,
+): { value: string; label: string }[] {
+  const product = provider === "sarvam"
+    ? [{ value: SARVAM_PRODUCT_ASR_MODEL, label: "Saaras v3" }]
+    : (ASR_MODELS[provider] ?? []);
+  const cur = (current ?? "").trim();
+  if (cur && !product.some((m) => m.value === cur)) {
+    const known = (ASR_MODELS[provider] ?? []).find((m) => m.value === cur);
+    return [...product, known ?? { value: cur, label: cur }];
+  }
+  return product;
+}
 
 /** LLM model id that routes calls through Gemini Live native audio. */
 export const GEMINI_LIVE_LLM_MODEL = "gemini-3.1-flash-live-preview" as const;
@@ -39,13 +60,16 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "gpt-4.1-mini", label: "GPT-4.1 Mini (Low Cost — Fast Voice)" },
     { value: "gpt-4o-mini",  label: "GPT-4o Mini" },
   ],
-  // Classic Gemini text models removed from the product catalog. `google` remains
-  // only for Gemini Live (native audio), selected via voice stack — not the LLM dropdown.
   google: [
+    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash (recommended)" },
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (retired — not in picker)" },
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite (fastest)" },
+    { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (preview)" },
     { value: GEMINI_LIVE_LLM_MODEL, label: "Gemini 3.1 Flash Live (Native Realtime Bidirectional Voice)" },
   ],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
-  groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
+  groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }],
   sarvam: [
     { value: "sarvam-105b-conversations", label: "Sarvam 105B Conversations (recommended — voice)" },
     { value: "gemma4", label: "Gemma 4 31B" },
@@ -68,10 +92,47 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   ],
 };
 
+/** Google ids Google still serves for voice. 2.5 Flash 404s — not in the picker. */
+const GOOGLE_LLM_PICKER_IDS = new Set([
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-pro-preview",
+  "gemini-2.5-pro",
+  GEMINI_LIVE_LLM_MODEL,
+]);
+
+function withCurrentModel(
+  product: { value: string; label: string }[],
+  catalog: { value: string; label: string }[] | undefined,
+  current?: string | null,
+): { value: string; label: string }[] {
+  const cur = (current ?? "").trim();
+  if (!cur || product.some((m) => m.value === cur)) return product;
+  const known = catalog?.find((m) => m.value === cur);
+  return [...product, known ?? { value: cur, label: `${cur} (retired — pick a working model)` }];
+}
+
+/** Dropdown: only models that work on live calls. A retired saved id stays visible so the user can switch. */
+export function llmModelsForPicker(
+  provider: string,
+  current?: string | null,
+): { value: string; label: string }[] {
+  const catalog = LLM_MODELS[provider] ?? [];
+  if (provider === "google") {
+    return withCurrentModel(
+      catalog.filter((m) => GOOGLE_LLM_PICKER_IDS.has(m.value)),
+      catalog,
+      current,
+    );
+  }
+  return catalog;
+}
+
 export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
   cartesia: [
-    { value: "sonic-3.5",     label: "Sonic 3.5 — 42 languages, lowest latency (default)" },
-    { value: "sonic-preview", label: "Sonic 3.6 (beta) — Hinglish, Odia/Urdu" },
+    { value: "sonic-3.6",     label: "Sonic 3.6 — current (Hinglish, 44 languages)" },
+    { value: "sonic-3.5",     label: "Sonic 3.5 — previous snapshot" },
+    { value: "sonic-preview", label: "Sonic preview (beta snapshot)" },
     { value: "sonic-3",     label: "Sonic 3" },
     { value: "sonic-2",     label: "Sonic 2 (stable)" },
     { value: "sonic-turbo", label: "Sonic Turbo (fast, low-latency)" },
@@ -155,8 +216,13 @@ export function isSarvamVoiceCompatible(voice: string | null | undefined, ttsMod
   return true;
 }
 
+/** Default Cartesia voice for new SnapServe agents (listed as Gayathri). */
+export const DEFAULT_CARTESIA_VOICE_ID = "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee";
+export const DEFAULT_CARTESIA_VOICE_NAME = "Gayathri";
+
 export const TTS_VOICES: Record<string, { value: string; label: string }[] | null> = {
   cartesia: [
+    { value: DEFAULT_CARTESIA_VOICE_ID, label: DEFAULT_CARTESIA_VOICE_NAME },
     { value: "a0e99841-438c-4a64-b679-ae501e7d6091", label: "Barbershop Man" },
     { value: "79a125e8-cd45-4c13-8a67-188112f4dd22", label: "British Narration Lady" },
     { value: "b7d50908-b17c-442d-ad8d-810c63997ed9", label: "Calm Lady" },
@@ -442,10 +508,34 @@ export const LANGUAGES = [
   { value: "ht-HT",  label: "Haitian Creole" },
 ];
 
-/** Languages shown in builder “Languages allowed” when Multilingual is on (Sarvam-oriented). */
-export const SARVAM_PERSONALISATION_LANGUAGES = LANGUAGES.filter((l) =>
-  /^(en-IN|hi-IN|ta-IN|te-IN|kn-IN|ml-IN|bn-IN|mr-IN|gu-IN|pa-IN|or-IN|as-IN|ur-IN)$/.test(l.value),
-);
+/**
+ * Sarvam saaras:v3-realtime `language_code` values except `auto`.
+ * `auto` is the Transcriber “Switch language during call” toggle, not a picker row.
+ * Odia is `or-IN` (legacy socket used `od-IN`).
+ */
+export const SARVAM_REALTIME_LANGUAGE_CODES = [
+  "en-IN", "hi-IN", "bn-IN", "kn-IN", "ml-IN", "mr-IN", "or-IN", "pa-IN",
+  "ta-IN", "te-IN", "gu-IN", "as-IN", "ur-IN", "ne-IN", "kok-IN", "ks-IN",
+  "sd-IN", "sa-IN", "sat-IN", "mni-IN", "brx-IN", "mai-IN", "doi-IN",
+] as const;
+
+const SARVAM_REALTIME_LANGUAGE_SET = new Set<string>(SARVAM_REALTIME_LANGUAGE_CODES);
+
+/** Languages shown in the builder picker and “Languages allowed” chips for Sarvam STT. */
+export const SARVAM_STT_LANGUAGES = LANGUAGES.filter((l) => SARVAM_REALTIME_LANGUAGE_SET.has(l.value));
+
+/** @deprecated alias — same 23-code table as SARVAM_STT_LANGUAGES. */
+export const SARVAM_PERSONALISATION_LANGUAGES = SARVAM_STT_LANGUAGES;
+
+/**
+ * True when this ASR model rides the realtime socket (partials + ms VAD).
+ * Saarika stays on the legacy finals-only socket.
+ */
+export function isSarvamRealtimeAsr(model: string | null | undefined): boolean {
+  const m = (model ?? "").trim();
+  if (m.startsWith("saarika")) return false;
+  return m === "" || m === "saaras:v3" || m === "saaras:v3-realtime" || m === "saaras:v4" || m.startsWith("saaras");
+}
 
 /** Normalize a BCP-47-ish language tag to its lowercase base language ("ta-IN" → "ta"). */
 export function baseLanguage(language: string | null | undefined): string {
@@ -468,29 +558,25 @@ export function isVoiceCompatibleWithLanguage(
 }
 
 /**
- * Single source of truth for filtering the admin-whitelisted voice list by
- * agent language. English agents see ALL whitelisted voices (every language);
- * non-English agents see only their language's voices.
+ * Voices offered in the agent picker for a given language.
+ * Always returns EVERY curated voice; language matches are sorted first so
+ * Hindi (etc.) recommendations appear at the top without hiding the rest.
+ * English agents already treat every voice as compatible, so order is unchanged.
  *
- * Languages with no dedicated voices in the catalog (Marathi, Odia, Assamese …
- * are rarely tagged by TTS vendors) would otherwise leave the picker empty, so
- * the full list is returned instead of nothing — matching voices first.
+ * @deprecated Prefer {@link orderVoicesByLanguage} by name — same behavior.
  */
 export function filterVoicesForLanguage<T extends { language?: string | null }>(
   voices: readonly T[],
   agentLanguage: string | null | undefined,
 ): T[] {
-  const matching = voices.filter(v => isVoiceCompatibleWithLanguage(v.language, agentLanguage));
-  if (matching.length > 0) return matching;
-  return [...voices];
+  return orderVoicesByLanguage(voices, agentLanguage);
 }
 
 /**
  * Should a saved curated voice be cleared because the agent language changed?
  *
- * Membership of the OFFERED list is the test, never the raw language tag: for a
- * language no vendor tags (Marathi) the picker legitimately offers every voice,
- * and testing the tag would wipe the user's pick the instant they saved it.
+ * The picker always offers every curated voice (language matches sorted first),
+ * so a language change never removes a whitelisted voice from the list.
  * Voices absent from the whitelist are user-pasted IDs and are never cleared.
  */
 export function shouldClearVoiceForLanguage<T extends { id: string; language?: string | null }>(
@@ -501,12 +587,14 @@ export function shouldClearVoiceForLanguage<T extends { id: string; language?: s
   if (!ttsVoice || ttsVoice === "__custom__") return false;
   if (voices.length === 0) return false;
   if (!voices.some(v => v.id === ttsVoice)) return false;
-  return !filterVoicesForLanguage(voices, agentLanguage).some(v => v.id === ttsVoice);
+  // Full catalog is always offered — keep any curated selection.
+  void agentLanguage;
+  return false;
 }
 
 /**
  * Order voices so the agent language's own voices come first, without hiding
- * the rest. Used where the picker should still surface every option.
+ * the rest. Used by the voice picker so recommended voices surface at the top.
  */
 export function orderVoicesByLanguage<T extends { language?: string | null }>(
   voices: readonly T[],
@@ -638,7 +726,7 @@ export const GEMINI_LIVE_LANGUAGES = LANGUAGES.filter((l) => isGeminiLiveLanguag
 
 /** Language picker options for classic vs Gemini Live agents. */
 export function languagesForAgent(isGeminiLive: boolean): typeof LANGUAGES {
-  return isGeminiLive ? GEMINI_LIVE_LANGUAGES : LANGUAGES;
+  return isGeminiLive ? GEMINI_LIVE_LANGUAGES : SARVAM_STT_LANGUAGES;
 }
 
 /** Static fallback; runtime UI may fetch GET /api/gemini-live/voices. */

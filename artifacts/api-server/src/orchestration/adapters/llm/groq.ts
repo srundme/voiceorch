@@ -3,6 +3,7 @@ import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolD
 import { logger } from "../../../lib/logger.js";
 import { toOpenAIMessages } from "./openai-messages.js";
 import { drainOpenAICompatibleStream } from "./openai-compat.js";
+import { toOpenAiToolChoice } from "./tool-choice.js";
 
 /**
  * Groq — OpenAI-compatible API with ultra-fast LPU inference.
@@ -71,6 +72,7 @@ export class GroqLLM implements LLMAdapter {
   private model: string;
   private maxTokens: number | undefined;
   private temperature: number | undefined;
+  private abortController: AbortController | null = null;
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.client = new OpenAI({
@@ -83,6 +85,11 @@ export class GroqLLM implements LLMAdapter {
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
   }
 
+  cancelInFlight(): void {
+    this.abortController?.abort();
+    this.abortController = null;
+  }
+
   async chat(
     messages: ConversationTurn[],
     systemPrompt: string,
@@ -90,6 +97,7 @@ export class GroqLLM implements LLMAdapter {
     onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
+      toolChoice?: "auto" | "required" | { name: string };
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
       onUsage?: (usage: LLMUsage) => void;
     }
@@ -109,7 +117,7 @@ export class GroqLLM implements LLMAdapter {
         }))
       : undefined;
 
-    const toolChoice = groqTools ? "auto" : undefined;
+    const toolChoice = groqTools ? toOpenAiToolChoice(options?.toolChoice, options?.tools) : undefined;
 
     // Groq-specific tool guidance: explicitly instruct the model to use structured
     // function calling and NOT emit preamble or text-serialized tool calls.
@@ -127,28 +135,41 @@ When you want to call a tool:
 ${systemPrompt}`
       : systemPrompt;
 
-    const stream = await this.client.chat.completions.create({
-      model:          this.model,
-      stream:         true,
-      stream_options: { include_usage: true },
-      // service_tier:"on_demand" guarantees dedicated LPU resources with no
-      // queue wait, which is critical for real-time voice turn latency.
-      service_tier:   "on_demand" as any,
-      // Capping output tokens directly reduces Decoding Time in the formula:
-      //   Total Latency = TTFT + (output_tokens / generation_speed) + network
-      // Voice turns rarely need more than 150–200 tokens; longer replies are
-      // chunked into sentences and played incrementally, so the cap doesn't
-      // truncate natural speech.
-      ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
-      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
-      messages: [
-        { role: "system", content: effectiveSystemPrompt },
-        ...toOpenAIMessages(messages),
-      ] as any,
-      ...(groqTools ? { tools: groqTools, tool_choice: toolChoice } : {}),
-    });
+    this.abortController?.abort();
+    const abortController = new AbortController();
+    this.abortController = abortController;
+    try {
+      const stream = await this.client.chat.completions.create({
+        model:          this.model,
+        stream:         true,
+        stream_options: { include_usage: true },
+        // service_tier:"on_demand" guarantees dedicated LPU resources with no
+        // queue wait, which is critical for real-time voice turn latency.
+        service_tier:   "on_demand" as any,
+        // Capping output tokens directly reduces Decoding Time in the formula:
+        //   Total Latency = TTFT + (output_tokens / generation_speed) + network
+        // Voice turns rarely need more than 150–200 tokens; longer replies are
+        // chunked into sentences and played incrementally, so the cap doesn't
+        // truncate natural speech.
+        ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
+        ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
+        messages: [
+          { role: "system", content: effectiveSystemPrompt },
+          ...toOpenAIMessages(messages),
+        ] as any,
+        ...(groqTools ? { tools: groqTools, tool_choice: toolChoice } : {}),
+      }, { signal: abortController.signal });
 
-    await drainOpenAICompatibleStream(stream as any, onToken, onDone, options);
+      await drainOpenAICompatibleStream(stream as any, onToken, onDone, options);
+    } catch (err) {
+      if (abortController.signal.aborted) {
+        onDone("");
+        return;
+      }
+      throw err;
+    } finally {
+      if (this.abortController === abortController) this.abortController = null;
+    }
   }
 }
 

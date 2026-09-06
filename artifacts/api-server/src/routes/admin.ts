@@ -1,12 +1,13 @@
 import { Router } from "express";
-import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable, bookInternsTable, bookProgressTable, bookExamAttemptsTable, partnersTable, phoneNumberOrdersTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable, bookInternsTable, bookProgressTable, bookExamAttemptsTable, partnersTable, partnerPendingPromotionsTable, phoneNumberOrdersTable, landingPartnerLeadsTable } from "@workspace/db";
 import { invalidateMinuteRatesCache } from "../services/minute-rates.js";
 import { sendTestEmail } from "../services/scheduling/notifications.js";
-import { eq, sql, count, sum, desc, lt, gt, and, inArray, ilike, like, type SQL, type AnyColumn } from "drizzle-orm";
+import { eq, sql, count, sum, desc, lt, gt, gte, and, inArray, ilike, like, type SQL, type AnyColumn } from "drizzle-orm";
 import { TRACK_PARAMS } from "../orchestration/ambient.js";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getAllSessions } from "../orchestration/session.js";
 import { logger } from "../lib/logger.js";
+import { fulfillCapturedPhonePurchase, PhoneFulfillError } from "./phone-numbers.js";
 import { sendTestAlertNotification, getAlertCooldownStats, resetAlertSuppressedCount, getAlertCooldownStatus } from "../services/alert-notifications.js";
 import { getAllCampaignConcurrency } from "../services/batchScheduler.js";
 import { processErasureRequest } from "../services/dpdp/index.js";
@@ -48,6 +49,14 @@ router.get("/admin/overview", async (req, res): Promise<void> => {
     const usersSeg = segment === "all" ? undefined : eq(usersTable.isTest, segment === "test");
     const callsSeg = segByClerkId(callsTable.userId, segment);
 
+    // Indian calendar day: 12:00 AM IST inclusive → next 12:00 AM IST exclusive.
+    const todayIstStart = sql`(date_trunc('day', timezone('Asia/Kolkata', now())) AT TIME ZONE 'Asia/Kolkata')`;
+    const todayCallWhere = and(
+      gte(callsTable.createdAt, todayIstStart),
+      lt(callsTable.createdAt, sql`${todayIstStart} + interval '1 day'`),
+      callsSeg,
+    );
+
     const [
       [{ totalUsers }],
       [{ totalCalls }],
@@ -56,6 +65,8 @@ router.get("/admin/overview", async (req, res): Promise<void> => {
       [{ recentCalls }],
       [{ totalDurationSeconds }],
       [{ successfulCalls }],
+      [{ callsToday, durationTodaySeconds }],
+      topMinutesToday,
     ] =
       await Promise.all([
         db.select({ totalUsers: count() }).from(usersTable).where(usersSeg),
@@ -86,10 +97,39 @@ router.get("/admin/overview", async (req, res): Promise<void> => {
           .select({ successfulCalls: count() })
           .from(callsTable)
           .where(and(eq(callsTable.status, "completed"), callsSeg)),
+        db
+          .select({
+            callsToday: count(),
+            durationTodaySeconds: sql<number>`coalesce(sum(least(coalesce(duration_seconds, 0), 7200)), 0)`,
+          })
+          .from(callsTable)
+          .where(todayCallWhere),
+        db
+          .select({
+            clerkId: callsTable.userId,
+            email: usersTable.email,
+            name: usersTable.name,
+            callCount: count(),
+            durationSeconds: sql<number>`coalesce(sum(least(coalesce(${callsTable.durationSeconds}, 0), 7200)), 0)`,
+          })
+          .from(callsTable)
+          .leftJoin(usersTable, eq(callsTable.userId, usersTable.clerkId))
+          .where(todayCallWhere)
+          .groupBy(callsTable.userId, usersTable.email, usersTable.name)
+          .orderBy(sql`sum(least(coalesce(${callsTable.durationSeconds}, 0), 7200)) desc`)
+          .limit(5),
       ]);
 
     const activeCalls = getAllSessions().length;
     const totalMinutes = Math.round(Number(totalDurationSeconds) / 60);
+    const minutesToday = Math.round(Number(durationTodaySeconds) / 60);
+    const topMinutesUsers = topMinutesToday.map((row) => ({
+      clerkId: row.clerkId,
+      email: row.email,
+      name: row.name,
+      callCount: Number(row.callCount),
+      minutes: Math.round(Number(row.durationSeconds) / 60),
+    }));
 
     res.json({
       segment,
@@ -102,6 +142,9 @@ router.get("/admin/overview", async (req, res): Promise<void> => {
       recentCalls,
       totalDurationSeconds: Number(totalDurationSeconds),
       totalMinutes,
+      callsToday: Number(callsToday),
+      minutesToday,
+      topMinutesUsers,
     });
   } catch (err) {
     req.log.error({ err }, "admin/overview failed");
@@ -113,10 +156,12 @@ router.get("/admin/overview", async (req, res): Promise<void> => {
 
 router.get("/admin/users", async (req, res): Promise<void> => {
   try {
-    const users = await db.select().from(usersTable).orderBy(desc(usersTable.createdAt)).limit(500);
-    const clerkIds = users.map((u) => u.clerkId);
+    // Returns every account. Aggregates are grouped across the whole table
+    // rather than filtered by an IN list, which would otherwise grow one bind
+    // parameter per user and eventually exceed Postgres' parameter limit.
+    const users = await db.select().from(usersTable).orderBy(desc(usersTable.createdAt));
 
-    if (clerkIds.length === 0) {
+    if (users.length === 0) {
       res.json([]);
       return;
     }
@@ -125,12 +170,10 @@ router.get("/admin/users", async (req, res): Promise<void> => {
       db
         .select({ clerkId: callsTable.userId, callCount: count() })
         .from(callsTable)
-        .where(inArray(callsTable.userId, clerkIds))
         .groupBy(callsTable.userId),
       db
         .select({ clerkId: agentsTable.userId, agentCount: count() })
         .from(agentsTable)
-        .where(inArray(agentsTable.userId, clerkIds))
         .groupBy(agentsTable.userId),
       db
         .select({
@@ -138,15 +181,7 @@ router.get("/admin/users", async (req, res): Promise<void> => {
           totalSpentCents: sql<number>`coalesce(sum(abs(amount_cents)), 0)`,
         })
         .from(walletTransactionsTable)
-        .where(
-          and(
-            inArray(
-              walletTransactionsTable.userId,
-              users.map((u) => u.id),
-            ),
-            lt(walletTransactionsTable.amountCents, 0),
-          ),
-        )
+        .where(lt(walletTransactionsTable.amountCents, 0))
         .groupBy(walletTransactionsTable.userId),
       db
         .select({
@@ -154,7 +189,6 @@ router.get("/admin/users", async (req, res): Promise<void> => {
           totalDurationSeconds: sql<number>`coalesce(sum(duration_seconds), 0)`,
         })
         .from(callsTable)
-        .where(inArray(callsTable.userId, clerkIds))
         .groupBy(callsTable.userId),
     ]);
 
@@ -175,6 +209,7 @@ router.get("/admin/users", async (req, res): Promise<void> => {
       onboardingCompleted: u.onboardingCompleted,
       onboardingData: u.onboardingData,
       isTest: u.isTest,
+      status: u.status,
       callCount: callCountMap.get(u.clerkId) ?? 0,
       agentCount: agentCountMap.get(u.clerkId) ?? 0,
       totalDurationSeconds: durationMap.get(u.clerkId) ?? 0,
@@ -198,7 +233,8 @@ router.get("/admin/users/:clerkId", async (req, res): Promise<void> => {
       return;
     }
 
-    const [calls, walletTransactions, agents, partnerRows] = await Promise.all([
+    const userEmail = (user.email ?? "").trim().toLowerCase();
+    const [calls, walletTransactions, agents, partnerRows, pendingRows] = await Promise.all([
       db
         .select()
         .from(callsTable)
@@ -224,9 +260,37 @@ router.get("/admin/users/:clerkId", async (req, res): Promise<void> => {
         .from(partnersTable)
         .where(eq(partnersTable.userId, clerkId!))
         .limit(1),
+      // Pending promotion for this email (e.g. admin pre-created partner, or
+      // email was fixed after the pending row was saved).
+      userEmail
+        ? db
+            .select({
+              id: partnerPendingPromotionsTable.id,
+              email: partnerPendingPromotionsTable.email,
+              companyName: partnerPendingPromotionsTable.companyName,
+              baseRateCentsPerMin: partnerPendingPromotionsTable.baseRateCentsPerMin,
+              createdAt: partnerPendingPromotionsTable.createdAt,
+            })
+            .from(partnerPendingPromotionsTable)
+            .where(eq(partnerPendingPromotionsTable.email, userEmail))
+            .limit(1)
+        : Promise.resolve([] as Array<{
+            id: number;
+            email: string;
+            companyName: string;
+            baseRateCentsPerMin: number;
+            createdAt: Date;
+          }>),
     ]);
 
-    res.json({ user, calls, walletTransactions, agents, partner: partnerRows[0] ?? null });
+    res.json({
+      user,
+      calls,
+      walletTransactions,
+      agents,
+      partner: partnerRows[0] ?? null,
+      pendingPartner: partnerRows[0] ? null : (pendingRows[0] ?? null),
+    });
   } catch (err) {
     req.log.error({ err }, "admin/users/:clerkId failed");
     res.status(500).json({ error: "Internal server error" });
@@ -559,12 +623,97 @@ router.get("/admin/phone-purchases", async (req, res): Promise<void> => {
   }
 });
 
+/**
+ * Repair a paid-but-never-provisioned DID (browser closed before /purchase/confirm).
+ * Verifies Razorpay captured the payment, then provisions and assigns the lone agent.
+ */
+router.post("/admin/phone-purchases/:id/fulfill", async (req, res): Promise<void> => {
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid order id" });
+    return;
+  }
+  try {
+    const [order] = await db
+      .select()
+      .from(phoneNumberOrdersTable)
+      .where(eq(phoneNumberOrdersTable.id, id))
+      .limit(1);
+    if (!order) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
+    if (order.numberType === "whatsapp") {
+      res.status(400).json({ error: "WhatsApp number orders are fulfilled on the WhatsApp confirm path" });
+      return;
+    }
+    if (!order.razorpayOrderId) {
+      res.status(400).json({ error: "Order has no Razorpay order id" });
+      return;
+    }
+
+    const keyId = process.env["RAZORPAY_KEY_ID"];
+    const secret = process.env["RAZORPAY_KEY_SECRET"];
+    if (!keyId || !secret) {
+      res.status(503).json({ error: "Razorpay not configured" });
+      return;
+    }
+    const auth = Buffer.from(`${keyId}:${secret}`).toString("base64");
+    const payRes = await fetch(
+      `https://api.razorpay.com/v1/orders/${encodeURIComponent(order.razorpayOrderId)}/payments`,
+      { headers: { Authorization: `Basic ${auth}` } },
+    );
+    const payJson = await payRes.json() as { items?: Array<{ id?: string; status?: string }> };
+    const captured = (payJson.items ?? []).find((p) => p.status === "captured" && p.id);
+    if (!captured?.id) {
+      res.status(409).json({ error: "Razorpay has not captured a payment for this order yet" });
+      return;
+    }
+
+    const webhookBase = (
+      process.env["WEBHOOK_BASE_URL"]
+      || process.env["APP_BASE_URL"]
+      || "https://app.snapserve.ai"
+    ).replace(/\/$/, "");
+    const result = await fulfillCapturedPhonePurchase({
+      razorpayOrderId: order.razorpayOrderId,
+      razorpayPaymentId: captured.id,
+      webhookBase,
+      assignLoneAgent: true,
+    });
+    logger.info({ orderId: id, ...result }, "admin: phone purchase fulfilled");
+    res.json(result);
+  } catch (err) {
+    if (err instanceof PhoneFulfillError) {
+      res.status(err.httpStatus).json({ error: err.message, code: err.code });
+      return;
+    }
+    req.log.error({ err }, "admin/phone-purchases fulfill failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ─── Platform / Engineering ───────────────────────────────────────────────────
 
 router.get("/admin/platform/active", async (_req, res): Promise<void> => {
   try {
     const sessions = getAllSessions();
-    res.json({ activeSessions: sessions, count: sessions.length });
+    const callIds = [...new Set(sessions.map((s) => s.callId).filter((id) => Number.isFinite(id)))];
+    const execMap = new Map<number, string | null>();
+    if (callIds.length > 0) {
+      const rows = await db
+        .select({ id: callsTable.id, executionId: callsTable.executionId })
+        .from(callsTable)
+        .where(inArray(callsTable.id, callIds));
+      for (const row of rows) execMap.set(row.id, row.executionId ?? null);
+    }
+    res.json({
+      activeSessions: sessions.map((s) => ({
+        ...s,
+        executionId: execMap.get(s.callId) ?? null,
+      })),
+      count: sessions.length,
+    });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
   }
@@ -647,10 +796,13 @@ router.get("/admin/platform/failed-calls", async (req, res): Promise<void> => {
     const agentIdRaw = req.query["agentId"];
     const userIdRaw = req.query["userId"];
     const reasonRaw = req.query["reason"];
+    const executionIdRaw = req.query["executionId"];
 
     const agentId = agentIdRaw ? Number(agentIdRaw) : null;
     const userId = typeof userIdRaw === "string" && userIdRaw.trim() ? userIdRaw.trim() : null;
     const reason = typeof reasonRaw === "string" && reasonRaw.trim() ? reasonRaw.trim() : null;
+    const executionId =
+      typeof executionIdRaw === "string" && executionIdRaw.trim() ? executionIdRaw.trim() : null;
 
     const conditions = [eq(callsTable.status, "failed")];
     if (agentId !== null && !isNaN(agentId)) {
@@ -662,6 +814,9 @@ router.get("/admin/platform/failed-calls", async (req, res): Promise<void> => {
     if (reason !== null) {
       conditions.push(ilike(callsTable.errorMessage, `%${reason}%`));
     }
+    if (executionId !== null) {
+      conditions.push(ilike(callsTable.executionId, `%${executionId}%`));
+    }
 
     const where = and(...conditions);
 
@@ -669,6 +824,7 @@ router.get("/admin/platform/failed-calls", async (req, res): Promise<void> => {
       db
         .select({
           id: callsTable.id,
+          executionId: callsTable.executionId,
           userId: callsTable.userId,
           userEmail: usersTable.email,
           userName: usersTable.name,
@@ -2032,6 +2188,32 @@ router.get("/admin/book/interns", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "admin/book/interns failed");
     res.status(500).json({ error: "Failed to load book interns" });
+  }
+});
+
+// GET /api/admin/landing-leads — Partner with us submissions from the marketing site
+router.get("/admin/landing-leads", async (req, res): Promise<void> => {
+  try {
+    const rows = await db
+      .select()
+      .from(landingPartnerLeadsTable)
+      .orderBy(desc(landingPartnerLeadsTable.createdAt))
+      .limit(500);
+    res.json(rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      email: r.email,
+      phone: r.phone,
+      company: r.company,
+      website: r.website,
+      role: r.role,
+      message: r.message,
+      source: r.source,
+      createdAt: r.createdAt.toISOString(),
+    })));
+  } catch (err) {
+    req.log.error({ err }, "admin/landing-leads failed");
+    res.status(500).json({ error: "Failed to load partner inquiries" });
   }
 });
 

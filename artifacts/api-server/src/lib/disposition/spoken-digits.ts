@@ -192,3 +192,30 @@ export function mergeSpokenPhoneFragments(
 
   return phones;
 }
+
+const SPOKEN_DIGIT_WORD_RE =
+  /^(zero|one|two|three|four|five|six|seven|eight|nine|double|triple|ஜீரோ|ஜிரோ|பூஜ்ஜியம்|ஒன்று|இரண்டு|ரெண்டு|மூன்று|நான்கு|ஐந்து|ஆறு|ஏழு|எட்டு|ஒன்பது|எயிட்|நைன்|ஃபோர்|onnu|ondru|rendu|randu|moonu|moonru|naalu|naal|anj|aindhu|aaru|ezhu|ettu|yeight|onbadhu|ombadhu)$/i;
+
+/** Phone / OTP collection — not ordinary speech like "one minute" or "3 PM". */
+export function looksLikeSpokenNumber(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  const digitCount = (t.replace(/\D/g, "").length);
+  if (digitCount >= 8) return true;
+  const tokens = t.split(/\s+/).filter(Boolean);
+  const digitWords = tokens.filter((tok) => SPOKEN_DIGIT_WORD_RE.test(tok.replace(/[.,]/g, ""))).length;
+  if (digitWords >= 4) return true;
+  if (digitCount >= 6 && digitWords >= 2) return true;
+  return false;
+}
+
+/**
+ * Keep a clean final digit run. Never splice a leftover eager partial
+ * over ordinary speech (call 20284: "Three" → "3 PM" leftovers).
+ */
+export function preferNumberTranscript(_partial: string | undefined, final: string): string {
+  const expandedFinal = expandSpokenDigits(final);
+  const finalPhone = pickBestPhone(mergeSpokenPhoneFragments(final));
+  if (finalPhone || looksLikeSpokenNumber(final)) return expandedFinal;
+  return final;
+}

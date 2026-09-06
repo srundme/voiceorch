@@ -16,13 +16,18 @@ export class ElevenLabsTTS implements TTSAdapter {
   private modelId: string;
   private speed: number | null;
 
-  constructor(apiKey: string, voice: string | null, speed?: number | null) {
+  constructor(apiKey: string, voice: string | null, speed?: number | null, model?: string | null) {
     this.key = apiKey;
-    // voice can be "VoiceName:voice_id" or just a voice_id
     const parts = (voice ?? "Rachel:21m00Tcm4TlvDq8ikWAM").split(":");
     this.voiceId = parts[1] ?? parts[0] ?? "21m00Tcm4TlvDq8ikWAM";
-    this.modelId = "eleven_turbo_v2_5";
+    this.modelId = (model ?? "").trim() || "eleven_turbo_v2_5";
     // ElevenLabs voice_settings.speed only accepts 0.7-1.2; clamp and skip at default.
+    this.speed = (speed != null && Number.isFinite(speed) && speed !== 1)
+      ? Math.min(1.2, Math.max(0.7, speed))
+      : null;
+  }
+
+  setSpeed(speed: number | null): void {
     this.speed = (speed != null && Number.isFinite(speed) && speed !== 1)
       ? Math.min(1.2, Math.max(0.7, speed))
       : null;

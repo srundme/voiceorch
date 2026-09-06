@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { desc, sql, eq, gte, and } from "drizzle-orm";
+import { desc, sql, eq, gte, and, inArray } from "drizzle-orm";
 import { db, callsTable, agentsTable, providersTable } from "@workspace/db";
 import {
   GetDashboardStatsResponse,
@@ -11,11 +11,14 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
+import { resolveWorkspaceScope, workspaceCallsWhere } from "../services/workspace-scope.js";
 
 const router: IRouter = Router();
 
 router.get("/analytics/dashboard", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
+  const scope = await resolveWorkspaceScope(clerkId);
+  const callWhere = workspaceCallsWhere(scope.userIds);
 
   const [agentStats] = await db
     .select({
@@ -23,7 +26,7 @@ router.get("/analytics/dashboard", requireAuth, clientContext, async (req, res):
       active: sql<number>`count(*) filter (where status = 'active')::int`,
     })
     .from(agentsTable)
-    .where(eq(agentsTable.userId, clerkId));
+    .where(inArray(agentsTable.userId, scope.userIds));
 
   const [callStats] = await db
     .select({
@@ -32,21 +35,21 @@ router.get("/analytics/dashboard", requireAuth, clientContext, async (req, res):
       avgDuration: sql<number>`avg(duration_seconds) filter (where duration_seconds is not null)::int`,
     })
     .from(callsTable)
-    .where(eq(callsTable.userId, clerkId));
+    .where(callWhere);
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const [todayCalls] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(callsTable)
-    .where(and(eq(callsTable.userId, clerkId), gte(callsTable.createdAt, todayStart)));
+    .where(and(callWhere, gte(callsTable.createdAt, todayStart)));
 
   const weekStart = new Date();
   weekStart.setDate(weekStart.getDate() - 7);
   const [weekCalls] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(callsTable)
-    .where(and(eq(callsTable.userId, clerkId), gte(callsTable.createdAt, weekStart)));
+    .where(and(callWhere, gte(callsTable.createdAt, weekStart)));
 
   const [providerCount] = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -73,6 +76,7 @@ router.get("/analytics/dashboard", requireAuth, clientContext, async (req, res):
 
 router.get("/analytics/calls/recent", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
+  const scope = await resolveWorkspaceScope(clerkId);
 
   const calls = await db
     .select({
@@ -92,7 +96,7 @@ router.get("/analytics/calls/recent", requireAuth, clientContext, async (req, re
     })
     .from(callsTable)
     .leftJoin(agentsTable, eq(callsTable.agentId, agentsTable.id))
-    .where(eq(callsTable.userId, clerkId))
+    .where(workspaceCallsWhere(scope.userIds))
     .orderBy(desc(callsTable.createdAt))
     .limit(20);
 
@@ -108,6 +112,7 @@ router.get("/analytics/calls/recent", requireAuth, clientContext, async (req, re
 
 router.get("/analytics/calls/by-status", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
+  const scope = await resolveWorkspaceScope(clerkId);
 
   const rows = await db
     .select({
@@ -115,7 +120,7 @@ router.get("/analytics/calls/by-status", requireAuth, clientContext, async (req,
       count: sql<number>`count(*)::int`,
     })
     .from(callsTable)
-    .where(eq(callsTable.userId, clerkId))
+    .where(workspaceCallsWhere(scope.userIds))
     .groupBy(callsTable.status);
 
   res.json(GetCallsByStatusResponse.parse(rows));
@@ -123,6 +128,7 @@ router.get("/analytics/calls/by-status", requireAuth, clientContext, async (req,
 
 router.get("/analytics/calls/daily", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
+  const scope = await resolveWorkspaceScope(clerkId);
 
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
@@ -136,7 +142,7 @@ router.get("/analytics/calls/daily", requireAuth, clientContext, async (req, res
       failed: sql<number>`count(*) filter (where status = 'failed')::int`,
     })
     .from(callsTable)
-    .where(and(eq(callsTable.userId, clerkId), gte(callsTable.createdAt, sevenDaysAgo)))
+    .where(and(workspaceCallsWhere(scope.userIds), gte(callsTable.createdAt, sevenDaysAgo)))
     .groupBy(sql`to_char(created_at at time zone 'UTC', 'YYYY-MM-DD')`)
     .orderBy(sql`to_char(created_at at time zone 'UTC', 'YYYY-MM-DD')`);
 
@@ -150,10 +156,11 @@ router.get("/analytics/agents/:id", requireAuth, clientContext, async (req, res)
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
 
   const clerkId = (req as any).clerkUserId as string;
+  const scope = await resolveWorkspaceScope(clerkId);
   const agentId = params.data.id;
 
   const [agent] = await db.select().from(agentsTable)
-    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+    .where(and(eq(agentsTable.id, agentId), inArray(agentsTable.userId, scope.userIds)));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
   const [totals] = await db.select({

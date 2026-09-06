@@ -38,6 +38,7 @@ export const agentFormSchema = z.object({
   webhookSecret:            z.string().optional(),
   webhookPayloadTemplate:   z.string().max(32000, "Payload template is too large").optional(),
   noiseCancellationEnabled: z.boolean().optional(),
+  forceSoftwareNoiseGate:   z.boolean().optional(),
   ambientNoiseEnabled:      z.boolean().optional(),
   ambientNoiseTrack:        z.string().optional(),
   ambientNoiseVolume:       z.number().min(0).max(1).optional(),
@@ -77,6 +78,8 @@ export const agentFormSchema = z.object({
     calendarId: z.preprocess(v => (v === "" || v == null ? undefined : Number(v)), z.number().optional()),
     eventTypeId: z.preprocess(v => (v === "" || v == null ? undefined : Number(v)), z.number().optional()),
     timezone: z.string().optional(),
+    collectAttendeeEmail: z.boolean().optional(),
+    defaultAttendeeEmail: z.string().optional(),
     goodbyeMessage: z.string().optional(),
     targetNumber: z.string().optional(),
     holdMessage: z.string().optional(),
@@ -147,12 +150,24 @@ export const agentFormSchema = z.object({
 
   // Sarvam STT mode (only relevant when asrProvider === "sarvam")
   sarvamSttMode: z.enum(["codemix", "verbatim", "transcribe", "translit", "translate"]).optional(),
-  /** Sarvam high_vad_sensitivity — default true (~128ms silence @8kHz). */
+  /** saaras:v3-realtime stream_type — default fast for voice agents. */
+  sarvamSttStreamType: z.enum(["fast", "balanced", "simulated"]).optional(),
+  /** Terminology hint applied to the final transcript only. */
+  sarvamSttPrompt: z.string().max(500).optional(),
+  /** Realtime connect `silence_duration_ms`. Omit = Saaras VAD. */
+  sarvamEndOfSpeechSilenceMs: z.number().min(150).max(800).optional(),
+  /** Realtime connect `min_speech_duration_ms`. Default 250. */
+  sarvamFirstTurnMinSpeechMs: z.number().min(80).max(800).optional(),
+  /** Realtime connect `threshold` (0–1). Default 0.3. */
+  sarvamVadThreshold: z.number().min(0.1).max(0.8).optional(),
+  /** Legacy Saarika `high_vad_sensitivity` — unused on saaras realtime. */
   sarvamHighVadSensitivity: z.boolean().optional(),
   /** ms after speech_end before emitting final — default 30. */
   sarvamSpeechEndFlushMs: z.number().min(0).max(200).optional(),
   /** ms hold for incomplete mid-thought fragments — default 220. */
   sarvamIncompleteHoldMs: z.number().min(0).max(1000).optional(),
+  /** Max extra silence after an incomplete Smart Turn HOLD before we answer. Default 1200. */
+  semanticTurnStopMs: z.number().min(400).max(4000).optional(),
 
   // Workspace calendar assigned to this agent for native scheduling tools
   schedulingCalendarId: z.number().optional().nullable(),
@@ -167,6 +182,24 @@ export const agentFormSchema = z.object({
 
   const ttsErr = getModelError(data.ttsProvider, data.ttsModel, TTS_MODELS);
   if (ttsErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ttsModel"], message: ttsErr });
+
+  const hasBookingTools = (data.tools ?? []).some((tool) =>
+    ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"].includes(tool.type),
+  );
+  if (hasBookingTools && data.schedulingCalendarId == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["schedulingCalendarId"],
+      message: "Select a calendar before enabling booking tools",
+    });
+  }
+  if (hasBookingTools && data.schedulingEventTypeId == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["schedulingEventTypeId"],
+      message: "Select or create a meeting type before enabling booking tools",
+    });
+  }
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;
@@ -203,12 +236,40 @@ export function hydrateToolsForForm(tools: readonly AgentTool[]): AgentFormTool[
   });
 }
 
-/** Call Engine presets — Fast = Saaras-native (STT owns turns). */
+/** Call Engine presets — Fast / Balanced / Patient write SnapServe barge knobs + Sarvam realtime VAD. */
 export const CALL_ENGINE_PRESETS = {
-  // Saaras VAD owns turn boundaries. Endpointing + barge words + optional linear delay.
-  fast:     { asrEndpointingSilenceMs: 150, linearDelayMs: 0,   stopSpeakingNumWords: 1, sarvamHighVadSensitivity: true },
-  balanced: { asrEndpointingSilenceMs: 250, linearDelayMs: 0,   stopSpeakingNumWords: 3, sarvamHighVadSensitivity: true },
-  patient:  { asrEndpointingSilenceMs: 500, linearDelayMs: 350, stopSpeakingNumWords: 4, sarvamHighVadSensitivity: false },
+  // silence_duration_ms / min_speech_duration_ms / threshold match the realtime connect query.
+  // semanticTurnStopMs is the incomplete-thought cap after Smart Turn HOLD (not VAD).
+  fast: {
+    asrEndpointingSilenceMs: 150,
+    linearDelayMs: 0,
+    stopSpeakingNumWords: 1,
+    sarvamHighVadSensitivity: true,
+    sarvamEndOfSpeechSilenceMs: undefined as unknown as number,
+    sarvamFirstTurnMinSpeechMs: 200,
+    sarvamVadThreshold: 0.3,
+    semanticTurnStopMs: 800,
+  },
+  balanced: {
+    asrEndpointingSilenceMs: 250,
+    linearDelayMs: 0,
+    stopSpeakingNumWords: 2,
+    sarvamHighVadSensitivity: true,
+    sarvamEndOfSpeechSilenceMs: 400,
+    sarvamFirstTurnMinSpeechMs: 250,
+    sarvamVadThreshold: 0.3,
+    semanticTurnStopMs: 1200,
+  },
+  patient: {
+    asrEndpointingSilenceMs: 500,
+    linearDelayMs: 350,
+    stopSpeakingNumWords: 4,
+    sarvamHighVadSensitivity: false,
+    sarvamEndOfSpeechSilenceMs: 700,
+    sarvamFirstTurnMinSpeechMs: 350,
+    sarvamVadThreshold: 0.35,
+    semanticTurnStopMs: 1800,
+  },
 } as const;
 
 export type CallEnginePreset = keyof typeof CALL_ENGINE_PRESETS;
@@ -246,8 +307,9 @@ export function clampFragmentCoalescePlayingMs(value: number | null | undefined)
 }
 
 export function clampTelephonyTailDrainMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 400;
-  return Math.max(0, Math.min(2000, Math.round(v)));
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  const ms = Math.max(0, Math.min(2000, Math.round(v)));
+  return ms === 400 || ms === 80 ? 0 : ms;
 }
 
 export function clampSarvamSpeechEndFlushMs(value: number | null | undefined): number {
@@ -260,9 +322,56 @@ export function clampSarvamIncompleteHoldMs(value: number | null | undefined): n
   return Math.max(0, Math.min(1000, Math.round(v)));
 }
 
+/** Realtime `silence_duration_ms`. Unset = omit (Saaras owns EOT). */
+export function clampSarvamSilenceMs(value: number | null | undefined): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.max(150, Math.min(800, Math.round(value)));
+}
+
+/** Realtime `min_speech_duration_ms`. Unset = omit (Saaras owns onset). */
+export function clampSarvamMinSpeechMs(value: number | null | undefined): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.max(80, Math.min(800, Math.round(value)));
+}
+
+/** Realtime VAD `threshold`. Unset = omit. */
+export function clampSarvamVadThreshold(value: number | null | undefined): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.min(0.8, Math.max(0.1, Math.round(value * 100) / 100));
+}
+
+/** Incomplete-thought cap after Smart Turn HOLD. Adapter default 1200. */
+export function clampSemanticTurnStopMs(value: number | null | undefined): number {
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 1200;
+  return Math.max(400, Math.min(4000, Math.round(v)));
+}
+
+/**
+ * Fill realtime VAD fields only when the agent saved them.
+ * Bolna does not overlay Fast / Balanced / Patient milliseconds on Saaras.
+ */
+export function hydrateSarvamRealtimeVad(cfg: {
+  sarvamEndOfSpeechSilenceMs?: unknown;
+  sarvamFirstTurnMinSpeechMs?: unknown;
+  sarvamVadThreshold?: unknown;
+  asrEndpointingSilenceMs?: unknown;
+}): { silence?: number; minSpeech?: number; threshold?: number } {
+  return {
+    silence: typeof cfg.sarvamEndOfSpeechSilenceMs === "number"
+      ? clampSarvamSilenceMs(cfg.sarvamEndOfSpeechSilenceMs)
+      : undefined,
+    minSpeech: typeof cfg.sarvamFirstTurnMinSpeechMs === "number"
+      ? clampSarvamMinSpeechMs(cfg.sarvamFirstTurnMinSpeechMs)
+      : undefined,
+    threshold: typeof cfg.sarvamVadThreshold === "number"
+      ? clampSarvamVadThreshold(cfg.sarvamVadThreshold)
+      : undefined,
+  };
+}
+
 export function clampInterruptWords(value: number | null | undefined): number {
   const v = typeof value === "number" && Number.isFinite(value) ? value : 3;
-  // Legacy agents stored 0 = "off" — treat as Bolna default 3.
+  // Legacy agents stored 0 = "off" — treat as Bolna default 3 while TTS plays.
   if (v <= 0) return 3;
   return Math.max(1, Math.min(6, Math.round(v)));
 }

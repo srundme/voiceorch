@@ -11,6 +11,17 @@ export function teamRoleCanWrite(role: string | null | undefined): boolean {
   return (role ?? "member") !== "viewer";
 }
 
+/** True when a call belongs to someone in this workspace (owner or active teammate). */
+export function isWorkspaceCall(
+  scopeUserIds: string[],
+  callUserId: string | null | undefined,
+  agentUserId?: string | null,
+): boolean {
+  if (callUserId) return scopeUserIds.includes(callUserId);
+  if (agentUserId) return scopeUserIds.includes(agentUserId);
+  return true;
+}
+
 /**
  * From team_members rows, collect every user id that belongs to a workspace
  * this person owns or has joined.

@@ -15,15 +15,16 @@ export function createTTSAdapter(
   extraConfig?: string | null,
   language?: string | null,
   speed?: number | null,
+  sampleRate?: number | null,
 ): TTSAdapter {
   if (STUB_PROVIDERS_ENABLED) return createStubTTS();
   switch (provider.toLowerCase()) {
     case "elevenlabs":
-      return new ElevenLabsTTS(apiKey, voice, speed);
+      return new ElevenLabsTTS(apiKey, voice, speed, model);
     case "cartesia":
-      return new CartesiaTTS(apiKey, voice, model, language, speed);
+      return new CartesiaTTS(apiKey, voice, model, language, speed, sampleRate);
     case "sarvam":
-      return new SarvamTTS(apiKey, voice, extraConfig, language, model, speed);
+      return new SarvamTTS(apiKey, voice, extraConfig, language, model, speed, sampleRate);
     case "openai":
     case "openai_tts":
       return new OpenAITTS(apiKey, voice, model);

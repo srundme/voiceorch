@@ -26,4 +26,11 @@ describe("fillerPcmCache", () => {
       getCachedFillerPcm({ provider: "cartesia", voice: "v1", model: "m", text: "One moment…" }),
     ).toBeNull();
   });
+
+  it("isolates 8 kHz and 16 kHz filler PCM", () => {
+    const base = { provider: "cartesia", voice: "v1", model: "m", text: "ஆஹா" };
+    setCachedFillerPcm({ ...base, sampleRate: 8000 }, Buffer.from([8]));
+    expect(getCachedFillerPcm({ ...base, sampleRate: 16000 })).toBeNull();
+    expect(getCachedFillerPcm({ ...base, sampleRate: 8000 })?.equals(Buffer.from([8]))).toBe(true);
+  });
 });

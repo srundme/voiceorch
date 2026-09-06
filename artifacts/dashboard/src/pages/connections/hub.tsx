@@ -49,7 +49,7 @@ const BASE_CARDS: ConnCard[] = [
     setupId: "calendar",
     icon: "calendar",
     title: "Bookings calendar",
-    blurb: "Google Calendar for appointments — invites include a Meet link.",
+    blurb: "Connect Google once. Agents pick which meeting to book.",
   },
   {
     id: "meetings",
@@ -64,14 +64,14 @@ const BASE_CARDS: ConnCard[] = [
     setupId: "whatsapp",
     brand: "whatsapp",
     title: "WhatsApp",
-    blurb: "One path: existing WABA, same number as your calls, buy a Vobiz WhatsApp DID, or webhook-only to another BSP.",
+    blurb: "Connect the number once. Agents pick which Meta template to send.",
   },
   {
     id: "email",
     setupId: "email",
     brand: "brevo",
     title: "Email (Brevo)",
-    blurb: "Email only — not WhatsApp. Paste a Brevo API key and a verified From address, then turn on Send Email on the agent.",
+    blurb: "Connect Brevo once. Agents turn on send — they do not paste the API key.",
   },
   {
     id: "website",
@@ -255,12 +255,14 @@ export function ConnectionsHub({ embedded = false }: { embedded?: boolean }) {
   const { data: waConnections } = useQuery({
     queryKey: ["connections-whatsapp-connections"],
     queryFn: () =>
-      customFetch<{ connections: Array<{ active?: boolean }> }>("/api/whatsapp/connections"),
+      customFetch<{ connections: Array<{ active?: boolean; metaConnected?: boolean; metaPhoneNumberId?: string | null }> }>("/api/whatsapp/connections"),
     staleTime: 60_000,
   });
   const waReady =
     !!waData?.channel?.active
-    || (waConnections?.connections ?? []).some((c) => c.active);
+    || (waConnections?.connections ?? []).some((c) =>
+      Boolean(c.active && (c.metaConnected || c.metaPhoneNumberId)),
+    );
 
   const { data: connections = [] } = useListConnections();
   const websiteReady = connections.some((c) => c.type === "webhook");
@@ -318,9 +320,7 @@ export function ConnectionsHub({ embedded = false }: { embedded?: boolean }) {
         description="Email only — not WhatsApp. Paste Brevo API key, add a verified From, test. Then enable Send Email on the agent."
         back={setupBackFromReturn ?? { href: hubHref, label: embedded ? "Vibe" : "Connections" }}
       >
-        <div className="max-w-lg">
-          <EmailChannelCard forceExpanded setupMode />
-        </div>
+        <EmailChannelCard forceExpanded setupMode />
       </StripePage>
     );
   }
@@ -495,7 +495,7 @@ export function ConnectionsHub({ embedded = false }: { embedded?: boolean }) {
   return (
     <StripePage
       title="Connections"
-      description="Phone numbers, Sheets, calendar, meetings, WhatsApp, email, and lead forms."
+      description="Plug in WhatsApp, email, Google Calendar, and numbers here. Agents only pick which template or meeting to use."
       back={{ href: "/app/home", label: "Home" }}
     >
       {grid}

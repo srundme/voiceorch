@@ -3,29 +3,33 @@
  * Keeps the carrier/webcall media transport open; swaps only the VoiceSession pipeline.
  */
 
-import { db, agentsTable, providersTable, platformSettingsTable, type Squad } from "@workspace/db";
+import { db, agentsTable, providersTable, platformSettingsTable, type Squad, spokenSquadHandoffMessage, spokenSquadHandoffGreeting } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { decryptKey } from "../lib/crypto.js";
 import { logger } from "../lib/logger.js";
 import { OrchestrationPipeline } from "../orchestration/pipeline.js";
 import { GeminiLivePipeline } from "../orchestration/adapters/live/gemini-live-pipeline.js";
 import {
-  DEFAULT_GEMINI_LIVE_MODEL,
+  resolveGeminiLiveModel,
   resolveGeminiLiveThinkingLevel,
   resolveGeminiLiveVoice,
   resolveVoiceStack,
 } from "../orchestration/adapters/live/gemini-live-voices.js";
 import { resolveSarvamSttMode } from "../orchestration/adapters/stt/sarvam-mode.js";
+import { resolveRealtimeStreamType } from "../orchestration/adapters/stt/sarvam-realtime.js";
 import {
   clampSarvamIncompleteHoldMs,
   clampSarvamSpeechEndFlushMs,
   resolveSarvamHighVadSensitivity,
+  normalizeCallEngineAgentConfig,
   FRAGMENT_COALESCE_DEFAULTS,
   resolveStartSpeakingPlan,
   resolveTtsMinSentenceChars,
 } from "@workspace/db/call-engine-defaults";
 import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "../orchestration/mic-sensitivity.js";
-import { optionalMs } from "../orchestration/stt-tuning.js";
+import { FORCE_SOFTWARE_NOISE_GATE_KEY } from "../orchestration/noise-gate.js";
+import { optionalMs, optionalUnitInterval } from "../orchestration/stt-tuning.js";
+import { clampSemanticTurnStopMs, resolveSemanticTurnEnabled } from "../orchestration/semantic-turn-gate.js";
 import { getAttachedSourceIds } from "../orchestration/kb-retrieval.js";
 import type { AgentConfig, AgentTool, SessionTransport } from "../orchestration/types.js";
 import type { VoiceSession } from "../orchestration/voice-session.js";
@@ -41,10 +45,26 @@ import {
   buildSquadPromptBlock,
   buildSharedCallerFactsBlock,
 } from "./squad-teamwork.js";
+import { languageDisplayName, mapLanguagePrefToBcp47 } from "../orchestration/call-direction-rules.js";
 
 const DEFAULT_SILENCE_TIMEOUT_SECONDS = 45;
 
-function buildHandoffPromptBlock(packet: HandoffPacket): string {
+/** Live caller language from agent 1 — STT/TTS/prompt for agent 2. */
+export function resolveSquadHandoffLanguage(
+  packetLang: string | null | undefined,
+  agentLang: string,
+): { bcp47: string; label: string; fromCaller: boolean } {
+  const mapped = mapLanguagePrefToBcp47(packetLang);
+  if (mapped) {
+    return { bcp47: mapped, label: languageDisplayName(mapped), fromCaller: true };
+  }
+  return { bcp47: agentLang, label: languageDisplayName(agentLang), fromCaller: false };
+}
+
+export function buildHandoffPromptBlock(packet: HandoffPacket): string {
+  const lang = packet.language?.trim()
+    ? resolveSquadHandoffLanguage(packet.language, packet.language)
+    : null;
   return [
     "[SQUAD HANDOFF — CONFIDENTIAL CONTEXT]",
     "You are taking over this live call from a teammate. The customer is still on the line.",
@@ -52,7 +72,9 @@ function buildHandoffPromptBlock(packet: HandoffPacket): string {
     `Reason for handoff: ${packet.reason}`,
     `Squad goal: ${packet.goal}`,
     `Prior conversation summary:\n${packet.transcriptSummary || "(none)"}`,
-    packet.language ? `Caller language preference: ${packet.language}` : null,
+    lang
+      ? `Caller language preference: ${lang.label} (${lang.bcp47}).\nYou MUST continue this live call in ${lang.label}. This overrides any other language rule in your prompt. The caller already chose this language with your teammate. Do not greet or reply in a different language and do not ask which language they want unless they switch.`
+      : null,
     packet.durableFacts && Object.keys(packet.durableFacts).length
       ? `Known facts: ${JSON.stringify(packet.durableFacts)}`
       : null,
@@ -86,10 +108,18 @@ export async function loadProviderKeysMap(userId: string | null): Promise<Map<st
     azure: "managed_azure_speech_key",
   };
   for (const [name, settingKey] of Object.entries(MANAGED)) {
-    if (providerKeys.has(name)) continue;
+    if (providerKeys.has(name) || settingKey === "managed_gemini_key") continue;
     const [row] = await db.select().from(platformSettingsTable)
       .where(eq(platformSettingsTable.key, settingKey)).limit(1);
     if (row?.value) providerKeys.set(name, row.value);
+  }
+  if (!providerKeys.has("google") || !providerKeys.has("gemini")) {
+    const { pickManagedGeminiKey } = await import("../lib/gemini-key-pool.js");
+    const geminiKey = await pickManagedGeminiKey();
+    if (geminiKey) {
+      if (!providerKeys.has("google")) providerKeys.set("google", geminiKey);
+      if (!providerKeys.has("gemini")) providerKeys.set("gemini", geminiKey);
+    }
   }
   return providerKeys;
 }
@@ -103,7 +133,9 @@ async function buildTargetAgentConfig(
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId)).limit(1);
   if (!agent) return null;
 
-  const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+  const agentCfg = normalizeCallEngineAgentConfig(
+    (agent.agentConfig ?? {}) as Record<string, unknown>,
+  ).config;
   let tools = Array.isArray(agent.tools) ? (agent.tools as unknown as AgentTool[]) : [];
   const endCallPhrases = agent.endCallPhrases
     ? agent.endCallPhrases.split(",").map((s) => s.trim()).filter(Boolean)
@@ -128,11 +160,13 @@ async function buildTargetAgentConfig(
     logger.warn({ err, agentId, squadId }, "Squad teamwork injection failed for handoff target");
   }
 
-  const effectiveAgentLang =
+  const configuredLang =
     (typeof agentCfg["language"] === "string" && (agentCfg["language"] as string)) ||
     agent.asrLanguage ||
     agent.language ||
     "en-IN";
+  const handoffLang = resolveSquadHandoffLanguage(packet.language, configuredLang);
+  const effectiveAgentLang = handoffLang.bcp47;
 
   const voiceStack = resolveVoiceStack(agentCfg["voiceStack"] as string | undefined);
   const micSensitivity = resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined);
@@ -176,16 +210,20 @@ async function buildTargetAgentConfig(
     ttsSpeed: (agentCfg["ttsSpeed"] as number | undefined) ?? 1.0,
     telephonyProvider: agent.telephonyProvider,
     greetingMessage: null,
+    // Receiving agent must take the floor after the swap. firstSpeaker=user
+    // plus a skipped greet() left dead air (caller waiting for the teammate).
     firstSpeaker: "assistant",
+    initialLanguage: handoffLang.fromCaller ? handoffLang.bcp47 : undefined,
     endCallPhrases,
     silenceTimeoutSeconds: agent.silenceTimeoutSeconds ?? DEFAULT_SILENCE_TIMEOUT_SECONDS,
     language: effectiveAgentLang,
     languageAutoDetect: agentCfg["languageMode"] === "multilingual" || agentCfg["languageAutoDetect"] === true,
     autoSwitchToEnglish: agentCfg["autoSwitchToEnglish"] === true,
-    backchannelingEnabled: agent.backchannelingEnabled ?? false,
+    backchannelingEnabled: agent.backchannelingEnabled !== false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
-    noiseCancellationEnabled: agent.noiseCancellationEnabled ?? false,
+    noiseCancellationEnabled: agent.noiseCancellationEnabled !== false,
+    forceSoftwareNoiseGate: agentCfg[FORCE_SOFTWARE_NOISE_GATE_KEY] === true,
     ambientNoiseEnabled: (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false,
     ambientNoiseTrack: (agentCfg["ambientNoiseTrack"] as string | undefined) ?? null,
     ambientNoiseVolume: 1.0,
@@ -234,12 +272,13 @@ async function buildTargetAgentConfig(
     genderDetectionFemaleSalutation: "Ma'am",
     genderDetectionNeutralSalutation: "",
     voiceMemoryEnabled: false,
-    wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 3,
-    incrementalDelay: (() => {
-      const v = agentCfg["incrementalDelay"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 0;
-      return v === 350 ? 0 : Math.max(0, Math.min(1500, Math.round(v)));
+    wordsForInterruption: (() => {
+      const v = agentCfg["wordsForInterruption"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 3;
+      const n = Math.max(0, Math.round(v));
+      return n === 2 ? 3 : n;
     })(),
+    incrementalDelay: 0,
     hangupAfterLlmCall: false,
     startSpeakingPlan: resolveStartSpeakingPlan(
       agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"] | undefined,
@@ -269,8 +308,9 @@ async function buildTargetAgentConfig(
     })(),
     telephonyTailDrainMs: (() => {
       const v = agentCfg["telephonyTailDrainMs"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 400;
-      return Math.max(0, Math.min(2000, Math.round(v)));
+      if (typeof v !== "number" || !Number.isFinite(v)) return 0;
+      const ms = Math.max(0, Math.min(2000, Math.round(v)));
+      return ms === 400 || ms === 80 ? 0 : ms;
     })(),
     sarvamSttMode: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? resolveSarvamSttMode(
@@ -278,21 +318,32 @@ async function buildTargetAgentConfig(
           (agentCfg["sarvamSttMode"] as string | undefined) ?? null,
         )
       : ((agentCfg["sarvamSttMode"] as string | undefined) ?? null),
+    sarvamSttStreamType: resolveRealtimeStreamType(agentCfg["sarvamSttStreamType"]),
+    sarvamSttPrompt: typeof agentCfg["sarvamSttPrompt"] === "string"
+      ? (agentCfg["sarvamSttPrompt"] as string)
+      : null,
     sarvamHighVadSensitivity: resolveSarvamHighVadSensitivity(agentCfg["sarvamHighVadSensitivity"]),
     sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs(agentCfg["sarvamSpeechEndFlushMs"] as number | undefined),
     sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs(agentCfg["sarvamIncompleteHoldMs"] as number | undefined),
     // Wall-clock VAD windows; the adapter converts them to frames at the live
     // sample rate. Null means "leave the provider default alone".
     sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
-    sarvamEndOfSpeechSilenceMs: optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]),
+    sarvamEndOfSpeechSilenceMs: (() => {
+      const v = optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]);
+      return v === 300 || v === 500 ? null : v;
+    })(),
+    sarvamVadThreshold: optionalUnitInterval(agentCfg["sarvamVadThreshold"]),
+    semanticTurnDetection: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
+      ? false
+      : resolveSemanticTurnEnabled(agentCfg["semanticTurnDetection"]),
+    semanticTurnStopMs: clampSemanticTurnStopMs(agentCfg["semanticTurnStopMs"]),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
     voiceStack,
     geminiLive: voiceStack === "gemini_live"
       ? {
-          model: (typeof (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["model"] === "string"
-            && ((agentCfg["geminiLive"] as Record<string, unknown>)["model"] as string).trim())
-            ? ((agentCfg["geminiLive"] as Record<string, unknown>)["model"] as string)
-            : DEFAULT_GEMINI_LIVE_MODEL,
+          model: resolveGeminiLiveModel(
+            (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["model"] as string | undefined,
+          ),
           voiceName: resolveGeminiLiveVoice(
             (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["voiceName"] as string | undefined,
           ),
@@ -384,11 +435,30 @@ export async function performSquadAgentHandoff(opts: {
     return null;
   }
 
+  // Finish any in-flight TTS on the departing agent. Speak a custom
+  // announcement only — stock / empty stay silent so we do not inject
+  // a second hardcoded voice before the teammate continues.
+  const announcement = spokenSquadHandoffMessage(opts.squad.handoffMessage);
+  try {
+    await opts.previousPipeline.finishSpeakingForMaxDuration(2_500);
+  } catch (err) {
+    logger.warn({ err, callId: opts.hooks.callId }, "Handoff: finishSpeaking before announcement failed");
+  }
+  if (announcement) {
+    try {
+      await opts.previousPipeline.speakRaw(announcement);
+    } catch (err) {
+      logger.warn({ err, callId: opts.hooks.callId }, "Handoff announcement speakRaw failed");
+    }
+  }
+
   // Build the new pipeline WHILE the previous one is still alive.
   // Closing first used to leave the call dead if construction failed, and
   // dropped inbound audio during the gap before session swapped pointers.
   const { agentConfig, providerKeys } = built;
   const hooks = opts.hooks;
+  const greeting = spokenSquadHandoffGreeting(opts.squad.handoffGreeting);
+  if (greeting) agentConfig.greetingMessage = greeting;
 
   let newPipeline: VoiceSession;
   try {
@@ -408,6 +478,9 @@ export async function performSquadAgentHandoff(opts: {
           onBargeIn: hooks.onBargeIn,
           callDirection: hooks.callDirection,
           memoryOwnerAgentId: hooks.memoryOwnerAgentId,
+          callerMemoryLanguage: packet.language ?? null,
+          isSquadHandoffTakeover: true,
+          handoffSeedTurns: opts.previousPipeline.getHistory(),
         })
       : new OrchestrationPipeline({
           callId: hooks.callId,
@@ -424,6 +497,9 @@ export async function performSquadAgentHandoff(opts: {
           onBargeIn: hooks.onBargeIn,
           callDirection: hooks.callDirection,
           memoryOwnerAgentId: hooks.memoryOwnerAgentId,
+          callerMemoryLanguage: packet.language ?? null,
+          isSquadHandoffTakeover: true,
+          handoffSeedTurns: opts.previousPipeline.getHistory(),
         });
   } catch (err) {
     logger.error({ err, callId: hooks.callId }, "Failed to create handoff pipeline — keeping previous agent");
@@ -436,22 +512,16 @@ export async function performSquadAgentHandoff(opts: {
     return null;
   }
 
-  const greeting =
-    (opts.squad.handoffGreeting && opts.squad.handoffGreeting.trim()) ||
-    "Hi — I've been briefed on your conversation so far. How can I help?";
-
-  // Speak before the session swaps pointers — onAudioOut is shared, so the
-  // caller hears the greeting even while inbound audio still hits the old
-  // pipeline for a moment.
-  try {
-    await newPipeline.speakRaw(greeting);
-  } catch (err) {
-    logger.warn({ err, callId: hooks.callId }, "Handoff greeting speakRaw failed");
-  }
-
   await recordSquadHandoff({ runId: opts.runId, packet, outcome: "success" });
   logger.info(
-    { callId: hooks.callId, from: opts.fromAgentId, to: opts.toAgentId, runId: opts.runId },
+    {
+      callId: hooks.callId,
+      from: opts.fromAgentId,
+      to: opts.toAgentId,
+      runId: opts.runId,
+      handoffLanguage: packet.language ?? null,
+      teammateLanguage: agentConfig.language,
+    },
     "Squad live handoff completed",
   );
   // Caller (session) must: live.pipeline = result.pipeline, THEN close the old one.

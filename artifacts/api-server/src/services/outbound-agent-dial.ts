@@ -18,7 +18,7 @@ import {
 } from "@workspace/db";
 import { dialTwilio, dialPlivo, dialVobiz, resolveAmdConfig } from "../orchestration/telephony/dial.js";
 import { decryptKey } from "../lib/crypto.js";
-import { getFlatRateCentsPerMin, resolveAgentBillingMode, resolveOwnTelephonyDiscount } from "./minute-rates.js";
+import { resolveAgentBillingMode, resolveOwnTelephonyDiscount, resolveBillingRateCentsPerMin } from "./minute-rates.js";
 import { resolvePartnerBilling } from "./partner-billing.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE } from "./irdai/gate.js";
 import { traiPreDialCheck, logPreDialDecision } from "./trai/index.js";
@@ -99,7 +99,7 @@ export async function dialOutboundAgent(opts: {
       // Partner-managed clients are billed at their partner-set rate — the
       // credit-seconds estimate must use the same rate as the final debit.
       const agentRate = (await resolvePartnerBilling(agent.userId))?.clientRateCentsPerMin
-        ?? Math.max(0, getFlatRateCentsPerMin(billingMode) - await resolveOwnTelephonyDiscount(agent.userId, agent));
+        ?? Math.max(0, (await resolveBillingRateCentsPerMin(billingMode)) - await resolveOwnTelephonyDiscount(agent.userId, agent));
       const creditSeconds = agentRate > 0 ? Math.floor((user.walletBalanceCents / agentRate) * 60) : 0;
       const baseline = minProviderLimitSeconds + PROVIDER_LIMIT_BUFFER_SECONDS;
       maxDurationSeconds = Math.max(baseline, creditSeconds);

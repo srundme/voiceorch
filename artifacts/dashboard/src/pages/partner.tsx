@@ -66,6 +66,9 @@ interface PartnerClient {
   walletBalanceCents: number;
   rateCentsPerMin: number;
   allowAgentEdit?: boolean;
+  loginLocked?: boolean;
+  portalLoginFailedAttempts?: number;
+  portalLoginLockedAt?: string | null;
   joinedAt: string;
   monthSeconds: number;
   monthSpendCents: number;
@@ -482,6 +485,18 @@ function ClientsTab({ me }: { me: PartnerMe }) {
     onError: (err: Error) => toast({ title: "Transfer failed", description: err.message, variant: "destructive" }),
   });
 
+  const unlockMutation = useMutation({
+    mutationFn: async (clerkId: string) =>
+      partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(clerkId)}/unlock-login`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      toast({ title: "Client login unlocked" });
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Unlock failed", description: err.message, variant: "destructive" }),
+  });
+
   const createRatePaise = parseRupees(createRateText);
 
   return (
@@ -526,8 +541,15 @@ function ClientsTab({ me }: { me: PartnerMe }) {
               {clients.map(c => (
                 <tr key={c.clerkId}>
                   <td className="px-4 py-2.5">
-                    <p className="font-medium truncate max-w-[220px]">{c.name || c.email || c.clerkId}</p>
-                    {c.email && <p className="text-[11px] text-muted-foreground truncate max-w-[220px]">{c.email}</p>}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="min-w-0">
+                        <p className="font-medium truncate max-w-[220px]">{c.name || c.email || c.clerkId}</p>
+                        {c.email && <p className="text-[11px] text-muted-foreground truncate max-w-[220px]">{c.email}</p>}
+                      </div>
+                      {c.loginLocked && (
+                        <Badge variant="destructive" className="shrink-0 text-[10px]">Login locked</Badge>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2.5 tabular-nums">{inr(c.walletBalanceCents)}</td>
                   <td className="px-3 py-2.5 tabular-nums">{inr(c.rateCentsPerMin)}/min</td>
@@ -537,6 +559,17 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5 justify-end">
+                      {c.loginLocked && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-7 px-2.5 text-xs"
+                          disabled={unlockMutation.isPending}
+                          onClick={() => unlockMutation.mutate(c.clerkId)}
+                        >
+                          Unlock login
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         className="h-7 px-2.5 text-xs"

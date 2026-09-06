@@ -10,6 +10,7 @@ import {
   executeWebhookTool,
   executeSendEmail,
   executeSendWhatsapp,
+  executeSendSms,
 } from "../../../services/tool-executor.js";
 import { scheduleCallbackRequested } from "../../../services/autoRedial.js";
 import { resolveCallbackTime } from "../../../lib/tz-datetime.js";
@@ -24,6 +25,8 @@ import {
   executeMuteMeetingTool,
 } from "../../../services/meet-control.js";
 import { logger } from "../../../lib/logger.js";
+import { liveToolTimeoutMs } from "./live-tool-timeout.js";
+import { LIVE_BOOKING_EMAIL_BLOCKED, liveBookingConfirmEmailBlocked } from "./live-booking-email.js";
 
 export interface LiveToolRunnerDeps {
   config: SessionConfig;
@@ -31,6 +34,10 @@ export interface LiveToolRunnerDeps {
   onAgentText: (text: string) => void;
   speakText: (text: string) => Promise<void>;
   endCall: () => void;
+  /** Committed caller turns so far — gates booking on real engagement. */
+  genuineUserTurns: () => number;
+  /** True after booking_confirmed / reschedule_confirmed on this Live call. */
+  schedulingActionConfirmed: () => boolean;
 }
 
 /**
@@ -45,10 +52,18 @@ export async function runLiveToolCall(
   const { config, agent, onAgentText, speakText, endCall } = deps;
 
   if (toolName === "end_call") {
+    if (deps.genuineUserTurns() < 1) {
+      logger.warn(
+        { callId: config.callId },
+        "Gemini Live: ignored end_call before the caller spoke",
+      );
+      return { output: "ignored_end_call_no_caller_turn" };
+    }
     const endCallTool = agent.tools.find((t) => t.type === "end_call");
     const goodbye = resolveGoodbyeMessage(
       endCallTool?.type === "end_call" ? endCallTool.goodbyeMessage : undefined,
       agent.endCallPhrases,
+      agent.language,
     );
     onAgentText(goodbye);
     await speakText(goodbye);
@@ -61,7 +76,7 @@ export async function runLiveToolCall(
     const scheduledAtRaw = args["scheduled_at"] as string | undefined;
     const notes = args["notes"] as string | undefined;
     const cbTz = agent.timezone?.trim() || "Asia/Kolkata";
-    const { scheduledAt, wasDefaulted, wasClamped } = resolveCallbackTime(scheduledAtRaw, cbTz);
+    const { scheduledAt, wasDefaulted, wasClamped, wasRolled } = resolveCallbackTime(scheduledAtRaw, cbTz);
     if (toNumber) {
       await scheduleCallbackRequested({
         agentId: agent.id,
@@ -75,7 +90,7 @@ export async function runLiveToolCall(
         hour: "numeric", minute: "2-digit", hour12: true, timeZone: cbTz,
       });
       logger.info(
-        { callId: config.callId, agentId: agent.id, toNumber, scheduledAtRaw, scheduledAt, tz: cbTz, wasDefaulted, wasClamped },
+        { callId: config.callId, agentId: agent.id, toNumber, scheduledAtRaw, scheduledAt, tz: cbTz, wasDefaulted, wasClamped, wasRolled },
         "Live: schedule_callback invoked by LLM",
       );
       return {
@@ -170,7 +185,25 @@ export async function runLiveToolCall(
   }
 
   try {
-    const result = await executeLiveAgentTool(deps, tool, args);
+    const skipTimeout =
+      tool.type === "end_call"
+      || tool.type === "call_transfer"
+      || tool.type === "transfer_cold"
+      || tool.type === "transfer_warm"
+      || tool.type === "transfer_agent";
+    const resultPromise = executeLiveAgentTool(deps, tool, args);
+    const timeoutMs = liveToolTimeoutMs(tool.type);
+    const result = skipTimeout
+      ? await resultPromise
+      : await Promise.race([
+          resultPromise,
+          new Promise<never>((_, reject) => {
+            setTimeout(
+              () => reject(new Error(`tool timed out after ${timeoutMs}ms`)),
+              timeoutMs,
+            );
+          }),
+        ]);
     if (result === undefined) return { output: "ok" };
     return { output: result };
   } catch (err) {
@@ -179,6 +212,7 @@ export async function runLiveToolCall(
     return { error: message };
   }
 }
+
 
 async function executeLiveAgentTool(
   deps: LiveToolRunnerDeps,
@@ -243,19 +277,36 @@ async function executeLiveAgentTool(
       });
     }
     case "webhook":
-      await executeWebhookTool(callId, tool, args);
-      return undefined;
+      return await executeWebhookTool(callId, tool, args);
     case "end_call": {
-      const goodbye = resolveGoodbyeMessage(tool.goodbyeMessage, agent.endCallPhrases);
+      if (deps.genuineUserTurns() < 1) {
+        logger.warn(
+          { callId: config.callId },
+          "Gemini Live: ignored end_call before the caller spoke",
+        );
+        return "ignored_end_call_no_caller_turn";
+      }
+      const goodbye = resolveGoodbyeMessage(tool.goodbyeMessage, agent.endCallPhrases, agent.language);
       onAgentText(goodbye);
       await speakText(goodbye);
       endCall();
       return undefined;
     }
-    case "native_booking":
+    case "native_booking": {
+      // Mirrors the classic pipeline guard: Live can chain check_availability →
+      // book off a single "Hello", so a dead-air call ends up with a real
+      // calendar invite and confirmation email.
+      const userTurns = deps.genuineUserTurns();
+      if (userTurns < 2) {
+        logger.warn({ callId, userTurns }, "Live native booking blocked: fewer than 2 caller turns");
+        return "error: cannot book yet — wait until the caller has given their name and chosen a slot.";
+      }
       return executeNativeBooking(callId, agentId, tool, args, {
         lineageCallId: config.bookingLineageCallId,
+        knownEmail: agent.knownAttendeeEmail,
+        knownSourceText: agent.systemPrompt,
       });
+    }
     case "native_check_availability":
       return executeNativeCheckAvailability(callId, agentId, tool, args);
     case "native_list_bookings":
@@ -267,8 +318,21 @@ async function executeLiveAgentTool(
     case "native_cancel":
       return executeNativeCancel(callId, agentId, tool, args);
     case "send_sms":
-      return undefined;
+      return executeSendSms({
+        callId,
+        callerPhone: config.callerPhone,
+        telephonyProvider: config.telephonyProvider,
+        providerKeys: config.providerKeys,
+        messageTemplate: tool.messageTemplate,
+      });
     case "send_email":
+      if (liveBookingConfirmEmailBlocked(args, deps.schedulingActionConfirmed())) {
+        logger.warn(
+          { callId, agentId: agent.id },
+          "Live: booking confirmation email blocked — no successful booking in this call",
+        );
+        return LIVE_BOOKING_EMAIL_BLOCKED;
+      }
       return executeSendEmail({
         agentId: agent.id,
         callId,

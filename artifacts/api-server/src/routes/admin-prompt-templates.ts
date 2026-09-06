@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import multer from "multer";
-import { db, promptTemplatesTable, agentsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { db, promptTemplatesTable, agentsTable, callsTable } from "@workspace/db";
+import { eq, desc, sql, isNotNull } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import {
   extractTextFromUpload,
@@ -178,40 +178,91 @@ router.post("/admin/prompt-templates/preview", async (req, res): Promise<void> =
 router.use("/admin/agents", requireAdmin);
 
 router.get("/admin/agents", async (_req, res): Promise<void> => {
-  const rows = await db
-    .select({
-      id: agentsTable.id,
-      name: agentsTable.name,
-      agentType: agentsTable.agentType,
-      userId: agentsTable.userId,
-      status: agentsTable.status,
-      systemPrompt: agentsTable.systemPrompt,
-      generatedPrompt: agentsTable.generatedPrompt,
-      promptTemplateVersion: agentsTable.promptTemplateVersion,
-      wizardInputs: agentsTable.wizardInputs,
-      createdAt: agentsTable.createdAt,
-    })
-    .from(agentsTable)
-    .orderBy(desc(agentsTable.createdAt));
+  try {
+    const rows = await db
+      .select({
+        id: agentsTable.id,
+        name: agentsTable.name,
+        agentType: agentsTable.agentType,
+        userId: agentsTable.userId,
+        status: agentsTable.status,
+        asrProvider: agentsTable.asrProvider,
+        llmProvider: agentsTable.llmProvider,
+        ttsProvider: agentsTable.ttsProvider,
+        ttsVoice: agentsTable.ttsVoice,
+        ttsVoiceName: agentsTable.ttsVoiceName,
+        language: agentsTable.language,
+        totalCalls: agentsTable.totalCalls,
+        systemPrompt: agentsTable.systemPrompt,
+        generatedPrompt: agentsTable.generatedPrompt,
+        promptTemplateVersion: agentsTable.promptTemplateVersion,
+        wizardInputs: agentsTable.wizardInputs,
+        createdAt: agentsTable.createdAt,
+      })
+      .from(agentsTable)
+      .orderBy(desc(agentsTable.createdAt));
 
-  // owner / company come from wizard inputs when available
-  const result = rows.map((r) => {
-    const wi = (r.wizardInputs ?? {}) as Record<string, unknown>;
-    return {
-      id: r.id,
-      name: r.name,
-      agentType: r.agentType,
-      ownerUserId: r.userId,
-      company: (wi["companyName"] as string | undefined) ?? null,
-      status: r.status,
-      promptTemplateVersion: r.promptTemplateVersion,
-      hasGeneratedPrompt: !!r.generatedPrompt,
-      hasWizardInputs: !!r.wizardInputs,
-      createdAt: r.createdAt,
-    };
-  });
+    // Aggregate call metrics from calls table when available
+    const countMap = new Map<number, { totalCalls: number; completedCalls: number; failedCalls: number; totalDurationSeconds: number }>();
+    try {
+      const callCounts = await db
+        .select({
+          agentId: callsTable.agentId,
+          totalCalls: sql<number>`count(*)::int`,
+          completedCalls: sql<number>`count(*) filter (where ${callsTable.status} = 'completed')::int`,
+          failedCalls: sql<number>`count(*) filter (where ${callsTable.status} in ('failed', 'error'))::int`,
+          totalDurationSeconds: sql<number>`coalesce(sum(${callsTable.durationSeconds}), 0)::int`,
+        })
+        .from(callsTable)
+        .where(isNotNull(callsTable.agentId))
+        .groupBy(callsTable.agentId);
 
-  res.json(result);
+      for (const c of callCounts) {
+        if (c.agentId != null) {
+          countMap.set(c.agentId, {
+            totalCalls: c.totalCalls ?? 0,
+            completedCalls: c.completedCalls ?? 0,
+            failedCalls: c.failedCalls ?? 0,
+            totalDurationSeconds: c.totalDurationSeconds ?? 0,
+          });
+        }
+      }
+    } catch (err) {
+      logger.warn({ err }, "Could not aggregate agent call counts for /admin/agents");
+    }
+
+    // owner / company come from wizard inputs when available
+    const result = rows.map((r) => {
+      const wi = (r.wizardInputs ?? {}) as Record<string, unknown>;
+      const counts = countMap.get(r.id);
+      return {
+        id: r.id,
+        name: r.name,
+        agentType: r.agentType,
+        ownerUserId: r.userId,
+        company: (wi["companyName"] as string | undefined) ?? null,
+        status: r.status,
+        asrProvider: r.asrProvider,
+        llmProvider: r.llmProvider,
+        ttsProvider: r.ttsProvider,
+        voice: r.ttsVoiceName || r.ttsVoice,
+        language: r.language,
+        totalCalls: counts?.totalCalls ?? r.totalCalls ?? 0,
+        completedCalls: counts?.completedCalls ?? 0,
+        failedCalls: counts?.failedCalls ?? 0,
+        totalDurationSeconds: counts?.totalDurationSeconds ?? 0,
+        promptTemplateVersion: r.promptTemplateVersion,
+        hasGeneratedPrompt: !!r.generatedPrompt,
+        hasWizardInputs: !!r.wizardInputs,
+        createdAt: r.createdAt,
+      };
+    });
+
+    res.json(result);
+  } catch (err) {
+    logger.error({ err }, "GET /admin/agents failed");
+    res.status(500).json({ error: "Failed to load agents" });
+  }
 });
 
 router.get("/admin/agents/:id/prompt", async (req, res): Promise<void> => {

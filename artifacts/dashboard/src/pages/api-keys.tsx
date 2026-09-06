@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { customFetch } from "@workspace/api-client-react";
+import { publicApiBase } from "@/lib/public-urls";
+import { hostProductName, isDirectSnapServeHost } from "@/lib/white-label";
 
 interface ApiKey {
   id: number;
@@ -44,6 +46,9 @@ export default function ApiKeysPage() {
   const { data, isLoading } = useApiKeys();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const apiBase = publicApiBase();
+  const product = hostProductName();
+  const showSnapServeApiHint = isDirectSnapServeHost();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
@@ -116,7 +121,9 @@ export default function ApiKeysPage() {
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-border/50">
           <p className="text-sm font-semibold text-foreground">Active Keys</p>
-          <p className="text-xs text-muted-foreground/50 mt-0.5">{activeKeys.length} of 5 slots used</p>
+          <p className="text-xs text-muted-foreground/50 mt-0.5">
+            {activeKeys.length} of 5 slots used · full keys are shown only once, at creation
+          </p>
         </div>
         <div className="px-5 py-3">
           {isLoading ? (
@@ -134,7 +141,8 @@ export default function ApiKeysPage() {
                 <div key={k.id} className="flex items-center gap-4 py-3.5">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground">{k.name}</p>
-                    <code className="text-[11px] text-muted-foreground/50 font-mono">{k.keyPrefix}{"•".repeat(32)}</code>
+                    {/* Not selectable: copying this preview yields a key-shaped string that never authenticates. */}
+                    <code className="text-[11px] text-muted-foreground/50 font-mono select-none">{k.keyPrefix}{"•".repeat(32)}</code>
                   </div>
                   <div className="text-[11px] text-muted-foreground/50 text-right shrink-0">
                     <p className="flex items-center gap-1 justify-end mb-0.5">
@@ -164,7 +172,7 @@ export default function ApiKeysPage() {
               <div key={k.id} className="flex items-center gap-4 py-3">
                 <div className="flex-1">
                   <p className="text-sm text-muted-foreground line-through">{k.name}</p>
-                  <code className="text-[11px] text-muted-foreground/40 font-mono">{k.keyPrefix}{"•".repeat(32)}</code>
+                  <code className="text-[11px] text-muted-foreground/40 font-mono select-none">{k.keyPrefix}{"•".repeat(32)}</code>
                 </div>
                 <span className="text-[10px] text-muted-foreground/50 px-2 py-0.5 rounded border border-border shrink-0">Revoked {timeAgo(k.revokedAt!)}</span>
               </div>
@@ -178,9 +186,19 @@ export default function ApiKeysPage() {
         <p className="text-sm font-semibold text-foreground">Using your API key</p>
         <p className="text-xs text-muted-foreground/60">Authenticate requests by passing the key in the Authorization header:</p>
         <pre className="text-xs bg-elevated border border-border/50 rounded-xl p-4 overflow-auto font-mono text-muted-foreground/70 leading-relaxed">
-{`curl https://api.snapserve.ai/api/agents \\
+{`curl ${apiBase}/agents \\
   -H "Authorization: Bearer sk_live_your_key_here"`}
         </pre>
+        <p className="text-[11px] text-muted-foreground/50">
+          Base URL is <code className="text-foreground/70">{apiBase}</code>
+          {showSnapServeApiHint ? (
+            <>
+              . Do not use <code>api.snapserve.ai</code> — that host is not the {product} API.
+            </>
+          ) : (
+            <> — use this host for {product} API calls.</>
+          )}
+        </p>
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

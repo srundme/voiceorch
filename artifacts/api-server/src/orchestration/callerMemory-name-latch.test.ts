@@ -22,6 +22,10 @@ import {
   isPlausibleName,
   NAME_PATTERNS,
   shouldLatchOverrideExtraction,
+  injectEnhancedMemory,
+  isAbruptEnd,
+  demoteResumeMemoryAfterOpening,
+  type CallerProfile,
 } from "./callerMemory.js";
 
 describe("detectNameLatch — rejections (no latch)", () => {
@@ -54,6 +58,9 @@ describe("detectNameLatch — Tier A (explicit self-introductions)", () => {
     ["My name is Karthik", "Karthik"],
     ["This is Priya speaking", "Priya"],
     ["என் பேர் Arjun", "Arjun"],
+    ["என்னோட பேரு Murali", "Murali"],
+    ["என் பெயர் Kavitha", "Kavitha"],
+    ["நான் Ravi பேசுறேன்", "Ravi"],
     ["मेरा नाम Divya", "Divya"],
     ["You can call me Ravi", "Ravi"],
   ];
@@ -66,6 +73,24 @@ describe("detectNameLatch — Tier A (explicit self-introductions)", () => {
   it('keeps "this is X" gated on a speaker cue', () => {
     expect(detectNameLatch("this is regarding the managed plan")).toBeNull();
   });
+
+  it('rejects "who\'s this" style fragments as names', () => {
+    expect(detectNameLatch("my name is who")).toBeNull();
+    expect(detectNameLatch("I am this")).toBeNull();
+  });
+
+  it("latches the affirmed name after a Tamil denial (call 14222)", () => {
+    expect(
+      detectNameLatch("சார் என்னோட பேரு ராஜேஸ்வரி கிடையாது என்னோட பேரு வந்து சிவராம்"),
+    ).toEqual({ name: "சிவராம்", tier: "A" });
+  });
+
+  it("latches romanized Tamil with a trailing denial (enoda peru Karthi, rajeswari ella)", () => {
+    expect(detectNameLatch("enoda peru Karthi, rajeswari ella")).toEqual({
+      name: "Karthi",
+      tier: "A",
+    });
+  });
 });
 
 describe("detectNameLatch — Tier B (ambiguous 'I am X')", () => {
@@ -74,6 +99,9 @@ describe("detectNameLatch — Tier B (ambiguous 'I am X')", () => {
   });
   it(`latches "I'm Divya" as Tier B`, () => {
     expect(detectNameLatch("I'm Divya")).toEqual({ name: "Divya", tier: "B" });
+  });
+  it('latches Hindi "मैं Anand हूँ" as Tier B', () => {
+    expect(detectNameLatch("मैं Anand हूँ")).toEqual({ name: "Anand", tier: "B" });
   });
 });
 
@@ -87,6 +115,10 @@ describe("isPlausibleName", () => {
       expect(isPlausibleName(w)).toBe(false);
     }
   });
+  it("rejects Tamil/English negation fragments as names", () => {
+    expect(isPlausibleName("ராஜேஸ்வரி கிடையாது")).toBe(false);
+    expect(isPlausibleName("not Rajesh")).toBe(false);
+  });
   it("keeps existing rejections", () => {
     for (const w of ["sorry", "calling", "trying", "tomorrow by", "managed"]) {
       expect(isPlausibleName(w)).toBe(false);
@@ -95,10 +127,11 @@ describe("isPlausibleName", () => {
 });
 
 describe("NAME_PATTERNS tiering", () => {
-  it("only the 'I am / I'm' pattern is Tier B", () => {
+  it("only ambiguous self-intros are Tier B (English I am / Hindi मैं हूँ)", () => {
     const tierB = NAME_PATTERNS.filter((p) => p.tier === "B");
-    expect(tierB).toHaveLength(1);
-    expect(tierB[0]!.pattern.source).toContain("i(?:'m| am)");
+    expect(tierB).toHaveLength(2);
+    expect(tierB.some((p) => p.pattern.source.includes("i(?:'m| am)"))).toBe(true);
+    expect(tierB.some((p) => p.pattern.source.includes("हूँ"))).toBe(true);
   });
 });
 
@@ -142,5 +175,97 @@ describe("call-end override guard (tier-conditional)", () => {
     const latch = detectNameLatch("I'm Divya")!;
     // No extraction ran — the latch's immediate DB write is the final state.
     expect(resolveFinalName(latch.name, latch.tier, null)).toBe("Divya");
+  });
+});
+
+describe("injectEnhancedMemory — returning-caller opener (call 14351)", () => {
+  it("does not tell the greeting LLM to recap bookings in the first line", () => {
+    const profile = {
+      id: 1,
+      agentId: 67,
+      phoneNumber: "917971543255",
+      name: "Karthik",
+      summary: "wiring issue and demo slot",
+      callCount: 15,
+      lastCalledAt: new Date("2026-08-27"),
+      lastCallDropped: false,
+      lastCallDroppedAt: null,
+      predictedIntent: null,
+      riskScore: null,
+      sentimentTrend: null,
+      preferredLanguage: "ta-IN",
+    } satisfies CallerProfile;
+    const out = injectEnhancedMemory("base prompt", {
+      profile,
+      facts: [],
+      recentCalls: [],
+    });
+    expect(out).not.toMatch(/naturally reference what you already know/);
+    expect(out).toMatch(/Do NOT recap previous bookings/);
+  });
+});
+
+describe("isAbruptEnd — completed call must not keep resume-drop (call 21824)", () => {
+  const base = {
+    id: 1,
+    agentId: 1113,
+    phoneNumber: "918904887300",
+    name: "Yashwanth",
+    summary: null,
+    callCount: 1,
+    predictedIntent: null,
+    riskScore: null,
+    sentimentTrend: null,
+    preferredLanguage: "ta-IN",
+  };
+
+  it("resumes only when the drop stamp is the latest call event", () => {
+    const droppedAt = new Date();
+    expect(isAbruptEnd({
+      ...base,
+      lastCalledAt: droppedAt,
+      lastCallDropped: true,
+      lastCallDroppedAt: droppedAt,
+    })).toBe(true);
+  });
+
+  it("does not resume after a later completed call left a stale drop flag", () => {
+    const droppedAt = new Date(Date.now() - 90_000);
+    const completedAt = new Date();
+    expect(isAbruptEnd({
+      ...base,
+      lastCalledAt: completedAt,
+      lastCallDropped: true,
+      lastCallDroppedAt: droppedAt,
+    })).toBe(false);
+  });
+});
+
+describe("demoteResumeMemoryAfterOpening — call 21828 recap loop", () => {
+  it("keeps name/facts and drops LAST EXCHANGES after the opening", () => {
+    const raw = [
+      "=== CALLER MEMORY ===",
+      "Name: Karthik  |  Calls: 12  |  ⚠️ LAST CALL DROPPED",
+      "",
+      "Previous call summary: Discussed AI courses for daughter in 12th.",
+      "HOW TO USE THIS SUMMARY: On the OPENING of this call only, continue the pending topic.",
+      "",
+      "LAST EXCHANGES BEFORE THE CALL DROPPED (resume from here):",
+      "Caller: from which school you are calling?",
+      "You: I'm calling from our school admissions office.",
+      "",
+      "⚠️ NAME PRIORITY RULE: keep the self-stated name.",
+      "⚠️ IMPORTANT — RESUME, DO NOT RESTART: pick up LAST EXCHANGES mid-thread.",
+      "=====================================",
+      "",
+      "You are a school admissions agent.",
+    ].join("\n");
+    const live = demoteResumeMemoryAfterOpening(raw);
+    expect(live).toContain("Name: Karthik");
+    expect(live).toContain("You are a school admissions agent.");
+    expect(live).not.toContain("LAST EXCHANGES BEFORE THE CALL DROPPED");
+    expect(live).not.toContain("LAST CALL DROPPED");
+    expect(live).not.toContain("RESUME, DO NOT RESTART");
+    expect(live).toMatch(/Background only/);
   });
 });

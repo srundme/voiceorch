@@ -37,6 +37,39 @@ describe("normalizeWhatsappInbound", () => {
     expect(ev?.phone).toBe("919876543210");
     expect(ev?.name).toBe("Asha");
     expect(ev?.buttonId).toBe("request_a_call");
+    expect(ev?.event).toBe("message");
+    expect(isRequestCallEvent(ev!, ["request_a_call", "call_me"])).toBe(true);
+  });
+
+  it("does not treat Meta Cloud plain text as request_call", () => {
+    const ev = normalizeWhatsappInbound({
+      entry: [{
+        changes: [{
+          value: {
+            contacts: [{ wa_id: "919876543210", profile: { name: "Asha" } }],
+            messages: [{
+              from: "919876543210",
+              id: "wamid.hi",
+              type: "text",
+              text: { body: "Hi, what are your hours?" },
+            }],
+          },
+        }],
+      }],
+    });
+    expect(ev?.phone).toBe("919876543210");
+    expect(ev?.event).toBe("message");
+    expect(ev?.buttonId).toBeUndefined();
+    expect(isRequestCallEvent(ev!, ["request_a_call", "call_me"])).toBe(false);
+  });
+
+  it("prefers inbound from/wa_id over business to for generic BSP payloads", () => {
+    const ev = normalizeWhatsappInbound({
+      from: "919876543210",
+      to: "911140000000",
+      event: "message",
+    });
+    expect(ev?.phone).toBe("919876543210");
   });
 
   it("returns null without phone", () => {

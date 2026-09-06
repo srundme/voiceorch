@@ -9,7 +9,10 @@ import { fromZonedTime, toZonedTime } from "date-fns-tz";
 const IST = "Asia/Kolkata";
 
 const CALLBACK_RE =
-  /\b(?:callback|call\s*back|call\s+(?:me\s+)?later)\b|\bschedule\b[\s\S]{0,40}\bcall\b/i;
+  /\b(?:callback|call\s*back|call\s+(?:me\s+)?later|demo\s+follow(?:[\s-]*up)?(?:\s+session)?|follow[\s-]*up\s+session)\b|\bschedule\b[\s\S]{0,40}\bcall\b/i;
+
+const BOOKED_RE =
+  /\b(?:booked|booking[_ ]confirmed|appointment[_ ]booked|meeting[_ ]booked|sale[_ ]closed)\b/i;
 
 /** Case-insensitive match on disposition / summary / status for callback intent. */
 export function isCallbackDisposition(
@@ -18,6 +21,15 @@ export function isCallbackDisposition(
   const blob = texts.filter((t) => typeof t === "string" && t.trim()).join(" ");
   if (!blob.trim()) return false;
   return CALLBACK_RE.test(blob);
+}
+
+/** True when hangup writeback should keep Status = Booked instead of Completed. */
+export function isBookedDisposition(
+  ...texts: Array<string | null | undefined>
+): boolean {
+  const blob = texts.filter((t) => typeof t === "string" && t.trim()).join(" ");
+  if (!blob.trim()) return false;
+  return BOOKED_RE.test(blob);
 }
 
 /**
@@ -55,18 +67,31 @@ export function extractExplicitCallbackAt(disp: unknown): Date | null {
   return null;
 }
 
-/** IST display string for Meeting Time / Next Follow-up cells. */
+/** Canonical sheet header for callback / demo follow datetime. */
+export const FOLLOW_UP_HEADER = "Follow-up";
+
+/** Map stored "Next Follow-up" / Meeting Time onto Follow-up. */
+export function followUpColumnName(raw?: string | null): string {
+  const v = (raw ?? "").trim();
+  if (!v || /^next\s*follow[-\s]*up$/i.test(v) || /^meeting\s*time$/i.test(v)) {
+    return FOLLOW_UP_HEADER;
+  }
+  return v;
+}
+
+/** IST display: date + time + AM/PM for Follow-up cells. */
 export function formatSheetIst(d: Date | string | null | undefined): string {
   if (!d) return "";
   const date = typeof d === "string" ? new Date(d) : d;
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("en-IN", {
+  const raw = date.toLocaleString("en-IN", {
     timeZone: IST,
     year: "numeric",
     month: "short",
     day: "numeric",
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
     hour12: true,
   });
+  return raw.replace(/\b(am|pm)\b/gi, (m) => m.toUpperCase());
 }

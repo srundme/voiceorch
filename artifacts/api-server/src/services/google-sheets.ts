@@ -31,6 +31,7 @@ import {
   rowToPromptVars,
   resolveMatchColumnIndex,
   sheetRange,
+  a1FromColIndex,
 } from "./google-sheets-helpers.js";
 
 export {
@@ -40,7 +41,11 @@ export {
   phonesMatch,
   cellMatchesPhone,
   rowToPromptVars,
+  a1FromColIndex,
 };
+
+/** Rows per Sheets values.get when paging large lead tabs. */
+export const SHEET_ROW_CHUNK_SIZE = 1000;
 
 const SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
@@ -332,24 +337,23 @@ const TEMPLATES: Record<SheetTemplate, {
     tab: "Leads",
     headers: [
       "Phone", "Name", "Email", "Status", "Last Call At", "Disposition",
-      "Summary", "Call ID", "Recording", "Next Follow-up", "Meeting Time", "Do Not Call",
+      "Summary", "Call ID", "Recording", "Follow-up",
     ],
     sampleRows: [
-      ["9876543210", "Sample Lead", "sample@example.com", "", "", "", "", "", "", "", "", ""],
-      ["9123456780", "Demo Contact", "", "", "", "", "", "", "", "", "", ""],
+      ["9876543210", "Sample Lead", "sample@example.com", "", "", "", "", "", "", ""],
+      ["9123456780", "Demo Contact", "", "", "", "", "", "", "", ""],
     ],
     instructions: [
       ["SnapServe Automatic Calls — how to use"],
       [""],
       ["1. Keep Phone in column A (required). Name/Email help the agent greet correctly."],
       ["2. Leave Status blank for new leads. SnapServe writes Queued → Calling → Completed / Failed."],
-      ["3. Put yes in Do Not Call to skip a row without deleting it."],
-      ["4. Set Status to Retry to dial that row again."],
-      ["5. Call Log tab gets one append-only row per call attempt."],
-      ["6. Phones work as 9876543210 or +91…; cells with two numbers use the first."],
-      ["7. Status Callback / call later → SnapServe schedules a platform callback and fills Next Follow-up."],
-      ["8. Inbound calls from a sheet phone update the same lead row (Status / Summary / Disposition)."],
-      ["9. When a meeting is booked on the call, Meeting Time (IST) is written and Status becomes Booked."],
+      ["3. Set Status to Retry to dial that row again."],
+      ["4. Call Log tab gets one append-only row per call attempt."],
+      ["5. Phones work as 9876543210 or +91…; cells with two numbers use the first."],
+      ["6. Disposition Callback / demo follow session → SnapServe fills Follow-up with date, time, and AM/PM. Status stays Completed."],
+      ["7. Inbound calls from a sheet phone update the same lead row (Status / Summary / Disposition)."],
+      ["8. When a meeting or demo is booked, the slot is written to Follow-up (date, time, AM/PM). Status stays Completed."],
     ],
     extraTabs: [
       {
@@ -405,23 +409,175 @@ export async function ensureHeaders(
   return { headers: merged, wrote: true, sheetName: tab.title };
 }
 
+function normalizeSheetMatrix(values: string[][]): string[][] {
+  return values.map((r) => r.map((c) => String(c ?? "")));
+}
+
+/** Header row only (sheet row 1). */
+export async function readSheetHeaders(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+): Promise<string[]> {
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: sheetRange(sheetName, "A1:ZZ1"),
+    majorDimension: "ROWS",
+  });
+  const row = (res.data.values?.[0] ?? []) as string[];
+  return row.map((h) => String(h ?? "").trim());
+}
+
+/**
+ * Last 1-based sheet row that has a value in the phone column (or column A).
+ * Trailing empty cells are omitted by the Sheets API.
+ */
+export async function getSheetLastDataRow(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+  phoneHeader?: string | null,
+): Promise<number> {
+  const headers = await readSheetHeaders(userId, connectionId, spreadsheetId, sheetName);
+  if (headers.length === 0) return 1;
+
+  let colIdx = phoneHeader
+    ? headers.findIndex((h) => h.toLowerCase() === phoneHeader.toLowerCase())
+    : -1;
+  if (colIdx < 0) colIdx = resolveMatchColumnIndex(headers, phoneHeader || "Phone");
+  if (colIdx < 0) colIdx = 0;
+
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  const col = a1FromColIndex(colIdx);
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: sheetRange(sheetName, `${col}:${col}`),
+    majorDimension: "ROWS",
+  });
+  const values = res.data.values ?? [];
+  return Math.max(1, values.length);
+}
+
+/**
+ * Read data rows for an inclusive 1-based sheet range (typically startRow >= 2).
+ * Returned `rows[i]` corresponds to sheet row `startRow + i`.
+ */
+export async function readSheetDataRows(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+  startRow: number,
+  endRow: number,
+): Promise<string[][]> {
+  if (endRow < startRow || startRow < 1) return [];
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: sheetRange(sheetName, `A${startRow}:ZZ${endRow}`),
+    majorDimension: "ROWS",
+  });
+  return normalizeSheetMatrix((res.data.values ?? []) as string[][]);
+}
+
+/** Read a single Status (or any) column for an inclusive row range. */
+export async function readSheetColumnValues(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+  columnHeader: string,
+  startRow: number,
+  endRow: number,
+): Promise<{ columnIndex: number; values: string[] }> {
+  const headers = await readSheetHeaders(userId, connectionId, spreadsheetId, sheetName);
+  const columnIndex = headers.findIndex(
+    (h) => h.toLowerCase() === columnHeader.toLowerCase(),
+  );
+  if (columnIndex < 0 || endRow < startRow) {
+    return { columnIndex: -1, values: [] };
+  }
+
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  const col = a1FromColIndex(columnIndex);
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: sheetRange(sheetName, `${col}${startRow}:${col}${endRow}`),
+    majorDimension: "ROWS",
+  });
+  const raw = (res.data.values ?? []) as string[][];
+  const values: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    values.push(String(raw[i]?.[0] ?? "").trim());
+  }
+  return { columnIndex, values };
+}
+
+/** Rename a header in row 1 in place (e.g. Next Follow-up → Follow-up). */
+export async function renameSheetHeader(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+  fromHeader: string,
+  toHeader: string,
+): Promise<boolean> {
+  const from = fromHeader.trim().toLowerCase();
+  const to = toHeader.trim();
+  if (!from || !to || from === to.toLowerCase()) return false;
+  const headers = await readSheetHeaders(userId, connectionId, spreadsheetId, sheetName);
+  const idx = headers.findIndex((h) => h.trim().toLowerCase() === from);
+  if (idx < 0) return false;
+  if (headers.some((h) => h.trim().toLowerCase() === to.toLowerCase())) return false;
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: sheetRange(sheetName, `${a1FromColIndex(idx)}1`),
+    valueInputOption: "RAW",
+    requestBody: { values: [[to]] },
+  });
+  return true;
+}
+
+/**
+ * Full used grid (header + all data rows). Pages in chunks so sheets past the
+ * old 500-row cap still load (lookup / preview / legacy callers).
+ */
 export async function readSheetGrid(
   userId: string,
   connectionId: string,
   spreadsheetId: string,
   sheetName: string,
 ): Promise<{ headers: string[]; rows: string[][] }> {
-  const auth = await getAuthedClient(connectionId, userId);
-  const sheets = google.sheets({ version: "v4", auth });
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: sheetRange(sheetName, "A1:ZZ500"),
-    majorDimension: "ROWS",
-  });
-  const values = (res.data.values ?? []) as string[][];
-  if (values.length === 0) return { headers: [], rows: [] };
-  const headers = (values[0] ?? []).map((h) => String(h ?? "").trim());
-  const rows = values.slice(1).map((r) => r.map((c) => String(c ?? "")));
+  const headers = await readSheetHeaders(userId, connectionId, spreadsheetId, sheetName);
+  if (headers.length === 0) return { headers: [], rows: [] };
+
+  const lastRow = await getSheetLastDataRow(
+    userId, connectionId, spreadsheetId, sheetName,
+  );
+  if (lastRow < 2) return { headers, rows: [] };
+
+  const rows: string[][] = [];
+  for (let start = 2; start <= lastRow; start += SHEET_ROW_CHUNK_SIZE) {
+    const end = Math.min(start + SHEET_ROW_CHUNK_SIZE - 1, lastRow);
+    const chunk = await readSheetDataRows(
+      userId, connectionId, spreadsheetId, sheetName, start, end,
+    );
+    // Align to expected row count when trailing cells in the chunk are empty
+    for (let i = 0; i < end - start + 1; i++) {
+      const sheetRow = start + i;
+      if (sheetRow > lastRow) break;
+      rows.push(chunk[i] ?? []);
+    }
+  }
   return { headers, rows };
 }
 

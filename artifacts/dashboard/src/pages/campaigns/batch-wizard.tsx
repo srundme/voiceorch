@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
-import { useAuth } from "@/lib/auth";
 import { useMutation } from "@tanstack/react-query";
 import {
   useGetCampaign, useListLeadSources,
@@ -1509,8 +1508,6 @@ function Step5({
   setState: (p: Partial<WizardState>) => void;
   campaignId: number;
 }) {
-  const { getToken } = useAuth();
-
   if (state.sourceMode === "crm") {
     const s = state.crmImportSummary;
     return (
@@ -1554,24 +1551,17 @@ function Step5({
       : state.newSourceType;
 
   const validateMutation = useMutation({
-    mutationFn: async () => {
-      const token = await getToken();
-      const res = await fetch(`${BASE}/api/campaigns/${campaignId}/validate-leads`, {
+    mutationFn: async () =>
+      customFetch<ValidationPreviewResult>(`${BASE}/api/campaigns/${campaignId}/validate-leads`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           leads:        state.csvRows,
           fieldMapping: { phone: state.fieldMapping["phone"] ?? "phone" },
           policy:       state.duplicatePolicy,
           countryCode:  state.phoneCountryCode,
         }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      return res.json() as Promise<ValidationPreviewResult>;
-    },
+      }),
     onSuccess: result => setState({ validationResult: result }),
   });
 

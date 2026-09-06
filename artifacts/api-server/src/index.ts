@@ -23,13 +23,16 @@ import { startStaleCallCleanup } from "./services/stale-call-cleanup.js";
 import { startKbEmbedMaintenance } from "./services/kb-embeddings.js";
 import { startKrutrimSummaryMaintenance } from "./services/kb-source-summary.js";
 import { startWorkflowWorker } from "./services/workflow-worker.js";
+import { startCallIntelligenceWorker } from "./services/analyze-call-intelligence.js";
 import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
 import { handleWebcallWebSocket } from "./orchestration/telephony/webcall.js";
+import { endSession, getAllSessions } from "./orchestration/session.js";
 import { verifySessionToken } from "./lib/session.js";
 import { parseCookieHeader, SESSION_COOKIE_NAME } from "./lib/session-cookie.js";
 import { warmSileroVAD } from "./orchestration/silero-vad.js";
+import { warmSmartTurn } from "./orchestration/smart-turn.js";
 import { probeGenderService } from "./orchestration/genderService.js";
 
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -548,7 +551,13 @@ server.listen(port, () => {
   logger.info({ port }, "Server listening");
   initAudioPool(new URL(`file://${workerFile}`));
   void warmSileroVAD(); // preload Silero VAD ONNX session so first call doesn't pay load cost
+  void warmSmartTurn(); // preload Smart Turn v3 so first speech_end doesn't pay load cost
   void probeGenderService(); // loudly log the resolved gender-service URL + reachability so misconfig isn't silent
+  void import("./services/meet-bots.js")
+    .then((m) => m.resolveRecallRegion())
+    .catch((err: unknown) => {
+      logger.warn({ err }, "Recall region warmup failed — first Join may be slower");
+    });
 
   // Run DB migrations after the port is open so Railway's health-check passes
   // while the schema is being applied. Services that need tables will become
@@ -567,6 +576,8 @@ server.listen(port, () => {
       void seedManagedKeyFromEnv("managed_openrouter_key", "OPENROUTER_API_KEY");
       void seedManagedKeyFromEnv("managed_krutrim_key",    "KRUTRIM_CLOUD_API_KEY");
       void seedManagedKeyFromEnv("zelto_api_key",          "ZELTO_API_KEY");
+      void seedManagedKeyFromEnv("recall_api_key",         "RECALL_API_KEY");
+      void seedManagedKeyFromEnv("recall_api_key_fallback","RECALL_API_KEY_FALLBACK");
       void migrateSaarikaToSaaras();
       void migrateCallEngineConfigs();
       void ensureCampaignsTableColumns();
@@ -584,6 +595,7 @@ server.listen(port, () => {
       startKbEmbedMaintenance();
       startKrutrimSummaryMaintenance();
       startWorkflowWorker();
+      startCallIntelligenceWorker();
     })
     .catch((err: unknown) => {
       // Log but do NOT exit — keeps the process alive so Railway's healthcheck
@@ -614,7 +626,30 @@ async function gracefulShutdown(signal: string) {
     else logger.info("Server closed cleanly");
   });
 
-  // 2) Drain in-flight outbound provider HTTP before exiting. close() (not
+  // 2) Persist every live call before the process disappears. Railway deploys
+  // used to wipe the in-memory sessions Map while calls were active, leaving
+  // their DB rows in_progress and losing the recording buffer forever. End all
+  // sessions concurrently so recordings finalize and terminal status is stored
+  // within the deploy grace window.
+  const activeSessions = getAllSessions();
+  if (activeSessions.length > 0) {
+    logger.warn(
+      { signal, count: activeSessions.length, callIds: activeSessions.map((s) => s.callId) },
+      "Shutdown: finalizing active calls before exit",
+    );
+    const results = await Promise.allSettled(
+      activeSessions.map((session) => endSession(session.sessionId, "server_shutdown")),
+    );
+    const failed = results.filter((result) => result.status === "rejected");
+    if (failed.length > 0) {
+      logger.error(
+        { signal, failed: failed.length, total: activeSessions.length },
+        "Shutdown: some active calls failed to finalize",
+      );
+    }
+  }
+
+  // 3) Drain in-flight outbound provider HTTP before exiting. close() (not
   //    destroy()) lets an LLM/TTS call mid-response on a live call finish rather
   //    than being aborted by a Railway SIGTERM redeploy. Bounded so a stuck
   //    socket can't block past the backstop above.

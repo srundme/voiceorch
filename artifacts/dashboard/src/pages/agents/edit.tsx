@@ -22,13 +22,19 @@ import {
   clampFragmentCoalesceListeningMs,
   clampFragmentCoalescePlayingMs,
   clampTelephonyTailDrainMs,
-  clampSarvamSpeechEndFlushMs,
-  clampSarvamIncompleteHoldMs,
-  clampInterruptWords,
+    clampSarvamSpeechEndFlushMs,
+    clampSarvamIncompleteHoldMs,
+    clampSarvamSilenceMs,
+    clampSarvamMinSpeechMs,
+    clampSarvamVadThreshold,
+    clampSemanticTurnStopMs,
+    hydrateSarvamRealtimeVad,
+    clampInterruptWords,
   voiceSecondsFromInterruptWords,
   WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER,
   type AgentFormValues,
 } from "./edit.schema";
+import { findBySchedulingId, normalizeSchedulingId } from "@/lib/scheduling-setup";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SnapServeAgentIcon } from "@/components/logo";
 import { isDirectSnapServeHost } from "@/lib/white-label";
@@ -79,6 +85,7 @@ import {
   LANGUAGES,
   ASR_MODELS,
   LLM_MODELS,
+  llmModelsForPicker,
   TTS_MODELS,
   TTS_VOICES,
   GEMINI_LIVE_LLM_MODEL,
@@ -89,8 +96,10 @@ import {
   isGeminiLiveAgent,
   isGeminiLiveLlmModel,
   llmFieldsForVoiceStack,
+  voiceStackForLlmModel,
   languagesForAgent,
   isGeminiLiveLanguage,
+  isSarvamRealtimeAsr,
 } from "@/lib/agent-providers";
 
 export type { AgentFormValues } from "./edit.schema";
@@ -105,13 +114,15 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     snapserveAgentId,
     contextWindowTurns, summarizationEnabled,
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
-    ambientNoiseEnabled, ambientNoiseTrack, ambientNoiseVolume,
+    ambientNoiseEnabled, ambientNoiseTrack, ambientNoiseVolume, forceSoftwareNoiseGate,
     preferredManagedNumber,
     asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs, ttsSpeed,
     fragmentCoalesceListeningMs, fragmentCoalescePlayingMs, telephonyTailDrainMs,
     autoRedialEnabled, autoRedialMaxAttempts,
-    sarvamSttMode, kbBakedOnly, schedulingCalendarId, schedulingEventTypeId,
+    sarvamSttMode, sarvamSttStreamType, sarvamSttPrompt, kbBakedOnly, schedulingCalendarId, schedulingEventTypeId,
     sarvamHighVadSensitivity, sarvamSpeechEndFlushMs, sarvamIncompleteHoldMs,
+    sarvamEndOfSpeechSilenceMs, sarvamFirstTurnMinSpeechMs, sarvamVadThreshold,
+    semanticTurnStopMs,
     voiceStack, geminiLiveVoiceName, geminiLiveThinkingLevel,
     agentComposition, agentSurfaces, meetingPrompt,
     meetingMaxDurationSeconds, meetingSilenceTimeoutSeconds, meetingSilenceHangupEnabled,
@@ -163,6 +174,10 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["voiceMemoryEnabled"] = !!voiceMemoryEnabled;
   agentConfig["recordingEnabled"] = !!recordingEnabled;
   agentConfig["summarizationEnabled"] = !!summarizationEnabled;
+  // Re-applies our software noise gate on VoBiz calls, which bypass it by
+  // default because VoBiz denoises at the carrier. Always persisted so turning
+  // it back off actually clears it (agentConfig is merged server-side).
+  agentConfig["forceSoftwareNoiseGate"] = !!forceSoftwareNoiseGate;
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
   if (ambientNoiseVolume != null) agentConfig["ambientNoiseVolume"] = ambientNoiseVolume;
@@ -173,10 +188,22 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     agentConfig["asrEndpointingSilenceMs"] = clampEndpointingMs(asrEndpointingSilenceMs);
   }
   if (sarvamSttMode) agentConfig["sarvamSttMode"] = sarvamSttMode;
+  agentConfig["sarvamSttStreamType"] =
+    sarvamSttStreamType === "balanced" || sarvamSttStreamType === "simulated"
+      ? sarvamSttStreamType
+      : "fast";
+  {
+    const hint = (sarvamSttPrompt ?? "").trim().slice(0, 500);
+    agentConfig["sarvamSttPrompt"] = hint || null;
+  }
   // Saaras owns turn-taking — persist high-VAD only; hold knobs forced off.
   agentConfig["sarvamHighVadSensitivity"] = sarvamHighVadSensitivity !== false;
   agentConfig["sarvamSpeechEndFlushMs"] = 0;
   agentConfig["sarvamIncompleteHoldMs"] = 0;
+  agentConfig["sarvamEndOfSpeechSilenceMs"] = clampSarvamSilenceMs(sarvamEndOfSpeechSilenceMs) ?? null;
+  agentConfig["sarvamFirstTurnMinSpeechMs"] = clampSarvamMinSpeechMs(sarvamFirstTurnMinSpeechMs) ?? null;
+  agentConfig["sarvamVadThreshold"] = clampSarvamVadThreshold(sarvamVadThreshold) ?? null;
+  agentConfig["semanticTurnStopMs"] = clampSemanticTurnStopMs(semanticTurnStopMs);
   if (kbBakedOnly) agentConfig["kbBakedOnly"] = true;
   // Always persist speed so Sarvam pace / Cartesia speed stay UI-owned (1.0 clears prior boost).
   agentConfig["ttsSpeed"] = ttsSpeed != null && Number.isFinite(ttsSpeed) ? ttsSpeed : 1;
@@ -216,10 +243,14 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     trai:  !!complianceTrai,
   };
   if (schedulingCalendarId != null) {
-    agentConfig["calendarCapability"] = {
-      defaultCalendarId: schedulingCalendarId,
-      ...(schedulingEventTypeId != null ? { defaultEventTypeId: schedulingEventTypeId } : {}),
-    };
+    const calendarId = normalizeSchedulingId(schedulingCalendarId);
+    const eventTypeId = normalizeSchedulingId(schedulingEventTypeId);
+    if (calendarId != null) {
+      agentConfig["calendarCapability"] = {
+        defaultCalendarId: calendarId,
+        ...(eventTypeId != null ? { defaultEventTypeId: eventTypeId } : {}),
+      };
+    }
   }
   if (isGeminiLiveLlmModel(rest.llmModel) || voiceStack === "gemini_live") {
     agentConfig["voiceStack"] = "gemini_live";
@@ -449,8 +480,9 @@ export default function AgentEdit() {
       ttsVoice: "priya", ttsModel: "bulbul:v3", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
       firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
-      language: "en-US", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
+      language: "en-IN", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: true,
+      forceSoftwareNoiseGate: false,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0,
       promptVariables: [], vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1800, bargeInMinFrames: 4, micSensitivity: "low",
       timezone: "",
@@ -478,10 +510,16 @@ export default function AgentEdit() {
       linearDelayMs: 0,
       fragmentCoalesceListeningMs: 0,
       fragmentCoalescePlayingMs: 0,
-      telephonyTailDrainMs: 400,
+      telephonyTailDrainMs: 0,
       sarvamHighVadSensitivity: true,
+      sarvamSttStreamType: "fast",
+      sarvamSttPrompt: "",
+      sarvamEndOfSpeechSilenceMs: undefined,
+      sarvamFirstTurnMinSpeechMs: undefined,
+      sarvamVadThreshold: undefined,
       sarvamSpeechEndFlushMs: 0,
       sarvamIncompleteHoldMs: 0,
+      semanticTurnStopMs: 1200,
       kbBakedOnly: false,
       startSpeakingWaitSecs: 0,
       startSpeakingOnPunctuationSecs: 0,
@@ -515,12 +553,12 @@ export default function AgentEdit() {
   const schedulingCalendarId = form.watch("schedulingCalendarId");
   const schedulingEventTypeId = form.watch("schedulingEventTypeId");
   const agentCalendar = schedulingCalendarId != null
-    ? (calendarsData ?? []).find((cal: any) => cal.id === schedulingCalendarId)
+    ? findBySchedulingId(calendarsData as Array<{ id: number }>, schedulingCalendarId)
     : id
       ? ((calendarsData ?? []).find((cal: any) => cal.agentId === id) ?? (calendarsData ?? [])[0])
       : (calendarsData ?? [])[0];
   const calendarIdForEt = agentCalendar?.id;
-  const { data: agentEventTypes } = useListEventTypes(
+  const { data: agentEventTypes, isLoading: eventTypesLoading } = useListEventTypes(
     calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
     { query: { enabled: !!calendarIdForEt, queryKey: ["agent-event-types", calendarIdForEt ?? null] } }
   );
@@ -548,6 +586,26 @@ export default function AgentEdit() {
   const watchedTools = (form.watch("tools") ?? []) as any[];
   const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
   const nativeToolIndex = (type: string) => watchedTools.findIndex((t: any) => t.type === type);
+  const hasBookingTools = watchedTools.some((tool: any) =>
+    ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"].includes(tool.type),
+  );
+  useEffect(() => {
+    if (!hasBookingTools || eventTypesLoading || !calendarIdForEt) return;
+    const eventTypes = (agentEventTypes ?? []) as Array<{ id: number }>;
+    if (eventTypes.some((eventType) => normalizeSchedulingId(eventType.id) === normalizeSchedulingId(schedulingEventTypeId))) return;
+    if (eventTypes.length === 0) return;
+    form.setValue("schedulingEventTypeId", eventTypes[0].id, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }, [
+    agentEventTypes,
+    calendarIdForEt,
+    eventTypesLoading,
+    form,
+    hasBookingTools,
+    schedulingEventTypeId,
+  ]);
   const EDIT_TOOL_FN_NAMES: Record<string, string> = {
     native_booking: "book_appointment",
     native_check_availability: "check_availability",
@@ -577,7 +635,7 @@ export default function AgentEdit() {
   };
 
   const BOOKING_TOOLS = [
-    { type: "native_booking", fnName: "book_appointment", icon: <BookOpen className="h-4 w-4" />, color: "emerald", label: "Book Appointment", description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live." },
+    { type: "native_booking", fnName: "book_appointment", icon: <BookOpen className="h-4 w-4" />, color: "emerald", label: "Book Appointment", description: "Lets the agent book a meeting slot. Uses an email from the prompt or lead, or collects one if the prompt says to." },
     { type: "native_check_availability", fnName: "check_availability", icon: <Sparkles className="h-4 w-4" />, color: "sky", label: "Check Availability", description: "Enables the agent to look up open slots before suggesting a time. Use alongside Book Appointment for a natural booking flow." },
     { type: "native_list_bookings", fnName: "list_bookings", icon: <List className="h-4 w-4" />, color: "violet", label: "List Bookings", description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows." },
     { type: "native_reschedule", fnName: "reschedule_booking", icon: <Pencil className="h-4 w-4" />, color: "amber", label: "Reschedule Booking", description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller." },
@@ -611,12 +669,11 @@ export default function AgentEdit() {
         type: "object",
         properties: {
           attendee_name: { type: "string", description: "Full name of the person being booked" },
-          attendee_email: { type: "string", description: "Email address of the person being booked" },
           preferred_date: { type: "string", description: "Optional preferred date/time, e.g. 'next Tuesday' or '2026-06-10'" },
           meeting_type: { type: "string", enum: ["google_meet", "in_person"], description: "Meeting format" },
           meeting_address: { type: "string", description: "Physical address (required when meeting_type is in_person)" },
         },
-        required: ["attendee_name", "attendee_email"],
+        required: ["attendee_name"],
       },
     },
     native_check_availability: {
@@ -698,6 +755,7 @@ export default function AgentEdit() {
       !liveOnLoad && (agent.llmProvider === "google" || agent.llmProvider === "gemini")
         ? { llmProvider: "sarvam", llmModel: "sarvam-105b-conversations" }
         : { llmProvider: agent.llmProvider, llmModel: agent.llmModel ?? "" };
+    const sarvamVad = hydrateSarvamRealtimeVad((agent as any).agentConfig ?? {});
     form.reset({
       name:              agent.name,
       description:       agent.description ?? "",
@@ -725,6 +783,7 @@ export default function AgentEdit() {
         ? (agent as any).agentConfig.webhookPayloadTemplate
         : "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
+      forceSoftwareNoiseGate:   ((agent as any).agentConfig?.forceSoftwareNoiseGate as boolean | undefined) ?? false,
       ambientNoiseEnabled:      ((agent as any).agentConfig?.ambientNoiseEnabled as boolean | undefined) ?? false,
       ambientNoiseTrack:        ((agent as any).agentConfig?.ambientNoiseTrack as string | undefined) ?? "",
       ambientNoiseVolume:       ((agent as any).agentConfig?.ambientNoiseVolume as number | undefined) ?? 1.0,
@@ -763,8 +822,16 @@ export default function AgentEdit() {
       fragmentCoalescePlayingMs: clampFragmentCoalescePlayingMs((agent as any).agentConfig?.fragmentCoalescePlayingMs as number | undefined),
       telephonyTailDrainMs: clampTelephonyTailDrainMs((agent as any).agentConfig?.telephonyTailDrainMs as number | undefined),
       sarvamHighVadSensitivity: ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) === true,
+      sarvamSttStreamType: ((agent as any).agentConfig?.sarvamSttStreamType as AgentFormValues["sarvamSttStreamType"] | undefined) ?? "fast",
+      sarvamSttPrompt: typeof (agent as any).agentConfig?.sarvamSttPrompt === "string"
+        ? (agent as any).agentConfig.sarvamSttPrompt
+        : "",
+      sarvamEndOfSpeechSilenceMs: sarvamVad.silence,
+      sarvamFirstTurnMinSpeechMs: sarvamVad.minSpeech,
+      sarvamVadThreshold: sarvamVad.threshold,
       sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs((agent as any).agentConfig?.sarvamSpeechEndFlushMs as number | undefined),
       sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs((agent as any).agentConfig?.sarvamIncompleteHoldMs as number | undefined),
+      semanticTurnStopMs: clampSemanticTurnStopMs((agent as any).agentConfig?.semanticTurnStopMs as number | undefined),
       kbBakedOnly: ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       startSpeakingWaitSecs:            ((agent as any).agentConfig?.startSpeakingPlan?.waitSeconds as number | undefined)            ?? 0,
       startSpeakingOnPunctuationSecs:   ((agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds as number | undefined)   ?? 0,
@@ -789,8 +856,8 @@ export default function AgentEdit() {
       complianceTrai:  ((agent as any).agentConfig?.compliance?.trai  as boolean | undefined) ?? false,
       autoRedialEnabled:      ((agent as any).agentConfig?.autoRedial?.enabled as boolean | undefined) ?? false,
       autoRedialMaxAttempts:  ((agent as any).agentConfig?.autoRedial?.maxAttempts as number | undefined) ?? 3,
-      schedulingCalendarId:   ((agent as any).agentConfig?.calendarCapability?.defaultCalendarId as number | null | undefined) ?? null,
-      schedulingEventTypeId:  ((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId as number | null | undefined) ?? null,
+      schedulingCalendarId:   normalizeSchedulingId((agent as any).agentConfig?.calendarCapability?.defaultCalendarId),
+      schedulingEventTypeId:  normalizeSchedulingId((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId),
       voiceStack:               (((agent as any).agentConfig?.voiceStack as string | undefined) === "gemini_live" ? "gemini_live" : "classic") as AgentFormValues["voiceStack"],
       geminiLiveVoiceName:      ((agent as any).agentConfig?.geminiLive?.voiceName as string | undefined) ?? "Kore",
       geminiLiveThinkingLevel:  ((agent as any).agentConfig?.geminiLive?.thinkingLevel as AgentFormValues["geminiLiveThinkingLevel"] | undefined) ?? "minimal",
@@ -818,6 +885,7 @@ export default function AgentEdit() {
   }, [agent]);
 
   const asrProvider = useWatch({ control: form.control, name: "asrProvider" });
+  const asrModel = useWatch({ control: form.control, name: "asrModel" });
   const llmProvider = useWatch({ control: form.control, name: "llmProvider" });
   const llmModel = useWatch({ control: form.control, name: "llmModel" });
   const ttsProvider = useWatch({ control: form.control, name: "ttsProvider" });
@@ -1117,7 +1185,8 @@ export default function AgentEdit() {
                       <FormField control={form.control} name="language" render={({ field }) => {
                         const langOpts = languagesForAgent(isGeminiLive);
                         const current = field.value ?? "";
-                        const options = (!isGeminiLive || !current || isGeminiLiveLanguage(current) || langOpts.some(l => l.value === current))
+                        const inList = langOpts.some(l => l.value === current);
+                        const options = (!current || inList)
                           ? langOpts
                           : [{ value: current, label: LANGUAGES.find(l => l.value === current)?.label ?? current }, ...langOpts];
                         return (
@@ -1169,7 +1238,7 @@ export default function AgentEdit() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium leading-none">Noise Cancellation</p>
-                          <p className="text-xs text-muted-foreground mt-1">Software noise filtering on caller audio. VoBiz and web calls are already denoised upstream (carrier / browser), so this applies to other carriers.</p>
+                          <p className="text-xs text-muted-foreground mt-1">Removes fans, traffic, and hiss from caller audio. Does not ignore other people talking nearby — keep the phone close. Greeting echo is ignored so the agent does not barge herself. Browser web calls still use the mic&apos;s own noise suppression.</p>
                         </div>
                         <FormField control={form.control} name="noiseCancellationEnabled" render={({ field }) => (
                           <FormItem>
@@ -1189,7 +1258,7 @@ export default function AgentEdit() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium leading-none">Backchanneling</p>
-                          <p className="text-xs text-muted-foreground mt-1">Agent says "I see", "Got it" etc. while thinking</p>
+                          <p className="text-xs text-muted-foreground mt-1">Agent says "okay", "hmm", or "mmm" while thinking</p>
                         </div>
                         <FormField control={form.control} name="backchannelingEnabled" render={({ field }) => (
                           <FormItem>
@@ -1489,9 +1558,6 @@ export default function AgentEdit() {
             <FormField control={form.control} name="llmProvider" render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-xs">Provider</FormLabel>
-                {isGeminiLive ? (
-                  <p className="text-sm font-medium pt-2">Gemini Live (native audio)</p>
-                ) : (
                 <Select onValueChange={(v) => {
                   field.onChange(v);
                   form.setValue("llmModel", "");
@@ -1502,7 +1568,6 @@ export default function AgentEdit() {
                     {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                )}
                 <FormMessage />
               </FormItem>
             )} />
@@ -1510,15 +1575,13 @@ export default function AgentEdit() {
               <FormItem>
                 <FormLabel className="text-xs">Model</FormLabel>
                 <FormControl>
-                  {isGeminiLive ? (
-                    <p className="text-sm font-medium pt-2">{geminiLiveModelLabel()}</p>
-                  ) : LLM_MODELS[llmProvider] ? (
+                  {LLM_MODELS[llmProvider] ? (
                     <ModelSelect
-                      options={LLM_MODELS[llmProvider]!.filter((m) => !isGeminiLiveLlmModel(m.value))}
+                      options={llmModelsForPicker(llmProvider, field.value)}
                       value={field.value}
                       onChange={(v) => {
                         field.onChange(v);
-                        form.setValue("voiceStack", "classic");
+                        form.setValue("voiceStack", voiceStackForLlmModel(v), { shouldDirty: true });
                       }}
                       placeholder="Select model"
                     />
@@ -1831,11 +1894,58 @@ export default function AgentEdit() {
                 )} />
               </div>
 
-              {asrProvider === "sarvam" && (
+              {asrProvider === "sarvam" && isSarvamRealtimeAsr(asrModel) && (
+                <div className="mt-6">
+                  <p className="text-sm font-medium text-foreground mb-0.5">Sarvam turn-taking (realtime VAD)</p>
+                  <p className="text-[11px] text-muted-foreground mb-4">
+                    Sent on connect as <code>silence_duration_ms</code>, <code>min_speech_duration_ms</code>, and <code>threshold</code>. Encoding, sample rate, and timestamps are automatic.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                    <FormField control={form.control} name="sarvamEndOfSpeechSilenceMs" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>End-of-speech silence</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={150} max={800} step={25}
+                            value={field.value ?? ""}
+                            placeholder="Saaras default"
+                            onChange={e => {
+                              const raw = e.target.value.trim();
+                              field.onChange(raw === "" ? undefined : parseInt(raw, 10));
+                            }} />
+                        </FormControl>
+                        <FormDescription className="text-[11px]">Leave blank to trust Saaras VAD. Optional override: Balanced 400 · Patient 700.</FormDescription>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="sarvamFirstTurnMinSpeechMs" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Minimum speech</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={80} max={800} step={10}
+                            value={field.value ?? 250}
+                            onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                        </FormControl>
+                        <FormDescription className="text-[11px]">Shortest burst counted as speech. Default 250ms. Filters clicks and echo blips.</FormDescription>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="sarvamVadThreshold" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>VAD threshold</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={0.1} max={0.8} step={0.05}
+                            value={field.value ?? 0.3}
+                            onChange={e => field.onChange(parseFloat(e.target.value))} />
+                        </FormControl>
+                        <FormDescription className="text-[11px]">0.3 is Sarvam&apos;s default. Higher = less sensitive to noise.</FormDescription>
+                      </FormItem>
+                    )} />
+                  </div>
+                </div>
+              )}
+              {asrProvider === "sarvam" && !isSarvamRealtimeAsr(asrModel) && (
                 <div className="mt-6">
                   <p className="text-sm font-medium text-foreground mb-0.5">How quickly the agent hears you stop talking</p>
                   <p className="text-[11px] text-muted-foreground mb-4">
-                    These settings control how fast the agent decides you finished speaking. Defaults are already tuned for natural phone calls.
+                    Saarika uses the legacy socket. These settings control how fast the agent decides you finished speaking.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                     <FormField control={form.control} name="sarvamHighVadSensitivity" render={({ field }) => (
@@ -1843,10 +1953,10 @@ export default function AgentEdit() {
                         <FormLabel>Detect pauses quickly</FormLabel>
                         <div className="flex items-center gap-3 pt-2">
                           <Switch checked={!!field.value} onCheckedChange={field.onChange} />
-                          <span className="text-sm text-muted-foreground">{field.value ? "On (Saaras VAD)" : "Off (more patient)"}</span>
+                          <span className="text-sm text-muted-foreground">{field.value ? "On (legacy VAD)" : "Off (more patient)"}</span>
                         </div>
                         <FormDescription className="text-[11px]">
-                          Default <strong>On</strong> — Saaras VAD owns end-of-speech. Turn off only if callers get cut mid-sentence on noisy lines.
+                          Frame-count VAD on the legacy Saarika socket only. Prefer Saaras v3 realtime for live calls.
                         </FormDescription>
                       </FormItem>
                     )} />
@@ -2061,15 +2171,15 @@ export default function AgentEdit() {
                         ) : "Event type used by booking tools"}
                       </p>
                       <Select
-                        value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
-                        onValueChange={v => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v))}
-                        disabled={!calendarIdForEt}
+                        value={normalizeSchedulingId(schedulingEventTypeId) != null ? String(normalizeSchedulingId(schedulingEventTypeId)) : "__none__"}
+                        onValueChange={v => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v), { shouldDirty: true, shouldValidate: true })}
+                        disabled={!calendarIdForEt || eventTypesLoading || (agentEventTypes ?? []).length === 0}
                       >
                         <SelectTrigger className="h-7 text-xs bg-background/50">
-                          <SelectValue placeholder="Any event type" />
+                          <SelectValue placeholder="Select a meeting type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="__none__" className="text-xs text-muted-foreground">Any event type</SelectItem>
+                          <SelectItem value="__none__" disabled className="text-xs text-muted-foreground">Select a meeting type</SelectItem>
                           {(agentEventTypes ?? []).map((et: any) => (
                             <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title || et.name}</SelectItem>
                           ))}

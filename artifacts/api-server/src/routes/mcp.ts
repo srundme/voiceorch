@@ -7,11 +7,12 @@ import { Router, type IRouter, type Request, type Response, type NextFunction } 
 import { randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import { SnapServe } from "@snapserveai/sdk";
-import { createSnapServeMcpServer } from "@snapserveai/mcp";
+import { createSnapServeMcpServer } from "@snapserve/mcp";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { logger } from "../lib/logger.js";
+import { describeApiKeyShapeError } from "../services/mcp-oauth-helpers.js";
 import {
+  checkClientRedirect,
   exchangeAuthorizationCode,
   issueAuthorizationCode,
   mcpResourceUrl,
@@ -65,6 +66,30 @@ async function requireMcpAuth(req: Request, res: Response, next: NextFunction): 
   next();
 }
 
+/**
+ * The global dashboard CSP allows `form-action 'self'` only, which makes Chrome
+ * refuse the cross-origin 302 that completes the OAuth handshake. Narrow the
+ * policy for this page and allow the client's already-validated redirect origin.
+ */
+function setAuthorizePageCsp(res: Response, redirectUri: string): void {
+  let formAction = "'self'";
+  try {
+    formAction += ` ${new URL(redirectUri).origin}`;
+  } catch { /* unparseable redirect_uri never reaches here — keep 'self' */ }
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'none'",
+      "base-uri 'none'",
+      "object-src 'none'",
+      "script-src 'none'",
+      "style-src 'unsafe-inline'",
+      `form-action ${formAction}`,
+      "frame-ancestors 'none'",
+    ].join("; "),
+  );
+}
+
 function authorizePageHtml(opts: {
   error?: string;
   stateToken: string;
@@ -105,6 +130,38 @@ function authorizePageHtml(opts: {
       <button type="submit">Authorize Claude</button>
     </form>
     <p class="hint">Create a key in <a href="https://app.snapserve.ai" target="_blank" rel="noreferrer">Dashboard → API Keys</a>. You can revoke the key anytime to disconnect.</p>
+  </div>
+</body>
+</html>`;
+}
+
+function staleLinkPageHtml(reason: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Connect link expired — SnapServe</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; background:#0f172a; color:#e2e8f0; margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+    .card { width:100%; max-width:420px; background:#1e293b; border:1px solid #334155; border-radius:16px; padding:28px; box-shadow:0 20px 40px rgba(0,0,0,.35); }
+    h1 { font-size:1.25rem; margin:0 0 8px; }
+    p { color:#94a3b8; font-size:.925rem; line-height:1.45; margin:0 0 12px; }
+    ol { color:#94a3b8; font-size:.9rem; line-height:1.6; padding-left:20px; margin:0 0 8px; }
+    a { color:#fdba74; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Connect link expired</h1>
+    <p>${escapeHtml(reason)}</p>
+    <p>Start again from Claude so it can issue a fresh link:</p>
+    <ol>
+      <li>Open Claude → Settings → Connectors</li>
+      <li>Find <strong>snapserve</strong> and click <strong>Connect</strong></li>
+      <li>Paste your <code>sk_live_…</code> key on the page Claude opens</li>
+    </ol>
+    <p>Need a key? <a href="https://app.snapserve.ai" target="_blank" rel="noreferrer">Dashboard → API Keys</a>. Setup guide: <a href="https://app.snapserve.ai/docs/sdks#mcp" target="_blank" rel="noreferrer">docs</a>.</p>
   </div>
 </body>
 </html>`;
@@ -156,7 +213,7 @@ router.post("/mcp/oauth/register", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/mcp/oauth/authorize", (req, res): void => {
+router.get("/mcp/oauth/authorize", async (req, res): Promise<void> => {
   const clientId = String(req.query["client_id"] ?? "");
   const redirectUri = String(req.query["redirect_uri"] ?? "");
   const state = String(req.query["state"] ?? "");
@@ -173,6 +230,20 @@ router.get("/mcp/oauth/authorize", (req, res): void => {
     return;
   }
 
+  const clientCheck = await checkClientRedirect(clientId, redirectUri);
+  if (clientCheck !== "ok") {
+    logger.warn({ clientId, redirectUri, clientCheck }, "MCP OAuth authorize link rejected");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.status(400).send(
+      staleLinkPageHtml(
+        clientCheck === "unknown_client"
+          ? "This connect link is no longer valid — Claude registers a new one each time it connects."
+          : "This connect link points somewhere we do not recognise.",
+      ),
+    );
+    return;
+  }
+
   const stateToken = signAuthorizeState({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -182,6 +253,7 @@ router.get("/mcp/oauth/authorize", (req, res): void => {
   });
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
+  setAuthorizePageCsp(res, redirectUri);
   res.send(authorizePageHtml({ stateToken, clientId, redirectUri }));
 });
 
@@ -196,6 +268,7 @@ router.post("/mcp/oauth/authorize", async (req, res): Promise<void> => {
   const stateToken = body.state_token!;
   const renderError = (error: string) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
+    setAuthorizePageCsp(res, payload["redirect_uri"] ?? "");
     res.status(400).send(
       authorizePageHtml({
         error,
@@ -206,7 +279,14 @@ router.post("/mcp/oauth/authorize", async (req, res): Promise<void> => {
     );
   };
 
-  const validated = await validateApiKeyForOauth(String(body.api_key ?? ""));
+  const rawKey = String(body.api_key ?? "");
+  const shapeError = describeApiKeyShapeError(rawKey);
+  if (shapeError) {
+    renderError(shapeError);
+    return;
+  }
+
+  const validated = await validateApiKeyForOauth(rawKey);
   if (!validated) {
     renderError("Invalid or revoked API key. Create one in Dashboard → API Keys.");
     return;
@@ -308,8 +388,7 @@ async function handleMcpPost(req: Request, res: Response): Promise<void> {
         if (sid) sessions.delete(sid);
       };
 
-      const snapserve = new SnapServe({ apiKey, baseUrl: apiBaseUrl() });
-      const server = createSnapServeMcpServer(snapserve);
+      const server = createSnapServeMcpServer({ apiKey, baseUrl: apiBaseUrl() });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
       return;
@@ -318,8 +397,7 @@ async function handleMcpPost(req: Request, res: Response): Promise<void> {
     // Stateless fallback: one-shot request (no session header)
     if (!sessionId) {
       transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      const snapserve = new SnapServe({ apiKey, baseUrl: apiBaseUrl() });
-      const server = createSnapServeMcpServer(snapserve);
+      const server = createSnapServeMcpServer({ apiKey, baseUrl: apiBaseUrl() });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
       res.on("close", () => {
@@ -393,6 +471,12 @@ router.get("/mcp/info", (_req, res): void => {
       oauth: "Claude Connect → paste API key on authorize page",
     },
     docs: "https://app.snapserve.ai/docs/sdks#mcp",
+    tools: [
+      "agents", "calls", "campaigns", "journeys", "whatsapp", "email",
+      "sheets_automatic_calls", "knowledge", "squads", "webcall",
+      "phone_numbers", "providers", "webhooks", "wallet", "analytics",
+      "snapserve_api",
+    ],
   });
 });
 

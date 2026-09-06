@@ -1,6 +1,6 @@
 /**
  * RecordingBuffer — captures caller and agent PCM audio during a call,
- * then encodes a stereo WAV (left = caller, right = agent) and stores the
+ * then encodes a dual-mono WAV (both legs mixed onto L and R) and stores the
  * bytes directly in PostgreSQL (the `call_recordings` table).
  *
  * Usage:
@@ -49,6 +49,7 @@
 import { eq } from "drizzle-orm";
 import { db, callRecordingsTable } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { encodeCallRecordingWav } from "./recorder-encode.js";
 
 const BYTES_PER_SAMPLE = 2; // LINEAR16
 
@@ -163,6 +164,18 @@ export class RecordingBuffer {
     return maxBytes / (this.sampleRate * BYTES_PER_SAMPLE);
   }
 
+  /** Seconds of agent PCM captured (excludes keepalive silence). */
+  getAgentCapturedSeconds(): number {
+    if (this.agent.bytes <= 0) return 0;
+    return this.agent.bytes / (this.sampleRate * BYTES_PER_SAMPLE);
+  }
+
+  /** Seconds of caller PCM captured. */
+  getCallerCapturedSeconds(): number {
+    if (this.caller.bytes <= 0) return 0;
+    return this.caller.bytes / (this.sampleRate * BYTES_PER_SAMPLE);
+  }
+
   /**
    * Wall-clock epoch ms of the most recent caller or agent PCM write, or null
    * when nothing was captured yet.
@@ -213,13 +226,15 @@ export class RecordingBuffer {
    */
   addCallerChunk(pcm: Buffer): void {
     if (!pcm.length) return;
-    this.append(this.caller, pcm);
+    // Copy: the same Buffer is handed to the audio worker / NC and must not
+    // mutate the bytes we already queued for the recording.
+    this.append(this.caller, Buffer.from(pcm));
   }
 
   /** Called for every outbound PCM frame sent to the caller (TTS audio). */
   addAgentChunk(pcm: Buffer): void {
     if (!pcm.length) return;
-    this.append(this.agent, pcm);
+    this.append(this.agent, Buffer.from(pcm));
   }
 
   get hasData(): boolean {
@@ -259,14 +274,12 @@ export class RecordingBuffer {
           callerPeak: trackPeak(callerPcm),
           agentPeak: trackPeak(agentPcm),
         },
-        "Recording finalize: track stats (caller=L, agent=R)",
+        "Recording finalize: track stats (caller + agent mixed to both channels)",
       );
       // Tracks may differ in length (e.g. a long agent tail with no caller
       // frames, or vice-versa). Span the longer one; the encoder reads the
       // shorter track as silence past its end.
-      const numSamples = Math.max(callerPcm.length, agentPcm.length) >> 1;
-
-      const wav = encodeStereoPcmWav(callerPcm, agentPcm, numSamples, this.sampleRate);
+      const wav = encodeCallRecordingWav(callerPcm, agentPcm, this.sampleRate);
 
       // Replace any prior recording for this call (idempotent re-finalize).
       await db.delete(callRecordingsTable).where(eq(callRecordingsTable.callId, callId));
@@ -289,59 +302,12 @@ export class RecordingBuffer {
   }
 }
 
+export { encodeCallRecordingWav } from "./recorder-encode.js";
+
 /** Result of {@link RecordingBuffer.finalize}. */
 export interface RecordingResult {
   /** Serving URL of the stored recording, or null when none was produced. */
   url: string | null;
   /** Failure reason when recording was attempted but could not be stored. */
   error: string | null;
-}
-
-/**
- * Writes a canonical 44-byte RIFF/WAV header followed by interleaved
- * stereo LINEAR16 samples (left = caller, right = agent).
- */
-function encodeStereoPcmWav(
-  callerPcm: Buffer,
-  agentPcm: Buffer,
-  numSamples: number,
-  sampleRate: number,
-): Buffer {
-  const channels      = 2;
-  const bytesPerSample = 2;
-  const dataSize      = numSamples * channels * bytesPerSample;
-  const headerSize    = 44;
-  const buf           = Buffer.allocUnsafe(headerSize + dataSize);
-
-  // ── RIFF chunk ────────────────────────────────────────────────────────────
-  buf.write("RIFF", 0, "ascii");
-  buf.writeUInt32LE(36 + dataSize, 4);
-  buf.write("WAVE", 8, "ascii");
-
-  // ── fmt  chunk ────────────────────────────────────────────────────────────
-  buf.write("fmt ", 12, "ascii");
-  buf.writeUInt32LE(16, 16);                                    // PCM sub-chunk size
-  buf.writeUInt16LE(1, 20);                                     // PCM format
-  buf.writeUInt16LE(channels, 22);
-  buf.writeUInt32LE(sampleRate, 24);
-  buf.writeUInt32LE(sampleRate * channels * bytesPerSample, 28); // byte rate
-  buf.writeUInt16LE(channels * bytesPerSample, 32);              // block align
-  buf.writeUInt16LE(16, 34);                                    // bits per sample
-
-  // ── data chunk ────────────────────────────────────────────────────────────
-  buf.write("data", 36, "ascii");
-  buf.writeUInt32LE(dataSize, 40);
-
-  // Interleave: [L0, R0, L1, R1, ...]
-  let offset = headerSize;
-  for (let i = 0; i < numSamples; i++) {
-    const byteIdx = i * 2;
-    const lSample = byteIdx + 1 < callerPcm.length ? callerPcm.readInt16LE(byteIdx) : 0;
-    const rSample = byteIdx + 1 < agentPcm.length  ? agentPcm.readInt16LE(byteIdx)  : 0;
-    buf.writeInt16LE(lSample, offset);
-    buf.writeInt16LE(rSample, offset + 2);
-    offset += 4;
-  }
-
-  return buf;
 }

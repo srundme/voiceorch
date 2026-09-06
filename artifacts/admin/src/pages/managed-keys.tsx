@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { useManagedKeys, useSaveManagedKeys, useAzureSpeakerCheck } from "@/hooks/use-admin-api";
+import { useEffect, useRef, useState } from "react";
+import { useManagedKeys, useSaveManagedKeys, useAzureSpeakerCheck, useManagedKeysStatus, useTestManagedKey, useRotateManagedKey } from "@/hooks/use-admin-api";
 import {
   Accordion,
   AccordionContent,
@@ -8,6 +8,8 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,11 +32,14 @@ import {
   XCircle,
   FlaskConical,
   Activity,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
+import { SectionSubNav } from "@/components/section-subnav";
+import { PRODUCT_TABS } from "@/lib/nav-config";
 
 type KeyField = {
   key: string;
@@ -86,8 +91,8 @@ const CATEGORIES: Category[] = [
       },
       {
         key: "managed_gemini_key",
-        label: "Google / Gemini API Key",
-        description: "Only needed for Gemini Live native audio (optional). Chat LLMs use Sarvam.",
+        label: "Google / Gemini API Keys",
+        description: "Add up to 20 Gemini keys. When key 1 hits quota or 429, the same Gemini model uses key 2, then 3. Does not switch LLM providers.",
         placeholder: "AIza...",
       },
       {
@@ -249,21 +254,75 @@ const CATEGORIES: Category[] = [
         description: "Zelto call monitoring — transcript and metadata are pushed to Zelto after each call ends. Rotate here without redeploying.",
         placeholder: "zelto_...",
       },
+      {
+        key: "recall_api_key",
+        label: "Recall API Key",
+        description: "Primary Recall.ai key for Meet / Zoom / Teams meeting bots. Same as Railway RECALL_API_KEY.",
+        placeholder: "recall_...",
+      },
+      {
+        key: "recall_api_key_fallback",
+        label: "Recall API Key (fallback)",
+        description: "Used automatically if the primary key is rejected (401/403), out of credit (402), or rate-limited (429). Set Railway RECALL_API_KEY_FALLBACK or paste here.",
+        placeholder: "recall_...",
+      },
     ],
   },
 ];
 
+const GEMINI_POOL_MAX = 20;
+
+type GeminiSlot = { masked: string; next: string };
+
+function parseMaskedGeminiPool(currentKeys?: Record<string, string>): string[] {
+  const raw = currentKeys?.managed_gemini_pool;
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  const primary = currentKeys?.managed_gemini_key;
+  return primary ? [primary] : [];
+}
+
 export default function ManagedKeys() {
   const { data: currentKeys, isLoading, refetch } = useManagedKeys();
+  const { data: statusData, refetch: refetchStatus } = useManagedKeysStatus();
   const { mutate: saveKeys, isPending } = useSaveManagedKeys();
+  const testKey = useTestManagedKey();
+  const rotateKey = useRotateManagedKey();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const [geminiSlots, setGeminiSlots] = useState<GeminiSlot[]>([{ masked: "", next: "" }]);
+  const [geminiHydrated, setGeminiHydrated] = useState(false);
   const [openSections, setOpenSections] = useState<string[]>(["llm"]);
+  const [testingKey, setTestingKey] = useState<string | null>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [runSpeakerCheck, setRunSpeakerCheck] = useState(false);
   const { data: speakerCheckResult, isFetching: speakerCheckFetching } = useAzureSpeakerCheck(runSpeakerCheck);
+
+  const statusByKey = Object.fromEntries((statusData?.credentials ?? []).map((c) => [c.key, c]));
+  const kpis = statusData?.kpis;
+
+  useEffect(() => {
+    if (!currentKeys || geminiHydrated) return;
+    const masks = parseMaskedGeminiPool(currentKeys);
+    setGeminiSlots(masks.length > 0 ? masks.map((masked) => ({ masked, next: "" })) : [{ masked: "", next: "" }]);
+    setGeminiHydrated(true);
+  }, [currentKeys, geminiHydrated]);
+
+  const savedGeminiMasks = parseMaskedGeminiPool(currentKeys);
+  const geminiDirty =
+    geminiSlots.some((s) => s.next.trim())
+    || geminiSlots.length !== savedGeminiMasks.length
+    || geminiSlots.some((s, i) => (s.masked || "") !== (savedGeminiMasks[i] ?? ""));
 
   function handleTestSpeakerRecognition() {
     queryClient.removeQueries({ queryKey: ["admin", "azure-speaker-check"] });
@@ -275,15 +334,59 @@ export default function ManagedKeys() {
   }
 
   function handleSave() {
-    saveKeys(formValues, {
+    const payload: Record<string, string> = { ...formValues };
+    if (geminiDirty) {
+      const pool = geminiSlots.map((s) => s.next.trim() || s.masked).filter(Boolean);
+      if (pool.length > 0) payload.managed_gemini_pool = JSON.stringify(pool);
+    }
+    saveKeys(payload, {
       onSuccess: (data) => {
         toast({ title: `Saved ${(data as any).saved} key(s) successfully` });
         setFormValues({});
+        setGeminiHydrated(false);
         refetch();
+        refetchStatus();
       },
       onError: (err) =>
         toast({ title: "Save failed", description: formatApiError(err), variant: "destructive" }),
     });
+  }
+
+  function handleTest(key: string) {
+    setTestingKey(key);
+    testKey.mutate(key, {
+      onSuccess: (res) => {
+        toast({
+          title: res.status === "healthy" || res.status === "skipped" ? "Health check OK" : "Health check failed",
+          description: res.errorMessageSafe ?? `Status: ${res.status}${res.latencyMs != null ? ` · ${res.latencyMs} ms` : ""}`,
+          variant: res.status === "failed" ? "destructive" : "default",
+        });
+        setTestingKey(null);
+      },
+      onError: (err) => {
+        toast({ title: "Test failed", description: formatApiError(err), variant: "destructive" });
+        setTestingKey(null);
+      },
+    });
+  }
+
+  function handleRotate(key: string) {
+    const value = formValues[key]?.trim();
+    if (!value) {
+      toast({ title: "Enter a new key value first", variant: "destructive" });
+      return;
+    }
+    rotateKey.mutate(
+      { key, value },
+      {
+        onSuccess: (res) => {
+          toast({ title: "Key rotated", description: res.message });
+          setFormValues((prev) => ({ ...prev, [key]: "" }));
+          refetch();
+        },
+        onError: (err) => toast({ title: "Rotate failed", description: formatApiError(err), variant: "destructive" }),
+      },
+    );
   }
 
   function openCategory(categoryId: CategoryId) {
@@ -304,21 +407,27 @@ export default function ManagedKeys() {
     }, 50);
   }
 
-  const hasChanges = Object.values(formValues).some(v => v?.trim());
+  const hasChanges = Object.values(formValues).some(v => v?.trim()) || geminiDirty;
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={PRODUCT_TABS} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Managed Stack Keys</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Managed Keys</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Master API keys used when customers choose the Managed AI stack.
-            <br />
-            Keys are stored encrypted and never exposed to users.
+            First-class platform credentials for ASR / LLM / TTS / telephony.
+            Secrets are masked after save. Use Test / Rotate for safe updates.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2" data-testid="button-refresh-keys">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { refetch(); refetchStatus(); }}
+            className="gap-2"
+            data-testid="button-refresh-keys"
+          >
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh
           </Button>
@@ -330,30 +439,47 @@ export default function ManagedKeys() {
                 <ChevronDown className="h-3.5 w-3.5 opacity-70" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              {CATEGORIES.map(cat => {
-                const Icon = cat.icon;
-                return (
-                  <DropdownMenuItem
-                    key={cat.id}
-                    onSelect={() => openCategory(cat.id)}
-                    data-testid={`menuitem-new-${cat.id}`}
-                  >
-                    <Icon className={cn("h-4 w-4", cat.iconColor)} />
-                    {cat.itemLabel}
-                  </DropdownMenuItem>
-                );
-              })}
+            <DropdownMenuContent align="end">
+              {CATEGORIES.map((c) => (
+                <DropdownMenuItem key={c.id} onClick={() => openCategory(c.id)}>
+                  {c.itemLabel}
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button size="sm" disabled={!hasChanges || isPending} onClick={handleSave} className="gap-2">
+            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Save
+          </Button>
         </div>
       </div>
 
-      <div className="rounded-md border border-primary/20 bg-primary/5 p-4 flex items-start gap-3">
-        <Info className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-        <div className="text-sm text-muted-foreground">
-          <strong className="text-foreground">Managed Stack Keys:</strong> Store master API keys for every provider the platform supports — LLM, STT, TTS, and Telephony. Keys shared across categories (e.g. Sarvam covers STT + LLM + TTS; OpenAI covers LLM + TTS) only need to be entered once. To update a key, type the new value and click Save. Masked values (showing ••••) are already stored.
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
+        {[
+          { label: "Total", value: kpis?.total },
+          { label: "Configured", value: kpis?.configured },
+          { label: "Healthy", value: kpis?.healthy },
+          { label: "Warning", value: kpis?.warning },
+          { label: "Failed", value: kpis?.failed },
+          { label: "Missing", value: kpis?.missing },
+        ].map((c) => (
+          <Card key={c.label} className="shadow-none">
+            <CardHeader className="pb-1 pt-3 px-3">
+              <CardTitle className="text-[10px] uppercase tracking-wider text-muted-foreground">{c.label}</CardTitle>
+            </CardHeader>
+            <CardContent className="px-3 pb-3">
+              <div className="text-xl font-bold font-mono tabular-nums">{c.value ?? "—"}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="rounded-lg border border-border bg-muted/20 px-4 py-3 flex gap-2 text-xs text-muted-foreground">
+        <Info className="h-4 w-4 shrink-0 mt-0.5" />
+        <p>
+          Changing a managed key affects user calls, agent STT/TTS/LLM fallbacks, and managed routing.
+          Rotate validates testable keys before activation. Never paste secrets into chat logs.
+        </p>
       </div>
 
       {isLoading ? (
@@ -443,11 +569,99 @@ export default function ManagedKeys() {
                   <div className="rounded-lg border bg-muted/10 divide-y divide-border">
                     <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                       <div className="col-span-3">Provider</div>
+                      <div className="col-span-2">Status</div>
                       <div className="col-span-3">Current (Masked)</div>
-                      <div className="col-span-6">New Value</div>
+                      <div className="col-span-4">New value / actions</div>
                     </div>
                     {category.fields.map(field => {
+                      if (field.key === "managed_gemini_key") {
+                        const st = statusByKey[field.key];
+                        const status = st?.status ?? (savedGeminiMasks.length > 0 ? "active" : "missing");
+                        return (
+                          <div
+                            key={field.key}
+                            className="grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4 px-4 py-3.5 items-start"
+                            data-testid="row-key-managed_gemini_key"
+                          >
+                            <div className="md:col-span-3">
+                              <div className="text-sm font-medium text-foreground">{field.label}</div>
+                              <p className="text-xs text-muted-foreground mt-0.5">{field.description}</p>
+                              <p className="text-[10px] text-muted-foreground mt-1">
+                                {geminiSlots.filter((s) => s.masked || s.next.trim()).length} / {GEMINI_POOL_MAX} keys
+                              </p>
+                            </div>
+                            <div className="md:col-span-2">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] capitalize",
+                                  status === "healthy" && "border-emerald-500/40 text-emerald-500",
+                                  status === "failed" && "border-red-500/40 text-red-500",
+                                  status === "warning" && "border-amber-500/40 text-amber-500",
+                                  status === "missing" && "text-muted-foreground",
+                                )}
+                              >
+                                {status}
+                              </Badge>
+                            </div>
+                            <div className="md:col-span-7 space-y-2">
+                              {geminiSlots.map((slot, index) => (
+                                <div key={`${slot.masked}-${index}`} className="flex flex-wrap items-center gap-2">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-12 shrink-0">
+                                    Key {index + 1}
+                                  </span>
+                                  {slot.masked ? (
+                                    <div className="font-mono text-xs text-muted-foreground rounded-md border border-border bg-muted/30 px-2.5 py-1.5 truncate min-w-[8rem] flex-1">
+                                      {slot.masked}
+                                    </div>
+                                  ) : (
+                                    <div className="font-mono text-xs text-muted-foreground/50 italic px-2.5 py-1.5 min-w-[8rem] flex-1">
+                                      not set
+                                    </div>
+                                  )}
+                                  <Input
+                                    type="password"
+                                    placeholder={slot.masked ? "Replace this key" : field.placeholder}
+                                    value={slot.next}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      setGeminiSlots((prev) => prev.map((s, i) => (i === index ? { ...s, next: value } : s)));
+                                    }}
+                                    className="font-mono text-xs bg-background/60 border-border flex-1 min-w-[10rem]"
+                                    data-testid={`input-gemini-key-${index}`}
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                    disabled={geminiSlots.length <= 1}
+                                    onClick={() => setGeminiSlots((prev) => prev.filter((_, i) => i !== index))}
+                                    aria-label={`Remove Gemini key ${index + 1}`}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              ))}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs gap-1"
+                                disabled={geminiSlots.length >= GEMINI_POOL_MAX}
+                                onClick={() => setGeminiSlots((prev) => [...prev, { masked: "", next: "" }])}
+                                data-testid="button-add-gemini-key"
+                              >
+                                <Plus className="h-3 w-3" />
+                                Add Gemini key
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      }
                       const masked = currentKeys?.[field.key];
+                      const st = statusByKey[field.key];
+                      const status = st?.status ?? (masked ? "active" : "missing");
                       return (
                         <div
                           key={field.key}
@@ -457,6 +671,26 @@ export default function ManagedKeys() {
                           <div className="md:col-span-3">
                             <div className="text-sm font-medium text-foreground">{field.label}</div>
                             <p className="text-xs text-muted-foreground mt-0.5">{field.description}</p>
+                            {st?.affects?.length ? (
+                              <p className="text-[10px] text-muted-foreground mt-1">Affects: {st.affects.join(" · ")}</p>
+                            ) : null}
+                          </div>
+                          <div className="md:col-span-2">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] capitalize",
+                                status === "healthy" && "border-emerald-500/40 text-emerald-500",
+                                status === "failed" && "border-red-500/40 text-red-500",
+                                status === "warning" && "border-amber-500/40 text-amber-500",
+                                status === "missing" && "text-muted-foreground",
+                              )}
+                            >
+                              {status}
+                            </Badge>
+                            {st?.lastLatencyMs != null && (
+                              <p className="text-[10px] text-muted-foreground mt-1">{st.lastLatencyMs} ms</p>
+                            )}
                           </div>
                           <div className="md:col-span-3">
                             {masked ? (
@@ -469,7 +703,7 @@ export default function ManagedKeys() {
                               </div>
                             )}
                           </div>
-                          <div className="md:col-span-6">
+                          <div className="md:col-span-4 space-y-2">
                             <Input
                               ref={(el) => { inputRefs.current[field.key] = el; }}
                               type="password"
@@ -479,6 +713,32 @@ export default function ManagedKeys() {
                               className="font-mono text-xs bg-background/60 border-border"
                               data-testid={`input-key-${field.key}`}
                             />
+                            <div className="flex flex-wrap gap-1.5">
+                              {st?.testable !== false && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs gap-1"
+                                  disabled={testingKey === field.key || !masked}
+                                  onClick={() => handleTest(field.key)}
+                                >
+                                  {testingKey === field.key ? <Loader2 className="h-3 w-3 animate-spin" /> : <FlaskConical className="h-3 w-3" />}
+                                  Test
+                                </Button>
+                              )}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs gap-1"
+                                disabled={!formValues[field.key]?.trim() || rotateKey.isPending}
+                                onClick={() => handleRotate(field.key)}
+                              >
+                                <Activity className="h-3 w-3" />
+                                Rotate
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       );

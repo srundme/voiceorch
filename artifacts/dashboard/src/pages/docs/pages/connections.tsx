@@ -22,7 +22,9 @@ export default function ConnectionsPage() {
       <h2 id="cards">What lives here</h2>
       <ul>
         <li>
-          <strong>WhatsApp</strong> — own WABA / Vobiz channel or webhook-only BSP.{" "}
+          <strong>WhatsApp</strong> — Meta Cloud API (WABA + Phone Number ID + token) is
+          enough to send templates. Vobiz only if we sell you the WhatsApp number or you
+          want WhatsApp calling. Webhook-only BSP still works.{" "}
           <Link href="/docs/whatsapp">WhatsApp guide</Link>.
         </li>
         <li>
@@ -33,7 +35,9 @@ export default function ConnectionsPage() {
           <strong>Google Sheets</strong> — campaign lead source and/or lead-transfer destination.
         </li>
         <li>
-          <strong>Website form</strong> — form POSTs into SnapServe as leads (form intake).
+          <strong>Website form</strong> — form POSTs into SnapServe as leads (form intake). For a
+          live in-browser voice call on your site, use the agent’s Settings → Website snippet
+          instead. <Link href="/docs/website-embed">Website webcall embed</Link>.
         </li>
         <li>
           <strong>Meta Lead Ads</strong> — Facebook / Instagram leads into a campaign.

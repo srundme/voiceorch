@@ -15,6 +15,7 @@ import {
   callTransfersTable, callExecutionsTable, callsTable, agentsTable,
 } from "@workspace/db";
 import { eq, and, sql, desc, isNotNull } from "drizzle-orm";
+import { reconcileCampaignTransfers } from "../services/campaign-tab-sync.js";
 
 const router: IRouter = Router();
 
@@ -37,6 +38,7 @@ router.get("/campaigns/:id/transfers/metrics", async (req, res): Promise<void> =
   if (isNaN(campaignId) || !await requireCampaign(campaignId, userId)) {
     res.status(404).json({ error: "Not found" }); return;
   }
+  await reconcileCampaignTransfers(campaignId).catch(() => {});
 
   const [m] = await db.select({
     pending:   sql<number>`count(distinct ${callTransfersTable.id}) filter (where ${callTransfersTable.status} in ('initiated', 'connected'))::int`,
@@ -72,6 +74,7 @@ router.get("/campaigns/:id/transfers", async (req, res): Promise<void> => {
   if (isNaN(campaignId) || !await requireCampaign(campaignId, userId)) {
     res.status(404).json({ error: "Not found" }); return;
   }
+  await reconcileCampaignTransfers(campaignId).catch(() => {});
 
   const status = String(req.query["status"] ?? "all");
   const page   = Math.max(0, parseInt(String(req.query["page"] ?? "0"), 10) || 0);

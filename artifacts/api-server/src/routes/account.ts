@@ -5,9 +5,12 @@ import { eq } from "drizzle-orm";
 import { db, usersTable, walletTransactionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext, denyManagedClient } from "../middlewares/clientContext.js";
+import { invalidateUserStatusCache } from "../middlewares/userStatusCache.js";
 import { logActivity } from "../lib/activity.js";
 import { issueInvoice } from "../services/invoice.js";
+import { createAlert } from "../services/usage/alert-engine.js";
 import { GetPreferencesResponse, UpdatePreferencesBody } from "@workspace/api-zod";
+import { logger } from "../lib/logger.js";
 
 const scryptAsync = promisify(scrypt);
 
@@ -176,6 +179,88 @@ router.patch("/account/preferences", requireAuth, clientContext, async (req, res
     .returning();
   const updatedPrefs: PrefsShape = (updated.preferences as PrefsShape | null) ?? {};
   res.json(GetPreferencesResponse.parse({ theme: updatedPrefs.theme ?? null }));
+});
+
+/**
+ * Self-serve workspace deletion (Danger Zone).
+ * Soft-deletes the account (status=deleted), revokes API keys, notifies admin,
+ * and blocks further login via the existing status check in session/auth.
+ */
+router.post("/account/delete-workspace", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const { confirmation } = (req.body ?? {}) as { confirmation?: string };
+
+  if (confirmation !== "DELETE") {
+    res.status(400).json({
+      error: 'Type DELETE to confirm. This permanently removes your workspace from SnapServe.',
+    });
+    return;
+  }
+
+  try {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+    if (user.status === "deleted") {
+      res.json({ ok: true, alreadyDeleted: true });
+      return;
+    }
+
+    const previousBalance = user.walletBalanceCents;
+
+    await db
+      .update(usersTable)
+      .set({
+        status: "deleted",
+        suspendedAt: new Date(),
+        suspendedReason: "User requested workspace deletion",
+        apiKey: null,
+        orgKey: null,
+        // Strip remaining balance so a same-ID return cannot keep ₹500 / ~100 min welcome credit.
+        walletBalanceCents: 0,
+        freeCreditsGranted: true,
+      })
+      .where(eq(usersTable.clerkId, clerkId));
+
+    if (previousBalance !== 0) {
+      await db.insert(walletTransactionsTable).values({
+        userId: user.id,
+        type: "adjustment",
+        amountCents: -previousBalance,
+        description: "Workspace deleted — remaining balance forfeited",
+        status: "completed",
+      });
+    }
+
+    invalidateUserStatusCache(clerkId);
+
+    await logActivity({
+      userId: clerkId,
+      eventType: "account.workspace_deleted",
+      description: "User deleted their SnapServe workspace",
+      metadata: { email: user.email, name: user.name },
+    });
+
+    void createAlert({
+      type: "account_deletion",
+      severity: "critical",
+      title: "Workspace deleted by user",
+      message: `${user.email ?? user.name ?? clerkId} permanently deleted their SnapServe workspace. Account status is now deleted.`,
+      dedupeKey: `account_deletion:${clerkId}:${new Date().toISOString().slice(0, 10)}`,
+      payload: {
+        clerkId,
+        email: user.email,
+        name: user.name,
+        deletedAt: new Date().toISOString(),
+      },
+    }).catch((err) => {
+      logger.warn({ err, clerkId }, "Failed to create admin alert for workspace deletion");
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err, clerkId }, "account/delete-workspace failed");
+    res.status(500).json({ error: "Failed to delete workspace" });
+  }
 });
 
 export { generateApiKey, generateOrgKey };

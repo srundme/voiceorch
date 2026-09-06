@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCallerFarewellUtterance, transcriptHasFarewellEnding } from "./callFarewell.js";
+import { isCallerFarewellUtterance, isCallerClosingUtterance, transcriptHasFarewellEnding } from "./callFarewell.js";
 
 describe("isCallerFarewellUtterance", () => {
   it("matches Latin bye variants", () => {
@@ -16,6 +16,16 @@ describe("isCallerFarewellUtterance", () => {
 
   it("matches Tamil நன்றி-only", () => {
     expect(isCallerFarewellUtterance("நன்றி")).toBe(true);
+  });
+
+  it("matches a no-more-help close (call 14315)", () => {
+    expect(isCallerClosingUtterance("வேற எதுவும் help பண்ண சார் நான் நாளைக்கு பேசுறேன்")).toBe(true);
+    expect(isCallerClosingUtterance("nothing else sir")).toBe(true);
+    expect(isCallerClosingUtterance("வேற ஒன்னும் இல்ல")).toBe(true);
+  });
+
+  it("rejects mid-call questions that mention tomorrow", () => {
+    expect(isCallerClosingUtterance("நாளைக்கு 5 மணிக்கு call பண்ணுங்க")).toBe(false);
   });
 
   it("rejects long non-farewell turns", () => {

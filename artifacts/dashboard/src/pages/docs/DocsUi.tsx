@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 import { Link } from "wouter";
 import { Check, ChevronRight, Copy, ExternalLink } from "lucide-react";
 import { MethodBadge } from "./api/MethodBadge";
@@ -35,7 +35,7 @@ export function PageHeader({
         </p>
       ) : null}
       <div className="flex items-start justify-between gap-4">
-        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-slate-900 m-0">
+        <h1 className="m-0 text-[clamp(1.5rem,1.1rem+2vw,2.25rem)] font-semibold tracking-tight text-slate-900">
           {title}
         </h1>
         {copyText ? (
@@ -108,6 +108,136 @@ export function DocCard({
         <p className="mt-1 text-sm text-slate-600 leading-snug">{description}</p>
       </div>
     </Link>
+  );
+}
+
+const PLATFORM_URLS = [
+  {
+    n: "1",
+    label: "App",
+    url: "https://app.snapserve.ai",
+    href: "https://app.snapserve.ai",
+    hint: "Dashboard login & product",
+    external: true,
+  },
+  {
+    n: "2",
+    label: "Docs",
+    url: "https://app.snapserve.ai/docs",
+    href: "https://app.snapserve.ai/docs",
+    hint: "Guides & this documentation",
+    external: true,
+  },
+  {
+    n: "3",
+    label: "API base URL",
+    url: "https://app.snapserve.ai/api",
+    // Bare /api is not a webpage — open the reference instead.
+    href: "/docs/api-reference",
+    hint: "For Bearer sk_live_… requests — not a browser page",
+    external: false,
+  },
+] as const;
+
+function PlatformUrlCard({
+  n,
+  label,
+  url,
+  href,
+  hint,
+  external,
+}: (typeof PLATFORM_URLS)[number]) {
+  const [copied, setCopied] = useState(false);
+
+  const onCopy = async (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const className =
+    "group relative flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white px-3.5 py-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all hover:border-slate-300 hover:shadow-[0_4px_12px_rgba(15,23,42,0.06)]";
+
+  const body = (
+    <>
+      <div className="flex items-center gap-2">
+        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[11px] font-semibold tabular-nums text-slate-600">
+          {n}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+          {label}
+        </span>
+        <button
+          type="button"
+          onClick={onCopy}
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
+          aria-label={`Copy ${url}`}
+          title={copied ? "Copied" : "Copy this URL"}
+        >
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        </button>
+      </div>
+      <p
+        className="mt-3 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px] leading-none tracking-tight text-slate-900"
+        title={url}
+      >
+        {url}
+      </p>
+      <p className="mt-auto pt-3 text-[12px] leading-snug text-slate-500">{hint}</p>
+    </>
+  );
+
+  if (external) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer" title={url} className={className}>
+        {body}
+      </a>
+    );
+  }
+
+  return (
+    <Link href={href} title={`${url} — open API reference`} className={className}>
+      {body}
+    </Link>
+  );
+}
+
+/** Three host cards — layout follows container width, not viewport (scaling-safe). */
+export function PlatformUrls() {
+  const [copiedAll, setCopiedAll] = useState(false);
+
+  const onCopyAll = async () => {
+    const text = PLATFORM_URLS.map((h) => h.url).join("\n");
+    await navigator.clipboard.writeText(text);
+    setCopiedAll(true);
+    setTimeout(() => setCopiedAll(false), 2000);
+  };
+
+  return (
+    <div className="@container/platform not-prose my-6 w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50 to-slate-50/40 p-3.5 sm:p-4 md:p-5">
+      <div className="mb-3.5 flex items-center justify-between gap-3 sm:mb-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+          Platform URLs
+        </p>
+        <button
+          type="button"
+          onClick={onCopyAll}
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white hover:text-slate-800"
+          aria-label="Copy all platform URLs"
+          title={copiedAll ? "Copied all" : "Copy all URLs"}
+        >
+          {copiedAll ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        </button>
+      </div>
+      {/* auto-fit: 1→2→3 columns from *available* width; avoids viewport vs content mismatch under OS zoom */}
+      <div className="grid grid-cols-1 gap-3 @[420px]/platform:grid-cols-2 @[700px]/platform:grid-cols-3 @[700px]/platform:gap-2.5">
+        {PLATFORM_URLS.map((host) => (
+          <PlatformUrlCard key={host.url} {...host} />
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -50,9 +50,10 @@ describe("resolveSttTuning — derivation from agent settings", () => {
     expect(resolveSttTuning({ ...DEFAULTS, stallBackstopMs: 6_000 }).recoveryMaxAudioMs).toBe(12_000);
   });
 
-  it("keeps the duplicate window wider than the backstop that triggers a recovery", () => {
+  it("does not invent a lost-turn flush window", () => {
     const t = resolveSttTuning(DEFAULTS);
-    expect(t.recoveryDedupMs).toBeGreaterThan(t.lostTurnBackstopMs);
+    expect(t.lostTurnBackstopMs).toBe(0);
+    expect(t.recoveryDedupMs).toBe(0);
   });
 
   it("never lets recovery fire before the caller could plausibly have finished", () => {
@@ -89,5 +90,16 @@ describe("resolveSttTuning — environment overrides", () => {
   it("ignores a non-numeric override rather than producing NaN", () => {
     process.env.STT_RECOVERY_MIN_SILENCE_MS = "not-a-number";
     expect(resolveSttTuning(DEFAULTS).recoveryMinSilenceMs).toBe(700);
+  });
+});
+
+describe("optionalUnitInterval", () => {
+  it("clamps 0–1 and rejects non-numbers", async () => {
+    const { optionalUnitInterval } = await import("./stt-tuning.js");
+    expect(optionalUnitInterval(0.3)).toBe(0.3);
+    expect(optionalUnitInterval(1.5)).toBe(1);
+    expect(optionalUnitInterval(-0.2)).toBe(0);
+    expect(optionalUnitInterval(undefined)).toBeNull();
+    expect(optionalUnitInterval("0.3")).toBeNull();
   });
 });

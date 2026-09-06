@@ -179,7 +179,7 @@ router.post("/wizard/preview-voice", requireDbUser, async (req, res): Promise<vo
       body: JSON.stringify({
         model_id: model,
         transcript: previewText,
-        voice: { mode: "id", id: voiceId },
+        voice: { id: voiceId },
         output_format: { container: "wav", encoding: "pcm_f32le", sample_rate: 22050 },
       }),
     });
@@ -751,6 +751,8 @@ const MANAGED_KEY_NAMES = [
   "managed_vobiz_auth_token",
   // Integrations
   "zelto_api_key",
+  "recall_api_key",
+  "recall_api_key_fallback",
 ];
 
 router.get("/admin/managed-keys", requireAdmin, async (_req, res): Promise<void> => {
@@ -765,13 +767,20 @@ router.get("/admin/managed-keys", requireAdmin, async (_req, res): Promise<void>
     result[row.key] = v.length > 8 ? `${v.slice(0, 4)}${"•".repeat(Math.min(v.length - 8, 20))}${v.slice(-4)}` : "••••••••";
   }
 
+  const { loadStoredGeminiKeys, maskGeminiKey } = await import("../lib/gemini-key-pool.js");
+  const geminiKeys = await loadStoredGeminiKeys();
+  if (geminiKeys.length > 0) {
+    result["managed_gemini_key"] = maskGeminiKey(geminiKeys[0]!);
+    result["managed_gemini_pool"] = JSON.stringify(geminiKeys.map(maskGeminiKey));
+  }
+
   res.json(result);
 });
 
 // ── Admin: PUT /admin/managed-keys ────────────────────────────────────────────
 
 router.put("/admin/managed-keys", requireAdmin, async (req, res): Promise<void> => {
-  const body = req.body as Record<string, string>;
+  const body = req.body as Record<string, unknown>;
 
   const updates: Promise<any>[] = [];
 
@@ -787,8 +796,21 @@ router.put("/admin/managed-keys", requireAdmin, async (req, res): Promise<void> 
     }
   }
 
+  const {
+    applyGeminiPoolEdits,
+    loadStoredGeminiKeys,
+    parseIncomingGeminiPool,
+    saveManagedGeminiPool,
+  } = await import("../lib/gemini-key-pool.js");
+  const incomingPool = parseIncomingGeminiPool(body["managed_gemini_pool"]);
+  let geminiSaved = 0;
+  if (incomingPool && incomingPool.some((item) => item.trim())) {
+    const next = applyGeminiPoolEdits(await loadStoredGeminiKeys(), incomingPool);
+    geminiSaved = await saveManagedGeminiPool(next);
+  }
+
   await Promise.all(updates);
-  res.json({ saved: updates.length });
+  res.json({ saved: updates.length + (geminiSaved > 0 ? 1 : 0), geminiKeys: geminiSaved || undefined });
 });
 
 // ── GET /wizard/system-prompt-store ──────────────────────────────────────────

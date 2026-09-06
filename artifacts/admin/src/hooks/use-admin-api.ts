@@ -13,6 +13,27 @@ export function useBookInterns() {
   });
 }
 
+export type LandingPartnerLead = {
+  id: number;
+  name: string;
+  email: string;
+  phone: string | null;
+  company: string | null;
+  website: string | null;
+  role: string | null;
+  message: string | null;
+  source: string;
+  createdAt: string;
+};
+
+export function useLandingPartnerLeads() {
+  return useQuery({
+    queryKey: ["admin", "landing-leads"],
+    queryFn: () => adminFetch<LandingPartnerLead[]>("/landing-leads"),
+    refetchInterval: 30000,
+  });
+}
+
 // Real vs. test/internal user segmentation
 export type UserSegment = "real" | "test" | "all";
 
@@ -124,6 +145,20 @@ export function useSetUserStatus(clerkId: string) {
       adminFetch<{ status: string }>(`/users/${clerkId}/status`, {
         method: "PATCH",
         body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+  });
+}
+
+export function useUnlockPortalLogin(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      adminFetch<{ ok: boolean; unlocked: boolean }>(`/users/${clerkId}/unlock-portal-login`, {
+        method: "POST",
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
@@ -549,12 +584,16 @@ export interface FailedCallsFilters {
   agentId?: number | null;
   userId?: string;
   reason?: string;
+  executionId?: string;
   page?: number;
   limit?: number;
 }
 
+/** The generated schema predates `executionId` on this endpoint. */
+export type FailedCallRow = AdminFailedCall & { executionId?: string | null };
+
 export interface FailedCallsResponse {
-  data: AdminFailedCall[];
+  data: FailedCallRow[];
   total: number;
   page: number;
   pageSize: number;
@@ -565,6 +604,7 @@ export function usePlatformFailedCalls(filters: FailedCallsFilters = {}) {
   if (filters.agentId != null) params.set("agentId", String(filters.agentId));
   if (filters.userId) params.set("userId", filters.userId);
   if (filters.reason) params.set("reason", filters.reason);
+  if (filters.executionId) params.set("executionId", filters.executionId);
   if (filters.page) params.set("page", String(filters.page));
   if (filters.limit) params.set("limit", String(filters.limit));
   const qs = params.toString();
@@ -626,7 +666,78 @@ export function useSaveManagedKeys() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "managed-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "managed-keys", "status"] });
     },
+  });
+}
+
+export function useManagedKeysStatus() {
+  return useQuery({
+    queryKey: ["admin", "managed-keys", "status"],
+    queryFn: () => adminFetch<{
+      kpis: { total: number; configured: number; healthy: number; warning: number; failed: number; missing: number };
+      credentials: Array<{
+        key: string;
+        label: string;
+        service: string;
+        provider: string;
+        affects: string[];
+        testable: boolean;
+        configured: boolean;
+        masked: string | null;
+        status: string;
+        lastCheckAt: string | null;
+        lastLatencyMs: number | null;
+        lastError: string | null;
+      }>;
+      generatedAt: string;
+    }>("/managed-keys/status"),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useTestManagedKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (key: string) =>
+      adminFetch<{ key: string; status: string; latencyMs: number | null; errorMessageSafe?: string }>(
+        `/managed-keys/${encodeURIComponent(key)}/test`,
+        { method: "POST", body: "{}" },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "managed-keys", "status"] });
+    },
+  });
+}
+
+export function useRotateManagedKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ key, value }: { key: string; value: string }) =>
+      adminFetch<{ ok: boolean; masked: string; message: string }>(
+        `/managed-keys/${encodeURIComponent(key)}/rotate`,
+        { method: "POST", body: JSON.stringify({ value }) },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "managed-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "managed-keys", "status"] });
+    },
+  });
+}
+
+export function useProductProviders() {
+  return useQuery({
+    queryKey: ["admin", "product", "providers"],
+    queryFn: () => adminFetch<any>("/product/providers"),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useInfraHealth() {
+  return useQuery({
+    queryKey: ["admin", "product", "infra-health"],
+    queryFn: () => adminFetch<any>("/product/infra-health"),
+    refetchInterval: 60_000,
   });
 }
 
@@ -1384,3 +1495,356 @@ export function useWorkshopResponses(id: number | null) {
     enabled: id !== null,
   });
 }
+
+// ─── Admin V2 analytics (canonical P&L / overview) ────────────────────────────
+
+export type DailyPnlDay = {
+  date: string;
+  users: number;
+  calls: number;
+  billableMinutes: number;
+  cashCollectedPaise: number;
+  callRevenuePaise: number;
+  phoneRevenuePaise: number;
+  recognizedRevenuePaise: number;
+  variableCostPaise: number;
+  grossProfitPaise: number;
+  grossMarginPct: number;
+  revenuePerMinPaise: number;
+  costPerMinPaise: number;
+};
+
+export type DailyPnlResponse = {
+  from: string;
+  to: string;
+  fxUsdToInr: number;
+  generatedAt: string;
+  meta: { definitions: Record<string, string> };
+  totals: DailyPnlDay;
+  days: DailyPnlDay[];
+};
+
+export type AnalyticsOverviewResponse = {
+  from: string;
+  to: string;
+  fxUsdToInr: number;
+  generatedAt: string;
+  meta: { definitions: Record<string, string> };
+  kpis: {
+    totalUsers: number;
+    activeUsers: number;
+    payingUsers: number;
+    calls: number;
+    billableMinutes: number;
+    cashCollectedPaise: number;
+    recognizedRevenuePaise: number;
+    variableCostPaise: number;
+    grossProfitPaise: number;
+    grossMarginPct: number;
+    revenuePerMinPaise: number;
+    costPerMinPaise: number;
+    profitPerMinPaise?: number;
+    arpuPaise?: number;
+  };
+  sparkline: { date: string; revenue: number; cost: number; profit: number; calls: number; billableMinutes?: number }[];
+  health?: {
+    callSuccessRatePct: number;
+    failureRatePct: number;
+    avgCallDurationSec: number;
+    avgLatencyMs: number;
+    totalCalls: number;
+  };
+  topCustomers?: Array<{
+    userId: string;
+    label: string;
+    calls: number;
+    minutes: number;
+    revenuePaise: number;
+    costPaise: number;
+    profitPaise: number;
+  }>;
+  costBreakdown?: Array<{ service: string; costPaise: number }>;
+  compare: { totals: DailyPnlDay; from: string; to: string } | null;
+};
+
+export type UnitEconomicsResponse = {
+  from: string;
+  to: string;
+  fxUsdToInr: number;
+  generatedAt: string;
+  meta: { definitions: Record<string, string> };
+  kpis: {
+    revenuePerMinPaise: number;
+    costPerMinPaise: number;
+    profitPerMinPaise: number;
+    grossMarginPct: number;
+    revenuePerActiveUserPaise: number;
+    costPerActiveUserPaise: number;
+    arpuPaise: number;
+    billableMinutes: number;
+    activeUsers: number;
+    payingUsers: number;
+    recognizedRevenuePaise: number;
+    variableCostPaise: number;
+    grossProfitPaise: number;
+  };
+  series: Array<{
+    date: string;
+    revenuePerMinPaise: number;
+    costPerMinPaise: number;
+    profitPerMinPaise: number;
+    grossMarginPct: number;
+  }>;
+  costBreakdown: Array<{ service: string; costPaise: number }>;
+};
+
+export function useDailyPnl(from: string, to: string) {
+  return useQuery({
+    queryKey: ["admin", "analytics", "daily-pnl", from, to],
+    queryFn: () =>
+      adminFetch<DailyPnlResponse>(
+        `/analytics/daily-pnl?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      ),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useAnalyticsOverview(
+  from: string,
+  to: string,
+  compareFrom?: string | null,
+  compareTo?: string | null,
+) {
+  const qs = new URLSearchParams({ from, to });
+  if (compareFrom && compareTo) {
+    qs.set("compareFrom", compareFrom);
+    qs.set("compareTo", compareTo);
+  }
+  return useQuery({
+    queryKey: ["admin", "analytics", "overview", from, to, compareFrom, compareTo],
+    queryFn: () => adminFetch<AnalyticsOverviewResponse>(`/analytics/overview?${qs}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useUnitEconomics(from: string, to: string) {
+  return useQuery({
+    queryKey: ["admin", "analytics", "unit-economics", from, to],
+    queryFn: () =>
+      adminFetch<UnitEconomicsResponse>(
+        `/analytics/unit-economics?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      ),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useUserGrowthAnalytics(from: string, to: string) {
+  return useQuery({
+    queryKey: ["admin", "analytics", "users", from, to],
+    queryFn: () =>
+      adminFetch<any>(`/analytics/users?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useActivationAnalytics(from: string, to: string) {
+  return useQuery({
+    queryKey: ["admin", "analytics", "activation", from, to],
+    queryFn: () =>
+      adminFetch<any>(`/analytics/activation?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useRetentionAnalytics() {
+  return useQuery({
+    queryKey: ["admin", "analytics", "retention"],
+    queryFn: () => adminFetch<any>("/analytics/retention"),
+    refetchInterval: 120_000,
+  });
+}
+
+export function useAgentAnalytics(from: string, to: string) {
+  return useQuery({
+    queryKey: ["admin", "analytics", "agents", from, to],
+    queryFn: () =>
+      adminFetch<any>(`/analytics/agents?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useProviderAnalytics(from: string, to: string) {
+  return useQuery({
+    queryKey: ["admin", "analytics", "providers", from, to],
+    queryFn: () =>
+      adminFetch<any>(`/analytics/providers?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useCustomerUsers(filter: string = "all") {
+  return useQuery({
+    queryKey: ["admin", "customers", "users", filter],
+    queryFn: () => adminFetch<{ users: any[]; generatedAt: string }>(`/customers/users?filter=${encodeURIComponent(filter)}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useUser360(clerkId: string) {
+  return useQuery({
+    queryKey: ["admin", "users", clerkId, "360"],
+    queryFn: () => adminFetch<any>(`/users/${clerkId}/360`),
+    enabled: !!clerkId,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useCustomerWorkspaces(from: string, to: string) {
+  return useQuery({
+    queryKey: ["admin", "customers", "workspaces", from, to],
+    queryFn: () =>
+      adminFetch<any>(
+        `/customers/workspaces?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      ),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useAgent360(agentId: string | number, days = 30) {
+  return useQuery({
+    queryKey: ["admin", "agents", agentId, "360", days],
+    queryFn: () => adminFetch<any>(`/agents/${agentId}/360?days=${days}`),
+    enabled: !!agentId,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useOperationsHealth() {
+  return useQuery({
+    queryKey: ["admin", "operations", "health"],
+    queryFn: () => adminFetch<any>("/operations/health"),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useAlertRules() {
+  return useQuery({
+    queryKey: ["admin", "operations", "alert-rules"],
+    queryFn: () => adminFetch<any>("/operations/alert-rules"),
+    refetchInterval: 30_000,
+  });
+}
+
+export function usePatchAlertRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; enabled?: boolean; threshold?: number; severity?: string; channels?: string[] }) =>
+      adminFetch<any>(`/operations/alert-rules/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "operations", "alert-rules"] }),
+  });
+}
+
+export function useEmailOpsSummary(days = 30) {
+  return useQuery({
+    queryKey: ["admin", "operations", "emails", "summary", days],
+    queryFn: () => adminFetch<any>(`/operations/emails/summary?days=${days}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useAuditOpsSummary(days = 30) {
+  return useQuery({
+    queryKey: ["admin", "operations", "audit", "summary", days],
+    queryFn: () => adminFetch<any>(`/operations/audit/summary?days=${days}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useProductIntegrations() {
+  return useQuery({
+    queryKey: ["admin", "product", "integrations"],
+    queryFn: () => adminFetch<any>("/product/integrations"),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useProductOverview() {
+  return useQuery({
+    queryKey: ["admin", "product", "overview"],
+    queryFn: () => adminFetch<any>("/product/overview"),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useVoiceLive() {
+  return useQuery({
+    queryKey: ["admin", "voice", "live"],
+    queryFn: () => adminFetch<any>("/voice/live"),
+    refetchInterval: 5_000,
+  });
+}
+
+export function useVoiceCall360(callId: string) {
+  return useQuery({
+    queryKey: ["admin", "voice", "calls", callId],
+    queryFn: () => adminFetch<any>(`/voice/calls/${callId}`),
+    enabled: !!callId,
+  });
+}
+
+export interface CallSearchRow {
+  id: number;
+  executionId: string | null;
+  status: string | null;
+  userId: string | null;
+  agentId: number | null;
+  toNumber: string | null;
+  durationSeconds: number | null;
+  costCents: number | null;
+  errorMessage: string | null;
+  createdAt: string | null;
+  agentName: string | null;
+  userEmail: string | null;
+  userName: string | null;
+}
+
+export interface CallSearchResponse {
+  query: string;
+  count: number;
+  calls: CallSearchRow[];
+}
+
+/** Look a call up by execution id (exec_…) or numeric call id. */
+export function useVoiceCallSearch(query: string) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ["admin", "voice", "call-search", q],
+    queryFn: () => adminFetch<CallSearchResponse>(`/voice/call-search?q=${encodeURIComponent(q)}`),
+    enabled: q.length >= 3,
+  });
+}
+
+export function useVoiceFailures(days = 7) {
+  return useQuery({
+    queryKey: ["admin", "voice", "failures", days],
+    queryFn: () => adminFetch<any>(`/voice/failures?days=${days}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useVoiceCallQuality(days = 7) {
+  return useQuery({
+    queryKey: ["admin", "voice", "call-quality", days],
+    queryFn: () => adminFetch<any>(`/voice/call-quality?days=${days}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useRevenueWallets() {
+  return useQuery({
+    queryKey: ["admin", "revenue", "wallets"],
+    queryFn: () => adminFetch<any>("/revenue/wallets"),
+    refetchInterval: 60_000,
+  });
+}
+

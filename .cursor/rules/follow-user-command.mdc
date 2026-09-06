@@ -1,0 +1,23 @@
+---
+description: On issue/bug, analyze and fix; push only on push to main
+alwaysApply: true
+---
+
+# Follow the user’s command first
+
+1. **Listen to what they actually asked.** Do that first. Do not invent codes, prices, names, or extra features they did not specify. If a required value is missing, ask — do not decide it yourself.
+
+2. **If they say issue / bug / error** (or send a screenshot / logs of a problem), even without the word “fix”:
+   - Analyze the relevant project code (full repo when the report is not scoped).
+   - Identify bugs, errors, broken functionality, and incorrect logic.
+   - Explain the **root cause** of each important issue.
+   - **Then fix it** without breaking existing features.
+   - Clean up unnecessary or duplicate code that is part of that work.
+   - Do **not** wait for a second “fix” message.
+
+3. **If they say only find / check / tell me** (and not issue/bug/error): report only. Do not change application code yet.
+
+4. **Push to `main` only** when they explicitly say **push to main** in that turn. After a fix, **wait** — ask if they want it on main. Never auto-push.
+
+5. Do not skip their sequence to “be helpful.”
+---

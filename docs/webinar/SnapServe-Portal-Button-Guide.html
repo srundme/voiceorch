@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SnapServe Portal — What Does This Button Do?</title>
+<style>
+  :root {
+    --ink: #0F172A;
+    --paper: #F4F7FA;
+    --white: #FFFFFF;
+    --muted: #5B6B7F;
+    --line: #E2E8F0;
+    --chip: #0F172A;
+    --accent: #1D4ED8;
+    --shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 8px 24px rgba(15, 23, 42, .06);
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Header ─────────────────────────────────────────────── */
+  header {
+    background: var(--ink);
+    color: var(--white);
+    padding: 40px 24px 32px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  .mark { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .bars { display: flex; flex-direction: column; gap: 3px; }
+  .bars i { display: block; height: 4px; border-radius: 2px; background: var(--white); }
+  .bars i:nth-child(1) { width: 26px; opacity: 1; }
+  .bars i:nth-child(2) { width: 19px; opacity: .7; }
+  .bars i:nth-child(3) { width: 12px; opacity: .45; }
+  .wordmark { font-size: 20px; letter-spacing: -.2px; }
+  .wordmark b { font-weight: 700; }
+  .wordmark span { font-weight: 400; }
+  header h1 { font-size: 34px; line-height: 1.2; margin: 0 0 10px; letter-spacing: -.6px; }
+  header p { margin: 0; color: #C7D2DE; max-width: 62ch; font-size: 16px; }
+
+  /* ── Search bar ─────────────────────────────────────────── */
+  .searchbar {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(244, 247, 250, .92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+    padding: 14px 24px;
+  }
+  .searchbar .wrap { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  #q {
+    flex: 1 1 320px;
+    min-width: 0;
+    padding: 12px 16px;
+    font-size: 16px;
+    font-family: inherit;
+    color: var(--ink);
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+  }
+  #q:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
+  #count { color: var(--muted); font-size: 14px; white-space: nowrap; }
+
+  /* ── Layout ─────────────────────────────────────────────── */
+  .layout { display: flex; gap: 40px; align-items: flex-start; padding: 32px 24px 80px; }
+  nav {
+    position: sticky; top: 78px;
+    flex: 0 0 232px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    font-size: 14px;
+  }
+  nav h4 { margin: 0 0 10px; font-size: 12px; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+  nav a { display: block; padding: 6px 10px; color: var(--muted); text-decoration: none; border-radius: 6px; }
+  nav a:hover { background: var(--white); color: var(--ink); }
+  main { flex: 1 1 auto; min-width: 0; }
+
+  /* ── Sections ───────────────────────────────────────────── */
+  .section {
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 26px 28px;
+    margin-bottom: 22px;
+    box-shadow: var(--shadow);
+  }
+  .section > h2 { font-size: 23px; margin: 0 0 4px; letter-spacing: -.3px; }
+  .section > .lede { margin: 0 0 20px; color: var(--muted); }
+  .section h3 {
+    font-size: 15px; margin: 26px 0 12px;
+    text-transform: uppercase; letter-spacing: .7px; color: var(--muted);
+    border-top: 1px solid var(--line); padding-top: 18px;
+  }
+  .section h3:first-of-type { border-top: 0; padding-top: 0; margin-top: 18px; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 210px 1fr;
+    gap: 8px 20px;
+    padding: 9px 0;
+    border-bottom: 1px dashed var(--line);
+    align-items: baseline;
+  }
+  .row:last-child { border-bottom: 0; }
+  .btn {
+    display: inline-block;
+    background: var(--chip); color: var(--white);
+    padding: 3px 11px; border-radius: 6px;
+    font-size: 13.5px; font-weight: 600;
+    line-height: 1.5;
+  }
+  .btn.soft { background: #E8EDF3; color: var(--ink); }
+  .row p { margin: 0; }
+  .row p em { color: var(--muted); font-style: normal; }
+
+  .note {
+    background: #F1F5F9; border-left: 3px solid var(--ink);
+    padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 18px 0 0;
+    font-size: 15px;
+  }
+
+  footer { padding: 0 24px 60px; color: var(--muted); font-size: 14px; }
+  #empty { display: none; padding: 40px 4px; color: var(--muted); }
+
+  /* ── Small screens ──────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .layout { flex-direction: column; gap: 20px; padding: 20px 16px 60px; }
+    nav { position: static; flex: 1 1 auto; max-height: none; width: 100%;
+          background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+    nav div { display: flex; flex-wrap: wrap; gap: 4px; }
+    nav a { border: 1px solid var(--line); }
+    .section { padding: 20px 18px; }
+    .row { grid-template-columns: 1fr; gap: 4px; }
+    header { padding: 28px 16px 24px; }
+    header h1 { font-size: 26px; }
+    .searchbar { padding: 12px 16px; }
+  }
+
+  /* ── Print / PDF ────────────────────────────────────────── */
+  @media print {
+    body { background: #fff; font-size: 11pt; }
+    .searchbar, nav { display: none !important; }
+    header { background: #fff; color: var(--ink); padding: 0 0 18pt; }
+    header p { color: var(--muted); }
+    .bars i { background: var(--ink); }
+    .layout { display: block; padding: 0; }
+    .section { box-shadow: none; border: 1px solid var(--line); margin-bottom: 12pt; }
+    /* Keep a button with its explanation when a page ends. */
+    .row { page-break-inside: avoid; break-inside: avoid; }
+    .section > h2, .section h3 { break-after: avoid; }
+    .section > h2 { break-before: auto; }
+    .note { break-inside: avoid; }
+    .btn { background: #fff; color: var(--ink); border: 1px solid var(--ink); }
+    a { color: var(--ink); text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="mark">
+      <span class="bars"><i></i><i></i><i></i></span>
+      <span class="wordmark"><b>Snap</b><span>Serve</span></span>
+    </div>
+    <h1>What does this button do?</h1>
+    <p>A plain-English guide to every screen and every button in the SnapServe portal. Made for the webinar, so anyone on the team can answer a participant instantly. Type in the search box to jump straight to a button.</p>
+  </div>
+</header>
+
+<div class="searchbar">
+  <div class="wrap">
+    <input id="q" type="search" placeholder="Type a button name, for example: Export, Get number, Live test, Re-campaign" autocomplete="off" />
+    <span id="count"></span>
+  </div>
+</div>
+
+<div class="layout">
+  <nav>
+    <h4>On this page</h4>
+    <div>
+      <a href="#around">Getting around</a>
+      <a href="#home">Home</a>
+      <a href="#agents">Agents</a>
+      <a href="#campaigns">Campaigns</a>
+      <a href="#numbers">Phone numbers</a>
+      <a href="#connections">Connections</a>
+      <a href="#history">History</a>
+      <a href="#analytics">Analytics</a>
+      <a href="#knowledge">Knowledge</a>
+      <a href="#memory">Memory</a>
+      <a href="#squads">Squads</a>
+      <a href="#bookings">Bookings</a>
+      <a href="#workspace">Workspace</a>
+      <a href="#providers">Providers</a>
+      <a href="#developers">Developers</a>
+      <a href="#billing">Billing</a>
+      <a href="#shared">Links you share</a>
+      <a href="#words">Words people ask about</a>
+    </div>
+  </nav>
+
+  <main>
+
+  <!-- ── GETTING AROUND ───────────────────────────────────── -->
+  <section class="section" id="around">
+    <h2>Getting around</h2>
+    <p class="lede">The menu on the left is the same on every screen. This is what each item opens.</p>
+
+    <h3>Main menu</h3>
+    <div class="row"><span class="btn">Home</span><p>Your starting screen. Shows what needs attention today and quick links to create things.</p></div>
+    <div class="row"><span class="btn">Campaigns</span><p>Calling lists. This is where you upload contacts and let the agent call them.</p></div>
+    <div class="row"><span class="btn">Agents</span><p>Your AI callers. Create one, write what it should say, and test it.</p></div>
+    <div class="row"><span class="btn">Phone numbers</span><p>Buy a number, and choose which agent answers it.</p></div>
+    <div class="row"><span class="btn">Connections</span><p>Connect outside tools: WhatsApp, email, Google Sheets, your website form, Meta lead ads, calendar, meeting bots.</p></div>
+    <div class="row"><span class="btn">History</span><p>Every call that happened. Recording, transcript and result of each one.</p></div>
+    <div class="row"><span class="btn">Analytics</span><p>Numbers and charts: how many calls, how many connected, how many booked.</p></div>
+
+    <h3>More menu</h3>
+    <div class="row"><span class="btn">Knowledge</span><p>Company information you give the agent, so it can answer questions correctly.</p></div>
+    <div class="row"><span class="btn">Memory</span><p>What the agent remembers about each caller from earlier calls.</p></div>
+    <div class="row"><span class="btn">Squads</span><p>A group of agents that pass a call to each other, like a small team.</p></div>
+    <div class="row"><span class="btn">Bookings</span><p>Your calendar. Meetings the agent booked, and the times you are free.</p></div>
+
+    <h3>Settings menu</h3>
+    <div class="row"><span class="btn">Workspace</span><p>Company details, team members, appearance, and account settings.</p></div>
+    <div class="row"><span class="btn">Providers</span><p>Bring your own AI keys and pick the voices you want.</p></div>
+    <div class="row"><span class="btn">Developers</span><p>API keys and webhooks, for connecting SnapServe to your own software.</p></div>
+    <div class="row"><span class="btn">Billing</span><p>Your wallet balance, add money, and see where the money went.</p></div>
+
+    <h3>Top of the screen</h3>
+    <div class="row"><span class="btn">Search…</span><p>Find any agent, call or campaign by typing. Keyboard shortcut is Ctrl+K, or Cmd+K on Mac.</p></div>
+    <div class="row"><span class="btn">New agent</span><p>Creates a new AI caller. Available from anywhere in the portal.</p></div>
+    <div class="row"><span class="btn soft">Wallet chip</span><p>The balance shown near the top. Click it to add money.</p></div>
+    <div class="row"><span class="btn">Documentation</span><p>The full written help guide.</p></div>
+    <div class="row"><span class="btn">Settings</span><p>In the user menu. Opens your workspace settings.</p></div>
+    <div class="row"><span class="btn">Light appearance</span><p>Switches the portal to the light colour theme.</p></div>
+    <div class="row"><span class="btn">Dark appearance</span><p>Switches the portal to the dark colour theme.</p></div>
+    <div class="row"><span class="btn">Sign out</span><p>Logs you out of the portal.</p></div>
+
+    <h3>On a phone</h3>
+    <div class="row"><span class="btn soft">Bottom bar</span><p>Five shortcuts at the bottom of the screen: Home, Campaigns, Create, Agents, History.</p></div>
+    <div class="row"><span class="btn">Create</span><p>The centre button on the phone bar. Opens the new agent box.</p></div>
+
+    <h3>When you click New agent</h3>
+    <div class="row"><span class="btn">Vibe Build</span><p>You describe your business in normal words and the AI builds the agent for you in a few minutes.</p></div>
+    <div class="row"><span class="btn">Manual Build</span><p>You set up every detail yourself: script, voice, actions.</p></div>
+    <div class="row"><span class="btn">Open builder</span><p>Goes straight to the builder. Shown instead of the two options above when your account is managed by a partner.</p></div>
+
+    <p class="note">Some accounts are managed by a partner. Those users see fewer menu items, for example no Providers. That is normal, not a fault.</p>
+  </section>
+
+  <!-- ── HOME ────────────────────────────────────────────── -->
+  <section class="section" id="home">
+    <h2>Home</h2>
+    <p class="lede">The first screen after you log in.</p>
+    <div class="row"><span class="btn">Open agent</span><p>Opens your agent so you can edit or test it.</p></div>
+    <div class="row"><span class="btn">New campaign</span><p>Starts a new calling list.</p></div>
+    <div class="row"><span class="btn soft">Setup checklist</span><p>Short list of the first three things to do: create an agent, create a campaign, connect a phone or channel. Each line is clickable.</p></div>
+  </section>
+
+  <!-- ── AGENTS ──────────────────────────────────────────── -->
+  <section class="section" id="agents">
+    <h2>Agents</h2>
+    <p class="lede">An agent is your AI caller. This screen has the list on the left and the builder on the right.</p>
+
+    <h3>Making a new agent</h3>
+    <div class="row"><span class="btn">New agent</span><p>Starts creating an agent.</p></div>
+    <div class="row"><span class="btn">Build with AI</span><p>Describe the business, and the AI writes the script and settings for you.</p></div>
+    <div class="row"><span class="btn">Configure manually</span><p>You fill in everything yourself.</p></div>
+    <div class="row"><span class="btn">Create agent</span><p>Saves the new agent and opens it.</p></div>
+
+    <h3>Buttons at the top of the builder</h3>
+    <div class="row"><span class="btn">Call</span><p>Makes the agent ring a real phone number so you can hear it on a live call.</p></div>
+    <div class="row"><span class="btn">Live test</span><p>Talk to the agent right now through your computer microphone. No phone number needed.</p></div>
+    <div class="row"><span class="btn">Close test</span><p>Closes that test panel.</p></div>
+    <div class="row"><span class="btn">Save</span><p>Saves your changes. It shows Saving while it works and Saved when it is done.</p></div>
+    <div class="row"><span class="btn">Phone test</span><p>Same as Call. This is the name it uses on a phone screen.</p></div>
+    <div class="row"><span class="btn">Publish version</span><p>Takes a snapshot of the agent as it is now, so you can come back to it later.</p></div>
+    <div class="row"><span class="btn">Refine with AI</span><p>Reopens the AI builder to improve an agent you already made.</p></div>
+    <div class="row"><span class="btn">API keys</span><p>Shortcut to the Providers screen, where the AI keys live.</p></div>
+    <div class="row"><span class="btn">Delete agent</span><p>Removes the agent permanently.</p></div>
+
+    <h3>The test call box</h3>
+    <div class="row"><span class="btn">Call</span><p>Starts the test call to the number you typed. Shows Calling while it connects.</p></div>
+    <div class="row"><span class="btn soft">Cancel</span><p>Closes the box without calling.</p></div>
+    <div class="row"><span class="btn">Start call</span><p>In the browser test panel. Begins talking to the agent.</p></div>
+    <div class="row"><span class="btn">End call</span><p>Hangs up the browser test call.</p></div>
+
+    <h3>The tabs inside the builder</h3>
+    <div class="row"><span class="btn soft">Overview</span><p>A summary of the agent and its main settings in one place.</p></div>
+    <div class="row"><span class="btn soft">Script</span><p>What the agent says and how it behaves. The most important tab.</p></div>
+    <div class="row"><span class="btn soft">Sound</span><p>Voice, language and speaking style.</p></div>
+    <div class="row"><span class="btn soft">Actions</span><p>Things the agent can actually do on a call: book a meeting, transfer to a person, send WhatsApp, end the call.</p></div>
+    <div class="row"><span class="btn soft">After the call</span><p>What happens once the call ends. Set the result of the call and send follow-up messages.</p></div>
+    <div class="row"><span class="btn soft">Activity</span><p>Recent calls made by this agent.</p></div>
+    <div class="row"><span class="btn soft">Settings</span><p>Advanced options, including the website widget.</p></div>
+    <div class="row"><span class="btn soft">Versions</span><p>Older saved copies of the agent.</p></div>
+
+    <h3>Inside Script</h3>
+    <div class="row"><span class="btn">Generate</span><p>The AI writes the script for you from a short description.</p></div>
+
+    <h3>Inside After the call</h3>
+    <div class="row"><span class="btn">Add rule</span><p>Adds a rule such as: if the call result was Interested, send this WhatsApp message.</p></div>
+    <div class="row"><span class="btn">Save Outcomes</span><p>Saves your call results and follow-up rules.</p></div>
+
+    <h3>Inside Settings, website widget</h3>
+    <div class="row"><span class="btn">Generate embed code</span><p>Creates a small piece of code. Paste it into your website and visitors can talk to the agent from there.</p></div>
+    <div class="row"><span class="btn">Copy</span><p>Copies that code to your clipboard.</p></div>
+    <div class="row"><span class="btn">Regenerate token</span><p>Creates a new secret link and stops the old one working. Use this if the old link leaked.</p></div>
+
+    <h3>Inside Versions</h3>
+    <div class="row"><span class="btn">Publish Version</span><p>Saves the current setup as a named version you can return to.</p></div>
+  </section>
+
+  <!-- ── CAMPAIGNS ───────────────────────────────────────── -->
+  <section class="section" id="campaigns">
+    <h2>Campaigns</h2>
+    <p class="lede">A campaign is a list of people to call, plus the agent that calls them.</p>
+
+    <h3>Where the contacts come from</h3>
+    <div class="row"><span class="btn">CSV file</span><p>Upload a contact list from Excel or a spreadsheet file.</p></div>
+    <div class="row"><span class="btn">Sheets</span><p>Connect a Google Sheet. New rows are called automatically as you add them.</p></div>
+    <div class="row"><span class="btn">Website</span><p>Calls people the moment they fill a form on your website.</p></div>
+    <div class="row"><span class="btn">Meta</span><p>Calls leads that come from Facebook and Instagram ads.</p></div>
+    <div class="row"><span class="btn">Zoho CRM</span><p>Pulls contacts from your Zoho CRM.</p></div>
+
+    <h3>On the campaign list</h3>
+    <div class="row"><span class="btn">Export</span><p>Downloads the list as a spreadsheet file.</p></div>
+    <div class="row"><span class="btn">Clear</span><p>Removes the filters you applied, so you see everything again.</p></div>
+    <div class="row"><span class="btn">Pause</span><p>Stops calling for now. You can start again later.</p></div>
+    <div class="row"><span class="btn">Resume</span><p>Starts calling again after a pause.</p></div>
+    <div class="row"><span class="btn">Stop</span><p>Ends the campaign. Remaining contacts are not called.</p></div>
+    <div class="row"><span class="btn">Edit</span><p>Change the campaign name, agent or settings.</p></div>
+    <div class="row"><span class="btn">Delete</span><p>Removes the campaign completely.</p></div>
+    <div class="row"><span class="btn">Start a CSV campaign</span><p>Shown when you have no campaigns yet. Begins the upload steps.</p></div>
+    <div class="row"><span class="btn">Campaign guide</span><p>Opens a short help panel explaining how campaigns work.</p></div>
+
+    <h3>The create steps</h3>
+    <div class="row"><span class="btn">Next</span><p>Goes to the next step.</p></div>
+    <div class="row"><span class="btn soft">Back</span><p>Goes to the previous step.</p></div>
+    <div class="row"><span class="btn soft">Cancel</span><p>Leaves without creating anything.</p></div>
+    <div class="row"><span class="btn">Create campaign</span><p>Finishes and creates the campaign. On some steps it says Create list.</p></div>
+
+    <h3>Inside one campaign</h3>
+    <div class="row"><span class="btn soft">Overview</span><p>Progress so far: how many called, connected, and remaining.</p></div>
+    <div class="row"><span class="btn soft">Analytics</span><p>Charts for this campaign only.</p></div>
+    <div class="row"><span class="btn soft">Live Queue</span><p>Calls happening right now, live.</p></div>
+    <div class="row"><span class="btn soft">Incoming</span><p>People from this list who called you back.</p></div>
+    <div class="row"><span class="btn soft">Callbacks</span><p>Calls the agent promised to make again later.</p></div>
+    <div class="row"><span class="btn soft">Transfers</span><p>Calls that were passed to a human.</p></div>
+    <div class="row"><span class="btn soft">Bookings</span><p>Meetings booked from this campaign.</p></div>
+    <div class="row"><span class="btn soft">Configuration</span><p>The settings of this campaign.</p></div>
+    <div class="row"><span class="btn">View Analytics</span><p>Opens the full analytics screen for this campaign.</p></div>
+    <div class="row"><span class="btn">Create Batch</span><p>Adds another set of contacts to the same campaign.</p></div>
+    <div class="row"><span class="btn">Activate</span><p>Turns a stopped continuous campaign back on.</p></div>
+    <div class="row"><span class="btn">Re-campaign</span><p>Calls the same people again, for example everyone who did not pick up.</p></div>
+  </section>
+
+  <!-- ── PHONE NUMBERS ───────────────────────────────────── -->
+  <section class="section" id="numbers">
+    <h2>Phone numbers</h2>
+    <p class="lede">The number your agent calls from, and the number customers call in on. Two tabs: My numbers and Verification.</p>
+
+    <div class="row"><span class="btn">Get number</span><p>Opens the buying steps for a new phone number.</p></div>
+    <div class="row"><span class="btn">Get Your First Number</span><p>The same thing, shown when you have no numbers yet.</p></div>
+    <div class="row"><span class="btn">Search</span><p>Shows the numbers available to buy.</p></div>
+    <div class="row"><span class="btn">Apply</span><p>Applies a coupon code to the price.</p></div>
+    <div class="row"><span class="btn">Purchase Number</span><p>Pays for the number and adds it to your account.</p></div>
+    <div class="row"><span class="btn">Get number free</span><p>Shown instead of Purchase Number when a coupon has made the price zero. No payment screen appears.</p></div>
+    <div class="row"><span class="btn">Assign</span><p>Chooses which agent answers this number.</p></div>
+    <div class="row"><span class="btn">Reassign</span><p>Moves the number to a different agent.</p></div>
+    <div class="row"><span class="btn">Rules</span><p>Decides who answers based on time or the caller, for example office hours to one agent and nights to another.</p></div>
+    <div class="row"><span class="btn">Save</span><p>Saves those answering rules.</p></div>
+    <div class="row"><span class="btn">Release</span><p>Gives the number back. You stop paying for it and you cannot get that same number again.</p></div>
+    <div class="row"><span class="btn">Verify Identity</span><p>Starts the identity check the telecom rules require before a number can be used.</p></div>
+    <div class="row"><span class="btn">Resume Verification</span><p>Continues an identity check you already started.</p></div>
+    <div class="row"><span class="btn soft">Back</span><p>Goes one step back in the buying steps.</p></div>
+    <div class="row"><span class="btn soft">Cancel</span><p>Leaves the buying steps.</p></div>
+  </section>
+
+  <!-- ── CONNECTIONS ─────────────────────────────────────── -->
+  <section class="section" id="connections">
+    <h2>Connections</h2>
+    <p class="lede">One screen with a card for every outside tool you can plug in.</p>
+
+    <h3>The cards</h3>
+    <div class="row"><span class="btn soft">Phone numbers</span><p>Buy a number and point it at an agent.</p></div>
+    <div class="row"><span class="btn soft">Google Sheets</span><p>Call people automatically as rows are added to a sheet.</p></div>
+    <div class="row"><span class="btn soft">Bookings calendar</span><p>Connect your calendar so the agent can book real meetings.</p></div>
+    <div class="row"><span class="btn soft">Meeting bots</span><p>Send the agent into a Google Meet, Zoom or Teams meeting.</p></div>
+    <div class="row"><span class="btn soft">WhatsApp</span><p>Send WhatsApp messages before or after a call.</p></div>
+    <div class="row"><span class="btn soft">Email (Brevo)</span><p>Send emails, for example a booking confirmation.</p></div>
+    <div class="row"><span class="btn soft">Form intake</span><p>Call a person as soon as they submit your website form.</p></div>
+    <div class="row"><span class="btn soft">Meta Lead Ads</span><p>Call leads from Facebook and Instagram ads.</p></div>
+
+    <h3>Buttons on the cards</h3>
+    <div class="row"><span class="btn">Get a number</span><p>Goes to the buying steps.</p></div>
+    <div class="row"><span class="btn">Manage</span><p>Opens the settings for something already connected.</p></div>
+    <div class="row"><span class="btn">Assign</span><p>Chooses which agent this connection belongs to.</p></div>
+    <div class="row"><span class="btn">Connect Google Sheets</span><p>Links your Google account and picks a sheet.</p></div>
+    <div class="row"><span class="btn">Start automatic calls</span><p>Turns on calling from that sheet.</p></div>
+    <div class="row"><span class="btn">Open meeting bots</span><p>Opens the screen where you paste a meeting link.</p></div>
+    <div class="row"><span class="btn">Add another</span><p>Connects one more account of the same type.</p></div>
+    <div class="row"><span class="btn">Disconnect</span><p>Unlinks that tool. Nothing is deleted from the tool itself.</p></div>
+
+    <h3>Inside WhatsApp</h3>
+    <div class="row"><span class="btn">Connect</span><p>Links your WhatsApp Business account.</p></div>
+    <div class="row"><span class="btn">Connect Meta</span><p>Opens the Meta login and permission steps.</p></div>
+    <div class="row"><span class="btn">Test</span><p>Sends a test message to your own number to prove it works.</p></div>
+    <div class="row"><span class="btn">Disconnect</span><p>Unlinks WhatsApp.</p></div>
+  </section>
+
+  <!-- ── HISTORY ─────────────────────────────────────────── -->
+  <section class="section" id="history">
+    <h2>History</h2>
+    <p class="lede">Every call, with the recording and the written transcript. Three tabs: Calls, Callbacks, Transfers.</p>
+
+    <h3>Calls</h3>
+    <div class="row"><span class="btn">Date Range</span><p>Choose the dates you want to look at.</p></div>
+    <div class="row"><span class="btn">Export</span><p>Downloads the calls you are viewing as a spreadsheet.</p></div>
+    <div class="row"><span class="btn">Clear</span><p>Removes your filters.</p></div>
+    <div class="row"><span class="btn">Retry</span><p>Loads the list again if it failed to appear.</p></div>
+    <div class="row"><span class="btn soft">Click any row</span><p>Opens that call: recording, transcript, result, and what the agent did.</p></div>
+    <div class="row"><span class="btn soft">Previous page</span><p>Older results.</p></div>
+    <div class="row"><span class="btn soft">Next page</span><p>More results.</p></div>
+
+    <h3>Callbacks</h3>
+    <div class="row"><span class="btn soft">All</span><p>Shows every kind of callback.</p></div>
+    <div class="row"><span class="btn soft">Callbacks</span><p>Only the ones the customer asked for.</p></div>
+    <div class="row"><span class="btn soft">Network Drop</span><p>Calls that got cut because of a network problem.</p></div>
+    <div class="row"><span class="btn soft">Auto-Redials</span><p>Calls the system retried on its own.</p></div>
+    <div class="row"><span class="btn">Reschedule</span><p>Changes the time of a planned callback.</p></div>
+    <div class="row"><span class="btn">View call details</span><p>Opens the original call.</p></div>
+    <div class="row"><span class="btn">Yes, cancel it</span><p>Confirms that the callback should not happen.</p></div>
+    <div class="row"><span class="btn soft">Keep</span><p>Changes your mind and keeps the callback.</p></div>
+
+    <h3>Transfers</h3>
+    <div class="row"><span class="btn">Connected</span><p>Marks that your team member picked up the transferred call.</p></div>
+    <div class="row"><span class="btn">Done</span><p>Marks the transfer as finished.</p></div>
+    <div class="row"><span class="btn">Retry</span><p>Loads the transfer list again.</p></div>
+  </section>
+
+  <!-- ── ANALYTICS ───────────────────────────────────────── -->
+  <section class="section" id="analytics">
+    <h2>Analytics</h2>
+    <p class="lede">Charts and totals for your calls.</p>
+    <div class="row"><span class="btn">Today</span><p>Only today's calls.</p></div>
+    <div class="row"><span class="btn">Yesterday</span><p>Only yesterday's calls.</p></div>
+    <div class="row"><span class="btn">7 Days</span><p>The last week.</p></div>
+    <div class="row"><span class="btn">30 Days</span><p>The last month.</p></div>
+    <div class="row"><span class="btn">Back to campaign</span><p>Returns to the campaign you came from.</p></div>
+  </section>
+
+  <!-- ── KNOWLEDGE ───────────────────────────────────────── -->
+  <section class="section" id="knowledge">
+    <h2>Knowledge</h2>
+    <p class="lede">Give the agent your company information so it answers correctly instead of guessing.</p>
+    <div class="row"><span class="btn">Add knowledge</span><p>Creates a new knowledge pack. You can upload a file, paste text, or add questions and answers.</p></div>
+    <div class="row"><span class="btn">Add your first pack</span><p>The same thing, shown when you have none yet.</p></div>
+    <div class="row"><span class="btn">Continue</span><p>Moves to the next step.</p></div>
+    <div class="row"><span class="btn">Upload &amp; continue</span><p>Uploads your file and moves on.</p></div>
+    <div class="row"><span class="btn">Add Q&amp;A Pair</span><p>Adds one question and its answer.</p></div>
+    <div class="row"><span class="btn">Add Entry</span><p>Adds a plain block of text.</p></div>
+    <div class="row"><span class="btn">Attach to</span><p>Chooses which agents can use this knowledge. It shows how many are selected.</p></div>
+    <div class="row"><span class="btn">Skip for now</span><p>Saves the knowledge without attaching it to an agent yet.</p></div>
+    <div class="row"><span class="btn">Done</span><p>Finishes and closes.</p></div>
+    <div class="row"><span class="btn">Search</span><p>Test it. Type a customer question and see what the agent would find.</p></div>
+    <div class="row"><span class="btn">Delete</span><p>Removes that knowledge source.</p></div>
+  </section>
+
+  <!-- ── MEMORY ──────────────────────────────────────────── -->
+  <section class="section" id="memory">
+    <h2>Memory</h2>
+    <p class="lede">Shown as Customer Intelligence at the top of the screen. What the agent remembers about each caller, so a repeat caller does not have to explain everything again.</p>
+    <div class="row"><span class="btn soft">Overview</span><p>A short summary of that caller.</p></div>
+    <div class="row"><span class="btn soft">Facts</span><p>Specific things learned, for example their city or their budget.</p></div>
+    <div class="row"><span class="btn soft">Episodes</span><p>Important moments from past conversations.</p></div>
+    <div class="row"><span class="btn soft">Timeline</span><p>Everything in date order.</p></div>
+    <div class="row"><span class="btn soft">Call History</span><p>Every call with this person.</p></div>
+    <div class="row"><span class="btn">Show transcript</span><p>Opens the written version of the conversation.</p></div>
+    <div class="row"><span class="btn">Hide transcript</span><p>Closes it again.</p></div>
+    <div class="row"><span class="btn">Delete this fact</span><p>Removes one remembered detail, for example if it is wrong.</p></div>
+    <div class="row"><span class="btn">Reset Memory</span><p>Erases everything remembered about that caller. It cannot be undone.</p></div>
+  </section>
+
+  <!-- ── SQUADS ──────────────────────────────────────────── -->
+  <section class="section" id="squads">
+    <h2>Squads</h2>
+    <p class="lede">A team of agents. One starts the call and hands over to another when the topic changes, for example sales to support.</p>
+    <div class="row"><span class="btn">New team</span><p>Creates a squad.</p></div>
+    <div class="row"><span class="btn">Create team</span><p>Saves the new squad.</p></div>
+    <div class="row"><span class="btn">Edit</span><p>Change which agents are in it and who starts the call.</p></div>
+    <div class="row"><span class="btn">Save team</span><p>Saves your changes.</p></div>
+    <div class="row"><span class="btn">Delete</span><p>Removes the squad. The agents themselves stay.</p></div>
+    <div class="row"><span class="btn">Cancel follow-up</span><p>Stops a follow-up task the squad had planned.</p></div>
+  </section>
+
+  <!-- ── BOOKINGS ────────────────────────────────────────── -->
+  <section class="section" id="bookings">
+    <h2>Bookings</h2>
+    <p class="lede">The calendar behind the agent. It decides which times the agent is allowed to offer on a call.</p>
+
+    <h3>The tabs</h3>
+    <div class="row"><span class="btn soft">Bookings</span><p>Meetings that are already booked.</p></div>
+    <div class="row"><span class="btn soft">Setup</span><p>The quick way to get your calendar working.</p></div>
+    <div class="row"><span class="btn soft">Calendars</span><p>Your calendars and their time zone.</p></div>
+    <div class="row"><span class="btn soft">Event Types</span><p>The kinds of meeting you offer, such as a 30 minute demo.</p></div>
+    <div class="row"><span class="btn soft">Availability</span><p>The days and hours you are free.</p></div>
+    <div class="row"><span class="btn soft">Conferencing</span><p>Connects Google Meet so every booking gets a meeting link.</p></div>
+
+    <h3>The buttons</h3>
+    <div class="row"><span class="btn">New Calendar</span><p>Creates a calendar.</p></div>
+    <div class="row"><span class="btn">Create a calendar</span><p>The same thing, shown when you have none.</p></div>
+    <div class="row"><span class="btn">Add schedule</span><p>Adds a set of working hours, for example Monday to Friday, 9 to 6.</p></div>
+    <div class="row"><span class="btn">Confirm booking</span><p>Approves a meeting that is waiting for approval.</p></div>
+    <div class="row"><span class="btn">Reschedule</span><p>Moves a booked meeting to another time.</p></div>
+    <div class="row"><span class="btn">Cancel booking</span><p>Cancels the meeting and tells the customer.</p></div>
+    <div class="row"><span class="btn soft">Keep</span><p>Changes your mind and keeps the meeting.</p></div>
+    <div class="row"><span class="btn soft">Back to Event Types</span><p>Returns to the list of meeting types.</p></div>
+
+    <p class="note">Common question: why did the agent not offer 10:45? The agent can only offer times that fit your meeting length. With a 30 minute meeting starting from 9:00, the available times are 9:00, 9:30, 10:00 and so on. Change the meeting length or the start of your working hours in Event Types and Availability.</p>
+  </section>
+
+  <!-- ── WORKSPACE ───────────────────────────────────────── -->
+  <section class="section" id="workspace">
+    <h2>Workspace</h2>
+    <p class="lede">Your company account. Two tabs: Workspace and Team.</p>
+    <div class="row"><span class="btn">Invite Member</span><p>Sends an email invite so a colleague can log in.</p></div>
+    <div class="row"><span class="btn">Update password</span><p>Changes your login password.</p></div>
+    <div class="row"><span class="btn">Add concurrent slot</span><p>Buys the ability to run one more call at the same time. Two slots means two calls at once.</p></div>
+    <div class="row"><span class="btn soft">Light / Dark / System</span><p>The colour theme. System follows your computer setting.</p></div>
+    <div class="row"><span class="btn soft">10 s / 30 s / None</span><p>How long the agent waits in silence before ending the call.</p></div>
+    <div class="row"><span class="btn">Delete from SnapServe</span><p>Deletes the whole workspace. You have to type DELETE to confirm. It cannot be undone.</p></div>
+    <div class="row"><span class="btn soft">Profile</span><p>Your own name and details.</p></div>
+    <div class="row"><span class="btn soft">Audit Logs</span><p>A record of who changed what.</p></div>
+  </section>
+
+  <!-- ── PROVIDERS ───────────────────────────────────────── -->
+  <section class="section" id="providers">
+    <h2>Providers</h2>
+    <p class="lede">The AI services behind the agent. Three tabs: Provider keys, Voices, My clones.</p>
+    <div class="row"><span class="btn">Add Provider</span><p>Use your own account with an AI company instead of ours. Billing for that part then goes to you.</p></div>
+    <div class="row"><span class="btn soft">Voices</span><p>Listen to the available voices and choose one.</p></div>
+    <div class="row"><span class="btn soft">My clones</span><p>Voices made from your own recording.</p></div>
+  </section>
+
+  <!-- ── DEVELOPERS ──────────────────────────────────────── -->
+  <section class="section" id="developers">
+    <h2>Developers</h2>
+    <p class="lede">For connecting SnapServe to your own software. Two tabs: API keys and Event subscriptions.</p>
+    <div class="row"><span class="btn">New Key</span><p>Creates a key your software uses to talk to SnapServe.</p></div>
+    <div class="row"><span class="btn">Create Key</span><p>Confirms and generates it.</p></div>
+    <div class="row"><span class="btn">I've saved my key</span><p>Closes the box showing the key. The key is shown only once, so copy it first.</p></div>
+    <div class="row"><span class="btn">Revoke Key</span><p>Switches a key off immediately. Anything using it stops working.</p></div>
+    <div class="row"><span class="btn">Add endpoint</span><p>Give a web address and SnapServe will notify it every time a call finishes.</p></div>
+    <div class="row"><span class="btn">Delete</span><p>Removes that address.</p></div>
+  </section>
+
+  <!-- ── BILLING ─────────────────────────────────────────── -->
+  <section class="section" id="billing">
+    <h2>Billing</h2>
+    <p class="lede">Money in and money out. Two tabs: Wallet and Usage.</p>
+    <div class="row"><span class="btn">Pay</span><p>Adds money to your wallet. The button shows the amount, for example Pay ₹1,000.</p></div>
+    <div class="row"><span class="btn soft">Preset amounts</span><p>Quick buttons for common top-up amounts.</p></div>
+    <div class="row"><span class="btn">Set Up Card Auto-pay</span><p>Saves your card and tops up automatically when the balance runs low, so calls never stop mid-campaign.</p></div>
+    <div class="row"><span class="btn soft">Usage</span><p>Shows where the money went: calls, minutes and numbers.</p></div>
+  </section>
+
+  <!-- ── SHARED LINKS ────────────────────────────────────── -->
+  <section class="section" id="shared">
+    <h2>Links you share with customers</h2>
+    <p class="lede">These pages are seen by your customers, not by your team. No login needed.</p>
+    <div class="row"><span class="btn soft">Call link</span><p>A web page where anyone can talk to your agent from a browser. No phone call, no charges for them.</p></div>
+    <div class="row"><span class="btn">Continue</span><p>The visitor agrees to use the microphone.</p></div>
+    <div class="row"><span class="btn">Start call</span><p>The visitor begins talking to the agent.</p></div>
+    <div class="row"><span class="btn">End call</span><p>The visitor hangs up.</p></div>
+    <div class="row"><span class="btn soft">Booking page</span><p>A page where a customer picks a time themselves. They can also cancel or move it later.</p></div>
+    <div class="row"><span class="btn soft">Website widget</span><p>The code from Generate embed code. It puts a call button on your own website.</p></div>
+  </section>
+
+  <!-- ── GLOSSARY ────────────────────────────────────────── -->
+  <section class="section" id="words">
+    <h2>Words people ask about</h2>
+    <p class="lede">If a participant asks what a word means, this is the short answer.</p>
+    <div class="row"><span class="btn soft">Agent</span><p>The AI that talks on the phone. You decide what it says.</p></div>
+    <div class="row"><span class="btn soft">Campaign</span><p>A list of people to call, plus the agent that calls them.</p></div>
+    <div class="row"><span class="btn soft">Batch</span><p>One group of contacts inside a campaign.</p></div>
+    <div class="row"><span class="btn soft">Lead</span><p>One person in that list.</p></div>
+    <div class="row"><span class="btn soft">Outcome</span><p>The result of a call, for example Interested or Not interested. Also called a disposition.</p></div>
+    <div class="row"><span class="btn soft">Transfer</span><p>The agent passes the live call to a human.</p></div>
+    <div class="row"><span class="btn soft">Callback</span><p>A call the agent promised to make later.</p></div>
+    <div class="row"><span class="btn soft">Webcall</span><p>A call through a web browser instead of a phone line.</p></div>
+    <div class="row"><span class="btn soft">Knowledge pack</span><p>A file or set of answers the agent reads from.</p></div>
+    <div class="row"><span class="btn soft">Squad</span><p>Several agents that hand a call to each other.</p></div>
+    <div class="row"><span class="btn soft">Concurrent slot</span><p>One call happening at the same time. Ten slots means ten calls at once.</p></div>
+    <div class="row"><span class="btn soft">Wallet</span><p>Your prepaid balance. Calls are paid from it.</p></div>
+    <div class="row"><span class="btn soft">Verification</span><p>The identity check the telecom rules require before you can use a number.</p></div>
+    <div class="row"><span class="btn soft">Provider key</span><p>Your own account with an AI company, used instead of ours.</p></div>
+    <div class="row"><span class="btn soft">API key</span><p>A password your software uses to control SnapServe.</p></div>
+    <div class="row"><span class="btn soft">Event subscription</span><p>SnapServe telling your software that something happened, such as a call ending. Also called a webhook.</p></div>
+    <div class="row"><span class="btn soft">Version</span><p>A saved copy of an agent from a point in time.</p></div>
+    <div class="row"><span class="btn soft">Vibe Build</span><p>Building an agent by describing your business in normal words.</p></div>
+  </section>
+
+  <p id="empty">No button matches that. Try a shorter word, for example <b>call</b> or <b>number</b>.</p>
+
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">SnapServe — app.snapserve.ai. Internal team reference for the webinar. Print this page to save it as a PDF.</div>
+</footer>
+
+<script>
+  (function () {
+    var box = document.getElementById("q");
+    var count = document.getElementById("count");
+    var empty = document.getElementById("empty");
+    var rows = Array.prototype.slice.call(document.querySelectorAll(".row"));
+    var sections = Array.prototype.slice.call(document.querySelectorAll(".section"));
+    var total = rows.length;
+
+    rows.forEach(function (row) {
+      row.dataset.text = row.textContent.toLowerCase();
+    });
+
+    function reset() {
+      rows.forEach(function (r) { r.style.display = ""; });
+      sections.forEach(function (s) {
+        s.style.display = "";
+        s.querySelectorAll("h3").forEach(function (h) { h.style.display = ""; });
+      });
+      empty.style.display = "none";
+      count.textContent = total + " buttons";
+    }
+
+    function run(term) {
+      if (!term) { reset(); return; }
+      var shown = 0;
+
+      rows.forEach(function (row) {
+        var hit = row.dataset.text.indexOf(term) !== -1;
+        row.style.display = hit ? "" : "none";
+        if (hit) shown++;
+      });
+
+      sections.forEach(function (section) {
+        var visible = section.querySelectorAll('.row:not([style*="none"])').length;
+        section.style.display = visible ? "" : "none";
+        // Hide a heading when everything under it is filtered out.
+        section.querySelectorAll("h3").forEach(function (heading) {
+          var any = false;
+          var node = heading.nextElementSibling;
+          while (node && node.tagName !== "H3") {
+            if (node.classList.contains("row") && node.style.display !== "none") any = true;
+            node = node.nextElementSibling;
+          }
+          heading.style.display = any ? "" : "none";
+        });
+      });
+
+      empty.style.display = shown ? "none" : "block";
+      count.textContent = shown + " of " + total + " buttons";
+    }
+
+    box.addEventListener("input", function () {
+      run(box.value.trim().toLowerCase());
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "/" && document.activeElement !== box) {
+        e.preventDefault();
+        box.focus();
+      }
+      if (e.key === "Escape") { box.value = ""; reset(); box.blur(); }
+    });
+
+    reset();
+  })();
+</script>
+
+</body>
+</html>

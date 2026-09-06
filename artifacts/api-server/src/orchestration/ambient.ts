@@ -269,6 +269,11 @@ export class AmbientNoiseStream {
     return mixAmbientIntoPcm16k(speechPcm16k, (n) => this.readPcm(n, this.speechVol));
   }
 
+  /** Mix ambient under native 8 kHz TTS (Cartesia telephony) without a 16 kHz round-trip. */
+  mixIntoPcm8k(speechPcm8k: Buffer): Buffer {
+    return mixAmbientIntoPcm8k(speechPcm8k, (n) => this.readPcm(n, this.speechVol));
+  }
+
   private readPcm(numSamples: number, vol: number): Buffer {
     const buf = Buffer.allocUnsafe(numSamples * 2);
     for (let i = 0; i < numSamples; i++) {
@@ -278,6 +283,21 @@ export class AmbientNoiseStream {
     }
     return buf;
   }
+}
+
+function mixAmbientIntoPcm8k(
+  speechPcm8k: Buffer,
+  readAmbient8k: (numSamples8k: number) => Buffer,
+): Buffer {
+  const samples = speechPcm8k.length >> 1;
+  const ambient = readAmbient8k(samples);
+  const out = Buffer.allocUnsafe(speechPcm8k.length);
+  for (let i = 0; i < samples; i++) {
+    const speech = speechPcm8k.readInt16LE(i * 2);
+    const amb = ambient.readInt16LE(i * 2);
+    out.writeInt16LE(Math.max(-32767, Math.min(32767, speech + amb)), i * 2);
+  }
+  return out;
 }
 
 /** Shared PCM16/16 kHz ambient mixing helper used by both ambient stream types. */
@@ -358,6 +378,11 @@ export class FileAmbientNoiseStream {
     return mixAmbientIntoPcm16k(speechPcm16k, (n) => this.readPcm(n, this.speechVol));
   }
 
+  /** See AmbientNoiseStream.mixIntoPcm8k. */
+  mixIntoPcm8k(speechPcm8k: Buffer): Buffer {
+    return mixAmbientIntoPcm8k(speechPcm8k, (n) => this.readPcm(n, this.speechVol));
+  }
+
   private readPcm(numSamples: number, vol: number): Buffer {
     if (this.loopSamples === 0) return Buffer.alloc(numSamples * 2);
     const buf = Buffer.allocUnsafe(numSamples * 2);
@@ -374,6 +399,7 @@ export class FileAmbientNoiseStream {
 
 /** In-memory cache: id → PCM Buffer.  Keyed by ambient sound UUID. */
 const pcmCache = new Map<string, Buffer>();
+const pcmInflight = new Map<string, Promise<Buffer>>();
 
 /** Sync peek — returns cached PCM without hitting the DB (call-start ambient). */
 export function peekCachedPcmLoop(id: string): Buffer | null {
@@ -397,25 +423,36 @@ export async function loadPcmLoop(id: string): Promise<Buffer> {
   const cached = pcmCache.get(id);
   if (cached) return cached;
 
-  const [row] = await db
-    .select({ pcmData: ambientSoundsTable.pcmData })
-    .from(ambientSoundsTable)
-    .where(eq(ambientSoundsTable.id, id));
-  if (!row) throw new Error(`ambient: sound ${id} not found in DB — cannot load PCM loop`);
+  const existing = pcmInflight.get(id);
+  if (existing) return existing;
 
-  // 1. Fast path — the pre-converted PCM loop already lives in the DB.
-  if (row.pcmData && row.pcmData.length >= 2) {
-    const buf = Buffer.isBuffer(row.pcmData) ? row.pcmData : Buffer.from(row.pcmData as Uint8Array);
+  const inflight = (async (): Promise<Buffer> => {
+    const [row] = await db
+      .select({ pcmData: ambientSoundsTable.pcmData })
+      .from(ambientSoundsTable)
+      .where(eq(ambientSoundsTable.id, id));
+    if (!row) throw new Error(`ambient: sound ${id} not found in DB — cannot load PCM loop`);
+
+    // 1. Fast path — the pre-converted PCM loop already lives in the DB.
+    if (row.pcmData && row.pcmData.length >= 2) {
+      const buf = Buffer.isBuffer(row.pcmData) ? row.pcmData : Buffer.from(row.pcmData as Uint8Array);
+      pcmCache.set(id, buf);
+      logger.info({ id, bytes: buf.length }, "ambient: PCM loop loaded and cached");
+      return buf;
+    }
+    logger.warn({ id }, "ambient: PCM loop missing or empty in DB — regenerating from original");
+
+    // 2. Self-heal — re-transcode from the stored original bytes.
+    const buf = await regeneratePcmLoop(id);
     pcmCache.set(id, buf);
-    logger.info({ id, bytes: buf.length }, "ambient: PCM loop loaded and cached");
     return buf;
+  })();
+  pcmInflight.set(id, inflight);
+  try {
+    return await inflight;
+  } finally {
+    if (pcmInflight.get(id) === inflight) pcmInflight.delete(id);
   }
-  logger.warn({ id }, "ambient: PCM loop missing or empty in DB — regenerating from original");
-
-  // 2. Self-heal — re-transcode from the stored original bytes.
-  const buf = await regeneratePcmLoop(id);
-  pcmCache.set(id, buf);
-  return buf;
 }
 
 /** Re-transcode an uploaded sound's original bytes into the 8 kHz PCM loop. */
@@ -484,6 +521,7 @@ function transcodeToPcm8k(inputBuffer: Buffer): Promise<Buffer> {
 /** Remove a cached PCM buffer when the corresponding sound is deleted. */
 export function invalidatePcmCache(id: string): void {
   pcmCache.delete(id);
+  pcmInflight.delete(id);
 }
 
 // ── Local PCM→mulaw (avoids circular import with audio.ts) ───────────────────

@@ -10,7 +10,7 @@
  */
 
 import { google } from "googleapis";
-import { db, googleCalendarConnectionsTable } from "@workspace/db";
+import { db, googleCalendarConnectionsTable, bookingsTable, schedulingCalendarsTable } from "@workspace/db";
 import { eq, asc, sql } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
 import { createHmac, randomBytes } from "node:crypto";
@@ -18,6 +18,7 @@ import { logger } from "../../lib/logger.js";
 import { encryptKey, decryptKey } from "../../lib/crypto.js";
 import { getSelfBaseUrl } from "../../lib/app-domain.js";
 import { APP_SECRET } from "../../lib/app-secret.js";
+import { encodeGmailRawMessage, GMAIL_SEND_SCOPE, hasGmailSendScope } from "./gmail-raw.js";
 
 // ── OAuth state signing ──────────────────────────────────────────────────────
 //
@@ -104,9 +105,12 @@ export function verifyOAuthState(raw: string | undefined): OAuthStatePayload | n
 // calendar.events alone returns 403 ACCESS_TOKEN_SCOPE_INSUFFICIENT when creating
 // events with Meet links. The full `calendar` scope is a superset — it covers events,
 // Meet creation, and calendar listing.
+export { encodeGmailRawMessage, GMAIL_SEND_SCOPE, hasGmailSendScope } from "./gmail-raw.js";
+
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/userinfo.email",
+  GMAIL_SEND_SCOPE,
 ];
 
 // Only the full calendar scope allows conferenceDataVersion=1 (Google Meet creation).
@@ -169,7 +173,11 @@ export function getAuthUrl(
   return client.generateAuthUrl({
     access_type: "offline",
     scope: SCOPES,
-    prompt: "consent",   // force refresh_token on every connect
+    include_granted_scopes: true,
+    // Re-auth of a known row: consent only so Google re-issues a refresh token.
+    // New account: also show the account picker — otherwise Google silently
+    // reuses the current session and a second Gmail never appears.
+    prompt: connectionId ? "consent" : "select_account consent",
     state,
   });
 }
@@ -532,23 +540,28 @@ export async function createCalendarEvent(params: {
   additionalHosts?: string[] | null;
   /** Sub-calendar ID within the linked Google account; null/undefined uses the primary calendar */
   googleCalendarId?: string | null;
+  /** When false, create a normal invite without conferenceData / Meet link (default true). */
+  createMeetLink?: boolean;
   onError?: (detail: { errorCode: string; status?: number; googleError?: string; googleErrorDescription?: string; message?: string }) => void;
 }): Promise<{ meetLink: string | null; eventId: string } | null> {
+  const createMeetLink = params.createMeetLink !== false;
+
   // ── Scope gate ──────────────────────────────────────────────────────────────
-  // Require the full calendar scope before making any API call.
-  // calendar.events is insufficient for conferenceDataVersion=1 (Meet links).
-  // Legacy connections (NULL granted_scopes) also return false — prompt reconnect.
-  const scopeCheck = await hasRequiredCalendarScopes(params.connectionId);
-  if (!scopeCheck) {
-    logger.warn(
-      { connectionId: params.connectionId, attendeeEmail: params.attendeeEmail },
-      "createCalendarEvent: connection lacks the full calendar scope (required for Meet links) — returning null without API call",
-    );
-    params.onError?.({
-      errorCode: "scope_insufficient",
-      message: "This Google Calendar connection was authorized with insufficient scopes. Re-authorize via Settings → Conferencing → Reconnect to grant full calendar access.",
-    });
-    return null;
+  // Full calendar scope is required for conferenceDataVersion=1 (Meet links).
+  // Calendar-only invites can still proceed when Meet is off.
+  if (createMeetLink) {
+    const scopeCheck = await hasRequiredCalendarScopes(params.connectionId);
+    if (!scopeCheck) {
+      logger.warn(
+        { connectionId: params.connectionId, attendeeEmail: params.attendeeEmail },
+        "createCalendarEvent: connection lacks the full calendar scope (required for Meet links) — returning null without API call",
+      );
+      params.onError?.({
+        errorCode: "scope_insufficient",
+        message: "This Google Calendar connection was authorized with insufficient scopes. Re-authorize via Settings → Conferencing → Reconnect to grant full calendar access.",
+      });
+      return null;
+    }
   }
 
   const tokens = await getValidAccessToken(params.connectionId);
@@ -568,7 +581,7 @@ export async function createCalendarEvent(params: {
       startTime: params.startTime.toISOString(),
       endTime: params.endTime.toISOString(),
       timezone: params.timezone,
-      scopeCheckResult: scopeCheck,
+      createMeetLink,
     },
     "createCalendarEvent: initiating Google Calendar API call",
   );
@@ -584,12 +597,14 @@ export async function createCalendarEvent(params: {
   for (const email of hostAttendeeEmails(params.hostEmail, params.additionalHosts, params.attendeeEmail)) {
     attendees.push({ email });
   }
-  const meetBotEmail = (process.env["RECALL_BOT_EMAIL"] ?? "").trim().toLowerCase();
-  if (
-    meetBotEmail
-    && !attendees.some((a) => a.email.toLowerCase() === meetBotEmail)
-  ) {
-    attendees.push({ email: meetBotEmail, displayName: "SnapServe meeting agent" });
+  if (createMeetLink) {
+    const meetBotEmail = (process.env["RECALL_BOT_EMAIL"] ?? "").trim().toLowerCase();
+    if (
+      meetBotEmail
+      && !attendees.some((a) => a.email.toLowerCase() === meetBotEmail)
+    ) {
+      attendees.push({ email: meetBotEmail, displayName: "SnapServe meeting agent" });
+    }
   }
 
   // Use local datetime strings (no Z/offset) + timeZone field — this is the correct
@@ -602,7 +617,7 @@ export async function createCalendarEvent(params: {
   try {
     const event = await calendar.events.insert({
       calendarId: params.googleCalendarId ?? "primary",
-      conferenceDataVersion: 1,
+      ...(createMeetLink ? { conferenceDataVersion: 1 } : {}),
       // sendUpdates: "all" causes Google Calendar to email invitations to every
       // attendee (and organizer). Without it Google silently skips the emails.
       sendUpdates: "all",
@@ -612,24 +627,30 @@ export async function createCalendarEvent(params: {
         start: { dateTime: localStart, timeZone: params.timezone },
         end:   { dateTime: localEnd,   timeZone: params.timezone },
         attendees,
-        conferenceData: {
-          createRequest: {
-            requestId: `voiceorch-${Date.now()}`,
-            conferenceSolutionKey: { type: "hangoutsMeet" },
-          },
-        },
+        ...(createMeetLink
+          ? {
+              conferenceData: {
+                createRequest: {
+                  requestId: `voiceorch-${Date.now()}`,
+                  conferenceSolutionKey: { type: "hangoutsMeet" },
+                },
+              },
+            }
+          : {}),
         reminders: { useDefault: true },
       },
-    });
+    }, { timeout: 12_000 });
 
     const statusCode = event.data.conferenceData?.createRequest?.status?.statusCode;
     const eventId  = event.data.id ?? "";
-    let meetLink = event.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null;
+    let meetLink = createMeetLink
+      ? (event.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null)
+      : null;
 
     // Google Calendar generates Meet links asynchronously — the initial insert
     // response often has statusCode="pending" with no entryPoints. Retry up to
     // twice (2 s apart) to give Google's async Meet link generation time to complete.
-    for (let attempt = 1; attempt <= 2 && (meetLink === null || statusCode === "pending") && eventId; attempt++) {
+    for (let attempt = 1; attempt <= 2 && createMeetLink && (meetLink === null || statusCode === "pending") && eventId; attempt++) {
       await new Promise<void>((resolve) => setTimeout(resolve, 2000));
       try {
         const fetched = await calendar.events.get({
@@ -651,7 +672,7 @@ export async function createCalendarEvent(params: {
     }
 
     logger.info(
-      { connectionId: params.connectionId, eventId, meetLink, statusCode,
+      { connectionId: params.connectionId, eventId, meetLink, statusCode, createMeetLink,
         organizerEmail: tokens.email, attendeeEmail: params.attendeeEmail,
         localStart, localEnd, timezone: params.timezone },
       "Google Calendar event created",
@@ -789,6 +810,95 @@ export async function updateCalendarEvent(params: {
       "Failed to update Google Calendar event",
     );
     return null;
+  }
+}
+
+/** Google account linked on the booking's scheduling calendar — no first-connection fallback. */
+export async function getLinkedGoogleConnectionForBooking(
+  bookingId: number,
+): Promise<{ id: string; email: string } | null> {
+  const rows = await db
+    .select({
+      id: googleCalendarConnectionsTable.id,
+      email: googleCalendarConnectionsTable.email,
+    })
+    .from(bookingsTable)
+    .innerJoin(schedulingCalendarsTable, eq(bookingsTable.calendarId, schedulingCalendarsTable.id))
+    .innerJoin(
+      googleCalendarConnectionsTable,
+      eq(schedulingCalendarsTable.googleCalendarConnectionId, googleCalendarConnectionsTable.id),
+    )
+    .where(eq(bookingsTable.id, bookingId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Google account this workspace should send agent mail as: the one linked to a
+ * scheduling calendar wins, since that is the address the user sees as "connected".
+ * Only connections that actually granted Gmail send are returned.
+ */
+export async function getGoogleMailConnectionForUser(
+  userId: string,
+): Promise<{ id: string; email: string } | null> {
+  const rows = await db
+    .select({
+      id: googleCalendarConnectionsTable.id,
+      email: googleCalendarConnectionsTable.email,
+      grantedScopes: googleCalendarConnectionsTable.grantedScopes,
+      linkedCalendarId: schedulingCalendarsTable.id,
+    })
+    .from(googleCalendarConnectionsTable)
+    .leftJoin(
+      schedulingCalendarsTable,
+      eq(schedulingCalendarsTable.googleCalendarConnectionId, googleCalendarConnectionsTable.id),
+    )
+    .where(eq(googleCalendarConnectionsTable.userId, userId))
+    .orderBy(asc(googleCalendarConnectionsTable.createdAt));
+
+  const sendable = rows.filter((row) => hasGmailSendScope(row.grantedScopes));
+  const preferred = sendable.find((row) => row.linkedCalendarId != null) ?? sendable[0];
+  return preferred ? { id: preferred.id, email: preferred.email } : null;
+}
+
+/** Send one email as the connected Google user. Returns false if token/scope/API fails. */
+export async function sendMailFromGoogleConnection(
+  connectionId: string,
+  mail: { to: string; subject: string; html: string },
+): Promise<boolean> {
+  const tokens = await getValidAccessToken(connectionId);
+  if (!tokens) return false;
+  const client = makePlatformOAuth2Client();
+  client.setCredentials({ access_token: tokens.accessToken });
+  const gmail = google.gmail({ version: "v1", auth: client });
+  try {
+    await gmail.users.messages.send({
+      userId: "me",
+      requestBody: {
+        raw: encodeGmailRawMessage({
+          from: tokens.email,
+          to: mail.to,
+          subject: mail.subject,
+          html: mail.html,
+        }),
+      },
+    });
+    logger.info(
+      { connectionId, from: tokens.email, to: mail.to },
+      "Booking email sent from connected Google calendar account",
+    );
+    return true;
+  } catch (err) {
+    logger.warn(
+      {
+        err,
+        connectionId,
+        from: tokens.email,
+        googleApiError: (err as { response?: { data?: unknown } })?.response?.data,
+      },
+      "Gmail send as connected calendar account failed — reconnect Google with mail permission, or rely on Calendar invites",
+    );
+    return false;
   }
 }
 

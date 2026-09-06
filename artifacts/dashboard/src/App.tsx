@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation, Redirect, Link } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { Sparkles } from "lucide-react";
+import { Gift } from "lucide-react";
 import { AuthProvider, useAuth, SignedIn, SignedOut, consumeSignOutReason } from "@/lib/auth";
 import { DotGridBackground } from "@/components/ui/dot-grid-background";
-import { setAuthTokenGetter, setDefaultTimeoutMs, setUnauthorizedHandler, useGetOnboardingStatus, useListAgents } from "@workspace/api-client-react";
+import { setAuthTokenGetter, setDefaultTimeoutMs, setUnauthorizedHandler, useGetOnboardingStatus } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
+import { useToast } from "@/hooks/use-toast";
+import { useIdleLogout } from "@/hooks/use-idle-logout";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -13,9 +15,8 @@ import { ThemeSync } from "@/components/theme-sync";
 
 import { Layout } from "@/components/layout";
 import { recordInAppNavigation } from "@/lib/nav-history";
-import { AppLoader } from "@/components/logo";
+import { AppLoader, SnapServeIcon } from "@/components/logo";
 import { isDirectSnapServeHost, loadHostBrand, type HostBrand } from "@/lib/white-label";
-import { VoiceAssistant } from "@/components/VoiceAssistant";
 
 // ── Page imports ─────────────────────────────────────────────────────────────
 // Tabbed wrappers (new routes)
@@ -81,7 +82,6 @@ import AutomaticCallsPage   from "@/pages/automatic-calls/index";
 import AutomaticCallsWizardPage from "@/pages/automatic-calls/wizard";
 import AutomaticCallDetailPage  from "@/pages/automatic-calls/[id]";
 import TransfersPage        from "@/pages/transfers";
-import VoicesPage           from "@/pages/voices";
 import TestSimulatorPage    from "@/pages/test-simulator";
 import VibePage             from "@/pages/vibe";
 import HomePage             from "@/pages/home/index";
@@ -134,6 +134,12 @@ function UnauthorizedSignOutSync() {
   return null;
 }
 
+/** Dashboard only — admin app must not mount this. */
+function IdleLogoutGuard() {
+  useIdleLogout();
+  return null;
+}
+
 function QueryClientCacheInvalidator() {
   const { userId } = useAuth();
   const qc = useQueryClient();
@@ -154,6 +160,7 @@ type PartnerLoginBrand = HostBrand & { authMode?: "password" };
 function SignInPage() {
   const [location, navigate] = useLocation();
   const { signIn } = useAuth();
+  const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [branding, setBranding] = useState<PartnerLoginBrand | null>(null);
   const [brandingLoaded, setBrandingLoaded] = useState(false);
@@ -168,6 +175,7 @@ function SignInPage() {
     if (reason === "revoked") {
       setError("You've been signed out because your account access has changed. Please contact support if you believe this is a mistake.");
     }
+    // Idle timeout still signs out; do not show a banner on the login page.
   }, []);
 
   useEffect(() => {
@@ -204,9 +212,31 @@ function SignInPage() {
           host: window.location.host,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; token?: string; error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        token?: string;
+        error?: string;
+        code?: string;
+        attemptsRemaining?: number;
+      };
       if (!res.ok) {
-        setError(data.error || "Sign in failed. Please try again.");
+        const message = data.error || "Sign in failed. Please try again.";
+        setError(message);
+        if (isPartnerGateway) {
+          if (data.code === "wrong_password") {
+            toast({
+              title: "Wrong password",
+              description: message,
+              variant: "destructive",
+            });
+          } else if (data.code === "portal_login_locked") {
+            toast({
+              title: "Account locked",
+              description: message,
+              variant: "destructive",
+            });
+          }
+        }
         return;
       }
       signIn(data.token);
@@ -267,11 +297,9 @@ function SignInPage() {
               {(branding?.companyName || "W").charAt(0).toUpperCase()}
             </div>
           ) : (
-            <div className="flex flex-col gap-[6px] w-[46px]">
-              <div className="h-[10px] w-full rounded-full bg-white" />
-              <div className="h-[10px] w-[78%] rounded-full bg-white/60" />
-              <div className="h-[10px] w-[58%] rounded-full bg-white/35" />
-            </div>
+            <span className="inline-flex text-white">
+              <SnapServeIcon size={46} className="text-white" />
+            </span>
           )}
           <div className="flex flex-col items-center gap-1.5">
             {isPartnerGateway ? (
@@ -298,7 +326,7 @@ function SignInPage() {
 
         {!isPartnerGateway && (
           <div className="inline-flex items-center gap-1.5 mb-6 px-3 py-1 rounded-full border border-purple-400/20 bg-purple-400/10 text-[0.7rem] font-medium tracking-wide text-purple-200">
-            <Sparkles size={12} /> ₹500 free credit · ~100 minutes on us
+            <Gift size={12} /> ₹500 free credit · ~100 minutes on us
           </div>
         )}
 
@@ -407,13 +435,6 @@ function HomeRedirect() {
 }
 
 function AppRoot() {
-  const { data: agents, isLoading } = useListAgents({});
-  if (isLoading) return <AppLoader />;
-  const list = Array.isArray(agents) ? agents : (agents as any)?.agents ?? [];
-  // Accounts with no agents land in the builder, not Vibe. Vibe stays available
-  // from the "Build with AI" entry points, but it is opt-in rather than the
-  // forced first screen after signup.
-  if (!list.length) return <Redirect to="/app/agents" />;
   return <Redirect to="/app/home" />;
 }
 
@@ -462,7 +483,6 @@ function AppRoutes() {
 
   return (
     <Layout>
-      <VoiceAssistant />
       <Switch>
         <Route path="/app" component={AppRoot} />
         <Route path="/app/home" component={HomePage} />
@@ -531,7 +551,7 @@ function AppRoutes() {
 
         <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
 
-        {/* ── Providers (tabbed — Voices + Provider keys) ── */}
+        {/* ── Providers (tabbed — Provider keys + Voices + My clones) ── */}
         <Route path="/app/providers" component={ProvidersTabPage} />
 
         {/* ── Voices → providers?tab=voices redirect ── */}
@@ -563,7 +583,9 @@ function AppRoutes() {
 
         <Route path="/app/connections" component={ConnectionsPage} />
         {/* WhatsApp page kept for Connections hub deep-link; removed from primary nav */}
-        <Route path="/app/whatsapp" component={WhatsAppPage} />
+        <Route path="/app/whatsapp">
+          <WhatsAppPage />
+        </Route>
 
         {/* ── Webhooks → api-keys?tab=webhooks redirect ── */}
         <Route path="/app/webhooks">
@@ -693,6 +715,7 @@ function Router() {
       <QueryClientProvider client={queryClient}>
         <AuthTokenSync />
         <UnauthorizedSignOutSync />
+        <IdleLogoutGuard />
         <QueryClientCacheInvalidator />
         <NavHistoryTracker />
         <ThemeSync />
@@ -724,7 +747,7 @@ function Router() {
 
 function App() {
   return (
-    <ThemeProvider defaultTheme="light" storageKey="snapserve-ui-theme-v2">
+    <ThemeProvider defaultTheme="light" storageKey="snapserve-ui-theme-v3">
       <TooltipProvider>
         <WouterRouter base={basePath}>
           <Router />

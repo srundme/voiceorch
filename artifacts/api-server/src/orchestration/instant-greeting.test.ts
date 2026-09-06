@@ -3,23 +3,18 @@ import {
   buildInstantReturningGreeting,
   neutralGreeting,
   isMetaRefusalGreeting,
+  isStubGreeting,
+  outboundTypedWelcomeBlocksGreetingLlm,
+  joinWelcomeAndOpener,
+  stripWelcomePrefix,
 } from "./endpointing.js";
 
 describe("buildInstantReturningGreeting", () => {
-  it("builds Hindi recognition opener with name", () => {
-    expect(buildInstantReturningGreeting("Thirumugam", "hi-IN")).toContain("Thirumugam");
-    expect(buildInstantReturningGreeting("Thirumugam", "hi-IN")).toMatch(/^नमस्ते/);
-  });
-
-  it("builds Tamil opener with name", () => {
-    expect(buildInstantReturningGreeting("Karthik", "ta")).toContain("Karthik");
-    expect(buildInstantReturningGreeting("Karthik", "ta")).toMatch(/^வணக்கம்/);
-    expect(buildInstantReturningGreeting("Karthik", "ta")).toContain("எப்படி இருக்கீங்க");
-  });
-
-  it("falls back without name", () => {
-    expect(buildInstantReturningGreeting(null, "en")).toBe("Hi! How are you?");
-    expect(buildInstantReturningGreeting("", "hi")).toBe("नमस्ते! कैसे हैं आप?");
+  it("greets a remembered name in the opening language — no purpose-of-call script", () => {
+    expect(buildInstantReturningGreeting("Thirumugam", "hi-IN")).toBe("नमस्ते Thirumugam.");
+    expect(buildInstantReturningGreeting("Karthik", "ta")).toBe("வணக்கம் Karthik.");
+    expect(buildInstantReturningGreeting(null, "en")).toBe("Hi.");
+    expect(buildInstantReturningGreeting("Karthik", "ta")).not.toMatch(/விஷயமா|எதற்காக|காரணமா/);
   });
 });
 
@@ -56,5 +51,68 @@ describe("isMetaRefusalGreeting", () => {
   it("treats empty text as not a refusal so the caller path still applies", () => {
     expect(isMetaRefusalGreeting("")).toBe(false);
     expect(isMetaRefusalGreeting(null)).toBe(false);
+  });
+});
+
+describe("joinWelcomeAndOpener", () => {
+  it("puts a stub Hello in front of the generated pitch", () => {
+    expect(
+      joinWelcomeAndOpener("Hello", "This is Infant from SnapServe. Got two minutes?"),
+    ).toBe("Hello. This is Infant from SnapServe. Got two minutes?");
+  });
+
+  it("does not double a greeting the opener already starts with", () => {
+    expect(joinWelcomeAndOpener("Hello", "Hello, this is Infant.")).toBe("Hello, this is Infant.");
+    expect(joinWelcomeAndOpener("Hello", "Hi, this is Infant from SnapServe.")).toBe(
+      "Hi, this is Infant from SnapServe.",
+    );
+  });
+
+  it("keeps a punctuated welcome as its own sentence", () => {
+    expect(joinWelcomeAndOpener("Hello!", "We're calling about Voice-a-thon.")).toBe(
+      "Hello! We're calling about Voice-a-thon.",
+    );
+  });
+});
+
+describe("stripWelcomePrefix", () => {
+  it("drops a duplicated Hello after Welcome already played", () => {
+    expect(stripWelcomePrefix("Hello", "Hello, this is Infant from SnapServe.")).toBe(
+      "this is Infant from SnapServe.",
+    );
+    expect(stripWelcomePrefix("Hello", "Hi, this is Infant from SnapServe.")).toBe(
+      "this is Infant from SnapServe.",
+    );
+  });
+
+  it("leaves a pitch that does not start with a greeting", () => {
+    expect(stripWelcomePrefix("Hello", "This is Infant from SnapServe. Got two minutes?")).toBe(
+      "This is Infant from SnapServe. Got two minutes?",
+    );
+  });
+});
+
+describe("outboundTypedWelcomeBlocksGreetingLlm", () => {
+  it("blocks a second spoken greeting when Welcome is just Hello (call 17455)", () => {
+    expect(outboundTypedWelcomeBlocksGreetingLlm("Hello!", "en-IN")).toBe(true);
+    expect(outboundTypedWelcomeBlocksGreetingLlm("Hi", "en")).toBe(true);
+  });
+
+  it("still generates an opener when Welcome is empty", () => {
+    expect(outboundTypedWelcomeBlocksGreetingLlm("", "en-IN")).toBe(false);
+    expect(outboundTypedWelcomeBlocksGreetingLlm("   ", "en-IN")).toBe(false);
+  });
+
+  it("keeps typed English Welcome even when start language is Indic (memory LID)", () => {
+    expect(outboundTypedWelcomeBlocksGreetingLlm("Hello!", "ta-IN")).toBe(true);
+  });
+});
+
+describe("isStubGreeting", () => {
+  it("treats Hello / Hi as stubs so outbound still generates the pitch", () => {
+    expect(isStubGreeting("Hello")).toBe(true);
+    expect(isStubGreeting("Hi!")).toBe(true);
+    expect(isStubGreeting("Hello there")).toBe(true);
+    expect(isStubGreeting("Hi, this is Infant from SnapServe. Got two minutes?")).toBe(false);
   });
 });

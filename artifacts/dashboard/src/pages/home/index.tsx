@@ -197,7 +197,7 @@ export default function HomePage() {
       issues.push({
         title: "Google Sheets disconnected",
         detail: `${pipeline.name} is paused`,
-        href: "/app/connections",
+        href: "/app/connections?setup=sheets",
         tone: "warning",
       });
     });
@@ -528,7 +528,10 @@ export default function HomePage() {
                         <Bot className="size-3.5 text-muted-foreground" />
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-[13px] font-medium">{agent.name ?? `Agent ${agent.id}`}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="truncate text-[13px] font-medium">{agent.name ?? `Agent ${agent.id}`}</p>
+                          <span className="shrink-0 rounded bg-muted/80 px-1 py-0.5 text-[9px] font-mono font-medium text-muted-foreground">#{agent.id}</span>
+                        </div>
                         <p className="mt-0.5 truncate text-[11px] capitalize text-muted-foreground">
                           {agent.status ?? "draft"}
                         </p>

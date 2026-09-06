@@ -1,0 +1,16 @@
+﻿# Exclude root-level heavy asset directories only (leading slash ensures sub-folders like src/pages/reports are NOT ignored)
+/attached_assets
+/brag-output-*
+/films
+/screenshots
+/reports
+
+# Exclude node_modules
+node_modules
+**/node_modules
+
+# Exclude temp files and logs
+*.log
+/tmp
+/.cache
+surat.js

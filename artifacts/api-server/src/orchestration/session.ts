@@ -3,23 +3,26 @@ import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, leadNotesTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, eventTypesTable, scheduledCallbacksTable, campaignsTable, executionLogsTable, squadsTable, squadRunsTable, phoneNumbersTable } from "@workspace/db";
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
 import { computeProRataDebitCents, isNonBillableCallStatus } from "../services/call-billing.js";
-import { getFlatRateCentsPerMin, resolveAgentBillingMode, resolveOwnTelephonyDiscount } from "../services/minute-rates.js";
+import { resolveAgentBillingMode, resolveOwnTelephonyDiscount, resolveBillingRateCentsPerMin } from "../services/minute-rates.js";
 import { resolvePartnerBilling, creditPartnerSpreadOnCall } from "../services/partner-billing.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlockEx } from "./kb-retrieval.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { decryptKey } from "../lib/crypto.js";
 import { eq, and, sql, inArray, or, gt, ne, lte, isNull, desc } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
-import { optionalMs } from "./stt-tuning.js";
+import { optionalMs, optionalUnitInterval } from "./stt-tuning.js";
+import { clampSemanticTurnStopMs, resolveSemanticTurnEnabled } from "./semantic-turn-gate.js";
 import type { VoiceSession } from "./voice-session.js";
 import { GeminiLivePipeline } from "./adapters/live/gemini-live-pipeline.js";
 import {
   DEFAULT_GEMINI_LIVE_MODEL,
+  resolveGeminiLiveModel,
   resolveGeminiLiveThinkingLevel,
   resolveGeminiLiveVoice,
   resolveVoiceStack,
 } from "./adapters/live/gemini-live-voices.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
+import { resolveRealtimeStreamType } from "./adapters/stt/sarvam-realtime.js";
 import { isSarvamCatalogSpeaker } from "./adapters/tts/sarvam.js";
 import {
   clampSarvamIncompleteHoldMs,
@@ -31,11 +34,15 @@ import {
   resolveTtsMinSentenceChars,
 } from "@workspace/db/call-engine-defaults";
 import { withDbRetry } from "./db-retry.js";
-import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
 import { transcriptHasFarewellEnding } from "./callFarewell.js";
-import { buildLeadContextBlock, resolvePromptVariables } from "./prompt-vars.js";
+import { shouldMarkCallVoicemail } from "../lib/voicemail-detect.js";
+import { looksLikeVoicemailOutcome } from "../services/sheet-auto-calls-helpers.js";
+import { capHandoffTranscript, mergeHandoffTranscript } from "./squad-transcript.js";
+import { buildLeadContextBlock, buildCallContextBlock, callVariablesFromMetadata, resolvePromptVariables } from "./prompt-vars.js";
+import { pickKnownBookingEmail } from "./booking-email-policy.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "./mic-sensitivity.js";
+import { FORCE_SOFTWARE_NOISE_GATE_KEY } from "./noise-gate.js";
 import { loadPcmLoop, TRACK_PARAMS } from "./ambient.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
@@ -47,12 +54,8 @@ import {
   removeSession,
 } from "./sessionStore.js";
 import { destroyAudioSession } from "./audioPool.js";
-import { disposeCall } from "../services/disposition.js";
-import {
-  DISPOSITION_EXTRACT_SYSTEM,
-  formatDispositionFieldList,
-  normalizeDispositionSchemaResult,
-} from "../lib/disposition/normalize-fields.js";
+import { disposeCall, extractFlatDispositionSchema } from "../services/disposition.js";
+import { schemaFieldsNeedFill } from "../lib/disposition/normalize-fields.js";
 import {
   buildCallEndedWebhookPayload,
   dispatchWebhooks,
@@ -93,6 +96,7 @@ import {
   type CallerContext,
   type NameLatchTier,
 } from "./callerMemory.js";
+import { buildOpeningLanguageRule, mapLanguagePrefToBcp47 } from "./call-direction-rules.js";
 import { performSquadAgentHandoff } from "../services/squad-handoff.js";
 import { completeLiveSquadRun, ensureLiveSquadRunForCall } from "../services/squad-engine.js";
 import {
@@ -357,60 +361,7 @@ export async function createSession(params: {
   const amdLeadInSeconds =
     typeof rawAmdLeadIn === "number" && Number.isFinite(rawAmdLeadIn) && rawAmdLeadIn > 0 ? rawAmdLeadIn : undefined;
 
-  // Build effective system prompt with date/time context + strict language enforcement
-  const LANG_NAMES: Record<string, string> = {
-    "en-US": "English", "en-GB": "English", "en-IN": "English", "en": "English",
-    "hi": "Hindi", "hi-IN": "Hindi", "ta": "Tamil", "ta-IN": "Tamil",
-    "te": "Telugu", "te-IN": "Telugu", "kn": "Kannada", "kn-IN": "Kannada",
-    "mr": "Marathi", "mr-IN": "Marathi", "gu": "Gujarati", "gu-IN": "Gujarati",
-    "bn": "Bengali", "bn-IN": "Bengali", "bn-BD": "Bengali", "ml": "Malayalam", "ml-IN": "Malayalam",
-    "pa": "Punjabi", "pa-IN": "Punjabi", "ur": "Urdu", "ur-IN": "Urdu",
-    "si": "Sinhala", "si-LK": "Sinhala",
-    "es": "Spanish", "es-MX": "Spanish (Mexico)", "es-US": "Spanish", "fr": "French", "fr-FR": "French", "de": "German", "de-DE": "German",
-    "it": "Italian", "it-IT": "Italian", "pt-BR": "Portuguese (Brazil)", "ja": "Japanese", "ja-JP": "Japanese",
-    "ko": "Korean", "ko-KR": "Korean", "zh": "Mandarin Chinese", "ar": "Arabic",
-    "id": "Indonesian", "id-ID": "Indonesian", "th": "Thai", "th-TH": "Thai",
-    "vi": "Vietnamese", "vi-VN": "Vietnamese", "tr": "Turkish", "tr-TR": "Turkish",
-    "ru": "Russian", "ru-RU": "Russian", "nl": "Dutch", "nl-NL": "Dutch",
-    "pl": "Polish", "pl-PL": "Polish", "uk": "Ukrainian", "uk-UA": "Ukrainian",
-    "ro": "Romanian", "ro-RO": "Romanian",
-  };
-  // Script directive for non-Latin languages — tells weaker models to write in
-  // native Unicode script, not romanized form (Tanglish, Hinglish-script, etc.).
-  const LANG_SCRIPT_DIRECTIVE: Record<string, string> = {
-    "ta-IN": "CRITICAL: Write ALL Tamil words in Tamil Unicode script (e.g. வணக்கம், நன்றி, சரி). NEVER romanize Tamil into English/Latin letters. " +
-      "COLLOQUIAL GRAMMAR — use everyday spoken Tamil verb forms, NOT formal/literary ones. Key contrasts: " +
-      "✓ வேணும் (not வேண்டும்) | ✓ இல்ல (not இல்லை) | ✓ ஆயிடுச்சு (not ஆகிவிட்டது) | ✓ சொல்றேன் (not சொல்கிறேன்) | ✓ வர்றேன் (not வருகிறேன்) | ✓ பண்றேன் (not செய்கிறேன்) | ✓ போயிடுது (not போகிறது) | ✓ பேசிட்டு இருக்கேன் (not பேசிக்கொண்டிருக்கிறேன்) | ✓ சொல்லுங்க or சொல்லுவீங்களா (not சொல்லுங்கள்). " +
-      "EXAMPLES of correct spoken Tamil: 'Sori, call cut ஆயிடுச்சு' | 'demo எப்போ வேணும்னு சொல்லுங்க' | 'நீங்க ready-ஆ இருக்கீங்களா?' | 'நான் confirm பண்றேன்' | 'OK-வா, நாளைக்கு பேசலாம்'. " +
-      "NEVER use: தொடரலாமா (→ use 'continue பண்ணலாமா' or 'பேசலாம்'), முடியுமான்னு (→ use 'வேணுமா?'), நிறுத்தியதோ (→ use 'விட்டோமோ'), தேன்றேன் (→ use 'தேடுறேன்'), செய்கின்றேன் (→ use 'பண்றேன்'), வருகின்றேன் (→ use 'வர்றேன்'). " +
-      "Keep 'call', 'demo', 'confirm', 'schedule', 'ok', 'ready' in English — they are everyday spoken words in Tamil. " +
-      "NUMBERS, TIME & DURATION in English: Tamil speakers say these in English naturally. ALWAYS say 'ten to fifteen minutes' (not '10 முதல் 15 நிமிஷத்துல'), 'three o'clock' (not 'மூன்று மணி'), 'tomorrow morning 9' (not 'நாளைக்கு காலை 9 மணி'), 'five minutes' (not 'ஐந்து நிமிஷம்'). Digits like '10', '15', '3' and time expressions must be spoken as English words embedded in Tamil sentences. " +
-      "MONEY & AMOUNTS: NEVER use the ₹ symbol — TTS reads it as formal 'ரூபாய்' which sounds unnatural. Say amounts as English words: 'ten lakhs' (not '₹10 lakhs' or 'பத்து லட்சம்'), 'five lakhs' (not '₹5 lakhs' or 'ஐந்து லட்சம்'), 'one crore' (not '₹1 crore' or 'ஒரு கோடி'). Colloquial spoken Tamil uses English for amounts naturally.",
-    "ta":    "CRITICAL: Write ALL Tamil words in Tamil Unicode script (e.g. வணக்கம், நன்றி, சரி). NEVER romanize Tamil into English/Latin letters. " +
-      "COLLOQUIAL GRAMMAR — use everyday spoken Tamil verb forms, NOT formal/literary ones. Key contrasts: " +
-      "✓ வேணும் (not வேண்டும்) | ✓ இல்ல (not இல்லை) | ✓ ஆயிடுச்சு (not ஆகிவிட்டது) | ✓ சொல்றேன் (not சொல்கிறேன்) | ✓ வர்றேன் (not வருகிறேன்) | ✓ பண்றேன் (not செய்கிறேன்) | ✓ போயிடுது (not போகிறது) | ✓ பேசிட்டு இருக்கேன் (not பேசிக்கொண்டிருக்கிறேன்) | ✓ சொல்லுங்க or சொல்லுவீங்களா (not சொல்லுங்கள்). " +
-      "EXAMPLES of correct spoken Tamil: 'Sori, call cut ஆயிடுச்சு' | 'demo எப்போ வேணும்னு சொல்லுங்க' | 'நீங்க ready-ஆ இருக்கீங்களா?' | 'நான் confirm பண்றேன்' | 'OK-வா, நாளைக்கு பேசலாம்'. " +
-      "NEVER use: தொடரலாமா (→ use 'continue பண்ணலாமா' or 'பேசலாம்'), முடியுமான்னு (→ use 'வேணுமா?'), நிறுத்தியதோ (→ use 'விட்டோமோ'), தேன்றேன் (→ use 'தேடுறேன்'), செய்கின்றேன் (→ use 'பண்றேன்'), வருகின்றேன் (→ use 'வர்றேன்'). " +
-      "Keep 'call', 'demo', 'confirm', 'schedule', 'ok', 'ready' in English — they are everyday spoken words in Tamil. " +
-      "NUMBERS, TIME & DURATION in English: Tamil speakers say these in English naturally. ALWAYS say 'ten to fifteen minutes' (not '10 முதல் 15 நிமிஷத்துல'), 'three o'clock' (not 'மூன்று மணி'), 'tomorrow morning 9' (not 'நாளைக்கு காலை 9 மணி'), 'five minutes' (not 'ஐந்து நிமிஷம்'). Digits like '10', '15', '3' and time expressions must be spoken as English words embedded in Tamil sentences. " +
-      "MONEY & AMOUNTS: NEVER use the ₹ symbol — TTS reads it as formal 'ரூபாய்' which sounds unnatural. Say amounts as English words: 'ten lakhs' (not '₹10 lakhs' or 'பத்து லட்சம்'), 'five lakhs' (not '₹5 lakhs' or 'ஐந்து லட்சம்'), 'one crore' (not '₹1 crore' or 'ஒரு கோடி'). Colloquial spoken Tamil uses English for amounts naturally.",
-    "hi-IN": "CRITICAL: Write ALL Hindi words in Devanagari Unicode script (e.g. नमस्ते, धन्यवाद, ठीक है). NEVER romanize Hindi into English/Latin letters.",
-    "hi":    "CRITICAL: Write ALL Hindi words in Devanagari Unicode script (e.g. नमस्ते, धन्यवाद, ठीक है). NEVER romanize Hindi into English/Latin letters.",
-    "te-IN": "CRITICAL: Write ALL Telugu words in Telugu Unicode script (e.g. నమస్కారం, ధన్యవాదాలు). NEVER romanize Telugu into English/Latin letters.",
-    "te":    "CRITICAL: Write ALL Telugu words in Telugu Unicode script (e.g. నమస్కారం, ధన్యవాదాలు). NEVER romanize Telugu into English/Latin letters.",
-    "kn-IN": "CRITICAL: Write ALL Kannada words in Kannada Unicode script (e.g. ನಮಸ್ಕಾರ, ಧನ್ಯವಾದ). NEVER romanize Kannada into English/Latin letters.",
-    "kn":    "CRITICAL: Write ALL Kannada words in Kannada Unicode script (e.g. ನಮಸ್ಕಾರ, ಧನ್ಯವಾದ). NEVER romanize Kannada into English/Latin letters.",
-    "ml-IN": "CRITICAL: Write ALL Malayalam words in Malayalam Unicode script (e.g. നമസ്കാരം, നന്ദി). NEVER romanize Malayalam into English/Latin letters.",
-    "ml":    "CRITICAL: Write ALL Malayalam words in Malayalam Unicode script (e.g. നമസ്കാരം, നന്ദി). NEVER romanize Malayalam into English/Latin letters.",
-    "mr-IN": "CRITICAL: Write ALL Marathi words in Devanagari Unicode script (e.g. नमस्कार, धन्यवाद). NEVER romanize Marathi into English/Latin letters.",
-    "mr":    "CRITICAL: Write ALL Marathi words in Devanagari Unicode script (e.g. नमस्कार, धन्यवाद). NEVER romanize Marathi into English/Latin letters.",
-    "bn-IN": "CRITICAL: Write ALL Bengali words in Bengali Unicode script (e.g. নমস্কার, ধন্যবাদ). NEVER romanize Bengali into English/Latin letters.",
-    "bn":    "CRITICAL: Write ALL Bengali words in Bengali Unicode script (e.g. নমস্কার, ধন্যবাদ). NEVER romanize Bengali into English/Latin letters.",
-    "gu-IN": "CRITICAL: Write ALL Gujarati words in Gujarati Unicode script (e.g. નમસ્તે, આભાર). NEVER romanize Gujarati into English/Latin letters.",
-    "gu":    "CRITICAL: Write ALL Gujarati words in Gujarati Unicode script (e.g. નમસ્તે, આભાર). NEVER romanize Gujarati into English/Latin letters.",
-    "si-LK": "CRITICAL: Write ALL Sinhala words in Sinhala Unicode script (e.g. ආයුබෝවන්, ස්තූතියි, හරි). NEVER romanize Sinhala into English/Latin letters — writing 'ayubowan', 'stuthi', 'hari' instead of Sinhala script is WRONG.",
-    "si":    "CRITICAL: Write ALL Sinhala words in Sinhala Unicode script (e.g. ආයුබෝවන්, ස්තූතියි, හරි). NEVER romanize Sinhala into English/Latin letters — writing 'ayubowan', 'stuthi', 'hari' instead of Sinhala script is WRONG.",
-  };
+  // Talk / prompt owns language and TTS style. Platform only adds clock + memory later.
   const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
   const nowForCtx = new Date();
   const dateCtxParts = nowForCtx.toLocaleDateString("en-IN", {
@@ -481,55 +432,6 @@ export async function createSession(params: {
     return L || A || null;
   })();
 
-  {
-    const agentLang = effectiveAgentLang;
-    if (agentLang) {
-      const langName = LANG_NAMES[agentLang] ?? agentLang;
-      const scriptNote = LANG_SCRIPT_DIRECTIVE[agentLang] ?? "";
-      if (isMultilingual) {
-        // Auto-detect mode: follow the caller's language; switch seamlessly when they do.
-        effectiveSystemPrompt += `\n\n[LANGUAGE RULE] Your primary language is ${langName}. Always follow the caller's language — if they speak Tamil, reply in Tamil; if they switch to English, reply in English; if they mix languages (e.g. Hinglish), match their mix naturally. REGISTER — always speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into ${langName} is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — keep all proper nouns (brand names, product names, company names, people's names) EXACTLY as written in your instructions; never translate or transliterate them.${scriptNote ? " " + scriptNote : ""}`;
-      } else {
-        // Strict mode: single language, no switching.
-        effectiveSystemPrompt += `\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in ${langName} at ALL times. Never switch to any other language under any circumstances, even if the caller speaks a different language. Always reply in ${langName} regardless of what language the caller uses. REGISTER — always speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into your ${langName} speech is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages, and "ONLY in ${langName}" does NOT mean avoiding these everyday English loanwords. EXCEPTION — keep all proper nouns (brand names, product names, company names, and people's names) EXACTLY as written in your instructions; never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.${scriptNote ? " " + scriptNote : ""}`;
-      }
-    }
-  }
-
-  // Auto-switch to English: when enabled, allow the agent to move to English mid-call on request.
-  if (agentCfg["autoSwitchToEnglish"] === true) {
-    effectiveSystemPrompt += `\n\nIf the caller asks you to speak in English, switch immediately and continue in English.`;
-  }
-
-  // TTS output formatting — provider-aware.
-  // Cartesia Sonic understands SSML-like tags and nonverbalisms; other TTS engines
-  // speak them aloud literally, so we forbid them for every non-Cartesia provider.
-  const isCartesiaTts = agent.ttsProvider?.toLowerCase() === "cartesia";
-  if (isCartesiaTts) {
-    effectiveSystemPrompt += `\n\n[TTS OUTPUT RULES — MANDATORY] Your responses are spoken aloud by Cartesia Sonic TTS. Follow these rules strictly:
-- Write plain prose in full sentences. End every response with . ? or !
-- Never use abbreviated place names with periods. Write "T Nagar" not "T. Nagar", "RK Salai" not "R.K. Salai", "MG Road" not "M.G. Road".
-- Never use ALL-CAPS words or acronyms — write them in lowercase or spell them out naturally.
-- Never use markdown: no asterisks, hashes, bullet points, numbered lists, or underscores.
-- The ONLY markup allowed is the four delivery signals listed below. Every other XML or SSML tag is spoken aloud literally — never use <prosody>, <say-as>, <phoneme>, or any tag not listed here.
-CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
-- EMOTION: Optionally place <emotion value="VALUE"/> at the very start of a sentence — never mid-sentence, never mid-word, and never more than once per sentence. Supported values: enthusiastic (genuinely good news), sympathetic (empathy for a problem), calm (reset to neutral after an emotional moment), curious (when gathering information), content (successful resolution), sad (delivering bad news). Example: "<emotion value="sympathetic"/> I completely understand that, and I'm sorry to hear that."
-- LAUGHTER: Insert [laughter] at a natural moment where a brief, warm laugh fits — do not force it. Example: "That's actually a great question! [laughter] Let me check that for you."
-- SPELL: Wrap confirmation codes, reference IDs, or anything that must be read character by character in <spell> tags. Example: "Your booking ID is <spell>AB12CD</spell>."
-- BREAK: Use <break time="500ms"/> for a deliberate pause before an important point. Do not chain multiple break tags in a row.`;
-  } else {
-    effectiveSystemPrompt += `\n\n[TTS OUTPUT RULES — MANDATORY] Your responses are spoken aloud by a TTS engine. Follow these rules strictly:
-- Never use abbreviated place names with periods. Write "T Nagar" not "T. Nagar", "RK Salai" not "R.K. Salai", "MG Road" not "M.G. Road".
-- Never use ALL-CAPS words or acronyms (AMD, STT, LLM etc.) — write them in lowercase or spell them out naturally.
-- Never use markdown: no asterisks, hashes, bullet points, numbered lists, or underscores.
-- NEVER use XML or SSML markup tags of any kind. Do NOT write <emotion>, </emotion>, <break>, <prosody>, or any similar tags — the TTS engine will speak them aloud literally as "less-than emotion greater-than".
-- Use only plain conversational sentences suitable for speech.`;
-  }
-
-  // Conversation discipline — force one-step-at-a-time delivery, turn yielding
-  // on "wait for response" markers, and resume-after-objection place-keeping.
-  effectiveSystemPrompt += `\n\n${CONVERSATION_DISCIPLINE_BLOCK}`;
-
   // P1-K: Inject regulatory compliance disclosures into the system prompt
   const complianceCfg = agentCfg["compliance"] as { irdai?: boolean; dpdp?: boolean; trai?: boolean } | undefined;
   if (complianceCfg?.dpdp) {
@@ -572,6 +474,21 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   const configuredLlmMaxTokens = "llmMaxTokens" in agentCfg
     ? agentCfg["llmMaxTokens"]
     : agentCfg["maxTokens"];
+  // Builder used to persist 200 as the form default. That clips Indic Sarvam
+  // replies; treat the old factory cap as "unset" so voice uses 500.
+  const resolvedMaxTokens = typeof configuredLlmMaxTokens === "number"
+    ? (isSarvamLlm && configuredLlmMaxTokens === 200 ? VOICE_DEFAULT_MAX_TOKENS : configuredLlmMaxTokens)
+    : VOICE_DEFAULT_MAX_TOKENS;
+  const groqGemmaWithTools =
+    (agent.llmProvider ?? "").toLowerCase() === "groq"
+    && (agent.llmModel ?? "").trim() === "gemma2-9b-it"
+    && tools.length > 0;
+  if (groqGemmaWithTools) {
+    logger.warn(
+      { agentId: agent.id, toolCount: tools.length },
+      "Groq gemma2-9b-it cannot call tools — routing this call to llama-3.1-8b-instant",
+    );
+  }
 
   const agentConfig: AgentConfig = {
     id: agent.id,
@@ -584,9 +501,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // fields live in the agent_config JSON blob; only defined values are carried.
     llmGenerationParams: {
       ...(typeof agent.temperature === "number" ? { temperature: agent.temperature } : {}),
-      maxTokens: typeof configuredLlmMaxTokens === "number"
-        ? configuredLlmMaxTokens
-        : VOICE_DEFAULT_MAX_TOKENS,
+      maxTokens: resolvedMaxTokens,
       ...(typeof agentCfg["topP"] === "number" ? { topP: agentCfg["topP"] as number } : {}),
       // Repetition guard: OpenAI-compatible LLMs (incl. Sarvam) default these to 0,
       // which at low temperature lets the model emit byte-identical replies turn
@@ -614,7 +529,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     asrProvider: agent.asrProvider,
     asrModel: agent.asrModel,
     llmProvider: agent.llmProvider,
-    llmModel: agent.llmModel,
+    llmModel: groqGemmaWithTools ? "llama-3.1-8b-instant" : agent.llmModel,
     fallbackLlmProvider: agent.llmFallbackProvider ?? null,
     fallbackLlmModel: agent.llmFallbackModel ?? null,
     ttsProvider: agent.ttsProvider,
@@ -637,10 +552,11 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     language: effectiveAgentLang,
     languageAutoDetect: isMultilingual,
     autoSwitchToEnglish: agentCfg["autoSwitchToEnglish"] === true,
-    backchannelingEnabled: agent.backchannelingEnabled ?? false,
+    backchannelingEnabled: agent.backchannelingEnabled !== false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
-    noiseCancellationEnabled: agent.noiseCancellationEnabled ?? false,
+    noiseCancellationEnabled: agent.noiseCancellationEnabled !== false,
+    forceSoftwareNoiseGate: agentCfg[FORCE_SOFTWARE_NOISE_GATE_KEY] === true,
     ambientNoiseEnabled: (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false,
     ambientNoiseTrack: (agentCfg["ambientNoiseTrack"] as string | undefined) ?? null,
     ambientNoiseVolume: (() => {
@@ -699,6 +615,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // 1800 so existing agents pick it up without a UI re-save (call 5718).
     bargeInEnergyThreshold: resolveBargeInEnergyThreshold(agentCfg["bargeInEnergyThreshold"]),
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,
+    // Empirical PSTN echo window (VoBiz/Twilio), not a carrier spec. See
+    // pipeline.ts BARGE_IN_ECHO_GRACE_MS. Stop Speaking Plan may override.
     bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 600,
     micSensitivity:         resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined),
     // P1-E: Agent timezone
@@ -715,17 +633,17 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // Voice Memory — default OFF (opt-in). Remembers voiceprints + mid-call handoff.
     voiceMemoryEnabled:            (agentCfg["voiceMemoryEnabled"]            as boolean | undefined) ?? false,
     // P1-G: Engine — interruption & pacing
-    // Default 3: 2-word STT stubs ("call பண்ண", "Hello Madam" mid-cut) were
-    // false-firing word-count barge-in too often on telephony. Semantic
-    // interrupt keywords (stop/wait) still bypass the word count.
-    wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 3,
-    // Legacy form default was 350ms — rewrite in-memory so existing agents get
-    // snappy turns without requiring a UI re-save. Intentional non-350 values keep.
-    incrementalDelay: (() => {
-      const v = agentCfg["incrementalDelay"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 0;
-      return v === 350 ? 0 : Math.max(0, Math.min(1500, Math.round(v)));
+    // PSTN default 2 while TTS plays; ambiguous partials raise to 3 in
+    // InterruptionManager. Bare VAD never cuts. Stop/wait still bypass.
+    wordsForInterruption: (() => {
+      const v = agentCfg["wordsForInterruption"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 3;
+      const n = Math.max(0, Math.round(v));
+      return n === 2 ? 3 : n;
     })(),
+    // Post-utterance WAIT before TTS. Always 0 — saved 350/500/900 values
+    // added ~1s of dead air every turn (call 20737).
+    incrementalDelay: 0,
     ttsSpeed:             (agentCfg["ttsSpeed"]             as number | undefined) ?? 1.0,
     sarvamIndicNumbers:   agentCfg["sarvamIndicNumbers"] !== false,
     // P1-H: Call lifecycle
@@ -763,8 +681,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     })(),
     telephonyTailDrainMs: (() => {
       const v = agentCfg["telephonyTailDrainMs"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 400;
-      return Math.max(0, Math.min(2000, Math.round(v)));
+      if (typeof v !== "number" || !Number.isFinite(v)) return 0;
+      const ms = Math.max(0, Math.min(2000, Math.round(v)));
+      return ms === 400 || ms === 80 ? 0 : ms;
     })(),
     sarvamSttMode: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? resolveSarvamSttMode(
@@ -772,21 +691,32 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           (agentCfg["sarvamSttMode"] as string | undefined) ?? null,
         )
       : ((agentCfg["sarvamSttMode"] as string | undefined) ?? null),
+    sarvamSttStreamType: resolveRealtimeStreamType(agentCfg["sarvamSttStreamType"]),
+    sarvamSttPrompt: typeof agentCfg["sarvamSttPrompt"] === "string"
+      ? (agentCfg["sarvamSttPrompt"] as string)
+      : null,
     sarvamHighVadSensitivity: resolveSarvamHighVadSensitivity(agentCfg["sarvamHighVadSensitivity"]),
     sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs(agentCfg["sarvamSpeechEndFlushMs"] as number | undefined),
     sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs(agentCfg["sarvamIncompleteHoldMs"] as number | undefined),
     // Wall-clock VAD windows; the adapter converts them to frames at the live
     // sample rate. Null means "leave the provider default alone".
     sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
-    sarvamEndOfSpeechSilenceMs: optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]),
+    sarvamEndOfSpeechSilenceMs: (() => {
+      const v = optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]);
+      return v === 300 || v === 500 ? null : v;
+    })(),
+    sarvamVadThreshold: optionalUnitInterval(agentCfg["sarvamVadThreshold"]),
+    semanticTurnDetection: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
+      ? false
+      : resolveSemanticTurnEnabled(agentCfg["semanticTurnDetection"]),
+    semanticTurnStopMs: clampSemanticTurnStopMs(agentCfg["semanticTurnStopMs"]),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
     voiceStack: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined),
     geminiLive: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined) === "gemini_live"
       ? {
-          model: (typeof (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["model"] === "string"
-            && ((agentCfg["geminiLive"] as Record<string, unknown>)["model"] as string).trim())
-            ? ((agentCfg["geminiLive"] as Record<string, unknown>)["model"] as string)
-            : DEFAULT_GEMINI_LIVE_MODEL,
+          model: resolveGeminiLiveModel(
+            (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["model"] as string | undefined,
+          ),
           voiceName: resolveGeminiLiveVoice(
             (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["voiceName"] as string | undefined,
           ),
@@ -1024,7 +954,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
 
     // 6. Inbound Automatic Calls sheet lookup (pre-fetched in parallel)
     (callDirection === "inbound" && !isWebcall && agent.userId && params.fromNumber?.trim())
-      ? lookupSheetsForSession(agent.userId, params.agentId, params.fromNumber).catch(() => null)
+      ? Promise.race([
+          lookupSheetsForSession(agent.userId, params.agentId, params.fromNumber).catch(() => null),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+        ])
       : Promise.resolve(null),
   ]);
 
@@ -1038,14 +971,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // agent is in auto-detect mode. Strict fixed-language agents must not inherit
     // a remembered preference from a prior multilingual call.
     if (agentConfig.languageAutoDetect) {
-      const LANG_PREF_TO_BCP47: Record<string, string> = {
-        "english": "en-IN", "hindi": "hi-IN", "tamil": "ta-IN",
-        "telugu": "te-IN", "kannada": "kn-IN", "malayalam": "ml-IN",
-        "marathi": "mr-IN", "bengali": "bn-IN", "gujarati": "gu-IN",
-        "punjabi": "pa-IN", "odia": "or-IN", "urdu": "ur-IN",
-      };
       const langPrefRaw = latchedFactsMap.get("language_pref");
-      const mappedSttLang = langPrefRaw ? LANG_PREF_TO_BCP47[langPrefRaw.toLowerCase()] : undefined;
+      const mappedSttLang = mapLanguagePrefToBcp47(langPrefRaw);
       if (mappedSttLang && mappedSttLang !== agentConfig.sttConfig.language) {
         const prevSttLang = agentConfig.sttConfig.language;
         agentConfig.sttConfig.language = mappedSttLang;
@@ -1118,6 +1045,15 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       );
     }
   }
+
+  agentConfig.systemPrompt += `\n\n${buildOpeningLanguageRule({
+    memoryLanguagePref:
+      latchedFactsMap.get("language_pref")
+      ?? callerProfileSnapshot?.preferredLanguage
+      ?? null,
+    agentLanguage: effectiveAgentLang,
+    languageAutoDetect: agentConfig.languageAutoDetect === true,
+  })}`;
 
   // ── Inject DB-backed upcoming bookings (pre-fetched in parallel) ─────────────
   // Meet bots: also inject upcoming bookings when we have a contact phone so
@@ -1349,6 +1285,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   };
 
   agentConfig.systemPrompt = resolvePromptVariables(agentConfig.systemPrompt, dynVars);
+  agentConfig.knownAttendeeEmail = pickKnownBookingEmail(dynVars, agentConfig.systemPrompt);
 
   // Apply the SAME resolution to the static greeting so it addresses the caller
   // by their prompt variables (e.g. {{customer_name}} → "krithika"). Static
@@ -1469,6 +1406,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // only need it as a fallback for providers the user hasn't configured.
   const settingsKeysNeeded = new Set<string>();
   settingsKeysNeeded.add("managed_gemini_key");
+  settingsKeysNeeded.add("managed_gemini_keys");
   for (const providerName of requiredProviders) {
     if (MANAGED[providerName] && (isManaged || !providerKeys.has(providerName))) {
       settingsKeysNeeded.add(MANAGED[providerName]!);
@@ -1491,10 +1429,18 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     for (const r of settingsRows) settingsMap.set(r.key, r.value);
   }
 
+  const { parseGeminiKeyList, pickGeminiKeyFromList } = await import("../lib/gemini-key-pool.js");
+  const pickedGeminiKey = pickGeminiKeyFromList(parseGeminiKeyList(
+    settingsMap.get("managed_gemini_key"),
+    settingsMap.get("managed_gemini_keys"),
+    process.env["GEMINI_API_KEY"] ?? process.env["GOOGLE_API_KEY"],
+  ));
+
   // Apply managed keys for required providers
   for (const providerName of requiredProviders) {
     if (MANAGED[providerName] && (isManaged || !providerKeys.has(providerName))) {
-      const managed = settingsMap.get(MANAGED[providerName]!)
+      const usesGeminiPool = MANAGED[providerName] === "managed_gemini_key";
+      const managed = (usesGeminiPool ? pickedGeminiKey : settingsMap.get(MANAGED[providerName]!))
         ?? (providerName === "sarvam" ? (process.env["SARVAM_API_KEY"] ?? "").trim() || undefined : undefined);
       if (managed) {
         providerKeys.set(providerName, managed);
@@ -1558,7 +1504,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     providerKeys.get("gemini_audio") ||
     providerKeys.get("google_speech") ||
     providerKeys.get("google_stt") ||
-    settingsMap.get("managed_gemini_key") ||
+    pickedGeminiKey ||
     process.env["GEMINI_API_KEY"] ||
     process.env["GOOGLE_API_KEY"];
   if (googleKey) {
@@ -1671,6 +1617,29 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // ── Inject Agent Task brief into system prompt (from dial-time metadata) ────
   try {
     const meta = callRecord.metadata ? JSON.parse(callRecord.metadata) as Record<string, unknown> : {};
+    const callVars = callVariablesFromMetadata(meta);
+    if (Object.keys(callVars).length > 0) {
+      const patientName = (callVars["patient_name"] ?? callVars["name"] ?? "").trim();
+      if (patientName) {
+        if (!callVars["name"]) callVars["name"] = patientName;
+        if (!callVars["customer_name"]) callVars["customer_name"] = patientName;
+        if (!callVars["caller_name"]) callVars["caller_name"] = patientName;
+      }
+      Object.assign(dynVars, callVars);
+      const callBlock = buildCallContextBlock(callVars);
+      if (callBlock) {
+        agentConfig.systemPrompt = `${callBlock}\n\n${agentConfig.systemPrompt}`;
+      }
+      agentConfig.systemPrompt = resolvePromptVariables(agentConfig.systemPrompt, dynVars);
+      agentConfig.knownAttendeeEmail = pickKnownBookingEmail(dynVars, agentConfig.systemPrompt);
+      if (agentConfig.greetingMessage) {
+        agentConfig.greetingMessage = resolvePromptVariables(agentConfig.greetingMessage, dynVars);
+      }
+      logger.info(
+        { agentId: params.agentId, callId: callRecord.id, variableKeys: Object.keys(callVars) },
+        "Per-call API variables injected into system prompt",
+      );
+    }
     const taskBrief = typeof meta["taskBrief"] === "string" ? meta["taskBrief"].trim() : "";
     if (taskBrief) {
       agentConfig.systemPrompt += `\n\n${taskBrief}`;
@@ -1680,7 +1649,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       );
     }
   } catch (taskBriefErr) {
-    logger.warn({ err: taskBriefErr, callId: callRecord.id }, "Failed to inject agent task brief");
+    logger.warn({ err: taskBriefErr, callId: callRecord.id }, "Failed to inject dial-time prompt context");
   }
 
   // ── Write back triggeredCallId on the scheduled callback row ─────────────────
@@ -1739,7 +1708,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     llmProvider: agent.llmProvider,
     ttsProvider: agent.ttsProvider,
     ttsVoice: agent.ttsVoice ?? null,
-    extra: { telephonyProvider: params.telephonyProvider },
+    extra: {
+      telephonyProvider: params.telephonyProvider,
+      backchannelingEnabled: agent.backchannelingEnabled !== false,
+    },
   });
 
   // ── Setup-time execution-log rows (mirror the web-call timeline) ─────────────
@@ -1978,7 +1950,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         return false;
       }
 
-      const transcriptSummary = live.pipeline.getTranscript().slice(-4000);
+      const priorTranscript = live.pipeline.getTranscript();
+      const transcriptSummary = priorTranscript.slice(-4000);
       const fromAgentId = live.agentId;
       const [runRow] = await db.select({ goal: squadRunsTable.goal })
         .from(squadRunsTable).where(eq(squadRunsTable.id, live.squadRunId)).limit(1);
@@ -1995,6 +1968,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
             for (const f of ctx.facts.slice(0, 25)) {
               durableFacts[f.key] = f.value;
             }
+            const livePref = live.pipeline.getLiveHandoffLanguage();
+            if (livePref) {
+              durableFacts["language_pref"] = livePref;
+            }
           }
         } catch (factErr) {
           logger.warn({ err: factErr, callId: callRecord.id }, "Failed to load durable facts for handoff");
@@ -2009,7 +1986,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         reason: operatorSummary?.trim() || "Specialist handoff",
         goal: runRow?.goal ?? "Live squad call",
         transcriptSummary,
-        language: live.pipeline.getPreferredCallerLang() ?? live.configuredLanguage,
+        language: live.pipeline.getLiveHandoffLanguage() || live.configuredLanguage || null,
         durableFacts,
         squad,
         previousPipeline: live.pipeline,
@@ -2048,10 +2025,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       // Swap pointer first, THEN close the previous pipeline so inbound audio
       // never lands on a closed instance and a failed close can't orphan the call.
       const previous = result.previousPipeline;
-      live.handoffTranscriptAccum = [
-        live.handoffTranscriptAccum,
-        transcriptSummary,
-      ].filter(Boolean).join("\n--- handoff ---\n").slice(-12000);
+      live.handoffTranscriptAccum = capHandoffTranscript(
+        mergeHandoffTranscript(live.handoffTranscriptAccum, priorTranscript),
+      );
       live.pipeline = result.pipeline;
       live.agentId = targetAgentId;
       try {
@@ -2059,6 +2035,11 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       } catch (closeErr) {
         logger.warn({ err: closeErr, callId: callRecord.id }, "Error closing previous pipeline after handoff swap");
       }
+      // Receiving pipeline was never greet()'d — firstSpeaker=user + silent
+      // stock lines left the caller in dead air after the swap.
+      result.pipeline.greet().catch((err) => {
+        logger.error({ err, callId: callRecord.id }, "Squad handoff: receiving agent greet failed");
+      });
 
       logExec(EXEC_COMPONENTS.Tool, "system", {
         status: "success",
@@ -2223,6 +2204,21 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
 
       // wasTransferred / transferredTo were already set BEFORE the provider call
       // (see comment above) to win the WS-close race. Nothing to set here.
+      // Cold (and warm-fallback) transfers never hit the warm insert above — still
+      // log call_transfers so History → Transfers and campaign sync see the handoff.
+      if (!transferId && agent.userId) {
+        try {
+          await db.insert(callTransfersTable).values({
+            callId:     callRecord.id,
+            userId:     agent.userId,
+            transferTo: to,
+            summary:    operatorSummary ?? null,
+            status:     "initiated",
+          });
+        } catch (err) {
+          logger.warn({ callId: callRecord.id, err }, "Transfer: failed to log call_transfers row");
+        }
+      }
       logExec(EXEC_COMPONENTS.Tool, "system", {
         status: "success",
         metadata: {
@@ -2295,6 +2291,34 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         onFatalError: (reason) => {
           void failSession(sessionId, reason);
         },
+        voicemailDelivery: (params.voicemailDelivery || ((params.amdMachineHint || params.amdArmed) && amdVoicemailAction === "leave_message"))
+          ? {
+              message: (typeof agentCfg["voicemailMessage"] === "string" && (agentCfg["voicemailMessage"] as string).trim())
+                ? (agentCfg["voicemailMessage"] as string)
+                : "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
+              ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
+            }
+          : undefined,
+        voicemailPolicy: {
+          action: amdVoicemailAction,
+          message: (typeof agentCfg["voicemailMessage"] === "string" && (agentCfg["voicemailMessage"] as string).trim())
+            ? (agentCfg["voicemailMessage"] as string)
+            : "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
+          ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
+        },
+        amdConfirm: (params.amdMachineHint || params.amdArmed)
+          ? {
+              action: amdVoicemailAction,
+              hint: !!params.amdMachineHint,
+              ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
+            }
+          : undefined,
+        onAmdResult: (result) => {
+          void withDbRetry("persist-amd-result", () =>
+            db.update(callsTable).set({ amdResult: result }).where(eq(callsTable.id, callRecord.id)),
+          ).catch((err) => logger.error({ callId: callRecord.id, err }, "Failed to persist AMD result"));
+        },
+        onVoicemailAction: () => { voicemailActionExecuted = true; },
         callDirection,
         answeredAt: params.answeredAt,
       })
@@ -2328,6 +2352,15 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
         }
       : undefined,
+    // Always expose the configured After-the-call voicemail policy so mid-call
+    // transcript detection can leave a message when acoustic AMD misses.
+    voicemailPolicy: {
+      action: amdVoicemailAction,
+      message: (typeof agentCfg["voicemailMessage"] === "string" && (agentCfg["voicemailMessage"] as string).trim())
+        ? (agentCfg["voicemailMessage"] as string)
+        : "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
+      ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
+    },
     // Acoustic AMD confirmation: armed either by a synchronous machine hint
     // (legacy path) or UNCONDITIONALLY for AMD-enabled VoBiz outbound calls
     // (amdArmed — the real verdict arrives via the async machine_detection_url
@@ -2352,6 +2385,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // Returning caller (>=1 prior completed call) → instant name opener (no greeting LLM).
     isReturningCaller: (callerProfileSnapshot?.callCount ?? 0) >= 1,
     returningCallerName: callerProfileSnapshot?.name ?? null,
+    callerMemoryLanguage:
+      latchedFactsMap.get("language_pref")
+      ?? callerProfileSnapshot?.preferredLanguage
+      ?? null,
     callDirection,
     isResumeDroppedCall: resumeDroppedCall,
     // Carrier answer time — anchors the recording clock (see SessionConfig).
@@ -2493,34 +2530,16 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   logger.info({ sessionId, callId: callRecord.id, agent: agent.name }, "Session created");
 
   if (params.amdMachineHint || params.amdArmed) {
-    if (agentConfig.voiceStack === "gemini_live") {
-      // v1: acoustic AMD / voicemail delivery stays on the classic stack only.
-      pipeline.greet().catch((err) => {
-        logger.error({ sessionId, err }, "Gemini Live greeting failed");
-      });
-    } else {
-      // Acoustic AMD confirmation — armed by an (unreliable) synchronous machine
-      // hint OR unconditionally for AMD-enabled VoBiz outbound calls (amdArmed;
-      // the async machine_detection_url callback corroborates mid-window). Open
-      // the normal stream but confirm the machine verdict acoustically BEFORE
-      // greeting — only a confirmed machine enacts the voicemail action; anything
-      // ambiguous falls through to a normal greeting so a live human is never harmed.
+      // Live: machine hint/callback enacts hangup or leave_message; no hint → greet.
+      // Classic: acoustic window before enacting.
       pipeline.confirmAmdMachineThenBranch().catch((err) => {
         logger.error({ sessionId, err }, "AMD acoustic confirmation failed");
       });
-    }
   } else if (params.voicemailDelivery) {
-    if (agentConfig.voiceStack === "gemini_live") {
-      pipeline.greet().catch((err) => {
-        logger.error({ sessionId, err }, "Gemini Live greeting failed");
-      });
-    } else {
-      // Voicemail-delivery mode: do NOT greet/run the conversation. Listen for the
-      // machine greeting to end, then speak the full message once and hang up.
+      // Voicemail-delivery mode: do NOT greet/run the conversation.
       pipeline.deliverVoicemail().catch((err) => {
         logger.error({ sessionId, err }, "Voicemail delivery failed");
       });
-    }
   } else {
     pipeline.greet().catch((err) => {
       logger.error({ sessionId, err }, "Greeting failed");
@@ -2560,6 +2579,15 @@ export function getSessionByExternalCallId(externalCallId: string): ActiveSessio
   if (!externalCallId) return undefined;
   for (const session of sessions.values()) {
     if (session.externalCallId === externalCallId) return session;
+  }
+  return undefined;
+}
+
+/** Second VoBiz media WS for the same campaign dial (two CallUUIDs). */
+export function getSessionByCampaignLeadId(campaignLeadId: number): ActiveSession | undefined {
+  if (!Number.isFinite(campaignLeadId)) return undefined;
+  for (const session of sessions.values()) {
+    if (session.campaignLeadId === campaignLeadId) return session;
   }
   return undefined;
 }
@@ -2662,11 +2690,12 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
   const session = sessions.get(sessionId);
   if (!session) return;
 
+  const fullTranscript = mergeHandoffTranscript(
+    session.handoffTranscriptAccum,
+    session.pipeline.getTranscript(),
+  );
   const squadTranscriptPreview = session.squadRunId
-    ? [
-        session.handoffTranscriptAccum,
-        session.pipeline.getTranscript(),
-      ].filter(Boolean).join("\n--- handoff ---\n").slice(0, 4000)
+    ? fullTranscript.slice(0, 4000)
     : null;
 
   sessions.delete(sessionId);
@@ -2716,7 +2745,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
   // Redact high-risk secrets (card numbers, PAN, Aadhaar, CVV/OTP/PIN) before
   // the transcript is persisted or sent to webhooks/summaries. Phone/email are
   // intentionally preserved — they are legitimate lead-capture data.
-  const transcript = redactTranscriptPII(session.pipeline.getTranscript());
+  const transcript = redactTranscriptPII(fullTranscript);
 
   const { metricsAcc } = session;
   const avgSttMs = metricsAcc.count > 0 ? Math.round(metricsAcc.sttTotal / metricsAcc.count) : null;
@@ -2724,20 +2753,76 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
   const avgTtsMs = metricsAcc.count > 0 ? Math.round(metricsAcc.ttsTotal / metricsAcc.count) : null;
 
   try {
-    // A confirmed-machine voicemail (message delivered or confirmed-machine hangup)
-    // is a distinct terminal outcome — takes precedence over transferred/completed.
-    // A call where the agent had zero turns (no STT→LLM cycle completed) and ended
-    // quickly was effectively rejected or dropped before the conversation started.
-    // Mark it "no_pickup" instead of "completed" so the UI and campaign stats reflect
-    // the real outcome (e.g. callee rejected, line busy, VoBiz brief-connect-then-drop).
+    // Voicemail status: AMD action executed, OR amdResult=machine, OR transcript
+    // clearly shows a VM greeting (call 14439: STT heard "Voice mail..." and the
+    // agent said "reached the voicemail" but status stayed Completed).
+    let amdResultAtEnd: string | null = null;
+    try {
+      const [amdRow] = await db
+        .select({ amdResult: callsTable.amdResult })
+        .from(callsTable)
+        .where(eq(callsTable.id, session.callId))
+        .limit(1);
+      amdResultAtEnd = amdRow?.amdResult ?? null;
+    } catch { /* non-critical */ }
+
+    const markedVoicemail = shouldMarkCallVoicemail({
+      voicemailActionExecuted: session.voicemailActionExecuted,
+      amdResult: amdResultAtEnd,
+      transcript,
+    });
     const noTurnsDrop = metricsAcc.count === 0 && durationSeconds <= 15 && !session.wasTransferred;
-    const callStatus = session.voicemailActionExecuted
+    // Silent agent with a real caller (or long idle with zero turns) must not look
+    // like a successful conversation — History used to show completed + no error.
+    const agentAudioSec = recording.getAgentCapturedSeconds();
+    const callerAudioSec = recording.getCallerCapturedSeconds();
+    const callerInTranscript = /\bCaller:\s*\S/.test(transcript);
+    const agentInTranscript = /\bAgent:\s*\S/.test(transcript);
+    const silentAgentFailure =
+      !markedVoicemail
+      && !session.wasTransferred
+      && agentAudioSec < 0.25
+      && !agentInTranscript
+      && (callerInTranscript || callerAudioSec >= 0.4)
+      && durationSeconds > 3;
+    let callStatus = markedVoicemail
       ? "voicemail"
       : session.wasTransferred
         ? "transferred"
-        : noTurnsDrop
-          ? "no_pickup"
-          : "completed";
+        : silentAgentFailure
+          ? "failed"
+          : noTurnsDrop
+            ? "no_pickup"
+            : "completed";
+    const silentErrorMessage = silentAgentFailure ? "no_agent_audio" : null;
+    if (silentAgentFailure) {
+      logger.warn(
+        {
+          sessionId,
+          callId: session.callId,
+          durationSeconds,
+          agentAudioSec,
+          callerAudioSec,
+          turnCount: metricsAcc.count,
+        },
+        "endSession: marking failed — caller present but no agent audio",
+      );
+    }
+    if (markedVoicemail && !session.voicemailActionExecuted) {
+      logger.info(
+        {
+          sessionId,
+          callId: session.callId,
+          amdResult: amdResultAtEnd,
+          viaTranscript: shouldMarkCallVoicemail({
+            voicemailActionExecuted: false,
+            amdResult: null,
+            transcript,
+          }),
+        },
+        "endSession: marking call voicemail from AMD/transcript (action not latched)",
+      );
+    }
 
     // ── Upload call recording (async, non-blocking) ──────────────────────────
     // Only finalize/upload when the agent has Call Recording enabled, so disabled
@@ -2840,6 +2925,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       endedAt,
       durationSeconds,
       transcript: transcript || null,
+      ...(silentErrorMessage ? { errorMessage: silentErrorMessage } : {}),
       sttLatencyMs: avgSttMs,
       llmLatencyMs: avgLlmMs,
       ttsFirstChunkMs: avgTtsMs,
@@ -2861,7 +2947,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       // let scheduleRetry decide whether attempts remain. Without this, dropped
       // campaign calls are silently marked "completed" and never retried.
       const midConvDrop =
-        !session.voicemailActionExecuted &&
+        !markedVoicemail &&
         !session.naturalEndTriggered &&
         !session.wasTransferred &&
         durationSeconds > 15;
@@ -2872,7 +2958,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       // once every configured attempt has ended in voicemail (scheduleRetry then
       // returns false). This mirrors the pre-connect webhook path, which already
       // treats voicemail/machine as retryable.
-      const isVoicemail = session.voicemailActionExecuted;
+      const isVoicemail = markedVoicemail || callStatus === "voicemail";
       const shouldRetry = midConvDrop || isVoicemail;
       const retryReason = isVoicemail ? "voicemail" : "network_drop";
 
@@ -3072,7 +3158,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               ctxLlmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
               if (ctxLlmKey) {
                 ctxLlmProvider = "groq";
-                ctxLlmModel    = "llama-3.3-70b-versatile";
+                ctxLlmModel    = "llama-3.1-70b-versatile";
               }
             }
             if (!ctxLlmKey) return;
@@ -3291,7 +3377,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             // credited to the partner after the debit below.
             const partnerBilling  = await resolvePartnerBilling(sessionCallUserId);
             const rateCentsPerMin = partnerBilling?.clientRateCentsPerMin
-              ?? Math.max(0, getFlatRateCentsPerMin(billingMode) - await resolveOwnTelephonyDiscount(sessionCallUserId, ag));
+              ?? Math.max(0, (await resolveBillingRateCentsPerMin(billingMode)) - await resolveOwnTelephonyDiscount(sessionCallUserId, ag));
             const modeLabel       = partnerBilling ? "partner" : billingMode === "managed" ? "managed" : "BYOP";
             const rateLabel       = `₹${(rateCentsPerMin / 100).toFixed(2)}/min (${modeLabel})`;
             const debitCents      = computeProRataDebitCents(durationSeconds, rateCentsPerMin);
@@ -3411,8 +3497,9 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
 
           // 1. Generate call summary when the agent has Auto Summarization on.
           // Uses BYOP key when available; falls back to platform managed key (Groq).
-          const summarizationEnabled = agCfgForWebhook["summarizationEnabled"] === true;
-          if (ag.userId && summarizationEnabled) {
+          const rawSum = agCfgForWebhook["summarizationEnabled"];
+          const summarizationEnabled = rawSum === true || rawSum === "true" || rawSum === 1 || rawSum === "1";
+          if (summarizationEnabled) {
             try {
               const hasTranscript = !!(transcript && transcript.trim().length > 0);
               if (!hasTranscript) {
@@ -3420,27 +3507,46 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 callSummary = "No conversation took place on this call, so there is nothing to summarize.";
                 await db.update(callsTable).set({ callSummary }).where(eq(callsTable.id, session.callId));
               } else {
-                const llmProvs = await db.select().from(providersTable).where(
-                  and(
-                    eq(providersTable.isActive, true),
-                    eq(providersTable.userId, ag.userId!),
-                    eq(providersTable.providerName, ag.llmProvider)
-                  )
-                );
-                let sumLlmKey: string | null = llmProvs[0] ? decryptKey(llmProvs[0].apiKey) : null;
+                let sumLlmKey: string | null = null;
                 let sumLlmProvider = ag.llmProvider;
                 let sumLlmModel = ag.llmModel;
-                // Managed plan: no BYOP key → fall back to platform managed key (Groq)
+
+                if (ag.userId) {
+                  const llmProvs = await db.select().from(providersTable).where(
+                    and(
+                      eq(providersTable.isActive, true),
+                      eq(providersTable.userId, ag.userId),
+                      eq(providersTable.providerName, ag.llmProvider)
+                    )
+                  );
+                  if (llmProvs[0]) {
+                    sumLlmKey = decryptKey(llmProvs[0].apiKey);
+                  }
+                }
+                // Managed plan: no BYOP key → fall back to Admin Panel managed keys
+                // Priority: (1) BYOP key, (2) admin managed_sarvam_key (Sarvam-105B / GLM 5.2), (3) admin managed_groq_key, (4) env GROQ_API_KEY
+                let fallbackGroqKey: string | null = null;
                 if (!sumLlmKey) {
-                  const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
-                  sumLlmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
-                  if (sumLlmKey) {
+                  const platformRows = await db
+                    .select()
+                    .from(platformSettingsTable)
+                    .where(inArray(platformSettingsTable.key, ["managed_sarvam_key", "managed_groq_key", "managed_qwen_key"]));
+                  const byKey = Object.fromEntries(platformRows.map((r) => [r.key, r.value?.trim() || ""]));
+
+                  const sarvamKey = byKey["managed_sarvam_key"] || process.env["SARVAM_API_KEY"] || null;
+                  fallbackGroqKey = byKey["managed_groq_key"] || byKey["managed_qwen_key"] || process.env["GROQ_API_KEY"] || null;
+
+                  if (sarvamKey) {
+                    sumLlmProvider = "sarvam";
+                    sumLlmKey = sarvamKey;
+                    sumLlmModel = "sarvam-105b";
+                  } else if (fallbackGroqKey) {
                     sumLlmProvider = "groq";
-                    sumLlmModel = "llama-3.3-70b-versatile";
+                    sumLlmKey = fallbackGroqKey;
+                    sumLlmModel = "llama-3.1-70b-versatile";
                   }
                 }
                 if (sumLlmKey) {
-                  const llm = createLLMAdapter(sumLlmProvider, sumLlmKey, sumLlmModel);
                   const customPrompt = (agCfgForWebhook["summarizationPrompt"] as string | undefined) ?? "";
                   // Freeze relative dates to absolute ones. This summary is replayed
                   // as cross-call memory on future calls; a bare "tomorrow" written
@@ -3460,16 +3566,65 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                     : `Summarize this call transcript as a single natural paragraph of 4 to 6 sentences. Briefly cover why the customer called, what was discussed, any important information collected, the outcome, and any follow-up or next steps (only if applicable). Write plain prose — do not use bullet points, numbered lists, or headings.`;
                   const userContent = `${baseInstruction}\n\n${dateRule}\n\nTranscript:\n${transcript.slice(0, 6000)}`;
                   let summary = "";
-                  await llm.chat(
-                    [{ role: "user", content: userContent }],
-                    "You are a call analyst. Write a concise, factual summary of the call as a single natural paragraph of 4 to 6 sentences. Do not use bullet points, numbered lists, or headings — write plain readable prose only.",
-                    () => {},
-                    (full) => { summary = full; }
-                  );
+
+                  // Try primary model (BYOP, or Sarvam-105B, or Groq Llama 3.3)
+                  try {
+                    const llm = createLLMAdapter(sumLlmProvider, sumLlmKey, sumLlmModel);
+                    await llm.chat(
+                      [{ role: "user", content: userContent }],
+                      "You are a call analyst. Write a concise, factual summary of the call as a single natural paragraph of 4 to 6 sentences. Do not use bullet points, numbered lists, or headings — write plain readable prose only.",
+                      () => {},
+                      (full) => { summary = full; }
+                    );
+                  } catch (primaryErr) {
+                    logger.warn({ sessionId, agentId: ag.id, provider: sumLlmProvider, model: sumLlmModel, primaryErr }, "Primary summary model failed");
+                  }
+
+                  // Fallback 1: If Sarvam-105B produced no output, try Sarvam GLM 5.2
+                  if (!summary && sumLlmProvider === "sarvam" && sumLlmKey) {
+                    try {
+                      logger.info({ sessionId, agentId: ag.id }, "Retrying summary with Sarvam GLM 5.2 (glm5.2)...");
+                      const glmLlm = createLLMAdapter("sarvam", sumLlmKey, "glm5.2");
+                      await glmLlm.chat(
+                        [{ role: "user", content: userContent }],
+                        "You are a call analyst. Write a concise, factual summary of the call as a single natural paragraph of 4 to 6 sentences. Do not use bullet points, numbered lists, or headings — write plain readable prose only.",
+                        () => {},
+                        (full) => { summary = full; }
+                      );
+                    } catch (glmErr) {
+                      logger.warn({ sessionId, agentId: ag.id, glmErr }, "Sarvam GLM 5.2 summary fallback failed");
+                    }
+                  }
+
+                  // Fallback 2: If Sarvam models produced no output, try Groq fallback key if available
+                  if (!summary && fallbackGroqKey && sumLlmProvider !== "groq") {
+                    try {
+                      logger.info({ sessionId, agentId: ag.id }, "Retrying summary with Groq (llama-3.1-70b-versatile)...");
+                      const groqLlm = createLLMAdapter("groq", fallbackGroqKey, "llama-3.1-70b-versatile");
+                      await groqLlm.chat(
+                        [{ role: "user", content: userContent }],
+                        "You are a call analyst. Write a concise, factual summary of the call as a single natural paragraph of 4 to 6 sentences. Do not use bullet points, numbered lists, or headings — write plain readable prose only.",
+                        () => {},
+                        (full) => { summary = full; }
+                      );
+                    } catch (groqErr) {
+                      logger.warn({ sessionId, agentId: ag.id, groqErr }, "Groq summary fallback failed");
+                    }
+                  }
+
                   if (summary) {
                     callSummary = summary;
                     await db.update(callsTable).set({ callSummary: summary }).where(eq(callsTable.id, session.callId));
+                  } else {
+                    logger.warn({ sessionId, agentId: ag.id }, "Post-call summary: All LLM models returned empty response, callSummary not saved");
                   }
+                } else {
+                  // summarizationEnabled is true but no LLM key found — log so admins can diagnose.
+                  logger.warn(
+                    { sessionId, agentId: ag.id, llmProvider: ag.llmProvider },
+                    "Post-call summary skipped: no LLM key available (no BYOP key for provider and no platform managed key). " +
+                    "Set managed_sarvam_key, managed_groq_key, or SARVAM_API_KEY / GROQ_API_KEY env var."
+                  );
                 }
               }
             } catch (summaryErr) {
@@ -3501,72 +3656,40 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 },
                 "Taxonomy disposition ready for webhook",
               );
+              // Disposition may detect voicemail after status was already written.
+              if (
+                callStatus !== "voicemail"
+                && looksLikeVoicemailOutcome(
+                  `${dispositionResult["primary"] ?? ""}: ${dispositionResult["sub"] ?? ""}`,
+                  dispositionResult,
+                  amdResultAtEnd,
+                )
+              ) {
+                callStatus = "voicemail";
+                await db.update(callsTable)
+                  .set({ status: "voicemail" })
+                  .where(eq(callsTable.id, session.callId));
+                logger.info(
+                  { sessionId, callId: session.callId, sub: dispositionResult["sub"] },
+                  "endSession: upgraded call status to voicemail from disposition",
+                );
+              }
             }
           } catch (dispErr) {
             logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");
           }
 
-          if (
-            !dispositionResult &&
-            dispositionSchema.length > 0 &&
-            transcript &&
-            transcript.length > 50 &&
-            ag.userId
-          ) {
+          if (schemaFieldsNeedFill(dispositionResult, dispositionSchema)) {
             try {
-              const llmProvs = await db.select().from(providersTable).where(
-                and(
-                  eq(providersTable.isActive, true),
-                  eq(providersTable.userId, ag.userId!),
-                  eq(providersTable.providerName, ag.llmProvider)
-                )
-              );
-              let llmKey: string | null = llmProvs[0] ? decryptKey(llmProvs[0].apiKey) : null;
-              let dispProvider = ag.llmProvider;
-              let dispModel = ag.llmModel;
-              if (!llmKey) {
-                const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
-                llmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
-                if (llmKey) {
-                  dispProvider = "groq";
-                  dispModel = "llama-3.3-70b-versatile";
-                }
-              }
-              if (llmKey) {
-                const llm = createLLMAdapter(dispProvider, llmKey, dispModel);
-                const fieldList = formatDispositionFieldList(dispositionSchema);
-                let raw = "";
-                await llm.chat(
-                  [{
-                    role: "user",
-                    content:
-                      `Extract disposition fields from this call transcript. Return valid JSON only.\n\n` +
-                      `Fields:\n${fieldList}\n\n` +
-                      `Transcript:\n${transcript.slice(0, 8000)}`,
-                  }],
-                  DISPOSITION_EXTRACT_SYSTEM,
-                  () => {},
-                  (full) => { raw = full; },
-                );
-                if (raw) {
-                  try {
-                    const jsonStr = raw.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "").trim();
-                    const parsed = JSON.parse(jsonStr);
-                    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-                      const result = normalizeDispositionSchemaResult(
-                        dispositionSchema,
-                        parsed as Record<string, unknown>,
-                      );
-                      dispositionResult = result;
-                      await db.update(callsTable).set({ dispositionResult: result }).where(eq(callsTable.id, session.callId));
-                    }
-                  } catch {
-                    logger.warn({ sessionId }, "Disposition JSON parse failed");
-                  }
-                }
-              }
+              dispositionResult = await extractFlatDispositionSchema({
+                agentId: call.agentId,
+                callId: session.callId,
+                transcript,
+                schema: dispositionSchema,
+                existing: dispositionResult,
+              });
             } catch (dispErr) {
-              logger.warn({ sessionId, dispErr }, "Post-call disposition extraction failed");
+              logger.warn({ sessionId, dispErr }, "Post-call disposition schema extraction failed");
             }
           }
 
@@ -3575,18 +3698,17 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           // disposition so we can pass dispositionResult as a hint. Non-campaign
           // calls are skipped inside analyzeCallIntelligence.
           if (session.campaignLeadId && transcript && transcript.trim().length >= 20) {
-            try {
-              const { analyzeCallIntelligence } = await import("../services/analyze-call-intelligence.js");
-              await analyzeCallIntelligence({
+            void import("../services/analyze-call-intelligence.js").then(({ analyzeCallIntelligence }) =>
+              analyzeCallIntelligence({
                 callId: session.callId,
                 leadId: session.campaignLeadId,
                 transcript,
                 callSummary: callSummary || null,
                 dispositionResult,
-              });
-            } catch (intelErr) {
+              }),
+            ).catch((intelErr) => {
               logger.warn({ sessionId, intelErr }, "Post-call intelligence analysis failed");
-            }
+            });
           }
 
           // 2c. Inbound call → campaign matching ("who called us back?").
@@ -3638,7 +3760,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 evalLlmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
                 if (evalLlmKey) {
                   evalProvider = "groq";
-                  evalModel = "llama-3.3-70b-versatile";
+                  evalModel = "llama-3.1-70b-versatile";
                 }
               }
               if (evalLlmKey) {
@@ -3884,16 +4006,15 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               let memLlmKey: string | null = memLlmProvs[0] ? decryptKey(memLlmProvs[0].apiKey) : null;
               let memLlmProvider = session.agentLlmProvider;
               let memLlmModel    = session.agentLlmModel;
-              // Managed plan: no BYOP key → fall back to platform managed key (Groq).
-              // IMPORTANT: the managed key is a Groq API key, so we must also switch
-              // the provider to "groq" and use a Groq-compatible model — otherwise
-              // createLLMAdapter("openai", groqKey, ...) would fail with 401.
+              // Managed plan: no BYOP key → fall back to platform Sarvam (same as
+              // post-call summary). Must switch provider+model with the key —
+              // createLLMAdapter("openai", sarvamKey, ...) would 401.
               if (!memLlmKey) {
-                const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
-                memLlmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
+                const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_sarvam_key"));
+                memLlmKey = row?.value?.trim() || process.env["SARVAM_API_KEY"] || null;
                 if (memLlmKey) {
-                  memLlmProvider = "groq";
-                  memLlmModel    = "llama-3.3-70b-versatile";
+                  memLlmProvider = "sarvam";
+                  memLlmModel    = "sarvam-105b";
                 }
               }
               if (memLlmKey) {

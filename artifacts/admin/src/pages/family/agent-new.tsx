@@ -124,8 +124,9 @@ const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
 
 const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
   cartesia: [
-    { value: "sonic-3.5",     label: "Sonic 3.5 — 42 languages, lowest latency" },
-    { value: "sonic-preview", label: "Sonic 3.6 (beta) — Hinglish, Odia/Urdu" },
+    { value: "sonic-3.6",     label: "Sonic 3.6 — current (Hinglish, 44 languages)" },
+    { value: "sonic-3.5",     label: "Sonic 3.5 — previous snapshot" },
+    { value: "sonic-preview", label: "Sonic preview (beta snapshot)" },
     { value: "sonic-3",     label: "Sonic 3" },
     { value: "sonic-2",     label: "Sonic 2 (stable)" },
     { value: "sonic-turbo", label: "Sonic Turbo (fast, low-latency)" },
@@ -864,7 +865,7 @@ export default function FamilyAgentNew() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium leading-none text-white/80">Backchanneling</p>
-                          <p className="text-xs text-white/35 mt-1">Agent says "I see", "Got it" etc. while thinking</p>
+                          <p className="text-xs text-white/35 mt-1">Agent says "okay", "hmm", or "mmm" while thinking</p>
                         </div>
                         <FormField control={form.control} name="backchannelingEnabled" render={({ field }) => (
                           <FormItem>

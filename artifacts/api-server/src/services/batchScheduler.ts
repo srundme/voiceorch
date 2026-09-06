@@ -348,6 +348,46 @@ async function countCallingLeads(campaignId: number): Promise<number> {
 }
 
 /**
+ * Platform-wide concurrent-call ceiling — server total across ALL campaigns and
+ * tenants. This protects live-call audio quality: too many simultaneous TTS
+ * drains on the shared single-process event loop slip the 20 ms wire pump →
+ * carrier jitter buffer underruns → choppy / buzzy ("kora kora") voice.
+ *
+ * 0 = disabled (unlimited — preserves prior behaviour). Set
+ * PLATFORM_MAX_CONCURRENT_CALLS to the value the box can sustain with clean
+ * audio; start conservative (e.g. 4–6) and raise while monitoring underruns.
+ */
+const PLATFORM_MAX_CONCURRENT_CALLS = Math.max(0, Number(process.env.PLATFORM_MAX_CONCURRENT_CALLS ?? 0));
+
+export function platformConcurrencyCap(): number {
+  return PLATFORM_MAX_CONCURRENT_CALLS;
+}
+
+/** Total in-flight calls across every campaign / tenant (calling + connected). */
+async function countActiveCallsPlatformWide(): Promise<number> {
+  const result = await db.select({ count: sql<number>`count(*)` })
+    .from(campaignLeadsTable)
+    .where(inArray(campaignLeadsTable.callStatus, ["calling", "connected"]));
+  return Number(result[0]?.count ?? 0);
+}
+
+/**
+ * Remaining platform-wide dial headroom. Returns `null` when the cap is disabled
+ * (PLATFORM_MAX_CONCURRENT_CALLS = 0). Otherwise the number of NEW calls that may
+ * still be started server-wide (>= 0).
+ *
+ * Soft cap: dial claims are serialized per-campaign, not globally, so two
+ * campaigns refilling at the exact same instant can each see the same headroom
+ * and briefly overshoot by a few calls. That is harmless — the next refill
+ * re-reads the live count and self-corrects.
+ */
+export async function platformConcurrencyHeadroom(): Promise<number | null> {
+  if (PLATFORM_MAX_CONCURRENT_CALLS <= 0) return null;
+  const active = await countActiveCallsPlatformWide();
+  return Math.max(0, PLATFORM_MAX_CONCURRENT_CALLS - active);
+}
+
+/**
  * Event-driven rolling refill.
  * ──────────────────────────────────────────────────────────────────────────
  * Tops a campaign back up to its configured `concurrentCallLimit` by claiming
@@ -408,6 +448,21 @@ async function doRefillCampaignConcurrency(campaignId: number): Promise<void> {
 
     let slots = Math.max(0, limit - currentlyActive);
     if (slots <= 0) return;
+
+    // Platform-wide ceiling (server total across all campaigns/tenants). Keeps
+    // the shared event loop from over-subscribing live audio — too many
+    // concurrent TTS drains slip the 20 ms wire pacing → underrun buzz.
+    const headroom = await platformConcurrencyHeadroom();
+    if (headroom !== null) {
+      if (headroom <= 0) {
+        logger.info(
+          { campaignId: campaign.id, platformCap: platformConcurrencyCap() },
+          "Rolling refill deferred — platform-wide concurrent-call cap reached",
+        );
+        return;
+      }
+      if (headroom < slots) slots = headroom;
+    }
 
     // Oldest running batches first so leads dial in batch order.
     const runningBatches = await db.select().from(campaignBatchesTable)

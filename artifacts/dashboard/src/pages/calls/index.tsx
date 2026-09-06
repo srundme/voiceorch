@@ -337,7 +337,7 @@ export default function CallsList() {
     if (next !== current) navigate(next, { replace: true });
   }, [statusFilter, agentFilter, dispositionFilter, searchQuery, dateFrom, dateTo, sortBy, currentPage, navigate]);
 
-  const { data: calls, isLoading: callsLoading } = useListCalls(
+  const { data: calls, isLoading: callsLoading, isError: callsError, refetch: refetchCalls } = useListCalls(
     {
       status: statusFilter !== "all" && statusFilter !== "automation" ? statusFilter : undefined,
       agentId: agentFilter !== "all" ? parseInt(agentFilter) : undefined,
@@ -573,7 +573,7 @@ export default function CallsList() {
 
           {/* Filters Bar */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative shrink-0 w-full sm:w-[340px] lg:w-[420px]">
+            <div className="relative min-w-[180px] flex-1 basis-[220px] max-w-[420px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
               <Input
                 type="search"
@@ -715,9 +715,9 @@ export default function CallsList() {
               </Popover>
             </div>
 
-            <div className="shrink-0 w-full sm:w-auto">
+            <div className="flex shrink-0 items-center gap-3">
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-full sm:w-[180px] h-9 text-xs">
+                <SelectTrigger className="w-[180px] h-9 text-xs">
                   <SelectValue placeholder="Sort" />
                 </SelectTrigger>
                 <SelectContent>
@@ -729,16 +729,10 @@ export default function CallsList() {
                   <SelectItem value="duration_low">Duration: Low to High</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="shrink-0">
               <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5" onClick={handleExport} disabled={!filteredCalls.length}>
                 <Download className="h-3.5 w-3.5" /> Export
               </Button>
-            </div>
-
-            {hasActiveFilters && (
-              <div className="shrink-0">
+              {hasActiveFilters && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -747,8 +741,8 @@ export default function CallsList() {
                 >
                   <RefreshCw className="h-3 w-3 mr-1" /> Clear
                 </Button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
@@ -765,6 +759,18 @@ export default function CallsList() {
                     <Skeleton className="h-3 w-full" />
                   </div>
                 ))
+              ) : callsError ? (
+                <EmptyState
+                  variant="inline"
+                  icon={<AlertTriangle />}
+                  title="Calls failed to load"
+                  description="History could not read the call list. Retry — this is not an empty log."
+                  action={{
+                    label: "Retry",
+                    onClick: () => { void refetchCalls(); },
+                    icon: <RefreshCw className="h-3 w-3" />,
+                  }}
+                />
               ) : pagedCalls.length > 0 ? (
                 pagedCalls.map((call) => (
                   <CallMobileCard key={call.id} call={call} onOpen={() => setSelectedCallId(call.id)} />
@@ -820,6 +826,22 @@ export default function CallsList() {
                       <TableCell className="px-4 py-0"><Skeleton className="h-3 w-10 ml-auto" /></TableCell>
                     </TableRow>
                   ))
+                ) : callsError ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="p-0 border-0">
+                      <EmptyState
+                        variant="inline"
+                        icon={<AlertTriangle />}
+                        title="Calls failed to load"
+                        description="History could not read the call list. Retry — this is not an empty log."
+                        action={{
+                          label: "Retry",
+                          onClick: () => { void refetchCalls(); },
+                          icon: <RefreshCw className="h-3 w-3" />,
+                        }}
+                      />
+                    </TableCell>
+                  </TableRow>
                 ) : pagedCalls.length > 0 ? (
                   pagedCalls.map((call) => {
                     const costCents = (call as any).costCents ?? 0;

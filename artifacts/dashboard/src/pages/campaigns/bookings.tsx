@@ -7,6 +7,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
 import {
   CalendarDays, CheckCircle2, XCircle, Clock, Download,
   RefreshCw, ExternalLink, Calendar, ArrowRightLeft, AlertCircle,
@@ -58,11 +59,6 @@ type BookingsPage = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, init);
-  if (!r.ok) throw new Error(await r.text());
-  return r.json() as Promise<T>;
-}
 
 function fmtDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -126,19 +122,21 @@ export default function BookingsTab({ campaignId }: { campaignId: number }) {
 
   const { data: metrics } = useQuery<BookingMetrics>({
     queryKey: metricsKey,
-    queryFn:  () => apiFetch(`${BASE}/api/campaigns/${campaignId}/bookings/metrics`),
+    queryFn:  () => customFetch(`${BASE}/api/campaigns/${campaignId}/bookings/metrics`),
     refetchInterval: 15000,
+    enabled: campaignId > 0,
   });
 
-  const { data, isFetching } = useQuery<BookingsPage>({
+  const { data, isFetching, isError, isLoading, refetch } = useQuery<BookingsPage>({
     queryKey: listKey,
     queryFn: () => {
       const p = new URLSearchParams({ status: tab, page: String(page), limit: String(LIMIT) });
       if (search) p.set("search", search);
-      return apiFetch<BookingsPage>(`${BASE}/api/campaigns/${campaignId}/bookings?${p}`);
+      return customFetch<BookingsPage>(`${BASE}/api/campaigns/${campaignId}/bookings?${p}`);
     },
     refetchInterval: 15000,
     placeholderData: prev => prev,
+    enabled: campaignId > 0,
   });
 
   const handleSearch = useCallback((v: string) => {
@@ -149,20 +147,23 @@ export default function BookingsTab({ campaignId }: { campaignId: number }) {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: metricsKey });
     qc.invalidateQueries({ queryKey: ["bookings", campaignId] });
+    qc.invalidateQueries({ queryKey: ["lq-metrics", campaignId] });
+    qc.invalidateQueries({ queryKey: ["lq-leads", campaignId] });
+    qc.invalidateQueries({ queryKey: [`/api/campaigns/${campaignId}/analytics`] });
   };
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
   const cancelMutation = useMutation({
     mutationFn: (bookingId: number) =>
-      apiFetch(`${BASE}/api/campaigns/${campaignId}/bookings/${bookingId}/cancel`, { method: "PATCH" }),
+      customFetch(`${BASE}/api/campaigns/${campaignId}/bookings/${bookingId}/cancel`, { method: "PATCH" }),
     onSuccess: () => { toast({ title: "Booking cancelled" }); invalidate(); },
     onError: () => toast({ title: "Failed to cancel", variant: "destructive" }),
   });
 
   const rescheduleMutation = useMutation({
     mutationFn: ({ bookingId, newTime }: { bookingId: number; newTime: string }) =>
-      apiFetch(`${BASE}/api/campaigns/${campaignId}/bookings/${bookingId}/reschedule`, {
+      customFetch(`${BASE}/api/campaigns/${campaignId}/bookings/${bookingId}/reschedule`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ newTime }),
@@ -189,16 +190,15 @@ export default function BookingsTab({ campaignId }: { campaignId: number }) {
       <div className="flex items-stretch gap-2 px-6 pt-5 pb-3 flex-wrap">
 
         {/* Today */}
-        <button
-          onClick={() => { setTab("all"); setPage(0); }}
-          className="flex-1 min-w-[100px] rounded-lg border px-4 py-3 text-left border-border/40 bg-card hover:bg-muted/30 transition-all"
+        <div
+          className="flex-1 min-w-[100px] rounded-lg border px-4 py-3 text-left border-border/40 bg-card"
         >
           <div className="flex items-center gap-1.5 mb-1">
             <Clock className="h-3 w-3 text-muted-foreground" />
             <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground">Today</span>
           </div>
           <p className="text-xl font-bold tabular-nums">{m?.today ?? "—"}</p>
-        </button>
+        </div>
 
         {/* Upcoming */}
         <button
@@ -297,7 +297,7 @@ export default function BookingsTab({ campaignId }: { campaignId: number }) {
           <Button
             size="sm" variant="ghost"
             className={cn("h-7 gap-1.5 text-xs", isFetching && "opacity-60")}
-            onClick={() => qc.invalidateQueries({ queryKey: listKey })}
+            onClick={invalidate}
           >
             <RefreshCw className={cn("h-3 w-3", isFetching && "animate-spin")} />
           </Button>
@@ -306,7 +306,18 @@ export default function BookingsTab({ campaignId }: { campaignId: number }) {
 
       {/* ── Table ──────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        {items.length === 0 ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center h-48 gap-2">
+            <p className="text-sm text-muted-foreground/50">Loading bookings…</p>
+          </div>
+        ) : isError ? (
+          <div className="flex flex-col items-center justify-center h-48 gap-3">
+            <AlertCircle className="h-8 w-8 text-amber-600" />
+            <p className="text-sm font-medium">Bookings failed to load</p>
+            <p className="text-xs text-muted-foreground">This is not an empty list — retry or check your session.</p>
+            <Button size="sm" variant="outline" disabled={isFetching} onClick={() => void refetch()}>Retry</Button>
+          </div>
+        ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3">
             <CalendarDays className="h-8 w-8 text-muted-foreground/20" />
             <p className="text-sm text-muted-foreground/50">

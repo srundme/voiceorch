@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Plus, Lock, Trash2, ExternalLink, Mic, Brain, AudioLines, Phone,
   KeyRound, ShieldCheck, ArrowRight,
@@ -62,6 +62,7 @@ const SUPPORTED_PROVIDERS: Record<string, ProviderDef[]> = {
   ],
   llm: [
     { label: "Sarvam AI (recommended)", value: "sarvam", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Sarvam key…", docsUrl: "https://dashboard.sarvam.ai", docsLabel: "dashboard.sarvam.ai" },
+    { label: "Google Gemini", value: "google", apiKeyLabel: "Gemini API Key", apiKeyPlaceholder: "Paste your Google AI Studio key…", docsUrl: "https://aistudio.google.com/apikey", docsLabel: "aistudio.google.com" },
     { label: "OpenAI", value: "openai", apiKeyLabel: "API Key", apiKeyPlaceholder: "sk-…", docsUrl: "https://platform.openai.com/api-keys", docsLabel: "platform.openai.com" },
     { label: "Groq", value: "groq", apiKeyLabel: "API Key", apiKeyPlaceholder: "gsk_…", docsUrl: "https://console.groq.com/keys", docsLabel: "console.groq.com" },
     { label: "Krutrim Cloud", value: "krutrim", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Krutrim Cloud API key…", docsUrl: "https://cloud.olakrutrim.com", docsLabel: "cloud.olakrutrim.com" },
@@ -173,10 +174,22 @@ const providerFormSchema = z.object({
 type ProviderFormValues = z.infer<typeof providerFormSchema>;
 
 /* ── Page ─────────────────────────────────────────────────────────────────── */
-export default function ProvidersList() {
+export default function ProvidersList({
+  hideInlineAddButton = false,
+  addOpen,
+  onAddOpenChange,
+}: {
+  /** When true, the in-page Add Provider control is omitted (parent owns the tab-row button). */
+  hideInlineAddButton?: boolean;
+  /** Controlled dialog open state from the Providers tab page. */
+  addOpen?: boolean;
+  onAddOpenChange?: (open: boolean) => void;
+} = {}) {
   const queryClient = useQueryClient();
   const { toast }   = useToast();
-  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [internalAddOpen, setInternalAddOpen] = useState(false);
+  const isAddOpen = addOpen ?? internalAddOpen;
+  const setIsAddOpen = onAddOpenChange ?? setInternalAddOpen;
   const [extraFieldValues, setExtraFieldValues] = useState<Record<string, string>>({});
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
@@ -188,6 +201,13 @@ export default function ProvidersList() {
     resolver: zodResolver(providerFormSchema),
     defaultValues: { providerType: "asr", providerName: "", apiKey: "" },
   });
+
+  // Tab-row "Add Provider" opens the dialog without openDialog() — seed defaults.
+  useEffect(() => {
+    if (addOpen !== true) return;
+    form.reset({ providerType: "llm", providerName: "", apiKey: "" });
+    setExtraFieldValues({});
+  }, [addOpen]); // eslint-disable-line react-hooks/exhaustive-deps -- only when parent opens
 
   const selectedType          = form.watch("providerType");
   const selectedProviderValue = form.watch("providerName");
@@ -260,22 +280,18 @@ export default function ProvidersList() {
     <div className="flex-1 overflow-y-auto animate-fade-in">
     <div className="max-w-[1400px] mx-auto px-10 py-10 space-y-6">
 
-      {/* Toolbar — parent StripeTabPage owns the Providers title */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 sm:px-0">
-        <div>
-          <p className="text-xs text-muted-foreground">
-            SnapServe defaults to Sarvam for speech. Add your own keys for other providers anytime.
-          </p>
-          <p className="text-[13px] mt-1 text-muted-foreground/60 max-w-[520px]">API keys for your voice AI services. Stored encrypted, never exposed.</p>
+      {/* Tab row owns Add Provider; keep optional inline button for non-tabbed embeds */}
+      {!hideInlineAddButton && (
+        <div className="flex justify-end px-4 sm:px-0">
+          <button
+            onClick={() => openDialog()}
+            className="flex items-center gap-1.5 text-[13px] font-medium rounded-xl px-3.5 h-[38px] border border-border bg-transparent text-foreground/85 hover:bg-accent/40 hover:border-border active:scale-[0.98] transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background shrink-0"
+            data-testid="button-add-provider"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add Provider
+          </button>
         </div>
-        <button
-          onClick={() => openDialog()}
-          className="flex items-center gap-1.5 text-[13px] font-medium rounded-xl px-3.5 h-[38px] border border-border bg-transparent text-foreground/85 hover:bg-accent/40 hover:border-border active:scale-[0.98] transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background shrink-0"
-          data-testid="button-add-provider"
-        >
-          <Plus className="h-3.5 w-3.5" /> Add Provider
-        </button>
-      </div>
+      )}
 
       {/* Add Provider Dialog */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>

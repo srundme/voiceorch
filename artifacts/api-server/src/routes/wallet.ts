@@ -7,8 +7,9 @@ import { eq, desc, sql, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext, denyManagedClient } from "../middlewares/clientContext.js";
 import { logger } from "../lib/logger.js";
+import { fulfillCapturedPhonePurchase, PhoneFulfillError } from "./phone-numbers.js";
 import { resolvePartnerBilling } from "../services/partner-billing.js";
-import { getFlatRateCentsPerMin } from "../services/minute-rates.js";
+import { resolveBillingRateCentsPerMin } from "../services/minute-rates.js";
 import { getAppOrigins } from "../lib/app-domain.js";
 import { issueInvoice, renderInvoiceHtml, renderInvoicePdf } from "../services/invoice.js";
 import {
@@ -81,7 +82,7 @@ router.get("/wallet", requireAuth, clientContext, async (req, res) => {
     isActivePartnerOwner(clerkId),
   ]);
   const effectiveRateCentsPerMin =
-    partnerBilling?.clientRateCentsPerMin ?? getFlatRateCentsPerMin("managed");
+    partnerBilling?.clientRateCentsPerMin ?? (await resolveBillingRateCentsPerMin("managed"));
   const minTopupPaise = minTopupPaiseForUser(isPartner);
   res.json({ ...walletInfoPayload(user, { minTopupPaise }), effectiveRateCentsPerMin });
 });
@@ -510,6 +511,36 @@ router.post("/wallet/webhook", async (req, res) => {
       .where(eq(walletTransactionsTable.razorpayOrderId, orderId));
 
     if (!txn) {
+      if (event === "payment.captured" && paymentId) {
+        try {
+          const razorpay = getRazorpay();
+          const verifiedPayment = await (razorpay.payments as any).fetch(paymentId) as {
+            status?: string; order_id?: string;
+          };
+          if (verifiedPayment?.status === "captured" && verifiedPayment.order_id === orderId) {
+            const webhookBase = (
+              process.env["WEBHOOK_BASE_URL"]
+              || process.env["APP_BASE_URL"]
+              || "https://app.snapserve.ai"
+            ).replace(/\/$/, "");
+            const result = await fulfillCapturedPhonePurchase({
+              razorpayOrderId: orderId,
+              razorpayPaymentId: paymentId,
+              webhookBase,
+              assignLoneAgent: true,
+            });
+            logger.info({ orderId, paymentId, ...result }, "Razorpay webhook: phone purchase fulfilled");
+            return;
+          }
+        } catch (err) {
+          if (err instanceof PhoneFulfillError && err.code === "ORDER_NOT_FOUND") {
+            logger.warn({ orderId, event }, "Razorpay webhook: order not found in DB — ignoring");
+            return;
+          }
+          logger.error({ err, orderId, paymentId }, "Razorpay webhook: phone purchase fulfill failed");
+          return;
+        }
+      }
       logger.warn({ orderId, event }, "Razorpay webhook: order not found in DB — ignoring");
       return;
     }

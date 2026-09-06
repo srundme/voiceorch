@@ -41,9 +41,10 @@ const call = await snapserve.calls.createOutbound({
 
       <h2 id="mcp">MCP Server — use SnapServe from Claude, Cursor &amp; other AI tools</h2>
       <p>
-        The official MCP (Model Context Protocol) server lets AI assistants manage your SnapServe
-        account in plain English — list agents, place calls, read transcripts, check analytics and
-        wallet balance.
+        The official MCP server lets Claude (and Cursor) operate the SnapServe account
+        behind your API key: agents, calls, campaigns, journeys, WhatsApp, Google Sheets
+        automatic calls, knowledge, squads, webcall links, numbers, wallet, and analytics.
+        Anything without a named tool is reachable via <code>snapserve_api</code>.
       </p>
 
       <h3 id="mcp-remote">Hosted remote MCP (Claude custom connectors)</h3>
@@ -73,14 +74,19 @@ const call = await snapserve.calls.createOutbound({
     "snapserve": {
       "command": "npx",
       "args": ["-y", "@snapserveai/mcp"],
-      "env": { "SNAPSERVE_API_KEY": "sk_live_..." }
+      "env": {
+        "SNAPSERVE_API_KEY": "sk_live_...",
+        "SNAPSERVE_BASE_URL": "https://app.snapserve.ai/api"
+      }
     }
   }
 }`}
       />
       <p>
-        Add this to <code>claude_desktop_config.json</code> (Claude Desktop → Settings → Developer →
-        Edit Config) or your MCP client's config, restart the app, and just ask:{" "}
+        Package on npm: <code>@snapserveai/mcp</code>. Full setup (hosted HTTP + skill):{" "}
+        <Link href="/docs/claude-skill">Claude skill &amp; MCP</Link>. Add this to{" "}
+        <code>claude_desktop_config.json</code> (Claude Desktop → Settings → Developer → Edit
+        Config) or your MCP client's config, restart the app, and ask:{" "}
         <em>"List my SnapServe agents"</em> or <em>"Call +91… with my sales agent"</em>. A ready-made
         Claude <strong>skill</strong> (for Claude Code / claude.ai) is also available at{" "}
         <a href="https://github.com/srundme/snapserve-claude-skill" target="_blank" rel="noreferrer">

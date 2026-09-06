@@ -1,5 +1,6 @@
 /**
  * Promo codes for first-time phone-number purchases.
+ * (Updated: August 2026 for SNAPXHITECH)
  *
  * A promo replaces the standard first-purchase base (tiered rental + ₹100
  * setup) with a flat promotional base, before GST. Renewals are deliberately
@@ -22,6 +23,11 @@ export interface PhonePromo {
   label: string;
   /** Optional hard stop — the code stops working at this instant. */
   expiresAt?: Date;
+  /**
+   * When true, this code may complete at most one purchase per SnapServe
+   * account email (Gmail dots / plus-tags count as the same mailbox).
+   */
+  oncePerEmail?: boolean;
 }
 
 /**
@@ -33,6 +39,17 @@ const PROMOS: readonly PhonePromo[] = [
     code: "VOICEATHON26",
     basePaise: 19_900, // ₹199 before GST → ₹234.82 payable
     label: "Voiceathon 2026",
+  },
+  {
+    code: "SNAPXHITECH",
+    basePaise: 24_900, // ₹249 before GST → ₹293.82 payable
+    label: "SnapX HiTech",
+  },
+  {
+    code: "ILUVSNAPSERVE",
+    basePaise: 0, // ₹0 + GST ₹0 — first DID only; renewals stay full price
+    label: "I Love SnapServe",
+    oncePerEmail: true,
   },
 ];
 

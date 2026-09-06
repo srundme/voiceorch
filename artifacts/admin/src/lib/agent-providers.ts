@@ -28,10 +28,10 @@ export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   azure:      [{ value: "en-US-standard", label: "Auto (base model from language)" }, { value: "en-US-enhanced", label: "Auto — enhanced (base model from language)" }, { value: "en-IN-standard", label: "Auto — Indic (base model from language)" }],
   assemblyai: [{ value: "best", label: "Best (default)" }, { value: "nano", label: "Nano (fast)" }],
   sarvam: [
-    { value: "saaras:v3",          label: "Saaras v3 — real-time streaming (recommended)" },
-    { value: "saaras:v4",          label: "Saaras v4 — new (unstable streaming, avoid)" },
-    { value: "saarika:v2.5",       label: "Saarika v2.5 — real-time streaming (legacy)" },
-    { value: "saaras:v3-realtime", label: "Saaras v3 Real-time — streaming" },
+    { value: "saaras:v3",          label: "Saaras v3 realtime — partials + ms VAD (recommended)" },
+    { value: "saaras:v3-realtime", label: "Saaras v3 realtime (explicit id)" },
+    { value: "saarika:v2.5",       label: "Saarika v2.5 — legacy finals-only socket" },
+    { value: "saaras:v4",          label: "Saaras v4 — avoid on live calls" },
     { value: "saarika:flash",      label: "Saarika Flash — batch (fast)" },
   ],
   cartesia: [{ value: "sonic-english", label: "Sonic English" }, { value: "sonic-multilingual", label: "Sonic Multilingual" }],
@@ -44,7 +44,7 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   anthropic: [{ value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" }, { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" }, { value: "claude-3-opus-20240229", label: "Claude 3 Opus" }],
   google:    [{ value: "gemini-3.1-flash-live-preview", label: "Gemini 3.1 Flash Live (native audio only)" }],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
-  groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
+  groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }],
   sarvam: [
     { value: "sarvam-105b-conversations", label: "Sarvam 105B Conversations (recommended — voice)" },
     { value: "gemma4", label: "Gemma 4 31B" },
@@ -57,8 +57,9 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
 
 export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
   cartesia: [
-    { value: "sonic-3.5",     label: "Sonic 3.5 — 42 languages, lowest latency (default)" },
-    { value: "sonic-preview", label: "Sonic 3.6 (beta) — Hinglish, Odia/Urdu" },
+    { value: "sonic-3.6",     label: "Sonic 3.6 — current (Hinglish, 44 languages)" },
+    { value: "sonic-3.5",     label: "Sonic 3.5 — previous snapshot" },
+    { value: "sonic-preview", label: "Sonic preview (beta snapshot)" },
     { value: "sonic-3",     label: "Sonic 3" },
     { value: "sonic-2",     label: "Sonic 2 (stable)" },
     { value: "sonic-turbo", label: "Sonic Turbo (fast, low-latency)" },
@@ -67,6 +68,7 @@ export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
 
 export const TTS_VOICES: Record<string, { value: string; label: string }[] | null> = {
   cartesia: [
+    { value: "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee", label: "Gayathri" },
     { value: "a0e99841-438c-4a64-b679-ae501e7d6091", label: "Barbershop Man" },
     { value: "79a125e8-cd45-4c13-8a67-188112f4dd22", label: "British Narration Lady" },
     { value: "b7d50908-b17c-442d-ad8d-810c63997ed9", label: "Calm Lady" },

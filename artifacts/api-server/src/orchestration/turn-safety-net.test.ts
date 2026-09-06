@@ -1,12 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   TurnSafetyNet,
-  FORCE_FINALIZE_MS,
-  STALL_BACKSTOP_MS,
   STALL_MAX_REPROMPTS,
   recoveryReprompt,
   speakerHandoffChallenge,
 } from "./endpointing.js";
+
+const FORCE_FINALIZE_MS = 1800;
+const STALL_BACKSTOP_MS = 10_000;
+const armedNet = (opts: ConstructorParameters<typeof TurnSafetyNet>[0]) =>
+  new TurnSafetyNet({
+    forceFinalizeMs: FORCE_FINALIZE_MS,
+    stallBackstopMs: STALL_BACKSTOP_MS,
+    ...opts,
+  });
 import {
   createStubStreamingSTTPartialsOnly,
   createStubStreamingSTTSilent,
@@ -19,11 +26,30 @@ describe("TurnSafetyNet", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
+  it("does not invent a turn when force/stall timers are off", () => {
+    const onForceFinalize = vi.fn();
+    const onStallReprompt = vi.fn();
+    const onStallGiveUp = vi.fn();
+    const net = new TurnSafetyNet({
+      forceFinalizeMs: 0,
+      stallBackstopMs: 0,
+      onForceFinalize,
+      onStallReprompt,
+      onStallGiveUp,
+    });
+    net.beginListening();
+    net.onPartial("I want to book");
+    vi.advanceTimersByTime(30_000);
+    expect(onForceFinalize).not.toHaveBeenCalled();
+    expect(onStallReprompt).not.toHaveBeenCalled();
+    expect(onStallGiveUp).not.toHaveBeenCalled();
+  });
+
   it("force-finalizes from the best partial when no STT final arrives (STUB partials-only)", () => {
     const onForceFinalize = vi.fn();
     const onStallReprompt = vi.fn();
     const onStallGiveUp = vi.fn();
-    const net = new TurnSafetyNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
+    const net = armedNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
     net.beginListening();
 
     // Wire the stub the same way pipeline/webcall do: partials → onPartial,
@@ -57,7 +83,7 @@ describe("TurnSafetyNet", () => {
     // Production re-arms the stall backstop after each reprompt.
     const onStallReprompt = vi.fn(() => net.beginListening());
     const onStallGiveUp = vi.fn();
-    net = new TurnSafetyNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
+    net = armedNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
 
     const stt = createStubStreamingSTTSilent(() => {
       throw new Error("silent stub must not emit");
@@ -79,7 +105,7 @@ describe("TurnSafetyNet", () => {
     const onForceFinalize = vi.fn();
     const onStallReprompt = vi.fn();
     const onStallGiveUp = vi.fn();
-    const net = new TurnSafetyNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
+    const net = armedNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
 
     net.beginListening();
     net.onPartial("hello"); // a partial arrived (force timer armed)
@@ -96,7 +122,7 @@ describe("TurnSafetyNet", () => {
     const onForceFinalize = vi.fn();
     const onStallReprompt = vi.fn();
     const onStallGiveUp = vi.fn();
-    const net = new TurnSafetyNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
+    const net = armedNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
 
     net.beginListening();
     net.onPartial("   "); // whitespace-only → ignored, no force timer armed
@@ -113,7 +139,7 @@ describe("TurnSafetyNet", () => {
     const onForceFinalize = vi.fn();
     const onStallReprompt = vi.fn();
     const onStallGiveUp = vi.fn();
-    const net = new TurnSafetyNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
+    const net = armedNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
     net.beginListening();
 
     // Caller keeps talking: a fresh partial arrives before the (short)
@@ -147,7 +173,7 @@ describe("TurnSafetyNet", () => {
     let net!: TurnSafetyNet;
     const onStallReprompt = vi.fn(() => net.beginListening());
     const onStallGiveUp = vi.fn();
-    net = new TurnSafetyNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
+    net = armedNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
 
     net.beginListening();
     // Burn one reprompt with silence.
@@ -175,7 +201,7 @@ describe("TurnSafetyNet", () => {
     const onForceFinalize = vi.fn();
     const onStallReprompt = vi.fn();
     const onStallGiveUp = vi.fn();
-    const net = new TurnSafetyNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
+    const net = armedNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
 
     net.beginListening();
     net.onPartial("partial in flight");
@@ -191,7 +217,7 @@ describe("TurnSafetyNet", () => {
     const onForceFinalize = vi.fn();
     const onStallReprompt = vi.fn();
     const onStallGiveUp = vi.fn();
-    const net = new TurnSafetyNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
+    const net = armedNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
 
     net.beginListening();
     vi.advanceTimersByTime(STALL_BACKSTOP_MS - 500);

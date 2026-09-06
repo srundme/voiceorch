@@ -13,6 +13,7 @@ import {
   db, campaignsTable, campaignLeadsTable, callCallbacksTable,
 } from "@workspace/db";
 import { eq, and, sql, desc, or, inArray, ilike } from "drizzle-orm";
+import { reconcileCampaignCallbacks } from "../services/campaign-tab-sync.js";
 
 const router: IRouter = Router();
 
@@ -43,6 +44,7 @@ router.get("/campaigns/:id/callbacks/metrics", async (req, res): Promise<void> =
   if (isNaN(campaignId) || !await requireCampaign(campaignId, userId)) {
     res.status(404).json({ error: "Not found" }); return;
   }
+  await reconcileCampaignCallbacks(campaignId).catch(() => {});
 
   const [m] = await db.select({
     pending:   sql<number>`count(*) filter (where ${callCallbacksTable.status} = 'pending')::int`,
@@ -71,6 +73,7 @@ router.get("/campaigns/:id/callbacks", async (req, res): Promise<void> => {
   if (isNaN(campaignId) || !await requireCampaign(campaignId, userId)) {
     res.status(404).json({ error: "Not found" }); return;
   }
+  await reconcileCampaignCallbacks(campaignId).catch(() => {});
 
   const status = String(req.query["status"] ?? "pending");
   const search = String(req.query["search"] ?? "").trim();
@@ -177,6 +180,15 @@ router.post("/campaigns/:id/callbacks/:callbackId/complete", async (req, res): P
     .returning({ id: callCallbacksTable.id });
 
   if (!row) { res.status(404).json({ error: "Callback not found" }); return; }
+  await db.execute(sql`
+    update scheduled_callbacks sc
+    set status = 'cancelled', cancelled_at = now()
+    from call_callbacks cc
+    where cc.id = ${callbackId}
+      and sc.campaign_lead_id = cc.lead_id
+      and sc.scheduled_at = cc.callback_at
+      and sc.status in ('pending', 'triggering')
+  `);
   res.json({ id: row.id, status: "completed" });
 });
 
@@ -198,8 +210,17 @@ router.post("/campaigns/:id/callbacks/:callbackId/reschedule", async (req, res):
   const newDate = new Date(callbackAt);
   if (isNaN(newDate.getTime())) { res.status(400).json({ error: "Invalid callbackAt" }); return; }
 
+  await db.execute(sql`
+    update scheduled_callbacks sc
+    set scheduled_at = ${newDate}, status = 'pending', cancelled_at = null
+    from call_callbacks cc
+    where cc.id = ${callbackId}
+      and sc.campaign_lead_id = cc.lead_id
+      and sc.scheduled_at = cc.callback_at
+      and sc.status in ('pending', 'triggering')
+  `);
   const [row] = await db.update(callCallbacksTable)
-    .set({ callbackAt: newDate, status: "pending" })
+    .set({ callbackAt: newDate, responseDueBy: newDate, status: "pending" })
     .where(and(eq(callCallbacksTable.id, callbackId), eq(callCallbacksTable.campaignId, campaignId)))
     .returning({ id: callCallbacksTable.id });
 
@@ -235,6 +256,15 @@ router.post("/campaigns/:id/callbacks/bulk-action", async (req, res): Promise<vo
   if (ownedIds.length === 0) { res.json({ action, affected: 0 }); return; }
 
   if (action === "complete") {
+    await db.execute(sql`
+      update scheduled_callbacks sc
+      set status = 'cancelled', cancelled_at = now()
+      from call_callbacks cc
+      where cc.id in (${sql.join(ownedIds.map((id) => sql`${id}`), sql`, `)})
+        and sc.campaign_lead_id = cc.lead_id
+        and sc.scheduled_at = cc.callback_at
+        and sc.status in ('pending', 'triggering')
+    `);
     await db.update(callCallbacksTable)
       .set({ status: "completed" })
       .where(inArray(callCallbacksTable.id, ownedIds));
@@ -242,8 +272,17 @@ router.post("/campaigns/:id/callbacks/bulk-action", async (req, res): Promise<vo
     if (!callbackAt) { res.status(400).json({ error: "callbackAt required for reschedule" }); return; }
     const newDate = new Date(callbackAt);
     if (isNaN(newDate.getTime())) { res.status(400).json({ error: "Invalid callbackAt" }); return; }
+    await db.execute(sql`
+      update scheduled_callbacks sc
+      set scheduled_at = ${newDate}, status = 'pending', cancelled_at = null
+      from call_callbacks cc
+      where cc.id in (${sql.join(ownedIds.map((id) => sql`${id}`), sql`, `)})
+        and sc.campaign_lead_id = cc.lead_id
+        and sc.scheduled_at = cc.callback_at
+        and sc.status in ('pending', 'triggering')
+    `);
     await db.update(callCallbacksTable)
-      .set({ callbackAt: newDate, status: "pending" })
+      .set({ callbackAt: newDate, responseDueBy: newDate, status: "pending" })
       .where(inArray(callCallbacksTable.id, ownedIds));
   } else {
     res.status(400).json({ error: "Invalid action" }); return;

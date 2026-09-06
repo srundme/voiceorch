@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { FILLER_SEQUENCE_ID, InterruptionManager, bargeInMinChars } from "./interruption-manager.js";
+import {
+  FILLER_SEQUENCE_ID,
+  InterruptionManager,
+  bargeInMinChars,
+  resolvePlayingWordFloor,
+  PLAYING_INTERRUPT_WORD_FLOOR,
+} from "./interruption-manager.js";
 
 describe("InterruptionManager", () => {
   afterEach(() => {
@@ -31,13 +37,20 @@ describe("InterruptionManager", () => {
     expect(m.getAudioSendStatus(FILLER_SEQUENCE_ID, 5)).toBe("SEND");
   });
 
+  it("filler still SEND while calleeSpeaking (echo VAD must not chop ம்ம்)", () => {
+    const m = new InterruptionManager();
+    m.beginAgentTurn();
+    m.onUserSpeechStart();
+    expect(m.getAudioSendStatus(FILLER_SEQUENCE_ID, 5)).toBe("SEND");
+  });
+
   it("WAIT while callee is speaking", () => {
     const m = new InterruptionManager();
     const id = m.beginAgentTurn();
     m.onUserSpeechStart();
     expect(m.getAudioSendStatus(id, 5)).toBe("WAIT");
     m.onUserSpeechEnd();
-    expect(m.getAudioSendStatus(id, 5)).toBe("WAIT");
+    expect(m.getAudioSendStatus(id, 5)).toBe("SEND");
   });
 
   it("SEND after incremental delay elapses post-utterance", () => {
@@ -77,22 +90,69 @@ describe("InterruptionManager", () => {
     expect(m.isValidSequence(FILLER_SEQUENCE_ID)).toBe(true);
   });
 
-  it("shouldTriggerInterruption respects word count and accidental interruption phrases", () => {
-    const m = new InterruptionManager({ wordsForInterruption: 3 });
+  it("shouldTriggerInterruption uses Bolna's 3-word floor while TTS plays", () => {
+    const m = new InterruptionManager();
+    expect(m.getWordsForInterruption()).toBe(PLAYING_INTERRUPT_WORD_FLOOR);
 
-    // Not playing audio -> false
     expect(m.shouldTriggerInterruption(5, "one two three four five", false)).toBe(false);
+    expect(m.shouldTriggerInterruption(1, "hello", true)).toBe(false);
+    expect(m.shouldTriggerInterruption(2, "yes okay", true)).toBe(false);
+    expect(m.shouldTriggerInterruption(1, "uh", true)).toBe(false);
+    expect(m.shouldTriggerInterruption(2, "uh yes", true)).toBe(false);
+    expect(m.shouldTriggerInterruption(3, "one two three", true)).toBe(false);
+    expect(m.shouldTriggerInterruption(4, "one two three four", true)).toBe(true);
 
-    // Playing audio + word count < 3 -> false
-    expect(m.shouldTriggerInterruption(2, "hello sir", true)).toBe(false);
-
-    // Playing audio + word count >= 3 -> true
-    expect(m.shouldTriggerInterruption(3, "one two three", true)).toBe(true);
-
-    // Playing audio + keyword match ("stop", "wait", "நிறுத்து", "रुक") -> true even if 1 word
     expect(m.shouldTriggerInterruption(1, "stop", true)).toBe(true);
     expect(m.shouldTriggerInterruption(1, "நிறுத்து", true)).toBe(true);
     expect(m.shouldTriggerInterruption(1, "रुक", true)).toBe(true);
+    expect(m.shouldTriggerInterruption(3, "wait stop இருங்க", true)).toBe(true);
+  });
+
+  it("isFalseInterruption is the other half of Bolna's barge gate", () => {
+    const m = new InterruptionManager();
+    // Short chatter while TTS plays — ignore, do not queue for later.
+    expect(m.isFalseInterruption(1, "Okay", true)).toBe(true);
+    expect(m.isFalseInterruption(2, "ஆமா ஆமா", true)).toBe(true);
+    expect(m.isFalseInterruption(1, "ஆ", true)).toBe(true);
+    expect(m.isFalseInterruption(2, "uh huh", true)).toBe(true);
+    // Real utterance while TTS plays — interrupt now.
+    expect(m.isFalseInterruption(8, "I want a bigger coverage plan", true)).toBe(false);
+    expect(m.shouldTriggerInterruption(8, "I want a bigger coverage plan", true)).toBe(true);
+    // Stop/wait still cut even at 1 word.
+    expect(m.isFalseInterruption(1, "stop", true)).toBe(false);
+    // Nothing playing → ordinary turn, neither verdict.
+    expect(m.isFalseInterruption(1, "Okay", false)).toBe(false);
+    expect(m.shouldTriggerInterruption(1, "Okay", false)).toBe(false);
+    // Welcome not played → neither.
+    expect(m.isFalseInterruption(8, "a long sentence here", true, false)).toBe(false);
+  });
+
+  it("the two Bolna verdicts never both hold", () => {
+    const m = new InterruptionManager();
+    for (const [words, text] of [
+      [8, "a genuinely long request"],
+      [2, "uh huh"],
+      [1, "stop"],
+    ] as const) {
+      const triggers = m.shouldTriggerInterruption(words, text, true, true);
+      const ignored = m.isFalseInterruption(words, text, true, true);
+      expect(triggers && ignored).toBe(false);
+    }
+  });
+
+  it("first-speech mute ignores every transcript including stop (Bolna welcome_played)", () => {
+    const m = new InterruptionManager();
+    expect(m.shouldTriggerInterruption(1, "Hello", true, false)).toBe(false);
+    expect(m.shouldTriggerInterruption(3, "Hello இங்க பாருங்க", true, false)).toBe(false);
+    expect(m.shouldTriggerInterruption(2, "yes okay", true, false)).toBe(false);
+    expect(m.shouldTriggerInterruption(1, "wait", true, false)).toBe(false);
+    expect(m.shouldTriggerInterruption(3, "wait stop இருங்க", true, false)).toBe(false);
+  });
+
+  it("uses the configured Bolna floor with no messy/+1 bump", () => {
+    expect(resolvePlayingWordFloor({ transcript: "yes okay" })).toBe(PLAYING_INTERRUPT_WORD_FLOOR);
+    expect(resolvePlayingWordFloor({ transcript: "uh yes" })).toBe(PLAYING_INTERRUPT_WORD_FLOOR);
+    expect(resolvePlayingWordFloor({ transcript: "Hello", lowConfidence: true })).toBe(PLAYING_INTERRUPT_WORD_FLOOR);
   });
 
   it("exposes wordsForInterruption from options", () => {

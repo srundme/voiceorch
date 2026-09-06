@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>SnapServe · Voice agents from first idea to a working phone</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: #E8EEF4;
+      color: #0F172A;
+      font-family: Inter, Helvetica, Arial, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .page {
+      width: 210mm;
+      height: 297mm;
+      page-break-after: always;
+      page-break-inside: avoid;
+      position: relative;
+      overflow: hidden;
+      background: #F4F7FA;
+    }
+    .page:last-child { page-break-after: auto; }
+    .page-dark { background: #0F172A; color: #FAFAFA; }
+
+    .bar {
+      position: absolute;
+      left: 0; top: 0; right: 0;
+      height: 5px;
+      background: linear-gradient(135deg, #FF9933 0%, #14B8A6 50%, #6366F1 100%);
+    }
+    .pad { padding: 16mm 16mm 18mm; height: 100%; display: flex; flex-direction: column; }
+
+    .eyebrow {
+      font-family: "Plus Jakarta Sans", Inter, sans-serif;
+      font-size: 8.5pt;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #64748B;
+    }
+    .page-dark .eyebrow { color: #94A3B8; }
+
+    h1 {
+      font-family: "Plus Jakarta Sans", Inter, sans-serif;
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      line-height: 1.05;
+    }
+    h2 {
+      font-family: "Plus Jakarta Sans", Inter, sans-serif;
+      font-size: 18pt;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin: 0 0 8px;
+    }
+    h3 {
+      font-family: "Plus Jakarta Sans", Inter, sans-serif;
+      font-size: 11pt;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 6px;
+    }
+    p, li { color: #334155; font-size: 10pt; line-height: 1.45; }
+    .page-dark p, .page-dark li { color: #CBD5E1; }
+    .lead { font-size: 11.5pt; line-height: 1.5; color: #475569; max-width: 155mm; }
+    .page-dark .lead { color: #CBD5E1; }
+    strong { color: #0F172A; font-weight: 650; }
+    .page-dark strong { color: #fff; }
+
+    .lockup { display: flex; align-items: center; gap: 12px; }
+    .mark { width: 36px; height: 36px; flex-shrink: 0; }
+    .wm { font-family: Helvetica, Arial, sans-serif; font-size: 20pt; letter-spacing: -0.03em; color: #0F172A; }
+    .wm b { font-weight: 700; }
+    .wm span { font-weight: 400; }
+    .page-dark .wm { color: #FAFAFA; }
+
+    .foot {
+      margin-top: auto;
+      padding-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 8pt;
+      color: #94A3B8;
+      border-top: 1px solid #E2E8F0;
+    }
+    .page-dark .foot { border-top-color: rgba(255,255,255,0.1); color: #64748B; }
+
+    .cards { display: grid; gap: 8px; }
+    .card {
+      background: #fff;
+      border: 1px solid #E2E8F0;
+      border-radius: 10px;
+      padding: 11px 13px;
+    }
+    .card-ink { background: #0F172A; border-color: #0F172A; color: #fff; }
+    .card-ink p, .card-ink li { color: #CBD5E1; }
+    .card-ink h3, .card-ink strong { color: #fff; }
+    .card-soft { background: #EEF2F7; border-color: transparent; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 7px; }
+
+    .num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px; height: 22px;
+      border-radius: 999px;
+      background: #0F172A;
+      color: #fff;
+      font-family: "Plus Jakarta Sans", Inter, sans-serif;
+      font-size: 9pt;
+      font-weight: 800;
+      margin-right: 6px;
+      flex-shrink: 0;
+    }
+    .num-row { display: flex; gap: 10px; align-items: flex-start; }
+
+    .pill {
+      display: inline-block;
+      font-size: 8pt;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #0F7A6E;
+      background: #D1FAE5;
+      border-radius: 999px;
+      padding: 3px 8px;
+    }
+    .pill-warn { color: #9A3412; background: #FFEDD5; }
+    .pill-indigo { color: #3730A3; background: #E0E7FF; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+    }
+    .flow-step {
+      background: #fff;
+      border-radius: 10px;
+      padding: 10px 8px 11px;
+      text-align: center;
+      border: 1px solid #E2E8F0;
+      position: relative;
+    }
+    .flow-step .k {
+      font-family: "Plus Jakarta Sans", Inter, sans-serif;
+      font-size: 8pt;
+      font-weight: 800;
+      color: #14B8A6;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .flow-step h3 { font-size: 10pt; margin-bottom: 4px; }
+    .flow-step p { font-size: 8.2pt; line-height: 1.35; color: #64748B; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+    th {
+      text-align: left;
+      font-size: 8pt;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #64748B;
+      padding: 6px 8px;
+      border-bottom: 1px solid #E2E8F0;
+    }
+    td {
+      padding: 8px;
+      border-bottom: 1px solid #F1F5F9;
+      color: #334155;
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+
+    .do { border-left: 3px solid #14B8A6; }
+    .dont { border-left: 3px solid #FF9933; }
+
+    .hour {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr;
+      gap: 8px;
+    }
+    .hour .mins {
+      font-family: "Plus Jakarta Sans", Inter, sans-serif;
+      font-size: 20pt;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .hour .mins em { font-style: normal; font-size: 10pt; font-weight: 600; color: #94A3B8; letter-spacing: 0; }
+
+    ul.plain { padding-left: 16px; }
+    ul.plain li { margin: 3px 0; }
+    .gap-sm { height: 10px; }
+    .gap-md { height: 14px; }
+    .muted { color: #64748B; }
+    .tiny { font-size: 8.5pt; line-height: 1.4; color: #64748B; }
+  </style>
+</head>
+<body>
+
+  <!-- 1 COVER -->
+  <section class="page page-dark">
+    <div class="bar"></div>
+    <div class="pad">
+      <div class="lockup">
+        <svg class="mark" viewBox="0 0 100 100" aria-hidden="true">
+          <rect x="6" y="14" width="88" height="20" rx="10" fill="#FAFAFA"/>
+          <rect x="14" y="42" width="72" height="20" rx="10" fill="#FAFAFA" opacity="0.60"/>
+          <rect x="22" y="70" width="56" height="20" rx="10" fill="#FAFAFA" opacity="0.36"/>
+        </svg>
+        <div class="wm"><b>Snap</b><span>Serve</span></div>
+      </div>
+
+      <div style="margin-top: 18mm;">
+        <p class="eyebrow">Live webinar companion · 23 August 2026</p>
+        <h1 style="font-size: 32pt; margin: 10px 0 12px; color: #fff; max-width: 172mm;">
+          Voice agents,<br>from zero to a<br>working phone.
+        </h1>
+        <p class="lead" style="max-width: 152mm;">
+          Building a production-ready voice agent should not be complicated. You do not need prior SnapServe experience. If you have never built one, this sheet is for you.
+        </p>
+      </div>
+
+      <div class="gap-md"></div>
+      <p class="tiny" style="color:#94A3B8; letter-spacing:0.1em; text-transform:uppercase; font-weight:700; margin-bottom:8px;">The hour</p>
+      <div class="hour">
+        <div class="card" style="background: #162032; border-color: #1E293B;">
+          <div class="mins" style="color:#14B8A6;">30 <em>min</em></div>
+          <h3>Live build</h3>
+          <p>We design a conversation, add rules, test the agent, and put it on a phone.</p>
+        </div>
+        <div class="card" style="background: #162032; border-color: #1E293B;">
+          <div class="mins" style="color:#FF9933;">15 <em>min</em></div>
+          <h3>What's next</h3>
+          <p>What we are building so agents are easier to ship and scale.</p>
+        </div>
+        <div class="card" style="background: #162032; border-color: #1E293B;">
+          <div class="mins" style="color:#A5B4FC;">15 <em>min</em></div>
+          <h3>Open Q&amp;A</h3>
+          <p>Prompts, voice, numbers, languages, pricing, going live.</p>
+        </div>
+      </div>
+
+      <div class="gap-md"></div>
+      <p class="tiny" style="color:#94A3B8; letter-spacing:0.1em; text-transform:uppercase; font-weight:700; margin-bottom:8px;">By the end of this hour you can</p>
+      <div class="grid-3">
+        <div class="card" style="background: #162032; border-color: #1E293B;">
+          <h3>Explain it</h3>
+          <p>Say what a voice agent is, and what it is not, in plain language.</p>
+        </div>
+        <div class="card" style="background: #162032; border-color: #1E293B;">
+          <h3>Write the job</h3>
+          <p>One sentence: who it talks to, what it does, what success is.</p>
+        </div>
+        <div class="card" style="background: #162032; border-color: #1E293B;">
+          <h3>Build the first one</h3>
+          <p>Follow the six steps we run live, then repeat after the session.</p>
+        </div>
+      </div>
+
+      <div class="gap-md"></div>
+      <p class="tiny" style="color:#94A3B8;">For founders, developers, students, and product teams. Bring a use case or just an idea.</p>
+
+      <div class="foot">
+        <span>app.snapserve.ai</span>
+        <span>Free to attend · Keep this sheet</span>
+        <span>01 / 06</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 WHAT IS A VOICE AGENT -->
+  <section class="page">
+    <div class="bar"></div>
+    <div class="pad">
+      <p class="eyebrow">Start here</p>
+      <h2>What is a voice agent?</h2>
+      <p class="lead">A voice agent is software that can take a real phone call. It listens, understands, speaks back, and can finish a small job while it talks.</p>
+
+      <div class="gap-sm"></div>
+      <div class="grid-2">
+        <div class="card dont">
+          <span class="pill pill-warn">Not this</span>
+          <h3 style="margin-top:8px;">A robot menu</h3>
+          <p>“Press 1 for sales. Press 2 for support.” The caller does all the work.</p>
+        </div>
+        <div class="card dont">
+          <span class="pill pill-warn">Not this</span>
+          <h3 style="margin-top:8px;">Only a chat box</h3>
+          <p>A website bot that types. Useful, but it is not a phone conversation.</p>
+        </div>
+      </div>
+      <div class="gap-sm"></div>
+      <div class="card do">
+        <span class="pill">This</span>
+        <h3 style="margin-top:8px;">A trained teammate on the phone</h3>
+        <p>The caller talks in normal language. The agent answers, asks one question at a time, and follows the rules you wrote. It never sleeps, and it can take many calls at once.</p>
+      </div>
+
+      <div class="gap-md"></div>
+      <h3>A simple picture</h3>
+      <p style="margin-bottom:8px;">A parent calls a clinic: “Do you have a slot tomorrow evening?”</p>
+      <div class="grid-3">
+        <div class="card-soft card">
+          <h3>1. Hear</h3>
+          <p>The agent catches the words, even if the line is a little noisy.</p>
+        </div>
+        <div class="card-soft card">
+          <h3>2. Decide</h3>
+          <p>It checks your hours and what you allow it to book.</p>
+        </div>
+        <div class="card-soft card">
+          <h3>3. Act</h3>
+          <p>It books or offers a time, then can send WhatsApp after the call.</p>
+        </div>
+      </div>
+
+      <div class="gap-md"></div>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Good first jobs</h3>
+          <ul class="plain">
+            <li>Book or confirm an appointment</li>
+            <li>Answer fees, hours, and location</li>
+            <li>Follow up a lead: interested or not</li>
+            <li>Collect name, city, and a callback time</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Leave these to a person</h3>
+          <ul class="plain">
+            <li>Angry or upset callers</li>
+            <li>Odd complaints you have not written down</li>
+            <li>Promises you have not approved</li>
+            <li>Anything that needs a human yes</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="foot">
+        <span>SnapServe webinar companion</span>
+        <span>One job. Done well. Then grow.</span>
+        <span>02 / 06</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 HOW A CALL WORKS -->
+  <section class="page">
+    <div class="bar"></div>
+    <div class="pad">
+      <p class="eyebrow">The only diagram you need</p>
+      <h2>How a phone call actually works</h2>
+      <p class="lead">Five parts. Remember these and the rest of the hour will click.</p>
+
+      <div class="gap-sm"></div>
+      <div class="flow">
+        <div class="flow-step">
+          <div class="k">1</div>
+          <h3>Number</h3>
+          <p>They dial you, or SnapServe dials them. It is a real phone number.</p>
+        </div>
+        <div class="flow-step">
+          <div class="k">2 Listen</div>
+          <h3>Speech to text</h3>
+          <p>Their voice becomes words. People call this STT.</p>
+        </div>
+        <div class="flow-step">
+          <div class="k">3 Think</div>
+          <h3>The brain</h3>
+          <p>Your instructions plus their words. Decides the next sentence. People call this the LLM.</p>
+        </div>
+        <div class="flow-step">
+          <div class="k">4 Speak</div>
+          <h3>Text to speech</h3>
+          <p>Those words become a natural voice. People call this TTS.</p>
+        </div>
+        <div class="flow-step">
+          <div class="k">5 Do</div>
+          <h3>Actions</h3>
+          <p>WhatsApp, a sheet, a CRM, or a label when the call ends.</p>
+        </div>
+      </div>
+
+      <div class="gap-md"></div>
+      <div class="card">
+        <h3>The caller only hears a conversation</h3>
+        <p>You design the job behind it. If the reply feels slow, that wait is called <strong>latency</strong>. Shorter feels more human. If the voice sounds off, that is usually the speaking step, not the thinking step.</p>
+      </div>
+
+      <div class="gap-md"></div>
+      <h3>Business logic, in plain English</h3>
+      <p style="margin-bottom:8px;">These are the rules the agent must not break. Write them before you worry about the voice.</p>
+      <div class="cards">
+        <div class="card-soft card"><p>Never promise a price or discount you did not write down.</p></div>
+        <div class="card-soft card"><p>Ask one question at a time. Confirm name, city, or time before you close.</p></div>
+        <div class="card-soft card"><p>If they say they are not interested, thank them and end politely. Do not push.</p></div>
+        <div class="card-soft card"><p>Send outcome WhatsApp <strong>after</strong> the call, when you know Interested vs Not interested. During the call you are still guessing.</p></div>
+      </div>
+
+      <div class="foot">
+        <span>SnapServe webinar companion</span>
+        <span>Listen · Think · Speak · Do</span>
+        <span>03 / 06</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 DESIGN THE CONVERSATION -->
+  <section class="page">
+    <div class="bar"></div>
+    <div class="pad">
+      <p class="eyebrow">Do this on paper first</p>
+      <h2>Design the conversation</h2>
+      <p class="lead">The live build goes faster if you already know the job. One sentence is enough to start.</p>
+
+      <div class="gap-sm"></div>
+      <div class="card-ink card">
+        <p class="tiny" style="color:#94A3B8; letter-spacing:0.08em; text-transform:uppercase; font-weight:700; margin-bottom:6px;">Write this now</p>
+        <h3 style="font-size:13pt;">This agent [does what] for [whom] so that [result].</h3>
+        <p style="margin-top:6px;">This agent follows up loan leads for first-time callers so interested people get a callback today.</p>
+      </div>
+
+      <div class="gap-md"></div>
+      <h3>Four beats of almost every call</h3>
+      <div class="gap-sm"></div>
+      <div class="grid-4">
+        <div class="card">
+          <div class="num">1</div>
+          <h3 style="margin-top:8px;">Hello</h3>
+          <p>Who you are. Why you called, or how you can help.</p>
+        </div>
+        <div class="card">
+          <div class="num">2</div>
+          <h3 style="margin-top:8px;">Listen</h3>
+          <p>One question at a time. Do not dump a list.</p>
+        </div>
+        <div class="card">
+          <div class="num">3</div>
+          <h3 style="margin-top:8px;">Confirm</h3>
+          <p>Repeat the facts that matter: name, time, city.</p>
+        </div>
+        <div class="card">
+          <div class="num">4</div>
+          <h3 style="margin-top:8px;">Close</h3>
+          <p>What happens next. Then a short goodbye.</p>
+        </div>
+      </div>
+
+      <div class="gap-md"></div>
+      <div class="grid-2">
+        <div class="card dont">
+          <span class="pill pill-warn">Too much</span>
+          <p style="margin-top:8px;">“Hi I am an advanced AI solution from our omnichannel stack here to digitally transform your enquiry journey.”</p>
+        </div>
+        <div class="card do">
+          <span class="pill">Better</span>
+          <p style="margin-top:8px;">“Hi, I am Aarthi from Green Valley Clinic. I can help you book a visit. Is now a good time?”</p>
+        </div>
+      </div>
+
+      <div class="gap-md"></div>
+      <h3>Pick a tiny use case for today</h3>
+      <div class="card" style="padding: 4px 6px 2px;">
+        <table>
+          <thead>
+            <tr><th>If you are</th><th>Try this job</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Founder / sales</td><td>Follow up a lead. Ask if they want a demo this week.</td></tr>
+            <tr><td>Student</td><td>Campus enquiry. Collect course and city.</td></tr>
+            <tr><td>Product / ops</td><td>Appointment reminder. Confirm or reschedule.</td></tr>
+            <tr><td>Support / clinic</td><td>Hours, price, location. Hand off if stuck.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="foot">
+        <span>SnapServe webinar companion</span>
+        <span>Five questions is plenty for v1</span>
+        <span>04 / 06</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 LIVE BUILD ON SNAPSERVE -->
+  <section class="page">
+    <div class="bar"></div>
+    <div class="pad">
+      <p class="eyebrow">The live 30 minutes</p>
+      <h2>Build it on SnapServe</h2>
+      <p class="lead">We will do this together. You can repeat the same six steps after the session at app.snapserve.ai.</p>
+
+      <div class="gap-sm"></div>
+      <div class="cards">
+        <div class="card num-row">
+          <span class="num">1</span>
+          <div><h3>Create the agent</h3><p>Give it a name, a language, and a voice. This is the teammate, not the whole company.</p></div>
+        </div>
+        <div class="card num-row">
+          <span class="num">2</span>
+          <div><h3>Write the conversation</h3><p>Paste the one-sentence job and the four beats. Say what success sounds like.</p></div>
+        </div>
+        <div class="card num-row">
+          <span class="num">3</span>
+          <div><h3>Add business logic</h3><p>What to collect. What never to say. When to end. When to mark Interested or Not interested.</p></div>
+        </div>
+        <div class="card num-row">
+          <span class="num">4</span>
+          <div><h3>Test in the browser</h3><p>Talk to it before it touches a phone. Fix the greeting and the close here. It is free to be messy.</p></div>
+        </div>
+        <div class="card num-row">
+          <span class="num">5</span>
+          <div><h3>Put it on a number</h3><p>Inbound: they call you. Outbound: you call them. Same agent. Different direction.</p></div>
+        </div>
+        <div class="card num-row">
+          <span class="num">6</span>
+          <div><h3>Improve from one real call</h3><p>Listen once. Change one instruction. Test again. That loop is the whole craft.</p></div>
+        </div>
+      </div>
+
+      <div class="gap-md"></div>
+      <div class="grid-2">
+        <div class="card">
+          <span class="pill pill-indigo">After the call</span>
+          <h3 style="margin-top:8px;">Outcome messages</h3>
+          <p>When the call ends you know the result. Map Interested to one WhatsApp template, Not interested to another. Leave mid-call send off unless the person asks for something during the call.</p>
+        </div>
+        <div class="card">
+          <span class="pill">Rest of the hour</span>
+          <h3 style="margin-top:8px;">15 + 15</h3>
+          <p><strong>What is next</strong> — easier build, deploy, and scale.<br><strong>Open Q&amp;A</strong> — prompts, voice quality, numbers, languages, WhatsApp, latency, pricing, going live.</p>
+        </div>
+      </div>
+
+      <div class="foot">
+        <span>SnapServe webinar companion</span>
+        <span>Browser first. Phone second.</span>
+        <span>05 / 06</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 GLOSSARY + NEXT -->
+  <section class="page">
+    <div class="bar"></div>
+    <div class="pad">
+      <p class="eyebrow">Take this home</p>
+      <h2>Words you will hear today</h2>
+      <p class="lead">Nobody expects you to know these already. Use this page in the Q&amp;A.</p>
+
+      <div class="gap-sm"></div>
+      <div class="card" style="padding: 4px 6px 2px;">
+        <table>
+          <tbody>
+            <tr><td style="width:38mm;"><strong>Voice agent</strong></td><td>Software that can hold a phone conversation and finish a small job.</td></tr>
+            <tr><td><strong>Prompt</strong></td><td>The written job for the agent. Your one sentence plus rules.</td></tr>
+            <tr><td><strong>STT / TTS</strong></td><td>Listening (speech to text) and speaking (text to speech).</td></tr>
+            <tr><td><strong>LLM</strong></td><td>The model that chooses the next sentence from your rules and their words.</td></tr>
+            <tr><td><strong>Latency</strong></td><td>How long until the agent replies. Shorter feels more human.</td></tr>
+            <tr><td><strong>Disposition</strong></td><td>The label at the end: Interested, Not interested, Callback, Wrong number.</td></tr>
+            <tr><td><strong>Campaign</strong></td><td>Calling many people from a list, with retry rules.</td></tr>
+            <tr><td><strong>Knowledge base</strong></td><td>Files the agent can look up: fees, hours, FAQs.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="gap-md"></div>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Ask us anything</h3>
+          <p>Prompts · Voice quality · Indian languages · Phone numbers · WhatsApp · Sheets · CRM · Latency · Pricing · How to go live this week</p>
+        </div>
+        <div class="card">
+          <h3>What you leave with</h3>
+          <p>A clear picture of a voice agent. A one-sentence job. Six steps from idea to a number that rings. Live answers to your questions.</p>
+        </div>
+      </div>
+
+      <div class="gap-md"></div>
+      <div class="card-ink card">
+        <p class="tiny" style="color:#94A3B8; letter-spacing:0.08em; text-transform:uppercase; font-weight:700; margin-bottom:6px;">After the session</p>
+        <p style="color:#E2E8F0; font-size:11pt; line-height:1.5;">
+          1. Open <strong>app.snapserve.ai</strong><br>
+          2. Create one agent for the sentence you wrote on page 4<br>
+          3. Test in the browser. Only then attach a phone number
+        </p>
+        <p class="tiny" style="margin-top:10px; color:#94A3B8;">Indic-first voice agents. Free to start. Bring the idea you explored today.</p>
+      </div>
+
+      <div class="foot">
+        <span>app.snapserve.ai</span>
+        <span>SnapServe · Voice AI live session</span>
+        <span>06 / 06</span>
+      </div>
+    </div>
+  </section>
+
+</body>
+</html>

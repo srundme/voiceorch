@@ -36,6 +36,33 @@ const BASE: AgentFormValues = {
   tools: [],
 };
 
+describe("agentFormSchema booking readiness", () => {
+  const bookingTool = {
+    type: "native_booking" as const,
+    name: "book_appointment",
+    description: "Book an appointment",
+  };
+
+  it("rejects booking tools without a calendar and meeting type", () => {
+    const parsed = agentFormSchema.safeParse({ ...BASE, tools: [bookingTool] });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.map((issue) => issue.path.join("."))).toEqual(
+        expect.arrayContaining(["schedulingCalendarId", "schedulingEventTypeId"]),
+      );
+    }
+  });
+
+  it("accepts booking tools when both are selected", () => {
+    expect(agentFormSchema.safeParse({
+      ...BASE,
+      tools: [bookingTool],
+      schedulingCalendarId: 12,
+      schedulingEventTypeId: 34,
+    }).success).toBe(true);
+  });
+});
+
 describe("buildUpdateAgentPayload", () => {
   it("gemini live settings — placed in agentConfig when Live model selected", () => {
     const data: AgentFormValues = {
@@ -107,6 +134,28 @@ describe("buildUpdateAgentPayload", () => {
     expect(result.data.ttsProvider).toBe("cartesia");
   });
 
+  it("preserves the selected Cartesia model and voice in the save payload", () => {
+    const payload = buildUpdateAgentPayload({
+      ...BASE,
+      ttsProvider: "cartesia",
+      ttsModel: "sonic-3.5",
+      ttsVoice: "janani-voice-id",
+    });
+    expect(payload.ttsProvider).toBe("cartesia");
+    expect(payload.ttsModel).toBe("sonic-3.5");
+    expect(payload.ttsVoice).toBe("janani-voice-id");
+  });
+
+  it("never includes stale phone assignments in an agent save", () => {
+    const payload = buildUpdateAgentPayload({
+      ...BASE,
+      inboundPhoneNumberId: 41,
+      outboundPhoneNumberId: 41,
+    });
+    expect(payload).not.toHaveProperty("inboundPhoneNumberId");
+    expect(payload).not.toHaveProperty("outboundPhoneNumberId");
+  });
+
   it.skip("disposition schema with choice options — placeholder until feature is completed", () => {
     // dispositionSchema field not yet in agentFormSchema; test preserved for re-enabling
   });
@@ -131,6 +180,33 @@ describe("buildUpdateAgentPayload", () => {
     expect(result.data.tools).toHaveLength(1);
     expect(result.data.tools![0].type).toBe("call_transfer");
     expect(result.data.tools![0].transferTo).toBe("+12125551234");
+  });
+
+  it("native booking email policy — survives UpdateAgentBody (not stripped)", () => {
+    const data: AgentFormValues = {
+      ...BASE,
+      schedulingCalendarId: 12,
+      schedulingEventTypeId: 34,
+      tools: [
+        {
+          type: "native_booking",
+          name: "book_appointment",
+          description: "Book an appointment. Do not ask for email.",
+          collectAttendeeEmail: false,
+          defaultAttendeeEmail: "ops@acme.com",
+        },
+      ],
+    };
+    const payload = buildUpdateAgentPayload(data);
+    const result = UpdateAgentBody.safeParse(payload);
+    expect(result.success, JSON.stringify(result)).toBe(true);
+    if (!result.success) return;
+    const tool = result.data.tools![0] as {
+      collectAttendeeEmail?: boolean;
+      defaultAttendeeEmail?: string;
+    };
+    expect(tool.collectAttendeeEmail).toBe(false);
+    expect(tool.defaultAttendeeEmail).toBe("ops@acme.com");
   });
 
   it("webhook secret — placed in agentConfig, not at top-level", () => {
@@ -304,6 +380,54 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     expect(result.success, JSON.stringify(result)).toBe(true);
   });
 
+  it("persists Sarvam stream_type fast by default", () => {
+    const payload = buildUpdateAgentPayload({
+      ...VALID_BASE,
+      asrProvider: "sarvam",
+      asrModel: "saaras:v3",
+      ttsProvider: "sarvam",
+      ttsModel: "bulbul:v3",
+      ttsVoice: "priya",
+    } as AgentFormValues);
+    expect((payload.agentConfig as any)?.sarvamSttStreamType).toBe("fast");
+  });
+
+  it("persists Sarvam realtime VAD connect params", () => {
+    const payload = buildUpdateAgentPayload({
+      ...VALID_BASE,
+      asrProvider: "sarvam",
+      asrModel: "saaras:v3",
+      ttsProvider: "sarvam",
+      ttsModel: "bulbul:v3",
+      ttsVoice: "priya",
+      sarvamEndOfSpeechSilenceMs: 300,
+      sarvamFirstTurnMinSpeechMs: 200,
+      sarvamVadThreshold: 0.35,
+      semanticTurnStopMs: 800,
+    } as AgentFormValues);
+    const cfg = payload.agentConfig as any;
+    expect(cfg.sarvamEndOfSpeechSilenceMs).toBe(300);
+    expect(cfg.sarvamFirstTurnMinSpeechMs).toBe(200);
+    expect(cfg.sarvamVadThreshold).toBe(0.35);
+    expect(cfg.semanticTurnStopMs).toBe(800);
+  });
+
+  it("omits Sarvam EOS silence when unset so Saaras VAD stands alone", () => {
+    const payload = buildUpdateAgentPayload({
+      ...VALID_BASE,
+      asrProvider: "sarvam",
+      asrModel: "saaras:v3",
+      ttsProvider: "sarvam",
+      ttsModel: "bulbul:v3",
+      ttsVoice: "priya",
+    } as AgentFormValues);
+    const cfg = payload.agentConfig as any;
+    expect(cfg.sarvamEndOfSpeechSilenceMs).toBeNull();
+    expect(cfg.sarvamFirstTurnMinSpeechMs).toBeNull();
+    expect(cfg.sarvamVadThreshold).toBeNull();
+    expect(cfg.semanticTurnStopMs).toBe(1200);
+  });
+
   it("mismatched ASR provider+model — reports error on asrModel", () => {
     const result = agentFormSchema.safeParse({
       ...VALID_BASE,
@@ -326,6 +450,34 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     if (result.success) return;
     const paths = result.error.issues.map(i => i.path.join("."));
     expect(paths).toContain("llmModel");
+  });
+
+  it("rejects a retired Google model before save", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      llmProvider: "google",
+      llmModel: "gemini-1.5-flash",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues.map(i => i.path.join("."))).toContain("llmModel");
+  });
+
+  it("accepts current Google classic and Live models", () => {
+    for (const llmModel of [
+      "gemini-2.5-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-pro-preview",
+      "gemini-3.1-flash-live-preview",
+    ]) {
+      const result = agentFormSchema.safeParse({
+        ...VALID_BASE,
+        llmProvider: "google",
+        llmModel,
+      });
+      expect(result.success, llmModel).toBe(true);
+    }
   });
 
   it("mismatched TTS provider+model — reports error on ttsModel", () => {
@@ -426,5 +578,50 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     expect(paths).toContain("asrModel");
     expect(paths).toContain("llmModel");
     expect(paths).toContain("ttsModel");
+  });
+});
+
+describe("Sarvam realtime builder catalog", () => {
+  it("language picker is the 23-code table without auto or en-US", async () => {
+    const { SARVAM_STT_LANGUAGES, languagesForAgent } = await import("@/lib/agent-providers");
+    expect(SARVAM_STT_LANGUAGES).toHaveLength(23);
+    expect(SARVAM_STT_LANGUAGES.map((l) => l.value)).toContain("or-IN");
+    expect(SARVAM_STT_LANGUAGES.map((l) => l.value)).toContain("doi-IN");
+    expect(SARVAM_STT_LANGUAGES.map((l) => l.value)).not.toContain("en-US");
+    expect(SARVAM_STT_LANGUAGES.map((l) => l.value)).not.toContain("auto");
+    expect(languagesForAgent(false)).toEqual(SARVAM_STT_LANGUAGES);
+  });
+
+  it("Saaras models are realtime; Saarika is legacy", async () => {
+    const { isSarvamRealtimeAsr } = await import("@/lib/agent-providers");
+    expect(isSarvamRealtimeAsr("saaras:v3")).toBe(true);
+    expect(isSarvamRealtimeAsr("saaras:v3-realtime")).toBe(true);
+    expect(isSarvamRealtimeAsr("saarika:v2.5")).toBe(false);
+  });
+
+  it("does not invent Sarvam VAD overlays when the agent left them unset", async () => {
+    const { hydrateSarvamRealtimeVad } = await import("./edit.schema");
+    expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 150 }).silence).toBeUndefined();
+    expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 500 }).silence).toBeUndefined();
+    expect(hydrateSarvamRealtimeVad({ asrEndpointingSilenceMs: 250 }).silence).toBeUndefined();
+    expect(hydrateSarvamRealtimeVad({ sarvamEndOfSpeechSilenceMs: 400, asrEndpointingSilenceMs: 150 }).silence).toBe(400);
+  });
+
+  it("product ASR picker is only Saaras v3", async () => {
+    const { asrModelsForPicker, SARVAM_PRODUCT_ASR_MODEL } = await import("@/lib/agent-providers");
+    expect(asrModelsForPicker("sarvam").map((m) => m.value)).toEqual([SARVAM_PRODUCT_ASR_MODEL]);
+    expect(asrModelsForPicker("sarvam", "saarika:v2.5").map((m) => m.value)).toEqual([
+      SARVAM_PRODUCT_ASR_MODEL,
+      "saarika:v2.5",
+    ]);
+  });
+
+  it("Google LLM picker hides retired 2.5 Flash unless it is already saved", async () => {
+    const { llmModelsForPicker } = await import("@/lib/agent-providers");
+    expect(llmModelsForPicker("google").map((m) => m.value)).not.toContain("gemini-2.5-flash");
+    expect(llmModelsForPicker("google").map((m) => m.value)).toContain("gemini-3.6-flash");
+    expect(llmModelsForPicker("google", "gemini-2.5-flash").map((m) => m.value)).toEqual(
+      expect.arrayContaining(["gemini-3.6-flash", "gemini-2.5-flash"]),
+    );
   });
 });

@@ -25,7 +25,9 @@ export default function WhatYouCanBuildPage() {
       <h2 id="outbound">Outbound dialers &amp; workflows</h2>
       <p>
         Trigger <code>POST /calls/outbound</code> from your backend when a lead fills a form, a
-        deal moves stage, or a reminder is due. Get transcript + summary back via webhooks.
+        deal moves stage, or a reminder is due. Pass per-call <code>variables</code> (name, questions)
+        so one agent can handle many patients. Get transcript + summary back via webhooks.{" "}
+        <Link href="/docs/variables">Variables</Link>.
       </p>
 
       <h2 id="booking">Booking agents</h2>
@@ -56,6 +58,10 @@ export default function WhatYouCanBuildPage() {
 
       <h2 id="embed">Apps on top of the API</h2>
       <ul>
+        <li>
+          Website voice widget — copy per-agent embed code from Settings → Website.{" "}
+          <Link href="/docs/website-embed">Website webcall embed</Link>
+        </li>
         <li>Custom CRM dialer UI</li>
         <li>Internal “call this contact” buttons</li>
         <li>Zapier-style automations / n8n workflows</li>

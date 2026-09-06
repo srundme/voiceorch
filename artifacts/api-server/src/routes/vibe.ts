@@ -20,6 +20,7 @@ import { filterVoicesByAgentGender } from "./vibe-agent-gender.js";
 import { getSarvamManagedKey, platformChatText, PLATFORM_CHAT_MODEL } from "../services/platform-chat-llm.js";
 import { SARVAM_FLAGSHIP_MODEL } from "../orchestration/adapters/llm/sarvam.js";
 import { resolveWorkspaceScope } from "../services/workspace-scope.js";
+import { attachVoiceNumberToAgent, PhoneAlreadyAssignedError } from "../services/voice-number-assign.js";
 
 const router = Router();
 
@@ -37,7 +38,7 @@ function looksLikeCartesiaVoiceId(id: string): boolean {
 /** SnapServe default stack is Sarvam; Cartesia UUIDs keep Cartesia TTS. */
 function resolveTtsStackForVoice(voiceId: string): { provider: string; model: string } {
   if (looksLikeCartesiaVoiceId(voiceId)) {
-    return { provider: "cartesia", model: "sonic-3.5" };
+    return { provider: "cartesia", model: "sonic-3.6" };
   }
   return { provider: DEFAULT_TTS_PROVIDER, model: DEFAULT_TTS_MODEL };
 }
@@ -248,6 +249,14 @@ interface GeminiVibeResponse {
   ready:  boolean;
   config: VibeConfig | null;
 }
+
+const JARVIS_VIBE_PREFIX = `You are Jarvis — Karthikeyan's voice on SnapServe, running the official Vibe Build. The phases, JSON schema, auto-advance rules, call-flow draft, voices, phone numbers, and agent save path are UNCHANGED from Vibe. Do not invent a shorter builder.
+
+SPEAK: colloquial Tamil (பேச்சுத் தமிழ்) in Tamil script — Chennai spoken style, never literary Tamil. English loanwords only for product words (agent, campaign, voice, number). Switch to English only if they write English-only. 2–3 spoken sentences in "reply". No markdown. Do not romanize Tamil.
+
+FIRST OPEN: greet by name if given, then start PHASE core — ask what the agent should do.
+
+`;
 
 const VIBE_SYSTEM_PROMPT = `You are an expert AI agent builder for SnapServe, a voice AI platform. Guide the user conversationally — warm, smart, 2–3 sentences per turn.
 
@@ -474,7 +483,7 @@ function lastUserContent(msgs: VibeChatMessage[]): string {
   return "";
 }
 
-async function callVibeLlm(_key: string, messages: VibeChatMessage[]): Promise<GeminiVibeResponse> {
+async function callVibeLlm(_key: string, messages: VibeChatMessage[], system = VIBE_SYSTEM_PROMPT): Promise<GeminiVibeResponse> {
   const specs = [
     { model: VIBE_CHAT_MODEL, attempts: 2 },
     { model: VIBE_FALLBACK_MODEL, attempts: 2 },
@@ -491,7 +500,7 @@ async function callVibeLlm(_key: string, messages: VibeChatMessage[]): Promise<G
       try {
         const text = await Promise.race([
           platformChatText({
-            system: VIBE_SYSTEM_PROMPT,
+            system,
             messages: chatMessages,
             temperature: 0.4,
             maxTokens: 8_192,
@@ -578,6 +587,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
     refineAgentId,
     refineBaseConfig,
     knowledgeSourceIds = [] as number[],
+    persona,
   } = req.body as {
     messages:             VibeChatMessage[];
     voicesShown?:         boolean;
@@ -586,7 +596,9 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
     refineAgentId?:       number;
     refineBaseConfig?:    Record<string, unknown>;
     knowledgeSourceIds?:  number[];
+    persona?:             string;
   };
+  const vibeSystem = persona === "jarvis" ? JARVIS_VIBE_PREFIX + VIBE_SYSTEM_PROMPT : VIBE_SYSTEM_PROMPT;
 
   const isRefine = typeof refineAgentId === "number" && refineAgentId > 0;
   if (!isRefine) void trackEvent(clerkId, "vibe_started");
@@ -828,7 +840,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
         ``,
         `CRITICAL — systemPrompt editing rules:`,
         `- The "systemPrompt" field above is the EXACT, COMPLETE current system prompt. Treat it as a literal string, not a description or summary.`,
-        `- Prompts use a fixed section pattern (IDENTITY, LANGUAGE STYLE, TONE, GENDER, CALL FLOW, INTERRUPTIONS, KB, OBJECTIONS, ERRORS, CARTESIA SONIC 3, HUMAN SPEECH RULES, CALL GOAL, COMPLETION, RESPONSE HANDLING). Preserve section headers and order.`,
+        `- Prompts use a fixed section pattern (IDENTITY, LANGUAGE STYLE, TONE, GENDER, CALL FLOW, INTERRUPTIONS, KB, OBJECTIONS, ERRORS, CARTESIA SONIC 3.5, HUMAN SPEECH RULES, CALL GOAL, COMPLETION, RESPONSE HANDLING). Preserve section headers and order.`,
         `- Never invent alternate Cartesia tag syntax. Emotion / [laughter] / <break> / <spell> rules stay as written unless the user explicitly changes them.`,
         `- When the user requests a text change (e.g. change "28" to "30", or update a specific phrase), find the exact substring in the system prompt and replace ONLY that. Copy the rest of the system prompt character-for-character.`,
         `- Do NOT rewrite, paraphrase, simplify, reformat, restructure, or shorten any part of the system prompt. The output "systemPrompt" must differ from the input "systemPrompt" only at the exact requested change site(s).`,
@@ -905,7 +917,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
 
     let parsed: GeminiVibeResponse;
     try {
-      parsed = await callVibeLlm(geminiKey, contextualMessages);
+      parsed = await callVibeLlm(geminiKey, contextualMessages, vibeSystem);
     } catch (err) {
       const kind = err instanceof VibeGeminiError ? err.kind : "unavailable";
       const detail = err instanceof Error ? err.message : String(err);
@@ -1591,7 +1603,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
           llmMaxTokens:            500,
           startSpeakingPlan:       { waitSeconds: 0, onPunctuationSeconds: 0, onNoPunctuationSeconds: 0, onNumberSeconds: 0 },
           autoRedial:              { enabled: true, maxAttempts: 3 },
-          // sarvamSttMode omitted — resolved per language at call start (en-IN → transcribe)
+          // sarvamSttMode omitted — adapter defaults to codemix (mixed Indian speech)
         };
         const [row] = await db.insert(agentsTable).values({
           userId:                   clerkId,
@@ -1660,36 +1672,35 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
       }
     }
 
-    // Inbound phone-number assignment (vibe phone_number phase) — mirrors
-    // PATCH /phone-numbers/:id/assign. Non-fatal: agent creation already succeeded.
-    // pickedNumberRow is validated against workspace-owned active numbers above.
+    // Inbound phone-number assignment (vibe phone_number phase).
+    // Never steal a number already on another agent — that made inbound die with no error.
     if (pickedNumberRow && pickedNumberRow.agentId !== insertedAgent.id) {
       try {
         const numberOwnerId = pickedNumberRow.userId ?? clerkId;
-        const [numRow] = await db.update(phoneNumbersTable)
-          .set({ agentId: insertedAgent.id })
-          .where(and(eq(phoneNumbersTable.id, pickedNumberRow.id), eq(phoneNumbersTable.userId, numberOwnerId)))
-          .returning();
-        if (numRow) {
-          await db.update(agentsTable)
-            .set({ inboundPhoneNumberId: numRow.id, outboundPhoneNumberId: numRow.id })
-            .where(eq(agentsTable.id, insertedAgent.id));
-          await logActivity({
-            userId:       clerkId,
-            eventType:    "phone_number.assigned",
-            resourceType: "phone_number",
-            resourceId:   String(numRow.id),
-            description:  `Phone number ${numRow.number} assigned to agent #${insertedAgent.id}`,
-          });
-          emit({ type: "field", key: "inbound_number", label: "Inbound Number", value: numRow.number, icon: "phone-incoming" });
-        }
+        const attached = await attachVoiceNumberToAgent({
+          phoneNumberId: pickedNumberRow.id,
+          agentId: insertedAgent.id,
+          numberOwnerUserId: numberOwnerId,
+          allowReassign: false,
+        });
+        await logActivity({
+          userId:       clerkId,
+          eventType:    "phone_number.assigned",
+          resourceType: "phone_number",
+          resourceId:   String(pickedNumberRow.id),
+          description:  `Phone number ${attached.number} assigned to agent #${insertedAgent.id}`,
+        });
+        emit({ type: "field", key: "inbound_number", label: "Inbound Number", value: attached.number, icon: "phone-incoming" });
       } catch (err) {
+        const taken = err instanceof PhoneAlreadyAssignedError;
         logger.warn({ err, numberId: pickedNumberRow.id, agentId: insertedAgent.id }, "vibe-chat: phone number assignment failed (non-fatal)");
         emit({
           type: "notice",
           noticeType: "phone_numbers",
           signature: `assign-failed-${pickedNumberRow.id}`,
-          message: `I couldn't connect ${pickedNumberRow.number} automatically — you can assign it from the Phone Numbers page.`,
+          message: taken
+            ? `${pickedNumberRow.number} is already on another agent. Unassign it from Phone Numbers if you want this new agent to use it.`
+            : `I couldn't connect ${pickedNumberRow.number} automatically — you can assign it from the Phone Numbers page.`,
         });
       }
     }

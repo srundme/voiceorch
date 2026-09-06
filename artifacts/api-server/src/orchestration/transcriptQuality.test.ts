@@ -9,9 +9,23 @@ import {
   isFalseInterruptionScrap,
   isTopicClarificationAsk,
   isAccidentalInterruptPhrase,
+  isCallerAttentionUtterance,
   isBackchannelOnlyUtterance,
+  hasCallerAddressToken,
   normalizeSttPhonetics,
+  normalizeHinglishClock,
   coalescePendingTranscripts,
+  signalsConversationalContinuation,
+  looksLikeIncompleteClauseStart,
+  collapseRepeatedUtterance,
+  isStutterLoopTranscript,
+  looksLikeBookingTimeAnswer,
+  looksLikeShortContextualAnswer,
+  isDomainOrAcronymAnswer,
+  preferStableTranscript,
+  repairUnexpectedScriptLeak,
+  isHardInterruptTranscript,
+  isLikelyCrosstalkUtterance,
 } from "./transcriptQuality.js";
 import { isAffirmationOnlyUtterance } from "./endpointing.js";
 
@@ -29,10 +43,9 @@ describe("checkTranscriptQuality", () => {
     expect(checkTranscriptQuality("thank you", { expectedLang: "en-IN" }).isGarbled).toBe(false);
   });
 
-  it("flags Indic script when STT is configured for English", () => {
+  it("does not treat Indic script as garbled English (language switch, not noise)", () => {
     const r = checkTranscriptQuality("નમસ્તે બોલો", { expectedLang: "en-IN" });
-    expect(r.isGarbled).toBe(true);
-    expect(r.reason).toBe("script-mismatch-en");
+    expect(r.isGarbled).toBe(false);
   });
 
   it("accepts normal English on en-IN", () => {
@@ -87,10 +100,93 @@ describe("checkTranscriptQuality", () => {
     expect(shouldHoldFragmentForCoalesce("No, not yet.", { expectedLang: "en-IN" })).toBe(false);
   });
 
+  it("holds Devanagari fragments left dangling on a postposition (call 12541)", () => {
+    // Saaras returns Devanagari for hi-IN, where the ASCII-only `\b` in the
+    // Hinglish dangler list can never match — these all read as complete before.
+    expect(checkTranscriptQuality("सौ करोड़ से", { expectedLang: "hi-IN" }).reason).toBe("truncated-dangling");
+    expect(checkTranscriptQuality("मुझे 30 लाख का", { expectedLang: "hi-IN" }).reason).toBe("truncated-dangling");
+    expect(checkTranscriptQuality("plot investment के", { expectedLang: "hi-IN" }).reason).toBe("truncated-dangling");
+    expect(shouldHoldFragmentForCoalesce("सौ करोड़ से", { expectedLang: "hi-IN" })).toBe(true);
+  });
+
+  it("leaves complete Hindi answers alone", () => {
+    expect(checkTranscriptQuality("रहने के लिए", { expectedLang: "hi-IN" }).reason).toBe("");
+    expect(checkTranscriptQuality("हाँ Sir", { expectedLang: "hi-IN" }).reason).toBe("");
+    expect(checkTranscriptQuality("ठीक है", { expectedLang: "hi-IN" }).reason).toBe("");
+    expect(shouldHoldFragmentForCoalesce("रहने के लिए", { expectedLang: "hi-IN" })).toBe(false);
+    // A lone particle is too often the whole answer to treat as a truncation.
+    expect(checkTranscriptQuality("एक", { expectedLang: "hi-IN" }).reason).toBe("");
+    expect(checkTranscriptQuality("तो", { expectedLang: "hi-IN" }).reason).toBe("");
+  });
+
+  it("keeps matching romanized Hinglish danglers", () => {
+    expect(checkTranscriptQuality("main Jaipur se", { expectedLang: "hi-IN" }).reason).toBe("truncated-dangling");
+  });
+
   it("holds Yes Ma'am so How are you can merge (call 4856 zigzag)", () => {
     expect(isBackchannelOnlyUtterance("Yes Ma'am")).toBe(true);
     expect(shouldHoldFragmentForCoalesce("Yes Ma'am", { expectedLang: "en-IN" })).toBe(true);
     expect(shouldHoldFragmentForCoalesce("How are you, Ma'am?", { expectedLang: "en-IN" })).toBe(false);
+  });
+
+  it("treats yeah but as an unfinished thought", () => {
+    expect(shouldHoldFragmentForCoalesce("yeah but", { expectedLang: "en-IN" })).toBe(true);
+    expect(shouldHoldFragmentForCoalesce("yeah but...", { expectedLang: "en-IN" })).toBe(true);
+  });
+});
+
+describe("signalsConversationalContinuation", () => {
+  it("detects dangling conversational structure, not just three phrases", () => {
+    expect(signalsConversationalContinuation("I want to participate but...")).toBe(true);
+    expect(signalsConversationalContinuation("Actually I was thinking")).toBe(true);
+    expect(signalsConversationalContinuation("Yes, but...")).toBe(true);
+    expect(signalsConversationalContinuation("நான் participate பண்ண")).toBe(true);
+    expect(signalsConversationalContinuation("அது வந்து...")).toBe(true);
+    expect(signalsConversationalContinuation("लेकिन मैं...")).toBe(true);
+    expect(signalsConversationalContinuation("எனக்கு ஒரு...")).toBe(true);
+    expect(signalsConversationalContinuation("yeah but")).toBe(true);
+    expect(signalsConversationalContinuation("I want to participate in the")).toBe(true);
+  });
+
+  it("does not veto complete short answers", () => {
+    expect(signalsConversationalContinuation("Yes, that works for me.")).toBe(false);
+    expect(signalsConversationalContinuation("No, not yet.")).toBe(false);
+    expect(signalsConversationalContinuation("I want to participate in the hackathon.")).toBe(false);
+    expect(signalsConversationalContinuation("Okay.")).toBe(false);
+    expect(signalsConversationalContinuation("சரி")).toBe(false);
+    expect(signalsConversationalContinuation("हाँ Sir")).toBe(false);
+  });
+});
+
+describe("looksLikeIncompleteClauseStart — call 21818 sentence-start hold", () => {
+  it("holds a short clause with no sentence end (not an ack)", () => {
+    expect(looksLikeIncompleteClauseStart("எனக்கு இப்போ")).toBe(true);
+    expect(isBackchannelOnlyUtterance("எனக்கு இப்போ")).toBe(false);
+    expect(looksLikeIncompleteClauseStart("I said")).toBe(true);
+  });
+
+  it("does not hold acks, questions, or finished sentences", () => {
+    expect(looksLikeIncompleteClauseStart("ஆ")).toBe(false);
+    expect(looksLikeIncompleteClauseStart("சரி")).toBe(false);
+    expect(looksLikeIncompleteClauseStart("Okay.")).toBe(false);
+    expect(looksLikeIncompleteClauseStart("என்னோட age 27?")).toBe(false);
+    expect(looksLikeIncompleteClauseStart("Yes, that works for me.")).toBe(false);
+    expect(looksLikeIncompleteClauseStart("stop")).toBe(false);
+  });
+});
+
+describe("collapseRepeatedUtterance — STT stutter loops", () => {
+  it("collapses I said x20 to one copy and flags it as a loop", () => {
+    const loop = Array.from({ length: 20 }, () => "I said").join(", ");
+    const collapsed = collapseRepeatedUtterance(loop);
+    expect(collapsed.toLowerCase()).toBe("i said");
+    expect(isStutterLoopTranscript(loop, collapsed)).toBe(true);
+  });
+
+  it("leaves a real sentence alone", () => {
+    const real = "I said I already told you my age is 27.";
+    expect(collapseRepeatedUtterance(real)).toBe(real);
+    expect(isStutterLoopTranscript(real, real)).toBe(false);
   });
 });
 
@@ -141,6 +237,57 @@ describe("isUltraShortNoiseFragment", () => {
     expect(isUltraShortNoiseFragment("No, not yet.")).toBe(false);
     expect(isUltraShortNoiseFragment("ஆ Madam பேசலாம் சொல்லுங்க.")).toBe(false);
     expect(isUltraShortNoiseFragment("இல்ல Madam இப்பதான் தெரிஞ்சிருக்கு.")).toBe(false);
+    expect(isUltraShortNoiseFragment("Ji")).toBe(false);
+    expect(isUltraShortNoiseFragment("B2B")).toBe(false);
+    expect(isUltraShortNoiseFragment("CRM")).toBe(false);
+  });
+});
+
+describe("call 20094 STT quality — domain answers and Kannada leak", () => {
+  it("does not treat B2B/B2C/CRM as garbled all-caps noise", () => {
+    expect(checkTranscriptQuality("B2B", { expectedLang: "hi-IN" }).isGarbled).toBe(false);
+    expect(checkTranscriptQuality("B2C", { expectedLang: "hi-IN" }).isGarbled).toBe(false);
+    expect(checkTranscriptQuality("CRM", { expectedLang: "hi-IN" }).isGarbled).toBe(false);
+    expect(checkTranscriptQuality("API", { expectedLang: "en-IN" }).isGarbled).toBe(false);
+    expect(isDomainOrAcronymAnswer("B2B")).toBe(true);
+    expect(isDomainOrAcronymAnswer("बी टू बी")).toBe(true);
+  });
+
+  it("still flags spaced letter blobs as noise", () => {
+    expect(checkTranscriptQuality("Z Z Z", { expectedLang: "en-IN" }).reason).toBe("short-allcaps-noise");
+    expect(checkTranscriptQuality("QQ QQ", { expectedLang: "en-IN" }).reason).toBe("short-allcaps-noise");
+  });
+
+  it("keeps Ji and हाँ जी as real contextual answers", () => {
+    expect(checkTranscriptQuality("Ji", { expectedLang: "hi-IN" }).isGarbled).toBe(false);
+    expect(looksLikeShortContextualAnswer("Ji")).toBe(true);
+    expect(looksLikeShortContextualAnswer("हाँ जी")).toBe(true);
+    expect(looksLikeShortContextualAnswer("B2B")).toBe(true);
+    expect(looksLikeShortContextualAnswer("Yes yes, just only.")).toBe(true);
+    expect(looksLikeShortContextualAnswer("Yeah, that's that's only.")).toBe(true);
+  });
+
+  it("strips Kannada tokens from a Hindi-latched line", () => {
+    const mixed = "invest ಮಾಡ್ತಾ रहे हैं और फिर और में रहते हैं";
+    const repaired = repairUnexpectedScriptLeak(mixed, "hi-IN");
+    expect(repaired).not.toMatch(/[\u0C80-\u0CFF]/);
+    expect(repaired).toMatch(/invest/);
+    expect(repaired).toMatch(/रहे हैं/);
+  });
+
+  it("prefers the clean Hindi partial over a Kannada-contaminated final", () => {
+    expect(
+      preferStableTranscript(
+        "invest ಮಾಡ್ತಾ रहे हैं और फिर और में रहते हैं",
+        "इन्वेस्ट करते हैं ना",
+        "hi-IN",
+      ),
+    ).toBe("इन्वेस्ट करते हैं ना");
+  });
+
+  it("normalizes spoken B2B / B2C", () => {
+    expect(normalizeSttPhonetics("मुझे बी टू बी चाहिए")).toContain("B2B");
+    expect(normalizeSttPhonetics("b to c portal")).toContain("B2C");
   });
 });
 
@@ -149,6 +296,8 @@ describe("isCallerAudioDifficulty", () => {
     expect(isCallerAudioDifficulty("I can't hear you")).toBe(true);
     expect(isCallerAudioDifficulty("கேக்கல")).toBe(true);
     expect(isCallerAudioDifficulty("hello madam")).toBe(false);
+    expect(isCallerAudioDifficulty("Hello, hello, are you there?")).toBe(true);
+    expect(isCallerAudioDifficulty("are you there")).toBe(true);
   });
 });
 
@@ -267,5 +416,80 @@ describe("isAccidentalInterruptPhrase", () => {
       ]);
       expect(coalesced?.text).toBe("ஆமா.");
     });
+  });
+});
+
+describe("looksLikeBookingTimeAnswer", () => {
+  it("accepts Hindi/Hinglish slot answers discarded on call 14160", () => {
+    expect(looksLikeBookingTimeAnswer("कल टेन थर्टी मैडम")).toBe(true);
+    expect(looksLikeBookingTimeAnswer("tomorrow 10:30")).toBe(true);
+    expect(looksLikeBookingTimeAnswer("eleven AM")).toBe(true);
+  });
+
+  it("accepts Tamil slot answers (call 14251 2pm talk-over)", () => {
+    expect(looksLikeBookingTimeAnswer("2 pm")).toBe(true);
+    expect(looksLikeBookingTimeAnswer("நாளைக்கு காலைல")).toBe(true);
+    expect(looksLikeBookingTimeAnswer("ரெண்டு மணிக்கு வேணும்")).toBe(true);
+  });
+
+  it("rejects ordinary acks", () => {
+    expect(looksLikeBookingTimeAnswer("हाँ।")).toBe(false);
+    expect(looksLikeBookingTimeAnswer("okay madam")).toBe(false);
+  });
+});
+
+describe("isHardInterruptTranscript", () => {
+  it("allows stop / wait and booking slots, not garbled echo", () => {
+    expect(isHardInterruptTranscript("wait")).toBe(true);
+    expect(isHardInterruptTranscript("2 pm")).toBe(true);
+    expect(isHardInterruptTranscript("Then you need to learn")).toBe(false);
+    expect(isHardInterruptTranscript("okay madam")).toBe(false);
+    expect(isHardInterruptTranscript("wait", true)).toBe(false);
+  });
+
+  it("does not treat a long pitch echo as a slot answer just because it says today/two", () => {
+    expect(
+      isHardInterruptTranscript(
+        "Hi Krithika this is Angel calling today about two minutes for admission",
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("isCallerAttentionUtterance", () => {
+  it("keeps Hello from being far-field-dropped (call 14315)", () => {
+    expect(isCallerAttentionUtterance("Hello")).toBe(true);
+    expect(isCallerAttentionUtterance("வணக்கம்")).toBe(true);
+    expect(isCallerAttentionUtterance("காலைல 10 மணிக்கு சார்")).toBe(false);
+  });
+});
+
+describe("isLikelyCrosstalkUtterance", () => {
+  it("drops room / meeting talk from call 20257", () => {
+    expect(isLikelyCrosstalkUtterance("Hello இங்க பாருங்க")).toBe(true);
+    expect(isLikelyCrosstalkUtterance("Participants, okay. And, uh,")).toBe(true);
+    expect(isLikelyCrosstalkUtterance("punishment-க்கு இதுதான் நம்ம protocol சொல்லணும்")).toBe(true);
+  });
+
+  it("keeps real caller answers", () => {
+    expect(isLikelyCrosstalkUtterance("CRM")).toBe(false);
+    expect(isLikelyCrosstalkUtterance("yes")).toBe(false);
+    expect(isLikelyCrosstalkUtterance("WhatsApp and SMS add பண்ணுங்க")).toBe(false);
+    expect(isLikelyCrosstalkUtterance("wait one minute")).toBe(false);
+  });
+});
+
+describe("normalizeHinglishClock — call 20113 Devanagari clock words", () => {
+  it("converts वन थर्टी पी and इलेवन थर्टी", () => {
+    expect(normalizeHinglishClock("वन थर्टी पी")).toBe("1:30 PM");
+    expect(normalizeHinglishClock("इलेवन थर्टी")).toBe("11:30");
+    expect(normalizeSttPhonetics("वन थर्टी पी")).toContain("1:30");
+  });
+});
+
+describe("hasCallerAddressToken", () => {
+  it("treats நீங்க as the caller addressing the agent, not TTS echo (call 14345)", () => {
+    expect(hasCallerAddressToken(["ஒரு", "நிமிஷம்", "நீங்க"])).toBe(true);
+    expect(hasCallerAddressToken(["ஒரு", "நிமிஷம்", "time"])).toBe(false);
   });
 });

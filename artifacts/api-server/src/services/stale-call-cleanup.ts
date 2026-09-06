@@ -4,7 +4,10 @@ import { logger } from "../lib/logger.js";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000;    // every hour
 const STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2-hour stale window
-const STARTUP_BACKSTOP_MS = 5 * 60 * 1000;   // 5-min window for boot sweep
+// Captured at module initialization, before this process can create a call.
+// Any active row older than this belongs to a previous process whose in-memory
+// session and recording buffer can no longer exist.
+const PROCESS_STARTED_AT = new Date();
 
 let started = false;
 
@@ -50,12 +53,12 @@ async function sweepStaleCalls(): Promise<void> {
  * Startup backstop: when the server process restarts, the in-memory `sessions`
  * Map is wiped. Any call that was live on the old process can never have its
  * `endSession()` fire (the session object is gone), so the DB row stays stuck
- * "in_progress" forever.  This runs once shortly after boot and closes any call
- * that was already older than 5 minutes with no ended_at — those are provably
- * from the previous process lifetime.
+ * "in_progress" forever. This runs once shortly after boot and closes every
+ * active call created before this process started. The old five-minute age
+ * threshold missed calls interrupted during their first five minutes — exactly
+ * when a deploy is most visible during a customer demo.
  */
 async function sweepOrphanedAtStartup(): Promise<void> {
-  const cutoff = new Date(Date.now() - STARTUP_BACKSTOP_MS);
   try {
     const updated = await db
       .update(callsTable)
@@ -64,7 +67,7 @@ async function sweepOrphanedAtStartup(): Promise<void> {
         and(
           inArray(callsTable.status, ["ringing", "in_progress"]),
           isNull(callsTable.endedAt),
-          lt(callsTable.createdAt, cutoff),
+          lt(callsTable.createdAt, PROCESS_STARTED_AT),
         ),
       )
       .returning({ id: callsTable.id });
@@ -90,8 +93,8 @@ export function startStaleCallCleanup(): void {
   if (started) return;
   started = true;
 
-  // One-time startup backstop: any in_progress/ringing call older than 5 min
-  // with no ended_at is from a previous server process and can never close.
+  // One-time startup backstop: every active row predating this process has lost
+  // its owning in-memory session and can never close normally.
   setTimeout(() => void sweepOrphanedAtStartup(), 30_000);
 
   // Periodic long-horizon sweep for calls that somehow never got closed.
@@ -101,7 +104,7 @@ export function startStaleCallCleanup(): void {
   }, 2 * 60 * 1000);
 
   logger.info(
-    { thresholdHours: 2, intervalHours: 1, startupBackstopMin: 5 },
+    { thresholdHours: 2, intervalHours: 1, processStartedAt: PROCESS_STARTED_AT },
     "Stale-call cleanup sweep scheduled",
   );
 }

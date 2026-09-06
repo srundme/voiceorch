@@ -3,6 +3,7 @@ import { buildSchema } from "./buildSchema.js";
 import { buildPrompt } from "./buildPrompt.js";
 import { rulePrefilter } from "./rulePrefilter.js";
 import { validate } from "./validate.js";
+import { extractUnavailableFallback } from "./extract-fallback.js";
 import type { DispositionConfig, CallEvent } from "./types.js";
 
 const INSURANCE_TAXONOMY = {
@@ -282,5 +283,32 @@ describe("validate", () => {
     expect(result.sub).toBe("interested"); // first valid sub
     expect(result.sub).not.toBe("");
     expect(result.confidence).toBeLessThanOrEqual(0.5);
+  });
+});
+
+describe("extractUnavailableFallback", () => {
+  it("stamps NOT_CONNECTED only when there is no transcript", () => {
+    const raw = extractUnavailableFallback(cfg, "   ", "no_llm");
+    expect(raw.primary).toBe("NOT_CONNECTED");
+    expect(raw.sub).toBe("no_answer");
+  });
+
+  it("does not stamp NOT_CONNECTED when the call had a transcript", () => {
+    const raw = extractUnavailableFallback(cfg, "Agent: hello\nUser: I want a quote", "llm_error");
+    expect(raw.primary).not.toBe("NOT_CONNECTED");
+    expect(raw.sub).not.toBe("no_answer");
+    expect(String(raw.summary)).toMatch(/transcript/i);
+  });
+
+  it("prefers a generic outcome container over SALE_CLOSED", () => {
+    const salesCfg: DispositionConfig = {
+      agentId: 3,
+      taxonomy: { outcome: ["interested", "not_interested", "callback", "no_answer"] },
+      domainFields: [],
+      rules: [],
+    };
+    const raw = extractUnavailableFallback(salesCfg, "hello there", "no_llm");
+    expect(raw.primary).toBe("outcome");
+    expect(raw.sub).not.toBe("no_answer");
   });
 });

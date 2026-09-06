@@ -96,7 +96,7 @@ export function ApiOverview() {
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold tracking-tight">Resources</h2>
-        <div className="grid sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 @[420px]/api:grid-cols-2">
           {groups.map((g) => {
             const first = g.operations[0];
             return (

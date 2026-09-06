@@ -7,7 +7,7 @@ import {
   Rocket,
   Sparkles,
 } from "lucide-react";
-import { Callout, DocCard, PageHeader } from "../DocsUi";
+import { Callout, DocCard, PageHeader, PlatformUrls } from "../DocsUi";
 import { CodeBlock } from "../CodeBlock";
 
 export default function IntroductionPage() {
@@ -16,7 +16,7 @@ export default function IntroductionPage() {
       <PageHeader
         breadcrumb="Get started"
         title="SnapServe documentation"
-        updated="18 Aug 2026"
+        updated="25 Aug 2026"
         description="Build Indic-first AI voice agents for phone, WhatsApp, webcall, and meetings. Configure in the dashboard, then drive calls from your own product with the REST API."
       />
 
@@ -26,8 +26,10 @@ export default function IntroductionPage() {
         on <code>https://app.snapserve.ai/api</code>.
       </p>
 
+      <PlatformUrls />
+
       <h2 id="start">Start here</h2>
-      <div className="not-prose grid grid-cols-1 sm:grid-cols-2 gap-3 my-6">
+      <div className="not-prose my-6 grid grid-cols-1 gap-3 @[480px]/docs:grid-cols-2">
         <DocCard
           href="/docs/vibe"
           title="Create an agent in Vibe"
@@ -87,8 +89,10 @@ export default function IntroductionPage() {
       <h2 id="base-url">API base URL</h2>
       <CodeBlock language="text" code={`https://app.snapserve.ai/api`} />
       <p>
-        Auth: <code>Authorization: Bearer sk_live_…</code> —{" "}
-        <Link href="/docs/authentication">Authentication</Link>.
+        This is the prefix for REST calls (not a webpage — opening it in a browser shows{" "}
+        <code>Cannot GET /api</code>). Auth: <code>Authorization: Bearer sk_live_…</code> —{" "}
+        <Link href="/docs/authentication">Authentication</Link>. Browse endpoints in the{" "}
+        <Link href="/docs/api-reference">API Reference</Link>.
       </p>
 
       <h2 id="guides">Popular guides</h2>

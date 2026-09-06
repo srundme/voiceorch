@@ -143,6 +143,12 @@ async function copyAssets(distDir) {
   const onnxDest = path.resolve(distDir, "orchestration/silero_vad.onnx");
   await mkdir(path.dirname(onnxDest), { recursive: true });
   await cp(onnxSrc, onnxDest);
+  const smartTurnSrc = path.resolve(artifactDir, "src/orchestration/smart-turn-v3.2-cpu.onnx");
+  const smartTurnDest = path.resolve(distDir, "orchestration", "smart-turn-v3.2-cpu.onnx");
+  await cp(smartTurnSrc, smartTurnDest);
+  const fillersSrc = path.resolve(artifactDir, "src/orchestration/fillers");
+  const fillersDest = path.resolve(distDir, "orchestration", "fillers");
+  await cp(fillersSrc, fillersDest, { recursive: true });
 }
 
 buildAll().catch((err) => {

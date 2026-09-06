@@ -1,7 +1,9 @@
-import { GoogleGenAI, Type, FunctionCallingConfigMode } from "@google/genai";
-import type { Content, Tool, FunctionDeclaration, Schema, GenerateContentConfig, CachedContent, GenerateContentResponseUsageMetadata } from "@google/genai";
+import { GoogleGenAI, FunctionCallingConfigMode } from "@google/genai";
+import type { Content, GenerateContentConfig, CachedContent, GenerateContentResponseUsageMetadata } from "@google/genai";
 import { logger } from "../../../lib/logger.js";
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
+import { toGeminiLiveTools } from "../live/gemini-tools.js";
+import { isGeminiQuotaError, loadManagedGeminiKeys, markGeminiKeyExhausted, maskGeminiKey, pickGeminiKeyFromList } from "../../../lib/gemini-key-pool.js";
 
 // ── Gemini-scoped reasoning/preamble backstop (GEMINI ONLY) ──────────────────
 /** A COMPLETE leading bracketed state/context line, e.g. "[DATE/TIME CONTEXT] …\n". */
@@ -151,9 +153,29 @@ const CACHE_TTL_SECONDS = Number(process.env.GEMINI_CACHE_TTL_SECONDS) || 900;
 // Distinct cache bases warmed per call. A code-switching caller needs one per
 // language guard variant, so 3 was too tight for bilingual Indic presentations.
 const CACHE_MAX_WARMS = Number(process.env.GEMINI_CACHE_MAX_WARMS) || 6;
-const CACHE_WARM_WAIT_MS = 3000;
+const CACHE_WARM_WAIT_MS = Number(process.env.GEMINI_CACHE_WARM_WAIT_MS) || 250;
 const REQUEST_TIMEOUT_MS = Math.max(10000, Number(process.env.GEMINI_REQUEST_TIMEOUT_MS) || 12000);
 const GEMINI3_THINKING_HEADROOM = Number(process.env.GEMINI3_THINKING_HEADROOM) || 256;
+
+/** Google 404s `gemini-2.5-flash` / `*-8b` and tells callers to use 3.6 Flash. */
+export const DEFAULT_GOOGLE_LLM_MODEL = "gemini-3.6-flash";
+
+const RETIRED_GOOGLE_LLM: Record<string, string> = {
+  "gemini-2.5-flash": DEFAULT_GOOGLE_LLM_MODEL,
+  "gemini-2.5-flash-8b": DEFAULT_GOOGLE_LLM_MODEL,
+  "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
+  "gemini-2.5-flash-preview-05-20": DEFAULT_GOOGLE_LLM_MODEL,
+};
+
+/** Map a saved agent model id to one the current Gemini API still serves. */
+export function resolveGoogleLlmModel(raw: string | null | undefined): string {
+  const t = (raw ?? "").trim().replace(/^models\//, "");
+  if (!t) return DEFAULT_GOOGLE_LLM_MODEL;
+  const aliased = RETIRED_GOOGLE_LLM[t];
+  if (aliased) return aliased;
+  if (/^gemini-2\.5-flash(-8b)?(-preview|$)/i.test(t)) return DEFAULT_GOOGLE_LLM_MODEL;
+  return t;
+}
 
 /** Model-aware thinking config.
  *  Gemini 3.x: thinkingLevel:"minimal" (cannot fully disable).
@@ -173,6 +195,7 @@ export function geminiThinkingConfig(model: string): Record<string, unknown> {
  */
 export class GoogleLLM implements LLMAdapter {
   private ai: GoogleGenAI;
+  private apiKey: string;
   private model: string;
   private temperature: number | undefined;
   private maxTokens: number | undefined;
@@ -192,39 +215,17 @@ export class GoogleLLM implements LLMAdapter {
   private cacheCreatedLogged = false;
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
+    this.apiKey = apiKey;
     this.ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: REQUEST_TIMEOUT_MS } });
-    this.model = model ?? "gemini-3.6-flash";
+    this.model = resolveGoogleLlmModel(model);
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
     const mt = genParams?.maxTokens;
     this.maxTokens = typeof mt === "number" && Number.isFinite(mt) && mt > 0 ? Math.floor(mt) : undefined;
   }
 
-  /**
-   * Convert our ToolDefinition[] to new SDK Tool[]/FunctionDeclaration[] format.
-   * New SDK Type enum: uppercase strings ("STRING", "OBJECT", "INTEGER", etc.)
-   */
-  private toGeminiTools(tools?: ToolDefinition[]): Tool[] | undefined {
-    if (!tools?.length) return undefined;
-    const declarations: FunctionDeclaration[] = tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      parameters: {
-        type: Type.OBJECT,
-        properties: Object.fromEntries(
-          Object.entries(t.parameters.properties).map(([key, val]) => [
-            key,
-            {
-              type: (Type as Record<string, Type>)[(val.type || "string").toUpperCase()] ?? Type.STRING,
-              description: val.description,
-              ...(val.enum ? { enum: val.enum, format: "enum" } : {}),
-            } as Schema,
-          ])
-        ),
-        required: t.parameters.required ?? [],
-      } as Schema,
-    }));
-    return [{ functionDeclarations: declarations }];
+  private toGeminiTools(tools?: ToolDefinition[]) {
+    return toGeminiLiveTools(tools);
   }
 
   private buildGenerationConfig(): Partial<GenerateContentConfig> {
@@ -414,6 +415,29 @@ export class GoogleLLM implements LLMAdapter {
     this.warmPromises.set(base, warm);
   }
 
+  private bindClient(apiKey: string): void {
+    this.apiKey = apiKey;
+    this.ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: REQUEST_TIMEOUT_MS } });
+    this.caches.clear();
+    this.warmPromises.clear();
+    this.cacheDisabled = false;
+  }
+
+  private async failoverIfQuota(err: unknown): Promise<boolean> {
+    if (!isGeminiQuotaError(err)) return false;
+    const pool = await loadManagedGeminiKeys();
+    if (!pool.includes(this.apiKey)) return false;
+    markGeminiKeyExhausted(this.apiKey);
+    const next = pickGeminiKeyFromList(pool);
+    if (!next || next === this.apiKey) return false;
+    logger.warn(
+      { from: maskGeminiKey(this.apiKey), to: maskGeminiKey(next), evt: "gemini_key_rotated" },
+      "Gemini quota exhausted — switched to the next pool key",
+    );
+    this.bindClient(next);
+    return true;
+  }
+
   private handleCacheError(e: unknown): void {
     this.cacheDisabled = true;
     this.caches.clear();
@@ -499,6 +523,7 @@ export class GoogleLLM implements LLMAdapter {
           return;
         } catch (e) {
           this.handleCacheError(e);
+          await this.failoverIfQuota(e);
           // Fall through to uncached path below.
         }
       }
@@ -510,7 +535,7 @@ export class GoogleLLM implements LLMAdapter {
       { role: "user", parts: [{ text: currentContent }] },
     ];
 
-    const stream = await this.ai.models.generateContentStream({
+    const request = {
       model: this.model,
       contents,
       config: {
@@ -519,7 +544,14 @@ export class GoogleLLM implements LLMAdapter {
         ...(geminiTools ? { tools: geminiTools } : {}),
         ...toolConfig,
       },
-    });
-    await this.drainStream(stream, onToken, onDone, options);
+    };
+    try {
+      const stream = await this.ai.models.generateContentStream(request);
+      await this.drainStream(stream, onToken, onDone, options);
+    } catch (e) {
+      if (!(await this.failoverIfQuota(e))) throw e;
+      const stream = await this.ai.models.generateContentStream(request);
+      await this.drainStream(stream, onToken, onDone, options);
+    }
   }
 }

@@ -26,6 +26,7 @@ const TYPE_LABEL: Record<string, string> = {
   error_spike: "Error spike",
   usage_spike: "Usage spike",
   provider_down: "Provider down",
+  account_deletion: "Account deleted",
 };
 
 export default function AlertsPage() {
@@ -39,7 +40,7 @@ export default function AlertsPage() {
     <div className="space-y-6">
       <UsagePageHeader
         title="Alerts"
-        subtitle={`${data?.unacknowledgedCount ?? 0} unacknowledged · low balance, budget thresholds, error & usage spikes, provider down`}
+        subtitle={`${data?.unacknowledgedCount ?? 0} unacknowledged · low balance, budget thresholds, spikes, provider down, account deletions`}
         actions={
           <Tabs value={view} onValueChange={(v) => setView(v as "open" | "all")}>
             <TabsList>

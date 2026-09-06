@@ -44,6 +44,13 @@ export const SARVAM_STT_LATENCY_DEFAULTS = {
   speechEndFlushMs: 0,
   /** Do not second-guess Saaras with mid-thought coalesce holds. */
   incompleteHoldMs: 0,
+  /**
+   * Omit `silence_duration_ms` unless the agent set it. Saaras owns EOT;
+   * 300/500 were SnapServe Fast/Balanced overlays on top of provider VAD.
+   */
+  endOfSpeechSilenceMs: null as number | null,
+  /** Previous builder/form defaults — rewritten off so Saaras VAD stands alone. */
+  legacyEndOfSpeechSilenceMs: [300, 500] as const,
 } as const;
 
 /**
@@ -256,6 +263,25 @@ export function normalizeCallEngineAgentConfig(
     if (sspChanged) cfg["startSpeakingPlan"] = ssp;
   }
 
+  const eos = cfg["sarvamEndOfSpeechSilenceMs"];
+  if (
+    typeof eos === "number"
+    && (SARVAM_STT_LATENCY_DEFAULTS.legacyEndOfSpeechSilenceMs as readonly number[]).includes(eos)
+  ) {
+    reasons.push(`sarvamEndOfSpeechSilenceMs ${eos}→∅ (Saaras VAD)`);
+    delete cfg["sarvamEndOfSpeechSilenceMs"];
+  }
+
+  const wordsLive = cfg["wordsForInterruption"];
+  if (wordsLive === 2) {
+    reasons.push("wordsForInterruption 2→3");
+    cfg["wordsForInterruption"] = 3;
+    const ssp = cfg["stopSpeakingPlan"];
+    if (ssp && typeof ssp === "object") {
+      cfg["stopSpeakingPlan"] = { ...(ssp as Record<string, unknown>), numWords: 3 };
+    }
+  }
+
   const ttsMin = cfg["ttsMinSentenceChars"];
   if (
     typeof ttsMin === "number"
@@ -263,6 +289,12 @@ export function normalizeCallEngineAgentConfig(
   ) {
     reasons.push(`ttsMinSentenceChars ${ttsMin}→${TTS_STREAM_DEFAULTS.minSentenceChars}`);
     cfg["ttsMinSentenceChars"] = TTS_STREAM_DEFAULTS.minSentenceChars;
+  }
+
+  const tailDrain = cfg["telephonyTailDrainMs"];
+  if (tailDrain === 400 || tailDrain === 80) {
+    reasons.push(`telephonyTailDrainMs ${tailDrain}→0`);
+    cfg["telephonyTailDrainMs"] = 0;
   }
 
   const uniqueReasons = [...new Set(reasons)];
@@ -285,7 +317,7 @@ export function callEngineInsertDefaults(): Record<string, unknown> {
     ttsMinSentenceChars: TTS_STREAM_DEFAULTS.minSentenceChars,
     fragmentCoalesceListeningMs: FRAGMENT_COALESCE_DEFAULTS.listeningMs,
     fragmentCoalescePlayingMs: FRAGMENT_COALESCE_DEFAULTS.playingMs,
-    telephonyTailDrainMs: 400,
+    telephonyTailDrainMs: 0,
     sarvamHighVadSensitivity: SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity,
     sarvamSpeechEndFlushMs: SARVAM_STT_LATENCY_DEFAULTS.speechEndFlushMs,
     sarvamIncompleteHoldMs: SARVAM_STT_LATENCY_DEFAULTS.incompleteHoldMs,

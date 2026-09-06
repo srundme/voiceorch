@@ -10,6 +10,17 @@ interface ApiErrorData {
   issues?: ZodIssue[];
 }
 
+function looksLikeHtml(s: string): boolean {
+  const t = s.trimStart();
+  return /^<!DOCTYPE/i.test(t) || /^<html[\s>]/i.test(t) || /<\/(?:html|body|head)>/i.test(s);
+}
+
+/** Carrier/proxy pages (Cloudflare 502 HTML) must never reach the toast. */
+function carrierUnavailable(s: string | null | undefined): boolean {
+  if (!s) return false;
+  return looksLikeHtml(s) || (/HTTP\s*502/i.test(s) && looksLikeHtml(s));
+}
+
 /**
  * Extracts a user-readable description from a mutation error.
  *
@@ -34,20 +45,37 @@ export function formatApiError(err: unknown): string {
   }
 
   if (err instanceof ApiError) {
-    const data = err.data as ApiErrorData | null;
-    const issue = data?.issues?.[0];
+    const data = err.data as ApiErrorData | string | null;
+    if (typeof data === "string" && (carrierUnavailable(data) || err.status === 502 && looksLikeHtml(data))) {
+      return "Carrier unavailable, try again";
+    }
+    const structured = data && typeof data === "object" ? data : null;
+    const issue = structured?.issues?.[0];
     if (issue) {
       const field = issue.path && issue.path.length > 0 ? issue.path.join(".") : null;
       return field ? `${field}: ${issue.message}` : issue.message;
     }
-    if (data?.error) return data.error;
+    if (structured?.error) {
+      if (carrierUnavailable(structured.error) || looksLikeHtml(structured.error)) {
+        return "Carrier unavailable, try again";
+      }
+      return structured.error;
+    }
+    if (err.status === 502 || carrierUnavailable(err.message)) {
+      return "Carrier unavailable, try again";
+    }
     // No structured body — avoid surfacing raw "HTTP 500 …" strings
     if (err.status >= 500) return "Something went wrong on our end — please try again.";
     if (err.status >= 400) return "Something went wrong with your request.";
     return "An unexpected error occurred.";
   }
 
-  if (err instanceof Error) return err.message;
+  if (err instanceof Error) {
+    if (carrierUnavailable(err.message) || looksLikeHtml(err.message)) {
+      return "Carrier unavailable, try again";
+    }
+    return err.message;
+  }
   return "An unexpected error occurred.";
 }
 

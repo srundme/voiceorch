@@ -87,9 +87,9 @@ export function AgentAnalyticsPanel({
 
   if (agentId <= 0) {
     return (
-      <div className="px-4 py-5 sm:px-6 lg:px-8">
-        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Analytics</h2>
-        <p className="mt-0.5 text-[12px] text-muted-foreground">
+      <div className="px-5 py-6 sm:px-8">
+        <h2 className="text-[17px] font-semibold tracking-[-0.03em]">{embedded ? "Activity" : "Analytics"}</h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
           Save the agent first to see call volume, success rate, spend, and latency.
         </p>
       </div>
@@ -98,7 +98,7 @@ export function AgentAnalyticsPanel({
 
   if (isLoading) {
     return (
-      <div className="space-y-4 px-4 py-5 sm:px-6 lg:px-8">
+      <div className="space-y-4 px-5 py-6 sm:px-8">
         <div className="h-8 w-48 bg-muted rounded animate-pulse" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
@@ -126,11 +126,11 @@ export function AgentAnalyticsPanel({
   const hasLatency = stats.avgSttLatencyMs || stats.avgLlmLatencyMs || stats.avgTtsFirstChunkMs;
 
   return (
-    <div className={embedded ? "px-4 py-5 sm:px-6 lg:px-8 space-y-5" : "space-y-6"}>
+    <div className={embedded ? "space-y-5 px-5 py-6 sm:px-8" : "space-y-6"}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 max-w-[68ch]">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Analytics</h2>
+            <h2 className="text-[17px] font-semibold tracking-[-0.03em]">{embedded ? "Activity" : "Analytics"}</h2>
             <Badge className="text-[10px] bg-muted text-foreground border-border">
               {stats.successRate}% success
             </Badge>

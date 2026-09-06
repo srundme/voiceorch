@@ -4,18 +4,17 @@ import { useLocation, useParams, useSearch, Link } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Trash2, Settings, FileText, Wrench,
-  VoicemailIcon, TestTube2, ChevronRight, ChevronLeft,
+  TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
-  User2, Users, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
-  Play, Pause,
+  User2, Users, Sparkles, CopyPlus, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
+  Play, Pause, Copy,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle, Calendar, Star, Video,
+  Upload, Archive, Info, AlertCircle, Calendar, Star, BadgeCheck, Video, ExternalLink,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { canGoBackInApp } from "@/lib/nav-history";
 import { EmptyState } from "@/components/empty-state";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
@@ -29,7 +28,7 @@ import {
   useListAgents, useGetAgent, useUpdateAgent, useDeleteAgent,
   useCreateAgent, useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
   useListCalendars, customFetch,
-  useListKnowledgeSources, useRunToolTest, useListAmbientSounds, useListEventTypes,
+  useListKnowledgeSources, useListAmbientSounds, useListEventTypes,
   useListAgentVersions, usePublishAgentVersion, useGetAgentVersion, useRestoreAgentVersion,
   useArchiveAgentVersion, useDeleteAgentVersion,
   getListAgentVersionsQueryKey, getGetAgentVersionQueryKey,
@@ -40,7 +39,8 @@ import type { AgentVersion } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, clampInterruptWords, voiceSecondsFromInterruptWords, WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER } from "./edit.schema";
+import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, hydrateSarvamRealtimeVad, clampInterruptWords, voiceSecondsFromInterruptWords, clampSemanticTurnStopMs, WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER } from "./edit.schema";
+import { AgentWebsiteEmbedPanel } from "./website-embed";
 import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
@@ -84,6 +84,8 @@ import {
   DOMAIN_FIELD_QUICK_ADDS,
   taxonomyToCategories,
   categoriesToTaxonomy,
+  canCommitDispositionSave,
+  isDispositionCommitKey,
   fromStoredDomainField,
   toStoredDomainField,
   slugDispositionKey,
@@ -94,16 +96,20 @@ import {
 } from "@/lib/disposition-fields";
 import { SnapServeAgentIcon } from "@/components/logo";
 import { hostProductName } from "@/lib/white-label";
+import { findBySchedulingId, normalizeSchedulingId } from "@/lib/scheduling-setup";
 import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import {
-  ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
-  LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
-  filterVoicesForLanguage, isVoiceCompatibleWithLanguage, shouldClearVoiceForLanguage,
+  LLM_PROVIDERS, TTS_PROVIDERS,
+  LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, asrModelsForPicker, SARVAM_PRODUCT_ASR_MODEL,
+  llmModelsForPicker, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
+  DEFAULT_CARTESIA_VOICE_ID, DEFAULT_CARTESIA_VOICE_NAME,
+  orderVoicesByLanguage, isVoiceCompatibleWithLanguage, shouldClearVoiceForLanguage,
+  baseLanguage,
   getSarvamTtsVoices, isSarvamVoiceCompatible,
   GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS, VOICE_STACK_OPTIONS,
-  geminiLiveModelLabel, isGeminiLiveAgent, isGeminiLiveLlmModel, voiceStackForLlmModel,
+  geminiLiveModelLabel, isGeminiLiveAgent, voiceStackForLlmModel,
   llmFieldsForVoiceStack,
-  languagesForAgent, isGeminiLiveLanguage,
+  languagesForAgent, isSarvamRealtimeAsr,
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
@@ -117,7 +123,8 @@ import {
   agentPathWithSection,
   type AgentTeamMembership,
 } from "./agent-team";
-import { ToolsWhatsappSetup, ToolsEmailSetup } from "./tools-messaging";
+import { ToolsWhatsappSetup, ToolsEmailSetup, connectionsSetupHref } from "./tools-messaging";
+import { WhatsappTemplateSelect, type WaCatalogEntry, type WaTplChoice } from "@/components/whatsapp/agent-template-picks";
 import { AgentAnalyticsPanel } from "./agent-analytics-panel";
 import {
   PropertyRow,
@@ -137,12 +144,11 @@ interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
 const TABS: TabDef[] = [
   { id: "overview",  label: "Overview",  icon: <Bot className="h-3.5 w-3.5" /> },
-  { id: "prompt",    label: "Prompt",    icon: <FileText className="h-3.5 w-3.5" /> },
-  { id: "voice",     label: "Voice",     icon: <Mic className="h-3.5 w-3.5" /> },
-  { id: "tools",     label: "Tools",     icon: <Wrench className="h-3.5 w-3.5" /> },
-  { id: "outcomes",  label: "Outcomes",  icon: <Tag className="h-3.5 w-3.5" /> },
-  { id: "analytics", label: "Analytics", icon: <BarChart3 className="h-3.5 w-3.5" /> },
-  { id: "voicemail", label: "Voicemail", icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
+  { id: "prompt",    label: "Script",    icon: <FileText className="h-3.5 w-3.5" /> },
+  { id: "voice",     label: "Sound",     icon: <Mic className="h-3.5 w-3.5" /> },
+  { id: "tools",     label: "Actions",   icon: <Wrench className="h-3.5 w-3.5" /> },
+  { id: "outcomes",  label: "After the call", icon: <Tag className="h-3.5 w-3.5" /> },
+  { id: "analytics", label: "Activity",  icon: <BarChart3 className="h-3.5 w-3.5" /> },
   { id: "settings",  label: "Settings",  icon: <Settings className="h-3.5 w-3.5" /> },
   { id: "versions",  label: "Versions",  icon: <History className="h-3.5 w-3.5" /> },
 ];
@@ -150,29 +156,106 @@ const TABS: TabDef[] = [
 const BUILDER_SEGMENTS: WorkspaceNavItem<TabId>[] = TABS.map((tab) => ({
   id: tab.id,
   label: tab.label,
+  // Build (overview → after the call) | Review (activity, settings, versions)
+  dividerBefore: tab.id === "analytics",
 }));
+
+/** One left edge for header, tabs, and every builder page. */
+const BUILDER_TAB_PAD = "px-5 py-6 sm:px-8";
+
+function BuilderTabHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description?: React.ReactNode;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
+      <div className="min-w-0 max-w-[68ch]">
+        <h2 className="text-[17px] font-semibold tracking-[-0.03em] text-foreground">{title}</h2>
+        {description ? (
+          <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+    </div>
+  );
+}
+
+function BuilderStatusChip({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
+        ok
+          ? "border-border/70 bg-muted/25 text-muted-foreground"
+          : "border-amber-500/35 bg-amber-500/10 text-amber-800 dark:text-amber-300",
+      )}
+    >
+      <span className={cn("size-1.5 shrink-0 rounded-full", ok ? "bg-emerald-500" : "bg-amber-500")} />
+      {label}
+    </span>
+  );
+}
+
+function BuilderPipelineStatus({ form }: { form: any }) {
+  const promptOk = String(form.watch("systemPrompt") ?? "").trim().length >= 40;
+  const greetOk = String(form.watch("greetingMessage") ?? "").trim().length >= 4;
+  const isGeminiLive = isGeminiLiveAgent({
+    llmModel: form.watch("llmModel"),
+    voiceStack: form.watch("voiceStack"),
+  });
+  const ttsVoice = form.watch("ttsVoice");
+  const voiceOk = isGeminiLive || Boolean(ttsVoice && ttsVoice !== "__custom__");
+  return (
+    <div className="hidden min-w-0 items-center gap-1 lg:flex" aria-label="Builder readiness">
+      <BuilderStatusChip ok={greetOk && promptOk} label="Script" />
+      <BuilderStatusChip ok={voiceOk} label="Sound" />
+    </div>
+  );
+}
 
 /** Map legacy ?section= values onto current tabs. */
 function sectionFromSearch(search: string): TabId {
   const requested = new URLSearchParams(search).get("section");
   if (requested === "advanced") return "settings";
-  // Channels removed — messaging/booking live under Tools.
+  // Channels removed — messaging/booking live under Actions.
   if (requested === "channels") return "tools";
+  // Voicemail now sits on After the call.
+  if (requested === "voicemail") return "outcomes";
   // Disposition used to nest under Settings → Analytics.
   if (requested === "disposition" || requested === "dispositions") {
     return "outcomes";
   }
   // Old Settings → Analytics was webhooks; real agent analytics is its own tab now.
   if (requested === "integrations") return "settings";
+  if (requested === "website" || requested === "embed") return "settings";
   return TABS.some((tab) => tab.id === requested) ? requested as TabId : "overview";
 }
 
 /* ── Small helpers ──────────────────────────────────────────────────────────── */
 
+function VoiceOptionLabel({ label, recommended }: { label: string; recommended?: boolean }) {
+  if (!recommended) return <>{label}</>;
+  return (
+    <span className="inline-flex items-center gap-1.5" title="Recommended for this language">
+      <span>{label}</span>
+      <BadgeCheck
+        className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+        aria-hidden
+        strokeWidth={2}
+      />
+    </span>
+  );
+}
+
 function SmallSelect({ value, onChange, options, placeholder }: {
   value: string | undefined;
   onChange: (v: string) => void;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; recommended?: boolean }[];
   placeholder?: string;
 }) {
   // Radix Select crashes if `value` is "" or not present in SelectItem list.
@@ -187,7 +270,9 @@ function SmallSelect({ value, onChange, options, placeholder }: {
       </SelectTrigger>
       <SelectContent position="popper" className="max-h-[280px] overflow-y-auto">
         {safeOptions.map((o) => (
-          <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+          <SelectItem key={o.value} value={o.value} className="text-xs">
+            <VoiceOptionLabel label={o.label} recommended={o.recommended} />
+          </SelectItem>
         ))}
       </SelectContent>
     </Select>
@@ -214,14 +299,51 @@ function resolveVoiceLabel(
   return voiceId;
 }
 
-function OverviewCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+/**
+ * Filled section box used by every builder tab — the title lives inside the
+ * shape so sections read as panels instead of floating labels.
+ */
+function BuilderPanel({
+  title,
+  description,
+  icon,
+  hint,
+  action,
+  children,
+  bodyClassName,
+  className,
+}: {
+  title: string;
+  description?: React.ReactNode;
+  icon?: React.ReactNode;
+  hint?: React.ReactNode;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  bodyClassName?: string;
+  className?: string;
+}) {
   return (
-    <div className="rounded-xl border border-border/60 bg-card/50 p-4 space-y-3">
-      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-        {icon}{title}
+    <section
+      className={cn(
+        "flex h-full min-h-0 flex-col rounded-xl border border-border bg-card shadow-sm",
+        className,
+      )}
+    >
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-border bg-muted/40 px-4 py-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          {icon ? <span className="shrink-0 text-muted-foreground [&_svg]:size-3.5">{icon}</span> : null}
+          <h3 className="truncate text-[13px] font-semibold tracking-[-0.02em] text-foreground">{title}</h3>
+          {description ? (
+            <span className="hidden truncate text-[12px] text-muted-foreground sm:inline">— {description}</span>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {hint}
+          {action}
+        </div>
       </div>
-      {children}
-    </div>
+      <div className={cn("flex min-h-0 flex-1 flex-col p-4", bodyClassName)}>{children}</div>
+    </section>
   );
 }
 
@@ -265,7 +387,7 @@ function KnowledgeSourceMultiSelect({ value, onChange }: {
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="w-full h-12 flex items-center justify-between rounded-lg border border-border/60 bg-card/30 px-4 text-sm text-muted-foreground hover:border-border hover:text-foreground transition-colors"
+            className="flex h-12 w-full items-center justify-between rounded-lg border border-border bg-background px-4 text-sm text-muted-foreground hover:border-foreground/20 hover:text-foreground transition-colors"
           >
             <span>
               {value.length === 0
@@ -427,14 +549,13 @@ function AgentCostSummary({
 
   if (mode === "line") {
     return (
-      <p className="text-[12px] text-muted-foreground">
-        Billed at{" "}
+      <span className="text-[11px] text-muted-foreground">
         <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
           ₹{totalPerMin.toFixed(2)}
         </span>
         <span className="text-emerald-700/70 dark:text-emerald-400/70">/min</span>
         {isByop ? " · BYOP" : ""}
-      </p>
+      </span>
     );
   }
 
@@ -518,7 +639,7 @@ function AgentCostSummary({
 }
 
 const SECTION_FIELDS: Record<CardSection, string[]> = {
-  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "languageAutoDetect", "multilingualLanguages", "sarvamIndicNumbers"],
+  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "sarvamSttStreamType", "sarvamSttPrompt", "languageAutoDetect", "multilingualLanguages", "sarvamIndicNumbers"],
   model: ["voiceStack", "llmProvider", "llmModel", "temperature"],
   voice: ["ttsProvider", "ttsModel", "ttsVoice", "ttsSpeed", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
 };
@@ -557,9 +678,9 @@ function OverviewTab({
   const ttsModel              = form.watch("ttsModel");
   const language              = form.watch("language");
   const temperature           = form.watch("temperature") ?? 0.4;
-  const llmOptions    = LLM_MODELS[llmProvider]  ?? [];
+  const llmOptions    = llmModelsForPicker(llmProvider, llmModel);
   const ttsModelOpts  = TTS_MODELS[ttsProvider]  ?? [];
-  const asrModelOpts  = ASR_MODELS[asrProvider]  ?? [];
+  const asrModelOpts  = asrModelsForPicker(asrProvider, asrModel);
 
   // Fetch admin-whitelisted voices (shared cache with VoiceTab)
   const { data: whitelistedData } = useQuery({
@@ -578,24 +699,30 @@ function OverviewTab({
   const mySarvamClones = myClones.filter((c) => c.provider === "sarvam");
   const [sarvamCloneOpen, setSarvamCloneOpen] = useState(false);
 
-  // Curated Cartesia voice list: prefer admin whitelist (language-filtered),
-  // fall back to the static catalog when whitelist is empty so "Choose voice"
-  // always has options. Always append the current voice if it's missing so the
-  // select can display it. Always end with Paste-custom.
+  // Curated Cartesia voice list: show ALL admin-whitelisted voices, with
+  // language-matching (recommended) voices sorted to the top. Fall back to the
+  // static catalog when whitelist is empty. Always append the current voice if
+  // missing so the select can display it. Always end with Paste-custom.
   const cartesiaOverviewOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const filtered = filterVoicesForLanguage(all, language);
+    const ordered = orderVoicesByLanguage(all, language);
     const seen = new Set<string>();
-    const opts: { value: string; label: string }[] = [];
+    const opts: { value: string; label: string; recommended?: boolean }[] = [];
     for (const c of myCartesiaClones) {
       if (seen.has(c.id)) continue;
       seen.add(c.id);
       opts.push({ value: c.id, label: `✦ ${c.name}` });
     }
-    for (const v of filtered) {
+    for (const v of ordered) {
       if (seen.has(v.id)) continue;
       seen.add(v.id);
-      opts.push({ value: v.id, label: v.name });
+      const recommended = isVoiceCompatibleWithLanguage(v.language, language)
+        && baseLanguage(language) !== "en";
+      opts.push({
+        value: v.id,
+        label: v.name,
+        recommended: recommended || undefined,
+      });
     }
     if (opts.length === 0 && Array.isArray(TTS_VOICES.cartesia)) {
       for (const v of TTS_VOICES.cartesia) {
@@ -679,22 +806,24 @@ function OverviewTab({
     return opts;
   }, [mySarvamClones, ttsModel, ttsVoice]);
 
-  const ttsVoiceOpts: { value: string; label: string }[] =
+  const ttsVoiceOpts: { value: string; label: string; recommended?: boolean }[] =
     ttsProvider === "cartesia"
       ? cartesiaOverviewOpts
       : ttsProvider === "sarvam"
       ? sarvamOverviewOpts
-      : ((ttsVoiceRaw ?? []) as { value: string; label: string }[]);
+      : ((ttsVoiceRaw ?? []) as { value: string; label: string; recommended?: boolean }[]);
 
-  const asrLabel       = ASR_PROVIDERS.find(p => p.value === asrProvider)?.label ?? asrProvider;
   const llmLabel       = LLM_PROVIDERS.find(p => p.value === llmProvider)?.label ?? llmProvider;
   const ttsLabel       = TTS_PROVIDERS.find(p => p.value === ttsProvider)?.label ?? ttsProvider;
   const langLabel      = LANGUAGES.find(l => l.value === language)?.label ?? language;
   const llmModelLabel  = llmOptions.find((m: any) => m.value === llmModel)?.label ?? llmModel;
   const curatedVoiceOpts = ttsVoiceOpts.filter(v => v.value !== "__custom__");
   const inCuratedList    = curatedVoiceOpts.some(v => v.value === ttsVoice);
-  // Languages like Marathi have no vendor-tagged voices, so the picker falls back
-  // to the full catalog instead of going empty — tell the user that's what happened.
+  // Languages with dedicated tags: recommended voices are sorted first.
+  // Languages with no tags: every voice is available (same full list).
+  const hasRecommendedVoicesForLanguage =
+    (whitelistedData?.voices ?? []).some(v => isVoiceCompatibleWithLanguage(v.language, language))
+    && baseLanguage(language) !== "en";
   const showingAllVoicesForLanguage =
     (whitelistedData?.voices ?? []).length > 0 &&
     (whitelistedData?.voices ?? []).every(v => !isVoiceCompatibleWithLanguage(v.language, language));
@@ -788,12 +917,16 @@ function OverviewTab({
   return (
     <div className="flex flex-col">
       <div className="relative min-w-0">
-        <div className="space-y-5 p-5 sm:p-6">
-          {/* Compact status — no duplicate checklist of Phone/Knowledge/Voice */}
-          <section className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <div className="min-w-0 space-y-0.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Overview</h2>
+        <div className={cn("space-y-6", BUILDER_TAB_PAD)}>
+          <BuilderTabHeader
+            title="Overview"
+            description={
+              missingSetup.length === 0
+                ? "Ready to test. Script, sound, and phone are set."
+                : `Still needs ${missingSetup.join(", ")}.`
+            }
+            actions={
+              <>
                 {missingSetup.length === 0 ? (
                   <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                     <Check className="size-3" />
@@ -802,50 +935,48 @@ function OverviewTab({
                 ) : (
                   <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-300">
                     <AlertCircle className="size-3" />
-                    Needs {missingSetup.slice(0, 2).join(", ")}
-                    {missingSetup.length > 2 ? ` +${missingSetup.length - 2}` : ""}
+                    {missingSetup.length} to finish
                   </span>
                 )}
-              </div>
-              <AgentCostSummary form={form} rateMap={rateMap} variant="line" />
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {onGoToAnalytics && agent?.id ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5 text-xs"
-                  onClick={onGoToAnalytics}
-                >
-                  <BarChart3 className="size-3.5" />
-                  Analytics
-                </Button>
-              ) : null}
-              {onGoToPrompt && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5 text-xs"
-                  onClick={onGoToPrompt}
-                >
-                  <FileText className="size-3.5" />
-                  Edit prompt
-                </Button>
-              )}
-            </div>
-          </section>
+                {onGoToAnalytics && agent?.id ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={onGoToAnalytics}
+                  >
+                    <BarChart3 className="size-3.5" />
+                    Activity
+                  </Button>
+                ) : null}
+                {onGoToPrompt && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={onGoToPrompt}
+                  >
+                    <FileText className="size-3.5" />
+                    Edit script
+                  </Button>
+                )}
+              </>
+            }
+          />
 
-          {/* Pipeline — primary composition */}
-          <section className="space-y-2.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Pipeline</p>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+          <BuilderPanel
+            title="How it talks"
+            icon={<AudioLines />}
+            hint={<AgentCostSummary form={form} rateMap={rateMap} variant="line" />}
+          >
+            <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-3">
               <AgentConfigCard
                 icon={isGeminiLive ? <Globe /> : <Mic />}
                 label={isGeminiLive ? "Language" : "Transcriber"}
                 value={langLabel}
-                subtext={isGeminiLive ? "Gemini Live conversation language" : <>{asrLabel}{asrModel ? ` · ${asrModel}` : ""}</>}
+                subtext={isGeminiLive ? "Gemini Live conversation language" : "Caller speech"}
                 active={openSection === "transcriber"}
                 onClick={() => openPipelineDialog("transcriber")}
               />
@@ -866,50 +997,79 @@ function OverviewTab({
                 onClick={() => openPipelineDialog("voice")}
               />
             </div>
-          </section>
+          </BuilderPanel>
 
-          {/* Phone + Knowledge side by side — one job each, no duplicate Knowledge banner */}
-          <section className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+          <section className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
             {agent?.id != null && (
-              <div className="space-y-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Phone</p>
+              <BuilderPanel
+                title="Phone"
+                icon={<PhoneForwarded />}
+                hint={phoneReady ? (
+                  <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">Live</span>
+                ) : (
+                  <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-300">Required</span>
+                )}
+                action={
+                  <Link href="/app/phone-numbers" className="text-[11px] font-medium text-muted-foreground hover:text-foreground">
+                    Numbers →
+                  </Link>
+                }
+              >
                 <AgentInboundPanel
                   agentId={agent.id}
                   preferredManagedNumber={form.watch("preferredManagedNumber")}
                   telephonyProvider={form.watch("telephonyProvider")}
+                  bare
                 />
-              </div>
+              </BuilderPanel>
             )}
-            <div className="space-y-2">
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Knowledge</p>
-                <span className="text-[10px] text-muted-foreground/70">
+            <BuilderPanel
+              title="Knowledge"
+              icon={<BookOpen />}
+              hint={
+                <span className="text-[10px] text-muted-foreground">
                   {knowledgeIds.length > 0
                     ? `${knowledgeIds.length} source${knowledgeIds.length === 1 ? "" : "s"}`
                     : "Optional"}
                 </span>
-              </div>
-              <div className="rounded-xl border border-border/60 bg-card/40 p-3 space-y-2">
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Documents searched during live calls and injected into context.
+              }
+            >
+              <p className="text-[12px] leading-relaxed text-muted-foreground">
+                Documents searched during live calls and injected into context.
+              </p>
+              <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
+                <FormItem className="mt-3 space-y-0">
+                  <FormControl>
+                    <KnowledgeSourceMultiSelect
+                      value={(field.value ?? []) as number[]}
+                      onChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormMessage className="text-[10px]" />
+                </FormItem>
+              )} />
+              {knowledgeIds.length === 0 ? (
+                <p className="mt-auto pt-4 text-[11px] leading-relaxed text-muted-foreground">
+                  Empty is fine. Attach a source only if this agent should look things up on the call.
                 </p>
-                <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
-                  <FormItem className="space-y-0">
-                    <FormControl>
-                      <KnowledgeSourceMultiSelect
-                        value={(field.value ?? []) as number[]}
-                        onChange={field.onChange}
-                      />
-                    </FormControl>
-                    <FormMessage className="text-[10px]" />
-                  </FormItem>
-                )} />
-              </div>
-            </div>
+              ) : null}
+            </BuilderPanel>
           </section>
 
           {agent?.id != null && (
-            <AgentTeamStrip agentId={agent.id} compact />
+            <BuilderPanel title="Team" icon={<Users />}>
+              <AgentTeamStrip agentId={agent.id} compact />
+            </BuilderPanel>
+          )}
+
+          {agent?.id != null && (
+            <BuilderPanel
+              title="Website embed"
+              icon={<Globe />}
+              description="Copy this onto your site so visitors can webcall this agent in the browser"
+            >
+              <AgentWebsiteEmbedPanel agentId={agent.id} agentName={agent.name ?? ""} />
+            </BuilderPanel>
           )}
 
           {/* ── Transcriber / Language dialog ── */}
@@ -922,7 +1082,7 @@ function OverviewTab({
             description={
               isGeminiLive
                 ? "Choose the conversation language for Gemini Live. Native audio has no separate STT — language is enforced via system instructions."
-                : "Choose the speech-to-text provider, model, and language used to transcribe caller audio."
+                : "What language callers speak, and how their words should be written."
             }
           >
             {isGeminiLive && (
@@ -930,12 +1090,12 @@ function OverviewTab({
                 Gemini Live supports ~97 languages. Pick the primary language callers should hear and speak.
               </p>
             )}
-            <div className={isGeminiLive ? "space-y-3" : "grid grid-cols-2 gap-3"}>
+            <div className="space-y-4">
               <FormField control={form.control} name="language" render={({ field }) => {
                 const langOpts = languagesForAgent(isGeminiLive);
                 const current = field.value ?? "";
-                // Keep current selection visible even if it isn't in the Live catalog.
-                const options = (!isGeminiLive || !current || isGeminiLiveLanguage(current) || langOpts.some(l => l.value === current))
+                const inList = langOpts.some(l => l.value === current);
+                const options = (!current || inList)
                   ? langOpts
                   : [{ value: current, label: LANGUAGES.find(l => l.value === current)?.label ?? current }, ...langOpts];
                 return (
@@ -943,23 +1103,26 @@ function OverviewTab({
                   <FormLabel className="text-[10px] text-muted-foreground">Language</FormLabel>
                   <SmallSelect value={field.value} onChange={(v) => {
                     field.onChange(v);
-                    // Language alone must never force Gemini Live / swap the LLM.
-                    // Users pick model + voice stack explicitly in the Model / Voice cards.
                   }}
                     options={options.map(l => ({ value: l.value, label: l.label }))} placeholder="Select language" />
                 </FormItem>
                 );
               }} />
-              {!isGeminiLive && (
-              <FormField control={form.control} name="asrProvider" render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
-                  <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("asrModel", ""); }}
-                    options={ASR_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
-                </FormItem>
-              )} />
+              {!isGeminiLive && asrProvider === "sarvam" && asrModel && asrModel !== SARVAM_PRODUCT_ASR_MODEL && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 space-y-2">
+                  <p className="text-[11px] text-foreground/80 leading-snug">
+                    This agent is on a legacy transcriber. Switch to Saaras v3 for live calls.
+                  </p>
+                  <button
+                    type="button"
+                    className="text-[11px] font-medium text-primary hover:underline"
+                    onClick={() => form.setValue("asrModel", SARVAM_PRODUCT_ASR_MODEL, { shouldDirty: true })}
+                  >
+                    Use Saaras v3
+                  </button>
+                </div>
               )}
-              {!isGeminiLive && asrModelOpts.length > 0 && (
+              {!isGeminiLive && asrProvider === "sarvam" && asrModelOpts.length > 1 && (
                 <FormField control={form.control} name="asrModel" render={({ field }) => (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
@@ -971,37 +1134,69 @@ function OverviewTab({
               )}
               {!isGeminiLive && asrProvider === "sarvam" && (
                 <FormField control={form.control} name="sarvamSttMode" render={({ field }) => {
-                  // Must match resolveSarvamSttMode: en → codemix, Indic → transcribe
-                  const lang = form.watch("language") ?? "";
-                  const autoDefault = lang.toLowerCase().startsWith("en") ? "codemix" : "transcribe";
-                  const currentValue = field.value ?? autoDefault;
+                  const currentValue = field.value ?? "codemix";
                   return (
                   <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] font-medium text-foreground/80">Speech Mode</FormLabel>
+                    <FormLabel className="text-[10px] font-medium text-foreground/80">How speech is written</FormLabel>
                     <SmallSelect value={currentValue} onChange={field.onChange}
                       options={[
-                        { value: "codemix", label: "Code-mix (English + regional, e.g. Hinglish)" },
-                        { value: "transcribe", label: "Transcribe (native script, e.g. हिंदी / தமிழ்)" },
-                        { value: "verbatim", label: "Verbatim (exact as spoken, incl. fillers)" },
-                        { value: "translit", label: "Translit (Indic speech → Roman script)" },
-                        { value: "translate", label: "Translate (speech → English text)" },
+                        { value: "codemix", label: "Mixed — Hinglish, Tanglish, …" },
+                        { value: "transcribe", label: "Native script — हिंदी, தமிழ்" },
+                        { value: "translate", label: "English text — any language spoken" },
+                        ...(currentValue === "verbatim"
+                          ? [{ value: "verbatim", label: "Verbatim — include fillers" }]
+                          : []),
+                        ...(currentValue === "translit"
+                          ? [{ value: "translit", label: "Roman script — Indic in Latin letters" }]
+                          : []),
                       ]} />
                     <p className="text-[9.5px] text-muted-foreground leading-snug mt-1">
                       {currentValue === "transcribe"
-                        ? "Clean native-script transcript. Recommended for Indic languages."
+                        ? "Every word in native script (मेरा फोन नंबर). Not for Hinglish — English becomes हिंदी."
                         : currentValue === "codemix"
-                        ? "English words stay Latin; regional words stay native. Recommended for en-IN / mixed speech."
+                        ? "Sarvam's code-mix mode: English stays English, Hindi stays हिंदी. Right default for Indian calls."
                         : currentValue === "verbatim"
                         ? "Keeps fillers and exact phrasing as spoken."
                         : currentValue === "translit"
-                        ? "Writes Indic speech in Roman/Latin script."
+                        ? "Writes Indic speech in English letters."
                         : currentValue === "translate"
-                        ? "Speech-to-English: any language spoken → English text."
-                        : "Auto: English → code-mix, Indic → native-script transcribe."}
+                        ? "Whatever the caller speaks is written as English."
+                        : "Defaults to mixed speech so Hinglish is captured. Pick native script only if every word should stay in हिंदी / தமிழ்."}
                     </p>
                   </FormItem>
                   );
                 }} />
+              )}
+              {!isGeminiLive && asrProvider === "sarvam" && (
+                <FormField control={form.control} name="sarvamSttPrompt" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] font-medium text-foreground/80">Brand names & terms</FormLabel>
+                    <Input
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      placeholder="e.g. SuperBae, IRDAI, UPI, GSTIN"
+                      className="h-8 text-[11px]"
+                      maxLength={500}
+                    />
+                    <p className="text-[9.5px] text-muted-foreground leading-snug mt-1">
+                      Helps the transcriber spell these words correctly.
+                    </p>
+                  </FormItem>
+                )} />
+              )}
+              {!isGeminiLive && asrProvider === "sarvam" && form.watch("sarvamSttStreamType") === "simulated" && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 space-y-2">
+                  <p className="text-[11px] text-foreground/80 leading-snug">
+                    Partials are off, so the agent waits for a full sentence before it can hear an interrupt. Turn this on for live calls.
+                  </p>
+                  <button
+                    type="button"
+                    className="text-[11px] font-medium text-primary hover:underline"
+                    onClick={() => form.setValue("sarvamSttStreamType", "fast", { shouldDirty: true })}
+                  >
+                    Use fast partials
+                  </button>
+                </div>
               )}
             </div>
             <div className="space-y-3 border-t border-border pt-3 mt-1">
@@ -1012,7 +1207,7 @@ function OverviewTab({
                   <p className="text-[9px] text-muted-foreground">
                     {isGeminiLive
                       ? "Allow Gemini Live to follow the caller when they switch languages mid-call."
-                      : "Follow along when the caller switches languages (Sarvam STT + TTS)."}
+                      : "Follow the caller if they switch languages mid-call."}
                   </p>
                 </div>
                 <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
@@ -1037,7 +1232,7 @@ function OverviewTab({
                   return (
                     <FormItem className="space-y-1.5">
                       <FormLabel className="text-[10px] font-medium text-foreground/80">Languages allowed</FormLabel>
-                      <p className="text-[9px] text-muted-foreground">Languages the agent can understand and reply in.</p>
+                      <p className="text-[9px] text-muted-foreground">Languages this agent can understand and reply in.</p>
                       <div className="flex flex-wrap gap-1.5">
                         {SARVAM_PERSONALISATION_LANGUAGES.map((lang) => {
                           const on = selected.has(lang.value);
@@ -1119,34 +1314,23 @@ function OverviewTab({
               <FormField control={form.control} name="llmProvider" render={({ field }) => (
                 <FormItem className="space-y-1">
                   <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
-                  {isGeminiLive ? (
-                    <p className="text-xs font-medium pt-1.5">Gemini Live (native audio)</p>
-                  ) : (
                   <SmallSelect value={field.value} onChange={(v) => {
                     field.onChange(v);
                     form.setValue("llmModel", "");
                     form.setValue("voiceStack", "classic");
                   }}
                     options={LLM_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
-                  )}
                 </FormItem>
               )} />
-              {isGeminiLive ? (
-                <div className="space-y-1">
-                  <p className="text-[10px] text-muted-foreground">Model</p>
-                  <p className="text-xs font-medium pt-1.5">{geminiLiveModelLabel()}</p>
-                </div>
-              ) : llmOptions.filter((m: { value: string }) => !isGeminiLiveLlmModel(m.value)).length > 0 && (
+              {llmOptions.length > 0 && (
                 <FormField control={form.control} name="llmModel" render={({ field }) => (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
                     <SmallSelect value={field.value ?? ""} onChange={(v) => {
                       field.onChange(v);
-                      form.setValue("voiceStack", "classic");
+                      form.setValue("voiceStack", voiceStackForLlmModel(v), { shouldDirty: true });
                     }}
-                      options={llmOptions
-                        .filter((m: { value: string }) => !isGeminiLiveLlmModel(m.value))
-                        .map((m: { value: string; label: string }) => ({ value: m.value, label: m.label }))} placeholder="Default" />
+                      options={llmOptions.map((m: { value: string; label: string }) => ({ value: m.value, label: m.label }))} placeholder="Default" />
                     <FormMessage className="text-[10px]" />
                   </FormItem>
                 )} />
@@ -1239,7 +1423,7 @@ function OverviewTab({
                         className="h-7 text-[10px] gap-1 px-2"
                         onClick={() => setCloneOpen(true)}
                       >
-                        <Sparkles className="h-3 w-3" />
+                        <CopyPlus className="h-3 w-3" />
                         Clone voice
                       </Button>
                     )}
@@ -1251,7 +1435,7 @@ function OverviewTab({
                         className="h-7 text-[10px] gap-1 px-2"
                         onClick={() => setSarvamCloneOpen(true)}
                       >
-                        <Sparkles className="h-3 w-3" />
+                        <CopyPlus className="h-3 w-3" />
                         Add Sarvam clone
                       </Button>
                     )}
@@ -1276,13 +1460,22 @@ function OverviewTab({
                               setVoiceCustomMode(false);
                               field.onChange(v);
                             }}
-                            options={ttsVoiceOpts.map(v => ({ value: v.value, label: v.label }))}
+                            options={ttsVoiceOpts.map(v => ({
+                              value: v.value,
+                              label: v.label,
+                              recommended: v.recommended,
+                            }))}
                             placeholder="Select a voice…"
                           />
                         </FormControl>
                         <FormMessage className="text-[10px]" />
                       </FormItem>
                     )} />
+                  )}
+                  {ttsProvider === "cartesia" && hasRecommendedVoicesForLanguage && (
+                    <p className="text-[10px] text-muted-foreground leading-relaxed rounded-md border border-border bg-muted/40 px-2.5 py-2">
+                      Voices recommended for {langLabel} are listed first. You can still pick any other voice.
+                    </p>
                   )}
                   {ttsProvider === "cartesia" && showingAllVoicesForLanguage && (
                     <p className="text-[10px] text-muted-foreground leading-relaxed rounded-md border border-border bg-muted/40 px-2.5 py-2">
@@ -1349,10 +1542,7 @@ function OverviewTab({
 
 /* ── Tab: Prompt ────────────────────────────────────────────────────────────── */
 
-function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
-  const [, navigate] = useLocation();
-  const { teamByAgentId } = useAgentTeamMap();
-  const team = agentId != null ? teamByAgentId.get(agentId) : undefined;
+function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }) {
   const { fields: pvFields, append: pvAppend, remove: pvRemove } = useFieldArray({ control: form.control, name: "promptVariables" });
   const [generateOpen, setGenerateOpen] = useState(false);
   const [promptSurface, setPromptSurface] = useState<"calls" | "meetings">("calls");
@@ -1369,7 +1559,11 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
   }, [canAttendMeetings, promptSurface]);
 
   return (
-    <div className="relative flex min-h-full flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
+    <div className={cn("relative flex min-h-full flex-col gap-6", BUILDER_TAB_PAD)}>
+      <BuilderTabHeader
+        title="Script"
+        description="Welcome first, then the instructions for the whole call. Live-test from the header before you publish."
+      />
       <GeneratePromptSheet
         open={generateOpen}
         onOpenChange={setGenerateOpen}
@@ -1383,146 +1577,102 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
         }}
       />
 
-      {team && team.members.length >= 2 && (
-        <section className="space-y-2 rounded-xl border border-border/60 bg-muted/15 px-3.5 py-3">
-          <div className="space-y-0.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Team prompts</p>
-            <p className="text-[12px] text-muted-foreground leading-snug">
-              Each teammate has their own prompt. Handoffs use the specialist&apos;s prompt.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {team.members.map((m) => {
-              const active = m.agentId === agentId;
-              return (
-                <button
-                  key={m.agentId}
-                  type="button"
-                  disabled={active}
-                  onClick={() => navigate(agentPathWithSection(m.agentId, "prompt"))}
-                  className={cn(
-                    "inline-flex max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] transition-colors",
-                    active
-                      ? "border-foreground/25 bg-background font-medium text-foreground"
-                      : "border-border/70 bg-background/60 text-muted-foreground hover:border-foreground/20 hover:text-foreground",
-                  )}
-                  title={active ? `Editing ${m.agentName}'s prompt` : `Edit ${m.agentName}'s prompt`}
-                >
-                  <span className="truncate">{active ? `Editing ${m.agentName}` : m.agentName}</span>
-                  <span className="truncate text-muted-foreground">· {m.roleName}</span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      <section className="space-y-3">
-        <div className="space-y-0.5">
-          <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Welcome</h2>
-          <p className="text-[12px] text-muted-foreground">
-            What callers hear at the start of the call.
-          </p>
-        </div>
-        <div className="space-y-3 overflow-hidden rounded-lg border border-border bg-card p-3.5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Label className="text-[12px] font-medium text-foreground/90">Who speaks first</Label>
-            <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
-              <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
-                <SelectTrigger className="h-8 w-48 shrink-0 border-border/50 text-[12px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  <SelectItem value="assistant" className="text-[13px]">Assistant speaks first</SelectItem>
-                  <SelectItem value="user" className="text-[13px]">User speaks first</SelectItem>
-                </SelectContent>
-              </Select>
-            )} />
-          </div>
-          <FormField control={form.control} name="greetingMessage" render={({ field }) => (
-            <FormItem className="space-y-0">
-              <FormControl>
-                <Textarea
-                  className="min-h-[72px] max-h-[120px] resize-none rounded-lg border-border/40 bg-background/50 px-3.5 py-2.5 text-[13px] leading-relaxed shadow-none focus-visible:border-foreground/20 focus-visible:ring-0"
-                  placeholder="Hello, how can I help?"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage className="text-[10px]" />
-            </FormItem>
+      <BuilderPanel
+        title="Welcome"
+        icon={<MessageCircle />}
+        description="What callers hear first"
+        bodyClassName="gap-3"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Label className="text-[12px] font-medium text-foreground/90">Who speaks first</Label>
+          <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
+            <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
+              <SelectTrigger className="h-8 w-48 shrink-0 text-[12px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectItem value="assistant" className="text-[13px]">Assistant speaks first</SelectItem>
+                <SelectItem value="user" className="text-[13px]">User speaks first</SelectItem>
+              </SelectContent>
+            </Select>
           )} />
         </div>
-      </section>
+        <FormField control={form.control} name="greetingMessage" render={({ field }) => (
+          <FormItem className="space-y-0">
+            <FormControl>
+              <Textarea
+                className="min-h-[72px] max-h-[120px] resize-none rounded-lg border-border bg-background px-3.5 py-2.5 text-[13px] leading-relaxed shadow-none focus-visible:border-foreground/20 focus-visible:ring-0"
+                placeholder="Hello, how can I help?"
+                {...field}
+              />
+            </FormControl>
+            <FormMessage className="text-[10px]" />
+            <p className="pt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+              Spoken first on inbound and outbound. What you type here is what they hear — including a short “Hello”.
+              If this is empty, the opener comes from the agent prompt.
+            </p>
+          </FormItem>
+        )} />
+      </BuilderPanel>
 
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Talk</h2>
+      <BuilderPanel
+        title="Talk"
+        icon={<FileText />}
+        description={canAttendMeetings ? "Phone calls and meetings" : "Instructions for phone calls"}
+        hint={
+          <>
             <Badge variant="secondary" className="h-5 rounded-md px-1.5 py-0 text-[10px] font-medium">
               {langLabel}
             </Badge>
-          </div>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">
-            {canAttendMeetings
-              ? "Instructions for phone calls and for when this agent joins Meet."
-              : "Instructions for phone calls."}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="hidden text-[10px] tabular-nums text-muted-foreground sm:inline">
-            {promptLen.toLocaleString()} chars
-          </span>
-          {promptSurface === "calls" && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-[11px]"
-              onClick={() => setGenerateOpen(true)}
-            >
-              <Sparkles className="size-3.5" />
-              Generate
-            </Button>
-          )}
-        </div>
-      </div>
-
+            <span className="hidden text-[10px] tabular-nums text-muted-foreground sm:inline">
+              {promptLen.toLocaleString()} chars
+            </span>
+          </>
+        }
+        action={promptSurface === "calls" ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 text-[11px]"
+            onClick={() => setGenerateOpen(true)}
+          >
+            <Sparkles className="size-3.5" />
+            Generate
+          </Button>
+        ) : undefined}
+        bodyClassName="p-0"
+      >
       {canAttendMeetings ? (
         <Tabs value={promptSurface} onValueChange={(v) => setPromptSurface(v as "calls" | "meetings")} className="w-full">
-          <TabsList className="h-9 w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
-            <TabsTrigger value="calls" className="gap-1.5 text-xs">
-              <Phone className="h-3.5 w-3.5" />
-              On calls
-            </TabsTrigger>
-            <TabsTrigger value="meetings" className="gap-1.5 text-xs">
-              <Video className="h-3.5 w-3.5" />
-              In meetings
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="calls" className="mt-3">
+          <div className="border-b border-border px-4 py-2.5">
+            <TabsList className="h-9 w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
+              <TabsTrigger value="calls" className="gap-1.5 text-xs">
+                <Phone className="h-3.5 w-3.5" />
+                On calls
+              </TabsTrigger>
+              <TabsTrigger value="meetings" className="gap-1.5 text-xs">
+                <Video className="h-3.5 w-3.5" />
+                In meetings
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="calls" className="mt-0">
             <FormField control={form.control} name="systemPrompt" render={({ field }) => (
               <FormItem className="space-y-0">
                 <FormControl>
-                  <div className="overflow-hidden rounded-lg border border-border bg-card">
-                    <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
-                      <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                        Call prompt
-                      </span>
-                      <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
-                    </div>
-                    <Textarea
-                      className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                      placeholder="You are a helpful voice assistant on phone calls…"
-                      {...field}
-                    />
-                  </div>
+                  <Textarea
+                    className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-4 py-4 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                    placeholder="You are a helpful voice assistant on phone calls…"
+                    {...field}
+                  />
                 </FormControl>
-                <FormMessage className="mt-2" />
+                <FormMessage className="px-4 pb-3" />
               </FormItem>
             )} />
           </TabsContent>
-          <TabsContent value="meetings" className="mt-3 space-y-3">
-            <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
+          <TabsContent value="meetings" className="mt-0">
+            <div className="border-b border-border bg-muted/25 px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
               <p className="font-medium text-foreground/90">Meeting ≠ phone call</p>
               <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
                 <li>People may ask you to wait 2–3 minutes for others — stay quiet after one acknowledgment.</li>
@@ -1539,30 +1689,22 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
             <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
               <FormItem className="space-y-0">
                 <FormControl>
-                  <div className="overflow-hidden rounded-lg border border-border bg-card">
-                    <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
-                      <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                        Meeting prompt
-                      </span>
-                      <span className="font-mono text-[10px] text-muted-foreground/70">blank = use call prompt</span>
-                    </div>
-                    <Textarea
-                      className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                      placeholder={"You are a participant in a live video meeting…\nIf asked to wait for others, acknowledge once and stay quiet.\nAddress people by name when speaker tags appear."}
-                      {...field}
-                      value={field.value ?? ""}
-                    />
-                  </div>
+                  <Textarea
+                    className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-4 py-4 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                    placeholder={"You are a participant in a live video meeting…\nIf asked to wait for others, acknowledge once and stay quiet.\nAddress people by name when speaker tags appear."}
+                    {...field}
+                    value={field.value ?? ""}
+                  />
                 </FormControl>
-                <FormMessage className="mt-2" />
+                <FormMessage className="px-4" />
               </FormItem>
             )} />
-            <p className="text-[11px] text-muted-foreground">
-              Phone + meetings agents can join Meet/Zoom/Teams from{" "}
+            <p className="border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
+              Blank uses the call prompt. Join links, wait time, and deck live on{" "}
               <Link href={agentId ? `/app/meet?agentId=${agentId}` : "/app/meet"} className="underline underline-offset-2">
                 Meeting bots
-              </Link>{" "}
-              (paste link) or from a booking. Configure wait time, max length, and deck there — not under Tools.
+              </Link>
+              .
             </p>
           </TabsContent>
         </Tabs>
@@ -1570,30 +1712,20 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
         <FormField control={form.control} name="systemPrompt" render={({ field }) => (
           <FormItem className="space-y-0">
             <FormControl>
-              <div className="overflow-hidden rounded-lg border border-border bg-card">
-                <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
-                  <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                    Call prompt
-                  </span>
-                  <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
-                </div>
-                <Textarea
-                  className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                  placeholder="You are a helpful voice assistant on phone calls…"
-                  {...field}
-                />
-              </div>
+              <Textarea
+                className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-4 py-4 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                placeholder="You are a helpful voice assistant on phone calls…"
+                {...field}
+              />
             </FormControl>
-            <FormMessage className="mt-2" />
+            <FormMessage className="px-4 pb-3" />
           </FormItem>
         )} />
       )}
+      </BuilderPanel>
 
-      <section className="overflow-hidden rounded-lg border border-border bg-card">
-        <div className="border-b border-border/70 px-3.5 py-2.5">
-          <h3 className="text-[11px] font-semibold">Call behaviour</h3>
-        </div>
-        <div className="px-3.5">
+      <BuilderPanel title="Call behaviour" icon={<Settings />} bodyClassName="p-0 px-4">
+        <div>
           <PropertyRow
             label="Timezone"
             description="Injected as current-time context"
@@ -1622,33 +1754,38 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
             )} />
           </PropertyRow>
         </div>
-      </section>
+      </BuilderPanel>
 
-      <section className="overflow-hidden rounded-lg border border-border bg-card">
-        <div className="flex h-10 items-center justify-between border-b border-border/70 px-3.5">
-          <div>
-            <h3 className="text-[11px] font-semibold">Prompt variables</h3>
-            <p className="text-[10px] text-muted-foreground">Use {"{{variable}}"} in the prompt</p>
-          </div>
+      <BuilderPanel
+        title="Prompt variables"
+        icon={<Layers />}
+        description={`Use ${"{{variable}}"} in the prompt`}
+        action={
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="h-7 gap-1 px-2 text-[11px]"
+            className="h-7 gap-1 px-2.5 text-[11px]"
             onClick={() => pvAppend({ key: "", defaultValue: "", description: "" })}
           >
             <Plus className="size-3" />
             Add
           </Button>
-        </div>
+        }
+        bodyClassName="p-0"
+      >
         {pvFields.length === 0 ? (
-          <p className="px-3.5 py-5 text-[11px] text-muted-foreground">
-            No variables yet.
+          <p className="px-4 py-5 text-[12px] leading-relaxed text-muted-foreground">
+            Optional defaults for {"{{placeholders}}"}. On each{" "}
+            <code className="font-mono text-[11px]">POST /calls/outbound</code>, pass a{" "}
+            <code className="font-mono text-[11px]">variables</code> object (patient name, category,
+            questions). Those values override defaults for that call only — one agent can serve many
+            questionnaires.
           </p>
         ) : (
-          <div className="divide-y divide-border/70">
+          <div className="divide-y divide-border">
             {pvFields.map((f, i) => (
-              <div key={f.id} className="grid grid-cols-[1fr_1fr_minmax(0,1.4fr)_28px] items-center gap-2 px-3.5 py-2.5">
+              <div key={f.id} className="grid grid-cols-[1fr_1fr_minmax(0,1.4fr)_28px] items-center gap-2 px-4 py-2.5">
                 <FormField control={form.control} name={`promptVariables.${i}.key`} render={({ field: ff }) => (
                   <FormItem className="space-y-0">
                     <FormControl><Input placeholder="key" className="h-8 text-xs" {...ff} /></FormControl>
@@ -1678,7 +1815,7 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
             ))}
           </div>
         )}
-      </section>
+      </BuilderPanel>
     </div>
   );
 }
@@ -1714,23 +1851,28 @@ function VoiceTab({ form }: { form: any }) {
   const myCartesiaClonesV = myClones.filter((c) => (c.provider ?? "cartesia") === "cartesia");
   const mySarvamClonesV = myClones.filter((c) => c.provider === "sarvam");
 
-  // Shared language filter (single source of truth in agent-providers.ts):
-  // English agents see ALL whitelisted voices; non-English agents see only
-  // their language's voices. Identical to the Overview section's list.
+  // Show ALL whitelisted voices; language matches (recommended) sorted first.
+  // Identical to the Overview section's list.
   const cartesiaVoiceOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const filtered = filterVoicesForLanguage(all, agentLanguage);
+    const ordered = orderVoicesByLanguage(all, agentLanguage);
     const seen = new Set<string>();
-    const opts: { value: string; label: string }[] = [];
+    const opts: { value: string; label: string; recommended?: boolean }[] = [];
     for (const c of myCartesiaClonesV) {
       if (seen.has(c.id)) continue;
       seen.add(c.id);
       opts.push({ value: c.id, label: `✦ ${c.name}` });
     }
-    for (const v of filtered) {
+    for (const v of ordered) {
       if (seen.has(v.id)) continue;
       seen.add(v.id);
-      opts.push({ value: v.id, label: v.name });
+      const recommended = isVoiceCompatibleWithLanguage(v.language, agentLanguage)
+        && baseLanguage(agentLanguage) !== "en";
+      opts.push({
+        value: v.id,
+        label: v.name,
+        recommended: recommended || undefined,
+      });
     }
     if (opts.length === 0 && Array.isArray(TTS_VOICES.cartesia)) {
       for (const v of TTS_VOICES.cartesia) {
@@ -1801,16 +1943,19 @@ function VoiceTab({ form }: { form: any }) {
 
   // For non-Cartesia providers fall back to the hardcoded list
   const ttsVoiceRawV  = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
-  const ttsVoiceOptsV: { value: string; label: string }[] =
+  const ttsVoiceOptsV: { value: string; label: string; recommended?: boolean }[] =
     ttsProvider === "cartesia"
       ? cartesiaVoiceOpts
       : ttsProvider === "sarvam"
       ? sarvamVoiceOptsV
-      : ((ttsVoiceRawV ?? []) as { value: string; label: string }[]);
+      : ((ttsVoiceRawV ?? []) as { value: string; label: string; recommended?: boolean }[]);
 
   const ttsModelOptsV = TTS_MODELS[ttsProvider] ?? [];
   const curatedVoiceOptsV = ttsVoiceOptsV.filter(v => v.value !== "__custom__");
   const inCuratedV        = curatedVoiceOptsV.some(v => v.value === ttsVoice);
+  const hasRecommendedVoicesForLanguageV =
+    (whitelistedData?.voices ?? []).some(v => isVoiceCompatibleWithLanguage(v.language, agentLanguage))
+    && baseLanguage(agentLanguage) !== "en";
   const showingAllVoicesForLanguageV =
     (whitelistedData?.voices ?? []).length > 0 &&
     (whitelistedData?.voices ?? []).every(v => !isVoiceCompatibleWithLanguage(v.language, agentLanguage));
@@ -1993,17 +2138,19 @@ function VoiceTab({ form }: { form: any }) {
   );
 
   return (
-    <div className="relative flex min-h-full flex-col gap-8 px-4 py-5 sm:px-6 lg:px-8">
+    <div className={cn("relative flex min-h-full flex-col gap-6", BUILDER_TAB_PAD)}>
+      <BuilderTabHeader
+        title="Sound"
+        description="Voice, language, and how quickly the agent takes a turn after the caller pauses."
+      />
 
-      {/* ── SPEAKING ── */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Speaking</h3>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">
-            How the agent sounds on the call — provider, voice, speed, and model.
-          </p>
-        </div>
-        <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
+      <BuilderPanel
+        title="Speaking"
+        icon={<Volume2 />}
+        description="Provider, voice, speed, and model"
+        bodyClassName="gap-3"
+      >
+        <div className="space-y-3">
           <FormField control={form.control} name="voiceStack" render={({ field }) => (
             <FormItem className="space-y-1">
               <FormLabel className="text-xs text-muted-foreground">Voice stack</FormLabel>
@@ -2073,7 +2220,7 @@ function VoiceTab({ form }: { form: any }) {
                         className="h-7 text-[10px] gap-1 px-2"
                         onClick={() => setCloneOpenV(true)}
                       >
-                        <Sparkles className="h-3 w-3" />
+                        <CopyPlus className="h-3 w-3" />
                         Clone voice
                       </Button>
                     )}
@@ -2085,7 +2232,7 @@ function VoiceTab({ form }: { form: any }) {
                         className="h-7 text-[10px] gap-1 px-2"
                         onClick={() => setSarvamCloneOpenV(true)}
                       >
-                        <Sparkles className="h-3 w-3" />
+                        <CopyPlus className="h-3 w-3" />
                         Add Sarvam clone
                       </Button>
                     )}
@@ -2116,7 +2263,7 @@ function VoiceTab({ form }: { form: any }) {
                     <SelectContent position="popper" className="max-h-[300px]">
                       {ttsVoiceOptsV.filter((v) => v.value !== "").map(v => (
                         <SelectItem key={v.value} value={v.value} className="text-sm">
-                          {v.label}
+                          <VoiceOptionLabel label={v.label} recommended={v.recommended} />
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -2126,6 +2273,11 @@ function VoiceTab({ form }: { form: any }) {
               )} />
             )}
 
+            {ttsProvider === "cartesia" && hasRecommendedVoicesForLanguageV && (
+              <p className="text-xs text-muted-foreground leading-relaxed rounded-md border border-border bg-muted/40 px-3 py-2.5 col-span-2">
+                Voices recommended for this language are listed first. You can still pick any other voice.
+              </p>
+            )}
             {ttsProvider === "cartesia" && showingAllVoicesForLanguageV && (
               <p className="text-xs text-muted-foreground leading-relaxed rounded-md border border-border bg-muted/40 px-3 py-2.5 col-span-2">
                 No voices are tagged for this language — showing every available voice. Most multilingual voices speak it well; preview a few to pick one.
@@ -2141,7 +2293,7 @@ function VoiceTab({ form }: { form: any }) {
                   className="h-8 text-xs gap-1.5"
                   onClick={() => setCloneOpenV(true)}
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
+                  <CopyPlus className="h-3.5 w-3.5" />
                   Clone my voice
                 </Button>
               </div>
@@ -2262,22 +2414,19 @@ function VoiceTab({ form }: { form: any }) {
           </>
           )}
         </div>
-      </section>
+      </BuilderPanel>
 
-      {/* ── LISTEN ── */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Listening</h3>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">
-            How the agent hears the caller — noise cancel, backchannels, and ambient bed.
-          </p>
-        </div>
-        <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
+      <BuilderPanel
+        title="Listening"
+        icon={<Mic />}
+        description="Noise cancel, backchannels, and ambient bed"
+      >
+        <div className="space-y-3">
           <FormField control={form.control} name="noiseCancellationEnabled" render={({ field }) => (
             <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
               <div>
                 <FormLabel className="text-sm">Noise Cancellation</FormLabel>
-                <FormDescription className="text-[10px]">Software noise filter — VoBiz &amp; web calls are denoised upstream automatically</FormDescription>
+                <FormDescription className="text-[10px]">Removes fans/traffic/hiss. Does not ignore other people nearby — keep the phone close. Greeting echo is ignored so the agent does not cut herself. Browser web calls use the mic’s own suppression.</FormDescription>
               </div>
               <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
@@ -2286,7 +2435,7 @@ function VoiceTab({ form }: { form: any }) {
             <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
               <div>
                 <FormLabel className="text-sm">Backchanneling</FormLabel>
-                <FormDescription className="text-[10px]">Agent says &quot;mm-hmm&quot;, &quot;I see&quot; while listening</FormDescription>
+                <FormDescription className="text-[10px]">Agent says &quot;okay&quot;, &quot;hmm&quot;, or &quot;mmm&quot; while listening</FormDescription>
               </div>
               <FormControl><Switch checked={field.value ?? false} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
@@ -2360,7 +2509,7 @@ function VoiceTab({ form }: { form: any }) {
             </div>
           )}
         </div>
-      </section>
+      </BuilderPanel>
 
       {/* ── CALL FEEL (same fields as Advanced → Engine presets) ── */}
       <VoiceCallFeelPresets form={form} />
@@ -2382,19 +2531,33 @@ function useCallEnginePreset(form: any): {
   applyPreset: (key: CallEnginePreset) => void;
 } {
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
+  const asrModelVal = form.watch("asrModel") as string | undefined;
+  const realtime = asrProviderVal === "sarvam" && isSarvamRealtimeAsr(asrModelVal);
   const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 250;
   const linearMs = form.watch("linearDelayMs") ?? 0;
   const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
   const vad = form.watch("sarvamHighVadSensitivity") ?? false;
+  const silenceMs = form.watch("sarvamEndOfSpeechSilenceMs");
+  const minSpeechMs = form.watch("sarvamFirstTurnMinSpeechMs") ?? 250;
+  const threshold = form.watch("sarvamVadThreshold") ?? 0.3;
+  const stopMs = form.watch("semanticTurnStopMs") ?? 1200;
 
   const matches = (key: CallEnginePreset): boolean => {
     const p = CALL_ENGINE_PRESETS[key];
-    return (
-      endpointMs === p.asrEndpointingSilenceMs
-      && linearMs === p.linearDelayMs
-      && interruptWords === p.stopSpeakingNumWords
-      && (asrProviderVal !== "sarvam" || vad === p.sarvamHighVadSensitivity)
-    );
+    if (
+      endpointMs !== p.asrEndpointingSilenceMs
+      || linearMs !== p.linearDelayMs
+      || interruptWords !== p.stopSpeakingNumWords
+      || stopMs !== p.semanticTurnStopMs
+    ) return false;
+    if (realtime) {
+      return (
+        silenceMs === p.sarvamEndOfSpeechSilenceMs
+        && minSpeechMs === p.sarvamFirstTurnMinSpeechMs
+        && Math.abs(threshold - p.sarvamVadThreshold) < 0.001
+      );
+    }
+    return asrProviderVal !== "sarvam" || vad === p.sarvamHighVadSensitivity;
   };
   const derived = (Object.keys(CALL_ENGINE_PRESETS) as CallEnginePreset[]).find(matches) ?? null;
 
@@ -2415,6 +2578,10 @@ function useCallEnginePreset(form: any): {
     form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(p.stopSpeakingNumWords), { shouldDirty: true });
     // Sarvam pause-detection is part of the preset — Fast without it leaves a ~2s turn tax.
     form.setValue("sarvamHighVadSensitivity", p.sarvamHighVadSensitivity, { shouldDirty: true });
+    form.setValue("sarvamEndOfSpeechSilenceMs", p.sarvamEndOfSpeechSilenceMs, { shouldDirty: true });
+    form.setValue("sarvamFirstTurnMinSpeechMs", p.sarvamFirstTurnMinSpeechMs, { shouldDirty: true });
+    form.setValue("sarvamVadThreshold", p.sarvamVadThreshold, { shouldDirty: true });
+    form.setValue("semanticTurnStopMs", p.semanticTurnStopMs, { shouldDirty: true });
     setPinned(key);
   };
 
@@ -2424,56 +2591,53 @@ function useCallEnginePreset(form: any): {
 /** Voice-tab Call Engine presets — writes the same form keys as Advanced → Engine. */
 function VoiceCallFeelPresets({ form }: { form: any }) {
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
+  const asrModelVal = form.watch("asrModel") as string | undefined;
+  const realtime = asrProviderVal === "sarvam" && isSarvamRealtimeAsr(asrModelVal);
   const { preset: activePreset, tweaked, applyPreset } = useCallEnginePreset(form);
 
   return (
-    <section className="space-y-3">
-      <div>
-        <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Phone feel</h3>
-        <p className="mt-0.5 text-[12px] text-muted-foreground">
-          How quickly the agent takes the turn — same Call Engine knobs as Settings → Engine.
-        </p>
-        {asrProviderVal === "sarvam" && (
-          <p className="text-[11px] text-muted-foreground mt-1">
-            Fast turns on quick pause detection (~0.13s) for Sarvam; Balanced and Patient
-            use Sarvam&apos;s patient mode so slow speakers aren&apos;t cut off.
-          </p>
-        )}
-      </div>
-      <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
-        <div className="flex flex-wrap gap-2">
-          {([
-            { id: "fast" as const, label: "Fast", hint: "Snappy barge / short silence" },
-            { id: "balanced" as const, label: "Balanced", hint: "Default natural pace" },
-            { id: "patient" as const, label: "Patient", hint: "Lets callers pause longer" },
-          ]).map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => applyPreset(p.id)}
-              title={p.hint}
-              className={cn(
-                "px-3 py-1.5 rounded-lg text-[11.5px] font-medium border transition-all",
-                activePreset === p.id
-                  ? "bg-primary/15 text-primary border-primary/40"
-                  : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/40",
-              )}
-            >
+    <BuilderPanel
+      title="Phone feel"
+      icon={<Timer />}
+      description="How soon the agent replies after a pause"
+      hint={tweaked ? (
+        <span className="text-[10px] text-muted-foreground">edited — saves as set</span>
+      ) : undefined}
+      bodyClassName="gap-3"
+    >
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {([
+          { id: "fast" as const, label: "Fast", hint: "Default — replies as soon as you pause" },
+          { id: "balanced" as const, label: "Balanced", hint: "Slightly more pause before the agent talks" },
+          { id: "patient" as const, label: "Patient", hint: "Waits if the caller thinks mid-sentence" },
+        ]).map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => applyPreset(p.id)}
+            className={cn(
+              "rounded-lg border px-3 py-2.5 text-left transition-all",
+              activePreset === p.id
+                ? "border-primary/40 bg-primary/10 ring-1 ring-primary/20"
+                : "border-border bg-background hover:border-foreground/20 hover:bg-muted/30",
+            )}
+          >
+            <span className={cn(
+              "block text-[12.5px] font-semibold",
+              activePreset === p.id ? "text-primary" : "text-foreground",
+            )}>
               {p.label}
-            </button>
-          ))}
-          {tweaked && (
-            <span className="px-2 py-1.5 text-[11px] text-muted-foreground/70 self-center">
-              edited — saves as set
             </span>
-          )}
-        </div>
-        <p className="text-[10px] text-muted-foreground leading-relaxed">
-          Fine-tune endpointing, linear delay, and interrupt words on{" "}
-          <span className="text-foreground/80">Settings → Engine</span>.
-        </p>
+            <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{p.hint}</span>
+          </button>
+        ))}
       </div>
-    </section>
+      {asrProviderVal === "sarvam" && !realtime && (
+        <p className="text-[11px] text-muted-foreground">
+          This agent is on a legacy transcriber. Switch it to Saaras v3 in Transcriber.
+        </p>
+      )}
+    </BuilderPanel>
   );
 }
 
@@ -2488,20 +2652,79 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const summarizationEnabled = form.watch("summarizationEnabled") ?? false;
   const watchedTools  = (form.watch("tools") ?? []) as any[];
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [meetTogglePending, setMeetTogglePending] = useState(false);
+  /** Local preference when no meeting/event type exists yet on the calendar. */
+  const [meetEnabledFallback, setMeetEnabledFallback] = useState(true);
 
   const { data: calendarsData } = useListCalendars();
   const schedulingCalendarId = form.watch("schedulingCalendarId");
   const schedulingEventTypeId = form.watch("schedulingEventTypeId");
   const agentCalendar = schedulingCalendarId != null
-    ? (calendarsData ?? []).find((cal: any) => cal.id === schedulingCalendarId)
+    ? findBySchedulingId(calendarsData ?? [], schedulingCalendarId)
     : agentId
       ? ((calendarsData ?? []).find((cal: any) => cal.agentId === agentId) ?? (calendarsData ?? [])[0])
       : (calendarsData ?? [])[0];
   const calendarIdForEt = agentCalendar?.id;
-  const { data: agentEventTypes } = useListEventTypes(
+  const { data: agentEventTypes, isLoading: eventTypesLoading } = useListEventTypes(
     calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
     { query: { enabled: !!calendarIdForEt, queryKey: ["agent-event-types", calendarIdForEt ?? null] } }
   );
+
+  const preferredEventType = useMemo(() => {
+    const ets = (agentEventTypes ?? []) as Array<{ id: number; enableGoogleMeet?: boolean }>;
+    if (ets.length === 0) return null;
+    if (schedulingEventTypeId != null) {
+      return ets.find((e) => normalizeSchedulingId(e.id) === normalizeSchedulingId(schedulingEventTypeId)) ?? ets[0] ?? null;
+    }
+    return ets[0] ?? null;
+  }, [agentEventTypes, schedulingEventTypeId]);
+
+  const googleMeetEnabled = preferredEventType
+    ? preferredEventType.enableGoogleMeet !== false
+    : meetEnabledFallback;
+
+  const setGoogleMeetEnabled = async (on: boolean) => {
+    setMeetEnabledFallback(on);
+    const ets = (agentEventTypes ?? []) as Array<{ id: number }>;
+    if (ets.length === 0) {
+      toast({
+        title: on ? "Google Meet on" : "Google Meet off",
+        description: on
+          ? "Meet links will be added once a meeting exists on this calendar."
+          : "Bookings won’t include Meet links until you turn this back on.",
+      });
+      return;
+    }
+    setMeetTogglePending(true);
+    try {
+      await Promise.all(
+        ets.map((et) =>
+          customFetch(`${DASH_API}/scheduling/event-types/${et.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enableGoogleMeet: on }),
+          }),
+        ),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["agent-event-types", calendarIdForEt ?? null] });
+      toast({
+        title: on ? "Google Meet enabled" : "Google Meet disabled",
+        description: on
+          ? "New bookings will include a Meet link on the Google invite."
+          : "New bookings stay on the calendar without a Meet link.",
+      });
+    } catch (err: any) {
+      setMeetEnabledFallback(!on);
+      toast({
+        title: "Couldn’t update Meet setting",
+        description: err?.message ?? String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setMeetTogglePending(false);
+    }
+  };
 
   // ── Issue 1: Auto-link calendar when none is set ──────────────────────────
   // When the agent has no calendar linked yet, find a calendar whose name
@@ -2541,14 +2764,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     }
   }, [calendarIdForEt]);
 
-  const [expandedSchema, setExpandedSchema] = useState<string | null>(null);
-  const [expandedTest, setExpandedTest]     = useState<string | null>(null);
-  const [testArgs, setTestArgs]             = useState<Record<string, string>>({});
-  const [testResult, setTestResult]         = useState<Record<string, string | null>>({});
-  const [bookingDetailsOpen, setBookingDetailsOpen] = useState(false);
-
-  const runTest = useRunToolTest();
-
   const BOOKING_TYPES = [
     "native_booking",
     "native_check_availability",
@@ -2573,6 +2788,32 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
 
   const bookingEnabled = BOOKING_TYPES.every((type) => hasNativeTool(type));
   const bookingPartial = !bookingEnabled && BOOKING_TYPES.some((type) => hasNativeTool(type));
+  const bookingToolsOn = bookingEnabled || bookingPartial;
+
+  // A calendar alone is not runnable: native scheduling requires an active
+  // event type. Auto-select the first event type when possible, but never leave
+  // the form looking ready when the selected calendar has none (call 13380).
+  useEffect(() => {
+    if (!bookingToolsOn || eventTypesLoading || !calendarIdForEt) return;
+    const eventTypes = (agentEventTypes ?? []) as Array<{ id: number }>;
+    const selectedIsValid = eventTypes.some(
+      (eventType) => normalizeSchedulingId(eventType.id) === normalizeSchedulingId(schedulingEventTypeId),
+    );
+    if (selectedIsValid) return;
+    // Empty list is loading/error — do not wipe a saved meeting type.
+    if (eventTypes.length === 0) return;
+    form.setValue("schedulingEventTypeId", eventTypes[0].id, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }, [
+    agentEventTypes,
+    bookingToolsOn,
+    calendarIdForEt,
+    eventTypesLoading,
+    form,
+    schedulingEventTypeId,
+  ]);
 
   const toggleBookingSuite = (on: boolean) => {
     const current = (form.getValues("tools") ?? []) as any[];
@@ -2589,21 +2830,8 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           })),
       ];
       replace(next);
-      setBookingDetailsOpen(true);
-      if (!agentId) {
-        toast({ title: "Save agent first", description: "Save this agent before configuring calendar tools.", variant: "destructive" });
-      } else if (!agentCalendar) {
-        toast({ title: "No calendar configured", description: "Finish Bookings calendar under Connections first.", variant: "destructive" });
-      } else if (!(agentCalendar as any).connectedGoogleEmail) {
-        toast({ title: "Google not connected", description: `Connect Google for "${agentCalendar.name}" under Connections → Bookings calendar.`, variant: "destructive" });
-      } else if ((agentEventTypes ?? []).length === 0) {
-        toast({ title: "No meeting set up", description: "Create a meeting under Connections → Bookings calendar before using booking.", variant: "destructive" });
-      }
     } else {
       replace(current.filter((t: any) => !(BOOKING_TYPES as readonly string[]).includes(t.type)));
-      setExpandedSchema(null);
-      setExpandedTest(null);
-      setBookingDetailsOpen(false);
     }
   };
 
@@ -2611,86 +2839,11 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     const idx = nativeToolIndex(type);
     if (idx >= 0) {
       remove(idx);
-      setExpandedSchema(null);
-      setExpandedTest(null);
     } else {
       append({ type: type as any, name: NATIVE_DEFAULT_NAMES[type] ?? "", description: "" });
     }
   };
 
-
-  const BOOKING_TOOL_LABELS = [
-    { type: "native_booking", fnName: "book_appointment", label: "Book" },
-    { type: "native_check_availability", fnName: "check_availability", label: "Check availability" },
-    { type: "native_list_bookings", fnName: "list_bookings", label: "List" },
-    { type: "native_reschedule", fnName: "reschedule_booking", label: "Reschedule" },
-    { type: "native_cancel", fnName: "cancel_booking", label: "Cancel" },
-  ] as const;
-
-  const BOOKING_TOOL_SCHEMAS: Record<string, object> = {
-    native_booking: {
-      name: "book_appointment",
-      description: "Book an appointment for the caller.",
-      parameters: {
-        type: "object",
-        properties: {
-          attendee_name:  { type: "string", description: "Full name of the person being booked" },
-          attendee_email: { type: "string", description: "Email address of the person being booked" },
-          preferred_date: { type: "string", description: "Optional preferred date/time, e.g. 'next Tuesday' or '2026-06-10'" },
-          meeting_type:   { type: "string", enum: ["google_meet", "in_person"], description: "Meeting format" },
-          meeting_address: { type: "string", description: "Physical address (required when meeting_type is in_person)" },
-        },
-        required: ["attendee_name", "attendee_email"],
-      },
-    },
-    native_check_availability: {
-      name: "check_availability",
-      description: "Check available appointment slots.",
-      parameters: {
-        type: "object",
-        properties: {
-          preferred_date: { type: "string", description: "Optional preferred date/time to check, e.g. 'tomorrow morning'" },
-          timezone:       { type: "string", description: "IANA timezone, e.g. 'America/New_York'" },
-        },
-        required: [],
-      },
-    },
-    native_list_bookings: {
-      name: "list_bookings",
-      description: "List existing bookings for the caller.",
-      parameters: {
-        type: "object",
-        properties: {
-          attendee_name: { type: "string", description: "Full name of the caller whose bookings to look up" },
-          timezone:      { type: "string", description: "IANA timezone for formatting dates" },
-        },
-        required: ["attendee_name"],
-      },
-    },
-    native_reschedule: {
-      name: "reschedule_booking",
-      description: "Reschedule an existing booking to a new time slot.",
-      parameters: {
-        type: "object",
-        properties: {
-          booking_id:     { type: "string", description: "The booking reference ID to reschedule" },
-          preferred_date: { type: "string", description: "Optional new preferred date/time" },
-        },
-        required: ["booking_id"],
-      },
-    },
-    native_cancel: {
-      name: "cancel_booking",
-      description: "Cancel an upcoming booking on the caller's request.",
-      parameters: {
-        type: "object",
-        properties: {
-          booking_id: { type: "string", description: "The booking reference ID to cancel" },
-        },
-        required: ["booking_id"],
-      },
-    },
-  };
 
   const CALL_CONTROL_TOOLS = [
     {
@@ -2706,7 +2859,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <Mail className="h-4 w-4" />,
       color: "sky",
       label: "Send Email",
-      description: "Lets the agent email mid-call. Connect Brevo under Connections first; pick templates there.",
+      description: "Lets the agent email mid-call using the workspace Brevo connection.",
       needsEventType: false,
     },
     {
@@ -2714,7 +2867,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <MessageCircle className="h-4 w-4" />,
       color: "emerald",
       label: "Send WhatsApp",
-      description: "Mid-call WhatsApp only. After-call messages are on the Outcomes tab. Connect WhatsApp under Connections first.",
+      description: "Usually leave off. The agent would send before we know Interested vs Not Interested. Outcome templates go out after the call.",
       needsEventType: false,
     },
   ] as const;
@@ -2752,325 +2905,264 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   };
 
   return (
-    <div className="relative flex min-h-full flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
+    <div className={cn("relative flex min-h-full flex-col gap-6", BUILDER_TAB_PAD)}>
 
       {/* ── Platform Tools ─── */}
       <div>
-        <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Platform Tools</h3>
-        <p className="mb-3 mt-0.5 text-[12px] text-muted-foreground">Built-in capabilities you can enable for this agent</p>
+        <BuilderTabHeader
+          title="Actions"
+          description="Turn on an action, then pick the calendar, WhatsApp template, or email already connected. Plug-in itself is under Connections."
+        />
 
-        <div className="space-y-2">
+        <div className="mt-5 space-y-4">
 
         {/* ── Booking suite (one switch → all five tools) ── */}
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-3">Scheduling & Bookings</p>
-        <div className={cn(
-          "rounded-xl border transition-all duration-150",
-          bookingEnabled || bookingPartial ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20",
-        )}>
+        <BuilderPanel
+          title="Bookings"
+          icon={<Calendar />}
+          bodyClassName="p-0"
+        >
+        <div>
           <div className="flex items-start gap-3 p-4">
-            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/30">
-              <Calendar className={cn("h-4 w-4", bookingEnabled || bookingPartial ? "text-foreground/70" : "text-muted-foreground/35")} />
-            </div>
             <div className="min-w-0 flex-1">
-              <div className="mb-0.5 flex items-center gap-2">
-                <span className="text-xs font-semibold text-foreground/80">Booking</span>
-                {bookingPartial && (
-                  <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
-                    Incomplete
-                  </span>
-                )}
-              </div>
-              <p className="text-[11px] leading-relaxed text-muted-foreground/60">
-                One switch enables the full booking flow: check availability, book, list, reschedule, and cancel.
+              <p className="text-[12.5px] font-semibold text-foreground">Book meetings on the call</p>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">
+                Agent can check times and book. Caller gets a Google Meet link.
               </p>
-              {(bookingEnabled || bookingPartial) && (
-                <div className="mt-1.5 space-y-1">
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    {canAttendMeetings
-                      ? "Booking creates calendar invites with a Meet link. To send this agent into the room, use Meeting bots (/app/meet) — separate from booking."
-                      : "Phone-only is supported: Booking still creates calendar invites with a Meet link for humans to attend. The AI will not join the room."}
-                  </p>
-                  {!canAttendMeetings && (
-                    <button
-                      type="button"
-                      className="text-[11px] font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                      onClick={() => form.setValue("agentSurfaces", "phone_and_meet", { shouldDirty: true })}
-                    >
-                      Optional: upgrade to phone + meetings if you want the AI to join Meet — then Save
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
-            <div className="mt-1 shrink-0">
-              <Switch
-                checked={bookingEnabled || bookingPartial}
-                onCheckedChange={(on) => toggleBookingSuite(on)}
-              />
-            </div>
+            <Switch
+              checked={bookingEnabled || bookingPartial}
+              onCheckedChange={(on) => toggleBookingSuite(on)}
+            />
           </div>
 
-          {(bookingEnabled || bookingPartial) && (
-            <div className="space-y-3 border-t border-border/30 px-4 pb-4 pt-3">
-              <div className="flex flex-wrap gap-1.5">
-                {BOOKING_TOOL_LABELS.map((tool) => (
-                  <span
-                    key={tool.type}
-                    className="rounded-md border border-border/60 bg-background/40 px-2 py-0.5 font-mono text-[10px] text-muted-foreground"
-                  >
-                    {tool.fnName}
-                  </span>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-3 rounded-lg border border-border/40 bg-background/30 px-3 py-2.5">
-                <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1 space-y-1">
-                  <p className="text-[11px] text-muted-foreground/70">
-                    {agentCalendar ? (
-                      <>
-                        Calendar: <span className="font-medium text-foreground/80">{agentCalendar.name}</span>
-                        <span className="text-muted-foreground/50"> · </span>
-                        Meeting callers can book
-                      </>
-                    ) : (
-                      "Meeting callers can book"
-                    )}
-                  </p>
-                  <Select
-                    value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
-                    onValueChange={(v) => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v), { shouldDirty: true })}
-                    disabled={!calendarIdForEt}
-                  >
-                    <SelectTrigger className="h-7 bg-background/50 text-xs">
-                      <SelectValue placeholder="Any meeting">
-                        {schedulingEventTypeId != null
-                          ? agentEventTypes == null
-                            ? "Loading…"
-                            : ((agentEventTypes as any[]).find((e: any) => e.id === schedulingEventTypeId)?.title
-                               || (agentEventTypes as any[]).find((e: any) => e.id === schedulingEventTypeId)?.name
-                               || undefined)
-                          : undefined}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__" className="text-xs text-muted-foreground">Any meeting</SelectItem>
-                      {(agentEventTypes ?? []).map((et: any) => (
-                        <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title || et.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {(!calendarIdForEt || (agentEventTypes ?? []).length === 0) && (
-                    <p className="text-[10px] text-amber-400/80">
-                      {!calendarIdForEt ? "No calendar yet. " : "No meeting yet. "}
-                      <Link href="/app/connections?setup=calendar" className="underline underline-offset-2">
-                        Finish Bookings calendar setup
-                      </Link>
-                      .
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  {!agentId ? (
-                    <p className="text-[10px] text-amber-400/80">Save agent first to link calendar tools.</p>
-                  ) : !agentCalendar ? (
-                    <p className="text-[10px] text-amber-400/80">
-                      No calendar found for this agent.{" "}
-                      <Link href="/app/connections?setup=calendar" className="underline underline-offset-2">
-                        Finish calendar setup
-                      </Link>
-                      .
-                    </p>
-                  ) : !(agentCalendar as any).connectedGoogleEmail ? (
-                    <span className="text-[10px] text-amber-400/80">
-                      No Google account connected.{" "}
-                      <Link href="/app/connections?setup=calendar" className="underline underline-offset-2">
-                        Finish calendar setup
-                      </Link>
-                      .
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-muted-foreground/60">
-                      {(agentCalendar as any).connectedGoogleAccountsCount > 1
-                        ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
-                        : (agentCalendar as any).connectedGoogleEmail}
-                    </span>
-                  )}
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-[10px]"
-                  onClick={() => setBookingDetailsOpen((v) => !v)}
-                >
-                  {bookingDetailsOpen ? "Hide details" : "Test & schema"}
-                  <ChevronDown className={cn("h-3 w-3 transition-transform", bookingDetailsOpen && "rotate-180")} />
-                </Button>
-              </div>
-
-              {bookingDetailsOpen && (
-                <div className="space-y-2 rounded-lg border border-border/40 bg-muted/15 p-3">
-                  {BOOKING_TOOL_LABELS.map(({ type, fnName, label }) => {
-                    const schemaOpen = expandedSchema === type;
-                    const testOpen = expandedTest === type;
-                    const argKey = `${type}:args`;
-                    const handleRunTest = async () => {
-                      setTestResult((r) => ({ ...r, [type]: null }));
-                      try {
-                        let parsedArgs: Record<string, unknown> = {};
-                        try { parsedArgs = JSON.parse(testArgs[argKey] || "{}"); } catch { parsedArgs = {}; }
-                        const res = await runTest.mutateAsync({ data: { agentId: agentId!, toolName: fnName, args: parsedArgs } });
-                        setTestResult((r) => ({ ...r, [type]: res.result ?? JSON.stringify(res) }));
-                      } catch (err: any) {
-                        setTestResult((r) => ({ ...r, [type]: `Error: ${err?.message ?? String(err)}` }));
-                      }
-                    };
-                    return (
-                      <div key={type} className="rounded-md border border-border/40 bg-background/40">
-                        <div className="flex items-center justify-between gap-2 px-3 py-2">
-                          <div className="min-w-0">
-                            <p className="text-[11px] font-medium">{label}</p>
-                            <code className="font-mono text-[10px] text-muted-foreground">{fnName}</code>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-6 gap-1 px-2 text-[10px]"
-                              onClick={() => {
-                                setExpandedSchema(schemaOpen ? null : type);
-                                setExpandedTest(null);
-                              }}
-                            >
-                              Schema
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-6 gap-1 px-2 text-[10px]"
-                              onClick={() => {
-                                setExpandedTest(testOpen ? null : type);
-                                setExpandedSchema(null);
-                                setTestResult((r) => ({ ...r, [type]: null }));
-                              }}
-                            >
-                              Test
-                            </Button>
-                          </div>
-                        </div>
-                        {schemaOpen && (
-                          <pre className="overflow-x-auto border-t border-border/30 p-3 font-mono text-[10px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap">
-                            {JSON.stringify(BOOKING_TOOL_SCHEMAS[type] ?? {}, null, 2)}
-                          </pre>
-                        )}
-                        {testOpen && (
-                          <div className="space-y-2 border-t border-border/30 p-3">
-                            {!agentCalendar ? (
-                              <p className="text-[10px] text-amber-400/80">No calendar assigned yet.</p>
-                            ) : (
-                              <>
-                                <textarea
-                                  className="min-h-[60px] w-full resize-y rounded-md border border-border/50 bg-background/50 p-2 font-mono text-[10px] focus:outline-none focus:ring-1 focus:ring-ring"
-                                  placeholder="{}"
-                                  value={testArgs[argKey] ?? "{}"}
-                                  onChange={(e) => setTestArgs((a) => ({ ...a, [argKey]: e.target.value }))}
-                                />
-                                <Button type="button" size="sm" className="h-6 px-3 text-[10px]" disabled={runTest.isPending} onClick={handleRunTest}>
-                                  {runTest.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Run test"}
-                                </Button>
-                                {testResult[type] != null && (
-                                  <pre className="whitespace-pre-wrap break-all font-mono text-[10px] text-muted-foreground/80">{testResult[type]}</pre>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
+          {(bookingEnabled || bookingPartial) && (() => {
+            const calendars = calendarsData ?? [];
+            const googleEmail = (agentCalendar as { connectedGoogleEmail?: string | null } | undefined)?.connectedGoogleEmail;
+            const setupHref = agentId ? connectionsSetupHref("calendar", agentId) : "/app/connections?setup=calendar";
+            return (
+            <div className="space-y-3 border-t border-border px-4 pb-4 pt-3">
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-medium text-foreground">Calendar</p>
+                <Select
+                  value={
+                    agentCalendar
+                      ? String(agentCalendar.id)
+                      : normalizeSchedulingId(schedulingCalendarId) != null
+                        ? String(normalizeSchedulingId(schedulingCalendarId))
+                        : "__none__"
+                  }
+                  onValueChange={(v) => {
+                    form.setValue(
+                      "schedulingCalendarId",
+                      v === "__none__" || !Number.isFinite(Number(v)) ? null : Number(v),
+                      { shouldDirty: true },
                     );
-                  })}
+                    form.setValue("schedulingEventTypeId", null, { shouldDirty: true });
+                  }}
+                >
+                  <SelectTrigger className="h-9 bg-background text-xs">
+                    <SelectValue placeholder="Pick a calendar">
+                      {agentCalendar
+                        ? agentCalendar.name
+                        : calendars.length === 0
+                          ? "No calendars yet"
+                          : normalizeSchedulingId(schedulingCalendarId) != null
+                            ? "Saved calendar — pick it again"
+                            : "Pick a calendar"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__" className="text-xs text-muted-foreground">Pick a calendar</SelectItem>
+                    {normalizeSchedulingId(schedulingCalendarId) != null && !agentCalendar && (
+                      <SelectItem value={String(normalizeSchedulingId(schedulingCalendarId))} className="text-xs">
+                        Saved calendar #{normalizeSchedulingId(schedulingCalendarId)}
+                      </SelectItem>
+                    )}
+                    {calendars.map((cal: { id: number; name: string }) => (
+                      <SelectItem key={cal.id} value={String(cal.id)} className="text-xs">{cal.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {calendars.length === 0 && (
+                  <Link href={setupHref} className="inline-flex items-center gap-1 text-[11.5px] font-medium text-foreground underline underline-offset-2">
+                    Create a calendar
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                )}
+              </div>
+
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-[12px] font-medium text-foreground">Google Meet conferencing</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                    {googleMeetEnabled
+                      ? "Add a Meet link on each booking invite. Pick the meeting type below."
+                      : "Off — turn this on to add a Meet link and choose the meeting type."}
+                  </p>
+                </div>
+                <Switch
+                  className="mt-0.5 shrink-0"
+                  checked={googleMeetEnabled}
+                  disabled={meetTogglePending}
+                  onCheckedChange={(on) => { void setGoogleMeetEnabled(on); }}
+                />
+              </div>
+
+              {googleMeetEnabled && (
+                <>
+                  {googleEmail ? (
+                    <p className="text-[11.5px] text-muted-foreground">
+                      Meet links via <span className="font-medium text-foreground">{googleEmail}</span>
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-[11.5px] text-muted-foreground">Connect Google so each booking gets a Meet link.</p>
+                      <Button asChild type="button" size="sm" className="h-8 text-[11px]">
+                        <Link href={setupHref}>Connect Google</Link>
+                      </Button>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-medium text-foreground">Meeting type</p>
+                    <Select
+                      value={normalizeSchedulingId(schedulingEventTypeId) != null ? String(normalizeSchedulingId(schedulingEventTypeId)) : "__none__"}
+                      onValueChange={(value) => {
+                        form.setValue(
+                          "schedulingEventTypeId",
+                          value === "__none__" ? null : Number(value),
+                          { shouldDirty: true, shouldValidate: true },
+                        );
+                      }}
+                      disabled={!calendarIdForEt || eventTypesLoading || (agentEventTypes ?? []).length === 0}
+                    >
+                      <SelectTrigger className="h-9 bg-background text-xs">
+                        <SelectValue placeholder={eventTypesLoading ? "Loading meeting types…" : "Pick a meeting type"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__" disabled className="text-xs text-muted-foreground">
+                          Pick a meeting type
+                        </SelectItem>
+                        {normalizeSchedulingId(schedulingEventTypeId) != null
+                          && !(agentEventTypes ?? []).some(
+                            (eventType: { id: number }) =>
+                              normalizeSchedulingId(eventType.id) === normalizeSchedulingId(schedulingEventTypeId),
+                          ) && (
+                          <SelectItem value={String(normalizeSchedulingId(schedulingEventTypeId))} className="text-xs">
+                            Saved meeting type #{normalizeSchedulingId(schedulingEventTypeId)}
+                          </SelectItem>
+                        )}
+                        {(agentEventTypes ?? []).map((eventType: any) => (
+                          <SelectItem key={eventType.id} value={String(eventType.id)} className="text-xs">
+                            {eventType.title || eventType.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+
+              {/* Kept outside the Meet gate: a calendar with no meeting type cannot
+                  book at all, so hiding the warning would repeat call 13380. */}
+              {!eventTypesLoading && calendarIdForEt && (agentEventTypes ?? []).length === 0 && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5">
+                  <p className="text-[11.5px] font-medium text-amber-700 dark:text-amber-300">
+                    Booking is not ready — this calendar has no meeting type.
+                  </p>
+                  <p className="mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
+                    Create one before saving. Without it, the agent cannot check availability, book a meeting, or send a Meet link.
+                  </p>
+                  <Button asChild type="button" size="sm" variant="outline" className="mt-2 h-8 text-[11px]">
+                    <Link href={setupHref}>Create meeting type</Link>
+                  </Button>
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
+        </BuilderPanel>
 
-        {/* Meeting bots — join actions live on /app/meet; Tools only explains capability. */}
-        {canAttendMeetings && (
-          <>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">
-              Meeting bots
-            </p>
-            <div className="rounded-xl border border-border/70 bg-card/40 p-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/30">
-                  <Video className="h-4 w-4 text-foreground/70" />
-                </div>
-                <div className="min-w-0 flex-1 space-y-2">
-                  <p className="text-xs font-semibold text-foreground/80">Can join Meet / Zoom / Teams</p>
-                  <p className="text-[11px] leading-relaxed text-muted-foreground/60">
-                    Join now, calendar Join toggles, and bot settings (waiting room, slides) live on the Meeting bots page — not here.
-                    Booking a calendar slot is separate (switch above).
-                  </p>
-                  {agentId ? (
-                    <Button asChild type="button" variant="outline" size="sm" className="h-7 text-[11px]">
-                      <Link href={`/app/meet?agentId=${agentId}`}>Open Meeting bots</Link>
-                    </Button>
-                  ) : (
-                    <p className="text-[11px] text-amber-400/80">Save the agent first, then open Meeting bots.</p>
-                  )}
-                </div>
-              </div>
+        <BuilderPanel title="Meeting bots" icon={<Video />} bodyClassName="p-0">
+          <div className="flex items-start gap-3 p-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-[12.5px] font-semibold text-foreground">Phone + meetings</p>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">
+                {canAttendMeetings
+                  ? "On — this agent can join Meet / Zoom / Teams."
+                  : "Off — phone only. Turn on when the agent should join meetings."}
+              </p>
             </div>
-          </>
-        )}
+            <Switch
+              className="mt-0.5 shrink-0"
+              checked={canAttendMeetings}
+              onCheckedChange={(on) =>
+                form.setValue("agentSurfaces", on ? "phone_and_meet" : "phone", { shouldDirty: true })
+              }
+            />
+          </div>
+          {canAttendMeetings && agentId ? (
+            <div className="border-t border-border px-4 pb-4 pt-3">
+              <Button asChild type="button" variant="outline" size="sm" className="h-8 text-[11px]">
+                <Link href={`/app/meet?agentId=${agentId}`}>Open Meeting bots</Link>
+              </Button>
+            </div>
+          ) : null}
+        </BuilderPanel>
 
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Messaging</p>
+        <BuilderPanel
+          title="Messaging"
+          icon={<MessageCircle />}
+          description="Mid-call is optional. WhatsApp by outcome sends after the call ends."
+          bodyClassName="p-0 divide-y divide-border"
+        >
         {CALL_CONTROL_TOOLS.filter((t) => t.type === "send_email" || t.type === "send_whatsapp").map(({ type, icon, label, description }) => {
           const isOn = hasNativeTool(type);
           return (
-            <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-              <div className="w-full text-left p-4 flex items-start gap-3">
-                <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-                  <span className={cn(isOn ? "text-foreground/70" : "text-muted-foreground/35")}>{icon}</span>
+            <div key={type}>
+              <div className="flex w-full items-start gap-3 p-4 text-left">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+                  <span className={cn(isOn ? "text-foreground" : "text-muted-foreground/50")}>{icon}</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-xs font-semibold text-foreground/80">{label}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="mb-0.5 flex items-center gap-2">
+                    <span className="text-[12.5px] font-semibold text-foreground">{label}</span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
+                  <p className="text-[11.5px] leading-relaxed text-muted-foreground">{description}</p>
                 </div>
-                <div className="shrink-0 mt-1">
+                <div className="mt-1 shrink-0">
                   <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} />
                 </div>
               </div>
               {type === "send_whatsapp" && isOn && agentId ? <ToolsWhatsappSetup agentId={agentId} /> : null}
-              {type === "send_email" && isOn ? <ToolsEmailSetup /> : null}
+              {type === "send_email" && isOn ? <ToolsEmailSetup agentId={agentId} /> : null}
             </div>
           );
         })}
+        </BuilderPanel>
 
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Call Control</p>
+        <BuilderPanel
+          title="Call control"
+          icon={<PhoneOff />}
+          bodyClassName="p-0 divide-y divide-border"
+        >
         {CALL_CONTROL_TOOLS.filter((t) => t.type === "end_call").map(({ type, icon, label, description }) => {
           const isOn = hasNativeTool(type);
           return (
-            <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-              <div className="w-full text-left p-4 flex items-start gap-3">
-                <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-                  <span className={cn(isOn ? "text-foreground/70" : "text-muted-foreground/35")}>{icon}</span>
+            <div key={type}>
+              <div className="flex w-full items-start gap-3 p-4 text-left">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+                  <span className={cn(isOn ? "text-foreground" : "text-muted-foreground/50")}>{icon}</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-xs font-semibold text-foreground/80">{label}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="mb-0.5 flex items-center gap-2">
+                    <span className="text-[12.5px] font-semibold text-foreground">{label}</span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
+                  <p className="text-[11.5px] leading-relaxed text-muted-foreground">{description}</p>
                 </div>
-                <div className="shrink-0 mt-1">
+                <div className="mt-1 shrink-0">
                   <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} />
                 </div>
               </div>
@@ -3079,25 +3171,25 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         })}
 
         {/* Call Transfer — platform tool (not under Custom Tools) */}
-        <div className={cn("rounded-xl border transition-all duration-150", transferOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-          <div className="w-full text-left p-4 flex items-start gap-3">
-            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-              <PhoneForwarded className={cn("h-4 w-4", transferOn ? "text-foreground/70" : "text-muted-foreground/35")} />
+        <div>
+          <div className="flex w-full items-start gap-3 p-4 text-left">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+              <PhoneForwarded className={cn("h-4 w-4", transferOn ? "text-foreground" : "text-muted-foreground/50")} />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-semibold text-foreground/80">Call Transfer</span>
+            <div className="min-w-0 flex-1">
+              <div className="mb-0.5 flex items-center gap-2">
+                <span className="text-[12.5px] font-semibold text-foreground">Call Transfer</span>
               </div>
-              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
                 Warm or cold transfer to a human number when the caller asks or the agent can’t resolve the issue.
               </p>
             </div>
-            <div className="shrink-0 mt-1">
+            <div className="mt-1 shrink-0">
               <Switch checked={transferOn} onCheckedChange={(v) => toggleCallTransfer(v)} />
             </div>
           </div>
           {transferOn && transferIdx >= 0 && (
-            <div className="space-y-3 border-t border-border/30 px-4 pb-4 pt-3">
+            <div className="space-y-3 border-t border-border bg-muted/20 px-4 pb-4 pt-3">
               <div className="grid grid-cols-2 gap-3">
                 <FormField control={form.control} name={`tools.${transferIdx}.name`} render={({ field: f }) => (
                   <FormItem className="space-y-1">
@@ -3149,29 +3241,34 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
           )}
         </div>
+        </BuilderPanel>
 
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Recording</p>
+        <BuilderPanel
+          title="Recording & summaries"
+          icon={<AudioLines />}
+          bodyClassName="p-0 divide-y divide-border"
+        >
         {/* Call Recording card */}
-        <div className={cn("rounded-xl border transition-all duration-150", recordingEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+        <div>
           <div
             role="button"
             tabIndex={0}
             onClick={(e) => { if (!e.nativeEvent.isTrusted) return; form.setValue("recordingEnabled", !recordingEnabled, { shouldDirty: true }); }}
             onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("recordingEnabled", !recordingEnabled, { shouldDirty: true }); } }}
-            className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
+            className="flex w-full cursor-pointer items-start gap-3 p-4 text-left"
           >
-            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-              <Mic className={cn("h-4 w-4", recordingEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+              <Mic className={cn("h-4 w-4", recordingEnabled ? "text-foreground" : "text-muted-foreground/50")} />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-semibold text-foreground/80">Call Recording</span>
+            <div className="min-w-0 flex-1">
+              <div className="mb-0.5 flex items-center gap-2">
+                <span className="text-[12.5px] font-semibold text-foreground">Call Recording</span>
               </div>
-              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
-                Records the full audio of each call (caller and agent) and stores it on the call. When enabled, recordings appear in the Call Recording tab on the call's detail page for playback and download.
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                Records the full audio of each call and stores it on the call, so you can play it back from the call detail page.
               </p>
             </div>
-            <div className="shrink-0 mt-1">
+            <div className="mt-1 shrink-0">
               <Switch
                 checked={recordingEnabled}
                 onCheckedChange={(v) => form.setValue("recordingEnabled", v, { shouldDirty: true })}
@@ -3181,27 +3278,26 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           </div>
         </div>
 
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">After the call</p>
-        <div className={cn("rounded-xl border transition-all duration-150", summarizationEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+        <div>
           <div
             role="button"
             tabIndex={0}
             onClick={(e) => { if (!e.nativeEvent.isTrusted) return; form.setValue("summarizationEnabled", !summarizationEnabled, { shouldDirty: true }); }}
             onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("summarizationEnabled", !summarizationEnabled, { shouldDirty: true }); } }}
-            className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
+            className="flex w-full cursor-pointer items-start gap-3 p-4 text-left"
           >
-            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-              <Sparkles className={cn("h-4 w-4", summarizationEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+              <Sparkles className={cn("h-4 w-4", summarizationEnabled ? "text-foreground" : "text-muted-foreground/50")} />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-semibold text-foreground/80">Auto Summarization</span>
+            <div className="min-w-0 flex-1">
+              <div className="mb-0.5 flex items-center gap-2">
+                <span className="text-[12.5px] font-semibold text-foreground">Auto Summarization</span>
               </div>
-              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
                 After each completed call, write a short AI summary on the History → Summary tab.
               </p>
             </div>
-            <div className="shrink-0 mt-1">
+            <div className="mt-1 shrink-0">
               <Switch
                 checked={summarizationEnabled}
                 onCheckedChange={(v) => form.setValue("summarizationEnabled", v, { shouldDirty: true })}
@@ -3210,26 +3306,31 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
           </div>
         </div>
+        </BuilderPanel>
 
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Caller Intelligence</p>
+        <BuilderPanel
+          title="Caller intelligence"
+          icon={<Users />}
+          bodyClassName="p-0 divide-y divide-border"
+        >
         {/* Gender Identification card */}
-        <div className={cn("rounded-xl border transition-all duration-150", genderEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+        <div>
           <div
             role="button"
             tabIndex={0}
             onClick={(e) => { if (!e.nativeEvent.isTrusted) return; form.setValue("genderDetectionEnabled", !genderEnabled, { shouldDirty: true }); }}
             onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("genderDetectionEnabled", !genderEnabled, { shouldDirty: true }); } }}
-            className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
+            className="flex w-full cursor-pointer items-start gap-3 p-4 text-left"
           >
-            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-              <User2 className={cn("h-4 w-4", genderEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+              <User2 className={cn("h-4 w-4", genderEnabled ? "text-foreground" : "text-muted-foreground/50")} />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-semibold text-foreground/80">Gender Identification</span>
-                <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">Beta</span>
+            <div className="min-w-0 flex-1">
+              <div className="mb-0.5 flex items-center gap-2">
+                <span className="text-[12.5px] font-semibold text-foreground">Gender Identification</span>
+                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400">Beta</span>
               </div>
-              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
                 Detects caller gender from voice at the start of the call. When enabled, the agent uses gender-appropriate salutations — "Sir", "Ma'am", or a neutral fallback.
               </p>
               {genderEnabled && (
@@ -3249,28 +3350,28 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         </div>
 
         {/* Voice Memory card */}
-        <div className={cn("rounded-xl border transition-all duration-150", voiceMemoryEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+        <div>
           <div
             role="button"
             tabIndex={0}
             onClick={(e) => { if (!e.nativeEvent.isTrusted) return; form.setValue("voiceMemoryEnabled", !voiceMemoryEnabled, { shouldDirty: true }); }}
             onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("voiceMemoryEnabled", !voiceMemoryEnabled, { shouldDirty: true }); } }}
-            className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
+            className="flex w-full cursor-pointer items-start gap-3 p-4 text-left"
           >
-            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-              <AudioLines className={cn("h-4 w-4", voiceMemoryEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+              <AudioLines className={cn("h-4 w-4", voiceMemoryEnabled ? "text-foreground" : "text-muted-foreground/50")} />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-semibold text-foreground/80">Voice Memory</span>
-                <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">Beta</span>
+            <div className="min-w-0 flex-1">
+              <div className="mb-0.5 flex items-center gap-2">
+                <span className="text-[12.5px] font-semibold text-foreground">Voice Memory</span>
+                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400">Beta</span>
               </div>
-              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
-                Remembers the caller&apos;s voiceprint. Detects mid-call handoffs (phone given to someone else) and can link the same voice across different phone numbers. Phone-number memory stays primary.
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                Remembers the caller&apos;s voiceprint. When a match lands, the agent addresses them immediately (by name if known). Also detects mid-call handoffs and links the same voice across phone numbers. Phone-number memory stays primary.
               </p>
               {voiceMemoryEnabled && (
                 <p className="text-[10px] text-amber-600 dark:text-amber-400 leading-relaxed mt-1.5">
-                  Soft signal only — not identity verification. Requires the voice-analysis service. On handoff the agent asks who it&apos;s speaking with and stops using the previous person&apos;s name/salutation until confirmed.
+                  Soft signal only — not identity verification. Requires the voice-analysis service. On a match the agent greets them as soon as they pause; on handoff it asks who it&apos;s speaking with and stops using the previous person&apos;s name until confirmed.
                 </p>
               )}
             </div>
@@ -3283,38 +3384,39 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
           </div>
         </div>
+        </BuilderPanel>
 
       </div>
       </div>
 
       {/* ── Custom Tools (webhooks only — Call Transfer lives under Platform Tools) ─── */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-sm font-semibold mb-0.5">Custom Tools</h3>
-            <p className="text-xs text-muted-foreground">
-              Mid-call HTTP to your API (while talking). Not the same as post-call notify or Developers event subscriptions.
+      <BuilderPanel
+        title="Custom tools"
+        icon={<Webhook />}
+        description="Mid-call HTTP to your own API"
+        action={
+          <Button type="button" variant="outline" size="sm" className="h-7 gap-1 px-2.5 text-[11px]"
+            onClick={() => append({ type: "webhook", name: "custom_action", description: "Invoke when caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment…", parameters: [] })}>
+            <Plus className="size-3" /> Add
+          </Button>
+        }
+        bodyClassName="p-0"
+      >
+        {(form.watch("tools") ?? []).filter((t: { type: string }) => t.type === "webhook").length === 0 ? (
+          <div className="px-4 py-8 text-center">
+            <Wrench className="mx-auto mb-2 h-6 w-6 text-muted-foreground/30" />
+            <p className="text-[12.5px] font-medium text-muted-foreground">No mid-call HTTP tools</p>
+            <p className="mt-0.5 text-[11.5px] text-muted-foreground/70">
+              These call your API while the agent is talking — not the same as post-call notify.
             </p>
           </div>
-          <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
-            onClick={() => append({ type: "webhook", name: "custom_action", description: "Invoke when caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment…", parameters: [] })}>
-            <Webhook className="h-3.5 w-3.5 mr-1" /> Mid-call HTTP
-          </Button>
-        </div>
-
-        {(form.watch("tools") ?? []).filter((t: { type: string }) => t.type === "webhook").length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
-            <Wrench className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
-            <p className="text-sm font-medium text-muted-foreground/50">No mid-call HTTP tools</p>
-            <p className="text-xs text-muted-foreground/30 mt-0.5">Add Mid-call HTTP above</p>
-          </div>
         ) : (
-          <div className="space-y-3">
+          <div className="divide-y divide-border">
             {fields.flatMap((field, index) => {
               const toolType = form.watch(`tools.${index}.type`);
               if (toolType !== "webhook") return [];
               return (
-                <div key={field.id} className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3">
+                <div key={field.id} className="space-y-3 p-4">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                       <Webhook className="h-3 w-3" />Mid-call HTTP
@@ -3381,24 +3483,24 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             })}
           </div>
         )}
-      </div>
+      </BuilderPanel>
     </div>
   );
 }
 
 /* ── Tab: Voicemail ─────────────────────────────────────────────────────────── */
 
-function VoicemailTab({ form }: { form: any }) {
+function VoicemailTab({ form, embedded = false }: { form: any; embedded?: boolean }) {
   const mode   = form.watch("machineDetectionMode");
   const action = form.watch("voicemailAction");
   return (
-    <div className="relative w-full max-w-xl space-y-5 px-4 py-5 sm:px-6 lg:px-8">
-      <div>
-        <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Voicemail</h3>
-        <p className="mt-1 text-[12px] text-muted-foreground">
-          Outbound only — detect answering machines and take action.
-        </p>
-      </div>
+    <BuilderPanel
+      title="Voicemail"
+      icon={<MicOff />}
+      description="Outbound only — detect answering machines"
+      className={embedded ? undefined : "mx-5 my-6 sm:mx-8"}
+      bodyClassName="gap-4"
+    >
       <FormField control={form.control} name="machineDetectionMode" render={({ field }) => (
         <FormItem>
           <FormLabel className="text-xs">Detection Mode</FormLabel>
@@ -3455,13 +3557,13 @@ function VoicemailTab({ form }: { form: any }) {
           )}
         </>
       )}
-    </div>
+    </BuilderPanel>
   );
 }
 
 /* ── Tab: Advanced ──────────────────────────────────────────────────────────── */
 
-type AdvSection = "engine" | "limits" | "compliance" | "integrations";
+type AdvSection = "engine" | "limits" | "website" | "integrations" | "compliance";
 
 function AdvSlider({ form, name, label, hint, min, max, step, fmt, onValueChange, disabled }: {
   form: any; name: string; label: string; hint?: string;
@@ -3531,7 +3633,11 @@ function IrdaiComplianceBanner({ enabled, agent }: { enabled: boolean; agent?: a
 }
 
 function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
-  const [section, setSection] = useState<AdvSection>("engine");
+  const search = useSearch();
+  const requested = new URLSearchParams(search).get("section");
+  const [section, setSection] = useState<AdvSection>(
+    requested === "website" || requested === "embed" ? "website" : "engine",
+  );
   const [traiConfirmOpen, setTraiConfirmOpen] = useState(false);
   const [dpdpConfirmOpen, setDpdpConfirmOpen] = useState(false);
   const [irdaiConfirmOpen, setIrdaiConfirmOpen] = useState(false);
@@ -3544,84 +3650,52 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   }, [form.formState.errors?.webhookUrl, form.formState.errors?.webhookSecret, form.formState.errors?.webhookPayloadTemplate]);
 
   const bargeIn = form.watch("bargeInEnabled");
-  const asrProviderVal = form.watch("asrProvider") as string | undefined;
-  const { preset: activePreset, tweaked, applyPreset } = useCallEnginePreset(form);
+  const notifyAgentName = String(form.watch("name") ?? agent?.name ?? "").trim() || "this agent";
 
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
     { id: "engine",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"     },
     { id: "limits",       icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"     },
+    { id: "website",      icon: <Globe className="h-3.5 w-3.5" />,       label: "Website"    },
     // Post-call notify for this agent — not Developers event subscriptions or campaign form intake.
     { id: "integrations", icon: <Webhook className="h-3.5 w-3.5" />,     label: "Post-call notify" },
     { id: "compliance",   icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance" },
   ];
 
   return (
-    <div className="flex flex-col">
-      <div className="border-b border-border/40 px-4 pt-5 sm:px-6 lg:px-8">
-        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Settings</h2>
-        <p className="mt-0.5 text-[12px] text-muted-foreground">
-          Engine timing, call limits, post-call notify URL, and compliance. Outcomes &amp; after-call messages are on the Outcomes tab.
-        </p>
-        {/* ── Sub-nav ── */}
-        <div className="mt-3 flex flex-shrink-0 items-center gap-1 pb-3">
-          {nav.map(n => (
-            <button
-              key={n.id}
-              type="button"
-              onClick={() => setSection(n.id)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-medium transition-all",
-                section === n.id
-                  ? "bg-primary/15 text-primary border border-primary/30"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
-              )}
-            >
-              {n.icon}
-              {n.label}
-            </button>
-          ))}
-        </div>
+    <div className={cn("flex flex-col gap-5", BUILDER_TAB_PAD)}>
+      <BuilderTabHeader
+        title="Settings"
+        description="Call limits, barge-in, hang-up, website embed, post-call notify URL, and compliance. How fast the agent replies is on Sound."
+      />
+      <div className="inline-flex flex-wrap items-center gap-1 self-start rounded-lg border border-border bg-card p-1">
+        {nav.map(n => (
+          <button
+            key={n.id}
+            type="button"
+            onClick={() => setSection(n.id)}
+            className={cn(
+              "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-[11.5px] font-medium transition-all",
+              section === n.id
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            {n.icon}
+            {n.label}
+          </button>
+        ))}
       </div>
 
-      {/* ── Content ── */}
-      <div className="space-y-4 px-4 py-5 sm:px-6 lg:px-8">
+      <div className="space-y-4">
 
         {/* ── ENGINE ── */}
         {section === "engine" && (
-          <>
-            <div>
-              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Engine</h3>
-              <p className="mt-0.5 text-[12px] text-muted-foreground">
-                The few knobs that actually drive live calls — interrupt words, when the turn ends, and how long to wait before the agent speaks.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {([
-                { id: "fast" as const, label: "Fast" },
-                { id: "balanced" as const, label: "Balanced" },
-                { id: "patient" as const, label: "Patient" },
-              ]).map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => applyPreset(p.id)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-[11.5px] font-medium border transition-all",
-                    activePreset === p.id
-                      ? "bg-primary/15 text-primary border-primary/30"
-                      : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/40",
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
-              {tweaked && (
-                <span className="px-2 py-1.5 text-[11px] text-muted-foreground/70 self-center">edited — saves as set</span>
-              )}
-            </div>
-
-            <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
+          <BuilderPanel
+            title="Call Engine"
+            icon={<Timer />}
+            description="Barge-in, extra pause, and silence hang-up"
+          >
+            <div className="space-y-5">
               <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
                 <FormItem className="flex items-center justify-between space-y-0 pb-1">
                   <div>
@@ -3650,30 +3724,9 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
 
               <AdvSlider
                 form={form}
-                name="asrEndpointingSilenceMs"
-                label="Endpointing"
-                hint={asrProviderVal === "sarvam"
-                  ? "Silence before the agent decides you finished. With Sarvam: under 200ms = fast pause detection (~0.13s), 200ms+ = patient (~1s+). Fast 150 · Balanced 250 · Patient 500."
-                  : "Milliseconds of silence after the caller stops before we finalize the turn (Azure + Deepgram). Fast 150 · Balanced 250 · Patient 500."}
-                min={100}
-                max={800}
-                step={25}
-                fmt={(v) => `${v}ms`}
-                onValueChange={(v: number) => {
-                  // Sarvam has no fine-grained silence window — only fast (~0.13s)
-                  // vs patient (~1-2s) server VAD. Map the single Endpointing knob
-                  // onto that switch so users get Bolna-style one-slider control.
-                  if (asrProviderVal === "sarvam") {
-                    form.setValue("sarvamHighVadSensitivity", v < 200, { shouldDirty: true });
-                  }
-                }}
-              />
-
-              <AdvSlider
-                form={form}
                 name="linearDelayMs"
-                label="Linear delay"
-                hint="Extra wait after end-of-turn before the agent speaks — covers mid-sentence pauses. Default off (0)."
+                label="Extra pause before speaking"
+                hint="Add a beat after the caller finishes. Off by default."
                 min={0}
                 max={1500}
                 step={50}
@@ -3686,24 +3739,6 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                   Advanced timing — rarely needed
                 </summary>
                 <div className="space-y-5 pt-4">
-                  {asrProviderVal === "sarvam" && (
-                    <>
-                      <FormField control={form.control} name="sarvamHighVadSensitivity" render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between gap-3 py-1">
-                          <div>
-                            <FormLabel className="text-[12px] font-medium text-foreground/90">Detect pauses quickly</FormLabel>
-                            <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                              Saaras VAD owns end-of-speech. On = faster pause detection (default).
-                            </p>
-                          </div>
-                          <FormControl>
-                            <Switch checked={!!field.value} onCheckedChange={field.onChange} />
-                          </FormControl>
-                        </FormItem>
-                      )} />
-                    </>
-                  )}
-
                   <AdvSlider
                     form={form}
                     name="fragmentCoalesceListeningMs"
@@ -3748,7 +3783,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                       <div>
                         <FormLabel className="text-[12px] font-medium text-foreground/90">Silence check-in</FormLabel>
                         <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                          If the caller is silent this long, play a check-in / end the call.
+                          After each turn: if they stay quiet this long, ask “are you there?” Stay silent another window and the call ends. How fast the agent replies is Fast / Balanced / Patient on Sound.
                         </p>
                       </div>
                       <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{val}s</span>
@@ -3766,20 +3801,19 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 );
               }} />
             </div>
-          </>
+          </BuilderPanel>
         )}
 
         {/* ── LIMITS ── */}
         {section === "limits" && (
-          <>
+          <div className="flex flex-col gap-4">
             {/* ── Auto-Redial on Drop ── */}
-            <div>
-              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Auto-Redial on Drop</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                When a call ends unexpectedly (network drop, accidental hang-up), automatically schedule a callback to the same number.
-              </p>
-            </div>
-            <div className="space-y-4 rounded-xl border border-border/50 bg-card/40 p-4">
+            <BuilderPanel
+              title="Auto-Redial on Drop"
+              icon={<PhoneForwarded />}
+              description="Call back after an unexpected disconnect"
+            >
+            <div className="space-y-4">
               <FormField control={form.control} name="autoRedialEnabled" render={({ field }) => (
                 <FormItem className="flex items-center justify-between space-y-0">
                   <div>
@@ -3819,14 +3853,14 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 );
               }} />
             </div>
+            </BuilderPanel>
 
-            <div>
-              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Limits</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Hard cut-off for call duration. Silence check-in lives on Engine.
-              </p>
-            </div>
-            <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
+            <BuilderPanel
+              title="Call Limits"
+              icon={<Gauge />}
+              description="Hard cut-off for call duration"
+            >
+            <div className="space-y-5">
               <FormField control={form.control} name="maxDuration" render={({ field }) => {
                 const val = field.value ?? 300;
                 const mins = Math.floor(val / 60);
@@ -3870,19 +3904,18 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 </FormItem>
               )} />
             </div>
-          </>
+            </BuilderPanel>
+          </div>
         )}
 
         {/* ── COMPLIANCE ── */}
         {section === "compliance" && (
-          <>
-            <div>
-              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Compliance Frameworks</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Regulatory disclosures injected into the system prompt at runtime. Enable the frameworks that apply to your use-case.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+          <BuilderPanel
+            title="Compliance frameworks"
+            icon={<ShieldCheck />}
+            description="Disclosures injected into the prompt at runtime"
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {([
                 { name: "complianceIrdai", label: "IRDAI",    badge: "Insurance",   desc: "Insurance Regulatory and Development Authority of India — for insurance advisory calls"         },
                 { name: "complianceDpdp",  label: "DPDP Act", badge: "Data Privacy", desc: "Digital Personal Data Protection Act 2023 — when collecting personal data from callers"       },
@@ -4029,20 +4062,32 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
             </AlertDialog>
 
             <IrdaiComplianceBanner enabled={!!form.watch("complianceIrdai")} agent={agent} />
-          </>
+          </BuilderPanel>
+        )}
+
+        {/* ── WEBSITE EMBED ── */}
+        {section === "website" && (
+          <BuilderPanel
+            title="Website webcall"
+            icon={<Globe />}
+            description="Embed this agent on your own site"
+          >
+            {agent?.id ? (
+              <AgentWebsiteEmbedPanel agentId={agent.id} agentName={agent.name ?? ""} />
+            ) : (
+              <p className="text-[12px] text-muted-foreground">Save the agent first, then generate embed code.</p>
+            )}
+          </BuilderPanel>
         )}
 
         {/* ── INTEGRATIONS ── */}
         {section === "integrations" && (
-          <>
-            <div>
-              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Post-call notify</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                After <em>this</em> agent finishes a call, POST JSON to your CRM or Zap. Leave blank if unused.
-                Workspace-wide event subscriptions live under Developers → Event subscriptions.
-              </p>
-            </div>
-            <div className="space-y-3 rounded-xl border border-border/50 bg-card/40 p-4">
+          <BuilderPanel
+            title="Post-call notify"
+            icon={<Webhook />}
+            description={`POST JSON to your CRM after each call on ${notifyAgentName}`}
+          >
+            <div className="space-y-3">
               <FormField control={form.control} name="webhookUrl" render={({ field }) => {
                 const val = field.value ?? "";
                 const isEmail = val.includes("@") && !val.startsWith("http");
@@ -4118,11 +4163,11 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 </FormItem>
               )} />
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              Disposition taxonomy and after-call WhatsApp / email live on the{" "}
-              <span className="text-foreground/80">Outcomes</span> tab.
+            <p className="mt-3 text-[11px] text-muted-foreground">
+              Outcome labels and after-call WhatsApp / email live on{" "}
+              <span className="text-foreground/80">After the call</span>.
             </p>
-          </>
+          </BuilderPanel>
         )}
 
       </div>
@@ -4253,8 +4298,9 @@ function AgentListPanel({ selectedId, onSelect, className }: {
               )}
             >
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <span className="truncate text-[12px] font-medium">{agent.name}</span>
+                  <span className="shrink-0 rounded bg-muted/80 px-1 py-0.5 text-[9px] font-mono font-medium text-muted-foreground">#{agent.id}</span>
                   <StatusDot tone={isLive ? "success" : "neutral"} />
                 </div>
                 {team ? (
@@ -4314,10 +4360,11 @@ type AfterCallMsgRule = {
   dispositions: string[];
   whatsapp: boolean;
   email: boolean;
+  whatsappTemplate?: WaTplChoice | null;
 };
 
 type AfterCallMessagesState = {
-  universal: { whatsapp: boolean; email: boolean };
+  universal: { whatsapp: boolean; email: boolean; whatsappTemplate?: WaTplChoice | null };
   skipUniversalWhenMatched: boolean;
   rules: AfterCallMsgRule[];
 };
@@ -4327,6 +4374,19 @@ const EMPTY_AFTER_CALL_MESSAGES: AfterCallMessagesState = {
   skipUniversalWhenMatched: true,
   rules: [],
 };
+
+function readWaTpl(raw: unknown): WaTplChoice | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const name = typeof o.name === "string" ? o.name.trim() : "";
+  const language = typeof o.language === "string" ? o.language.trim() : "";
+  if (!name || !language) return null;
+  return {
+    name,
+    language,
+    paramCount: Number.isFinite(Number(o.paramCount)) ? Math.max(0, Number(o.paramCount)) : 0,
+  };
+}
 
 function readAfterCallMessages(raw: unknown): AfterCallMessagesState {
   if (!raw || typeof raw !== "object") return { ...EMPTY_AFTER_CALL_MESSAGES, rules: [] };
@@ -4348,12 +4408,17 @@ function readAfterCallMessages(raw: unknown): AfterCallMessagesState {
             dispositions,
             whatsapp: !!r["whatsapp"],
             email: !!r["email"],
+            whatsappTemplate: readWaTpl(r["whatsappTemplate"]),
           };
         })
-        .filter((r): r is AfterCallMsgRule => !!r)
+        .filter((r): r is NonNullable<typeof r> => r !== null)
     : [];
   return {
-    universal: { whatsapp: !!u["whatsapp"], email: !!u["email"] },
+    universal: {
+      whatsapp: !!u["whatsapp"],
+      email: !!u["email"],
+      whatsappTemplate: readWaTpl(u["whatsappTemplate"]),
+    },
     skipUniversalWhenMatched: o["skipUniversalWhenMatched"] !== false,
     rules,
   };
@@ -4383,12 +4448,15 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const [outcomeGuides, setOutcomeGuides] = useState<Record<string, string>>({});
   const [afterCallMessages, setAfterCallMessages] = useState<AfterCallMessagesState>(EMPTY_AFTER_CALL_MESSAGES);
   const [dirty, setDirty] = useState(false);
-
-  const connectionsReturn = (setup: "whatsapp" | "email") => {
-    const returnTo = encodeURIComponent(`/app/agents/${agentId}?section=outcomes`);
-    const returnLabel = encodeURIComponent("Outcomes");
-    navigate(`/app/connections?setup=${setup}&agentId=${agentId}&returnTo=${returnTo}&returnLabel=${returnLabel}`);
-  };
+  const [outcomesAutoStatus, setOutcomesAutoStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
+  const [outcomesCommitTick, setOutcomesCommitTick] = useState(0);
+  const outcomesAutoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const outcomesEditRevRef = useRef(0);
+  const outcomesSaveRevRef = useRef(0);
+  const outcomesAutoSaveRef = useRef(false);
+  const mutateOutcomesRef = useRef<() => void>(() => {});
+  const outcomesCommitSnapRef = useRef({ dirty: false, categories, fields });
+  outcomesCommitSnapRef.current = { dirty, categories, fields };
 
   const { data: dispConfig, isLoading: dispLoading } = useQuery<DispConfigRow | null>({
     queryKey: ["disposition-config", agentId],
@@ -4407,7 +4475,14 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
     queryKey: ["builder-whatsapp-connections", agentId],
     queryFn: () =>
       customFetch<{
-        connections: Array<{ id: string; active: boolean; agentId: number | null }>;
+        connections: Array<{
+          id: string;
+          active: boolean;
+          agentId: number | null;
+          metaConnected?: boolean;
+          metaPhoneNumberId?: string | null;
+          templateCatalog?: WaCatalogEntry[];
+        }>;
       }>(`${DASH_API}/whatsapp/connections`),
     staleTime: 60_000,
     enabled: agentId > 0,
@@ -4415,7 +4490,14 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const { data: waChannel } = useQuery({
     queryKey: ["builder-whatsapp-channel", agentId],
     queryFn: () =>
-      customFetch<{ channel: { active?: boolean } | null }>(`${DASH_API}/whatsapp/channel`),
+      customFetch<{ channel: { active?: boolean; status?: string | null; vobizChannelId?: string | null; phoneE164?: string | null; templateCatalog?: WaCatalogEntry[] } | null }>(`${DASH_API}/whatsapp/channel`),
+    staleTime: 60_000,
+    enabled: agentId > 0,
+  });
+  const { data: nativeTpl } = useQuery({
+    queryKey: ["wa-agent-templates", agentId],
+    queryFn: () =>
+      customFetch<{ templateCatalog?: WaCatalogEntry[] }>(`${DASH_API}/whatsapp/agents/${agentId}/templates`),
     staleTime: 60_000,
     enabled: agentId > 0,
   });
@@ -4429,13 +4511,30 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
 
   const waConnList = Array.isArray(waConnections?.connections) ? waConnections.connections : [];
   const whatsappReady = !!(
-    waConnList.some((c) => c.active && (c.agentId === agentId || c.agentId == null)) ||
-    waChannel?.channel?.active
+    waConnList.some((c) => c.active && (c.metaConnected || c.metaPhoneNumberId))
+    || (waChannel?.channel?.active && (waChannel.channel.status === "active" || waChannel.channel.vobizChannelId || waChannel.channel.phoneE164))
   );
   const emailReady = !!emailChannel?.channel?.active;
+  const waCatalog = useMemo(() => {
+    const map = new Map<string, WaCatalogEntry>();
+    const piles = [
+      waChannel?.channel?.templateCatalog,
+      nativeTpl?.templateCatalog,
+      ...waConnList.map((c) => c.templateCatalog),
+    ];
+    for (const list of piles) {
+      for (const t of list ?? []) {
+        if (!t?.name || !t.language) continue;
+        map.set(`${t.name}|${t.language}`, t);
+      }
+    }
+    return [...map.values()];
+  }, [waChannel?.channel?.templateCatalog, nativeTpl?.templateCatalog, waConnList]);
 
   useEffect(() => {
     if (!dispConfig) return;
+    // Keep an open empty row — refetch after auto-save used to wipe it.
+    if (dirty) return;
     setCategories(taxonomyToCategories(dispConfig.taxonomy ?? {}));
     setFields((dispConfig.domainFields ?? []).map(fromStoredDomainField));
     setRules(Array.isArray(dispConfig.rules) ? dispConfig.rules : []);
@@ -4455,7 +4554,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
     );
     setAfterCallMessages(readAfterCallMessages(dispConfig.afterCallMessages));
     setDirty(false);
-  }, [dispConfig]);
+  }, [dispConfig, dirty]);
 
   /** After-call rules: primary + primary:sub (matches dispositionMatchesAny). */
   const dispositionKeys = useMemo(() => {
@@ -4497,12 +4596,6 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       const domainFields = fields
         .map(toStoredDomainField)
         .filter((f): f is StoredDomainField => !!f);
-      // Don't persist empty after-call config on first save — that would gate off legacy always-on WhatsApp.
-      const persistAfterCall =
-        dispConfig?.afterCallMessages != null ||
-        afterCallMessages.universal.whatsapp ||
-        afterCallMessages.universal.email ||
-        afterCallMessages.rules.length > 0;
       const allowed = new Set<string>();
       for (const [primary, vals] of Object.entries(taxonomy)) {
         for (const v of vals ?? []) {
@@ -4526,25 +4619,65 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           rules,
           meaningMap,
           outcomeGuides: guides,
-          ...(persistAfterCall ? { afterCallMessages } : {}),
+          // Always persist the explicit toggle state. Omitting an all-off value
+          // makes the server use the legacy always-on WhatsApp behaviour.
+          afterCallMessages,
         }),
       });
     },
     onSuccess: () => {
-      toast({ title: "Outcomes saved" });
+      const isAuto = outcomesAutoSaveRef.current;
+      outcomesAutoSaveRef.current = false;
+      if (outcomesEditRevRef.current !== outcomesSaveRevRef.current) {
+        setOutcomesAutoStatus("pending");
+        return;
+      }
       setDirty(false);
+      setOutcomesAutoStatus("saved");
+      if (!isAuto) toast({ title: "Outcomes saved" });
       void qc.invalidateQueries({ queryKey: ["disposition-config", agentId] });
     },
     onError: () => {
+      outcomesAutoSaveRef.current = false;
+      setOutcomesAutoStatus("error");
       toast({ title: "Failed to save", variant: "destructive" });
     },
   });
+  mutateOutcomesRef.current = saveMutation.mutate;
+
+  function requestOutcomesCommit() {
+    setOutcomesCommitTick((n) => n + 1);
+  }
+
+  function onOutcomesFieldKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!isDispositionCommitKey(e.key, e.nativeEvent.isComposing)) return;
+    e.preventDefault();
+    e.currentTarget.blur();
+  }
+
+  useEffect(() => {
+    if (!dirty) return;
+    outcomesEditRevRef.current += 1;
+    setOutcomesAutoStatus("pending");
+  }, [dirty, categories, fields, rules, meaningMap, outcomeGuides, afterCallMessages]);
+
+  useEffect(() => {
+    if (outcomesCommitTick === 0) return;
+    const snap = outcomesCommitSnapRef.current;
+    if (!canCommitDispositionSave(snap.dirty, snap.categories, snap.fields)) return;
+    if (outcomesAutoTimerRef.current) clearTimeout(outcomesAutoTimerRef.current);
+    outcomesSaveRevRef.current = outcomesEditRevRef.current;
+    outcomesAutoSaveRef.current = true;
+    setOutcomesAutoStatus("saving");
+    mutateOutcomesRef.current();
+  }, [outcomesCommitTick]);
 
   function applyPreset(presetId: string) {
     const preset = OUTCOME_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     setCategories(taxonomyToCategories(preset.taxonomy));
     setDirty(true);
+    requestOutcomesCommit();
   }
 
   function addCategory() {
@@ -4555,6 +4688,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   function removeCategory(id: string) {
     setCategories((prev) => prev.filter((c) => c.id !== id));
     setDirty(true);
+    requestOutcomesCommit();
   }
 
   function updateCategory(id: string, field: "name" | "values", value: string) {
@@ -4579,11 +4713,13 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       ];
     });
     setDirty(true);
+    if (label || key) requestOutcomesCommit();
   }
 
   function removeField(id: string) {
     setFields((prev) => prev.filter((f) => f.id !== id));
     setDirty(true);
+    requestOutcomesCommit();
   }
 
   function updateField(id: string, patch: Partial<UiDomainField>) {
@@ -4602,31 +4738,16 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
 
   if (agentId <= 0) {
     return (
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <Tag className="h-4 w-4 text-amber-400" />
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Outcomes</h3>
-        </div>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
+      <BuilderPanel title="What happened" icon={<Tag />}>
+        <p className="text-[12px] leading-relaxed text-muted-foreground">
           Save the agent first to define outcomes and data fields.
         </p>
-      </div>
+      </BuilderPanel>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <Tag className="h-4 w-4 text-amber-400" />
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Outcomes</h3>
-        </div>
-        <p className="text-[11px] text-muted-foreground">
-          After each call, AI reads the transcript, picks one of <em>your</em> outcome labels
-          (using the business definitions you write), and extracts data fields as structured values.
-        </p>
-      </div>
-
+    <div className="flex flex-col gap-6">
       {dispLoading ? (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-xl bg-muted/20 animate-pulse" />)}
@@ -4634,18 +4755,16 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       ) : (
         <>
           {/* ── Outcomes ─────────────────────────────────────────────── */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h4 className="text-xs font-semibold text-foreground">Outcome labels</h4>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Add labels, then define what each means for your business — that text is what the AI uses.
-                </p>
-              </div>
-              <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addCategory}>
-                <Plus className="h-3.5 w-3.5" /> Add category
+          <BuilderPanel
+            title="Outcome labels"
+            icon={<Tag />}
+            description="AI picks one of these after each call"
+            action={
+              <Button type="button" variant="outline" size="sm" className="h-7 gap-1 px-2.5 text-[11px]" onClick={addCategory}>
+                <Plus className="size-3" /> Add category
               </Button>
-            </div>
+            }
+          >
             <div className="flex flex-wrap gap-1.5 mb-3">
               {OUTCOME_PRESETS.map((p) => (
                 <Button
@@ -4661,14 +4780,14 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
               ))}
             </div>
             {categories.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border/50 p-6 text-center">
-                <p className="text-sm font-medium text-muted-foreground/60">No outcomes yet</p>
-                <p className="text-xs text-muted-foreground/40 mt-0.5">Pick a preset or add a category</p>
+              <div className="rounded-lg border border-dashed border-border p-6 text-center">
+                <p className="text-[12.5px] font-medium text-muted-foreground">No outcomes yet</p>
+                <p className="mt-0.5 text-[11.5px] text-muted-foreground/70">Pick a preset or add a category</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {categories.map((cat) => (
-                  <div key={cat.id} className="rounded-xl border border-border/60 bg-card/20 p-4">
+                  <div key={cat.id} className="rounded-lg border border-border bg-background p-4">
                     <div className="flex items-start gap-3">
                       <div className="flex-1 grid grid-cols-2 gap-3">
                         <div className="space-y-1">
@@ -4678,6 +4797,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                             placeholder="e.g. outcome"
                             value={cat.name}
                             onChange={(e) => updateCategory(cat.id, "name", e.target.value)}
+                            onBlur={() => requestOutcomesCommit()}
+                            onKeyDown={onOutcomesFieldKeyDown}
                           />
                         </div>
                         <div className="space-y-1">
@@ -4689,6 +4810,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                             placeholder="interested, callback, no_answer"
                             value={cat.values}
                             onChange={(e) => updateCategory(cat.id, "values", e.target.value)}
+                            onBlur={() => requestOutcomesCommit()}
+                            onKeyDown={onOutcomesFieldKeyDown}
                           />
                         </div>
                       </div>
@@ -4706,21 +4829,22 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                 ))}
               </div>
             )}
-          </div>
+          </BuilderPanel>
 
           {/* ── Per-outcome business definitions ─────────────────────── */}
           {outcomeGuideKeys.length > 0 && (
-            <div>
-              <div className="mb-2">
-                <h4 className="text-xs font-semibold text-foreground">What each label means</h4>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Your definitions — not a sales funnel. Example for <span className="font-mono">interested</span>:
-                  “Asked for pricing, budget confirmed, or agreed to a site visit this week.”
-                </p>
-              </div>
+            <BuilderPanel
+              title="What each label means"
+              icon={<BookOpen />}
+              description="Your definitions are what the AI reads"
+            >
+              <p className="mb-3 text-[11.5px] leading-relaxed text-muted-foreground">
+                Example for <span className="font-mono">interested</span>: “Asked for pricing, budget confirmed,
+                or agreed to a site visit this week.”
+              </p>
               <div className="space-y-2.5">
                 {outcomeGuideKeys.map((key) => (
-                  <div key={key} className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-1.5">
+                  <div key={key} className="space-y-1.5 rounded-lg border border-border bg-background p-3">
                     <label className="text-[12px] font-medium text-foreground font-mono">{key}</label>
                     <Textarea
                       className="min-h-[72px] resize-y text-[12px] leading-relaxed"
@@ -4736,30 +4860,25 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                         });
                         setDirty(true);
                       }}
+                      onBlur={() => requestOutcomesCommit()}
                     />
                   </div>
                 ))}
               </div>
-            </div>
+            </BuilderPanel>
           )}
 
           {/* ── After-call messages (agent-owned) ─────────────────────── */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                  <h4 className="text-xs font-semibold text-foreground">After-call messages</h4>
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  WhatsApp / email after the call ends. Connecting channels opens a setup page — use Back to Outcomes when finished.
-                </p>
-              </div>
+          <BuilderPanel
+            title="After-call messages"
+            icon={<MessageCircle />}
+            description="Sends when the call ends and the outcome is known — Interested vs Not Interested cannot be decided mid-call"
+            action={
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs gap-1"
+                className="h-7 gap-1 px-2.5 text-[11px]"
                 disabled={dispositionKeys.length === 0}
                 onClick={() => {
                   setAfterCallMessages((prev) => ({
@@ -4775,14 +4894,15 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                     ],
                   }));
                   setDirty(true);
+                  requestOutcomesCommit();
                 }}
               >
-                <Plus className="h-3.5 w-3.5" /> Add rule
+                <Plus className="size-3" /> Add rule
               </Button>
-            </div>
-
+            }
+          >
             {(!whatsappReady || !emailReady) && (
-              <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 mb-3 space-y-2">
+              <div className="mb-3 space-y-2 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
                 <p className="text-[12px] font-medium text-foreground">
                   {!whatsappReady && !emailReady
                     ? "Connect WhatsApp or email first"
@@ -4791,7 +4911,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                       : "Email not connected yet"}
                 </p>
                 <p className="text-[10px] text-muted-foreground">
-                  You can still save rules now — messages only send after the channel is live under Connections.
+                  You can still save rules now — messages only send after the workspace connection is live.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {!whatsappReady && (
@@ -4799,9 +4919,9 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                       type="button"
                       size="sm"
                       className="h-7 text-[10px]"
-                      onClick={() => connectionsReturn("whatsapp")}
+                      onClick={() => navigate(connectionsSetupHref("whatsapp", agentId, "outcomes"))}
                     >
-                      Set up WhatsApp
+                      Connect WhatsApp
                     </Button>
                   )}
                   {!emailReady && (
@@ -4810,9 +4930,9 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                       size="sm"
                       variant={whatsappReady ? "default" : "outline"}
                       className="h-7 text-[10px]"
-                      onClick={() => connectionsReturn("email")}
+                      onClick={() => navigate(connectionsSetupHref("email", agentId, "outcomes"))}
                     >
-                      Set up email
+                      Connect email
                     </Button>
                   )}
                 </div>
@@ -4849,29 +4969,32 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                     variant="ghost"
                     size="sm"
                     className="h-6 text-[10px] px-2"
-                    onClick={() => connectionsReturn("whatsapp")}
+                    onClick={() => navigate(connectionsSetupHref("whatsapp", agentId, "outcomes"))}
                   >
                     Connect WhatsApp
                   </Button>
-                ) : (
+                ) : null}
+                {!emailReady ? (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     className="h-6 text-[10px] px-2"
-                    onClick={() => connectionsReturn("whatsapp")}
+                    onClick={() => navigate(connectionsSetupHref("email", agentId, "outcomes"))}
                   >
-                    Manage WhatsApp
+                    Connect email
                   </Button>
-                )}
+                ) : null}
               </div>
             )}
 
             <div className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-3 mb-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[12px] font-medium text-foreground">Every call</p>
-                  <p className="text-[10px] text-muted-foreground">Universal follow-up for all leads</p>
+                  <p className="text-[12px] font-medium text-foreground">One template for all outcomes</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    After the call, every lead gets this template. Add a rule below to send a different one for Interested, Not Interested, etc.
+                  </p>
                 </div>
                 <div className="flex items-center gap-4">
                   <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -4883,6 +5006,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                           universal: { ...prev.universal, whatsapp: v },
                         }));
                         setDirty(true);
+                        requestOutcomesCommit();
                       }}
                     />
                     WhatsApp
@@ -4896,12 +5020,31 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                           universal: { ...prev.universal, email: v },
                         }));
                         setDirty(true);
+                        requestOutcomesCommit();
                       }}
                     />
                     Email
                   </label>
                 </div>
               </div>
+              {afterCallMessages.universal.whatsapp && whatsappReady && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground">WhatsApp template</p>
+                  <WhatsappTemplateSelect
+                    catalog={waCatalog}
+                    value={afterCallMessages.universal.whatsappTemplate}
+                    emptyLabel="Select template"
+                    onChange={(next) => {
+                      setAfterCallMessages((prev) => ({
+                        ...prev,
+                        universal: { ...prev.universal, whatsappTemplate: next },
+                      }));
+                      setDirty(true);
+                      requestOutcomesCommit();
+                    }}
+                  />
+                </div>
+              )}
               {afterCallMessages.rules.length > 0 && (
                 <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
                   <Switch
@@ -4909,6 +5052,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                     onCheckedChange={(v) => {
                       setAfterCallMessages((prev) => ({ ...prev, skipUniversalWhenMatched: v }));
                       setDirty(true);
+                      requestOutcomesCommit();
                     }}
                   />
                   Skip universal when a disposition rule matches
@@ -4917,17 +5061,17 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
             </div>
 
             {afterCallMessages.rules.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border/50 p-4 text-center">
-                <p className="text-xs text-muted-foreground/60">
+              <div className="rounded-lg border border-dashed border-border p-4 text-center">
+                <p className="text-[11.5px] text-muted-foreground">
                   {dispositionKeys.length === 0
-                    ? "Add outcomes first, then map WhatsApp / email per disposition."
-                    : "No disposition rules yet — use Add rule, or turn on Every call."}
+                    ? "Add outcomes above, then Add rule to send a different template for one or more dispositions."
+                    : "Same template for every outcome above — or Add rule to pick dispositions and a different template."}
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
                 {afterCallMessages.rules.map((rule) => (
-                  <div key={rule.id} className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-3">
+                  <div key={rule.id} className="space-y-3 rounded-lg border border-border bg-background p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex flex-wrap gap-1.5 flex-1">
                         {dispositionKeys.map((d) => {
@@ -4948,6 +5092,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                                   }),
                                 }));
                                 setDirty(true);
+                                requestOutcomesCommit();
                               }}
                               className={cn(
                                 "rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors",
@@ -4972,6 +5117,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                             rules: prev.rules.filter((r) => r.id !== rule.id),
                           }));
                           setDirty(true);
+                          requestOutcomesCommit();
                         }}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -4989,6 +5135,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                               ),
                             }));
                             setDirty(true);
+                            requestOutcomesCommit();
                           }}
                         />
                         WhatsApp
@@ -5004,31 +5151,52 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                               ),
                             }));
                             setDirty(true);
+                            requestOutcomesCommit();
                           }}
                         />
                         Email
                       </label>
                     </div>
+                    {rule.whatsapp && whatsappReady && (
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Template for the selected dispositions</p>
+                        <WhatsappTemplateSelect
+                          catalog={waCatalog}
+                          value={rule.whatsappTemplate}
+                          emptyLabel="Select template"
+                          onChange={(next) => {
+                            setAfterCallMessages((prev) => ({
+                              ...prev,
+                              rules: prev.rules.map((r) =>
+                                r.id === rule.id ? { ...r, whatsappTemplate: next } : r,
+                              ),
+                            }));
+                            setDirty(true);
+                            requestOutcomesCommit();
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </BuilderPanel>
 
           {/* ── Data to collect ──────────────────────────────────────── */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h4 className="text-xs font-semibold text-foreground">Data to collect</h4>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  AI pulls these from the transcript after the call as structured fields.
-                  Phone / WhatsApp / alternate number → digits only (spoken “eight nine…” is converted).
-                </p>
-              </div>
-              <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => addField()}>
-                <Plus className="h-3.5 w-3.5" /> Add field
+          <BuilderPanel
+            title="Data to collect"
+            icon={<List />}
+            description="Structured fields pulled from the transcript"
+            action={
+              <Button type="button" variant="outline" size="sm" className="h-7 gap-1 px-2.5 text-[11px]" onClick={() => addField()}>
+                <Plus className="size-3" /> Add field
               </Button>
-            </div>
+            }
+          >
+            <p className="mb-3 text-[11.5px] leading-relaxed text-muted-foreground">
+              Phone / WhatsApp / alternate number are saved as digits only — spoken “eight nine…” is converted.
+            </p>
             <div className="flex flex-wrap gap-1.5 mb-3">
               {DOMAIN_FIELD_QUICK_ADDS.map((q) => (
                 <Button
@@ -5045,14 +5213,14 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
               ))}
             </div>
             {fields.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border/50 p-6 text-center">
-                <p className="text-sm font-medium text-muted-foreground/60">No data fields</p>
-                <p className="text-xs text-muted-foreground/40 mt-0.5">Quick-add WhatsApp, email, city…</p>
+              <div className="rounded-lg border border-dashed border-border p-6 text-center">
+                <p className="text-[12.5px] font-medium text-muted-foreground">No data fields</p>
+                <p className="mt-0.5 text-[11.5px] text-muted-foreground/70">Quick-add WhatsApp, email, city…</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {fields.map((field) => (
-                  <div key={field.id} className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
+                  <div key={field.id} className="space-y-3 rounded-lg border border-border bg-background p-4">
                     <div className="flex items-start gap-3">
                       <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="space-y-1">
@@ -5062,6 +5230,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                             placeholder="WhatsApp number"
                             value={field.label}
                             onChange={(e) => updateField(field.id, { label: e.target.value })}
+                            onBlur={() => requestOutcomesCommit()}
+                            onKeyDown={onOutcomesFieldKeyDown}
                           />
                         </div>
                         <div className="space-y-1">
@@ -5071,13 +5241,18 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                             placeholder="whatsapp_number"
                             value={field.key}
                             onChange={(e) => updateField(field.id, { key: e.target.value })}
+                            onBlur={() => requestOutcomesCommit()}
+                            onKeyDown={onOutcomesFieldKeyDown}
                           />
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Type</label>
                           <Select
                             value={field.uiType}
-                            onValueChange={(v) => updateField(field.id, { uiType: v as UiDomainFieldType })}
+                            onValueChange={(v) => {
+                              updateField(field.id, { uiType: v as UiDomainFieldType });
+                              requestOutcomesCommit();
+                            }}
                           >
                             <SelectTrigger className="h-8 text-xs">
                               <SelectValue />
@@ -5112,6 +5287,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                           placeholder="yes, no, maybe"
                           value={field.optionsText ?? ""}
                           onChange={(e) => updateField(field.id, { optionsText: e.target.value })}
+                          onBlur={() => requestOutcomesCommit()}
+                          onKeyDown={onOutcomesFieldKeyDown}
                         />
                       </div>
                     )}
@@ -5119,18 +5296,32 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                 ))}
               </div>
             )}
-          </div>
+          </BuilderPanel>
         </>
       )}
 
-      {(categories.length > 0 || fields.length > 0 || dirty || dispositionKeys.length > 0) && (
-        <div className="flex justify-end">
+      {(categories.length > 0 || fields.length > 0 || dirty || dispositionKeys.length > 0 || outcomesAutoStatus === "saved") && (
+        <div className="flex items-center justify-end gap-2">
+          {dirty && (
+            <span className="text-[11px] text-muted-foreground">
+              {outcomesAutoStatus === "saving" ? "Auto-saving…" : outcomesAutoStatus === "error" ? "Auto-save failed" : "Saves when you leave the field"}
+            </span>
+          )}
+          {!dirty && outcomesAutoStatus === "saved" && (
+            <span className="text-[11px] text-emerald-700 dark:text-emerald-400">Auto-saved</span>
+          )}
           <Button
             type="button"
             size="sm"
             className="h-8 text-xs gap-1.5"
             disabled={saveMutation.isPending || !dirty}
-            onClick={() => saveMutation.mutate()}
+            onClick={() => {
+              if (outcomesAutoTimerRef.current) clearTimeout(outcomesAutoTimerRef.current);
+              outcomesSaveRevRef.current = outcomesEditRevRef.current;
+              outcomesAutoSaveRef.current = false;
+              setOutcomesAutoStatus("saving");
+              saveMutation.mutate();
+            }}
           >
             <Save className="h-3.5 w-3.5" />
             {saveMutation.isPending ? "Saving…" : "Save Outcomes"}
@@ -6024,7 +6215,7 @@ function VersionCard({
 
   return (
     <div className={cn(
-      "flex items-start gap-4 px-5 py-4 hover:bg-muted/10 transition-colors",
+      "flex items-start gap-4 px-0 py-4 hover:bg-muted/10 transition-colors",
       isArchived && "opacity-60",
       selected && "bg-primary/5",
     )}>
@@ -6366,47 +6557,43 @@ function VersionsTab({ agentId }: { agentId: number }) {
   const selectedV2 = versions.find(v => v.id === selectedArr[1]);
 
   return (
-    <div className="flex flex-col">
-      {/* Header strip */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-border/60 shrink-0">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <History className="h-4 w-4 text-primary" />
-          Version History
-        </div>
-        {productionVersion && (
-          <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={() => setRestoreTarget(productionVersion)}>
-            <RotateCcw className="h-3 w-3" /> Restore Last Working Version
+    <div className={cn("flex flex-col gap-4", BUILDER_TAB_PAD)}>
+      <BuilderTabHeader
+        title="Versions"
+        description="Published snapshots you can restore. Drafts are auto-saved history."
+        actions={productionVersion ? (
+          <Button type="button" variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setRestoreTarget(productionVersion)}>
+            <RotateCcw className="h-3 w-3" /> Restore last working
           </Button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
-      {/* Sub-tabs */}
-      <div className="flex border-b border-border/60 shrink-0 px-1">
+      <div className="inline-flex flex-wrap items-center gap-1 self-start rounded-lg border border-border bg-card p-1">
         <button
           type="button"
           onClick={() => setActiveSubTab("published")}
           className={cn(
-            "flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors",
+            "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-[11.5px] font-medium transition-all",
             activeSubTab === "published"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground",
+              ? "bg-foreground text-background"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
           )}
         >
-          Published Versions
-          <Badge variant="outline" className="text-[10px] h-4 px-1">{activePublished.length}</Badge>
+          Published
+          <Badge variant="outline" className={cn("h-4 px-1 text-[10px]", activeSubTab === "published" && "border-background/30 text-background")}>{activePublished.length}</Badge>
         </button>
         <button
           type="button"
           onClick={() => setActiveSubTab("drafts")}
           className={cn(
-            "flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors",
+            "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-[11.5px] font-medium transition-all",
             activeSubTab === "drafts"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground",
+              ? "bg-foreground text-background"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
           )}
         >
-          Draft History
-          <Badge variant="outline" className="text-[10px] h-4 px-1">{draftVersions.length}</Badge>
+          Drafts
+          <Badge variant="outline" className={cn("h-4 px-1 text-[10px]", activeSubTab === "drafts" && "border-background/30 text-background")}>{draftVersions.length}</Badge>
         </button>
       </div>
 
@@ -6415,7 +6602,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
         <>
           {/* Usage indicator */}
           {!isLoading && publishedVersions.length > 0 && (
-            <div className="px-5 py-3 border-b border-border/40 shrink-0 space-y-2">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground font-medium">
                   <span className={cn("font-bold", publishedCount >= limit ? "text-destructive" : publishedCount >= 8 ? "text-amber-400" : "text-foreground")}>
@@ -6430,7 +6617,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
           )}
           {/* Warning banner */}
           {isNearLimit && publishedCount < limit && (
-            <div className="mx-5 mt-3 shrink-0 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3.5 py-2.5">
+            <div className="mt-1 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3.5 py-2.5">
               <Info className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
               <p className="text-[11px] text-amber-400/90 leading-relaxed">
                 <strong>Approaching limit:</strong> You have {publishedCount} of {limit} published versions used. Consider archiving older versions to keep publishing new ones.
@@ -6479,7 +6666,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
                 <button
                   type="button"
                   onClick={() => setArchivedOpen(o => !o)}
-                  className="w-full flex items-center gap-2 px-5 py-2.5 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors border-t border-border/40 hover:bg-muted/10"
+                  className="flex w-full items-center gap-2 border-t border-border/40 py-2.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted/10 hover:text-foreground"
                 >
                   {archivedOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                   <Archive className="h-3 w-3" />
@@ -6529,12 +6716,12 @@ function VersionsTab({ agentId }: { agentId: number }) {
           )}
           {!isLoading && draftGroups.map(({ label, items }) => (
             <div key={label} className="mb-1">
-              <div className="px-5 py-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 bg-muted/10 border-y border-border/30">
+              <div className="border-y border-border/30 bg-muted/10 px-0 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">
                 {label}
               </div>
               <div className="divide-y divide-border/30">
                 {items.map((v) => (
-                  <div key={v.id} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/10 transition-colors">
+                  <div key={v.id} className="flex items-center gap-3 px-0 py-3 hover:bg-muted/10 transition-colors">
                     <div className="shrink-0 text-[10px] font-mono text-muted-foreground/60 w-10 text-right">
                       {format(new Date(v.createdAt), "HH:mm")}
                     </div>
@@ -6595,7 +6782,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
 
       {/* Quick compare sticky bar */}
       {selectedForCompare.size === 2 && selectedV1 && selectedV2 && (
-        <div className="shrink-0 border-t border-primary/30 bg-primary/5 px-5 py-3 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3 border-t border-primary/30 bg-primary/5 px-0 py-3">
           <ArrowLeftRight className="h-3.5 w-3.5 text-primary shrink-0" />
           <span className="text-xs text-foreground/80 flex-1 truncate">
             Compare <strong>{selectedV1.versionNumber}</strong> vs <strong>{selectedV2.versionNumber}</strong>
@@ -6722,18 +6909,26 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   const updateAgent = useUpdateAgent();
   const deleteAgent = useDeleteAgent();
   const initiateOutbound = useInitiateOutboundCall();
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "invalid" | "error">("idle");
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveHandlerRef = useRef<(() => Promise<void>) | null>(null);
+  const autoSaveRequestRef = useRef(false);
+  const saveInFlightRef = useRef(false);
+  const suppressAutoSaveRef = useRef(false);
+  const editRevisionRef = useRef(0);
 
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
       name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
       llmProvider: "sarvam", llmModel: "sarvam-105b-conversations", ttsProvider: "cartesia",
-      ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478", ttsModel: "sonic-3.5", telephonyProvider: "vobiz",
+      ttsVoice: DEFAULT_CARTESIA_VOICE_ID, ttsModel: "sonic-3.6", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 480,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
-      language: "en-US", asrLanguage: "", backchannelingEnabled: true,
+      language: "en-IN", asrLanguage: "", backchannelingEnabled: true,
       backchannelingFrequency: 0.5, webhookUrl: "",
       webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: true,
+      forceSoftwareNoiseGate: false,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0, promptVariables: [],
       vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1800,
       bargeInMinFrames: 4, micSensitivity: "low", timezone: "", machineDetectionMode: "disabled",
@@ -6745,7 +6940,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       autoSwitchToEnglish: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0,
       startSpeakingOnNoPunctuationSecs: 0, startSpeakingOnNumberSecs: 0,
-      stopSpeakingNumWords: 1, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
+      stopSpeakingNumWords: 3, stopSpeakingVoiceSecs: 0.45, stopSpeakingBackOffSecs: 1,
       complianceIrdai: false, complianceDpdp: false, complianceTrai: false,
       knowledgeSourceIds: [],
       contextWindowTurns: undefined,
@@ -6756,17 +6951,23 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       inboundPhoneNumberId: undefined,
       outboundPhoneNumberId: undefined,
       preferredManagedNumber: null,
-      asrEndpointingSilenceMs: 250,
-      llmMaxTokens: 200,
+      asrEndpointingSilenceMs: 150,
+      llmMaxTokens: 500,
       ttsMinSentenceChars: 5,
       ttsSpeed: 1,
       linearDelayMs: 0,
       fragmentCoalesceListeningMs: 0,
       fragmentCoalescePlayingMs: 0,
-      telephonyTailDrainMs: 400,
+      telephonyTailDrainMs: 0,
       sarvamHighVadSensitivity: true,
+      sarvamSttStreamType: "fast",
+      sarvamSttPrompt: "",
+      sarvamEndOfSpeechSilenceMs: undefined,
+      sarvamFirstTurnMinSpeechMs: undefined,
+      sarvamVadThreshold: undefined,
       sarvamSpeechEndFlushMs: 0,
       sarvamIncompleteHoldMs: 0,
+      semanticTurnStopMs: 800,
       kbBakedOnly: false,
       autoRedialEnabled: true,
       autoRedialMaxAttempts: 3,
@@ -6825,6 +7026,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
     const resetSig = `${agent.id}:${(agent as any).updatedAt ?? ""}`;
     if (agentResetSigRef.current === resetSig) return;
     agentResetSigRef.current = resetSig;
+    const sarvamVad = hydrateSarvamRealtimeVad((agent as any).agentConfig ?? {});
     form.reset({
       name:                     agent.name,
       description:              agent.description ?? "",
@@ -6843,7 +7045,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       firstSpeaker:             ((agent as any).firstSpeaker === "user" ? "user" : "assistant") as AgentFormValues["firstSpeaker"],
       endCallPhrases:           agent.endCallPhrases ?? "",
       silenceTimeoutSeconds:    agent.silenceTimeoutSeconds ?? 30,
-      language:                 agent.language ?? "en-US",
+      language:                 agent.language ?? "en-IN",
       asrLanguage:              agent.asrLanguage ?? "",
       backchannelingEnabled:    agent.backchannelingEnabled ?? true,
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
@@ -6853,6 +7055,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         ? (agent as any).agentConfig.webhookPayloadTemplate
         : "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
+      forceSoftwareNoiseGate:   (agent as any).agentConfig?.forceSoftwareNoiseGate ?? false,
       ambientNoiseEnabled:      (agent as any).agentConfig?.ambientNoiseEnabled ?? false,
       ambientNoiseTrack:        (agent as any).agentConfig?.ambientNoiseTrack ?? "",
       ambientNoiseVolume:       (agent as any).agentConfig?.ambientNoiseVolume ?? 1.0,
@@ -6919,12 +7122,20 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       sarvamHighVadSensitivity:        ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) !== false,
       sarvamSpeechEndFlushMs:          0,
       sarvamIncompleteHoldMs:          0,
+      semanticTurnStopMs:              clampSemanticTurnStopMs((agent as any).agentConfig?.semanticTurnStopMs),
       kbBakedOnly:                     ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       autoRedialEnabled:      (agent as any).agentConfig?.autoRedial?.enabled ?? false,
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,
       sarvamSttMode:          ((agent as any).agentConfig?.sarvamSttMode as AgentFormValues["sarvamSttMode"]) ?? undefined,
-      schedulingCalendarId:   ((agent as any).agentConfig?.calendarCapability?.defaultCalendarId as number | null | undefined) ?? null,
-      schedulingEventTypeId:  ((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId as number | null | undefined) ?? null,
+      sarvamSttStreamType:    ((agent as any).agentConfig?.sarvamSttStreamType as AgentFormValues["sarvamSttStreamType"]) ?? "fast",
+      sarvamSttPrompt:        typeof (agent as any).agentConfig?.sarvamSttPrompt === "string"
+        ? (agent as any).agentConfig.sarvamSttPrompt
+        : "",
+      sarvamEndOfSpeechSilenceMs: sarvamVad.silence,
+      sarvamFirstTurnMinSpeechMs: sarvamVad.minSpeech,
+      sarvamVadThreshold:         sarvamVad.threshold,
+      schedulingCalendarId:   normalizeSchedulingId((agent as any).agentConfig?.calendarCapability?.defaultCalendarId),
+      schedulingEventTypeId:  normalizeSchedulingId((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId),
       voiceStack:               (((agent as any).agentConfig?.voiceStack as string | undefined) === "gemini_live" ? "gemini_live" : "classic") as AgentFormValues["voiceStack"],
       geminiLiveVoiceName:      ((agent as any).agentConfig?.geminiLive?.voiceName as string | undefined) ?? "Kore",
       geminiLiveThinkingLevel:  ((agent as any).agentConfig?.geminiLive?.thinkingLevel as AgentFormValues["geminiLiveThinkingLevel"] | undefined) ?? "minimal",
@@ -6958,9 +7169,14 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
 
   const onSave = form.handleSubmit(
     async (data) => {
+      const isAutoSave = autoSaveRequestRef.current;
+      const revisionAtStart = editRevisionRef.current;
+      saveInFlightRef.current = true;
+      if (isAutoSave) setAutoSaveStatus("saving");
       try {
         const payload = buildUpdateAgentPayload(data);
         const saved = await updateAgent.mutateAsync({ id: agentId, data: payload as any });
+        suppressAutoSaveRef.current = true;
         form.setValue("languageAutoDetect", (saved as any)?.agentConfig?.languageAutoDetect ?? false, { shouldDirty: false });
         form.setValue(
           "multilingualLanguages",
@@ -6972,20 +7188,39 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         form.setValue("sarvamIndicNumbers", (saved as any)?.agentConfig?.sarvamIndicNumbers !== false, { shouldDirty: false });
         // Sync scheduling fields immediately from the save response so the event-type
         // Select is not shown as "Any event type" while the background refetch is in-flight.
-        form.setValue("schedulingCalendarId", (saved as any)?.agentConfig?.calendarCapability?.defaultCalendarId ?? null, { shouldDirty: false });
-        form.setValue("schedulingEventTypeId", (saved as any)?.agentConfig?.calendarCapability?.defaultEventTypeId ?? null, { shouldDirty: false });
-        queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
+        const savedCal = normalizeSchedulingId((saved as any)?.agentConfig?.calendarCapability?.defaultCalendarId);
+        const savedEt = normalizeSchedulingId((saved as any)?.agentConfig?.calendarCapability?.defaultEventTypeId);
+        if (savedCal != null) form.setValue("schedulingCalendarId", savedCal, { shouldDirty: false });
+        if (savedEt != null) form.setValue("schedulingEventTypeId", savedEt, { shouldDirty: false });
+        const hasNewerEdits = editRevisionRef.current !== revisionAtStart;
+        if (!hasNewerEdits) {
+          form.reset(form.getValues(), { keepErrors: true });
+          queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
+        }
+        suppressAutoSaveRef.current = false;
         queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
-        toast({ title: "Saved", description: `${data.name} updated.` });
+        if (isAutoSave) {
+          setAutoSaveStatus(hasNewerEdits ? "pending" : "saved");
+        } else {
+          toast({ title: "Saved", description: `${data.name} updated.` });
+        }
         setSavedFlash(true);
         setTimeout(() => setSavedFlash(false), 2500);
       } catch (err) {
+        suppressAutoSaveRef.current = false;
+        if (isAutoSave) setAutoSaveStatus("error");
         const mapped = mapApiErrors(err);
         if (Object.keys(mapped).length > 0) { Object.entries(mapped).forEach(([k, v]) => form.setError(k as any, { message: v })); }
-        toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+        toast({ title: isAutoSave ? "Auto-save failed" : "Error", description: formatApiError(err), variant: "destructive" });
+      } finally {
+        saveInFlightRef.current = false;
       }
     },
     (errors) => {
+      if (autoSaveRequestRef.current) {
+        setAutoSaveStatus("invalid");
+        return;
+      }
       const fieldTabMap: Record<string, TabId> = {
         webhookUrl:               "settings",
         webhookSecret:            "settings",
@@ -7002,6 +7237,9 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         fragmentCoalescePlayingMs:   "voice",
         telephonyTailDrainMs:        "voice",
         sarvamHighVadSensitivity:    "voice",
+        sarvamEndOfSpeechSilenceMs:  "voice",
+        sarvamFirstTurnMinSpeechMs:  "voice",
+        sarvamVadThreshold:          "voice",
         sarvamSpeechEndFlushMs:      "voice",
         sarvamIncompleteHoldMs:      "voice",
         stopSpeakingNumWords:     "voice",
@@ -7014,10 +7252,10 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         autoRedialEnabled:        "settings",
         autoRedialMaxAttempts:    "settings",
         summarizationEnabled:     "tools",
-        machineDetectionMode:     "voicemail",
-        voicemailAction:          "voicemail",
-        voicemailMessage:         "voicemail",
-        voicemailLeadInSeconds:   "voicemail",
+        machineDetectionMode:     "outcomes",
+        voicemailAction:          "outcomes",
+        voicemailMessage:         "outcomes",
+        voicemailLeadInSeconds:   "outcomes",
         systemPrompt:             "prompt",
         meetingPrompt:            "prompt",
         temperature:              "prompt",
@@ -7039,6 +7277,39 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       toast({ title: "Validation error", description: `${msg}${tabLabel}`, variant: "destructive" });
     }
   );
+
+  autoSaveHandlerRef.current = async () => {
+    autoSaveRequestRef.current = true;
+    try {
+      await onSave();
+    } finally {
+      autoSaveRequestRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    const runAutoSave = async () => {
+      if (saveInFlightRef.current) {
+        autoSaveTimerRef.current = setTimeout(runAutoSave, 300);
+        return;
+      }
+      await autoSaveHandlerRef.current?.();
+    };
+    const subscription = form.watch(() => {
+      if (suppressAutoSaveRef.current) return;
+      queueMicrotask(() => {
+        if (!form.formState.isDirty) return;
+        editRevisionRef.current += 1;
+        setAutoSaveStatus("pending");
+        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = setTimeout(runAutoSave, 1200);
+      });
+    });
+    return () => {
+      subscription.unsubscribe();
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [form]);
 
   const handleDelete = async () => {
     const agentName = form.getValues("name") || "this agent";
@@ -7143,23 +7414,8 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       {/* Single toolbar — agent identity + actions */}
-      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3 sm:h-16 sm:px-5">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-5 sm:h-16 sm:px-8">
         <div className="flex min-w-0 items-center gap-2.5">
-          {!embedded && (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-8 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                if (canGoBackInApp()) window.history.back();
-                else navigate("/app/home");
-              }}
-            >
-              <ChevronLeft className="size-3.5" />
-              <span className="hidden sm:inline">Back</span>
-            </Button>
-          )}
           {!embedded && onOpenAgents && (
             <Button
               type="button"
@@ -7173,32 +7429,54 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
               <ChevronDown className="size-3 text-muted-foreground" />
             </Button>
           )}
-          {!embedded && <div className="h-4 w-px shrink-0 bg-border/80" />}
+          {!embedded && onOpenAgents && <div className="h-4 w-px shrink-0 bg-border/80" />}
           <button
             type="button"
             onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
-            className="group inline-flex min-w-0 max-w-[min(420px,52vw)] items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1 text-left shadow-sm hover:border-foreground/25 hover:bg-muted/40"
+            className="group inline-flex min-w-0 max-w-[min(420px,52vw)] items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 text-left shadow-sm hover:border-foreground/25 hover:bg-muted/40"
             title="Rename agent"
           >
-            <span className="min-w-0">
-              <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground leading-none">
-                Editing
-              </span>
-              <span className="mt-0.5 block truncate text-[15px] sm:text-[16px] font-semibold tracking-[-0.03em] text-foreground leading-tight">
-                {agent.name}
-              </span>
+            <span className="truncate text-[15px] sm:text-[16px] font-semibold tracking-[-0.03em] text-foreground leading-tight">
+              {agent.name}
             </span>
             <Pencil className="size-3.5 shrink-0 text-muted-foreground opacity-70 group-hover:opacity-100" />
           </button>
+          {agent.id != null && (
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard.writeText(String(agent.id));
+                toast({ title: "Copied Agent ID", description: `Agent #${agent.id} copied to clipboard.` });
+              }}
+              className="group inline-flex items-center gap-1 rounded-md border border-border/80 bg-muted/40 px-2 py-1 text-[11px] font-mono text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-muted hover:text-foreground"
+              title="Click to copy Agent ID"
+            >
+              <span className="text-[9px] font-sans font-semibold uppercase tracking-wider text-muted-foreground/70">ID</span>
+              <span className="font-semibold text-foreground">#{agent.id}</span>
+              <Copy className="size-2.5 opacity-50 group-hover:opacity-100" />
+            </button>
+          )}
           <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[10px] capitalize text-muted-foreground">
             <StatusDot tone={agent.status === "active" ? "success" : "neutral"} />
             {agent.status === "active" ? "Live" : "Draft"}
           </span>
           {isDirty && (
             <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-              Unsaved
+              {autoSaveStatus === "saving"
+                ? "Auto-saving…"
+                : autoSaveStatus === "invalid"
+                  ? "Fix errors to save"
+                  : autoSaveStatus === "error"
+                    ? "Auto-save failed"
+                    : "Auto-save pending"}
             </span>
           )}
+          {!isDirty && autoSaveStatus === "saved" && (
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-400">
+              Auto-saved
+            </span>
+          )}
+          <BuilderPipelineStatus form={form} />
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
@@ -7231,7 +7509,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
             disabled={updateAgent.isPending}
           >
             {savedFlash ? <Check className="size-3.5" /> : <Save className="size-3.5" />}
-            {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save"}
+            {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save now"}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -7246,7 +7524,17 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
               <DropdownMenuItem className="sm:hidden" onClick={() => setShowWebcall((v) => !v)}>
                 <Mic className="mr-2 size-3.5" /> Live test
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setPublishModalOpen(true)}>
+              <DropdownMenuItem onClick={() => {
+                if (isDirty) {
+                  toast({
+                    title: "Save changes first",
+                    description: "Publish snapshots the saved agent configuration.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                setPublishModalOpen(true);
+              }}>
                 <Upload className="mr-2 size-3.5" /> Publish version
               </DropdownMenuItem>
               {!isManagedWorkspace && !embedded && (
@@ -7255,7 +7543,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
               </DropdownMenuItem>
               )}
               {!isManagedWorkspace && (
-              <DropdownMenuItem onClick={() => navigate("/app/providers")}>
+              <DropdownMenuItem onClick={() => navigate("/app/providers?tab=provider-keys")}>
                 <Star className="mr-2 size-3.5" /> API keys
               </DropdownMenuItem>
               )}
@@ -7324,17 +7612,8 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
             onSelect={handleTabClick}
           />
 
-          <div ref={tabContentRef} className="min-h-0 flex-1 overflow-y-auto">
-            <div
-              className={cn(
-                "builder-workspace-shell mx-auto flex min-h-full w-full",
-                activeTab === "prompt" || activeTab === "overview"
-                  ? "max-w-[1200px]"
-                  : activeTab === "versions"
-                    ? "max-w-[1000px]"
-                    : "max-w-[1100px]",
-              )}
-            >
+          <div ref={tabContentRef} className="min-h-0 flex-1 overflow-y-auto bg-muted/40">
+            <div className="builder-workspace-shell mx-auto flex min-h-full w-full border-border bg-background xl:border-x">
               <form
                 onSubmit={(e) => e.preventDefault()}
                 className={cn(
@@ -7355,14 +7634,18 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
                 {activeTab === "outcomes"  && (
-                  <div className="px-4 py-5 sm:px-6 lg:px-8">
+                  <div className={cn("flex flex-col gap-6", BUILDER_TAB_PAD)}>
+                    <BuilderTabHeader
+                      title="After the call"
+                      description="Label what happened, pick the WhatsApp template for each outcome, and decide what to do with voicemail."
+                    />
                     <DispositionSettingsPanel agentId={agent?.id ?? 0} />
+                    <VoicemailTab form={form} embedded />
                   </div>
                 )}
                 {activeTab === "analytics" && (
                   <AgentAnalyticsPanel agentId={agent?.id ?? 0} embedded />
                 )}
-                {activeTab === "voicemail" && <VoicemailTab form={form} />}
                 {activeTab === "settings"  && <AdvancedTab form={form} agent={agent} />}
                 {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
               </form>
@@ -7376,7 +7659,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
           </div>
 
           {/* Mobile-only sticky actions */}
-          <div className="shrink-0 border-t border-border/70 bg-background/95 px-3 py-2 pb-safe backdrop-blur-md sm:hidden">
+          <div className="shrink-0 border-t border-border/70 bg-background/95 px-5 py-2 pb-safe backdrop-blur-md sm:hidden">
             <div className="grid grid-cols-3 gap-1.5">
               <Button
                 type="button"
@@ -7403,7 +7686,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
                 disabled={updateAgent.isPending}
               >
                 {savedFlash ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-                {updateAgent.isPending ? "…" : savedFlash ? "Saved" : "Save"}
+                {updateAgent.isPending ? "…" : savedFlash ? "Saved" : "Save now"}
                 {isDirty && !updateAgent.isPending && !savedFlash && (
                   <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-400" />
                 )}
@@ -7500,22 +7783,22 @@ function PromptReadinessAside({
     ...(canAttendMeetings
       ? [{ label: "Meeting prompt", ready: meetingPrompt.length > 0, detail: meetingPrompt ? `${meetingPrompt.length.toLocaleString()} chars` : "Uses call prompt", optional: true as const }]
       : []),
-    { label: "Voice", ready: voiceOk, detail: voiceOk ? "Set" : "Missing" },
+    { label: "Sound", ready: voiceOk, detail: voiceOk ? "Set" : "Missing" },
   ];
 
   return (
-    <WorkspaceInspector title="At a glance" className="h-full bg-muted/[0.08]">
+    <WorkspaceInspector title="At a glance" className="h-full bg-muted/25">
       <div className="space-y-4">
-        <div className="space-y-1">
-          <p className="truncate text-[13px] font-medium">{agent?.name ?? "Agent"}</p>
-          <p className="inline-flex items-center gap-1.5 text-[11px] capitalize text-muted-foreground">
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2.5">
+          <p className="truncate text-[13px] font-semibold">{agent?.name ?? "Agent"}</p>
+          <p className="inline-flex shrink-0 items-center gap-1.5 text-[11px] capitalize text-muted-foreground">
             <StatusDot tone={agent?.status === "active" ? "success" : "neutral"} />
             {agent?.status === "active" ? "Live" : "Draft"}
           </p>
         </div>
-        <ul className="space-y-2">
+        <ul className="overflow-hidden rounded-lg border border-border bg-card divide-y divide-border">
           {rows.map((row) => (
-            <li key={row.label} className="flex items-start gap-2.5 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2">
+            <li key={row.label} className="flex items-start gap-2.5 px-3 py-2.5">
               <span
                 className={cn(
                   "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full",
@@ -7530,19 +7813,19 @@ function PromptReadinessAside({
               </span>
               <div className="min-w-0">
                 <p className="text-[12px] font-medium">{row.label}</p>
-                <p className="truncate text-[10px] text-muted-foreground">{row.detail}</p>
+                <p className="truncate text-[10.5px] text-muted-foreground">{row.detail}</p>
               </div>
             </li>
           ))}
         </ul>
         {onLiveTest && (
-          <Button type="button" variant="outline" size="sm" className="h-8 w-full gap-1.5 text-[11px]" onClick={onLiveTest}>
+          <Button type="button" size="sm" className="h-9 w-full gap-1.5 text-[12px]" onClick={onLiveTest}>
             <Play className="size-3.5" />
             Live test
           </Button>
         )}
-        <p className="text-[10px] leading-relaxed text-muted-foreground">
-          Save from the header when you are done. Overview shows phone, pipeline, and knowledge readiness.
+        <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+          Changes auto-save after you pause typing. Overview shows phone, pipeline, and knowledge readiness.
         </p>
       </div>
     </WorkspaceInspector>
@@ -7595,7 +7878,7 @@ function AgentTeamChromeBar({ agentId, section }: { agentId: number; section: st
   if (isLoading || !membership) return null;
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-3 py-1.5 sm:px-5">
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-5 py-1.5 sm:px-8">
       <Users className="size-3.5 shrink-0 text-muted-foreground" />
       <button
         type="button"
@@ -7630,13 +7913,13 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
 
   const shell = cn(
     compact
-      ? "flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/40 px-3 py-2.5"
-      : "flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-3 py-1.5 sm:px-5",
+      ? "flex flex-wrap items-center gap-2"
+      : "flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-5 py-1.5 sm:px-8",
   );
 
   if (!membership) {
     return (
-      <div className={cn(shell, compact && "border-dashed bg-transparent")}>
+      <div className={shell}>
         <Users className="size-3.5 shrink-0 text-muted-foreground/70" />
         <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
           Solo agent
@@ -7644,8 +7927,8 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
         <Button
           type="button"
           size="sm"
-          variant="ghost"
-          className="h-7 shrink-0 gap-1 px-2 text-[11px] text-muted-foreground"
+          variant="outline"
+          className="h-7 shrink-0 gap-1 px-2.5 text-[11px]"
           onClick={() => navigate(`/app/squads?seedAgent=${agentId}`)}
         >
           <Plus className="size-3" />
@@ -7696,6 +7979,8 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
   const [agent1Role, setAgent1Role] = useState("Lead Qualifier");
   const [agent2Name, setAgent2Name] = useState("");
   const [agent2Role, setAgent2Role] = useState("Meeting Scheduler");
+  const [handoffMessage, setHandoffMessage] = useState("");
+  const [handoffGreeting, setHandoffGreeting] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -7707,15 +7992,16 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     language: "en-IN",
     telephonyProvider: "vobiz",
     systemPrompt: "You are a helpful AI voice assistant.",
-    greetingMessage: "Hello! How can I help you today?",
+    greetingMessage: "Hello",
     tools: [
       { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
     ],
     llmProvider: "sarvam",
     llmModel: "sarvam-105b-conversations",
     ttsProvider: "cartesia",
-    ttsModel: "sonic-3.5",
-    ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478",
+    ttsModel: "sonic-3.6",
+    ttsVoice: DEFAULT_CARTESIA_VOICE_ID,
+    ttsVoiceName: DEFAULT_CARTESIA_VOICE_NAME,
     // Attendance capacity is fixed by agent type:
     // phone+meet → can join Meet (paste-link or booking); phone-only → book only, never join.
     agentConfig: {
@@ -7745,6 +8031,8 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     setAgent1Role("Lead Qualifier");
     setAgent2Name("");
     setAgent2Role("Meeting Scheduler");
+    setHandoffMessage("");
+    setHandoffGreeting("");
     setCreateError(null);
     onClose();
   };
@@ -7792,6 +8080,8 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
               name: resolvedTeam,
               description: null,
               status: "active",
+              handoffMessage: handoffMessage.trim(),
+              handoffGreeting: handoffGreeting.trim(),
               members: [
                 {
                   agentId: agent1.id,
@@ -7994,7 +8284,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         )}
 
         {step === "name" && composition === "team" && (
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
             <div className="space-y-1.5">
               <Label htmlFor="team-name">Team name</Label>
               <Input
@@ -8027,6 +8317,19 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                   />
                 </div>
               </div>
+              <div className="space-y-1.5 pt-1 border-t border-border/50">
+                <Label htmlFor="handoff-message" className="text-[11px]">Handoff announcement</Label>
+                <Textarea
+                  id="handoff-message"
+                  className="min-h-[60px] text-xs resize-none"
+                  value={handoffMessage}
+                  onChange={e => setHandoffMessage(e.target.value)}
+                  placeholder="Optional. Leave empty to stay silent."
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Optional. Empty stays silent — no extra voice before Agent 2.
+                </p>
+              </div>
             </div>
             <div className="rounded-lg border border-border/60 p-3 space-y-2">
               <p className="text-xs font-medium text-muted-foreground">Agent 2</p>
@@ -8049,6 +8352,19 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                     onChange={e => setAgent2Role(e.target.value)}
                   />
                 </div>
+              </div>
+              <div className="space-y-1.5 pt-1 border-t border-border/50">
+                <Label htmlFor="handoff-greeting" className="text-[11px]">Receiving agent greeting</Label>
+                <Textarea
+                  id="handoff-greeting"
+                  className="min-h-[60px] text-xs resize-none"
+                  value={handoffGreeting}
+                  onChange={e => setHandoffGreeting(e.target.value)}
+                  placeholder="Optional. Leave empty — they continue from their prompt."
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Optional. Empty stays silent — Agent 2 follows their own prompt.
+                </p>
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground">

@@ -813,6 +813,55 @@
       "when": 1791600015000,
       "tag": "0115_team_invite_token",
       "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1791600016000,
+      "tag": "0116_cost_pricing_rates",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1791600017000,
+      "tag": "0117_managed_key_health",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1791600018000,
+      "tag": "0118_align_customer_voice_rate",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1791600019000,
+      "tag": "0119_portal_login_lockout",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1791600020000,
+      "tag": "0120_squad_handoff_message",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1791600021000,
+      "tag": "0121_whatsapp_meta_token_expires",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1791600022000,
+      "tag": "0122_landing_partner_leads",
+      "breakpoints": true
     }
   ]
 }

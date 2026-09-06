@@ -169,7 +169,7 @@ export default function AutomaticCallDetailPage() {
           <p className="text-muted-foreground">{p.lastError}</p>
           <div className="flex gap-2">
             <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-              <Link href="/app/connections">Reconnect Google</Link>
+              <Link href="/app/connections?setup=sheets">Reconnect Google</Link>
             </Button>
             {p.status === "paused" && (
               <Button size="sm" className="h-7 text-xs" onClick={() => action.mutate("resume")} disabled={action.isPending}>

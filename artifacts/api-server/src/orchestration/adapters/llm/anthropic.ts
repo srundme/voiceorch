@@ -64,6 +64,7 @@ export class AnthropicLLM implements LLMAdapter {
   // shared 0–2 UI slider), so clamp down rather than passing 0–2 through.
   private temperature: number | undefined;
   private maxTokens: number | undefined;
+  private abortController: AbortController | null = null;
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.key = apiKey;
@@ -74,6 +75,11 @@ export class AnthropicLLM implements LLMAdapter {
     // silently ignored the setting — the only adapter that did).
     const mt = genParams?.maxTokens;
     this.maxTokens = typeof mt === "number" && Number.isFinite(mt) && mt > 0 ? Math.floor(mt) : undefined;
+  }
+
+  cancelInFlight(): void {
+    this.abortController?.abort();
+    this.abortController = null;
   }
 
   async chat(
@@ -119,83 +125,98 @@ export class AnthropicLLM implements LLMAdapter {
       headers["anthropic-beta"] = "prompt-caching-2024-07-31";
     }
 
-    const resp = await fetch(API_URL, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
-
-    if (!resp.ok) throw new Error(`Anthropic ${resp.status}: ${await resp.text()}`);
-    if (!resp.body) throw new Error("Anthropic: no response body");
-
-    let full = "";
-    let toolName = "";
-    let toolJson = "";
-    let inToolUse = false;
-    let inputTokens = 0;
-    let outputTokens = 0;
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = "";
+    this.abortController?.abort();
+    const abortController = new AbortController();
+    this.abortController = abortController;
 
     try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() ?? "";
+      const resp = await fetch(API_URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: abortController.signal,
+      });
 
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const raw = line.slice(6).trim();
-          if (!raw || raw === "[DONE]") continue;
-          let ev: AnthropicStreamEvent;
-          try { ev = JSON.parse(raw) as AnthropicStreamEvent; } catch { continue; }
+      if (!resp.ok) throw new Error(`Anthropic ${resp.status}: ${await resp.text()}`);
+      if (!resp.body) throw new Error("Anthropic: no response body");
 
-          // message_start carries the initial input token count
-          if (ev.type === "message_start" && ev.message?.usage) {
-            inputTokens = ev.message.usage.input_tokens ?? 0;
-          }
+      let full = "";
+      let toolName = "";
+      let toolJson = "";
+      let inToolUse = false;
+      let inputTokens = 0;
+      let outputTokens = 0;
 
-          // message_delta carries the final output token count
-          if (ev.type === "message_delta" && ev.usage) {
-            outputTokens = ev.usage.output_tokens ?? 0;
-          }
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
 
-          if (ev.type === "content_block_start" && ev.content_block?.type === "tool_use") {
-            inToolUse = true;
-            toolName = ev.content_block.name ?? "";
-          }
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
 
-          if (ev.type === "content_block_delta") {
-            if (ev.delta?.type === "text_delta" && ev.delta.text) {
-              full += ev.delta.text;
-              onToken(ev.delta.text);
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const raw = line.slice(6).trim();
+            if (!raw || raw === "[DONE]") continue;
+            let ev: AnthropicStreamEvent;
+            try { ev = JSON.parse(raw) as AnthropicStreamEvent; } catch { continue; }
+
+            // message_start carries the initial input token count
+            if (ev.type === "message_start" && ev.message?.usage) {
+              inputTokens = ev.message.usage.input_tokens ?? 0;
             }
-            if (ev.delta?.type === "input_json_delta" && ev.delta.partial_json) {
-              toolJson += ev.delta.partial_json;
+
+            // message_delta carries the final output token count
+            if (ev.type === "message_delta" && ev.usage) {
+              outputTokens = ev.usage.output_tokens ?? 0;
+            }
+
+            if (ev.type === "content_block_start" && ev.content_block?.type === "tool_use") {
+              inToolUse = true;
+              toolName = ev.content_block.name ?? "";
+            }
+
+            if (ev.type === "content_block_delta") {
+              if (ev.delta?.type === "text_delta" && ev.delta.text) {
+                full += ev.delta.text;
+                onToken(ev.delta.text);
+              }
+              if (ev.delta?.type === "input_json_delta" && ev.delta.partial_json) {
+                toolJson += ev.delta.partial_json;
+              }
             }
           }
         }
+      } finally {
+        reader.releaseLock();
       }
+
+      const usage: LLMUsage | undefined = (inputTokens > 0 || outputTokens > 0)
+        ? { inputTokens, outputTokens }
+        : undefined;
+
+      if (usage) options?.onUsage?.(usage);
+
+      if (inToolUse && toolName && options?.onToolCall) {
+        let args: Record<string, unknown> = {};
+        try { args = JSON.parse(toolJson || "{}") as Record<string, unknown>; } catch { /* ignore */ }
+        options.onToolCall(toolName, args);
+      } else {
+        onDone(full, usage);
+      }
+    } catch (err) {
+      if (abortController.signal.aborted) {
+        onDone("");
+        return;
+      }
+      throw err;
     } finally {
-      reader.releaseLock();
-    }
-
-    const usage: LLMUsage | undefined = (inputTokens > 0 || outputTokens > 0)
-      ? { inputTokens, outputTokens }
-      : undefined;
-
-    if (usage) options?.onUsage?.(usage);
-
-    if (inToolUse && toolName && options?.onToolCall) {
-      let args: Record<string, unknown> = {};
-      try { args = JSON.parse(toolJson || "{}") as Record<string, unknown>; } catch { /* ignore */ }
-      options.onToolCall(toolName, args);
-    } else {
-      onDone(full, usage);
+      if (this.abortController === abortController) this.abortController = null;
     }
   }
 }

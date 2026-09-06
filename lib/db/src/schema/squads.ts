@@ -23,6 +23,36 @@ export const DEFAULT_SQUAD_LIMITS: Required<SquadLimits> = {
   maxRuntimeMinutes: 60,
 };
 
+/** Stock copy we used to force-speak. Kept so old squads that saved it stay silent. */
+export const DEFAULT_SQUAD_HANDOFF_MESSAGE =
+  "Just a second — connecting you now.";
+
+export const DEFAULT_SQUAD_HANDOFF_GREETING =
+  "Hi — I have what you just said. How can I help?";
+
+const STOCK_SQUAD_HANDOFF_MESSAGES = new Set([
+  DEFAULT_SQUAD_HANDOFF_MESSAGE,
+  "One moment — I'm connecting you to a teammate who can help with this.",
+]);
+
+const STOCK_SQUAD_HANDOFF_GREETINGS = new Set([
+  DEFAULT_SQUAD_HANDOFF_GREETING,
+  "Hi — I've been briefed on your conversation so far. How can I help?",
+]);
+
+/** Custom announcement only. Stock / empty → silent (receiving agent uses their prompt). */
+export function spokenSquadHandoffMessage(stored?: string | null): string {
+  const t = (stored ?? "").trim();
+  if (!t || STOCK_SQUAD_HANDOFF_MESSAGES.has(t)) return "";
+  return t;
+}
+
+export function spokenSquadHandoffGreeting(stored?: string | null): string {
+  const t = (stored ?? "").trim();
+  if (!t || STOCK_SQUAD_HANDOFF_GREETINGS.has(t)) return "";
+  return t;
+}
+
 export const squadsTable = pgTable("squads", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
@@ -33,10 +63,13 @@ export const squadsTable = pgTable("squads", {
   /** Default member that answers inbound / campaign dials for this squad. */
   entryMemberId: integer("entry_member_id"),
   limits: jsonb("limits").$type<SquadLimits>().notNull().default({}),
-  /** Warm line spoken by the receiving agent after a live handoff. */
-  handoffGreeting: text("handoff_greeting").default(
-    "Hi — I've been briefed on your conversation so far. How can I help?",
-  ),
+  /**
+   * Optional line spoken by the *current* agent before a live teammate handoff.
+   * Empty / stock defaults stay silent — only operator-written copy is spoken.
+   */
+  handoffMessage: text("handoff_message").default(""),
+  /** Optional warm line spoken by the receiving agent. Empty / stock stay silent. */
+  handoffGreeting: text("handoff_greeting").default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

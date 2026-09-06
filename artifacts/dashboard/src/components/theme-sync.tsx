@@ -5,7 +5,7 @@ import { useTheme } from "@/components/theme-provider";
 import { useQueryClient } from "@tanstack/react-query";
 
 /** Must match ThemeProvider storageKey in App.tsx — new key resets to light for readability. */
-const THEME_STORAGE_KEY = "snapserve-ui-theme-v2";
+const THEME_STORAGE_KEY = "snapserve-ui-theme-v3";
 
 export function ThemeSync() {
   const { isSignedIn, userId } = useAuth();

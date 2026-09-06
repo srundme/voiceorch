@@ -16,6 +16,12 @@ export default function PlatformConceptsPage() {
         the outside world.
       </Callout>
 
+      <h2 id="jarvis">Jarvis</h2>
+      <p>
+        The in-app Jarvis overlay is removed. Use <Link href="/docs/vibe">Vibe</Link> to build an
+        agent. <Link href="/docs/jarvis">Jarvis note</Link>.
+      </p>
+
       <h2 id="agent">Agent</h2>
       <p>
         A voice persona: system prompt, greeting, language, ASR/LLM/TTS (or BYOP), tools, knowledge
@@ -50,13 +56,15 @@ export default function PlatformConceptsPage() {
       <p>
         After each call, AI picks an outcome from the agent’s taxonomy and fills data fields you
         define. Map labels to funnel meanings (Interested / Callback / DNC) for analytics. Set under
-        Agent Builder → <strong>Outcomes</strong> (top-level tab).
+        Agent Builder → <strong>After the call</strong>.
       </p>
 
       <h2 id="after-call">After-call messages</h2>
       <p>
-        Agent-owned WhatsApp / email rules: every call, or only for matching dispositions. Requires
-        live channels under Connections. Campaigns no longer map WA/email branches — they only{" "}
+        Agent-owned WhatsApp / email rules: every call, or only for matching dispositions.
+        Connect WhatsApp and email under <strong>Connections</strong>, then pick the Meta
+        template per outcome on <strong>After the call</strong>.
+        Campaigns no longer map WA/email branches — they only{" "}
         <strong>transfer leads</strong>.
       </p>
 
@@ -107,7 +115,9 @@ export default function PlatformConceptsPage() {
       <h2 id="tools">Tools</h2>
       <p>
         Functions mid-conversation (book slot, transfer, HTTP webhook, meeting controls). Configured
-        in the agent builder Tools tab.
+        in the agent builder <strong>Actions</strong> tab. Connect WhatsApp, email, and
+        Google Calendar under <strong>Connections</strong>, then pick the template or
+        meeting on the agent.
       </p>
 
       <h2 id="knowledge">Knowledge base</h2>

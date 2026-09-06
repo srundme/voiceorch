@@ -20,20 +20,157 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 const RECALL_REGIONS = ["ap-northeast-1", "us-west-2", "us-east-1", "eu-central-1"];
 const RECALL_REGION = () => process.env["RECALL_REGION"] || "us-west-2";
+const RECALL_FETCH_TIMEOUT_MS = 15_000;
+const RECALL_REGION_PROBE_TIMEOUT_MS = 4_000;
+
+function looksLikeHtmlBody(s: string): boolean {
+  const t = s.trimStart();
+  return /^<!DOCTYPE/i.test(t) || /^<html[\s>]/i.test(t) || /<\/(?:html|body|head)>/i.test(s);
+}
+
+/** Strip tracking junk from Google Meet links (`?authuser=0`) so Recall gets a clean room URL. Keep Zoom `pwd`. */
+export function normalizeMeetingUrl(raw: string): string {
+  const trimmed = raw.trim();
+  try {
+    const u = new URL(trimmed);
+    const host = u.hostname.toLowerCase();
+    if (host === "meet.google.com" || host.endsWith(".meet.google.com")) {
+      u.search = "";
+      u.hash = "";
+      return u.toString().replace(/\/$/, "");
+    }
+    return trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
+export function sanitizeRecallError(raw: string): string {
+  if (!raw.trim() || looksLikeHtmlBody(raw)) {
+    return "Meeting bot service is temporarily unavailable. Try again in a moment.";
+  }
+  return raw.replace(/\s+/g, " ").trim().slice(0, 280);
+}
+
+/** Prefer Recall JSON `detail`/`error`; never leak Cloudflare HTML to the client. */
+export function messageFromRecallBody(status: number, text: string): string {
+  if (looksLikeHtmlBody(text)) {
+    return "Meeting bot service is temporarily unavailable. Try again in a moment.";
+  }
+  try {
+    const parsed = JSON.parse(text) as { detail?: unknown; message?: unknown; error?: unknown };
+    const detail =
+      typeof parsed.detail === "string"
+        ? parsed.detail
+        : typeof parsed.message === "string"
+          ? parsed.message
+          : typeof parsed.error === "string"
+            ? parsed.error
+            : null;
+    if (detail) return sanitizeRecallError(detail);
+  } catch {
+    /* not JSON */
+  }
+  if (status === 401 || status === 403) {
+    return "Meeting bot service rejected the API key. Check RECALL_API_KEY and RECALL_REGION.";
+  }
+  return sanitizeRecallError(`Recall request failed (${status}): ${text}`);
+}
+
+function fetchSignal(init: RequestInit | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  if (init?.signal && typeof AbortSignal.any === "function") {
+    return AbortSignal.any([init.signal, timeout]);
+  }
+  return timeout;
+}
+
+export const RECALL_PRIMARY_SETTING_KEY = "recall_api_key";
+export const RECALL_FALLBACK_SETTING_KEY = "recall_api_key_fallback";
+
+export function pickRecallKeys(src: {
+  envPrimary?: string | null;
+  envFallback?: string | null;
+  dbPrimary?: string | null;
+  dbFallback?: string | null;
+}): { primary: string | null; fallback: string | null } {
+  const trim = (v?: string | null) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  const primary = trim(src.dbPrimary) || trim(src.envPrimary);
+  let fallback = trim(src.dbFallback) || trim(src.envFallback);
+  if (fallback && fallback === primary) fallback = null;
+  return { primary: primary ?? null, fallback };
+}
+
+export function shouldFailoverRecall(status: number): boolean {
+  return status === 401 || status === 403 || status === 402 || status === 429;
+}
+
+let cachedPrimary = "";
+let cachedFallback = "";
+let usingFallback = false;
+let keysCachedUntil = 0;
+
+function envRecallPrimary(): string {
+  return (process.env["RECALL_API_KEY"] ?? "").trim();
+}
+function envRecallFallback(): string {
+  return (process.env["RECALL_API_KEY_FALLBACK"] ?? "").trim();
+}
+
+async function readPlatformSetting(key: string): Promise<string> {
+  const { eq } = await import("drizzle-orm");
+  const { db, platformSettingsTable } = await import("@workspace/db");
+  const [row] = await db
+    .select({ value: platformSettingsTable.value })
+    .from(platformSettingsTable)
+    .where(eq(platformSettingsTable.key, key))
+    .limit(1);
+  return (row?.value ?? "").trim();
+}
+
+export async function ensureRecallKeysLoaded(): Promise<void> {
+  if (Date.now() < keysCachedUntil && (cachedPrimary || cachedFallback)) return;
+  const [dbPrimary, dbFallback] = await Promise.all([
+    readPlatformSetting(RECALL_PRIMARY_SETTING_KEY).catch(() => ""),
+    readPlatformSetting(RECALL_FALLBACK_SETTING_KEY).catch(() => ""),
+  ]);
+  const picked = pickRecallKeys({
+    envPrimary: envRecallPrimary(),
+    envFallback: envRecallFallback(),
+    dbPrimary,
+    dbFallback,
+  });
+  cachedPrimary = picked.primary ?? "";
+  cachedFallback = picked.fallback ?? "";
+  keysCachedUntil = Date.now() + 30_000;
+  if (usingFallback && !cachedFallback) usingFallback = false;
+}
+
+function activateRecallFallback(): boolean {
+  if (usingFallback || !cachedFallback) return false;
+  usingFallback = true;
+  resolvedRegion = null;
+  return true;
+}
 
 function recallKey(): string {
-  const k = (process.env["RECALL_API_KEY"] ?? "").trim();
+  const k = usingFallback ? cachedFallback || cachedPrimary : cachedPrimary || cachedFallback;
   if (!k) throw new Error("RECALL_API_KEY is not configured");
   return k;
 }
 
+export async function isRecallConfigured(): Promise<boolean> {
+  await ensureRecallKeysLoaded();
+  return Boolean(cachedPrimary || cachedFallback);
+}
+
 /**
  * Realtime + async diarized transcripts (Recall streaming STT + perfect
- * diarization). Default ON when RECALL_API_KEY is set; set
+ * diarization). Default ON when a Recall key is set; set
  * RECALL_DIARIZED_TRANSCRIPT=0 to disable (transcript minutes are billed).
  */
 export function isRecallDiarizedTranscriptEnabled(): boolean {
-  if (!(process.env["RECALL_API_KEY"] ?? "").trim()) return false;
+  if (!envRecallPrimary() && !envRecallFallback() && !cachedPrimary && !cachedFallback) return false;
   const v = (process.env["RECALL_DIARIZED_TRANSCRIPT"] ?? "1").trim().toLowerCase();
   return v !== "0" && v !== "false" && v !== "off" && v !== "no";
 }
@@ -43,25 +180,46 @@ export function isRecallDiarizedTranscriptEnabled(): boolean {
 // region first), then cache for the process lifetime.
 let resolvedRegion: string | null = null;
 
+async function probeRecallRegion(region: string): Promise<string | null> {
+  const res = await fetch(`https://${region}.recall.ai/api/v1/bot/?limit=1`, {
+    headers: { accept: "application/json", authorization: recallKey() },
+    signal: AbortSignal.timeout(RECALL_REGION_PROBE_TIMEOUT_MS),
+  });
+  return res.ok ? region : null;
+}
+
+async function probeAllRecallRegions(): Promise<string | null> {
+  const preferred = RECALL_REGION();
+  try {
+    const hit = await probeRecallRegion(preferred);
+    if (hit) return hit;
+  } catch {
+    /* preferred region unreachable — try the rest in parallel */
+  }
+  const others = RECALL_REGIONS.filter((r) => r !== preferred);
+  return (await Promise.all(others.map((r) => probeRecallRegion(r).catch(() => null)))).find(
+    (r): r is string => Boolean(r),
+  ) ?? null;
+}
+
 /** Resolve working Recall region once (API keys are region-scoped). */
 export async function resolveRecallRegion(): Promise<string> {
+  await ensureRecallKeysLoaded();
   if (resolvedRegion) return resolvedRegion;
-  const candidates = [RECALL_REGION(), ...RECALL_REGIONS.filter((r) => r !== RECALL_REGION())];
-  for (const region of candidates) {
-    try {
-      const res = await fetch(`https://${region}.recall.ai/api/v1/bot/?limit=1`, {
-        headers: { accept: "application/json", authorization: recallKey() },
-      });
-      if (res.ok) {
-        resolvedRegion = region;
-        return region;
-      }
-    } catch {
-      /* network error — try next region */
+  const found = await probeAllRecallRegions();
+  if (found) {
+    resolvedRegion = found;
+    return found;
+  }
+  if (activateRecallFallback()) {
+    const fallbackFound = await probeAllRecallRegions();
+    if (fallbackFound) {
+      resolvedRegion = fallbackFound;
+      return fallbackFound;
     }
   }
   throw new Error(
-    "Recall API key was rejected by every Recall region — verify RECALL_API_KEY is the API key from the Recall.ai dashboard (not a webhook secret)",
+    "Recall API key was rejected by every Recall region — verify RECALL_API_KEY (or the fallback key) is the API key from the Recall.ai dashboard (not a webhook secret)",
   );
 }
 
@@ -76,11 +234,10 @@ export async function resolveRecallV2Base(): Promise<string> {
   return `https://${region}.recall.ai/api/v2`;
 }
 
-export async function recallFetchV2(path: string, init?: RequestInit): Promise<Response> {
-  const base = await resolveRecallV2Base();
-  const p = path.startsWith("/") ? path : `/${path}`;
-  return fetch(`${base}${p}`, {
+async function recallHttp(url: string, init?: RequestInit): Promise<Response> {
+  return fetch(url, {
     ...init,
+    signal: fetchSignal(init, RECALL_FETCH_TIMEOUT_MS),
     headers: {
       accept: "application/json",
       "content-type": "application/json",
@@ -88,6 +245,40 @@ export async function recallFetchV2(path: string, init?: RequestInit): Promise<R
       ...(init?.headers ?? {}),
     },
   });
+}
+
+async function recallHttpWithFallback(
+  buildUrl: () => Promise<string>,
+  init?: RequestInit,
+): Promise<Response> {
+  await ensureRecallKeysLoaded();
+  try {
+    let res = await recallHttp(await buildUrl(), init);
+    if (!res.ok && shouldFailoverRecall(res.status) && activateRecallFallback()) {
+      res = await recallHttp(await buildUrl(), init);
+    }
+    return res;
+  } catch (err) {
+    if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
+      if (activateRecallFallback()) {
+        try {
+          return await recallHttp(await buildUrl(), init);
+        } catch (retryErr) {
+          if (retryErr instanceof Error && (retryErr.name === "AbortError" || retryErr.name === "TimeoutError")) {
+            throw new Error("Meeting bot service timed out. Try again.");
+          }
+          throw retryErr;
+        }
+      }
+      throw new Error("Meeting bot service timed out. Try again.");
+    }
+    throw err;
+  }
+}
+
+export async function recallFetchV2(path: string, init?: RequestInit): Promise<Response> {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return recallHttpWithFallback(async () => `${await resolveRecallV2Base()}${p}`, init);
 }
 
 // ── Signed page/WS token ─────────────────────────────────────────────────────
@@ -197,16 +388,7 @@ export interface RecallBotSummary {
 }
 
 async function recallFetch(path: string, init?: RequestInit): Promise<Response> {
-  const base = await resolveRecallBase();
-  return fetch(`${base}${path}`, {
-    ...init,
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-      authorization: recallKey(),
-      ...(init?.headers ?? {}),
-    },
-  });
+  return recallHttpWithFallback(async () => `${await resolveRecallBase()}${path}`, init);
 }
 
 function summarizeBot(bot: any): RecallBotSummary {
@@ -411,7 +593,7 @@ export async function createRecallBot(opts: RecallBotCreateOpts): Promise<Recall
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Recall create bot failed (${res.status}): ${text.slice(0, 300)}`);
+    throw new Error(messageFromRecallBody(res.status, text));
   }
   return summarizeBot(await res.json());
 }

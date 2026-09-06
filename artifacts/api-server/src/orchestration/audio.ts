@@ -45,6 +45,17 @@ export function encodeMulaw(pcmBuffer: Buffer): Buffer {
   return mulaw;
 }
 
+/** Scales s16le samples by `gain` (clamped). Used to fade a concealment frame
+ *  out instead of looping it at full volume, which buzzes. */
+export function attenuatePcm16(pcm: Buffer, gain: number): Buffer {
+  const out = Buffer.allocUnsafe(pcm.length - (pcm.length % 2));
+  for (let i = 0; i < out.length; i += 2) {
+    const scaled = Math.round(pcm.readInt16LE(i) * gain);
+    out.writeInt16LE(Math.max(-32768, Math.min(32767, scaled)), i);
+  }
+  return out;
+}
+
 // Upsample from 8kHz to 16kHz (linear interpolation) for STT APIs
 export function upsample8to16(buf8k: Buffer): Buffer {
   const samples = buf8k.length / 2;
@@ -109,8 +120,9 @@ function firAt(buf: Buffer, inSamples: number, center: number, kernel: Float64Ar
   return s > 32767 ? 32767 : s < -32768 ? -32768 : s;
 }
 
-// 16→8: cutoff 3.4 kHz (voice band top), 15 taps.
-const K16TO8 = buildSincKernel(15, 3400 / 16000);
+// 16→8: cutoff 3.4 kHz (voice band top), 63 taps (~45 dB stopband; 15 taps
+// still leaked grit on Cartesia sibilants after a second downsample).
+const K16TO8 = buildSincKernel(63, 3400 / 16000);
 // 24→8: steeper ratio needs a longer kernel; cutoff 3.4 kHz, 21 taps.
 const K24TO8 = buildSincKernel(21, 3400 / 24000);
 // 24→16: output Nyquist 8 kHz, cutoff 7.2 kHz for margin; alternate phases 0 / 0.5.
@@ -475,6 +487,30 @@ export function frameRms(pcmBuffer: Buffer): number {
 
 export function hasSpeechEnergy(pcmBuffer: Buffer, threshold = 300): boolean {
   return frameRms(pcmBuffer) > threshold;
+}
+
+/** Pad a short telephony frame to exact 20 ms so VoBiz never sees a runt playAudio payload. */
+export function padWireFrame(chunk: Buffer, frameBytes: number): Buffer {
+  if (chunk.length === frameBytes) return chunk;
+  const padded = Buffer.alloc(frameBytes);
+  chunk.copy(padded);
+  return padded;
+}
+
+/** Split PCM into exact 20 ms frames, carrying a remainder across blocks. */
+export function enqueueExactFrames(
+  pcm: Buffer,
+  frameBytes: number,
+  queue: Buffer[],
+  rem: { buf: Buffer },
+): void {
+  const combined = rem.buf.length > 0 ? Buffer.concat([rem.buf, pcm]) : pcm;
+  let offset = 0;
+  while (offset + frameBytes <= combined.length) {
+    queue.push(combined.subarray(offset, offset + frameBytes));
+    offset += frameBytes;
+  }
+  rem.buf = offset < combined.length ? combined.subarray(offset) : Buffer.alloc(0);
 }
 
 // Build a minimal WAV header for PCM data (for REST-based STT APIs)

@@ -10,10 +10,11 @@ export type FillerPcmCacheKey = {
   voice: string;
   model: string;
   text: string;
+  sampleRate?: number;
 };
 
 function keyOf(k: FillerPcmCacheKey): string {
-  return `${k.provider}|${k.voice}|${k.model}|${k.text}`;
+  return `${k.provider}|${k.voice}|${k.model}|${k.sampleRate ?? ""}|${k.text}`;
 }
 
 const cache = new Map<string, Buffer>();

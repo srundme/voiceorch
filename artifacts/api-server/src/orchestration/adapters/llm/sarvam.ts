@@ -1,6 +1,7 @@
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toOpenAIMessages } from "./openai-messages.js";
 import { logger } from "../../../lib/logger.js";
+import { toOpenAiToolChoice } from "./tool-choice.js";
 
 /**
  * Gated raw-SSE diagnostic flag (OFF by default). When SARVAM_RAW_SSE_DEBUG is
@@ -53,13 +54,14 @@ export function sarvamChatCompletionsUrl(model: string): string {
 /** Normalize playground / docs aliases to the wire model ids. */
 export function normalizeSarvamLlmModel(model: string | null | undefined): string {
   const ALIASES: Record<string, string> = {
-    "sarvam-m": SARVAM_FLAGSHIP_MODEL,
-    "sarvam-2b": SARVAM_FLAGSHIP_MODEL,
-    "sarvam-2b-v0.5": SARVAM_FLAGSHIP_MODEL,
-    "sarvam-m1": SARVAM_FLAGSHIP_MODEL,
-    "sarvam-30b-16k": SARVAM_FLAGSHIP_MODEL,
+    // Retired / playground aliases → voice conversations model (docs: voice agents).
+    "sarvam-m": SARVAM_CONVERSATIONS_MODEL,
+    "sarvam-2b": SARVAM_CONVERSATIONS_MODEL,
+    "sarvam-2b-v0.5": SARVAM_CONVERSATIONS_MODEL,
+    "sarvam-m1": SARVAM_CONVERSATIONS_MODEL,
+    "sarvam-30b-16k": SARVAM_CONVERSATIONS_MODEL,
     "sarvam-105b-32k": SARVAM_FLAGSHIP_MODEL,
-    "sarvam-30b": SARVAM_FLAGSHIP_MODEL,
+    "sarvam-30b": SARVAM_CONVERSATIONS_MODEL,
     // Conversational aliases
     "sarvam-105b-conversation": SARVAM_CONVERSATIONS_MODEL,
     "sarvam-105b-chat": SARVAM_CONVERSATIONS_MODEL,
@@ -72,7 +74,7 @@ export function normalizeSarvamLlmModel(model: string | null | undefined): strin
     "glm5-2": "glm5.2",
     "glm-5-2": "glm5.2",
   };
-  const raw = (model ?? SARVAM_FLAGSHIP_MODEL).trim();
+  const raw = (model ?? SARVAM_CONVERSATIONS_MODEL).trim();
   const key = raw.toLowerCase();
   return ALIASES[key] ?? ALIASES[raw] ?? raw;
 }
@@ -122,7 +124,47 @@ function sanitizeForAlternation(messages: ConversationTurn[]): ConversationTurn[
   return merged;
 }
 
-export type ToolEnvelopeFormat = "structured" | "json" | "bracket" | "function_tag" | "function_call";
+export type ToolEnvelopeFormat = "structured" | "json" | "bracket" | "function_tag" | "function_call" | "xml";
+
+/**
+ * Sarvam-105b-conversations (and some Gemma/Groq prompts) emit tools as XML
+ * in delta.content instead of delta.tool_calls:
+ *
+ *   <tool_call>next_service_suggestion
+ *   <arg_key>offering_type</arg_key>
+ *   <arg_value>B2B portal</arg_value>
+ *   </tool_call>
+ *
+ * parseSerializedToolCall only understands JSON, so this used to stream to TTS,
+ * get stripped as a tool artifact, and leave the caller in dead air (call 12705).
+ */
+export function parseXmlToolCall(raw: string): { name: string; args: Record<string, unknown> } | null {
+  if (!raw) return null;
+  const text = raw.trim();
+  const block = /<tool_call>\s*([A-Za-z][\w]*)\s*([\s\S]*?)(?:<\/tool_call>|$)/i.exec(text);
+  if (!block) return null;
+  const name = block[1]!.trim();
+  if (!name) return null;
+  const body = block[2] ?? "";
+  const args: Record<string, unknown> = {};
+  const pairRe = /<arg_key>\s*([^<]+?)\s*<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/gi;
+  let pair: RegExpExecArray | null;
+  while ((pair = pairRe.exec(body)) !== null) {
+    const key = pair[1]!.trim();
+    if (key) args[key] = pair[2]!.trim();
+  }
+  return { name, args };
+}
+
+/** True when streamed content is (or might still become) an XML tool envelope. */
+export function xmlToolSniff(peek: string): "yes" | "no" | "hold" {
+  const p = peek.replace(/^\s+/, "").toLowerCase();
+  if (!p.startsWith("<")) return "no";
+  if (p.startsWith("<tool_call") || p.startsWith("<arg_key") || p.startsWith("<function")) return "yes";
+  const maybe = ["<tool_call", "<arg_key", "<function"];
+  if (maybe.some((m) => m.startsWith(p))) return "hold";
+  return "no";
+}
 
 export function parseSerializedToolCall(raw: string): { name: string; args: Record<string, unknown> } | null {
   if (!raw) return null;
@@ -248,6 +290,7 @@ export function parseFunctionCallNotation(
           args["attendee_email"] = val;
           args["email"] = val;
         } else if (/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|pm|am|\d{1,2}:\d{2})\b/i.test(val)) {
+          args["preferred_date"] = val;
           args["date_time"] = val;
           args["start_time"] = val;
           args["slot"] = val;
@@ -271,6 +314,11 @@ export function parseToolEnvelope(
   validNames?: Set<string>,
 ): { name: string; args: Record<string, unknown>; format: ToolEnvelopeFormat } | null {
   const nameOk = (n: string) => !validNames || validNames.size === 0 || validNames.has(n);
+
+  // XML is unambiguous even when the tool name is hallucinated — dispatch it
+  // so the pipeline can return "tool not available" instead of going silent.
+  const xml = parseXmlToolCall(raw);
+  if (xml) return { ...xml, format: "xml" };
 
   const json = parseSerializedToolCall(raw);
   if (json && nameOk(json.name)) return { ...json, format: "json" };
@@ -403,16 +451,11 @@ export class SarvamLLM implements LLMAdapter {
       if (typeof mt !== "number" || mt < 500) genBody["max_tokens"] = 500;
     }
 
-    // Tool turns need reasoning on — with effort null, Sarvam stays conversational
-    // and ignores tools (confirmed). Flagship and conversations both bump to "low"
-    // for tools; non-tool voice turns keep reasoning off for TTFT.
-    if (hasTools && !openSource) {
-      if (genBody["reasoning_effort"] == null) {
-        genBody["reasoning_effort"] = "low";
-        const mt = genBody["max_tokens"];
-        if (typeof mt !== "number" || mt < 500) genBody["max_tokens"] = 500;
-      }
-    }
+    // Tool calling uses structured `tools` + XML fallback in the stream
+    // parser. Do NOT force reasoning_effort="low" just because tools exist —
+    // that re-enables CoT on every voice turn, burns max_tokens, and can
+    // return empty spoken `content` (Sarvam gotcha). Agents that want
+    // thinking set reasoningEffort explicitly.
 
     // glm5.2 reasons before every answer by default; that burns max_tokens and
     // adds seconds of silence on voice. Turn thinking off for live calls unless
@@ -452,7 +495,7 @@ ${systemPrompt}`
         type: "function",
         function: { name: t.name, description: t.description, parameters: t.parameters },
       }));
-      body["tool_choice"] = "auto";
+      body["tool_choice"] = toOpenAiToolChoice(options?.toolChoice, options.tools);
     }
 
     const endpoint = sarvamChatCompletionsUrl(this.model);
@@ -464,8 +507,12 @@ ${systemPrompt}`
     this.abortController = abort;
     // Timeout covers connect + first headers only — clear once the SSE body is
     // open so a long spoken reply is not cut mid-sentence.
+    let connectTimedOut = false;
     let connectTimer: ReturnType<typeof setTimeout> | null = setTimeout(
-      () => abort.abort(),
+      () => {
+        connectTimedOut = true;
+        abort.abort();
+      },
       REQUEST_TIMEOUT_MS,
     );
     const clearConnectTimer = () => {
@@ -483,7 +530,10 @@ ${systemPrompt}`
 
     try {
       while (attempts < maxAttempts) {
-        if (abort.signal.aborted) return; // barge-in / connect timeout
+        if (abort.signal.aborted) {
+          if (connectTimedOut) throw new Error("Sarvam LLM connect timeout");
+          return; // barge-in
+        }
         attempts++;
         try {
           resp = await fetch(endpoint, {
@@ -512,7 +562,10 @@ ${systemPrompt}`
           }
           throw new Error(`Sarvam LLM error ${resp.status}: ${lastErr}`);
         } catch (err) {
-          if (abort.signal.aborted) return; // barge-in cancel — not an error
+          if (abort.signal.aborted) {
+            if (connectTimedOut) throw new Error("Sarvam LLM connect timeout");
+            return; // barge-in cancel — not an error
+          }
           if (attempts >= maxAttempts) throw err;
         }
       }
@@ -604,19 +657,50 @@ ${systemPrompt}`
                 jsonBuffer += token;
                 return;
               }
-              jsonSniffDecided = true;
               const firstChar = peek[0];
               if (firstChar === "{" || firstChar === "`" || firstChar === "[") {
+                jsonSniffDecided = true;
                 bufferingJson = true;
                 jsonBuffer += token;
                 return;
               }
+              const xmlSniff = xmlToolSniff(peek);
+              if (xmlSniff === "hold") {
+                jsonBuffer += token;
+                return;
+              }
+              if (xmlSniff === "yes") {
+                jsonSniffDecided = true;
+                bufferingJson = true;
+                jsonBuffer += jsonBuffer ? token : peek;
+                return;
+              }
+              jsonSniffDecided = true;
               jsonBuffer = "";
               token = peek;
             }
           }
 
           if (!sawRealContent && /^\s*$/.test(token)) return;
+
+          // Call 14160: the model spoke a few words, then dumped <tool_call> XML.
+          // Start-of-stream sniff had already committed to speech, so XML used to
+          // reach TTS, get stripped, and leave empty-LLM recovery ("I didn't hear you").
+          if (hasTools && jsonSniffDecided && !bufferingJson && !sawToolDelta) {
+            const hay = full + token;
+            const xmlAt = hay.search(/<tool_call\b/i);
+            if (xmlAt >= 0) {
+              const extraSpeech = xmlAt > full.length ? hay.slice(full.length, xmlAt) : "";
+              if (extraSpeech) {
+                sawRealContent = true;
+                full += extraSpeech;
+                onToken(extraSpeech);
+              }
+              bufferingJson = true;
+              jsonBuffer = hay.slice(xmlAt);
+              return;
+            }
+          }
 
           sawRealContent = true;
           full += token;
@@ -663,6 +747,18 @@ ${systemPrompt}`
 
       if (usage) options?.onUsage?.(usage);
 
+      // Stream ended while still holding a possible XML prefix ("<", "<tool") —
+      // flush it as speech rather than dropping it.
+      if (!sawToolDelta && !bufferingJson && jsonBuffer) {
+        const leftover = jsonBuffer.replace(/^\s+/, "") || jsonBuffer;
+        jsonBuffer = "";
+        if (leftover) {
+          sawRealContent = true;
+          full += leftover;
+          onToken(leftover);
+        }
+      }
+
       if (toolAcc.size > 0 && options?.onToolCall) {
         const picked = [...toolAcc.entries()]
           .sort((a, b) => a[0] - b[0])
@@ -674,7 +770,11 @@ ${systemPrompt}`
           try {
             args = JSON.parse(picked.args || "{}") as Record<string, unknown>;
           } catch {
-            // Empty args on JSON parse error
+            logger.warn(
+              { model: this.model, argsSnippet: (picked.args || "").slice(0, 200) },
+              "Sarvam tool args JSON parse failed — using empty object",
+            );
+            args = {};
           }
           options.onToolParsed?.({ name: picked.name, format: "structured", args });
           options.onToolCall(picked.name, args);
@@ -693,8 +793,25 @@ ${systemPrompt}`
           options.onToolCall(parsedCall.name, parsedCall.args);
           return;
         }
-        onDone("", usage);
+        // Withheld content was not a tool after all — speak it. onDone("") here
+        // is the silent-turn bug (call 12705): XML tool tags got buffered, failed
+        // JSON parse, and the caller heard nothing.
+        onDone(jsonBuffer, usage);
         return;
+      }
+
+      if (!sawToolDelta && !bufferingJson && options?.onToolCall) {
+        const midStreamXml = parseToolEnvelope(full, validToolNames);
+        if (midStreamXml) {
+          options.onToolDetected?.({ format: midStreamXml.format });
+          options.onToolParsed?.({
+            name: midStreamXml.name,
+            format: midStreamXml.format,
+            args: midStreamXml.args,
+          });
+          options.onToolCall(midStreamXml.name, midStreamXml.args);
+          return;
+        }
       }
 
       if (!sawToolDelta && !bufferingJson && options?.onToolCall && validToolNames.size > 0) {

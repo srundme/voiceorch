@@ -1,3 +1,4 @@
+import { Link } from "wouter";
 import { PageHeader } from "../DocsUi";
 
 export default function ChangelogPage() {
@@ -8,6 +9,178 @@ export default function ChangelogPage() {
         title="Changelog"
         description="Notable documentation and API-consumer changes."
       />
+
+      <h2 id="2026-08-25-mcp-docs">2026-08-25 — MCP docs: npm name + tool count</h2>
+      <ul>
+        <li>
+          Claude skill &amp; MCP docs now recommend published{" "}
+          <code>@snapserveai/mcp</code> (<code>npx -y @snapserveai/mcp</code>) and note{" "}
+          <strong>76</strong> tools (was listed as 67).
+        </li>
+        <li>
+          Hosted connector remains <code>https://app.snapserve.ai/api/mcp</code> (see{" "}
+          <Link href="/docs/sdks#mcp">SDKs → MCP</Link>).
+        </li>
+      </ul>
+
+      <h2 id="2026-08-25-platform-urls">2026-08-25 — Platform URLs (Hosts renamed)</h2>
+      <ul>
+        <li>
+          Intro page <strong>Hosts</strong> is now labeled <strong>Platform URLs</strong>: App, Docs,
+          and <strong>API base URL</strong> (<code>https://app.snapserve.ai/api</code>).
+        </li>
+        <li>
+          Opening <code>/api</code> in a browser is not a page (<code>Cannot GET /api</code>). The
+          card links to <Link href="/docs/api-reference">API Reference</Link> instead; use the base
+          URL only with a Bearer API key.
+        </li>
+      </ul>
+
+      <h2 id="2026-08-24-mcp-full">2026-08-24 — Claude MCP: full product tools</h2>
+      <ul>
+        <li>
+          Hosted connector <code>https://app.snapserve.ai/api/mcp</code> now exposes the full
+          SnapServe tool set (campaigns, journeys, WhatsApp, Sheets automatic calls, knowledge,
+          squads, webcall) rather than agents/calls/wallet only.
+        </li>
+        <li>
+          Older tool names (<code>create_outbound_call</code>, <code>snapserve_api_request</code>,
+          analytics aliases) still work.
+        </li>
+      </ul>
+
+      <h2 id="2026-08-23-base-url">2026-08-23 — Published hosts (API + docs)</h2>
+      <ul>
+        <li>
+          The only public API base is <code>https://app.snapserve.ai/api</code>.{" "}
+          <code>api.snapserve.ai</code> is not a SnapServe API host (it 404s).
+        </li>
+        <li>
+          Docs live at <code>https://app.snapserve.ai/docs</code>, not{" "}
+          <code>docs.snapserve.ai</code>.
+        </li>
+        <li>
+          Dashboard → API Keys curl sample now uses the live base URL.
+        </li>
+      </ul>
+
+      <h2 id="2026-08-22-jarvis">2026-08-22 — Jarvis: Karthikeyan voice, colloquial Tamil, creates as you talk</h2>
+      <ul>
+        <li>
+          In-app Jarvis UI has been removed (overlay and rail). A new assistant plan is incoming.
+        </li>
+        <li>
+          Guide: <Link href="/docs/jarvis">Jarvis</Link>.
+        </li>
+      </ul>
+
+      <h2 id="2026-08-20-voice-memory-address">2026-08-20 — Voice Memory: address the caller on match</h2>
+      <ul>
+        <li>
+          When a voiceprint match lands, the agent now speaks immediately —{" "}
+          <em>Hi Priya — good to hear from you again</em> — instead of waiting for the
+          next LLM turn. If they are still talking, it waits for the pause, then takes
+          the floor. Match without stored facts still greets them.
+        </li>
+      </ul>
+
+      <h2 id="2026-08-20-builder-panels">2026-08-20 — Agent Builder: every tab is panels</h2>
+      <ul>
+        <li>
+          Script, Sound, Actions, After the call, and Settings use the same filled panel:
+          title inside the box, not floating above it. Welcome and Talk sit in one shape each;
+          Fast / Balanced / Patient are equal cards; Actions groups (booking, messaging, recording)
+          are stacked rows inside a panel instead of loose uppercase labels.
+        </li>
+        <li>
+          The editor column sits on a muted page with a bordered sheet. At a glance is a
+          checklist block, not three separate chips.
+        </li>
+      </ul>
+
+      <h2 id="2026-08-20-builder-ux">2026-08-20 — Agent Builder: one column, aligned layout</h2>
+      <ul>
+        <li>
+          Header, tabs, and every builder page now share the same left edge and page width.
+          Tabs split <em>Build</em> (Overview → After the call) from <em>Review</em>
+          (Activity, Settings, Versions). Script and Sound show ready/not-ready chips in the header.
+        </li>
+        <li>
+          Overview sections are real panels now: title inside the box, equal-height Phone and
+          Knowledge, trial line nested in Phone. Builder no longer flattens card corners.
+        </li>
+      </ul>
+
+      <h2 id="2026-08-20-connections-vs-agent">2026-08-20 — Connections vs Agent Builder</h2>
+      <ul>
+        <li>
+          Connections is the raw-material page: WhatsApp number, Brevo, Google Calendar.
+          Agent Builder only <em>uses</em> those — turn on send, pick a Meta template,
+          map it to an outcome, pick a meeting.
+        </li>
+        <li>
+          After the call: each outcome rule can pick which approved WhatsApp template
+          to send. Fast / Balanced / Patient stays on Sound. Settings no longer
+          duplicates STT endpointing.
+        </li>
+      </ul>
+
+      <h2 id="2026-08-20-agent-builder-actions">2026-08-20 — Agent Builder: Actions in one place</h2>
+      <ul>
+        <li>
+          Tabs are job-named: Script, Sound, Actions, After the call, Activity.
+          Voicemail moved onto After the call. Connecting WhatsApp / email / Google
+          stays under Connections.
+        </li>
+        <li>
+          After the call maps each outcome to an approved WhatsApp template. Fast /
+          Balanced / Patient lives on Sound.
+        </li>
+      </ul>
+
+      <h2 id="2026-08-20-agent-builder-sarvam-realtime-ui">2026-08-20 — Agent Builder: Sarvam realtime settings</h2>
+      <ul>
+        <li>
+          Transcriber is a no-code screen: language, how speech is written, and
+          brand terms. The language picker is the 23-code Sarvam table
+          (<code>en-IN</code>, Odia as <code>or-IN</code>). Switch language during
+          call still sends <code>language_code=auto</code>.
+        </li>
+        <li>
+          Model/provider pickers and millisecond VAD sliders are gone from
+          Transcriber. Fast / Balanced / Patient on Sound set turn-taking
+          (<code>silence_duration_ms</code> 300 / 500 / 700). Settings no longer
+          repeats those STT sliders.
+        </li>
+      </ul>
+
+      <h2 id="2026-08-19-sarvam-stt-realtime">2026-08-19 — Sarvam STT: realtime partials</h2>
+      <ul>
+        <li>
+          Live Sarvam STT now uses <code>saaras:v3-realtime</code> (
+          <code>/speech-to-text-realtime/ws</code>): real <code>transcript.partial</code> events,
+          millisecond VAD, and mid-call <code>config.update</code> without reconnecting.
+          Saarika stays on the legacy finals-only socket.
+        </li>
+        <li>
+          Indic script on an English-configured agent is treated as a language switch, not
+          garbled audio — Tamil inbound is no longer answered with &quot;I didn&apos;t get that.&quot;
+        </li>
+        <li>
+          Server VAD (<code>endpointing=vad</code>, <code>stream_type=fast</code>) owns turns.
+          Barge-in uses <code>vad.speech_start</code> and early partials — not energy and not
+          <code>transcript.final</code>. Language/mode changes go out as <code>config.update</code>.
+          Call logs record Sarvam&apos;s billed <code>session.end.audio_duration_s</code>.
+          Transcriber → Partial transcripts picks <code>fast</code> (default),
+          <code>balanced</code>, or <code>simulated</code> (finals only).
+          The socket now sends the full connect query: 8 kHz linear16,
+          millisecond VAD, <code>return_timestamps</code>, and an optional
+          terminology <code>prompt</code> for finals.
+          Auto-detect uses the 24-code table (<code>or-IN</code> for Odia, not
+          legacy <code>od-IN</code>) and reads <code>language</code> /
+          <code>language_confidence</code> on transcripts.
+        </li>
+      </ul>
 
       <h2 id="2026-08-19-voice-memory-live-link">2026-08-19 — Voice Memory: recognize mid-call</h2>
       <ul>

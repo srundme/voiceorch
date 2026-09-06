@@ -3,6 +3,7 @@ export { buildSchema } from "./buildSchema.js";
 export { buildPrompt } from "./buildPrompt.js";
 export { rulePrefilter } from "./rulePrefilter.js";
 export { validate } from "./validate.js";
+export { extractUnavailableFallback } from "./extract-fallback.js";
 export {
   extractBarePhone,
   isPhoneLikeDispositionField,
@@ -10,6 +11,8 @@ export {
   formatDispositionFieldList,
   DISPOSITION_EXTRACT_SYSTEM,
   clampDispositionText,
+  jsonSchemaFromDispositionFields,
+  schemaFieldsNeedFill,
 } from "./normalize-fields.js";
 export {
   fillMissingPhoneFields,
@@ -19,6 +22,8 @@ export {
   expandSpokenDigits,
   mergeSpokenPhoneFragments,
   preferIndianPhone,
+  looksLikeSpokenNumber,
+  preferNumberTranscript,
 } from "./spoken-digits.js";
 export {
   slugDispositionKey,

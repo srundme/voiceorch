@@ -1,6 +1,7 @@
 /**
  * Partner-managed client workspaces: keep the product they use daily,
- * hide SnapServe-platform pages (docs, BYOP, API keys, vibe, etc.).
+ * hide SnapServe-platform pages (docs, BYOP, vibe, etc.).
+ * API keys + event webhooks are allowed so clients can integrate.
  */
 
 const BLOCKED_PREFIXES = [
@@ -9,8 +10,6 @@ const BLOCKED_PREFIXES = [
   "/app/squads",
   "/app/providers",
   "/app/voices",
-  "/app/api-keys",
-  "/app/webhooks",
   "/app/vibe",
   "/app/test-simulator",
   "/app/meet",

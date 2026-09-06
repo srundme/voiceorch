@@ -1,8 +1,33 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { db, agentsTable, callsTable, platformSettingsTable } from "@workspace/db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import {
+  db,
+  agentsTable,
+  callsTable,
+  campaignsTable,
+  phoneNumbersTable,
+  platformSettingsTable,
+  usersTable,
+} from "@workspace/db";
+import { eq, and, desc, ne, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
+import {
+  formatBriefForLlm,
+  recommendationsFromSnapshot,
+  type AssistantRecommendation,
+} from "../services/assistant-brief.js";
+import { loadWorkspaceSnapshot } from "../services/assistant-brief-load.js";
+import { resolveJarvisVoice } from "../services/assistant-voice-resolve.js";
+import { JARVIS_TTS_FALLBACK_VOICE_ID, ttsLanguageForText } from "../services/assistant-voice.js";
+import { platformChatText } from "../services/platform-chat-llm.js";
+import { SARVAM_FLAGSHIP_MODEL } from "../orchestration/adapters/llm/sarvam.js";
+import {
+  JOB_TYPES,
+  runAssistantJob,
+  runAssistantJobs,
+  sanitizeJobs,
+  type AssistantJob,
+} from "../services/assistant-jobs.js";
 
 const router = Router();
 
@@ -17,22 +42,54 @@ async function getSetting(key: string): Promise<string | null> {
   return null;
 }
 
-const SYSTEM_PROMPT = `You are Orcha, an expert AI assistant embedded in SnapServe — India's AI voice agent orchestration platform. You have deep knowledge of the platform and can read users' real agent data, diagnose issues, and propose configuration changes.
+const SYSTEM_PROMPT = `You are Jarvis — Karthikeyan's voice on SnapServe. You are their friend on the dashboard, and you also build the workspace when they ask. No forms, no "click apply" unless they ask to review a risky change.
+
+VOICE: Speak colloquial Tamil — Chennai / Tamil Nadu spoken Tamil (பேச்சுத் தமிழ்), never literary or news-reader Tamil. Write the reply in Tamil script. Everyday particles are required: டா, மா, இல்ல, சரிப்பா, வேணும், பண்ணு, சொல்லு. English loanwords only for product words (agent, campaign, wallet, number). Sound like a close friend, not a call-center bot. Examples:
+- "வணக்கம்டா, நான் ஜார்விஸ். எப்படி இருக்கே? ஏஜென்ட் வேணுமா, இல்ல ஜஸ்ட் பேசலாமா?"
+- "பிரியா ரெடிடா. கேம்பெய்ன் டிராஃப்ட்ல வச்சிட்டேன் — லீட்ஸ் இம்போர்ட் பண்ண சொல்லு."
+Keep "message" spoken: 1–3 short sentences. No markdown, no lists, no code fences.
+
+LANGUAGE: Default is colloquial Tamil. Switch to English only if their last message is English-only with no Tamil. Do not romanize Tamil (no "eppadi irukka" in the spoken message).
+
+FRIENDLY CHAT: You are also their friend, not only a builder. If they greet, joke, ask how you are, ask what you can do, or just want to talk — talk back warmly. Tease a little. Use their name. Empty jobs and empty recommendations are correct for pure chat. Do not force a build, a page jump, or a next-step card. You can offer help in one short last sentence only if it fits.
+
+CREATE IMMEDIATELY: When they describe a campaign or assignment on an existing agent, emit the job. Do not ask permission. Only refuse delete / release number / start a live dial batch — send them to the page instead.
+
+FULL VIBE BUILD: The dashboard HUD already runs official Vibe Build (same phases, voices, phone numbers, and save path as /app/vibe) when they have no agent yet or they ask to create or build an agent. Do not emit create_agent for that path. You still diagnose, draft campaigns, assign numbers, and publish.
 
 ## DATA RETRIEVAL COMMANDS
-When you need data to answer a question accurately, output ONLY a JSON command (nothing else) and the system will fetch it for you. Then give your full response with the data.
+When you need data, output ONLY a JSON command (nothing else):
 
+Workspace snapshot:     {"cmd":"get_workspace_brief"}
 Get all agents:         {"cmd":"list_agents"}
 Get agent details:      {"cmd":"get_agent_detail","agent_id":36}
 Get call performance:   {"cmd":"get_call_stats","agent_id":36}
 Full diagnosis:         {"cmd":"diagnose_agent","agent_id":36}
+List campaigns:         {"cmd":"list_campaigns"}
+List phone numbers:     {"cmd":"list_phone_numbers"}
+Wallet + minutes:       {"cmd":"get_wallet"}
 
 ## RESPONSE FORMAT
 Always respond with valid JSON (no markdown, no code fences):
-{"message":"Your detailed response","navigate":"/app/agents","proposal":null}
+{"message":"Spoken reply","navigate":null,"proposal":null,"recommendations":[],"jobs":[]}
 
-"navigate" — optional, only when sending user to a specific page.
-"proposal" — include when proposing configuration changes (see PROPOSING CHANGES).
+"navigate" — send them to a page when that is the job.
+"proposal" — agent setting changes they must confirm with Apply.
+"recommendations" — 1–3 next steps with {id,title,reason,href,priority}.
+"jobs" — actions the system runs immediately (except navigate).
+
+## JOBS
+Emit jobs to do the work now. Types:
+- create_agent: {"type":"create_agent","label":"Create Priya","agentName":"Priya","useCase":"NBFC loan collection","language":"ta-IN","companyName":"their company","direction":"outbound","gender":"female"}
+- create_campaign: {"type":"create_campaign","label":"Website Leads","agentId":36,"campaignName":"Website Leads"}
+- assign_phone: {"type":"assign_phone","label":"Assign number","agentId":36,"phoneNumberId":9}
+- set_agent_status: {"type":"set_agent_status","label":"Publish Priya","agentId":36,"status":"active"}
+- navigate: {"type":"navigate","label":"Open wallet","href":"/app/wallet"}
+
+If you just created an agent and also want a campaign, emit both — create_agent first, then create_campaign without inventing agentId. Never invent IDs for existing records. Destructive work (delete, release number, start a live batch) is navigate-only.
+
+## RECOMMENDATIONS
+Lead with the highest-leverage gap: no agent, no phone/WhatsApp, unused number, no campaign, draft-only agent, low wallet, recent failed calls. If the workspace is healthy, recommend a test call.
 
 ## PROPOSING CHANGES
 When you want to change an agent's settings, include a proposal in your response:
@@ -146,6 +203,30 @@ interface Proposal {
   changes: ProposalChange[];
 }
 
+function sanitizeRecs(raw: unknown): AssistantRecommendation[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AssistantRecommendation[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.id !== "string" || typeof r.title !== "string" || typeof r.href !== "string") continue;
+    out.push({
+      id: r.id.slice(0, 40),
+      title: r.title.slice(0, 80),
+      reason: typeof r.reason === "string" ? r.reason.slice(0, 160) : "",
+      href: r.href,
+      priority: r.priority === "high" || r.priority === "low" ? r.priority : "medium",
+    });
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
+function mergeRecs(server: AssistantRecommendation[], llm: AssistantRecommendation[]): AssistantRecommendation[] {
+  const seen = new Set(server.map((r) => r.id));
+  return [...server, ...llm.filter((r) => !seen.has(r.id))].slice(0, 4);
+}
+
 function tryParseCommand(raw: string): Record<string, unknown> | null {
   const cleaned = raw.trim().replace(/```json\n?|\n?```/g, "").trim();
   if (!cleaned.startsWith("{")) return null;
@@ -156,26 +237,82 @@ function tryParseCommand(raw: string): Record<string, unknown> | null {
   return null;
 }
 
-function parseResponse(raw: string): { text: string; navigate: string | null; proposal: Proposal | null } {
+type ChatResult = {
+  text: string;
+  navigate: string | null;
+  proposal: Proposal | null;
+  recommendations: AssistantRecommendation[];
+  jobs: AssistantJob[];
+  done: Array<{ label: string; message: string; href?: string }>;
+};
+
+function emptyResult(text: string): ChatResult {
+  return { text, navigate: null, proposal: null, recommendations: [], jobs: [], done: [] };
+}
+
+async function fulfillJobs(clerkUserId: string, result: ChatResult): Promise<ChatResult> {
+  const actionable = result.jobs.filter((j) => j.type !== "navigate");
+  if (actionable.length === 0) return result;
+  const voice = await resolveJarvisVoice();
+  const { results, navigate } = await runAssistantJobs(clerkUserId, actionable, voice);
+  const done = results
+    .filter((r) => r.success)
+    .map((r) => ({
+      label: r.message.split(/[.!]/)[0] || "Done",
+      message: r.message,
+      href: r.navigate,
+    }));
+  const extra = results.map((r) => r.message).filter(Boolean).join(" ");
+  return {
+    ...result,
+    text: extra ? `${result.text} ${extra}`.trim() : result.text,
+    navigate: navigate ?? result.navigate,
+    jobs: result.jobs.filter((j) => j.type === "navigate"),
+    done,
+  };
+}
+
+function parseResponse(raw: string): ChatResult {
   const cleaned = raw.trim().replace(/```json\n?|\n?```/g, "").trim();
-  if (!cleaned.startsWith("{")) return { text: cleaned, navigate: null, proposal: null };
+  if (!cleaned.startsWith("{")) return emptyResult(cleaned);
   try {
-    const parsed = JSON.parse(cleaned) as { message?: string; navigate?: string; proposal?: Proposal };
+    const parsed = JSON.parse(cleaned) as {
+      message?: string;
+      navigate?: string;
+      proposal?: Proposal;
+      recommendations?: unknown;
+      jobs?: unknown;
+    };
     return {
       text: parsed.message ?? cleaned,
       navigate: parsed.navigate ?? null,
       proposal: parsed.proposal ?? null,
+      recommendations: sanitizeRecs(parsed.recommendations),
+      jobs: sanitizeJobs(parsed.jobs),
+      done: [],
     };
   } catch {
-    // Try to extract JSON from mixed text
     const match = cleaned.match(/\{[\s\S]*\}/);
     if (match) {
       try {
-        const p = JSON.parse(match[0]) as { message?: string; navigate?: string; proposal?: Proposal };
-        return { text: p.message ?? cleaned, navigate: p.navigate ?? null, proposal: p.proposal ?? null };
+        const p = JSON.parse(match[0]) as {
+          message?: string;
+          navigate?: string;
+          proposal?: Proposal;
+          recommendations?: unknown;
+          jobs?: unknown;
+        };
+        return {
+          text: p.message ?? cleaned,
+          navigate: p.navigate ?? null,
+          proposal: p.proposal ?? null,
+          recommendations: sanitizeRecs(p.recommendations),
+          jobs: sanitizeJobs(p.jobs),
+          done: [],
+        };
       } catch { /* ok */ }
     }
-    return { text: cleaned, navigate: null, proposal: null };
+    return emptyResult(cleaned);
   }
 }
 
@@ -259,7 +396,7 @@ async function executeTool(cmd: string, args: Record<string, unknown>, clerkUser
         systemPrompt: agent.systemPrompt ?? "",
         vadSilenceMs: config.vadSilenceMs ?? 350,
         bargeInEnabled: config.bargeInEnabled ?? false,
-        backchannelingEnabled: agent.backchannelingEnabled ?? false,
+        backchannelingEnabled: agent.backchannelingEnabled !== false,
         contextWindowTurns: agent.contextWindowTurns,
         performance: {
           totalCalls: agent.totalCalls ?? 0,
@@ -360,72 +497,130 @@ async function executeTool(cmd: string, args: Record<string, unknown>, clerkUser
       });
     }
 
+    case "get_workspace_brief": {
+      const snap = await loadWorkspaceSnapshot(clerkUserId);
+      return formatBriefForLlm(snap);
+    }
+
+    case "list_campaigns": {
+      const rows = await db
+        .select({
+          id: campaignsTable.id,
+          name: campaignsTable.name,
+          status: campaignsTable.status,
+          isActive: campaignsTable.isActive,
+          agentId: campaignsTable.agentId,
+          totalLeads: campaignsTable.totalLeads,
+          calledLeads: campaignsTable.calledLeads,
+        })
+        .from(campaignsTable)
+        .where(eq(campaignsTable.userId, clerkUserId))
+        .orderBy(desc(campaignsTable.updatedAt))
+        .limit(20);
+      return JSON.stringify(rows);
+    }
+
+    case "list_phone_numbers": {
+      const rows = await db
+        .select({
+          id: phoneNumbersTable.id,
+          number: phoneNumbersTable.number,
+          agentId: phoneNumbersTable.agentId,
+          status: phoneNumbersTable.status,
+        })
+        .from(phoneNumbersTable)
+        .where(and(
+          eq(phoneNumbersTable.userId, clerkUserId),
+          eq(phoneNumbersTable.status, "active"),
+          ne(phoneNumbersTable.service, "whatsapp"),
+        ))
+        .limit(20);
+      return JSON.stringify(rows);
+    }
+
+    case "get_wallet": {
+      const [user] = await db
+        .select({ walletBalanceCents: usersTable.walletBalanceCents })
+        .from(usersTable)
+        .where(eq(usersTable.clerkId, clerkUserId))
+        .limit(1);
+      const cents = user?.walletBalanceCents ?? 0;
+      return JSON.stringify({
+        balanceInr: Math.round(cents / 100),
+        minutesLeft: Math.floor(cents / 500),
+        low: cents < 10_000,
+      });
+    }
+
     default:
       return JSON.stringify({ error: `Unknown command: ${cmd}` });
   }
 }
 
-function stripThinkTags(raw: string): string {
-  // Qwen 3 / reasoning models wrap internal monologue in <think>...</think> — strip it
-  return raw.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+const briefCache = new Map<string, { at: number; recs: AssistantRecommendation[]; block: string }>();
+const BRIEF_TTL_MS = 20_000;
+
+async function loadBriefCached(clerkUserId: string): Promise<{ recs: AssistantRecommendation[]; block: string }> {
+  const hit = briefCache.get(clerkUserId);
+  if (hit && Date.now() - hit.at < BRIEF_TTL_MS) return { recs: hit.recs, block: hit.block };
+  const snap = await loadWorkspaceSnapshot(clerkUserId);
+  const recs = recommendationsFromSnapshot(snap);
+  const block = `\n[WORKSPACE BRIEF]: ${formatBriefForLlm(snap)}\n`;
+  briefCache.set(clerkUserId, { at: Date.now(), recs, block });
+  return { recs, block };
 }
 
-async function callLLM(
-  messages: Array<{ role: string; content: string }>,
-  key: string,
+async function jarvisComplete(
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
   model: string,
-  baseUrl: string,
-): Promise<string | null> {
-  try {
-    const isGroq = baseUrl.includes("groq.com");
-    const body: Record<string, unknown> = {
-      model,
-      messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
-      max_tokens: 1024,
-      temperature: 0.65,
-    };
-    // Disable Qwen 3 chain-of-thought thinking on Groq — keeps responses clean
-    if (isGroq) body["reasoning_effort"] = null;
-
-    const r = await fetch(baseUrl, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) return null;
-    const data = (await r.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    const raw = data.choices?.[0]?.message?.content ?? null;
-    return raw ? stripThinkTags(raw) : null;
-  } catch (err) {
-    logger.warn({ err, model }, "assistant: LLM call error");
-    return null;
-  }
+  timeoutMs: number,
+): Promise<string> {
+  return platformChatText({
+    system: SYSTEM_PROMPT,
+    messages,
+    model,
+    json: true,
+    reasoningEffort: null,
+    maxTokens: 700,
+    timeoutMs,
+    temperature: 0.5,
+  });
 }
 
-async function runChat(
-  messages: ChatMessage[],
-  key: string,
-  model: string,
-  baseUrl: string,
-  clerkUserId: string,
-): Promise<{ text: string; navigate: string | null; proposal: Proposal | null } | null> {
-  const raw1 = await callLLM(messages.map((m) => ({ role: m.role, content: m.content })), key, model, baseUrl);
-  if (!raw1) return null;
+async function runChat(messages: ChatMessage[], clerkUserId: string): Promise<ChatResult | null> {
+  const mapped = messages.map((m) => ({
+    role: m.role as "user" | "assistant",
+    content: m.content,
+  }));
 
-  const cmd = tryParseCommand(raw1);
-  if (cmd) {
+  const tryOnce = async (model: string, timeoutMs: number): Promise<ChatResult> => {
+    const raw1 = await jarvisComplete(mapped, model, timeoutMs);
+    const cmd = tryParseCommand(raw1);
+    if (!cmd) return parseResponse(raw1);
     const toolResult = await executeTool(cmd.cmd as string, cmd, clerkUserId);
-    const messages2 = [
-      ...messages.map((m) => ({ role: m.role, content: m.content })),
-      { role: "assistant", content: raw1 },
-      { role: "user", content: `[PLATFORM DATA RESULT]:\n${toolResult}\n\nNow give your complete response to the user based on this data.` },
-    ];
-    const raw2 = await callLLM(messages2, key, model, baseUrl);
-    if (!raw2) return null;
+    const raw2 = await jarvisComplete(
+      [
+        ...mapped,
+        { role: "assistant", content: raw1 },
+        { role: "user", content: `[PLATFORM DATA RESULT]:\n${toolResult}\n\nNow give your complete response to the user based on this data.` },
+      ],
+      model,
+      timeoutMs,
+    );
     return parseResponse(raw2);
-  }
+  };
 
-  return parseResponse(raw1);
+  try {
+    return await tryOnce(SARVAM_FLAGSHIP_MODEL, 20_000);
+  } catch (err) {
+    logger.warn({ err }, "assistant: sarvam-105b failed");
+  }
+  try {
+    return await tryOnce("gemma4", 10_000);
+  } catch (err) {
+    logger.warn({ err }, "assistant: gemma4 fallback failed");
+  }
+  return null;
 }
 
 // ── POST /assistant/chat ──────────────────────────────────────────────────────
@@ -447,35 +642,81 @@ router.post("/assistant/chat", async (req: Request, res: Response): Promise<void
 
   const displayName = (userName || dbUser.name || dbUser.email?.split("@")[0] || "there").trim();
   const contextNote = pageUrl ? `[User is on page: ${pageUrl}] ` : "";
+  let snapshotRecs: AssistantRecommendation[] = [];
+  let briefBlock = "";
+  if (!isFirst) {
+    try {
+      const brief = await loadBriefCached(clerkUserId);
+      snapshotRecs = brief.recs;
+      briefBlock = brief.block;
+    } catch (err) {
+      logger.warn({ err }, "assistant: workspace brief failed");
+    }
+  }
 
   const userContent = isFirst
-    ? `${contextNote}[User name: "${displayName}". First message — greet warmly by first name, welcome to SnapServe, ask what they need help with today.]\n${message}`
-    : `${contextNote}${message}`;
+    ? `${contextNote}[User name: "${displayName}". First message — greet them as a friend in colloquial Tamil script as Jarvis (Karthikeyan's voice). Ask how they are. Say you can just talk, or build their first agent when they are ready. Do not start building until they ask.]\n${message}`
+    : `${contextNote}${briefBlock}${message}`;
 
   const messages: ChatMessage[] = [
-    ...(history ?? []).slice(-10),
+    ...(history ?? []).slice(-8),
     { role: "user", content: userContent },
   ];
 
-  const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-  const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-
-  const qwenKey = await getSetting("managed_qwen_key");
-  if (qwenKey) {
-    const result = await runChat(messages, qwenKey, "qwen/qwen3-32b", GROQ_URL, clerkUserId);
-    if (result?.text) { res.json(result); return; }
-  }
-
-  const openaiKey = await getSetting("managed_openai_key");
-  if (openaiKey) {
-    const result = await runChat(messages, openaiKey, "gpt-4o-mini", OPENAI_URL, clerkUserId);
-    if (result?.text) { res.json(result); return; }
+  const result = await runChat(messages, clerkUserId);
+  if (result?.text) {
+    const fulfilled = await fulfillJobs(clerkUserId, {
+      ...result,
+      recommendations: mergeRecs(snapshotRecs, result.recommendations),
+    });
+    res.json(fulfilled);
+    return;
   }
 
   const fallback = isFirst
-    ? `Hi ${displayName}! I'm Orcha, your SnapServe assistant. I can read your agents, diagnose latency issues, write system prompts, and apply fixes for you. What do you need?`
-    : "I'm here to help with your agents and calls. Try asking 'why is my agent slow?' or 'show me my agents'.";
-  res.json({ text: fallback, navigate: null, proposal: null });
+    ? `வணக்கம் ${displayName}, நான் ஜார்விஸ். எப்படி இருக்கே? பேசலாம் — இல்ல ஏஜென்ட் வேணும்னா சொல்லு, நான் Vibe-ல பில்ட் பண்ணிடுவேன்.`
+    : "சொல்லுடா — பேசலாம், இல்ல ஏஜென்ட், கேம்பெய்ன், நம்பர் — என்ன வேணுமோ.";
+  res.json({
+    text: fallback,
+    navigate: null,
+    proposal: null,
+    recommendations: snapshotRecs,
+    jobs: [],
+    done: [],
+  });
+});
+
+// ── GET /assistant/brief — live recommendations without chatting ──────────────
+
+router.get("/assistant/brief", async (req: Request, res: Response): Promise<void> => {
+  const clerkUserId = (req as any).clerkUserId as string;
+  if (!clerkUserId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const snap = await loadWorkspaceSnapshot(clerkUserId);
+  res.json({
+    snapshot: snap,
+    recommendations: recommendationsFromSnapshot(snap),
+  });
+});
+
+// ── POST /assistant/job — confirmable workspace actions ───────────────────────
+
+router.post("/assistant/job", async (req: Request, res: Response): Promise<void> => {
+  const clerkUserId = (req as any).clerkUserId as string;
+  if (!clerkUserId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const job = req.body as AssistantJob;
+  if (!job || typeof job.type !== "string" || !JOB_TYPES.has(job.type)) {
+    res.status(400).json({ error: "Unsupported job" });
+    return;
+  }
+
+  const voice = await resolveJarvisVoice();
+  const result = await runAssistantJob(clerkUserId, job, voice);
+  if (!result.success) {
+    res.status(400).json({ error: result.message });
+    return;
+  }
+  res.json(result);
 });
 
 // ── POST /assistant/apply — applies proposed changes to an agent ───────────────
@@ -543,6 +784,8 @@ router.post("/assistant/tts", async (req: Request, res: Response): Promise<void>
     return;
   }
 
+  const jarvisVoice = voiceId || (await resolveJarvisVoice()).voiceId || JARVIS_TTS_FALLBACK_VOICE_ID;
+
   try {
     const cartesiaBase = (process.env["CARTESIA_BASE_URL"] ?? "https://api-india.cartesia.ai").replace(/\/+$/, "");
     const ttsRes = await fetch(`${cartesiaBase}/tts/bytes`, {
@@ -553,9 +796,10 @@ router.post("/assistant/tts", async (req: Request, res: Response): Promise<void>
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model_id: "sonic-3.5",
-        transcript: text.slice(0, 500),
-        voice: { mode: "id", id: voiceId ?? "a0e99841-438c-4a64-b679-ae501e7d6091" },
+        model_id: "sonic-3.6",
+        transcript: text.slice(0, 700),
+        language: ttsLanguageForText(text),
+        voice: { id: jarvisVoice },
         output_format: { container: "wav", encoding: "pcm_f32le", sample_rate: 22050 },
       }),
     });

@@ -55,8 +55,14 @@ const FILLER_WORDS = new Set([
   "haan", "han", "ha", "hn", "ji", "hai", "nahi", "nhi",
   "acha", "accha", "achha", "theek", "thik", "sari", "seri", "sar",
   "ama", "aama", "illa", "illai",
-  // continuation / clarification requests (e.g. "please tell me", "tell me more")
-  "tell", "me", "more",
+  // romanized Hindi/Indic "go ahead / tell me" replies (call 13340: "Aa boliye Ma'am")
+  "aa", "boliye", "bolie", "bolo", "boli", "batao", "bataiye",
+  "suniye", "suno", "bolna", "baat", "karo", "kijiye", "kripya",
+  // continuation crumbs that appear with politeness fillers ("please … more")
+  // Do NOT list "tell" / "me" — "Tell me, I'm on the line" is a real prompt
+  // for the agent to speak (call 16986), and "please tell me" still holds
+  // because it has fewer than MIN_REAL_ENGLISH_WORDS content words.
+  "more",
   // hold-on fragments
   "wait", "hold", "on", "one", "sec", "second", "minute",
   // ── English grammatical function words ───────────────────────────────────
@@ -116,11 +122,16 @@ export interface AutoDetectResolution {
  *
  * Precedence:
  *  1. A latched explicit request always wins (bypasses the guard).
- *  2. Indic-script detection passes through unchanged.
- *  3. Script-detected English is held back when the conversation is already in
+ *  2. An Indic-configured agent does not passively become English just because
+ *     STT/LID wrote Latin letters. English STT on Tamil audio looks like a
+ *     "real English sentence" (call 21546 Tanglish) — we cannot dictionary-
+ *     match every romanized word, so we trust the agent pin until the caller
+ *     asks for English (latch) or autoSwitchToEnglish is on.
+ *  3. Indic-script detection passes through unchanged.
+ *  4. Script-detected English is held back when the conversation is already in
  *     a non-English language and the utterance is a short filler/backchannel.
- *  4. First-turn English (no current language, or current language already
- *     English) passes through unchanged.
+ *  5. First-turn English (no current language, or current language already
+ *     English) passes through unchanged — unless rule 2 applies.
  */
 export function resolveAutoDetectLanguage(opts: {
   /** Result of STT-provided or script-based detection (may be null). */
@@ -131,9 +142,23 @@ export function resolveAutoDetectLanguage(opts: {
   currentLang: string;
   /** The caller's transcript for this turn. */
   text: string;
+  /** Agent / STT configured language (e.g. ta-IN). */
+  agentLang?: string | null;
+  /** When false (default), an Indic agent never flips to English from LID. */
+  allowPassiveEnglish?: boolean;
 }): AutoDetectResolution {
   if (opts.latchedLang) return { lang: opts.latchedLang, heldFiller: false };
   const detected = opts.detected;
+  const agentLang = opts.agentLang ?? "";
+  const agentIsIndic = Boolean(agentLang && !agentLang.startsWith("en-"));
+  if (agentIsIndic && opts.allowPassiveEnglish !== true) {
+    if (!detected || detected.startsWith("en-")) {
+      const hold = (opts.currentLang && !opts.currentLang.startsWith("en-"))
+        ? opts.currentLang
+        : agentLang;
+      return { lang: hold, heldFiller: Boolean(detected?.startsWith("en-")) };
+    }
+  }
   if (
     detected &&
     detected.startsWith("en-") &&

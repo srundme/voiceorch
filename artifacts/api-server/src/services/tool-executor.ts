@@ -1,5 +1,5 @@
 import { format, addMinutes } from "date-fns";
-import { toZonedTime, fromZonedTime, formatInTimeZone } from "date-fns-tz";
+import { toZonedTime, formatInTimeZone } from "date-fns-tz";
 import {
   db,
   bookingsTable,
@@ -14,8 +14,12 @@ import {
   callExecutionsTable,
   type AgentConfig,
 } from "@workspace/db";
-import { eq, and, or, sql } from "drizzle-orm";
+import { eq, and, or, sql, desc, ne } from "drizzle-orm";
 import { getAvailableSlots } from "./scheduling/slot-engine.js";
+import { findExactAvailableSlot, parsePreferredInstant, extractIsoDateTime } from "./scheduling/slot-match.js";
+import { pickTimeSlotBySpokenClock } from "../orchestration/booking-flow-enforce.js";
+import { parseRelativeDateTime, type PartOfDay } from "./scheduling/relative-datetime.js";
+import { parseCallbackDateTime } from "../lib/tz-datetime.js";
 import { buildSlotLockKey } from "./scheduling/lock.js";
 import {
   sendBookingCreatedEmail,
@@ -31,12 +35,27 @@ import {
 import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
 import type { AgentConfig as _AgentConfig } from "../orchestration/types.js";
 import type { AgentTool, ToolDefinition } from "../orchestration/types.js";
+import { bookingAsksCallerForEmail, resolveBookingAttendeeEmail } from "../orchestration/booking-email-policy.js";
 import { logger } from "../lib/logger.js";
 import { writeExecutionLog } from "./execution-log.js";
 import type { TimeSlot } from "./scheduling/slot-engine.js";
 import { sendChannelEmail } from "./email-channel.js";
+import { attachMeetLinkToEmailBody } from "../orchestration/booking-email-guard.js";
 import { sendMidCallWhatsapp } from "./whatsapp/outbound.js";
 import { resolveBookingLineageCallId } from "./meet-booking.js";
+import { normalizeBookingDatetimeArgs } from "./booking-tool-args.js";
+import {
+  sanitizeAttendeeEmail,
+  validateBookableEmail,
+  preferCompleteEmail,
+} from "../orchestration/booking-email-validate.js";
+import { latinizeAttendeeName } from "../orchestration/booking-attendee-name.js";
+import { fetchUserConfiguredUrl } from "../lib/ssrf.js";
+import {
+  syncCampaignBooking,
+  syncCampaignTransfer,
+  type CampaignCallContext,
+} from "./campaign-tab-sync.js";
 
 // ── Booking diagnostic log helper ────────────────────────────────────────────
 
@@ -133,7 +152,10 @@ const END_CALL_TOOL_DEF: ToolDefinition = {
  * Always injects a built-in `end_call` tool unless the agent already defines one.
  * Suitable for passing directly to LLM adapters.
  */
-export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
+export function buildToolDefs(
+  tools: AgentTool[],
+  ctx?: { systemPrompt?: string | null; knownEmail?: string | null },
+): ToolDefinition[] {
   const hasExplicitEndCall = tools.some((t) => t.type === "end_call");
   const builtInEndCall: ToolDefinition[] = hasExplicitEndCall
     ? []
@@ -143,21 +165,32 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
     ...builtInEndCall,
     ...tools.map((t): ToolDefinition => {
       if (t.type === "native_booking") {
+        const askEmail = bookingAsksCallerForEmail(t, {
+          prompt: ctx?.systemPrompt,
+          knownEmail: ctx?.knownEmail,
+        });
         return {
           name: t.name,
           description:
             t.description +
-            " Call this tool to create the actual booking." +
-            " CRITICAL RULES — violating any of these will cause an error:" +
-            " (1) NEVER call this tool with placeholder, example, or test values — attendee_name must be the caller's real full name and attendee_email must be their real email address (not @example.com, @test.com, or similar fake domains)." +
-            " (2) You MUST have the caller's real name AND real email address explicitly stated in the conversation before calling — do NOT fabricate or guess these details." +
-            " (3) Only book ONE slot per conversation turn — present available slots to the caller, wait for them to choose one, then book only that ONE slot. Do NOT call this tool multiple times in a row." +
-            " (4) Required fields: attendee_name (ask the caller if not yet provided) and attendee_email (ask the caller if not yet provided).",
+            " Call this tool to create the calendar booking. Pass attendee_name." +
+            (askEmail
+              ? " Pass attendee_email from the caller."
+              : " Pass attendee_email if the caller said one or it is already in the prompt or lead."),
           parameters: {
             type: "object",
             properties: {
-              attendee_name: { type: "string", description: "Full name of the person being booked" },
-              attendee_email: { type: "string", description: "Email address of the person being booked" },
+              attendee_name: {
+                type: "string",
+                description:
+                  "Caller's full name in English / Latin letters ONLY (e.g. 'Kishore Kumar'). If they spoke Hindi, Tamil, Marathi, or another language, romanize the name — never pass Devanagari, Tamil, or other native scripts.",
+              },
+              attendee_email: {
+                type: "string",
+                description: askEmail
+                  ? "Email address the caller gave."
+                  : "Optional. Pass if the caller said an email or it is already in the prompt or lead.",
+              },
               preferred_date: {
                 type: "string",
                 description:
@@ -179,7 +212,7 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
                   "The physical address for the meeting. Required only when meeting_type is 'in_person'. Ask the caller for the address before booking.",
               },
             },
-            required: ["attendee_name", "attendee_email"],
+            required: askEmail ? ["attendee_name", "attendee_email"] : ["attendee_name"],
           },
         };
       }
@@ -224,9 +257,9 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
             t.description +
             " This tool ONLY checks availability — it does NOT create a booking." +
             " The response has three possible formats:" +
-            " (1) requested_slot_available: the 'slot' field contains the ISO 8601 string for the exact time the caller requested — tell the caller that time is available, then immediately collect their full name and email and call book_appointment with that ISO string verbatim as preferred_date." +
-            " (2) requested_slot_unavailable: the requested time is not open — tell the caller and present the slots from the 'alternatives' field (each slot is shown as an ISO string followed by a human label in parentheses); once the caller chooses one, collect their name and email and call book_appointment with the chosen ISO string verbatim as preferred_date." +
-            " (3) available_slots: the 'next' field lists up to 5 slots, each formatted as an ISO 8601 string followed by a human-readable label in parentheses, e.g. '2026-06-22T15:00:00+05:30 (Sun Jun 22 at 3:00 PM)' — present these to the caller, then after they choose one collect name and email and call book_appointment with the ISO string verbatim." +
+            " (1) requested_slot_available: the 'slot' field contains the ISO 8601 string for the exact time the caller requested — tell the caller that time is available, then call book_appointment with that ISO string verbatim as preferred_date." +
+            " (2) requested_slot_unavailable: the requested time is not open — tell the caller and present the slots from the 'alternatives' field (each slot is shown as an ISO string followed by a human label in parentheses); once the caller chooses one, call book_appointment with the chosen ISO string verbatim as preferred_date." +
+            " (3) available_slots: the 'next' field lists up to 5 slots, each formatted as an ISO 8601 string followed by a human-readable label in parentheses, e.g. '2026-06-22T15:00:00+05:30 (Sun Jun 22 at 3:00 PM)' — present these to the caller, then after they choose one call book_appointment with the ISO string verbatim." +
             " Always pass ISO strings verbatim to book_appointment — do NOT convert or reformat them." +
             " Never confirm to the caller that an appointment is booked without first calling the booking tool and receiving a booking_confirmed result.",
           parameters: {
@@ -239,7 +272,7 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
               },
               timezone: {
                 type: "string",
-                description: "IANA timezone, e.g. 'America/New_York' or 'Asia/Kolkata'. Defaults to Asia/Kolkata if not provided.",
+                description: "Optional IANA timezone the caller mentioned, e.g. 'America/New_York'. Slots are always returned in the business's own timezone, which is reported in the 'timezone' field of the result — read times to the caller exactly as returned.",
               },
             },
             required: [],
@@ -330,7 +363,9 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
             (t.description || "Send an email to the caller using the configured Email channel.") +
             " Use this when the caller asks you to email them something (summary, brochure, confirmation)." +
             " You MUST have a real email address from the caller before calling — never invent one." +
-            " Optional subject/body override the channel default template; omit them to use the saved template with {{variables}}.",
+            " Optional subject/body override the channel default template; omit them to use the saved template with {{variables}}." +
+            " For a booking confirmation, do not write that a Meet link will be included unless you paste the real URL." +
+            " Use {{meet_link}} when a booking on this call has a Google Meet URL — SnapServe will also insert it.",
           parameters: {
             type: "object",
             properties: {
@@ -365,7 +400,11 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
           description:
             (t.description || "Send a WhatsApp message to the caller.") +
             " Use when the caller asks you to WhatsApp them something." +
-            " Put the actual content you want to send in `message` — it is delivered inside the business's approved WhatsApp template." +
+            " Approved templates have numbered blanks {{1}}, {{2}}, {{3}}, {{4}} — fill them separately." +
+            " For appointment confirmations: caller_name = the person on the phone (NEVER the agent/dashboard name)," +
+            " doctor = the doctor or staff they booked with, date = appointment date, time = appointment time." +
+            " Prefer those fields (or `params` in {{1}}…{{n}} order) over stuffing everything into `message`." +
+            " `message` is only extra notes or 1-blank templates." +
             " Prefer the caller's phone from the call; only pass to_phone if they give a different number." +
             " template_hint is one of: call_summary, booking_confirmed, callback_scheduled.",
           parameters: {
@@ -375,9 +414,30 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
                 type: "string",
                 description: "Recipient phone in E.164 or 10-digit local form. Omit to use the caller on this call.",
               },
+              caller_name: {
+                type: "string",
+                description: "The caller's real name for a greeting blank. Never the agent name.",
+              },
+              doctor: {
+                type: "string",
+                description: "Doctor / provider / staff name for the 'appointment with' blank.",
+              },
+              date: {
+                type: "string",
+                description: "Appointment date only, e.g. 27 Aug 2026. Do not combine with time.",
+              },
+              time: {
+                type: "string",
+                description: "Appointment time only, e.g. 9:30 am IST. Do not combine with date.",
+              },
+              params: {
+                type: "array",
+                items: { type: "string" },
+                description: "Optional ordered template body values for {{1}}…{{n}} matching the approved template.",
+              },
               message: {
                 type: "string",
-                description: "The message content to send (any text: details, address, price, link, summary…). Inserted into the approved template's variable.",
+                description: "Extra notes, address, or the full message for a 1-variable template. Do not use this as the only field when the template has multiple blanks.",
               },
               template_hint: {
                 type: "string",
@@ -534,18 +594,45 @@ export async function executeNativeBooking(
   agentId: number,
   tool: AgentTool & { type: "native_booking" },
   args: Record<string, unknown>,
-  opts?: { lineageCallId?: number | null },
+  opts?: { lineageCallId?: number | null; knownEmail?: string | null; knownSourceText?: string | null },
 ): Promise<string> {
+  args = normalizeBookingDatetimeArgs(args);
   logger.info({ callId, eventTypeId: tool.eventTypeId }, "Native booking tool invoked");
   const bookingCallId = await resolveBookingLineageCallId(callId, opts?.lineageCallId);
-  const attendeeName = String(args["attendee_name"] ?? args["name"] ?? "Guest");
-  const attendeeEmail = String(args["attendee_email"] ?? args["email"] ?? "");
+  const attendeeNameRaw = String(args["attendee_name"] ?? args["name"] ?? "Guest");
+  const askEmail = bookingAsksCallerForEmail(tool, {
+    prompt: opts?.knownSourceText,
+    knownEmail: opts?.knownEmail,
+  });
+  const resolved = resolveBookingAttendeeEmail({
+    tool,
+    args,
+    callId,
+    knownEmail: opts?.knownEmail,
+    knownSourceText: opts?.knownSourceText,
+  });
+  const attendeeEmailRaw = resolved.email;
   const preferredRaw = args["preferred_date"] != null ? String(args["preferred_date"]) : null;
 
-  if (!attendeeEmail) {
+  if (askEmail && !attendeeEmailRaw.trim()) {
     logger.warn({ callId }, "Native booking: no attendee email — cannot book");
     return "error: attendee_email is required to complete the booking";
   }
+
+  const emailCheck = validateBookableEmail(attendeeEmailRaw);
+  if (!emailCheck.ok) {
+    logger.warn({ callId, attendeeEmailRaw, reason: emailCheck.reason }, "Native booking blocked: invalid email");
+    void appendBookingLog(callId, agentId, "Booking Blocked", {
+      reason: emailCheck.reason,
+      attendeeEmail: sanitizeAttendeeEmail(attendeeEmailRaw),
+      attendeeName: attendeeNameRaw,
+    }, "error");
+    return `error: ${emailCheck.detail} Do not call this tool again until you have a complete, confirmed email.`;
+  }
+  const attendeeEmail = emailCheck.email;
+  // Calendar invites + customer emails must use English/Latin names even when
+  // STT captured Hindi/Tamil/Marathi (etc.) native script on the call.
+  const attendeeName = latinizeAttendeeName(attendeeNameRaw, attendeeEmail);
 
   // ── Placeholder email guard ──────────────────────────────────────────────
   const emailParts = attendeeEmail.split("@");
@@ -553,7 +640,7 @@ export async function executeNativeBooking(
   const emailDomain = emailParts[1]?.toLowerCase() ?? "";
   const isBlockedDomain = BLOCKED_EMAIL_DOMAINS.includes(emailDomain);
   const isBlockedLocalPart = BLOCKED_EMAIL_LOCAL_PARTS.has(emailLocalPart);
-  if (isBlockedDomain || isBlockedLocalPart) {
+  if (askEmail && (isBlockedDomain || isBlockedLocalPart)) {
     logger.warn({ callId, attendeeEmail, isBlockedDomain, isBlockedLocalPart }, "Native booking blocked: placeholder email");
     void appendBookingLog(callId, agentId, "Booking Blocked", {
       reason: "placeholder_email",
@@ -631,7 +718,10 @@ export async function executeNativeBooking(
     // produce the correct calendar-local date string (not the UTC-local date string
     // which would be wrong when the offset crosses midnight: e.g. 00:00+05:30 → "prev day" in UTC).
     let slots = await getAvailableSlots(eventType.id, formatInTimeZone(searchStart, calTz, "yyyy-MM-dd"), formatInTimeZone(searchEnd, calTz, "yyyy-MM-dd"));
-    if (minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
+    // Exact times must not be cut off by `>= minSlotStart`. A 1ms parse skew
+    // (or an ISO with the spoken label glued on) used to drop the slot we had
+    // just offered, and the agent then told the caller it was booked.
+    if (!isExactTime && minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
     if (timeFilter) slots = slots.filter(timeFilter);
     void appendBookingLog(callId, agentId, "Booking Request", {
       attendeeName,
@@ -659,16 +749,13 @@ export async function executeNativeBooking(
     // requested time is unavailable causes silent, wrong bookings.
     let chosenSlot: TimeSlot;
     if (isExactTime && minSlotStart) {
-      const EXACT_TOLERANCE_MS = 60_000; // 1-minute window to absorb rounding
-      const exactMatch = slots.find(
-        (s) => Math.abs(s.slotStart.getTime() - minSlotStart.getTime()) <= EXACT_TOLERANCE_MS,
-      );
+      const exactMatch = findExactAvailableSlot(slots, minSlotStart, calTz, preferredRaw ?? undefined);
 
       const tz = calendar.timezone || "UTC";
       const requestedLabel = formatInTimeZone(minSlotStart, tz, "EEEE, MMMM do 'at' h:mm a");
 
       logger.info(
-        { callId, requestedLabel, exactMatch: !!exactMatch, availableCount: slots.length },
+        { callId, requestedLabel, exactMatch: !!exactMatch, availableCount: slots.length, preferredRaw },
         "Native booking: exact-time slot check",
       );
 
@@ -684,7 +771,12 @@ export async function executeNativeBooking(
       logger.info({ callId, confirmedSlot: exactMatch.slotStart }, "Native booking: exact slot confirmed");
       chosenSlot = exactMatch;
     } else {
-      chosenSlot = slots[0]!;
+      // Vague "tomorrow morning" stays first slot. A clock in the same string
+      // ("10 AM") must not silently book slots[0] (call 17701).
+      chosenSlot =
+        pickTimeSlotBySpokenClock(preferredRaw, slots, (s) =>
+          formatInTimeZone(s.slotStart, calTz, "yyyy-MM-dd'T'HH:mm:ssXXX"),
+        ) ?? slots[0]!;
     }
 
     // Post-selection availability guard — verify the chosen slot falls within
@@ -776,7 +868,7 @@ export async function executeNativeBooking(
     }
     const confirmedBooking = booking;
 
-    const tz = (args["timezone"] as string | undefined) || calendar.timezone || "UTC";
+    const tz = calendar.timezone || "UTC";
     const dateStr = formatInTimeZone(slotStart, tz, "EEEE, MMMM do 'at' h:mm a zzz");
     logger.info(
       {
@@ -801,7 +893,7 @@ export async function executeNativeBooking(
       attendeeName,
     }, "success");
 
-    // Automatic Calls sheet: Meeting Time + Status Booked (fire-and-forget)
+    // Automatic Calls sheet: Follow-up datetime (fire-and-forget; Status stays call-state)
     import("./sheets-writeback.js").then(({ writeSheetBookingForCall }) => {
       writeSheetBookingForCall(callId, {
         slotStart: confirmedBooking.slotStart,
@@ -809,7 +901,7 @@ export async function executeNativeBooking(
       }).catch((err) => logger.warn({ callId, err }, "sheet-auto-call: booking writeback failed"));
     }).catch(() => {});
 
-    // Create Google Calendar event with Meet link
+    // Create Google Calendar event (Meet link only when enableGoogleMeet is on)
     let meetLink: string | null = null;
     let googleEventId: string | null = null;
     let gcalConnectionId: string | null = null;
@@ -817,15 +909,6 @@ export async function executeNativeBooking(
     let calendarSyncStatus: string | null = null;
     let calendarSyncError: string | null = null;
 
-    if (!eventType.enableGoogleMeet) {
-      // Google Meet not enabled on this event type — skip GCal entirely
-      calendarSyncStatus = "skipped";
-      await db.execute(
-        sql`UPDATE bookings SET calendar_sync_status = 'skipped' WHERE id = ${confirmedBooking.id}`,
-      );
-      logger.info({ callId, bookingId: confirmedBooking.id }, "Native booking: GCal skipped — enableGoogleMeet=false on event type");
-    }
-    if (eventType.enableGoogleMeet) {
     try {
       const calRow = await db.execute(
         sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${calendar.id}`,
@@ -839,7 +922,12 @@ export async function executeNativeBooking(
       }
 
       if (gcalConnectionId) {
-        logger.info({ callId, bookingId: confirmedBooking.id, connectionId: gcalConnectionId }, "Native booking: creating Google Calendar event");
+        logger.info({
+          callId,
+          bookingId: confirmedBooking.id,
+          connectionId: gcalConnectionId,
+          createMeetLink: !!eventType.enableGoogleMeet,
+        }, "Native booking: creating Google Calendar event");
       } else {
         calendarSyncStatus = "skipped";
         await db.execute(
@@ -870,6 +958,7 @@ export async function executeNativeBooking(
             timezone: tz,
             hostEmail: calendar.hostEmail,
             additionalHosts: calendar.additionalHosts,
+            createMeetLink: !!eventType.enableGoogleMeet,
             onError: (detail) => { gcalErrCode = detail.errorCode; gcalErrMsg = detail.message ?? null; },
           })
         : null;
@@ -952,7 +1041,6 @@ export async function executeNativeBooking(
         calendarSyncStatus: "sync_failed",
       }, "error");
     }
-    } // end if (eventType.enableGoogleMeet)
 
     // If GCal was configured but failed, only downgrade to pending for manual-confirmation
     // event types. Instant (auto-confirm) events stay confirmed — GCal is supplementary.
@@ -980,6 +1068,13 @@ export async function executeNativeBooking(
             googleEventId,
           },
         }).catch((err) => logger.warn({ callId, bookingId: confirmedBooking.id, err }, "Native booking: webhook dispatch failed"));
+        await syncCampaignBooking({
+          callId: bookingCallId,
+          bookingId: confirmedBooking.id,
+          meetingTime: confirmedBooking.slotStart,
+          meetingLink: meetLink,
+          status: "pending",
+        }).catch((err) => logger.warn({ callId, bookingId: confirmedBooking.id, err }, "Native booking: campaign tab sync failed"));
         return `booking_pending: booking_id=${confirmedBooking.id}, slot="${dateStr}", status="pending", note="Google Calendar event creation failed — booking requires manual confirmation"`;
       }
       // Instant-confirm: GCal failure is non-blocking — booking stays confirmed
@@ -1044,6 +1139,14 @@ export async function executeNativeBooking(
       googleEventId: googleEventId ?? null,
     }, "success");
 
+    await syncCampaignBooking({
+      callId: bookingCallId,
+      bookingId: confirmedBooking.id,
+      meetingTime: confirmedBooking.slotStart,
+      meetingLink: meetLink,
+      status: confirmedBooking.status,
+    }).catch((err) => logger.warn({ callId, bookingId: confirmedBooking.id, err }, "Native booking: campaign tab sync failed"));
+
     const meetingsEnabled = await agentMeetingsChannelEnabled(agentId);
     const meetNote = formatMeetLinkToolNote(meetLink, meetingsEnabled);
     return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${confirmedBooking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${confirmedBooking.status}"${meetNote}`;
@@ -1053,12 +1156,100 @@ export async function executeNativeBooking(
   }
 }
 
+/**
+ * Caller asked to change the attendee email after the booking already landed
+ * (call 20113). Patch the row + GCal invite and resend confirmation.
+ */
+export async function executeUpdateBookingAttendeeEmail(
+  callId: number,
+  agentId: number,
+  bookingId: number,
+  newEmailRaw: string,
+): Promise<string> {
+  const emailCheck = validateBookableEmail(newEmailRaw);
+  if (!emailCheck.ok) {
+    return `error: ${emailCheck.detail}`;
+  }
+  const attendeeEmail = emailCheck.email;
+
+  try {
+    const [existing] = await db
+      .select()
+      .from(bookingsTable)
+      .where(and(eq(bookingsTable.id, bookingId), ne(bookingsTable.status, "cancelled")))
+      .limit(1);
+    if (!existing) {
+      return "error: could not find the booking to update the email.";
+    }
+    if (existing.attendeeEmail.toLowerCase() === attendeeEmail) {
+      return `email_updated: booking_id=${existing.id}, email="${attendeeEmail}" (already on file). Confirm briefly to the caller.`;
+    }
+
+    await db
+      .update(bookingsTable)
+      .set({ attendeeEmail, updatedAt: new Date() })
+      .where(eq(bookingsTable.id, existing.id));
+
+    const [eventType] = existing.eventTypeId
+      ? await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, existing.eventTypeId)).limit(1)
+      : [];
+    const [calendar] = existing.calendarId
+      ? await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, existing.calendarId)).limit(1)
+      : [];
+
+    if (calendar && existing.googleEventId) {
+      try {
+        const connectionId =
+          (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
+        if (connectionId) {
+          await updateCalendarEvent({
+            connectionId,
+            eventId: existing.googleEventId,
+            attendeeEmail,
+            attendeeName: existing.attendeeName,
+            timezone: calendar.timezone,
+            hostEmail: calendar.hostEmail,
+            additionalHosts: calendar.additionalHosts,
+          });
+        }
+      } catch (err) {
+        logger.warn({ callId, bookingId: existing.id, err }, "Update booking email: GCal attendee patch failed");
+      }
+    }
+
+    if (calendar && eventType) {
+      sendBookingCreatedEmail({
+        attendeeName: existing.attendeeName,
+        attendeeEmail,
+        eventTypeName: eventType.name,
+        slotStart: existing.slotStart,
+        slotEnd: existing.slotEnd,
+        timezone: calendar.timezone,
+        hostEmail: calendar.hostEmail,
+        additionalHosts: calendar.additionalHosts,
+        bookingId: existing.id,
+        notes: existing.attendeeNotes,
+        meetLink: existing.meetLink,
+      }).catch((err) => {
+        logger.error({ callId, bookingId: existing.id, err }, "Update booking email: confirmation resend failed");
+      });
+    }
+
+    logger.info({ callId, bookingId: existing.id, attendeeEmail, agentId }, "Booking attendee email updated");
+    return `email_updated: booking_id=${existing.id}, email="${attendeeEmail}". Confirmation is being sent to the new address. Tell the caller the invite is on its way.`;
+  } catch (err) {
+    logger.error({ callId, bookingId, err }, "Update booking email failed");
+    return "error: could not update the booking email due to a technical issue.";
+  }
+}
+
 export async function executeNativeCheckAvailability(
   callId: number,
   agentId: number,
   tool: AgentTool & { type: "native_check_availability" },
   args: Record<string, unknown>,
 ): Promise<string> {
+  args = normalizeBookingDatetimeArgs(args);
   logger.info({ callId, eventTypeId: tool.eventTypeId }, "Native check-availability tool invoked");
   const preferredRaw = args["preferred_date"] != null ? String(args["preferred_date"]) : null;
 
@@ -1104,7 +1295,7 @@ export async function executeNativeCheckAvailability(
     const calTz = calendar.timezone || "UTC";
     const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
     let slots = await getAvailableSlots(eventType.id, formatInTimeZone(searchStart, calTz, "yyyy-MM-dd"), formatInTimeZone(searchEnd, calTz, "yyyy-MM-dd"));
-    if (minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
+    if (!isExactTime && minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
     if (timeFilter) slots = slots.filter(timeFilter);
 
     if (slots.length === 0) {
@@ -1112,17 +1303,22 @@ export async function executeNativeCheckAvailability(
       return `no_availability: no available slots ${rangeDesc}`;
     }
 
-    const tz = tool.timezone || calendar.timezone || "UTC";
+    // Slots are generated from the calendar's working hours, so they must be
+    // labelled in the calendar's timezone.  A model-supplied `timezone` argument
+    // is a guess (the schema advertises a default) and labelling with it made the
+    // agent speak times that did not match the slot the booking tool then used.
+    const tz = calendar.timezone || tool.timezone || "UTC";
+    const requestedTz = args["timezone"] != null ? String(args["timezone"]).trim() : "";
+    if (requestedTz && requestedTz !== tz) {
+      logger.info({ callId, requestedTz, tz }, "check_availability: ignoring model-supplied timezone in favour of calendar timezone");
+    }
 
     const slotLabel = (s: { slotStart: Date }) =>
       `${formatInTimeZone(s.slotStart, tz, "yyyy-MM-dd'T'HH:mm:ssxxx")} (${formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a")})`;
 
     // Exact-time branch: check whether the requested slot is available
     if (isExactTime && minSlotStart) {
-      const EXACT_TOLERANCE_MS = 60_000;
-      const exactMatch = slots.find(
-        (s) => Math.abs(s.slotStart.getTime() - minSlotStart.getTime()) <= EXACT_TOLERANCE_MS,
-      );
+      const exactMatch = findExactAvailableSlot(slots, minSlotStart, tz, preferredRaw ?? undefined);
       if (exactMatch) {
         return `requested_slot_available: slot="${formatInTimeZone(exactMatch.slotStart, tz, "yyyy-MM-dd'T'HH:mm:ssxxx")}", label="${formatInTimeZone(exactMatch.slotStart, tz, "EEE MMM d 'at' h:mm a")}", event="${eventType.name}", duration_mins=${eventType.durationMinutes}, timezone="${tz}"`;
       }
@@ -1287,6 +1483,7 @@ export async function executeNativeReschedule(
   args: Record<string, unknown>,
   opts?: { lineageCallId?: number | null },
 ): Promise<string> {
+  args = normalizeBookingDatetimeArgs(args);
   logger.info({ callId }, "Native reschedule tool invoked");
   const bookingId = Number(args["booking_id"] ?? args["bookingId"] ?? 0);
   const preferredRaw = args["preferred_date"] != null ? String(args["preferred_date"]) : null;
@@ -1340,7 +1537,7 @@ export async function executeNativeReschedule(
     const calTz = calendar.timezone || "UTC";
     const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
     let slots = await getAvailableSlots(eventType.id, formatInTimeZone(searchStart, calTz, "yyyy-MM-dd"), formatInTimeZone(searchEnd, calTz, "yyyy-MM-dd"));
-    if (minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
+    if (!isExactTime && minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
     if (timeFilter) slots = slots.filter(timeFilter);
     const filteredSlots = slots.filter((s) => s.slotStart.getTime() !== existing.slotStart.getTime());
     if (filteredSlots.length === 0) {
@@ -1354,16 +1551,13 @@ export async function executeNativeReschedule(
     // requested time is unavailable causes silent, wrong reschedules.
     let chosenSlot: TimeSlot;
     if (isExactTime && minSlotStart) {
-      const EXACT_TOLERANCE_MS = 60_000; // 1-minute window to absorb rounding
-      const exactMatch = filteredSlots.find(
-        (s) => Math.abs(s.slotStart.getTime() - minSlotStart.getTime()) <= EXACT_TOLERANCE_MS,
-      );
+      const exactMatch = findExactAvailableSlot(filteredSlots, minSlotStart, calTz, preferredRaw ?? undefined);
 
       const tz = calendar.timezone || "UTC";
       const requestedLabel = formatInTimeZone(minSlotStart, tz, "EEEE, MMMM do 'at' h:mm a");
 
       logger.info(
-        { callId, requestedLabel, exactMatch: !!exactMatch, availableCount: filteredSlots.length },
+        { callId, requestedLabel, exactMatch: !!exactMatch, availableCount: filteredSlots.length, preferredRaw },
         "Native reschedule: exact-time slot check",
       );
 
@@ -1380,8 +1574,10 @@ export async function executeNativeReschedule(
       logger.info({ callId, confirmedSlot: exactMatch.slotStart }, "Native reschedule: exact slot confirmed");
       chosenSlot = exactMatch;
     } else {
-      // Vague preference (morning / next Tuesday / etc.) — first available is fine
-      chosenSlot = filteredSlots[0]!;
+      chosenSlot =
+        pickTimeSlotBySpokenClock(preferredRaw, filteredSlots, (s) =>
+          formatInTimeZone(s.slotStart, calTz, "yyyy-MM-dd'T'HH:mm:ssXXX"),
+        ) ?? filteredSlots[0]!;
     }
 
     // Post-selection availability guard — verify the chosen slot falls within
@@ -1502,6 +1698,7 @@ export async function executeNativeReschedule(
     // Seed meetLink from the old booking — the GCal patch preserves the same link,
     // so even if the sync fails below the email still gets the correct Meet URL.
     let meetLink: string | null = existing.meetLink ?? null;
+    let calendarSyncStatus: string | null = null;
     try {
       const oldGcalRow = await db.execute(
         sql`SELECT google_event_id FROM bookings WHERE id = ${bookingId}`,
@@ -1557,6 +1754,7 @@ export async function executeNativeReschedule(
         if (gcalResult) {
           // Never wipe an existing Meet link if GCal omits conference data.
           meetLink = gcalResult.meetLink ?? meetLink ?? existing.meetLink ?? null;
+          calendarSyncStatus = "synced";
           await db.execute(
             sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${confirmedNewBooking.id}`,
           );
@@ -1582,6 +1780,7 @@ export async function executeNativeReschedule(
       notes: confirmedNewBooking.attendeeNotes,
       meetLink,
       oldSlotStart: existing.slotStart,
+      calendarSyncStatus,
     }).catch((err) => logger.error({ callId, bookingId: confirmedNewBooking.id, err }, "Native reschedule: email send failed"));
     dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.rescheduled", {
       booking: {
@@ -1700,6 +1899,7 @@ export async function executeNativeCancel(
         additionalHosts: calendar.additionalHosts,
         bookingId: existing.id,
         notes: existing.attendeeNotes,
+        calendarSyncStatus: existing.googleEventId ? "synced" : null,
       }).catch((err) => logger.error({ callId, bookingId: existing.id, err }, "Native cancel: email send failed"));
       dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.cancelled", {
         booking: {
@@ -1734,23 +1934,50 @@ export async function executeWebhookTool(
   try {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
+      "User-Agent": "SnapServe-VoiceAgent/1.0",
+      "ngrok-skip-browser-warning": "true",
       ...(tool.headers ?? {}),
     };
     if (tool.secret) headers["X-Webhook-Secret"] = tool.secret;
 
-    const resp = await fetch(tool.url, {
+    let targetUrl = tool.url;
+    if (tool.method === "GET" && args && Object.keys(args).length > 0) {
+      try {
+        const u = new URL(targetUrl);
+        for (const [k, v] of Object.entries(args)) {
+          if (v !== undefined && v !== null) {
+            u.searchParams.set(k, String(v));
+          }
+        }
+        targetUrl = u.toString();
+      } catch {
+        // if invalid URL for parsing, fallback to original
+      }
+    }
+
+    // Support both wrapped { args } and top-level fields for maximum developer compatibility
+    const requestBody =
+      tool.method === "POST"
+        ? JSON.stringify({
+            callId,
+            toolName: tool.name,
+            args,
+            ...args,
+          })
+        : undefined;
+
+    const resp = await fetchUserConfiguredUrl(targetUrl, {
       method: tool.method,
       headers,
-      body: tool.method === "POST" ? JSON.stringify({ callId, toolName: tool.name, args }) : undefined,
-      signal: AbortSignal.timeout(8000),
-    });
+      body: requestBody,
+    }, { timeoutMs: 8000, retries: 1 });
 
     if (!resp.ok) {
-      logger.warn({ callId, url: tool.url, status: resp.status }, "Webhook tool returned non-OK status");
+      logger.warn({ callId, url: targetUrl, status: resp.status }, "Webhook tool returned non-OK status");
       return `webhook_error: status=${resp.status}`;
     }
 
-    logger.info({ callId, url: tool.url, status: resp.status }, "Webhook tool executed successfully");
+    logger.info({ callId, url: targetUrl, status: resp.status }, "Webhook tool executed successfully");
 
     let body = "";
     try {
@@ -1758,7 +1985,7 @@ export async function executeWebhookTool(
     } catch {
       // ignore body read errors
     }
-    return body ? `webhook_result: ${body.slice(0, 500)}` : "webhook_success";
+    return body ? `webhook_result: ${body.slice(0, 2000)}` : "webhook_success";
   } catch (err) {
     logger.error({ callId, url: tool.url, err }, "Webhook tool execution failed");
     return "error: webhook tool failed to execute";
@@ -1766,6 +1993,20 @@ export async function executeWebhookTool(
 }
 
 // ── parsePreferredDate (shared between pipeline.ts and webcall tool execution) ─
+
+const PART_OF_DAY_HOURS: Record<PartOfDay, [number, number]> = {
+  morning: [0, 12],
+  afternoon: [12, 17],
+  evening: [17, 24],
+};
+
+function partOfDaySlotFilter(part: PartOfDay, tz: string): (slot: TimeSlot) => boolean {
+  const [fromHour, toHour] = PART_OF_DAY_HOURS[part];
+  return (slot) => {
+    const h = toZonedTime(slot.slotStart, tz).getHours();
+    return h >= fromHour && h < toHour;
+  };
+}
 
 /**
  * Parse a natural-language or ISO preferred date string into a concrete search
@@ -1782,70 +2023,48 @@ export function parsePreferredDate(
   tz = "UTC",
 ): { searchStart: Date; minSlotStart?: Date; timeFilter?: (slot: TimeSlot) => boolean; isExactTime?: boolean } {
   const now = new Date();
-  const lower = raw.trim().toLowerCase();
 
-  if (lower === "morning") {
-    return { searchStart: now, timeFilter: (s) => toZonedTime(s.slotStart, tz).getHours() < 12 };
-  }
-  if (lower === "afternoon") {
-    return {
-      searchStart: now,
-      timeFilter: (s) => {
-        const h = toZonedTime(s.slotStart, tz).getHours();
-        return h >= 12 && h < 17;
-      },
-    };
-  }
-  if (lower === "evening") {
-    return { searchStart: now, timeFilter: (s) => toZonedTime(s.slotStart, tz).getHours() >= 17 };
-  }
+  // Availability returns `ISO (spoken label)`. Models pass that whole string
+  // into book_appointment; Date.parse of the mixed form is Invalid and used
+  // to fall through to "first slot / not available".
+  const isoToken = extractIsoDateTime(raw);
 
-  if (lower === "today") {
-    return { searchStart: now };
-  }
-  if (lower === "tomorrow") {
-    const d = new Date(now);
-    d.setDate(d.getDate() + 1);
-    d.setHours(0, 0, 0, 0);
-    return { searchStart: d };
-  }
-
-  const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  const dayMatch = lower.match(/^(?:(next|this)\s+)?(\w+)$/);
-  if (dayMatch) {
-    const modifier = dayMatch[1];
-    const dayName = dayMatch[2]!;
-    const dayIdx = DAY_NAMES.indexOf(dayName);
-    if (dayIdx !== -1) {
-      const d = new Date(now);
-      d.setHours(0, 0, 0, 0);
-      const currentDay = d.getDay();
-      let daysAhead = dayIdx - currentDay;
-      if (modifier === "next") {
-        if (daysAhead <= 0) daysAhead += 7;
-        else daysAhead += 7;
-      } else {
-        if (daysAhead <= 0) daysAhead += 7;
+  // Relative phrasing is what callers say, and the model forwards it verbatim
+  // ("tomorrow 10:45 AM"). Without this the day AND the clock time were both
+  // dropped, so check_availability answered a different question — it listed
+  // the next week of slots, the agent read that as "yes, available", and
+  // book_appointment then rejected the time the caller had just been promised.
+  if (!isoToken) {
+    const relative = parseRelativeDateTime(raw, tz, now);
+    if (relative) {
+      const timeFilter = relative.partOfDay ? partOfDaySlotFilter(relative.partOfDay, tz) : undefined;
+      if (relative.date && relative.time) {
+        const at = parseCallbackDateTime(`${relative.date}T${relative.time}:00`, tz);
+        if (at) return { searchStart: at > now ? at : now, minSlotStart: at, isExactTime: true };
       }
-      d.setDate(d.getDate() + daysAhead);
-      return { searchStart: d };
+      if (relative.date) {
+        const dayStart = parseCallbackDateTime(`${relative.date}T00:00:00`, tz);
+        const future = dayStart && dayStart > now ? dayStart : undefined;
+        return { searchStart: future ?? now, minSlotStart: future, timeFilter, isExactTime: false };
+      }
+      if (timeFilter) return { searchStart: now, timeFilter };
     }
   }
 
-  const parsed = new Date(raw);
-  if (!isNaN(parsed.getTime())) {
-    const hasTimeComponent = raw.includes("T") || raw.includes(":");
-    // When the string carries an explicit UTC offset (Z or ±HH:mm / ±HHmm) JS
-    // new Date() honours it correctly.  A bare datetime like "2026-06-22T15:00:00"
-    // has no offset and new Date() treats it as UTC, which shifts 3 PM IST to
-    // 8:30 PM IST.  Re-anchor bare datetimes to the calendar's IANA timezone.
-    const hasExplicitOffset = /Z$|[+-]\d{2}:?\d{2}$/.test(raw.trim());
-    const anchoredDate =
-      hasTimeComponent && !hasExplicitOffset ? fromZonedTime(raw, tz) : new Date(raw);
-    const effectiveStart = anchoredDate > now ? anchoredDate : now;
+  const parseTarget = isoToken ?? raw.trim();
+  const anchoredFromHelper = parsePreferredInstant(parseTarget, tz);
+  const parsed = anchoredFromHelper ?? (() => {
+    const d = new Date(parseTarget);
+    return isNaN(d.getTime()) ? null : d;
+  })();
+  if (parsed) {
+    const hasTimeComponent = /T\d{2}:\d{2}|\d{1,2}:\d{2}/.test(parseTarget);
+    const searchStart = parsed > now ? parsed : now;
     return {
-      searchStart: effectiveStart,
-      minSlotStart: hasTimeComponent ? effectiveStart : undefined,
+      searchStart,
+      // Keep the actual requested clock. Clamping this to `now` made exact
+      // matching look for "right now" instead of the slot the caller picked.
+      minSlotStart: hasTimeComponent ? parsed : undefined,
       isExactTime: hasTimeComponent,
     };
   }
@@ -1901,6 +2120,93 @@ async function isSlotWithinAvailabilityWindow(
   return daySchedules.some((s) => slotTimeStr >= s.startTime && slotTimeStr < s.endTime);
 }
 
+// ── Mid-call SMS (Twilio / Plivo) ────────────────────────────────────────────
+
+export async function executeSendSms(opts: {
+  callId: number;
+  callerPhone?: string | null;
+  telephonyProvider: string;
+  providerKeys: Map<string, string>;
+  messageTemplate: string;
+}): Promise<string> {
+  const callerPhone = opts.callerPhone?.trim() ?? "";
+  if (!callerPhone) {
+    logger.warn({ callId: opts.callId }, "Send SMS: no caller phone available — skipping");
+    return "error: no caller phone available to send SMS. Ask the caller for a number, or continue without SMS.";
+  }
+  const tprov = opts.telephonyProvider;
+  if (tprov !== "twilio" && tprov !== "plivo") {
+    logger.warn({ callId: opts.callId, tprov }, "Send SMS: telephony provider does not support SMS");
+    return "error: this telephony provider does not support SMS. Tell the caller you cannot text them from this call.";
+  }
+  logger.info({ callId: opts.callId, to: callerPhone, tprov }, "Executing Send SMS tool (queued)");
+  void sendSmsNow(opts, callerPhone, tprov).catch((err) => {
+    logger.error({ callId: opts.callId, err }, "Send SMS background delivery failed");
+  });
+  return `sms_queued: message is being sent to ${callerPhone}. Confirm briefly to the caller that it is on its way.`;
+}
+
+async function sendSmsNow(
+  opts: {
+    callId: number;
+    telephonyProvider: string;
+    providerKeys: Map<string, string>;
+    messageTemplate: string;
+  },
+  callerPhone: string,
+  tprov: string,
+): Promise<void> {
+  const message = opts.messageTemplate;
+  if (tprov === "twilio") {
+    const authToken = opts.providerKeys.get("twilio") ?? "";
+    const extra = opts.providerKeys.get("twilio:extraConfig");
+    const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+    const accountSid = cfg["accountSid"] ?? "";
+    const fromNumber = cfg["fromNumber"] ?? "";
+    const body = new URLSearchParams({ To: callerPhone, From: fromNumber, Body: message });
+    const resp = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: body.toString(),
+        signal: AbortSignal.timeout(8000),
+      },
+    );
+    if (!resp.ok) {
+      logger.warn({ callId: opts.callId, status: resp.status }, "Twilio SMS failed");
+      return;
+    }
+    logger.info({ callId: opts.callId, to: callerPhone }, "SMS sent via Twilio");
+    return;
+  }
+  const authToken = opts.providerKeys.get("plivo") ?? "";
+  const extra = opts.providerKeys.get("plivo:extraConfig");
+  const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+  const authId = cfg["authId"] ?? "";
+  const fromNumber = cfg["fromNumber"] ?? "";
+  const resp = await fetch(
+    `https://api.plivo.com/v1/Account/${authId}/Message/`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Basic ${Buffer.from(`${authId}:${authToken}`).toString("base64")}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ src: fromNumber, dst: callerPhone, text: message }),
+      signal: AbortSignal.timeout(8000),
+    },
+  );
+  if (!resp.ok) {
+    logger.warn({ callId: opts.callId, status: resp.status }, "Plivo SMS failed");
+    return;
+  }
+  logger.info({ callId: opts.callId, to: callerPhone }, "SMS sent via Plivo");
+}
+
 // ── Mid-call email (Email channel: managed or BYO Brevo) ─────────────────────
 
 export async function executeSendEmail(opts: {
@@ -1933,42 +2239,62 @@ export async function executeSendEmail(opts: {
   const subject = typeof opts.args["subject"] === "string" ? opts.args["subject"].trim() : "";
   const body = typeof opts.args["body"] === "string" ? opts.args["body"].trim() : "";
 
+  const [booking] = await db
+    .select({ meetLink: bookingsTable.meetLink, attendeeEmail: bookingsTable.attendeeEmail })
+    .from(bookingsTable)
+    .where(and(
+      eq(bookingsTable.callId, opts.callId),
+      ne(bookingsTable.status, "cancelled"),
+    ))
+    .orderBy(desc(bookingsTable.id))
+    .limit(1);
+  const meetLink = (booking?.meetLink ?? "").trim();
+  // Call 20113: book used 307@gmail.com while send_email used the full address.
+  // Always prefer the completed local-part so calendar + inbox stay aligned.
+  const toEmailResolved = preferCompleteEmail(toEmail, booking?.attendeeEmail ?? "");
+  const toEmailFinal = toEmailResolved || toEmail;
+  const bodyWithMeet = body ? attachMeetLinkToEmailBody(body, meetLink || null) : "";
+
   const template =
-    subject || body
+    subject || bodyWithMeet
       ? {
           ...(subject ? { subject } : {}),
-          ...(body ? { body } : {}),
+          ...(bodyWithMeet ? { body: bodyWithMeet } : {}),
         }
       : null;
 
   logger.info(
-    { callId: opts.callId, agentId: opts.agentId, toEmail, hasOverride: !!(subject || body) },
-    "Executing Send Email tool",
+    { callId: opts.callId, agentId: opts.agentId, toEmail: toEmailFinal, hasOverride: !!(subject || body) },
+    "Executing Send Email tool (queued)",
   );
 
-  const result = await sendChannelEmail({
+  void sendChannelEmail({
     userId: agent.userId,
-    toEmail,
+    toEmail: toEmailFinal,
     context: {
       name: recipientName || "there",
       phone: opts.callerPhone ?? "",
-      email: toEmail,
+      email: toEmailFinal,
       summary,
       agent_name: opts.agentName || agent.name || "SnapServe",
+      meet_link: meetLink,
       call_id: opts.callId,
     },
     template,
     callId: opts.callId,
     journeyRunHint: "midcall_send_email",
+  }).then((result) => {
+    if (!result.ok) {
+      logger.warn(
+        { callId: opts.callId, error: result.error, skipped: result.skipped },
+        "Send Email background delivery failed",
+      );
+    }
+  }).catch((err) => {
+    logger.error({ callId: opts.callId, err }, "Send Email background delivery failed");
   });
 
-  if (result.ok) {
-    return `email_sent: successfully sent to ${toEmail}. Confirm briefly to the caller that the email is on its way.`;
-  }
-  if (result.skipped === "inactive" || result.skipped === "missing_config") {
-    return "email_failed: Email channel is not configured or inactive. Tell the caller you cannot send email right now.";
-  }
-  return `email_failed: ${result.error ?? "send failed"}. Apologize and offer another way to follow up.`;
+  return `email_queued: message is being sent to ${toEmailFinal}. Confirm briefly to the caller that it is on its way.`;
 }
 
 // ── Mid-call WhatsApp (BYO BSP webhook or native Instant/Business) ───────────
@@ -1998,13 +2324,14 @@ export async function executeSendWhatsapp(opts: {
   const templateName = typeof opts.args["template_name"] === "string" ? opts.args["template_name"].trim() : "";
   const message = typeof opts.args["message"] === "string" ? opts.args["message"].trim() : "";
   const summary = message || (typeof opts.args["summary"] === "string" ? opts.args["summary"].trim() : "");
+  const fields = readWhatsappToolFields(opts.args, opts.agentName || agent.name);
 
   logger.info(
     { callId: opts.callId, agentId: opts.agentId, toPhone, templateHint },
-    "Executing Send WhatsApp tool",
+    "Executing Send WhatsApp tool (queued)",
   );
 
-  const result = await sendMidCallWhatsapp({
+  void sendMidCallWhatsapp({
     userId: agent.userId,
     agentId: opts.agentId,
     agentName: opts.agentName || agent.name,
@@ -2013,12 +2340,65 @@ export async function executeSendWhatsapp(opts: {
     templateHint,
     templateName: templateName || undefined,
     summary,
+    callerName: fields.callerName || undefined,
+    doctor: fields.doctor || undefined,
+    date: fields.date || undefined,
+    time: fields.time || undefined,
+    explicitParams: fields.explicitParams,
+  }).then((result) => {
+    if (!result.ok) {
+      logger.warn(
+        { callId: opts.callId, error: result.error },
+        "Send WhatsApp background delivery failed",
+      );
+    }
+  }).catch((err) => {
+    logger.error({ callId: opts.callId, err }, "Send WhatsApp background delivery failed");
   });
 
-  if (result.ok) {
-    return `whatsapp_sent: message queued to ${toPhone} via ${result.via ?? "channel"}. Confirm briefly to the caller.`;
+  return `whatsapp_queued: message is being sent to ${toPhone}. Confirm briefly to the caller that it is on its way.`;
+}
+
+function readWhatsappToolFields(
+  args: Record<string, unknown>,
+  agentName?: string,
+): {
+  callerName: string;
+  doctor: string;
+  date: string;
+  time: string;
+  explicitParams?: string[];
+} {
+  const str = (key: string): string =>
+    typeof args[key] === "string" ? String(args[key]).trim() : "";
+  let callerName = str("caller_name") || str("attendee_name") || str("patient_name") || str("name");
+  const doctor = str("doctor") || str("provider") || str("with");
+  const date = str("date");
+  const time = str("time");
+  const agent = (agentName ?? "").trim();
+  if (callerName && agent && callerName.toLowerCase() === agent.toLowerCase()) {
+    callerName = "";
   }
-  return `whatsapp_failed: ${result.error ?? "send failed"}. Apologize and offer another way to follow up.`;
+
+  let explicitParams: string[] | undefined;
+  const raw = args["params"] ?? args["template_params"];
+  if (Array.isArray(raw)) {
+    explicitParams = raw.map((v) => String(v ?? ""));
+  } else if (typeof raw === "string" && raw.trim().startsWith("[")) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) explicitParams = parsed.map((v) => String(v ?? ""));
+    } catch { /* ignore */ }
+  }
+  if (!explicitParams) {
+    const numbered: string[] = [];
+    for (let i = 1; i <= 8; i++) {
+      const v = str(`param_${i}`);
+      if (v) numbered[i - 1] = v;
+    }
+    if (numbered.length) explicitParams = numbered;
+  }
+  return { callerName, doctor, date, time, explicitParams };
 }
 
 // ── Transfer lead DB helper ────────────────────────────────────────────────────
@@ -2051,6 +2431,11 @@ export async function writeTransferLeadDb(
     return;
   }
   if (!campaignId) return;
+  const campaignContext: CampaignCallContext = {
+    leadId: campaignLeadId,
+    campaignId,
+    batchId,
+  };
 
   let callExecutionId: number | null = null;
   try {
@@ -2086,5 +2471,16 @@ export async function writeTransferLeadDb(
     });
   } catch (err) {
     logger.warn({ callId, campaignLeadId, err }, "Transfer DB: lead_timeline insert failed");
+  }
+
+  try {
+    await syncCampaignTransfer({
+      callId,
+      context: campaignContext,
+      transferTo,
+      summary,
+    });
+  } catch (err) {
+    logger.warn({ callId, campaignLeadId, err }, "Transfer DB: campaign transfer sync failed");
   }
 }

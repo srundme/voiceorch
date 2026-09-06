@@ -23,7 +23,7 @@ import { Activity, AlertTriangle, BarChart2, ChevronLeft, ChevronRight, Search, 
 import { useState, useCallback } from "react";
 import { useDebounce } from "@/hooks/use-debounce";
 import { SectionSubNav } from "@/components/section-subnav";
-import { OPS_TABS } from "@/lib/nav-config";
+import { VOICE_TABS } from "@/lib/nav-config";
 
 const PAGE_SIZE = 50;
 
@@ -65,7 +65,7 @@ function ErrorCategoryBadge({ reason }: { reason: string | null }) {
 }
 
 function hasActiveFilters(filters: FailedCallsFilters): boolean {
-  return !!(filters.agentId || filters.userId || filters.reason);
+  return !!(filters.agentId || filters.userId || filters.reason || filters.executionId);
 }
 
 export default function Platform() {
@@ -76,15 +76,18 @@ export default function Platform() {
   const [agentId, setAgentId] = useState<number | null>(null);
   const [userIdInput, setUserIdInput] = useState("");
   const [reasonInput, setReasonInput] = useState("");
+  const [executionIdInput, setExecutionIdInput] = useState("");
   const [page, setPage] = useState(1);
 
   const debouncedUserId = useDebounce(userIdInput, 400);
   const debouncedReason = useDebounce(reasonInput, 400);
+  const debouncedExecutionId = useDebounce(executionIdInput, 400);
 
   const filters: FailedCallsFilters = {
     agentId: agentId ?? undefined,
     userId: debouncedUserId || undefined,
     reason: debouncedReason || undefined,
+    executionId: debouncedExecutionId.trim() || undefined,
     page,
     limit: PAGE_SIZE,
   };
@@ -100,6 +103,7 @@ export default function Platform() {
     setAgentId(null);
     setUserIdInput("");
     setReasonInput("");
+    setExecutionIdInput("");
     setPage(1);
   }, []);
 
@@ -118,13 +122,18 @@ export default function Platform() {
     setPage(1);
   };
 
+  const handleExecutionIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setExecutionIdInput(e.target.value);
+    setPage(1);
+  };
+
   const emptyMessage = filtersActive
     ? "No failed calls match the current filters"
     : "No failed calls recently";
 
   return (
     <div className="space-y-6">
-      <SectionSubNav tabs={OPS_TABS} />
+      <SectionSubNav tabs={VOICE_TABS} />
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Platform Health</h1>
       </div>
@@ -140,8 +149,8 @@ export default function Platform() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Session ID</TableHead>
                   <TableHead>Call ID</TableHead>
+                  <TableHead>Session ID</TableHead>
                   <TableHead className="text-right">Started At</TableHead>
                 </TableRow>
               </TableHeader>
@@ -154,9 +163,21 @@ export default function Platform() {
                   <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No active calls right now</TableCell></TableRow>
                 ) : (
                   activeData?.activeSessions?.map((session: any) => (
-                    <TableRow key={session.sessionId}>
-                      <TableCell className="font-mono text-xs">{session.sessionId}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{session.callId}</TableCell>
+                    <TableRow
+                      key={session.sessionId}
+                      className={session.callId ? "cursor-pointer hover:bg-muted/50" : undefined}
+                      onClick={() => {
+                        if (session.callId) window.open(`/app/calls/${session.callId}`, "_blank", "noopener,noreferrer");
+                      }}
+                    >
+                      <TableCell className="font-mono text-xs" title={session.executionId ?? undefined}>
+                        {session.executionId ? (
+                          session.executionId
+                        ) : (
+                          <span className="text-muted-foreground italic">Not available</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{session.sessionId}</TableCell>
                       <TableCell className="text-right font-mono text-xs">
                         {session.startedAt ? format(new Date(session.startedAt), "HH:mm:ss") : "-"}
                       </TableCell>
@@ -265,6 +286,16 @@ export default function Platform() {
                   onChange={handleReasonChange}
                 />
               </div>
+
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <Input
+                  className="h-8 text-xs pl-6 w-[200px] font-mono"
+                  placeholder="Search Call ID (exec_…)"
+                  value={executionIdInput}
+                  onChange={handleExecutionIdChange}
+                />
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-0 h-[400px] overflow-auto">
@@ -274,7 +305,7 @@ export default function Platform() {
                   <TableRow>
                     <TableHead className="w-[110px]">Date</TableHead>
                     <TableHead className="w-[140px]">User</TableHead>
-                    <TableHead className="w-[80px]">Call ID</TableHead>
+                    <TableHead className="w-[130px]">Call ID</TableHead>
                     <TableHead className="w-[160px]">Agent</TableHead>
                     <TableHead>Reason</TableHead>
                   </TableRow>
@@ -316,7 +347,13 @@ export default function Platform() {
                               {call.userId && <TooltipContent className="max-w-[400px] break-all">{call.userId}</TooltipContent>}
                             </Tooltip>
                           </TableCell>
-                          <TableCell className="text-xs font-mono truncate" title={String(call.id)}>{call.id}</TableCell>
+                          <TableCell className="text-xs font-mono truncate" title={call.executionId ?? undefined}>
+                            {call.executionId ? (
+                              call.executionId
+                            ) : (
+                              <span className="text-muted-foreground italic">Not available</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-xs">
                             <Tooltip>
                               <TooltipTrigger asChild>

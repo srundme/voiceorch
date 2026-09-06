@@ -15,19 +15,41 @@ import { cpus } from "os";
 import { randomBytes } from "crypto";
 import { logger } from "../lib/logger.js";
 
-const POOL_SIZE = Math.max(2, cpus().length - 1);
+/**
+ * Cap the worker pool. Railway (and other hosts) often report a large shared
+ * CPU count; spawning cpus()-1 workers at boot can OOM the container right
+ * after "Server listening", so /api/healthz never stays up.
+ * Override with AUDIO_POOL_SIZE when you intentionally want a larger pool.
+ */
+const AUDIO_POOL_MAX = 8;
+export function resolveAudioPoolSize(
+  env: NodeJS.ProcessEnv = process.env,
+  cpuCount: number = cpus().length,
+): number {
+  const raw = env["AUDIO_POOL_SIZE"];
+  if (raw !== undefined && raw.trim() !== "") {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 1) return Math.min(64, Math.floor(n));
+  }
+  return Math.min(AUDIO_POOL_MAX, Math.max(2, cpuCount - 1));
+}
+const POOL_SIZE = resolveAudioPoolSize();
 
 export interface AudioProcessResult {
   pcm8k: Buffer;
   pcm16k: Buffer;
   hasSpeech: boolean;
+  /** Pre-gate frame RMS. Used to reject far-field bystanders. */
+  rawRms: number;
 }
 
 interface WorkerResponse {
   id: string;
-  pcm8k: ArrayBuffer;
-  pcm16kAb: ArrayBuffer;
-  hasSpeech: boolean;
+  pcm8k?: ArrayBuffer;
+  pcm16kAb?: ArrayBuffer;
+  hasSpeech?: boolean;
+  rawRms?: number;
+  error?: string;
 }
 
 interface Pending {
@@ -48,10 +70,15 @@ class AudioWorkerThread {
       const p = this.pending.get(msg.id);
       if (!p) return;
       this.pending.delete(msg.id);
+      if (msg.error || !msg.pcm8k || !msg.pcm16kAb) {
+        p.reject(new Error(msg.error ?? "Audio worker returned empty audio"));
+        return;
+      }
       p.resolve({
         pcm8k:    Buffer.from(msg.pcm8k),
         pcm16k:   Buffer.from(msg.pcm16kAb),
-        hasSpeech: msg.hasSpeech,
+        hasSpeech: msg.hasSpeech ?? false,
+        rawRms: msg.rawRms ?? 0,
       });
     });
     this.worker.on("error", (err) => {
@@ -108,7 +135,10 @@ export function initAudioPool(workerUrl: URL): void {
   for (let i = 0; i < POOL_SIZE; i++) {
     pool.push(new AudioWorkerThread(workerUrl));
   }
-  logger.info({ poolSize: POOL_SIZE }, "Audio worker pool initialised");
+  logger.info(
+    { poolSize: POOL_SIZE, cpus: cpus().length, envOverride: process.env["AUDIO_POOL_SIZE"] ?? null },
+    "Audio worker pool initialised",
+  );
 }
 
 /**
@@ -150,7 +180,7 @@ export function processAudioIn(
   vadThreshold: number = VAD_THRESHOLD,
 ): Promise<AudioProcessResult> {
   // Fallback: if pool is not yet initialised (e.g. in tests), process inline
-  if (!ready) return processInline(mulawChunk, noiseCancel, false, gateRatio, vadThreshold);
+  if (!ready) return processInline(callId, mulawChunk, noiseCancel, false, gateRatio, vadThreshold);
   return workerFor(callId).process("PROCESS_MULAW", callId, mulawChunk, noiseCancel, gateRatio, vadThreshold);
 }
 
@@ -161,11 +191,12 @@ export function processRawPcm8kIn(
   gateRatio: number = GATE_RATIO_DEFAULT,
   vadThreshold: number = VAD_THRESHOLD,
 ): Promise<AudioProcessResult> {
-  if (!ready) return processInline(pcm8k, noiseCancel, true, gateRatio, vadThreshold);
+  if (!ready) return processInline(callId, pcm8k, noiseCancel, true, gateRatio, vadThreshold);
   return workerFor(callId).process("PROCESS_PCM8K", callId, pcm8k, noiseCancel, gateRatio, vadThreshold);
 }
 
 export function destroyAudioSession(callId: string): void {
+  fallbackNc.delete(callId);
   if (!ready) return;
   const worker = workerFor(callId);
   worker.destroySession(callId);
@@ -178,14 +209,15 @@ import {
   decodeMulaw,
   upsample8to16,
   hasSpeechEnergy,
+  frameRms,
   NoiseCanceller,
 } from "./audio.js";
-
 const VAD_THRESHOLD = 100;
 const GATE_RATIO_DEFAULT = 4.0;
 const fallbackNc = new Map<string, NoiseCanceller>();
 
 async function processInline(
+  callId: string,
   data: Buffer,
   noiseCancel: boolean,
   alreadyPcm = false,
@@ -193,14 +225,21 @@ async function processInline(
   vadThreshold: number = VAD_THRESHOLD,
 ): Promise<AudioProcessResult> {
   let pcm8k = alreadyPcm ? data : decodeMulaw(data);
+  const rawRms = frameRms(pcm8k);
+  let pcm16k: Buffer | null = null;
   if (noiseCancel) {
-    let nc = fallbackNc.get("default");
-    if (!nc) { nc = new NoiseCanceller(gateRatio); fallbackNc.set("default", nc); }
+    let nc = fallbackNc.get(callId);
+    if (!nc) {
+      nc = new NoiseCanceller(gateRatio);
+      fallbackNc.set(callId, nc);
+    }
     pcm8k = nc.process(pcm8k);
   }
+  if (!pcm16k) pcm16k = upsample8to16(pcm8k);
   return {
     pcm8k,
-    pcm16k: upsample8to16(pcm8k),
-    hasSpeech: hasSpeechEnergy(pcm8k, vadThreshold),
+    pcm16k,
+    hasSpeech: pcm8k.length >= 2 && hasSpeechEnergy(pcm8k, vadThreshold),
+    rawRms,
   };
 }

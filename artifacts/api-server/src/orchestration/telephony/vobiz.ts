@@ -1,23 +1,25 @@
 import type { WebSocket } from "ws";
-import { createSession, getSession, getSessionByExternalCallId, endSession, failSession } from "../session.js";
+import { createSession, getSession, getSessionByCampaignLeadId, getSessionByExternalCallId, endSession, failSession } from "../session.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { db, scheduledCallbacksTable, callsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { startEarlyAmbientKeepalive } from "./early-ambient.js";
+import { decideVobizDuplicateStart, vobizDuplicateLegKey } from "./vobiz-duplicate-stream.js";
+
+/** Serializes createSession for a VoBiz CallUUID so two answer-webhook retries
+ *  cannot both pass the live-session check before either session is registered. */
+const vobizCallUuidStartsInFlight = new Set<string>();
+/** Same campaign dial can mint two CallUUIDs (two answer webhooks). */
+const vobizLegStartsInFlight = new Set<string>();
 
 /**
- * VoBiz performs noise removal / voice isolation natively in its telecom media
- * layer — verified against the complete VoBiz docs (Jul 2026): there is NO API
- * parameter to toggle it; it is always on for every call. Audio arriving on
- * this WebSocket is therefore already denoised, so our software noise gate is
- * bypassed for VoBiz-carried calls (same treatment webcall gives browser-AEC
- * audio). The agent's noiseCancellationEnabled toggle still governs
- * Twilio/Plivo, which do no carrier-side cleanup. Escape hatch: set
- * VOBIZ_FORCE_SOFTWARE_NC=1 to re-apply the software gate on VoBiz calls if
- * carrier-side NC ever proves insufficient in the field.
+ * VoBiz also denoises in its media layer, but the agent's Noise Cancellation
+ * toggle is still honored here. This handler does not decide that itself: it
+ * passes no noiseCancel flag and lets the pipeline (classic or Gemini Live)
+ * apply resolveSoftwareNoiseGate. Hardcoding false here used to make the
+ * toggle a silent no-op for every VoBiz agent. See orchestration/noise-gate.ts.
  */
-const VOBIZ_FORCE_SOFTWARE_NC = process.env["VOBIZ_FORCE_SOFTWARE_NC"] === "1";
 
 /**
  * Vobiz WebSocket handler
@@ -192,25 +194,42 @@ export async function handleVobizWebSocket(
         // WS stream-session id and `corrToken` links back to the dial request_uuid.
         logger.info({ agentId, streamId, streamCallId: callId, resolvedCallId, urlCallUuid: urlCallUuid ?? null, corrToken: corrToken ?? null, fromNumber, toNumber, encoding: msg.start?.mediaFormat?.encoding }, "Vobiz start event");
 
-        // ── Duplicate-stream guard (AMD/voicemail path only) ─────────────────
+        // ── Duplicate-stream guard ───────────────────────────────────────────
         // A VoBiz answer-webhook retry can open a SECOND media WebSocket for the
         // same CallUUID. The session map is keyed by internal sessionId, so
-        // nothing else prevents two live sessions (= two frame senders + a
-        // second AMD confirmation / voicemail playback) for one call — a direct
-        // cause of overlapping "helicopter" audio on the delivered voicemail.
-        // Scoped strictly to the AMD-armed / voicemail-delivery path so normal
-        // VoBiz call handling is unchanged.
-        if (resolvedCallId && (amdArmed || amdMachineHint || voicemailDelivery)) {
-          const existing = getSessionByExternalCallId(resolvedCallId);
-          if (existing) {
-            logger.warn(
-              { agentId, resolvedCallId, existingCallId: existing.callId, streamId },
-              "Vobiz start: live session already exists for this CallUUID (AMD/voicemail path) — closing duplicate media stream, no second playback",
-            );
-            ws.close();
-            break;
-          }
+        // nothing else prevents two live sessions (= two greetings + two TTS
+        // senders). That overlapping audio is what callers hear as a "broken"
+        // voice. Squad live handoff reuses this socket and does not emit a
+        // second start — it is not blocked. A later reconnect is allowed once
+        // the previous session has left the map (endSession).
+        const legKey = vobizDuplicateLegKey({ campaignLeadId, corrToken });
+        const existing = resolvedCallId ? getSessionByExternalCallId(resolvedCallId) : undefined;
+        const existingLeg = campaignLeadId != null ? getSessionByCampaignLeadId(campaignLeadId) : undefined;
+        const decision = decideVobizDuplicateStart({
+          callUuid: resolvedCallId,
+          hasLiveSession: !!existing,
+          startInFlight: resolvedCallId ? vobizCallUuidStartsInFlight.has(resolvedCallId) : false,
+          legKey,
+          hasLiveLeg: !!existingLeg,
+          legStartInFlight: legKey ? vobizLegStartsInFlight.has(legKey) : false,
+        });
+        if (decision.close) {
+          logger.warn(
+            {
+              agentId,
+              resolvedCallId,
+              existingCallId: existing?.callId ?? existingLeg?.callId ?? null,
+              campaignLeadId: campaignLeadId ?? null,
+              streamId,
+              reason: decision.reason,
+            },
+            "Vobiz start: live session already exists for this CallUUID — closing duplicate media stream, no second playback",
+          );
+          ws.close();
+          break;
         }
+        if (resolvedCallId) vobizCallUuidStartsInFlight.add(resolvedCallId);
+        if (legKey) vobizLegStartsInFlight.add(legKey);
 
         // Measures the pre-pipeline setup window (WS start → session ready).
         // Watch setupMs in prod for DB/setup latency; caller should hear ambient
@@ -309,6 +328,9 @@ export async function handleVobizWebSocket(
             "Failed to create Vobiz session — closing socket before greeting",
           );
           ws.close();
+        } finally {
+          if (resolvedCallId) vobizCallUuidStartsInFlight.delete(resolvedCallId);
+          if (legKey) vobizLegStartsInFlight.delete(legKey);
         }
         break;
       }
@@ -321,9 +343,9 @@ export async function handleVobizWebSocket(
         // Vobiz sends inbound audio as little-endian LINEAR16 PCM (same as outbound).
         // Pass directly to pipeline — no byte-swap needed.
         const pcm8k = Buffer.from(msg.media.payload, "base64");
-        // noiseCancel=false: VoBiz already denoised this audio at the carrier
-        // layer (see VOBIZ_FORCE_SOFTWARE_NC above for the escape hatch).
-        session.pipeline.onRawPcm8kIn(pcm8k, VOBIZ_FORCE_SOFTWARE_NC ? undefined : false);
+        // No noiseCancel argument: the pipeline (classic or Gemini Live) applies
+        // the agent's Noise Cancellation toggle via noise-gate.ts.
+        session.pipeline.onRawPcm8kIn(pcm8k);
         break;
       }
 

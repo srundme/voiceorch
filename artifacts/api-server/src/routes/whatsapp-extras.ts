@@ -3,9 +3,10 @@
  *  - BYON: WhatsApp-enable an existing voice DID. Verification OTPs (from
  *    Meta Business Manager or the VoBiz BYON verify API) arrive as calls to
  *    the DID — which routes to OUR answer webhook — so the platform answers
- *    armed calls with <Record> + transcription, extracts the spoken code, and
- *    surfaces it in the dashboard (the owner can't answer their own virtual
- *    number). VoBiz-side verifications are auto-confirmed when possible.
+ *    armed calls with <Record>, we STT the recording (Vobiz has no Plivo-style
+ *    transcription callback), extract the spoken code, and surface it in the
+ *    dashboard (the owner can't answer their own virtual number). VoBiz-side
+ *    verifications are auto-confirmed when possible.
  *  - Template manager: per-channel Meta template list/create/sync via VoBiz
  *    (own tier; shared tier sees the read-only platform catalog).
  *  - Brochure assets: upload → Postgres bytea → unguessable public URL that
@@ -19,6 +20,7 @@ import {
   db,
   agentsTable,
   phoneNumbersTable,
+  platformSettingsTable,
   whatsappAssetsTable,
   whatsappByonVerificationsTable,
   whatsappChannelsTable,
@@ -42,6 +44,11 @@ import {
   normalizeAgentWaTemplates,
   upsertAgentWaTemplates,
 } from "../services/whatsapp/agent-templates.js";
+import { isUsableWhatsappTemplateStatus } from "../services/whatsapp/meta.js";
+import { extractOtpCode } from "../services/whatsapp/extract-otp.js";
+import { buildByonOtpHangupXml } from "../services/whatsapp/byon-otp-xml.js";
+
+export { extractOtpCode };
 
 const router: IRouter = Router();
 
@@ -254,6 +261,33 @@ router.post("/whatsapp/byon/vobiz-confirm", requireAuth, async (req, res): Promi
   res.json({ ok: true, verification: updated ? verificationPublic(updated) : null });
 });
 
+router.post("/whatsapp/byon/submit-code", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const body = (req.body ?? {}) as { phoneNumberId?: number; otpCode?: string };
+  const pn = await loadOwnedVoiceNumber(userId, Number(body.phoneNumberId));
+  if (!pn) {
+    res.status(404).json({ error: "Voice number not found" });
+    return;
+  }
+  const code = String(body.otpCode ?? "").replace(/\D/g, "");
+  if (!/^\d{4,8}$/.test(code)) {
+    res.status(400).json({ error: "Enter the 4–8 digit code you heard or saw in Meta" });
+    return;
+  }
+  const phoneE164 = toPlusE164(pn.number);
+  const row = await latestVerification(userId, phoneE164);
+  if (!row || (row.status !== "armed" && row.status !== "code_captured")) {
+    res.status(400).json({ error: "Start capture first, then enter the code" });
+    return;
+  }
+  const [updated] = await db.update(whatsappByonVerificationsTable)
+    .set({ otpCode: code, status: "code_captured", updatedAt: new Date() })
+    .where(eq(whatsappByonVerificationsTable.id, row.id))
+    .returning();
+  logger.info({ userId, phone: phoneE164 }, "whatsapp-byon: code submitted manually");
+  res.json({ verification: verificationPublic(updated ?? row) });
+});
+
 /** Poll the capture/verification state. */
 router.get("/whatsapp/byon/state", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
@@ -354,31 +388,94 @@ router.get("/whatsapp/byon/recording", requireAuth, async (req, res): Promise<vo
 
 /* ── OTP capture webhook callbacks (from the <Record> verb) ───────────────── */
 
-/** Extract a 6-digit verification code from a robocall transcript. */
-export function extractOtpCode(raw: string): string | null {
-  if (!raw) return null;
-  // Pass 1: numeric digits, possibly separated ("1 2 3 - 4 5 6").
-  const groups = raw.replace(/[^0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
-  for (const g of groups) if (g.length === 6) return g;
-  for (let i = 0; i < groups.length; i++) {
-    let acc = "";
-    for (let j = i; j < groups.length && acc.length < 6; j++) acc += groups[j];
-    if (acc.length >= 6) return acc.slice(0, 6);
+const SARVAM_STT_URL = "https://api.sarvam.ai/speech-to-text";
+
+async function getManagedSarvamKey(): Promise<string | null> {
+  const [managed] = await db
+    .select({ value: platformSettingsTable.value })
+    .from(platformSettingsTable)
+    .where(eq(platformSettingsTable.key, "managed_sarvam_key"));
+  const fromDb = managed?.value?.trim();
+  if (fromDb) return fromDb;
+  return (process.env["SARVAM_API_KEY"] ?? "").trim() || null;
+}
+
+/** Vobiz Record does not fire Plivo-style transcriptionUrl — we STT the mp3 ourselves. */
+async function transcribeByonRecording(url: string): Promise<string | null> {
+  const key = await getManagedSarvamKey();
+  if (!key) {
+    logger.warn("whatsapp-byon: no Sarvam key — cannot transcribe OTP recording");
+    return null;
   }
-  // Pass 2: spelled-out digits ("one two three four five six").
-  const words: Record<string, string> = {
-    zero: "0", oh: "0", one: "1", two: "2", three: "3", four: "4",
-    five: "5", six: "6", seven: "7", eight: "8", nine: "9",
-  };
-  const mapped = raw.toLowerCase().split(/[^a-z0-9]+/)
-    .map((w) => words[w] ?? (/^\d+$/.test(w) ? w : " "))
-    .join("");
-  const m = mapped.match(/\d{6}/);
-  return m ? m[0] : null;
+  const resp = await fetchMediaValidated(url);
+  if (!resp?.ok) {
+    logger.warn({ status: resp?.status }, "whatsapp-byon: recording fetch failed for STT");
+    return null;
+  }
+  const buf = Buffer.from(await resp.arrayBuffer());
+  if (buf.length < 200 || buf.length > 15 * 1024 * 1024) return null;
+
+  const form = new FormData();
+  const copy = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  const ctype = (resp.headers.get("content-type") ?? "audio/mpeg").split(";")[0]!.trim();
+  const ext = ctype.includes("wav") ? "wav" : "mp3";
+  form.append("file", new Blob([copy], { type: ctype }), `otp.${ext}`);
+  form.append("model", "saaras:v3");
+  form.append("language_code", "en-IN");
+  form.append("mode", "transcribe");
+
+  const stt = await fetch(SARVAM_STT_URL, {
+    method: "POST",
+    headers: { "api-subscription-key": key },
+    body: form,
+    signal: AbortSignal.timeout(25_000),
+  });
+  if (!stt.ok) {
+    const body = await stt.text().catch(() => "");
+    logger.warn({ status: stt.status, body: body.slice(0, 300) }, "whatsapp-byon: Sarvam STT failed");
+    return null;
+  }
+  const json = (await stt.json()) as { transcript?: string };
+  return (json.transcript ?? "").trim() || null;
+}
+
+async function applyCapturedTranscript(vid: string, transcript: string): Promise<void> {
+  const code = extractOtpCode(transcript);
+  const [row] = await db.update(whatsappByonVerificationsTable)
+    .set({
+      transcript: transcript.slice(0, 2000),
+      ...(code ? { otpCode: code, status: "code_captured" } : {}),
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(whatsappByonVerificationsTable.id, vid),
+      inArray(whatsappByonVerificationsTable.status, ["armed", "code_captured"]),
+    ))
+    .returning();
+  logger.info({ vid, gotCode: !!code }, "whatsapp-byon: transcript stored");
+  if (row && code && row.vobizVerificationId && row.status !== "confirmed") {
+    setImmediate(() => {
+      void autoConfirmVobiz(row).catch((err) =>
+        logger.warn({ err, vid }, "whatsapp-byon: auto-confirm crashed"));
+    });
+  }
+}
+
+async function transcribeRecordingAndStore(vid: string, url: string): Promise<void> {
+  const [existing] = await db
+    .select({ otpCode: whatsappByonVerificationsTable.otpCode })
+    .from(whatsappByonVerificationsTable)
+    .where(eq(whatsappByonVerificationsTable.id, vid))
+    .limit(1);
+  if (existing?.otpCode) return;
+  const transcript = await transcribeByonRecording(url);
+  if (!transcript) return;
+  await applyCapturedTranscript(vid, transcript);
 }
 
 router.post("/webhooks/vobiz/wa-otp-recording", async (req, res): Promise<void> => {
-  res.status(200).json({ ok: true }); // ack fast; VoBiz retries otherwise
+  // Vobiz Record `action` expects VoiceXML back, not JSON.
+  res.status(200).set("Content-Type", "text/xml").send(buildByonOtpHangupXml());
   const vid = String(req.query["vid"] ?? "");
   if (!UUID_RE.test(vid)) return;
   const b = (req.body ?? {}) as Record<string, any>;
@@ -396,6 +493,13 @@ router.post("/webhooks/vobiz/wa-otp-recording", async (req, res): Promise<void> 
         inArray(whatsappByonVerificationsTable.status, ["armed", "code_captured"]),
       ));
     logger.info({ vid, hasUrl: !!safeUrl }, "whatsapp-byon: recording callback stored");
+    // Vobiz never sends transcriptionUrl callbacks — STT the recording ourselves.
+    if (safeUrl) {
+      setImmediate(() => {
+        void transcribeRecordingAndStore(vid, safeUrl).catch((err) =>
+          logger.warn({ err, vid }, "whatsapp-byon: recording STT crashed"));
+      });
+    }
   } catch (err) {
     logger.warn({ err, vid }, "whatsapp-byon: recording callback failed");
   }
@@ -408,29 +512,8 @@ router.post("/webhooks/vobiz/wa-otp-transcription", async (req, res): Promise<vo
   const b = (req.body ?? {}) as Record<string, any>;
   const transcript = String(b["transcription"] ?? b["transcription_text"] ?? b["transcript"] ?? b["text"] ?? "").trim();
   if (!transcript) return;
-  const code = extractOtpCode(transcript);
   try {
-    const [row] = await db.update(whatsappByonVerificationsTable)
-      .set({
-        transcript: transcript.slice(0, 2000),
-        ...(code ? { otpCode: code, status: "code_captured" } : {}),
-        updatedAt: new Date(),
-      })
-      // Status guard: a confirmed verification must never be downgraded by a late
-      // or forged callback.
-      .where(and(
-        eq(whatsappByonVerificationsTable.id, vid),
-        inArray(whatsappByonVerificationsTable.status, ["armed", "code_captured"]),
-      ))
-      .returning();
-    logger.info({ vid, gotCode: !!code }, "whatsapp-byon: transcription callback stored");
-    // If WE requested the VoBiz verification, close the loop automatically.
-    if (row && code && row.vobizVerificationId && row.status !== "confirmed") {
-      setImmediate(() => {
-        void autoConfirmVobiz(row).catch((err) =>
-          logger.warn({ err, vid }, "whatsapp-byon: auto-confirm crashed"));
-      });
-    }
+    await applyCapturedTranscript(vid, transcript);
   } catch (err) {
     logger.warn({ err, vid }, "whatsapp-byon: transcription callback failed");
   }
@@ -489,12 +572,12 @@ function toChannelCatalog(list: Array<Record<string, any>>): WaTemplateCatalogEn
     const name = typeof t.name === "string" ? t.name : null;
     const language = typeof t.language === "string" ? t.language : null;
     if (!name || !language) continue;
-    const status = String(t.status ?? "unknown").toUpperCase();
-    if (status !== "APPROVED" && status !== "PLATFORM_MANAGED") continue;
+    const status = String(t.status ?? "").toUpperCase();
+    if (!isUsableWhatsappTemplateStatus(status)) continue;
     out.push({
       name,
       language,
-      status,
+      status: status || "APPROVED",
       paramCount: countBodyParams(t.components),
       category: typeof t.category === "string" ? t.category : null,
     });
@@ -682,11 +765,15 @@ router.get("/whatsapp/agents/:agentId/templates", requireAuth, async (req, res):
   }
   const channel = await getUserChannel(userId);
   const templates = await loadAgentWaTemplates(userId, agentId);
+  let catalog = Array.isArray(channel?.templateCatalog) ? channel!.templateCatalog : [];
+  if (channel && catalog.length === 0 && channel.mode === "own" && channel.vobizChannelId) {
+    catalog = await refreshOwnChannelTemplateCatalog(channel, userId).catch(() => catalog);
+  }
   res.json({
     agentId,
     templates,
     needsTemplates: !hasAgentTemplatePicks(templates),
-    templateCatalog: Array.isArray(channel?.templateCatalog) ? channel!.templateCatalog : [],
+    templateCatalog: catalog,
     channelMode: channel?.mode ?? null,
   });
 });

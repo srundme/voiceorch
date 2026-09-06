@@ -128,6 +128,24 @@ function parseRedirectUris(raw: string): string[] {
   }
 }
 
+export type ClientRedirectCheck = "ok" | "unknown_client" | "redirect_not_registered";
+
+/**
+ * Verify the authorize link belongs to a registered client before asking for a
+ * key — a stale or hand-edited link otherwise fails only after the user pastes.
+ */
+export async function checkClientRedirect(
+  clientId: string,
+  redirectUri: string,
+): Promise<ClientRedirectCheck> {
+  const client = await getClient(clientId);
+  if (!client) return "unknown_client";
+  if (!parseRedirectUris(client.redirectUris).includes(redirectUri)) {
+    return "redirect_not_registered";
+  }
+  return "ok";
+}
+
 export async function validateApiKeyForOauth(rawKey: string): Promise<{ userId: string; apiKey: string } | null> {
   const key = rawKey.trim();
   if (!key.startsWith("sk_live_")) return null;

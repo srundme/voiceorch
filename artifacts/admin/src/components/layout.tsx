@@ -69,15 +69,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground font-sans text-sm">
-      <aside className="w-64 border-r border-border bg-card flex-col hidden md:flex shrink-0">
-        <div className="h-14 flex items-center px-4 border-b border-border">
+    <div className="flex h-screen h-dvh w-full overflow-hidden bg-background text-foreground selection:bg-primary selection:text-primary-foreground font-sans text-sm">
+      <aside className="w-64 h-full border-r border-border bg-card flex-col hidden md:flex shrink-0 overflow-hidden">
+        <div className="h-14 flex items-center px-4 border-b border-border shrink-0">
           <BrandMark />
         </div>
-        <nav className="flex-1 overflow-y-auto p-2" aria-label="Admin">
+        <nav className="flex-1 overflow-y-auto min-h-0 p-2" aria-label="Admin">
           <NavTree />
         </nav>
-        <div className="p-2 border-t border-border">
+        <div className="p-2 border-t border-border shrink-0">
           <Button
             variant="ghost"
             className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-muted h-9 px-3 cursor-pointer"
@@ -92,14 +92,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-72 p-0 flex flex-col">
-          <SheetHeader className="h-14 px-4 border-b border-border justify-center">
+          <SheetHeader className="h-14 px-4 border-b border-border justify-center shrink-0">
             <SheetTitle className="sr-only">Admin navigation</SheetTitle>
             <BrandMark compact />
           </SheetHeader>
-          <nav className="flex-1 overflow-y-auto p-2" aria-label="Admin">
+          <nav className="flex-1 overflow-y-auto min-h-0 p-2" aria-label="Admin">
             <NavTree onNavigate={() => setMobileOpen(false)} />
           </nav>
-          <div className="p-2 border-t border-border">
+          <div className="p-2 border-t border-border shrink-0">
             <Button
               variant="ghost"
               className="w-full justify-start text-muted-foreground h-9 px-3 cursor-pointer"
@@ -112,8 +112,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </SheetContent>
       </Sheet>
 
-      <main className="flex-1 flex flex-col min-w-0">
-        <div className="h-14 border-b border-border flex items-center justify-between gap-3 px-3 md:px-6 bg-card sticky top-0 z-20">
+      <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-background">
+        <div className="h-14 border-b border-border flex items-center justify-between gap-3 px-3 md:px-6 bg-card shrink-0 z-20">
           <div className="flex items-center gap-2 min-w-0">
             <Button
               variant="ghost"
@@ -152,7 +152,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <AlertsBell />
           </div>
         </div>
-        <div className="flex-1 overflow-auto p-4 md:p-6 scroll-pt-16">
+        <div className="flex-1 overflow-y-auto min-h-0 p-4 md:p-6 scroll-pt-16">
           <div className="max-w-7xl mx-auto space-y-6">{children}</div>
         </div>
       </main>

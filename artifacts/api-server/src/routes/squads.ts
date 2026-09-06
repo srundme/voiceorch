@@ -120,6 +120,7 @@ async function serializeSquad(s: Squad) {
     supervisorAgentId: s.supervisorAgentId,
     entryMemberId: s.entryMemberId,
     limits: s.limits ?? {},
+    handoffMessage: s.handoffMessage,
     handoffGreeting: s.handoffGreeting,
     members: members.map((m) => serializeMember(m, nameById.get(m.agentId))),
     connections: { phoneNumbers: phones, campaigns: camps },
@@ -173,6 +174,7 @@ router.post("/squads", requireAuth, clientContext, async (req, res): Promise<voi
     supervisorAgentId?: number | null;
     entryMemberId?: number | null;
     limits?: SquadLimits;
+    handoffMessage?: string;
     handoffGreeting?: string;
     members?: MemberInput[];
     status?: SquadStatus;
@@ -195,7 +197,8 @@ router.post("/squads", requireAuth, clientContext, async (req, res): Promise<voi
     description: body.description ?? null,
     supervisorAgentId: body.supervisorAgentId ?? null,
     limits: body.limits ?? {},
-    handoffGreeting: body.handoffGreeting ?? undefined,
+    handoffMessage: body.handoffMessage?.trim() ?? "",
+    handoffGreeting: body.handoffGreeting?.trim() ?? "",
     status: body.status === "active" ? "active" : "draft",
   }).returning();
 
@@ -242,6 +245,7 @@ router.patch("/squads/:id", requireAuth, clientContext, async (req, res): Promis
     supervisorAgentId: number | null;
     entryMemberId: number | null;
     limits: SquadLimits;
+    handoffMessage: string;
     handoffGreeting: string;
     status: SquadStatus;
     members: MemberInput[];
@@ -277,7 +281,8 @@ router.patch("/squads/:id", requireAuth, clientContext, async (req, res): Promis
   if (body.supervisorAgentId !== undefined) updates["supervisorAgentId"] = body.supervisorAgentId;
   if (body.entryMemberId !== undefined) updates["entryMemberId"] = body.entryMemberId;
   if (body.limits !== undefined) updates["limits"] = body.limits;
-  if (body.handoffGreeting !== undefined) updates["handoffGreeting"] = body.handoffGreeting;
+  if (body.handoffMessage !== undefined) updates["handoffMessage"] = body.handoffMessage.trim();
+  if (body.handoffGreeting !== undefined) updates["handoffGreeting"] = body.handoffGreeting.trim();
   if (body.status !== undefined && ["draft", "active", "paused"].includes(body.status)) {
     updates["status"] = body.status;
   }

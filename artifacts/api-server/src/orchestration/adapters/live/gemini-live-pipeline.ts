@@ -10,11 +10,25 @@ import type { AgentConfig, ConversationTurn, SessionConfig } from "../../types.j
 import type { VoiceSession } from "../../voice-session.js";
 import { RecordingBuffer, WEBCALL_GAP_RESYNC_MS } from "../../recorder.js";
 import {
+  attenuatePcm16,
   createDownsampler24to8,
   decodeMulaw,
   encodeMulaw,
+  frameRms,
   upsample8to16,
 } from "../../audio.js";
+import { processRawPcm8kIn } from "../../audioPool.js";
+import {
+  envForceVobizSoftwareNc,
+  resolveSoftwareNoiseGate,
+  type NoiseGateDecision,
+} from "../../noise-gate.js";
+import {
+  getMicSensitivityThresholds,
+  resolveBargeInEnergyThreshold,
+  resolveMicSensitivity,
+  type MicSensitivityThresholds,
+} from "../../mic-sensitivity.js";
 import {
   AmbientNoiseStream,
   FileAmbientNoiseStream,
@@ -23,15 +37,32 @@ import {
   peekCachedPcmLoop,
 } from "../../ambient.js";
 import { logger } from "../../../lib/logger.js";
+import { createExecutionLogger, EXEC_COMPONENTS } from "../../../services/execution-log.js";
 import { buildToolDefs } from "../../../services/tool-executor.js";
 import {
-  DEFAULT_GEMINI_LIVE_MODEL,
+  resolveGeminiLiveModel,
   resolveGeminiLiveThinkingLevel,
   resolveGeminiLiveVoice,
 } from "./gemini-live-voices.js";
 import { toGeminiLiveTools } from "./gemini-tools.js";
 import { runLiveToolCall } from "./live-tool-runner.js";
+import {
+  applyBookingEmailToBookArgs,
+  buildEmailSpellLine,
+  emptyBookingFlowState,
+  looksLikeBookOrRescheduleTool,
+  looksLikeFalseBookingClaim,
+  shouldSpeakEmailSpell,
+  updateBookingFlowFromAssistantText,
+  updateBookingFlowFromToolResult,
+  updateBookingFlowFromUserTurn,
+  type BookingFlowState,
+} from "../../booking-flow-enforce.js";
+import { bookingAsksCallerForEmail } from "../../booking-email-policy.js";
+import { liveBookingTruthRule, liveToolResultConfirmedBooking } from "./live-booking-email.js";
 import { mergeTranscriptFragment } from "./live-transcript-merge.js";
+import { CALL_SCREENING_WINDOW_MS, detectScreeningPrompt } from "../../callScreening.js";
+import { isGeminiQuotaError, loadManagedGeminiKeys, markGeminiKeyExhausted, maskGeminiKey, pickGeminiKeyFromList } from "../../../lib/gemini-key-pool.js";
 
 const SCHEDULE_CALLBACK_TOOL = {
   name: "schedule_callback",
@@ -163,7 +194,7 @@ export class GeminiLivePipeline implements VoiceSession {
 
   private readonly config: SessionConfig;
   private readonly agent: AgentConfig;
-  private readonly apiKey: string;
+  private apiKey: string;
   private readonly recording: RecordingBuffer;
   private readonly history: ConversationTurn[] = [];
   private lastUserText: string | null = null;
@@ -184,6 +215,17 @@ export class GeminiLivePipeline implements VoiceSession {
   private readonly outDecim24to8 = createDownsampler24to8();
   private isPlayingOut = false;
 
+  // ── Caller-audio isolation ───────────────────────────────────────────────
+  // Live used to send caller audio straight to Gemini, which made the Noise
+  // Cancellation toggle a no-op on this stack. Both Live and classic now share
+  // resolveSoftwareNoiseGate + the audio-worker energy NoiseCanceller so the
+  // same toggle covers every LLM.
+  private readonly noiseGate: NoiseGateDecision;
+  private readonly micThresholds: MicSensitivityThresholds;
+  private readonly gateRatio: number;
+  /** Serialize isolator + Gemini send so 20 ms frames stay in order. */
+  private audioInChain: Promise<void> = Promise.resolve();
+
   // ── Paced outbound pump ──────────────────────────────────────────────────
   // Gemini Live streams a whole reply's audio much faster than real time. If we
   // forward it to the carrier as it arrives, the carrier buffers many seconds of
@@ -196,7 +238,33 @@ export class GeminiLivePipeline implements VoiceSession {
   private pumpAnchorMs = 0;
   private framesSent = 0;
   private static readonly FRAME_MS = 20;
-  private static readonly LEAD_MS = 240; // frames allowed ahead of real time (carrier jitter buffer)
+  private static readonly LEAD_MS = 80; // frames allowed ahead of real time (carrier jitter buffer)
+  // Gemini does not always deliver a reply faster than real time. Starting the
+  // pump on the very first 20 ms frame means one slow chunk drains the queue
+  // mid-word. 16 frames (320 ms) made every webcall and PSTN reply late.
+  private static readonly PREBUFFER_FRAMES = 5; // 100 ms jitter — do not start on the first 20 ms
+  private underruns = 0;
+  private lastOutPcm8k: Buffer | null = null;
+
+  // ── Self-echo suppression ────────────────────────────────────────────────
+  // On a PSTN leg there is no AEC between our outbound audio and the caller
+  // audio the carrier returns, so the agent's own voice comes back as "caller
+  // speech". Gemini's server VAD then fires `interrupted` and we clear the
+  // reply — the agent cuts itself off ~200 ms after it starts talking. The
+  // classic pipeline defends with an echo grace + a measured echo floor
+  // (BARGE_IN_ECHO_* in pipeline.ts); Live forwarded every frame raw. Mirror
+  // that here: mute the caller leg while returning echo dominates, and after
+  // the grace require energy above the learned echo floor to pass through, so
+  // a genuinely loud caller can still barge in.
+  private agentAudioStartedAt = 0;
+  private echoFloorRms = 0;
+  private echoSamples = 0;
+  private echoSuppressedFrames = 0;
+  private static readonly ECHO_CALIBRATION_MS = 250;
+  private static readonly ECHO_MARGIN = 1.6;
+  private static readonly ECHO_MAX_BAR = 2500;
+  private static readonly ECHO_FLOOR_RISE_ALPHA = 0.05;
+  private static readonly ECHO_FLOOR_FALL_ALPHA = 0.3;
 
   // ── Carrier keepalive / ambient bed ──────────────────────────────────────
   // Gemini Live only emits audio while the model is actually speaking, so the
@@ -221,6 +289,17 @@ export class GeminiLivePipeline implements VoiceSession {
   private meetingForceMuted = false;
   private meetingMuteWhenIdle = false;
   private pendingMeetingNotes: string[] = [];
+  /** Last Live session-resumption handle — reconnects after GoAway / socket close. */
+  private resumptionHandle: string | null = null;
+  private reconnecting = false;
+  private reconnectAttempts = 0;
+  private static readonly MAX_LIVE_RECONNECTS = 2;
+  private screeningHangupDone = false;
+  private readonly screeningWindowStart = Date.now();
+  private schedulingActionConfirmed = false;
+  private bookingFlowState: BookingFlowState = emptyBookingFlowState();
+  private bookingTruthPromptSent = false;
+  private amdExternalVerdict: "human" | "machine" | null = null;
 
   constructor(config: SessionConfig) {
     const rawAudioOut = config.onAudioOut;
@@ -245,6 +324,27 @@ export class GeminiLivePipeline implements VoiceSession {
     if (config.answeredAt) {
       this.recording.anchorStart(config.answeredAt);
     }
+    this.micThresholds = getMicSensitivityThresholds(resolveMicSensitivity());
+    this.gateRatio = this.micThresholds.gateRatio;
+    this.noiseGate = resolveSoftwareNoiseGate({
+      telephonyProvider: config.telephonyProvider,
+      agentEnabled: this.agent.noiseCancellationEnabled,
+      agentOverride: this.agent.forceSoftwareNoiseGate,
+      envForceVobiz: envForceVobizSoftwareNc(),
+    });
+    logger.info(
+      {
+        callId: config.callId,
+        agentId: this.agent.id,
+        telephonyProvider: config.telephonyProvider,
+        voiceStack: "gemini-live",
+        toggle: this.agent.noiseCancellationEnabled,
+        softwareGate: this.noiseGate.enabled,
+        reason: this.noiseGate.reason,
+        gateRatio: this.noiseGate.enabled ? this.gateRatio : undefined,
+      },
+      "Noise cancellation resolved",
+    );
     this.initAmbient();
     this.startKeepalive();
   }
@@ -315,14 +415,49 @@ export class GeminiLivePipeline implements VoiceSession {
     this.onRawPcm8kIn(decodeMulaw(mulawChunk));
   }
 
-
-  onRawPcm8kIn(pcm8k: Buffer, _noiseCancel?: boolean, nativePcm16k?: Buffer): void {
+  onRawPcm8kIn(pcm8k: Buffer, noiseCancel?: boolean, nativePcm16k?: Buffer): void {
     if (this.closed || pcm8k.length < 2) return;
+    // Record and tap the RAW caller audio, so the recording stays a faithful
+    // copy of what the carrier delivered even when isolation is running.
     this.recording.addCallerChunk(pcm8k);
     this.config.callerAudioTap?.(pcm8k);
 
-    const pcm16k = nativePcm16k?.length ? nativePcm16k : upsample8to16(pcm8k);
-    void this.ensureConnected().then(() => {
+    // Explicit caller flag wins (webcall passes false). Stay on during agent
+    // speech so room talkers are still gated (call 20235).
+    const gateOn = noiseCancel !== undefined ? noiseCancel : this.noiseGate.enabled;
+    const callId = String(this.config.callId);
+    const pcm8kCopy = Buffer.from(pcm8k);
+    const nativeCopy = nativePcm16k?.length ? Buffer.from(nativePcm16k) : undefined;
+    const muteEcho = this.isSelfEcho(pcm8k);
+
+    this.audioInChain = this.audioInChain.then(async () => {
+      if (this.closed) return;
+      let pcm16k: Buffer;
+      if (muteEcho) {
+        // Send silence rather than nothing: a continuous stream keeps Gemini's
+        // VAD timing honest, it just has no echo to trigger on.
+        pcm16k = Buffer.alloc(pcm8kCopy.length * 2);
+        await this.ensureConnected();
+        if (this.closed || !this.session) return;
+        this.session.sendRealtimeInput({
+          audio: { data: pcm16k.toString("base64"), mimeType: "audio/pcm;rate=16000" },
+        });
+        return;
+      }
+      if (gateOn) {
+        const result = await processRawPcm8kIn(
+          callId,
+          pcm8kCopy,
+          true,
+          this.micThresholds.gateRatio,
+          this.micThresholds.vadThreshold,
+        );
+        pcm16k = result.pcm16k;
+      } else {
+        pcm16k = nativeCopy?.length ? nativeCopy : upsample8to16(pcm8kCopy);
+      }
+      if (this.closed || pcm16k.length < 2) return;
+      await this.ensureConnected();
       if (this.closed || !this.session) return;
       this.session.sendRealtimeInput({
         audio: {
@@ -330,41 +465,176 @@ export class GeminiLivePipeline implements VoiceSession {
           mimeType: "audio/pcm;rate=16000",
         },
       });
-    }).catch((err) => this.handleFatal(err));
+    }).catch((err) => {
+      logger.error({ callId: this.config.callId, err }, "Gemini Live caller-audio path failed");
+    });
+  }
+
+  /**
+   * True when this caller frame is most likely our own audio coming back off
+   * the carrier rather than the person on the line.
+   *
+   * Webcall legs are excluded: the browser already runs AEC, so there is no
+   * echo to reject and gating there would only cost real barge-ins.
+   */
+  private isSelfEcho(pcm8k: Buffer): boolean {
+    if (this.config.rawPcmOutput) return false;
+    if (!(this.isPlayingOut || this.outFrames8k.length > 0)) return false;
+
+    const rms = frameRms(pcm8k);
+    const sinceStart = Date.now() - this.agentAudioStartedAt;
+
+    // Right after a line starts, anything returning is echo — measure it.
+    if (sinceStart <= GeminiLivePipeline.ECHO_CALIBRATION_MS) {
+      const alpha = rms > this.echoFloorRms
+        ? GeminiLivePipeline.ECHO_FLOOR_RISE_ALPHA
+        : GeminiLivePipeline.ECHO_FLOOR_FALL_ALPHA;
+      this.echoFloorRms = this.echoSamples === 0
+        ? rms
+        : this.echoFloorRms + alpha * (rms - this.echoFloorRms);
+      this.echoSamples++;
+      this.echoSuppressedFrames++;
+      return true;
+    }
+    if (sinceStart <= this.agent.bargeInEchoGraceMs) {
+      this.echoSuppressedFrames++;
+      return true;
+    }
+
+    // Past the grace: a caller louder than the measured echo still gets through.
+    const bar = Math.min(
+      GeminiLivePipeline.ECHO_MAX_BAR,
+      Math.max(
+        resolveBargeInEnergyThreshold(this.agent.bargeInEnergyThreshold),
+        this.echoFloorRms * GeminiLivePipeline.ECHO_MARGIN,
+      ),
+    );
+    if (rms >= bar) return false;
+    this.echoSuppressedFrames++;
+    return true;
+  }
+
+  /** Test hook: wait until queued caller frames have been sent to Gemini. */
+  async flushCallerAudio(): Promise<void> {
+    await this.audioInChain;
   }
 
   async greet(): Promise<void> {
     if (this.closed || this.greetingSent) return;
     await this.ensureConnected();
-    if (this.agent.firstSpeaker === "user") {
+    const takeover = this.config.isSquadHandoffTakeover === true;
+    if (this.agent.firstSpeaker === "user" && !takeover) {
       logger.info({ callId: this.config.callId }, "Gemini Live: first speaker = user — waiting for caller");
       return;
     }
 
     this.greetingSent = true;
     const greeting = (this.agent.greetingMessage ?? "").trim();
+    if (takeover) {
+      await this.beginSquadHandoffTakeover(greeting);
+      return;
+    }
     const prompt = greeting
       ? `Begin the call by speaking this greeting naturally: "${greeting}"`
       : "Begin the call with a brief, friendly greeting and ask how you can help.";
 
-    this.session?.sendClientContent({
-      turns: [{ role: "user", parts: [{ text: prompt }] }],
-      turnComplete: true,
-    });
+    this.session?.sendRealtimeInput({ text: prompt });
+  }
+
+  /**
+   * Gemini Live only starts a spoken turn when a client turn completes.
+   * sendRealtimeInput({ text }) does not close VAD, so a takeover prompt sat
+   * there forever and the teammate never spoke. Seed the prior call, then
+   * force turnComplete.
+   */
+  private async beginSquadHandoffTakeover(customGreeting: string): Promise<void> {
+    const seed = toLiveHandoffTurns(this.config.handoffSeedTurns);
+    const cue =
+      "You just took over this live call from a teammate. The customer is still on the line. " +
+      "Do not start a new greeting. Speak 1-2 short sentences: acknowledge continuity and continue.";
+    if (!this.session || this.closed) return;
+
+    if (customGreeting) {
+      if (seed.length > 0) {
+        this.session.sendClientContent({ turns: seed, turnComplete: false });
+      }
+      await this.speakRaw(customGreeting);
+      return;
+    }
+
+    const turns = seed.length > 0
+      ? [...seed, { role: "user" as const, parts: [{ text: cue }] }]
+      : [{ role: "user" as const, parts: [{ text: cue }] }];
+    this.session.sendClientContent({ turns, turnComplete: true });
+    logger.info(
+      { callId: this.config.callId, seedTurns: seed.length },
+      "Gemini Live: squad handoff takeover — seeded prior turns and forced a spoken reply",
+    );
   }
 
   async confirmAmdMachineThenBranch(): Promise<void> {
-    // v1: AMD/voicemail paths are classic-only — fall through to normal greeting.
-    await this.greet();
+    if (this.closed) return;
+    const action = this.config.amdConfirm?.action ?? "hangup";
+    // amdArmed with no sync hint: wait briefly for the async machine_detection callback.
+    if (this.config.amdConfirm && this.config.amdConfirm.hint !== true && this.amdExternalVerdict == null) {
+      const waitMs = 2_500;
+      const t0 = Date.now();
+      while (!this.closed && Date.now() - t0 < waitMs && this.amdExternalVerdict == null) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+    const providerSaidMachine =
+      this.config.amdConfirm?.hint === true || this.amdExternalVerdict === "machine";
+    // No acoustic window on Live — do not hang up every AMD-armed outbound
+    // (that would drop humans). Enact voicemail only on a machine hint/callback.
+    if (!providerSaidMachine) {
+      await this.greet();
+      return;
+    }
+    try { this.config.onAmdResult?.("machine"); } catch { /* best-effort */ }
+    if (action === "continue") {
+      await this.greet();
+      return;
+    }
+    if (action === "leave_message") {
+      await this.deliverVoicemail();
+      return;
+    }
+    try { this.config.onVoicemailAction?.(); } catch { /* best-effort */ }
+    this.config.onCallEnd();
   }
 
   async deliverVoicemail(): Promise<void> {
-    await this.greet();
+    if (this.closed) return;
+    this.greetingSent = true;
+    const message = (
+      this.config.voicemailDelivery?.message
+      ?? this.config.voicemailPolicy?.message
+      ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you."
+    ).trim();
+    const leadSec =
+      this.config.voicemailDelivery?.leadInSeconds
+      ?? this.config.amdConfirm?.leadInSeconds
+      ?? this.config.voicemailPolicy?.leadInSeconds
+      ?? 0;
+    if (leadSec > 0 && !this.closed) {
+      await new Promise((r) => setTimeout(r, Math.round(leadSec * 1000)));
+    }
+    if (!this.closed && message) {
+      await this.speakRaw(message);
+    }
+    try { this.config.onVoicemailAction?.(); } catch { /* best-effort */ }
+    if (!this.closed) this.config.onCallEnd();
   }
 
   async finishSpeakingForMaxDuration(graceMs: number): Promise<void> {
-    if (graceMs <= 0) return;
-    await new Promise((r) => setTimeout(r, graceMs));
+    if (this.closed || graceMs <= 0) return;
+    const speaking =
+      this.isPlayingOut
+      || this.outFrames8k.length > 0
+      || this.pendingOut24k.length > 0;
+    if (!speaking) return;
+    await this.waitUntilSpokenAudioDrained(Date.now() - 80, graceMs);
   }
 
   async speakRaw(text: string): Promise<void> {
@@ -372,10 +642,46 @@ export class GeminiLivePipeline implements VoiceSession {
     await this.ensureConnected();
     this.appendAgent(text);
     this.config.onTranscript("agent", text);
-    this.session?.sendClientContent({
-      turns: [{ role: "user", parts: [{ text: `Speak exactly the following to the caller: "${text}"` }] }],
-      turnComplete: true,
+    const spokenAfter = Date.now();
+    this.session?.sendRealtimeInput({
+      text: `Speak exactly the following to the caller: "${text}"`,
     });
+    // Classic speakRaw waits for TTS + drain. Live used to return here, then
+    // transfer/end_call tore the media down before Gemini audio reached the phone.
+    await this.waitUntilSpokenAudioDrained(spokenAfter, 10_000);
+  }
+
+  /**
+   * Wait until Gemini audio for a speakRaw prompt has been pumped, then a short
+   * quiet gap. Does not wait on msgChain (that deadlocks during tool calls).
+   */
+  private async waitUntilSpokenAudioDrained(startedAtMs: number, timeoutMs: number): Promise<void> {
+    const t0 = Date.now();
+    let heard = false;
+    while (Date.now() - t0 < timeoutMs) {
+      if (this.closed) return;
+      if (this.lastRealFrameAt >= startedAtMs) heard = true;
+      const idle =
+        this.outFrames8k.length === 0
+        && this.pendingOut24k.length === 0;
+      if (heard && idle && Date.now() - this.lastRealFrameAt >= 450) return;
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    if (!heard) {
+      logger.warn(
+        { callId: this.config.callId, timeoutMs },
+        "Gemini Live: speakRaw timed out with no outbound audio",
+      );
+    }
+  }
+
+  private ingestOutboundAudio(msg: LiveServerMessage): void {
+    if (this.closed) return;
+    const inlineAudio = msg.data;
+    if (!inlineAudio) return;
+    const pcm24k = Buffer.from(inlineAudio, "base64");
+    this.pendingOut24k = Buffer.concat([this.pendingOut24k, pcm24k]);
+    this.flushOutboundAudio();
   }
 
   getTranscript(): string {
@@ -407,6 +713,10 @@ export class GeminiLivePipeline implements VoiceSession {
     return this.agent.language ?? this.agent.sttConfig.language ?? "en-IN";
   }
 
+  getLiveHandoffLanguage(): string {
+    return this.getPreferredCallerLang();
+  }
+
   getExplicitLangRequestForMemory(): string | null {
     return null;
   }
@@ -433,10 +743,7 @@ export class GeminiLivePipeline implements VoiceSession {
     const line = `[Meeting chat from ${who}]: ${body}`;
     void this.ensureConnected().then(() => {
       if (this.closed) return;
-      this.session?.sendClientContent({
-        turns: [{ role: "user", parts: [{ text: line }] }],
-        turnComplete: true,
-      });
+      this.session?.sendRealtimeInput({ text: line });
       this.config.onTranscript("user", line);
       this.appendUser(line);
     }).catch((err) => {
@@ -499,8 +806,8 @@ export class GeminiLivePipeline implements VoiceSession {
     // Live stack uses native VAD — no classic STT wait state.
   }
 
-  onExternalAmdSignal(_verdict: "machine" | "human", _source: string): void {
-    // v1: AMD corroboration is classic-only.
+  onExternalAmdSignal(verdict: "machine" | "human", _source: string): void {
+    this.amdExternalVerdict = verdict;
   }
 
   private async ensureConnected(): Promise<void> {
@@ -512,13 +819,15 @@ export class GeminiLivePipeline implements VoiceSession {
   }
 
   private async connect(): Promise<void> {
-    const ai = new GoogleGenAI({ apiKey: this.apiKey });
     const liveCfg = this.agent.geminiLive;
-    const model = liveCfg?.model ?? DEFAULT_GEMINI_LIVE_MODEL;
+    const model = resolveGeminiLiveModel(liveCfg?.model);
     const voiceName = resolveGeminiLiveVoice(liveCfg?.voiceName);
     const thinkingLevel = resolveGeminiLiveThinkingLevel(liveCfg?.thinkingLevel);
 
-    const toolDefs = buildToolDefs(this.agent.tools);
+    const toolDefs = buildToolDefs(this.agent.tools, {
+      systemPrompt: this.agent.systemPrompt,
+      knownEmail: this.agent.knownAttendeeEmail,
+    });
     toolDefs.push(SCHEDULE_CALLBACK_TOOL);
     if (this.agent.isMeetingSession) {
       toolDefs.push(SCHEDULE_MEET_REJOIN_TOOL, ...MEETING_PRESENTATION_TOOLS);
@@ -532,11 +841,20 @@ export class GeminiLivePipeline implements VoiceSession {
       high: ThinkingLevel.HIGH,
     };
 
-    this.session = await ai.live.connect({
+    const connectStarted = Date.now();
+    const liveSessionExtras: Record<string, unknown> = {
+      // Without compression, audio sessions hard-drop around 15 min.
+      contextWindowCompression: { slidingWindow: {} },
+      // Empty object enables handle updates; pass the last handle on reconnect.
+      sessionResumption: this.resumptionHandle ? { handle: this.resumptionHandle } : {},
+    };
+    const openLive = async (apiKey: string) => {
+      const ai = new GoogleGenAI({ apiKey });
+      return ai.live.connect({
       model,
       config: {
         responseModalities: [Modality.AUDIO],
-        systemInstruction: this.agent.systemPrompt,
+        systemInstruction: this.liveSystemInstruction(),
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: { voiceName },
@@ -549,6 +867,7 @@ export class GeminiLivePipeline implements VoiceSession {
         outputAudioTranscription: {},
         tools,
         temperature: this.agent.temperature,
+        ...liveSessionExtras,
       },
       callbacks: {
         onmessage: (msg) => {
@@ -556,24 +875,60 @@ export class GeminiLivePipeline implements VoiceSession {
           // long-running tool call inside the chain must never head-of-line
           // block the barge-in (queue clear + carrier clearAudio).
           if (msg.serverContent?.interrupted) this.handleInterrupted();
+          // Play audio immediately. Tool handlers await on msgChain; if audio
+          // waited there, speakRaw/transfer would hang and the caller hears silence.
+          this.ingestOutboundAudio(msg);
           this.msgChain = this.msgChain
             .then(() => this.onServerMessage(msg))
             .catch((err) => logger.error({ callId: this.config.callId, err }, "Gemini Live message handler error"));
         },
         onerror: (e) => {
           logger.error({ callId: this.config.callId, err: e.error ?? e }, "Gemini Live socket error");
+          if (!this.closed && this.resumptionHandle && this.reconnectAttempts < GeminiLivePipeline.MAX_LIVE_RECONNECTS) {
+            void this.tryResumeAfterDisconnect("socket_error");
+            return;
+          }
           this.handleFatal(e.error ?? e);
         },
         onclose: () => {
-          if (!this.closed) {
-            logger.info({ callId: this.config.callId }, "Gemini Live socket closed");
-            this.config.onCallEnd();
-          }
+          if (this.closed || this.reconnecting) return;
+          logger.info({ callId: this.config.callId, hasHandle: Boolean(this.resumptionHandle) }, "Gemini Live socket closed");
+          void this.tryResumeAfterDisconnect("socket_closed");
         },
       },
     });
+    };
 
-    logger.info({ callId: this.config.callId, model, voiceName }, "Gemini Live session connected");
+    try {
+      this.session = await openLive(this.apiKey);
+    } catch (err) {
+      if (!isGeminiQuotaError(err)) throw err;
+      const pool = await loadManagedGeminiKeys();
+      if (!pool.includes(this.apiKey)) throw err;
+      markGeminiKeyExhausted(this.apiKey);
+      const next = pickGeminiKeyFromList(pool);
+      if (!next || next === this.apiKey) throw err;
+      logger.warn(
+        { callId: this.config.callId, from: maskGeminiKey(this.apiKey), to: maskGeminiKey(next), evt: "gemini_key_rotated" },
+        "Gemini Live quota exhausted — switched to the next pool key",
+      );
+      this.apiKey = next;
+      this.session = await openLive(next);
+    }
+
+    const connectMs = Date.now() - connectStarted;
+    logger.info({ callId: this.config.callId, model, voiceName, connectMs }, "Gemini Live session connected");
+    createExecutionLogger(this.config.callId, null)(EXEC_COMPONENTS.LLM, "system", {
+      provider: "gemini_live",
+      status: "info",
+      latencyMs: connectMs,
+      metadata: {
+        event: "Gemini Live Connected",
+        model,
+        voiceName,
+        promptChars: this.agent.systemPrompt.length,
+      },
+    });
   }
 
   private async onServerMessage(msg: LiveServerMessage): Promise<void> {
@@ -585,6 +940,7 @@ export class GeminiLivePipeline implements VoiceSession {
     // reliable `finished` flag. Buffer until a turn boundary, then commit.
     if (content?.inputTranscription?.text) {
       this.inputBuf = mergeTranscriptFragment(this.inputBuf, content.inputTranscription.text);
+      if (this.tryHangupCallScreening(this.inputBuf)) return;
     }
 
     if (content?.outputTranscription?.text) {
@@ -593,22 +949,35 @@ export class GeminiLivePipeline implements VoiceSession {
       this.outputBuf = mergeTranscriptFragment(this.outputBuf, content.outputTranscription.text);
     }
 
-    const inlineAudio = msg.data;
-    if (inlineAudio) {
-      const pcm24k = Buffer.from(inlineAudio, "base64");
-      this.pendingOut24k = Buffer.concat([this.pendingOut24k, pcm24k]);
-      this.flushOutboundAudio();
-    }
-
     if (msg.toolCall?.functionCalls?.length) {
       // Tool calls usually follow user speech with no output transcription yet.
       if (this.inputBuf.trim()) this.flushInputBuf();
+      this.nudgeExactEmailSpell();
       await this.handleToolCalls(msg.toolCall.functionCalls);
+    }
+
+    const extras = msg as LiveServerMessage & {
+      sessionResumptionUpdate?: { newHandle?: string; resumable?: boolean };
+      goAway?: { timeLeft?: string };
+    };
+    const handle = extras.sessionResumptionUpdate?.newHandle;
+    if (typeof handle === "string" && handle.trim()) {
+      this.resumptionHandle = handle.trim();
+    }
+    if (extras.goAway && !this.closed) {
+      logger.info(
+        { callId: this.config.callId, timeLeft: extras.goAway.timeLeft },
+        "Gemini Live GoAway — resuming session",
+      );
+      void this.tryResumeAfterDisconnect("go_away");
     }
 
     if (content?.turnComplete) {
       this.flushInputBuf();
+      this.nudgeExactEmailSpell();
       this.flushOutputBuf();
+      // Release a tail shorter than the prebuffer — no more audio is coming.
+      this.flushOutboundAudio(true);
       this.isPlayingOut = false;
       // Classic STT→LLM→TTS metrics don't apply; count a conversational turn
       // so History / wasDropped / no_turns logic treat Live calls as real.
@@ -623,11 +992,49 @@ export class GeminiLivePipeline implements VoiceSession {
     const droppedMs = this.outFrames8k.length * GeminiLivePipeline.FRAME_MS;
     this.pendingOut24k = Buffer.alloc(0);
     this.outFrames8k.length = 0; // drop locally queued (unplayed) audio immediately
+    this.lastOutPcm8k = null;
     this.isPlayingOut = false;
     // Commit what was already transcribed; drop only unplayed audio frames.
     this.flushOutputBuf();
     this.config.onBargeIn?.();
-    logger.info({ callId: this.config.callId, droppedMs }, "Gemini Live: interrupted — cleared queued audio");
+    logger.info(
+      {
+        callId: this.config.callId,
+        droppedMs,
+        sinceAgentAudioMs: this.agentAudioStartedAt ? Date.now() - this.agentAudioStartedAt : null,
+        echoFloorRms: Math.round(this.echoFloorRms),
+        echoSuppressedFrames: this.echoSuppressedFrames,
+      },
+      "Gemini Live: interrupted — cleared queued audio",
+    );
+    // If we wiped real queued speech, nudge the model so "Hello"/barge-in does not
+    // leave the caller in dead air with status completed and no agent reply.
+    if (droppedMs >= 200 && this.session && !this.closed) {
+      try {
+        this.session.sendRealtimeInput({
+          text:
+            "The caller just spoke or interrupted. Continue the conversation now — " +
+            "acknowledge them briefly and answer. Do not stay silent.",
+        });
+      } catch (err) {
+        logger.warn({ callId: this.config.callId, err }, "Gemini Live: interrupt recovery nudge failed");
+      }
+    }
+  }
+
+  /** Ask Live to spell the captured address — do not invent a different one. */
+  private nudgeExactEmailSpell(): void {
+    if (!this.session || this.closed) return;
+    if (!bookingAsksCallerForEmail(this.agent.tools.find((t) => t.type === "native_booking"))) return;
+    if (!shouldSpeakEmailSpell(this.bookingFlowState) || !this.bookingFlowState.pendingEmail) return;
+    const line = buildEmailSpellLine(this.bookingFlowState.pendingEmail);
+    try {
+      this.session.sendRealtimeInput({
+        text: `Speak exactly this and then wait: ${line} Do not invent a different email.`,
+      });
+    } catch (err) {
+      logger.warn({ callId: this.config.callId, err }, "Gemini Live: email-spell nudge failed");
+    }
   }
 
   private flushInputBuf(): void {
@@ -636,17 +1043,87 @@ export class GeminiLivePipeline implements VoiceSession {
     if (!text) return;
     this.appendUser(text);
     this.config.onTranscript("user", text);
+    this.tryHangupCallScreening(text);
+  }
+
+  /**
+   * iPhone Ask Reason for Calling / Google Call Screen on outbound Live calls:
+   * hang up and mark voicemail instead of letting Gemini treat the robot as a human.
+   */
+  private tryHangupCallScreening(transcript: string): boolean {
+    if (this.screeningHangupDone || this.closed) return false;
+    if (this.config.callDirection !== "outbound") return false;
+    if (Date.now() - this.screeningWindowStart > CALL_SCREENING_WINDOW_MS) return false;
+    if (!detectScreeningPrompt(transcript)) return false;
+
+    this.screeningHangupDone = true;
+    const text = transcript.trim();
+    if (text && this.inputBuf.trim()) {
+      this.flushInputBuf();
+    }
+    logger.info(
+      { callId: this.config.callId, transcript: text.slice(0, 160) },
+      "Gemini Live: call screening bot detected — hanging up as voicemail",
+    );
+    createExecutionLogger(this.config.callId, null)(EXEC_COMPONENTS.STT, "system", {
+      provider: "gemini_live",
+      status: "info",
+      metadata: {
+        event: "Call Screening Detected",
+        action: "hangup_voicemail",
+        screenerPrompt: text.slice(0, 160),
+      },
+    });
+    this.pendingOut24k = Buffer.alloc(0);
+    this.outFrames8k.length = 0;
+    this.isPlayingOut = false;
+    try { this.config.onAmdResult?.("machine"); } catch { /* best-effort */ }
+    try { this.config.onVoicemailAction?.(); } catch { /* best-effort */ }
+    this.config.onCallEnd();
+    return true;
   }
 
   private flushOutputBuf(): void {
     const text = this.outputBuf.trim();
     this.outputBuf = "";
     if (!text) return;
+    if (!this.schedulingActionConfirmed && looksLikeFalseBookingClaim(text)) {
+      this.pendingOut24k = Buffer.alloc(0);
+      this.outFrames8k.length = 0;
+      this.config.onBargeIn?.();
+      logger.warn(
+        { callId: this.config.callId, text: text.slice(0, 120) },
+        "Gemini Live: suppressed spoken booking claim with no booking_confirmed",
+      );
+      this.nudgeBookingTruth();
+    }
     this.appendAgent(text);
     this.config.onTranscript("agent", text);
   }
 
-  private flushOutboundAudio(): void {
+  private liveSystemInstruction(): string {
+    const hasBook = this.agent.tools.some(
+      (t) => t.type === "native_booking" || t.type === "native_reschedule",
+    );
+    if (!hasBook) return this.agent.systemPrompt;
+    return `${this.agent.systemPrompt}\n\n${liveBookingTruthRule()}`;
+  }
+
+  private nudgeBookingTruth(): void {
+    if (this.bookingTruthPromptSent || !this.session || this.closed) return;
+    this.bookingTruthPromptSent = true;
+    try {
+      this.session.sendRealtimeInput({
+        text:
+          "The booking was not saved. Do not tell the caller they are booked. " +
+          "Say the booking could not be completed and offer to transfer or try again.",
+      });
+    } catch (err) {
+      logger.warn({ callId: this.config.callId, err }, "Gemini Live: booking-truth nudge failed");
+    }
+  }
+
+  private flushOutboundAudio(force = false): void {
     // Slice into ~20ms frames at 24kHz (480 samples = 960 bytes) and queue them
     // for the paced pump — never forward faster than real time (see pump docs).
     const FRAME_BYTES_24K = 960;
@@ -655,7 +1132,15 @@ export class GeminiLivePipeline implements VoiceSession {
       this.pendingOut24k = this.pendingOut24k.subarray(FRAME_BYTES_24K);
       this.outFrames8k.push(this.outDecim24to8.process(frame24k));
     }
-    if (this.outFrames8k.length) this.ensurePump();
+    if (!this.outFrames8k.length) return;
+    // Already streaming: keep feeding. Otherwise wait for the jitter buffer so a
+    // fresh (or post-underrun) start has cushion — force only on turn end, where
+    // no more audio is coming and a short tail must still be played.
+    const ready =
+      this.pumpTimer !== null
+      || force
+      || this.outFrames8k.length >= GeminiLivePipeline.PREBUFFER_FRAMES;
+    if (ready) this.ensurePump();
   }
 
   private ensurePump(): void {
@@ -675,7 +1160,27 @@ export class GeminiLivePipeline implements VoiceSession {
   private pumpTick(): void {
     if (this.closed) { this.stopPump(); return; }
     if (this.outFrames8k.length === 0) {
-      // Drained — stop; a fresh anchor starts with the next reply's audio.
+      // Mid-reply stall: hold a faded last frame so the carrier does not
+      // go silent. Pace at 20 ms like real frames. Stop when this reply ends.
+      if (this.isPlayingOut && this.lastOutPcm8k) {
+        const elapsedMs = Date.now() - this.pumpAnchorMs + GeminiLivePipeline.LEAD_MS;
+        if (this.framesSent * GeminiLivePipeline.FRAME_MS >= elapsedMs) return;
+        this.underruns++;
+        const hold = attenuatePcm16(this.lastOutPcm8k, 0.35);
+        this.recording.addAgentChunk(hold);
+        const out = this.config.rawPcmOutput
+          ? (this.pcmOutRate() === 16000 ? upsample8to16(hold) : hold)
+          : encodeMulaw(hold);
+        this.config.onAudioOut(out);
+        this.framesSent++;
+        if (this.underruns === 1 || this.underruns % 25 === 0) {
+          logger.warn(
+            { callId: this.config.callId, underruns: this.underruns, framesSent: this.framesSent },
+            "Gemini Live: outbound audio underrun — concealing with last frame",
+          );
+        }
+        return;
+      }
       this.stopPump();
       return;
     }
@@ -686,15 +1191,28 @@ export class GeminiLivePipeline implements VoiceSession {
     ) {
       const pcm8k = this.outFrames8k.shift()!;
       this.framesSent++;
+      // Anchor the echo grace to the moment a speech burst becomes audible.
+      if (!this.isPlayingOut) this.agentAudioStartedAt = Date.now();
       this.isPlayingOut = true;
       this.lastRealFrameAt = Date.now();
       if (!this.firstFrameLogged) {
         this.firstFrameLogged = true;
+        const bootMs = this.lastRealFrameAt - this.startedAtMs;
         logger.info(
-          { callId: this.config.callId, bootMs: this.lastRealFrameAt - this.startedAtMs },
+          { callId: this.config.callId, bootMs },
           "Gemini Live: first agent audio on the wire",
         );
+        createExecutionLogger(this.config.callId, null)(EXEC_COMPONENTS.TTS, "system", {
+          provider: "gemini_live",
+          status: "info",
+          latencyMs: bootMs,
+          metadata: {
+            event: "First Agent Audio",
+            bootMs,
+          },
+        });
       }
+      this.lastOutPcm8k = pcm8k;
       this.recording.addAgentChunk(pcm8k); // record at playback time, not arrival time
       const out = this.config.rawPcmOutput
         ? (this.pcmOutRate() === 16000 ? upsample8to16(pcm8k) : pcm8k)
@@ -708,7 +1226,10 @@ export class GeminiLivePipeline implements VoiceSession {
     const responses = [];
     for (const call of calls) {
       const name = call.name ?? "";
-      const args = (call.args ?? {}) as Record<string, unknown>;
+      const rawArgs = (call.args ?? {}) as Record<string, unknown>;
+      const args = looksLikeBookOrRescheduleTool(name)
+        ? applyBookingEmailToBookArgs(this.bookingFlowState, rawArgs)
+        : rawArgs;
       const result = await runLiveToolCall(
         {
           config: this.config,
@@ -719,10 +1240,26 @@ export class GeminiLivePipeline implements VoiceSession {
             this.endReasonHint = "end_call";
             this.config.onCallEnd();
           },
+          genuineUserTurns: () =>
+            this.history.filter((m) => m.role === "user" && m.content.trim().length > 0).length,
+          schedulingActionConfirmed: () => this.schedulingActionConfirmed,
         },
         name,
         args,
       );
+      if (liveToolResultConfirmedBooking(result)) this.schedulingActionConfirmed = true;
+      const toolBlob = [
+        typeof result["output"] === "string" ? result["output"] : "",
+        typeof result["error"] === "string" ? result["error"] : "",
+      ].join(" ").trim();
+      if (toolBlob) {
+        this.bookingFlowState = updateBookingFlowFromToolResult(
+          this.bookingFlowState,
+          name,
+          toolBlob,
+        );
+      }
+      this.maybeCorrectFailedLiveBooking(name, result);
       responses.push({
         id: call.id,
         name,
@@ -730,7 +1267,31 @@ export class GeminiLivePipeline implements VoiceSession {
       });
       this.config.onConversationUpdate?.(this.getHistory());
     }
+    // Squad handoff closes this Live socket from inside the transfer tool.
+    // Sending the tool result after that would throw and (worse) let the
+    // departing model keep talking over the teammate.
+    if (this.closed || !this.session) return;
     this.session.sendToolResponse({ functionResponses: responses });
+  }
+
+  /** Live audio can claim "you're booked" before the tool result — drop that if save failed. */
+  private maybeCorrectFailedLiveBooking(toolName: string, result: Record<string, unknown>): void {
+    if (!/book_appointment|native_booking/i.test(toolName)) return;
+    const output = typeof result["output"] === "string" ? result["output"] : "";
+    const err = typeof result["error"] === "string" ? result["error"] : "";
+    const blob = `${output} ${err}`;
+    if (/booking_confirmed/.test(blob)) return;
+    const spoken = `${this.outputBuf} ${this.lastAgentText ?? ""}`;
+    if (looksLikeFalseBookingClaim(spoken)) {
+      this.pendingOut24k = Buffer.alloc(0);
+      this.outFrames8k.length = 0;
+      this.config.onBargeIn?.();
+      logger.warn(
+        { callId: this.config.callId, toolName, result: blob.slice(0, 160) },
+        "Gemini Live: dropped spoken booking claim after tool did not confirm",
+      );
+    }
+    this.nudgeBookingTruth();
   }
 
   private appendUser(text: string): void {
@@ -741,6 +1302,11 @@ export class GeminiLivePipeline implements VoiceSession {
     } else {
       this.history.push({ role: "user", content: text });
     }
+    this.bookingFlowState = updateBookingFlowFromUserTurn(
+      this.bookingFlowState,
+      text,
+      this.lastAgentText ?? "",
+    );
   }
 
   private appendAgent(text: string): void {
@@ -753,6 +1319,36 @@ export class GeminiLivePipeline implements VoiceSession {
     } else {
       this.history.push({ role: "assistant", content: clean });
     }
+    this.bookingFlowState = updateBookingFlowFromAssistantText(this.bookingFlowState, clean);
+  }
+
+  private async tryResumeAfterDisconnect(reason: string): Promise<void> {
+    if (this.closed || this.reconnecting) return;
+    if (!this.resumptionHandle || this.reconnectAttempts >= GeminiLivePipeline.MAX_LIVE_RECONNECTS) {
+      logger.info(
+        { callId: this.config.callId, reason, hasHandle: Boolean(this.resumptionHandle), attempts: this.reconnectAttempts },
+        "Gemini Live: no resumable session — ending call",
+      );
+      this.config.onCallEnd();
+      return;
+    }
+    this.reconnecting = true;
+    this.reconnectAttempts += 1;
+    const attempt = this.reconnectAttempts;
+    try {
+      this.session = null;
+      this.connectPromise = null;
+      await this.ensureConnected();
+      logger.info(
+        { callId: this.config.callId, reason, attempt },
+        "Gemini Live session resumed",
+      );
+    } catch (err) {
+      logger.error({ callId: this.config.callId, reason, attempt, err }, "Gemini Live resume failed");
+      this.config.onCallEnd();
+    } finally {
+      this.reconnecting = false;
+    }
   }
 
   private handleFatal(err: unknown): void {
@@ -760,6 +1356,22 @@ export class GeminiLivePipeline implements VoiceSession {
     logger.error({ callId: this.config.callId, reason }, "Gemini Live fatal error");
     this.config.onFatalError?.(reason);
   }
+}
+
+const HANDOFF_SEED_MAX_TURNS = 16;
+
+/** Map classic/Live history into Gemini Live client-content turns. */
+export function toLiveHandoffTurns(
+  turns: ConversationTurn[] | undefined,
+): Array<{ role: "user" | "model"; parts: Array<{ text: string }> }> {
+  if (!turns?.length) return [];
+  return turns
+    .filter((t) => (t.role === "user" || t.role === "assistant") && t.content.trim())
+    .slice(-HANDOFF_SEED_MAX_TURNS)
+    .map((t) => ({
+      role: t.role === "assistant" ? "model" as const : "user" as const,
+      parts: [{ text: t.content.trim() }],
+    }));
 }
 
 /** Strip TTS prosody markup so Live transcripts stay human-readable. */

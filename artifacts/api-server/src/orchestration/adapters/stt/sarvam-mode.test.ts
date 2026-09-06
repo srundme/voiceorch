@@ -10,23 +10,22 @@ describe("resolveSarvamSttMode", () => {
     expect(resolveSarvamSttMode("ta-IN", "translit")).toBe("translit");
   });
 
-  it("defaults Indic languages to transcribe (clean native script) and en-IN to codemix", () => {
+  it("defaults every language to codemix so mixed Hinglish is captured", () => {
     expect(resolveSarvamSttMode("en-IN")).toBe("codemix");
     expect(resolveSarvamSttMode("en-US")).toBe("codemix");
-    expect(resolveSarvamSttMode("ta-IN")).toBe("transcribe");
-    expect(resolveSarvamSttMode("hi-IN")).toBe("transcribe");
-    expect(resolveSarvamSttMode("te-IN")).toBe("transcribe");
-    // Languages that previously fell through to codemix by omission:
-    expect(resolveSarvamSttMode("od-IN")).toBe("transcribe");
-    expect(resolveSarvamSttMode("pa-IN")).toBe("transcribe");
-    expect(resolveSarvamSttMode("ur-IN")).toBe("transcribe");
-    expect(resolveSarvamSttMode("ne-IN")).toBe("transcribe");
+    expect(resolveSarvamSttMode("ta-IN")).toBe("codemix");
+    expect(resolveSarvamSttMode("hi-IN")).toBe("codemix");
+    expect(resolveSarvamSttMode("te-IN")).toBe("codemix");
+    expect(resolveSarvamSttMode("od-IN")).toBe("codemix");
+    expect(resolveSarvamSttMode("pa-IN")).toBe("codemix");
+    expect(resolveSarvamSttMode("ur-IN")).toBe("codemix");
+    expect(resolveSarvamSttMode("ne-IN")).toBe("codemix");
     expect(resolveSarvamSttMode(null)).toBe("codemix");
     expect(resolveSarvamSttMode(undefined)).toBe("codemix");
   });
 
-  it("ignores unknown explicit modes and falls back to language default", () => {
+  it("ignores unknown explicit modes and falls back to codemix", () => {
     expect(resolveSarvamSttMode("en-IN", "not-a-mode")).toBe("codemix");
-    expect(resolveSarvamSttMode("ta-IN", "not-a-mode")).toBe("transcribe");
+    expect(resolveSarvamSttMode("ta-IN", "not-a-mode")).toBe("codemix");
   });
 });

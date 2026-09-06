@@ -91,7 +91,7 @@ export function normalizeDispositionSchemaResult(
     if (!(field.key in out)) continue;
     const raw = out[field.key];
     if (raw == null) {
-      out[field.key] = null;
+      delete out[field.key];
       continue;
     }
     if (field.type === "boolean") {
@@ -99,26 +99,32 @@ export function normalizeDispositionSchemaResult(
       const s = String(raw).trim().toLowerCase();
       if (s === "true" || s === "yes" || s === "y") out[field.key] = true;
       else if (s === "false" || s === "no" || s === "n") out[field.key] = false;
-      else out[field.key] = null;
+      else delete out[field.key];
       continue;
     }
     if (field.type === "number" && !isPhoneLikeDispositionField(field.key, field.label, field.type)) {
       const n = typeof raw === "number" ? raw : Number(String(raw).replace(/,/g, ""));
-      out[field.key] = Number.isFinite(n) ? n : null;
+      if (Number.isFinite(n)) out[field.key] = n;
+      else delete out[field.key];
       continue;
     }
     if (isPhoneLikeDispositionField(field.key, field.label, field.type)) {
-      out[field.key] = extractBarePhone(raw);
+      const phone = extractBarePhone(raw);
+      if (phone) out[field.key] = phone;
+      else delete out[field.key];
       continue;
     }
     if (field.type === "choice" && field.options?.length) {
       const s = String(raw).trim();
       const hit = field.options.find((o) => o.toLowerCase() === s.toLowerCase());
-      out[field.key] = hit ?? null;
+      if (hit) out[field.key] = hit;
+      else delete out[field.key];
       continue;
     }
     // text / string — never allow a paragraph dump into a scalar field
-    out[field.key] = clampDispositionText(raw);
+    const clamped = clampDispositionText(raw);
+    if (clamped) out[field.key] = clamped;
+    else delete out[field.key];
   }
   return out;
 }
@@ -149,3 +155,47 @@ export const DISPOSITION_EXTRACT_SYSTEM =
   "Never put a summary sentence or paragraph into a field. " +
   "For phone / WhatsApp / mobile fields: return digits only (optional leading country code), never prose like \"the caller said their WhatsApp is…\". " +
   "If a field was not clearly collected, use null.";
+
+/** JSON Schema for DispositionLLM.extract — keys match agents.dispositionSchema. */
+export function jsonSchemaFromDispositionFields(
+  schema: DispositionSchemaField[],
+): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  for (const f of schema) {
+    const phone = isPhoneLikeDispositionField(f.key, f.label, f.type);
+    if (f.type === "boolean") {
+      properties[f.key] = { type: ["boolean", "null"], description: f.label };
+    } else if (f.type === "number" && !phone) {
+      properties[f.key] = { type: ["number", "null"], description: f.label };
+    } else if (f.type === "choice" && f.options?.length) {
+      properties[f.key] = {
+        type: ["string", "null"],
+        enum: [...f.options, null],
+        description: f.label,
+      };
+    } else {
+      properties[f.key] = {
+        type: ["string", "null"],
+        description: phone ? `${f.label} (digits only)` : f.label,
+      };
+    }
+  }
+  return {
+    type: "object",
+    properties,
+    additionalProperties: false,
+  };
+}
+
+/** True when any configured schema key is still empty on the stored result. */
+export function schemaFieldsNeedFill(
+  existing: Record<string, unknown> | null | undefined,
+  schema: DispositionSchemaField[],
+): boolean {
+  if (!schema.length) return false;
+  if (!existing || typeof existing !== "object") return true;
+  return schema.some((f) => {
+    const v = existing[f.key];
+    return v == null || v === "";
+  });
+}

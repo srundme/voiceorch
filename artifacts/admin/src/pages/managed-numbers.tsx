@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Save, Phone, RefreshCw, Plus, Trash2, Info } from "lucide-react";
+import { SectionSubNav } from "@/components/section-subnav";
+import { PRODUCT_TABS } from "@/lib/nav-config";
 
 export default function ManagedNumbers() {
   const { data, isLoading, refetch } = useManagedPhoneNumbers();
@@ -83,6 +85,7 @@ export default function ManagedNumbers() {
 
   return (
     <div className="p-6 space-y-6 max-w-3xl">
+      <SectionSubNav tabs={PRODUCT_TABS} />
       <div>
         <h1 className="text-2xl font-semibold">Managed Phone Numbers</h1>
         <p className="text-sm text-muted-foreground mt-1">

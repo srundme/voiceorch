@@ -113,6 +113,22 @@ export const workshopSubmitRateLimit = rateLimit({
   },
 });
 
+export const landingLeadsSubmitRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const email = String((req.body as Record<string, unknown> | undefined)?.["email"] ?? "unknown").toLowerCase();
+    return `${ipKeyGenerator(req.ip ?? req.socket?.remoteAddress ?? "unknown")}:landing-lead:${email}`;
+  },
+  message: { error: "Too many submissions. Please try again in a minute." },
+  handler: (req, res, _next, options) => {
+    logger.warn({ ip: req.ip }, "Rate limit exceeded (landing partner lead)");
+    res.status(429).json(options.message);
+  },
+});
+
 export const voiceathonMetaRateLimit = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
@@ -205,6 +221,10 @@ export const exemptPaths = [
   // cap only produced 429s that blanked the shared deck. Covers /present too.
   "/api/meet-bots/present",
   "/api/mcp",
+  // Public website embed assets — cached, but a busy origin NAT would otherwise
+  // 429 /api/widget.js for every visitor.
+  "/api/widget.js",
+  "/api/widget/call",
   "/.well-known/oauth-authorization-server",
   "/.well-known/oauth-protected-resource",
 ];

@@ -11,6 +11,30 @@ import { randomBytes } from "node:crypto";
 
 const router: IRouter = Router();
 
+async function withOwnerRow(ownerUserId: string, members: unknown[]) {
+  const [owner] = await db
+    .select({
+      clerkId: usersTable.clerkId,
+      email: usersTable.email,
+      name: usersTable.name,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.clerkId, ownerUserId));
+  const ownerRow = {
+    id: 0,
+    ownerUserId,
+    memberUserId: ownerUserId,
+    email: owner?.email ?? "",
+    name: owner?.name ?? "Workspace owner",
+    role: "owner",
+    status: "active",
+    token: null,
+    invitedAt: new Date(0).toISOString(),
+    joinedAt: new Date(0).toISOString(),
+  };
+  return [ownerRow, ...members];
+}
+
 function newTeamInviteToken(): string {
   return randomBytes(24).toString("hex");
 }
@@ -126,7 +150,7 @@ router.get("/team/members", requireAuth, async (req, res): Promise<void> => {
       .where(eq(teamMembersTable.ownerUserId, userId));
 
     if (members.length > 0) {
-      res.json(members);
+      res.json(await withOwnerRow(userId, members));
       return;
     }
 
@@ -154,7 +178,7 @@ router.get("/team/members", requireAuth, async (req, res): Promise<void> => {
       .select()
       .from(teamMembersTable)
       .where(eq(teamMembersTable.ownerUserId, membership.ownerUserId));
-    res.json(workspace);
+    res.json(await withOwnerRow(membership.ownerUserId, workspace));
   } catch (err) {
     logger.error({ err }, "Failed to fetch team members");
     res.status(500).json({ error: "Internal server error" });

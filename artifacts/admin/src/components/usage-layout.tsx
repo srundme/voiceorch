@@ -13,7 +13,7 @@ const TABS = [
   { href: "/usage/history", label: "History" },
   { href: "/usage/pricing", label: "Pricing" },
   { href: "/usage/allocations", label: "Allocations" },
-  { href: "/usage/alerts", label: "Alerts" },
+  { href: "/operations/alerts", label: "Alerts" },
 ];
 
 export function UsageSubNav() {

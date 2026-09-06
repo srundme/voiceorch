@@ -39,18 +39,30 @@ interface TeamMember {
   memberUserId: string | null;
   email: string;
   name: string | null;
-  role: "admin" | "developer" | "member" | "viewer" | string;
+  role: "owner" | "admin" | "developer" | "member" | "viewer" | string;
   status: "pending" | "active" | string;
   invitedAt: string;
   joinedAt: string | null;
 }
 
-export function TeamPage() {
+export function TeamPage({
+  inviteOpen,
+  onInviteOpenChange,
+  hideToolbarInvite = false,
+}: {
+  /** Controlled invite dialog (e.g. from Workspace tab row). */
+  inviteOpen?: boolean;
+  onInviteOpenChange?: (open: boolean) => void;
+  /** Hide the in-content Invite Member button when it lives on the tab row. */
+  hideToolbarInvite?: boolean;
+} = {}) {
   const { userId } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [internalInviteOpen, setInternalInviteOpen] = useState(false);
+  const inviteModalOpen = inviteOpen ?? internalInviteOpen;
+  const setInviteModalOpen = onInviteOpenChange ?? setInternalInviteOpen;
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
@@ -160,7 +172,7 @@ export function TeamPage() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background overflow-y-auto">
-      {/* Toolbar — parent StripeTabPage owns the page title */}
+      {/* Toolbar — parent StripeTabPage owns the page title + Invite on the tab row */}
       <div className="px-6 py-4 border-b border-border/40">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
@@ -172,7 +184,7 @@ export function TeamPage() {
             </Badge>
           </div>
 
-          {isOwner && (
+          {isOwner && !hideToolbarInvite && (
           <Button
             onClick={() => setInviteModalOpen(true)}
             className="h-10 text-xs font-medium gap-2 shadow-sm rounded-xl"
@@ -201,7 +213,7 @@ export function TeamPage() {
               <span className="text-xs font-medium">Active Collaborators</span>
               <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             </div>
-            <p className="text-2xl font-bold mt-2 text-foreground">{activeCount + 1}</p>
+            <p className="text-2xl font-bold mt-2 text-foreground">{activeCount}</p>
             <p className="text-[11px] text-emerald-500/80 mt-0.5">Active workspace users</p>
           </div>
 
@@ -300,7 +312,7 @@ export function TeamPage() {
                         </>
                       )}
 
-                      {isOwner && (
+                      {isOwner && member.role !== "owner" && (
                       <Button
                         variant="ghost"
                         size="icon"

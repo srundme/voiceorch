@@ -45,6 +45,18 @@ describe("isRealEnglishUtterance", () => {
     expect(isRealEnglishUtterance("")).toBe(false);
     expect(isRealEnglishUtterance("   ")).toBe(false);
   });
+  it("treats 'tell me I'm on the line' as real English, not a borrowed filler", () => {
+    expect(isRealEnglishUtterance("Tell me, I'm on the line, tell me.")).toBe(true);
+    expect(isRealEnglishUtterance("please tell me")).toBe(false);
+    expect(isRealEnglishUtterance("tell me more")).toBe(false);
+  });
+
+  it("rejects romanized Indic go-ahead replies (Latin script, not English)", () => {
+    expect(isRealEnglishUtterance("Aa boliye Ma'am")).toBe(false);
+    expect(isRealEnglishUtterance("boliye")).toBe(false);
+    expect(isRealEnglishUtterance("haan boliye")).toBe(false);
+    expect(isRealEnglishUtterance("bolo na")).toBe(false);
+  });
 });
 
 describe("resolveAutoDetectLanguage", () => {
@@ -56,6 +68,17 @@ describe("resolveAutoDetectLanguage", () => {
       text: "okay thank you",
     });
     expect(r.lang).toBe("ta-IN");
+    expect(r.heldFiller).toBe(true);
+  });
+
+  it("holds Hindi when the first reply is Romanized Indic written in Latin letters", () => {
+    const r = resolveAutoDetectLanguage({
+      detected: "en-IN",
+      latchedLang: null,
+      currentLang: "hi-IN",
+      text: "Aa boliye Ma'am",
+    });
+    expect(r.lang).toBe("hi-IN");
     expect(r.heldFiller).toBe(true);
   });
 
@@ -87,6 +110,43 @@ describe("resolveAutoDetectLanguage", () => {
       latchedLang: null,
       currentLang: "en-IN",
       text: "okay",
+    });
+    expect(r.lang).toBe("en-IN");
+    expect(r.heldFiller).toBe(false);
+  });
+
+  it("keeps a Tamil agent on Tamil when LID writes Latin — no word list (call 21546)", () => {
+    const r = resolveAutoDetectLanguage({
+      detected: "en-IN",
+      latchedLang: null,
+      currentLang: "en-IN",
+      text: "Neenga yaaru enga irundhu call pannittu irukkeenga?",
+      agentLang: "ta-IN",
+    });
+    expect(r.lang).toBe("ta-IN");
+    expect(r.heldFiller).toBe(true);
+  });
+
+  it("still allows an explicit English latch on a Tamil agent", () => {
+    const r = resolveAutoDetectLanguage({
+      detected: "en-IN",
+      latchedLang: "en-IN",
+      currentLang: "ta-IN",
+      text: "please speak in English from now",
+      agentLang: "ta-IN",
+    });
+    expect(r.lang).toBe("en-IN");
+    expect(r.heldFiller).toBe(false);
+  });
+
+  it("allows passive English only when autoSwitchToEnglish is on", () => {
+    const r = resolveAutoDetectLanguage({
+      detected: "en-IN",
+      latchedLang: null,
+      currentLang: "ta-IN",
+      text: "how much does the premium cost?",
+      agentLang: "ta-IN",
+      allowPassiveEnglish: true,
     });
     expect(r.lang).toBe("en-IN");
     expect(r.heldFiller).toBe(false);

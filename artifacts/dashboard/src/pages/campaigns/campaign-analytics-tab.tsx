@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -169,8 +170,6 @@ export default function CampaignAnalyticsTab({
 }) {
   const { toast } = useToast();
   const [tab, setTab] = useState<"results" | "ask" | "reports">("results");
-  const [insights, setInsights] = useState<Insights | null>(null);
-  const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(14);
   const [questions, setQuestions] = useState<AnalyticsQuestion[]>([]);
   const [savingQ, setSavingQ] = useState(false);
@@ -199,17 +198,18 @@ export default function CampaignAnalyticsTab({
     return `/api/campaigns/${campaignId}/analytics/insights?${q}`;
   }, [campaignId, batchId, days]);
 
+  const {
+    data: insights = null,
+    isLoading: loading,
+    refetch: refetchInsights,
+  } = useQuery({
+    queryKey: ["campaign-insights", campaignId, batchId ?? null, days],
+    queryFn: () => customFetch<Insights>(insightsUrl),
+    refetchInterval: 30_000,
+  });
+
   async function loadInsights() {
-    setLoading(true);
-    try {
-      const data = await customFetch<Insights>(insightsUrl);
-      setInsights(data);
-      setQuestions(data.questions ?? []);
-    } catch {
-      toast({ title: "Could not load analytics", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+    await refetchInsights();
   }
 
   async function loadReports() {
@@ -240,10 +240,13 @@ export default function CampaignAnalyticsTab({
   }
 
   useEffect(() => {
-    void loadInsights();
     void loadReports();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId, days, batchId]);
+
+  useEffect(() => {
+    if (insights) setQuestions(insights.questions ?? []);
+  }, [insights]);
 
   async function saveQuestions(next: AnalyticsQuestion[]) {
     setSavingQ(true);

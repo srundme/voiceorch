@@ -68,6 +68,13 @@ export const DOCS_NAV: DocsNavGroup[] = [
         description: "Agents, campaigns, connections, outcomes, and calls.",
       },
       {
+        title: "Jarvis",
+        slug: "jarvis",
+        icon: Bot,
+        search: "Jarvis support voice assistant recommend jobs publish campaign assign phone",
+        description: "Jarvis overlay removed. New assistant plan incoming.",
+      },
+      {
         title: "Quick Start (API)",
         slug: "quick-start",
         icon: Rocket,
@@ -112,7 +119,7 @@ export const DOCS_NAV: DocsNavGroup[] = [
         title: "Variables",
         slug: "variables",
         icon: Variable,
-        search: "mustache customer_name agent variables registry",
+        search: "mustache customer_name agent variables registry outbound questions patient",
         description: "Per-call placeholders in prompts and tools.",
       },
       {
@@ -169,6 +176,13 @@ export const DOCS_NAV: DocsNavGroup[] = [
         icon: Video,
         search: "Meet Zoom Teams meeting bots join paste link calendar",
         description: "Join Google Meet, Zoom, or Teams as a bot.",
+      },
+      {
+        title: "Website webcall embed",
+        slug: "website-embed",
+        icon: Code2,
+        search: "embed widget website webcall iframe script data-share agent snippet join link",
+        description: "Put an agent’s voice widget on your own website.",
       },
       {
         title: "Phone numbers",

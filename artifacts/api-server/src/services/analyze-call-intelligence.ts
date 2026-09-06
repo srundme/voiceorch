@@ -24,7 +24,7 @@ import {
   callsTable,
   campaignsTable,
 } from "@workspace/db";
-import { and, eq, isNotNull, isNull, sql, inArray } from "drizzle-orm";
+import { and, eq, isNotNull, sql, inArray } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { getDispositionLLMChain, isRetryableProviderError } from "./disposition-llm.js";
 import {
@@ -195,7 +195,8 @@ async function resolveLeadContext(
       batchId: campaignLeadsTable.batchId,
     })
     .from(campaignLeadsTable)
-    .where(eq(campaignLeadsTable.callId, callId))
+    .leftJoin(callExecutionsTable, eq(callExecutionsTable.leadId, campaignLeadsTable.id))
+    .where(sql`${campaignLeadsTable.callId} = ${callId} or ${callExecutionsTable.callId} = ${callId}`)
     .limit(1);
   if (!byCall) return null;
   return {
@@ -211,31 +212,44 @@ async function ensureExecutionRow(opts: {
   campaignId: number;
   batchId: number | null;
 }): Promise<number> {
-  const [existing] = await db
-    .select({ id: callExecutionsTable.id, sentiment: callExecutionsTable.sentiment })
-    .from(callExecutionsTable)
-    .where(eq(callExecutionsTable.callId, opts.callId))
-    .limit(1);
-  if (existing) return existing.id;
+  return db.transaction(async (tx) => {
+    // Serialise the select/insert pair even before the schema has a unique
+    // call_id constraint. This prevents the dial-start and recovery worker from
+    // creating duplicate execution rows for the same call.
+    await tx.execute(sql`select pg_advisory_xact_lock(${opts.callId})`);
+    const [existing] = await tx
+      .select({ id: callExecutionsTable.id })
+      .from(callExecutionsTable)
+      .where(eq(callExecutionsTable.callId, opts.callId))
+      .limit(1);
+    if (existing) return existing.id;
 
-  const [inserted] = await db
-    .insert(callExecutionsTable)
-    .values({
-      leadId: opts.leadId,
-      campaignId: opts.campaignId,
-      batchId: opts.batchId,
-      callId: opts.callId,
-      attemptNumber: 1,
-    })
-    .returning({ id: callExecutionsTable.id });
-  return inserted!.id;
+    const [lead] = await tx
+      .select({ attempts: campaignLeadsTable.callAttempts })
+      .from(campaignLeadsTable)
+      .where(eq(campaignLeadsTable.id, opts.leadId))
+      .limit(1);
+    const [inserted] = await tx
+      .insert(callExecutionsTable)
+      .values({
+        leadId: opts.leadId,
+        campaignId: opts.campaignId,
+        batchId: opts.batchId,
+        callId: opts.callId,
+        attemptNumber: Math.max(1, lead?.attempts ?? 1),
+      })
+      .returning({ id: callExecutionsTable.id });
+    return inserted!.id;
+  });
 }
 
 /**
  * Analyse one call and persist intelligence. Returns null when skipped
  * (no transcript / not a campaign call / already analysed without force).
  */
-export async function analyzeCallIntelligence(
+const intelligenceInFlight = new Set<number>();
+
+async function analyzeCallIntelligenceInternal(
   input: AnalyzeCallIntelligenceInput,
 ): Promise<CallIntelligence | null> {
   const transcript = input.transcript?.trim() ?? "";
@@ -437,6 +451,27 @@ export async function analyzeCallIntelligence(
   return intel;
 }
 
+export async function analyzeCallIntelligence(
+  input: AnalyzeCallIntelligenceInput,
+): Promise<CallIntelligence | null> {
+  if (intelligenceInFlight.has(input.callId)) return null;
+  intelligenceInFlight.add(input.callId);
+  try {
+    // Cross-process guard for horizontally scaled API replicas. The two-key
+    // advisory-lock namespace is separate from the execution-row insert lock.
+    return await db.transaction(async (tx) => {
+      const lockResult = await tx.execute(sql`
+        select pg_try_advisory_xact_lock(739201, ${input.callId}) as acquired
+      `);
+      const acquired = ((lockResult as unknown as { rows?: Array<{ acquired: boolean }> }).rows ?? [])[0]?.acquired;
+      if (!acquired) return null;
+      return analyzeCallIntelligenceInternal(input);
+    });
+  } finally {
+    intelligenceInFlight.delete(input.callId);
+  }
+}
+
 export interface BackfillCampaignIntelligenceResult {
   campaignId: number;
   scanned: number;
@@ -445,6 +480,8 @@ export interface BackfillCampaignIntelligenceResult {
   failed: number;
   /** First error reason (e.g. model unavailable / billing) when failures occur. */
   error?: string;
+  /** True when the analysis model itself is down (auth/quota/rate-limit) — every call fails identically. */
+  modelDown?: boolean;
 }
 
 /**
@@ -458,30 +495,59 @@ export async function backfillCampaignIntelligence(
   const limit = Math.min(Math.max(opts.limit ?? 500, 1), 5000);
   const concurrency = Math.min(Math.max(opts.concurrency ?? 2, 1), 4);
 
-  // Prefer leads with a callId + transcript; join calls for transcript/summary.
-  const candidates = await db
-    .select({
-      leadId: campaignLeadsTable.id,
-      callId: campaignLeadsTable.callId,
-      batchId: campaignLeadsTable.batchId,
-      transcript: callsTable.transcript,
-      callSummary: callsTable.callSummary,
-      dispositionResult: callsTable.dispositionResult,
-      existingSentiment: callExecutionsTable.sentiment,
-    })
-    .from(campaignLeadsTable)
-    .innerJoin(callsTable, eq(campaignLeadsTable.callId, callsTable.id))
-    .leftJoin(callExecutionsTable, eq(callExecutionsTable.callId, campaignLeadsTable.callId))
-    .where(
-      and(
-        eq(campaignLeadsTable.campaignId, campaignId),
-        isNotNull(campaignLeadsTable.callId),
-        isNotNull(callsTable.transcript),
-        sql`length(trim(${callsTable.transcript})) >= 20`,
-        opts.force ? sql`true` : isNull(callExecutionsTable.sentiment),
-      ),
+  // Include every execution attempt plus inbound calls matched to the campaign;
+  // campaign_leads.call_id alone only points at the latest outbound attempt.
+  const candidateResult = await db.execute(sql`
+    with linked_calls as (
+      select ce.lead_id, ce.campaign_id, ce.call_id
+      from call_executions ce
+      where ce.campaign_id = ${campaignId} and ce.call_id is not null
+      union
+      select cl.id, cl.campaign_id, cl.call_id
+      from campaign_leads cl
+      where cl.campaign_id = ${campaignId} and cl.call_id is not null
+      union
+      select ic.lead_id, ic.campaign_id, ic.call_id
+      from incoming_calls ic
+      where ic.campaign_id = ${campaignId}
+        and ic.lead_id is not null
+        and ic.call_id is not null
     )
-    .limit(limit);
+    select distinct on (c.id)
+      lc.lead_id as "leadId",
+      c.id as "callId",
+      c.transcript,
+      c.call_summary as "callSummary",
+      c.disposition_result as "dispositionResult",
+      (
+        select ce2.sentiment from call_executions ce2
+        where ce2.call_id = c.id and ce2.sentiment is not null
+        order by ce2.id desc limit 1
+      ) as "existingSentiment"
+    from linked_calls lc
+    join calls c on c.id = lc.call_id
+    where c.transcript is not null
+      and length(trim(c.transcript)) >= 20
+      and (
+        ${opts.force === true}
+        or not exists (
+          select 1 from call_executions ce3
+          where ce3.call_id = c.id and ce3.sentiment is not null
+        )
+      )
+    order by c.id
+    limit ${limit}
+  `);
+  const candidates = ((candidateResult as unknown as {
+    rows?: Array<{
+      leadId: number;
+      callId: number;
+      transcript: string | null;
+      callSummary: string | null;
+      dispositionResult: Record<string, unknown> | null;
+      existingSentiment: string | null;
+    }>;
+  }).rows ?? []);
 
   let analysed = 0;
   let skipped = 0;
@@ -536,6 +602,7 @@ export async function backfillCampaignIntelligence(
     skipped,
     failed,
     ...(firstError ? { error: firstError } : {}),
+    ...(abortAll ? { modelDown: true } : {}),
   };
 }
 
@@ -561,23 +628,31 @@ export async function getCampaignIntelligenceStats(campaignId: number): Promise<
       ),
     );
 
-  // Pending = campaign leads with a call + transcript but no sentiment yet
-  const [pendingRow] = await db
-    .select({
-      pending: sql<number>`count(*)::int`,
-    })
-    .from(campaignLeadsTable)
-    .innerJoin(callsTable, eq(campaignLeadsTable.callId, callsTable.id))
-    .leftJoin(callExecutionsTable, eq(callExecutionsTable.callId, campaignLeadsTable.callId))
-    .where(
-      and(
-        eq(campaignLeadsTable.campaignId, campaignId),
-        isNotNull(campaignLeadsTable.callId),
-        isNotNull(callsTable.transcript),
-        sql`length(trim(${callsTable.transcript})) >= 20`,
-        isNull(callExecutionsTable.sentiment),
-      ),
-    );
+  const pendingResult = await db.execute(sql`
+    with linked_calls as (
+      select ce.call_id
+      from call_executions ce
+      where ce.campaign_id = ${campaignId} and ce.call_id is not null
+      union
+      select cl.call_id
+      from campaign_leads cl
+      where cl.campaign_id = ${campaignId} and cl.call_id is not null
+      union
+      select ic.call_id
+      from incoming_calls ic
+      where ic.campaign_id = ${campaignId} and ic.call_id is not null
+    )
+    select count(distinct c.id)::int as pending
+    from linked_calls lc
+    join calls c on c.id = lc.call_id
+    where c.transcript is not null
+      and length(trim(c.transcript)) >= 20
+      and not exists (
+        select 1 from call_executions ce
+        where ce.call_id = c.id and ce.sentiment is not null
+      )
+  `);
+  const pendingRow = ((pendingResult as unknown as { rows?: Array<{ pending: number }> }).rows ?? [])[0];
 
   const sentimentRows = await db
     .select({
@@ -651,4 +726,123 @@ export async function getCampaignIntelligenceStats(campaignId: number): Promise<
     topTopics: topicList.map((r) => ({ label: String(r.label), count: Number(r.cnt) })),
     hotLeads: hot?.hotLeads ?? 0,
   };
+}
+
+const INTELLIGENCE_SWEEP_MS = 60_000;
+const INTELLIGENCE_FAILURE_BACKOFF_MS = 15 * 60_000;
+// Global circuit-breaker: when the analysis model itself is down (missing key /
+// billing / quota / rate-limit) EVERY campaign fails identically, and each failed
+// attempt burns event-loop time + opens outbound HTTP sockets — which starves
+// live-call TTS/STT on the same shared dispatcher and manifests as broken/jumpy
+// audio. Once we see repeated model-down outcomes, trip the breaker so the worker
+// goes quiet instead of hammering every 60s across up to 10 campaigns.
+const INTELLIGENCE_GLOBAL_TRIP_THRESHOLD = Math.max(
+  1,
+  Number(process.env.INTELLIGENCE_GLOBAL_TRIP_THRESHOLD ?? 2),
+);
+const INTELLIGENCE_GLOBAL_BACKOFF_MS = Math.max(
+  60_000,
+  Number(process.env.INTELLIGENCE_GLOBAL_BACKOFF_MS ?? 30 * 60_000),
+);
+let intelligenceSweepRunning = false;
+let intelligenceGlobalBackoffUntil = 0;
+let intelligenceConsecutiveModelDown = 0;
+const campaignBackoffUntil = new Map<number, number>();
+
+/** Recover eligible calls missed by process restarts, inbound matching, or transient LLM failures. */
+export async function runPendingCallIntelligenceSweep(): Promise<void> {
+  if (intelligenceSweepRunning) return;
+  // Breaker open: analysis model was repeatedly down — stay quiet to protect live calls.
+  if (intelligenceGlobalBackoffUntil > Date.now()) return;
+  intelligenceSweepRunning = true;
+  try {
+    const result = await db.execute(sql`
+      with pending_campaigns as (
+        select ce.campaign_id
+        from call_executions ce
+        join calls c on c.id = ce.call_id
+        where c.transcript is not null
+          and length(trim(c.transcript)) >= 20
+          and not exists (
+            select 1 from call_executions done
+            where done.call_id = c.id and done.sentiment is not null
+          )
+        union
+        select cl.campaign_id
+        from campaign_leads cl
+        join calls c on c.id = cl.call_id
+        where c.transcript is not null
+          and length(trim(c.transcript)) >= 20
+          and not exists (
+            select 1 from call_executions done
+            where done.call_id = c.id and done.sentiment is not null
+          )
+        union
+        select ic.campaign_id
+        from incoming_calls ic
+        join calls c on c.id = ic.call_id
+        where ic.campaign_id is not null
+          and c.transcript is not null
+          and length(trim(c.transcript)) >= 20
+          and not exists (
+            select 1 from call_executions done
+            where done.call_id = c.id and done.sentiment is not null
+          )
+      )
+      select distinct campaign_id as "campaignId"
+      from pending_campaigns
+      where campaign_id is not null
+      limit 10
+    `);
+    const campaigns = ((result as unknown as { rows?: Array<{ campaignId: number }> }).rows ?? []);
+    for (const row of campaigns) {
+      // Breaker may trip mid-sweep once we detect the model is down — stop immediately.
+      if (intelligenceGlobalBackoffUntil > Date.now()) break;
+      const campaignId = Number(row.campaignId);
+      if ((campaignBackoffUntil.get(campaignId) ?? 0) > Date.now()) continue;
+      const outcome = await backfillCampaignIntelligence(campaignId, {
+        limit: 50,
+        concurrency: 2,
+      });
+      if (outcome.error) {
+        campaignBackoffUntil.set(campaignId, Date.now() + INTELLIGENCE_FAILURE_BACKOFF_MS);
+      } else {
+        campaignBackoffUntil.delete(campaignId);
+      }
+      if (outcome.modelDown) {
+        // Model-level failure (auth/quota/rate-limit) — repeats identically for every
+        // campaign. Count consecutive occurrences and trip the global breaker so we
+        // stop generating a socket/CPU storm that starves live-call audio.
+        intelligenceConsecutiveModelDown++;
+        if (intelligenceConsecutiveModelDown >= INTELLIGENCE_GLOBAL_TRIP_THRESHOLD) {
+          intelligenceGlobalBackoffUntil = Date.now() + INTELLIGENCE_GLOBAL_BACKOFF_MS;
+          logger.warn(
+            {
+              consecutiveModelDown: intelligenceConsecutiveModelDown,
+              backoffMs: INTELLIGENCE_GLOBAL_BACKOFF_MS,
+              lastError: outcome.error,
+            },
+            "call-intelligence: global breaker tripped — analysis model down, pausing worker to protect live-call TTS/STT",
+          );
+          break;
+        }
+      } else if (outcome.analysed > 0) {
+        // Real progress — the model is healthy again; reset the breaker counter.
+        intelligenceConsecutiveModelDown = 0;
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "call-intelligence: automatic recovery sweep failed");
+  } finally {
+    intelligenceSweepRunning = false;
+  }
+}
+
+export function startCallIntelligenceWorker(): void {
+  const timer = setInterval(() => {
+    void runPendingCallIntelligenceSweep();
+  }, INTELLIGENCE_SWEEP_MS);
+  timer.unref();
+  setTimeout(() => void runPendingCallIntelligenceSweep(), 15_000).unref();
+  logger.info({ intervalMs: INTELLIGENCE_SWEEP_MS }, "call-intelligence: automatic recovery worker started");
 }

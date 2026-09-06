@@ -42,9 +42,40 @@ export function uiTypeFromStored(field: StoredDomainField): UiDomainFieldType {
   return "text";
 }
 
+export function isIncompleteCategory(cat: DispositionCategory): boolean {
+  return !cat.name.trim() && !cat.values.trim();
+}
+
+export function isIncompleteDomainField(field: UiDomainField): boolean {
+  return !field.label.trim() && !field.key.trim();
+}
+
+/** True while the user opened a new row but has not typed yet — do not persist. */
+export function hasIncompleteDispositionDrafts(
+  categories: DispositionCategory[],
+  fields: UiDomainField[],
+): boolean {
+  return categories.some(isIncompleteCategory) || fields.some(isIncompleteDomainField);
+}
+
+export function canCommitDispositionSave(
+  dirty: boolean,
+  categories: DispositionCategory[],
+  fields: UiDomainField[],
+): boolean {
+  return dirty && !hasIncompleteDispositionDrafts(categories, fields);
+}
+
+/** Single-line fields: Enter commits. IME composing must not. */
+export function isDispositionCommitKey(key: string, isComposing = false): boolean {
+  return key === "Enter" && !isComposing;
+}
+
 export function toStoredDomainField(ui: UiDomainField): StoredDomainField | null {
   const label = ui.label.trim();
-  let key = (ui.key.trim() || slugDispositionKey(label)).replace(/[^a-zA-Z0-9_]/g, "_");
+  const rawKey = ui.key.trim();
+  if (!label && !rawKey) return null;
+  let key = (rawKey || slugDispositionKey(label)).replace(/[^a-zA-Z0-9_]/g, "_");
   if (!key) return null;
   if (
     ui.uiType === "phone" &&

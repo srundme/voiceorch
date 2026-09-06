@@ -10,9 +10,10 @@ import {
   usePlatformActive,
   usePlatformFailedCalls,
   usePlatformFailedCallsByReason,
+  useAnalyticsOverview,
   type UserSegment,
 } from "@/hooks/use-admin-api";
-import { adminFetch } from "@/lib/api";
+import { adminFetch, formatCentsToDollars } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +33,7 @@ import {
   CheckCircle2,
   Timer,
   Handshake,
+  Trophy,
 } from "lucide-react";
 import { formatApiError } from "@/lib/format-api-error";
 import { useToast } from "@/hooks/use-toast";
@@ -42,6 +44,7 @@ import { CallVolumeChart } from "@/components/call-volume-chart";
 import { PageHeader } from "@/components/page-header";
 import { SectionSubNav } from "@/components/section-subnav";
 import { OPS_TABS } from "@/lib/nav-config";
+import { formatYmd } from "@/hooks/use-date-range";
 import {
   Table,
   TableBody,
@@ -51,6 +54,121 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+function pctChange(current: number, previous: number): string | null {
+  if (previous === 0) return current === 0 ? null : "+∞";
+  const p = ((current - previous) / Math.abs(previous)) * 100;
+  const sign = p > 0 ? "↑" : p < 0 ? "↓" : "→";
+  return `${sign} ${Math.abs(p).toFixed(1)}%`;
+}
+
+function CommandKpiStrip() {
+  const today = new Date();
+  const to = formatYmd(today);
+  const fromDate = new Date(today);
+  fromDate.setDate(fromDate.getDate() - 29);
+  const from = formatYmd(fromDate);
+  const compareToDate = new Date(fromDate);
+  compareToDate.setDate(compareToDate.getDate() - 1);
+  const compareFromDate = new Date(compareToDate);
+  compareFromDate.setDate(compareFromDate.getDate() - 29);
+  const compareFrom = formatYmd(compareFromDate);
+  const compareTo = formatYmd(compareToDate);
+
+  const { data, isLoading, dataUpdatedAt } = useAnalyticsOverview(from, to, compareFrom, compareTo);
+  const k = data?.kpis;
+  const prev = data?.compare?.totals;
+
+  const cards: { label: string; value: string; delta: string | null; href?: string }[] = [
+    { label: "Total Users", value: String(k?.totalUsers ?? "—"), delta: null },
+    {
+      label: "Active Users",
+      value: String(k?.activeUsers ?? "—"),
+      delta: prev ? pctChange(k?.activeUsers ?? 0, prev.users) : null,
+    },
+    {
+      label: "Calls",
+      value: (k?.calls ?? 0).toLocaleString(),
+      delta: prev ? pctChange(k?.calls ?? 0, prev.calls) : null,
+    },
+    {
+      label: "Billable Minutes",
+      value: String(k?.billableMinutes ?? "—"),
+      delta: prev ? pctChange(k?.billableMinutes ?? 0, prev.billableMinutes) : null,
+    },
+    {
+      label: "Revenue",
+      value: formatCentsToDollars(k?.recognizedRevenuePaise ?? 0),
+      delta: prev ? pctChange(k?.recognizedRevenuePaise ?? 0, prev.recognizedRevenuePaise) : null,
+      href: "/analytics/daily-pnl",
+    },
+    {
+      label: "Cost",
+      value: formatCentsToDollars(k?.variableCostPaise ?? 0),
+      delta: prev ? pctChange(k?.variableCostPaise ?? 0, prev.variableCostPaise) : null,
+      href: "/analytics/daily-pnl",
+    },
+    {
+      label: "Gross Profit",
+      value: formatCentsToDollars(k?.grossProfitPaise ?? 0),
+      delta: prev ? pctChange(k?.grossProfitPaise ?? 0, prev.grossProfitPaise) : null,
+      href: "/analytics/daily-pnl",
+    },
+    {
+      label: "Gross Margin",
+      value: `${(k?.grossMarginPct ?? 0).toFixed(1)}%`,
+      delta: prev ? pctChange(k?.grossMarginPct ?? 0, prev.grossMarginPct) : null,
+      href: "/analytics/daily-pnl",
+    },
+  ];
+
+  const updatedLabel = dataUpdatedAt
+    ? `Updated ${Math.max(0, Math.round((Date.now() - dataUpdatedAt) / 60000))} min ago`
+    : null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          Command Center · Last 30 days
+        </p>
+        <div className="flex items-center gap-3">
+          {updatedLabel && <span className="text-[11px] text-muted-foreground">{updatedLabel}</span>}
+          <Link href="/analytics/daily-pnl" className="text-[11px] text-primary hover:underline">
+            Open Daily P&amp;L
+          </Link>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
+        {cards.map((c) => {
+          const inner = (
+            <Card key={c.label} className="shadow-none">
+              <CardHeader className="pb-1 pt-3 px-3">
+                <CardTitle className="text-[10px] font-semibold text-muted-foreground uppercase tracking-[0.12em]">
+                  {c.label}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-3 pb-3">
+                <div className="text-lg font-bold font-mono tabular-nums">
+                  {isLoading ? "…" : c.value}
+                </div>
+                {c.delta && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">vs prior {c.delta}</p>
+                )}
+              </CardContent>
+            </Card>
+          );
+          return c.href ? (
+            <Link key={c.label} href={c.href} className="block hover:opacity-90 transition-opacity">
+              {inner}
+            </Link>
+          ) : (
+            <div key={c.label}>{inner}</div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 function SpikeAlertsPanel() {
   const { data: alertsData, isLoading } = useSpikeAlerts();
   const dismissAlert = useDismissSpikeAlert();
@@ -304,7 +422,7 @@ function HealthLights() {
             Health
           </CardTitle>
           <Button variant="ghost" size="sm" className="h-7 text-xs cursor-pointer" asChild>
-            <Link href="/health">Open →</Link>
+            <Link href="/operations/health">Open →</Link>
           </Button>
         </div>
       </CardHeader>
@@ -507,6 +625,23 @@ export default function Overview() {
   const pendingCount = overview?.pendingCallbacks ?? 0;
   const recentCallsCount = overview?.recentCalls ?? 0;
   const liveSessions = live?.count ?? activeCount;
+  const callsToday = Number(overview?.callsToday ?? 0);
+  const minutesToday = Number(overview?.minutesToday ?? 0);
+  const topMinutesUsers: Array<{
+    clerkId: string | null;
+    email: string | null;
+    name: string | null;
+    callCount: number;
+    minutes: number;
+  }> = overview?.topMinutesUsers ?? [];
+  const heaviest = topMinutesUsers[0];
+
+  function todayUserLabel(row: (typeof topMinutesUsers)[number] | undefined) {
+    if (!row) return "No calls yet today";
+    if (row.name?.trim()) return row.name.trim();
+    if (row.email) return row.email;
+    return row.clerkId ?? "Unknown user";
+  }
 
   if (isLoading) {
     return (
@@ -532,8 +667,8 @@ export default function Overview() {
       {!hasActiveTemplate && <NoActiveTemplateBanner />}
 
       <PageHeader
-        title="Today"
-        subtitle="What needs a hand right now. User tools stay on this page — spikes, wallets, and account totals are not gone."
+        title="Overview"
+        subtitle="Command Center — health, money, and what needs attention. Live ops stay below."
         actions={
           <div className="flex items-center gap-3">
             <div className="inline-flex items-center rounded-md border border-border bg-card p-0.5">
@@ -562,6 +697,106 @@ export default function Overview() {
           </div>
         }
       />
+
+      <CommandKpiStrip />
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Card className="border-primary/40 shadow-none">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em] flex items-center gap-1.5">
+              <PhoneCall className="h-3.5 w-3.5" /> Calls today
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <div className="text-3xl font-bold font-mono tabular-nums text-primary">
+              {callsToday.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">12:00 AM–11:59 PM IST · {segment} users</p>
+          </CardContent>
+        </Card>
+        <Card className="border-primary/40 shadow-none">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em] flex items-center gap-1.5">
+              <Timer className="h-3.5 w-3.5" /> Minutes today
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <div className="text-3xl font-bold font-mono tabular-nums text-primary">
+              {minutesToday.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">Talk time consumed today (IST)</p>
+          </CardContent>
+        </Card>
+        <Card className="border-primary/40 shadow-none">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em] flex items-center gap-1.5">
+              <Trophy className="h-3.5 w-3.5" /> Heaviest user today
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            {heaviest?.clerkId ? (
+              <>
+                <Link
+                  href={`/users/${heaviest.clerkId}`}
+                  className="text-lg font-semibold text-primary hover:underline truncate block"
+                >
+                  {todayUserLabel(heaviest)}
+                </Link>
+                <p className="text-xs text-muted-foreground mt-1 font-mono tabular-nums">
+                  {heaviest.minutes.toLocaleString()} min · {heaviest.callCount.toLocaleString()} calls
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No calls yet today</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {topMinutesUsers.length > 0 && (
+        <Card className="border-border shadow-none">
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+              Top minutes today (IST)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="text-xs">User</TableHead>
+                  <TableHead className="text-xs text-right">Calls</TableHead>
+                  <TableHead className="text-xs text-right">Minutes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {topMinutesUsers.map((row, i) => (
+                  <TableRow key={row.clerkId ?? i}>
+                    <TableCell>
+                      {row.clerkId ? (
+                        <Link href={`/users/${row.clerkId}`} className="text-sm text-primary hover:underline">
+                          {todayUserLabel(row)}
+                        </Link>
+                      ) : (
+                        <span className="text-sm">{todayUserLabel(row)}</span>
+                      )}
+                      {row.email && row.name ? (
+                        <div className="text-[11px] text-muted-foreground">{row.email}</div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-sm">
+                      {row.callCount.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-sm font-medium">
+                      {row.minutes.toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="border-border shadow-none">
@@ -609,7 +844,7 @@ export default function Overview() {
           { href: "/users", label: "Users", icon: Users },
           { href: "/partners", label: "Partners", icon: Handshake },
           { href: "/all-agents", label: "All agents", icon: Activity },
-          { href: "/emails", label: "Emails", icon: Mail },
+          { href: "/operations/emails", label: "Emails", icon: Mail },
           { href: "/recharges", label: "Recharges", icon: Wallet },
           { href: "/platform", label: "Failed calls", icon: AlertCircle },
         ].map((a) => (

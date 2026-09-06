@@ -32,9 +32,32 @@ import {
   Shield,
 } from "lucide-react";
 import { useState } from "react";
+import { Link } from "wouter";
 import { SectionSubNav } from "@/components/section-subnav";
-import { OPS_TABS } from "@/lib/nav-config";
+import { OPS_TABS, OPERATIONS_TABS } from "@/lib/nav-config";
+import { useInfraHealth } from "@/hooks/use-admin-api";
 
+function ManagedKeysHealthStrip() {
+  const { data } = useInfraHealth();
+  const s = data?.summary;
+  return (
+    <Card className="shadow-none border-border">
+      <CardContent className="py-3 px-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 text-sm">
+          <Shield className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium">Managed keys</span>
+          <span className="capitalize text-muted-foreground">{s?.status ?? "unknown"}</span>
+          <span className="text-xs text-muted-foreground font-mono">
+            {s?.healthy ?? 0} healthy · {s?.warning ?? 0} warn · {s?.failed ?? 0} failed
+          </span>
+        </div>
+        <Link href="/managed-keys" className="text-xs text-primary hover:underline">
+          Open Managed Keys
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Deployment {
@@ -1117,6 +1140,7 @@ export default function HealthChecklistPage() {
 
   return (
     <div className="space-y-8">
+      <SectionSubNav tabs={OPERATIONS_TABS} />
       <SectionSubNav tabs={OPS_TABS} />
       {/* Page header */}
       <div className="flex items-center justify-between">
@@ -1137,6 +1161,8 @@ export default function HealthChecklistPage() {
           </button>
         </div>
       </div>
+
+      <ManagedKeysHealthStrip />
 
       {/* Section 1 — Deployment */}
       <div>

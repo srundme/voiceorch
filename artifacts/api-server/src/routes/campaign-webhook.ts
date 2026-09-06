@@ -26,6 +26,8 @@ import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
 import { isOnDnc } from "../lib/dnc-check.js";
 import { captureListenSample } from "./connections.js";
+import { sheetKeysForLead } from "../services/sheets-writeback.js";
+import { getOrCreateLiveBatch } from "../services/campaign-live-batch.js";
 
 const router: IRouter = Router();
 
@@ -101,70 +103,7 @@ function verifyHmacSignature(
   }
 }
 
-/**
- * Find or create today's auto-dialing batch for webhook-sourced leads.
- *
- * Named "Live — {Month Day}" (e.g. "Live — Jun 30").  A single batch covers
- * all webhook leads that arrive on the same calendar day.  The batch is set to
- * "running" immediately so each new lead triggers a call without any manual
- * "Create Batch → Start Batch" step.
- *
- * If a same-day batch already exists but is completed/draft (e.g. the batch
- * scheduler closed it after it finished), it is re-opened to "running" so
- * new same-day leads keep flowing.
- */
-export async function getOrCreateLiveBatch(
-  campaignId: number,
-  timezone = "Asia/Kolkata",
-): Promise<typeof campaignBatchesTable.$inferSelect | null> {
-  const now       = new Date();
-  // Use the agent's configured IANA timezone so daily batch boundaries match
-  // the agent's local calendar date, not UTC.
-  const batchName = `Live — ${now.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: timezone })}`;
-
-  // Check for an existing auto-batch created today for this campaign
-  const existing = await db.query.campaignBatchesTable.findFirst({
-    where: and(
-      eq(campaignBatchesTable.campaignId, campaignId),
-      eq(campaignBatchesTable.leadSource, "webhook"),
-      sql`${campaignBatchesTable.name} = ${batchName}`,
-    ),
-    orderBy: (t, { desc }) => [desc(t.id)],
-  });
-
-  if (existing) {
-    if (existing.status !== "running") {
-      await db.update(campaignBatchesTable)
-        .set({ status: "running" })
-        .where(eq(campaignBatchesTable.id, existing.id));
-    }
-    return { ...existing, status: "running" };
-  }
-
-  // Create a fresh live batch for today
-  const [batch] = await db.insert(campaignBatchesTable).values({
-    campaignId,
-    name:              batchName,
-    description:       "Auto-created — incoming website leads are dialled immediately",
-    leadSource:        "webhook",
-    callDelaySeconds:  0,
-    maxAttempts:       2,
-    retryDelayMinutes: 60,
-    duplicatePolicy:   "skip",
-  } as typeof campaignBatchesTable.$inferInsert).returning();
-
-  if (!batch) {
-    logger.warn({ campaignId }, "Failed to create live batch for webhook lead");
-    return null;
-  }
-
-  await db.update(campaignBatchesTable)
-    .set({ status: "running" })
-    .where(eq(campaignBatchesTable.id, batch.id));
-
-  logger.info({ campaignId, batchId: batch.id, batchName }, "Auto-created live batch for webhook leads");
-  return { ...batch, status: "running" };
-}
+export { getOrCreateLiveBatch } from "../services/campaign-live-batch.js";
 
 async function insertLeadAndSchedule(opts: {
   campaignId: number;
@@ -243,6 +182,7 @@ async function insertLeadAndSchedule(opts: {
     ? await getOrCreateLiveBatch(opts.campaignId, agentTimezone)
     : runningBatch ?? null;
 
+  const sheetKeys = await sheetKeysForLead(campaign.userId, campaign.agentId, opts.phone);
   const [lead] = await db.insert(campaignLeadsTable).values({
     campaignId:      opts.campaignId,
     batchId:         targetBatch?.id ?? null,
@@ -250,7 +190,7 @@ async function insertLeadAndSchedule(opts: {
     normalizedPhone: normalized,
     name:            opts.name,
     email:           opts.email,
-    leadData:        opts.leadData,
+    leadData:        { ...opts.leadData, ...sheetKeys },
     source:          opts.source,
     externalLeadId:  opts.externalLeadId ?? null,
     callStatus:      "pending",

@@ -14,6 +14,7 @@ import {
   callExecutionsTable, callRetriesTable, callCallbacksTable, leadTimelineTable,
 } from "@workspace/db";
 import { eq, and, sql, desc, or, inArray, ilike } from "drizzle-orm";
+import { reconcileCampaignCallbacks } from "../services/campaign-tab-sync.js";
 
 const router: IRouter = Router();
 
@@ -75,6 +76,7 @@ router.get("/campaigns/:id/live-queue/metrics", async (req, res): Promise<void> 
   if (isNaN(campaignId) || !await requireCampaign(campaignId, userId)) {
     res.status(404).json({ error: "Not found" }); return;
   }
+  await reconcileCampaignCallbacks(campaignId);
 
   const [m] = await db.select({
     total:             sql<number>`count(*)::int`,
@@ -83,8 +85,14 @@ router.get("/campaigns/:id/live-queue/metrics", async (req, res): Promise<void> 
     connected:         sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'connected')::int`,
     nopickup:          sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'failed')::int`,
     failed:            sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'exhausted')::int`,
-    callbackScheduled: sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'callback_requested')::int`,
   }).from(campaignLeadsTable).where(eq(campaignLeadsTable.campaignId, campaignId));
+
+  const [callbackRow] = await db.select({
+    count: sql<number>`count(distinct ${callCallbacksTable.leadId})::int`,
+  }).from(callCallbacksTable).where(and(
+    eq(callCallbacksTable.campaignId, campaignId),
+    eq(callCallbacksTable.status, "pending"),
+  ));
 
   const [retryRow] = await db.select({
     count: sql<number>`count(distinct ${callRetriesTable.leadId})::int`,
@@ -97,7 +105,7 @@ router.get("/campaigns/:id/live-queue/metrics", async (req, res): Promise<void> 
     calling:           m?.calling ?? 0,
     connected:         m?.connected ?? 0,
     retryScheduled:    retryRow?.count ?? 0,
-    callbackScheduled: m?.callbackScheduled ?? 0,
+    callbackScheduled: callbackRow?.count ?? 0,
     nopickup:          m?.nopickup ?? 0,
     failed:            m?.failed ?? 0,
   });

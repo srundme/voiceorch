@@ -6,6 +6,8 @@
  *   C) Semantic barge-in keyword detection → instant TTS interruption
  */
 
+import { isHoldRequest } from "./conversationDiscipline.js";
+
 export interface TranscriptQualityOptions {
   /** BCP-47 language the STT stream was configured for (e.g. en-IN, ta-IN). */
   expectedLang?: string | null;
@@ -25,7 +27,19 @@ export interface TranscriptQualityOptions {
 // NOTE: Do NOT include bare `yet` — "No, not yet." is a complete answer (call 4943
 // false-clarification). `already`/`still` stay; they almost never end a finished thought alone.
 const TRUNCATION_DANGLER_RE =
-  /\b(about|with|for|from|into|through|of|to|and|but|or|because|although|though|a|an|the|just|like|so|also|even|only|already|still|both|either|neither|nor|since|until|unless|whether|while|as|if|then|than|that|this|these|those|which|who|whom|whose|when|where|how|what|why|ke|ki|ka|ko|mein|pe|par|se|ne|aur|lekin|jo|ek|toh|bhi|hi|na|kya|kaise|kyun|kyunki|jab|jahan|என்|உன்|என்|எனக்கு|உங்களுக்கு|என்ன|எந்த|இந்த|அந்த|ஒரு|மற்றும்|ஆனால்|அல்லது|ஏனெனில்|எப்படி|எங்கே|எப்போது)\s*[,.]?\s*$/i;
+  /\b(about|with|for|from|into|through|of|to|and|but|or|because|although|though|a|an|the|just|like|so|also|even|only|already|still|both|either|neither|nor|since|until|unless|whether|while|as|if|then|than|that|this|these|those|which|who|whom|whose|when|where|how|what|why|ke|ki|ka|ko|mein|pe|par|se|ne|aur|lekin|jo|ek|toh|bhi|hi|na|kya|kaise|kyun|kyunki|jab|jahan|என்|உன்|என்|எனக்கு|உங்களுக்கு|என்ன|எந்த|இந்த|அந்த|ஒரு|மற்றும்|ஆனால்|அல்லது|ஏனெனில்|எப்படி|எங்கே|எப்போது)\s*[,.…]*\s*$/i;
+
+/**
+ * Devanagari postpositions and conjunctions that almost never end a finished
+ * thought ("सौ करोड़ से", "मुझे 30 लाख का").
+ *
+ * Kept separate from TRUNCATION_DANGLER_RE because `\b` is ASCII-only in JS —
+ * a Devanagari alternation placed there can never match, which left Hindi-script
+ * agents with no truncation detection at all while Hinglish ("Jaipur se") worked.
+ * Anchored on whitespace instead, and `।` counts as terminal punctuation.
+ */
+const DEVANAGARI_DANGLER_RE =
+  /(?:^|\s)(से|को|में|पे|पर|का|की|के|ने|तक|और|या|लेकिन|क्योंकि|कि|अगर|जब|जहाँ|जहां|तो|भी|ही)\s*[,.।]?\s*$/u;
 
 /** Complete short negations that end on "yet" / time words — never clarification-bait. */
 const COMPLETE_SHORT_NEGATION_RE =
@@ -39,19 +53,61 @@ const PHANTOM_UTTERANCE_RE =
 
 /** Complete short greetings, acks, and backchannels — never clarification-bait. */
 const VALID_COMPLETE_SHORT_UTTERANCE_RE =
-  /^(hi|hello|hey|hiya|yo|yes|yeah|yep|yup|no|nope|ok|okay|sure|right|fine|thanks|thank you|bye|goodbye|namaste|vanakkam)([,.]|\s+(madam|ma'?am|sir|there))?\.?$/i;
+  /^(hi|hello|hey|hiya|yo|yes|yeah|yep|yup|no|nope|ok|okay|sure|right|fine|thanks|thank you|bye|goodbye|namaste|vanakkam|ji|jee)([,.]|\s+(madam|ma'?am|sir|there|ji|jee))?\.?$/i;
+
+/**
+ * One-word product / portal answers callers actually say (call 20094: "B2B"
+ * was classified as short-allcaps-noise and triggered "I didn't hear you").
+ */
+const DOMAIN_ACRONYM_RE =
+  /^(b2b|b2c|b2g|b2b2c|crm|api|otp|upi|gst|sme|dmc|tbo|fd|ivr|sip|did|kyc|pan|gstin|whatsapp)$/i;
+
+/** Spoken Hindi/English forms of B2B / B2C that Saaras often writes instead of the acronym. */
+const SPOKEN_DOMAIN_TERM_RE =
+  /^(b\s*2\s*b|b\s*2\s*c|b\s*to\s*b|b\s*to\s*c|be\s*to\s*be|बी\s*टू\s*बी|बी\s*टू\s*सी)$/iu;
+
+export function isDomainOrAcronymAnswer(text: string): boolean {
+  const t = text.trim().replace(/[.,!।?]+$/g, "").trim();
+  if (!t) return false;
+  if (DOMAIN_ACRONYM_RE.test(t)) return true;
+  if (SPOKEN_DOMAIN_TERM_RE.test(t)) return true;
+  // Letter-digit-letter product codes: B2B, B2C, 4G
+  if (/^[A-Za-z]\d[A-Za-z]$/.test(t)) return true;
+  return false;
+}
 
 /** Reduplicated pure ack ("Okay Okay.") — treat as content-bearing, not noise. */
 const REDUPLICATED_ACK_RE =
-  /^(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक)([\s,.!]+(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक)){0,2}[\s,.!]*$/i;
+  /^(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक|ओके|अच्छा)([\s,.!]+(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक|ओके|अच्छा)){0,2}[\s,.!]*$/i;
 
 /** Indic one-word acks / negations — backchannel, not a standalone question. */
 const INDIC_SINGLE_ACK_RE =
-  /^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|जी|haan|han|theek|accha|hmm|hm|mm)[\s,.!]*$/iu;
+  /^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|ओके|अच्छा|जी|haan|han|theek|accha|hmm|hm|mm|ji|jee)[\s,.!]*$/iu;
 
-/** Indic/Hinglish ack + vocative chains ("ஆமா சார் ஆமா.", "okay sir"). */
+/** Indic/Hinglish ack + vocative chains ("ஆமா சார் ஆமா.", "okay sir", "अच्छा जी"). */
 const INDIC_ACK_VOCATIVE_RE =
-  /^(ஆமா|ஆம்|சரி|haan|ok(?:ay)?)([\s,.!]+(சார்|sir|जी|ji|madam|மா.?ம்|ஆமா|ஆம்|சரி|हां|हाँ|haan|ok(?:ay)?)){0,4}[\s,.!]*$/iu;
+  /^(ஆமா|ஆம்|சரி|ठीक|ओके|अच्छा|haan|ok(?:ay)?)([\s,.!]+(சார்|sir|जी|ji|madam|மா.?ம்|ஆமா|ஆம்|சரி|हां|हाँ|ठीक|ओके|अच्छा|haan|ok(?:ay)?)){0,4}[\s,.!]*$/iu;
+
+/**
+ * Short contextual replies that must reach the LLM even if they arrive while
+ * TTS is still draining (call 20094: "हाँ जी" discarded as self-echo; "B2B"
+ * then "clarified"). Content-echo still applies — this only skips energy-only discard.
+ */
+export function looksLikeShortContextualAnswer(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (isDomainOrAcronymAnswer(t)) return true;
+  if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) return true;
+  if (INDIC_SINGLE_ACK_RE.test(t)) return true;
+  if (INDIC_ACK_VOCATIVE_RE.test(t)) return true;
+  if (/^(जी|हाँ|हां|हां जी|हाँ जी|haan ji|han ji|ji|jee)[\s,.!]*$/iu.test(t)) return true;
+  // Call 20275: "Yes yes, just only." / "Yeah, that's that's only." must not
+  // become "I didn't get that" after a late barge.
+  if (/^(yes|yeah|yep)([\s,]+(yes|yeah|yep)){0,3}[\s,]+((just|that's|thats)\s+)*only\.?$/i.test(t)) {
+    return true;
+  }
+  return false;
+}
 
 /** English ack/backchannel only — excludes greetings/farewells (those are real turns). */
 const ENGLISH_BACKCHANNEL_ONLY_RE =
@@ -101,6 +157,8 @@ export function isCallerAudioDifficulty(text: string): boolean {
     || /கேட்க(ல|வில்லை|முடியல)|கேக்க(ல|வில்லை)|கேட்குறது\s*(இல்ல|தெரியல)|சத்தம்\s*(கேக்க|இல்ல)/u.test(t)
     || /सुनाई\s*नहीं|आवाज़\s*नहीं|सुन\s*नहीं/u.test(t)
     || /கேட்டு\s*வேணாம்|கேட்கலைய்|கேட்கலை/u.test(t)
+    || /\b(are you there|can you hear(?:\s+me)?)\b/i.test(t)
+    || /^(hello[\s,]+)+hello\b/i.test(t)
   );
 }
 
@@ -152,11 +210,13 @@ const ENGLISH_NOISE_STUB_RE =
 export function isUltraShortNoiseFragment(text: string): boolean {
   const t = text.trim();
   if (!t) return true;
+  if (isDomainOrAcronymAnswer(t)) return false;
   if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) return false;
   if (REDUPLICATED_ACK_RE.test(t)) return false;
   if (COMPLETE_SHORT_NEGATION_RE.test(t)) return false;
   // Common Indic one-word acks / negations — keep for flow control
-  if (/^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|जी|नहीं|nahi|haan|ha[a]?n)[\s,.!]*$/iu.test(t)) {
+  // Include romanized "ji" (call 20094 discarded "Ji" as a 2-grapheme stub).
+  if (/^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|ओके|अच्छा|जी|नहीं|nahi|haan|ha[a]?n|ji|jee)[\s,.!]*$/iu.test(t)) {
     return false;
   }
   if (/^(bye|goodbye|thanks|thank you|நன்றி|வணக்கம்|धन्यवाद)\b/i.test(t)) return false;
@@ -176,38 +236,130 @@ export function isUltraShortNoiseFragment(text: string): boolean {
   return false;
 }
 
-function countScriptLetters(text: string): { latin: number; devanagari: number; tamil: number; telugu: number; other: number } {
-  const counts = { latin: 0, devanagari: 0, tamil: 0, telugu: 0, other: 0 };
+function countScriptLetters(text: string): {
+  latin: number;
+  devanagari: number;
+  tamil: number;
+  telugu: number;
+  kannada: number;
+  other: number;
+} {
+  const counts = { latin: 0, devanagari: 0, tamil: 0, telugu: 0, kannada: 0, other: 0 };
   for (const ch of text) {
     const cp = ch.codePointAt(0) ?? 0;
     if ((cp >= 0x41 && cp <= 0x5a) || (cp >= 0x61 && cp <= 0x7a)) counts.latin++;
     else if (cp >= 0x0900 && cp <= 0x097f) counts.devanagari++;
     else if (cp >= 0x0b80 && cp <= 0x0bff) counts.tamil++;
     else if (cp >= 0x0c00 && cp <= 0x0c7f) counts.telugu++;
+    else if (cp >= 0x0c80 && cp <= 0x0cff) counts.kannada++;
     else if (/\p{L}/u.test(ch)) counts.other++;
   }
   return counts;
 }
 
+/** Unexpected Indic ranges for a latched language (LID drift, not a real switch). */
+function unexpectedScriptRanges(bareLang: string): Array<[number, number]> {
+  if (bareLang === "hi" || bareLang === "mr" || bareLang === "ne") {
+    return [
+      [0x0b80, 0x0bff], // Tamil
+      [0x0c00, 0x0c7f], // Telugu
+      [0x0c80, 0x0cff], // Kannada
+      [0x0d00, 0x0d7f], // Malayalam
+    ];
+  }
+  if (bareLang === "ta") {
+    return [
+      [0x0900, 0x097f],
+      [0x0c00, 0x0c7f],
+      [0x0c80, 0x0cff],
+      [0x0d00, 0x0d7f],
+    ];
+  }
+  return [];
+}
+
+export function hasUnexpectedScriptLeak(text: string, expectedLang?: string | null): boolean {
+  const bare = expectedLang?.split("-")[0]?.toLowerCase() ?? "";
+  const ranges = unexpectedScriptRanges(bare);
+  if (ranges.length === 0) return false;
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (ranges.some(([lo, hi]) => cp >= lo && cp <= hi)) return true;
+  }
+  return false;
+}
+
+/**
+ * Drop tokens written in a script that cannot be the latched language
+ * (call 20094: Hindi call leaked Kannada "ಮಾಡ್ತಾ" into an otherwise Hinglish line).
+ * Does not invent words — just removes the foreign-script tokens.
+ */
+export function repairUnexpectedScriptLeak(text: string, expectedLang?: string | null): string {
+  if (!text || !hasUnexpectedScriptLeak(text, expectedLang)) return text;
+  const ranges = unexpectedScriptRanges(expectedLang?.split("-")[0]?.toLowerCase() ?? "");
+  const cleaned = text
+    .split(/(\s+)/)
+    .map((tok) => {
+      if (/^\s+$/.test(tok)) return tok;
+      let leak = 0;
+      for (const ch of tok) {
+        const cp = ch.codePointAt(0) ?? 0;
+        if (ranges.some(([lo, hi]) => cp >= lo && cp <= hi)) leak++;
+      }
+      return leak > 0 ? "" : tok;
+    })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || text;
+}
+
+/**
+ * When the final is contaminated with a foreign script and the same-turn
+ * partial is clean Hindi/English, keep the partial (call 20094 eager
+ * "इन्वेस्ट करते हैं ना" vs final with Kannada).
+ */
+export function preferStableTranscript(
+  finalText: string,
+  hint: string,
+  expectedLang?: string | null,
+): string {
+  const repaired = repairUnexpectedScriptLeak(finalText, expectedLang);
+  const hintTrim = hint.trim();
+  if (!hintTrim) return repaired;
+  if (
+    hasUnexpectedScriptLeak(finalText, expectedLang)
+    && !hasUnexpectedScriptLeak(hintTrim, expectedLang)
+    && hintTrim.length >= 4
+    && !isBackchannelOnlyUtterance(hintTrim)
+  ) {
+    return hintTrim;
+  }
+  return repaired;
+}
+
 /**
  * Flags transcripts whose Unicode script disagrees with the configured STT language.
- * Common Sarvam failure: en-IN + codemix → Gujarati/Tamil script for English speech.
+ * Indic on an English-configured agent is a language switch, not garbled STT.
  */
 function checkScriptMismatch(text: string, expectedLang?: string | null): { isGarbled: boolean; reason: string } {
   if (!expectedLang) return { isGarbled: false, reason: "" };
   const bare = expectedLang.split("-")[0]?.toLowerCase() ?? "";
   const c = countScriptLetters(text);
-  const indic = c.devanagari + c.tamil + c.telugu + c.other;
+  const indic = c.devanagari + c.tamil + c.telugu + c.kannada + c.other;
   const total = c.latin + indic;
   if (total < 4) return { isGarbled: false, reason: "" };
 
+  // Indic on an English-configured agent is a language switch, not noise.
+  // Treating it as garbled made live Tamil inbound hear "I didn't get that"
+  // twice (call 11234) even though Saaras transcribed the line correctly.
   if (bare === "en" && indic / total >= 0.65) {
-    return { isGarbled: true, reason: "script-mismatch-en" };
+    return { isGarbled: false, reason: "script-switch-en" };
   }
   if (bare === "ta" && c.tamil / total < 0.25 && c.devanagari / total >= 0.5) {
     return { isGarbled: true, reason: "script-mismatch-ta" };
   }
-  if (bare === "hi" && c.devanagari / total < 0.25 && c.tamil / total >= 0.5) {
+  if (bare === "hi" && c.devanagari / total < 0.25 && (c.tamil + c.kannada) / total >= 0.5) {
     return { isGarbled: true, reason: "script-mismatch-hi" };
   }
   return { isGarbled: false, reason: "" };
@@ -273,6 +425,135 @@ export function shouldHoldFragmentForCoalesce(
   return q.reason === "truncated-dangling";
 }
 
+const TAMIL_CONTINUATION_TAIL_RE =
+  /(ஆனால்|ஆனா|வந்து|இருந்து|பண்ண|பண்ணி|போய்|சொல்லி|பார்த்து|கேட்டு|ஒரு)\s*[,.…]*\s*$/u;
+
+const HINDI_CONTINUATION_TAIL_RE =
+  /(लेकिन(\s+मैं)?|क्योंकि|सोच\s+रहा|सोच\s+रही|वाला|वाली|वाले)\s*[,.।…]?\s*$/u;
+
+/**
+ * Semantic continuation veto for the turn gate — not a 3-phrase exact list.
+ * Detects dangling conversational structure ("I want to participate but…",
+ * "Actually I was thinking", "நான் participate பண்ண", "लेकिन मैं").
+ *
+ * Distinct from shouldHoldFragmentForCoalesce: backchannel acks ("yes" / "சரி")
+ * are complete turns here. This is only "the sentence signals they are still talking".
+ */
+export function signalsConversationalContinuation(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) return false;
+  if (COMPLETE_SHORT_NEGATION_RE.test(t) || /\bnot yet\.?$/i.test(t)) return false;
+  if (INDIC_SINGLE_ACK_RE.test(t) || INDIC_ACK_VOCATIVE_RE.test(t)) return false;
+  if (REDUPLICATED_ACK_RE.test(t)) return false;
+  // Pure acks are complete turns for EOU. "yeah but" is not a pure ack.
+  if (isBackchannelOnlyUtterance(t) && !/\bbut\b|ஆனால்|ஆனா|लेकिन|lekin/i.test(t)) {
+    return false;
+  }
+
+  if (/[…]|\.{2,}\s*$/.test(t)) return true;
+
+  if (/^(yes|yeah|yep|yup|no|nope|ok|okay|sure)[,.]?\s+but\b/i.test(t)) return true;
+
+  if (
+    /\b(i was thinking|i was wondering|i was going to|i was about to|i wanted to|i was saying|actually i was|the thing is|wait[,.]? i)\s*[,.…]*\s*$/i.test(t)
+  ) {
+    return true;
+  }
+
+  if (TAMIL_CONTINUATION_TAIL_RE.test(t)) return true;
+  if (HINDI_CONTINUATION_TAIL_RE.test(t)) return true;
+  if (/\b(lekin|kyunki)\b/i.test(t) && !/[?？]$/.test(t) && !/[.?!।]$/.test(t)) return true;
+
+  const hasStrongTerminal = /[.?!।]$/u.test(t) && !/[…]|\.{2,}/.test(t);
+  if (hasStrongTerminal) {
+    return /\b(but|although|though|because)\s*[.?!।]$/i.test(t)
+      || /(ஆனால்|ஆனா|लेकिन)\s*[.?!।]$/u.test(t);
+  }
+
+  if (/\b(but|although|though|because|unless|until|whereas)\s*[,.…]*\s*$/i.test(t)) {
+    return true;
+  }
+
+  const wordCount = t.split(/\s+/).filter(Boolean).length;
+  if (wordCount >= 3 && /\b(the|a|an|to|for|of|with|about|from)\s*[,.…]*\s*$/i.test(t)) {
+    return true;
+  }
+
+  if (TRUNCATION_DANGLER_RE.test(t)) return true;
+  if (wordCount >= 2 && DEVANAGARI_DANGLER_RE.test(t)) return true;
+
+  return false;
+}
+
+/**
+ * Short talk-over that is not an ack and has no sentence end — a sentence
+ * start, not chatter. Used while TTS is playing so we hold for the rest of
+ * the utterance instead of dropping it (call 21818: "எனக்கு இப்போ").
+ * Structure only: punctuation + length + not-a-backchannel. No word lists.
+ */
+export function looksLikeIncompleteClauseStart(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (isBackchannelOnlyUtterance(t) || isUltraShortNoiseFragment(t)) return false;
+  if (isSemanticInterrupt(t) || isAccidentalInterruptPhrase(t) || isHardInterruptTranscript(t)) {
+    return false;
+  }
+  if (/[?？]$/u.test(t)) return false;
+  if (/[.।!]$/u.test(t) && !/[…]|\.{2,}/.test(t)) return false;
+  const wordCount = t.split(/\s+/).filter(Boolean).length;
+  return wordCount >= 1 && wordCount <= 6;
+}
+
+/**
+ * STT sometimes loops a short phrase for the whole VAD window
+ * ("I said, I said, I said, …"). Collapse to one copy. Language-agnostic.
+ */
+export function collapseRepeatedUtterance(text: string): string {
+  const t = text.trim();
+  if (!t) return t;
+
+  const norm = (s: string) => s.toLowerCase().replace(/[,.!?।;:]+$/g, "").trim();
+  const clauses = t.split(/[,.!।;]+\s*|\s{2,}/).map((s) => s.trim()).filter(Boolean);
+  if (clauses.length >= 3) {
+    const first = norm(clauses[0]);
+    if (first) {
+      const same = clauses.filter((c) => norm(c) === first);
+      if (same.length >= 3 && same.length / clauses.length >= 0.7) {
+        return clauses[0];
+      }
+    }
+  }
+
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length >= 6) {
+    const low = words.map((w) => w.replace(/[,.!?।;:]+$/g, "").toLowerCase());
+    for (const n of [1, 2, 3, 4]) {
+      const unit = low.slice(0, n).join(" ");
+      if (!unit) continue;
+      let reps = 0;
+      let i = 0;
+      while (i + n <= low.length && low.slice(i, i + n).join(" ") === unit) {
+        reps++;
+        i += n;
+      }
+      if (reps >= 3 && i >= words.length * 0.7) {
+        return words.slice(0, n).join(" ");
+      }
+    }
+  }
+  return t;
+}
+
+/** Collapsed a long STT loop into a thin scrap — not a caller turn. */
+export function isStutterLoopTranscript(original: string, collapsed: string): boolean {
+  const o = original.trim();
+  const c = collapsed.trim();
+  if (!o || !c || o === c) return false;
+  const words = c.split(/\s+/).filter(Boolean);
+  return words.length <= 4 && o.length >= c.length * 3;
+}
+
 /**
  * Heuristic quality check on a raw STT transcript.
  * Catches noise, very short non-meaningful outputs, heavy repetition, and
@@ -288,6 +569,12 @@ export function checkTranscriptQuality(
 
   // Empty after trim — caller might have been silent/muted
   if (t.length < 2) return { isGarbled: true, reason: "too-short" };
+
+  // Product codes / portal answers must never become "I didn't hear you"
+  // (call 20094: "B2B" matched short-allcaps-noise).
+  if (isDomainOrAcronymAnswer(t) || looksLikeShortContextualAnswer(t)) {
+    return { isGarbled: false, reason: "" };
+  }
 
   // Normal one-word greetings / acks ("Hi", "Hello", "Okay") — complete turns.
   if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) {
@@ -316,8 +603,12 @@ export function checkTranscriptQuality(
   if (/^(.)\1{4,}$/u.test(t)) return { isGarbled: true, reason: "single-char-repeat" };
 
   // Very short random-looking uppercase blobs (common Deepgram low-confidence output)
-  // e.g. "Bm bm", "Z Z Z", "QQ QQ"
+  // e.g. "Z Z Z", "QQ QQ". Do NOT flag digits (B2B) or a single 2–5 letter
+  // acronym without spaces (CRM, API, OTP) — those are real one-word answers.
   if (t.length <= 6 && /^[^a-z\u0900-\u097f]+$/u.test(t) && /[A-Z]/.test(t)) {
+    if (/\d/.test(t) || (!/\s/.test(t) && t.length >= 2 && t.length <= 5)) {
+      return { isGarbled: false, reason: "" };
+    }
     return { isGarbled: true, reason: "short-allcaps-noise" };
   }
 
@@ -337,7 +628,10 @@ export function checkTranscriptQuality(
   // Only applied to short utterances (≤ MAX_TRUNCATION_WORDS) to avoid
   // false-positives on longer sentences that happen to end on these words.
   const wordCount = t.split(/\s+/).filter(Boolean).length;
-  if (wordCount <= MAX_TRUNCATION_WORDS && TRUNCATION_DANGLER_RE.test(t)) {
+  // A lone Devanagari particle ("एक", "तो") is too often a complete answer to
+  // treat as truncation, so the script path needs at least two words.
+  const danglesInDevanagari = wordCount >= 2 && DEVANAGARI_DANGLER_RE.test(t);
+  if (wordCount <= MAX_TRUNCATION_WORDS && (TRUNCATION_DANGLER_RE.test(t) || danglesInDevanagari)) {
     // English greeting "Hi" must not match the Hindi emphatic-particle dangler `hi`.
     if (wordCount === 1 && /^hi\.?$/i.test(t)) {
       return { isGarbled: false, reason: "" };
@@ -492,6 +786,43 @@ export function isAccidentalInterruptPhrase(text: string): boolean {
   return ACCIDENTAL_INTERRUPTION_PHRASES.has(compact);
 }
 
+/** Tokens that mean the speaker is addressing the other person — echo of our
+ *  own TTS almost never adds these. Call 14345: "ஒரு நிமிஷம் நீங்க" was dropped
+ *  as self-echo of the greeting's "ஒரு நிமிஷம் time கிடைக்குமா?". */
+const CALLER_ADDRESS_TOKENS = new Set([
+  "நீங்க", "நீங்கள்", "நான்", "நாங்க", "you", "i", "we", "me",
+]);
+
+export function hasCallerAddressToken(tokens: string[]): boolean {
+  return tokens.some((t) => CALLER_ADDRESS_TOKENS.has(t.toLowerCase()));
+}
+
+/** Short "hello" / "வணக்கம்" to get the agent's attention — never far-field-drop. */
+export function isCallerAttentionUtterance(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/[.!?]+$/g, "");
+  if (!t) return false;
+  return /^(hello|hi|hey|vanakkam|வணக்கம்|ஹலோ)(\s+(sir|madam|சார்|மேடம்))?$/.test(t);
+}
+
+/**
+ * Room / meeting talk aimed at someone else, not the agent.
+ * Call 20257: "Hello இங்க பாருங்க" barged the greeting; "Participants…" then
+ * "punishment… protocol" became a real turn. Transcript-side drop — not an
+ * RMS gate (call 14351).
+ */
+const CROSSTALK_RE =
+  /(?:இங்க\s*பாருங்க|இங்க\s*பார்|idhar\s*dekh|look\s*here|look\s*at\s*this|(?:^|[\s,.])participants?\b|\bunmute\b|share\s+(?:the\s+)?screen|punishment.{0,48}protocol|protocol.{0,48}punishment)/iu;
+
+export function isLikelyCrosstalkUtterance(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (isSemanticInterrupt(t) || isHoldRequest(t) || looksLikeBookingTimeAnswer(t)) {
+    return false;
+  }
+  if (looksLikeShortContextualAnswer(t) || isDomainOrAcronymAnswer(t)) return false;
+  return CROSSTALK_RE.test(t);
+}
+
 /**
  * Returns true if the transcript contains a semantic interruption signal.
  * Called on both interim and final transcripts from streaming STT.
@@ -501,6 +832,51 @@ export function isSemanticInterrupt(text: string): boolean {
   if (!t) return false;
   if (isAccidentalInterruptPhrase(t)) return true;
   return SEMANTIC_INTERRUPT_PATTERNS.some(re => re.test(t));
+}
+
+/**
+ * Caller named a day/time for booking while the agent was still talking.
+ * Energy-only self-echo discard must not drop these (call 14160: "कल टेन थर्टी मैडम"
+ * was thrown away because RMS never cleared the echo bar). Content self-echo
+ * still applies — if the transcript is the agent's own "three PM or four PM",
+ * that path remains.
+ */
+/**
+ * PSTN barge-in must only cut TTS on a clear interrupt (stop/wait) or a slot
+ * answer. Generic / garbled echo of our own pitch must not clearAudio.
+ */
+export function isHardInterruptTranscript(text: string, isSelfEcho = false): boolean {
+  const t = text.trim();
+  if (!t || isSelfEcho) return false;
+  if (isBackchannelOnlyUtterance(t) || isCallerAttentionUtterance(t)) return false;
+  if (isSemanticInterrupt(t)) return true;
+  // Slot answers are short ("2 pm", "காலை"). A long echo of our pitch that
+  // merely contains "today" / "two" must not clearAudio mid-call.
+  const tokenCount = t.split(/\s+/).filter(Boolean).length;
+  if (tokenCount > 8 || [...t].length > 48) return false;
+  return looksLikeBookingTimeAnswer(t);
+}
+
+export function looksLikeBookingTimeAnswer(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (/\b\d{1,2}[:.]\d{2}\b/.test(t)) return true;
+  if (/\b\d{1,2}\s*(?:a\.?m\.?|p\.?m\.?)\b/i.test(t)) return true;
+  if (
+    /\b(?:ten|eleven|twelve|one|two|three|four|five|six|seven|eight|nine)\s*(?:thirty|fifteen|forty[\s-]?five|o'?clock)?\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(?:tomorrow|today|tonight|morning|afternoon|evening|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  return /(?:कल|परसों|आज|सुबह|दोपहर|शाम|बजे|टेन|थर्टी|इलेवन|ट्वेल्व|நாளை|இன்னைக்கு|இன்று|காலை|மாலை|மதியம்|மணிக்கு|மணி)/u.test(t);
 }
 
 /**
@@ -683,11 +1059,50 @@ export function normalizeSttPhonetics(text: string): string {
     if (/Futures-ல/i.test(match)) return "features-ல";
     return "features";
   });
-  // Strip stray single digit prefixing Indic words (e.g., "4 ஆமாம்" -> "ஆமாம்")
+  // Strip stray single digit prefixing Indic words (e.g. "4 ஆமாம்" -> "ஆமாம்")
   s = s.replace(/^\d\s+([\u0B80-\u0BFF\u0900-\u097F]+)/u, "$1");
+  // Spoken B2B / B2C so the LLM sees the same token the caller meant.
+  // No `\b` on Devanagari — JS word boundaries are ASCII-only, and
+  // normalizeHinglishClock would otherwise turn "टू" into "2:00".
+  s = s.replace(/बी\s*टू\s*बी/gu, "B2B");
+  s = s.replace(/बी\s*टू\s*सी/gu, "B2C");
+  s = s.replace(/\bb\s*to\s*b\b/gi, "B2B");
+  s = s.replace(/\bb\s*to\s*c\b/gi, "B2C");
+  s = s.replace(/\bbe\s*to\s*be\b/gi, "B2B");
   // Normalize spoken email tokens
   s = normalizeSpokenEmail(s);
+  s = normalizeHinglishClock(s);
   return s;
+}
+
+/**
+ * Sarvam often emits Devanagari number-words for clock answers
+ * (call 20113: "वन थर्टी पी" / "इलेवन थर्टी एट").
+ */
+export function normalizeHinglishClock(text: string): string {
+  if (!text) return text;
+  const hours: Record<string, string> = {
+    "वन": "1", "टू": "2", "थ्री": "3", "फोर": "4", "फाइव": "5",
+    "सिक्स": "6", "सेवन": "7", "नाइन": "9", "टेन": "10",
+    "इलेवन": "11", "ट्वेल्व": "12", "ट्वेलव": "12",
+  };
+  const minutes: Record<string, string> = {
+    "थर्टी": "30", "फिफटीन": "15", "फोर्टीफाइव": "45", "फोर्टी फाइव": "45",
+  };
+  return text.replace(
+    /(वन|टू|थ्री|फोर|फाइव|सिक्स|सेवन|नाइन|टेन|इलेवन|ट्वेल्व|ट्वेलव)\s*(थर्टी|फिफटीन|फोर्टी\s*फाइव|फोर्टीफाइव)?\s*(पी\.?एम?\.?|ए\.?एम\.?|पी|एएम)?/giu,
+    (full, hourWord: string, minuteWord?: string, mer?: string) => {
+      const h = hours[hourWord] ?? hours[hourWord.toLowerCase()];
+      if (!h) return full;
+      const minuteKey = (minuteWord ?? "").replace(/\s+/g, "");
+      const m = minuteKey ? (minutes[minuteWord!] ?? minutes[minuteKey] ?? "00") : "00";
+      const merNorm = !mer ? ""
+        : /पी|p/i.test(mer) ? " PM"
+        : /ए|a/i.test(mer) ? " AM"
+        : "";
+      return `${h}:${m}${merNorm}`;
+    },
+  );
 }
 
 /** Upper bound on how many queued finals get merged into the next turn. */

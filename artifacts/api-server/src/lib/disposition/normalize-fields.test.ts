@@ -4,7 +4,9 @@ import {
   extractBarePhone,
   formatDispositionFieldList,
   isPhoneLikeDispositionField,
+  jsonSchemaFromDispositionFields,
   normalizeDispositionSchemaResult,
+  schemaFieldsNeedFill,
 } from "./normalize-fields.js";
 
 describe("isPhoneLikeDispositionField", () => {
@@ -57,6 +59,31 @@ describe("normalizeDispositionSchemaResult", () => {
     });
     expect(out["whatsapp_number"]).toBe("8428920212");
     expect(out["outcome"]).toBe("interested");
+  });
+});
+
+describe("schemaFieldsNeedFill", () => {
+  const schema = [
+    { key: "outcome", label: "Outcome", type: "text" },
+    { key: "doctor", label: "Doctor", type: "text" },
+  ];
+
+  it("needs fill when result is null or missing doctor", () => {
+    expect(schemaFieldsNeedFill(null, schema)).toBe(true);
+    expect(schemaFieldsNeedFill({ outcome: "Booked" }, schema)).toBe(true);
+    expect(schemaFieldsNeedFill({ outcome: "Booked", doctor: "Dr. Rao" }, schema)).toBe(false);
+  });
+});
+
+describe("jsonSchemaFromDispositionFields", () => {
+  it("emits nullable properties for each schema key", () => {
+    const schema = jsonSchemaFromDispositionFields([
+      { key: "follow_up_needed", label: "Follow up", type: "boolean" },
+      { key: "doctor", label: "Doctor", type: "text" },
+    ]);
+    const props = schema["properties"] as Record<string, { type: unknown }>;
+    expect(props["follow_up_needed"]?.type).toEqual(["boolean", "null"]);
+    expect(props["doctor"]?.type).toEqual(["string", "null"]);
   });
 });
 

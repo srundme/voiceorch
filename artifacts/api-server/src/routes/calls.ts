@@ -4,7 +4,7 @@ import { randomBytes } from "crypto";
 import { eq, desc, and, or, sql, gte, gt, lte, isNull, inArray } from "drizzle-orm";
 import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callExecutionsTable, canonicalizeCallerKey, humanPhone, resolveCallerKey } from "@workspace/db";
 import { computeProRataDebitCents } from "../services/call-billing.js";
-import { getFlatRateCentsPerMin, resolveAgentBillingMode, resolveOwnTelephonyDiscount } from "../services/minute-rates.js";
+import { resolveAgentBillingMode, resolveOwnTelephonyDiscount, resolveBillingRateCentsPerMin } from "../services/minute-rates.js";
 import { resolvePartnerBilling, creditPartnerSpreadOnCall } from "../services/partner-billing.js";
 import {
   InitiateCallBody,
@@ -15,6 +15,7 @@ import {
   EndCallParams,
   ListCallsQueryParams,
   ListCallsResponse,
+  ListCallsResponseItem,
   GetCallResponse,
   GetCallCallerMemoryResponse,
   UpdateCallResponse,
@@ -33,9 +34,37 @@ import {
   readWebhookPayloadTemplate,
   serializeAgentWebhookBody,
 } from "../lib/webhook-payload-template.js";
-import { disposeCall } from "../services/disposition.js";
+import { disposeCall, extractFlatDispositionSchema } from "../services/disposition.js";
+import { schemaFieldsNeedFill } from "../lib/disposition/normalize-fields.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE } from "../services/irdai/gate.js";
+import { normalizeCallVariables } from "../orchestration/prompt-vars.js";
+import { canAccessWorkspaceCall, resolveWorkspaceScope, workspaceCallsWhere } from "../services/workspace-scope.js";
+import { logger } from "../lib/logger.js";
+
+const CALL_LIST_STATUSES = new Set([
+  "pending", "ringing", "in_progress", "connected", "completed", "failed",
+  "cancelled", "transferred", "no_pickup", "voicemail", "busy", "booked", "callback_scheduled",
+]);
+
+function sanitizeCallStatus(status: string): string {
+  if (CALL_LIST_STATUSES.has(status)) return status;
+  if (status === "error" || status === "ended") return "failed";
+  if (status === "no_answer" || status === "no-answer" || status === "noanswer") return "no_pickup";
+  return "completed";
+}
+
+/** Zod list/detail schemas reject null/array/object disposition values — one bad row 500s History. */
+function sanitizeDispositionResult(
+  raw: unknown,
+): Record<string, string | number | boolean> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const out: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
 
 function parseLatencyBody(body: unknown): { sttLatencyMs?: number; llmLatencyMs?: number; ttsFirstChunkMs?: number } {
   if (!body || typeof body !== "object") return {};
@@ -76,6 +105,8 @@ async function enrichCall(call: typeof callsTable.$inferSelect, campaignId?: num
   const recordingEnabled = agent?.agentConfig?.recordingEnabled ?? false;
   return {
     ...call,
+    status: sanitizeCallStatus(call.status),
+    dispositionResult: sanitizeDispositionResult(call.dispositionResult),
     agentName: agent?.name ?? "Unknown Agent",
     recordingEnabled,
     endedAt: call.endedAt?.toISOString() ?? null,
@@ -134,19 +165,27 @@ import { generateAndStoreOtp, verifyDestinationOtp } from "../services/phone-otp
 
 router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
-  const parsed = InitiateOutboundCallBody.safeParse(req.body);
+  const parsed = InitiateOutboundCallBody.passthrough().safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
     return;
   }
-  const { agentId, toNumber, webhookBaseUrl } = parsed.data;
+  const { agentId, toNumber, webhookBaseUrl, variables, parameters, ...rest } = parsed.data;
+  const callVariables = normalizeCallVariables({
+    ...(rest as Record<string, unknown>),
+    ...(parameters && typeof parameters === "object" ? parameters : {}),
+    ...(variables && typeof variables === "object" ? variables : {}),
+  });
 
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
   if (agent.userId !== userId) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
+    const scope = await resolveWorkspaceScope(userId ?? "");
+    if (!userId || !agent.userId || !scope.userIds.includes(agent.userId) || !scope.canWrite) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
   }
 
   // IRDAI compliance enforcement gate. Reads the agent's latest stored
@@ -222,7 +261,7 @@ router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Pro
       // Partner-managed clients are billed at their partner-set rate — the
       // credit-seconds estimate must use the same rate as the final debit.
       const agentRate = (await resolvePartnerBilling(agent.userId))?.clientRateCentsPerMin
-        ?? Math.max(0, getFlatRateCentsPerMin(billingMode) - await resolveOwnTelephonyDiscount(agent.userId, agent));
+        ?? Math.max(0, (await resolveBillingRateCentsPerMin(billingMode)) - await resolveOwnTelephonyDiscount(agent.userId, agent));
       const creditSeconds = agentRate > 0
         ? Math.floor((user.walletBalanceCents / agentRate) * 60)
         : 0;
@@ -424,12 +463,16 @@ router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Pro
       // answer-webhook WS session reconciles this row by corrToken.
       ...(vobizRequestUuid ? { requestUuid: vobizRequestUuid } : {}),
       ...(vobizCorrToken ? { corrToken: vobizCorrToken } : {}),
+      ...(Object.keys(callVariables).length > 0 ? { callVariables } : {}),
     }),
   }).returning();
 
   await db.update(agentsTable).set({ totalCalls: agent.totalCalls + 1 }).where(eq(agentsTable.id, agentId));
 
-  req.log.info({ agentId, toNumber, providerCallId, vobizRequestUuid, vobizCorrToken }, "Outbound call initiated");
+  req.log.info(
+    { agentId, toNumber, providerCallId, vobizRequestUuid, vobizCorrToken, variableKeys: Object.keys(callVariables) },
+    "Outbound call initiated",
+  );
   res.status(201).json(GetCallResponse.parse(await enrichCall(call)));
 });
 
@@ -526,18 +569,11 @@ router.get("/calls", requireAuth, clientContext, async (req, res): Promise<void>
   }
 
   const clerkId = (req as any).clerkUserId as string;
+  const scope = await resolveWorkspaceScope(clerkId);
 
-  // Ownership: rows the user directly owns, plus legacy/live-call rows where
-  // userId is null but the call's agent belongs to the requester (mirrors the
-  // fallback used by GET /calls/:id). Keeps the optional agentId filter intact.
-  const ownedAgentIds = db
-    .select({ id: agentsTable.id })
-    .from(agentsTable)
-    .where(eq(agentsTable.userId, clerkId));
-  const ownership = or(
-    eq(callsTable.userId, clerkId),
-    and(isNull(callsTable.userId), inArray(callsTable.agentId, ownedAgentIds)),
-  );
+  // Workspace: owner + teammates share one History list. Legacy rows with
+  // null userId still match if the agent belongs to someone in the workspace.
+  const ownership = workspaceCallsWhere(scope.userIds);
   const where = query.data.agentId != null
     ? and(ownership, eq(callsTable.agentId, query.data.agentId))
     : ownership;
@@ -557,7 +593,19 @@ router.get("/calls", requireAuth, clientContext, async (req, res): Promise<void>
       campaignId: row.campaignId ?? null,
     })),
   );
-  res.json(ListCallsResponse.parse(enriched));
+  const valid = [];
+  for (const row of enriched) {
+    const parsed = ListCallsResponseItem.safeParse(row);
+    if (parsed.success) {
+      valid.push(parsed.data);
+      continue;
+    }
+    logger.warn(
+      { callId: (row as { id?: number }).id, issues: parsed.error.issues.slice(0, 8) },
+      "GET /calls skipped invalid row (would 500 History)",
+    );
+  }
+  res.json(ListCallsResponse.parse(valid));
 });
 
 router.post("/calls", requireAuth, clientContext, async (req, res): Promise<void> => {
@@ -574,10 +622,12 @@ router.post("/calls", requireAuth, clientContext, async (req, res): Promise<void
     return;
   }
 
-  // Ownership: only the agent's owner may create call records under it
   if (agent.userId !== userId) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
+    const scope = await resolveWorkspaceScope(userId ?? "");
+    if (!userId || !agent.userId || !scope.userIds.includes(agent.userId) || !scope.canWrite) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
   }
 
   // Balance gate — block if wallet is empty
@@ -621,19 +671,9 @@ router.get("/calls/:id", requireAuth, clientContext, async (req, res): Promise<v
     res.status(404).json({ error: "Call not found" });
     return;
   }
-  // Ownership check: call.userId must match the requester, or (for legacy rows
-  // where userId is null) the call's agent must belong to the requester.
-  if (call.userId && call.userId !== clerkId) {
+  if (!(await canAccessWorkspaceCall(clerkId, call))) {
     res.status(404).json({ error: "Call not found" });
     return;
-  }
-  if (!call.userId) {
-    const [agent] = await db.select({ userId: agentsTable.userId })
-      .from(agentsTable).where(eq(agentsTable.id, call.agentId));
-    if (agent?.userId && agent.userId !== clerkId) {
-      res.status(404).json({ error: "Call not found" });
-      return;
-    }
   }
   const [exec] = await db
     .select({ campaignId: callExecutionsTable.campaignId })
@@ -644,6 +684,87 @@ router.get("/calls/:id", requireAuth, clientContext, async (req, res): Promise<v
     campaignId: exec?.campaignId ?? null,
   };
   res.json(GetCallResponse.parse(enriched));
+});
+
+/**
+ * Translate this call's transcript into a preferred language (Sarvam Mayura).
+ * Does not persist — returns translated content for UI display only.
+ */
+router.post("/calls/:id/translate-transcript", requireAuth, clientContext, async (req, res): Promise<void> => {
+  const params = GetCallParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
+    return;
+  }
+
+  const targetLanguage = String((req.body as { targetLanguage?: string } | undefined)?.targetLanguage ?? "").trim();
+  const {
+    isTranscriptTranslateLang,
+    toSarvamTranslateTarget,
+    TRANSCRIPT_TRANSLATE_LANGUAGES,
+    parseTranscriptForTranslate,
+    translateTranscriptLines,
+    rebuildPlainTranscript,
+  } = await import("../services/transcript-translate.js");
+
+  if (!targetLanguage || !isTranscriptTranslateLang(targetLanguage)) {
+    res.status(400).json({
+      error: "Choose a supported target language",
+      languages: TRANSCRIPT_TRANSLATE_LANGUAGES,
+    });
+    return;
+  }
+
+  const clerkId = (req as any).clerkUserId as string;
+  const [call] = await db.select().from(callsTable).where(eq(callsTable.id, params.data.id));
+  if (!call) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (!(await canAccessWorkspaceCall(clerkId, call))) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (!call.transcript?.trim()) {
+    res.status(400).json({ error: "No transcript available for this call" });
+    return;
+  }
+
+  try {
+    const parsed = parseTranscriptForTranslate(call.transcript);
+    if (parsed.lines.length === 0) {
+      res.status(400).json({ error: "No transcript available for this call" });
+      return;
+    }
+
+    const translatedLines = await translateTranscriptLines(parsed.lines, targetLanguage);
+    const target = toSarvamTranslateTarget(targetLanguage);
+    const label =
+      TRANSCRIPT_TRANSLATE_LANGUAGES.find((l) => l.value === target)?.label ?? target;
+
+    if (parsed.kind === "json") {
+      res.json({
+        targetLanguage: target,
+        targetLanguageLabel: label,
+        kind: "json",
+        lines: translatedLines,
+      });
+      return;
+    }
+
+    res.json({
+      targetLanguage: target,
+      targetLanguageLabel: label,
+      kind: "plain",
+      transcript: rebuildPlainTranscript(parsed.plainLines ?? [], translatedLines),
+      lines: translatedLines,
+    });
+  } catch (err) {
+    req.log.error({ err, callId: params.data.id }, "translate-transcript failed");
+    const message = err instanceof Error ? err.message : "Translation failed";
+    const status = /not configured/i.test(message) ? 503 : 502;
+    res.status(status).json({ error: message });
+  }
 });
 
 /**
@@ -662,17 +783,9 @@ router.get("/calls/:id/meeting-recording", requireAuth, clientContext, async (re
     res.status(404).json({ error: "Call not found" });
     return;
   }
-  if (call.userId && call.userId !== clerkId) {
+  if (!(await canAccessWorkspaceCall(clerkId, call))) {
     res.status(404).json({ error: "Call not found" });
     return;
-  }
-  if (!call.userId) {
-    const [agent] = await db.select({ userId: agentsTable.userId })
-      .from(agentsTable).where(eq(agentsTable.id, call.agentId));
-    if (agent?.userId && agent.userId !== clerkId) {
-      res.status(404).json({ error: "Call not found" });
-      return;
-    }
   }
 
   let meta: Record<string, unknown> = {};
@@ -686,13 +799,13 @@ router.get("/calls/:id/meeting-recording", requireAuth, clientContext, async (re
     res.status(404).json({ error: "No meeting recording for this call" });
     return;
   }
-  if (!process.env["RECALL_API_KEY"]) {
+  const { fetchRecallBotMixedVideoUrl, isRecallConfigured } = await import("../services/meet-bots.js");
+  if (!(await isRecallConfigured())) {
     res.status(503).json({ error: "Meeting recording is not configured" });
     return;
   }
 
   try {
-    const { fetchRecallBotMixedVideoUrl } = await import("../services/meet-bots.js");
     const url = await fetchRecallBotMixedVideoUrl(botId);
     if (!url) {
       res.status(404).json({
@@ -734,17 +847,9 @@ router.get("/calls/:id/meeting-separate-audio", requireAuth, clientContext, asyn
     res.status(404).json({ error: "Call not found" });
     return;
   }
-  if (call.userId && call.userId !== clerkId) {
+  if (!(await canAccessWorkspaceCall(clerkId, call))) {
     res.status(404).json({ error: "Call not found" });
     return;
-  }
-  if (!call.userId) {
-    const [agent] = await db.select({ userId: agentsTable.userId })
-      .from(agentsTable).where(eq(agentsTable.id, call.agentId));
-    if (agent?.userId && agent.userId !== clerkId) {
-      res.status(404).json({ error: "Call not found" });
-      return;
-    }
   }
 
   let meta: Record<string, unknown> = {};
@@ -758,13 +863,13 @@ router.get("/calls/:id/meeting-separate-audio", requireAuth, clientContext, asyn
     res.status(404).json({ error: "No meeting audio for this call" });
     return;
   }
-  if (!process.env["RECALL_API_KEY"]) {
+  const { fetchRecallBotSeparateAudioTracks, isRecallConfigured } = await import("../services/meet-bots.js");
+  if (!(await isRecallConfigured())) {
     res.status(503).json({ error: "Meeting recording is not configured" });
     return;
   }
 
   try {
-    const { fetchRecallBotSeparateAudioTracks } = await import("../services/meet-bots.js");
     const result = await fetchRecallBotSeparateAudioTracks(botId);
     if (!result?.tracks.length) {
       res.status(404).json({
@@ -820,17 +925,9 @@ router.get("/calls/:id/caller-memory", requireAuth, clientContext, async (req, r
     return;
   }
   // Ownership check identical to GET /calls/:id.
-  if (call.userId && call.userId !== clerkId) {
+  if (!(await canAccessWorkspaceCall(clerkId, call))) {
     res.status(404).json({ error: "Call not found" });
     return;
-  }
-  if (!call.userId) {
-    const [agent] = await db.select({ userId: agentsTable.userId })
-      .from(agentsTable).where(eq(agentsTable.id, call.agentId));
-    if (agent?.userId && agent.userId !== clerkId) {
-      res.status(404).json({ error: "Call not found" });
-      return;
-    }
   }
 
   // Resolve the SAME memory key the call session used. Sessions persist the
@@ -906,6 +1003,7 @@ router.get("/calls/:id/caller-memory", requireAuth, clientContext, async (req, r
     id:              ep.id,
     callId:          ep.callId,
     summary:         ep.summary,
+    sentiment:       ep.sentiment ?? null,
     durationSeconds: ep.durationSeconds,
     createdAt:       ep.createdAt,
     insightFactIds:  [] as number[],
@@ -945,15 +1043,14 @@ router.patch("/calls/:id", requireAuth, clientContext, async (req, res): Promise
     res.status(404).json({ error: "Call not found" });
     return;
   }
-  if (existing.userId && existing.userId !== userId) {
+  if (!userId || !(await canAccessWorkspaceCall(userId, existing))) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  if (!existing.userId) {
-    const [agent] = await db.select({ userId: agentsTable.userId })
-      .from(agentsTable).where(eq(agentsTable.id, existing.agentId));
-    if (agent?.userId && agent.userId !== userId) {
-      res.status(403).json({ error: "Forbidden" });
+  {
+    const scope = await resolveWorkspaceScope(userId);
+    if (!scope.canWrite) {
+      res.status(403).json({ error: "Your team role cannot edit calls" });
       return;
     }
   }
@@ -1094,15 +1191,14 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
   }
 
   // Ownership check — prevent cross-tenant billing manipulation
-  if (existing.userId && existing.userId !== userId) {
+  if (!userId || !(await canAccessWorkspaceCall(userId, existing))) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  if (!existing.userId) {
-    const [agent] = await db.select({ userId: agentsTable.userId })
-      .from(agentsTable).where(eq(agentsTable.id, existing.agentId));
-    if (agent?.userId && agent.userId !== userId) {
-      res.status(403).json({ error: "Forbidden" });
+  {
+    const scope = await resolveWorkspaceScope(userId);
+    if (!scope.canWrite) {
+      res.status(403).json({ error: "Your team role cannot edit calls" });
       return;
     }
   }
@@ -1136,7 +1232,7 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
   const partnerBilling = alreadyBilled ? null : await resolvePartnerBilling(callClerkId);
   const ownTelephonyDiscount = alreadyBilled ? 0 : await resolveOwnTelephonyDiscount(callClerkId, agentForBilling ?? {});
   const rateCentsPerMin = partnerBilling?.clientRateCentsPerMin
-    ?? Math.max(0, getFlatRateCentsPerMin(billingMode) - ownTelephonyDiscount);
+    ?? Math.max(0, (await resolveBillingRateCentsPerMin(billingMode)) - ownTelephonyDiscount);
   const modeLabel = partnerBilling ? "partner" : billingMode === "managed" ? "managed" : "BYOP";
   const rateLabel = `₹${(rateCentsPerMin / 100).toFixed(2)}/min (${modeLabel})`;
   // Per-second pro-rata (never ceil to a full minute). 9s @ ₹5/min → ₹0.75.
@@ -1279,6 +1375,18 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
           calledNumber: call.toNumber ?? null,
         });
         dispositionResult = flatDispositionFromTaxonomy(taxResult) ?? dispositionResult;
+      }
+      const hangupSchema = Array.isArray(agent?.dispositionSchema)
+        ? (agent.dispositionSchema as Array<{ key: string; label: string; type: string; required?: boolean; options?: string[] }>)
+        : [];
+      if (schemaFieldsNeedFill(dispositionResult, hangupSchema)) {
+        dispositionResult = await extractFlatDispositionSchema({
+          agentId: call.agentId,
+          callId: call.id,
+          transcript: call.transcript ?? null,
+          schema: hangupSchema,
+          existing: dispositionResult,
+        }) ?? dispositionResult;
       }
     } catch {
       /* disposition optional */
@@ -1428,10 +1536,13 @@ router.get("/calls/:id/logs", requireAuth, clientContext, async (req, res) => {
   const clerkId = (req as any).clerkUserId as string;
 
   // Verify the call belongs to the authenticated user
-  const [call] = await db.select({ id: callsTable.id, userId: callsTable.userId })
+  const [call] = await db.select({ id: callsTable.id, userId: callsTable.userId, agentId: callsTable.agentId })
     .from(callsTable).where(eq(callsTable.id, callId));
   if (!call) { res.status(404).json({ error: "Call not found" }); return; }
-  if (call.userId && call.userId !== clerkId) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (!(await canAccessWorkspaceCall(clerkId, call))) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
 
   const events = await db.select().from(executionLogsTable)
     .where(eq(executionLogsTable.callId, callId))

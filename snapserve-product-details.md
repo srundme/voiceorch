@@ -12,7 +12,9 @@
   - "Ship voice agents in minutes, not months"
   - "Your providers. Our orchestration."
   - "AI voice calls — built, deployed, done."
-- **Domain / API base:** `api.snapserve.ai`
+- **App:** `https://app.snapserve.ai`
+- **Docs:** `https://app.snapserve.ai/docs`
+- **API base:** `https://app.snapserve.ai/api`
 - **Contact:** `sales@snapserve.ai`
 - **Year:** 2026
 - **Status:** Beta — Now live
@@ -213,12 +215,12 @@ English (US, UK, AU), Hindi, Tamil, Telugu, Kannada, Malayalam, Bengali, Gujarat
 ## API
 
 ```http
-POST https://api.snapserve.ai/calls/outbound
+POST https://app.snapserve.ai/api/calls/outbound
 Authorization: Bearer <API_KEY>
 
 {
-  "agent_id": "agt_8f2k9d",
-  "to": "+14155550192"
+  "agentId": 123,
+  "toNumber": "+919876543210"
 }
 ```
 

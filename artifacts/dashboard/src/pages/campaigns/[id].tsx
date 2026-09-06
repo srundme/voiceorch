@@ -1,22 +1,21 @@
-import { useState, useRef, useEffect } from "react";
-import { useRoute, useLocation, Link } from "wouter";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useRoute, useLocation, useSearch, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
   useDeleteCampaign, useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
   useGetBatchWorkspaceKpis,
-  getListCampaignBatchesQueryKey, getGetCampaignQueryKey,
+  getListCampaignBatchesQueryKey, getGetCampaignQueryKey, getGetCampaignAnalyticsQueryKey,
   getGetBatchAnalyticsQueryOptions,
   useListCrmConnections, useUpdateCrmConnection, getListCrmConnectionsQueryKey,
   customFetch,
 } from "@workspace/api-client-react";
 import type { CampaignBatch, CrmConnection } from "@workspace/api-client-react";
 import { CrmImportDialog } from "../connections";
-import { useQueryClient, useQueries } from "@tanstack/react-query";
+import { useQueryClient, useQueries, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -30,17 +29,19 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getIrdaiBlockedError } from "@/lib/irdai-block";
+import { resolveCampaignOverviewMetrics } from "@/lib/campaign-overview-metrics";
 import {
   ArrowLeft, Copy, Check, Megaphone, Upload, FileText, Layers,
   ChevronRight, ChevronDown, Calendar, Trash2, Users, Clock, AlertCircle,
   CheckCircle2, X, BarChart3, PhoneCall, ArrowRight, Hash,
-  Activity, PlayCircle, PauseCircle, XCircle, Info, Settings,
+  Activity, PlayCircle, PauseCircle, XCircle, Settings,
   Phone, Globe, Building2, Zap, ListFilter, Plus,
   PhoneIncoming, ArrowRightLeft, Radio, Ban,
-  TrendingUp, DollarSign, Target, MoreVertical, Eye,
+  MoreVertical, Eye,
   KeyRound, Link2, Link2Off, Loader2, Instagram,
   Download,
-  Sparkles,
+  Table2,
+  ExternalLink,
 } from "lucide-react";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 import { TablePagination } from "@/components/table-pagination";
@@ -867,6 +868,8 @@ function BatchKpiCard({ batch, index, campaignId }: {
     { label: "Booked",     value: kpis?.booked     ?? 0, cls: "text-emerald-500" },
     { label: "Interested", value: kpis?.interested ?? 0, cls: "text-emerald-400" },
     { label: "Failed",     value: kpis?.failed     ?? 0, cls: "text-red-500" },
+    { label: "Busy",       value: kpis?.busy       ?? 0, cls: "text-orange-500" },
+    { label: "No pickup",  value: kpis?.noPickup   ?? 0, cls: "text-amber-500" },
     { label: "Callbacks",  value: kpis?.callbacks  ?? 0, cls: "text-amber-500" },
   ];
   const lastActivity = kpis?.lastActivityAt
@@ -1239,22 +1242,6 @@ function MetaIntegrationCard({
   );
 }
 
-// ── Campaign summary KPI card (mirrors the Batch Workspace KpiCard) ───────────
-
-function KpiCard({ icon, label, value, color }: {
-  icon: React.ReactNode; label: string; value: number | string; color?: string;
-}) {
-  return (
-    <div className="bg-card px-3.5 py-3 flex flex-col gap-1.5">
-      <div className="flex items-center gap-1.5">
-        <span className={cn("text-muted-foreground/50", color)}>{icon}</span>
-        <span className="text-xs uppercase tracking-wider font-semibold text-muted-foreground/40 truncate">{label}</span>
-      </div>
-      <p className={cn("text-xl font-bold tabular-nums truncate", color ?? "text-foreground")}>{value}</p>
-    </div>
-  );
-}
-
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CampaignDetailPage() {
@@ -1264,6 +1251,7 @@ export default function CampaignDetailPage() {
   const qc = useQueryClient();
 
   const [, setLocation] = useLocation();
+  const search = useSearch();
   const [deletingBatch,    setDeletingBatch]    = useState<CampaignBatch | null>(null);
   const [showDeleteCamp,   setShowDeleteCamp]   = useState(false);
   const [deleteNameInput,  setDeleteNameInput]  = useState("");
@@ -1323,11 +1311,33 @@ export default function CampaignDetailPage() {
   const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: campaign, isLoading: campLoading } = useGetCampaign(campaignId, { query: { refetchInterval: 15_000 } as any });
+  const { data: campaign, isLoading: campLoading } = useGetCampaign(campaignId, { query: { enabled: campaignId > 0, refetchInterval: 15_000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { refetchInterval: 10_000 } as any });
+  const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { enabled: campaignId > 0, refetchInterval: 10_000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: analytics } = useGetCampaignAnalytics(campaignId, { query: { refetchInterval: 10_000 } as any });
+  const { data: analytics } = useGetCampaignAnalytics(campaignId, { query: { enabled: campaignId > 0, refetchInterval: 10_000 } as any });
+  const { data: liveQueueMetrics } = useQuery({
+    queryKey: ["lq-metrics", campaignId],
+    queryFn: () => customFetch<{
+      total: number;
+      queued: number;
+      calling: number;
+      connected: number;
+      nopickup: number;
+      failed: number;
+    }>(`/api/campaigns/${campaignId}/live-queue/metrics`),
+    refetchInterval: 10_000,
+    enabled: campaignId > 0,
+  });
+  const isSheetAuto = (campaign as { leadSource?: string } | undefined)?.leadSource === "google_sheets";
+  const { data: autoPipelines } = useQuery({
+    queryKey: ["automatic-calls"],
+    queryFn: () => customFetch<Array<{ id: string; campaignId: number | null; name: string; status: string }>>(
+      "/api/automatic-calls",
+    ),
+    enabled: isSheetAuto,
+  });
+  const sheetPipeline = autoPipelines?.find((p) => p.campaignId === campaignId);
 
   // Business hours editor state — declared after campaign so the useEffect dep is valid
   const [editingHours, setEditingHours] = useState(false);
@@ -1335,12 +1345,22 @@ export default function CampaignDetailPage() {
   const [hoursEnd,   setHoursEnd]   = useState<string>("");
   const [hoursTz,    setHoursTz]    = useState<string>("Asia/Kolkata");
   const [hoursEnabled, setHoursEnabled] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<CampaignTab>("overview");
+  const tabFromUrl = useMemo(() => {
+    const raw = new URLSearchParams(search).get("tab");
+    return CAMPAIGN_TABS.some((t) => t.id === raw) ? (raw as CampaignTab) : "overview";
+  }, [search]);
+  const activeTab = tabFromUrl;
+  const setActiveTab = useCallback((id: CampaignTab) => {
+    const sp = new URLSearchParams(search);
+    if (id === "overview") sp.delete("tab");
+    else sp.set("tab", id);
+    const qs = sp.toString();
+    setLocation(`/app/campaigns/${campaignId}${qs ? `?${qs}` : ""}`);
+  }, [search, setLocation, campaignId]);
   const [leadTransferForm, setLeadTransferForm] = useState<LeadTransferForm>(EMPTY_LEAD_TRANSFER);
   const [savingTransfer, setSavingTransfer] = useState(false);
   const [actingDisposition, setActingDisposition] = useState<string | null>(null);
   const [recampaignOpen, setRecampaignOpen] = useState(false);
-  const [backfillingIntel, setBackfillingIntel] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1427,45 +1447,11 @@ export default function CampaignDetailPage() {
           await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
         }
       }
-      await qc.invalidateQueries({ queryKey: ["getCampaignAnalytics", campaignId] });
+      await qc.invalidateQueries({ queryKey: getGetCampaignAnalyticsQueryKey(campaignId) });
     } catch {
       toast({ title: "Action failed", variant: "destructive" });
     } finally {
       setActingDisposition(null);
-    }
-  }
-
-  async function handleBackfillIntelligence() {
-    setBackfillingIntel(true);
-    try {
-      const result = await customFetch<{
-        scanned: number;
-        analysed: number;
-        skipped: number;
-        failed: number;
-        error?: string;
-      }>(`/api/campaigns/${campaignId}/intelligence/backfill`, {
-        method: "POST",
-        body: JSON.stringify({ limit: 500 }),
-      });
-      if (result.error && result.analysed === 0) {
-        toast({
-          title: "Analysis model unavailable",
-          description: result.error,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Outcome analysis updated",
-          description: `${result.analysed} analysed · ${result.skipped} skipped · ${result.failed} failed (of ${result.scanned} scanned)`
-            + (result.error ? ` — ${result.error}` : ""),
-        });
-      }
-      await qc.invalidateQueries({ queryKey: ["getCampaignAnalytics", campaignId] });
-    } catch {
-      toast({ title: "Could not analyse outcomes", variant: "destructive" });
-    } finally {
-      setBackfillingIntel(false);
     }
   }
 
@@ -1474,22 +1460,19 @@ export default function CampaignDetailPage() {
     : "";
 
   const fm = campaign?.fieldMappings as Record<string, string> | undefined;
-  const imported    = analytics?.imported    ?? campaign?.totalLeads  ?? 0;
-  const called      = analytics?.called      ?? campaign?.calledLeads ?? 0;
-  const failed      = analytics?.failed      ?? 0;
+  const liveTotal = liveQueueMetrics?.total ?? 0;
+  const overviewMetrics = resolveCampaignOverviewMetrics({
+    analytics,
+    campaign,
+  });
+  const { failed } = overviewMetrics;
   const hasCsvSource = batches?.some(b => b.leadSource === "csv") ?? false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const isContinuous = ["webhook", "meta_ads", "crm"].includes((campaign as any)?.leadSource ?? "");
+  const isContinuous = ["webhook", "meta_ads", "crm", "google_sheets"].includes((campaign as any)?.leadSource ?? "");
 
   // ── Campaign-level summary metrics ────────────────────────────────────────
   const totalBatches     = batches?.length ?? 0;
   const activeBatches    = batches?.filter(b => b.status === "running").length ?? 0;
-  const completedBatches = batches?.filter(b => (b.status as string) === "completed").length ?? 0;
-  const stoppedBatches   = batches?.filter(b => b.status === "stopped").length ?? 0;
-
-  const campaignCreated = campaign?.createdAt
-    ? formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })
-    : "—";
 
   // ── Campaign "finished" detection (UI-only) ───────────────────────────────
   // A campaign is finished when it has at least one batch, every batch is in a
@@ -1522,45 +1505,6 @@ export default function CampaignDetailPage() {
   );
   const campaignFinished =
     preFinished && allAnalyticsLoaded && pendingRetriesTotal === 0;
-
-  // Overall progress: leads processed vs imported. While running with no
-  // progress yet, show "Tracking..." instead of a bare 0%.
-  const overallPct = imported > 0 ? Math.round((called / imported) * 100) : 0;
-  const campaignRunning = activeBatches > 0;
-  const overallProgress = overallPct > 0
-    ? `${overallPct}%`
-    : campaignRunning
-      ? "Tracking..."
-      : "0%";
-
-  // Campaign health: derived purely from already-fetched batch/analytics data.
-  const failureRate = called > 0 ? failed / called : 0;
-  const campaignHealth: { label: string; accent: string; dotCls: string; icon: React.ReactNode } = (() => {
-    // No activity yet → neutral.
-    if (imported === 0 && called === 0) {
-      return { label: "Healthy", accent: "text-emerald-500", dotCls: "bg-emerald-500", icon: <CheckCircle2 className="h-3.5 w-3.5" /> };
-    }
-    // Fully completed (everything processed) → healthy.
-    if (imported > 0 && called >= imported) {
-      return { label: "Healthy", accent: "text-emerald-500", dotCls: "bg-emerald-500", icon: <CheckCircle2 className="h-3.5 w-3.5" /> };
-    }
-    // Unfinished work but nothing running → stalled.
-    if (imported > called && activeBatches === 0) {
-      return { label: "Stalled", accent: "text-red-500", dotCls: "bg-red-500", icon: <AlertCircle className="h-3.5 w-3.5" /> };
-    }
-    // Something running but high failure rate or mixed stopped batches → needs attention.
-    if (activeBatches > 0 && (failureRate >= 0.3 || stoppedBatches > 0)) {
-      return { label: "Needs Attention", accent: "text-amber-500", dotCls: "bg-amber-500", icon: <AlertCircle className="h-3.5 w-3.5" /> };
-    }
-    // Otherwise running cleanly.
-    return { label: "Healthy", accent: "text-emerald-500", dotCls: "bg-emerald-500", icon: <CheckCircle2 className="h-3.5 w-3.5" /> };
-  })();
-
-  // Outcome metrics sourced directly from the analytics endpoint — these are
-  // what a user actually acts on (vs administrative batch bookkeeping).
-  const connectedCalls  = analytics?.connected ?? 0;
-  const successRatePct  = analytics?.successRate ?? 0;
-  const leadsRemaining  = Math.max(imported - called, 0);
 
   async function handleDeleteBatch() {
     if (!deletingBatch) return;
@@ -1661,9 +1605,22 @@ export default function CampaignDetailPage() {
                   <Instagram className="h-3 w-3" /> Meta Ads
                 </span>
               )}
+              {isSheetAuto && (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 rounded-md">
+                  <Table2 className="h-3 w-3" /> Google Sheets
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => setLocation(`/app/analytics?campaignId=${campaignId}`)}
+            >
+              <BarChart3 className="h-3 w-3" /> View Analytics
+            </Button>
             {/* Delete campaign — always visible */}
             <Button
               size="icon" variant="ghost"
@@ -1763,158 +1720,30 @@ export default function CampaignDetailPage() {
           {/* ── OVERVIEW tab ─────────────────────────────────────────────── */}
           {activeTab === "overview" && (<>
 
-          {/* View Analytics */}
-          <div className="flex items-center justify-end">
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
-              onClick={() => setLocation(`/app/analytics?campaignId=${campaignId}`)}>
-              <BarChart3 className="h-3 w-3" /> View Analytics
-            </Button>
-          </div>
-
-          {/* Conversation intelligence — sentiment / intent / topics */}
-          {(() => {
-            type Intel = {
-              analysed: number;
-              pendingAnalysis: number;
-              sentiment: Array<{ label: string; count: number }>;
-              intents: Array<{ label: string; count: number }>;
-              topTopics: Array<{ label: string; count: number }>;
-              hotLeads: number;
-            };
-            const intel = (analytics as { intelligence?: Intel } | undefined)?.intelligence;
-            const analysed = intel?.analysed ?? 0;
-            const pending = intel?.pendingAnalysis ?? 0;
-            const sentimentTotal = (intel?.sentiment ?? []).reduce((s, r) => s + r.count, 0) || 1;
-            const sentimentColor: Record<string, string> = {
-              positive: "bg-emerald-500",
-              neutral: "bg-zinc-400",
-              negative: "bg-rose-500",
-            };
-            return (
-              <div className="bg-card border border-border rounded-xl p-4 space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">
-                      Outcomes &amp; sentiment
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      AI reads each call transcript for tone, intent, and topics — works with your disposition labels.
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs gap-1.5"
-                    disabled={backfillingIntel || (pending === 0 && analysed > 0)}
-                    onClick={() => void handleBackfillIntelligence()}
-                  >
-                    {backfillingIntel
-                      ? <Loader2 className="h-3 w-3 animate-spin" />
-                      : <Sparkles className="h-3 w-3" />}
-                    {pending > 0
-                      ? `Analyse ${pending} call${pending === 1 ? "" : "s"}`
-                      : analysed > 0
-                        ? "Up to date"
-                        : "Analyse completed calls"}
+          {isSheetAuto && (
+            <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-foreground">Automatic Calls from Google Sheets</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {liveTotal > 0
+                    ? "Sheet rows that were queued show in Live Queue and in the numbers below. Sentiment needs a real conversation (someone picked up)."
+                    : "Overview fills after sheet rows are queued and dialled. Stopping the pipeline does not mean calls ran — open Live Queue or the pipeline activity for the real row list."}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                  onClick={() => setActiveTab("live-queue")}>
+                  <Radio className="h-3 w-3" /> Live Queue
+                </Button>
+                {sheetPipeline && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                    onClick={() => setLocation(`/app/automatic-calls/${sheetPipeline.id}`)}>
+                    <ExternalLink className="h-3 w-3" /> Pipeline
                   </Button>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="rounded-lg border border-border/60 px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Analysed</p>
-                    <p className="text-lg font-semibold tabular-nums">{analysed}</p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Pending</p>
-                    <p className="text-lg font-semibold tabular-nums">{pending}</p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Hot leads</p>
-                    <p className="text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-500">
-                      {intel?.hotLeads ?? 0}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Topics tracked</p>
-                    <p className="text-lg font-semibold tabular-nums">{intel?.topTopics?.length ?? 0}</p>
-                  </div>
-                </div>
-
-                {analysed === 0 && pending === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    No completed calls with transcripts yet. After calls finish, sentiment and intent appear here automatically — or run Analyse on older campaigns.
-                  </p>
-                ) : (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <p className="text-[11px] font-medium text-foreground/80">Sentiment</p>
-                      <div className="flex h-2 overflow-hidden rounded-full bg-muted">
-                        {(["positive", "neutral", "negative"] as const).map((label) => {
-                          const count = intel?.sentiment?.find((s) => s.label === label)?.count ?? 0;
-                          if (!count) return null;
-                          return (
-                            <div
-                              key={label}
-                              className={cn(sentimentColor[label], "h-full")}
-                              style={{ width: `${(count / sentimentTotal) * 100}%` }}
-                              title={`${label}: ${count}`}
-                            />
-                          );
-                        })}
-                      </div>
-                      <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-                        {(["positive", "neutral", "negative"] as const).map((label) => {
-                          const count = intel?.sentiment?.find((s) => s.label === label)?.count ?? 0;
-                          return (
-                            <span key={label} className="capitalize">
-                              <span className={cn("inline-block h-1.5 w-1.5 rounded-full mr-1 align-middle", sentimentColor[label])} />
-                              {label} {count}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <p className="text-[11px] font-medium text-foreground/80">Top intents</p>
-                      {(intel?.intents?.length ?? 0) === 0 ? (
-                        <p className="text-[11px] text-muted-foreground">Run Analyse to fill intents.</p>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {[...(intel?.intents ?? [])]
-                            .sort((a, b) => b.count - a.count)
-                            .slice(0, 5)
-                            .map((row) => (
-                              <div key={row.label} className="flex items-center justify-between gap-2 text-[11px]">
-                                <span className="truncate text-foreground/80">{row.label.replace(/_/g, " ")}</span>
-                                <span className="tabular-nums text-muted-foreground shrink-0">{row.count}</span>
-                              </div>
-                            ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {(intel?.topTopics?.length ?? 0) > 0 && (
-                      <div className="sm:col-span-2 space-y-2">
-                        <p className="text-[11px] font-medium text-foreground/80">Topics mentioned</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {intel!.topTopics.map((t) => (
-                            <span
-                              key={t.label}
-                              className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] text-foreground/80"
-                            >
-                              {t.label}
-                              <span className="tabular-nums text-muted-foreground">{t.count}</span>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
                 )}
               </div>
-            );
-          })()}
+            </div>
+          )}
 
           {/* Disposition breakdown — act on slice */}
           {(analytics?.dispositions?.length ?? 0) > 0 && (
@@ -2186,7 +2015,7 @@ export default function CampaignDetailPage() {
             <CampaignAnalyticsTab
               campaignId={campaignId}
               onAnalysed={() => {
-                void qc.invalidateQueries({ queryKey: ["getCampaignAnalytics", campaignId] });
+                void qc.invalidateQueries({ queryKey: getGetCampaignAnalyticsQueryKey(campaignId) });
               }}
             />
           )}
@@ -2198,35 +2027,8 @@ export default function CampaignDetailPage() {
           {activeTab === "transfers"  && <TransfersTab campaignId={campaignId} />}
           {activeTab === "bookings"   && <BookingsTab campaignId={campaignId} />}
 
-          {/* ── OVERVIEW continued: stats + batches ──────────────────────── */}
+          {/* ── OVERVIEW continued: batches ──────────────────────── */}
           {activeTab === "overview" && (<>
-
-          {/* Campaign-level summary — health + progress, then outcome metrics that
-              actually help judge performance (vs. flat administrative counts). */}
-          <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-8 px-4 py-3.5 border-b border-border/50">
-              <div className="flex items-center gap-2 shrink-0" title={campaignHealth.label}>
-                <span className={cn("h-2 w-2 rounded-full shrink-0", campaignHealth.dotCls)} />
-                <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold", campaignHealth.accent)}>
-                  {campaignHealth.icon}
-                  {campaignHealth.label}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground/40">Overall Progress</span>
-                  <span className="text-xs font-mono font-semibold text-foreground/80 tabular-nums">{overallProgress}</span>
-                </div>
-                <Progress value={overallPct} className="h-1.5" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border/60">
-              <KpiCard icon={<PhoneCall className="h-3 w-3" />} label="Connected"       value={connectedCalls.toLocaleString()} color="text-sky-500" />
-              <KpiCard icon={<Target className="h-3 w-3" />}    label="Success Rate"    value={`${successRatePct}%`} color="text-emerald-500" />
-              <KpiCard icon={<Users className="h-3 w-3" />}     label="Leads Remaining" value={leadsRemaining.toLocaleString()} color="text-amber-500" />
-              <KpiCard icon={<XCircle className="h-3 w-3" />}   label="Failed"          value={failed.toLocaleString()} color="text-red-500" />
-            </div>
-          </div>
 
           {/* Batches — batch-mode campaigns only */}
           {(campaign as unknown as Record<string, unknown>)["triggerMode"] !== "instant" ? (
@@ -2267,7 +2069,11 @@ export default function CampaignDetailPage() {
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>
                 <h3 className="text-sm font-semibold text-foreground">Daily Batches</h3>
-                <p className="text-xs text-muted-foreground/50 mt-0.5">Auto-created per day as leads arrive via the webhook</p>
+                <p className="text-xs text-muted-foreground/50 mt-0.5">
+                  {isSheetAuto
+                    ? "Created per day when Automatic Calls enqueues sheet rows"
+                    : "Auto-created per day as leads arrive via the webhook"}
+                </p>
               </div>
               {(campaign as any).leadSource === "crm" && (
                 <CrmImportButton campaignId={campaignId} />
@@ -2277,11 +2083,29 @@ export default function CampaignDetailPage() {
               <div className="grid grid-cols-1 gap-3">
                 {[1, 2].map(i => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}
               </div>
+            ) : !batches?.length && liveTotal > 0 ? (
+              <div className="py-8 text-center border border-dashed border-border rounded-xl">
+                <Radio className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground/50">{liveTotal} lead{liveTotal === 1 ? "" : "s"} in Live Queue</p>
+                <p className="text-xs text-muted-foreground/30 mt-0.5 mb-3">
+                  Dials ran without a daily batch card. Open Live Queue for names, status, and cost.
+                </p>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                  onClick={() => setActiveTab("live-queue")}>
+                  Open Live Queue
+                </Button>
+              </div>
             ) : !batches?.length ? (
               <div className="py-10 text-center border border-dashed border-border rounded-xl">
                 <Zap className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground/50">No leads yet</p>
-                <p className="text-xs text-muted-foreground/30 mt-0.5">A batch is auto-created the moment the first lead arrives today.</p>
+                <p className="text-sm text-muted-foreground/50">
+                  {isSheetAuto ? "No sheet rows dialled yet" : "No leads yet"}
+                </p>
+                <p className="text-xs text-muted-foreground/30 mt-0.5">
+                  {isSheetAuto
+                    ? "Start (or keep running) Automatic Calls so existing or new sheet rows enqueue. Activity lives on the pipeline page; this campaign stays empty until a row is actually queued."
+                    : "A batch is auto-created the moment the first lead arrives today."}
+                </p>
               </div>
             ) : (() => {
               // Group batches by their date label (extracted from "Live — Jun 30" names)

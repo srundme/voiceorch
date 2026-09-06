@@ -5,6 +5,7 @@ import {
   useUserDetail,
   useSetConcurrentLimit,
   useSetUserStatus,
+  useUnlockPortalLogin,
   useEditUserProfile,
   useUserProviders,
   useUserCalls,
@@ -20,8 +21,11 @@ import {
   useSendEmailToUser,
   usePlatformEmails,
   useSetUserUnlimitedTrial,
+  useUser360,
 } from "@/hooks/use-admin-api";
 import { formatCentsToDollars, formatDuration, adminFetch } from "@/lib/api";
+import { SectionSubNav } from "@/components/section-subnav";
+import { CUSTOMERS_TABS } from "@/lib/nav-config";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,6 +59,7 @@ function StatusBadge({ status }: { status?: string }) {
 export default function UserDetail() {
   const { clerkId } = useParams<{ clerkId: string }>();
   const { data, isLoading } = useUserDetail(clerkId || "");
+  const { data: user360 } = useUser360(clerkId || "");
   const { toast } = useToast();
 
   const [tab, setTab] = useState<Tab>("overview");
@@ -63,6 +68,7 @@ export default function UserDetail() {
   const setConcurrentLimit = useSetConcurrentLimit(clerkId || "");
   const setUnlimitedTrial = useSetUserUnlimitedTrial(clerkId || "");
   const setStatus = useSetUserStatus(clerkId || "");
+  const unlockPortalLogin = useUnlockPortalLogin(clerkId || "");
   const editProfile = useEditUserProfile(clerkId || "");
   const creditWallet = useCreditWallet(clerkId || "");
   const debitWallet = useDebitWallet(clerkId || "");
@@ -114,6 +120,7 @@ export default function UserDetail() {
         method: "POST",
         body: JSON.stringify({
           email: data?.user?.email ?? "",
+          clerkId: data?.user?.clerkId ?? clerkId,
           companyName: partnerCompany.trim(),
           baseRateCentsPerMin: toPaise(partnerBaseText),
           // Client pricing is the partner's own setting (their panel).
@@ -130,6 +137,16 @@ export default function UserDetail() {
       queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
     },
     onError: (e) => toast({ title: "Could not create partner", description: formatApiError(e), variant: "destructive" }),
+  });
+  const applyPendingPartner = useMutation({
+    mutationFn: (pendingId: number) =>
+      adminFetch(`/partners/pending/${pendingId}/apply`, { method: "POST" }),
+    onSuccess: () => {
+      toast({ title: "Partner approved", description: "This user is now a partner." });
+      queryClient.invalidateQueries({ queryKey: ["admin", "partners"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+    },
+    onError: (e) => toast({ title: "Could not approve partner", description: formatApiError(e), variant: "destructive" }),
   });
 
   // Pagination
@@ -223,6 +240,7 @@ export default function UserDetail() {
 
   const { user } = data;
   const partner = data.partner ?? null;
+  const pendingPartner = data.pendingPartner ?? null;
   const isSuspended = user.status === "suspended";
   const isDeleted = user.status === "deleted";
 
@@ -258,6 +276,7 @@ export default function UserDetail() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={CUSTOMERS_TABS} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start gap-4">
         <Button variant="outline" size="icon" asChild className="shrink-0">
@@ -267,6 +286,12 @@ export default function UserDetail() {
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight truncate">{user.email}</h1>
             <StatusBadge status={user.status} />
+            {user360?.saas?.lifecycle && (
+              <Badge variant="outline" className="text-[10px]">{user360.saas.lifecycle}</Badge>
+            )}
+            {user360?.saas?.activation && (
+              <Badge variant="secondary" className="text-[10px]">Activation: {user360.saas.activation}</Badge>
+            )}
             {partner && (
               <Badge
                 variant="outline"
@@ -277,6 +302,15 @@ export default function UserDetail() {
                 <Handshake className="h-3 w-3" />
                 {partner.status === "suspended" ? "Partner · Suspended" : "Partner"}
               </Badge>
+            )}
+            {!partner && pendingPartner && (
+              <Badge variant="outline" className="gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400">
+                <Handshake className="h-3 w-3" />
+                Partner · Pending
+              </Badge>
+            )}
+            {user.portalLoginLockedAt && (
+              <Badge variant="destructive" className="text-[10px]">Portal login locked</Badge>
             )}
           </div>
           <p className="text-xs text-muted-foreground font-mono mt-1">{user.clerkId}</p>
@@ -293,6 +327,23 @@ export default function UserDetail() {
             <LogIn className="h-3.5 w-3.5" />
             {impersonate.isPending ? "Starting…" : "Login As User"}
           </Button>
+          {user.portalLoginLockedAt && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="gap-1.5"
+              disabled={unlockPortalLogin.isPending}
+              onClick={() =>
+                unlockPortalLogin.mutate(undefined, {
+                  onSuccess: () => toast({ title: "Portal login unlocked" }),
+                  onError: (e) => toast({ title: "Unlock failed", description: formatApiError(e), variant: "destructive" }),
+                })
+              }
+            >
+              <ShieldAlert className="h-3.5 w-3.5" />
+              {unlockPortalLogin.isPending ? "Unlocking…" : "Unlock portal login"}
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={() => { setProfileEmail(user.email || ""); setProfileName(user.name || ""); setProfileModal(true); }}>
             Edit Profile
           </Button>
@@ -312,6 +363,17 @@ export default function UserDetail() {
                 <Link href="/partners">
                   <Handshake className="h-3.5 w-3.5" /> Manage Partner
                 </Link>
+              </Button>
+            ) : pendingPartner ? (
+              <Button
+                size="sm"
+                variant="default"
+                className="gap-1.5 bg-sky-600 hover:bg-sky-700"
+                disabled={applyPendingPartner.isPending}
+                onClick={() => applyPendingPartner.mutate(pendingPartner.id)}
+              >
+                <Handshake className="h-3.5 w-3.5" />
+                {applyPendingPartner.isPending ? "Approving…" : "Approve Partner"}
               </Button>
             ) : (
               <Button
@@ -402,6 +464,87 @@ export default function UserDetail() {
       {/* ── Overview Tab ─────────────────────────────────────────── */}
       {tab === "overview" && (
         <div className="space-y-6">
+          {user360?.saas && (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Lifetime revenue</CardTitle></CardHeader>
+                <CardContent className="text-xl font-bold font-mono">{formatCentsToDollars(user360.saas.lifetimeRevenuePaise ?? 0)}</CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Lifetime cost</CardTitle></CardHeader>
+                <CardContent className="text-xl font-bold font-mono text-muted-foreground">{formatCentsToDollars(user360.saas.lifetimeCostPaise ?? 0)}</CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Lifetime profit</CardTitle></CardHeader>
+                <CardContent className={`text-xl font-bold font-mono ${(user360.saas.lifetimeProfitPaise ?? 0) < 0 ? "text-destructive" : "text-emerald-600"}`}>
+                  {formatCentsToDollars(user360.saas.lifetimeProfitPaise ?? 0)}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Calls</CardTitle></CardHeader>
+                <CardContent className="text-xl font-bold font-mono">{user360.saas.calls ?? 0}</CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Minutes</CardTitle></CardHeader>
+                <CardContent className="text-xl font-bold font-mono">{Math.round(user360.saas.minutes ?? 0)}</CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Last active</CardTitle></CardHeader>
+                <CardContent className="text-sm font-mono">
+                  {user360.saas.lastActiveAt ? format(new Date(user360.saas.lastActiveAt), "yyyy-MM-dd HH:mm") : "—"}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {user360?.timeline && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Activation timeline</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ol className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {user360.timeline.map((step: { stage: string; at: string | null; done: boolean }) => (
+                    <li key={step.stage} className="flex items-start gap-2 text-sm">
+                      {step.done ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-muted-foreground/40 mt-0.5 shrink-0" />
+                      )}
+                      <div>
+                        <div className={step.done ? "font-medium" : "text-muted-foreground"}>{step.stage}</div>
+                        <div className="text-[11px] text-muted-foreground font-mono">
+                          {step.at ? format(new Date(step.at), "yyyy-MM-dd HH:mm") : "Not yet"}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </CardContent>
+            </Card>
+          )}
+
+          {user360?.recentActivity?.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Recent activity</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {user360.recentActivity.slice(0, 12).map((a: any, i: number) => (
+                  <div key={i} className="flex justify-between gap-3 text-xs border-b border-border/50 pb-2 last:border-0">
+                    <div className="min-w-0">
+                      <span className="font-mono text-muted-foreground mr-2">{a.eventType}</span>
+                      <span className="truncate">{a.description}</span>
+                    </div>
+                    <span className="shrink-0 text-muted-foreground font-mono">
+                      {a.createdAt ? format(new Date(a.createdAt), "MMM d HH:mm") : ""}
+                    </span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
               <CardHeader className="pb-2">
@@ -554,6 +697,7 @@ export default function UserDetail() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-[80px]">ID</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>ASR</TableHead>
@@ -565,12 +709,13 @@ export default function UserDetail() {
               </TableHeader>
               <TableBody>
                 {agents.isLoading ? (
-                  <TableRow><TableCell colSpan={7} className="text-center h-20 text-muted-foreground animate-pulse">Loading…</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center h-20 text-muted-foreground animate-pulse">Loading…</TableCell></TableRow>
                 ) : (agents.data ?? []).length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center h-20 text-muted-foreground">No agents</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center h-20 text-muted-foreground">No agents</TableCell></TableRow>
                 ) : (
                   (agents.data ?? []).map((agent: any) => (
                     <TableRow key={agent.id}>
+                      <TableCell className="font-mono text-xs text-muted-foreground font-semibold">#{agent.id}</TableCell>
                       <TableCell className="font-medium">{agent.name}</TableCell>
                       <TableCell>
                         <Badge variant={agent.status === "active" ? "default" : "secondary"} className="text-[10px] uppercase">{agent.status || "inactive"}</Badge>
@@ -660,6 +805,7 @@ export default function UserDetail() {
                 <TableRow className="hover:bg-transparent">
                   <TableHead>Status</TableHead>
                   <TableHead>Date</TableHead>
+                  <TableHead>Execution ID</TableHead>
                   <TableHead>Agent</TableHead>
                   <TableHead className="text-right">Duration</TableHead>
                   <TableHead className="text-right">Cost</TableHead>
@@ -667,16 +813,27 @@ export default function UserDetail() {
               </TableHeader>
               <TableBody>
                 {calls.isLoading ? (
-                  <TableRow><TableCell colSpan={5} className="text-center h-20 animate-pulse text-muted-foreground">Loading…</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center h-20 animate-pulse text-muted-foreground">Loading…</TableCell></TableRow>
                 ) : (calls.data?.data ?? []).length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center h-20 text-muted-foreground">No calls found</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center h-20 text-muted-foreground">No calls found</TableCell></TableRow>
                 ) : (
                   (calls.data?.data ?? []).map((call: any) => (
-                    <TableRow key={call.id}>
+                    <TableRow
+                      key={call.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => window.open(`/app/calls/${call.id}`, "_blank", "noopener,noreferrer")}
+                    >
                       <TableCell>
                         <Badge variant={call.status === "completed" ? "default" : call.status === "failed" ? "destructive" : "secondary"} className="text-[10px] uppercase">{call.status}</Badge>
                       </TableCell>
                       <TableCell className="text-xs font-mono text-muted-foreground">{format(new Date(call.createdAt), "MMM d HH:mm")}</TableCell>
+                      <TableCell className="text-xs font-mono truncate" title={call.executionId ?? undefined}>
+                        {call.executionId ? (
+                          call.executionId
+                        ) : (
+                          <span className="text-muted-foreground italic">Not available</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{call.agentId ?? "—"}</TableCell>
                       <TableCell className="text-right text-xs font-mono">{formatDuration(call.durationSeconds || 0)}</TableCell>
                       <TableCell className="text-right text-xs font-mono">{formatCentsToDollars(call.costCents || 0)}</TableCell>

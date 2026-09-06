@@ -3,6 +3,8 @@ import {
   expandSpokenDigits,
   mergeSpokenPhoneFragments,
   preferIndianPhone,
+  preferNumberTranscript,
+  looksLikeSpokenNumber,
 } from "./spoken-digits.js";
 
 describe("expandSpokenDigits", () => {
@@ -41,5 +43,18 @@ Agent: டபுள் ஜீரோவையும் சேர்த்து �
 
   it("finds a continuous 10-digit number", () => {
     expect(mergeSpokenPhoneFragments("WhatsApp 9876543210 please")).toContain("9876543210");
+  });
+});
+
+describe("preferNumberTranscript", () => {
+  it("keeps a clean final phone and never overwrites ordinary speech", () => {
+    expect(preferNumberTranscript("98 76 54 32 11 extra", "9876543210")).toBe("9876543210");
+    expect(looksLikeSpokenNumber("one minute")).toBe(false);
+    expect(preferNumberTranscript("9876543211", "one minute")).toBe("one minute");
+  });
+
+  it("expands spoken digits on the final when the caller is collecting a number", () => {
+    expect(preferNumberTranscript(undefined, "eight nine zero four seven four eight eight seven four"))
+      .toMatch(/8904748874/);
   });
 });

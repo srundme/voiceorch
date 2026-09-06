@@ -43,6 +43,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { format } from "date-fns";
+import { getCachedHostBrand, hostProductName, isDirectSnapServeHost } from "@/lib/white-label";
 
 /** Events that are actually delivered today */
 const LIVE_EVENTS = [
@@ -96,6 +97,7 @@ function WebhookForm({
     initialEvents.length ? initialEvents : ["call.completed"],
   );
   const [description, setDescription] = useState(initial?.description ?? "");
+  const product = hostProductName();
 
   const toggle = (ev: string) => {
     setEvents((prev) =>
@@ -110,12 +112,12 @@ function WebhookForm({
         <Input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://your-app.com/hooks/snapserve"
+          placeholder="https://your-app.com/hooks/events"
           className="mt-1.5 h-9 text-sm"
         />
         <p className="text-[11px] text-muted-foreground mt-1.5">
-          SnapServe will <strong>POST</strong> JSON here. This is <em>your</em> server URL — not a
-          SnapServe URL.
+          {product} will <strong>POST</strong> JSON here. This is <em>your</em> server URL — not a{" "}
+          {product} URL.
         </p>
       </div>
 
@@ -205,6 +207,9 @@ export default function WebhooksPage() {
   const [deleteTarget, setDeleteTarget] = useState<WebhookEndpoint | null>(null);
   const [newSecret, setNewSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const product = hostProductName();
+  const partnerDocs = getCachedHostBrand()?.docsUrl?.trim() || null;
+  const docsHref = isDirectSnapServeHost() ? "/docs/webhooks" : partnerDocs;
 
   const invalidate = () =>
     qc.invalidateQueries({ queryKey: getListWebhookEndpointsQueryKey() });
@@ -277,7 +282,7 @@ export default function WebhooksPage() {
       {/* Toolbar — parent StripeTabPage owns the Developers title */}
       <div className="shrink-0 border-b border-border px-5 py-4 sm:px-6 flex items-start justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Event subscriptions: SnapServe POSTs call results to your app. Not form intake, lead transfer, or agent post-call notify.
+          Event subscriptions: {product} POSTs call results to your app. Not form intake, lead transfer, or agent post-call notify.
         </p>
         <Button size="sm" className="h-8 text-xs gap-1.5 shrink-0" onClick={() => setCreateOpen(true)}>
           <Plus className="w-3.5 h-3.5" />
@@ -296,7 +301,7 @@ export default function WebhooksPage() {
                   This page — Event subscriptions
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
-                  Workspace-wide: you give SnapServe a URL. We POST{" "}
+                  Workspace-wide: you give {product} a URL. We POST{" "}
                   <code className="text-[10px]">call.completed</code> (transcript, summary, cost) for every call.
                 </p>
               </div>
@@ -309,12 +314,13 @@ export default function WebhooksPage() {
                   <ArrowRight className="h-3 w-3 opacity-50 group-hover:opacity-100" />
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
-                  The other direction: your website form POSTs leads into SnapServe to dial. Agent post-call notify is per-agent under Builder → Settings.
+                  The other direction: your website form POSTs leads into {product} to dial. Agent post-call notify is per-agent under Builder → Settings.
                 </p>
               </Link>
             </div>
+            {docsHref ? (
             <a
-              href="/docs/webhooks"
+              href={docsHref}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
@@ -323,6 +329,7 @@ export default function WebhooksPage() {
               Developer docs — verify signatures
               <ExternalLink className="h-3 w-3 opacity-60" />
             </a>
+            ) : null}
           </div>
 
           {isLoading ? (
@@ -425,7 +432,7 @@ export default function WebhooksPage() {
 
           <div className="rounded-xl border border-border bg-muted/15 p-4 text-xs text-muted-foreground space-y-2">
             <p className="font-medium text-foreground text-sm">What we send</p>
-            <pre className="font-mono text-[11px] leading-relaxed overflow-x-auto whitespace-pre-wrap text-foreground/80">{`POST https://your-app.com/hooks/snapserve
+            <pre className="font-mono text-[11px] leading-relaxed overflow-x-auto whitespace-pre-wrap text-foreground/80">{`POST https://your-app.com/hooks/events
 Content-Type: application/json
 X-SnapServe-Signature: sha256=<hmac>
 X-SnapServe-Timestamp: 1718612345
@@ -445,10 +452,15 @@ X-SnapServe-Timestamp: 1718612345
 }`}</pre>
             <p>
               Verify with HMAC-SHA256 of <code className="text-foreground">{"{timestamp}.{rawBody}"}</code>{" "}
-              using your endpoint secret. Full guide:{" "}
-              <a href="/docs/webhooks" className="text-primary hover:underline">
-                /docs/webhooks
-              </a>
+              using your endpoint secret
+              {docsHref ? (
+                <>
+                  . Full guide:{" "}
+                  <a href={docsHref} className="text-primary hover:underline" target="_blank" rel="noreferrer">
+                    {isDirectSnapServeHost() ? "/docs/webhooks" : "docs"}
+                  </a>
+                </>
+              ) : null}
               .
             </p>
           </div>
@@ -497,7 +509,7 @@ X-SnapServe-Timestamp: 1718612345
           <DialogHeader>
             <DialogTitle className="text-base">Add call webhook</DialogTitle>
             <DialogDescription className="text-xs">
-              Point SnapServe at your HTTPS handler to receive call results.
+              Point {product} at your HTTPS handler to receive call results.
             </DialogDescription>
           </DialogHeader>
           <WebhookForm
@@ -529,7 +541,7 @@ X-SnapServe-Timestamp: 1718612345
           <DialogHeader>
             <DialogTitle className="text-base">Delete webhook?</DialogTitle>
             <DialogDescription className="text-xs">
-              SnapServe will stop POSTing to{" "}
+              {product} will stop POSTing to{" "}
               <span className="font-mono text-foreground">{deleteTarget?.url}</span>.
             </DialogDescription>
           </DialogHeader>

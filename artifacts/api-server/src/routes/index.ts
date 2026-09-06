@@ -33,6 +33,15 @@ import adminEmailsRouter from "./admin-emails.js";
 import adminFinanceAnalyticsRouter from "./admin-finance-analytics.js";
 import adminBoardAnalyticsRouter from "./admin-board-analytics.js";
 import adminCallAnalyticsRouter from "./admin-call-analytics.js";
+import adminV2AnalyticsRouter from "./admin-v2-analytics.js";
+import adminV2SaasRouter from "./admin-v2-saas.js";
+import adminCostPricingRouter from "./admin-cost-pricing.js";
+import adminManagedInfraRouter from "./admin-managed-infra.js";
+import adminV2CustomersRouter from "./admin-v2-customers.js";
+import adminV2OperationsRouter from "./admin-v2-operations.js";
+import adminV2ProductRouter from "./admin-v2-product.js";
+import adminV2VoiceRouter from "./admin-v2-voice.js";
+import adminV2RevenueRouter from "./admin-v2-revenue.js";
 import ambientSoundsRouter, { ambientSoundsUserRouter } from "./ambient-sounds.js";
 import wizardRouter from "./wizard.js";
 import vibeRouter from "./vibe.js";
@@ -42,6 +51,7 @@ import campaignsRouter from "./campaigns.js";
 import campaignDashboardRouter from "./campaign-dashboard.js";
 import campaignBatchesRouter from "./campaign-batches.js";
 import campaignWebhookRouter from "./campaign-webhook.js";
+import landingLeadsRouter from "./landing-leads.js";
 import campaignLeadsRouter from "./campaign-leads.js";
 import campaignAnalyticsRouter from "./campaign-analytics.js";
 import campaignReportsRouter from "./campaign-reports.js";
@@ -85,6 +95,7 @@ import voiceathonPublicRouter from "./voiceathon-public.js";
 import voiceathonEventsRouter from "./voiceathon-events.js";
 import adminEventFeedbackRouter from "./admin-event-feedback.js";
 import adminVoiceathonRouter from "./admin-voiceathon.js";
+import adminTeamGuidesRouter from "./admin-team-guides.js";
 import workflowsRouter from "./workflows.js";
 import workflowsPublicRouter from "./workflows-public.js";
 import journeysRouter from "./journeys.js";
@@ -120,8 +131,18 @@ router.use(adminEmailsRouter);
 router.use(adminFinanceAnalyticsRouter);
 router.use(adminBoardAnalyticsRouter);
 router.use(adminCallAnalyticsRouter);
+router.use(adminV2AnalyticsRouter);
+router.use(adminV2SaasRouter);
+router.use(adminCostPricingRouter);
+router.use(adminManagedInfraRouter);
+router.use(adminV2CustomersRouter);
+router.use(adminV2OperationsRouter);
+router.use(adminV2ProductRouter);
+router.use(adminV2VoiceRouter);
+router.use(adminV2RevenueRouter);
 router.use(adminEventFeedbackRouter);
 router.use(adminVoiceathonRouter);
+router.use(adminTeamGuidesRouter);
 
 // Public campaign lead webhook — must be before provisionUser (no Clerk session needed)
 router.use(campaignWebhookRouter);
@@ -155,6 +176,9 @@ router.use(bookRouter);
 
 // Public workshop feedback form — anonymous students, no session required
 router.use(workshopRouter);
+
+// Public landing-page partner form (CORS + optional API key)
+router.use(landingLeadsRouter);
 
 // Public Voice-a-thon registration / judge / verify — no session required
 router.use(voiceathonPublicRouter);

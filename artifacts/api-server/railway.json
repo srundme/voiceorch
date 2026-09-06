@@ -8,6 +8,7 @@
       "artifacts/dashboard/**",
       "artifacts/admin/**",
       "artifacts/snapserve-book/**",
+      "docs/webinar/*.pdf",
       "lib/**",
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",

@@ -416,17 +416,14 @@ export default function OnboardingPage() {
   const totalSteps = answers.usedVoiceAgents === true ? 5 : 4;
 
   const submitOnboarding = useCallback((finalAnswers: Answers) => {
-    // Finish onboarding in the agent builder with the create dialog open.
-    // Vibe is still reachable from "Build with AI", but it is no longer the
-    // screen every new signup is dropped into. The name is still stashed so
-    // Vibe can greet them whenever they choose to open it.
+    // Finish onboarding on Home. Vibe stays opt-in from "Build with AI".
     const goToBuilder = () => {
       try {
         if (finalAnswers.name.trim()) {
           sessionStorage.setItem("vibe:welcomeName", finalAnswers.name.trim());
         }
       } catch { /* ignore */ }
-      setLocation("/app/agents?create=1");
+      setLocation("/app/home");
     };
     complete(
       {

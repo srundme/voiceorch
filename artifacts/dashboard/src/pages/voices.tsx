@@ -1,9 +1,8 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import {
@@ -13,12 +12,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mic2, Loader2, Search, Play, Square, AlertTriangle, Star, ArrowUpDown, User, Sparkles, Trash2 } from "lucide-react";
+import { Mic2, Search, Play, Square, AlertTriangle, Star, ArrowUpDown, User } from "lucide-react";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
 import { getVoiceAvatar, resolveVoiceGenderLabel } from "@/lib/voice-avatars";
-import { CloneVoiceDialog, type ClonedVoiceResult } from "@/components/clone-voice-dialog";
-import { RegisterSarvamVoiceDialog } from "@/components/register-sarvam-voice-dialog";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
@@ -77,10 +74,6 @@ type SortOption = "name-asc" | "name-desc" | "language";
 
 export default function VoicesPage() {
   const [voices, setVoices] = useState<Voice[]>([]);
-  const [myClones, setMyClones] = useState<ClonedVoiceResult[]>([]);
-  const [clonesLoading, setClonesLoading] = useState(true);
-  const [cloneOpen, setCloneOpen] = useState(false);
-  const [sarvamCloneOpen, setSarvamCloneOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [search, setSearch] = useState("");
@@ -90,22 +83,9 @@ export default function VoicesPage() {
   const [sortBy, setSortBy] = useState<SortOption>("name-asc");
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavorites());
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const { toast } = useToast();
   const { getToken } = useAuth();
-
-  const loadMyClones = useCallback(async () => {
-    setClonesLoading(true);
-    try {
-      const data = await customFetch<{ voices: ClonedVoiceResult[] }>(`${API}/voices/mine`);
-      setMyClones(data.voices ?? []);
-    } catch {
-      setMyClones([]);
-    } finally {
-      setClonesLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,11 +104,10 @@ export default function VoicesPage() {
           setLoading(false);
         }
       });
-    void loadMyClones();
     return () => {
       cancelled = true;
     };
-  }, [loadMyClones]);
+  }, []);
 
   function toggleFavorite(id: string) {
     setFavorites((prev) => {
@@ -196,27 +175,6 @@ export default function VoicesPage() {
     }
   }
 
-  async function deleteClone(voice: ClonedVoiceResult) {
-    setDeletingId(voice.id);
-    try {
-      const token = await getToken();
-      const res = await fetch(`${API}/voices/mine/${encodeURIComponent(voice.id)}`, {
-        method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error ?? `Delete failed (${res.status})`);
-      }
-      setMyClones((prev) => prev.filter((v) => v.id !== voice.id));
-      toast({ title: "Clone deleted", description: `"${voice.name}" was removed.` });
-    } catch (err) {
-      toast({ title: "Delete failed", description: formatApiError(err), variant: "destructive" });
-    } finally {
-      setDeletingId(null);
-    }
-  }
-
   const languages = useMemo(() => {
     return Array.from(new Set(voices.map((v) => v.language))).sort();
   }, [voices]);
@@ -254,120 +212,6 @@ export default function VoicesPage() {
   return (
     <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
       <div className="max-w-6xl mx-auto w-full p-4 sm:p-6 space-y-6">
-        {/* Toolbar — parent StripeTabPage owns the Providers / Voices title */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <p className="text-muted-foreground text-sm">
-            Whitelisted Cartesia voices, Cartesia instant clones, and Sarvam Creative Studio clones.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <Button onClick={() => setCloneOpen(true)} className="gap-1.5 w-full sm:w-auto min-h-10 h-11">
-              <Sparkles className="h-4 w-4" />
-              Clone (Cartesia)
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setSarvamCloneOpen(true)}
-              className="gap-1.5 w-full sm:w-auto min-h-10 h-11"
-            >
-              <Sparkles className="h-4 w-4" />
-              Add Sarvam clone
-            </Button>
-          </div>
-        </div>
-
-        <CloneVoiceDialog
-          open={cloneOpen}
-          onOpenChange={setCloneOpen}
-          onCloned={(voice) => {
-            setMyClones((prev) => [voice, ...prev.filter((v) => v.id !== voice.id)]);
-          }}
-        />
-        <RegisterSarvamVoiceDialog
-          open={sarvamCloneOpen}
-          onOpenChange={setSarvamCloneOpen}
-          onRegistered={(voice) => {
-            setMyClones((prev) => [voice, ...prev.filter((v) => v.id !== voice.id)]);
-          }}
-        />
-
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold tracking-tight">My clones</h2>
-            {!clonesLoading && (
-              <span className="text-[11px] text-muted-foreground">
-                {myClones.length} voice{myClones.length === 1 ? "" : "s"}
-              </span>
-            )}
-          </div>
-          {clonesLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Array.from({ length: 2 }).map((_, i) => (
-                <div key={i} className="rounded-xl border border-border/60 bg-card/40 p-4 h-[120px] animate-pulse" />
-              ))}
-            </div>
-          ) : myClones.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border/60 p-6 text-center text-sm text-muted-foreground">
-              No clones yet. Instant-clone with Cartesia, or add a Sarvam Creative Studio speaker id.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {myClones.map((voice) => {
-                const isPreviewing = previewingId === voice.id;
-                const providerLabel = voice.provider === "sarvam" ? "Sarvam" : "Cartesia";
-                return (
-                  <Card key={`${voice.provider ?? "cartesia"}:${voice.id}`} className="flex flex-col border border-border/60 bg-card/60">
-                    <CardContent className="p-4 flex flex-col gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold truncate">{voice.name}</p>
-                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                          <Badge variant="outline" className={cn(METADATA_PILL_CLASS, "uppercase")}>
-                            {voice.language.toUpperCase()}
-                          </Badge>
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 gap-1">
-                            <Sparkles className="h-2.5 w-2.5" /> {providerLabel}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
-                        <button
-                          onClick={() => void previewVoice(voice)}
-                          disabled={previewingId !== null && !isPreviewing}
-                          className={cn(
-                            "h-8 px-3 flex items-center gap-1.5 rounded-md border text-xs font-medium transition-colors disabled:opacity-40",
-                            isPreviewing
-                              ? "border-primary/40 bg-primary/10 text-primary"
-                              : "border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground",
-                          )}
-                        >
-                          {isPreviewing ? (
-                            <><Square className="h-3 w-3 fill-current" /> Stop</>
-                          ) : (
-                            <><Play className="h-3 w-3" /> Preview</>
-                          )}
-                        </button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 text-destructive hover:text-destructive"
-                          disabled={deletingId === voice.id}
-                          onClick={() => void deleteClone(voice)}
-                        >
-                          {deletingId === voice.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3.5 w-3.5" />
-                          )}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
         {error && (
           <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 flex items-start gap-3">
             <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
@@ -377,10 +221,6 @@ export default function VoicesPage() {
             </div>
           </div>
         )}
-
-        <div className="flex items-center justify-between gap-2 pt-2">
-          <h2 className="text-sm font-semibold tracking-tight">Library</h2>
-        </div>
 
         <div className="flex flex-col lg:flex-row gap-3">
           <div className="relative flex-1 min-w-[200px]">

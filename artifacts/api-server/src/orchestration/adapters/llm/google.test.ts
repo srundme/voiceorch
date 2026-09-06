@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   makeGeminiPreambleGuard,
   parseGeminiBracketToolCall,
+  resolveGoogleLlmModel,
   stripGeminiThinkingPreamble,
   GoogleLLM,
 } from "./google.js";
@@ -11,6 +12,19 @@ function runStream(chunks: string[]): string {
   const guard = makeGeminiPreambleGuard();
   return chunks.map((c) => guard(c)).join("");
 }
+
+describe("resolveGoogleLlmModel", () => {
+  it("rewrites retired 2.5 Flash ids that Google 404s (call failed after Hello)", () => {
+    expect(resolveGoogleLlmModel("gemini-2.5-flash")).toBe("gemini-3.6-flash");
+    expect(resolveGoogleLlmModel("models/gemini-2.5-flash-8b")).toBe("gemini-3.6-flash");
+    expect(resolveGoogleLlmModel(null)).toBe("gemini-3.6-flash");
+  });
+
+  it("leaves current Gemini 3 / Pro ids alone", () => {
+    expect(resolveGoogleLlmModel("gemini-3.6-flash")).toBe("gemini-3.6-flash");
+    expect(resolveGoogleLlmModel("gemini-2.5-pro")).toBe("gemini-2.5-pro");
+  });
+});
 
 describe("stripGeminiThinkingPreamble (final reply)", () => {
   it("leaves a normal reply untouched", () => {

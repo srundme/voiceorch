@@ -41,6 +41,25 @@ function tzOffsetMs(date: Date, tz: string): number {
   return asUtc - date.getTime();
 }
 
+/** Read an instant back as the wall-clock numbers a clock in `tz` would show. */
+function wallClockPartsIn(date: Date, tz: string): { y: number; mo: number; d: number; h: number; mi: number; s: number } {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const map: Record<string, number> = {};
+  for (const p of dtf.formatToParts(date)) {
+    if (p.type !== "literal") map[p.type] = Number(p.value);
+  }
+  return { y: map["year"]!, mo: map["month"]!, d: map["day"]!, h: map["hour"]!, mi: map["minute"]!, s: map["second"]! };
+}
+
 /** Convert a wall-clock time (as if the numbers were read off a clock in `tz`) to a real UTC instant. */
 function wallClockToInstant(
   y: number,
@@ -96,16 +115,35 @@ export function parseCallbackDateTime(raw: string | undefined | null, tz: string
 }
 
 /**
+ * Keep the wall-clock time the caller agreed to, but move it to the first day
+ * that is still in the future. Returns null when even a week ahead stays in the
+ * past, which means the model emitted a date that was wrong by more than a day.
+ */
+function rollForwardToFutureDay(parsed: Date, tz: string, now: number): Date | null {
+  const { y, mo, d, h, mi, s } = wallClockPartsIn(parsed, tz);
+  for (let addDays = 1; addDays <= 7; addDays++) {
+    // Date.UTC normalizes day overflow, so month/year roll over on their own.
+    const candidate = wallClockToInstant(y, mo, d + addDays, h, mi, s, tz);
+    if (candidate.getTime() > now) return candidate;
+  }
+  return null;
+}
+
+/**
  * Resolve the effective callback time from an LLM-supplied string.
  *  - Missing/unparseable → default to `defaultMinutesAhead` from now.
- *  - Parsed time in the past (model miscomputed the date) → clamp to a small
- *    buffer ahead so the poller does not immediately re-dial at the wrong time.
+ *  - Parsed time already past → keep the agreed wall-clock time and roll it to
+ *    the next day that is still ahead. Models routinely stamp a relative phrase
+ *    ("Sunday 11 am", "tomorrow at 9") with TODAY's date; honouring the hour is
+ *    far closer to the caller's intent than dialling them minutes from now.
+ *  - Past by more than a week → clamp to a small buffer ahead so the poller does
+ *    not immediately re-dial at the wrong time.
  */
 export function resolveCallbackTime(
   raw: string | undefined | null,
   tz: string,
   opts: { defaultMinutesAhead?: number; minBufferMinutes?: number } = {},
-): { scheduledAt: Date; wasDefaulted: boolean; wasClamped: boolean } {
+): { scheduledAt: Date; wasDefaulted: boolean; wasClamped: boolean; wasRolled: boolean } {
   const defaultMinutesAhead = opts.defaultMinutesAhead ?? 60;
   const minBufferMinutes = opts.minBufferMinutes ?? 2;
   const now = Date.now();
@@ -116,14 +154,20 @@ export function resolveCallbackTime(
       scheduledAt: new Date(now + defaultMinutesAhead * 60_000),
       wasDefaulted: true,
       wasClamped: false,
+      wasRolled: false,
     };
   }
   if (parsed.getTime() <= now) {
+    const rolled = rollForwardToFutureDay(parsed, tz, now);
+    if (rolled) {
+      return { scheduledAt: rolled, wasDefaulted: false, wasClamped: false, wasRolled: true };
+    }
     return {
       scheduledAt: new Date(now + minBufferMinutes * 60_000),
       wasDefaulted: false,
       wasClamped: true,
+      wasRolled: false,
     };
   }
-  return { scheduledAt: parsed, wasDefaulted: false, wasClamped: false };
+  return { scheduledAt: parsed, wasDefaulted: false, wasClamped: false, wasRolled: false };
 }

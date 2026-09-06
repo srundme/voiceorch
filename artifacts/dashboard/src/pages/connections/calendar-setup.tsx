@@ -3,7 +3,7 @@
  * Creates calendar + Google link + bookable meeting without "event type" jargon.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -23,26 +23,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
   computeBookingSetupReadiness,
   createMeeting,
   createOrUpdateCalendar,
+  defaultWeeklyAvailability,
   getBrowserTimezone,
   linkGoogleToCalendar,
+  listCalendarAvailability,
   listGoogleConnections,
+  mergeWeeklyAvailability,
+  replaceCalendarAvailability,
   MEETING_DURATION_OPTIONS,
+  CALENDAR_TIMEZONES,
+  WEEKDAY_SHORT,
   openGoogleConnectPopup,
   slugifyMeetingName,
   type MeetingInfo,
   type SchedulingCalendarInfo,
+  type WeeklyAvailabilitySlot,
 } from "@/lib/scheduling-setup";
 import {
   Check,
-  CheckCircle2,
-  ChevronRight,
+  Globe,
   Loader2,
   Plus,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -54,7 +62,7 @@ const STEPS: { id: WizardStepId; title: string; blurb: string }[] = [
   {
     id: "calendar",
     title: "Your calendar",
-    blurb: "Name it and the email where bookings should go.",
+    blurb: "Name, timezone, hosts, and weekly hours.",
   },
   {
     id: "google",
@@ -63,22 +71,26 @@ const STEPS: { id: WizardStepId; title: string; blurb: string }[] = [
   },
   {
     id: "meeting",
-    title: "What can callers book?",
-    blurb: "Name and length. Meet link is included on every invite by default.",
+    title: "Create a meeting (with Google Meet)",
+    blurb: "Give it a name and length. When a caller books, they get a Google Meet link on the calendar invite — you do not create that Meet URL yourself.",
   },
 ];
 
 function mapCalFromQuery(c: {
   id: number;
   name: string;
+  description?: string | null;
   hostEmail?: string | null;
+  additionalHosts?: string[] | null;
   connectedGoogleEmail?: string | null;
   timezone?: string;
 }): SchedulingCalendarInfo {
   return {
     id: c.id,
     name: c.name,
+    description: c.description ?? null,
     hostEmail: c.hostEmail ?? null,
+    additionalHosts: c.additionalHosts ?? null,
     connectedGoogleEmail: c.connectedGoogleEmail ?? null,
     timezone: c.timezone || "UTC",
   };
@@ -101,12 +113,87 @@ function mapMeetingFromQuery(e: {
   };
 }
 
+function CalendarShell({
+  embedded,
+  backHref,
+  backLabel,
+  children,
+}: {
+  embedded: boolean;
+  backHref: string;
+  backLabel: string;
+  children: ReactNode;
+}) {
+  if (embedded) return <div className="space-y-4">{children}</div>;
+  return (
+    <StripePage
+      title="Bookings calendar"
+      description="Keep calendar, Google Meet, and the meeting type on this page — nothing is hidden in an accordion."
+      back={{ href: backHref, label: backLabel }}
+      actions={
+        <Button asChild size="sm" className="h-9">
+          <Link href={`${BASE}/app/scheduling`}>Open Bookings</Link>
+        </Button>
+      }
+    >
+      {children}
+    </StripePage>
+  );
+}
+
+function SetupCard({
+  step,
+  title,
+  blurb,
+  done,
+  locked,
+  children,
+}: {
+  step: number;
+  title: string;
+  blurb: string;
+  done: boolean;
+  locked?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section className="flex min-h-[320px] max-h-[min(80vh,720px)] flex-col rounded-xl border border-border bg-card p-4 shadow-sm">
+      <div className="mb-4 flex items-start gap-2.5">
+        <span
+          className={cn(
+            "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+            done
+              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+              : "bg-muted text-muted-foreground",
+          )}
+        >
+          {done ? <Check className="h-3.5 w-3.5" /> : step}
+        </span>
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-foreground">{title}</p>
+          <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">{blurb}</p>
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
+        {locked ? (
+          <p className="text-[13px] text-muted-foreground">Save a calendar on the left first.</p>
+        ) : (
+          children
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function ConnectionsCalendarSetup({
   backHref = "/app/connections",
   backLabel = "Connections",
+  embedded = false,
 }: {
   backHref?: string;
   backLabel?: string;
+  /** Render inside Agent Builder without the Connections page chrome. */
+  embedded?: boolean;
 } = {}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -122,29 +209,33 @@ export function ConnectionsCalendarSetup({
     [eventTypesQ.data],
   );
 
-  const readiness = computeBookingSetupReadiness(calendars, meetings);
-  const { calendar, meeting, requiredReadyCount, ready } = readiness;
+  const [userWantsNew, setUserWantsNew] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (userWantsNew) return;
+    if (calendars.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    if (selectedId == null || !calendars.some((c) => c.id === selectedId)) {
+      setSelectedId(calendars[0]!.id);
+    }
+  }, [calendars, selectedId, userWantsNew]);
+
+  const composingNew = userWantsNew || calendars.length === 0;
+
+  const readiness = computeBookingSetupReadiness(
+    calendars,
+    meetings,
+    composingNew ? null : selectedId,
+  );
+  const { calendar, meeting } = readiness;
   const doneFlags: Record<WizardStepId, boolean> = {
     calendar: Boolean(calendar),
     google: readiness.googleLinked,
     meeting: Boolean(meeting),
   };
-
-  const firstIncomplete = STEPS.find((s) => !doneFlags[s.id])?.id ?? null;
-  const [activeStep, setActiveStep] = useState<WizardStepId | null>(null);
-  const [editingReady, setEditingReady] = useState(false);
-
-  useEffect(() => {
-    if (ready && !editingReady) {
-      setActiveStep(null);
-      return;
-    }
-    if (!activeStep || doneFlags[activeStep]) {
-      if (firstIncomplete) setActiveStep(firstIncomplete);
-    }
-    // Only re-pick when readiness / first incomplete changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, firstIncomplete, editingReady]);
 
   const refresh = useCallback(async () => {
     await Promise.all([
@@ -159,205 +250,133 @@ export function ConnectionsCalendarSetup({
 
   if (loading) {
     return (
-      <StripePage
-        title="Bookings calendar"
-        description="Set up booking in a few simple steps. Day-to-day appointments live under Bookings."
-        back={{ href: backHref, label: backLabel }}
-      >
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
+      <CalendarShell embedded={embedded} backHref={backHref} backLabel={backLabel}>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
           <Loader2 className="h-4 w-4 animate-spin" /> Checking your setup…
         </div>
-      </StripePage>
-    );
-  }
-
-  if (ready && !editingReady) {
-    return (
-      <StripePage
-        title="Bookings calendar"
-        description="Set up booking in a few simple steps. Day-to-day appointments live under Bookings."
-        back={{ href: backHref, label: backLabel }}
-      >
-        <div className="max-w-lg space-y-4">
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[12px] text-emerald-600 dark:text-emerald-400">
-            <p className="font-medium flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              3 of 3 ready
-            </p>
-            <p className="mt-1 leading-relaxed text-emerald-600 dark:text-emerald-400/90">
-              On your agent → Tools → turn on Booking and pick this meeting, then watch appointments under Bookings.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3 space-y-2">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Your meeting</p>
-            <p className="text-[14px] font-medium">{meeting?.name}</p>
-            <p className="text-[12px] text-muted-foreground">
-              {meeting?.durationMinutes} minutes
-              {calendar?.connectedGoogleEmail ? ` · ${calendar.connectedGoogleEmail}` : ""}
-              {meeting?.slug ? (
-                <>
-                  {" · "}
-                  <span className="font-mono text-[11px]">/book/{meeting.slug}</span>
-                </>
-              ) : null}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button asChild size="sm" className="h-9">
-              <Link href={`${BASE}/app/scheduling`}>Open Bookings</Link>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9"
-              onClick={() => {
-                setEditingReady(true);
-                setActiveStep("meeting");
-              }}
-            >
-              Change meeting
-            </Button>
-            <Button asChild size="sm" variant="ghost" className="h-9 text-muted-foreground">
-              <Link href={`${BASE}/app/scheduling/availability`}>Adjust hours</Link>
-            </Button>
-            <Button asChild size="sm" variant="ghost" className="h-9 text-muted-foreground">
-              <Link href={`${BASE}/app/scheduling/calendars`}>Advanced</Link>
-            </Button>
-          </div>
-        </div>
-      </StripePage>
+      </CalendarShell>
     );
   }
 
   return (
-    <StripePage
-      title="Bookings calendar"
-      description="Set up booking in a few simple steps. Day-to-day appointments live under Bookings."
-      back={{ href: backHref, label: backLabel }}
-    >
-      <div className="max-w-lg space-y-4">
-        <div
-          className={cn(
-            "rounded-xl border px-4 py-3 text-[12px]",
-            ready
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-              : "border-border/60 bg-muted/20 text-muted-foreground",
-          )}
-        >
-          <p className="font-medium text-[12px]">
-            {ready ? "3 of 3 ready" : `${requiredReadyCount} of 3 ready`}
-          </p>
-          <p className="mt-0.5 leading-relaxed">
-            {ready
-              ? "You're set — turn on Booking on an agent and pick this meeting."
-              : "Follow the steps below. We’ll create everything agents need to book calls."}
-          </p>
+    <CalendarShell embedded={embedded} backHref={backHref} backLabel={backLabel}>
+      <div className="space-y-6">
+        {calendars.length > 0 ? (
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Label className="text-xs font-medium">Which calendar</Label>
+              <Select
+                value={composingNew ? "__new__" : selectedId != null ? String(selectedId) : undefined}
+                onValueChange={(value) => {
+                  if (value === "__new__") {
+                    setUserWantsNew(true);
+                    setSelectedId(null);
+                    return;
+                  }
+                  setUserWantsNew(false);
+                  setSelectedId(Number(value));
+                }}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select a calendar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {calendars.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="__new__">Create new calendar</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                {calendars.length === 1
+                  ? "You already have a calendar. Open it here, or create another."
+                  : `${calendars.length} calendars in this workspace. Google and meeting setup follow the one you pick.`}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 shrink-0 gap-1.5"
+              onClick={() => {
+                setUserWantsNew(true);
+                setSelectedId(null);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" /> New calendar
+            </Button>
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <SetupCard step={1} title={STEPS[0]!.title} blurb={STEPS[0]!.blurb} done={doneFlags.calendar}>
+            <CalendarPanel
+              key={calendar?.id ?? "new"}
+              existing={calendar}
+              onDone={async (saved) => {
+                await refresh();
+                if (saved) {
+                  setUserWantsNew(false);
+                  setSelectedId(saved.id);
+                }
+              }}
+            />
+          </SetupCard>
+          <SetupCard
+            step={2}
+            title={STEPS[1]!.title}
+            blurb={STEPS[1]!.blurb}
+            done={doneFlags.google}
+            locked={!calendar}
+          >
+            {calendar ? (
+              <GooglePanel
+                calendarId={calendar.id}
+                linkedEmail={calendar.connectedGoogleEmail}
+                onDone={refresh}
+              />
+            ) : null}
+          </SetupCard>
+          <SetupCard
+            step={3}
+            title={STEPS[2]!.title}
+            blurb={STEPS[2]!.blurb}
+            done={doneFlags.meeting}
+            locked={!calendar}
+          >
+            {calendar ? (
+              <MeetingPanel
+                calendarId={calendar.id}
+                existing={meeting}
+                onDone={async () => {
+                  await refresh();
+                  toast({
+                    title: "Meeting saved",
+                    description: embedded
+                      ? "Pick this calendar on the agent Bookings toggle, then save."
+                      : "Turn on Bookings on the agent and pick this calendar.",
+                  });
+                }}
+              />
+            ) : null}
+          </SetupCard>
         </div>
 
-        <ol className="space-y-2">
-          {STEPS.map((step, i) => {
-            const done = doneFlags[step.id];
-            const unlocked =
-              i === 0 || STEPS.slice(0, i).every((s) => doneFlags[s.id]);
-            const open = activeStep === step.id;
-            return (
-              <li key={step.id} className="rounded-xl border border-border/60 bg-card/40 overflow-hidden">
-                <button
-                  type="button"
-                  disabled={!unlocked}
-                  onClick={() => unlocked && setActiveStep(open ? null : step.id)}
-                  className={cn(
-                    "flex w-full items-start gap-3 px-3.5 py-3 text-left transition-colors",
-                    unlocked ? "hover:bg-muted/30" : "opacity-40 cursor-not-allowed",
-                  )}
-                >
-                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-background/50">
-                    {done ? (
-                      <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    ) : (
-                      <span className="text-[12px] font-semibold text-muted-foreground">{i + 1}</span>
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-medium">
-                      {step.title}
-                      {done && !open ? (
-                        <span className="ml-2 text-[11px] font-normal text-emerald-600 dark:text-emerald-400/80">Done</span>
-                      ) : null}
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground leading-relaxed">{step.blurb}</p>
-                  </div>
-                  {unlocked && (
-                    <ChevronRight
-                      className={cn(
-                        "mt-2 h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-transform",
-                        open && "rotate-90",
-                      )}
-                    />
-                  )}
-                </button>
-
-                {open && unlocked && (
-                  <div className="border-t border-border/40 px-3.5 pb-4 pt-3">
-                    {step.id === "calendar" && (
-                      <CalendarPanel
-                        existing={calendar}
-                        onDone={async () => {
-                          await refresh();
-                          setActiveStep("google");
-                        }}
-                      />
-                    )}
-                    {step.id === "google" && calendar && (
-                      <GooglePanel
-                        calendarId={calendar.id}
-                        linkedEmail={calendar.connectedGoogleEmail}
-                        onDone={async () => {
-                          await refresh();
-                          setActiveStep("meeting");
-                        }}
-                      />
-                    )}
-                    {step.id === "meeting" && calendar && (
-                      <MeetingPanel
-                        calendarId={calendar.id}
-                        existing={meeting}
-                        onDone={async () => {
-                          await refresh();
-                          setEditingReady(false);
-                          setActiveStep(null);
-                          toast({
-                            title: "Booking setup complete",
-                            description: "Turn on Booking on an agent and pick this meeting.",
-                          });
-                        }}
-                      />
-                    )}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Button asChild size="sm" className="h-9">
-            <Link href={`${BASE}/app/scheduling`}>Open Bookings</Link>
+        <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+          <Button asChild size="sm" variant="outline" className="h-9">
+            <Link href={`${BASE}/app/scheduling/availability`}>Hours</Link>
           </Button>
           <Button asChild size="sm" variant="ghost" className="h-9 text-muted-foreground">
-            <Link href={`${BASE}/app/scheduling/availability`}>Adjust hours later</Link>
+            <Link href={`${BASE}/app/scheduling/event-types`}>All meetings</Link>
           </Button>
           <Button asChild size="sm" variant="ghost" className="h-9 text-muted-foreground">
-            <Link href={`${BASE}/app/scheduling/event-types`}>Meetings</Link>
-          </Button>
-          <Button asChild size="sm" variant="ghost" className="h-9 text-muted-foreground">
-            <Link href={`${BASE}/app/scheduling/calendars`}>Advanced</Link>
+            <Link href={`${BASE}/app/scheduling/calendars`}>All calendars</Link>
           </Button>
         </div>
       </div>
-    </StripePage>
+    </CalendarShell>
   );
 }
 
@@ -368,12 +387,38 @@ function CalendarPanel({
   onDone,
 }: {
   existing: SchedulingCalendarInfo | null;
-  onDone: () => Promise<void>;
+  onDone: (saved: SchedulingCalendarInfo) => Promise<void>;
 }) {
   const { toast } = useToast();
   const [name, setName] = useState(existing?.name ?? "My Calendar");
+  const [description, setDescription] = useState(existing?.description ?? "");
+  const [timezone, setTimezone] = useState(existing?.timezone || getBrowserTimezone() || "Asia/Kolkata");
   const [hostEmail, setHostEmail] = useState(existing?.hostEmail ?? "");
+  const [additionalHosts, setAdditionalHosts] = useState<string[]>(existing?.additionalHosts?.length ? [...existing.additionalHosts] : []);
+  const [slots, setSlots] = useState<WeeklyAvailabilitySlot[]>(() => defaultWeeklyAvailability());
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!existing?.id) {
+      setSlots(defaultWeeklyAvailability());
+      return;
+    }
+    let cancelled = false;
+    void listCalendarAvailability(existing.id)
+      .then((rows) => {
+        if (!cancelled) setSlots(mergeWeeklyAvailability(rows));
+      })
+      .catch(() => {
+        if (!cancelled) setSlots(defaultWeeklyAvailability());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [existing?.id]);
+
+  const tzOptions = CALENDAR_TIMEZONES.includes(timezone as (typeof CALENDAR_TIMEZONES)[number])
+    ? CALENDAR_TIMEZONES
+    : [timezone, ...CALENDAR_TIMEZONES];
 
   async function handleSave() {
     if (!name.trim()) {
@@ -381,18 +426,33 @@ function CalendarPanel({
       return;
     }
     if (!hostEmail.trim() || !hostEmail.includes("@")) {
-      toast({ title: "Enter the email where bookings should go", variant: "destructive" });
+      toast({ title: "Enter the host / organizer email", variant: "destructive" });
+      return;
+    }
+    const invalid = slots.find((s) => s.isActive && s.startTime >= s.endTime);
+    if (invalid) {
+      toast({
+        title: `End time must be after start on ${WEEKDAY_SHORT[invalid.dayOfWeek]}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!slots.some((s) => s.isActive)) {
+      toast({ title: "Turn on at least one day for bookings", variant: "destructive" });
       return;
     }
     setSaving(true);
     try {
-      await createOrUpdateCalendar({
+      const saved = await createOrUpdateCalendar({
         id: existing?.id,
         name,
+        description,
+        timezone,
         hostEmail,
-        timezone: existing?.timezone || getBrowserTimezone(),
+        additionalHosts,
       });
-      await onDone();
+      await replaceCalendarAvailability(saved.id, slots);
+      await onDone(saved);
     } catch (e: unknown) {
       toast({
         title: "Couldn’t save calendar",
@@ -405,9 +465,9 @@ function CalendarPanel({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="space-y-1.5">
-        <Label className="text-xs font-medium">Calendar name</Label>
+        <Label className="text-xs font-medium">Calendar name *</Label>
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -415,7 +475,31 @@ function CalendarPanel({
         />
       </div>
       <div className="space-y-1.5">
-        <Label className="text-xs font-medium">Email where bookings should go</Label>
+        <Label className="text-xs font-medium">Description</Label>
+        <Input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="e.g. Handles inbound demo booking requests"
+        />
+        <p className="text-[11px] text-muted-foreground">Optional. Shown on the calendar card.</p>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium">Timezone *</Label>
+        <Select value={timezone} onValueChange={setTimezone}>
+          <SelectTrigger className="h-9">
+            <Globe className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="max-h-64">
+            {tzOptions.map((tz) => (
+              <SelectItem key={tz} value={tz}>{tz.replace(/_/g, " ")}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-[11px] text-muted-foreground">Slots and availability use this timezone.</p>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium">Host / organizer email *</Label>
         <Input
           type="email"
           value={hostEmail}
@@ -423,8 +507,105 @@ function CalendarPanel({
           placeholder="you@company.com"
         />
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Use the inbox you check every day. You’ll get booking emails here — ideally the same Google account you’ll connect next.
+          Organizer on Google invites. Use the same Google account you connect next.
         </p>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium">Additional hosts</Label>
+        <div className="space-y-2">
+          {additionalHosts.map((host, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Input
+                type="email"
+                value={host}
+                onChange={(e) => {
+                  const next = [...additionalHosts];
+                  next[i] = e.target.value;
+                  setAdditionalHosts(next);
+                }}
+                placeholder="cohost@example.com"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                onClick={() => setAdditionalHosts(additionalHosts.filter((_, j) => j !== i))}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-[11px]"
+            onClick={() => setAdditionalHosts([...additionalHosts, ""])}
+          >
+            <Plus className="h-3.5 w-3.5" /> Add host
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Extra people get the Meet link on every booking.
+        </p>
+      </div>
+      <div className="space-y-2 border-t border-border pt-3">
+        <p className="text-xs font-medium text-foreground">Weekly hours</p>
+        <p className="text-[11px] text-muted-foreground">
+          Days and times callers can book. Uses the timezone above.
+        </p>
+        <div className="space-y-1">
+          {slots.map((slot) => (
+            <div
+              key={slot.dayOfWeek}
+              className={cn(
+                "flex items-center gap-2 rounded-md px-1.5 py-1",
+                slot.isActive ? "bg-muted/40" : "opacity-50",
+              )}
+            >
+              <Switch
+                checked={slot.isActive}
+                onCheckedChange={() =>
+                  setSlots((prev) =>
+                    prev.map((s) =>
+                      s.dayOfWeek === slot.dayOfWeek ? { ...s, isActive: !s.isActive } : s,
+                    ),
+                  )
+                }
+                className="scale-75 origin-left"
+              />
+              <span className="w-8 shrink-0 text-[11px] font-medium">{WEEKDAY_SHORT[slot.dayOfWeek]}</span>
+              <input
+                type="time"
+                value={slot.startTime}
+                disabled={!slot.isActive}
+                onChange={(e) =>
+                  setSlots((prev) =>
+                    prev.map((s) =>
+                      s.dayOfWeek === slot.dayOfWeek ? { ...s, startTime: e.target.value } : s,
+                    ),
+                  )
+                }
+                className="h-7 w-[5.75rem] rounded border border-input bg-background px-1.5 text-[11px] text-foreground disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <span className="text-[11px] text-muted-foreground">–</span>
+              <input
+                type="time"
+                value={slot.endTime}
+                disabled={!slot.isActive}
+                onChange={(e) =>
+                  setSlots((prev) =>
+                    prev.map((s) =>
+                      s.dayOfWeek === slot.dayOfWeek ? { ...s, endTime: e.target.value } : s,
+                    ),
+                  )
+                }
+                className="h-7 w-[5.75rem] rounded border border-input bg-background px-1.5 text-[11px] text-foreground disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+          ))}
+        </div>
       </div>
       <Button className="w-full" disabled={saving} onClick={() => void handleSave()}>
         {saving ? (
@@ -432,9 +613,9 @@ function CalendarPanel({
             <Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…
           </>
         ) : existing ? (
-          "Save & continue"
+          "Save calendar"
         ) : (
-          "Create calendar & continue"
+          "Create calendar"
         )}
       </Button>
     </div>
@@ -454,32 +635,73 @@ function GooglePanel({
   const googleQ = useQuery({
     queryKey: ["scheduling-google-connections"],
     queryFn: () => listGoogleConnections(),
-    staleTime: 15_000,
+    staleTime: 5_000,
   });
   const [linking, setLinking] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+
+  const finishOauthReturn = useCallback((ok: boolean, email?: string) => {
+    setConnecting(false);
+    void googleQ.refetch();
+    if (ok) {
+      toast({
+        title: "Google account added",
+        description: email
+          ? `${email} is saved. Pick it below to use it on this calendar.`
+          : "Pick the account below to use it on this calendar.",
+      });
+    } else {
+      toast({
+        title: "Google sign-in failed",
+        description: "Try Add Google account again and choose the Gmail you want.",
+        variant: "destructive",
+      });
+    }
+  }, [googleQ, toast]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gcal = params.get("gcal");
+    const email = params.get("email") ?? undefined;
+    if (gcal !== "connected" && gcal !== "error") return;
+    params.delete("gcal");
+    params.delete("email");
+    const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+    window.history.replaceState({}, "", next);
+    try {
+      const ch = new BroadcastChannel("google-oauth");
+      ch.postMessage({ type: gcal === "connected" ? "connected" : "error", email });
+      ch.close();
+    } catch {
+      /* BroadcastChannel unavailable */
+    }
+    if (window.name === "snapserve-google-oauth") {
+      window.setTimeout(() => {
+        try { window.close(); } catch { /* not a popup */ }
+      }, 400);
+      return;
+    }
+    finishOauthReturn(gcal === "connected", email);
+  }, [finishOauthReturn]);
 
   useEffect(() => {
     let ch: BroadcastChannel | null = null;
     try {
       ch = new BroadcastChannel("google-oauth");
-      ch.onmessage = (e: MessageEvent<{ type: string }>) => {
+      ch.onmessage = (e: MessageEvent<{ type: string; email?: string }>) => {
         if (e.data?.type === "connected") {
-          setConnecting(false);
-          void googleQ.refetch();
+          finishOauthReturn(true, e.data.email);
+        } else if (e.data?.type === "error") {
+          finishOauthReturn(false);
         }
       };
     } catch {
       /* BroadcastChannel unavailable */
     }
     return () => {
-      try {
-        ch?.close();
-      } catch {
-        /* ignore */
-      }
+      try { ch?.close(); } catch { /* ignore */ }
     };
-  }, [googleQ]);
+  }, [finishOauthReturn]);
 
   async function handleAddAccount() {
     setConnecting(true);
@@ -503,19 +725,6 @@ function GooglePanel({
     }
   }
 
-  if (linkedEmail) {
-    return (
-      <div className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Connected as <span className="font-medium text-foreground">{linkedEmail}</span>
-        </p>
-        <Button className="w-full" onClick={() => void onDone()}>
-          Continue
-        </Button>
-      </div>
-    );
-  }
-
   if (googleQ.isLoading) {
     return (
       <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
@@ -529,36 +738,48 @@ function GooglePanel({
   return (
     <div className="space-y-4">
       <p className="text-[12px] text-muted-foreground leading-relaxed">
-        Connect the Google account that matches your booking email. Callers get a Meet link and events land on your calendar.
+        Connect every Google account you need, then pick which one this calendar uses. Calendar invites, Meet links, and booking mail are sent from that account — not the Google Cloud Console mailbox. Reconnect the account once so mail permission is granted.
       </p>
 
       {connections.length > 0 ? (
         <div className="space-y-2">
-          {connections.map((conn) => (
-            <div
-              key={conn.id}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-background"
-            >
-              <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
-                <span className="text-xs font-semibold">{conn.email[0]?.toUpperCase()}</span>
-              </div>
-              <span className="flex-1 text-sm truncate">{conn.email}</span>
-              <Button
-                size="sm"
-                className="h-7 px-3 text-xs shrink-0"
-                disabled={linking !== null}
-                onClick={() => void handleSelect(conn.id)}
+          {connections.map((conn) => {
+            const isLinked = linkedEmail != null && conn.email.toLowerCase() === linkedEmail.toLowerCase();
+            return (
+              <div
+                key={conn.id}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-background"
               >
-                {linking === conn.id ? (
-                  <>
-                    <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> Linking…
-                  </>
+                <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                  <span className="text-xs font-semibold">{conn.email[0]?.toUpperCase()}</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm truncate">{conn.email}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {isLinked ? "Used on this calendar" : "Saved — not used on this calendar yet"}
+                  </p>
+                </div>
+                {isLinked ? (
+                  <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 shrink-0">Connected</span>
                 ) : (
-                  "Use this"
+                  <Button
+                    size="sm"
+                    className="h-7 px-3 text-xs shrink-0"
+                    disabled={linking !== null}
+                    onClick={() => void handleSelect(conn.id)}
+                  >
+                    {linking === conn.id ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> Linking…
+                      </>
+                    ) : (
+                      "Use this"
+                    )}
+                  </Button>
                 )}
-              </Button>
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
@@ -632,19 +853,18 @@ function MeetingPanel({
   if (existing) {
     return (
       <div className="space-y-3">
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Callers can book <span className="font-medium text-foreground">{existing.name}</span>
-          {" "}({existing.durationMinutes} min).
+        <p className="text-sm text-foreground">
+          <span className="font-medium">{existing.name}</span>
+          <span className="text-muted-foreground"> · {existing.durationMinutes} min</span>
         </p>
-        <p className="text-[11px] text-muted-foreground">
-          Public link: <span className="font-mono">/book/{existing.slug}</span>
-          {" · "}
-          <Link href={`${BASE}/app/scheduling/event-types/${existing.id}`} className="underline underline-offset-2">
-            Edit details
-          </Link>
+        <p className="text-[11.5px] text-muted-foreground">
+          Booking page (not the Meet link): <span className="font-mono">/book/{existing.slug}</span>
         </p>
-        <Button className="w-full" onClick={() => void onDone()}>
-          Looks good — finish
+        <p className="text-[11.5px] text-muted-foreground">
+          After someone picks a time, Google Meet is added automatically on the invite.
+        </p>
+        <Button asChild variant="outline" size="sm" className="h-8">
+          <Link href={`${BASE}/app/scheduling/event-types/${existing.id}`}>Edit this meeting</Link>
         </Button>
       </div>
     );
@@ -662,7 +882,9 @@ function MeetingPanel({
         />
         {name.trim() && (
           <p className="text-[11px] text-muted-foreground">
-            Booking link: <span className="font-mono bg-muted rounded px-1">/book/{slug}</span>
+            Callers open this page to pick a time:{" "}
+            <span className="font-mono bg-muted rounded px-1">/book/{slug}</span>
+            . The Google Meet URL is generated only after they book.
           </p>
         )}
       </div>
@@ -687,7 +909,7 @@ function MeetingPanel({
             <Loader2 className="h-4 w-4 animate-spin mr-2" /> Creating…
           </>
         ) : (
-          "Create meeting & finish"
+          "Create meeting"
         )}
       </Button>
     </div>

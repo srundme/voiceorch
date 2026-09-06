@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { adminFetch, BASE, formatAdminError } from "@/lib/api";
+import { SectionSubNav } from "@/components/section-subnav";
+import { PRODUCT_TABS } from "@/lib/nav-config";
 import {
   Upload,
   Loader2,
@@ -243,6 +245,7 @@ export default function AmbientSoundsPage() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={PRODUCT_TABS} />
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Ambient Sounds</h1>
         <p className="text-muted-foreground mt-1">

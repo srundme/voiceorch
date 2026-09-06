@@ -30,6 +30,12 @@ export function optionalMs(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : null;
 }
 
+/** Optional 0–1 float from agent config (Sarvam realtime VAD threshold). */
+export function optionalUnitInterval(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.min(1, Math.max(0, value));
+}
+
 /** Agent-level settings the recovery timings are derived from. */
 export interface SttTuningInputs {
   /** Local VAD silence that closes a turn on the batch path (agent `vadSilenceMs`). */
@@ -67,7 +73,7 @@ const SUBSTANTIVE_SPEECH_MS = 700;
  * Long enough to sit above an ordinary uninterrupted sentence, since Sarvam emits
  * nothing at all until end-of-speech and a talkative caller is not a failure.
  */
-const LOST_TURN_BACKSTOP_MS = 6_000;
+const LOST_TURN_BACKSTOP_MS = 0;
 
 /** Floor for the recovery silence gate, for agents configured with very short windows. */
 const RECOVERY_MIN_SILENCE_FLOOR_MS = 400;

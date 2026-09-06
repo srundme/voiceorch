@@ -17,10 +17,15 @@ const OPENAI_COMPAT_PREAMBLE_RE =
 function looksLikeFunctionCallNotation(text: string, validNames: Set<string>): boolean {
   if (validNames.size === 0) return false;
   for (const name of validNames) {
-    if (new RegExp(`\\b${name}\\b`).test(text)) return true;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Require name( — a bare tool name in spoken text is not a call and must
+    // not stall TTS until the stream ends.
+    if (new RegExp(`\\b${escaped}\\s*\\(`).test(text)) return true;
   }
   return false;
 }
+
+export { looksLikeFunctionCallNotation };
 
 export async function drainOpenAICompatibleStream(
   stream: AsyncIterable<{

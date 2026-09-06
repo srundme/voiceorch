@@ -24,6 +24,20 @@ import {
 
 const API = "/api";
 
+const STOCK_HANDOFF_MESSAGES = new Set([
+  "Just a second — connecting you now.",
+  "One moment — I'm connecting you to a teammate who can help with this.",
+]);
+const STOCK_HANDOFF_GREETINGS = new Set([
+  "Hi — I have what you just said. How can I help?",
+  "Hi — I've been briefed on your conversation so far. How can I help?",
+]);
+
+function stockHandoffLine(stored: string | null | undefined, stockSet: Set<string>): string {
+  const t = (stored ?? "").trim();
+  return !t || stockSet.has(t) ? "" : t;
+}
+
 type SquadMember = {
   id?: number;
   agentId: number;
@@ -40,6 +54,8 @@ type Squad = {
   name: string;
   description: string | null;
   status: string;
+  handoffMessage?: string | null;
+  handoffGreeting?: string | null;
   members: SquadMember[];
   connections: {
     phoneNumbers: Array<{ id: number; number: string }>;
@@ -247,27 +263,31 @@ function CreateSquadDialog({
   const seedName = seeded ? agents.find((a) => a.id === seedAgentId)?.name : null;
 
   const blankDrafts = (): MemberDraft[] => [
-    { agentId: "", roleName: "Lead Qualifier", instructions: "" },
-    { agentId: "", roleName: "Meeting Scheduler", instructions: "" },
+    { agentId: "", roleName: "", instructions: "" },
+    { agentId: "", roleName: "", instructions: "" },
   ];
 
   const seededDrafts = (): MemberDraft[] => [
     {
       agentId: String(seedAgentId),
-      roleName: "First agent",
+      roleName: "",
       instructions: "Entry point — hand off when a specialist should take over",
     },
-    { agentId: "", roleName: "Specialist", instructions: "" },
+    { agentId: "", roleName: "", instructions: "" },
   ];
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [handoffMessage, setHandoffMessage] = useState("");
+  const [handoffGreeting, setHandoffGreeting] = useState("");
   const [drafts, setDrafts] = useState<MemberDraft[]>(blankDrafts);
 
   useEffect(() => {
     if (!open) return;
     setName("");
     setDescription("");
+    setHandoffMessage("");
+    setHandoffGreeting("");
     setDrafts(seeded ? seededDrafts() : blankDrafts());
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when dialog opens / seed changes
   }, [open, seedAgentId, seeded]);
@@ -281,6 +301,10 @@ function CreateSquadDialog({
     setDrafts((prev) => prev.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
   };
 
+  const selectAgent = (i: number, agentId: string) => {
+    setDraft(i, { agentId, roleName: "" });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
@@ -292,7 +316,7 @@ function CreateSquadDialog({
               : "Pick agents you already built and give each a role. Handoff tools, shared caller memory, and task creation are wired up automatically."}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
           <div>
             <Label>Name</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Sales team" autoFocus={seeded} />
@@ -314,8 +338,9 @@ function CreateSquadDialog({
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Select value={d.agentId} onValueChange={(v) => setDraft(i, { agentId: v })}>
+              <div className="space-y-1.5">
+                <Label className="text-[11px]">Select agent</Label>
+                <Select value={d.agentId} onValueChange={(v) => selectAgent(i, v)}>
                   <SelectTrigger><SelectValue placeholder="Select agent" /></SelectTrigger>
                   <SelectContent>
                     {agents.map((a) => (
@@ -329,17 +354,54 @@ function CreateSquadDialog({
                     ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  value={d.roleName}
-                  onChange={(e) => setDraft(i, { roleName: e.target.value })}
-                  placeholder="Role, e.g. Lead Qualifier"
-                />
               </div>
+              {d.agentId ? (
+                <div className="space-y-1.5">
+                  <Label className="text-[11px]">Agent Role</Label>
+                  <Input
+                    value={d.roleName}
+                    onChange={(e) => setDraft(i, { roleName: e.target.value })}
+                    placeholder="e.g. Lead Qualifier"
+                  />
+                </div>
+              ) : null}
               <Input
                 value={d.instructions}
                 onChange={(e) => setDraft(i, { instructions: e.target.value })}
                 placeholder="What they handle, e.g. qualifying new leads (helps teammates know when to transfer)"
               />
+              {i === 0 ? (
+                <div className="space-y-1.5 pt-1 border-t border-border/50">
+                  <Label className="text-[11px] inline-flex items-center gap-1.5">
+                    <PhoneForwarded className="w-3 h-3" /> Handoff announcement
+                  </Label>
+                  <Textarea
+                    value={handoffMessage}
+                    onChange={(e) => setHandoffMessage(e.target.value)}
+                    rows={2}
+                    placeholder="Optional. Leave empty to stay silent."
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Optional. Empty stays silent — no extra voice before the teammate.
+                  </p>
+                </div>
+              ) : null}
+              {i === 1 ? (
+                <div className="space-y-1.5 pt-1 border-t border-border/50">
+                  <Label className="text-[11px] inline-flex items-center gap-1.5">
+                    <PhoneForwarded className="w-3 h-3" /> Receiving agent greeting
+                  </Label>
+                  <Textarea
+                    value={handoffGreeting}
+                    onChange={(e) => setHandoffGreeting(e.target.value)}
+                    rows={2}
+                    placeholder="Optional. Leave empty — they continue from their prompt."
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Optional. Empty stays silent — they follow their own prompt.
+                  </p>
+                </div>
+              ) : null}
             </div>
           ))}
 
@@ -364,9 +426,13 @@ function CreateSquadDialog({
                 name: name.trim(),
                 description: description.trim() || null,
                 status: "active",
+                handoffMessage: handoffMessage.trim(),
+                handoffGreeting: handoffGreeting.trim(),
                 members: filled.map((d, i) => ({
                   agentId: parseInt(d.agentId, 10),
-                  roleName: d.roleName.trim(),
+                  roleName: d.roleName.trim()
+                    || agents.find((a) => String(a.id) === d.agentId)?.name
+                    || `Agent ${i + 1}`,
                   roleType: "specialist",
                   instructions: d.instructions.trim() || null,
                   handoffEnabled: true,
@@ -400,12 +466,20 @@ function EditSquadDialog({
 }) {
   const [name, setName] = useState(squad.name);
   const [description, setDescription] = useState(squad.description ?? "");
+  const [handoffMessage, setHandoffMessage] = useState(
+    stockHandoffLine(squad.handoffMessage, STOCK_HANDOFF_MESSAGES),
+  );
+  const [handoffGreeting, setHandoffGreeting] = useState(
+    stockHandoffLine(squad.handoffGreeting, STOCK_HANDOFF_GREETINGS),
+  );
   const [drafts, setDrafts] = useState<MemberDraft[]>([]);
 
   useEffect(() => {
     if (!open) return;
     setName(squad.name);
     setDescription(squad.description ?? "");
+    setHandoffMessage(stockHandoffLine(squad.handoffMessage, STOCK_HANDOFF_MESSAGES));
+    setHandoffGreeting(stockHandoffLine(squad.handoffGreeting, STOCK_HANDOFF_GREETINGS));
     setDrafts(
       squad.members.map((m) => ({
         agentId: String(m.agentId),
@@ -422,6 +496,10 @@ function EditSquadDialog({
 
   const setDraft = (i: number, patch: Partial<MemberDraft>) => {
     setDrafts((prev) => prev.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
+  };
+
+  const selectAgent = (i: number, agentId: string) => {
+    setDraft(i, { agentId, roleName: "" });
   };
 
   return (
@@ -452,8 +530,9 @@ function EditSquadDialog({
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Select value={d.agentId} onValueChange={(v) => setDraft(i, { agentId: v })}>
+              <div className="space-y-1.5">
+                <Label className="text-[11px]">Select agent</Label>
+                <Select value={d.agentId} onValueChange={(v) => selectAgent(i, v)}>
                   <SelectTrigger><SelectValue placeholder="Select agent" /></SelectTrigger>
                   <SelectContent>
                     {agents.map((a) => (
@@ -467,17 +546,54 @@ function EditSquadDialog({
                     ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  value={d.roleName}
-                  onChange={(e) => setDraft(i, { roleName: e.target.value })}
-                  placeholder="Role, e.g. Lead Qualifier"
-                />
               </div>
+              {d.agentId ? (
+                <div className="space-y-1.5">
+                  <Label className="text-[11px]">Agent Role</Label>
+                  <Input
+                    value={d.roleName}
+                    onChange={(e) => setDraft(i, { roleName: e.target.value })}
+                    placeholder="e.g. Lead Qualifier"
+                  />
+                </div>
+              ) : null}
               <Input
                 value={d.instructions}
                 onChange={(e) => setDraft(i, { instructions: e.target.value })}
                 placeholder="What they handle"
               />
+              {i === 0 ? (
+                <div className="space-y-1.5 pt-1 border-t border-border/50">
+                  <Label className="text-[11px] inline-flex items-center gap-1.5">
+                    <PhoneForwarded className="w-3 h-3" /> Handoff announcement
+                  </Label>
+                  <Textarea
+                    value={handoffMessage}
+                    onChange={(e) => setHandoffMessage(e.target.value)}
+                    rows={2}
+                    placeholder="Optional. Leave empty to stay silent."
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Optional. Empty stays silent — no extra voice before the teammate.
+                  </p>
+                </div>
+              ) : null}
+              {i === 1 ? (
+                <div className="space-y-1.5 pt-1 border-t border-border/50">
+                  <Label className="text-[11px] inline-flex items-center gap-1.5">
+                    <PhoneForwarded className="w-3 h-3" /> Receiving agent greeting
+                  </Label>
+                  <Textarea
+                    value={handoffGreeting}
+                    onChange={(e) => setHandoffGreeting(e.target.value)}
+                    rows={2}
+                    placeholder="Optional. Leave empty — they continue from their prompt."
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Optional. Empty stays silent — they follow their own prompt.
+                  </p>
+                </div>
+              ) : null}
             </div>
           ))}
           <Button
@@ -497,9 +613,13 @@ function EditSquadDialog({
               onSubmit({
                 name: name.trim(),
                 description: description.trim() || null,
+                handoffMessage: handoffMessage.trim(),
+                handoffGreeting: handoffGreeting.trim(),
                 members: filled.map((d, i) => ({
                   agentId: parseInt(d.agentId, 10),
-                  roleName: d.roleName.trim(),
+                  roleName: d.roleName.trim()
+                    || agents.find((a) => String(a.id) === d.agentId)?.name
+                    || `Agent ${i + 1}`,
                   roleType: "specialist",
                   instructions: d.instructions.trim() || null,
                   handoffEnabled: true,
@@ -617,7 +737,7 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">Team</h2>
             <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => setEditOpen(true)}>
-              Edit members
+              Edit team
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
@@ -626,7 +746,7 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
             follow-up calls for one another.
           </p>
           <div className="space-y-2">
-            {squad.members.map((m) => (
+            {squad.members.map((m, i) => (
               <div key={m.id ?? m.agentId} className="rounded-lg border border-border/60 p-3">
                 <div className="flex justify-between gap-2">
                   <div>
@@ -649,12 +769,35 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
                 {m.instructions && (
                   <p className="text-xs text-muted-foreground mt-2 line-clamp-2">Handles: {m.instructions}</p>
                 )}
+                {i === 0 ? (
+                  <div className="mt-3 pt-2 border-t border-border/50">
+                    <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+                      <PhoneForwarded className="w-3 h-3" /> Handoff announcement
+                    </p>
+                    <p className="text-xs text-foreground/90 mt-0.5">
+                      {stockHandoffLine(squad.handoffMessage, STOCK_HANDOFF_MESSAGES) || "Silent — teammate continues from their prompt"}
+                    </p>
+                  </div>
+                ) : null}
+                {i === 1 ? (
+                  <div className="mt-3 pt-2 border-t border-border/50">
+                    <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+                      <PhoneForwarded className="w-3 h-3" /> Receiving agent greeting
+                    </p>
+                    <p className="text-xs text-foreground/90 mt-0.5">
+                      {stockHandoffLine(squad.handoffGreeting, STOCK_HANDOFF_GREETINGS) || "Silent — they follow their own prompt"}
+                    </p>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
           <p className="text-[11px] text-muted-foreground">
             Agents without a phone number can still receive in-call handoffs, but cannot make follow-up calls.
           </p>
+          <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => setEditOpen(true)}>
+            Edit handoff messages
+          </Button>
         </section>
 
         <section className="space-y-3">

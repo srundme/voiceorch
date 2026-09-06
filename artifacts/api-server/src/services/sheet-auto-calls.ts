@@ -8,6 +8,7 @@ import {
   db,
   agentsTable,
   campaignsTable,
+  campaignBatchesTable,
   campaignLeadsTable,
   leadTimelineTable,
   googleSheetsConnectionsTable,
@@ -21,25 +22,32 @@ import {
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import {
-  readSheetGrid,
+  readSheetHeaders,
+  readSheetDataRows,
+  readSheetColumnValues,
+  getSheetLastDataRow,
   createSpreadsheet,
   ensureHeaders,
+  renameSheetHeader,
   updateSheetRowByIndex,
+  SHEET_ROW_CHUNK_SIZE,
 } from "./google-sheets.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
+import { getOrCreateLiveBatch } from "./campaign-live-batch.js";
 import {
   parseSheetLeadRow,
-  isDoNotDialValue,
-  resolveDoNotDialHeader,
   isRetryStatus,
   friendlySheetStatus,
   fuzzyDetectColumnMap,
 } from "./sheet-auto-calls-helpers.js";
+import { followUpColumnName } from "./sheet-auto-call-loops.js";
 
 export {
   parseSheetLeadRow,
   fuzzyDetectColumnMap,
   friendlySheetStatus,
+  formatSheetDisposition,
+  resolveSheetStatusLabel,
 } from "./sheet-auto-calls-helpers.js";
 
 const DEFAULT_STATUS_COLS: SheetAutoStatusColumns = {
@@ -49,8 +57,7 @@ const DEFAULT_STATUS_COLS: SheetAutoStatusColumns = {
   summary: "Summary",
   callId: "Call ID",
   recording: "Recording",
-  nextFollowUp: "Next Follow-up",
-  meetingTime: "Meeting Time",
+  nextFollowUp: "Follow-up",
 };
 
 const CALL_LOG_HEADERS = [
@@ -60,16 +67,34 @@ const CALL_LOG_HEADERS = [
 
 async function ensureWritebackHeaders(pipeline: SheetAutoCallPipeline): Promise<void> {
   if (pipeline.writebackMode === "same_sheet" || pipeline.writebackMode === "both") {
+    try {
+      await renameSheetHeader(
+        pipeline.userId,
+        pipeline.connectionId,
+        pipeline.spreadsheetId,
+        pipeline.sheetName,
+        "Next Follow-up",
+        "Follow-up",
+      );
+    } catch {
+      /* header may not exist yet */
+    }
+    const stored = pipeline.sameSheetStatusColumns ?? DEFAULT_STATUS_COLS;
     const cols = [
-      ...Object.values(pipeline.sameSheetStatusColumns ?? DEFAULT_STATUS_COLS).filter(Boolean) as string[],
-      "Do Not Call",
+      stored.status || "Status",
+      stored.lastCallAt || "Last Call At",
+      stored.disposition || "Disposition",
+      stored.summary || "Summary",
+      stored.callId || "Call ID",
+      stored.recording || "Recording",
+      followUpColumnName(stored.nextFollowUp),
     ];
     await ensureHeaders(
       pipeline.userId,
       pipeline.connectionId,
       pipeline.spreadsheetId,
       pipeline.sheetName,
-      [...new Set(cols)],
+      [...new Set(cols.filter(Boolean))],
     );
   }
   if (
@@ -273,20 +298,8 @@ async function enqueueRow(
   campaignId: number,
   sheetRowIndex: number,
   parsed: ReturnType<typeof parseSheetLeadRow>,
-  opts?: { forceRetry?: boolean; doNotDial?: boolean },
+  opts?: { forceRetry?: boolean },
 ): Promise<"enqueued" | "skipped" | "duplicate"> {
-  if (opts?.doNotDial) {
-    await db.insert(sheetAutoCallRowStateTable).values({
-      pipelineId: pipeline.id,
-      sheetRowIndex,
-      phoneNormalized: parsed.phoneNormalized || "",
-      status: "skipped",
-      error: "Do Not Call",
-    }).onConflictDoNothing();
-    await writeLiveSheetStatus(pipeline, sheetRowIndex, "Skipped");
-    return "skipped";
-  }
-
   if (!parsed.phoneNormalized) {
     await db.insert(sheetAutoCallRowStateTable).values({
       pipelineId: pipeline.id,
@@ -339,6 +352,11 @@ async function enqueueRow(
   const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId)).limit(1);
   if (!campaign) throw new Error("Campaign missing");
 
+  const liveBatch = await getOrCreateLiveBatch(campaignId, campaign.timezone ?? "Asia/Kolkata", {
+    leadSource: "google_sheets",
+    description: "Auto-created — Google Sheet rows are dialled immediately",
+  });
+
   const leadData = {
     ...parsed.leadData,
     ...(parsed.name
@@ -350,6 +368,7 @@ async function enqueueRow(
 
   const [lead] = await db.insert(campaignLeadsTable).values({
     campaignId,
+    batchId: liveBatch?.id ?? null,
     phone: parsed.phoneRaw || parsed.phoneNormalized,
     normalizedPhone: parsed.phoneNormalized,
     name: parsed.name || null,
@@ -370,6 +389,12 @@ async function enqueueRow(
   await db.update(campaignsTable)
     .set({ totalLeads: sql`${campaignsTable.totalLeads} + 1` })
     .where(eq(campaignsTable.id, campaignId));
+
+  if (liveBatch) {
+    await db.update(campaignBatchesTable)
+      .set({ totalLeads: sql`${campaignBatchesTable.totalLeads} + 1` })
+      .where(eq(campaignBatchesTable.id, liveBatch.id));
+  }
 
   await db.insert(sheetAutoCallRowStateTable).values({
     pipelineId: pipeline.id,
@@ -392,54 +417,117 @@ async function enqueueRow(
 }
 
 /**
- * Process sheet rows for a pipeline. When `fromRowExclusive` is set, only rows
- * after that index (1-based header=1) are considered.
+ * Process sheet rows for a pipeline using cursor + chunked reads.
+ * - New / backfill rows: up to a few chunks after `fromRowExclusive` per call
+ * - Retry: Status column scan for rows already behind the cursor
+ *
+ * When `fromRowExclusive` is set, only rows after that index (1-based header=1)
+ * are treated as new; Retry status can re-enqueue earlier rows.
  */
 export async function processSheetRows(
   pipeline: SheetAutoCallPipeline,
   opts: { fromRowExclusive: number; advanceCursor: boolean },
-): Promise<{ enqueued: number; skipped: number; lastRow: number }> {
-  const grid = await readSheetGrid(
+): Promise<{ enqueued: number; skipped: number; lastRow: number; cursorRowIndex: number }> {
+  const columnMap = pipeline.columnMap as SheetAutoColumnMap;
+  const lastDataRow = await getSheetLastDataRow(
+    pipeline.userId,
+    pipeline.connectionId,
+    pipeline.spreadsheetId,
+    pipeline.sheetName,
+    columnMap.phone,
+  );
+  const headers = await readSheetHeaders(
     pipeline.userId,
     pipeline.connectionId,
     pipeline.spreadsheetId,
     pipeline.sheetName,
   );
-  const { headers, rows } = grid;
-  const lastRow = rows.length + 1; // 1-based last data row index (= header + length)
   const campaignId = await ensureCampaign(pipeline);
-  const columnMap = pipeline.columnMap as SheetAutoColumnMap;
-  const dncHeader = resolveDoNotDialHeader(headers, columnMap);
   const statusHeader =
     (pipeline.sameSheetStatusColumns as SheetAutoStatusColumns | null)?.status ?? "Status";
 
   let enqueued = 0;
   let skipped = 0;
+  let cursor = Math.max(pipeline.cursorRowIndex, opts.fromRowExclusive);
 
-  for (let i = 0; i < rows.length; i++) {
-    const sheetRowIndex = i + 2; // row 1 = header
-    const row = rows[i]!;
-    const statusVal = cellAtHeader(headers, row, statusHeader);
-    const forceRetry = isRetryStatus(statusVal);
+  // --- New rows after cursor (a few chunks per tick for large backfills) ---
+  const maxChunksPerTick = 3;
+  if (headers.length > 0) {
+    for (let c = 0; c < maxChunksPerTick; c++) {
+      const firstNewRow = Math.max(cursor + 1, 2);
+      if (firstNewRow > lastDataRow) break;
 
-    if (sheetRowIndex <= opts.fromRowExclusive && !forceRetry) continue;
+      const chunkEnd = Math.min(firstNewRow + SHEET_ROW_CHUNK_SIZE - 1, lastDataRow);
+      const chunk = await readSheetDataRows(
+        pipeline.userId,
+        pipeline.connectionId,
+        pipeline.spreadsheetId,
+        pipeline.sheetName,
+        firstNewRow,
+        chunkEnd,
+      );
 
-    const parsed = parseSheetLeadRow(headers, row, columnMap);
-    const doNotDial = dncHeader
-      ? isDoNotDialValue(cellAtHeader(headers, row, dncHeader))
-      : false;
-    const result = await enqueueRow(pipeline, campaignId, sheetRowIndex, parsed, {
-      forceRetry,
-      doNotDial,
-    });
-    if (result === "enqueued") enqueued += 1;
-    else skipped += 1;
+      for (let i = 0; i < chunkEnd - firstNewRow + 1; i++) {
+        const sheetRowIndex = firstNewRow + i;
+        const row = chunk[i] ?? [];
+        const statusVal = cellAtHeader(headers, row, statusHeader);
+        const forceRetry = isRetryStatus(statusVal);
+        const parsed = parseSheetLeadRow(headers, row, columnMap);
+        const result = await enqueueRow(pipeline, campaignId, sheetRowIndex, parsed, {
+          forceRetry,
+        });
+        if (result === "enqueued") enqueued += 1;
+        else skipped += 1;
+      }
+      cursor = Math.max(cursor, chunkEnd);
+    }
+  }
+
+  // Caught up with known sheet extent
+  if (cursor + 1 > lastDataRow) {
+    cursor = Math.max(cursor, lastDataRow);
+  }
+
+  // --- Retry: scan Status on rows already behind the *start* cursor ---
+  const retryThrough = Math.min(opts.fromRowExclusive, lastDataRow);
+  if (headers.length > 0 && retryThrough >= 2 && statusHeader) {
+    const { values: statusVals } = await readSheetColumnValues(
+      pipeline.userId,
+      pipeline.connectionId,
+      pipeline.spreadsheetId,
+      pipeline.sheetName,
+      statusHeader,
+      2,
+      retryThrough,
+    );
+    const retryIndexes: number[] = [];
+    for (let i = 0; i < statusVals.length; i++) {
+      if (isRetryStatus(statusVals[i])) retryIndexes.push(i + 2);
+    }
+    const retryCap = 50;
+    for (const sheetRowIndex of retryIndexes.slice(0, retryCap)) {
+      const rowChunk = await readSheetDataRows(
+        pipeline.userId,
+        pipeline.connectionId,
+        pipeline.spreadsheetId,
+        pipeline.sheetName,
+        sheetRowIndex,
+        sheetRowIndex,
+      );
+      const row = rowChunk[0] ?? [];
+      const parsed = parseSheetLeadRow(headers, row, columnMap);
+      const result = await enqueueRow(pipeline, campaignId, sheetRowIndex, parsed, {
+        forceRetry: true,
+      });
+      if (result === "enqueued") enqueued += 1;
+      else skipped += 1;
+    }
   }
 
   if (opts.advanceCursor) {
     await db.update(sheetAutoCallPipelinesTable)
       .set({
-        cursorRowIndex: Math.max(pipeline.cursorRowIndex, lastRow),
+        cursorRowIndex: Math.max(pipeline.cursorRowIndex, cursor),
         lastPolledAt: new Date(),
         lastError: null,
         updatedAt: new Date(),
@@ -447,7 +535,12 @@ export async function processSheetRows(
       .where(eq(sheetAutoCallPipelinesTable.id, pipeline.id));
   }
 
-  return { enqueued, skipped, lastRow };
+  return {
+    enqueued,
+    skipped,
+    lastRow: lastDataRow,
+    cursorRowIndex: Math.max(pipeline.cursorRowIndex, cursor),
+  };
 }
 
 function cellAtHeader(headers: string[], row: string[], headerName: string): string {
@@ -467,11 +560,14 @@ export async function startPipeline(userId: string, id: string) {
   const fresh = (await getPipeline(userId, id))!;
 
   if (pipeline.startMode === "new_only") {
-    // Set cursor to current last row so existing rows are ignored
-    const grid = await readSheetGrid(
-      fresh.userId, fresh.connectionId, fresh.spreadsheetId, fresh.sheetName,
+    // Set cursor to current last data row so existing rows are ignored
+    const lastRow = await getSheetLastDataRow(
+      fresh.userId,
+      fresh.connectionId,
+      fresh.spreadsheetId,
+      fresh.sheetName,
+      (fresh.columnMap as SheetAutoColumnMap | null)?.phone,
     );
-    const lastRow = grid.rows.length + 1;
     await db.update(sheetAutoCallPipelinesTable)
       .set({
         status: "running",
@@ -482,7 +578,7 @@ export async function startPipeline(userId: string, id: string) {
       })
       .where(eq(sheetAutoCallPipelinesTable.id, id));
   } else {
-    // Backfill existing rows, then watch
+    // Backfill existing rows (chunked across start + poller ticks), then watch
     await db.update(sheetAutoCallPipelinesTable)
       .set({ status: "running", lastError: null, updatedAt: new Date() })
       .where(eq(sheetAutoCallPipelinesTable.id, id));
@@ -537,8 +633,15 @@ export async function stopPipeline(userId: string, id: string) {
     .where(eq(sheetAutoCallPipelinesTable.id, id));
   if (pipeline.campaignId) {
     await db.update(campaignsTable)
-      .set({ status: "completed", isActive: false })
+      .set({ status: "stopped", isActive: false })
       .where(eq(campaignsTable.id, pipeline.campaignId));
+    await db.update(campaignBatchesTable)
+      .set({ status: "completed" })
+      .where(and(
+        eq(campaignBatchesTable.campaignId, pipeline.campaignId),
+        eq(campaignBatchesTable.status, "running"),
+        eq(campaignBatchesTable.leadSource, "google_sheets"),
+      ));
   }
   return getPipeline(userId, id);
 }
@@ -695,23 +798,27 @@ export async function previewDialRows(
     .limit(1);
   if (!conn) throw new Error("Google Sheets connection not found");
 
-  const grid = await readSheetGrid(userId, opts.connectionId, opts.spreadsheetId, opts.sheetName);
+  const grid = await readSheetHeaders(userId, opts.connectionId, opts.spreadsheetId, opts.sheetName)
+    .then(async (headers) => {
+      const limit = Math.min(Math.max(opts.limit ?? 3, 1), 10);
+      // Read a small window so preview stays cheap on large sheets
+      const rows = await readSheetDataRows(
+        userId, opts.connectionId, opts.spreadsheetId, opts.sheetName,
+        2, 1 + Math.max(limit * 5, 25),
+      );
+      return { headers, rows };
+    });
   const columnMap = opts.columnMap?.phone
     ? opts.columnMap
     : fuzzyDetectColumnMap(grid.headers);
-  const dncHeader = resolveDoNotDialHeader(grid.headers, columnMap);
   const limit = Math.min(Math.max(opts.limit ?? 3, 1), 10);
   const rows = [];
 
   for (let i = 0; i < grid.rows.length && rows.length < limit; i++) {
     const sheetRowIndex = i + 2;
     const parsed = parseSheetLeadRow(grid.headers, grid.rows[i]!, columnMap);
-    const doNotDial = dncHeader
-      ? isDoNotDialValue(cellAtHeader(grid.headers, grid.rows[i]!, dncHeader))
-      : false;
     let skipReason: string | null = null;
-    if (doNotDial) skipReason = "Do Not Call";
-    else if (!parsed.phoneNormalized) skipReason = "Invalid phone";
+    if (!parsed.phoneNormalized) skipReason = "Invalid phone";
     rows.push({
       sheetRowIndex,
       phone: parsed.phoneRaw,
@@ -735,23 +842,21 @@ export async function retrySheetRow(
   if (!pipeline) throw new Error("Pipeline not found");
   if (pipeline.status === "stopped") throw new Error("Pipeline is stopped");
 
-  const grid = await readSheetGrid(
+  const headers = await readSheetHeaders(
     pipeline.userId, pipeline.connectionId, pipeline.spreadsheetId, pipeline.sheetName,
   );
-  const idx = sheetRowIndex - 2;
-  if (idx < 0 || idx >= grid.rows.length) throw new Error("Row not found in sheet");
+  const rowChunk = await readSheetDataRows(
+    pipeline.userId, pipeline.connectionId, pipeline.spreadsheetId, pipeline.sheetName,
+    sheetRowIndex, sheetRowIndex,
+  );
+  if (sheetRowIndex < 2 || rowChunk.length === 0) throw new Error("Row not found in sheet");
 
   const campaignId = await ensureCampaign(pipeline);
   const columnMap = pipeline.columnMap as SheetAutoColumnMap;
-  const parsed = parseSheetLeadRow(grid.headers, grid.rows[idx]!, columnMap);
-  const dncHeader = resolveDoNotDialHeader(grid.headers, columnMap);
-  const doNotDial = dncHeader
-    ? isDoNotDialValue(cellAtHeader(grid.headers, grid.rows[idx]!, dncHeader))
-    : false;
+  const parsed = parseSheetLeadRow(headers, rowChunk[0]!, columnMap);
 
   const result = await enqueueRow(pipeline, campaignId, sheetRowIndex, parsed, {
     forceRetry: true,
-    doNotDial,
   });
   return { status: result };
 }

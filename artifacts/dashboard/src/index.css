@@ -645,8 +645,8 @@
 .builder-workspace-content {
   padding-bottom: 2.5rem;
 }
-.builder-workspace-content :where(.rounded-2xl) {
-  border-radius: 0.5rem;
+.builder-workspace-shell {
+  max-width: 1120px;
 }
 .builder-workspace-content :where(.shadow-lg, .shadow-xl, .shadow-2xl) {
   box-shadow: none;

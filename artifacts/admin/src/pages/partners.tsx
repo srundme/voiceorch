@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Handshake, Users, Mail, Clock, X } from "lucide-react";
+import { Plus, Pencil, Handshake, Users, Mail, Clock, X, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatAdminError } from "@/lib/api";
 
@@ -27,6 +27,11 @@ interface AdminPartner {
   userEmail: string | null;
   walletBalanceCents: number | null;
   clientCount: number;
+  slug?: string | null;
+  customDomain?: string | null;
+  customDomainStatus?: string | null;
+  /** Client login URL (custom domain if active, else subdomain). */
+  portalUrl?: string | null;
 }
 
 interface PartnerClientRow {
@@ -257,6 +262,7 @@ export default function PartnersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Company</TableHead>
+                  <TableHead>Portal URL</TableHead>
                   <TableHead>User</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Base rate</TableHead>
@@ -270,6 +276,22 @@ export default function PartnersPage() {
                 {partners.map(p => (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.companyName}</TableCell>
+                    <TableCell className="max-w-[220px]">
+                      {p.portalUrl ? (
+                        <a
+                          href={p.portalUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline break-all"
+                          title={p.portalUrl}
+                        >
+                          {p.portalUrl.replace(/^https:\/\//, "")}
+                          <ExternalLink className="h-3 w-3 shrink-0 opacity-70" />
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Not set</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="leading-tight">
                         <p>{p.userName ?? "—"}</p>
@@ -341,7 +363,17 @@ export default function PartnersPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Edit partner</DialogTitle>
-            <DialogDescription>{editTarget?.userEmail}</DialogDescription>
+            <DialogDescription>
+              {editTarget?.userEmail}
+              {editTarget?.portalUrl ? (
+                <>
+                  {" · "}
+                  <a href={editTarget.portalUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                    {editTarget.portalUrl.replace(/^https:\/\//, "")}
+                  </a>
+                </>
+              ) : null}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">

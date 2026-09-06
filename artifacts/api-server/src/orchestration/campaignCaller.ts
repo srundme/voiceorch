@@ -458,17 +458,27 @@ export async function recordCallExecution(opts: {
   callId: number;
   attemptNumber: number;
 }): Promise<void> {
-  await db.insert(callExecutionsTable).values({
-    leadId:        opts.leadId,
-    campaignId:    opts.campaignId,
-    batchId:       opts.batchId,
-    callId:        opts.callId,
-    attemptNumber: opts.attemptNumber,
-  });
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(${opts.callId})`);
+    const [existing] = await tx
+      .select({ id: callExecutionsTable.id })
+      .from(callExecutionsTable)
+      .where(eq(callExecutionsTable.callId, opts.callId))
+      .limit(1);
+    if (!existing) {
+      await tx.insert(callExecutionsTable).values({
+        leadId:        opts.leadId,
+        campaignId:    opts.campaignId,
+        batchId:       opts.batchId,
+        callId:        opts.callId,
+        attemptNumber: opts.attemptNumber,
+      });
+    }
 
-  await db.update(campaignLeadsTable)
-    .set({ callId: opts.callId })
-    .where(eq(campaignLeadsTable.id, opts.leadId));
+    await tx.update(campaignLeadsTable)
+      .set({ callId: opts.callId })
+      .where(eq(campaignLeadsTable.id, opts.leadId));
+  });
 }
 
 async function addTimelineEvent(

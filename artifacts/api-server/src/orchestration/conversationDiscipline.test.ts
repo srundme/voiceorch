@@ -7,6 +7,7 @@ import {
   isQuestionUtterance,
   isBareAcknowledgement,
   buildAntiRepeatNudge,
+  extractRecentAgentQuestions,
 } from "./conversationDiscipline.js";
 
 describe("truncateToSingleStep (whole-string)", () => {
@@ -198,5 +199,29 @@ describe("caller-utterance intent gating (call 1915)", () => {
       const n = buildAntiRepeatNudge({ lastUserText: "one minute please", prevLine, escalated: true });
       expect(n).toContain("CALLER ASKED TO WAIT");
     });
+
+    it("lists already-asked qualification questions (call 20113)", () => {
+      const n = buildAntiRepeatNudge({
+        lastUserText: "हां जी सही है",
+        prevLine,
+        escalated: false,
+        alreadyAsked: ["क्या आपको फ़्लाइट और होटल बुकिंग की सुविधा चाहिए?"],
+      });
+      expect(n).toContain("already asked");
+      expect(n).toContain("फ़्लाइट");
+    });
+  });
+});
+
+describe("extractRecentAgentQuestions", () => {
+  it("keeps the latest distinct questions", () => {
+    expect(extractRecentAgentQuestions([
+      { role: "assistant", content: "Are you already running a travel business?" },
+      { role: "user", content: "नया business" },
+      { role: "assistant", content: "तो क्या आपको फ़्लाइट चाहिए?" },
+    ])).toEqual([
+      "Are you already running a travel business?",
+      "तो क्या आपको फ़्लाइट चाहिए?",
+    ]);
   });
 });

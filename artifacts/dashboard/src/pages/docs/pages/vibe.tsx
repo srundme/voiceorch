@@ -38,8 +38,8 @@ export default function VibePage() {
       </ul>
 
       <Callout variant="tip" title="Start here for a first agent">
-        Tell Vibe who the agent is, what language they speak, and what a successful call looks like.
-        Refine in chat, then switch to Agent / Connect / Test without leaving the page.
+        Open this page from “Build with AI”. Tell it who the agent is, what language they speak, and
+        what a successful call looks like.
       </Callout>
 
       <h2 id="models">Which models Vibe uses</h2>

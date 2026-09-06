@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectWorkspaceUserIds, teamRoleCanWrite } from "./workspace-scope-logic.js";
+import { collectWorkspaceUserIds, isWorkspaceCall, teamRoleCanWrite } from "./workspace-scope-logic.js";
 
 describe("collectWorkspaceUserIds", () => {
   it("returns only self when there are no team rows", () => {
@@ -27,6 +27,23 @@ describe("collectWorkspaceUserIds", () => {
       { ownerUserId: "other", memberUserId: "stranger", status: "active", role: "admin" },
     ]);
     expect(ids).toEqual(["mate_2"]);
+  });
+});
+
+describe("isWorkspaceCall", () => {
+  const scope = ["owner_1", "mate_2"];
+
+  it("lets a teammate see the owner's call", () => {
+    expect(isWorkspaceCall(scope, "owner_1")).toBe(true);
+  });
+
+  it("hides a call from another workspace", () => {
+    expect(isWorkspaceCall(scope, "stranger")).toBe(false);
+  });
+
+  it("falls back to the agent owner when call.userId is null", () => {
+    expect(isWorkspaceCall(scope, null, "owner_1")).toBe(true);
+    expect(isWorkspaceCall(scope, null, "stranger")).toBe(false);
   });
 });
 

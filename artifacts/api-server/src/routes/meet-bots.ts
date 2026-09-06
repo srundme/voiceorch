@@ -20,6 +20,9 @@ import {
   getRecallBot,
   leaveRecallBot,
   getMeetBotIdentity,
+  normalizeMeetingUrl,
+  sanitizeRecallError,
+  isRecallConfigured,
 } from "../services/meet-bots.js";
 import {
   bindMeetRosterBot,
@@ -130,7 +133,9 @@ router.get("/meet-bots/identity", requireAuth, (_req, res) => {
 router.post("/meet-bots", requireAuth, async (req, res) => {
   const userId = (req as unknown as { clerkUserId: string }).clerkUserId;
   const agentId = Number(req.body?.agentId);
-  const meetingUrl = typeof req.body?.meetingUrl === "string" ? req.body.meetingUrl.trim() : "";
+  const meetingUrl = normalizeMeetingUrl(
+    typeof req.body?.meetingUrl === "string" ? req.body.meetingUrl : "",
+  );
   // Meet paste-link UI: honor the selected agent; skip booking "delegate" swap.
   const joinAsSelected = req.body?.joinAsSelected === true;
 
@@ -142,8 +147,9 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
     res.status(400).json({ error: "meetingUrl must be a Google Meet, Zoom, or Teams link" });
     return;
   }
-  if (!process.env["RECALL_API_KEY"]) {
-    res.status(503).json({ error: "Meeting bots are not configured (missing Recall API key)" });
+  if (!(await isRecallConfigured())) {
+    // 422 (not 502/503): edge proxies replace origin 502/503 with an HTML error page.
+    res.status(422).json({ error: "Meeting bots are not configured (missing Recall API key)" });
     return;
   }
 
@@ -230,7 +236,9 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
     });
   } catch (err) {
     logger.error({ err, userId, agentId }, "Meeting bot creation failed");
-    res.status(502).json({ error: err instanceof Error ? err.message : "Failed to create meeting bot" });
+    res.status(422).json({
+      error: sanitizeRecallError(err instanceof Error ? err.message : "Failed to create meeting bot"),
+    });
   }
 });
 
@@ -251,7 +259,9 @@ router.get("/meet-bots/:botId", requireAuth, async (req, res) => {
     }
     res.json({ botId: bot.id, status: bot.statusCode });
   } catch (err) {
-    res.status(502).json({ error: err instanceof Error ? err.message : "Failed to fetch bot status" });
+    res.status(422).json({
+      error: sanitizeRecallError(err instanceof Error ? err.message : "Failed to fetch bot status"),
+    });
   }
 });
 
@@ -267,7 +277,9 @@ router.delete("/meet-bots/:botId", requireAuth, async (req, res) => {
     scheduleDiarizedTranscriptArchive(bot.id);
     res.json({ ok: true });
   } catch (err) {
-    res.status(502).json({ error: err instanceof Error ? err.message : "Failed to remove bot" });
+    res.status(422).json({
+      error: sanitizeRecallError(err instanceof Error ? err.message : "Failed to remove bot"),
+    });
   }
 });
 

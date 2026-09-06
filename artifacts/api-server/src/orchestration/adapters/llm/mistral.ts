@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toOpenAIMessages } from "./openai-messages.js";
 import { drainOpenAICompatibleStream } from "./openai-compat.js";
+import { toOpenAiToolChoice } from "./tool-choice.js";
 
 /**
  * Mistral AI — OpenAI-compatible API
@@ -51,7 +52,7 @@ export class MistralLLM implements LLMAdapter {
         { role: "system", content: systemPrompt },
         ...toOpenAIMessages(messages),
       ] as any,
-      ...(tools ? { tools, tool_choice: "auto" } : {}),
+      ...(tools ? { tools, tool_choice: toOpenAiToolChoice(options?.toolChoice, options?.tools) } : {}),
       ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
     });
 

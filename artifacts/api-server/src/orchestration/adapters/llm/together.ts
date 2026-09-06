@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toOpenAIMessages } from "./openai-messages.js";
 import { drainOpenAICompatibleStream } from "./openai-compat.js";
+import { toOpenAiToolChoice } from "./tool-choice.js";
 
 /**
  * Together AI — OpenAI-compatible gateway to open-weight models.
@@ -46,6 +47,7 @@ export class TogetherLLM implements LLMAdapter {
   private model: string;
   private maxTokens: number | undefined;
   private temperature: number | undefined;
+  private abortController: AbortController | null = null;
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.client = new OpenAI({
@@ -59,6 +61,11 @@ export class TogetherLLM implements LLMAdapter {
     this.maxTokens = genParams?.maxTokens ?? undefined;
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
+  }
+
+  cancelInFlight(): void {
+    this.abortController?.abort();
+    this.abortController = null;
   }
 
   async chat(
@@ -80,7 +87,7 @@ export class TogetherLLM implements LLMAdapter {
         }))
       : undefined;
 
-    const toolChoice = togetherTools ? "auto" : undefined;
+    const toolChoice = togetherTools ? toOpenAiToolChoice(options?.toolChoice, options?.tools) : undefined;
 
     // Disable reasoning/thinking tokens — they add latency before first spoken word
     // and are never useful for a real-time voice call.
@@ -107,8 +114,20 @@ export class TogetherLLM implements LLMAdapter {
       ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
       ...(togetherTools ? { tools: togetherTools, tool_choice: toolChoice } : {}),
     };
-    const stream = await this.client.chat.completions.create(reqBody) as unknown as AsyncIterable<any>;
-
-    await drainOpenAICompatibleStream(stream, onToken, onDone, options);
+    this.abortController?.abort();
+    const abortController = new AbortController();
+    this.abortController = abortController;
+    try {
+      const stream = await this.client.chat.completions.create(reqBody, { signal: abortController.signal }) as unknown as AsyncIterable<any>;
+      await drainOpenAICompatibleStream(stream, onToken, onDone, options);
+    } catch (err) {
+      if (abortController.signal.aborted) {
+        onDone("");
+        return;
+      }
+      throw err;
+    } finally {
+      if (this.abortController === abortController) this.abortController = null;
+    }
   }
 }

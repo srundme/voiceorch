@@ -31,7 +31,7 @@ const WS_RETRY_MAX = 3;
 /** After flush, if the WS goes fully idle this long with no message (audio,
  * event, or error), assume "final" was lost and resolve — every armed message
  * re-arms the timer, so slow-but-alive synthesis of long sentences is safe. */
-const FINAL_EVENT_IDLE_MS = Math.max(600, Number(process.env.SARVAM_TTS_FINAL_IDLE_MS ?? 800));
+const FINAL_EVENT_IDLE_MS = Math.max(1500, Number(process.env.SARVAM_TTS_FINAL_IDLE_MS ?? 2500));
 const WS_RETRY_BASE_MS = 400;
 const WS_RETRY_MAX_MS = 4_000;
 
@@ -181,8 +181,15 @@ export class SarvamTTS implements TTSAdapter {
   private warmConnecting: Promise<WebSocket> | null = null;
   private warmPingTimer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
-  /** True while an utterance owns the warm/live WS — parallel prefetch must not steal it. */
-  private wsInUse = false;
+  /**
+   * Sarvam accepts many utterances on one configured socket, but only one
+   * flush cycle can own that socket at a time. Keep concurrent sentence
+   * prefetch ordered instead of moving sentence N+1 to the slower HTTP path.
+   */
+  private synthesisTail: Promise<void> = Promise.resolve();
+
+  /** Native PCM rate of returned chunks. 8 kHz on VoBiz; 16 kHz on HD webcall. */
+  readonly pcmSampleRate: 8000 | 16000;
 
   constructor(
     apiKey: string,
@@ -191,8 +198,10 @@ export class SarvamTTS implements TTSAdapter {
     language?: string | null,
     model?: string | null,
     speed?: number | null,
+    sampleRate?: number | null,
   ) {
     this.key = apiKey;
+    this.pcmSampleRate = sampleRate === 8000 ? 8000 : 16000;
     this.model = (model && VALID_MODELS.has(model)) ? model : "bulbul:v3";
 
     let lang = language ?? null;
@@ -245,6 +254,12 @@ export class SarvamTTS implements TTSAdapter {
     });
   }
 
+  setSpeed(speed: number | null): void {
+    this.pace = (typeof speed === "number" && Number.isFinite(speed))
+      ? Math.min(2, Math.max(0.5, speed))
+      : null;
+  }
+
   warmup(): void {
     if (this.closed) return;
     void this.ensureWarmWs().catch((err) => {
@@ -291,17 +306,24 @@ export class SarvamTTS implements TTSAdapter {
     return parts.filter((p) => p.length > 0);
   }
 
+  /**
+   * Sarvam WS `min_buffer_size` is minimum *character* length that triggers
+   * a flush (integer 30–200, SDK default 50) — not PCM bytes. Sending
+   * `(sampleRate/1000)*10*2` (160 @ 8 kHz, 320 @ 16 kHz) made 16 kHz webcall
+   * fail with "Input parameters has to be a valid dictionary" (call 17933).
+   */
+  private minBufferChars(): number {
+    return 50;
+  }
+
   private buildConfigPayload(): Record<string, unknown> {
     const data: Record<string, unknown> = {
       speaker: this.speaker,
-      target_language_code: this.langCode,
-      // OpenAPI: sample rate is a string enum. Larger max_chunk_length reduces
-      // mid-sentence prosody seams that sound like TTS "glitches".
-      speech_sample_rate: 16000,
+      // WS wire format: language_code (required). REST uses target_language_code.
+      language_code: this.langCode,
+      speech_sample_rate: this.pcmSampleRate,
       output_audio_codec: "linear16",
-      // 320 bytes = 10ms at 16k s16le. 100 (~3ms) made Sarvam flush tiny
-      // chunks — heavy JSON/base64 overhead per frame and unstable accumulation.
-      min_buffer_size: 320,
+      min_buffer_size: this.minBufferChars(),
       max_chunk_length: 500,
     };
     this.applyPace(data);
@@ -352,7 +374,7 @@ export class SarvamTTS implements TTSAdapter {
         this.dropWarmWs();
         return;
       }
-      try { ws.send(JSON.stringify({ type: "ping" })); } catch { this.dropWarmWs(); }
+      try { ws.send(JSON.stringify({ type: "ping", data: {} })); } catch { this.dropWarmWs(); }
     }, WS_PING_INTERVAL_MS);
     this.warmPingTimer.unref?.();
   }
@@ -466,7 +488,7 @@ export class SarvamTTS implements TTSAdapter {
       speaker: this.speaker,
       model: this.model,
       enable_preprocessing: this.enablePreprocessing,
-      speech_sample_rate: 16000,
+      speech_sample_rate: this.pcmSampleRate,
       output_audio_codec: "linear16",
     };
     this.applyPace(body);
@@ -499,12 +521,14 @@ export class SarvamTTS implements TTSAdapter {
   }
 
   /**
-   * Streaming synthesis — WebSocket first (with backoff), HTTP stream fallback.
-   * Yields raw PCM s16le @ 16 kHz chunks.
+   * Streaming synthesis — serialised WebSocket flush cycles, with HTTP stream
+   * used only after genuine WS failure. Yields raw PCM s16le @ 16 kHz chunks.
    *
-   * Parallel sentence prefetch: if the warm WS is already synthesizing sentence N,
-   * sentence N+1 uses HTTP stream instead of stealing the socket (calls 4852/4853
-   * firstByteMs spikes up to ~1s when two utterances contended for one WS).
+   * The pipeline deliberately starts sentence N+1 while N is still playing.
+   * Sarvam cannot safely run two flush cycles on one socket, and mixing a
+   * parallel HTTP response into the next sentence caused uneven delivery and
+   * mid-sentence underruns. Queueing preserves one persistent WS and lets the
+   * pipeline's PCM jitter buffer absorb provider timing variation.
    */
   async synthesizeStream(
     text: string,
@@ -515,15 +539,14 @@ export class SarvamTTS implements TTSAdapter {
     if (signal?.aborted) throw abortError();
     if (this.closed) throw new Error("SarvamTTS: closed");
 
-    if (this.wsInUse) {
-      logger.info("SarvamTTS WS busy — parallel synth via HTTP stream");
-      await this.synthesizeViaHttpStream(text, onChunk, signal);
-      onDone(text.length);
-      return;
-    }
-
-    this.wsInUse = true;
+    const previous = this.synthesisTail;
+    let release!: () => void;
+    this.synthesisTail = new Promise<void>((resolve) => { release = resolve; });
     try {
+      await previous;
+      if (signal?.aborted) throw abortError();
+      if (this.closed) throw new Error("SarvamTTS: closed");
+
       let lastErr: unknown;
       for (let attempt = 0; attempt < WS_RETRY_MAX; attempt++) {
         if (signal?.aborted) throw abortError();
@@ -550,7 +573,7 @@ export class SarvamTTS implements TTSAdapter {
       await this.synthesizeViaHttpStream(text, onChunk, signal);
       onDone(text.length);
     } finally {
-      this.wsInUse = false;
+      release();
     }
   }
 
@@ -680,7 +703,7 @@ export class SarvamTTS implements TTSAdapter {
           ws.send(JSON.stringify({ type: "text", data: { text: part } }));
         }
         // Flush so remaining buffer is processed even below min_buffer_size.
-        ws.send(JSON.stringify({ type: "flush" }));
+        ws.send(JSON.stringify({ type: "flush", data: {} }));
         armIdle();
       } catch (err) {
         settle(() => reject(err instanceof Error ? err : new Error(String(err))));
@@ -710,7 +733,7 @@ export class SarvamTTS implements TTSAdapter {
       speaker: this.speaker,
       model: apiModel(this.model),
       enable_preprocessing: this.enablePreprocessing,
-      speech_sample_rate: 16000,
+      speech_sample_rate: this.pcmSampleRate,
       output_audio_codec: "linear16",
     };
     this.applyPace(body);

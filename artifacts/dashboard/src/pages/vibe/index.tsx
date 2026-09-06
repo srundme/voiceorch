@@ -274,7 +274,7 @@ async function previewVoice(voiceId: string, setPlaying: (id: string | null) => 
     const resp = await apiFetch("/api/voices/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ voice: voiceId, model: "sonic-3.5" }),
+      body: JSON.stringify({ voice: voiceId, model: "sonic-3.6" }),
     });
     if (!resp.ok) throw new Error("preview failed");
     const blob  = await resp.blob();

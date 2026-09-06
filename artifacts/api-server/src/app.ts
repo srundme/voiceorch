@@ -7,6 +7,7 @@ import pinoHttp from "pino-http";
 import path from "path";
 import { existsSync } from "fs";
 import { attachSession } from "./middlewares/session.js";
+import { enforcePartnerPortalAccess } from "./middlewares/partnerPortalAccess.js";
 import { detectImpersonation } from "./middlewares/detectImpersonation.js";
 import { authenticateApiKey } from "./routes/user-api-keys.js";
 import router from "./routes";
@@ -61,9 +62,14 @@ void refreshPartnerHostCache();
 // Public paths that must accept browser requests from any origin (embed widget).
 // Mount BEFORE the restrictive global cors so OPTIONS preflights reach this
 // middleware first and are answered with Access-Control-Allow-Origin: *.
+app.use("/api/widget/call", (_req, res, next) => {
+  // Allow third-party sites to iframe the standalone webcall page.
+  res.removeHeader("X-Frame-Options");
+  next();
+});
 app.use(
-  ["/api/webhooks/lead", "/api/widget/lead-capture.js"],
-  cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"] }),
+  ["/api/webhooks/lead", "/api/widget/lead-capture.js", "/api/widget.js", "/api/widget/call", "/api/leads", "/api/landing/leads"],
+    cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"], allowedHeaders: ["Content-Type", "Authorization", "x-api-key", "x-leads-api-key"] }),
 );
 
 // Remote MCP + OAuth authorize page (Claude / MCP Inspector may preflight from browsers).
@@ -117,6 +123,9 @@ app.use(express.urlencoded({ extended: true, limit: "12mb" }));
 // IP rate limiter can skip authenticated users and the auth rate limiter can
 // key on the user id.
 app.use(attachSession);
+
+// Partner white-label hosts: block cross-tenant sessions (login bypass paths included).
+app.use(enforcePartnerPortalAccess);
 
 // Developer API keys (Authorization: Bearer sk_live_…). No-op for session JWTs /
 // unauthenticated requests. Must run after attachSession so dashboard session

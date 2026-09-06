@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toOpenAIMessages } from "./openai-messages.js";
 import { drainOpenAICompatibleStream } from "./openai-compat.js";
+import { toOpenAiToolChoice } from "./tool-choice.js";
 import { logger } from "../../../lib/logger.js";
 
 /**
@@ -209,7 +210,7 @@ export class OpenAILLM implements LLMAdapter {
       stream: true,
       ...(instructions !== undefined ? { instructions } : {}),
       ...(this.previousResponseId ? { previous_response_id: this.previousResponseId } : {}),
-      ...(responsesTools ? { tools: responsesTools, tool_choice: "auto" } : {}),
+      ...(responsesTools ? { tools: responsesTools, tool_choice: toOpenAiToolChoice(options?.toolChoice, options?.tools) } : {}),
       // Float → integer coercion: the Responses API rejects float temperatures
       // (e.g. 0.7 → 400). Round to 1 decimal to keep control while satisfying the API.
       ...(this.temperature !== undefined
@@ -352,7 +353,7 @@ export class OpenAILLM implements LLMAdapter {
         { role: "system", content: systemPrompt },
         ...toOpenAIMessages(messages),
       ] as any,
-      ...(openAiTools ? { tools: openAiTools, tool_choice: "auto" } : {}),
+      ...(openAiTools ? { tools: openAiTools, tool_choice: toOpenAiToolChoice(options?.toolChoice, options?.tools) } : {}),
       ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
     });
 

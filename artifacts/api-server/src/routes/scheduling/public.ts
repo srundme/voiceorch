@@ -25,6 +25,7 @@ import {
 } from "@workspace/api-zod";
 import { buildSlotLockKey } from "../../services/scheduling/lock.js";
 import { logger } from "../../lib/logger.js";
+import { latinizeAttendeeName } from "../../orchestration/booking-attendee-name.js";
 import { schedulingSlotsRateLimit, schedulingBookingRateLimit } from "../../lib/rate-limit.js";
 import {
   createCalendarEvent,
@@ -199,7 +200,7 @@ router.post("/scheduling/public/bookings", schedulingBookingRateLimit, async (re
       calendarId: calendar.id,
       callId: null,
       userId: calendar.userId,
-      attendeeName: parsed.data.attendeeName,
+      attendeeName: latinizeAttendeeName(parsed.data.attendeeName, parsed.data.attendeeEmail),
       attendeeEmail: parsed.data.attendeeEmail,
       attendeeNotes: parsed.data.attendeeNotes ?? null,
       slotStart,
@@ -215,7 +216,7 @@ router.post("/scheduling/public/bookings", schedulingBookingRateLimit, async (re
     return;
   }
 
-  // Create Google Calendar event with Meet link
+  // Create Google Calendar event (Meet link only when enableGoogleMeet is on)
   let meetLink: string | null = null;
   let googleEventId: string | null = null;
   let gcalConnectionId: string | null = null;
@@ -223,13 +224,6 @@ router.post("/scheduling/public/bookings", schedulingBookingRateLimit, async (re
   let calendarSyncStatus: string | null = null;
   let calendarSyncError: string | null = null;
 
-  if (!eventType.enableGoogleMeet) {
-    // Google Meet not enabled on this event type — skip GCal entirely
-    calendarSyncStatus = "skipped";
-    await db.execute(
-      sql`UPDATE bookings SET calendar_sync_status = 'skipped' WHERE id = ${booking.id}`
-    );
-  } else {
   try {
     const calRow = await db.execute(
       sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${calendar.id}`
@@ -248,7 +242,7 @@ router.post("/scheduling/public/bookings", schedulingBookingRateLimit, async (re
       );
     } else {
       logger.info(
-        { calendarId: calendar.id, calendarConnectionId, connectionId: gcalConnectionId, bookingId: booking.id },
+        { calendarId: calendar.id, calendarConnectionId, connectionId: gcalConnectionId, bookingId: booking.id, createMeetLink: !!eventType.enableGoogleMeet },
         "Attempting Google Calendar event creation",
       );
     }
@@ -266,6 +260,7 @@ router.post("/scheduling/public/bookings", schedulingBookingRateLimit, async (re
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
+      createMeetLink: !!eventType.enableGoogleMeet,
       onError: (detail) => { gcalErrCode = detail.errorCode; gcalErrMsg = detail.message ?? null; },
     }) : null;
     if (gcalConnectionId && !gcalResult) {
@@ -302,7 +297,6 @@ router.post("/scheduling/public/bookings", schedulingBookingRateLimit, async (re
       "Google Calendar event creation failed",
     );
   }
-  } // end if (eventType.enableGoogleMeet)
 
   // Only downgrade to pending on GCal failure for manual-confirmation event types.
   // Instant (auto-confirm) events stay confirmed — GCal is supplementary.
@@ -466,6 +460,7 @@ router.post("/scheduling/public/bookings/cancel", async (req, res): Promise<void
     hostEmail: calendar?.hostEmail,
     additionalHosts: calendar?.additionalHosts,
     bookingId: cancelled.id,
+    calendarSyncStatus: existingGoogleEventId ? "synced" : null,
   });
 
   void dispatchSchedulingWebhooks(booking.userId, "scheduling.booking.cancelled", {
@@ -621,6 +616,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
   // Google Calendar sync (best-effort) — awaited so the resulting Meet link is
   // available for the reschedule confirmation email.
   let rescheduledMeetLink: string | null = booking.meetLink ?? null;
+  let calendarSyncStatus: string | null = null;
   {
     let reschedConnectionId: string | null = null;
     try {
@@ -663,6 +659,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
               sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
             );
             rescheduledMeetLink = gcalResult.meetLink ?? rescheduledMeetLink;
+            calendarSyncStatus = "synced";
           }
         } else {
           // No existing event — create fresh
@@ -688,6 +685,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
               sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
             );
             rescheduledMeetLink = gcalResult.meetLink ?? null;
+            calendarSyncStatus = "synced";
           }
         }
       }
@@ -721,6 +719,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
     meetLink: rescheduledMeetLink,
     cancelLink: newCancelLink,
     rescheduleLink: newRescheduleLink,
+    calendarSyncStatus,
   });
 
   void dispatchSchedulingWebhooks(booking.userId, "scheduling.booking.rescheduled", {

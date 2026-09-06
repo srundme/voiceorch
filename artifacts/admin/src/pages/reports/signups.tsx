@@ -124,7 +124,7 @@ function toCsv(rows: SignupReportRow[]): string {
   };
   const lines = [headers.join(",")];
   for (const r of rows) {
-    lines.push(headers.map((h) => esc((r as Record<string, unknown>)[h])).join(","));
+    lines.push(headers.map((h) => esc((r as unknown as Record<string, unknown>)[h])).join(","));
   }
   return lines.join("\n");
 }
@@ -188,8 +188,8 @@ export default function SignupsReport() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Segmented options={SEGMENTS} value={segment} onChange={setSegment} />
-          <Segmented options={CATEGORIES} value={category} onChange={setCategory} />
+          <Segmented options={SEGMENTS} value={segment} onChange={setSegment as (v: string) => void} />
+          <Segmented options={CATEGORIES} value={category} onChange={setCategory as (v: string) => void} />
           <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={handleExport} disabled={filtered.length === 0}>
             <Download className="h-3.5 w-3.5" /> CSV
           </Button>
@@ -207,7 +207,7 @@ export default function SignupsReport() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Segmented options={LIFECYCLE_FILTERS} value={lifecycle} onChange={setLifecycle} />
+        <Segmented options={LIFECYCLE_FILTERS} value={lifecycle} onChange={setLifecycle as (v: string) => void} />
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input

@@ -68,22 +68,47 @@ export interface EndCallTool {
  */
 export const DEFAULT_GOODBYE_MESSAGE = "Thank you for calling. Have a great day. Goodbye!";
 
+const STUB_GOODBYE_RE =
+  /^(thankyou|thank you|thanks|bye|goodbye|ok|okay|hello|hi|நன்றி|வணக்கம்)[!.,\s]*$/i;
+
+/**
+ * Dashboard End Call Phrases are hangup *detectors* ("thankyou", "bye").
+ * Speaking the first detector as the whole farewell (call 13981) is a stub.
+ */
+export function isStubGoodbye(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (t.length < 12) return true;
+  return STUB_GOODBYE_RE.test(t);
+}
+
+export function defaultGoodbyeMessage(language?: string | null): string {
+  const lang = (language ?? "en").split("-")[0]?.toLowerCase() ?? "en";
+  if (lang === "ta") return "நேரம் ஒதுக்கியதுக்கு நன்றி. நல்ல நாள். வணக்கம்.";
+  if (lang === "hi") return "कॉल करने के लिए धन्यवाद। आपका दिन शुभ हो।";
+  return DEFAULT_GOODBYE_MESSAGE;
+}
+
 /**
  * Resolve the spoken goodbye for an AI-driven end-call in a single, consistent
  * priority order so every end-call path behaves identically:
  *   1. The `end_call` tool's own `goodbyeMessage` (most specific — wins if set)
- *   2. The agent's first configured End Call Phrase (`endCallPhrases[0]`)
- *   3. `DEFAULT_GOODBYE_MESSAGE` (last resort — never hang up silently)
+ *   2. A non-stub End Call Phrase (skip detectors like "thankyou" / "bye")
+ *   3. Language-aware default (last resort — never hang up silently)
  */
 export function resolveGoodbyeMessage(
   goodbyeMessage: string | undefined | null,
   endCallPhrases: string[],
+  language?: string | null,
 ): string {
+  const fallback = defaultGoodbyeMessage(language);
   const explicit = goodbyeMessage?.trim();
-  if (explicit) return explicit;
-  const firstPhrase = endCallPhrases[0]?.trim();
-  if (firstPhrase) return firstPhrase;
-  return DEFAULT_GOODBYE_MESSAGE;
+  if (explicit && !isStubGoodbye(explicit)) return explicit;
+  for (const phrase of endCallPhrases) {
+    const t = phrase.trim();
+    if (t && !isStubGoodbye(t)) return t;
+  }
+  return fallback;
 }
 
 export interface CalComTool {
@@ -109,6 +134,10 @@ export interface NativeBookingTool {
   taskName?: string;
   /** Optional message spoken to the caller right before the booking executes (advisory; LLM-driven) */
   preToolMessage?: string;
+  /** @deprecated Ignored. Collect email only if the Talk prompt says to. */
+  collectAttendeeEmail?: boolean;
+  /** @deprecated Hidden. Still used if an old agent already saved a value. */
+  defaultAttendeeEmail?: string;
 }
 
 export interface NativeRescheduleTool {
@@ -192,13 +221,23 @@ export interface SquadFollowupTool {
 
 export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendEmailTool | SendWhatsappTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
 
+/** One JSON-schema property on a tool argument object. */
+export interface ToolPropertySchema {
+  type: string;
+  description?: string;
+  enum?: string[];
+  items?: ToolPropertySchema;
+  properties?: Record<string, ToolPropertySchema>;
+  required?: string[];
+}
+
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
   name: string;
   description: string;
   parameters: {
     type: "object";
-    properties: Record<string, { type: string; description?: string; enum?: string[] }>;
+    properties: Record<string, ToolPropertySchema>;
     required?: string[];
   };
 }
@@ -295,10 +334,9 @@ export interface AgentConfig {
    */
   isMeetingSession?: boolean;
   language: string | null;
-  /** When set, overrides the initial currentLang in the pipeline for this specific call.
-   *  Used by session.ts to seed the caller's preferred language from memory so the
-   *  agent starts the call in the language the caller used last time. Only respected
-   *  when languageAutoDetect=true. */
+  /** When set, overrides the initial currentLang (and language latch) for this
+   *  call — returning-caller memory and mid-call squad handoff. Wins even when
+   *  languageAutoDetect is false so a teammate does not reset to English. */
   initialLanguage?: string | null;
   /** When true, pipeline updates currentLang from STT's detectedLanguage on each
    *  final transcript so the per-turn LLM instruction follows the caller's language.
@@ -312,6 +350,9 @@ export interface AgentConfig {
   backchannelingFrequency: number | null;
   webhookUrl: string | null;
   noiseCancellationEnabled: boolean;
+  /** Kept for existing agent_config rows. The Noise Cancellation toggle now
+   *  runs the software gate on VoBiz by itself; this flag is no longer required. */
+  forceSoftwareNoiseGate: boolean;
   ambientNoiseEnabled: boolean;
   ambientNoiseTrack: string | null;
   /** 0–1 multiplier on ambient bed (Voice tab Volume). Default 1.0 when unset. */
@@ -330,6 +371,8 @@ export interface AgentConfig {
 
   // P1-A: User-defined prompt variables resolved at call start
   promptVariables: Array<{ key: string; defaultValue: string; description?: string }>;
+  /** Email already on the lead / {{email}} / sheet — use for booking, never ask. */
+  knownAttendeeEmail?: string | null;
 
   // P1-B: Knowledge Base RAG
   knowledgeBaseId: number | null;
@@ -345,6 +388,8 @@ export interface AgentConfig {
   bargeInEnabled: boolean;
   bargeInEnergyThreshold: number;
   bargeInMinFrames: number;
+  /** Echo-suppression window after TTS starts. Default 600 ms — empirical
+   *  PSTN round-trip, not a spec. See pipeline.ts BARGE_IN_ECHO_GRACE_MS. */
   bargeInEchoGraceMs: number;
   /** "Mic Sensitivity" — single lever scaling the noise gate ratio, VAD floor, and
    *  barge-in energy bars together. "low" filters quiet background talkers more
@@ -436,11 +481,20 @@ export interface AgentConfig {
    * the goodbye. Tuned via Latency Tuning UI.
    */
   telephonyTailDrainMs: number;
-  /** Per-agent Sarvam STT mode. null = auto (en → codemix, Indic → transcribe). */
+  /** Per-agent Sarvam STT mode. null = codemix (mixed Indian speech). */
   sarvamSttMode: string | null;
   /**
-   * Sarvam WS `high_vad_sensitivity`. true ≈ 2 VAD frames (~128ms @8kHz silence
-   * boundary). false ≈ ~1s+ silence. Default true (snappy voice agents).
+   * saaras:v3-realtime `stream_type`. fast = snappy partials (voice agents).
+   * balanced = slower/more accurate partials. simulated = finals only.
+   */
+  sarvamSttStreamType: "fast" | "balanced" | "simulated";
+  /** Optional Sarvam realtime `prompt` — terminology hint on the final transcript. */
+  sarvamSttPrompt: string | null;
+  /**
+   * Legacy Sarvam `/speech-to-text/ws` `high_vad_sensitivity`. Not sent on the
+   * saaras:v3-realtime socket (that uses `silence_duration_ms`). true ≈ 2 VAD
+   * frames (~128ms @8kHz). false ≈ ~1s+ silence. Fast/Balanced keep true for
+   * the legacy fallback; Patient sets false.
    */
   sarvamHighVadSensitivity: boolean;
   /**
@@ -454,21 +508,26 @@ export interface AgentConfig {
    */
   sarvamIncompleteHoldMs: number;
   /**
-   * Consecutive speech (ms) required before the FIRST speech segment of a Sarvam
-   * connection opens. Configured in milliseconds rather than VAD frames because a
-   * frame is a fixed 512 samples — a frame count means twice as long on 8kHz
-   * telephony as on a 16kHz webcall, which silently dropped short first replies.
-   * Null uses the adapter default (256ms, Sarvam's intended window).
+   * Realtime connect `min_speech_duration_ms` — shortest burst counted as speech.
+   * Null uses the adapter default (250ms).
    */
   sarvamFirstTurnMinSpeechMs: number | null;
   /**
-   * Silence (ms) required to close a speech segment — the dominant term in turn
-   * latency, since Sarvam emits a transcript only at end-of-speech. Null leaves
-   * Sarvam on whichever preset `sarvamHighVadSensitivity` selects, which on
-   * telephony is a choice between ~128ms (chops callers) and ~1150ms+ (dead air).
-   * Set a value to pick a real window in between.
+   * Realtime connect `silence_duration_ms` — quiet time before the turn ends.
+   * Null uses the adapter default (300ms, Fast).
    */
   sarvamEndOfSpeechSilenceMs: number | null;
+  /**
+   * Realtime connect `threshold` (0–1). Null uses Sarvam's default 0.3.
+   */
+  sarvamVadThreshold: number | null;
+  /**
+   * After Sarvam VAD silence, run an audio end-of-turn model (Smart Turn) so
+   * "yeah but…" pauses do not start the LLM. Default on. SEMANTIC_TURN=0 disables.
+   */
+  semanticTurnDetection: boolean;
+  /** Max extra silence after an incomplete EOU before we answer anyway. */
+  semanticTurnStopMs: number;
   /**
    * When true, skip per-turn pgvector retrieval entirely — the KB is already baked into
    * the system prompt (see KB_INJECT_MAX_CHARS). Saves ~150-200ms per turn by eliminating
@@ -545,9 +604,25 @@ export interface StreamSTT {
    * right script. Implementations should no-op when already on the requested
    * language and reconnect their underlying session as needed. Adapters that
    * don't support live switching simply omit this method.
+   * `pin` = explicit latch: realtime sockets must leave `language_code=auto`.
    */
-  setLanguage?(lang: string): void;
+  setLanguage?(lang: string, pin?: boolean): void;
+  /**
+   * Provider-specific (optional): stretch or restore server VAD silence
+   * mid-call without reconnecting. Used while the agent is collecting a
+   * phone/OTP/email so Saaras Fast (300 ms) does not fire between tokens.
+   * Implementations should no-op when the value is unchanged.
+   */
+  setSilenceDurationMs?(ms: number): void;
   close(): void;
+  /** True while saaras:v3-realtime is the live socket (false after legacy fallback). */
+  getRealtimeActive?: () => boolean;
+  /** saaras:v3-realtime stream_type on the live socket. */
+  getRealtimeStreamType?: () => "fast" | "balanced" | "simulated";
+  /**
+   * Sarvam realtime `session.end.audio_duration_s` — billed audio, not wall clock.
+   */
+  onSessionUsage?: ((info: { audioDurationS: number }) => void) | null;
   /**
    * Set by the caller immediately after creation.
    * Fired when the adapter detects that the WebSocket has silently died during
@@ -600,6 +675,8 @@ export interface LLMAdapter {
     onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
+      /** OpenAI-style tool forcing. Default "auto". Use { name } to require one tool. */
+      toolChoice?: "auto" | "required" | { name: string };
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
       /** Fired the moment the adapter recognises that the model output contains a
        *  tool call, BEFORE the name/args are fully parsed. `format` records which
@@ -664,12 +741,25 @@ export interface TTSAdapter {
    * so TTS does not keep speaking Tamil text with an English (or null) tag.
    */
   setLanguage?(lang: string): void;
+  /**
+   * Hot-swap speaking rate mid-call (Sarvam / Cartesia / ElevenLabs).
+   * Used to slow the inbound opening greeting slightly without changing
+   * the agent's configured speed for the rest of the call.
+   * Pass null to clear an override and use the provider default.
+   */
+  setSpeed?(speed: number | null): void;
   /** Optional teardown — close any persistent connections (e.g. WebSocket).
    *  Called by the pipeline's close() when the call ends. */
   close?(): void;
   /** Optional pre-warm — open persistent connections before the first synthesis
    *  request so the greeting doesn't pay the connection cost. Fire-and-forget. */
   warmup?(): void;
+  /**
+   * Native PCM sample rate of `synthesize` / `synthesizeStream` chunks.
+   * Cartesia and Sarvam match the telephony wire (8 kHz) so the drain path
+   * does not FIR-downsample. Unset means 16 kHz (ElevenLabs / etc.).
+   */
+  pcmSampleRate?: 8000 | 16000;
 }
 
 export type TelephonyProvider = "twilio" | "plivo" | "vobiz";
@@ -754,10 +844,22 @@ export interface SessionConfig {
   memoryOwnerAgentId?: number;
   /** Returning caller's remembered name — used for an instant opener (no greeting-LLM wait). */
   returningCallerName?: string | null;
+  /**
+   * Caller memory language_pref (or mapped preferredLanguage) for opening-language rules.
+   * When missing, call-direction rules default to English for auto-detect agents.
+   */
+  callerMemoryLanguage?: string | null;
   /** Inbound vs outbound — used for post-greeting listen timing on telephony calls. */
   callDirection?: "inbound" | "outbound";
   /** Prior call dropped within the resume window — shorter opener + listen stall. */
   isResumeDroppedCall?: boolean;
+  /**
+   * Mid-call squad teammate takeover. The receiving agent must speak a short
+   * continuity line (not wait silently, not replay Welcome / CALL FLOW).
+   */
+  isSquadHandoffTakeover?: boolean;
+  /** Prior pipeline turns — Gemini Live seeds these so the teammate can continue. */
+  handoffSeedTurns?: ConversationTurn[];
   /** Carrier answer/bridge time (epoch ms), captured at the telephony answer
    *  webhook. When set, the recording timeline is anchored here so the gap
    *  between carrier answer and the first media frame is padded as leading
@@ -797,6 +899,13 @@ export interface SessionConfig {
      *  only; the confirmation heuristics are identical either way. */
     hint?: boolean;
     /** Configured Lead-in Pause (seconds); forwarded to voicemail delivery. */
+    leadInSeconds?: number;
+  };
+  /** Configured After-the-call voicemail policy — always available for mid-call
+   *  transcript detection when acoustic AMD misses and STT hears the greeting. */
+  voicemailPolicy?: {
+    action: "leave_message" | "hangup" | "continue";
+    message: string;
     leadInSeconds?: number;
   };
   /** Called once with the acoustically-confirmed AMD verdict so the call record's

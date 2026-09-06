@@ -11,6 +11,7 @@ import {
   type AfterCallBranch,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { fetchUserConfiguredUrl } from "../lib/ssrf.js";
 import { dispositionMatchesAny, formatDispositionLabel } from "../lib/disposition-match.js";
 
 export function parseAfterCallBranches(raw: unknown): AfterCallBranch[] {
@@ -128,12 +129,11 @@ export async function maybeRunAfterCallBranches(opts: {
         firedAt: new Date().toISOString(),
       };
       const bodyStr = JSON.stringify(payload);
-      const res = await fetch(br.webhookUrl!, {
+      const res = await fetchUserConfiguredUrl(br.webhookUrl!, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: bodyStr,
-        signal: AbortSignal.timeout(12_000),
-      });
+      }, { timeoutMs: 12_000, retries: 2 });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         throw new Error(`webhook ${res.status}: ${text.slice(0, 200)}`);

@@ -41,11 +41,11 @@ export function AgentConfigCard({
       type="button"
       onClick={onClick}
       className={cn(
-        "group relative text-left rounded-2xl border p-4 sm:p-5 cursor-pointer transition-all duration-200",
-        "bg-card/40 hover:bg-card/70 backdrop-blur-sm",
+        "group relative flex h-full min-h-[7.25rem] w-full flex-col text-left rounded-xl border p-4 cursor-pointer transition-all duration-200",
+        "bg-background hover:bg-muted/30",
         active
           ? "border-foreground/25 shadow-sm ring-1 ring-foreground/10"
-          : "border-border/50 hover:border-border",
+          : "border-border hover:border-foreground/20",
         className
       )}
     >

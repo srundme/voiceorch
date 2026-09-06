@@ -10,15 +10,19 @@ import {
 import {
   useAdminGetAgent,
   useAdminEditAgent,
+  useAgent360,
 } from "@/hooks/use-admin-api";
 import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS, TELEPHONY_PROVIDERS,
   ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, LANGUAGES, AGENT_TIMEZONES,
   getModelError,
 } from "@/lib/agent-providers";
-import { formatAdminError } from "@/lib/api";
+import { formatAdminError, formatCentsToDollars } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { SectionSubNav } from "@/components/section-subnav";
+import { CUSTOMERS_TABS } from "@/lib/nav-config";
 import {
   Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
@@ -312,6 +316,7 @@ export default function AdminAgentEdit() {
   const { toast } = useToast();
 
   const { data: agent, isLoading } = useAdminGetAgent(agentId);
+  const { data: agent360 } = useAgent360(agentId, 30);
   const editAgent = useAdminEditAgent(clerkId || "");
   const formInitialized = useRef(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -475,6 +480,7 @@ export default function AdminAgentEdit() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-20">
+      <SectionSubNav tabs={CUSTOMERS_TABS} />
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handleBack}>
@@ -497,6 +503,42 @@ export default function AdminAgentEdit() {
           {editAgent.isPending ? "Saving…" : "Save Changes"}
         </Button>
       </div>
+
+      {agent360 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Revenue (30d)</CardTitle></CardHeader>
+            <CardContent className="text-lg font-bold font-mono">{formatCentsToDollars(agent360.economics?.revenuePaise ?? 0)}</CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Cost</CardTitle></CardHeader>
+            <CardContent className="text-lg font-bold font-mono text-muted-foreground">{formatCentsToDollars(agent360.economics?.costPaise ?? 0)}</CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Profit</CardTitle></CardHeader>
+            <CardContent className={`text-lg font-bold font-mono ${(agent360.economics?.profitPaise ?? 0) < 0 ? "text-destructive" : "text-emerald-600"}`}>
+              {formatCentsToDollars(agent360.economics?.profitPaise ?? 0)}
+              <Badge variant="outline" className="ml-2 text-[10px]">{agent360.economics?.marginPct ?? 0}%</Badge>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Calls</CardTitle></CardHeader>
+            <CardContent className="text-lg font-bold font-mono">{agent360.usage?.calls ?? 0}</CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Success rate</CardTitle></CardHeader>
+            <CardContent className="text-lg font-bold font-mono">{agent360.quality?.successRatePct ?? 0}%</CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground uppercase">Avg latency</CardTitle></CardHeader>
+            <CardContent className="text-xs font-mono space-y-0.5">
+              <div>STT {agent360.quality?.avgSttMs ?? "—"}ms</div>
+              <div>LLM {agent360.quality?.avgLlmMs ?? "—"}ms</div>
+              <div>TTS {agent360.quality?.avgTtsMs ?? "—"}ms</div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {isDirty && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-400">
@@ -930,7 +972,7 @@ export default function AdminAgentEdit() {
                     <FormItem className="flex items-center justify-between">
                       <div>
                         <FormLabel>Enabled</FormLabel>
-                        <FormDescription className="text-xs">Agent says "I see", "Got it" while thinking.</FormDescription>
+                        <FormDescription className="text-xs">Agent says "okay", "hmm", or "mmm" while thinking.</FormDescription>
                       </div>
                       <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
                     </FormItem>

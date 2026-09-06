@@ -40,7 +40,8 @@ import {
 } from "recharts";
 
 function defaultFrom() {
-  return format(subDays(new Date(), 30), "yyyy-MM-dd");
+  // All-time so Cash-in / Wallet credited match Recharges (₹25k + ₹5k + ₹500s + ₹100).
+  return "2024-01-01";
 }
 function defaultTo() {
   return format(new Date(), "yyyy-MM-dd");
@@ -137,13 +138,36 @@ export default function Finance() {
           <h1 className="text-3xl font-bold tracking-tight">Finance &amp; Analytics</h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Audit ledger, unit economics, and investor headline metrics. Amounts are INR.
-            Cash-in = successful wallet topups; recognized = call usage billed from wallets.
+            Cash-in and Wallet credited match Recharges: completed top-ups for real users.
+            Open All time to include every recharge. GST is a side estimate. Recognized = calls + number fees.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-8 w-36 text-xs" />
           <span className="text-xs text-muted-foreground">→</span>
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-8 w-36 text-xs" />
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => {
+              setFrom("2024-01-01");
+              setTo(defaultTo());
+            }}
+          >
+            All time
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => {
+              setFrom(format(subDays(new Date(), 30), "yyyy-MM-dd"));
+              setTo(defaultTo());
+            }}
+          >
+            Last 30d
+          </Button>
           <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={exportLedger}>
             <Download className="h-3.5 w-3.5" /> Ledger CSV
           </Button>
@@ -164,19 +188,23 @@ export default function Finance() {
         <TabsContent value="audit" className="space-y-6 mt-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Kpi
-              label="Cash-in (wallet credit)"
+              label="Cash-in"
+              value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.paidTopupWalletPaise ?? audit?.period?.cashInWalletCreditPaise ?? 0)}
+              hint="Same as Recharges — completed top-ups, real users"
+            />
+            <Kpi
+              label="Wallet credited"
               value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.cashInWalletCreditPaise ?? 0)}
-              hint="Successful topups in range (pre-GST)"
+              hint="Completed top-up / auto-topup credits (pre-GST)"
             />
             <Kpi
-              label="Est. cash collected"
-              value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.cashCollectedEstPaise ?? 0)}
-              hint={`Includes ~${Math.round((audit?.gstRate ?? 0.18) * 100)}% GST on topups`}
-            />
-            <Kpi
-              label="Recognized usage"
-              value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.recognizedUsagePaise ?? 0)}
-              hint="call_debit from wallets"
+              label="Recognized revenue"
+              value={auditLoading ? "…" : formatCentsToDollars(audit?.period?.recognizedRevenuePaise ?? (audit?.period?.recognizedUsagePaise ?? 0) + (audit?.period?.phoneDebitPaise ?? 0))}
+              hint={
+                auditLoading
+                  ? "Calls + phone / WhatsApp numbers"
+                  : `Calls ${formatCentsToDollars(audit?.period?.recognizedUsagePaise ?? 0)} · Numbers ${formatCentsToDollars(audit?.period?.phoneDebitPaise ?? 0)}`
+              }
             />
             <Kpi
               label="Wallet liability"
@@ -194,11 +222,12 @@ export default function Finance() {
             <Kpi
               label="GST est. (period)"
               value={formatCentsToDollars(audit?.period?.gstEstimatedPaise ?? 0)}
-              hint="18% of successful topup base"
+              hint="18% GST on successful topup base (not on card-paid numbers)"
             />
             <Kpi
-              label="Phone debits"
+              label="Phone / WhatsApp numbers"
               value={formatCentsToDollars(audit?.period?.phoneDebitPaise ?? 0)}
+              hint="Included in recognized revenue"
             />
             <Kpi
               label="Pending / failed topups"
@@ -289,8 +318,9 @@ export default function Finance() {
                 {[
                   ["all", "All"],
                   ["cash_in", "Cash-in"],
-                  ["recognized", "Usage"],
-                  ["phones", "Phones"],
+                  ["wallet_credit", "Credits"],
+                  ["recognized", "Revenue"],
+                  ["phones", "Numbers"],
                   ["adjustments", "Adjustments"],
                 ].map(([id, label]) => (
                   <Button
@@ -393,7 +423,7 @@ export default function Finance() {
               {ledger?.total != null ? (
                 <p className="text-[11px] text-muted-foreground px-4 py-2 border-t">
                   Showing {ledger.rows.length} of {ledger.total.toLocaleString()} ·{" "}
-                  <Link href="/audit-logs" className="text-primary hover:underline">
+                  <Link href="/operations/audit" className="text-primary hover:underline">
                     Admin audit logs
                   </Link>
                 </p>
@@ -414,6 +444,8 @@ export default function Finance() {
                       <TableHead>Day</TableHead>
                       <TableHead className="text-right">Topups</TableHead>
                       <TableHead className="text-right">GST est.</TableHead>
+                      <TableHead className="text-right">Card numbers</TableHead>
+                      <TableHead className="text-right">Cash-in</TableHead>
                       <TableHead className="text-right">Call debit</TableHead>
                       <TableHead className="text-right">Phone</TableHead>
                       <TableHead className="text-right">Adjust</TableHead>
@@ -428,6 +460,12 @@ export default function Finance() {
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs">
                           {formatCentsToDollars(d.gstEstimatedPaise)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {formatCentsToDollars(d.cardDidCashPaise ?? 0)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {formatCentsToDollars(d.cashCollectedPaise ?? (d.topupsSuccessPaise ?? 0) + (d.gstEstimatedPaise ?? 0))}
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs">
                           {formatCentsToDollars(d.callDebitPaise)}
@@ -451,13 +489,14 @@ export default function Finance() {
         <TabsContent value="economics" className="space-y-6 mt-4">
           <div className="flex gap-2 rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
             <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            Revenue = call_debit + phone fees. COGS ≈ provider usage (USD micros → INR @ FX{" "}
+            Revenue = call usage + phone / WhatsApp number fees. COGS ≈ provider usage (USD micros → INR @ FX{" "}
             {economics?.usdToInrRate ?? "…"}). Margin is approximate.
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Kpi
               label="Cash-in"
               value={econLoading ? "…" : formatCentsToDollars(economics?.totals?.cashInPaise ?? 0)}
+              hint="Completed top-ups — same as Recharges"
             />
             <Kpi
               label="Recognized revenue"
@@ -543,7 +582,7 @@ export default function Finance() {
             <Kpi
               label="Lifetime cash-in"
               value={invLoading ? "…" : formatCentsToDollars(investor?.headline?.cashCollectedLifetimePaise ?? 0)}
-              hint={`Est. with GST ${formatCentsToDollars(investor?.headline?.cashCollectedLifetimeEstWithGstPaise ?? 0)}`}
+              hint="Completed top-ups for real users — same as Recharges"
             />
             <Kpi
               label="Wallet liability"
@@ -555,7 +594,7 @@ export default function Finance() {
               value={
                 invLoading ? "…" : formatCentsToDollars(investor?.headline?.recognizedUsageLifetimePaise ?? 0)
               }
-              hint="Usage billed from wallets"
+              hint="Calls + phone / WhatsApp number fees"
             />
             <Kpi
               label="30d margin"

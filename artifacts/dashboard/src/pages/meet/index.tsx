@@ -17,10 +17,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 import { Video, Loader2, LogOut, Bot, Plus, CalendarDays, Unplug } from "lucide-react";
 import { MeetingsChannelCard } from "@/pages/agents/meetings-channel-card";
 
 const API = "/api";
+
+function formatMeetError(err: unknown): string {
+  const msg = formatApiError(err);
+  if (msg === "Carrier unavailable, try again") {
+    return "Could not reach the meeting-bot service. Try Join again in a moment.";
+  }
+  return msg;
+}
 
 /**
  * Meetings page only lists agents that can join Meet/Zoom/Teams:
@@ -222,7 +231,7 @@ export default function MeetPage() {
     } catch (err: unknown) {
       toast({
         title: enable ? "Could not schedule bot" : "Could not remove bot",
-        description: err instanceof Error ? err.message : "Unknown error",
+        description: formatMeetError(err),
         variant: "destructive",
       });
     } finally {
@@ -234,6 +243,7 @@ export default function MeetPage() {
     mutationFn: async () =>
       customFetch<{ botId: string; status: string; agentId?: number; configuredAgentId?: number }>(`${API}/meet-bots`, {
         method: "POST",
+        timeoutMs: 45_000,
         body: JSON.stringify({
           agentId: Number(agentId),
           meetingUrl: meetingUrl.trim(),
@@ -256,14 +266,14 @@ export default function MeetPage() {
       });
     },
     onError: (err: any) =>
-      toast({ title: "Could not join meeting", description: err?.message ?? "Unknown error", variant: "destructive" }),
+      toast({ title: "Could not join meeting", description: formatMeetError(err), variant: "destructive" }),
   });
 
   const remove = useMutation({
     mutationFn: async (botId: string) => customFetch(`${API}/meet-bots/${botId}`, { method: "DELETE" }),
     onSuccess: (_d, botId) => setBots((prev) => prev.filter((b) => b.botId !== botId)),
     onError: (err: any) =>
-      toast({ title: "Could not remove bot", description: err?.message ?? "Unknown error", variant: "destructive" }),
+      toast({ title: "Could not remove bot", description: formatMeetError(err), variant: "destructive" }),
   });
 
   const connected = Boolean(connectionQ.data?.connected);

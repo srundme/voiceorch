@@ -328,7 +328,7 @@ export function EmailDesigner({
 
           <div className="space-y-2">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Insert variable</p>
-            <div className="flex flex-wrap gap-1">
+            <div className="grid grid-cols-2 gap-1">
               {variables.map((v) => (
                 <button
                   key={v.key}
@@ -336,7 +336,7 @@ export function EmailDesigner({
                   disabled={!selected}
                   title={v.label}
                   onClick={() => insertVar(v.key)}
-                  className="rounded-md border border-border/50 bg-background/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground disabled:opacity-40 hover:border-sky-500/40 hover:text-sky-300"
+                  className="w-full truncate rounded-md border border-border/50 bg-background/60 px-1.5 py-1 text-center font-mono text-[10px] text-muted-foreground disabled:opacity-40 hover:border-sky-500/40 hover:text-sky-300"
                 >
                   {`{{${v.key}}}`}
                 </button>

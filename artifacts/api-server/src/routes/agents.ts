@@ -26,6 +26,7 @@ import {
   DeleteAgentParams,
   ToggleAgentParams,
   ListAgentsResponse,
+  ListAgentsResponseItem,
   GetAgentResponse,
   UpdateAgentResponse,
   ToggleAgentResponse,
@@ -34,7 +35,7 @@ import {
   ListAgentMemoryEpisodesResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { clientContext, getManagingPartner } from "../middlewares/clientContext.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { logActivity } from "../lib/activity.js";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
 import {
@@ -46,6 +47,8 @@ import { sanitizeToolName } from "../services/tool-executor.js";
 import { checkIrdaiCompliance } from "../services/irdai/index.js";
 import { callEngineInsertDefaults } from "@workspace/db/call-engine-defaults";
 import { resolveWorkspaceScope } from "../services/workspace-scope.js";
+import { unsupportedAgentModel } from "../services/agent-model-validation.js";
+import { applyAsrSmartEndpointing, normalizeAsrSmartEndpointing } from "../lib/agent-response.js";
 
 const router: IRouter = Router();
 
@@ -96,6 +99,7 @@ function prepareAgentForResponse(
   const { generatedPrompt: _gp, promptTemplateVersion: _pv, wizardInputs: _wi, ...rest } = agent;
   return {
     ...rest,
+    asrSmartEndpointing: normalizeAsrSmartEndpointing(agent.asrSmartEndpointing),
     knowledgeSourceIds,
     leadSourceToken: maskLeadToken(agent.leadSourceToken),
     hasGeneratedPrompt: !!agent.generatedPrompt,
@@ -152,7 +156,20 @@ router.get("/agents", requireAuth, clientContext, async (req, res): Promise<void
     .where((await workspaceOwned(clerkId)).owned)
     .orderBy(agentsTable.createdAt);
   const sourceIdMap = await getKnowledgeSourceIdsByAgent(agents);
-  res.json(ListAgentsResponse.parse(agents.map((a) => prepareAgentForResponse(a, sourceIdMap.get(a.id) ?? []))));
+  const valid = [];
+  for (const a of agents) {
+    const row = prepareAgentForResponse(a, sourceIdMap.get(a.id) ?? []);
+    const parsed = ListAgentsResponseItem.safeParse(row);
+    if (parsed.success) {
+      valid.push(parsed.data);
+      continue;
+    }
+    logger.warn(
+      { agentId: a.id, issues: parsed.error.issues.slice(0, 8) },
+      "GET /agents skipped invalid row (would 500 Agents page)",
+    );
+  }
+  res.json(ListAgentsResponse.parse(valid));
 });
 
 router.post("/agents", requireAuth, clientContext, async (req, res): Promise<void> => {
@@ -169,12 +186,21 @@ router.post("/agents", requireAuth, clientContext, async (req, res): Promise<voi
     res.status(400).json({ error: "webhookUrl must be a valid https:// URL" });
     return;
   }
+  const unsupportedModel = unsupportedAgentModel(parsed.data.llmProvider, parsed.data.llmModel);
+  if (unsupportedModel) {
+    res.status(400).json({
+      error: `Unsupported Google model: ${unsupportedModel}. Choose a model currently shown in the dashboard.`,
+      field: "llmModel",
+    });
+    return;
+  }
   // wizardInputs is an admin-managed pass-through (not in DB schema strict type)
   const rawBody = (req.body ?? {}) as Record<string, unknown>;
   const wizardInputs = (rawBody["wizardInputs"] ?? null) as WizardInputs | null;
 
   const insertData: Record<string, unknown> = { ...parsed.data, userId: clerkId };
   normalizeToolNames(insertData);
+  applyAsrSmartEndpointing(insertData);
   // knowledgeSourceIds is an M:N association, not an agents column — extract before insert.
   const createSourceIds = Array.isArray(insertData["knowledgeSourceIds"])
     ? (insertData["knowledgeSourceIds"] as number[])
@@ -214,6 +240,21 @@ router.post("/agents", requireAuth, clientContext, async (req, res): Promise<voi
       req.log.warn({ err }, "Qwen prompt generation failed — falling back to wizard-provided systemPrompt");
       insertData["wizardInputs"] = wizardInputs;
       // generatedPrompt and promptTemplateVersion left unset; systemPrompt from payload is used
+    }
+  }
+
+  // New Cartesia agents default to Gayathri (not the old Customer Support Lady).
+  // INSERT only — existing agents keep whatever voice they already have.
+  const DEFAULT_CARTESIA_VOICE_ID = "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee";
+  const DEFAULT_CARTESIA_VOICE_NAME = "Gayathri";
+  const LEGACY_CARTESIA_SUPPORT_LADY_ID = "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478";
+  if (String(insertData["ttsProvider"] ?? "").toLowerCase() === "cartesia") {
+    const voice = String(insertData["ttsVoice"] ?? "").trim();
+    if (!voice || voice === LEGACY_CARTESIA_SUPPORT_LADY_ID) {
+      insertData["ttsVoice"] = DEFAULT_CARTESIA_VOICE_ID;
+      insertData["ttsVoiceName"] = DEFAULT_CARTESIA_VOICE_NAME;
+    } else if (voice === DEFAULT_CARTESIA_VOICE_ID && !insertData["ttsVoiceName"]) {
+      insertData["ttsVoiceName"] = DEFAULT_CARTESIA_VOICE_NAME;
     }
   }
 
@@ -376,8 +417,37 @@ router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promis
     res.status(400).json({ error: "webhookUrl must be a valid https:// URL" });
     return;
   }
+  if ("inboundPhoneNumberId" in parsed.data || "outboundPhoneNumberId" in parsed.data) {
+    res.status(400).json({
+      error: "Phone assignments cannot be changed through agent updates. Use the Phone Numbers assignment endpoint.",
+    });
+    return;
+  }
+  if (parsed.data.llmProvider !== undefined || parsed.data.llmModel !== undefined) {
+    const [currentModel] = await db
+      .select({ llmProvider: agentsTable.llmProvider, llmModel: agentsTable.llmModel })
+      .from(agentsTable)
+      .where(and(eq(agentsTable.id, params.data.id), (await workspaceOwned(clerkId)).owned))
+      .limit(1);
+    if (!currentModel) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    const unsupportedModel = unsupportedAgentModel(
+      parsed.data.llmProvider ?? currentModel.llmProvider,
+      parsed.data.llmModel ?? currentModel.llmModel,
+    );
+    if (unsupportedModel) {
+      res.status(400).json({
+        error: `Unsupported Google model: ${unsupportedModel}. Choose a model currently shown in the dashboard.`,
+        field: "llmModel",
+      });
+      return;
+    }
+  }
   const updateData: Record<string, unknown> = { ...parsed.data };
   normalizeToolNames(updateData);
+  applyAsrSmartEndpointing(updateData);
   // knowledgeSourceIds is an M:N association, not an agents column — extract before update.
   const updateSourceIds = Array.isArray(updateData["knowledgeSourceIds"])
     ? (updateData["knowledgeSourceIds"] as number[])
@@ -440,35 +510,6 @@ router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promis
   }
   if (updateSourceIds !== undefined) {
     await setAgentKnowledgeSources(agent.id, updateSourceIds);
-  }
-  // Sync phone_numbers.agent_id when inbound phone number assignment changes.
-  // Whenever a number becomes this agent's inbound number, it also becomes the
-  // agent's outbound caller ID automatically — inbound and outbound should stay
-  // the same number unless the user explicitly picks a different one.
-  if ("inboundPhoneNumberId" in parsed.data) {
-    await db.update(phoneNumbersTable)
-      .set({ agentId: null })
-      .where(eq(phoneNumbersTable.agentId, agent.id));
-    if (parsed.data.inboundPhoneNumberId && agent.userId) {
-      // Managed clients: the number may be owned by the managing partner
-      // (partner-assigned). Accept the agent owner OR their active partner as
-      // the number's owner — never anyone else's number.
-      const managingPartner = await getManagingPartner(agent.userId);
-      const allowedNumberOwners = managingPartner
-        ? [agent.userId, managingPartner.partnerUserId]
-        : [agent.userId];
-      await db.update(phoneNumbersTable)
-        .set({ agentId: agent.id })
-        .where(and(
-          eq(phoneNumbersTable.id, parsed.data.inboundPhoneNumberId as number),
-          inArray(phoneNumbersTable.userId, allowedNumberOwners),
-        ));
-      const [updatedAgent] = await db.update(agentsTable)
-        .set({ outboundPhoneNumberId: parsed.data.inboundPhoneNumberId as number })
-        .where(eq(agentsTable.id, agent.id))
-        .returning();
-      if (updatedAgent) Object.assign(agent, updatedAgent);
-    }
   }
   const sourceIdMap = await getKnowledgeSourceIdsByAgent([agent]);
   res.json(UpdateAgentResponse.parse(prepareAgentForResponse(agent, sourceIdMap.get(agent.id) ?? [])));
@@ -727,6 +768,7 @@ router.get("/agents/:id/memory/episodes", requireAuth, clientContext, async (req
       id:              callerCallArchiveTable.id,
       callId:          callerCallArchiveTable.callId,
       summary:         callerCallArchiveTable.summary,
+      sentiment:       callerCallArchiveTable.sentiment,
       durationSeconds: callerCallArchiveTable.durationSeconds,
       createdAt:       callerCallArchiveTable.createdAt,
     })
@@ -916,6 +958,7 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async
     id:              ep.id,
     callId:          ep.callId,
     summary:         ep.summary,
+    sentiment:       ep.sentiment ?? null,
     durationSeconds: ep.durationSeconds,
     createdAt:       ep.createdAt,
     insightFactIds:  factIdsByEpisode.get(ep.id) ?? [],
@@ -1193,7 +1236,8 @@ router.patch("/agents/:id/toggle", requireAuth, clientContext, async (req, res):
     .where(and(eq(agentsTable.id, params.data.id), (await workspaceOwned(clerkId)).owned))
     .returning();
   await logActivity({ userId: clerkId, eventType: "agent.toggled", resourceType: "agent", resourceId: String(agent.id), description: `Agent "${agent.name}" set to ${newStatus}` });
-  res.json(ToggleAgentResponse.parse(agent));
+  const sourceIdMap = await getKnowledgeSourceIdsByAgent([agent]);
+  res.json(ToggleAgentResponse.parse(prepareAgentForResponse(agent, sourceIdMap.get(agent.id) ?? [])));
 });
 
 /* ── GET /agents/:id/latency-stats ─────────────────────────────────────────── */

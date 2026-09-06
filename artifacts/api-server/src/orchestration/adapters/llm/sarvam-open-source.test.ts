@@ -13,10 +13,11 @@ describe("Sarvam open-source model routing", () => {
     expect(normalizeSarvamLlmModel("gemma-4-31b")).toBe("gemma4");
     expect(normalizeSarvamLlmModel("glm5.2")).toBe("glm5.2");
     expect(normalizeSarvamLlmModel("glm-5.2")).toBe("glm5.2");
-    expect(normalizeSarvamLlmModel("sarvam-30b")).toBe("sarvam-105b");
+    expect(normalizeSarvamLlmModel("sarvam-30b")).toBe("sarvam-105b-conversations");
+    expect(normalizeSarvamLlmModel("sarvam-105b")).toBe("sarvam-105b");
     expect(normalizeSarvamLlmModel("sarvam-105b-conversations")).toBe("sarvam-105b-conversations");
     expect(normalizeSarvamLlmModel("sarvam-105b-chat")).toBe("sarvam-105b-conversations");
-    expect(normalizeSarvamLlmModel(null)).toBe("sarvam-105b");
+    expect(normalizeSarvamLlmModel(null)).toBe("sarvam-105b-conversations");
   });
 
   it("routes open-source models to /v2 and Sarvam models to /v1", () => {

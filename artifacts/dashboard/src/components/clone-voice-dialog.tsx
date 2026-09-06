@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Mic, Square, Upload, Trash2 } from "lucide-react";
+import { Loader2, Mic, Square, Upload, Trash2, CopyPlus } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
@@ -366,7 +366,10 @@ export function CloneVoiceDialog({
                 Cloning…
               </>
             ) : (
-              "Clone voice"
+              <>
+                <CopyPlus className="h-3.5 w-3.5 mr-1.5" />
+                Clone voice
+              </>
             )}
           </Button>
         </DialogFooter>

@@ -16,6 +16,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   useGetAccount, useAddConcurrentSlot, useChangePassword, getGetAccountQueryKey, setDefaultTimeoutMs,
   useListPhoneNumbers, useListWebhookEndpoints, useGetWallet, customFetch,
 } from "@workspace/api-client-react";
@@ -120,7 +124,7 @@ function AppearanceCard() {
           Appearance
         </CardTitle>
         <CardDescription>
-          Choose how the dashboard looks. Your preference is synced to your account across devices.
+          Light is the default. Switch to dark anytime — your choice is saved to your account.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -326,7 +330,6 @@ function AccountBillingCard() {
           <div className="h-24 bg-muted/30 rounded-lg animate-pulse" />
         ) : (
           <>
-            {!isManagedWorkspace && (
             <div className="flex items-center gap-2.5 p-3.5 rounded-lg border border-border/60 bg-muted/10">
               <Key className="h-4 w-4 text-muted-foreground shrink-0" />
               <p className="text-xs text-muted-foreground flex-1">
@@ -339,7 +342,6 @@ function AccountBillingCard() {
                 </Button>
               </Link>
             </div>
-            )}
 
             <div className="flex items-center justify-between p-4 rounded-lg border border-border/60 bg-muted/20">
               <div className="flex items-start gap-3">
@@ -559,7 +561,6 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
           { icon: Lock, label: "Change Password", onClick: onOpenGeneral },
         ]}
       />
-      {!isManagedWorkspace && (
       <CategoryCard
         icon={Terminal}
         title="API & Developers"
@@ -570,7 +571,6 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
           { icon: Webhook, label: "Event subscriptions", href: "/app/webhooks" },
         ]}
       />
-      )}
       <CategoryCard
         icon={Phone}
         title="Telephony"
@@ -579,7 +579,7 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
         links={isManagedWorkspace
           ? [{ icon: Phone, label: "Phone Numbers", href: "/app/phone-numbers" }]
           : [
-              { icon: Layers, label: "Providers", href: "/app/providers" },
+              { icon: Layers, label: "Providers", href: "/app/providers?tab=provider-keys" },
               { icon: Phone, label: "Phone Numbers", href: "/app/phone-numbers" },
             ]}
       />
@@ -591,7 +591,7 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
         iconClassName="bg-muted text-muted-foreground"
         links={[
           { icon: Mic2, label: "Voices", href: "/app/voices" },
-          { icon: Layers, label: "AI Providers (BYOP)", href: "/app/providers" },
+          { icon: Layers, label: "AI Providers (BYOP)", href: "/app/providers?tab=provider-keys" },
         ]}
       />
       )}
@@ -624,24 +624,137 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
 }
 
 function DangerZoneCard() {
+  const [step, setStep] = useState<"closed" | "warn" | "confirm">("closed");
+  const [confirmText, setConfirmText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { toast } = useToast();
+  const { signOut } = useAuth();
+
+  async function handleFinalDelete() {
+    if (confirmText !== "DELETE" || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await customFetch("/api/account/delete-workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: "DELETE" }),
+      });
+      toast({
+        title: "Workspace deleted",
+        description: "Your SnapServe account has been removed. You will be signed out.",
+      });
+      setStep("closed");
+      // Brief pause so toast can render, then revoke session.
+      setTimeout(() => signOut("revoked"), 600);
+    } catch (err) {
+      toast({
+        title: "Could not delete workspace",
+        description: formatApiError(err),
+        variant: "destructive",
+      });
+      setIsDeleting(false);
+    }
+  }
+
   return (
-    <Card className="border-destructive/20">
-      <CardContent className="p-5 flex items-start gap-4">
-        <div className="h-10 w-10 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
-          <Trash2 className="h-5 w-5 text-destructive" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground">Danger Zone</p>
-          <p className="text-xs text-muted-foreground mt-0.5 mb-3">Irreversible and destructive actions.</p>
-          <div className="flex flex-col divide-y divide-border/50 border-t border-border/50">
-            <div className="flex items-center justify-between py-2.5">
-              <span className="text-sm text-destructive/70">Delete Workspace</span>
-              <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-muted-foreground/60">Coming soon</span>
+    <>
+      <Card className="border-destructive/20">
+        <CardContent className="p-5 flex items-start gap-4">
+          <div className="h-10 w-10 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
+            <Trash2 className="h-5 w-5 text-destructive" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground">Danger Zone</p>
+            <p className="text-xs text-muted-foreground mt-0.5 mb-3">Irreversible and destructive actions.</p>
+            <div className="flex flex-col divide-y divide-border/50 border-t border-border/50">
+              <div className="flex items-center justify-between gap-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm text-destructive">Delete Workspace</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Permanently remove your account and data from SnapServe.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => { setConfirmText(""); setStep("warn"); }}
+                >
+                  Delete
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+
+      {/* Step 1 — initial warning */}
+      <AlertDialog open={step === "warn"} onOpenChange={(open) => { if (!open && !isDeleting) setStep("closed"); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this workspace?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  Deleting this workspace is permanent and cannot be undone. All associated agents, campaigns, call history, and wallet data will be permanently removed from SnapServe. You will no longer be able to access or recover this data after deletion.
+                </p>
+                <p>Are you sure you want to continue?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                setConfirmText("");
+                setStep("confirm");
+              }}
+            >
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Step 2 — final confirmation */}
+      <AlertDialog open={step === "confirm"} onOpenChange={(open) => { if (!open && !isDeleting) setStep("closed"); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm permanent deletion</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                This action cannot be reversed, You are about to permanently delete your data from SnapServe !!
+                </p>
+                <p>
+                  Enter <span className="font-semibold text-foreground">DELETE</span> to confirm this action.
+                </p>
+                <Input
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder="DELETE"
+                  autoComplete="off"
+                  disabled={isDeleting}
+                  className="font-sans tracking-normal"
+                />
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={confirmText !== "DELETE" || isDeleting}
+              onClick={() => void handleFinalDelete()}
+            >
+              {isDeleting ? "Deleting…" : "Delete from SnapServe"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

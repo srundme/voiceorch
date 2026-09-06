@@ -40,7 +40,7 @@ export function AlertsBell() {
               {count} unacknowledged
             </p>
           </div>
-          <Link href="/usage/alerts" onClick={() => setOpen(false)}>
+          <Link href="/operations/alerts" onClick={() => setOpen(false)}>
             <Button variant="link" size="sm" className="h-auto p-0 text-xs">View all</Button>
           </Link>
         </div>

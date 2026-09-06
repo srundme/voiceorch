@@ -1,6 +1,6 @@
 /**
- * Thin WhatsApp + Email status for Tools tab.
- * Credentials live under Connections — Tools only toggles capability + template pick when ready.
+ * Agent Builder consumes workspace connections — it does not connect them.
+ * Credentials live under Connections. Templates are mapped on After the call.
  */
 
 import { useLocation } from "wouter";
@@ -11,7 +11,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useEmailChannelReady } from "./email-channel-card";
 import {
-  AgentWhatsappTemplatePicks,
   type AgentWaTemplates,
   type WaCatalogEntry,
 } from "@/components/whatsapp/agent-template-picks";
@@ -25,6 +24,7 @@ type BuilderWhatsappChannel = {
   businessName?: string | null;
   mode?: string | null;
   phoneE164?: string | null;
+  vobizChannelId?: string | null;
   templateCatalog?: WaCatalogEntry[];
 };
 
@@ -37,6 +37,17 @@ type BuilderWhatsappConnection = {
   metaConnected?: boolean;
   metaTemplates?: AgentWaTemplates;
   templateCatalog?: WaCatalogEntry[];
+};
+
+type EmailChannelPeek = {
+  channel?: {
+    active?: boolean;
+    fromName?: string | null;
+    fromEmail?: string | null;
+    defaultTemplateId?: number | null;
+  } | null;
+  templates?: Array<{ id: number; name: string; isDefault: boolean }>;
+  identities?: Array<{ fromName: string; fromEmail: string; isDefault: boolean }>;
 };
 
 function StatusLine({ ready, label }: { ready: boolean; label: string }) {
@@ -53,6 +64,16 @@ function StatusLine({ ready, label }: { ready: boolean; label: string }) {
       {label}
     </span>
   );
+}
+
+export function connectionsSetupHref(
+  setup: "whatsapp" | "email" | "calendar",
+  agentId: number,
+  section: "tools" | "outcomes" = "tools",
+) {
+  const returnTo = encodeURIComponent(`/app/agents/${agentId}?section=${section}`);
+  const returnLabel = encodeURIComponent(section === "outcomes" ? "After the call" : "Actions");
+  return `/app/connections?setup=${setup}&agentId=${agentId}&returnTo=${returnTo}&returnLabel=${returnLabel}`;
 }
 
 export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
@@ -74,76 +95,70 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
     waConnList.find((c) => c.active && c.agentId === agentId)
     ?? waConnList.find((c) => c.active)
     ?? null;
+  const metaReady = Boolean(
+    agentConnection && (agentConnection.metaConnected || agentConnection.metaPhoneNumberId),
+  );
+  const nativeReady = Boolean(
+    waData?.channel?.active && (waData.channel.status === "active" || waData.channel.vobizChannelId || waData.channel.phoneE164),
+  );
 
   return (
-    <div className="space-y-3 border-t border-border/30 px-4 pb-4 pt-3">
+    <div className="space-y-3 border-t border-border bg-muted/20 px-4 pb-4 pt-3">
       {waLoading ? (
         <Skeleton className="h-10 w-full rounded-md" />
-      ) : agentConnection || waData?.channel ? (
-        <div className="space-y-3">
+      ) : metaReady && agentConnection ? (
+        <div className="space-y-1">
           <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-[12px] font-medium">
-                {agentConnection?.name
-                  || waData?.channel?.businessName
-                  || "WhatsApp connected"}
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                Mid-call templates only. After-call WhatsApp is on Outcomes. Credentials under Connections.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <StatusLine ready label="Ready" />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 text-[10px]"
-                onClick={() => {
-                  const returnTo = encodeURIComponent(`/app/agents/${agentId}?section=tools`);
-                  navigate(
-                    `/app/connections?setup=whatsapp&agentId=${agentId}&returnTo=${returnTo}&returnLabel=${encodeURIComponent("Tools")}`,
-                  );
-                }}
-              >
-                Connections
-              </Button>
-            </div>
+            <p className="truncate text-[12px] font-medium">
+              {agentConnection.name || "WhatsApp"}
+            </p>
+            <StatusLine ready label="Connected" />
           </div>
-          {agentConnection && (agentConnection.metaPhoneNumberId || agentConnection.metaConnected) ? (
-            <AgentWhatsappTemplatePicks
-              agentId={agentId}
-              connectionId={agentConnection.id}
-              initialTemplates={agentConnection.metaTemplates}
-              initialCatalog={agentConnection.templateCatalog}
-            />
-          ) : waData?.channel ? (
-            <AgentWhatsappTemplatePicks
-              agentId={agentId}
-              nativeMode
-              initialCatalog={waData.channel.templateCatalog}
-            />
-          ) : null}
+          <p className="text-[11px] text-muted-foreground">
+            Leave this off unless the customer asks for a message during the call. Interested vs Not Interested templates send only after the call, on After the call.
+          </p>
         </div>
-      ) : (
+      ) : nativeReady ? (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-3">
+            <p className="truncate text-[12px] font-medium">
+              {waData?.channel?.businessName || "WhatsApp"}
+            </p>
+            <StatusLine ready label="Connected" />
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Leave this off unless the customer asks during the call. Outcome templates send after the call.
+          </p>
+        </div>
+      ) : agentConnection ? (
         <div className="rounded-lg bg-muted/25 px-3 py-3">
-          <p className="text-[12px] font-medium">WhatsApp not connected</p>
+          <p className="text-[12px] font-medium">{agentConnection.name || "WhatsApp"} is saved, not fully wired</p>
           <p className="mt-0.5 text-[10px] text-muted-foreground">
-            Connect Meta WhatsApp under Connections, then return here for mid-call templates.
-            After-call WhatsApp rules live on the Outcomes tab.
+            Meta Business verification is not enough. Paste the Phone Number ID, WABA ID, and a permanent
+            System User token on Connections, then Refresh templates here.
           </p>
           <Button
             type="button"
             size="sm"
             className="mt-2 h-7 text-[10px]"
-            onClick={() => {
-              const returnTo = encodeURIComponent(`/app/agents/${agentId}?section=tools`);
-              navigate(
-                `/app/connections?setup=whatsapp&agentId=${agentId}&returnTo=${returnTo}&returnLabel=${encodeURIComponent("Tools")}`,
-              );
-            }}
+            onClick={() => navigate(connectionsSetupHref("whatsapp", agentId))}
           >
-            Connect WhatsApp
+            Finish on Connections
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-lg bg-muted/25 px-3 py-3">
+          <p className="text-[12px] font-medium">WhatsApp is not connected yet</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Connect the number once under Connections. Then come back here to pick a template.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-2 h-7 text-[10px]"
+            onClick={() => navigate(connectionsSetupHref("whatsapp", agentId))}
+          >
+            Open Connections
           </Button>
         </div>
       )}
@@ -151,36 +166,56 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
   );
 }
 
-export function ToolsEmailSetup() {
+export function ToolsEmailSetup({ agentId }: { agentId?: number }) {
   const [, navigate] = useLocation();
   const ready = useEmailChannelReady();
+  const { data, isLoading } = useQuery({
+    queryKey: ["email-channel"],
+    queryFn: () => customFetch<EmailChannelPeek>(`${DASH_API}/email/channel`),
+    staleTime: 30_000,
+  });
+  const from =
+    data?.identities?.find((i) => i.isDefault)
+    ?? data?.identities?.[0];
+  const tpl =
+    data?.templates?.find((t) => t.id === data.channel?.defaultTemplateId)
+    ?? data?.templates?.find((t) => t.isDefault)
+    ?? data?.templates?.[0];
 
   return (
-    <div className="border-t border-border/30 px-4 pb-4 pt-3">
-      <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/25 px-3 py-3">
-        <div className="min-w-0">
-          <p className="text-[12px] font-medium">
-            {ready ? "Brevo email ready" : "Email not connected"}
-          </p>
+    <div className="border-t border-border bg-muted/20 px-4 pb-4 pt-3">
+      {isLoading ? (
+        <Skeleton className="h-16 w-full rounded-md" />
+      ) : ready ? (
+        <div className="flex items-start justify-between gap-3 rounded-lg bg-muted/25 px-3 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-[12px] font-medium">
+              {from ? `${from.fromName} · ${from.fromEmail}` : "Email connected"}
+            </p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              {tpl ? `Sends “${tpl.name}”. Edit From and templates under Connections.` : "Using the workspace default template."}
+            </p>
+          </div>
+          <StatusLine ready label="Connected" />
+        </div>
+      ) : (
+        <div className="rounded-lg bg-muted/25 px-3 py-3">
+          <p className="text-[12px] font-medium">Email is not connected yet</p>
           <p className="mt-0.5 text-[10px] text-muted-foreground">
-            {ready
-              ? "Sender and template are managed under Connections."
-              : "Connect Brevo under Connections (from address + API key + test)."}
+            Paste the Brevo key and From address under Connections. This agent only turns send on.
           </p>
+          {agentId ? (
+            <Button
+              type="button"
+              size="sm"
+              className="mt-2 h-7 text-[10px]"
+              onClick={() => navigate(connectionsSetupHref("email", agentId))}
+            >
+              Open Connections
+            </Button>
+          ) : null}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <StatusLine ready={ready} label={ready ? "Ready" : "Needs setup"} />
-          <Button
-            type="button"
-            size="sm"
-            variant={ready ? "outline" : "default"}
-            className="h-7 text-[10px]"
-            onClick={() => navigate("/app/connections?setup=email")}
-          >
-            {ready ? "Connections" : "Set up email"}
-          </Button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

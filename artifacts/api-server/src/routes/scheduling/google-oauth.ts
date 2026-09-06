@@ -202,20 +202,23 @@ router.get("/scheduling/google/callback", async (req, res): Promise<void> => {
   // /app/scheduling/conferencing depending on which page initiated the OAuth flow.
   const redirectPath = returnTo === "calendar"
     ? "/app/scheduling/calendars"
-    : returnTo === "scheduling-conferencing"
+    : returnTo === "connections-calendar"
+      ? "/app/connections?setup=calendar"
+      : returnTo === "scheduling-conferencing"
       ? "/app/scheduling/conferencing"
       : "/app/settings/conferencing";
   // If the request came from a dev preview, redirect the popup back to that origin
   // instead of the production domain so BroadcastChannel fires on the right page.
   const base = returnOrigin && isTrustedOrigin(returnOrigin) ? returnOrigin : DASHBOARD_BASE();
   const redirectBase = `${base}${redirectPath}`;
+  const q = redirectBase.includes("?") ? "&" : "?";
 
   if (error || !code || !clerkId || !statePayload) {
     logger.warn(
       { clerkId, error, stateVerified: !!statePayload },
       "Google OAuth callback error, missing params, or invalid/expired state token",
     );
-    res.redirect(`${redirectBase}?gcal=error`);
+    res.redirect(`${redirectBase}${q}gcal=error`);
     return;
   }
 
@@ -235,10 +238,10 @@ router.get("/scheduling/google/callback", async (req, res): Promise<void> => {
       { clerkId, email: tokens.email, updatedExistingId: stateConnectionId ?? null, grantedScopes: tokens.grantedScopes },
       "Google Calendar connected",
     );
-    res.redirect(`${redirectBase}?gcal=connected&email=${encodeURIComponent(tokens.email)}`);
+    res.redirect(`${redirectBase}${q}gcal=connected&email=${encodeURIComponent(tokens.email)}`);
   } catch (err) {
     logger.warn({ err, clerkId }, "Failed to exchange Google OAuth code");
-    res.redirect(`${redirectBase}?gcal=error`);
+    res.redirect(`${redirectBase}${q}gcal=error`);
   }
 });
 

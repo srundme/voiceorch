@@ -29,27 +29,25 @@ export default function AgentsPage() {
           → create or open an agent.
         </li>
         <li>
-          <strong>Prompt</strong> — instructions, language, and an explicit{" "}
-          <strong>Greeting message</strong> (exact first line). Use{" "}
+          <strong>Script</strong> — welcome (exact first line) then call instructions. Use{" "}
           <Link href="/docs/variables">variables</Link> like <code>{"{{name}}"}</code>. The agent
           display name is an internal label — not automatically your company brand on the call.
         </li>
         <li>
-          <strong>Voice</strong> — speak / listen providers (or BYOP keys under Providers).
+          <strong>Sound</strong> — voice, language, and Fast / Balanced / Patient turn-taking.
         </li>
         <li>
-          <strong>Tools</strong> — transfer, HTTP, booking (
-          <Link href="/docs/calendar">calendar</Link>), etc.
+          <strong>Actions</strong> — booking, transfer, mid-call WhatsApp / email. Connect the
+          account once under <Link href="/docs/connections">Connections</Link>, then pick the
+          template or meeting here.
         </li>
         <li>
-          <strong>Outcomes</strong> (top-level Builder tab) — taxonomy, funnel meaning (Interested /
-          Callback / DNC), data fields, and <strong>after-call WhatsApp / email</strong> rules. Wire
-          channels under Connections first (or save rules and connect later). Mid-call WhatsApp is
-          under Tools.
+          <strong>After the call</strong> — outcome labels, per-outcome WhatsApp templates, and
+          voicemail. Mid-call send stays on Actions.
         </li>
         <li>
-          <strong>Analytics</strong> (top-level Builder tab) — this agent’s call volume, success rate,
-          spend, and latency. Platform-wide funnel view stays at{" "}
+          <strong>Activity</strong> — this agent’s call volume, success rate, spend, and latency.
+          Platform-wide funnel stays at{" "}
           <a href="https://app.snapserve.ai/app/analytics" target="_blank" rel="noreferrer">
             /app/analytics
           </a>
@@ -68,6 +66,11 @@ export default function AgentsPage() {
         </li>
         <li>
           <strong>Save</strong>, then toggle <strong>Active</strong> when ready.
+        </li>
+        <li>
+          Optional: <strong>Settings → Website</strong> — copy embed code so visitors can webcall this
+          agent on your site.{" "}
+          <Link href="/docs/website-embed">Website embed guide</Link>.
         </li>
         <li>Use Test / Publish flows in the builder before going live.</li>
       </ol>
@@ -101,9 +104,10 @@ export default function AgentsPage() {
 
       <h2 id="calls">Using on a call</h2>
       <p>
-        Pass <code>agentId</code> to{" "}
+        Pass <code>agentId</code> and optional <code>variables</code> (patient fields, questions) to{" "}
         <Link href="/docs/api-reference/initiateOutboundCall">POST /calls/outbound</Link>. Wallet
-        must cover ₹5/min. See <Link href="/docs/outbound-calls">Calls &amp; history</Link>.
+        must cover ₹5/min. See <Link href="/docs/variables">Variables</Link> and{" "}
+        <Link href="/docs/outbound-calls">Calls &amp; history</Link>.
       </p>
     </div>
   );

@@ -27,6 +27,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { logger } from "../lib/logger.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
+import { fetchUserConfiguredUrl } from "../lib/ssrf.js";
 import { scheduleCallbackRequested } from "./autoRedial.js";
 import {
   getUserConcurrentLimit,
@@ -45,6 +46,7 @@ import { sendChannelEmail } from "./email-channel.js";
 import { interpolateTemplate } from "./template-vars.js";
 import { launchMeetingBotForAgent } from "./meeting-bot-launch.js";
 import { updateSheetRowByIndex } from "./google-sheets.js";
+import { sheetKeysForLead } from "./sheets-writeback.js";
 
 const CALL_TIMEOUT_MS = 20 * 60 * 1000; // give up waiting on a call after 20 min
 
@@ -427,6 +429,8 @@ async function beginCall(runId: number, userId: string, step: WorkflowStep, cont
   campaign = await syncWorkflowCampaignConcurrency(campaign, userId, hours);
   const batch = await getOrCreateWorkflowRunningBatch(campaign.id);
   const leadData = flattenPrimitives(context);
+  const sheetKeys = await sheetKeysForLead(userId, step.agentId, phoneRaw);
+  Object.assign(context, sheetKeys);
   const [lead] = await db.insert(campaignLeadsTable).values({
     campaignId: campaign.id,
     batchId: batch.id,
@@ -438,6 +442,7 @@ async function beginCall(runId: number, userId: string, step: WorkflowStep, cont
       ...leadData,
       __workflowRunId: String(runId),
       ...(squadId ? { __squad_id: String(squadId) } : {}),
+      ...sheetKeys,
     },
     callStatus: "pending",
     source: "workflow",
@@ -587,12 +592,11 @@ function evalCondition(step: WorkflowStep, context: Ctx): boolean {
 
 async function doWebhook(step: WorkflowStep, context: Ctx): Promise<void> {
   if (!step.url) throw new Error("send_webhook missing url");
-  await fetch(step.url, {
+  await fetchUserConfiguredUrl(step.url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": "SnapServe-Workflows/1.0" },
     body: JSON.stringify(context),
-    signal: AbortSignal.timeout(10_000),
-  }).catch((err) => { throw new Error(`webhook POST failed: ${err?.message ?? err}`); });
+  }, { timeoutMs: 10_000, retries: 2 }).catch((err) => { throw new Error(`webhook POST failed: ${err?.message ?? err}`); });
 }
 
 async function doScheduleCallback(userId: string, step: WorkflowStep, context: Ctx): Promise<void> {
@@ -786,7 +790,8 @@ async function doJoinMeeting(
     });
     return;
   }
-  if (!process.env["RECALL_API_KEY"]) {
+  const { isRecallConfigured } = await import("./meet-bots.js");
+  if (!(await isRecallConfigured())) {
     throw new Error("Meeting bots are not configured (missing Recall API key)");
   }
 

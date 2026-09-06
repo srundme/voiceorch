@@ -10,7 +10,7 @@ npm install @snapserveai/sdk
 
 ## Usage
 
-Create an API key from **Dashboard → API Keys** (`sk_live_...`), then:
+Create an API key from **Dashboard → API Keys** (`sk_live_...`). Default base URL is `https://app.snapserve.ai/api` (not `api.snapserve.ai`). Then:
 
 ```ts
 import { SnapServe } from "@snapserveai/sdk";

@@ -22,6 +22,44 @@ const INDIC_LANG_PREFIXES = new Set([
 const BARGE_IN_MIN_CHARS_DEFAULT = 4;
 const BARGE_IN_MIN_CHARS_INDIC = 10;
 
+/** Bolna `number_of_words_for_interruption` default while TTS is playing. */
+export const PLAYING_INTERRUPT_WORD_FLOOR = 3;
+
+const DEFAULT_ACCIDENTAL_INTERRUPT_PHRASES = [
+  "stop", "wait", "hold on", "hang up", "cancel", "pause", "shut up",
+  "hold", "enough", "வேண்டாம்", "நிறுத்து", "இருங்க",
+  "ரூக்", "रुक", "रुको", "बस", "सुनो", "एक मिनट",
+];
+
+export function countTranscriptWords(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/** Hesitation / one-word scraps — raise the playing floor to 3. */
+export function isAmbiguousInterruptTranscript(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length <= 1) return true;
+  if (/\b(uh|um|uhh|umm|er|ah)\b/i.test(t)) return true;
+  return false;
+}
+
+/**
+ * Bolna word floor while the agent is speaking.
+ * After TTS stops the floor is 0 (caller turn). No messy/+1 bump.
+ */
+export function resolvePlayingWordFloor(opts: {
+  transcript: string;
+  configuredFloor?: number;
+  lowConfidence?: boolean;
+}): number {
+  const configured = opts.configuredFloor && opts.configuredFloor > 0
+    ? opts.configuredFloor
+    : PLAYING_INTERRUPT_WORD_FLOOR;
+  return configured;
+}
+
 /**
  * Minimum grapheme count on the *current* transcript before word-count barge-in
  * may fire. Background talk-over and Devanagari one-word scraps sit under this.
@@ -52,10 +90,10 @@ export class InterruptionManager {
   private bargeInCount = 0;
 
   constructor(opts: InterruptionManagerOptions = {}) {
-    this.incrementalDelayMs = opts.incrementalDelayMs ?? 500;
-    this.wordsForInterruption = opts.wordsForInterruption ?? 3;
+    this.incrementalDelayMs = opts.incrementalDelayMs ?? 0;
+    this.wordsForInterruption = opts.wordsForInterruption ?? PLAYING_INTERRUPT_WORD_FLOOR;
     this.accidentalInterruptionPhrases = new Set(
-      (opts.accidentalInterruptionPhrases ?? ["stop", "wait", "hold on", "hang up", "cancel", "pause", "shut up", "listen", "hello", "hey", "வேண்டாம்", "நிறுத்து", "இருங்க", "இல்ல", "ஹலோ", "சொல்லுங்க", "ரூக்", "ரुक", "रुक", "रुको", "बस", "सुनो", "अरे", "सुनिए", "एक मिनट"])
+      (opts.accidentalInterruptionPhrases ?? DEFAULT_ACCIDENTAL_INTERRUPT_PHRASES)
         .map((p) => p.trim().toLowerCase()),
     );
   }
@@ -64,22 +102,66 @@ export class InterruptionManager {
     return this.wordsForInterruption;
   }
 
+  isImmediateInterruptPhrase(transcript: string): boolean {
+    const stripped = transcript.trim().toLowerCase().replace(/[.!?…,]+$/g, "").trim();
+    if (!stripped) return false;
+    if (this.accidentalInterruptionPhrases.has(stripped)) return true;
+    const tokens = stripped.split(/\s+/).filter(Boolean);
+    for (const phrase of this.accidentalInterruptionPhrases) {
+      if (phrase.includes(" ")) {
+        if (stripped.includes(phrase)) return true;
+      } else if (tokens.includes(phrase)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /**
-   * Bolna-parity should_trigger_interruption:
-   * Returns true if user speech should trigger a barge-in during audio playback.
+   * Bolna `should_trigger_interruption`:
+   * no audio / welcome not played → never cut (including stop).
+   * Cut when `word_count > number_of_words` or an accidental phrase matches.
    */
   shouldTriggerInterruption(
     wordCount: number,
     transcript: string,
     isAudioPlaying: boolean,
     welcomePlayed = true,
+    lowConfidence = false,
   ): boolean {
     if (!isAudioPlaying || !welcomePlayed) return false;
     if (this.wordsForInterruption === 0) return false;
-    const stripped = transcript.trim().toLowerCase();
-    return (
-      wordCount >= this.wordsForInterruption ||
-      this.accidentalInterruptionPhrases.has(stripped)
+    if (this.isImmediateInterruptPhrase(transcript)) return true;
+    const words = wordCount > 0 ? wordCount : countTranscriptWords(transcript);
+    const floor = resolvePlayingWordFloor({
+      transcript,
+      configuredFloor: this.wordsForInterruption,
+      lowConfidence,
+    });
+    return words > floor;
+  }
+
+  /**
+   * Bolna `is_false_interruption` — the other half of `should_trigger_interruption`.
+   * Short talk-over while TTS is playing is chatter: drop it, never queue it
+   * to answer after the current dialogue (call 21803). Opposite of
+   * `shouldTriggerInterruption`; both must never be true together.
+   */
+  isFalseInterruption(
+    wordCount: number,
+    transcript: string,
+    isAudioPlaying: boolean,
+    welcomePlayed = true,
+    lowConfidence = false,
+  ): boolean {
+    if (!isAudioPlaying || !welcomePlayed) return false;
+    if (this.wordsForInterruption === 0) return false;
+    return !this.shouldTriggerInterruption(
+      wordCount,
+      transcript,
+      isAudioPlaying,
+      welcomePlayed,
+      lowConfidence,
     );
   }
 
@@ -130,6 +212,9 @@ export class InterruptionManager {
    */
   getAudioSendStatus(sequenceId: number, historyLength: number): AudioSendStatus {
     if (!this.validSequenceIds.has(sequenceId)) return "BLOCK";
+    // Fillers must never WAIT on echo-VAD calleeSpeaking — that audio_gates
+    // "ம்ம்"/"புரிஞ்சுது" and the caller hears a chopped first word (call 14235).
+    if (sequenceId === FILLER_SEQUENCE_ID) return "SEND";
     if (this.calleeSpeaking) return "WAIT";
     if (historyLength > 2 && this.utteranceEndAt > 0) {
       const since = Date.now() - this.utteranceEndAt;

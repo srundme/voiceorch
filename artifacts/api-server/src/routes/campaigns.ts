@@ -22,8 +22,11 @@ router.use(requireAuth, clientContext);
 /**
  * Hard platform ceiling on how many concurrent calls a single campaign may run.
  * Enforced server-side on create/update regardless of the account's stored limit.
+ *
+ * Env-overridable so ops can lower the ceiling (e.g. under shared-runtime load
+ * that starves live-call TTS) without a code change. Default stays 10.
  */
-const MAX_CONCURRENT_CALLS = 10;
+const MAX_CONCURRENT_CALLS = Math.max(1, Number(process.env.CAMPAIGN_MAX_CONCURRENT_CALLS ?? 10));
 
 /**
  * Evaluate the IRDAI enforcement gate for a campaign's assigned agent. Reads the

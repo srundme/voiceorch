@@ -410,6 +410,10 @@ export interface AgentTool {
   taskName?: string;
   /** (native_booking) Optional sentence the agent should say just before invoking the booking tool */
   preToolMessage?: string;
+  /** (native_booking) If true, the agent asks the caller for an email and must confirm it before booking. Default false — do not ask. */
+  collectAttendeeEmail?: boolean;
+  /** (native_booking) Calendar invite address used when collectAttendeeEmail is false */
+  defaultAttendeeEmail?: string;
   /** (transfer_cold / transfer_warm) E.164 phone number to transfer the call to (e.g. +12125551234) */
   targetNumber?: string;
   /** (transfer_cold / transfer_warm) Optional message spoken to the caller before the transfer is initiated */
@@ -1266,6 +1270,8 @@ export interface CallerDetailEpisode {
   /** @nullable */
   summary?: string | null;
   /** @nullable */
+  sentiment?: string | null;
+  /** @nullable */
   durationSeconds?: number | null;
   createdAt: string;
   insightFactIds: number[];
@@ -1435,6 +1441,10 @@ export interface OutboundCallBody {
   toNumber: string;
   /** Override public base URL for webhooks (auto-detected if omitted) */
   webhookBaseUrl?: string;
+  /** Per-call values (patient fields, questions) for this dial */
+  variables?: { [key: string]: unknown };
+  /** Alias of variables */
+  parameters?: { [key: string]: unknown };
 }
 
 /**
@@ -3127,6 +3137,8 @@ export interface CampaignAnalytics {
   booked?: number;
   transferred?: number;
   failed?: number;
+  busy?: number;
+  noPickup?: number;
   pending?: number;
   successRate?: number;
   connectionRate?: number;
@@ -4522,6 +4534,8 @@ export interface BatchWorkspaceKpis {
   booked?: number;
   transferred?: number;
   failed: number;
+  busy?: number;
+  noPickup?: number;
   pending: number;
   callbacks: number;
   incoming: number;

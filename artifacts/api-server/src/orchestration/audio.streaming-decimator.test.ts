@@ -4,6 +4,8 @@ import {
   createDownsampler24to8,
   downsample16to8,
   downsample24to8,
+  enqueueExactFrames,
+  padWireFrame,
 } from "./audio.js";
 
 /** Speech-like tone stack (200 Hz fundamental + harmonics through the voice band). */
@@ -48,12 +50,12 @@ describe("StreamingDecimator (16→8)", () => {
   it("matches a whole-buffer filter far more closely than per-block stateless calls", () => {
     const input = speech(16000, 16000); // 1s
     const reference = toSamples(downsample16to8(input));
-    const stateful = toSamples(chunked(input, FRAME_16K_BYTES, ((d) => (b: Buffer) => d.process(b))(createDownsampler16to8())));
+    const decim = createDownsampler16to8();
+    const stateful = toSamples(chunked(input, FRAME_16K_BYTES, ((d) => (b: Buffer) => d.process(b))(decim)));
     const stateless = toSamples(chunked(input, FRAME_16K_BYTES, downsample16to8));
 
-    // The stateful path lags by `half` input samples (7 @16k = 3.5 output
-    // samples), so compare against the reference shifted by that constant.
-    const LAG = 4;
+    // The stateful path lags by delaySamples (half the kernel, in output samples).
+    const LAG = createDownsampler16to8().delaySamples;
     const err = (xs: number[], lag: number) => {
       const n = Math.min(xs.length - lag, reference.length - lag) - 32;
       const diffs: number[] = [];
@@ -133,5 +135,28 @@ describe("StreamingDecimator (24→8)", () => {
     };
 
     expect(err(stateful, LAG)).toBeLessThan(err(stateless, 0) / 5);
+  });
+});
+
+describe("padWireFrame / enqueueExactFrames", () => {
+  it("pads a runt 8 kHz playAudio frame to exactly 20 ms", () => {
+    const runt = Buffer.alloc(80, 7);
+    const padded = padWireFrame(runt, 320);
+    expect(padded.length).toBe(320);
+    expect(padded.subarray(0, 80).equals(runt)).toBe(true);
+    expect(padded.subarray(80).every((b) => b === 0)).toBe(true);
+  });
+
+  it("does not emit short frames across block boundaries", () => {
+    const queue: Buffer[] = [];
+    const rem = { buf: Buffer.alloc(0) };
+    enqueueExactFrames(Buffer.alloc(500, 1), 320, queue, rem);
+    expect(queue).toHaveLength(1);
+    expect(queue[0]!.length).toBe(320);
+    expect(rem.buf.length).toBe(180);
+    enqueueExactFrames(Buffer.alloc(140, 2), 320, queue, rem);
+    expect(queue).toHaveLength(2);
+    expect(queue.every((f) => f.length === 320)).toBe(true);
+    expect(rem.buf.length).toBe(0);
   });
 });

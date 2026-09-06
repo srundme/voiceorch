@@ -6,6 +6,8 @@ export type WorkspaceNavItem<T extends string = string> = {
   label: string;
   icon?: ElementType;
   badge?: string | number;
+  /** Draw a vertical rule before this item (e.g. Build vs Review). */
+  dividerBefore?: boolean;
 };
 
 export type WorkspaceNavGroup<T extends string = string> = {
@@ -164,28 +166,31 @@ export function WorkspaceSegmentNav<T extends string>({
     <nav
       aria-label="Editor sections"
       className={cn(
-        "flex h-11 shrink-0 items-stretch overflow-x-auto border-b border-border/70 bg-background px-2 sm:px-4",
+        "flex h-11 shrink-0 items-stretch gap-0.5 overflow-x-auto border-b border-border/70 bg-muted/[0.18] px-5 sm:px-8",
         className,
       )}
     >
       {items.map((item) => {
         const active = item.id === activeId;
         return (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onSelect(item.id)}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "relative shrink-0 px-3.5 text-[12.5px] font-medium transition-colors duration-150",
-              "after:absolute after:bottom-0 after:left-2 after:right-2 after:h-[2px] after:rounded-full after:transition-all after:duration-150",
-              active
-                ? "text-foreground after:bg-foreground"
-                : "text-muted-foreground hover:text-foreground after:bg-transparent",
-            )}
-          >
-            {item.label}
-          </button>
+          <div key={item.id} className="flex shrink-0 items-stretch">
+            {item.dividerBefore ? (
+              <span aria-hidden className="mx-1.5 my-2 w-px shrink-0 bg-border/80" />
+            ) : null}
+            <button
+              type="button"
+              onClick={() => onSelect(item.id)}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "relative my-1.5 shrink-0 whitespace-nowrap rounded-md px-3 text-[12px] transition-colors",
+                active
+                  ? "bg-background font-medium text-foreground shadow-sm ring-1 ring-border/80"
+                  : "text-muted-foreground hover:bg-background/50 hover:text-foreground",
+              )}
+            >
+              {item.label}
+            </button>
+          </div>
         );
       })}
     </nav>

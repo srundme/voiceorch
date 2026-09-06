@@ -30,7 +30,7 @@ export default function ErrorsPage() {
               ["400", "Validation failed — check issues[] or error string"],
               ["402", "Payment / wallet — often insufficient balance"],
               ["403", "Forbidden (suspended account, compliance block)"],
-              ["404", "Resource not found or not owned by this account"],
+              ["404", "Resource not found, or you hit api.snapserve.ai / docs.snapserve.ai (use app.snapserve.ai)"],
               ["409", "Conflict (e.g. number already taken)"],
               ["429", "Rate limited — back off and retry"],
               ["5xx", "Server / upstream provider error — retry with jitter"],

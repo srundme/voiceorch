@@ -9,6 +9,10 @@ import { randomBytes } from "node:crypto";
 import { db, scheduledCallbacksTable } from "@workspace/db";
 import { and, eq, gte, lt, inArray, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
+import {
+  resolveCampaignCallContext,
+  syncCampaignCallback,
+} from "./campaign-tab-sync.js";
 
 type CallbackRow = typeof scheduledCallbacksTable.$inferSelect;
 
@@ -107,15 +111,31 @@ export async function scheduleCallbackRequested(opts: {
   toNumber:  string;
   userId?:   string | null;
   callId?:   number | null;
+  campaignLeadId?: number | null;
   scheduledAt: Date;
   notes?:    string | null;
 }): Promise<number> {
+  const context = opts.campaignLeadId
+    ? await db.execute(sql`
+        select id as "leadId", campaign_id as "campaignId", batch_id as "batchId"
+        from campaign_leads where id = ${opts.campaignLeadId} limit 1
+      `).then((result) => {
+        const row = (result.rows[0] as { leadId: number; campaignId: number; batchId: number | null } | undefined);
+        return row
+          ? { leadId: Number(row.leadId), campaignId: Number(row.campaignId), batchId: row.batchId == null ? null : Number(row.batchId) }
+          : null;
+      })
+    : opts.callId
+      ? await resolveCampaignCallContext(opts.callId)
+      : null;
+
   const [row] = await db.insert(scheduledCallbacksTable).values({
     agentId:           opts.agentId,
     toNumber:          opts.toNumber,
     userId:            opts.userId ?? null,
     scheduledAt:       opts.scheduledAt,
     createdFromCallId: opts.callId ?? null,
+    campaignLeadId:    context?.leadId ?? null,
     reason:            "callback_requested",
     maxAttempts:       1,
     notes:             opts.notes ?? null,
@@ -126,6 +146,16 @@ export async function scheduleCallbackRequested(opts: {
     { agentId: opts.agentId, toNumber: opts.toNumber, scheduledAt: opts.scheduledAt },
     "Callback requested: scheduled",
   );
+  if (context) {
+    await syncCampaignCallback({
+      context,
+      callId: opts.callId,
+      scheduledAt: opts.scheduledAt,
+      notes: opts.notes,
+    }).catch((err) => {
+      logger.warn({ err, callId: opts.callId, campaignLeadId: context.leadId }, "Callback requested: campaign tab sync failed");
+    });
+  }
   return row!.id;
 }
 

@@ -56,6 +56,9 @@ import {
   validateFactCandidate,
   shouldSupersedeFact,
   canonicalizeFactKey,
+  extractDateOfBirthFactValue,
+  extractPhoneFactValue,
+  extractEmailFactValue,
 } from "./callerMemory-durable-facts.js";
 
 export {
@@ -251,6 +254,64 @@ export function formatSpeakerTranscript(history: ConversationTurn[]): string {
     .join("\n");
 }
 
+const EPISODE_SKIP_LINE =
+  /^(yes|yeah|yep|ok|okay|no|nah|hmm|uh|um|hi|hello|thanks|thank you|please|wait|சரி|ஆமா|ஆம்|இல்ல|இல்லை|ஹாய்|வணக்கம்)[.!?]*$/iu;
+
+const EPISODE_IMPORTANT_CUE =
+  /(?:\bname\b|பேரு|பேர்|பெயர்|\bperu\b|\bpeyar\b|\bage\b|வயசு|ஊர்|\boor\b|\bfrom\b|\blive\b|\bwork\b|வேலை|பணி|\bprofessor\b|\bpolicy\b|\bplan\b|\bproduct\b|\bemail\b|\bmail\b|\bdob\b|\bbirthday\b|date of birth|\bphone\b|\bmobile\b|\bwhatsapp\b|\bwtsp\b|கிடையாது|\bella\b|\bwant\b|\bneed\b|வேணும்|வேண்டும்|\benoda\b|\bennoda\b|நான்\s)/iu;
+
+/**
+ * Caller lines worth keeping on the episode card when the extract LLM is down.
+ * Identity / need cues first; otherwise the longest recent caller utterances.
+ */
+export function pickImportantCallerLines(
+  sentences: Array<{ speaker: string; text: string }>,
+  max = 3,
+): string[] {
+  const caller = sentences
+    .filter((s) => s.speaker === "caller")
+    .map((s) => s.text.replace(/\s+/g, " ").trim())
+    .filter((t) => t.length >= 8 && !EPISODE_SKIP_LINE.test(t));
+  const cued = caller.filter((t) => EPISODE_IMPORTANT_CUE.test(t));
+  const pool = (cued.length > 0 ? cued : caller.filter((t) => t.length >= 18)).slice(-max);
+  return pool.map((t) => (t.length > 180 ? `${t.slice(0, 177)}…` : t));
+}
+
+/** Readable episode blurb when the extract LLM omits / fails summary. */
+export function buildFallbackEpisodeSummary(opts: {
+  name?: string | null;
+  facts: Array<{ key: string; value: string }>;
+  wasDropped?: boolean;
+  callerHighlights?: string[];
+}): string {
+  const parts: string[] = [];
+  const name = opts.name?.trim();
+  if (name) parts.push(`Caller ${name}`);
+
+  const skip = new Set(["name", "language_pref", PERSONA_HASH_FACT_KEY]);
+  const detailBits: string[] = [];
+  for (const f of opts.facts) {
+    if (skip.has(f.key)) continue;
+    const label = isDurableFactKey(f.key) ? DURABLE_FACT_LABELS[f.key] : f.key;
+    detailBits.push(`${label} ${f.value}`);
+  }
+  if (detailBits.length > 0) {
+    parts.push(parts.length ? `shared ${detailBits.join(", ")}` : `Caller shared ${detailBits.join(", ")}`);
+  }
+
+  let summary = parts.length > 0
+    ? `${parts.join(" — ")}.`
+    : "Call completed; limited caller details were captured.";
+  const highlights = (opts.callerHighlights ?? []).filter(Boolean);
+  if (highlights.length > 0) {
+    summary += ` Caller said: ${highlights.join(" / ")}`;
+  }
+  if (opts.wasDropped) {
+    summary += " Call dropped before a natural ending.";
+  }
+  return summary.slice(0, 800);
+}
+
 // BCP-47 → plain-name value stored in the language_pref fact. Reverse of the
 // LANG_PREF_TO_BCP47 map session.ts uses at call start to seed the STT/agent
 // language from this fact — keys/values MUST stay in sync with that map.
@@ -304,11 +365,23 @@ const DROPPED_CALL_WINDOW_MS = 60 * 60 * 1000;
 const ABRUPT_END_TAIL_SIZE = 6;
 
 export function isAbruptEnd(profile: CallerProfile | null): boolean {
-  return (
-    profile?.lastCallDropped === true &&
-    profile.lastCallDroppedAt != null &&
-    Date.now() - profile.lastCallDroppedAt.getTime() < DROPPED_CALL_WINDOW_MS
-  );
+  if (
+    profile?.lastCallDropped !== true
+    || profile.lastCallDroppedAt == null
+    || Date.now() - profile.lastCallDroppedAt.getTime() >= DROPPED_CALL_WINDOW_MS
+  ) {
+    return false;
+  }
+  // A later completed call updates lastCalledAt but may fail to clear the
+  // sticky drop flag (call 21824 resumed a finished 21822). The drop is stale
+  // once lastCalledAt is after the drop stamp.
+  if (
+    profile.lastCalledAt
+    && profile.lastCalledAt.getTime() > profile.lastCallDroppedAt.getTime() + 1000
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /** True when this call should resume a recently dropped thread (not cold-start). */
@@ -710,6 +783,17 @@ export function injectEnhancedMemory(
         "date/time given elsewhere in your instructions before saying them aloud (e.g. a meeting " +
         'stored as "tomorrow" may actually be today).',
     );
+    // Call 21628: memory said the child was in eighth standard (itself recorded
+    // as a "correction" from a prior call). The caller said twelfth four times
+    // and the agent kept re-asserting eighth, ending with "you're saying eighth
+    // or twelfth — which one should I update?" until the caller asked to be
+    // called back. Stored facts are stale by definition; the live caller is not.
+    lines.push(
+      "[LIVE CORRECTION WINS] If the caller says anything in THIS call that contradicts a fact " +
+        "above, the caller is right and the memory is out of date. Accept it immediately, use the " +
+        "new value for the rest of the call, and do NOT argue, repeat the old value back, or ask " +
+        "the caller to choose between the stored value and what they just told you.",
+    );
   }
 
   // ── Previous call summary (single line — most recent call only) ───────────
@@ -725,10 +809,12 @@ export function injectEnhancedMemory(
     // caller agreed twice. Tell the model how to ACT on the summary, not just
     // what it says.
     lines.push(
-      "HOW TO USE THIS SUMMARY: open the pending topic yourself with a concrete question or the " +
-        "next substantive step. Ask at most ONE short \"shall we continue?\"-style question for the " +
-        "whole call — once the caller agrees (any yes/okay), or if you already asked once, go " +
-        "straight into the substance. Never re-ask permission to continue.",
+      "HOW TO USE THIS SUMMARY: On the OPENING of this call only, continue the pending topic. " +
+        "After the caller has spoken on THIS call, answer what they just said — memory is background, " +
+        "not a script. Do not re-open the prior-call pitch or re-ask a question already asked in this " +
+        "conversation. Ask at most ONE short \"shall we continue?\"-style question for the whole call — " +
+        "once the caller agrees (any yes/okay), or if you already asked once, go straight into the " +
+        "substance. Never re-ask permission to continue.",
     );
   }
 
@@ -822,17 +908,19 @@ export function injectEnhancedMemory(
       "briefly acknowledge the drop in natural colloquial language, then immediately continue the topic " +
       "from LAST EXCHANGES BEFORE THE CALL DROPPED above — mid-thread, not from the beginning. " +
       "If an opening was ALREADY spoken on this call, do NOT acknowledge any drop/cut again — answer the " +
-      "caller's latest message only. Never invent a drop apology unless this is the opening OR the caller just said the call dropped. " +
+      "caller's latest message only. LAST EXCHANGES are background after the opening, not a script to replay. " +
+      "Never invent a drop apology unless this is the opening OR the caller just said the call dropped. " +
       (hasResumeTail
-        ? "Pick up exactly where those exchanges left off."
-        : "Continue naturally from the prior context above."),
+        ? "On the opening only, pick up where those exchanges left off."
+        : "On the opening only, continue naturally from the prior context above."),
     );
   } else if (!suppressDomain && callCount >= 1) {
     const namePhrase = namePart !== "unknown" ? ` by name (${namePart})` : " by name if known";
     lines.push(
       `⚠️ IMPORTANT — THIS IS A RETURNING CALLER YOU ALREADY KNOW (call #${callCount + 1}). ` +
       `Do NOT introduce yourself or your company as if meeting for the first time, and do NOT speak a generic first-time intro. ` +
-      `Open by greeting them${namePhrase} and naturally reference what you already know about them from the memory above. ` +
+      `Open by greeting them${namePhrase} in one short clause and ask if it is a good time to talk. ` +
+      `Do NOT recap previous bookings, slots, times, or call summaries in the opener — wait for them to speak. ` +
       `Continue the relationship rather than starting cold.`,
     );
   }
@@ -849,10 +937,9 @@ export function injectEnhancedMemory(
       "questions (e.g. asking for the caller's name, what they're calling about, or other " +
       "details) written as if this were a brand-new caller. If the answer to any such question " +
       "is already present above (Name, Previous call summary, or Known details), treat it as " +
-      "already answered — do NOT ask that question again. Instead, confirm it naturally in " +
-      "passing if needed (e.g. \"I see you were asking about X earlier, want to pick that back " +
-      "up?\") and move the conversation forward. Only ask a scripted question if its answer is " +
-      "genuinely missing from the memory above.",
+      "already answered — do NOT ask that question again. Use the known fact and move forward. " +
+      "Do not ask permission to continue or recap the prior call. Only ask a scripted question " +
+      "if its answer is genuinely missing from the memory above.",
     );
   }
   if (operatorFacts.length > 0) {
@@ -867,6 +954,38 @@ export function injectEnhancedMemory(
   lines.push("=====================================");
 
   return `${lines.join("\n")}\n\n${systemPrompt}`;
+}
+
+/**
+ * After the opening has been spoken, LAST EXCHANGES + the resume-drop banner
+ * must not stay in the live system prompt. Weak models treat them as this-turn
+ * homework and recap the prior call on every "continue" / "we already discussed"
+ * (call 21828). Facts and name stay; the resume agenda does not.
+ */
+export function demoteResumeMemoryAfterOpening(systemPrompt: string): string {
+  if (!systemPrompt.includes("=== CALLER MEMORY ===")) return systemPrompt;
+  if (
+    !systemPrompt.includes("LAST EXCHANGES BEFORE THE CALL DROPPED")
+    && !systemPrompt.includes("RESUME, DO NOT RESTART")
+    && !systemPrompt.includes("LAST CALL DROPPED")
+  ) {
+    return systemPrompt;
+  }
+
+  let out = systemPrompt.replace(/\s*\|\s*⚠️ LAST CALL DROPPED/g, "");
+  out = out.replace(
+    /\nLAST EXCHANGES BEFORE THE CALL DROPPED \(resume from here\):[\s\S]*?(?=\n⚠️ NAME PRIORITY RULE:)/,
+    "\n",
+  );
+  out = out.replace(
+    /\n⚠️ IMPORTANT — RESUME, DO NOT RESTART:[\s\S]*?(?=\n⚠️ |\n=====)/,
+    "\n",
+  );
+  out = out.replace(
+    /\nHOW TO USE THIS SUMMARY:[\s\S]*?(?=\n\n|\nLikely reason|\nKNOWN DETAILS|\n⚠️ )/,
+    "\nHOW TO USE THIS SUMMARY: Background only — the opening already happened. Do not recap or re-ask permission to continue.\n",
+  );
+  return out;
 }
 
 // ── Graph helper: supersede or insert a fact (L0 conflict resolution) ─────────
@@ -1082,6 +1201,9 @@ export async function archiveCall(opts: {
   sentiment?: string | null;
   sentences?: Array<{ speaker: "agent" | "caller"; text: string }>;
 }): Promise<{ archiveId: number | null; sentenceIds: number[] }> {
+  // Insert the episode row first and keep it even if sentence insert fails —
+  // otherwise Facts can land later while Episodes stays empty.
+  let archiveId: number | null = null;
   try {
     const [row] = await db
       .insert(callerCallArchiveTable)
@@ -1096,29 +1218,34 @@ export async function archiveCall(opts: {
         sentiment:       opts.sentiment ?? null,
       })
       .returning({ id: callerCallArchiveTable.id });
+    archiveId = row?.id ?? null;
+  } catch (err) {
+    logger.warn({ err, agentId: opts.agentId, phoneNumber: opts.phoneNumber }, "archiveCall episode insert failed");
+    return { archiveId: null, sentenceIds: [] };
+  }
 
-    const archiveId = row?.id ?? null;
-    let sentenceIds: number[] = [];
-
-    // Insert L2 sentence nodes with NEXT-edge ordering
-    if (archiveId && opts.sentences && opts.sentences.length > 0) {
+  let sentenceIds: number[] = [];
+  if (archiveId && opts.sentences && opts.sentences.length > 0) {
+    try {
       const inserted = await db
         .insert(callerSentencesTable)
         .values(opts.sentences.map((s, i) => ({
-          episodeId:   archiveId,
+          episodeId:   archiveId!,
           sequenceNum: i + 1,
           speaker:     s.speaker,
           text:        s.text.slice(0, 4000),
         })))
         .returning({ id: callerSentencesTable.id });
       sentenceIds = inserted.map(r => r.id);
+    } catch (err) {
+      logger.warn(
+        { err, agentId: opts.agentId, phoneNumber: opts.phoneNumber, archiveId },
+        "archiveCall sentence insert failed — episode row kept",
+      );
     }
-
-    return { archiveId, sentenceIds };
-  } catch (err) {
-    logger.warn({ err, agentId: opts.agentId, phoneNumber: opts.phoneNumber }, "archiveCall DB write failed");
-    return { archiveId: null, sentenceIds: [] };
   }
+
+  return { archiveId, sentenceIds };
 }
 
 // ── Extract and save structured facts via LLM ─────────────────────────────────
@@ -1151,9 +1278,9 @@ async function runLLMExtraction(opts: {
       content:
         `${priorContext}${priorFactsStr}` +
         `Analyze this call transcript and extract:\n` +
-        `1. A concise 1-3 sentence summary of what was discussed (merge with any prior context above)\n` +
+        `1. A 2-4 sentence episode summary of THIS call (see summary rules below)\n` +
         `2. The caller's emotional sentiment for THIS call\n` +
-        `3. DURABLE identity facts about the caller (see rules below)\n\n` +
+        `3. IMPORTANT durable facts the CALLER stated (see allowed keys)\n\n` +
         `Return ONLY valid JSON with exactly these fields:\n` +
         `{\n` +
         `  "name": "caller's first name if stated, otherwise null",\n` +
@@ -1176,7 +1303,7 @@ async function runLLMExtraction(opts: {
         `${durableFactsPromptBlock()}\n\n` +
         `Transcript:\n${annotatedTranscript.slice(0, 10000)}`,
     }],
-    "You extract DURABLE caller identity facts from voice call transcripts. Return only JSON with 'name', 'summary', 'sentiment', and 'facts' (each fact needs key, value, confidence, sentence_ids citing [cN] caller lines only). Never invent. Never store ephemeral sales intent as facts.",
+    "You extract important caller-stated facts and an episode summary from voice call transcripts in ANY language (Tamil, Hindi, English, romanized Tamil, or mixed). Return only JSON with 'name', 'summary', 'sentiment', and 'facts' (each fact needs key, value, confidence, sentence_ids citing [cN] caller lines only). Never invent. Never store agent pitches or ephemeral sales intent as facts. Never treat questions like \"who's this\" as a name.",
     () => {},
     (full) => { raw = full; },
   );
@@ -1594,8 +1721,13 @@ export async function updateCallerProfile(opts: {
   }
 
   if (!llmSucceeded) {
-    logger.error({ agentId, phoneNumber, callId }, "Caller memory LLM extraction failed after all retries");
-    return;
+    // Do NOT bail entirely — deterministic regex facts (age / location / etc.)
+    // must still land in Facts when the extract LLM is down.
+    logger.error(
+      { agentId, phoneNumber, callId },
+      "Caller memory LLM extraction failed after all retries — continuing with regex fact gap-fill only",
+    );
+    extracted = { name: null, summary: null, sentiment: null, facts: [] };
   }
 
   // Guard against the LLM hallucinating a "name" out of a topic/product phrase
@@ -1613,10 +1745,26 @@ export async function updateCallerProfile(opts: {
   // ── Phase 3a: validation gate → supersession (only facts that pass) ───────
   // Promote top-level `name` when it can be grounded to any caller sentence
   // that contains the name (or when a Tier-A mid-call latch already confirmed it).
-  const nameFactCandidates = extracted.name?.trim()
+  // Prefer an explicit mid-call latch (Tier A) over a missing/weak LLM name so
+  // Facts still get `name` when the caller said e.g. "என்னோட பேரு Murali".
+  // Tier B ("I am X") does NOT force a name fact without LLM agreement — avoids
+  // turning casual phrases into durable Facts.
+  const latchedNameForFacts =
+    callerNameInCall?.trim() && shouldLatchOverrideExtraction(callerNameLatchTier)
+      ? callerNameInCall.trim()
+      : null;
+  const nameForFacts = (latchedNameForFacts || extracted.name?.trim() || "") || null;
+  if (latchedNameForFacts && extracted.name?.trim() &&
+      extracted.name.trim().toLowerCase() !== latchedNameForFacts.toLowerCase()) {
+    extracted.name = latchedNameForFacts;
+  } else if (!extracted.name?.trim() && latchedNameForFacts) {
+    extracted.name = latchedNameForFacts;
+  }
+
+  const nameFactCandidates = nameForFacts
     ? [{
         key: "name",
-        value: extracted.name.trim(),
+        value: nameForFacts,
         confidence: 0.95,
         sentence_ids: (extracted.facts ?? [])
           .filter((f) => canonicalizeFactKey(f.key) === "name")
@@ -1660,6 +1808,35 @@ export async function updateCallerProfile(opts: {
   // Deduplicate by canonical key (last wins — last-stated in transcript order)
   const byKey = new Map<string, (typeof validFacts)[number]>();
   for (const f of validFacts) byKey.set(f.key, f);
+
+  // Gap-fill: promote deterministic pattern matches from CALLER lines when the
+  // LLM omitted them (common for code-mixed Tamil/Hindi + English, e.g.
+  // "என்னோட age 25"). Never overrides an LLM/name fact already in byKey.
+  const regexFillKeys: string[] = [];
+  for (const cand of collectRegexDurableFactCandidates(parsedSentences, sentenceIds)) {
+    if (byKey.has(cand.key)) continue;
+    const result = validateFactCandidate({
+      key: cand.key,
+      value: cand.value,
+      confidence: cand.confidence,
+      sentenceIds: cand.sentence_ids,
+      callerSentenceIds,
+      requireCitation: true,
+    });
+    if (!result.ok || !result.fact) {
+      rejectReasons.push(`regex:${cand.key}:${result.reason ?? "rejected"}`);
+      continue;
+    }
+    byKey.set(result.fact.key, result.fact);
+    regexFillKeys.push(result.fact.key);
+  }
+  if (regexFillKeys.length > 0) {
+    logger.info(
+      { agentId, phoneNumber, callId, keys: regexFillKeys },
+      "Caller memory: regex durable facts gap-filled into Facts",
+    );
+  }
+
   const uniqueFacts = [...byKey.values()];
 
   const newFactIds: number[] = [];
@@ -1702,6 +1879,20 @@ export async function updateCallerProfile(opts: {
     },
     "Caller memory: durable fact extraction complete",
   );
+
+  // Prefer LLM summary; if missing (LLM down / empty), still leave a readable
+  // episode card so Memory → Episodes is never a blank timestamp.
+  if (!extracted.summary?.trim()) {
+    extracted.summary = buildFallbackEpisodeSummary({
+      name: extracted.name ?? callerNameInCall ?? existing?.name ?? null,
+      facts: uniqueFacts.map((f) => ({ key: f.key, value: f.value })),
+      wasDropped,
+      callerHighlights: pickImportantCallerLines(parsedSentences),
+    });
+  }
+  if (!extracted.sentiment?.trim()) {
+    extracted.sentiment = wasDropped ? "frustrated" : "neutral";
+  }
 
   // ── Phase 3b: update episode summary + sentiment + insight_facts edges ───
   if (archiveId) {
@@ -1816,16 +2007,25 @@ export const NAME_PATTERNS: { pattern: RegExp; tier: NameLatchTier }[] = [
   { pattern: /\bthis is ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\s+(?:speaking|calling|here)\b/iu, tier: "A" },
   { pattern: /\bcall me ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu, tier: "A" },
   { pattern: /\bname(?:'s| is) ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu, tier: "A" },
-  // Tamil: "என் பேர் <name>" / "என்னோட பேர் <name>"
-  { pattern: /என்(?:னோட)?\s*பேர்\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u, tier: "A" },
-  // Hindi: "मेरा नाम <name>" / "मैं <name> हूँ"
+  // Tamil: "என் பேர் / பேரு / பெயர் <name>" / "என்னோட பேரு <name>"
+  // Note: colloquial பேரு is பேர+ு (no pulli); literary பேர் is பேர+் — both needed.
+  { pattern: /என்(?:னோட|னுடைய)?\s*(?:பேரு|பேர்|பெயர்)\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u, tier: "A" },
+  // Romanized Tamil (STT / typed): "enoda peru Karthi", "ennoda peyar Sivaram"
+  { pattern: /\ben+n?o(?:da|daya)?\s+(?:peru|per|peyar|peyer)\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/iu, tier: "A" },
+  { pattern: /\ben\s+(?:peru|per|peyar)\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/iu, tier: "A" },
+  // Tamil: "நான் <name>" when followed by speaking cue (பேசுறேன் / speaking)
+  // Avoid \\b after Tamil — JS word boundaries are ASCII-oriented even with /u.
+  { pattern: /நான்\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)\s*(?:பேசுறேன்|பேசுகிறேன்|speaking|calling)(?=\s|$|[.!,])/u, tier: "A" },
+  // Hindi: "मेरा नाम <name>" (explicit) / "मैं <name> हूँ" (ambiguous like "I am X" → Tier B)
   { pattern: /मेरा\s*नाम\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u, tier: "A" },
+  { pattern: /मैं\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)\s+हूँ/u, tier: "B" },
 ];
 
 const NAME_STOPWORDS = new Set([
   "sure", "sorry", "good", "fine", "here", "happy", "okay", "just",
   "calling", "speaking", "back", "checking", "looking", "trying",
   "not", "also", "right", "ready", "interested",
+  "a", "an",
   // Intensifiers / emotional-state words. "I am so confused" structurally
   // matches the "I am X" pattern and (pre-fix) latched "so confused" as the
   // caller's name. These are never part of a real human name.
@@ -1853,6 +2053,10 @@ const NAME_BLOCKLIST = new Set([
   "cost", "billing", "payment", "regarding", "about", "for", "with", "the",
   "your", "our", "service", "services", "call", "calls", "issue", "problem",
   "question", "help", "support", "account", "number", "phone",
+  // Question / deixis fragments that STT sometimes captures after "hello"
+  // ("hello who's this" → must never become the caller's name).
+  "who", "whose", "whos", "what", "which", "where", "when", "why", "how",
+  "this", "that", "these", "those", "there", "here",
 ]);
 
 // Next-token reject list: if the word IMMEDIATELY following the matched span
@@ -1862,6 +2066,22 @@ const NAME_BLOCKLIST = new Set([
 const NAME_NEXT_TOKEN_REJECTS = new Set([
   "not", "no", "unable", "unsure", "just", "really", "so", "very", "still",
   "also", "trying", "going", "looking", "calling",
+  // Call 14222: "என்னோட பேரு ராஜேஸ்வரி கிடையாது … சிவராம்" — next token after
+  // the denied name is a negation, not a surname.
+  "கிடையாது", "இல்லை", "இல்ல", "அல்ல", "नहीं", "नही",
+  "ella", "illa", "illai",
+]);
+
+/** Words that mean "is not / no" — never part of a stored name (call 14222). */
+const NAME_NEGATION_WORDS = new Set([
+  "not", "no", "n't",
+  "கிடையாது", "இல்லை", "இல்ல", "அல்ல", "இல்லங்க",
+  "नहीं", "नही",
+]);
+
+/** Discourse fillers callers put between "my name is" and the actual name. */
+const NAME_FILLER_WORDS = new Set([
+  "வந்து", "தான்", "actually", "really", "just",
 ]);
 
 // Honorifics/titles that callers commonly attach around their name when
@@ -1889,6 +2109,8 @@ export function stripNameHonorifics(name: string): string {
   const words = name.trim().split(/\s+/);
   while (words.length && NAME_HONORIFICS.has(normalizeNameWord(words[words.length - 1]))) words.pop();
   while (words.length && NAME_HONORIFICS.has(normalizeNameWord(words[0]))) words.shift();
+  while (words.length && NAME_FILLER_WORDS.has(normalizeNameWord(words[0]))) words.shift();
+  while (words.length && NAME_FILLER_WORDS.has(normalizeNameWord(words[words.length - 1]))) words.pop();
   return words.join(" ");
 }
 
@@ -1907,8 +2129,12 @@ export function isPlausibleName(candidate: string): boolean {
   for (const w of words) {
     const lw = w.toLowerCase().replace(/[^\p{L}\p{M}]/gu, "");
     if (!lw) return false;
-    if (NAME_STOPWORDS.has(lw) || NAME_BLOCKLIST.has(lw)) return false;
+    if (NAME_STOPWORDS.has(lw) || NAME_BLOCKLIST.has(lw) || NAME_NEGATION_WORDS.has(lw)) return false;
   }
+  // Trailing romanized "ella"/"illa" is a denial, not a surname — but a lone
+  // name "Ella" must still be allowed.
+  const last = normalizeNameWord(words[words.length - 1]!);
+  if (words.length >= 2 && (last === "ella" || last === "illa" || last === "illai")) return false;
   return true;
 }
 
@@ -1919,21 +2145,31 @@ export function isPlausibleName(candidate: string): boolean {
  * check. Returns the detected name and its trust tier, or null.
  */
 export function detectNameLatch(transcript: string): { name: string; tier: NameLatchTier } | null {
+  let best: { name: string; tier: NameLatchTier; index: number } | null = null;
   for (const { pattern, tier } of NAME_PATTERNS) {
-    const match = transcript.match(pattern);
-    const candidate = stripNameHonorifics(match?.[1]?.trim() ?? "");
-    if (!candidate || !isPlausibleName(candidate)) continue;
-    // Next-token reject: the word immediately after the matched span reveals a
-    // sentence continuation, not a self-introduction ("I am Arjun Kumar trying
-    // to reach…"). Applies alongside the per-word stopword/blocklist checks.
-    if (typeof match!.index === "number") {
-      const after = transcript.slice(match!.index + match![0].length);
-      const nextToken = after.match(/[\p{L}\p{M}]+/u)?.[0]?.toLowerCase();
-      if (nextToken && NAME_NEXT_TOKEN_REJECTS.has(nextToken)) continue;
+    const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+    const re = new RegExp(pattern.source, flags);
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(transcript)) !== null) {
+      if (match[0].length === 0) {
+        re.lastIndex++;
+        continue;
+      }
+      const candidate = stripNameHonorifics(match[1]?.trim() ?? "");
+      if (!candidate || !isPlausibleName(candidate)) continue;
+      const after = transcript.slice((match.index ?? 0) + match[0].length);
+      const nextToken = after.match(/[\p{L}\p{M}]+/u)?.[0];
+      const nextNorm = nextToken ? normalizeNameWord(nextToken) : "";
+      if (nextNorm && (NAME_NEXT_TOKEN_REJECTS.has(nextNorm) || NAME_NEGATION_WORDS.has(nextNorm))) {
+        continue;
+      }
+      const index = match.index ?? 0;
+      if (!best || index >= best.index) {
+        best = { name: candidate, tier, index };
+      }
     }
-    return { name: candidate, tier };
   }
-  return null;
+  return best ? { name: best.name, tier: best.tier } : null;
 }
 
 export async function latchCallerName(opts: {
@@ -1989,6 +2225,8 @@ const LOCATION_BLOCKLIST = new Set([
   "september", "october", "november", "december",
   "home", "work", "office", "here", "there", "abroad", "outside", "inside",
   "the", "your", "our", "my", "this", "that",
+  // Hindi fillers that can sit in "मैं X से हूँ" without being a city
+  "ठीक", "बस", "अभी", "बहुत", "सिर्फ", "केवल",
 ]);
 
 function isPlausibleLocation(candidate: string): boolean {
@@ -2014,6 +2252,7 @@ const OCCUPATION_BLOCKLIST = new Set([
   "friend", "regarding", "about", "for", "with", "the", "your", "our",
   "little", "bit", "lot", "way", "long", "time", "while",
   "managed", "byop", "plan", "provider", "agent", "service", "reseller",
+  "policy", "insurance", "product", "premium", "coverage",
 ]);
 
 function isPlausibleOccupation(candidate: string): boolean {
@@ -2023,9 +2262,10 @@ function isPlausibleOccupation(candidate: string): boolean {
   const words = trimmed.split(/\s+/);
   if (words.length > 4) return false;
   for (const w of words) {
-    const lw = w.toLowerCase().replace(/[^a-z]/g, "");
+    const lw = w.toLowerCase().replace(/[^\p{L}\p{M}]/gu, "");
     if (!lw) return false;
-    if (OCCUPATION_BLOCKLIST.has(lw)) return false;
+    // Blocklist is Latin-only; skip native-script tokens.
+    if (/^[a-z]+$/i.test(lw) && OCCUPATION_BLOCKLIST.has(lw)) return false;
   }
   return true;
 }
@@ -2039,6 +2279,17 @@ const FACT_PATTERNS: FactPattern[] = [
       /\bi(?:'m| am) (\d{1,3}) years? old\b/i,
       /\bmy age is (\d{1,3})\b/i,
       /\b(\d{1,3}) years? old\b/i,
+      // Code-mixed / terse: "age 25", "age is 25", "என்னோட age 25 madam"
+      /\bage\s*(?:is|=|:)?\s*(\d{1,3})\b/i,
+      /(?:என்னோட|என்|எனக்கு)\s*age\s*(?:is\s*)?(\d{1,3})/iu,
+      /(?:என்னோட|என்)\s*(\d{1,3})\s*age\b/iu,
+      // Tamil: "எனக்கு 32 வயசு" / "32 வயது" / "என்னோட வயசு 25"
+      /(?:எனக்கு|என்|என்னோட)\s*(\d{1,3})\s*(?:வயசு|வயது)/u,
+      /(?:எனக்கு|என்|என்னோட)\s*(?:வயசு|வயது)\s*(?:is\s*)?(\d{1,3})/u,
+      /(\d{1,3})\s*(?:வயசு|வயது)/u,
+      // Hindi: "मेरी उम्र 32" / "32 साल"
+      /(?:मेरी\s*)?उम्र\s*(?:है\s*)?(\d{1,3})/u,
+      /(\d{1,3})\s*साल(?:\s*का|\s*की)?/u,
     ],
     extract: m => m[1]!,
     confidence: 0.4,
@@ -2049,6 +2300,10 @@ const FACT_PATTERNS: FactPattern[] = [
       /\b(\d+) (?:kids?|children)\b/i,
       /\bi have (\d+) (?:kids?|children|sons?|daughters?)\b/i,
       /\bfamily of (\d+)\b/i,
+      // Tamil: "2 பிள்ளை" / "இரண்டு குழந்தை"
+      /(\d+)\s*(?:பிள்ளை(?:கள்)?|குழந்தை(?:கள்)?)/u,
+      // Hindi: "2 बच्चे"
+      /(\d+)\s*(?:बच्चे|बच्ची|बच्चों)/u,
     ],
     extract: m => m[1]!,
     confidence: 0.4,
@@ -2056,8 +2311,20 @@ const FACT_PATTERNS: FactPattern[] = [
   {
     key: "location",
     patterns: [
-      /\bi(?:'m| am) (?:from|in|based in|calling from) ([A-Z][a-zA-Z\s]{2,30}?)(?:\.|,|$)/,
-      /\bi live in ([A-Z][a-zA-Z\s]{2,30}?)(?:\.|,|$)/,
+      // Case-insensitive — STT often lowercases city names ("chennai")
+      /\bi(?:'m| am) (?:from|in|based in|calling from) ([A-Za-z][A-Za-z\s]{1,30}?)(?:\.|,|$)/i,
+      /\bi live in ([A-Za-z][A-Za-z\s]{1,30}?)(?:\.|,|$)/i,
+      /\b(?:calling from|based in)\s+([A-Za-z][A-Za-z\s]{1,30}?)(?:\.|,|$)/i,
+      // Tamil / code-mixed: "என்னோட ஊர் Chennai" / "என் city is Chennai"
+      /(?:என்னோட|என்|எனக்கு)\s*(?:ஊர்|இடம்|address|city|location|place)\s*(?:is\s*|=\s*)?([\p{L}\p{M}A-Za-z]+(?:\s[\p{L}\p{M}A-Za-z]+){0,3})/iu,
+      // Romanized Tamil: "enoda oor Chennai" / "en city Chennai"
+      /\b(?:en+n?o(?:da|daya)?|en)\s+(?:ooru|oor|city|place)\s+([\p{L}\p{M}A-Za-z]+(?:\s[\p{L}\p{M}A-Za-z]+){0,3})/iu,
+      // Tamil colloquial: "நான் Chennai-ல" / "சென்னையில இருக்கு"
+      /(?:நான்|நா)\s+([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{1,28}?)\s*[- ]?(?:ல|இல்|யில)\b/u,
+      /\b([\p{L}\p{M}A-Za-z]{3,24})\s*[- ]?ல\s+(?:இருக்கு|இருந்து|இருக்கேன்|இருக்குறேன்)/u,
+      // Hindi: "मैं दिल्ली से हूँ" / "बैंगलोर में रहता हूँ"
+      /मैं\s+([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{1,28}?)\s+से\s+(?:हूँ|हूं)/u,
+      /([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{1,28}?)\s+में\s+(?:रहता|रहती|रहते)\s+(?:हूँ|हूं|हैं)/u,
     ],
     extract: m => m[1]!.trim(),
     confidence: 0.4,
@@ -2068,12 +2335,188 @@ const FACT_PATTERNS: FactPattern[] = [
     patterns: [
       /\bi(?:'m| am) a(?:n)? ([a-zA-Z\s]{3,40}?) (?:by profession|by trade|working as)\b/i,
       /\bi work as (?:a(?:n)? )?([a-zA-Z\s]{3,40}?)\b(?:\.|,|$)/i,
+      /\bmy (?:job|occupation|profession)(?:\s+is)?\s+([a-zA-Z\s]{3,40}?)(?:\.|,|$)/i,
+      // Tamil: require explicit job cue (வேலை / பணி) — not generic பண்றேன் ("I do X")
+      /(?:நான்|நா)\s+(?:ஒரு\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)\s*(?:வேலை|பணி)/u,
+      /(?:என்|என்னோட)\s*(?:வேலை|job|occupation|profession)\s+(?:is\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)(?:\.|,|$)/iu,
+      // Call 14222: "நான் professor-ஆ இருக்கேன்" / "நான் டாக்டர் ஆ இருக்கேன்"
+      /(?:நான்|நா)\s+(?:ஒரு\s+)?([\p{L}\p{M}A-Za-z]{2,28})\s*[- ]?(?:ஆ|ஆக)\s*(?:இருக்கேன்|இருக்குறேன்|இருக்கிறேன்)/u,
+      // Romanized: "naan professor-a irukken"
+      /\bnaan\s+(?:oru\s+)?([A-Za-z]{2,28})\s*[- ]?a(?:aga)?\s+irukk(?:en|uren|iren)\b/i,
+      // English copula: "I am a professor" / "I'm a teacher."
+      /\bi(?:'m| am) a(?:n)? ([a-zA-Z][a-zA-Z\s]{1,28}?)(?:\.|,|$)/i,
+      // Hindi: require job/work cue — not bare "मैं X हूँ" (too ambiguous with names)
+      /(?:मेरा|मेरी)\s*(?:काम|नौकरी|पेशा)\s+([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)(?:\.|,|$)/u,
+      /मैं\s+(?:एक\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z\s]{2,36}?)\s+(?:का\s*काम|की\s*नौकरी|बाय\s*प्रोफेशन)/u,
     ],
     extract: m => m[1]!.trim(),
     confidence: 0.4,
     isPlausible: isPlausibleOccupation,
   },
+  {
+    key: "existing_product",
+    patterns: [
+      /\bi have (?:an? |the )?([A-Za-z][A-Za-z0-9\s&.-]{2,36}?)\s+(?:policy|plan|product)\b/i,
+      /\bmy (?:policy|plan|product)(?:\s+is|\s+name)?\s+(?:is\s+)?([A-Za-z][A-Za-z0-9\s&.-]{2,36}?)(?:\.|,|$)/i,
+      /(?:என்|என்னோட)\s*(?:policy|பாலிசி|plan|product)\s+(?:is\s+|வந்து\s+)?([\p{L}\p{M}A-Za-z0-9][\p{L}\p{M}A-Za-z0-9\s&.-]{1,36}?)(?:\.|,|$)/iu,
+      /\b(?:en+n?o(?:da|daya)?|en)\s+(?:policy|plan|product)\s+(?:is\s+)?([A-Za-z][A-Za-z0-9\s&.-]{2,36}?)(?:\.|,|$)/i,
+      /(?:मेरी|मेरा)\s*(?:policy|पॉलिसी|plan)\s+(?:है\s+)?([A-Za-z][A-Za-z0-9\s&.-]{2,36}?)(?:\.|,|$)/u,
+    ],
+    extract: m => m[1]!.trim(),
+    confidence: 0.4,
+    isPlausible: (v) => v.length >= 2 && !/^(insurance|policy|plan|product)$/i.test(v),
+  },
+  {
+    key: "email",
+    patterns: [
+      /\bmy e-?mail(?:\s+(?:id|address))?(?:\s+is)?\s+(.+)/i,
+      /(?:என்|என்னோட)\s*(?:e-?mail|மெயில்)\s*(?:id\s*)?(?:is\s+|வந்து\s+)?(.+)/iu,
+      /\b(?:en+n?o(?:da|daya)?|en)\s+e-?mail(?:\s+id)?\s+(?:is\s+)?(.+)/i,
+      /\b(?:mail id|email id)(?:\s+is)?\s+(.+)/i,
+    ],
+    extract: m => extractEmailFactValue(m[1]!) ?? "",
+    confidence: 0.4,
+  },
+  {
+    key: "date_of_birth",
+    patterns: [
+      /\b(?:my\s+)?(?:date of birth|d\.?o\.?b\.?|dob|birthday)(?:\s+is)?\s+(.+)/i,
+      /\bi was born (?:on\s+)?(.+)/i,
+      /(?:என்|என்னோட)\s*(?:dob|d\.o\.b|birthday|பிறந்த\s*தேதி)\s*(?:is\s+|வந்து\s+)?(.+)/iu,
+      /\b(?:en+n?o(?:da|daya)?|en)\s+(?:dob|birthday)\s+(?:is\s+)?(.+)/i,
+      /(?:मेरी|मेरा)\s*(?:dob|जन्म\s*तिथि|जन्मदिन)\s*(?:है\s+)?(.+)/u,
+    ],
+    extract: m => extractDateOfBirthFactValue(m[1]!) ?? "",
+    confidence: 0.4,
+  },
+  {
+    key: "phone_number",
+    patterns: [
+      /\bmy (?:phone|mobile|contact)(?: number)?(?:\s+is)?\s+(.+)/i,
+      /\b(?:phone|mobile) number(?:\s+is)?\s+(.+)/i,
+      /(?:என்|என்னோட)\s*(?:phone|mobile|number|போன்|மொபைல்)\s*(?:number\s*)?(?:is\s+|வந்து\s+)?(.+)/iu,
+      /\b(?:en+n?o(?:da|daya)?|en)\s+(?:phone|mobile|number)\s+(?:is\s+)?(.+)/i,
+      /(?:मेरा|मेरी)\s*(?:phone|mobile|नंबर)\s*(?:number\s*)?(?:है\s+)?(.+)/u,
+    ],
+    extract: m => extractPhoneFactValue(m[1]!) ?? "",
+    confidence: 0.4,
+  },
+  {
+    key: "whatsapp_number",
+    patterns: [
+      /\bmy whats(?:app)?(?: number)?(?:\s+is)?\s+(.+)/i,
+      /\bwhats(?:app)?(?: number)?(?:\s+is)?\s+(.+)/i,
+      /\b(?:wtsp|wa)(?: number)?(?:\s+is)?\s+(.+)/i,
+      /(?:என்|என்னோட)\s*(?:whatsapp|வாட்ஸ்அப்|வாட்சப்|wtsp)\s*(?:number\s*)?(?:is\s+|வந்து\s+)?(.+)/iu,
+      /\b(?:en+n?o(?:da|daya)?|en)\s+(?:whatsapp|wtsp)\s+(?:is\s+)?(.+)/i,
+      /(?:मेरा|मेरी)\s*(?:whatsapp|व्हाट्सएप)\s*(?:number\s*)?(?:है\s+)?(.+)/u,
+    ],
+    extract: m => extractPhoneFactValue(m[1]!) ?? "",
+    confidence: 0.4,
+  },
+  {
+    key: "company_name",
+    patterns: [
+      /\bi work (?:at|for|with)\s+([A-Za-z][A-Za-z0-9\s&.-]{1,40}?)(?:\.|,|$)/i,
+      /\bmy (?:company|employer|workplace)(?:\s+is)?\s+([A-Za-z][A-Za-z0-9\s&.-]{1,40}?)(?:\.|,|$)/i,
+      /(?:என்|என்னோட)\s*(?:company|கம்பெனி|நிறுவனம்|office)\s+(?:is\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z0-9\s&.-]{1,36}?)(?:\.|,|$)/iu,
+      /(?:मेरी|मेरा)\s*(?:कंपनी|कम्पनी|ऑफिस)\s+(?:है\s+)?([\p{L}\p{M}A-Za-z][\p{L}\p{M}A-Za-z0-9\s&.-]{1,36}?)(?:\.|,|$)/u,
+    ],
+    extract: m => m[1]!.trim(),
+    confidence: 0.4,
+    isPlausible: (v) => isPlausibleOccupation(v), // same length/blocklist guards
+  },
+  {
+    key: "family_spouse_name",
+    patterns: [
+      /\bmy (?:wife|husband|spouse)(?:'s)?(?: name)? is ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu,
+      // Tamil: "மனைவி பேர் Priya" / "கணவர் பெயர்" (பேரு + பேர்)
+      /(?:மனைவி|கணவர்)\s*(?:பேரு|பேர்|பெயர்|name)?\s*(?:is\s+)?([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u,
+      // Hindi: "मेरी पत्नी का नाम Priya"
+      /(?:पत्नी|पति|बीवी)\s*(?:का\s*)?नाम\s+(?:है\s+)?([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u,
+    ],
+    extract: m => m[1]!.trim(),
+    confidence: 0.4,
+    isPlausible: isPlausibleName,
+  },
+  {
+    key: "gender",
+    patterns: [
+      /\bi(?:'m| am) (?:a )?(male|female|man|woman)\b/i,
+      /\bmy gender is (male|female|other)\b/i,
+      /நான்\s+(ஆண்|பெண்)/u,
+      /मैं\s+(पुरुष|महिला|लड़का|लड़की)\s*(?:हूँ|हूं)?/u,
+    ],
+    extract: m => m[1]!,
+    confidence: 0.4,
+  },
 ];
+
+const SAME_WHATSAPP_RE =
+  /(?:whats(?:app)?|wtsp|வாட்ஸ்அப்|व्हाट्सएप).{0,48}(?:same|இதே|वही)|(?:same as (?:my |this )?(?:phone|mobile|number))/iu;
+
+/** Pure matcher for unit tests + call-end gap-fill. Returns canonical key → value. */
+export function matchCallerFactPatterns(transcript: string): Map<string, string> {
+  const found = new Map<string, string>();
+  for (const fp of FACT_PATTERNS) {
+    if (found.has(fp.key)) continue;
+    for (const pattern of fp.patterns) {
+      const match = transcript.match(pattern);
+      if (!match) continue;
+      let value: string;
+      try { value = fp.extract(match).trim(); } catch { continue; }
+      if (!value || value.length > 200) continue;
+      if (fp.isPlausible && !fp.isPlausible(value)) continue;
+      const canonical = canonicalizeFactKey(fp.key);
+      if (!canonical) continue;
+      found.set(canonical, value);
+      break;
+    }
+  }
+  const phone = found.get("phone_number");
+  if (phone && !found.has("whatsapp_number") && SAME_WHATSAPP_RE.test(transcript)) {
+    found.set("whatsapp_number", phone);
+  }
+  return found;
+}
+
+/**
+ * Scan archived caller sentences and attach L2 sentence ids for citation-
+ * grounded promotion into caller_facts at call-end.
+ * Last matching caller utterance wins per key (most recent statement).
+ */
+function collectRegexDurableFactCandidates(
+  sentences: Array<{ speaker: "caller" | "agent"; text: string }>,
+  sentenceIds: Array<number | undefined | null>,
+): Array<{ key: string; value: string; confidence: number; sentence_ids: number[] }> {
+  const byKey = new Map<string, { key: string; value: string; confidence: number; sentence_ids: number[] }>();
+  for (let i = 0; i < sentences.length; i++) {
+    const s = sentences[i]!;
+    if (s.speaker !== "caller") continue;
+    const sid = sentenceIds[i];
+    if (typeof sid !== "number") continue;
+    const matches = matchCallerFactPatterns(s.text);
+    for (const [key, value] of matches) {
+      byKey.set(key, {
+        key,
+        value,
+        // Above MIN_FACT_CONFIDENCE (0.6); mid-call pending stays at 0.4.
+        confidence: 0.85,
+        sentence_ids: [sid],
+      });
+    }
+    if (SAME_WHATSAPP_RE.test(s.text) && byKey.has("phone_number") && !byKey.has("whatsapp_number")) {
+      const phone = byKey.get("phone_number")!;
+      byKey.set("whatsapp_number", {
+        key: "whatsapp_number",
+        value: phone.value,
+        confidence: 0.85,
+        sentence_ids: [sid],
+      });
+    }
+  }
+  return [...byKey.values()];
+}
 
 /**
  * Mid-call pattern latch — writes CANDIDATES to pending_caller_facts only
@@ -2092,42 +2535,25 @@ export async function latchCallerFact(opts: {
   const phoneNumber = canonicalizeCallerKey(opts.phoneNumber) ?? opts.phoneNumber;
   const updated = new Map(existingFacts);
 
-  for (const fp of FACT_PATTERNS) {
-    // Within-call dedup: skip if already detected this call
-    if (updated.has(fp.key)) continue;
-
-    for (const pattern of fp.patterns) {
-      const match = transcript.match(pattern);
-      if (!match) continue;
-
-      let value: string;
-      try { value = fp.extract(match).trim(); } catch { continue; }
-      if (!value || value.length > 200) continue;
-      if (fp.isPlausible && !fp.isPlausible(value)) {
-        logger.warn({ callId, agentId, phoneNumber, key: fp.key, rejected: value }, "Caller fact latch failed plausibility check — discarding");
-        continue;
-      }
-
-      const canonical = canonicalizeFactKey(fp.key);
-      if (!canonical) continue;
-
-      updated.set(canonical, value);
-      try {
-        await db.insert(pendingCallerFactsTable).values({
-          callId,
-          agentId,
-          phoneNumber,
-          key: canonical,
-          valueRaw: value.slice(0, 512),
-          method: "regex",
-          confidence: fp.confidence,
-        });
-        logger.info({ callId, agentId, phoneNumber, key: canonical, value }, "Caller fact candidate staged (pending)");
-      } catch (err) {
-        // Table may not exist until schema push — personalization map still updated.
-        logger.warn({ err, callId, agentId, phoneNumber, key: canonical }, "pending_caller_facts insert failed");
-      }
-      break;
+  const matches = matchCallerFactPatterns(transcript);
+  for (const [canonical, value] of matches) {
+    if (updated.has(canonical)) continue;
+    updated.set(canonical, value);
+    const fp = FACT_PATTERNS.find((p) => canonicalizeFactKey(p.key) === canonical);
+    try {
+      await db.insert(pendingCallerFactsTable).values({
+        callId,
+        agentId,
+        phoneNumber,
+        key: canonical,
+        valueRaw: value.slice(0, 512),
+        method: "regex",
+        confidence: fp?.confidence ?? 0.4,
+      });
+      logger.info({ callId, agentId, phoneNumber, key: canonical, value }, "Caller fact candidate staged (pending)");
+    } catch (err) {
+      // Table may not exist until schema push — personalization map still updated.
+      logger.warn({ err, callId, agentId, phoneNumber, key: canonical }, "pending_caller_facts insert failed");
     }
   }
 
