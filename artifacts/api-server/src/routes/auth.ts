@@ -24,6 +24,7 @@ import { usersTable, walletTransactionsTable, passwordResetOtpsTable, platformSe
 import { eq, and, isNull, gt, desc, sql } from "drizzle-orm";
 import { createSessionToken, verifySessionToken } from "../lib/session.js";
 import { setSessionCookie, clearSessionCookie, oauthTempCookieOptions } from "../lib/session-cookie.js";
+import { saveGoogleLoginState, takeGoogleLoginState } from "../lib/google-login-state.js";
 import { hashPassword, verifyPassword } from "../lib/password.js";
 import { logger } from "../lib/logger.js";
 import { sendBrevoEmail } from "../services/brevo.js";
@@ -734,6 +735,7 @@ router.get("/auth/google/connect", async (req, res): Promise<void> => {
   const redirectUri = deriveRedirectUri(req, LOGIN_CALLBACK_PATH);
 
   res.cookie("google_login_state", state, oauthTempCookieOptions());
+  await saveGoogleLoginState(state);
 
   // Partner white-label: after OAuth (which always callbacks on the primary
   // app host), send the user back to the brand domain they started on.
@@ -771,7 +773,9 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
   // Strict cookie-bound CSRF check. cookie-parser is installed and wired in
   // app.ts, so req.cookies is always available here.
   const cookieState = (req as any).cookies?.["google_login_state"] as string | undefined;
-  if (!cookieState || cookieState !== state) {
+  const cookieOk = !!cookieState && cookieState === state;
+  const serverOk = await takeGoogleLoginState(state);
+  if (!cookieOk && !serverOk) {
     logger.warn({ hasCookie: !!cookieState }, "Google Sign-In callback: CSRF state mismatch or missing cookie");
     res.clearCookie("google_login_return", oauthTempCookieOptions());
     res.redirect(`${base}/?google_error=true&reason=csrf`);
