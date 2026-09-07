@@ -1603,7 +1603,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
           llmMaxTokens:            500,
           startSpeakingPlan:       { waitSeconds: 0, onPunctuationSeconds: 0, onNoPunctuationSeconds: 0, onNumberSeconds: 0 },
           autoRedial:              { enabled: true, maxAttempts: 3 },
-          // sarvamSttMode omitted — adapter defaults to codemix (mixed Indian speech)
+          // sarvamSttMode omitted — adapter: English→codemix, Indic→transcribe
         };
         const [row] = await db.insert(agentsTable).values({
           userId:                   clerkId,

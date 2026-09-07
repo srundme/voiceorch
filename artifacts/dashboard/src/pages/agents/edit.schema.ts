@@ -312,6 +312,34 @@ export function clampTelephonyTailDrainMs(value: number | null | undefined): num
   return ms === 400 || ms === 80 ? 0 : ms;
 }
 
+/** Unset STT writing mode: English/auto → Mixed, pinned Indic → native script. */
+export function defaultSarvamSttMode(
+  language?: string | null,
+): "codemix" | "transcribe" {
+  const lang = (language ?? "").toLowerCase();
+  if (!lang || lang === "auto" || lang === "unknown" || lang.startsWith("en")) {
+    return "codemix";
+  }
+  return "transcribe";
+}
+
+/** Match runtime: Tamil + leftover Mixed/codemix → native script, not Tanglish. */
+export function hydrateSarvamSttMode(
+  language: string | null | undefined,
+  stored: string | null | undefined,
+): "codemix" | "verbatim" | "transcribe" | "translit" | "translate" | undefined {
+  const lang = (language ?? "").toLowerCase();
+  const isTamil = lang === "ta" || lang.startsWith("ta-");
+  if (isTamil && (!stored || stored === "codemix")) return "transcribe";
+  if (
+    stored === "codemix" || stored === "verbatim" || stored === "transcribe"
+    || stored === "translit" || stored === "translate"
+  ) {
+    return stored;
+  }
+  return undefined;
+}
+
 export function clampSarvamSpeechEndFlushMs(value: number | null | undefined): number {
   const v = typeof value === "number" && Number.isFinite(value) ? value : 0;
   return Math.max(0, Math.min(200, Math.round(v)));

@@ -39,7 +39,7 @@ import type { AgentVersion } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, hydrateSarvamRealtimeVad, clampInterruptWords, voiceSecondsFromInterruptWords, clampSemanticTurnStopMs, WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER } from "./edit.schema";
+import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, hydrateSarvamRealtimeVad, clampInterruptWords, voiceSecondsFromInterruptWords, clampSemanticTurnStopMs, defaultSarvamSttMode, hydrateSarvamSttMode, WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER } from "./edit.schema";
 import { AgentWebsiteEmbedPanel } from "./website-embed";
 import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
@@ -1134,7 +1134,7 @@ function OverviewTab({
               )}
               {!isGeminiLive && asrProvider === "sarvam" && (
                 <FormField control={form.control} name="sarvamSttMode" render={({ field }) => {
-                  const currentValue = field.value ?? "codemix";
+                  const currentValue = hydrateSarvamSttMode(language, field.value) ?? defaultSarvamSttMode(language);
                   return (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] font-medium text-foreground/80">How speech is written</FormLabel>
@@ -1152,16 +1152,16 @@ function OverviewTab({
                       ]} />
                     <p className="text-[9.5px] text-muted-foreground leading-snug mt-1">
                       {currentValue === "transcribe"
-                        ? "Every word in native script (मेरा फोन नंबर). Not for Hinglish — English becomes हिंदी."
+                        ? "Caller Tamil/Hindi is written in native script (கடைக்காக, मेरा फ़ोन). Pick Mixed only if you want Tanglish."
                         : currentValue === "codemix"
-                        ? "Sarvam's code-mix mode: English stays English, Hindi stays हिंदी. Right default for Indian calls."
+                        ? "English stays English; Indic words may come out mixed or romanized (Tanglish)."
                         : currentValue === "verbatim"
                         ? "Keeps fillers and exact phrasing as spoken."
                         : currentValue === "translit"
-                        ? "Writes Indic speech in English letters."
+                        ? "Writes Indic speech in English letters (Tanglish)."
                         : currentValue === "translate"
                         ? "Whatever the caller speaks is written as English."
-                        : "Defaults to mixed speech so Hinglish is captured. Pick native script only if every word should stay in हिंदी / தமிழ்."}
+                        : "Tamil and other Indic languages default to native script. English defaults to mixed."}
                     </p>
                   </FormItem>
                   );
@@ -7126,7 +7126,10 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       kbBakedOnly:                     ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       autoRedialEnabled:      (agent as any).agentConfig?.autoRedial?.enabled ?? false,
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,
-      sarvamSttMode:          ((agent as any).agentConfig?.sarvamSttMode as AgentFormValues["sarvamSttMode"]) ?? undefined,
+      sarvamSttMode:          hydrateSarvamSttMode(
+        (agent as any).asrLanguage || agent.language,
+        (agent as any).agentConfig?.sarvamSttMode as string | undefined,
+      ),
       sarvamSttStreamType:    ((agent as any).agentConfig?.sarvamSttStreamType as AgentFormValues["sarvamSttStreamType"]) ?? "fast",
       sarvamSttPrompt:        typeof (agent as any).agentConfig?.sarvamSttPrompt === "string"
         ? (agent as any).agentConfig.sarvamSttPrompt

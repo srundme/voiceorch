@@ -31,6 +31,7 @@ import {
     hydrateSarvamRealtimeVad,
     clampInterruptWords,
   voiceSecondsFromInterruptWords,
+  defaultSarvamSttMode,
   WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER,
   type AgentFormValues,
 } from "./edit.schema";
@@ -187,7 +188,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     // endpointing (Azure + Deepgram) and post-transcript linear delay.
     agentConfig["asrEndpointingSilenceMs"] = clampEndpointingMs(asrEndpointingSilenceMs);
   }
-  if (sarvamSttMode) agentConfig["sarvamSttMode"] = sarvamSttMode;
+  agentConfig["sarvamSttMode"] = sarvamSttMode ?? defaultSarvamSttMode(data.language);
   agentConfig["sarvamSttStreamType"] =
     sarvamSttStreamType === "balanced" || sarvamSttStreamType === "simulated"
       ? sarvamSttStreamType
