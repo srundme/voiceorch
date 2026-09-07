@@ -47,9 +47,8 @@ const PROMOS: readonly PhonePromo[] = [
   },
   {
     code: "ILUVSNAPSERVE",
-    basePaise: 0, // ₹0 + GST ₹0 — first DID only; renewals stay full price
+    basePaise: 0, // ₹0 + GST ₹0 — any number of first purchases; renewals stay full price
     label: "I Love SnapServe",
-    oncePerEmail: true,
   },
 ];
 

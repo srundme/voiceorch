@@ -57,7 +57,7 @@ describe("pricePhonePurchase", () => {
     expect(p.discountPaise).toBe(phonePurchaseBasePaise(NUM_80));
     const resolved = resolvePhonePromo("ILUVSNAPSERVE");
     expect(resolved.ok).toBe(true);
-    if (resolved.ok) expect(resolved.promo.oncePerEmail).toBe(true);
+    if (resolved.ok) expect(resolved.promo.oncePerEmail).toBeFalsy();
   });
 
   it("prices SNAPXHITECH at ₹249 + 18% GST = ₹293.82", () => {
