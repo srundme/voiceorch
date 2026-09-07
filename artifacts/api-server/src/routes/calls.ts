@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { randomBytes } from "crypto";
-import { eq, desc, and, or, sql, gte, gt, lte, isNull, inArray } from "drizzle-orm";
+import { eq, desc, and, or, sql, gte, gt, lte, isNull, inArray, ne } from "drizzle-orm";
 import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callExecutionsTable, canonicalizeCallerKey, humanPhone, resolveCallerKey } from "@workspace/db";
 import { computeProRataDebitCents } from "../services/call-billing.js";
 import { resolveAgentBillingMode, resolveOwnTelephonyDiscount, resolveBillingRateCentsPerMin } from "../services/minute-rates.js";
@@ -219,13 +219,37 @@ router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Pro
     }
   }
 
-  // Look up agent's assigned outbound phone number (overrides provider fromNumber)
+  // Look up agent's assigned outbound phone number (overrides provider fromNumber).
+  // Prefer agents.outboundPhoneNumberId, then a DID assigned via phone_numbers.agentId
+  // (the builder shows that as From), then any active owned voice DID.
   let agentOutboundNumber: string | null = null;
   if ((agent as any).outboundPhoneNumberId) {
     const [pn] = await db.select({ number: phoneNumbersTable.number })
       .from(phoneNumbersTable)
       .where(eq(phoneNumbersTable.id, (agent as any).outboundPhoneNumberId as number));
     if (pn) agentOutboundNumber = pn.number;
+  }
+  if (!agentOutboundNumber) {
+    const [assigned] = await db.select({ number: phoneNumbersTable.number })
+      .from(phoneNumbersTable)
+      .where(and(
+        eq(phoneNumbersTable.agentId, agent.id),
+        eq(phoneNumbersTable.status, "active"),
+        ne(phoneNumbersTable.service, "whatsapp"),
+      ))
+      .limit(1);
+    if (assigned) agentOutboundNumber = assigned.number;
+  }
+  if (!agentOutboundNumber && agent.userId) {
+    const [owned] = await db.select({ number: phoneNumbersTable.number })
+      .from(phoneNumbersTable)
+      .where(and(
+        eq(phoneNumbersTable.userId, agent.userId),
+        eq(phoneNumbersTable.status, "active"),
+        ne(phoneNumbersTable.service, "whatsapp"),
+      ))
+      .limit(1);
+    if (owned) agentOutboundNumber = owned.number;
   }
 
   // Balance gate + max call duration limiter.
@@ -393,7 +417,7 @@ router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Pro
           res.status(503).json({ error: "Managed telephony is not configured. Please add your own Vobiz provider or contact support." });
           return;
         }
-        if (numbers.length === 0) {
+        if (numbers.length === 0 && !agentOutboundNumber) {
           res.status(503).json({ error: "No managed phone numbers are configured. Please add your own Vobiz provider or contact support." });
           return;
         }
