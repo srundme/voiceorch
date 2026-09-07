@@ -404,6 +404,20 @@ async function ensureCampaignsTableColumns(): Promise<void> {
   }
 }
 
+/** Outbound INSERT … RETURNING selects every calls column; missing ones 500 the dial. */
+async function ensureCallsTableColumns(): Promise<void> {
+  try {
+    await db.execute(sql`
+      ALTER TABLE calls
+        ADD COLUMN IF NOT EXISTS primary_language text,
+        ADD COLUMN IF NOT EXISTS memory_recognized boolean;
+    `);
+    logger.info("Auto-migrated calls table columns");
+  } catch (err) {
+    logger.warn({ err }, "Calls column auto-migration failed (non-fatal)");
+  }
+}
+
 async function migrateCallEngineConfigs(): Promise<void> {
   try {
     const { migrateCallEngineAgentConfigs } = await import("./migrations/migrateCallEngineAgentConfigs.js");
@@ -581,6 +595,7 @@ server.listen(port, () => {
       void migrateSaarikaToSaaras();
       void migrateCallEngineConfigs();
       void ensureCampaignsTableColumns();
+      void ensureCallsTableColumns();
       startCallbackPoller();
       startSpikeChecker();
       startAlertSweep();

@@ -475,29 +475,39 @@ router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Pro
   }
 
   const executionId = `exec_${randomBytes(4).toString("hex")}`;
-  const [call] = await db.insert(callsTable).values({
-    agentId, toNumber, fromNumber: effectiveFromNumber, status: "ringing",
-    userId: agent.userId ?? null,
-    executionId,
-    metadata: JSON.stringify({
-      ...(providerCallId ? { providerCallId } : {}),
-      provider,
-      // VoBiz: dial-time placeholder is the request_uuid (correlation only). The
-      // live CallUUID is written over providerCallId/externalCallId when the
-      // answer-webhook WS session reconciles this row by corrToken.
-      ...(vobizRequestUuid ? { requestUuid: vobizRequestUuid } : {}),
-      ...(vobizCorrToken ? { corrToken: vobizCorrToken } : {}),
-      ...(Object.keys(callVariables).length > 0 ? { callVariables } : {}),
-    }),
-  }).returning();
+  try {
+    const [call] = await db.insert(callsTable).values({
+      agentId, toNumber, fromNumber: effectiveFromNumber, status: "ringing",
+      userId: agent.userId ?? null,
+      executionId,
+      metadata: JSON.stringify({
+        ...(providerCallId ? { providerCallId } : {}),
+        provider,
+        // VoBiz: dial-time placeholder is the request_uuid (correlation only). The
+        // live CallUUID is written over providerCallId/externalCallId when the
+        // answer-webhook WS session reconciles this row by corrToken.
+        ...(vobizRequestUuid ? { requestUuid: vobizRequestUuid } : {}),
+        ...(vobizCorrToken ? { corrToken: vobizCorrToken } : {}),
+        ...(Object.keys(callVariables).length > 0 ? { callVariables } : {}),
+      }),
+    }).returning();
 
-  await db.update(agentsTable).set({ totalCalls: agent.totalCalls + 1 }).where(eq(agentsTable.id, agentId));
+    await db.update(agentsTable).set({ totalCalls: agent.totalCalls + 1 }).where(eq(agentsTable.id, agentId));
 
-  req.log.info(
-    { agentId, toNumber, providerCallId, vobizRequestUuid, vobizCorrToken, variableKeys: Object.keys(callVariables) },
-    "Outbound call initiated",
-  );
-  res.status(201).json(GetCallResponse.parse(await enrichCall(call)));
+    req.log.info(
+      { agentId, toNumber, providerCallId, vobizRequestUuid, vobizCorrToken, variableKeys: Object.keys(callVariables) },
+      "Outbound call initiated",
+    );
+    res.status(201).json(GetCallResponse.parse(await enrichCall(call)));
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    req.log.error({ err, agentId, toNumber }, "Outbound call persist failed");
+    res.status(500).json({
+      error: /column .* does not exist/i.test(msg)
+        ? "Call could not be saved because the database schema is missing a column. Try again after the latest migrations."
+        : msg,
+    });
+  }
 });
 
 /* ── POST /calls/send-destination-otp ────────────────────────────────────── */
