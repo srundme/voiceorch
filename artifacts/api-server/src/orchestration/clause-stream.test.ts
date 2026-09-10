@@ -58,11 +58,10 @@ describe("clause-level dispatch", () => {
     )).toBe("Sorry, the line cut out there for a second.");
   });
 
-  it("Cartesia still starts TTS on a long clause before the period (webcall + phone latency)", () => {
+  it("Cartesia does not word-split a long greeting (call 24502 glue)", () => {
     const pending = "Hello Gopi, I'm Aisha from ILCC and I can help you today with admissions";
     const { sentences, remainder } = extractSentences(pending, 8, { earlyClause: false });
-    expect(sentences[0]).toMatch(/^Hello Gopi,/);
-    expect(sentences[0]).not.toBe("Hello Gopi");
-    expect(sentences.join(" ") + " " + remainder).toContain("admissions");
+    expect(sentences).toEqual([]);
+    expect(remainder).toBe(pending);
   });
 });

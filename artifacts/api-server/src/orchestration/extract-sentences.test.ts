@@ -131,13 +131,11 @@ describe("extractSentences — Cartesia sentence mode (Sonic 3.5/3.6)", () => {
     expect(remainder).toBe(pending);
   });
 
-  it("starts TTS on a long Cartesia clause before the period (webcall + phone)", () => {
+  it("does not word-split a long Cartesia greeting before .!?", () => {
     const pending = "I can help you schedule that appointment, just tell me your preferred time";
     const { sentences, remainder } = extractSentences(pending, 15, { earlyClause: false });
-    expect(sentences[0]).toMatch(/^I can help you schedule/);
-    expect(sentences[0]).not.toBe("I can help you schedule that appointment");
-    expect((sentences.join(" ") + " " + remainder).replace(/\s+/g, " ").trim())
-      .toContain("preferred time");
+    expect(sentences).toEqual([]);
+    expect(remainder).toBe(pending);
   });
 
   it("splits on an em-dash clause without comma-clipping (call 21264)", () => {

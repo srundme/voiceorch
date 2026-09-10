@@ -243,16 +243,12 @@ export function extractSentences(
       remainder = early.rest;
     }
   } else {
+    // Cartesia: dash/semicolon only. Word-splitting the remainder glued the
+    // greeting into two clips with a lost space (call 24502).
     const dash = tryDashClauseDispatch(remainder, minCommaClauseChars);
     if (dash) {
       sentences.push(dash.clause);
       remainder = dash.rest;
-    } else {
-      const words = tryWordBoundaryDispatch(remainder, minCommaClauseChars);
-      if (words) {
-        sentences.push(words.clause);
-        remainder = words.rest;
-      }
     }
   }
 
