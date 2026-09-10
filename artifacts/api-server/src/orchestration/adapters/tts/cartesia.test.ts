@@ -281,11 +281,10 @@ describe("Cartesia adaptor contract (source)", () => {
     expect(src).toContain("appendCartesiaRemainder");
   });
 
-  it("does not continue:true join sentences after the first clip (call 24440)", () => {
+  it("streams join transcripts on the open WS context (managed buffering)", () => {
     const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
-    expect(src).toContain("Call 24440");
-    expect(src).toMatch(/if \(join\) \{[\s\S]*appendCartesiaRemainder\(prev, streamed\)/);
-    expect(src).not.toMatch(/if \(join\) \{[\s\S]*sendTranscript\(transcript\)/);
+    expect(src).toContain("sendTranscript(streamed)");
+    expect(src).toContain("middle ground");
   });
 
   it("does not arm the playJob idle timer on skipDrain leftover REST (call 19809)", () => {

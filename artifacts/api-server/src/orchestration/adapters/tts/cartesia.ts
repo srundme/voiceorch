@@ -7,11 +7,10 @@ import type { TTSAdapter } from "../../types.js";
  *
  * Primary path: WebSocket (`/tts/websocket`)
  *   - One persistent WS connection per call (lazy-opened on first transcript).
- *   - First sentence of a turn on the WS context (continue:true, delay 3000).
- *     Transcripts join verbatim when we do continue (call 24404: inserting a
- *     space between "So"+"rry," made Sonic spell). Later sentences do not
- *     continue:true — Cartesia closes after the first `.!?` (call 24440) and
- *     leftover text is one REST clip.
+ *   - Stream LLM tokens with continue:true (managed buffering, delay 3000).
+ *     Do not wait client-side for `.!?` — that is the docs "middle ground"
+ *     and adds latency on top of Sonic's ~75–90ms TTFB.
+ *     Transcripts join verbatim (call 24404: inserting a space made Sonic spell).
  *   - continue:false (empty transcript) when the LLM turn ends.
  *   - pcm_s16le @ the leg rate: 8000 for VoBiz, 16000 for HD webcall.
  *
@@ -907,11 +906,21 @@ export class CartesiaTTS implements TTSAdapter {
     if (join) {
       const waitOpen = this.turnOpened.get(turnContextId);
       if (waitOpen) await waitOpen;
-      // Call 24440: Sonic generates and closes the context on the first `.!?`.
-      // continue:true after that is dropped (0-byte "success" per word). Buffer
-      // later sentences for one leftover REST in completeTurnContext.
-      const prev = this.closedRemainder.get(turnContextId) ?? "";
-      this.closedRemainder.set(turnContextId, appendCartesiaRemainder(prev, streamed));
+      // Managed buffering: keep continue:true on the same context (Cartesia
+      // concatenates transcripts). Remainder REST only if the context already
+      // closed (1s after last audio — contexts.md) or pending is gone.
+      if (
+        this.closedTurns.has(turnContextId)
+        || this.restFallbackTurns.has(turnContextId)
+        || !this.pending.has(turnContextId)
+      ) {
+        const prev = this.closedRemainder.get(turnContextId) ?? "";
+        this.closedRemainder.set(turnContextId, appendCartesiaRemainder(prev, streamed));
+        onDone(streamed.length);
+        return;
+      }
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      await this.enqueueTurnSend(turnContextId, () => sendTranscript(streamed));
       onDone(streamed.length);
       return;
     }
