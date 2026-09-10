@@ -336,6 +336,36 @@ export async function reopenCampaignIfCompleted(campaignId: number): Promise<voi
   }
 }
 
+/** Promote due draft batches and refill slots. Used when the live-queue is open
+ *  so CSV leads do not sit in Queued until the 60s scheduler tick. */
+export async function kickQueuedCampaignDialing(campaignId: number): Promise<void> {
+  try {
+    const [campaign] = await db.select().from(campaignsTable)
+      .where(eq(campaignsTable.id, campaignId))
+      .limit(1);
+    if (!campaign || !isCampaignDialable(campaign)) return;
+
+    const dueDraft = await db.select().from(campaignBatchesTable)
+      .where(and(
+        eq(campaignBatchesTable.campaignId, campaignId),
+        eq(campaignBatchesTable.status, "draft"),
+        or(
+          isNull(campaignBatchesTable.scheduledStartAt),
+          lte(campaignBatchesTable.scheduledStartAt, new Date()),
+        ),
+      ));
+    for (const batch of dueDraft) {
+      await db.update(campaignBatchesTable)
+        .set({ status: "running" })
+        .where(eq(campaignBatchesTable.id, batch.id));
+    }
+    if (dueDraft.length > 0) await reopenCampaignIfCompleted(campaignId);
+    await refillCampaignConcurrency(campaign.id);
+  } catch (err) {
+    logger.error({ err, campaignId }, "kickQueuedCampaignDialing failed");
+  }
+}
+
 async function countCallingLeads(campaignId: number): Promise<number> {
   const result = await db.select({ count: sql<number>`count(*)` })
     .from(campaignLeadsTable)

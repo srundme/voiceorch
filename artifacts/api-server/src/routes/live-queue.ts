@@ -15,6 +15,7 @@ import {
 } from "@workspace/db";
 import { eq, and, sql, desc, or, inArray, ilike } from "drizzle-orm";
 import { reconcileCampaignCallbacks } from "../services/campaign-tab-sync.js";
+import { kickQueuedCampaignDialing } from "../services/batchScheduler.js";
 
 const router: IRouter = Router();
 
@@ -77,6 +78,7 @@ router.get("/campaigns/:id/live-queue/metrics", async (req, res): Promise<void> 
     res.status(404).json({ error: "Not found" }); return;
   }
   await reconcileCampaignCallbacks(campaignId);
+  void kickQueuedCampaignDialing(campaignId);
 
   const [m] = await db.select({
     total:             sql<number>`count(*)::int`,

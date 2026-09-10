@@ -31,7 +31,7 @@ import {
   Info, ChevronDown, FileDown, Package, Lock, BarChart2, Maximize2,
 } from "lucide-react";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -157,6 +157,9 @@ function EditScheduleDialog({
       <DialogContent className="sm:max-w-[340px]">
         <DialogHeader>
           <DialogTitle className="text-sm">Edit Scheduled Time</DialogTitle>
+          <DialogDescription className="text-xs">
+            Choose when this batch should start dialing, in the agent timezone.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-1">
           <div className="space-y-1.5">

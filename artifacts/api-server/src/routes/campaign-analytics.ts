@@ -16,7 +16,8 @@ import {
 } from "@workspace/db";
 import { eq, and, count, sql, desc, isNotNull, inArray, ne, or } from "drizzle-orm";
 import { normalizePhone } from "../lib/phone-normalize.js";
-import { canonicalDispositionBucket, dispositionBucketSql } from "../lib/disposition/canonical.js";
+import { logger } from "../lib/logger.js";
+import { canonicalDispositionBucket, canonicalDispositionFromLabel, dispositionBucketSql } from "../lib/disposition/canonical.js";
 import { safelyReconcileCampaignTabs } from "../services/campaign-tab-sync.js";
 import { campaignLeadFunnelSelect, funnelFromRow } from "../lib/campaign-lead-funnel.js";
 
@@ -137,6 +138,8 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
   const campaignId = parseInt(req.params["id"]!, 10);
   const campaign = await requireCampaign(campaignId, userId);
   if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  try {
   await safelyReconcileCampaignTabs(campaignId);
 
   // Same funnel as GET .../batches/:batchId/workspace/kpis (campaign-wide).
@@ -145,23 +148,26 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
     .where(eq(campaignLeadsTable.campaignId, campaignId));
   const funnel = funnelFromRow(funnelRow);
 
-  // Disposition breakdown, grouped on the canonical bucket. Grouping the raw
-  // label listed the same outcome several times ("no pickup: no pickup",
-  // "not pickup: no pickup", "NOT_CONNECTED: no_answer"), which also split the
-  // slice actions across rows that each acted on a fraction of the leads.
-  const dispRows = await db
-    .select({ bucket: CAMPAIGN_DISPOSITION_BUCKET_SQL, cnt: count() })
+  // Bucket in JS. GROUP BY of dispositionBucketSql() parameterized CASE
+  // disagrees between SELECT and GROUP BY in Postgres (500 on this route).
+  const dispRaw = await db
+    .select({ disposition: campaignLeadsTable.disposition, cnt: count() })
     .from(campaignLeadsTable)
     .where(and(
       eq(campaignLeadsTable.campaignId, campaignId),
       isNotNull(campaignLeadsTable.disposition),
       sql`btrim(${campaignLeadsTable.disposition}) <> ''`,
     ))
-    .groupBy(CAMPAIGN_DISPOSITION_BUCKET_SQL);
+    .groupBy(campaignLeadsTable.disposition);
 
-  const dispositions: Array<{ label: string; count: number }> = dispRows
-    .filter(r => (r.bucket ?? "").trim() !== "")
-    .map(r => ({ label: r.bucket, count: Number(r.cnt) }))
+  const dispCounts = new Map<string, number>();
+  for (const r of dispRaw) {
+    const bucket = canonicalDispositionFromLabel(r.disposition);
+    if (!bucket) continue;
+    dispCounts.set(bucket, (dispCounts.get(bucket) ?? 0) + Number(r.cnt));
+  }
+  const dispositions: Array<{ label: string; count: number }> = [...dispCounts.entries()]
+    .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 
   // Status breakdown (per callStatus value)
@@ -180,19 +186,21 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
     .from(callCallbacksTable)
     .where(eq(callCallbacksTable.campaignId, campaignId));
 
-  // Avg call duration + total cost — join campaign_leads to calls via call_id
-  const [costDuration] = await db.select({
-    avgDurationS: sql<number | null>`round(avg(${callsTable.durationSeconds}))::int`,
-    totalCostCents: sql<number>`coalesce(sum(${callsTable.costCents}),0)::int`,
-  }).from(campaignLeadsTable)
-    .innerJoin(
-      callsTable,
-      and(
-        eq(campaignLeadsTable.callId, callsTable.id),
+  let costDuration: { avgDurationS: number | null; totalCostCents: number } | undefined;
+  try {
+    const [row] = await db.select({
+      avgDurationS: sql<number | null>`round(avg(${callsTable.durationSeconds}))::int`,
+      totalCostCents: sql<number>`coalesce(sum(${callsTable.costCents}),0)::int`,
+    }).from(campaignLeadsTable)
+      .innerJoin(callsTable, eq(campaignLeadsTable.callId, callsTable.id))
+      .where(and(
+        eq(campaignLeadsTable.campaignId, campaignId),
         isNotNull(campaignLeadsTable.callId),
-      )!,
-    )
-    .where(eq(campaignLeadsTable.campaignId, campaignId));
+      ));
+    costDuration = row;
+  } catch (err) {
+    logger.warn({ err, campaignId }, "Campaign analytics cost join failed");
+  }
 
   const imported    = funnel.imported;
   const called      = funnel.called;
@@ -255,6 +263,10 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
     avgCostPerBooking,
     intelligence,
   });
+  } catch (err) {
+    logger.error({ err, campaignId }, "GET /campaigns/:id/analytics failed");
+    res.status(500).json({ error: "Analytics unavailable" });
+  }
 });
 
 // ── GET /campaigns/:id/activity ───────────────────────────────────────────────
