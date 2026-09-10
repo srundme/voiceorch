@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { flushCartesiaSpeakable, pushCartesiaSpeakable } from "./cartesia-token-coalesce.js";
 
 describe("pushCartesiaSpeakable", () => {
-  it("holds Latin BPE scraps until a space (call 24502 coffee)", () => {
+  it("does not wait for a Latin word boundary (VoBiz dies if we add 3000ms per word)", () => {
+    const r = pushCartesiaSpeakable("", "Hello");
+    expect(r.pieces).toEqual(["Hello"]);
+    expect(r.rest).toBe("");
+  });
+
+  it("streams Latin BPE through for Cartesia managed buffering (not word-wait)", () => {
     let pending = "";
     let spoken = "";
     for (const t of ["cof", "f", "ee "]) {
@@ -39,7 +45,7 @@ describe("pushCartesiaSpeakable", () => {
     expect(r2.pieces.join("") + r2.rest).toBe(" ");
   });
 
-  it("flushes the held word at stream end", () => {
+  it("flushes the held Indic tail at stream end", () => {
     expect(flushCartesiaSpeakable("SnapServe")).toBe("SnapServe");
   });
 });

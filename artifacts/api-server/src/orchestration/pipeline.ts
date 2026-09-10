@@ -8801,7 +8801,7 @@ export class OrchestrationPipeline implements VoiceSession {
 
     let llmResponse = "";
     let pendingText  = "";
-    /** Cartesia: hold the last grapheme so a virama is not its own WS transcript. */
+    /** Cartesia: hold combining marks / unspaced Indic; stream Latin tokens (Sonic 3.6 managed buffer). */
     let cartesiaTok = "";
     // One-step output guard: suppresses any second question (and everything)
     // after it) so a turn that runs through multiple flow steps is truncated at
