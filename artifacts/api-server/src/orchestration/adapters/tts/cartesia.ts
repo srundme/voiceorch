@@ -6,34 +6,28 @@ import type { TTSAdapter } from "../../types.js";
  * Cartesia — Sonic TTS
  *
  * Primary path: WebSocket (`/tts/websocket`)
- *   - One persistent WS connection per call (lazy-opened on first sentence).
- *   - No per-sentence TCP/TLS handshake → saves ~30–80ms per sentence.
- *   - max_buffer_delay_ms: 0 — we already send punctuated sentences (Cartesia
- *     docs: only lower the 3000ms default when the client buffers itself).
- *     A 200ms flush was chopping phonemes on live VoBiz (call 17873).
+ *   - One persistent WS connection per call (lazy-opened on first transcript).
+ *   - Stream LLM tokens with continue:true and omit max_buffer_delay_ms so
+ *     Cartesia managed buffering decides when to start speech (docs default
+ *     3000ms cap; the model starts earlier when it has enough context).
+ *   - Do not pre-split Tamil/English clauses client-side — that was custom
+ *     buffering stacked on the API (call 24396 ~2s/turn).
+ *   - continue:false (empty transcript) when the LLM turn ends.
  *   - pcm_s16le @ the leg rate: 8000 for VoBiz, 16000 for HD webcall.
- *     Do not request 16 kHz and FIR-downsample for telephony — that stretched
- *     and grit the voice (call 17873).
- *   - One context_id per LLM turn. The first sentence owns the WS context.
- *     With max_buffer_delay_ms=0 Cartesia closes that context after the first
- *     clip (call 19809: 400 "Context has closed" / remaining sentences silent).
- *     Later sentences REST into the same PCM sink after the first clip so the
- *     caller hears the full reply. continue:true joins stay for delay>0.
  *
- * Fallback: REST (`/tts/bytes`) — WS-down, and leftover sentences after the
- *   first clip when Cartesia has already closed the turn context.
+ * Fallback: REST (`/tts/bytes`) — WS-down, or leftover text if Cartesia
+ *   closed the context (400).
  *
  * Docs:
+ *   https://docs.cartesia.ai/use-the-api/tts-websocket/buffering
+ *   https://docs.cartesia.ai/build-with-cartesia/capability-guides/stream-inputs-using-continuations
  *   https://docs.cartesia.ai/api-reference/tts/websocket
- *   https://docs.cartesia.ai/api-reference/tts/bytes
  */
 
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 300;
 const CARTESIA_VERSION = "2026-03-01";
 const WS_CONNECT_TIMEOUT_MS = 6_000;
-/** We send punctuated sentences; Cartesia should not hold a second buffer. */
-const CARTESIA_MAX_BUFFER_DELAY_MS = 0;
 
 /** Cartesia current TTS model (https://docs.cartesia.ai/build-with-cartesia/tts-models/latest). */
 export const CARTESIA_DEFAULT_MODEL = "sonic-3.6";
@@ -676,16 +670,6 @@ export class CartesiaTTS implements TTSAdapter {
     // made every sentence a new playJob — call 17915: two Playback Started
     // rows and a 3s stall on the second clip.
     if (this.claimedTurns.has(turnContextId) || this.finalizedTurns.has(turnContextId)) {
-      // delay=0 joins REST after clip 1. Increment here (sync, before the
-      // pipeline IIFE) so finalize can wait even if synthesizeStreamInContext
-      // has not started yet.
-      if (
-        CARTESIA_MAX_BUFFER_DELAY_MS === 0
-        && this.claimedTurns.has(turnContextId)
-        && !this.finalizedTurns.has(turnContextId)
-      ) {
-        this.bumpLeftoverPending(turnContextId, 1);
-      }
       return false;
     }
     this.claimedTurns.add(turnContextId);
@@ -765,6 +749,7 @@ export class CartesiaTTS implements TTSAdapter {
   }
 
   private enqueueLeftoverRest(turnContextId: string, work: () => Promise<void>): Promise<void> {
+    this.bumpLeftoverPending(turnContextId, 1);
     const prev = this.leftoverRestChains.get(turnContextId) ?? Promise.resolve();
     const next = prev.then(() => work(), () => work());
     this.leftoverRestChains.set(turnContextId, next.then(() => undefined, () => undefined));
@@ -819,8 +804,7 @@ export class CartesiaTTS implements TTSAdapter {
     if (chain) await chain.catch(() => undefined);
 
     const skipClose = this.restFallbackTurns.has(turnContextId)
-      || (CARTESIA_MAX_BUFFER_DELAY_MS === 0
-        && (this.closedTurns.has(turnContextId) || this.firstClipDone.has(turnContextId)));
+      || this.closedTurns.has(turnContextId);
 
     if (skipClose || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
       const ctx = this.pending.get(turnContextId);
@@ -863,7 +847,7 @@ export class CartesiaTTS implements TTSAdapter {
     emotions: string[] | undefined,
     join: boolean,
   ): Promise<void> {
-    const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
+    const streamed = text;
 
     const sendTranscript = (transcript: string): void => {
       const transcriptMsg: Record<string, unknown> = {
@@ -873,7 +857,6 @@ export class CartesiaTTS implements TTSAdapter {
         voice: this.buildVoice(),
         output_format: this.outputFormat(),
         continue: true,
-        max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS,
       };
       const gcCtx = this.buildGenerationConfig(emotions);
       if (gcCtx) transcriptMsg.generation_config = gcCtx;
@@ -894,10 +877,10 @@ export class CartesiaTTS implements TTSAdapter {
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
       const transcript = joinContinuationTranscript(
         this.turnLastTranscript.get(turnContextId) ?? "",
-        safeText,
+        streamed,
       );
       await this.enqueueTurnSend(turnContextId, () => sendTranscript(transcript));
-      onDone(safeText.length);
+      onDone(streamed.length);
       return;
     }
 
@@ -919,9 +902,9 @@ export class CartesiaTTS implements TTSAdapter {
       signal?.addEventListener("abort", onAbort, { once: true });
 
       this.pending.set(turnContextId, {
-        text: safeText,
+        text: streamed,
         onChunk,
-        resolve: () => cleanup(() => { onDone(safeText.length); resolve(); }),
+        resolve: () => cleanup(() => { onDone(streamed.length); resolve(); }),
         reject: (err) => {
           this.markFirstClipDone(turnContextId);
           cleanup(() => reject(err));
@@ -929,7 +912,7 @@ export class CartesiaTTS implements TTSAdapter {
       });
       this.turnOpenedResolve.get(turnContextId)?.();
 
-      void this.enqueueTurnSend(turnContextId, () => sendTranscript(safeText)).catch((err) => {
+      void this.enqueueTurnSend(turnContextId, () => sendTranscript(streamed)).catch((err) => {
         cleanup(() => reject(err));
       });
     });
@@ -956,7 +939,7 @@ export class CartesiaTTS implements TTSAdapter {
     // delay=0: leftover sentences REST after clip 1. Register before awaiting
     // WS so finalizeTurnContext can wait on leftoverPending even if this
     // sentence's IIFE has not reached getOrOpenWs yet.
-    if (join && CARTESIA_MAX_BUFFER_DELAY_MS === 0) {
+    if (join && (this.closedTurns.has(turnContextId) || this.restFallbackTurns.has(turnContextId))) {
       return this.enqueueLeftoverRest(turnContextId, () =>
         this.runLeftoverRest(turnContextId, text, onChunk, onDone, signal, emotions),
       );
@@ -999,10 +982,6 @@ export class CartesiaTTS implements TTSAdapter {
             }
             releaseOwnerWait();
             await this.restIfSilent(text, sink, onDone, signal, undefined, wsBytes, "streamInContext:retry", retryErr, turnContextId);
-            if (!join && CARTESIA_MAX_BUFFER_DELAY_MS === 0) {
-              await this.waitTurnFinalized(turnContextId);
-              await this.waitLeftoversIdle(turnContextId);
-            }
             return;
           }
         } else {
@@ -1011,20 +990,12 @@ export class CartesiaTTS implements TTSAdapter {
           }
           releaseOwnerWait();
           await this.restIfSilent(text, sink, onDone, signal, emotions, wsBytes, "streamInContext", err, turnContextId);
-          if (!join && CARTESIA_MAX_BUFFER_DELAY_MS === 0) {
-            await this.waitTurnFinalized(turnContextId);
-            await this.waitLeftoversIdle(turnContextId);
-          }
           return;
         }
       }
     }
     releaseOwnerWait();
     await this.restIfSilent(text, sink, onDone, signal, emotions, 0, "streamInContext:wsDown", new Error("WS permanently failed"), turnContextId);
-    if (!join && CARTESIA_MAX_BUFFER_DELAY_MS === 0) {
-      await this.waitTurnFinalized(turnContextId);
-      await this.waitLeftoversIdle(turnContextId);
-    }
   }
 
   /**
@@ -1105,7 +1076,6 @@ export class CartesiaTTS implements TTSAdapter {
         voice: this.buildVoice(),
         output_format: this.outputFormat(),
         continue: false,
-        max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS,
       };
       const gcMsg = this.buildGenerationConfig(emotions);
       if (gcMsg) msg.generation_config = gcMsg;

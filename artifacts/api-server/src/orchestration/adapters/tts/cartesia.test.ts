@@ -237,13 +237,15 @@ describe("ensureTerminalPunctuation", () => {
 });
 
 describe("Cartesia adaptor contract (source)", () => {
-  it("matches current Sonic docs: /tts/websocket, voice { mode: id, id }, max_buffer_delay_ms 0", () => {
+  it("matches current Sonic docs: /tts/websocket, voice { mode: id, id }, managed buffering", () => {
     const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
     expect(src).toContain("/tts/websocket?");
     expect(src).not.toContain("/tts/websockets");
     expect(src).toContain('return { mode: "id", id: this.voiceId }');
-    expect(src).toMatch(/CARTESIA_MAX_BUFFER_DELAY_MS = 0/);
-    expect(src).toContain('CARTESIA_SONIC_36_MODEL = "sonic-3.6"');
+    expect(src).not.toMatch(/CARTESIA_MAX_BUFFER_DELAY_MS = 0/);
+    expect(src).not.toMatch(/max_buffer_delay_ms:\s*\d/);
+    expect(src).toContain("omit max_buffer_delay_ms");
+    expect(src).toContain("CARTESIA_SONIC_36_MODEL = \"sonic-3.6\"");
     expect(src).toContain("never both");
     expect(src).toMatch(/if \(this\.language\) msg\.language = this\.language;/);
   });
@@ -379,18 +381,6 @@ describe("Cartesia delay=0 leftover REST (call 19809 mid-sentence cut)", () => {
     await vi.waitFor(() => expect(sockets.length).toBe(1));
     await vi.waitFor(() => expect(sockets[0]!.sent.length).toBeGreaterThan(0));
 
-    expect(tts.claimTurnContext(turnId)).toBe(false);
-
-    const joinP = tts.synthesizeStreamInContext(
-      turnId,
-      "challan है।",
-      (pcm) => { joinChunks.push(pcm); },
-      (n) => { joinDoneChars = n; },
-      undefined,
-      undefined,
-      true,
-    );
-
     const wsPcm = Buffer.from([10, 11, 12, 13]);
     sockets[0]!.emit({
       type: "chunk",
@@ -405,6 +395,18 @@ describe("Cartesia delay=0 leftover REST (call 19809 mid-sentence cut)", () => {
       errorCode: null,
       detail: "Context has closed and is no longer accepting new inputs, use a new context ID. — Context closed — status=400",
     });
+
+    expect(tts.claimTurnContext(turnId)).toBe(false);
+
+    const joinP = tts.synthesizeStreamInContext(
+      turnId,
+      "challan है।",
+      (pcm) => { joinChunks.push(pcm); },
+      (n) => { joinDoneChars = n; },
+      undefined,
+      undefined,
+      true,
+    );
 
     await joinP;
     tts.finalizeTurnContext(turnId);

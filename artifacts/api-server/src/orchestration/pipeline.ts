@@ -6722,6 +6722,11 @@ export class OrchestrationPipeline implements VoiceSession {
     return { earlyClause: this.agent.ttsProvider !== "cartesia" };
   }
 
+  /** Cartesia managed buffering: stream LLM chunks; do not wait for `.!?`. */
+  private cartesiaManagedTokenStream(): boolean {
+    return this.agent.ttsProvider === "cartesia";
+  }
+
   private extractSpeakable(text: string) {
     return extractSentences(text, this.agent.ttsMinSentenceChars, this.ttsExtractOpts());
   }
@@ -9995,9 +10000,8 @@ export class OrchestrationPipeline implements VoiceSession {
             llmFirstTokenAt = Date.now();
             this._tTurnLlmFirstToken = performance.now();
             clearTtftFallbackTimer();
-            // The first token is not audible TTS — Cartesia needs a full
-            // sentence, which lands 0.3–1.5s later. The cover filler must stay
-            // up until enqueue() actually queues Talk audio (call 21546).
+            // The first token is not audible TTS — Cartesia managed buffering
+            // starts when the model has enough context (or its delay cap).
             const ttftMs = llmFirstTokenAt - llmStart;
             const slowTtft = ttftMs >= LLM_SLOW_TTFT_MS;
             this.logExec("LLM", "system", {
@@ -10025,6 +10029,10 @@ export class OrchestrationPipeline implements VoiceSession {
           // guard withholds it from TTS so a tool call is never spoken aloud.
           const afterEnvelope = envelopeGuard.filter(afterBrackets);
           if (!afterEnvelope) return;
+          if (this.cartesiaManagedTokenStream()) {
+            enqueue(afterEnvelope);
+            return;
+          }
           pendingText += afterEnvelope;
           const { sentences, remainder } = this.extractSpeakable(pendingText);
           for (const s of sentences) {
@@ -10197,6 +10205,10 @@ export class OrchestrationPipeline implements VoiceSession {
               if (!filtered) return;
               const afterBrackets = filterBrackets(filtered);
               if (!afterBrackets) return;
+              if (this.cartesiaManagedTokenStream()) {
+                enqueue(afterBrackets);
+                return;
+              }
               pendingText += afterBrackets;
               const { sentences, remainder } = this.extractSpeakable(pendingText);
               for (const s of sentences) {
@@ -10508,7 +10520,7 @@ export class OrchestrationPipeline implements VoiceSession {
     } else {
       flushText = pendingText;
     }
-    {
+    if (!this.cartesiaManagedTokenStream()) {
       const g = stepGuard.push(flushText);
       if (g.trim()) {
         enqueue(g);
@@ -11371,6 +11383,10 @@ export class OrchestrationPipeline implements VoiceSession {
             llmFirstSpeakableAt = Date.now();
             if (followUpFillerTimer) { clearTimeout(followUpFillerTimer); followUpFillerTimer = null; }
           }
+          if (this.cartesiaManagedTokenStream()) {
+            enqueue(afterEnvelope);
+            return;
+          }
           pendingText += afterEnvelope;
           const { sentences, remainder } = this.extractSpeakable(pendingText);
           for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
@@ -11496,7 +11512,7 @@ export class OrchestrationPipeline implements VoiceSession {
     } else {
       flushText = pendingText;
     }
-    {
+    if (!this.cartesiaManagedTokenStream()) {
       const g = stepGuard.push(flushText);
       if (g.trim()) {
         enqueue(g);
