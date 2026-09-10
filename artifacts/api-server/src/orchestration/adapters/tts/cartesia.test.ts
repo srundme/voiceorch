@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { CartesiaTTS, resolveCartesiaModelId, parseCartesiaLang, joinContinuationTranscript, isCartesiaContextClosedError } from "./cartesia.js";
+import { CartesiaTTS, resolveCartesiaModelId, parseCartesiaLang, cartesiaWireLanguage, joinContinuationTranscript, appendCartesiaRemainder, isCartesiaContextClosedError } from "./cartesia.js";
 
 /**
  * Regression test for the Cartesia emotion-voice-control bug: Cartesia can
@@ -112,7 +112,7 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
     tts.setLanguage("ta-IN");
     await tts.synthesize("வணக்கம்");
 
-    expect(languages).toEqual(["en", "ta"]);
+    expect(languages).toEqual(["en-IN", "ta-IN"]);
     expect(locales).toEqual([undefined, undefined]);
     expect(models).toEqual(["sonic-3.5", "sonic-3.5"]);
   });
@@ -146,15 +146,14 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
   });
 });
 
-describe("joinContinuationTranscript", () => {
-  it("forwards LLM tokens verbatim so Cartesia can concatenate them", () => {
-    expect(joinContinuationTranscript("Hello, world!", "How are you?")).toBe("How are you?");
-    expect(joinContinuationTranscript("Hello, world!", " How are you?")).toBe(" How are you?");
-    expect(joinContinuationTranscript("So", "rry,")).toBe("rry,");
-    expect(joinContinuationTranscript("ன", "்")).toBe("்");
-    expect(joinContinuationTranscript("", "Hello")).toBe("Hello");
+describe("appendCartesiaRemainder", () => {
+  it("inserts a space between leftover sentences", () => {
+    expect(appendCartesiaRemainder("வணக்கம்!", "இப்போ பேசலாமா?")).toBe("வணக்கம்! இப்போ பேசலாமா?");
+    expect(appendCartesiaRemainder("Hello. ", "How are you?")).toBe("Hello. How are you?");
+    expect(appendCartesiaRemainder("", "First.")).toBe("First.");
   });
 });
+
 
 describe("claimTurnContext (call 17915 — no second owner clip)", () => {
   it("lets only the first sentence own the turn, even after finalize or WS-down", () => {
@@ -193,8 +192,18 @@ describe("resolveCartesiaModelId", () => {
 describe("parseCartesiaLang", () => {
   it("splits en-IN into language + locale for Sonic 3.6", () => {
     expect(parseCartesiaLang("en-IN")).toEqual({ language: "en", locale: "en-IN" });
-    expect(parseCartesiaLang("hi")).toEqual({ language: "hi", locale: null });
+    expect(parseCartesiaLang("hi")).toEqual({ language: "hi", locale: "hi-IN" });
+    expect(parseCartesiaLang("ta")).toEqual({ language: "ta", locale: "ta-IN" });
+    expect(parseCartesiaLang("ta-IN")).toEqual({ language: "ta", locale: "ta-IN" });
     expect(parseCartesiaLang(null)).toEqual({ language: null, locale: null });
+  });
+});
+
+describe("cartesiaWireLanguage", () => {
+  it("prefers the regional locale on the language field", () => {
+    expect(cartesiaWireLanguage("ta", "ta-IN")).toBe("ta-IN");
+    expect(cartesiaWireLanguage("en", "en-IN")).toBe("en-IN");
+    expect(cartesiaWireLanguage("en", null)).toBe("en");
   });
 });
 
@@ -217,8 +226,8 @@ describe("Cartesia language vs locale", () => {
     await new CartesiaTTS("k", null, "sonic-3.5", "ta-IN").synthesize("வணக்கம்");
 
     expect(bodies).toHaveLength(2);
-    expect(bodies[0]).toMatchObject({ model_id: "sonic-3.6", language: "en" });
-    expect(bodies[1]).toMatchObject({ model_id: "sonic-3.5", language: "ta" });
+    expect(bodies[0]).toMatchObject({ model_id: "sonic-3.6", language: "en-IN", normalization: "en-IN" });
+    expect(bodies[1]).toMatchObject({ model_id: "sonic-3.5", language: "ta-IN", normalization: "ta-IN" });
     for (const b of bodies) {
       expect(b.locale).toBeUndefined();
       expect(Boolean(b.language) && Boolean(b.locale)).toBe(false);
@@ -248,7 +257,8 @@ describe("Cartesia adaptor contract (source)", () => {
     expect(src).toMatch(/max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS/);
     expect(src).toContain("CARTESIA_SONIC_36_MODEL = \"sonic-3.6\"");
     expect(src).toContain("never both");
-    expect(src).toMatch(/if \(this\.language\) msg\.language = this\.language;/);
+    expect(src).toContain("msg.language = tag");
+    expect(src).toContain("msg.normalization = tag");
   });
 
   it("sends voice on continue:false finalize so Cartesia does not 400 Voice ID required mid-clip", () => {
@@ -268,8 +278,14 @@ describe("Cartesia adaptor contract (source)", () => {
   it("sends leftover REST once from concatenated remainder after clip 1", () => {
     const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
     expect(src).toContain("closedRemainder");
-    expect(src).toContain("prev + text");
-    expect(src).toContain("prev + streamed");
+    expect(src).toContain("appendCartesiaRemainder");
+  });
+
+  it("does not continue:true join sentences after the first clip (call 24440)", () => {
+    const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
+    expect(src).toContain("Call 24440");
+    expect(src).toMatch(/if \(join\) \{[\s\S]*appendCartesiaRemainder\(prev, streamed\)/);
+    expect(src).not.toMatch(/if \(join\) \{[\s\S]*sendTranscript\(transcript\)/);
   });
 
   it("does not arm the playJob idle timer on skipDrain leftover REST (call 19809)", () => {

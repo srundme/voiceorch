@@ -149,8 +149,10 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("shouldInjectSchedulingPhrasebook");
     expect(pipelineSrc).toContain("needSchedulingGuides");
     expect(pipelineSrc).toContain("earlyClause: this.agent.ttsProvider !== \"cartesia\"");
-    expect(pipelineSrc).toContain("enqueueCartesiaSpeakable");
-    expect(methodBody("processTurn")).toContain("this.cartesiaManagedTokenStream()");
+    // Call 24440: do not enqueue Cartesia per LLM word — wait for `.!?` like
+    // other TTS, then leftover REST after clip 1.
+    expect(pipelineSrc).not.toContain("enqueueCartesiaSpeakable");
+    expect(pipelineSrc).not.toContain("cartesiaManagedTokenStream");
     expect(readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), "clause-stream.ts"),
       "utf8",

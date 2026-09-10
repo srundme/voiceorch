@@ -41,7 +41,6 @@ import {
   extractSentences,
   pickStreamedGreetingHead,
 } from "./clause-stream.js";
-import { pushCartesiaSpeakable } from "./cartesia-token-coalesce.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
@@ -6723,28 +6722,6 @@ export class OrchestrationPipeline implements VoiceSession {
     return { earlyClause: this.agent.ttsProvider !== "cartesia" };
   }
 
-  /** Cartesia managed buffering: stream LLM chunks; do not wait for `.!?`. */
-  private cartesiaManagedTokenStream(): boolean {
-    return this.agent.ttsProvider === "cartesia";
-  }
-
-  /** Hold Cartesia TTS until a word/pause break so Sonic does not speak LLM scraps. */
-  private enqueueCartesiaSpeakable(
-    pending: { buf: string },
-    token: string,
-    enqueue: (text: string) => void,
-  ): void {
-    const { pieces, rest } = pushCartesiaSpeakable(pending.buf, token);
-    pending.buf = rest;
-    for (const p of pieces) enqueue(p);
-  }
-
-  private flushCartesiaSpeakable(pending: { buf: string }, enqueue: (text: string) => void): void {
-    const t = pending.buf;
-    pending.buf = "";
-    if (t) enqueue(t);
-  }
-
   private extractSpeakable(text: string) {
     return extractSentences(text, this.agent.ttsMinSentenceChars, this.ttsExtractOpts());
   }
@@ -8746,8 +8723,7 @@ export class OrchestrationPipeline implements VoiceSession {
 
     let llmResponse = "";
     let pendingText  = "";
-    const cartesiaTok = { buf: "" };
-    // One-step output guard: suppresses any second question (and everything
+    // One-step output guard: suppresses any second question (and everything)
     // after it) so a turn that runs through multiple flow steps is truncated at
     // the first natural yield point. Mirrored into stored history below.
     const stepGuard = { push: (sentence: string) => sentence, truncated: () => false };
@@ -10025,8 +10001,8 @@ export class OrchestrationPipeline implements VoiceSession {
             llmFirstTokenAt = Date.now();
             this._tTurnLlmFirstToken = performance.now();
             clearTtftFallbackTimer();
-            // The first token is not audible TTS — Cartesia managed buffering
-            // starts when the model has enough context (or its delay cap).
+            // The first token is not audible TTS — Cartesia starts after the
+            // first `.!?` sentence; leftover REST speaks the rest (call 24440).
             const ttftMs = llmFirstTokenAt - llmStart;
             const slowTtft = ttftMs >= LLM_SLOW_TTFT_MS;
             this.logExec("LLM", "system", {
@@ -10054,10 +10030,6 @@ export class OrchestrationPipeline implements VoiceSession {
           // guard withholds it from TTS so a tool call is never spoken aloud.
           const afterEnvelope = envelopeGuard.filter(afterBrackets);
           if (!afterEnvelope) return;
-          if (this.cartesiaManagedTokenStream()) {
-            this.enqueueCartesiaSpeakable(cartesiaTok, afterEnvelope, enqueue);
-            return;
-          }
           pendingText += afterEnvelope;
           const { sentences, remainder } = this.extractSpeakable(pendingText);
           for (const s of sentences) {
@@ -10230,10 +10202,6 @@ export class OrchestrationPipeline implements VoiceSession {
               if (!filtered) return;
               const afterBrackets = filterBrackets(filtered);
               if (!afterBrackets) return;
-              if (this.cartesiaManagedTokenStream()) {
-                this.enqueueCartesiaSpeakable(cartesiaTok, afterBrackets, enqueue);
-                return;
-              }
               pendingText += afterBrackets;
               const { sentences, remainder } = this.extractSpeakable(pendingText);
               for (const s of sentences) {
@@ -10545,17 +10513,13 @@ export class OrchestrationPipeline implements VoiceSession {
     } else {
       flushText = pendingText;
     }
-    if (!this.cartesiaManagedTokenStream()) {
-      const g = stepGuard.push(flushText);
-      if (g.trim()) {
-        enqueue(g);
-      } else if (flushText.trim() && stepGuard.truncated()) {
-        // Micro-clauses during streaming exhausted the sentence cap — still speak
-        // the unsent tail so the caller does not hear a prefix then silence.
-        enqueue(flushText.trim());
-      }
-    } else {
-      this.flushCartesiaSpeakable(cartesiaTok, enqueue);
+    const g = stepGuard.push(flushText);
+    if (g.trim()) {
+      enqueue(g);
+    } else if (flushText.trim() && stepGuard.truncated()) {
+      // Micro-clauses during streaming exhausted the sentence cap — still speak
+      // the unsent tail so the caller does not hear a prefix then silence.
+      enqueue(flushText.trim());
     }
     allEnqueued = true;
     finalizeTurnCtx();
@@ -11173,7 +11137,6 @@ export class OrchestrationPipeline implements VoiceSession {
 
     let llmResponse = "";
     let pendingText = "";
-    const cartesiaTok = { buf: "" };
     // One-step output guard (same as the main turn path) — truncate at the first
     // natural yield point if the post-tool reply runs through multiple steps.
     const stepGuard = { push: (sentence: string) => sentence, truncated: () => false };
@@ -11411,10 +11374,6 @@ export class OrchestrationPipeline implements VoiceSession {
             llmFirstSpeakableAt = Date.now();
             if (followUpFillerTimer) { clearTimeout(followUpFillerTimer); followUpFillerTimer = null; }
           }
-          if (this.cartesiaManagedTokenStream()) {
-            this.enqueueCartesiaSpeakable(cartesiaTok, afterEnvelope, enqueue);
-            return;
-          }
           pendingText += afterEnvelope;
           const { sentences, remainder } = this.extractSpeakable(pendingText);
           for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
@@ -11540,15 +11499,11 @@ export class OrchestrationPipeline implements VoiceSession {
     } else {
       flushText = pendingText;
     }
-    if (!this.cartesiaManagedTokenStream()) {
-      const g = stepGuard.push(flushText);
-      if (g.trim()) {
-        enqueue(g);
-      } else if (flushText.trim() && stepGuard.truncated()) {
-        enqueue(flushText.trim());
-      }
-    } else {
-      this.flushCartesiaSpeakable(cartesiaTok, enqueue);
+    const gFollow = stepGuard.push(flushText);
+    if (gFollow.trim()) {
+      enqueue(gFollow);
+    } else if (flushText.trim() && stepGuard.truncated()) {
+      enqueue(flushText.trim());
     }
     if (
       !cleanResponse.trim()

@@ -7,10 +7,11 @@ import type { TTSAdapter } from "../../types.js";
  *
  * Primary path: WebSocket (`/tts/websocket`)
  *   - One persistent WS connection per call (lazy-opened on first transcript).
- *   - Stream LLM tokens with continue:true. Transcripts join verbatim (call
- *     24404: inserting a space between "So"+"rry," / Tamil combining marks
- *     made Sonic spell each token). Send max_buffer_delay_ms: 3000 — Cartesia's
- *     documented default. Omitting it behaved like 0 (generate every token).
+ *   - First sentence of a turn on the WS context (continue:true, delay 3000).
+ *     Transcripts join verbatim when we do continue (call 24404: inserting a
+ *     space between "So"+"rry," made Sonic spell). Later sentences do not
+ *     continue:true — Cartesia closes after the first `.!?` (call 24440) and
+ *     leftover text is one REST clip.
  *   - continue:false (empty transcript) when the LLM turn ends.
  *   - pcm_s16le @ the leg rate: 8000 for VoBiz, 16000 for HD webcall.
  *
@@ -62,6 +63,11 @@ export function resolveCartesiaModelId(model: string | null | undefined): string
   return CARTESIA_VALID_MODELS.has(id) ? id : CARTESIA_DEFAULT_MODEL;
 }
 
+/** Indic languages Cartesia documents as `xx-IN` locales. */
+const CARTESIA_IN_LOCALES = new Set([
+  "bn", "gu", "hi", "kn", "ml", "mr", "or", "pa", "ta", "te", "ur",
+]);
+
 /** `en-IN` → language `en` + locale `en-IN` (Sonic 3.6 date/number reading). */
 export function parseCartesiaLang(tag: string | null | undefined): {
   language: string | null;
@@ -73,7 +79,15 @@ export function parseCartesiaLang(tag: string | null | undefined): {
   const language = (lang ?? "").toLowerCase() || null;
   if (!language) return { language: null, locale: null };
   if (region) return { language, locale: `${language}-${region.toUpperCase()}` };
+  if (CARTESIA_IN_LOCALES.has(language)) {
+    return { language, locale: `${language}-IN` };
+  }
   return { language, locale: null };
+}
+
+/** Tag to send on `language` (never also `locale` — both 400s). Prefer `ta-IN` over `ta`. */
+export function cartesiaWireLanguage(language: string | null, locale: string | null): string | null {
+  return locale ?? language;
 }
 
 /** India endpoint by default for lowest latency; override via CARTESIA_BASE_URL env var. */
@@ -112,6 +126,14 @@ const FIRST_CLIP_QUIET_MS = 400;
  *  became "So rry," and Tamil virama was spoken as its own syllable). */
 export function joinContinuationTranscript(_previous: string, next: string): string {
   return next;
+}
+
+/** Leftover REST is separate sentences — join with a space when neither side has one. */
+export function appendCartesiaRemainder(prev: string, next: string): string {
+  if (!prev) return next;
+  if (!next) return prev;
+  if (/\s$/u.test(prev) || /^\s/u.test(next)) return prev + next;
+  return `${prev} ${next}`;
 }
 
 /** Emotion enum accepted by generation_config.emotion (2026-03-01 spec). */
@@ -441,11 +463,15 @@ export class CartesiaTTS implements TTSAdapter {
 
   /**
    * Cartesia: `language` OR `locale`, never both (docs: TTSRequest). Sending
-   * both 400s every clip — silent call. `locale` is Sonic 3.6+ only; the India
-   * endpoint we use still speaks `language` (`en`). Keep locale off the wire.
+   * both 400s every clip — silent call. The India endpoint still wants the
+   * `language` field; put the regional tag there (`ta-IN`, not `ta`) and pin
+   * `normalization` so mixed Tamil/English is not read as English (call 24440).
    */
   private applyLang(msg: Record<string, unknown>): void {
-    if (this.language) msg.language = this.language;
+    const tag = cartesiaWireLanguage(this.language, this.locale);
+    if (!tag) return;
+    msg.language = tag;
+    msg.normalization = tag;
   }
 
   private get restHeaders() {
@@ -881,18 +907,11 @@ export class CartesiaTTS implements TTSAdapter {
     if (join) {
       const waitOpen = this.turnOpened.get(turnContextId);
       if (waitOpen) await waitOpen;
-      if (!this.pending.has(turnContextId)) {
-        const prev = this.closedRemainder.get(turnContextId) ?? "";
-        this.closedRemainder.set(turnContextId, prev + streamed);
-        onDone(streamed.length);
-        return;
-      }
-      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-      const transcript = joinContinuationTranscript(
-        this.turnLastTranscript.get(turnContextId) ?? "",
-        streamed,
-      );
-      await this.enqueueTurnSend(turnContextId, () => sendTranscript(transcript));
+      // Call 24440: Sonic generates and closes the context on the first `.!?`.
+      // continue:true after that is dropped (0-byte "success" per word). Buffer
+      // later sentences for one leftover REST in completeTurnContext.
+      const prev = this.closedRemainder.get(turnContextId) ?? "";
+      this.closedRemainder.set(turnContextId, appendCartesiaRemainder(prev, streamed));
       onDone(streamed.length);
       return;
     }
@@ -954,7 +973,7 @@ export class CartesiaTTS implements TTSAdapter {
     // sentence's IIFE has not reached getOrOpenWs yet.
     if (join && (this.closedTurns.has(turnContextId) || this.restFallbackTurns.has(turnContextId))) {
       const prev = this.closedRemainder.get(turnContextId) ?? "";
-      this.closedRemainder.set(turnContextId, prev + text);
+      this.closedRemainder.set(turnContextId, appendCartesiaRemainder(prev, text));
       onDone(text.length);
       return;
     }
