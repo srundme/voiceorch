@@ -60,6 +60,9 @@ describe("pushCartesiaSpeakable", () => {
     expect(s.push("சரி, ")).toEqual(["சரி, "]);
     expect(s.push("பாக்குறீங்க?")).toEqual(["பாக்குறீங்க?"]);
     expect(s.push(" அதாவது ")).toEqual([]);
-    expect(s.finish("சரி, பாக்குறீங்க? அதாவது ஷாப்பா?")).toEqual([" அதாவது ஷாப்பா?"]);
+    expect(s.finish("சரி, பாக்குறீங்க? அதாவது ஷாப்பா?")).toEqual({
+      stream: [],
+      leftover: " அதாவது ஷாப்பா?",
+    });
   });
 });

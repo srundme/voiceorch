@@ -1042,6 +1042,17 @@ export class CartesiaTTS implements TTSAdapter {
   }
 
   /**
+   * Call 24579: after Sonic closes clip 1 on `.!?`, do not WS-continue the rest
+   * (0-byte skipDrain). Buffer it for leftover REST into the owner PCM sink.
+   */
+  appendTurnRemainder(turnContextId: string, text: string): void {
+    if (!text) return;
+    this.closedTurns.add(turnContextId);
+    const prev = this.closedRemainder.get(turnContextId) ?? "";
+    this.closedRemainder.set(turnContextId, appendCartesiaRemainder(prev, text));
+  }
+
+  /**
    * Finalizes a turn context after all sentences have been dispatched.
    * delay=0 leftover REST must finish before the owner pending resolves so
    * playJob drain does not exit with remaining sentence PCM still in flight.

@@ -277,8 +277,7 @@ describe("Cartesia adaptor contract (source)", () => {
 
   it("sends leftover REST once from concatenated remainder after clip 1", () => {
     const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
-    expect(src).toContain("closedRemainder");
-    expect(src).toContain("appendCartesiaRemainder");
+    expect(src).toContain("appendTurnRemainder");
   });
 
   it("streams join transcripts on the open WS context (managed buffering)", () => {

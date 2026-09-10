@@ -71,18 +71,16 @@ export class CartesiaTurnStream {
     return out;
   }
 
-  finish(fullReply: string): string[] {
+  finish(fullReply: string): { stream: string[]; leftover: string } {
     const held = flushCartesiaSpeakable(this.pending);
     this.pending = "";
-    const out: string[] = [];
+    const stream: string[] = [];
     if (held && !this.hitPunct) {
-      out.push(held);
+      stream.push(held);
       this.sent += held;
       if (CARTESIA_SENTENCE_END.test(held)) this.hitPunct = true;
     }
-    const leftover = cartesiaUnspokenTail(this.sent, fullReply);
-    if (leftover) out.push(leftover);
-    return out;
+    return { stream, leftover: cartesiaUnspokenTail(this.sent, fullReply) };
   }
 
   reset(): void {

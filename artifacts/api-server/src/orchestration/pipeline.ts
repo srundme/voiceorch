@@ -10609,7 +10609,12 @@ export class OrchestrationPipeline implements VoiceSession {
       flushText = pendingText;
     }
     if (this.cartesiaManagedTokenStream()) {
-      for (const p of cartesiaTurn.finish(cleanResponse)) enqueue(p);
+      const { stream, leftover } = cartesiaTurn.finish(cleanResponse);
+      for (const p of stream) enqueue(p);
+      if (leftover) {
+        if (turnContextId && cartesiaTts) cartesiaTts.appendTurnRemainder(turnContextId, leftover);
+        else enqueue(leftover);
+      }
     } else {
     const g = stepGuard.push(flushText);
     if (g.trim()) {
@@ -11607,7 +11612,12 @@ export class OrchestrationPipeline implements VoiceSession {
       flushText = pendingText;
     }
     if (this.cartesiaManagedTokenStream()) {
-      for (const p of cartesiaTurn.finish(cleanResponse)) enqueue(p);
+      const { stream, leftover } = cartesiaTurn.finish(cleanResponse);
+      for (const p of stream) enqueue(p);
+      if (leftover) {
+        if (ctTurnContextId && ctCartesiaTts) ctCartesiaTts.appendTurnRemainder(ctTurnContextId, leftover);
+        else enqueue(leftover);
+      }
     } else {
     const gFollow = stepGuard.push(flushText);
     if (gFollow.trim()) {

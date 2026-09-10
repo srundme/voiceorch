@@ -151,7 +151,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("earlyClause: this.agent.ttsProvider !== \"cartesia\"");
     expect(methodBody("processTurn")).toContain("this.cartesiaManagedTokenStream()");
     expect(pipelineSrc).toContain("CartesiaTurnStream");
-    expect(pipelineSrc).toContain("cartesiaTurn.finish(cleanResponse)");
+    expect(pipelineSrc).toContain("appendTurnRemainder");
     expect(pipelineSrc).toContain("trim: !this.cartesiaManagedTokenStream()");
     expect(readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), "clause-stream.ts"),
