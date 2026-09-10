@@ -51,6 +51,22 @@ describe("SarvamLLM conversations voice knobs", () => {
     const body = (llm as unknown as Internals).buildGenerationBody();
     expect(body["reasoning_effort"]).toBeNull();
   });
+
+  it("uses Sarvam conversations docs temperature 1 / top_p 1 when unset", () => {
+    const llm = new SarvamLLM("test-key", "sarvam-105b-conversations", {});
+    const body = (llm as unknown as Internals).buildGenerationBody();
+    expect(body["temperature"]).toBe(1);
+    expect(body["top_p"]).toBe(1);
+    expect(body["max_tokens"]).toBe(500);
+    expect(body["reasoning_effort"]).toBeNull();
+  });
+
+  it("honors an explicit agent temperature on conversations", () => {
+    const llm = new SarvamLLM("test-key", "sarvam-105b-conversations", { temperature: 0.4, maxTokens: 200 });
+    const body = (llm as unknown as Internals).buildGenerationBody();
+    expect(body["temperature"]).toBe(0.4);
+    expect(body["max_tokens"]).toBe(200);
+  });
 });
 
 describe("SarvamLLM gemma4 voice latency knobs", () => {

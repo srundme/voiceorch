@@ -386,15 +386,27 @@ export class SarvamLLM implements LLMAdapter {
       }
     }
 
-    if (typeof p.temperature === "number" && Number.isFinite(p.temperature))
+    if (typeof p.temperature === "number" && Number.isFinite(p.temperature)) {
       body["temperature"] = clamp(p.temperature, 0, 2);
-    if (typeof p.topP === "number" && Number.isFinite(p.topP))
+    } else if (this.model === SARVAM_CONVERSATIONS_MODEL) {
+      // Docs: sarvam-105b-conversations voice example uses temperature 1
+      // (https://docs.sarvam.ai/api/getting-started/models/sarvam-105b).
+      // Omitting it with reasoning_effort=null would fall back to 0.2.
+      body["temperature"] = 1;
+    }
+    if (typeof p.topP === "number" && Number.isFinite(p.topP)) {
       body["top_p"] = clamp(p.topP, 0, 1);
+    } else if (this.model === SARVAM_CONVERSATIONS_MODEL) {
+      body["top_p"] = 1;
+    }
 
     let maxTokens =
       typeof p.maxTokens === "number" && Number.isFinite(p.maxTokens) && p.maxTokens > 0
         ? Math.floor(p.maxTokens)
-        : undefined;
+        : this.model === SARVAM_CONVERSATIONS_MODEL
+          // Spoken range in Sarvam voice guidance is 100–500; 100 clips Indic.
+          ? 500
+          : undefined;
     // Gemma 4 answers directly with no thinking pass — keep the spoken budget
     // tight so TTFT + full-turn latency stay voice-friendly.
     if (this.model === "gemma4") {
