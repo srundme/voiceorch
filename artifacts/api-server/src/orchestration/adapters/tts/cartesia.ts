@@ -7,11 +7,10 @@ import type { TTSAdapter } from "../../types.js";
  *
  * Primary path: WebSocket (`/tts/websocket`)
  *   - One persistent WS connection per call (lazy-opened on first transcript).
- *   - Stream LLM tokens with continue:true and omit max_buffer_delay_ms so
- *     Cartesia managed buffering decides when to start speech (docs default
- *     3000ms cap; the model starts earlier when it has enough context).
- *   - Do not pre-split Tamil/English clauses client-side — that was custom
- *     buffering stacked on the API (call 24396 ~2s/turn).
+ *   - Stream LLM tokens with continue:true. Transcripts join verbatim (call
+ *     24404: inserting a space between "So"+"rry," / Tamil combining marks
+ *     made Sonic spell each token). Send max_buffer_delay_ms: 3000 — Cartesia's
+ *     documented default. Omitting it behaved like 0 (generate every token).
  *   - continue:false (empty transcript) when the LLM turn ends.
  *   - pcm_s16le @ the leg rate: 8000 for VoBiz, 16000 for HD webcall.
  *
@@ -28,6 +27,8 @@ const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 300;
 const CARTESIA_VERSION = "2026-03-01";
 const WS_CONNECT_TIMEOUT_MS = 6_000;
+/** Cartesia managed-buffering default (docs). Do not send 0 — that starts a clip per token. */
+const CARTESIA_MAX_BUFFER_DELAY_MS = 3000;
 
 /** Cartesia current TTS model (https://docs.cartesia.ai/build-with-cartesia/tts-models/latest). */
 export const CARTESIA_DEFAULT_MODEL = "sonic-3.6";
@@ -106,12 +107,11 @@ export function isCartesiaContextClosedError(err: unknown): boolean {
 /** Quiet after the last WS chunk ≈ first clip finished (fallback if no `done`). */
 const FIRST_CLIP_QUIET_MS = 400;
 
-/** Cartesia continuations require the joined transcripts to be a valid string. */
-export function joinContinuationTranscript(previous: string, next: string): string {
-  if (!next) return next;
-  if (!previous) return next;
-  if (/^\s/.test(next)) return next;
-  return ` ${next}`;
+/** Cartesia concatenates continuation transcripts verbatim. Do not insert a
+ *  space — LLM tokens already carry their own whitespace (call 24404: "So"+"rry,"
+ *  became "So rry," and Tamil virama was spoken as its own syllable). */
+export function joinContinuationTranscript(_previous: string, next: string): string {
+  return next;
 }
 
 /** Emotion enum accepted by generation_config.emotion (2026-03-01 spec). */
@@ -857,6 +857,7 @@ export class CartesiaTTS implements TTSAdapter {
         voice: this.buildVoice(),
         output_format: this.outputFormat(),
         continue: true,
+        max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS,
       };
       const gcCtx = this.buildGenerationConfig(emotions);
       if (gcCtx) transcriptMsg.generation_config = gcCtx;

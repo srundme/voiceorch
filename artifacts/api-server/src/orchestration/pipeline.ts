@@ -6756,8 +6756,14 @@ export class OrchestrationPipeline implements VoiceSession {
     const turnContextId = cartesiaTts ? globalThis.crypto.randomUUID() : undefined;
     try {
       if (turnContextId && cartesiaTts) {
-        const jobs = sentences.map((s) =>
-          this.startSentenceSynthesis(s, this._activeTurnIndex, seqId, turnContextId, emotions),
+        const jobs = sentences.map((s, i) =>
+          this.startSentenceSynthesis(
+            i === 0 || /^\s/.test(s) ? s : ` ${s}`,
+            this._activeTurnIndex,
+            seqId,
+            turnContextId,
+            emotions,
+          ),
         );
         const owner = jobs.find((j) => !j.skipDrain) ?? jobs[0]!;
         const continuations = jobs.filter((j) => j.skipDrain);

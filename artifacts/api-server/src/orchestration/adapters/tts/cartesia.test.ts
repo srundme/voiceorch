@@ -147,9 +147,11 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
 });
 
 describe("joinContinuationTranscript", () => {
-  it("inserts a space so Cartesia sees one valid transcript", () => {
-    expect(joinContinuationTranscript("Hello, world!", "How are you?")).toBe(" How are you?");
+  it("forwards LLM tokens verbatim so Cartesia can concatenate them", () => {
+    expect(joinContinuationTranscript("Hello, world!", "How are you?")).toBe("How are you?");
     expect(joinContinuationTranscript("Hello, world!", " How are you?")).toBe(" How are you?");
+    expect(joinContinuationTranscript("So", "rry,")).toBe("rry,");
+    expect(joinContinuationTranscript("ன", "்")).toBe("்");
     expect(joinContinuationTranscript("", "Hello")).toBe("Hello");
   });
 });
@@ -242,9 +244,8 @@ describe("Cartesia adaptor contract (source)", () => {
     expect(src).toContain("/tts/websocket?");
     expect(src).not.toContain("/tts/websockets");
     expect(src).toContain('return { mode: "id", id: this.voiceId }');
-    expect(src).not.toMatch(/CARTESIA_MAX_BUFFER_DELAY_MS = 0/);
-    expect(src).not.toMatch(/max_buffer_delay_ms:\s*\d/);
-    expect(src).toContain("omit max_buffer_delay_ms");
+    expect(src).toMatch(/CARTESIA_MAX_BUFFER_DELAY_MS = 3000/);
+    expect(src).toMatch(/max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS/);
     expect(src).toContain("CARTESIA_SONIC_36_MODEL = \"sonic-3.6\"");
     expect(src).toContain("never both");
     expect(src).toMatch(/if \(this\.language\) msg\.language = this\.language;/);
