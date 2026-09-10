@@ -2113,6 +2113,7 @@ export async function createSession(params: {
         transferTwilioCall, buildTwilioWarmTransferTwiML,
         transferPlivoCall,  buildPlivoWarmTransferXml,
         transferVobizCall,  buildVobizWarmTransferXml,
+        vobizMergeRoom,
       } = await import("./telephony/transfer.js");
       const tprov = params.telephonyProvider;
 
@@ -2172,13 +2173,42 @@ export async function createSession(params: {
         // toNumber is the platform number.
         const callerId = params.callDirection === "outbound" ? params.fromNumber : params.toNumber;
         const callerIdQs = callerId ? `&callerId=${encodeURIComponent(callerId)}` : "";
-        let xmlUrl: string;
         if (isWarm && transferId && briefingToken) {
-          xmlUrl = `${baseUrl}/api/webhooks/vobiz/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}${callerIdQs}`;
+          // 3-way merge: customer waits in a conference, sales is dialed into the
+          // same room, then conference Speak plays the AI briefing to everyone.
+          // Stream cannot stay in the conference (Conference XML replaces Stream).
+          const { dialVobiz } = await import("./telephony/dial.js");
+          const room = vobizMergeRoom(callRecord.id, transferId);
+          const qs = `transferId=${encodeURIComponent(String(transferId))}&token=${encodeURIComponent(briefingToken)}`;
+          const customerXml = `${baseUrl}/api/webhooks/vobiz/merge-customer-xml?${qs}`;
+          const salesAnswer = `${baseUrl}/api/webhooks/vobiz/merge-sales-xml?${qs}`;
+          const salesHangup = `${baseUrl}/api/webhooks/vobiz/merge-sales-hangup?${qs}&customerUuid=${encodeURIComponent(params.externalCallId)}`;
+          if (!callerId?.trim()) {
+            throw new Error("VoBiz merge transfer needs a platform caller ID");
+          }
+          await db.update(callTransfersTable).set({
+            providerTransferId: `vobiz-merge:${room}:${params.externalCallId}`,
+          }).where(eq(callTransfersTable.id, transferId));
+          await transferVobizCall({
+            authId, authToken, callUuid: params.externalCallId, xmlUrl: customerXml, callDirection: params.callDirection,
+          });
+          await dialVobiz({
+            authId,
+            authToken,
+            fromNumber: callerId,
+            toNumber: to,
+            answerUrl: salesAnswer,
+            hangupUrl: salesHangup,
+            maxDurationSeconds: 3600,
+          });
+          logExec(EXEC_COMPONENTS.Tool, "system", {
+            status: "info",
+            metadata: { event: "Merge Conference Started", room, target: to },
+          });
         } else {
-          xmlUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodeURIComponent(to)}${callerIdQs}`;
+          const xmlUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodeURIComponent(to)}${callerIdQs}`;
+          await transferVobizCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl, callDirection: params.callDirection });
         }
-        await transferVobizCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl, callDirection: params.callDirection });
       } else {
         // Unknown / unsupported telephony provider. We optimistically set
         // wasTransferred=true before the provider branch (to win the WS-close race),
