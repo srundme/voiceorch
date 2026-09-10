@@ -35,7 +35,7 @@ import { languagePrefix, resolveToolFillerPhrase } from "./tool-fillers.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
-import { isPstnStopHold, shouldCutTtsFromCallerTranscript, shouldDiscardOpenerTranscript } from "./pstn-interrupt-policy.js";
+import { isPstnStopHold, shouldAbandonStuckBarge, shouldCutTtsFromCallerTranscript, shouldDiscardOpenerTranscript, BARGE_STUCK_RESUME_MS } from "./pstn-interrupt-policy.js";
 import { shouldIgnoreSelfEcho } from "./self-echo-policy.js";
 import {
   extractSentences,
@@ -1167,6 +1167,8 @@ export class OrchestrationPipeline implements VoiceSession {
   // never clears the echo bar, nothing but our own audio reached the mic during the
   // sentence — used to veto word_count barge-ins fired by garbled echo transcripts.
   private bargeInPeakRmsSinceSentence = 0;
+  /** Last inbound frame RMS — used so room VAD does not look like a caller reply. */
+  private _lastInboundRawRms = 0;
   // Throttle for the periodic "energy barge-in monitor" diagnostic log line.
   private lastEnergyMonitorLogAt = 0;
   // Throttle for logging caller energy during agent speech (barge-in diagnostics).
@@ -2356,7 +2358,12 @@ export class OrchestrationPipeline implements VoiceSession {
       
       // Pipecat UserStartedSpeaking: provider VAD (not local energy) cancels idle
       // once echo grace has ended. Echo of our own TTS must not look like a reply.
-      if (!this.isPlaying && !this.isSendingTtsAudio && Date.now() >= this.bargeInHoldUntil) {
+      if (
+        !this.isPlaying
+        && !this.isSendingTtsAudio
+        && Date.now() >= this.bargeInHoldUntil
+        && this._lastInboundRawRms >= BACKGROUND_TALKER_MIN_RAW_RMS
+      ) {
         this.noteCallerTurnActivity("vad_start");
       }
       if (shouldAdvanceSemanticTurnOnVadStart({
@@ -2475,6 +2482,8 @@ export class OrchestrationPipeline implements VoiceSession {
         || Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs,
       isSelfEcho: this.isSelfEcho(text.trim()),
       interruptionMgr: this.interruptionMgr,
+      peakRawRms: this.bargeInPeakRmsSinceSentence,
+      minBargeRms: BACKGROUND_TALKER_MIN_RAW_RMS,
     })) {
       return false;
     }
@@ -2496,13 +2505,48 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   private armBargeRecovery(partial?: string): void {
-    const text = partial?.trim();
-    if (!text) return;
-    this._bargeRecoveryText = text;
+    const text = partial?.trim() ?? "";
+    if (text) this._bargeRecoveryText = text;
     this._bargeRecoveryArmedAt = Date.now();
-    this._bargeRecoveryStableText = text;
+    this._bargeRecoveryStableText = this._bargeRecoveryText ?? "";
     this._bargeRecoveryStableSince = Date.now();
     this.scheduleBargeRecoveryTick();
+  }
+
+  /**
+   * Nearby / phone-crosstalk barge: TTS already stopped, VAD stays open, no
+   * caller final, stall is refreshed by room energy → mute until hangup.
+   * Release WAIT, listen again, optionally finish the cut reply.
+   */
+  private abandonFalseBarge(reason: string): void {
+    const preview = this._bargeRecoveryText || "";
+    this.clearBargeRecovery();
+    this.interruptionMgr.onUserSpeechEnd();
+    this.clearBargeWait();
+    this.interruptReplyArmed = false;
+    this.pendingTranscriptQueue = [];
+    if (preview) this.logDiscardedTranscript(preview, "room_crosstalk");
+    logger.info(
+      { callId: this.config.callId, reason },
+      "False barge abandoned — room talk; resuming listen",
+    );
+    this.logExec("Agent", "system", {
+      status: "info",
+      turnNumber: this._activeTurnIndex,
+      warningFlags: ["false_barge"],
+      metadata: { event: "False Barge Abandoned", reason },
+    });
+    const remainder = this._bargedReplyRemainder;
+    const remainderAge = Date.now() - this._bargedReplyAt;
+    if (remainder && remainderAge < 15_000 && !this.isProcessing && !this.isPlaying) {
+      this._bargedReplyRemainder = null;
+      void this.resumeBargedReply(remainder);
+      return;
+    }
+    if (!this.closed && !this.isProcessing) {
+      this.safetyNet.beginListening();
+      this.resetHangupTimer();
+    }
   }
 
   /**
@@ -2510,16 +2554,31 @@ export class OrchestrationPipeline implements VoiceSession {
    * progress. Firing while Sarvam's VAD is still open truncates the caller
    * mid-utterance and answers the fragment (call 21628: committed "No, no"
    * 1.29s into a 4.28s segment, then the real final landed as a second turn).
-   * Each tick refreshes the armed text. While VAD is open, only a frozen
-   * pending transcript for BARGE_RECOVERY_MAX_WAIT_MS is "stuck" (call 21818:
-   * growing text for 13s was committed at 8s). speech_end is the primary commit.
+   * Each tick refreshes the armed text. Growing room talk must not wait 8s
+   * then become a turn — resume after BARGE_STUCK_RESUME_MS.
    */
   private scheduleBargeRecoveryTick(): void {
     if (this._bargeRecoveryTimer) clearTimeout(this._bargeRecoveryTimer);
     this._bargeRecoveryTimer = setTimeout(() => {
       this._bargeRecoveryTimer = null;
+      if (this.closed) return;
+      if (this.isProcessing) {
+        if (this.interruptReplyArmed) {
+          this.clearBargeRecovery();
+          return;
+        }
+        this.scheduleBargeRecoveryTick();
+        return;
+      }
       const live = this.streamSTT?.getPendingTranscript?.()?.trim();
       if (live) this._bargeRecoveryText = live;
+      const bargeAge = this._bargeRecoveryArmedAt
+        ? Date.now() - this._bargeRecoveryArmedAt
+        : BARGE_STUCK_RESUME_MS;
+      if (shouldAbandonStuckBarge({ bargeAgeMs: bargeAge })) {
+        this.abandonFalseBarge("barge_stuck");
+        return;
+      }
       if (this._vadSpeechStartAt !== 0) {
         const current = (this._bargeRecoveryText || "").trim();
         if (current !== this._bargeRecoveryStableText) {
@@ -2527,8 +2586,6 @@ export class OrchestrationPipeline implements VoiceSession {
           this._bargeRecoveryStableSince = Date.now();
         }
         const frozenMs = Date.now() - (this._bargeRecoveryStableSince || Date.now());
-        // Open VAD + growing text = still talking. Only force-commit when the
-        // pending transcript has been frozen for the ceiling (true stuck VAD).
         if (frozenMs < BARGE_RECOVERY_MAX_WAIT_MS) {
           this.scheduleBargeRecoveryTick();
           return;
@@ -2544,7 +2601,11 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private flushBargeRecovery(reason: string): void {
     const text = this._bargeRecoveryText?.trim() ?? "";
-    if (!text || this.closed) return;
+    if (this.closed) return;
+    if (!text || reason === "crosstalk") {
+      this.abandonFalseBarge(reason || "empty");
+      return;
+    }
     if (this.isPlaying || this.isSendingTtsAudio) {
       this.clearBargeRecovery();
       return;
@@ -4820,6 +4881,11 @@ export class OrchestrationPipeline implements VoiceSession {
       : pcm16k;
     if (pcm8k.length < 2 && effectivePcm16k.length < 2) return;
 
+    this._lastInboundRawRms = rawRms;
+    if ((this.isPlaying || this.isSendingTtsAudio) && rawRms > this.bargeInPeakRmsSinceSentence) {
+      this.bargeInPeakRmsSinceSentence = rawRms;
+    }
+
     // ── IVR DTMF detection ──
     // Run on every incoming frame when an IVR interaction is active.
     // Independent of speech/silence — DTMF tones are recognisable even during
@@ -6492,7 +6558,10 @@ export class OrchestrationPipeline implements VoiceSession {
         barged: this.bargeInRequested,
       },
     });
-    if (this.bargeInRequested) return;
+    if (this.bargeInRequested) {
+      if (!this._bargeRecoveryArmedAt) this.armBargeRecovery();
+      return;
+    }
     this.resetHangupTimer();
     this.safetyNet.beginListening();
   }

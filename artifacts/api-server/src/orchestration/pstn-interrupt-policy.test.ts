@@ -7,8 +7,10 @@ import {
   resolvePlayingWordFloor,
 } from "./interruption-manager.js";
 import {
+  shouldAbandonStuckBarge,
   shouldCutTtsFromCallerTranscript,
   shouldDiscardOpenerTranscript,
+  BARGE_STUCK_RESUME_MS,
 } from "./pstn-interrupt-policy.js";
 
 /**
@@ -103,6 +105,30 @@ describe("call 20257 — greeting + VAD + empty/partial must not start a turn", 
       .toEqual({ cutTts: false, processTurn: true });
     expect(decide20257("wait", { greetingPlaying: false, inEchoGrace: true }))
       .toEqual({ cutTts: true, processTurn: true });
+  });
+
+  it("far-field RMS does not cut TTS; stop still does", () => {
+    const interruptionMgr = new InterruptionManager();
+    const base = {
+      transcript: "Start continue please now",
+      agentSpeaking: true,
+      greetingPlaybackActive: false,
+      interruptionMgr,
+      minBargeRms: 900,
+    };
+    expect(shouldCutTtsFromCallerTranscript({ ...base, peakRawRms: 200 })).toBe(false);
+    expect(shouldCutTtsFromCallerTranscript({ ...base, peakRawRms: 1800 })).toBe(true);
+    expect(shouldCutTtsFromCallerTranscript({
+      ...base,
+      transcript: "wait",
+      peakRawRms: 200,
+    })).toBe(true);
+  });
+
+  it("abandons a barge that never becomes a caller turn (room chatter)", () => {
+    expect(BARGE_STUCK_RESUME_MS).toBe(3500);
+    expect(shouldAbandonStuckBarge({ bargeAgeMs: 800 })).toBe(false);
+    expect(shouldAbandonStuckBarge({ bargeAgeMs: 3500 })).toBe(true);
   });
 });
 

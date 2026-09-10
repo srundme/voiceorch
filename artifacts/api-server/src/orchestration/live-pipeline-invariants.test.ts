@@ -231,6 +231,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     // Call 21818: do not vad_stuck while the pending transcript is still growing.
     expect(tick).toContain("this._bargeRecoveryStableText");
     expect(tick).toContain("frozenMs");
+    expect(tick).toContain("shouldAbandonStuckBarge");
+    expect(pipelineSrc).toContain("abandonFalseBarge");
+    expect(pipelineSrc).toContain("BARGE_STUCK_RESUME_MS");
     // speech_end must stay the primary commit path.
     expect(pipelineSrc).toContain('this.flushBargeRecovery("speech_end")');
     // The cover masks our latency — it must never talk over the caller.

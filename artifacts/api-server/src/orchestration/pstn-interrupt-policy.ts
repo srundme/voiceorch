@@ -22,6 +22,16 @@ export function shouldDiscardOpenerTranscript(
   return true;
 }
 
+/** After a barge with no committed caller turn, resume listening (room chatter). */
+export const BARGE_STUCK_RESUME_MS = 3500;
+
+export function shouldAbandonStuckBarge(opts: {
+  bargeAgeMs: number;
+  stuckResumeMs?: number;
+}): boolean {
+  return opts.bargeAgeMs >= (opts.stuckResumeMs ?? BARGE_STUCK_RESUME_MS);
+}
+
 export function shouldCutTtsFromCallerTranscript(opts: {
   transcript: string;
   agentSpeaking: boolean;
@@ -30,6 +40,10 @@ export function shouldCutTtsFromCallerTranscript(opts: {
   inEchoGrace?: boolean;
   isSelfEcho?: boolean;
   interruptionMgr: InterruptionManager;
+  /** Loudest inbound RMS since this sentence started. 0 / omitted = unknown (do not veto). */
+  peakRawRms?: number;
+  /** Far-field / next-seat talk must not cut TTS (stop/hold still cut). */
+  minBargeRms?: number;
 }): boolean {
   const t = opts.transcript.trim();
   if (!t) return false;
@@ -41,6 +55,14 @@ export function shouldCutTtsFromCallerTranscript(opts: {
   }
   // "yes" / "okay okay" are answers, not barges — unless they are hold/stop.
   if (isBackchannelOnlyUtterance(t) && !isPstnStopHold(t, opts.interruptionMgr)) {
+    return false;
+  }
+  if (isPstnStopHold(t, opts.interruptionMgr)) {
+    return welcomePlayed;
+  }
+  const minRms = opts.minBargeRms;
+  const peak = opts.peakRawRms ?? 0;
+  if (minRms != null && peak > 0 && peak < minRms) {
     return false;
   }
   const words = t.split(/\s+/).filter(Boolean).length;
