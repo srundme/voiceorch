@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flushCartesiaSpeakable, pushCartesiaSpeakable } from "./cartesia-token-coalesce.js";
+import { flushCartesiaSpeakable, pushCartesiaSpeakable, cartesiaUnspokenTail, CartesiaTurnStream } from "./cartesia-token-coalesce.js";
 
 describe("pushCartesiaSpeakable", () => {
   it("does not wait for a Latin word boundary (VoBiz dies if we add 3000ms per word)", () => {
@@ -47,5 +47,19 @@ describe("pushCartesiaSpeakable", () => {
 
   it("flushes the held Indic tail at stream end", () => {
     expect(flushCartesiaSpeakable("SnapServe")).toBe("SnapServe");
+  });
+
+  it("returns the unspoken suffix after Cartesia closes on .!? (call 24547)", () => {
+    const sent = "சரி, அப்போ எந்த மாதிரி பிசினஸ்க்காக பாக்குறீங்க?";
+    const full = "சரி, அப்போ எந்த மாதிரி பிசினஸ்க்காக பாக்குறீங்க? அதாவது ஷாப்பா, ரெஸ்டாரண்ட்டா இல்ல ஆபீஸா?";
+    expect(cartesiaUnspokenTail(sent, full)).toBe(" அதாவது ஷாப்பா, ரெஸ்டாரண்ட்டா இல்ல ஆபீஸா?");
+  });
+
+  it("does not WS-continue after the first sentence end", () => {
+    const s = new CartesiaTurnStream();
+    expect(s.push("சரி, ")).toEqual(["சரி, "]);
+    expect(s.push("பாக்குறீங்க?")).toEqual(["பாக்குறீங்க?"]);
+    expect(s.push(" அதாவது ")).toEqual([]);
+    expect(s.finish("சரி, பாக்குறீங்க? அதாவது ஷாப்பா?")).toEqual([" அதாவது ஷாப்பா?"]);
   });
 });

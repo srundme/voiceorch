@@ -41,7 +41,7 @@ import {
   extractSentences,
   pickStreamedGreetingHead,
 } from "./clause-stream.js";
-import { flushCartesiaSpeakable, pushCartesiaSpeakable } from "./cartesia-token-coalesce.js";
+import { CartesiaTurnStream } from "./cartesia-token-coalesce.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
@@ -8801,8 +8801,8 @@ export class OrchestrationPipeline implements VoiceSession {
 
     let llmResponse = "";
     let pendingText  = "";
-    /** Cartesia: hold combining marks / unspaced Indic; stream Latin tokens (Sonic 3.6 managed buffer). */
-    let cartesiaTok = "";
+    /** Cartesia: stream tokens until first `.!?`, then leftover REST of full LLM text. */
+    const cartesiaTurn = new CartesiaTurnStream();
     // One-step output guard: suppresses any second question (and everything)
     // after it) so a turn that runs through multiple flow steps is truncated at
     // the first natural yield point. Mirrored into stored history below.
@@ -10117,9 +10117,7 @@ export class OrchestrationPipeline implements VoiceSession {
           const afterEnvelope = envelopeGuard.filter(afterBrackets);
           if (!afterEnvelope) return;
           if (this.cartesiaManagedTokenStream()) {
-            const r = pushCartesiaSpeakable(cartesiaTok, afterEnvelope);
-            cartesiaTok = r.rest;
-            for (const p of r.pieces) enqueue(p);
+            for (const p of cartesiaTurn.push(afterEnvelope)) enqueue(p);
             return;
           }
           pendingText += afterEnvelope;
@@ -10272,7 +10270,7 @@ export class OrchestrationPipeline implements VoiceSession {
         });
         llmResponse = "";
         pendingText  = "";
-        cartesiaTok = "";
+        cartesiaTurn.reset();
         llmFirstSentenceProcessed = false; // reset so fallback can also suppress its leading ack
         try {
           await this.fallbackLlm.chat(
@@ -10296,9 +10294,7 @@ export class OrchestrationPipeline implements VoiceSession {
               const afterBrackets = filterBrackets(filtered);
               if (!afterBrackets) return;
               if (this.cartesiaManagedTokenStream()) {
-                const r = pushCartesiaSpeakable(cartesiaTok, afterBrackets);
-                cartesiaTok = r.rest;
-                for (const p of r.pieces) enqueue(p);
+                for (const p of cartesiaTurn.push(afterBrackets)) enqueue(p);
                 return;
               }
               pendingText += afterBrackets;
@@ -10613,9 +10609,7 @@ export class OrchestrationPipeline implements VoiceSession {
       flushText = pendingText;
     }
     if (this.cartesiaManagedTokenStream()) {
-      const tail = flushCartesiaSpeakable(cartesiaTok);
-      cartesiaTok = "";
-      if (tail) enqueue(tail);
+      for (const p of cartesiaTurn.finish(cleanResponse)) enqueue(p);
     } else {
     const g = stepGuard.push(flushText);
     if (g.trim()) {
@@ -11242,7 +11236,7 @@ export class OrchestrationPipeline implements VoiceSession {
 
     let llmResponse = "";
     let pendingText = "";
-    let cartesiaTok = "";
+    const cartesiaTurn = new CartesiaTurnStream();
     // One-step output guard (same as the main turn path) — truncate at the first
     // natural yield point if the post-tool reply runs through multiple steps.
     const stepGuard = { push: (sentence: string) => sentence, truncated: () => false };
@@ -11484,9 +11478,7 @@ export class OrchestrationPipeline implements VoiceSession {
             if (followUpFillerTimer) { clearTimeout(followUpFillerTimer); followUpFillerTimer = null; }
           }
           if (this.cartesiaManagedTokenStream()) {
-            const r = pushCartesiaSpeakable(cartesiaTok, afterEnvelope);
-            cartesiaTok = r.rest;
-            for (const p of r.pieces) enqueue(p);
+            for (const p of cartesiaTurn.push(afterEnvelope)) enqueue(p);
             return;
           }
           pendingText += afterEnvelope;
@@ -11615,9 +11607,7 @@ export class OrchestrationPipeline implements VoiceSession {
       flushText = pendingText;
     }
     if (this.cartesiaManagedTokenStream()) {
-      const tail = flushCartesiaSpeakable(cartesiaTok);
-      cartesiaTok = "";
-      if (tail) enqueue(tail);
+      for (const p of cartesiaTurn.finish(cleanResponse)) enqueue(p);
     } else {
     const gFollow = stepGuard.push(flushText);
     if (gFollow.trim()) {
