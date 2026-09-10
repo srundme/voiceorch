@@ -230,6 +230,8 @@ export class CartesiaTTS implements TTSAdapter {
   private readonly leftoverPendingWaiters = new Map<string, Array<() => void>>();
   private readonly leftoverRestChains = new Map<string, Promise<void>>();
   private readonly finalizedWaiters = new Map<string, Array<() => void>>();
+  /** After clip-1 close, concatenate leftover text and REST once (not per token). */
+  private readonly closedRemainder = new Map<string, string>();
 
   constructor(
     apiKey: string,
@@ -391,6 +393,7 @@ export class CartesiaTTS implements TTSAdapter {
     this.leftoverPendingWaiters.clear();
     this.leftoverRestChains.clear();
     this.finalizedWaiters.clear();
+    this.closedRemainder.clear();
   }
 
   private buildWsUrl(): string {
@@ -791,6 +794,7 @@ export class CartesiaTTS implements TTSAdapter {
     this.leftoverPending.delete(turnContextId);
     this.closedTurns.delete(turnContextId);
     this.firstClipDone.delete(turnContextId);
+    this.closedRemainder.delete(turnContextId);
   }
 
   /**
@@ -799,6 +803,14 @@ export class CartesiaTTS implements TTSAdapter {
    * continue:false (that 400s) and resolve the owner pending instead.
    */
   private async completeTurnContext(turnContextId: string): Promise<void> {
+    const remainder = this.closedRemainder.get(turnContextId);
+    this.closedRemainder.delete(turnContextId);
+    if (remainder && remainder.length > 0) {
+      const owner = this.turnChunkHandlers.get(turnContextId) ?? (() => undefined);
+      await this.enqueueLeftoverRest(turnContextId, () =>
+        this.runLeftoverRest(turnContextId, remainder, owner, () => undefined, undefined, undefined),
+      );
+    }
     await this.waitLeftoversIdle(turnContextId);
     const chain = this.leftoverRestChains.get(turnContextId);
     if (chain) await chain.catch(() => undefined);
@@ -870,10 +882,10 @@ export class CartesiaTTS implements TTSAdapter {
       const waitOpen = this.turnOpened.get(turnContextId);
       if (waitOpen) await waitOpen;
       if (!this.pending.has(turnContextId)) {
-        // Owner already closed or fell back to REST. Do not open a fresh
-        // context_id — that is a second voice start (audible seam).
-        const owner = this.turnChunkHandlers.get(turnContextId) ?? onChunk;
-        return this.synthesizeViaRest(text, owner, onDone, signal, emotions);
+        const prev = this.closedRemainder.get(turnContextId) ?? "";
+        this.closedRemainder.set(turnContextId, prev + streamed);
+        onDone(streamed.length);
+        return;
       }
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
       const transcript = joinContinuationTranscript(
@@ -941,9 +953,10 @@ export class CartesiaTTS implements TTSAdapter {
     // WS so finalizeTurnContext can wait on leftoverPending even if this
     // sentence's IIFE has not reached getOrOpenWs yet.
     if (join && (this.closedTurns.has(turnContextId) || this.restFallbackTurns.has(turnContextId))) {
-      return this.enqueueLeftoverRest(turnContextId, () =>
-        this.runLeftoverRest(turnContextId, text, onChunk, onDone, signal, emotions),
-      );
+      const prev = this.closedRemainder.get(turnContextId) ?? "";
+      this.closedRemainder.set(turnContextId, prev + text);
+      onDone(text.length);
+      return;
     }
     const sink = join
       ? (this.turnChunkHandlers.get(turnContextId) ?? onChunk)

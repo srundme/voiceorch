@@ -265,6 +265,13 @@ describe("Cartesia adaptor contract (source)", () => {
     expect(src).toContain("cartesia_leftover_rest");
   });
 
+  it("sends leftover REST once from concatenated remainder after clip 1", () => {
+    const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
+    expect(src).toContain("closedRemainder");
+    expect(src).toContain("prev + text");
+    expect(src).toContain("prev + streamed");
+  });
+
   it("does not arm the playJob idle timer on skipDrain leftover REST (call 19809)", () => {
     const src = readFileSync(new URL("../../pipeline.ts", import.meta.url), "utf8");
     expect(src).toContain("if (job.skipDrain) return;");
