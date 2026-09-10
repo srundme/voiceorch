@@ -158,7 +158,7 @@ const INITIAL_STATE: WizardState = {
   maxDailyCalls: null,
   scheduledStartAt: null,
   scheduledEndAt: null,
-  autoStart: false,
+  autoStart: true,
   phoneCountryCode: "IN",
 };
 
@@ -1926,7 +1926,7 @@ function Step7({
             onCheckedChange={v => setState({ autoStart: v })}
           />
           <Label htmlFor="autostart" className="text-xs cursor-pointer">
-            Auto-start immediately after import
+            Start calling immediately after import
           </Label>
         </div>
       </div>

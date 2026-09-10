@@ -10,6 +10,7 @@ import {
 import { eq, and, count, desc, inArray, sql, isNull } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { reopenCampaignIfCompleted, platformConcurrencyHeadroom } from "../services/batchScheduler.js";
+import { csvBatchShouldStartNow } from "../services/campaign-dialable.js";
 import { normalizePhone as normalizePhoneSimple } from "../lib/phone-normalize.js";
 import { normalizePhone as normalizePhoneService, INDIA_PHONE_CONFIG, type WorkspacePhoneConfig } from "../services/phone-normalization.js";
 
@@ -172,7 +173,7 @@ async function fireStartBatch(batch: BatchRow, campaign: CampaignRow): Promise<v
       SELECT id FROM campaign_leads
       WHERE campaign_id = ${campaign.id}
         AND batch_id = ${batch.id}
-        AND call_status = 'pending'
+        AND call_status IN ('pending', 'queued')
         AND NOT EXISTS (
           SELECT 1 FROM call_retries cr
           WHERE cr.lead_id = campaign_leads.id
@@ -182,7 +183,7 @@ async function fireStartBatch(batch: BatchRow, campaign: CampaignRow): Promise<v
       ORDER BY id
       LIMIT ${slots}
     )
-    AND call_status = 'pending'
+    AND call_status IN ('pending', 'queued')
     RETURNING id
   `);
 
@@ -391,8 +392,10 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
 
   let [fresh] = await db.select().from(campaignBatchesTable).where(eq(campaignBatchesTable.id, batch!.id));
 
-  const wantsImmediateStart =
-    (fresh && fresh.scheduledStartAt && fresh.scheduledStartAt <= new Date()) || !!body.autoStart;
+  const wantsImmediateStart = csvBatchShouldStartNow({
+    autoStart: body.autoStart,
+    scheduledStartAt: fresh?.scheduledStartAt ?? null,
+  });
   if (wantsImmediateStart) {
     const irdaiGate = await evaluateCampaignIrdaiGate(campaign.agentId);
     if (irdaiGate.blocked) {

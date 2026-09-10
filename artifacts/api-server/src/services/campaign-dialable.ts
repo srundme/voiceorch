@@ -61,3 +61,20 @@ export function isCampaignDialable(campaign: DialableFields | null | undefined):
 
   return true;
 }
+
+/**
+ * CSV / batch create: start dialing unless the user picked a future Run At
+ * or explicitly set autoStart=false (hold as draft).
+ * Omitting autoStart (simple Create Batch) starts now — "Launch" must not
+ * leave leads queued until the 60s poll (call CSV campaigns stuck in queue).
+ */
+export function csvBatchShouldStartNow(opts: {
+  autoStart?: boolean;
+  scheduledStartAt?: Date | null;
+  now?: Date;
+}): boolean {
+  const now = opts.now ?? new Date();
+  const startAt = opts.scheduledStartAt ?? null;
+  if (startAt != null && startAt.getTime() > now.getTime()) return false;
+  return opts.autoStart !== false;
+}
