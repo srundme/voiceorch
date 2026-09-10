@@ -8811,9 +8811,15 @@ export class OrchestrationPipeline implements VoiceSession {
       // Extract any leading <emotion value="…"/> tag so the clean sentence goes
       // to TTS while the emotion array is forwarded to Cartesia's voice controls.
       // Skip markup-only leftovers (call 17666: truncated `<emotion value="c`).
-      const { emotion, text: cleanText } = extractEmotionTag(text);
+      // Cartesia concatenates tokens verbatim (call 24489: trim dropped " "
+      // so "நீங்க"+"முன்னாடி" became "நீங்கமுன்னாடி" and Sonic spelled junk).
+      const { emotion, text: cleanText } = extractEmotionTag(text, {
+        trim: !this.cartesiaManagedTokenStream(),
+      });
       if (!cleanText) return;
-      
+      const cartesiaSpaceOnly = this.cartesiaManagedTokenStream() && !cleanText.trim();
+      if (cartesiaSpaceOnly && sentenceQueue.length === 0) return;
+
       // P0 Fix (call 20088): Don't generate separate TTS for ultra-short fillers.
       // Fillers like "ओके", "अच्छा", "अच्छा जी" should be merged with the next
       // substantive sentence, not played as standalone clips. Separate TTS jobs for
@@ -8824,7 +8830,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // logic, so dropping standalone filler jobs does not lose content. If a filler
       // is the ONLY output (turn 1 pure "ஆமா"), it still plays (isBackchannelOnly
       // does not block a multi-word reply that STARTS with an ack).
-      if (isBackchannelOnlyUtterance(cleanText) && sentenceQueue.length > 0) {
+      if (isBackchannelOnlyUtterance(cleanText) && sentenceQueue.length > 0 && !cartesiaSpaceOnly) {
         logger.info(
           { callId: this.config.callId, evt: "standalone_filler_suppressed", textSnippet: cleanText.slice(0, 80) },
           "Pipeline: suppressed standalone ultra-short filler — will merge with next substantive sentence",
@@ -11217,8 +11223,11 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       // Extract any leading <emotion value="…"/> tag so the clean sentence goes
       // to TTS while the emotion array is forwarded to Cartesia's voice controls.
-      const { emotion, text: cleanText } = extractEmotionTag(text);
+      const { emotion, text: cleanText } = extractEmotionTag(text, {
+        trim: !this.cartesiaManagedTokenStream(),
+      });
       if (!cleanText) return;
+      if (this.cartesiaManagedTokenStream() && !cleanText.trim() && sentenceQueue.length === 0) return;
       const emotions = emotion ? mapEmotionToCartesia(emotion) : undefined;
       if (emotion && emotions) {
         logger.info(

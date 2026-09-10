@@ -122,7 +122,8 @@ const FIRST_CLIP_QUIET_MS = 400;
 
 /** Cartesia concatenates continuation transcripts verbatim. Do not insert a
  *  space — LLM tokens already carry their own whitespace (call 24404: "So"+"rry,"
- *  became "So rry," and Tamil virama was spoken as its own syllable). */
+ *  became "So rry,"). Do not *drop* those spaces either (call 24489: trim made
+ *  "நீங்க"+"முன்னாடி" → "நீங்கமுன்னாடி"). */
 export function joinContinuationTranscript(_previous: string, next: string): string {
   return next;
 }
