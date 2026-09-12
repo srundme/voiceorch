@@ -1,4 +1,5 @@
 import type { WebSocket } from "ws";
+import { PlaybackCheckpoints } from "./playback-checkpoints.js";
 import { createSession, getSession, getSessionByCampaignLeadId, getSessionByExternalCallId, endSession, failSession } from "../session.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
@@ -44,7 +45,8 @@ const vobizLegStartsInFlight = new Set<string>();
  */
 
 interface VobizMessage {
-  event: "connected" | "start" | "media" | "stop" | "mark";
+  event: "connected" | "start" | "media" | "stop" | "mark" | "playedStream" | "clearedAudio";
+  name?: string;
   sequenceNumber?: number;
   streamId?: string;
   mark?: {
@@ -129,6 +131,10 @@ export async function handleVobizWebSocket(
   // awaiting.  In that case sessionId was null at the time, so endSession was
   // skipped.  We detect this and call endSession immediately once sessionId is set.
   let sessionEndedBeforeReady = false;
+  const playback = new PlaybackCheckpoints((name) => {
+    if (!streamId || ws.readyState !== ws.OPEN) throw new Error("Vobiz socket not open");
+    ws.send(JSON.stringify({ event: "checkpoint", streamId, name }));
+  });
   let sessionStarting = false;
   // Caller audio can arrive while DB/config/provider setup is awaited. Retain
   // at most 5 seconds of PCM8k, not an unbounded queue during a stuck setup.
@@ -163,6 +169,7 @@ export async function handleVobizWebSocket(
    * Called by the pipeline when the caller speaks during agent playback.
    */
   function sendBargeIn(): void {
+    playback.clear();
     if (!streamId || ws.readyState !== ws.OPEN) return;
     ws.send(JSON.stringify({ event: "clearAudio", streamId }));
     logger.info({ streamId }, "Vobiz clearAudio sent (barge-in)");
@@ -284,6 +291,7 @@ export async function handleVobizWebSocket(
 
         try {
           const { sessionId: sid } = await createSession({
+            awaitPlaybackReceipt: () => playback.wait(),
             agentId,
             telephonyProvider: "vobiz",
             toNumber,
@@ -380,6 +388,14 @@ export async function handleVobizWebSocket(
         break;
       }
 
+      case "playedStream": {
+        if (msg.name) playback.acknowledge(msg.name);
+        break;
+      }
+      case "clearedAudio":
+        // Local clearAudio already invalidated outstanding receipts. Do not
+        // clear again: a delayed carrier confirmation may belong to an old turn.
+        break;
       case "mark": {
         if (sessionId && msg.mark?.name) {
           const session = getSession(sessionId);
@@ -391,6 +407,7 @@ export async function handleVobizWebSocket(
       }
 
       case "stop":
+        playback.close();
         clearPendingInput();
         logger.info({ sessionId }, "Vobiz stream stopped");
         if (sessionId) {
@@ -404,6 +421,7 @@ export async function handleVobizWebSocket(
   });
 
   ws.on("close", () => {
+    playback.close();
     clearPendingInput();
     logger.info({ sessionId }, "Vobiz WS closed");
     if (sessionId) {
@@ -417,6 +435,7 @@ export async function handleVobizWebSocket(
   });
 
   ws.on("error", (err: unknown) => {
+    playback.close();
     clearPendingInput();
     logger.error({ sessionId, err }, "Vobiz WS error");
     if (sessionId) {

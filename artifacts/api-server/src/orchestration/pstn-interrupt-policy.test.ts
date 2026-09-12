@@ -59,13 +59,13 @@ describe("call 20257 — greeting + VAD + empty/partial must not start a turn", 
     expect(decide20257("")).toEqual({ cutTts: false, processTurn: false });
   });
 
-  it("speech_start + Hello during the opener is ignored", () => {
-    expect(decide20257("Hello")).toEqual({ cutTts: false, processTurn: false });
-    expect(decide20257("Hello Madam")).toEqual({ cutTts: false, processTurn: false });
+  it("retains caller hello during the opener without cutting it", () => {
+    expect(decide20257("Hello")).toEqual({ cutTts: false, processTurn: true });
+    expect(decide20257("Hello Madam")).toEqual({ cutTts: false, processTurn: true });
   });
 
-  it("speech_start + room leftover during the opener is ignored", () => {
-    expect(decide20257("Hello இங்க பாருங்க")).toEqual({ cutTts: false, processTurn: false });
+  it("retains nonempty opener speech for deferred processing", () => {
+    expect(decide20257("Hello இங்க பாருங்க")).toEqual({ cutTts: false, processTurn: true });
   });
 
   it("yes / okay okay never cut TTS (answers, not barges)", () => {
@@ -80,7 +80,7 @@ describe("call 20257 — greeting + VAD + empty/partial must not start a turn", 
   });
 
   it("speech_start + yes okay stays below the Bolna 3-word floor", () => {
-    expect(decide20257("yes okay")).toEqual({ cutTts: false, processTurn: false });
+    expect(decide20257("yes okay")).toEqual({ cutTts: false, processTurn: true });
     expect(decide20257("yes okay", { greetingPlaying: false }))
       .toEqual({ cutTts: false, processTurn: true });
     expect(decide20257("yes okay continue", { greetingPlaying: false }))
@@ -89,8 +89,8 @@ describe("call 20257 — greeting + VAD + empty/partial must not start a turn", 
       .toEqual({ cutTts: true, processTurn: true });
   });
 
-  it("speech_start + wait/stop during the opener does not cut (Bolna welcome_played)", () => {
-    expect(decide20257("wait stop இருங்க")).toEqual({ cutTts: false, processTurn: false });
+  it("stop during the opener bypasses welcome mute", () => {
+    expect(decide20257("wait stop இருங்க")).toEqual({ cutTts: true, processTurn: true });
   });
 
   it("cuts TTS when the caller talks over a new clip with more than 3 words", () => {
@@ -131,4 +131,3 @@ describe("call 20257 — greeting + VAD + empty/partial must not start a turn", 
     expect(shouldAbandonStuckBarge({ bargeAgeMs: 3500 })).toBe(true);
   });
 });
-

@@ -56,7 +56,8 @@ export function resolveSpokenForHistory(opts: {
   barged: boolean;
   heardOnly: string;
   fullResponse: string;
+  requireDeliveryEvidence?: boolean;
 }): string {
-  if (opts.barged) return opts.heardOnly;
+  if (opts.barged || opts.requireDeliveryEvidence) return opts.heardOnly;
   return opts.heardOnly || opts.fullResponse;
 }

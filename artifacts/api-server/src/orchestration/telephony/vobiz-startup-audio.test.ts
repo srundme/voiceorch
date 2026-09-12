@@ -26,7 +26,10 @@ class Socket extends EventEmitter {
     this.message({ event: "media", media: { payload: pcm.toString("base64"), track } });
   }
 }
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.end.mockResolvedValue(undefined);
+});
 
 async function setup() {
   let ready!: (session: { sessionId: string }) => void;
@@ -39,6 +42,35 @@ async function setup() {
 }
 
 describe("Vobiz input during async call setup", () => {
+  it("wires checkpoints, clears and late carrier events to the session receipt hook", async () => {
+    const { socket, ready } = await setup();
+    ready();
+    await Promise.resolve();
+    const config = mocks.create.mock.calls[0]![0];
+    const checkpoint = () => JSON.parse(socket.send.mock.calls.at(-1)![0]);
+    const first = config.awaitPlaybackReceipt();
+    const firstEvent = checkpoint();
+    expect(firstEvent).toEqual({ event: "checkpoint", streamId: "stream", name: expect.any(String) });
+    socket.message({ event: "playedStream", name: firstEvent.name });
+    await expect(first).resolves.toBe("played");
+
+    const second = config.awaitPlaybackReceipt();
+    const secondEvent = checkpoint();
+    config.onBargeIn();
+    expect(checkpoint()).toEqual({ event: "clearAudio", streamId: "stream" });
+    await expect(second).resolves.toBe("cleared");
+
+    const third = config.awaitPlaybackReceipt();
+    const thirdEvent = checkpoint();
+    socket.message({ event: "clearedAudio" }); // delayed response to the earlier clear
+    socket.message({ event: "playedStream", name: secondEvent.name });
+    socket.message({ event: "playedStream", name: thirdEvent.name });
+    await expect(third).resolves.toBe("played");
+    const fourth = config.awaitPlaybackReceipt();
+    socket.emit("close");
+    await expect(fourth).resolves.toBe("closed");
+  });
+
   it("delivers initial caller audio in order, exactly once, before live frames", async () => {
     const { socket, ready } = await setup();
     socket.media(Buffer.alloc(320, 1));

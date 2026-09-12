@@ -14,12 +14,12 @@ export function isPstnStopHold(text: string, interruptionMgr: InterruptionManage
     || isAccidentalInterruptPhrase(t);
 }
 
-/** Bolna `discard_pre_welcome_utterance`: drop opener-window STT entirely. */
+/** Empty transcripts are not turns; nonempty opener speech must be retained. */
 export function shouldDiscardOpenerTranscript(
-  _transcript: string,
+  transcript: string,
   _interruptionMgr: InterruptionManager,
 ): boolean {
-  return true;
+  return !transcript.trim();
 }
 
 /** After a barge with no committed caller turn, resume listening (room chatter). */
@@ -49,16 +49,12 @@ export function shouldCutTtsFromCallerTranscript(opts: {
   if (!t) return false;
   if (!opts.agentSpeaking) return false;
   if (opts.isSelfEcho) return false;
+  if (isPstnStopHold(t, opts.interruptionMgr)) return true;
   const welcomePlayed = !(opts.greetingPlaybackActive || !!opts.systemPlaybackActive);
-  if (opts.inEchoGrace) {
-    return welcomePlayed && isPstnStopHold(t, opts.interruptionMgr);
-  }
+  if (opts.inEchoGrace) return false;
   // "yes" / "okay okay" are answers, not barges — unless they are hold/stop.
-  if (isBackchannelOnlyUtterance(t) && !isPstnStopHold(t, opts.interruptionMgr)) {
+  if (isBackchannelOnlyUtterance(t)) {
     return false;
-  }
-  if (isPstnStopHold(t, opts.interruptionMgr)) {
-    return welcomePlayed;
   }
   const minRms = opts.minBargeRms;
   const peak = opts.peakRawRms ?? 0;

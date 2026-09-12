@@ -2,20 +2,27 @@ import { describe, expect, it } from "vitest";
 import { shouldIgnoreSelfEcho } from "./self-echo-policy.js";
 
 describe("Bolna self-echo", () => {
-  it("welcome_played=false mutes every transcript including stop", () => {
+  it("rejects substantial matching output, but not a short answer or stop", () => {
+    const base = { agentSpeaking: true, welcomePlayed: false, isOverridePhrase: false,
+      recentAgentText: ["Hello I am calling from the travel desk."] };
+    expect(shouldIgnoreSelfEcho({ ...base, transcript: "I am calling from the travel desk" }).ignore).toBe(true);
+    expect(shouldIgnoreSelfEcho({ ...base, transcript: "Hello" }).ignore).toBe(false);
+    expect(shouldIgnoreSelfEcho({ ...base, transcript: "stop", isOverridePhrase: true }).ignore).toBe(false);
+  });
+  it("welcome state alone never mutes caller speech or stop", () => {
     expect(shouldIgnoreSelfEcho({
       transcript: "Hello",
       agentSpeaking: true,
       welcomePlayed: false,
       isOverridePhrase: false,
-    })).toEqual({ ignore: true, reason: "bolna_welcome" });
+    })).toEqual({ ignore: false, reason: "none" });
 
     expect(shouldIgnoreSelfEcho({
       transcript: "wait",
       agentSpeaking: true,
       welcomePlayed: false,
       isOverridePhrase: true,
-    }).ignore).toBe(true);
+    }).ignore).toBe(false);
   });
 
   it("does not drop one-word answers while the agent is speaking", () => {

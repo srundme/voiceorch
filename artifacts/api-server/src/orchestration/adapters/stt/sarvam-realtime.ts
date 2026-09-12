@@ -782,7 +782,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
           legacyStream?.setSilenceDurationMs?.(ms);
           return;
         }
-        const next = Math.max(150, Math.min(800, Math.round(ms)));
+        const next = Math.max(150, Math.min(2000, Math.round(ms)));
         if (!Number.isFinite(next) || next === silenceDurationMs) return;
         silenceDurationMs = next;
         logger.info({ silenceDurationMs: next }, "Sarvam STT realtime: silence_duration_ms");

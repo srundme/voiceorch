@@ -321,110 +321,24 @@ export function telephonyBandpass(samples: Int16Array): Int16Array {
   return bandpassFilter(samples, makeBiquadStates());
 }
 
-// --- Adaptive noise gate ---
-const GATE_RATIO          = 4.0;   // suppress frames below 4× estimated noise floor
-const NOISE_ALPHA         = 0.98;  // slow-tracking IIR for noise-frame noise floor updates
-const CALIB_ALPHA         = 0.7;   // fast-tracking IIR used during calibration phase
-const CALIB_FRAMES        = 25;    // ~500 ms @ 20 ms/frame before gating begins
-const NOISE_FRAME_BYTES   = 320;   // 20 ms @ 8 kHz → 160 samples → 320 bytes
-// Below-threshold frames are ATTENUATED, not replaced with pure digital silence.
-// Hard-zeroing erased short/soft utterances ("yes", "okay") entirely before they
-// reached any STT provider — the provider-independent one-word-reply loss (call
-// 2039). Attenuated frames keep enough residual signal for STT VADs to latch
-// onto quiet speech onsets while still suppressing background noise.
-const GATE_ATTENUATION    = 0.15;  // scale gated frames to 15% instead of zeroing
-// After a speech frame, keep the gate open for this many subsequent frames
-// (hangover) so brief pauses inside/around short utterances aren't clipped.
-const GATE_HANGOVER_FRAMES = 5;    // 5 × 20 ms = 100 ms hangover
-
-function rms(samples: Int16Array): number {
-  let sum = 0;
-  for (let i = 0; i < samples.length; i++) sum += (samples[i]! / 32768) ** 2;
-  return Math.sqrt(sum / samples.length);
-}
-
 /**
- * NoiseCanceller is stateful — create one instance per call session.
- * Call process(pcm8k) on every incoming 8 kHz LINEAR16 PCM chunk.
- *
- * Calibration phase (first CALIB_FRAMES frames ≈ 500 ms):
- *   Audio passes through unmodified while a fast IIR (CALIB_ALPHA) builds an
- *   initial noise floor estimate from the ambient environment.  Gating only
- *   begins after calibration completes.
- *
- * Active phase:
- *   - Noise frames (energy < noiseFloor × GATE_RATIO): attenuated to
- *     GATE_ATTENUATION (NOT zeroed — hard-zeroing erased short/soft caller
- *     utterances before STT); noise floor updated with slow IIR (NOISE_ALPHA).
- *   - Speech frames (energy ≥ noiseFloor × GATE_RATIO): passed through and the
- *     gate is held open for GATE_HANGOVER_FRAMES so speech onsets/tails are not
- *     clipped; noise floor is NOT updated downward so the calibrated background
- *     estimate is preserved across speech bursts.
+ * Speech-preserving telephony noise filtering. There is no reliable speech/noise
+ * label in this worker: learning the first 500 ms as noise can learn the caller.
+ * Keep the continuous bandpass, but never attenuate in-band audio based on RMS.
+ * This is not a neural denoiser or acoustic echo canceller.
  */
 export class NoiseCanceller {
   private readonly bqStates: BiquadState[] = makeBiquadStates();
-  private noiseFloor      = 0.0;
-  private calibFrameCount = 0;
-  private hangoverFrames  = 0;
-  /** Per-agent "Mic Sensitivity" lever (see mic-sensitivity.ts). Defaults to the
-   *  original hardcoded ratio so agents without the setting are unaffected. */
-  private readonly gateRatio: number;
 
-  constructor(gateRatio: number = GATE_RATIO) {
-    this.gateRatio = gateRatio;
-  }
+  // Retain the constructor argument for callers with legacy mic-sensitivity settings.
+  constructor(_legacyGateRatio?: number) {}
 
   process(pcm8k: Buffer): Buffer {
-    const samples = new Int16Array(pcm8k.buffer, pcm8k.byteOffset, pcm8k.length / 2);
-
-    // Stage 1 — bandpass
-    const filtered = bandpassFilter(samples, this.bqStates);
-
-    // Stage 2 — adaptive noise gate (process in 20 ms frames)
-    const frameSize = NOISE_FRAME_BYTES / 2;   // 160 samples
-    const out = new Int16Array(filtered.length);
-
-    for (let offset = 0; offset < filtered.length; offset += frameSize) {
-      const end    = Math.min(offset + frameSize, filtered.length);
-      const frame  = filtered.subarray(offset, end);
-      const energy = rms(frame);
-
-      if (this.calibFrameCount < CALIB_FRAMES) {
-        // Calibration phase: build ambient noise estimate, pass audio through.
-        this.noiseFloor = this.calibFrameCount === 0
-          ? energy
-          : CALIB_ALPHA * this.noiseFloor + (1 - CALIB_ALPHA) * energy;
-        this.calibFrameCount++;
-        out.set(frame, offset);
-        continue;
-      }
-
-      if (energy < this.noiseFloor * this.gateRatio) {
-        if (this.hangoverFrames > 0) {
-          // Hangover: a speech frame occurred recently — keep the gate open so
-          // brief dips inside/around a short utterance aren't clipped. The
-          // noise floor is NOT updated here (the frame may carry a speech tail).
-          this.hangoverFrames--;
-          out.set(frame, offset);
-        } else {
-          // Noise frame: update noise floor estimate and attenuate. Never
-          // hard-zero — pure digital silence erased short/soft utterances
-          // entirely before they reached any STT provider (call 2039).
-          this.noiseFloor = NOISE_ALPHA * this.noiseFloor + (1 - NOISE_ALPHA) * energy;
-          for (let i = offset; i < end; i++) {
-            out[i] = Math.round(filtered[i]! * GATE_ATTENUATION);
-          }
-        }
-      } else {
-        // Speech frame: pass through and hold the gate open; do NOT pull the
-        // noise floor down — preserve the calibrated background estimate
-        // across speech bursts.
-        this.hangoverFrames = GATE_HANGOVER_FRAMES;
-        out.set(frame, offset);
-      }
-    }
-
-    return Buffer.from(out.buffer);
+    if (pcm8k.length % 2 !== 0) throw new Error("PCM16 input must contain complete samples");
+    // Buffer slices need not have an aligned byteOffset.
+    const samples = new Int16Array(pcm8k.length / 2);
+    for (let i = 0; i < samples.length; i++) samples[i] = pcm8k.readInt16LE(i * 2);
+    return Buffer.from(bandpassFilter(samples, this.bqStates).buffer);
   }
 }
 

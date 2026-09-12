@@ -44,7 +44,8 @@ import { createLLMAdapter } from "./adapters/llm/index.js";
 import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "./mic-sensitivity.js";
 import { FORCE_SOFTWARE_NOISE_GATE_KEY } from "./noise-gate.js";
 import { loadPcmLoop, TRACK_PARAMS } from "./ambient.js";
-import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics } from "./types.js";
+import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics, SessionConfig } from "./types.js";
+import { resolveSarvamEndpointingMs } from "./endpointing-settings.js";
 import { logger } from "../lib/logger.js";
 import { MEETING_BEHAVIOR_PROMPT, parseMeetingsConfig } from "../services/meeting-runtime.js";
 import {
@@ -227,6 +228,7 @@ export async function createSession(params: {
   /** Campaign lead ID — if set, lead data is merged into prompt variable resolution */
   campaignLeadId?: number;
   onAudioOut: (audio: Buffer) => void;
+  awaitPlaybackReceipt?: SessionConfig["awaitPlaybackReceipt"];
   onCallEnd: () => void;
   onBargeIn?: () => void;
   /** Forwards every finalized transcript line (user + agent) to the transport so a
@@ -701,7 +703,7 @@ export async function createSession(params: {
     // Wall-clock VAD windows; the adapter converts them to frames at the live
     // sample rate. Null means "leave the provider default alone".
     sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
-    sarvamEndOfSpeechSilenceMs: optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]),
+    sarvamEndOfSpeechSilenceMs: resolveSarvamEndpointingMs(agentCfg),
     sarvamVadThreshold: optionalUnitInterval(agentCfg["sarvamVadThreshold"]),
     semanticTurnDetection: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? false
@@ -1989,6 +1991,7 @@ export async function createSession(params: {
         squad,
         previousPipeline: live.pipeline,
         hooks: {
+          awaitPlaybackReceipt: params.awaitPlaybackReceipt,
           callId: callRecord.id,
           telephonyProvider: params.telephonyProvider,
           callerPhone,
@@ -2370,6 +2373,7 @@ export async function createSession(params: {
     memoryOwnerAgentId,
     campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
+    awaitPlaybackReceipt: params.awaitPlaybackReceipt,
     rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
     rawPcmOutputRate: params.rawPcmOutputRate,
     voicemailDelivery: (params.voicemailDelivery || ((params.amdMachineHint || params.amdArmed) && amdVoicemailAction === "leave_message"))

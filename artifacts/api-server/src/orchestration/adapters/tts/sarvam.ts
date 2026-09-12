@@ -168,6 +168,7 @@ function retryDelayMs(attempt: number): number {
 }
 
 export class SarvamTTS implements TTSAdapter {
+  readonly synthesisScheduling = "serial" as const;
   private key: string;
   private speaker: string;
   private model: string;
@@ -535,17 +536,28 @@ export class SarvamTTS implements TTSAdapter {
     onChunk: (pcm16k: Buffer) => void,
     onDone: (characters: number) => void,
     signal?: AbortSignal,
+    _emotions?: string[],
+    onStarted?: () => void,
   ): Promise<void> {
     if (signal?.aborted) throw abortError();
     if (this.closed) throw new Error("SarvamTTS: closed");
 
     const previous = this.synthesisTail;
     let release!: () => void;
-    this.synthesisTail = new Promise<void>((resolve) => { release = resolve; });
+    const slot = new Promise<void>((resolve) => { release = resolve; });
+    // A cancelled waiter may release itself early, but never the preceding slot.
+    this.synthesisTail = previous.then(() => slot);
     try {
-      await previous;
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => { cleanup(); reject(abortError()); };
+        const cleanup = () => signal?.removeEventListener("abort", onAbort);
+        signal?.addEventListener("abort", onAbort, { once: true });
+        if (signal?.aborted) { onAbort(); return; }
+        previous.then(() => { cleanup(); resolve(); }, (err) => { cleanup(); reject(err); });
+      });
       if (signal?.aborted) throw abortError();
       if (this.closed) throw new Error("SarvamTTS: closed");
+      onStarted?.();
 
       let lastErr: unknown;
       for (let attempt = 0; attempt < WS_RETRY_MAX; attempt++) {
