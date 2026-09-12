@@ -1,24 +1,24 @@
 // μ-law (G.711 PCMU) codec — used by Twilio and Plivo
 // 8-bit mulaw ↔ 16-bit linear PCM
 
-const MULAW_BIAS = 33;
-const MULAW_MAX = 0x1fff;
+// G.711's bias is 33 in the 14-bit domain, but this codec accepts PCM16.
+const MULAW_BIAS = 0x84;
+const MULAW_MAX = 32635;
 
 export function mulawToLinear(mulaw: number): number {
   mulaw = ~mulaw & 0xff;
   const sign = mulaw & 0x80 ? -1 : 1;
   const exponent = (mulaw >> 4) & 0x07;
   const mantissa = mulaw & 0x0f;
-  const sample = ((mantissa << 1) + 33) << (exponent + 1);
-  return sign * (sample - MULAW_BIAS);
+  const sample = ((mantissa << 3) + MULAW_BIAS) << exponent;
+  return sample === MULAW_BIAS ? 0 : sign * (sample - MULAW_BIAS);
 }
 
 export function linearToMulaw(sample: number): number {
   const sign = sample < 0 ? 0x80 : 0;
   if (sample < 0) sample = -sample;
-  sample = Math.min(sample, 32767);
+  sample = Math.min(sample, MULAW_MAX);
   sample += MULAW_BIAS;
-  if (sample > MULAW_MAX) sample = MULAW_MAX;
 
   let exponent = 7;
   for (let expMask = 0x4000; (sample & expMask) === 0 && exponent > 0; exponent--, expMask >>= 1) {}

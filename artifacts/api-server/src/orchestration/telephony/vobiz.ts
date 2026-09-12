@@ -14,8 +14,8 @@ const vobizCallUuidStartsInFlight = new Set<string>();
 const vobizLegStartsInFlight = new Set<string>();
 
 /**
- * VoBiz also denoises in its media layer, but the agent's Noise Cancellation
- * toggle is still honored here. This handler does not decide that itself: it
+ * The agent's Noise Cancellation toggle is honored here; this integration
+ * does not establish whether carrier-side denoising is present. The handler
  * passes no noiseCancel flag and lets the pipeline (classic or Gemini Live)
  * apply resolveSoftwareNoiseGate. Hardcoding false here used to make the
  * toggle a silent no-op for every VoBiz agent. See orchestration/noise-gate.ts.
@@ -24,8 +24,8 @@ const vobizLegStartsInFlight = new Set<string>();
 /**
  * Vobiz WebSocket handler
  *
- * Vobiz uses a Twilio-like Media Streams protocol but with LINEAR16 PCM audio,
- * NOT mulaw. Key differences from Twilio:
+ * This integration requests LINEAR16 PCM8k input. Vobiz also supports other
+ * inbound formats; do not assume they are interchangeable with this path.
  *
  * Inbound event flow (Vobiz → server):
  *   { event: "connected" }
@@ -40,7 +40,7 @@ const vobizLegStartsInFlight = new Set<string>();
  *
  * Audio format: LINEAR16 PCM at 8000 Hz (NOT mulaw like Twilio/Plivo)
  *
- * Docs: https://docs.vobiz.ai/guides/ai-voice-agent
+ * Docs: https://www.vobiz.ai/docs/concepts/streaming-websockets
  */
 
 interface VobizMessage {
@@ -129,6 +129,16 @@ export async function handleVobizWebSocket(
   // awaiting.  In that case sessionId was null at the time, so endSession was
   // skipped.  We detect this and call endSession immediately once sessionId is set.
   let sessionEndedBeforeReady = false;
+  let sessionStarting = false;
+  // Caller audio can arrive while DB/config/provider setup is awaited. Retain
+  // at most 5 seconds of PCM8k, not an unbounded queue during a stuck setup.
+  const pendingInput: Buffer[] = [];
+  let pendingInputBytes = 0;
+  const maxPendingInputBytes = 8000 * 2 * 5;
+  function clearPendingInput(): void {
+    pendingInput.length = 0;
+    pendingInputBytes = 0;
+  }
 
   /**
    * Send audio to Vobiz caller via the playAudio WebSocket event.
@@ -230,6 +240,7 @@ export async function handleVobizWebSocket(
         }
         if (resolvedCallId) vobizCallUuidStartsInFlight.add(resolvedCallId);
         if (legKey) vobizLegStartsInFlight.add(legKey);
+        sessionStarting = true;
 
         // Measures the pre-pipeline setup window (WS start → session ready).
         // Watch setupMs in prod for DB/setup latency; caller should hear ambient
@@ -313,12 +324,19 @@ export async function handleVobizWebSocket(
           stopSilence();                // safety-net: session ready with no audio yet
           sessionId = sid;
           if (sessionEndedBeforeReady) {
+            clearPendingInput();
             // VoBiz sent stop/closed the socket while createSession was still
             // setting up.  sessionId was null then so endSession was skipped —
             // call it now so the record is not stuck in_progress.
             logger.warn({ sessionId, agentId }, "Vobiz session ended before setup completed — ending immediately");
             await endSession(sessionId);
           } else {
+            const readySession = getSession(sid);
+            for (const pcm of pendingInput) readySession?.pipeline.onRawPcm8kIn(pcm);
+            if (pendingInputBytes > 0) {
+              logger.info({ sessionId, bufferedInputMs: pendingInputBytes / 16 }, "Vobiz: delivered caller audio retained during session setup");
+            }
+            clearPendingInput();
             logger.info({ sessionId, agentId, fromNumber, toNumber, streamId, setupMs: Date.now() - sessionSetupStartedAt }, "Vobiz session started");
           }
         } catch (err) {
@@ -329,6 +347,8 @@ export async function handleVobizWebSocket(
           );
           ws.close();
         } finally {
+          sessionStarting = false;
+          clearPendingInput();
           if (resolvedCallId) vobizCallUuidStartsInFlight.delete(resolvedCallId);
           if (legKey) vobizLegStartsInFlight.delete(legKey);
         }
@@ -336,8 +356,19 @@ export async function handleVobizWebSocket(
       }
 
       case "media": {
-        if (!sessionId || !msg.media?.payload) break;
+        if (!msg.media?.payload || sessionEndedBeforeReady) break;
         if (msg.media.track && msg.media.track !== "inbound") break;
+        if (!sessionId) {
+          if (!sessionStarting) break;
+          const pcm = Buffer.from(msg.media.payload, "base64");
+          if (pcm.length === 0 || pcm.length % 2 !== 0) break;
+          // Oversized messages retain only a bounded, sample-aligned tail.
+          const bounded = Buffer.from(pcm.subarray(Math.max(0, pcm.length - maxPendingInputBytes)));
+          pendingInput.push(bounded);
+          pendingInputBytes += bounded.length;
+          while (pendingInputBytes > maxPendingInputBytes) pendingInputBytes -= pendingInput.shift()!.length;
+          break;
+        }
         const session = getSession(sessionId);
         if (!session) break;
         // Vobiz sends inbound audio as little-endian LINEAR16 PCM (same as outbound).
@@ -360,6 +391,7 @@ export async function handleVobizWebSocket(
       }
 
       case "stop":
+        clearPendingInput();
         logger.info({ sessionId }, "Vobiz stream stopped");
         if (sessionId) {
           getSession(sessionId)?.pipeline.noteMediaDropIfWaitingForReply();
@@ -372,6 +404,7 @@ export async function handleVobizWebSocket(
   });
 
   ws.on("close", () => {
+    clearPendingInput();
     logger.info({ sessionId }, "Vobiz WS closed");
     if (sessionId) {
       getSession(sessionId)?.pipeline.noteMediaDropIfWaitingForReply();
@@ -384,6 +417,7 @@ export async function handleVobizWebSocket(
   });
 
   ws.on("error", (err: unknown) => {
+    clearPendingInput();
     logger.error({ sessionId, err }, "Vobiz WS error");
     if (sessionId) {
       failSession(sessionId, toReadableError(err, "Telephony error")).catch((e: unknown) =>
@@ -453,12 +487,8 @@ export function getVobizAnswerXML(
   // XML with HangupCauseCode 8011 "Invalid Answer XML" and drops the call before
   // opening the WebSocket.  VoBiz decodes &amp; back to & when it reads the URL.
   const wsUrlXml = wsUrl.replace(/&/g, "&amp;");
-  // contentType="audio/x-l16;rate=8000" explicitly negotiates LINEAR16 8kHz for
-  // both the inbound stream and the outbound playAudio events.  Without this,
-  // Vobiz may default to µ-law, which causes it to mis-decode our LINEAR16
-  // playAudio payload — producing the "tractor/glitch" audio artifact on the
-  // caller side.  Per Vobiz docs the playAudio contentType must match the
-  // stream-negotiated format, so locking it here fixes the outbound path.
+  // This negotiates INBOUND PCM8k only. Outbound playAudio independently
+  // declares its real format; Vobiz does not require both directions to match.
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-l16;rate=8000">${wsUrlXml}</Stream>

@@ -550,12 +550,22 @@ export class SarvamTTS implements TTSAdapter {
       let lastErr: unknown;
       for (let attempt = 0; attempt < WS_RETRY_MAX; attempt++) {
         if (signal?.aborted) throw abortError();
+        let emittedAudio = false;
         try {
-          await this.synthesizeViaWs(text, onChunk, signal);
+          await this.synthesizeViaWs(text, (chunk) => {
+            if (signal?.aborted) return;
+            if (chunk.length > 0) emittedAudio = true;
+            onChunk(chunk);
+          }, signal);
+          if (signal?.aborted) throw abortError();
           onDone(text.length);
           return;
         } catch (err) {
           if (isAbort(err)) throw err;
+          // Playback consumes chunks concurrently. Restarting the full text
+          // after any bytes escaped repeats the prefix the caller already heard.
+          // Without provider word alignment there is no safe resumable offset.
+          if (emittedAudio) throw err;
           lastErr = err;
           if (err instanceof SarvamWsFatalError) {
             logger.warn({ err }, "SarvamTTS WS fatal (auth/quota) — not retrying WS");

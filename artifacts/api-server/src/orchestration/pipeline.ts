@@ -7036,6 +7036,10 @@ export class OrchestrationPipeline implements VoiceSession {
     if (turnContextId && sequenceId !== FILLER_SEQUENCE_ID && this.tts instanceof CartesiaTTS) {
       job.skipDrain = !this.tts.claimTurnContext(turnContextId);
     }
+    // bargeInRequested is reset for the next turn. Sequence validity is the
+    // durable ownership check for delayed provider callbacks / REST recovery.
+    const isObsolete = (): boolean => this.closed || this.bargeInRequested
+      || !this.interruptionMgr.isValidSequence(sequenceId);
 
     // Backchannels use the agent's TTS voice (call 20282: preset WAVs were a
     // different speaker — "Mm-hmm" / "ahamm" did not match Cartesia).
@@ -7058,7 +7062,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // job.pcmQueue for later draining. Pure buffering, no recording/ambient/
       // encoding — safe to run ahead of actual playback.
       const flush = (): void => {
-        if (accum.length === 0 || this.closed || this.bargeInRequested) {
+        if (accum.length === 0 || isObsolete()) {
           accum = [];
           accumSize = 0;
           return;
@@ -7086,6 +7090,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // indefinitely and the caller hears complete silence until Vobiz drops.
       const ttsAbort = new AbortController();
       this.activeTtsAborts.add(ttsAbort);
+      let timedOut = false;
       let ttsTimerId: ReturnType<typeof setTimeout> | null = null;
       const armTtsIdleTimer = (ms: number): void => {
         // Call 19809: skipDrain leftover REST waits for Cartesia clip 1 (can be
@@ -7095,18 +7100,19 @@ export class OrchestrationPipeline implements VoiceSession {
         if (ttsTimerId) clearTimeout(ttsTimerId);
         ttsTimerId = setTimeout(() => {
           logger.warn({ callId: this.config.callId }, "TTS streaming timed out — aborting fetch");
+          timedOut = true;
           ttsAbort.abort();
         }, ms);
       };
       if (!job.skipDrain) armTtsIdleTimer(TTS_STREAM_TIMEOUT_MS); // initial: wait for the first byte
       const closedWatcher = setInterval(() => {
-        if (this.closed || this.bargeInRequested) ttsAbort.abort();
+        if (isObsolete()) ttsAbort.abort();
       }, 50);
 
       void (async () => {
         try {
           const onTtsChunk = (chunk: Buffer): void => {
-            if (this.closed || this.bargeInRequested) return;
+            if (ttsAbort.signal.aborted || isObsolete()) return;
             if (this._tTurnTtsFirstByte === null) this._tTurnTtsFirstByte = performance.now();
             if (_ttsFirstByteMs === null) _ttsFirstByteMs = Date.now() - _ttsReqStart;
             _ttsTotalBytes += chunk.length;
@@ -7131,14 +7137,17 @@ export class OrchestrationPipeline implements VoiceSession {
             // Idle timeout with zero bytes: retry once via REST/one-shot so the
             // caller still hears the sentence (call 16986: greeting + follow-up
             // streams hung, agent never spoke after "hello").
-            if (!this.closed && !this.bargeInRequested && _ttsTotalBytes === 0 && !job.skipDrain) {
+            if (timedOut && !isObsolete() && _ttsTotalBytes === 0 && !job.skipDrain) {
               try {
                 const { audio } = await this.tts.synthesize(text);
-                if (audio?.length && !this.closed && !this.bargeInRequested) {
+                if (audio?.length && !isObsolete()) {
                   // Keep job.streaming true so an in-flight drain can play
                   // these blocks from pcmQueue (switching to nonStreamAudio
                   // after drain already entered the stream path is silent).
                   job.pcmQueue.push(audio);
+                  _ttsAccumBytes += audio.length;
+                  _ttsTotalBytes += audio.length;
+                  _ttsFirstByteMs = Date.now() - _ttsReqStart;
                   job.audioDurationMs = this.ttsDurationMs(audio.length);
                   logger.info(
                     { callId: this.config.callId, textLength: text.length, audioBytes: audio.length },
@@ -7150,8 +7159,8 @@ export class OrchestrationPipeline implements VoiceSession {
               }
             } else if (
               TTS_MIDSTREAM_RESYNTH
-              && !this.closed
-              && !this.bargeInRequested
+              && timedOut
+              && !isObsolete()
               && _ttsAccumBytes > 0
               && text.length > 0
             ) {
@@ -7171,9 +7180,11 @@ export class OrchestrationPipeline implements VoiceSession {
                 const remainderChars = remainder.replace(/\s+/g, "").length;
                 if (remainderChars >= TTS_MIDSTREAM_MIN_REMAINDER_CHARS) {
                   const { audio } = await this.tts.synthesize(remainder);
-                  if (audio?.length && !this.closed && !this.bargeInRequested) {
+                  if (audio?.length && !isObsolete()) {
                     job.pcmQueue.push(audio);
-                    job.audioDurationMs = this.ttsDurationMs(_ttsAccumBytes + audio.length);
+                    _ttsAccumBytes += audio.length;
+                    _ttsTotalBytes += audio.length;
+                    job.audioDurationMs = this.ttsDurationMs(_ttsAccumBytes);
                     logger.info(
                       {
                         callId: this.config.callId,
@@ -7202,7 +7213,7 @@ export class OrchestrationPipeline implements VoiceSession {
           this.activeTtsAborts.delete(ttsAbort);
           flush(); // flush any leftover accumulator bytes after aborts
           job.audioDurationMs = this.ttsDurationMs(_ttsAccumBytes);
-          if (!job.synthError) {
+          if (!job.synthError && !isObsolete()) {
             this.logExec("TTS", "response", {
               provider: this.agent.ttsProvider,
               status: "success",
@@ -7221,11 +7232,11 @@ export class OrchestrationPipeline implements VoiceSession {
         const ttsAbort = new AbortController();
         this.activeTtsAborts.add(ttsAbort);
         const closedWatcher = setInterval(() => {
-          if (this.closed || this.bargeInRequested) ttsAbort.abort();
+          if (isObsolete()) ttsAbort.abort();
         }, 50);
         try {
           const { audio } = await this.tts.synthesize(text);
-          if (ttsAbort.signal.aborted || this.bargeInRequested || this.closed) return;
+          if (ttsAbort.signal.aborted || isObsolete()) return;
           if (!audio?.length) throw new Error("TTS returned empty audio");
           job.nonStreamAudio = audio;
           this.logExec("TTS", "response", {
