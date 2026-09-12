@@ -253,7 +253,7 @@ export function downsample24to16(buf24k: Buffer): Buffer {
 //
 // Two-stage pipeline applied to 8 kHz LINEAR16 PCM before it reaches any STT:
 //
-//   1. 4th-order Butterworth bandpass filter (300–3400 Hz)
+//   1. Cascaded second-order Butterworth high/low-pass filters (300–3400 Hz)
 //      Removes sub-300 Hz mains hum / HVAC rumble and >3400 Hz hiss.
 //      Coefficients computed for fs=8000 Hz via bilinear transform.
 //
@@ -262,14 +262,24 @@ export function downsample24to16(buf24k: Buffer): Buffer {
 //      low-energy frames) and suppresses frames whose energy is below
 //      GATE_RATIO × noiseFloor.  Speech frames are passed unmodified.
 
-// --- Butterworth 300–3400 Hz bandpass @ 8000 Hz (biquad cascade, 2 sections) ---
-// Each section: [b0, b1, b2, a1, a2]  (a0 = 1, direct form II)
-const BP_SECTIONS: [number, number, number, number, number][] = [
-  // Section 1
-  [ 0.13072,  0.0,      -0.13072, -1.38122,  0.73856 ],
-  // Section 2
-  [ 1.0,     -2.0,       1.0,     -1.64996,  0.84016 ],
-];
+// Each section: [b0, b1, b2, a1, a2] (a0 = 1, direct form I).
+// Derive coefficients from the cutoffs rather than unrelated rounded constants.
+// The old cascade peaked at 800 Hz (+6 dB) and suppressed 3 kHz by 22 dB,
+// removing speech consonants before STT instead of just out-of-band noise.
+function butterworthSection(cutoffHz: number, highpass: boolean): [number, number, number, number, number] {
+  const k = Math.tan(Math.PI * cutoffHz / 8000);
+  const norm = 1 / (1 + Math.SQRT2 * k + k * k);
+  const b0 = (highpass ? 1 : k * k) * norm;
+  return [
+    b0,
+    (highpass ? -2 : 2) * b0,
+    b0,
+    2 * (k * k - 1) * norm,
+    (1 - Math.SQRT2 * k + k * k) * norm,
+  ];
+}
+
+const BP_SECTIONS = [butterworthSection(300, true), butterworthSection(3400, false)];
 
 interface BiquadState { x1: number; x2: number; y1: number; y2: number }
 

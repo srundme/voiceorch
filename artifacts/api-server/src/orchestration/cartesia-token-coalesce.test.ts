@@ -55,14 +55,30 @@ describe("pushCartesiaSpeakable", () => {
     expect(cartesiaUnspokenTail(sent, full)).toBe(" அதாவது ஷாப்பா, ரெஸ்டாரண்ட்டா இல்ல ஆபீஸா?");
   });
 
-  it("does not WS-continue after the first sentence end", () => {
+  it("continues on the same stream after the first sentence end", () => {
     const s = new CartesiaTurnStream();
     expect(s.push("சரி, ")).toEqual(["சரி, "]);
     expect(s.push("பாக்குறீங்க?")).toEqual(["பாக்குறீங்க?"]);
-    expect(s.push(" அதாவது ")).toEqual([]);
+    expect(s.push(" அதாவது ")).toEqual([" அதாவது "]);
+    expect(s.push("ஷாப்பா?")).toEqual(["ஷாப்பா?"]);
     expect(s.finish("சரி, பாக்குறீங்க? அதாவது ஷாப்பா?")).toEqual({
       stream: [],
-      leftover: " அதாவது ஷாப்பா?",
+      leftover: "",
     });
+  });
+
+  it.each([
+    ["Hello.", " Are", " you", " ready?"],
+    ["कीमत ", "3.", "5 ", "है।", " ठीक ", "है?"],
+    ["சரி?", " சொன", "்ன", " பதில்"],
+  ])("preserves every token across punctuation and combining marks: %s", (...tokens: string[]) => {
+    const s = new CartesiaTurnStream();
+    const sent = tokens.flatMap((t) => s.push(t));
+    const end = s.finish(tokens.join(""));
+    expect([...sent, ...end.stream].join("")).toBe(tokens.join(""));
+    expect(end.leftover).toBe("");
+    s.reset();
+    expect(s.sent).toBe("");
+    expect(s.pending).toBe("");
   });
 });

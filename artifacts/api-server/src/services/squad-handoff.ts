@@ -328,10 +328,7 @@ async function buildTargetAgentConfig(
     // Wall-clock VAD windows; the adapter converts them to frames at the live
     // sample rate. Null means "leave the provider default alone".
     sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
-    sarvamEndOfSpeechSilenceMs: (() => {
-      const v = optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]);
-      return v === 300 || v === 500 ? null : v;
-    })(),
+    sarvamEndOfSpeechSilenceMs: optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]),
     sarvamVadThreshold: optionalUnitInterval(agentCfg["sarvamVadThreshold"]),
     semanticTurnDetection: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? false

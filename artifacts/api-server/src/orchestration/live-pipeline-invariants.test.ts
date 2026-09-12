@@ -148,7 +148,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("incrementalDelayMs: 0");
     expect(pipelineSrc).toContain("shouldInjectSchedulingPhrasebook");
     expect(pipelineSrc).toContain("needSchedulingGuides");
-    expect(pipelineSrc).toContain("earlyClause: this.agent.ttsProvider !== \"cartesia\"");
+    expect(pipelineSrc).toContain("return ttsSentenceOptions(this.agent.ttsProvider)");
     expect(methodBody("processTurn")).toContain("this.cartesiaManagedTokenStream()");
     expect(pipelineSrc).toContain("CartesiaTurnStream");
     expect(pipelineSrc).toContain("appendTurnRemainder");

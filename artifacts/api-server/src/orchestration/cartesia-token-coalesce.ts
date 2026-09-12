@@ -9,14 +9,13 @@
  *  - an unspaced Indic run until whitespace (virama can still attach)
  * Latin BPE ("cof"+"f") is streamed through; Sonic concatenates in the buffer.
  *
- * Sonic closes the first WS clip at `.!?` (call 24547). Tokens after that must
- * not be more WS continuations (0-byte). Speak the unspoken suffix of the full
- * LLM text as one leftover clip.
+ * Sentence punctuation is not a context-close signal. Keep streaming all
+ * sentences on the same context; only the adapter can observe a provider
+ * context-closed response and decide whether a fallback is needed.
  */
 
 const BREAK = /[\s.,;:!?…।॥]$/u;
 const INDIC = /[\u0900-\u0D7F]/u;
-export const CARTESIA_SENTENCE_END = /[.!?…।॥]/u;
 
 export function pushCartesiaSpeakable(pending: string, token: string): { pieces: string[]; rest: string } {
   const buf = pending + token;
@@ -56,17 +55,14 @@ export function cartesiaUnspokenTail(sent: string, full: string): string {
 export class CartesiaTurnStream {
   pending = "";
   sent = "";
-  hitPunct = false;
 
   push(token: string): string[] {
-    if (this.hitPunct) return [];
     const r = pushCartesiaSpeakable(this.pending, token);
     this.pending = r.rest;
     const out: string[] = [];
     for (const p of r.pieces) {
       out.push(p);
       this.sent += p;
-      if (CARTESIA_SENTENCE_END.test(p)) this.hitPunct = true;
     }
     return out;
   }
@@ -75,10 +71,9 @@ export class CartesiaTurnStream {
     const held = flushCartesiaSpeakable(this.pending);
     this.pending = "";
     const stream: string[] = [];
-    if (held && !this.hitPunct) {
+    if (held) {
       stream.push(held);
       this.sent += held;
-      if (CARTESIA_SENTENCE_END.test(held)) this.hitPunct = true;
     }
     return { stream, leftover: cartesiaUnspokenTail(this.sent, fullReply) };
   }
@@ -86,6 +81,5 @@ export class CartesiaTurnStream {
   reset(): void {
     this.pending = "";
     this.sent = "";
-    this.hitPunct = false;
   }
 }

@@ -701,10 +701,7 @@ export async function createSession(params: {
     // Wall-clock VAD windows; the adapter converts them to frames at the live
     // sample rate. Null means "leave the provider default alone".
     sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
-    sarvamEndOfSpeechSilenceMs: (() => {
-      const v = optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]);
-      return v === 300 || v === 500 ? null : v;
-    })(),
+    sarvamEndOfSpeechSilenceMs: optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]),
     sarvamVadThreshold: optionalUnitInterval(agentCfg["sarvamVadThreshold"]),
     semanticTurnDetection: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? false
@@ -1769,6 +1766,7 @@ export async function createSession(params: {
       status: "info",
       metadata: {
         event: "Provider Initialized", provider: agent.asrProvider,
+        model: agent.asrModel ?? null,
         // Use the effective language from agentConfig — may differ from agent.asrLanguage
         // when caller memory language_pref overrode it at session start.
         language: agentConfig.language ?? agent.asrLanguage ?? agent.language ?? null,
@@ -1784,7 +1782,7 @@ export async function createSession(params: {
     });
     logExec(EXEC_COMPONENTS.TTS, "system", {
       status: "info",
-      metadata: { event: "Provider Initialized", provider: agent.ttsProvider },
+      metadata: { event: "Provider Initialized", provider: agent.ttsProvider, model: agent.ttsModel ?? null },
     });
     logExec(EXEC_COMPONENTS.TTS, "system", {
       status: "info",

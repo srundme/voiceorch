@@ -64,7 +64,7 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
 
   it("synthesize() with no emotions passes through unaffected on success", async () => {
     const audioBytes = new Uint8Array([9, 9]).buffer;
-    const fetchMock = vi.fn(async () => ({
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
       ok: true,
       status: 200,
       arrayBuffer: async () => audioBytes,
@@ -76,7 +76,7 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.audio.length).toBe(2);
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as {
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string) as {
       voice?: Record<string, unknown>;
     };
     expect(body.voice).toEqual({ mode: "id", id: expect.any(String) });
@@ -147,8 +147,9 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
 });
 
 describe("appendCartesiaRemainder", () => {
-  it("inserts a space between leftover sentences", () => {
-    expect(appendCartesiaRemainder("வணக்கம்!", "இப்போ பேசலாமா?")).toBe("வணக்கம்! இப்போ பேசலாமா?");
+  it("preserves token boundaries and existing sentence whitespace", () => {
+    expect(appendCartesiaRemainder("வணக்கம்!", " இப்போ பேசலாமா?")).toBe("வணக்கம்! இப்போ பேசலாமா?");
+    expect(appendCartesiaRemainder("cof", "fee")).toBe("coffee");
     expect(appendCartesiaRemainder("Hello. ", "How are you?")).toBe("Hello. How are you?");
     expect(appendCartesiaRemainder("", "First.")).toBe("First.");
   });
@@ -270,7 +271,7 @@ describe("Cartesia adaptor contract (source)", () => {
   it("ignores premature context done until leftover REST + finalizeTurnContext (call 18112 / 19809)", () => {
     const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
     expect(src).toContain("claimedTurns.has(contextId)");
-    expect(src).toContain("finalizedTurns.has(contextId)");
+    expect(src).toContain("closingTurns.has(contextId)");
     expect(src).toContain("cartesia_context_closed_after_first_clip");
     expect(src).toContain("cartesia_leftover_rest");
   });
@@ -354,6 +355,89 @@ describe("Cartesia delay=0 leftover REST (call 19809 mid-sentence cut)", () => {
     vi.restoreAllMocks();
   });
 
+  it("sends every continuation before closing when the LLM finishes before WS opens", async () => {
+    const sockets: FakeCartesiaWs[] = [];
+    vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
+      constructor(url: string) { super(url); sockets.push(this); }
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const tts = new CartesiaTTS("test-key", null, "sonic-3.6", "hi-IN", null, 8000);
+    const chunks: Buffer[] = [];
+    tts.claimTurnContext("fast-llm");
+    const owner = tts.synthesizeStreamInContext("fast-llm", "नमस्ते।", (pcm) => chunks.push(pcm), () => {});
+    const join = tts.synthesizeStreamInContext("fast-llm", " आप कैसे हैं?", () => {}, () => {}, undefined, undefined, true);
+    tts.finalizeTurnContext("fast-llm");
+    try {
+      await join;
+      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBe(3));
+      const requests = sockets[0]!.sent.map((s) => JSON.parse(s));
+      expect(requests.map((r) => [r.transcript, r.continue])).toEqual([
+        ["नमस्ते।", true], [" आप कैसे हैं?", true], ["", false],
+      ]);
+      expect(requests.every((r) => r.context_id === "fast-llm")).toBe(true);
+      expect(requests[0]).toMatchObject({ model_id: "sonic-3.6", output_format: { sample_rate: 8000 } });
+      sockets[0]!.emit({ type: "chunk", context_id: "fast-llm", data: Buffer.from([1, 2]).toString("base64") });
+      sockets[0]!.emit({ type: "done", context_id: "fast-llm" });
+      await owner;
+      expect(Buffer.concat(chunks)).toEqual(Buffer.from([1, 2]));
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      tts.close();
+      await owner.catch(() => {});
+    }
+  });
+
+  it("reports a send failure instead of swallowing it in the send queue", async () => {
+    const tts = new CartesiaTTS("test-key", null, null);
+    const queue = tts as unknown as { enqueueTurnSend(id: string, send: () => void): Promise<void> };
+    await expect(queue.enqueueTurnSend("send-error", () => { throw new Error("socket closed"); })).rejects.toThrow("socket closed");
+    const next = vi.fn();
+    await queue.enqueueTurnSend("send-error", next);
+    expect(next).toHaveBeenCalledOnce();
+    tts.close();
+  });
+
+  it("cancels provider synthesis on barge-in and does not REST-replay the tail", async () => {
+    const sockets: FakeCartesiaWs[] = [];
+    vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
+      constructor(url: string) { super(url); sockets.push(this); }
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const tts = new CartesiaTTS("test-key", null, null);
+    const abort = new AbortController();
+    tts.claimTurnContext("interrupted");
+    const owner = tts.synthesizeStreamInContext("interrupted", "Hello.", () => {}, () => {}, abort.signal);
+    const rejected = expect(owner).rejects.toMatchObject({ name: "AbortError" });
+    await vi.waitFor(() => expect(sockets[0]?.sent.length).toBe(1));
+    tts.appendTurnRemainder("interrupted", " Do not play this after interruption.");
+    abort.abort();
+    tts.finalizeTurnContext("interrupted");
+    await rejected;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(sockets[0]!.sent.map((s) => JSON.parse(s))).toContainEqual({ context_id: "interrupted", cancel: true });
+    expect(fetchMock).not.toHaveBeenCalled();
+    tts.close();
+  });
+
+  it("does not finalize a context aborted before the handshake completed", async () => {
+    const sockets: FakeCartesiaWs[] = [];
+    vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
+      constructor(url: string) { super(url); sockets.push(this); }
+    });
+    const tts = new CartesiaTTS("test-key", null, null);
+    const abort = new AbortController();
+    abort.abort();
+    tts.claimTurnContext("early-abort");
+    const owner = tts.synthesizeStreamInContext("early-abort", "Hello.", () => {}, () => {}, abort.signal);
+    tts.finalizeTurnContext("early-abort");
+    await expect(owner).rejects.toMatchObject({ name: "AbortError" });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(sockets.flatMap((ws) => ws.sent)).toEqual([]);
+    tts.close();
+  });
+
   it("plays remaining sentences via REST into the owner sink after Cartesia closes the context", async () => {
     const sockets: FakeCartesiaWs[] = [];
     vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
@@ -364,7 +448,7 @@ describe("Cartesia delay=0 leftover REST (call 19809 mid-sentence cut)", () => {
     });
 
     const restPcm = new Uint8Array([20, 21, 22, 23]);
-    const fetchMock = vi.fn(async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
       let n = 0;
       return {
         ok: true,

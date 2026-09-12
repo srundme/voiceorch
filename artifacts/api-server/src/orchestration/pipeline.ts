@@ -40,6 +40,7 @@ import { shouldIgnoreSelfEcho } from "./self-echo-policy.js";
 import {
   extractSentences,
   pickStreamedGreetingHead,
+  ttsSentenceOptions,
 } from "./clause-stream.js";
 import { CartesiaTurnStream } from "./cartesia-token-coalesce.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
@@ -6784,12 +6785,12 @@ export class OrchestrationPipeline implements VoiceSession {
    * mirroring the web-call playback lifecycle.
    */
   /**
-   * Cartesia Sonic 3.5/3.6: wait for a real sentence (`.!?।`). Comma-clause
-   * dispatch turns "Hello Gopi, I'm Aisha…" into two clips plus a forced
-   * period — Sonic then speaks each fragment as a full stop, not a pause.
+   * Sarvam jobs are separate WS flushes: splitting mid-phrase resets prosody
+   * and adds serialized requests. Cartesia's non-token paths also retain
+   * natural sentence boundaries; its managed stream bypasses this extractor.
    */
   private ttsExtractOpts(): { earlyClause: boolean } {
-    return { earlyClause: this.agent.ttsProvider !== "cartesia" };
+    return ttsSentenceOptions(this.agent.ttsProvider);
   }
 
   /** Cartesia managed buffering: stream LLM tokens; do not wait for `.!?`.
@@ -8902,7 +8903,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // logic, so dropping standalone filler jobs does not lose content. If a filler
       // is the ONLY output (turn 1 pure "ஆமா"), it still plays (isBackchannelOnly
       // does not block a multi-word reply that STARTS with an ack).
-      if (isBackchannelOnlyUtterance(cleanText) && sentenceQueue.length > 0 && !cartesiaSpaceOnly) {
+      if (!this.cartesiaManagedTokenStream() && isBackchannelOnlyUtterance(cleanText) && sentenceQueue.length > 0) {
         logger.info(
           { callId: this.config.callId, evt: "standalone_filler_suppressed", textSnippet: cleanText.slice(0, 80) },
           "Pipeline: suppressed standalone ultra-short filler — will merge with next substantive sentence",
