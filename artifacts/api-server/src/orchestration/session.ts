@@ -1,4 +1,7 @@
 import { createHash, randomBytes } from "crypto";
+import { reserveCall, type CallLease } from "./call-admission.js";
+import { assertAcceptingCalls } from "./lifecycle.js";
+const callLeases = new Map<string, CallLease>();
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, leadNotesTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, eventTypesTable, scheduledCallbacksTable, campaignsTable, executionLogsTable, squadsTable, squadRunsTable, phoneNumbersTable } from "@workspace/db";
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
@@ -301,6 +304,7 @@ export async function createSession(params: {
   squadRunId?: number;
   squadId?: number;
 }): Promise<{ sessionId: string; callDbId: number }> {
+  assertAcceptingCalls();
   const createSessionStartMs = Date.now();
 
   // Browser "Live Test" transport — labels the call record + lifecycle log so the
@@ -317,7 +321,8 @@ export async function createSession(params: {
     throw new Error(`Agent ${params.agentId} not found`);
   }
 
-  // ── Concurrent call limit (per user, hard ceiling = 10) ──────────────────
+  // Reserve before asynchronous setup: shared across all server replicas.
+  let effectiveLimit = 10;
   if (agent.userId) {
     const [user] = await withDbRetry("load-user-concurrent-limit", () =>
       db
@@ -325,16 +330,18 @@ export async function createSession(params: {
         .from(usersTable)
         .where(eq(usersTable.clerkId, agent.userId!)),
     );
-    const effectiveLimit = user?.concurrentLimit ?? 10;
-    const activeForUser = Array.from(sessions.values()).filter(
-      s => s.agentUserId === agent.userId,
-    ).length;
-    if (activeForUser >= effectiveLimit) {
-      throw new Error(
-        `Concurrent call limit reached (${effectiveLimit}). Wait for an active call to finish.`,
-      );
-    }
+    effectiveLimit = user?.concurrentLimit ?? 10;
   }
+  let admittedSessionId: string | undefined;
+  const identity = params.corrToken ?? (params.campaignLeadId ? `lead:${params.campaignLeadId}` : params.externalCallId) ?? randomBytes(16).toString("hex");
+  const lease = await reserveCall(agent.userId ?? `agent:${agent.id}`, `${params.telephonyProvider}:${identity}`, effectiveLimit, () => {
+    if (admittedSessionId) void endSession(admittedSessionId, "ownership_lost");
+  });
+  const ownedAudioOut = (audio: Buffer) => {
+    try { lease.assertOwned(); } catch { return; }
+    params.onAudioOut(audio);
+  };
+  try {
 
   // Independent reads overlap memory-owner/context loading. Attach rejection
   // handlers immediately so an early failure cannot become unhandled.
@@ -2002,7 +2009,7 @@ export async function createSession(params: {
           telephonyProvider: params.telephonyProvider,
           callerPhone,
           campaignLeadId: params.campaignLeadId ?? null,
-          onAudioOut: params.onAudioOut,
+          onAudioOut: ownedAudioOut,
           onCallEnd: () => {
             naturalEndTriggered = true;
             params.onCallEnd();
@@ -2309,7 +2316,7 @@ export async function createSession(params: {
         meetingMuteWhenIdle: isMeetBotSession ? meetingsCfg.muteWhenIdle : false,
         memoryOwnerAgentId,
         campaignLeadId: params.campaignLeadId ?? null,
-        onAudioOut: params.onAudioOut,
+        onAudioOut: ownedAudioOut,
         rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
         rawPcmOutputRate: params.rawPcmOutputRate,
         onTranscript: (speaker, text) => {
@@ -2378,7 +2385,7 @@ export async function createSession(params: {
     meetingMuteWhenIdle: isMeetBotSession ? meetingsCfg.muteWhenIdle : false,
     memoryOwnerAgentId,
     campaignLeadId: params.campaignLeadId ?? null,
-    onAudioOut: params.onAudioOut,
+    onAudioOut: ownedAudioOut,
     awaitPlaybackReceipt: params.awaitPlaybackReceipt,
     rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
     rawPcmOutputRate: params.rawPcmOutputRate,
@@ -2494,6 +2501,10 @@ export async function createSession(params: {
     onProviderIssue: params.onProviderIssue,
   });
 
+  try { assertAcceptingCalls(); lease.assertOwned(); }
+  catch (err) { pipeline.close(); throw err; }
+  admittedSessionId = sessionId;
+  callLeases.set(sessionId, lease);
   sessions.set(sessionId, {
     callId: callRecord.id,
     agentId: params.agentId,
@@ -2585,6 +2596,9 @@ export async function createSession(params: {
   }
 
   return { sessionId, callDbId: callRecord.id };
+  } finally {
+    if (!admittedSessionId || !sessions.has(admittedSessionId)) await lease.release();
+  }
 }
 
 export function getSession(sessionId: string): ActiveSession | undefined {
@@ -2737,6 +2751,9 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
     : null;
 
   sessions.delete(sessionId);
+  const lease = callLeases.get(sessionId);
+  callLeases.delete(sessionId);
+  void lease?.release();
   session.pipeline.close();
   destroyAudioSession(String(session.callId));
   void patchSessionMeta(sessionId, { status: "ended" }, 3600);
@@ -4139,6 +4156,9 @@ export async function failSession(sessionId: string, errorMessage: string): Prom
   if (!session) return;
 
   sessions.delete(sessionId);
+  const lease = callLeases.get(sessionId);
+  callLeases.delete(sessionId);
+  void lease?.release();
   session.pipeline.close();
   void patchSessionMeta(sessionId, { status: "failed" }, 3600);
   void removeSession(sessionId, session.callId);

@@ -1,5 +1,7 @@
 // Deployment rebuild marker: orchestration playback and caller-audio fixes.
 import http from "http";
+import { beginDraining, callDrainMs } from "./orchestration/lifecycle.js";
+import { initializeCallAdmission } from "./orchestration/call-admission.js";
 import { randomBytes } from "crypto";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -42,6 +44,8 @@ import { eq, sql } from "drizzle-orm";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const workerFile = join(__dirname, "orchestration", "audioWorker.mjs");
+// Create/warm the additive lease table during boot, not the first call.
+void initializeCallAdmission().catch(err => logger.error({ err }, "Call admission initialization failed"));
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -588,6 +592,8 @@ let isShuttingDown = false;
 async function gracefulShutdown(signal: string) {
   if (isShuttingDown) return; // ignore repeated SIGTERM/SIGINT during drain
   isShuttingDown = true;
+  beginDraining();
+  const drainMs = callDrainMs();
   logger.info({ signal }, "Received shutdown signal, closing server");
   void agnost.shutdown();
 
@@ -595,7 +601,7 @@ async function gracefulShutdown(signal: string) {
   const force = setTimeout(() => {
     logger.warn("Forcing exit after timeout");
     process.exit(1);
-  }, 10_000);
+  }, drainMs + 15_000);
   force.unref();
 
   // 1) Stop accepting new connections.
@@ -604,11 +610,12 @@ async function gracefulShutdown(signal: string) {
     else logger.info("Server closed cleanly");
   });
 
-  // 2) Persist every live call before the process disappears. Railway deploys
-  // used to wipe the in-memory sessions Map while calls were active, leaving
-  // their DB rows in_progress and losing the recording buffer forever. End all
-  // sessions concurrently so recordings finalize and terminal status is stored
-  // within the deploy grace window.
+  // 2) Let existing calls finish; terminate/finalize only at the drain deadline.
+  // The hosting platform must allow CALL_DRAIN_MS + 15s before forced SIGKILL.
+  const deadline = Date.now() + drainMs;
+  while (getAllSessions().length > 0 && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
   const activeSessions = getAllSessions();
   if (activeSessions.length > 0) {
     logger.warn(

@@ -250,10 +250,11 @@ describe("clipRealtimePrompt", () => {
 });
 
 describe("buildSarvamTerminologyPrompt", () => {
-  it("includes B2B/CRM defaults and agent keyterms", () => {
+  it("includes only agent keyterms, not another industry's defaults", () => {
     const prompt = buildSarvamTerminologyPrompt(["TraviYo"], "GSTIN");
-    expect(prompt).toMatch(/B2B/);
-    expect(prompt).toMatch(/CRM/);
+    expect(prompt).not.toMatch(/B2B/);
+    expect(prompt).not.toMatch(/CRM/);
+    expect(buildSarvamTerminologyPrompt(undefined)).toBeUndefined();
     expect(prompt).toMatch(/TraviYo/);
     expect(prompt).toMatch(/GSTIN/);
   });

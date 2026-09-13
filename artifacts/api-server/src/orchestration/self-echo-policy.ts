@@ -16,8 +16,10 @@ export function shouldIgnoreSelfEcho(opts: {
   isOverridePhrase: boolean;
   wordFloor?: number;
   recentAgentText?: string[];
+  /** Bounded by the actual last output frame, not estimated sentence length. */
+  recentPlaybackTail?: boolean;
 }): { ignore: boolean; reason: SelfEchoReason } {
-  if (opts.isOverridePhrase || !opts.agentSpeaking) return { ignore: false, reason: "none" };
+  if (opts.isOverridePhrase || (!opts.agentSpeaking && !opts.recentPlaybackTail)) return { ignore: false, reason: "none" };
   const normalize = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}\p{M}\s]/gu, " ").replace(/\s+/g, " ").trim();
   const text = normalize(opts.transcript);
   // Short answers must survive. Only a substantial exact contiguous phrase

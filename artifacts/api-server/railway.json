@@ -16,6 +16,7 @@
     ]
   },
   "deploy": {
+    "drainingSeconds": "320",
     "healthcheckPath": "/api/healthz",
     "healthcheckTimeout": 60,
     "restartPolicyType": "ON_FAILURE",

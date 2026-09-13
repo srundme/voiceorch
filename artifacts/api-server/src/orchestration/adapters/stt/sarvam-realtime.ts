@@ -47,18 +47,11 @@ export function clipRealtimePrompt(raw: unknown): string | undefined {
   return t || undefined;
 }
 
-/** Default Indian B2B / travel terms so Saaras keeps B2B/CRM in Latin. */
-const DEFAULT_SARVAM_HINTS = [
-  "B2B", "B2C", "CRM", "integration", "travel portal",
-  "flight booking", "hotel booking", "GST", "UPI",
-];
-
 export function buildSarvamTerminologyPrompt(
   keyterms: string[] | undefined,
   extraPrompt?: string | null,
 ): string | undefined {
   const parts = [
-    ...DEFAULT_SARVAM_HINTS,
     ...(keyterms ?? []),
     ...(extraPrompt ? extraPrompt.split(/[,;]/).map((s) => s.trim()).filter(Boolean) : []),
   ];
@@ -564,8 +557,14 @@ export class SarvamRealtimeSTT implements STTAdapter {
           { code: msg.code, fatal: msg.is_fatal, message: msg.message, requestId: lastRequestId },
           "Sarvam STT realtime: error event",
         );
-        if (msg.is_fatal && !sessionBegan) {
-          fallbackToLegacy("fatal_error_before_session", { code: msg.code, message: msg.message });
+        if (msg.is_fatal && !intentionallyClosed) {
+          // Fatal protocol errors are terminal even if the socket remains open.
+          intentionallyClosed = true;
+          wsReady = false;
+          stopPing();
+          _onConnectionDead?.();
+          onClose?.();
+          ws?.close();
         }
         return;
       }
@@ -706,7 +705,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
         logger.info({ code, reason, sessionBegan }, "Sarvam STT realtime: socket closed");
         if (intentionallyClosed || usingLegacy) return;
         // 4000 = invalid model / account not enabled — fall back once.
-        if ((code === 4000 || code === 1003) && !sessionBegan) {
+        if (code === 4000 && !sessionBegan) {
           fallbackToLegacy("ws_close", { code, reason });
           return;
         }

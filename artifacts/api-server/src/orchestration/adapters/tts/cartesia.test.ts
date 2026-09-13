@@ -265,7 +265,8 @@ describe("Cartesia adaptor contract (source)", () => {
   it("sends voice on continue:false finalize so Cartesia does not 400 Voice ID required mid-clip", () => {
     const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
     expect(src).toContain('transcript: ""');
-    expect(src).toMatch(/transcript: "",\s*\n\s*voice: this\.buildVoice\(\)/);
+    expect(src).toContain("...this.settingsForContext(turnContextId)");
+    expect(src).toContain("voice: this.buildVoice()");
   });
 
   it("ignores premature context done until leftover REST + finalizeTurnContext (call 18112 / 19809)", () => {

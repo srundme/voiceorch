@@ -38,7 +38,9 @@ describe("Sarvam incomplete response recovery", () => {
     const fetcher = vi.fn().mockResolvedValueOnce(stream("length")).mockResolvedValueOnce(completed("Would you like help?"));
     vi.stubGlobal("fetch", fetcher);
     const tokens: string[] = [];
-    await new SarvamLLM("test", null).chat([], "", t => tokens.push(t), () => {});
+    const done = vi.fn();
+    await expect(new SarvamLLM("test", null).chat([], "", t => tokens.push(t), done)).rejects.toThrow("truncated");
+    expect(done).not.toHaveBeenCalled();
     expect(tokens.join("")).toBe("Can I hel");
   });
   it("does not repair a normally terminated stream", async () => {

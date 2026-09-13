@@ -1237,8 +1237,8 @@ export default function AgentEdit() {
                     <div className="space-y-3 p-4 border rounded-md bg-muted/20">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium leading-none">Noise Cancellation</p>
-                          <p className="text-xs text-muted-foreground mt-1">Removes fans, traffic, and hiss from caller audio. Does not ignore other people talking nearby — keep the phone close. Greeting echo is ignored so the agent does not barge herself. Browser web calls still use the mic&apos;s own noise suppression.</p>
+                          <p className="text-sm font-medium leading-none">Speech-band Noise Filter</p>
+                          <p className="text-xs text-muted-foreground mt-1">Filters out-of-band noise without suppressing quiet speech. Not acoustic echo cancellation; overlapping voices and in-band noise may remain. Browser microphone suppression depends on browser support.</p>
                         </div>
                         <FormField control={form.control} name="noiseCancellationEnabled" render={({ field }) => (
                           <FormItem>

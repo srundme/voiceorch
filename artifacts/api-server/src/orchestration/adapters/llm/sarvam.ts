@@ -726,10 +726,25 @@ ${systemPrompt}`
       };
 
       let buffer = "";
+      let streamTimedOut = false;
+      const responseDeadline = Date.now() + 120_000;
       try {
         while (true) {
           if (abort.signal.aborted) break;
-          const { done, value } = await reader.read();
+          let idleTimer: ReturnType<typeof setTimeout> | undefined;
+          const idleMs = Math.min(15_000, Math.max(1, responseDeadline - Date.now()));
+          const { done, value } = await Promise.race([
+            reader.read(),
+            new Promise<never>((_, reject) => {
+              idleTimer = setTimeout(() => {
+                streamTimedOut = true;
+                abort.abort();
+                void reader.cancel().catch(() => {});
+                reject(new Error("Sarvam response stalled before completion"));
+              }, idleMs);
+            }),
+          ]).finally(() => clearTimeout(idleTimer));
+          if (streamTimedOut) throw new Error("Sarvam response stalled before completion");
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
@@ -740,6 +755,7 @@ ${systemPrompt}`
             buffer = buffer.slice(nl + 1);
             if (line.startsWith("data:")) handleData(line.slice(5).trimStart());
           }
+          if (sawDone) { void reader.cancel().catch(() => {}); break; }
         }
 
         if (!abort.signal.aborted) {
@@ -748,6 +764,7 @@ ${systemPrompt}`
           if (tail.startsWith("data:")) handleData(tail.slice(5).trimStart());
         }
       } catch (err) {
+        if (streamTimedOut) throw new Error("Sarvam response stalled before completion");
         if (abort.signal.aborted) {
           try { await reader.cancel(); } catch { /* noop */ }
           return;
@@ -760,8 +777,10 @@ ${systemPrompt}`
         return;
       }
 
-      // A truncated stream is not a completed answer. Repair speech only, once,
-      // without exposing tools or repeating already streamed text. Exact-prefix
+      if (usage) options?.onUsage?.(usage);
+      logger.info({ callId: this.callId, model: this.model, finishReason, sawDone,
+        outputCharacters: full.length, evt: "sarvam_stream_termination" }, "Sarvam stream termination");
+      // Repair incomplete speech once without tools or replay. Exact-prefix
       // validation deliberately rejects rewrites (which would duplicate speech).
       const incomplete = finishReason === "length" || (!finishReason && !sawDone);
       if (incomplete && (sawToolDelta || bufferingJson)) {
@@ -805,9 +824,8 @@ ${systemPrompt}`
         finally { clearTimeout(timer); }
         if (abort.signal.aborted) return;
         logger.warn({ callId: this.callId, model: this.model, finishReason, sawDone, repaired, evt: "sarvam_incomplete_response" }, "Sarvam incomplete response repair result");
+        if (!repaired) throw new Error("Sarvam response truncated; repair failed (partial speech already delivered)");
       }
-
-      if (usage) options?.onUsage?.(usage);
 
       // Stream ended while still holding a possible XML prefix ("<", "<tool") —
       // flush it as speech rather than dropping it.

@@ -53,22 +53,29 @@ interface WorkerResponse {
 }
 
 interface Pending {
+  timer: ReturnType<typeof setTimeout>;
   resolve: (r: AudioProcessResult) => void;
   reject:  (e: Error) => void;
 }
 
-class AudioWorkerThread {
-  private worker: Worker;
+export class AudioWorkerThread {
+  private worker!: Worker;
+  private healthy = false;
+  private restarts = 0;
   private pending = new Map<string, Pending>();
 
   /** Number of in-flight requests on this worker — used for load-based routing. */
   get pendingCount(): number { return this.pending.size; }
 
-  constructor(workerUrl: URL) {
-    this.worker = new Worker(workerUrl);
+  constructor(private workerUrl: URL) { this.start(); }
+
+  private start(): void {
+    const worker = this.worker = new Worker(this.workerUrl);
+    this.healthy = true;
     this.worker.on("message", (msg: WorkerResponse) => {
       const p = this.pending.get(msg.id);
       if (!p) return;
+      clearTimeout(p.timer);
       this.pending.delete(msg.id);
       if (msg.error || !msg.pcm8k || !msg.pcm16kAb) {
         p.reject(new Error(msg.error ?? "Audio worker returned empty audio"));
@@ -81,11 +88,17 @@ class AudioWorkerThread {
         rawRms: msg.rawRms ?? 0,
       });
     });
-    this.worker.on("error", (err) => {
+    const fail = (err: Error) => {
+      if (this.worker !== worker || !this.healthy) return;
+      this.healthy = false;
       logger.error({ err }, "AudioWorker thread error");
-      for (const p of this.pending.values()) p.reject(err as Error);
+      for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(err); }
       this.pending.clear();
-    });
+      void worker.terminate();
+      if (this.restarts++ < 3) setTimeout(() => this.start(), 1000).unref();
+    };
+    worker.on("error", fail);
+    worker.on("exit", code => fail(new Error(`Audio worker exited (${code})`)));
   }
 
   process(
@@ -96,16 +109,22 @@ class AudioWorkerThread {
     gateRatio: number,
     vadThreshold: number,
   ): Promise<AudioProcessResult> {
+    if (!this.healthy || this.pending.size >= 1000) return Promise.reject(new Error("Audio worker unavailable or overloaded"));
     return new Promise((resolve, reject) => {
       const id = randomBytes(8).toString("hex");
-      this.pending.set(id, { resolve, reject });
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error("Audio processing deadline exceeded"));
+      }, 2000);
+      this.pending.set(id, { resolve, reject, timer });
       const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-      this.worker.postMessage({ id, type, callId, data: ab, noiseCancel, gateRatio, vadThreshold }, [ab]);
+      try { this.worker.postMessage({ id, type, callId, data: ab, noiseCancel, gateRatio, vadThreshold }, [ab]); }
+      catch (err) { clearTimeout(timer); this.pending.delete(id); reject(err); }
     });
   }
 
   destroySession(callId: string): void {
-    this.worker.postMessage({ type: "DESTROY_SESSION", callId });
+    if (this.healthy) this.worker.postMessage({ type: "DESTROY_SESSION", callId });
   }
 }
 

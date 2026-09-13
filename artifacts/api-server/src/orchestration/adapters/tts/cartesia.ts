@@ -233,6 +233,30 @@ export class CartesiaTTS implements TTSAdapter {
   /** First sentence's chunk sink — later continuations must not open a second stream. */
   private readonly turnChunkHandlers = new Map<string, (pcm: Buffer) => void>();
   private readonly turnLastTranscript = new Map<string, string>();
+  private readonly contextSettings = new Map<string, Record<string, unknown>>();
+  private readonly wordTimings = new Map<string, Array<{ word: string; end: number }>>();
+
+  playedText(contextId: string, audioMs: number): string {
+    return (this.wordTimings.get(contextId) ?? [])
+      .filter(w => w.end * 1000 <= audioMs).map(w => w.word).join(" ").trim();
+  }
+
+  private settingsForContext(contextId: string, emotions?: string[]): Record<string, unknown> {
+    let settings = this.contextSettings.get(contextId);
+    if (!settings) {
+      settings = { model_id: this.modelId, voice: this.buildVoice(),
+        output_format: this.outputFormat(), max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS,
+        add_timestamps: true };
+      const gc = this.buildGenerationConfig(emotions);
+      if (gc) settings.generation_config = gc;
+      this.applyLang(settings);
+      this.contextSettings.set(contextId, settings);
+      // Keep recently completed contexts until their paced audio finishes.
+      if (this.wordTimings.size >= 32) this.wordTimings.delete(this.wordTimings.keys().next().value!);
+      this.wordTimings.set(contextId, []);
+    }
+    return settings;
+  }
   private readonly claimedTurns = new Set<string>();
   private readonly turnSendChains = new Map<string, Promise<void>>();
   private readonly turnOpened = new Map<string, Promise<void>>();
@@ -617,6 +641,19 @@ export class CartesiaTTS implements TTSAdapter {
 
     const flushId = msg["flush_id"] as number | undefined;
 
+    if (type === "timestamps") {
+      const wt = msg["word_timestamps"] as { words?: unknown[]; end?: unknown[] } | undefined;
+      const timings = this.wordTimings.get(contextId);
+      if (timings && Array.isArray(wt?.words) && Array.isArray(wt?.end)) {
+        wt.words.forEach((word, i) => {
+          const end = wt.end![i];
+          if (typeof word === "string" && typeof end === "number" && Number.isFinite(end) && end >= 0 && timings.length < 10000) {
+            timings.push({ word, end });
+          }
+        });
+      }
+      return;
+    }
     // Route to flush-tracked pending (turn-level contexts using manual flushing).
     if (flushId != null) {
       const key = `${contextId}:${flushId}`;
@@ -815,6 +852,7 @@ export class CartesiaTTS implements TTSAdapter {
   }
 
   private cleanupTurnMaps(turnContextId: string): void {
+    this.contextSettings.delete(turnContextId);
     const quiet = this.firstClipQuietTimers.get(turnContextId);
     if (quiet) clearTimeout(quiet);
     this.firstClipQuietTimers.delete(turnContextId);
@@ -880,11 +918,9 @@ export class CartesiaTTS implements TTSAdapter {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.closingTurns.add(turnContextId);
         this.ws.send(JSON.stringify({
+          ...this.settingsForContext(turnContextId),
           context_id: turnContextId,
-          model_id: this.modelId,
           transcript: "",
-          voice: this.buildVoice(),
-          output_format: this.outputFormat(),
           continue: false,
         }));
       }
@@ -911,17 +947,11 @@ export class CartesiaTTS implements TTSAdapter {
 
     const sendTranscript = (transcript: string): void => {
       const transcriptMsg: Record<string, unknown> = {
+        ...this.settingsForContext(turnContextId, emotions),
         context_id: turnContextId,
-        model_id: this.modelId,
         transcript,
-        voice: this.buildVoice(),
-        output_format: this.outputFormat(),
         continue: true,
-        max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS,
       };
-      const gcCtx = this.buildGenerationConfig(emotions);
-      if (gcCtx) transcriptMsg.generation_config = gcCtx;
-      this.applyLang(transcriptMsg);
       ws.send(JSON.stringify(transcriptMsg));
       this.turnLastTranscript.set(turnContextId, transcript);
     };
@@ -957,6 +987,7 @@ export class CartesiaTTS implements TTSAdapter {
         signal?.removeEventListener("abort", onAbort);
         this.pending.delete(turnContextId);
         this.turnChunkHandlers.delete(turnContextId);
+        this.contextSettings.delete(turnContextId);
         fn();
       };
       const onAbort = (): void => {

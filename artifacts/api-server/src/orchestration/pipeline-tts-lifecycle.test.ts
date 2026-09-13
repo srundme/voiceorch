@@ -10,6 +10,8 @@ function harness() {
   p.agent = { ttsProvider: "sarvam" };
   p.config = { callId: 1 };
   p.closed = false;
+  p.recentAgentSpeech = [];
+  p.normalizeForRepeat = (text: string) => text.toLowerCase();
   p.bargeInRequested = false;
   p.activeTtsAborts = new Set<AbortController>();
   p.ttsContextJobs = new Map();

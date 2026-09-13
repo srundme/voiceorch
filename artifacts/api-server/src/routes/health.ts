@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { isDraining } from "../orchestration/lifecycle.js";
 import { HealthCheckResponse } from "@workspace/api-zod";
 import { pool } from "@workspace/db";
 import { getRedis } from "../lib/redis.js";
@@ -8,6 +9,7 @@ import { getAllCampaignConcurrency } from "../services/batchScheduler.js";
 const router: IRouter = Router();
 
 router.get("/healthz", async (_req, res) => {
+  if (isDraining()) { res.status(503).json({ status: "draining" }); return; }
   const data = HealthCheckResponse.parse({ status: "ok" });
   res.json({
     ...data,

@@ -39,17 +39,9 @@ export function cartesiaUnspokenTail(sent: string, full: string): string {
   if (!full) return "";
   if (!sent) return full;
   if (full.startsWith(sent)) return full.slice(sent.length);
-  let i = 0;
-  const n = Math.min(sent.length, full.length);
-  while (i < n && sent[i] === full[i]) i++;
-  let start = i;
-  if (start < full.length && /^\p{M}/u.test(full.slice(start))) {
-    const prev = full.slice(0, start);
-    const segs = [...new Intl.Segmenter("ta", { granularity: "grapheme" }).segment(prev)];
-    const last = segs.at(-1);
-    if (last) start -= last.segment.length;
-  }
-  return full.slice(Math.max(0, start));
+  // A rewrite/normalization mismatch is not evidence of an unspoken suffix.
+  // Never replay words the caller may already have heard.
+  return "";
 }
 
 export class CartesiaTurnStream {

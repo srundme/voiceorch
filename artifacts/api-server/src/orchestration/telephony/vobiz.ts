@@ -154,6 +154,11 @@ export async function handleVobizWebSocket(
    */
   function sendAudioToVobiz(pcmChunk: Buffer): void {
     if (ws.readyState !== ws.OPEN) return;
+    if (ws.bufferedAmount > 64 * 1024) {
+      logger.error({ streamId, bufferedBytes: ws.bufferedAmount }, "Vobiz output backpressure exceeded; closing stalled transport");
+      ws.close(1013, "Audio transport overloaded");
+      return;
+    }
     ws.send(JSON.stringify({
       event: "playAudio",
       media: {
