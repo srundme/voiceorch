@@ -336,6 +336,17 @@ export async function createSession(params: {
     }
   }
 
+  // Independent reads overlap memory-owner/context loading. Attach rejection
+  // handlers immediately so an early failure cannot become unhandled.
+  const providerRowsPromise = agent.userId
+    ? db.select().from(providersTable).where(
+        and(eq(providersTable.isActive, true), eq(providersTable.userId, agent.userId))
+      ).catch((provErr) => {
+        logger.warn({ agentId: params.agentId, provErr }, "Failed to load provider keys — continuing without user keys");
+        return [] as Array<typeof providersTable.$inferSelect>;
+      })
+    : Promise.resolve([] as Array<typeof providersTable.$inferSelect>);
+
   // Fire attached KB source IDs query immediately so DB latency overlaps with prompt building
   const knowledgeSourceIdsPromise = getAttachedSourceIds(agent.id, agent.knowledgeBaseId).catch(() => [] as number[]);
 
@@ -894,14 +905,7 @@ export async function createSession(params: {
     })(),
 
     // 4. Provider API keys — independent of above, fetch in parallel
-    agent.userId
-      ? db.select().from(providersTable).where(
-          and(eq(providersTable.isActive, true), eq(providersTable.userId, agent.userId))
-        ).catch((provErr) => {
-          logger.warn({ agentId: params.agentId, provErr }, "Failed to load provider keys — continuing without user keys");
-          return [] as Array<typeof providersTable.$inferSelect>;
-        })
-      : Promise.resolve([] as Array<typeof providersTable.$inferSelect>),
+    providerRowsPromise,
 
     // 5. Upcoming bookings (pre-fetched in parallel). Meet bots use the contact
     // phone / source call — not meetbot-* synthetic numbers.
@@ -1709,6 +1713,8 @@ export async function createSession(params: {
     ttsVoice: agent.ttsVoice ?? null,
     extra: {
       telephonyProvider: params.telephonyProvider,
+      setupElapsedMs: Date.now() - createSessionStartMs,
+      deployedCommit: process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT_SHA ?? null,
       backchannelingEnabled: agent.backchannelingEnabled !== false,
     },
   });

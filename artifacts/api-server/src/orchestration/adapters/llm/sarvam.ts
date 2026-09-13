@@ -591,6 +591,8 @@ ${systemPrompt}`
       const reader = resp.body!.getReader();
       const decoder = new TextDecoder();
       let full = "";
+      let finishReason: string | null = null;
+      let sawDone = false;
       let reasoningBuffer = "";
       let usage: LLMUsage | undefined;
 
@@ -602,7 +604,7 @@ ${systemPrompt}`
       let jsonBuffer = "";
 
       const handleData = (data: string): void => {
-        if (data === "[DONE]") return;
+        if (data === "[DONE]") { sawDone = true; return; }
         try {
           const parsed = JSON.parse(data) as {
             choices: Array<{
@@ -628,7 +630,8 @@ ${systemPrompt}`
             };
           }
 
-          const delta = parsed.choices[0]?.delta;
+          if (parsed.choices?.[0]?.finish_reason) finishReason = parsed.choices[0].finish_reason;
+          const delta = parsed.choices?.[0]?.delta;
           if (!delta) return;
 
           // Collect reasoning trace as fallback
@@ -735,14 +738,14 @@ ${systemPrompt}`
           while ((nl = buffer.indexOf("\n")) !== -1) {
             const line = buffer.slice(0, nl).trim();
             buffer = buffer.slice(nl + 1);
-            if (line.startsWith("data: ")) handleData(line.slice(6));
+            if (line.startsWith("data:")) handleData(line.slice(5).trimStart());
           }
         }
 
         if (!abort.signal.aborted) {
           buffer += decoder.decode();
           const tail = buffer.trim();
-          if (tail.startsWith("data: ")) handleData(tail.slice(6));
+          if (tail.startsWith("data:")) handleData(tail.slice(5).trimStart());
         }
       } catch (err) {
         if (abort.signal.aborted) {
@@ -755,6 +758,53 @@ ${systemPrompt}`
       if (abort.signal.aborted) {
         try { await reader.cancel(); } catch { /* noop */ }
         return;
+      }
+
+      // A truncated stream is not a completed answer. Repair speech only, once,
+      // without exposing tools or repeating already streamed text. Exact-prefix
+      // validation deliberately rejects rewrites (which would duplicate speech).
+      const incomplete = finishReason === "length" || (!finishReason && !sawDone);
+      if (incomplete && (sawToolDelta || bufferingJson)) {
+        throw new Error(`Sarvam tool response ended before completion (${finishReason ?? "unexpected EOF"}); tool not executed`);
+      }
+      if (incomplete && full.trim() && !sawToolDelta && !bufferingJson && !jsonBuffer) {
+        const repairAbort = new AbortController();
+        const timer = setTimeout(() => repairAbort.abort(), 3000);
+        let repaired = false;
+        try {
+          const repairBody: Record<string, unknown> = { ...body, stream: false };
+          // Reproducing the prefix consumes tokens too. Allow a small bounded
+          // suffix budget on this one recovery request, not on normal turns.
+          repairBody["max_tokens"] = Math.min(4096, Number(body["max_tokens"] ?? 500) + 128);
+          delete repairBody["tools"];
+          delete repairBody["tool_choice"];
+          repairBody["messages"] = [
+            ...(body["messages"] as Array<Record<string, unknown>>),
+            { role: "assistant", content: full },
+            { role: "user", content: "The preceding assistant reply was cut off by the transport. Return that exact reply verbatim, including its exact prefix, and finish only its interrupted sentence. Do not add a new question, action, tool call, or claim that any new action was performed." },
+          ];
+          const result = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "api-subscription-key": this.key, Authorization: `Bearer ${this.key}` },
+            body: JSON.stringify(repairBody),
+            signal: AbortSignal.any([abort.signal, repairAbort.signal]),
+          });
+          if (result.ok) {
+            const data = await result.json() as { choices?: Array<{ finish_reason?: string; message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+            if (data.usage) options?.onUsage?.({ inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0 });
+            const choice = data.choices?.[0];
+            const completed = choice?.message?.content;
+            if (!abort.signal.aborted && choice?.finish_reason === "stop" && completed?.startsWith(full) && completed.length > full.length && !parseToolEnvelope(completed)) {
+              const suffix = completed.slice(full.length);
+              full = completed;
+              onToken(suffix);
+              repaired = true;
+            }
+          }
+        } catch { /* Keep already delivered speech; never replay it on repair failure. */ }
+        finally { clearTimeout(timer); }
+        if (abort.signal.aborted) return;
+        logger.warn({ callId: this.callId, model: this.model, finishReason, sawDone, repaired, evt: "sarvam_incomplete_response" }, "Sarvam incomplete response repair result");
       }
 
       if (usage) options?.onUsage?.(usage);

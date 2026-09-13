@@ -31,7 +31,39 @@ function beginNextTurn(p: any) {
 
 afterEach(() => vi.useRealTimers());
 
+describe("fragmented PCM playback", () => {
+  it.each([true, false])("drains every queued short block (synthesis complete: %s)", async (complete) => {
+    vi.useFakeTimers();
+    const { p, sequence } = harness();
+    p.config.rawPcmOutput = true;
+    p.config.onAudioOut = vi.fn();
+    p.pcmOutRate = () => 8000;
+    p.recording = { addAgentChunk: vi.fn() };
+    p.maybeBargeFromRealtimeVadStart = vi.fn();
+    p.audioSendStatus = () => "SEND";
+    p.markFirstAudioSent = vi.fn();
+    p.turnEchoGraceAt = 0;
+    const pcm = Buffer.alloc(1600, 7);
+    const job = { text: "Fragmented audio.", streaming: true, sequenceId: sequence,
+      pcmQueue: Array.from({ length: 100 }, (_, i) => pcm.subarray(i * 16, (i + 1) * 16)),
+      synthDone: complete, ready: Promise.resolve(), audioDurationMs: 100 };
+    if (!complete) setTimeout(() => { job.synthDone = true; }, 40);
+    const result = p.drainSentenceJobInner(job);
+    await vi.runAllTimersAsync();
+    expect((await result).speechMs).toBe(100);
+    expect(Buffer.concat(p.config.onAudioOut.mock.calls.map((c: Buffer[]) => c[0]))).toEqual(pcm);
+    expect(p.logExec).not.toHaveBeenCalled();
+  });
+});
+
 describe("TTS job generation ownership", () => {
+  it("preserves a final native 8k sample that is not a sample pair", async () => {
+    const { p, sequence } = harness();
+    p.tts.synthesizeStream = vi.fn(async (_text, chunk) => { chunk(Buffer.alloc(322)); });
+    const job = p.startSentenceSynthesis("Sample tail.", 1, sequence);
+    await job.ready;
+    expect(Buffer.concat(job.pcmQueue).length).toBe(322);
+  });
   it("does not label timed-out partial synthesis as a completed utterance", async () => {
     vi.useFakeTimers();
     const { p, sequence } = harness();

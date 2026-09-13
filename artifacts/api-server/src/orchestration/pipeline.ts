@@ -7082,7 +7082,10 @@ export class OrchestrationPipeline implements VoiceSession {
       let _ttsFirstByteMs: number | null = null;
       const streamAccumBytes = (this.ttsPcmRate() / 1000) * 2 * 20; // 20 ms at native TTS rate
 
-      // Aligns received bytes to a 4-byte boundary and buffers the result into
+      // Native 8k PCM needs sample alignment (2 bytes); 16k decimation consumes
+      // sample pairs (4 bytes). Do not lose a final native 8k sample.
+      const pcmAlignment = this.ttsPcmRate() === 8000 ? 2 : 4;
+      // Aligns received bytes and buffers the result into
       // job.pcmQueue for later draining. Pure buffering, no recording/ambient/
       // encoding — safe to run ahead of actual playback.
       const flush = (): void => {
@@ -7096,7 +7099,7 @@ export class OrchestrationPipeline implements VoiceSession {
           : Buffer.concat(accum);
         accum = [];
         accumSize = 0;
-        const alignedLen = Math.floor(combined.length / 4) * 4;
+        const alignedLen = Math.floor(combined.length / pcmAlignment) * pcmAlignment;
         flushRemainder = alignedLen < combined.length
           ? combined.slice(alignedLen)
           : Buffer.alloc(0);
@@ -7255,7 +7258,9 @@ export class OrchestrationPipeline implements VoiceSession {
               latencyMs: Date.now() - _ttsReqStart,
               turnNumber,
               durationMs: Date.now() - _ttsReqStart,
-              responsePayload: { audioBytes: _ttsTotalBytes, textLength: text.length, firstByteMs: _ttsFirstByteMs },
+              responsePayload: job.skipDrain
+                ? { event: "Continuation text submitted", contextId: turnContextId, textLength: text.length, audioOwnedByContext: true }
+                : { audioBytes: _ttsTotalBytes, textLength: job.text.length, firstByteMs: _ttsFirstByteMs, contextId: turnContextId },
             });
           }
           job.synthDone = true;
@@ -7365,7 +7370,7 @@ export class OrchestrationPipeline implements VoiceSession {
       const wireFrameBytes = this.config.rawPcmOutput
         ? CHUNK_SIZE_MULAW * 2 * (this.pcmOutRate() / 8000)
         : CHUNK_SIZE_MULAW;
-      const holdFrame = Buffer.alloc(wireFrameBytes, 0);
+      const holdFrame = Buffer.alloc(wireFrameBytes, this.config.rawPcmOutput ? 0 : 0xff);
       // Block-continuous decimators when TTS is 16 kHz on an 8 kHz leg.
       // Per-block stateless downsample16to8 repeats a kernel-edge defect at
       // 50 Hz (buzzy/gritty voice). Native Cartesia/Sarvam 8 kHz skips this path.
@@ -7396,8 +7401,15 @@ export class OrchestrationPipeline implements VoiceSession {
       };
       const flushWireRemainder = (): void => {
         if (wireRem.buf.length === 0) return;
-        wireQueue.push(padWireFrame(wireRem.buf, wireFrameBytes));
+        const padded = Buffer.from(holdFrame);
+        wireRem.buf.copy(padded);
+        wireQueue.push(padded);
         wireRem.buf = Buffer.alloc(0);
+      };
+      const fillNextWireFrame = (): void => {
+        // Provider chunks need not be a full 20ms frame. Exhaust available
+        // fragments before declaring an underrun or end-of-stream.
+        while (wireQueue.length === 0 && processNextBlock()) { /* accumulate */ }
       };
 
       // Buffered-but-unsent audio in ms (s16le: 16 bytes/ms @8k, 32 @16k).
@@ -7492,7 +7504,7 @@ export class OrchestrationPipeline implements VoiceSession {
           continue;
         }
 
-        if (wireQueue.length === 0) processNextBlock();
+        fillNextWireFrame();
         if (job.synthDone && pcmIdx >= job.pcmQueue.length) flushWireRemainder();
         if (wireQueue.length > 0) {
           const chunk = wireQueue.shift()!;
@@ -7539,7 +7551,7 @@ export class OrchestrationPipeline implements VoiceSession {
             bufferedMs() < TTS_REBUFFER_MS &&
             Date.now() - _uStart < TTS_REBUFFER_CAP_MS
           ) {
-            processNextBlock();
+            fillNextWireFrame();
             if (wireQueue.length > 0) break;
             const now = Date.now();
             if (now >= rebufferTick) {
@@ -7557,7 +7569,6 @@ export class OrchestrationPipeline implements VoiceSession {
             continue;
           }
           if (job.synthDone) {
-            flushWireRemainder();
             continue;
           }
           this.config.onAudioOut(holdFrame);
