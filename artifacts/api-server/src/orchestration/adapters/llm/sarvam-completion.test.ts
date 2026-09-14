@@ -49,6 +49,14 @@ describe("Sarvam incomplete response recovery", () => {
     await new SarvamLLM("test", null).chat([], "", () => {}, () => {});
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+  it("repairs a stream that reports stop but omits the completion sentinel", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(stream("stop", false)).mockResolvedValueOnce(completed());
+    vi.stubGlobal("fetch", fetcher);
+    const done = vi.fn();
+    await new SarvamLLM("test", null).chat([], "", () => {}, done);
+    expect(done).toHaveBeenCalledWith("Can I help?", undefined);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   it("discards repair output after barge-in", async () => {
     const llm = new SarvamLLM("test", null);
     const fetcher = vi.fn().mockResolvedValueOnce(stream("length")).mockImplementationOnce(async () => {

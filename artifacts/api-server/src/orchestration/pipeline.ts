@@ -367,21 +367,21 @@ const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
 // Greeting is the coldest clip (TTS just warmed, and for multilingual agents the
 // opener is LLM-generated first — first byte often lands ~450-500 ms). 280 ms of
 // runway underran the wire at the opening; 400/600 rides that cold start out.
-const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 0));
+const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 400));
 const TTS_PREBUFFER_GREETING_CAP_MS = Math.max(
   TTS_PREBUFFER_GREETING_MS,
-  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 0),
+  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 800),
 );
-const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 0));
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 600));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
-  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 0),
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 800),
 );
-const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 0));
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 1200));
 /** On mid-sentence underrun only: refill this much real audio. Not on the
  *  happy path — keep the carrier alive with silence, never a looped frame. */
-const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 0));
-const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 0));
+const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 120));
+const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 1000));
 const TTS_UNDERRUN_COLD_MS = 8_000;
 /**
  * Concurrency-aware prebuffer runway (restored — removed in a20aca3d).
@@ -1112,6 +1112,8 @@ export class OrchestrationPipeline implements VoiceSession {
   // Require N consecutive speech frames before triggering barge-in to avoid
   // ambient noise / single-word false positives stopping the agent mid-sentence.
   private bargeInSpeechFrames = 0;
+  private partialBargeTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingPartialBargeText = "";
   // Consecutive below-threshold frames counter — used to delay bargeInSpeechFrames
   // reset so brief inter-syllable dips don't kill an accumulating barge-in run.
   private bargeInLowEnergyFrames = 0;
@@ -1727,6 +1729,9 @@ export class OrchestrationPipeline implements VoiceSession {
     this.skipAgentPlaybackForHandoff = false;
     this.bargeInSpeechFrames = 0;
     this.streamingBargeInWordCount = 0;
+    if (this.partialBargeTimer) clearTimeout(this.partialBargeTimer);
+    this.partialBargeTimer = null;
+    this.pendingPartialBargeText = "";
     this.interruptionMgr.onUserSpeechEnd();
   }
 
@@ -1840,6 +1845,9 @@ export class OrchestrationPipeline implements VoiceSession {
     opts?: { speculative?: boolean; energyDetails?: Record<string, unknown> },
   ): void {
     if (this.bargeInRequested) return;
+    if (this.partialBargeTimer) clearTimeout(this.partialBargeTimer);
+    this.partialBargeTimer = null;
+    this.pendingPartialBargeText = "";
     // Cheap cancel: sequence_id is the hard boundary. Invalidate N first so
     // in-flight TTS tagged N cannot emit, then mute the carrier, then abort
     // synth / LLM. Do not wait for drainPlaybackTail.
@@ -2500,6 +2508,31 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.isSameUtteranceStillArriving(text)) return false;
     if (this.playbackTooFreshForPartialBarge(text)) return false;
     return true;
+  }
+
+  private schedulePartialBargeIn(text: string): void {
+    const candidate = text.trim();
+    if (!candidate || this.bargeInRequested || !this.isPlaying) return;
+    this.pendingPartialBargeText = candidate;
+    if (this.partialBargeTimer) clearTimeout(this.partialBargeTimer);
+    this.partialBargeTimer = setTimeout(() => {
+      this.partialBargeTimer = null;
+      const stable = this.pendingPartialBargeText;
+      this.pendingPartialBargeText = "";
+      if (
+        !stable
+        || this.closed
+        || this.bargeInRequested
+        || !this.isPlaying
+        || this.isSelfEcho(stable)
+        || !this.shouldInterruptFromCallerTranscript(stable)
+      ) return;
+      this.triggerBargeIn("vad_partial", stable, { speculative: true });
+      logger.info(
+        { callId: this.config.callId, text: stable.slice(0, 80) },
+        "Barge-in detected after stable Sarvam realtime partial",
+      );
+    }, 160);
   }
 
   private clearBargeRecovery(): void {
@@ -3692,15 +3725,7 @@ export class OrchestrationPipeline implements VoiceSession {
                 if (interimIsSelfEcho) {
                   // opener mute / content echo / room crosstalk — inspect only
                 } else if (this.shouldInterruptFromCallerTranscript(text)) {
-                  this.triggerBargeIn("vad_partial", text, { speculative: true });
-                  logger.info(
-                    {
-                      callId: this.config.callId,
-                      words: this.streamingBargeInWordCount,
-                      text: text.slice(0, 80),
-                    },
-                    "Barge-in detected (Sarvam realtime early partial)",
-                  );
+                  this.schedulePartialBargeIn(text);
                 }
               } else {
                 const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
@@ -3725,6 +3750,9 @@ export class OrchestrationPipeline implements VoiceSession {
             return;
           }
           if (!text.trim()) return;
+          if (this.partialBargeTimer) clearTimeout(this.partialBargeTimer);
+          this.partialBargeTimer = null;
+          this.pendingPartialBargeText = "";
           this.lastCallerActivityAt = Date.now();
           this.streamSTTReconnectAttempts = 0; // reset backoff on successful transcript
           this.resetHangupTimer();

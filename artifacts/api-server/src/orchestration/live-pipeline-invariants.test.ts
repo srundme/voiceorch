@@ -138,9 +138,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("this.config.onAudioOut(holdFrame)");
     expect(pipelineSrc).toContain("Never start the wire on an empty queue");
     expect(pipelineSrc).not.toContain("STREAMING_TTS_PREBUFFER_BOOST_MS");
-    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_GREETING_MS \?\? 0\)/);
-    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 0\)/);
-    expect(pipelineSrc).toMatch(/TTS_REBUFFER_MS \?\? 0\)/);
+    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_GREETING_MS \?\? 400\)/);
+    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 600\)/);
+    expect(pipelineSrc).toMatch(/TTS_REBUFFER_MS \?\? 120\)/);
     expect(pipelineSrc).not.toContain("loadPresetFillerPcm");
     expect(pipelineSrc).not.toContain("preset-filler");
     expect(pipelineSrc).toContain("job.streaming && this.tts.synthesizeStream");

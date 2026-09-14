@@ -782,7 +782,10 @@ ${systemPrompt}`
         outputCharacters: full.length, evt: "sarvam_stream_termination" }, "Sarvam stream termination");
       // Repair incomplete speech once without tools or replay. Exact-prefix
       // validation deliberately rejects rewrites (which would duplicate speech).
-      const incomplete = finishReason === "length" || (!finishReason && !sawDone);
+      // A finish reason without the provider's stream sentinel is not a
+      // complete response: the connection may have closed immediately after a
+      // partial chunk. Do not commit that output as a successful turn.
+      const incomplete = finishReason === "length" || !sawDone;
       if (incomplete && (sawToolDelta || bufferingJson)) {
         throw new Error(`Sarvam tool response ended before completion (${finishReason ?? "unexpected EOF"}); tool not executed`);
       }
