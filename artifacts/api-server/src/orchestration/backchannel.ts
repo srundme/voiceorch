@@ -1,14 +1,13 @@
-// Backchannel bank is only okay / hmm / mmm — no language-specific acks,
-// "I see", "Got it", "Mm-hmm", சரி, etc. Fillers play BEFORE the LLM reply
-// is known, so "Okay" stays off questions / refusals (sounds like agreement).
-// On safe statements: 80% Okay, 20% Hmm/Mmm so it sounds like a person, not a
-// coin flip among three words.
+// Fillers play BEFORE the LLM reply is known, so positive acknowledgements stay
+// off questions and refusals where they could sound like agreement.
 
 /** Pure listening sounds — safe before any answer polarity. */
-const LISTENING_FILLERS = ["Hmm.", "Mmm."];
+const ENGLISH_LISTENING_FILLERS = ["Hmm.", "Mmm."];
+const TAMIL_LISTENING_FILLERS = ["ம்.", "ஹ்ம்ம்."];
 
 /** Soft ack — only when the caller turn is not a question / risk turn. */
-const SOFT_ACK_FILLERS = ["Okay.", "Hmm.", "Mmm."];
+const ENGLISH_SOFT_ACK_FILLERS = ["Okay.", "Hmm.", "Mmm."];
+const TAMIL_SOFT_ACK_FILLERS = ["சரி.", "ம்.", "ஹ்ம்ம்."];
 
 /** Share of safe-statement backchannels that should be "Okay." */
 export const SOFT_ACK_OKAY_WEIGHT = 0.8;
@@ -17,7 +16,7 @@ export const SOFT_ACK_OKAY_WEIGHT = 0.8;
 export const FILLER_RECENT_AVOID = 3;
 
 export interface BackchannelFillerOptions {
-  /** Kept for callers; the spoken bank is okay / hmm / mmm in every language. */
+  /** Keep English fillers for an explicitly English-locked conversation. */
   englishStrictAck?: boolean;
   /** Custom fillers configured on the agent */
   customFillers?: string[];
@@ -70,14 +69,17 @@ export function getBackchannelFillers(
   }
 
   if (!language) return [];
+  const isTamil = !opts?.englishStrictAck && language.toLowerCase().split("-")[0] === "ta";
+  const listeningFillers = isTamil ? TAMIL_LISTENING_FILLERS : ENGLISH_LISTENING_FILLERS;
+  const softAckFillers = isTamil ? TAMIL_SOFT_ACK_FILLERS : ENGLISH_SOFT_ACK_FILLERS;
   const transcript = opts?.callerTranscript?.trim() || "";
 
   // Unknown next-sentence polarity → listening only (safe before "no").
   if (!transcript || isRiskyFillerContext(transcript)) {
-    return [...LISTENING_FILLERS];
+    return [...listeningFillers];
   }
 
-  return [...SOFT_ACK_FILLERS];
+  return [...softAckFillers];
 }
 
 function nextRandom(opts?: BackchannelFillerOptions): number {
@@ -88,9 +90,13 @@ function pickFrom(choices: string[], opts?: BackchannelFillerOptions): string {
   return choices[Math.floor(nextRandom(opts) * choices.length)]!;
 }
 
-function pickListeningFiller(recent: string[], opts?: BackchannelFillerOptions): string {
-  const filtered = LISTENING_FILLERS.filter((p) => !recent.includes(p.trim().toLowerCase()));
-  return pickFrom(filtered.length > 0 ? filtered : LISTENING_FILLERS, opts);
+function pickListeningFiller(
+  choices: string[],
+  recent: string[],
+  opts?: BackchannelFillerOptions,
+): string {
+  const filtered = choices.filter((p) => !recent.includes(p.trim().toLowerCase()));
+  return pickFrom(filtered.length > 0 ? filtered : choices, opts);
 }
 
 /**
@@ -111,9 +117,11 @@ export function pickBackchannelFiller(
     .filter(Boolean);
 
   const usingCustom = Boolean(opts?.customFillers && opts.customFillers.length > 0);
-  if (!usingCustom && pool.includes("Okay.")) {
-    if (nextRandom(opts) < SOFT_ACK_OKAY_WEIGHT) return "Okay.";
-    return pickListeningFiller(recent, opts);
+  const positiveAck = pool.includes("Okay.") ? "Okay." : pool.includes("சரி.") ? "சரி." : null;
+  if (!usingCustom && positiveAck) {
+    if (nextRandom(opts) < SOFT_ACK_OKAY_WEIGHT) return positiveAck;
+    const listening = pool.filter((phrase) => phrase !== positiveAck);
+    return pickListeningFiller(listening, recent, opts);
   }
 
   let choices = pool;

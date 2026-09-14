@@ -7,15 +7,16 @@ import {
 } from "./backchannel.js";
 
 const ONLY_OKAY_HMM_MMM = ["Okay.", "Hmm.", "Mmm."];
+const ONLY_TAMIL_FILLERS = ["சரி.", "ம்.", "ஹ்ம்ம்."];
 
 describe("backchannel fillers — okay / hmm / mmm only", () => {
   it("uses hmm/mmm only for questions (no Okay, no language acks)", () => {
     const pool = getBackchannelFillers("ta-IN", {
       callerTranscript: "என்ன விலை?",
     });
-    expect(pool).toEqual(["Hmm.", "Mmm."]);
+    expect(pool).toEqual(["ம்.", "ஹ்ம்ம்."]);
     expect(pool).not.toContain("Okay.");
-    expect(pool).not.toContain("சரி");
+    expect(pool).not.toContain("சரி.");
     expect(pool).not.toContain("I see.");
     expect(pool).not.toContain("Mm-hmm.");
   });
@@ -24,17 +25,17 @@ describe("backchannel fillers — okay / hmm / mmm only", () => {
     const pool = getBackchannelFillers("ta-IN", {
       callerTranscript: "I don't want this, cancel it",
     });
-    expect(pool).toEqual(["Hmm.", "Mmm."]);
-    expect(pool).not.toContain("சரி");
+    expect(pool).toEqual(["ம்.", "ஹ்ம்ம்."]);
+    expect(pool).not.toContain("சரி.");
     expect(pool).not.toContain("Okay.");
   });
 
   it("allows Okay on safe statements, still only the three words", () => {
-    const pool = getBackchannelFillers("hi-IN", {
+    const pool = getBackchannelFillers("ta-IN", {
       callerTranscript: "நான் சென்னையில இருக்கேன்",
     });
-    expect(pool.sort()).toEqual([...ONLY_OKAY_HMM_MMM].sort());
-    expect(pool).not.toContain("சரிங்க");
+    expect(pool.sort()).toEqual([...ONLY_TAMIL_FILLERS].sort());
+    expect(pool).not.toContain("Okay.");
     expect(pool).not.toContain("Got it.");
     expect(pool).not.toContain("अच्छा");
   });
@@ -44,6 +45,13 @@ describe("backchannel fillers — okay / hmm / mmm only", () => {
       .toEqual([...ONLY_OKAY_HMM_MMM].sort());
     expect(getBackchannelFillers("en-IN", { callerTranscript: "Can you help?" }))
       .toEqual(["Hmm.", "Mmm."]);
+  });
+
+  it("keeps English fillers when explicitly locked to English", () => {
+    expect(getBackchannelFillers("ta-IN", {
+      englishStrictAck: true,
+      callerTranscript: "I live in Chennai",
+    }).sort()).toEqual([...ONLY_OKAY_HMM_MMM].sort());
   });
 
   it("picks Okay 80% and Hmm/Mmm 20% on safe statements", () => {
