@@ -44,8 +44,12 @@ import { eq, sql } from "drizzle-orm";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const workerFile = join(__dirname, "orchestration", "audioWorker.mjs");
-// Create/warm the additive lease table during boot, not the first call.
-void initializeCallAdmission().catch(err => logger.error({ err }, "Call admission initialization failed"));
+// Create/warm the additive lease table during boot, not the first call. The
+// upgrade handler waits on the same shared initialization promise below.
+const callAdmissionReady = initializeCallAdmission().catch(err => {
+  logger.error({ err }, "Call admission initialization failed");
+  throw err;
+});
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -127,6 +131,12 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
 
   const provider          = match[1] as "twilio" | "plivo" | "vobiz" | "webcall";
   const agentId           = parseInt(match[2]!, 10);
+  try {
+    await callAdmissionReady;
+  } catch {
+    socket.destroy();
+    return;
+  }
   const platformTelephony = url.includes("pt=1");
   const qs                = new URLSearchParams(url.split("?")[1] ?? "");
   const campaignLeadId    = qs.has("campaignLeadId") ? parseInt(qs.get("campaignLeadId")!, 10) : undefined;
