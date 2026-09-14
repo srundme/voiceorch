@@ -10717,7 +10717,15 @@ export class OrchestrationPipeline implements VoiceSession {
     // they don't appear in the transcript UI or pollute conversation history.
     // Computed BEFORE the final flush so the spoken tail and the stored history
     // are derived from the exact same fully-cleaned text.
-    const cleanResponse = sanitizeMalformedContinuation(stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
+    const cleanResponse = sanitizeMalformedContinuation(
+      stripJsonMessageWrapper(
+        stripToolArtifacts(
+          stripBracketedInstructions(
+            stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))),
+          ),
+        ),
+      ).trim(),
+    );
     const baseSpokenResponse = cleanResponse;
 
     // Silent-turn recovery: the LLM produced no speakable text and no tool call.
@@ -11780,7 +11788,15 @@ export class OrchestrationPipeline implements VoiceSession {
 
     // Compute the fully-cleaned response BEFORE the final flush so the spoken
     // tail and the stored history are derived from the exact same text.
-    const cleanResponse = sanitizeMalformedContinuation(stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
+    const cleanResponse = sanitizeMalformedContinuation(
+      stripJsonMessageWrapper(
+        stripToolArtifacts(
+          stripBracketedInstructions(
+            stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))),
+          ),
+        ),
+      ).trim(),
+    );
 
     // Final flush: prefer the fullReply-derived remainder over the possibly-
     // truncated pendingText, and enqueue any non-empty trailing text — a length
