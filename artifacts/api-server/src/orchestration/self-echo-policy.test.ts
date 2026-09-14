@@ -52,4 +52,15 @@ describe("Bolna self-echo", () => {
       wordFloor: 3,
     })).toEqual({ ignore: false, reason: "none" });
   });
+
+  it("rejects near-miss suffixes from the agent's own recent speech", () => {
+    expect(shouldIgnoreSelfEcho({
+      transcript: "our time",
+      agentSpeaking: true,
+      welcomePlayed: true,
+      isOverridePhrase: false,
+      recentAgentText: ["Sure, take your time."],
+      wordFloor: 3,
+    })).toEqual({ ignore: true, reason: "content_match" });
+  });
 });
