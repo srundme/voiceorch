@@ -424,6 +424,15 @@ const TTS_MIDSTREAM_MIN_REMAINDER_CHARS = Math.max(1, Number(process.env.TTS_MID
  *  event-loop hitch does not empty the carrier jitter buffer. */
 const TTS_WIRE_LEAD_FRAMES = Math.max(0, Math.min(8, Number(process.env.TTS_WIRE_LEAD_FRAMES ?? 0)));
 
+function sanitizeMalformedContinuation(text: string): string {
+  const marker = /(?:\.\.\.|…)[ \t]*(?:umm?|uhh?|sorry)\b/i.exec(text);
+  if (!marker || marker.index <= 0) return text;
+  let prefix = text.slice(0, marker.index).trimEnd();
+  const lastWord = prefix.match(/(?:^|\s)(\p{L}{1,3})$/u);
+  if (lastWord) prefix = prefix.slice(0, prefix.length - lastWord[1]!.length).trimEnd();
+  return prefix.replace(/[,:;\-]+$/u, "").trim();
+}
+
 /** Process-local in-flight TTS drains — drives the concurrency-aware prebuffer
  *  boost above and is surfaced on underrun logs (concurrentDrains). */
 let activeTtsDrainCount = 0;
@@ -8947,6 +8956,7 @@ export class OrchestrationPipeline implements VoiceSession {
     let fillerTimer: ReturnType<typeof setTimeout> | null = null;
 
     let llmResponse = "";
+    let malformedContinuationDetected = false;
     let pendingText  = "";
     /** Cartesia: stream tokens until first `.!?`, then leftover REST of full LLM text. */
     const cartesiaTurn = new CartesiaTurnStream();
@@ -10261,6 +10271,16 @@ export class OrchestrationPipeline implements VoiceSession {
           const afterEnvelope = envelopeGuard.filter(afterBrackets);
           if (!afterEnvelope) return;
           if (this.cartesiaManagedTokenStream()) {
+            if (malformedContinuationDetected) return;
+            const bufferedSpeech = `${cartesiaTurn.sent}${cartesiaTurn.pending}${afterEnvelope}`;
+            if (/(?:\.\.\.|…)[ \t]*(?:umm?|uhh?|sorry)\b/i.test(bufferedSpeech)) {
+              malformedContinuationDetected = true;
+              logger.warn(
+                { callId: this.config.callId, turnNumber: _currentTurnIndex },
+                "Suppressing malformed repeated LLM continuation before Cartesia",
+              );
+              return;
+            }
             for (const p of cartesiaTurn.push(afterEnvelope)) enqueue(p);
             return;
           }
@@ -10697,7 +10717,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // they don't appear in the transcript UI or pollute conversation history.
     // Computed BEFORE the final flush so the spoken tail and the stored history
     // are derived from the exact same fully-cleaned text.
-    const cleanResponse = stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
+    const cleanResponse = sanitizeMalformedContinuation(stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
     const baseSpokenResponse = cleanResponse;
 
     // Silent-turn recovery: the LLM produced no speakable text and no tool call.
@@ -11407,6 +11427,7 @@ export class OrchestrationPipeline implements VoiceSession {
     toolCounts[completedKey] = (toolCounts[completedKey] ?? 0) + 1;
 
     let llmResponse = "";
+    let malformedContinuationDetected = false;
     let pendingText = "";
     const cartesiaTurn = new CartesiaTurnStream();
     // One-step output guard (same as the main turn path) — truncate at the first
@@ -11650,6 +11671,16 @@ export class OrchestrationPipeline implements VoiceSession {
             if (followUpFillerTimer) { clearTimeout(followUpFillerTimer); followUpFillerTimer = null; }
           }
           if (this.cartesiaManagedTokenStream()) {
+            if (malformedContinuationDetected) return;
+            const bufferedSpeech = `${cartesiaTurn.sent}${cartesiaTurn.pending}${afterEnvelope}`;
+            if (/(?:\.\.\.|…)[ \t]*(?:umm?|uhh?|sorry)\b/i.test(bufferedSpeech)) {
+              malformedContinuationDetected = true;
+              logger.warn(
+                { callId: this.config.callId, turnNumber: this._activeTurnIndex },
+                "Suppressing malformed repeated LLM continuation before Cartesia",
+              );
+              return;
+            }
             for (const p of cartesiaTurn.push(afterEnvelope)) enqueue(p);
             return;
           }
@@ -11749,7 +11780,7 @@ export class OrchestrationPipeline implements VoiceSession {
 
     // Compute the fully-cleaned response BEFORE the final flush so the spoken
     // tail and the stored history are derived from the exact same text.
-    const cleanResponse = stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
+    const cleanResponse = sanitizeMalformedContinuation(stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
 
     // Final flush: prefer the fullReply-derived remainder over the possibly-
     // truncated pendingText, and enqueue any non-empty trailing text — a length
