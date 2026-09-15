@@ -73,16 +73,16 @@ describe("nextRealtimeLanguageOnSwitch", () => {
 });
 
 describe("resolveRealtimeVadDefaults", () => {
-  it("does not overlay Sarvam VAD milliseconds", () => {
+  it("sends Sarvam telephony VAD for 8 kHz and a shorter headset table for 16 kHz", () => {
     expect(resolveRealtimeVadDefaults(8000)).toEqual({
-      silenceDurationMs: null,
-      minSpeechDurationMs: null,
-      threshold: null,
+      silenceDurationMs: 500,
+      minSpeechDurationMs: 200,
+      threshold: 0.7,
     });
     expect(resolveRealtimeVadDefaults(16000)).toEqual({
-      silenceDurationMs: null,
-      minSpeechDurationMs: null,
-      threshold: null,
+      silenceDurationMs: 300,
+      minSpeechDurationMs: 150,
+      threshold: 0.5,
     });
   });
 });

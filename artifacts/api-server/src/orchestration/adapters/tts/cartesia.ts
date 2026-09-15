@@ -272,12 +272,12 @@ export class CartesiaTTS implements TTSAdapter {
   private readonly firstClipQuietTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly turnWsBytes = new Map<string, number>();
   private readonly closedTurns = new Set<string>();
-  /** Join sentences claimed while delay=0 — leftover REST still in flight. */
+  /** Join sentences claimed while delay=0 — leftover WS still in flight. */
   private readonly leftoverPending = new Map<string, number>();
   private readonly leftoverPendingWaiters = new Map<string, Array<() => void>>();
   private readonly leftoverRestChains = new Map<string, Promise<void>>();
   private readonly finalizedWaiters = new Map<string, Array<() => void>>();
-  /** After clip-1 close, concatenate leftover text and REST once (not per token). */
+  /** After clip-1 close, concatenate leftover text and speak once on a new WS context. */
   private readonly closedRemainder = new Map<string, string>();
 
   constructor(
@@ -701,7 +701,7 @@ export class CartesiaTTS implements TTSAdapter {
       }
     } else if (type === "done") {
       // Call 18112 / 19809: delay=0 emits `done` after clip 1 while more
-      // sentences are still queued. Mark first-clip complete so leftover REST
+      // sentences are still queued. Mark first-clip complete so leftover WS
       // can start; do not resolve the owner until leftover audio is queued.
       this.markFirstClipDone(contextId);
       if (this.claimedTurns.has(contextId) && !this.closingTurns.has(contextId)) {
@@ -721,7 +721,7 @@ export class CartesiaTTS implements TTSAdapter {
         const wsBytes = this.turnWsBytes.get(contextId) ?? 0;
         logger.info(
           { evt: "cartesia_context_closed_after_first_clip", contextId, wsBytes },
-          "Cartesia closed turn context after first clip — leftover sentences via REST",
+          "Cartesia closed turn context after first clip — leftover sentences on a new WS context",
         );
         if (wsBytes > 0) return;
       }
@@ -827,6 +827,12 @@ export class CartesiaTTS implements TTSAdapter {
     return next;
   }
 
+  /**
+   * After Sonic closes a delay=0 context, remaining sentences must not
+   * continue:true on the dead id and must not REST into a sink whose playJob
+   * already idled. Speak them on a new WS context_id, sequentially, into the
+   * owner PCM sink.
+   */
   private async runLeftoverRest(
     turnContextId: string,
     text: string,
@@ -841,9 +847,18 @@ export class CartesiaTTS implements TTSAdapter {
       const owner = this.turnChunkHandlers.get(turnContextId) ?? fallbackSink;
       await this.waitFirstClipComplete(turnContextId);
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      const ws = this.ws;
+      if (ws && ws.readyState === WebSocket.OPEN && !this.wsFailedPermanently) {
+        logger.info(
+          { evt: "cartesia_leftover_ws", contextId: turnContextId, chars: text.length },
+          "Cartesia leftover sentence on a new WS context after first clip",
+        );
+        await this.synthesizeViaWs(ws, text, owner, onDone, signal, emotions);
+        return;
+      }
       logger.info(
         { evt: "cartesia_leftover_rest", contextId: turnContextId, chars: text.length },
-        "Cartesia leftover sentence via REST after first clip (call 19809)",
+        "Cartesia leftover sentence via REST because WS is down",
       );
       await this.synthesizeViaRest(text, owner, onDone, signal, emotions);
     } finally {
@@ -1143,7 +1158,7 @@ export class CartesiaTTS implements TTSAdapter {
 
   /**
    * Finalizes a turn context after all sentences have been dispatched.
-   * delay=0 leftover REST must finish before the owner pending resolves so
+   * delay=0 leftover WS must finish before the owner pending resolves so
    * playJob drain does not exit with remaining sentence PCM still in flight.
    */
   finalizeTurnContext(turnContextId: string): void {

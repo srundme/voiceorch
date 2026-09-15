@@ -6890,7 +6890,7 @@ export class OrchestrationPipeline implements VoiceSession {
         );
         const owner = jobs.find((j) => !j.skipDrain) ?? jobs[0]!;
         const continuations = jobs.filter((j) => j.skipDrain);
-        // Owner pending stays open until leftover REST is queued and the turn
+        // Owner pending stays open until leftover WS is queued and the turn
         // is finalized (call 19809: Cartesia closes the WS context after clip 1).
         // Start playback immediately, wait until continuation sentences have
         // been synthesized into the owner PCM sink, finalize, then await
@@ -7188,7 +7188,7 @@ export class OrchestrationPipeline implements VoiceSession {
       let queueTimedOut = false;
       let ttsTimerId: ReturnType<typeof setTimeout> | null = null;
       const armTtsIdleTimer = (ms: number): void => {
-        // Call 19809: skipDrain leftover REST waits for Cartesia clip 1 (can be
+        // Call 19809: skipDrain leftover WS waits for Cartesia clip 1 (can be
         // >8s) and writes into the owner sink, so this job sees 0 bytes. Arming
         // the idle timer here abort()s leftover audio mid-sentence.
         if (job.skipDrain) return;

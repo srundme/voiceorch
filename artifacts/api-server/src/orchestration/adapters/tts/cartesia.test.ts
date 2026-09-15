@@ -274,10 +274,10 @@ describe("Cartesia adaptor contract (source)", () => {
     expect(src).toContain("claimedTurns.has(contextId)");
     expect(src).toContain("closingTurns.has(contextId)");
     expect(src).toContain("cartesia_context_closed_after_first_clip");
-    expect(src).toContain("cartesia_leftover_rest");
+    expect(src).toContain("cartesia_leftover_ws");
   });
 
-  it("sends leftover REST once from concatenated remainder after clip 1", () => {
+  it("sends leftover WS once from concatenated remainder after clip 1", () => {
     const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
     expect(src).toContain("appendTurnRemainder");
   });
@@ -350,7 +350,7 @@ class FakeCartesiaWs {
   }
 }
 
-describe("Cartesia delay=0 leftover REST (call 19809 mid-sentence cut)", () => {
+describe("Cartesia delay=0 leftover WS (call 19809 mid-sentence cut)", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -439,7 +439,7 @@ describe("Cartesia delay=0 leftover REST (call 19809 mid-sentence cut)", () => {
     tts.close();
   });
 
-  it("plays remaining sentences via REST into the owner sink after Cartesia closes the context", async () => {
+  it("plays remaining sentences on a new WS context into the owner sink after Cartesia closes the context", async () => {
     const sockets: FakeCartesiaWs[] = [];
     vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
       constructor(url: string) {
@@ -448,22 +448,8 @@ describe("Cartesia delay=0 leftover REST (call 19809 mid-sentence cut)", () => {
       }
     });
 
-    const restPcm = new Uint8Array([20, 21, 22, 23]);
-    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
-      let n = 0;
-      return {
-        ok: true,
-        status: 200,
-        body: {
-          getReader: () => ({
-            read: async () => (n++ === 0
-              ? { done: false, value: restPcm }
-              : { done: true, value: undefined }),
-            releaseLock: () => {},
-          }),
-        },
-      } as unknown as Response;
-    });
+    const leftoverPcm = Buffer.from([20, 21, 22, 23]);
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
     const tts = new CartesiaTTS("test-key", null, null);
@@ -517,15 +503,32 @@ describe("Cartesia delay=0 leftover REST (call 19809 mid-sentence cut)", () => {
 
     await joinP;
     tts.finalizeTurnContext(turnId);
+
+    const leftoverMsg = await vi.waitFor(() => {
+      const msgs = sockets[0]!.sent.map((s) => JSON.parse(s) as {
+        context_id?: string;
+        transcript?: string;
+        continue?: boolean;
+      });
+      const found = msgs.find((m) => (m.transcript?.includes("challan") ?? false) && m.context_id !== turnId);
+      expect(found).toBeDefined();
+      return found!;
+    });
+    expect(leftoverMsg.continue).toBe(false);
+    sockets[0]!.emit({
+      type: "chunk",
+      context_id: leftoverMsg.context_id,
+      data: leftoverPcm.toString("base64"),
+    });
+    sockets[0]!.emit({ type: "done", context_id: leftoverMsg.context_id });
     await ownerP;
 
     const ownerBytes = Buffer.concat(ownerChunks);
-    expect(ownerBytes.equals(Buffer.concat([wsPcm, Buffer.from(restPcm)]))).toBe(true);
+    expect(ownerBytes.equals(Buffer.concat([wsPcm, leftoverPcm]))).toBe(true);
     expect(joinChunks).toEqual([]);
     expect(ownerDoneChars).toBeGreaterThan(0);
     expect(joinDoneChars).toBeGreaterThan(0);
-    expect(fetchMock).toHaveBeenCalled();
-    expect((fetchMock.mock.calls[0]![0] as string)).toContain("/tts/bytes");
+    expect(fetchMock).not.toHaveBeenCalled();
 
     const continueTrue = sockets[0]!.sent.filter((s) => {
       const m = JSON.parse(s) as { continue?: boolean; transcript?: string };

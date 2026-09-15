@@ -5,7 +5,7 @@
 
 export const CALL_ENGINE_SAFE = {
   bargeInEnergyThreshold: 1200,
-  asrEndpointingSilenceMs: 250,
+  asrEndpointingSilenceMs: 500,
   /** Extra post-transcript wait before LLM — 0 keeps turn latency snappy. */
   incrementalDelay: 0,
   wordsForInterruption: 3,

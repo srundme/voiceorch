@@ -481,7 +481,7 @@ export default function AgentEdit() {
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
       firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-IN", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
-      webhookUrl: "", webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: true,
+      webhookUrl: "", webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: false,
       forceSoftwareNoiseGate: false,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0,
       promptVariables: [], vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1800, bargeInMinFrames: 4, micSensitivity: "low",
@@ -503,7 +503,7 @@ export default function AgentEdit() {
       stagedPromptEnabled: false,
       stagedPromptStages: [],
       stagedPromptCoreIdentity: "",
-      asrEndpointingSilenceMs: 250,
+      asrEndpointingSilenceMs: 500,
       llmMaxTokens: null,
       ttsMinSentenceChars: 5,
       ttsSpeed: 1,
@@ -782,7 +782,7 @@ export default function AgentEdit() {
       webhookPayloadTemplate:   typeof (agent as any).agentConfig?.webhookPayloadTemplate === "string"
         ? (agent as any).agentConfig.webhookPayloadTemplate
         : "",
-      noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
+      noiseCancellationEnabled: agent.noiseCancellationEnabled ?? false,
       forceSoftwareNoiseGate:   ((agent as any).agentConfig?.forceSoftwareNoiseGate as boolean | undefined) ?? false,
       ambientNoiseEnabled:      ((agent as any).agentConfig?.ambientNoiseEnabled as boolean | undefined) ?? false,
       ambientNoiseTrack:        ((agent as any).agentConfig?.ambientNoiseTrack as string | undefined) ?? "",

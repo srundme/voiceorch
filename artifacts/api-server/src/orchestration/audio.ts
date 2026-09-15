@@ -322,23 +322,18 @@ export function telephonyBandpass(samples: Int16Array): Int16Array {
 }
 
 /**
- * Speech-preserving telephony noise filtering. There is no reliable speech/noise
- * label in this worker: learning the first 500 ms as noise can learn the caller.
- * Keep the continuous bandpass, but never attenuate in-band audio based on RMS.
- * This is not a neural denoiser or acoustic echo canceller.
+ * Optional software noise path. PSTN echo is not cancelled here — VoBiz/Twilio
+ * already ran their AEC. Bandpass + RMS gating of 8 kHz caller audio was
+ * clipping speech and triggering false barge-in, so this is a pass-through
+ * unless a future neural denoiser is wired in. telephonyBandpass() remains
+ * for explicit analysis tests.
  */
 export class NoiseCanceller {
-  private readonly bqStates: BiquadState[] = makeBiquadStates();
-
-  // Retain the constructor argument for callers with legacy mic-sensitivity settings.
   constructor(_legacyGateRatio?: number) {}
 
   process(pcm8k: Buffer): Buffer {
     if (pcm8k.length % 2 !== 0) throw new Error("PCM16 input must contain complete samples");
-    // Buffer slices need not have an aligned byteOffset.
-    const samples = new Int16Array(pcm8k.length / 2);
-    for (let i = 0; i < samples.length; i++) samples[i] = pcm8k.readInt16LE(i * 2);
-    return Buffer.from(bandpassFilter(samples, this.bqStates).buffer);
+    return pcm8k;
   }
 }
 

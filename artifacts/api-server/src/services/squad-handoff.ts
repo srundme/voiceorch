@@ -223,7 +223,7 @@ async function buildTargetAgentConfig(
     backchannelingEnabled: agent.backchannelingEnabled !== false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
-    noiseCancellationEnabled: agent.noiseCancellationEnabled !== false,
+    noiseCancellationEnabled: agent.noiseCancellationEnabled === true,
     forceSoftwareNoiseGate: agentCfg[FORCE_SOFTWARE_NOISE_GATE_KEY] === true,
     ambientNoiseEnabled: (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false,
     ambientNoiseTrack: (agentCfg["ambientNoiseTrack"] as string | undefined) ?? null,
@@ -292,7 +292,7 @@ async function buildTargetAgentConfig(
     stagedPromptEnabled: agent.stagedPromptEnabled ?? false,
     stagedPromptStages: (agent.stagedPromptStages as Array<{ name: string; content: string }> | null) ?? [],
     stagedPromptCoreIdentity: agent.stagedPromptCoreIdentity ?? null,
-    asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 250,
+    asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 500,
     llmMaxTokens: (agentCfg["llmMaxTokens"] as number | null | undefined) ?? null,
     ttsMinSentenceChars: resolveTtsMinSentenceChars(
       agentCfg["ttsMinSentenceChars"] as number | undefined,

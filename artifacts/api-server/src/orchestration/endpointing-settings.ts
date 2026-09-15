@@ -4,7 +4,7 @@ export function resolveSarvamEndpointingMs(config: Record<string, unknown>): num
   for (const key of ["sarvamEndOfSpeechSilenceMs", "asrEndpointingSilenceMs"]) {
     const value = config[key];
     if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-      return Math.max(150, Math.min(2000, Math.round(value)));
+      return Math.max(400, Math.min(2000, Math.round(value)));
     }
   }
   return null;

@@ -23,13 +23,17 @@ const PING_MS = 20_000;
  * (https://docs.sarvam.ai/api/integration/livekit-production-best-practices).
  * Telephony (8 kHz) needs a higher onset bar and longer EOS than headset audio.
  */
-export function resolveRealtimeVadDefaults(_sampleRate: 8000 | 16000): {
+export function resolveRealtimeVadDefaults(sampleRate: 8000 | 16000): {
   silenceDurationMs: number | null;
   minSpeechDurationMs: number | null;
   threshold: number | null;
 } {
-  // Bolna does not overlay VAD milliseconds. Omit unless the agent set them.
-  return { silenceDurationMs: null, minSpeechDurationMs: null, threshold: null };
+  // Saaras telephony table (docs.sarvam.ai realtime VAD): 8 kHz PSTN echo
+  // and hold music need a longer EOS and a higher onset than headset 16 kHz.
+  if (sampleRate === 8000) {
+    return { silenceDurationMs: 500, minSpeechDurationMs: 200, threshold: 0.7 };
+  }
+  return { silenceDurationMs: 300, minSpeechDurationMs: 150, threshold: 0.5 };
 }
 
 export type SarvamRealtimeStreamType = "fast" | "balanced" | "simulated";
