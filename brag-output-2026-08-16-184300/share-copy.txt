@@ -1,9 +1,0 @@
-LinkedIn
---------
-SnapServe agents now join your meetings.
-
-Pick an agent, paste a Meet or Zoom link, and it walks in — talks on camera,
-then presents your slides and advances the deck itself.
-
-Google Meet · Zoom · Teams
-app.snapserve.ai

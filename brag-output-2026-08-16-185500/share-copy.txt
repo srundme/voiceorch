@@ -1,9 +1,0 @@
-LinkedIn
---------
-SnapServe agents now join your meetings.
-
-They walk into Google Meet or Zoom, talk on camera, and present the deck —
-then advance the slides themselves.
-
-Google Meet · Zoom · Teams
-app.snapserve.ai

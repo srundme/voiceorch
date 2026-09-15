@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none" role="img" aria-label="Zoom">
-  <title>Zoom</title>
-  <!-- Zoom app mark, for integration/product diagrams.
-       Zoom is a trademark of Zoom Communications, Inc. -->
-  <rect width="256" height="256" rx="56" fill="#0B5CFF"/>
-  <path fill="#FFFFFF" d="M56 100a20 20 0 0 1 20-20h68a28 28 0 0 1 28 28v48a20 20 0 0 1-20 20H84a28 28 0 0 1-28-28v-48Z"/>
-  <path fill="#FFFFFF" d="M176 114.5l25.4-18.6c4.6-3.4 11.1-.1 11.1 5.6v53c0 5.7-6.5 9-11.1 5.6L176 141.5v-27Z"/>
-</svg>
