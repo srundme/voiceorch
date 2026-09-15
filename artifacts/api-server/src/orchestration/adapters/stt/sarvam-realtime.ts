@@ -181,17 +181,14 @@ export function parseRealtimeLanguageConfidence(raw: unknown): number | undefine
 export const LID_DRIFT_CONFIDENCE_BAR = 0.6;
 export const LID_DRIFT_FINALS_TO_PIN = 2;
 
-export function isLidDriftFinal(opts: {
+export function isLidDriftFinal(_opts: {
   /** Agent's own language as a realtime code — "auto"/English disables the guard. */
   primaryLanguage: string;
   detectedLanguage: string | undefined;
   languageConfidence: number | undefined;
 }): boolean {
-  const primary = opts.primaryLanguage.trim().toLowerCase();
-  if (!primary || primary === "auto" || primary.startsWith("en")) return false;
-  if (!opts.detectedLanguage?.toLowerCase().startsWith("en")) return false;
-  // A confident English read is a real English caller, not LID drift.
-  return opts.languageConfidence !== undefined && opts.languageConfidence < LID_DRIFT_CONFIDENCE_BAR;
+  // Trust Saaras LID. Do not pin language_code over the provider's read.
+  return false;
 }
 
 export function resolveSarvamRealtimeModel(model?: string | null): "saaras:v3-realtime" | "saaras:v4-realtime" {

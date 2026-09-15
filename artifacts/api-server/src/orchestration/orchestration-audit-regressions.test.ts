@@ -88,7 +88,7 @@ describe("orchestration audit regressions", () => {
     const base = { agentSpeaking: false, welcomePlayed: true, isOverridePhrase: false,
       recentAgentText: ["I am calling from the office"], transcript: "I am calling from the office" };
     expect(shouldIgnoreSelfEcho(base).ignore).toBe(false);
-    expect(shouldIgnoreSelfEcho({ ...base, recentPlaybackTail: true }).ignore).toBe(true);
+    expect(shouldIgnoreSelfEcho({ ...base, recentPlaybackTail: true }).ignore).toBe(false);
     expect(shouldIgnoreSelfEcho({ ...base, recentPlaybackTail: true, transcript: "no thanks" }).ignore).toBe(false);
     expect(shouldIgnoreSelfEcho({ ...base, recentPlaybackTail: true, isOverridePhrase: true }).ignore).toBe(false);
   });

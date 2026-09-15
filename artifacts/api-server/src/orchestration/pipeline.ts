@@ -42,7 +42,6 @@ import {
   pickStreamedGreetingHead,
   ttsSentenceOptions,
 } from "./clause-stream.js";
-import { CartesiaTurnStream } from "./cartesia-token-coalesce.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
@@ -117,7 +116,7 @@ import {
   RESUME_DROP_POST_GREETING_STALL_MS,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isCallerAudioDifficulty, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeShortContextualAnswer, isDomainOrAcronymAnswer, preferStableTranscript, looksLikeIncompleteClauseStart, collapseRepeatedUtterance, isStutterLoopTranscript } from "./transcriptQuality.js";
+import { pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isCallerAudioDifficulty, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeIncompleteClauseStart } from "./transcriptQuality.js";
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
@@ -348,7 +347,7 @@ const MEETING_SESSION_TOOL_DEFS: ToolDefinition[] = [
   UNMUTE_MEETING_TOOL_DEF,
 ];
 
-const VAD_SILENCE_MS          = 150;    // default silence window before STT flush (per-agent tunable via vadSilenceMs)
+const VAD_SILENCE_MS          = 0;      // STT provider owns end-of-speech; no SnapServe silence overlay
 const MIN_SPEECH_BYTES        = 3200;   // ~200ms @ 8kHz PCM — skip noise bursts shorter than this
 const CHUNK_SIZE_MULAW        = 160;    // 20ms @ 8kHz mulaw for paced batch playback
 /** Fallback RMS for hasSpeechEnergy when mic-sensitivity Low is not yet applied.
@@ -471,7 +470,7 @@ const BARGE_IN_ENERGY_THRESHOLD = 1200; // Much higher than normal VAD (300) —
 /** PSTN round-trip + playback start. Human barge reaction is typically >300 ms,
  *  so the first ~600 ms after a line starts is echo-dominated, not the caller.
  *  Empirical on VoBiz/Twilio, not a carrier spec. Per-agent override:
- *  agentConfig.bargeInEchoGraceMs (session.ts default 600). Owner: this constant
+ *  agentConfig.bargeInEchoGraceMs (session.ts default 0). Owner: this constant
  *  as module fallback; live path uses `this.bargeInEchoGraceMs`. */
 const BARGE_IN_ECHO_GRACE_MS  = 0;    // Bolna has no echo-grace overlay; welcome_played + word floor only.
                                          // gives audio time to reach the caller before we start
@@ -1774,9 +1773,7 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   private fragmentCoalesceHoldMs(): number {
-    return (this.isPlaying || this.isSendingTtsAudio)
-      ? (this.agent.fragmentCoalescePlayingMs ?? FRAGMENT_COALESCE_MS_DEFAULT)
-      : (this.agent.fragmentCoalesceListeningMs ?? FRAGMENT_COALESCE_LISTENING_MS_DEFAULT);
+    return 0;
   }
 
   /** Hold / re-arm a short STT fragment so a follow-up final can merge. */
@@ -3861,17 +3858,9 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     
     const spellingHint = this.eagerPartialText.trim() || this._specLlmState?.partialSnapshot || "";
-    const expectedLang = this.requestedLangLatch || this.currentLang || this.agent.sttConfig.language;
     let transcript = preferNumberTranscript(
       spellingHint,
-      preferEmailTranscript(
-        spellingHint,
-        preferStableTranscript(
-          sanitizeSpokenEmailsInTranscript(normalizeSttPhonetics(rawTranscript)),
-          spellingHint,
-          expectedLang,
-        ),
-      ),
+      preferEmailTranscript(spellingHint, sanitizeSpokenEmailsInTranscript(rawTranscript)),
     );
     this._turnCloseReason = closeReason;
     const _tStreamNow = performance.now();
@@ -4083,34 +4072,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // Pinned language_code omits the field. Odia is or-IN on this socket (legacy was od-IN).
       let sttLang = parseRealtimeDetectedLang(this._pendingSttLang) ?? null;
       this._pendingSttLang = null; // consume — prevent stale value leaking into force-finalize / queue-drain paths
-      const lidConfidence = this._pendingSttMeta?.languageConfidence;
 
-      // TRUST SAARAS V3 NATIVE DETECTION
-      // Saaras v3 documentation: "automatically detects the spoken language... follows along without
-      // losing accuracy... a single unified model that understands multilingual Indian speech as a
-      // continuous stream." We were building redundant confidence thresholds and script detection on
-      // top of what Saaras already handles natively. Calls 19992, 19994 issue was agent configuration
-      // (single-language Hindi instead of multilingual Tamil), NOT Saaras's detection.
-      //
-      // NEW APPROACH (minimal filtering):
-      //  • Multilingual (languageAutoDetect=true): Trust Saaras completely (no confidence filter)
-      //  • Single-language (languageAutoDetect=false): Very low bar (10%) to catch only garbage
-      if (this.agent.languageAutoDetect) {
-        // Multilingual: Trust Saaras v3's native detection completely
-        // No confidence filtering — Saaras handles code-mixing, transliteration, borrowed words
-        // No script detection — Saaras's unified model already knows the language
-      } else {
-        // Single-language: Only reject extremely uncertain detections (confidence < 10%)
-        // This catches actual noise/silence, not legitimate language switching
-        const MIN_CONFIDENCE = 0.1;
-        if (sttLang && lidConfidence != null && lidConfidence < MIN_CONFIDENCE) {
-          logger.info(
-            { callId: this.config.callId, sttLang, lidConfidence },
-            "STT language ignored — extremely low confidence (likely noise)",
-          );
-          sttLang = null;
-        }
-      }
       if (sttLang && !LANG_DISPLAY_NAMES[sttLang]) sttLang = null; // unknown code — use fallback
 
       if (this.agent.languageAutoDetect) {
@@ -4366,23 +4328,6 @@ export class OrchestrationPipeline implements VoiceSession {
     // A real caller turn is being accepted — any pending barged-reply remainder
     // is now stale (the caller moved the conversation on); never resume it.
     this._bargedReplyRemainder = null;
-
-    {
-      const collapsed = collapseRepeatedUtterance(transcript);
-      if (isStutterLoopTranscript(transcript, collapsed)) {
-        this.logDiscardedTranscript(transcript, "stutter_loop");
-        logger.info(
-          { callId: this.config.callId, preview: transcript.slice(0, 80) },
-          "Ignoring transcript — STT stutter loop, not a caller turn",
-        );
-        this.safetyNet.onFinal();
-        this.clearEagerPartialTimer();
-        this.interruptionMgr.onUserSpeechEnd();
-        if (!this.closed) this.safetyNet.beginListening();
-        return;
-      }
-      transcript = collapsed;
-    }
 
     // Outbound call-screening bots (iPhone Ask Reason for Calling / Google
     // Call Screen): hang up and record voicemail — do not pitch the robot.
@@ -6578,18 +6523,18 @@ export class OrchestrationPipeline implements VoiceSession {
     const audioBufferMs = Math.round(
       this.audioBuffer.reduce((s, b) => s + b.length, 0) / 8
     );
-    const { ms, reason } = computeEndpointMs({
+    const { reason } = computeEndpointMs({
       lastAgentText,
       partialTranscript,
       audioBufferMs,
       baseSilenceMs: this.vadSilenceMs,
     });
-    this._lastEndpointMs = ms;
+    this._lastEndpointMs = 0;
     this._lastEndpointReason = reason;
     this.silenceTimer = setTimeout(() => {
       this.silenceTimer = null;
       void this.flushAndProcess();
-    }, ms);
+    }, 0);
   }
 
   /**
@@ -7084,7 +7029,6 @@ export class OrchestrationPipeline implements VoiceSession {
       turnNumber,
       requestPayload: {
         text,
-        chars: text.length,
         chars: text.length,
       },
     });
@@ -8565,18 +8509,6 @@ export class OrchestrationPipeline implements VoiceSession {
       undefined,
       sanitizeSpokenEmailsInTranscript(transcript),
     );
-    {
-      const collapsed = collapseRepeatedUtterance(transcript);
-      if (isStutterLoopTranscript(transcript, collapsed)) {
-        this.logDiscardedTranscript(transcript, "stutter_loop");
-        logger.info(
-          { callId: this.config.callId, preview: transcript.slice(0, 80) },
-          "processTurn skipped — STT stutter loop, not a caller turn",
-        );
-        return;
-      }
-      transcript = collapsed;
-    }
     this._processTurnGeneration = this.semanticTurnGate.turnGeneration;
     // This turn IS the reply to the barge. Leaving bargeInRequested=true
     // drops every onToken / enqueue (call 21426: LLM wrote 387 chars, 0 TTS).
@@ -8752,22 +8684,6 @@ export class OrchestrationPipeline implements VoiceSession {
     // ── Guardrail route check ──
     // Fast word-overlap classifier — runs before the main LLM to intercept
     // sensitive or off-topic utterances and play a canned response instead.
-    // P0-A: Garbled transcript recovery — catch noise/garbage before it reaches the LLM.
-    // truncated-dangling is an incomplete-but-real STT final: send it to the LLM
-    // (or coalesce) instead of overlaying "sorry, say that again".
-    const sttLang = this.currentLang || this.agent.sttConfig.language;
-    const { isGarbled, reason: garbledReason } = checkTranscriptQuality(transcript, { expectedLang: sttLang });
-    if (
-      isGarbled
-      && garbledReason !== "truncated-dangling"
-      && !looksLikeSpokenEmailSpelling(transcript)
-      && !isDomainOrAcronymAnswer(transcript)
-      && !looksLikeShortContextualAnswer(transcript)
-    ) {
-      logger.warn({ callId: this.config.callId, transcript, garbledReason }, "Garbled transcript — responding with clarification");
-      await this.respondWithClarification(sttLang);
-      return;
-    }
 
     // ── Caller farewell short-circuit ─────────────────────────────────────
     // When the caller says a clear farewell ("Thank you", "Bye", "நன்றி"…)
@@ -8965,8 +8881,7 @@ export class OrchestrationPipeline implements VoiceSession {
     let llmResponse = "";
     let malformedContinuationDetected = false;
     let pendingText  = "";
-    /** Cartesia: stream tokens until first `.!?`, then leftover REST of full LLM text. */
-    const cartesiaTurn = new CartesiaTurnStream();
+    let cartesiaBuf = "";
     // One-step output guard: suppresses any second question (and everything)
     // after it) so a turn that runs through multiple flow steps is truncated at
     // the first natural yield point. Mirrored into stored history below.
@@ -10279,8 +10194,8 @@ export class OrchestrationPipeline implements VoiceSession {
           if (!afterEnvelope) return;
           if (this.cartesiaManagedTokenStream()) {
             if (malformedContinuationDetected) return;
-            const bufferedSpeech = `${cartesiaTurn.sent}${cartesiaTurn.pending}${afterEnvelope}`;
-            if (/(?:\.\.\.|…)[ \t]*(?:umm?|uhh?|sorry)\b/i.test(bufferedSpeech)) {
+            cartesiaBuf += afterEnvelope;
+            if (/(?:\.\.\.|…)[ \t]*(?:umm?|uhh?|sorry)\b/i.test(cartesiaBuf)) {
               malformedContinuationDetected = true;
               logger.warn(
                 { callId: this.config.callId, turnNumber: _currentTurnIndex },
@@ -10288,7 +10203,7 @@ export class OrchestrationPipeline implements VoiceSession {
               );
               return;
             }
-            for (const p of cartesiaTurn.push(afterEnvelope)) enqueue(p);
+            enqueue(afterEnvelope);
             return;
           }
           pendingText += afterEnvelope;
@@ -10460,7 +10375,7 @@ export class OrchestrationPipeline implements VoiceSession {
         });
         llmResponse = "";
         pendingText  = "";
-        cartesiaTurn.reset();
+        cartesiaBuf = "";
         llmFirstSentenceProcessed = false; // reset so fallback can also suppress its leading ack
         try {
           await this.fallbackLlm.chat(
@@ -10484,7 +10399,7 @@ export class OrchestrationPipeline implements VoiceSession {
               const afterBrackets = filterBrackets(filtered);
               if (!afterBrackets) return;
               if (this.cartesiaManagedTokenStream()) {
-                for (const p of cartesiaTurn.push(afterBrackets)) enqueue(p);
+                enqueue(afterBrackets);
                 return;
               }
               pendingText += afterBrackets;
@@ -10807,12 +10722,7 @@ export class OrchestrationPipeline implements VoiceSession {
       flushText = pendingText;
     }
     if (this.cartesiaManagedTokenStream()) {
-      const { stream, leftover } = cartesiaTurn.finish(cleanResponse);
-      for (const p of stream) enqueue(p);
-      if (leftover) {
-        if (turnContextId && cartesiaTts) cartesiaTts.appendTurnRemainder(turnContextId, leftover);
-        else enqueue(leftover);
-      }
+      // Adapter holds BPE until a word boundary and closes with continue:false.
     } else {
     const g = stepGuard.push(flushText);
     if (g.trim()) {
@@ -11444,7 +11354,7 @@ export class OrchestrationPipeline implements VoiceSession {
     let llmResponse = "";
     let malformedContinuationDetected = false;
     let pendingText = "";
-    const cartesiaTurn = new CartesiaTurnStream();
+    let cartesiaBuf = "";
     // One-step output guard (same as the main turn path) — truncate at the first
     // natural yield point if the post-tool reply runs through multiple steps.
     const stepGuard = { push: (sentence: string) => sentence, truncated: () => false };
@@ -11687,8 +11597,8 @@ export class OrchestrationPipeline implements VoiceSession {
           }
           if (this.cartesiaManagedTokenStream()) {
             if (malformedContinuationDetected) return;
-            const bufferedSpeech = `${cartesiaTurn.sent}${cartesiaTurn.pending}${afterEnvelope}`;
-            if (/(?:\.\.\.|…)[ \t]*(?:umm?|uhh?|sorry)\b/i.test(bufferedSpeech)) {
+            cartesiaBuf += afterEnvelope;
+            if (/(?:\.\.\.|…)[ \t]*(?:umm?|uhh?|sorry)\b/i.test(cartesiaBuf)) {
               malformedContinuationDetected = true;
               logger.warn(
                 { callId: this.config.callId, turnNumber: this._activeTurnIndex },
@@ -11696,7 +11606,7 @@ export class OrchestrationPipeline implements VoiceSession {
               );
               return;
             }
-            for (const p of cartesiaTurn.push(afterEnvelope)) enqueue(p);
+            enqueue(afterEnvelope);
             return;
           }
           pendingText += afterEnvelope;
@@ -11833,12 +11743,7 @@ export class OrchestrationPipeline implements VoiceSession {
       flushText = pendingText;
     }
     if (this.cartesiaManagedTokenStream()) {
-      const { stream, leftover } = cartesiaTurn.finish(cleanResponse);
-      for (const p of stream) enqueue(p);
-      if (leftover) {
-        if (ctTurnContextId && ctCartesiaTts) ctCartesiaTts.appendTurnRemainder(ctTurnContextId, leftover);
-        else enqueue(leftover);
-      }
+      // Adapter holds BPE until a word boundary and closes with continue:false.
     } else {
     const gFollow = stepGuard.push(flushText);
     if (gFollow.trim()) {

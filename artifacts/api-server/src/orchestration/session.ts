@@ -628,7 +628,7 @@ export async function createSession(params: {
     // P1-C: Webhook HMAC secret
     webhookSecret: (agentCfg["webhookSecret"] as string | undefined) ?? null,
     // P1-D: VAD / Barge-in tuning (defaults match the hardcoded pipeline constants)
-    vadSilenceMs:           (agentCfg["vadSilenceMs"]           as number  | undefined) ?? 350,
+    vadSilenceMs:           (agentCfg["vadSilenceMs"]           as number  | undefined) ?? 0,
     bargeInEnabled:         (agentCfg["bargeInEnabled"]         as boolean | undefined) ?? true,
     // Mic Sensitivity is not in Builder — all calls use Low. Legacy saved
     // bargeInEnergyThreshold=1200 (Normal form default) is rewritten to Low's
@@ -637,7 +637,7 @@ export async function createSession(params: {
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,
     // Empirical PSTN echo window (VoBiz/Twilio), not a carrier spec. See
     // pipeline.ts BARGE_IN_ECHO_GRACE_MS. Stop Speaking Plan may override.
-    bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 600,
+    bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 0,
     micSensitivity:         resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined),
     // P1-E: Agent timezone
     timezone: agentTimezone,
@@ -658,8 +658,7 @@ export async function createSession(params: {
     wordsForInterruption: (() => {
       const v = agentCfg["wordsForInterruption"];
       if (typeof v !== "number" || !Number.isFinite(v)) return 3;
-      const n = Math.max(0, Math.round(v));
-      return n === 2 ? 3 : n;
+      return Math.max(0, Math.round(v));
     })(),
     // Post-utterance WAIT before TTS. Always 0 — saved 350/500/900 values
     // added ~1s of dead air every turn (call 20737).

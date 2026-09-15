@@ -69,7 +69,7 @@ function isNearMissEcho(text: string, spoken: string): boolean {
   return false;
 }
 
-export function shouldIgnoreSelfEcho(opts: {
+export function shouldIgnoreSelfEcho(_opts: {
   transcript: string;
   agentSpeaking: boolean;
   welcomePlayed: boolean;
@@ -79,19 +79,6 @@ export function shouldIgnoreSelfEcho(opts: {
   /** Bounded by the actual last output frame, not estimated sentence length. */
   recentPlaybackTail?: boolean;
 }): { ignore: boolean; reason: SelfEchoReason } {
-  if (opts.isOverridePhrase || (!opts.agentSpeaking && !opts.recentPlaybackTail)) return { ignore: false, reason: "none" };
-  const text = normalize(opts.transcript);
-  if (!text) return { ignore: false, reason: "none" };
-
-  // Short answers must survive. Only a substantial phrase from current/recent
-  // output qualifies as probable echo, not an AEC verdict.
-  const words = text.split(" ").filter(Boolean);
-  const recentAgentText = opts.recentAgentText ?? [];
-  if (recentAgentText.some((spoken) => isNearMissEcho(text, spoken))) {
-    return { ignore: true, reason: "content_match" };
-  }
-
-  if (words.length < 4) return { ignore: false, reason: "none" };
-
+  // Do not drop STT finals as "echo". Provider transcript is the turn.
   return { ignore: false, reason: "none" };
 }

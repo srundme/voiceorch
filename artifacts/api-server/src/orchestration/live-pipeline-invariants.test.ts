@@ -150,8 +150,8 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("needSchedulingGuides");
     expect(pipelineSrc).toContain("return ttsSentenceOptions(this.agent.ttsProvider)");
     expect(methodBody("processTurn")).toContain("this.cartesiaManagedTokenStream()");
-    expect(pipelineSrc).toContain("CartesiaTurnStream");
-    expect(pipelineSrc).toContain("appendTurnRemainder");
+    expect(pipelineSrc).not.toContain("CartesiaTurnStream");
+    expect(pipelineSrc).toContain("finalizeTurnContext");
     expect(pipelineSrc).toContain("trim: !this.cartesiaManagedTokenStream()");
     expect(readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), "clause-stream.ts"),
@@ -171,7 +171,6 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     // cannot finish first.
     expect(methodBody("handleStreamingTranscript")).toContain("looksLikeIncompleteClauseStart");
     expect(methodBody("handleStreamingTranscript")).toContain("fragment_coalesce_hold");
-    expect(methodBody("handleStreamingTranscript")).toContain("collapseRepeatedUtterance");
     expect(methodBody("processTurn")).toContain("interruptReplyArmed");
     expect(pipelineSrc).toContain("THIS_TURN_INSTRUCTION");
     expect(pipelineSrc).toContain("this.wakePlayTask()");

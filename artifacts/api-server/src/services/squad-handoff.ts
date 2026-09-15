@@ -260,11 +260,11 @@ async function buildTargetAgentConfig(
     knowledgeBaseId: agent.knowledgeBaseId ?? null,
     knowledgeSourceIds: await getAttachedSourceIds(agent.id, agent.knowledgeBaseId),
     webhookSecret: (agentCfg["webhookSecret"] as string | undefined) ?? null,
-    vadSilenceMs: (agentCfg["vadSilenceMs"] as number | undefined) ?? 350,
+    vadSilenceMs: (agentCfg["vadSilenceMs"] as number | undefined) ?? 0,
     bargeInEnabled: (agentCfg["bargeInEnabled"] as boolean | undefined) ?? true,
     bargeInEnergyThreshold: resolveBargeInEnergyThreshold(agentCfg["bargeInEnergyThreshold"]),
     bargeInMinFrames: (agentCfg["bargeInMinFrames"] as number | undefined) ?? 4,
-    bargeInEchoGraceMs: (agentCfg["bargeInEchoGraceMs"] as number | undefined) ?? 600,
+    bargeInEchoGraceMs: (agentCfg["bargeInEchoGraceMs"] as number | undefined) ?? 0,
     micSensitivity,
     timezone: (agentCfg["timezone"] as string | undefined) ?? "Asia/Kolkata",
     recordingEnabled: (agentCfg["recordingEnabled"] as boolean | undefined) ?? false,
@@ -276,8 +276,7 @@ async function buildTargetAgentConfig(
     wordsForInterruption: (() => {
       const v = agentCfg["wordsForInterruption"];
       if (typeof v !== "number" || !Number.isFinite(v)) return 3;
-      const n = Math.max(0, Math.round(v));
-      return n === 2 ? 3 : n;
+      return Math.max(0, Math.round(v));
     })(),
     incrementalDelay: 0,
     hangupAfterLlmCall: false,
