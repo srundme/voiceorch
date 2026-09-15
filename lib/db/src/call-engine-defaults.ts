@@ -38,7 +38,7 @@ export const TTS_STREAM_DEFAULTS = {
 
 /** Sarvam STT — trust Saaras VAD; no SnapServe artificial holds. */
 export const SARVAM_STT_LATENCY_DEFAULTS = {
-  /** Match Sarvam docs / LiveKit agents: STT owns end-of-speech. */
+  /** Match Sarvam realtime docs: STT owns end-of-speech. */
   highVadSensitivity: true,
   /** Emit immediately when Saaras ends speech / returns transcript. */
   speechEndFlushMs: 0,

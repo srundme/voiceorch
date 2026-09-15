@@ -19,21 +19,16 @@ const WS_BASE = "wss://api.sarvam.ai/speech-to-text-realtime/ws";
 const PING_MS = 20_000;
 
 /**
- * Sarvam LiveKit production VAD table
- * (https://docs.sarvam.ai/api/integration/livekit-production-best-practices).
- * Telephony (8 kHz) needs a higher onset bar and longer EOS than headset audio.
+ * Official saaras realtime VAD (docs.sarvam.ai realtime streaming).
+ * Agent Latency Tuning can still override per call; we do not overlay a
+ * third-party SIP table on top of Saaras.
  */
-export function resolveRealtimeVadDefaults(sampleRate: 8000 | 16000): {
+export function resolveRealtimeVadDefaults(_sampleRate: 8000 | 16000): {
   silenceDurationMs: number | null;
   minSpeechDurationMs: number | null;
   threshold: number | null;
 } {
-  // Saaras telephony table (docs.sarvam.ai realtime VAD): 8 kHz PSTN echo
-  // and hold music need a longer EOS and a higher onset than headset 16 kHz.
-  if (sampleRate === 8000) {
-    return { silenceDurationMs: 500, minSpeechDurationMs: 200, threshold: 0.7 };
-  }
-  return { silenceDurationMs: 300, minSpeechDurationMs: 150, threshold: 0.5 };
+  return { silenceDurationMs: 500, minSpeechDurationMs: 250, threshold: 0.3 };
 }
 
 export type SarvamRealtimeStreamType = "fast" | "balanced" | "simulated";
@@ -308,8 +303,7 @@ export function shouldCommitStreamingEnergyBarge(opts: {
 }
 
 /**
- * Official LiveKit recipe: first non-echo partial (`min_words` ≥ 1) cuts TTS.
- * Greeting lock, echo grace, and self-echo stay. No energy / hard-interrupt extras.
+ * First usable non-echo partial cuts TTS. Greeting lock and echo grace stay.
  */
 export function shouldBargeOnRealtimePartial(opts: {
   greetingOrSystem: boolean;
@@ -465,6 +459,9 @@ export class SarvamRealtimeSTT implements STTAdapter {
     let usingLegacy = false;
     let legacyStream: StreamSTT | null = null;
     let pingTimer: ReturnType<typeof setInterval> | null = null;
+    let reconnectAttempts = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    const MAX_RECONNECT = 10;
     let lastPartial = "";
     let lastPartialLang: string | undefined;
     let speechEndAt = 0;
@@ -512,6 +509,30 @@ export class SarvamRealtimeSTT implements STTAdapter {
       }, PING_MS);
     };
 
+    const scheduleReconnect = (code: number, reason: string): void => {
+      if (intentionallyClosed || usingLegacy) return;
+      if (reconnectAttempts >= MAX_RECONNECT) {
+        logger.error({ code, reason, reconnectAttempts }, "Sarvam STT realtime: max reconnects — handing off");
+        _onConnectionDead?.();
+        onClose?.();
+        return;
+      }
+      const delay = Math.min(500 * 2 ** reconnectAttempts, 8_000);
+      reconnectAttempts++;
+      logger.info(
+        { code, reason, delay, reconnectAttempts },
+        "Sarvam STT realtime: socket closed — reconnecting (do not hang up the PSTN call)",
+      );
+      _onConnectionDead?.();
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (intentionallyClosed || usingLegacy) return;
+        sessionBegan = false;
+        wsReady = false;
+        openSocket();
+      }, delay);
+    };
+
     const fallbackToLegacy = (reason: string, detail?: Record<string, unknown>): void => {
       if (usingLegacy || intentionallyClosed) return;
       usingLegacy = true;
@@ -544,6 +565,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
       if (event === "session.begin") {
         sessionBegan = true;
         wsReady = true;
+        reconnectAttempts = 0;
         logger.info(
           { requestId: lastRequestId, languageCode },
           "Sarvam STT realtime: session.begin",
@@ -699,6 +721,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
       ws = new WebSocket(url, { headers: { "api-subscription-key": key } });
       ws.on("open", () => {
         wsReady = true;
+        reconnectAttempts = 0;
         startPing();
       });
       ws.on("message", handleMessage);
@@ -717,10 +740,10 @@ export class SarvamRealtimeSTT implements STTAdapter {
           fallbackToLegacy("inactivity_before_session", { code });
           return;
         }
-        if (!intentionallyClosed) {
-          _onConnectionDead?.();
-          onClose?.();
-        }
+        // Mid-call 1008 (idle / max session) used to call pipeline onClose,
+        // which left 1–16s with no STT and the silence watchdog hung up the
+        // phone. Reconnect the Saaras socket; keep the PSTN leg up.
+        scheduleReconnect(code, reason);
       });
       ws.on("error", (err) => {
         logger.warn({ err }, "Sarvam STT realtime: socket error");
@@ -800,6 +823,10 @@ export class SarvamRealtimeSTT implements STTAdapter {
       close(): void {
         intentionallyClosed = true;
         stopPing();
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
         if (usingLegacy) {
           legacyStream?.close();
           return;

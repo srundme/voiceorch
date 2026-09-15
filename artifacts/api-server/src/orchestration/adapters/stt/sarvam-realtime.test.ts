@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   buildRealtimeConfigUpdate,
@@ -73,17 +74,26 @@ describe("nextRealtimeLanguageOnSwitch", () => {
 });
 
 describe("resolveRealtimeVadDefaults", () => {
-  it("sends Sarvam telephony VAD for 8 kHz and a shorter headset table for 16 kHz", () => {
+  it("uses official Saaras realtime VAD", () => {
     expect(resolveRealtimeVadDefaults(8000)).toEqual({
       silenceDurationMs: 500,
-      minSpeechDurationMs: 200,
-      threshold: 0.7,
+      minSpeechDurationMs: 250,
+      threshold: 0.3,
     });
     expect(resolveRealtimeVadDefaults(16000)).toEqual({
-      silenceDurationMs: 300,
-      minSpeechDurationMs: 150,
-      threshold: 0.5,
+      silenceDurationMs: 500,
+      minSpeechDurationMs: 250,
+      threshold: 0.3,
     });
+  });
+});
+
+describe("Sarvam realtime mid-call socket close", () => {
+  it("reconnects the Saaras socket instead of hanging up the PSTN call", () => {
+    const src = readFileSync(new URL("./sarvam-realtime.ts", import.meta.url), "utf8");
+    expect(src).toContain("scheduleReconnect");
+    expect(src).toContain("do not hang up the PSTN call");
+    expect(src).toContain("MAX_RECONNECT = 10");
   });
 });
 
@@ -330,7 +340,7 @@ describe("shouldBargeOnRealtimePartial", () => {
     expect(shouldBargeOnRealtimePartial({ ...base, inEchoGrace: true })).toBe(false);
   });
 
-  it("cuts a non-echo partial without energy or hard-interrupt extras (LiveKit min_words)", () => {
+  it("cuts a non-echo partial without extra energy gates", () => {
     expect(shouldBargeOnRealtimePartial({
       ...base,
       echoBarReady: false,

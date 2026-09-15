@@ -128,7 +128,7 @@ import { lookupSheetsForSession } from "../services/sheets-writeback.js";
  * Override the default via SILENCE_TIMEOUT_DEFAULT_SECONDS.
  */
 const DEFAULT_SILENCE_TIMEOUT_SECONDS =
-  parseInt(process.env["SILENCE_TIMEOUT_DEFAULT_SECONDS"] ?? "", 10) || 15;
+  parseInt(process.env["SILENCE_TIMEOUT_DEFAULT_SECONDS"] ?? "", 10) || 30;
 
 interface MetricsAcc {
   sttTotal: number;

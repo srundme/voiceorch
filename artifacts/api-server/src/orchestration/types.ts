@@ -252,7 +252,7 @@ export interface STTConfig {
   endOfTurnConfidence: number;
   endOfTurnTimeout: number;
   keyterms: string[];
-  /** "off" | "vapi" | "livekit" — "vapi" enables Deepgram utterance-end VAD events */
+  /** "off" | "vapi" | "livekit" — Deepgram utterance-end VAD (legacy livekit alias) */
   smartEndpointing: string;
   autoFallback: boolean;
   fallbackProviders: Array<{ provider: string; model: string | null }>;

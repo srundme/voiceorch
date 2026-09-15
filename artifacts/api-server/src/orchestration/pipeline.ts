@@ -2371,7 +2371,7 @@ export class OrchestrationPipeline implements VoiceSession {
       
       // ── PRIMARY BARGE-IN SIGNAL (Industry Standard) ────────────────────────────
       // Sarvam's VAD detected speech while agent is speaking → potential barge-in!
-      // This is the CORRECT way to detect interruptions (PipeCat, Bolna, LiveKit all
+      // This is the CORRECT way to detect interruptions (PipeCat, Bolna all
       // use provider-side VAD events, not energy thresholds). Sarvam's model handles
       // mic sensitivity, echo, noise, and far-field speech automatically.
       //
@@ -5046,7 +5046,7 @@ export class OrchestrationPipeline implements VoiceSession {
       //
       // Barge-in detection now uses Sarvam's native `vad.speech_start` event (see
       // onSpeechStart callback below) instead of raw energy thresholds. This follows
-      // the industry standard (PipeCat, Bolna, LiveKit) and the "trust the provider"
+      // the industry standard (PipeCat, Bolna) and the "trust the provider"
       // principle we applied to language detection and Azure STT confidence.
       //
       // Background speakers are now filtered on the TRANSCRIPT side (isSelfEcho(),
@@ -7085,7 +7085,7 @@ export class OrchestrationPipeline implements VoiceSession {
       requestPayload: {
         text,
         chars: text.length,
-        letterSized: this.agent.ttsProvider === "cartesia" && text.trim().length <= 2,
+        chars: text.length,
       },
     });
 
@@ -8752,11 +8752,14 @@ export class OrchestrationPipeline implements VoiceSession {
     // ── Guardrail route check ──
     // Fast word-overlap classifier — runs before the main LLM to intercept
     // sensitive or off-topic utterances and play a canned response instead.
-    // P0-A: Garbled transcript recovery — catch noise/garbage before it reaches the LLM
+    // P0-A: Garbled transcript recovery — catch noise/garbage before it reaches the LLM.
+    // truncated-dangling is an incomplete-but-real STT final: send it to the LLM
+    // (or coalesce) instead of overlaying "sorry, say that again".
     const sttLang = this.currentLang || this.agent.sttConfig.language;
     const { isGarbled, reason: garbledReason } = checkTranscriptQuality(transcript, { expectedLang: sttLang });
     if (
       isGarbled
+      && garbledReason !== "truncated-dangling"
       && !looksLikeSpokenEmailSpelling(transcript)
       && !isDomainOrAcronymAnswer(transcript)
       && !looksLikeShortContextualAnswer(transcript)
