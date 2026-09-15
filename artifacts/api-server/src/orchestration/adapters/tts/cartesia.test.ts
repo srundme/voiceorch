@@ -256,7 +256,7 @@ describe("Cartesia WS continuations", () => {
       await vi.waitFor(() => expect(sockets[0]?.sent.length).toBe(3));
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s));
       expect(requests.map((r) => [r.transcript, r.continue])).toEqual([
-        ["नमस्ते।", true], [" आप कैसे हैं?", true], ["", false],
+        ["नमस्ते।", true], [" आप कैसे हैं?", true], [undefined, false],
       ]);
       expect(requests[0]).toMatchObject({
         model_id: "sonic-3.6",
@@ -322,6 +322,52 @@ describe("Cartesia WS continuations", () => {
       expect(requests.map((r) => r.transcript)).toContain("No problem.");
       sockets[0]!.emit({ type: "chunk", context_id: "race", data: Buffer.from([1]).toString("base64") });
       sockets[0]!.emit({ type: "done", context_id: "race" });
+      await owner;
+    } finally {
+      tts.close();
+      await owner.catch(() => {});
+    }
+  });
+
+  it("does not send empty transcript:\"\" on finalize (calls 25048/25049)", async () => {
+    const sockets: FakeCartesiaWs[] = [];
+    vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
+      constructor(url: string) { super(url); sockets.push(this); }
+    });
+    vi.stubGlobal("fetch", vi.fn());
+    const tts = new CartesiaTTS("test-key", null, "sonic-3.6", "en-IN", null, 8000);
+    tts.claimTurnContext("empty-llm");
+    const owner = tts.synthesizeStreamInContext("empty-llm", "", () => {}, () => {});
+    tts.finalizeTurnContext("empty-llm");
+    try {
+      await vi.waitFor(() => expect(sockets[0]).toBeTruthy());
+      await new Promise((r) => setTimeout(r, 40));
+      const requests = (sockets[0]?.sent ?? []).map((s) => JSON.parse(s) as { transcript?: string; continue?: boolean });
+      expect(requests.some((r) => r.transcript === "")).toBe(false);
+      expect(requests.filter((r) => r.continue === false && r.transcript == null)).toHaveLength(0);
+    } finally {
+      tts.close();
+      await owner.catch(() => {});
+    }
+  });
+
+  it("flushes a held word as continue:false instead of an empty close", async () => {
+    const sockets: FakeCartesiaWs[] = [];
+    vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
+      constructor(url: string) { super(url); sockets.push(this); }
+    });
+    vi.stubGlobal("fetch", vi.fn());
+    const tts = new CartesiaTTS("test-key", null, "sonic-3.6", "en-IN", null, 8000);
+    tts.claimTurnContext("held");
+    const owner = tts.synthesizeStreamInContext("held", "Hello", () => {}, () => {});
+    tts.finalizeTurnContext("held");
+    try {
+      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
+      const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as { transcript?: string; continue?: boolean });
+      expect(requests.some((r) => r.transcript === "")).toBe(false);
+      expect(requests).toContainEqual(expect.objectContaining({ transcript: "Hello", continue: false }));
+      sockets[0]!.emit({ type: "chunk", context_id: "held", data: Buffer.from([1]).toString("base64") });
+      sockets[0]!.emit({ type: "done", context_id: "held" });
       await owner;
     } finally {
       tts.close();

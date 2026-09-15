@@ -7,7 +7,8 @@
  *
  * One WebSocket per call. One context_id per LLM turn.
  * Word-sized continue:true transcripts (never letter BPE — call 25026).
- * continue:false with empty transcript when the turn ends.
+ * Last speakable chunk uses continue:false. Never send transcript:"" — Sonic
+ * India returns "No valid transcripts passed" (calls 25048 / 25049).
  * REST /tts/bytes only if the handshake never opens or a sentence has no WS audio.
  */
 import crypto from "node:crypto";
@@ -110,6 +111,10 @@ export function takeCartesiaWordChunks(buffered: string, incoming: string, flush
   return { chunks: [], rest: buf };
 }
 
+export function isSpeakableCartesiaTranscript(text: string): boolean {
+  return text.trim().length > 0;
+}
+
 function isInvalidVoiceControlsError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return /invalid voice controls|invalid emotion|generation_config/i.test(msg);
@@ -197,6 +202,7 @@ export class CartesiaTTS implements TTSAdapter {
   private readonly turnInputs = new Map<string, Set<Promise<void>>>();
   private readonly contextSettings = new Map<string, Record<string, unknown>>();
   private readonly wordTimings = new Map<string, Array<{ word: string; end: number }>>();
+  private readonly turnSentValid = new Set<string>();
 
   constructor(
     apiKey: string,
@@ -418,8 +424,21 @@ export class CartesiaTTS implements TTSAdapter {
   }
 
   private async completeTurn(turnContextId: string): Promise<void> {
+    const opened = this.turnOpened.get(turnContextId);
+    if (opened) {
+      const ownerInFlight =
+        this.pending.has(turnContextId)
+        || (this.turnInputs.get(turnContextId)?.size ?? 0) > 0
+        || this.wsConnecting != null;
+      if (ownerInFlight) await opened;
+      else {
+        await Promise.race([
+          opened,
+          new Promise<void>((r) => setTimeout(r, 250)),
+        ]);
+      }
+    }
     this.markTurnOpened(turnContextId);
-    await this.turnOpened.get(turnContextId);
     await Promise.allSettled([...(this.turnInputs.get(turnContextId) ?? [])]);
     await this.turnSendChains.get(turnContextId);
     if (this.cancelledTurns.has(turnContextId)) {
@@ -431,16 +450,29 @@ export class CartesiaTTS implements TTSAdapter {
     this.turnOutBuf.delete(turnContextId);
     const remainder = appendCartesiaRemainder(held, this.closedRemainder.get(turnContextId) ?? "");
     this.closedRemainder.delete(turnContextId);
-    if (remainder && this.closedTurns.has(turnContextId)) {
+    const leftover = takeCartesiaWordChunks("", remainder, true).chunks
+      .filter((chunk) => isSpeakableCartesiaTranscript(chunk));
+    if (leftover.length && this.closedTurns.has(turnContextId)) {
       const owner = this.turnChunkHandlers.get(turnContextId) ?? (() => undefined);
       try {
-        await this.synthesizeViaWsOneShot(remainder, owner, () => undefined);
+        await this.synthesizeViaWsOneShot(leftover.join(""), owner, () => undefined);
       } catch (err) {
         logger.warn({ contextId: turnContextId, err: this.errMsg(err) }, "Cartesia leftover synthesis failed");
       }
     }
 
+    const extra = this.closedTurns.has(turnContextId) ? [] : leftover;
+    const hadValid = this.turnSentValid.has(turnContextId);
     const skipClose = this.restFallbackTurns.has(turnContextId) || this.closedTurns.has(turnContextId);
+    if (!skipClose && (extra.length || hadValid)) {
+      try {
+        await this.getOrOpenWs();
+      } catch {
+        this.pending.get(turnContextId)?.resolve();
+        this.cleanupTurn(turnContextId);
+        return;
+      }
+    }
     if (skipClose || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
       this.pending.get(turnContextId)?.resolve();
       this.cleanupTurn(turnContextId);
@@ -449,22 +481,28 @@ export class CartesiaTTS implements TTSAdapter {
 
     await this.enqueueTurnSend(turnContextId, () => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-      const extra = held && !this.closedTurns.has(turnContextId) ? held : "";
-      if (extra) {
+      extra.forEach((chunk, i) => {
+        const last = i === extra.length - 1;
+        this.ws!.send(JSON.stringify({
+          ...this.settingsForContext(turnContextId),
+          context_id: turnContextId,
+          transcript: chunk,
+          continue: !last,
+        }));
+      });
+      if (extra.length) this.turnSentValid.add(turnContextId);
+      else if (hadValid) {
         this.ws.send(JSON.stringify({
           ...this.settingsForContext(turnContextId),
           context_id: turnContextId,
-          transcript: extra,
-          continue: true,
+          continue: false,
         }));
       }
-      this.ws.send(JSON.stringify({
-        ...this.settingsForContext(turnContextId),
-        context_id: turnContextId,
-        transcript: "",
-        continue: false,
-      }));
     });
+    if (!extra.length && !hadValid) {
+      this.pending.get(turnContextId)?.resolve();
+      this.cleanupTurn(turnContextId);
+    }
   }
 
   private cleanupTurn(turnContextId: string): void {
@@ -479,6 +517,7 @@ export class CartesiaTTS implements TTSAdapter {
     this.cancelledTurns.delete(turnContextId);
     this.restFallbackTurns.delete(turnContextId);
     this.closedTurns.delete(turnContextId);
+    this.turnSentValid.delete(turnContextId);
   }
 
   private async getOrOpenWs(): Promise<WebSocket> {
@@ -678,6 +717,8 @@ export class CartesiaTTS implements TTSAdapter {
       const { chunks, rest } = takeCartesiaWordChunks(prev, transcript, false);
       this.turnOutBuf.set(turnContextId, rest);
       for (const chunk of chunks) {
+        if (!isSpeakableCartesiaTranscript(chunk)) continue;
+        this.turnSentValid.add(turnContextId);
         ws.send(JSON.stringify({
           ...this.settingsForContext(turnContextId, emotions),
           context_id: turnContextId,
@@ -742,6 +783,10 @@ export class CartesiaTTS implements TTSAdapter {
     signal?: AbortSignal,
     emotions?: string[],
   ): Promise<void> {
+    if (!isSpeakableCartesiaTranscript(text)) {
+      onDone(0);
+      return;
+    }
     const ws = await this.getOrOpenWs();
     const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
     const contextId = crypto.randomUUID();
