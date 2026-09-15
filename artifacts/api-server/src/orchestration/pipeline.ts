@@ -6559,10 +6559,8 @@ export class OrchestrationPipeline implements VoiceSession {
     return ttsSentenceOptions(this.agent.ttsProvider);
   }
 
-  /** Cartesia managed buffering: stream LLM tokens; do not wait for `.!?`.
-   *  Docs: aggregating sentences client-side *and* max_buffer_delay_ms 3000
-   *  is the "middle ground" that adds up to 3s extra
-   *  (https://docs.cartesia.ai/use-the-api/tts-websocket/buffering). */
+  /** Cartesia custom buffering: word-chunk in the adapter, max_buffer_delay_ms 0.
+   *  Docs: client aggregation *and* 3000ms managed delay is extra mute latency. */
   private cartesiaManagedTokenStream(): boolean {
     return this.agent.ttsProvider === "cartesia";
   }

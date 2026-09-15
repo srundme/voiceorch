@@ -6,9 +6,12 @@
  *   https://docs.cartesia.ai/build-with-cartesia/capability-guides/stream-inputs-using-continuations
  *
  * One WebSocket per call. One context_id per LLM turn.
- * Word-sized continue:true transcripts (never letter BPE — call 25026).
- * Last speakable chunk uses continue:false. Never send transcript:"" — Sonic
- * India returns "No valid transcripts passed" (calls 25048 / 25049).
+ * Word-sized transcripts (never letter BPE — call 25026). Last speakable
+ * chunk uses continue:false. Never send transcript:"" or a transcript-less
+ * close — Sonic India returns "No valid transcripts passed" and never emits
+ * `done` (calls 25048 / 25049). We already wait for word boundaries, so
+ * max_buffer_delay_ms is 0 (custom buffering). Mixing that hold with the
+ * 3000ms managed default is the documented middle-ground mute.
  * REST /tts/bytes only if the handshake never opens or a sentence has no WS audio.
  */
 import crypto from "node:crypto";
@@ -19,8 +22,8 @@ const CARTESIA_VERSION = "2026-03-01";
 const WS_CONNECT_TIMEOUT_MS = 6_000;
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 300;
-/** Docs managed-buffering default. 0 starts a clip per token. */
-const CARTESIA_MAX_BUFFER_DELAY_MS = 3000;
+/** Custom buffering: we send word chunks, Sonic must speak them immediately. */
+const CARTESIA_MAX_BUFFER_DELAY_MS = 0;
 
 export const CARTESIA_DEFAULT_MODEL = "sonic-3.6";
 export const CARTESIA_SONIC_36_MODEL = "sonic-3.6";
@@ -203,6 +206,8 @@ export class CartesiaTTS implements TTSAdapter {
   private readonly contextSettings = new Map<string, Record<string, unknown>>();
   private readonly wordTimings = new Map<string, Array<{ word: string; end: number }>>();
   private readonly turnSentValid = new Set<string>();
+  /** Last complete word not yet sent — reserved for continue:false. */
+  private readonly turnHeldWord = new Map<string, string>();
 
   constructor(
     apiKey: string,
@@ -386,6 +391,7 @@ export class CartesiaTTS implements TTSAdapter {
     this.turnOpened.clear();
     this.turnOpenedResolve.clear();
     this.turnInputs.clear();
+    this.turnHeldWord.clear();
     this.contextSettings.clear();
   }
 
@@ -446,25 +452,27 @@ export class CartesiaTTS implements TTSAdapter {
       return;
     }
 
-    const held = this.turnOutBuf.get(turnContextId) ?? "";
+    const heldLetters = this.turnOutBuf.get(turnContextId) ?? "";
     this.turnOutBuf.delete(turnContextId);
-    const remainder = appendCartesiaRemainder(held, this.closedRemainder.get(turnContextId) ?? "");
+    const remainder = appendCartesiaRemainder(heldLetters, this.closedRemainder.get(turnContextId) ?? "");
     this.closedRemainder.delete(turnContextId);
     const leftover = takeCartesiaWordChunks("", remainder, true).chunks
       .filter((chunk) => isSpeakableCartesiaTranscript(chunk));
-    if (leftover.length && this.closedTurns.has(turnContextId)) {
+    const heldWord = this.turnHeldWord.get(turnContextId) ?? "";
+    this.turnHeldWord.delete(turnContextId);
+    const closing = [heldWord, ...leftover].filter((chunk) => isSpeakableCartesiaTranscript(chunk));
+    if (closing.length && this.closedTurns.has(turnContextId)) {
       const owner = this.turnChunkHandlers.get(turnContextId) ?? (() => undefined);
       try {
-        await this.synthesizeViaWsOneShot(leftover.join(""), owner, () => undefined);
+        await this.synthesizeViaWsOneShot(closing.join(""), owner, () => undefined);
       } catch (err) {
         logger.warn({ contextId: turnContextId, err: this.errMsg(err) }, "Cartesia leftover synthesis failed");
       }
     }
 
-    const extra = this.closedTurns.has(turnContextId) ? [] : leftover;
-    const hadValid = this.turnSentValid.has(turnContextId);
+    const extra = this.closedTurns.has(turnContextId) ? [] : closing;
     const skipClose = this.restFallbackTurns.has(turnContextId) || this.closedTurns.has(turnContextId);
-    if (!skipClose && (extra.length || hadValid)) {
+    if (!skipClose && extra.length) {
       try {
         await this.getOrOpenWs();
       } catch {
@@ -479,30 +487,24 @@ export class CartesiaTTS implements TTSAdapter {
       return;
     }
 
-    await this.enqueueTurnSend(turnContextId, () => {
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-      extra.forEach((chunk, i) => {
-        const last = i === extra.length - 1;
-        this.ws!.send(JSON.stringify({
-          ...this.settingsForContext(turnContextId),
-          context_id: turnContextId,
-          transcript: chunk,
-          continue: !last,
-        }));
+    if (extra.length) {
+      await this.enqueueTurnSend(turnContextId, () => {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        extra.forEach((chunk, i) => {
+          const last = i === extra.length - 1;
+          this.ws!.send(JSON.stringify({
+            ...this.settingsForContext(turnContextId),
+            context_id: turnContextId,
+            transcript: chunk,
+            continue: !last,
+          }));
+        });
+        this.turnSentValid.add(turnContextId);
       });
-      if (extra.length) this.turnSentValid.add(turnContextId);
-      else if (hadValid) {
-        this.ws.send(JSON.stringify({
-          ...this.settingsForContext(turnContextId),
-          context_id: turnContextId,
-          continue: false,
-        }));
-      }
-    });
-    if (!extra.length && !hadValid) {
-      this.pending.get(turnContextId)?.resolve();
-      this.cleanupTurn(turnContextId);
+      return;
     }
+    this.pending.get(turnContextId)?.resolve();
+    this.cleanupTurn(turnContextId);
   }
 
   private cleanupTurn(turnContextId: string): void {
@@ -514,6 +516,7 @@ export class CartesiaTTS implements TTSAdapter {
     this.turnOpened.delete(turnContextId);
     this.turnOpenedResolve.delete(turnContextId);
     this.turnSendChains.delete(turnContextId);
+    this.turnHeldWord.delete(turnContextId);
     this.cancelledTurns.delete(turnContextId);
     this.restFallbackTurns.delete(turnContextId);
     this.closedTurns.delete(turnContextId);
@@ -718,13 +721,17 @@ export class CartesiaTTS implements TTSAdapter {
       this.turnOutBuf.set(turnContextId, rest);
       for (const chunk of chunks) {
         if (!isSpeakableCartesiaTranscript(chunk)) continue;
-        this.turnSentValid.add(turnContextId);
-        ws.send(JSON.stringify({
-          ...this.settingsForContext(turnContextId, emotions),
-          context_id: turnContextId,
-          transcript: chunk,
-          continue: true,
-        }));
+        const held = this.turnHeldWord.get(turnContextId);
+        if (held) {
+          this.turnSentValid.add(turnContextId);
+          ws.send(JSON.stringify({
+            ...this.settingsForContext(turnContextId, emotions),
+            context_id: turnContextId,
+            transcript: held,
+            continue: true,
+          }));
+        }
+        this.turnHeldWord.set(turnContextId, chunk);
       }
     };
 

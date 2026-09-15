@@ -253,14 +253,14 @@ describe("Cartesia WS continuations", () => {
     tts.finalizeTurnContext("fast-llm");
     try {
       await join;
-      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBe(3));
+      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBe(2));
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s));
       expect(requests.map((r) => [r.transcript, r.continue])).toEqual([
-        ["नमस्ते।", true], [" आप कैसे हैं?", true], [undefined, false],
+        ["नमस्ते।", true], [" आप कैसे हैं?", false],
       ]);
       expect(requests[0]).toMatchObject({
         model_id: "sonic-3.6",
-        max_buffer_delay_ms: 3000,
+        max_buffer_delay_ms: 0,
         voice: { mode: "id", id: expect.any(String) },
         output_format: { sample_rate: 8000 },
       });
@@ -287,11 +287,11 @@ describe("Cartesia WS continuations", () => {
     await tts.synthesizeStreamInContext("spell", " problem.", () => {}, () => {}, undefined, undefined, true);
     tts.finalizeTurnContext("spell");
     try {
-      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(2));
-      const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as { transcript?: string });
+      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
+      const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as { transcript?: string; continue?: boolean });
       expect(requests.some((r) => r.transcript === "N")).toBe(false);
       expect(requests.some((r) => r.transcript === "o")).toBe(false);
-      expect(requests.map((r) => r.transcript)).toContain("No problem.");
+      expect(requests).toContainEqual(expect.objectContaining({ transcript: "No problem.", continue: false }));
       sockets[0]!.emit({ type: "chunk", context_id: "spell", data: Buffer.from([1]).toString("base64") });
       sockets[0]!.emit({ type: "done", context_id: "spell" });
       await owner;
@@ -315,11 +315,11 @@ describe("Cartesia WS continuations", () => {
     await tts.synthesizeStreamInContext("race", " problem.", () => {}, () => {}, undefined, undefined, true);
     tts.finalizeTurnContext("race");
     try {
-      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(2));
-      const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as { transcript?: string });
+      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
+      const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as { transcript?: string; continue?: boolean });
       expect(requests.some((r) => r.transcript === "N")).toBe(false);
       expect(requests.some((r) => r.transcript === "o")).toBe(false);
-      expect(requests.map((r) => r.transcript)).toContain("No problem.");
+      expect(requests).toContainEqual(expect.objectContaining({ transcript: "No problem.", continue: false }));
       sockets[0]!.emit({ type: "chunk", context_id: "race", data: Buffer.from([1]).toString("base64") });
       sockets[0]!.emit({ type: "done", context_id: "race" });
       await owner;
@@ -344,7 +344,7 @@ describe("Cartesia WS continuations", () => {
       await new Promise((r) => setTimeout(r, 40));
       const requests = (sockets[0]?.sent ?? []).map((s) => JSON.parse(s) as { transcript?: string; continue?: boolean });
       expect(requests.some((r) => r.transcript === "")).toBe(false);
-      expect(requests.filter((r) => r.continue === false && r.transcript == null)).toHaveLength(0);
+      expect(requests.some((r) => r.continue === false && !r.transcript)).toBe(false);
     } finally {
       tts.close();
       await owner.catch(() => {});
@@ -386,7 +386,8 @@ describe("Cartesia WS continuations", () => {
     tts.claimTurnContext("interrupted");
     const owner = tts.synthesizeStreamInContext("interrupted", "Hello.", () => {}, () => {}, abort.signal);
     const rejected = expect(owner).rejects.toMatchObject({ name: "AbortError" });
-    await vi.waitFor(() => expect(sockets[0]?.sent.length).toBe(1));
+    await vi.waitFor(() => expect(sockets[0]?.readyState).toBe(FakeCartesiaWs.OPEN));
+    await new Promise((r) => setTimeout(r, 30));
     abort.abort();
     tts.finalizeTurnContext("interrupted");
     await rejected;
