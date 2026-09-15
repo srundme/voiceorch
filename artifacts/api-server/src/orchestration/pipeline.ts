@@ -14,10 +14,10 @@ import { buildDatetimeInjection, buildTurnClockBlock, THIS_TURN_INSTRUCTION } fr
 import { demoteResumeMemoryAfterOpening } from "./callerMemory.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
-import { isHoldRequest, buildAntiRepeatNudge, extractRecentAgentQuestions } from "./conversationDiscipline.js";
+import { buildAntiRepeatNudge, extractRecentAgentQuestions } from "./conversationDiscipline.js";
 import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared, isCallerClosingUtterance } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
-import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isSameUtteranceContinuation, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
+import { EAGER_PARTIAL_STABLE_MS, isSameUtteranceContinuation, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
 import {
   SemanticTurnGate,
   resolveEouCommit,
@@ -108,7 +108,7 @@ import {
   RESUME_DROP_POST_GREETING_STALL_MS,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isCallerAudioDifficulty, isTopicClarificationAsk, isBackchannelOnlyUtterance, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeIncompleteClauseStart } from "./transcriptQuality.js";
+import { pickClarificationPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isCallerAudioDifficulty, isTopicClarificationAsk, isBackchannelOnlyUtterance, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeIncompleteClauseStart } from "./transcriptQuality.js";
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
@@ -1881,9 +1881,6 @@ export class OrchestrationPipeline implements VoiceSession {
     this.captureInterruptionHint();
     const heard = this.getHeardAgentText({ includeActiveEstimate: true });
     this.trimHistoryToHeardOnBarge();
-    if (opts?.speculative !== false && partial?.trim()) {
-      this._launchSpeculativeLlm(partial);
-    }
     this.logExec("Agent", "system", {
       status: "info",
       turnNumber: this._activeTurnIndex,
@@ -1945,16 +1942,9 @@ export class OrchestrationPipeline implements VoiceSession {
     this.launchEagerLlmFromPartial(text, "eou_commit", pendingTurnId);
   }
 
-  /**
-   * Tamil/Hindi agents: refuse English-decoder scraps ("I want to win.")
-   * so speculative LLM does not burn a turn on LID garbage (call 21546).
-   */
-  private isEagerPartialReady(text: string, speechEnd = false): boolean {
-    const pin = this.agent.language || this.agent.sttConfig.language || "";
-    return isEagerCommitReady(text, {
-      speechEnd,
-      indicPinned: Boolean(pin && !pin.startsWith("en")),
-    });
+  /** Prefill only needs provider text. Do not second-guess STT scraps. */
+  private isEagerPartialReady(text: string, _speechEnd = false): boolean {
+    return Boolean(text.trim());
   }
 
   /** VAD ≠ turn complete: do not prefetch LLM while Smart Turn is deciding / holding. */
@@ -2377,13 +2367,8 @@ export class OrchestrationPipeline implements VoiceSession {
     this._bargeRecoveryStableSince = 0;
   }
 
-  private armBargeRecovery(partial?: string): void {
-    const text = partial?.trim() ?? "";
-    if (text) this._bargeRecoveryText = text;
-    this._bargeRecoveryArmedAt = Date.now();
-    this._bargeRecoveryStableText = this._bargeRecoveryText ?? "";
-    this._bargeRecoveryStableSince = Date.now();
-    this.scheduleBargeRecoveryTick();
+  private armBargeRecovery(_partial?: string): void {
+    return;
   }
 
   /**
@@ -2496,43 +2481,8 @@ export class OrchestrationPipeline implements VoiceSession {
    * Call 21450: vad_partial barge, then VAD speech_end with no transcript.final.
    * Speak from the last barge preview instead of staying mute until hangup.
    */
-  private flushBargeRecovery(reason: string): void {
-    const text = this._bargeRecoveryText?.trim() ?? "";
-    if (this.closed) return;
-    if (!text || reason === "crosstalk") {
-      if (this.isProcessing && this.pendingTranscriptQueue.length > 0) {
-        this.clearBargeRecovery();
-        return;
-      }
-      this.abandonFalseBarge(reason || "empty");
-      return;
-    }
-    if (this.isPlaying || this.isSendingTtsAudio) {
-      this.clearBargeRecovery();
-      return;
-    }
-    if (this.isProcessing) {
-      if (reason === "timer" || reason === "speech_end") {
-        if (this._bargeRecoveryTimer) clearTimeout(this._bargeRecoveryTimer);
-        this._bargeRecoveryTimer = setTimeout(() => {
-          this._bargeRecoveryTimer = null;
-          this.flushBargeRecovery("retry");
-        }, 400);
-      }
-      return;
-    }
+  private flushBargeRecovery(_reason: string): void {
     this.clearBargeRecovery();
-    this.logExec("STT", "system", {
-      status: "info",
-      turnNumber: this._activeTurnIndex,
-      warningFlags: ["barge_recovery"],
-      metadata: { event: "Barge Recovery", reason, transcriptPreview: text.slice(0, 80) },
-    });
-    logger.info(
-      { callId: this.config.callId, reason, text: text.slice(0, 80) },
-      "Barge recovery — no STT final after interrupt; answering last partial",
-    );
-    void this.handleStreamingTranscript(text, Date.now(), "barge_recovery");
   }
 
   // ── Lost-turn backstop (calls 4831/4833) ────────────────────────────────────
@@ -3511,68 +3461,18 @@ export class OrchestrationPipeline implements VoiceSession {
             if (this.systemPlaybackActive && this.isPlaying && text.trim().length >= 4) {
               this.cancelSystemPlaybackForCallerSpeech(text);
             }
-            // P0-C: Semantic barge-in on interims — detect caller interruption
-            // immediately during playback, before the STT provider finalizes.
-            // Reuses the same isSemanticInterrupt / bargeInRequested / bargeInCallback
-            // machinery as the final-transcript path; only responsiveness improves.
+            // Barge on provider partials while TTS is playing.
             if (
               this.bargeInEnabled &&
               this.isPlaying &&
               !this.bargeInRequested &&
               text.trim()
             ) {
-              // During system recovery TTS, only stop-words force a full barge —
-              // word-count interim was cutting “can't hear” mid-apology (call 2626).
-              if (this.systemPlaybackActive) {
-                if (isSemanticInterrupt(text) || isAccidentalInterruptPhrase(text) || isHoldRequest(text)) {
-                  this.systemPlaybackActive = false;
-                  this.triggerBargeIn("semantic_interim_system", text);
-                }
-                return;
-              }
-              // Bolna: interrupt on interim when word count exceeds threshold OR
-              // the phrase is an accidental-interrupt / semantic stop cue.
-              // Energy alone is secondary — Sarvam may not finalize during talk-over,
-              // but it DOES emit interims once the caller overpowers carrier echo.
-              if (
-                (isHoldRequest(text) || isAccidentalInterruptPhrase(text)
-                  || (isSemanticInterrupt(text) && !isBackchannelOnlyUtterance(text)))
-              ) {
-                this.triggerBargeIn("semantic_interim", text);
-                logger.info(
-                  { callId: this.config.callId, text: text.slice(0, 80) },
-                  "Semantic barge-in triggered (streaming STT interim)",
-                );
-              } else if (this.sarvamRealtimePartials()) {
-                // Realtime best practice: barge on early partials, not transcript.final.
-                // Call 14227: Tamil greeting echo transcribed as English "Then you
-                // need to learn" — greeting + echo-grace still block that. After
-                // those windows, a non-echo partial must cut TTS even if the echo
-                // floor is cold (call 14251: 2pm during the 4pm/9am offer never
-                // interrupted because we required a warm floor).
-                const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
-                this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
-                if (this.shouldInterruptFromCallerTranscript(text)) {
-                  this.schedulePartialBargeIn(text);
-                }
-              } else {
-                const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
-                // Bolna accumulates interim word length across partials for the turn
-                this.streamingBargeInWordCount = Math.max(
-                  this.streamingBargeInWordCount,
-                  wordCount,
-                );
-                if (this.shouldInterruptFromCallerTranscript(text)) {
-                  this.triggerBargeIn("word_count_interim", text, { speculative: true });
-                  logger.info(
-                    {
-                      callId: this.config.callId,
-                      words: this.streamingBargeInWordCount,
-                      text: text.slice(0, 80),
-                    },
-                    "Barge-in detected (streaming STT interim + InterruptionManager)",
-                  );
-                }
+              if (this.systemPlaybackActive) this.systemPlaybackActive = false;
+              const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+              this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
+              if (this.shouldInterruptFromCallerTranscript(text)) {
+                this.schedulePartialBargeIn(text);
               }
             }
             return;
@@ -3742,55 +3642,14 @@ export class OrchestrationPipeline implements VoiceSession {
     }
 
     if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
-      // P0-C: Semantic barge-in — certain keywords ("stop", "wait", …) bypass
-      // BOTH the word-count gate AND the echo grace: our own audio never utters
-      // them, so they are always a genuine caller interruption.
-      if (
-        (isSemanticInterrupt(transcript) || isHoldRequest(transcript))
-      ) {
-        this.triggerBargeIn("semantic", transcript);
-        logger.info({ callId: this.config.callId, transcript }, "Semantic barge-in triggered (streaming STT)");
-      } else if (this.sarvamRealtimePartials()) {
-        // Realtime prefers VAD + partials. If those were locked for the greeting
-        // (call 14345: 0 barge-ins while Hello/Telugu/wait were discarded), a
-        // non-echo final after the 3s hold must still cut TTS.
-        if (this.shouldInterruptFromCallerTranscript(transcript)) {
-          this.triggerBargeIn("word_count", transcript, { speculative: true });
-          logger.info(
-            { callId: this.config.callId, transcript: transcript.slice(0, 80) },
-            "Barge-in detected (streaming STT final + InterruptionManager)",
-          );
-        } else {
-          logger.info(
-            { callId: this.config.callId, transcript: transcript.slice(0, 80) },
-            "Streaming STT: skipping final-transcript barge-in (realtime uses VAD + partials)",
-          );
-        }
-      } else if (
-        Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs ||
-        Date.now() < this.greetingEchoHoldUntil
-      ) {
-        // Per-sentence 600 ms echo grace — suppress non-semantic barge-in while our own
-        // freshly started audio may still be echoing back. This uses the *sentence start*
-        // timestamp (not the extended bargeInHoldUntil which protects the batch STT
-        // path) so that the streaming STT path (webcall) can interrupt mid-sentence after
-        // the initial 600 ms window expires. The greetingEchoHoldUntil clause additionally
-        // protects the FULL greeting (carrier path only) — the 600 ms grace is too short
-        // for the carrier echo of a multi-second opening line (call 772).
-        logger.info({ callId: this.config.callId }, "Streaming STT: barge-in suppressed during echo grace");
-      } else {
-        // Peak word count across streaming callbacks for this user turn — do NOT
-        // add successive finals (call 10544: leftover "Okay"/"दरअसल" scraps summed
-        // past the threshold and cut the pitch). Match the interim Math.max path.
-        const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
-        this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
-        if (this.shouldInterruptFromCallerTranscript(transcript)) {
-          this.triggerBargeIn("word_count", transcript, { speculative: true });
-          logger.info(
-            { callId: this.config.callId, words: this.streamingBargeInWordCount },
-            "Barge-in detected (streaming STT + InterruptionManager)",
-          );
-        }
+      const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
+      this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
+      if (this.shouldInterruptFromCallerTranscript(transcript)) {
+        this.triggerBargeIn("word_count", transcript);
+        logger.info(
+          { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+          "Barge-in detected (streaming STT final + InterruptionManager)",
+        );
       }
     } else if (!this.isPlaying) {
       // Agent is not currently playing — keep the accumulator at zero so the
@@ -3799,26 +3658,6 @@ export class OrchestrationPipeline implements VoiceSession {
       // agent is speaking, and the very first callback that arrives while
       // isPlaying=true will therefore always start from 0.
       this.streamingBargeInWordCount = 0;
-    }
-
-    // Call 14227: realtime skipped final-transcript barge-in, then still fed
-    // greeting echo into the LLM. Only drop during greeting/system playback —
-    // a blanket isPlaying discard ate overlapping caller speech (call 14235).
-    // Only while greeting/system audio is actually on the wire. prepareSystemPlayback
-    // used to leave systemPlaybackActive=true after dropping "Hmm" with no TTS —
-    // every later "Hello" was discarded and the agent went silent (call 14243).
-    if (
-      (this.systemPlaybackActive || this.greetingPlaybackActive)
-      && (this.isPlaying || this.isSendingTtsAudio)
-      && !this.bargeInRequested
-    ) {
-      this.streamingBargeInWordCount = 0;
-      logger.info(
-        { callId: this.config.callId, transcript: transcript.slice(0, 80) },
-        "Streaming STT: discarding final during greeting/system playback (no barge-in)",
-      );
-      this.logDiscardedTranscript(transcript, "agent_still_speaking");
-      return;
     }
 
     // Transfer in-flight guard (defense-in-depth). transferInitiated is set at
@@ -3908,43 +3747,9 @@ export class OrchestrationPipeline implements VoiceSession {
         }
         detected = resolved.lang;
         if (detected) {
-          const explicitLatch = !!requested && requested === detected;
-          const coldStart = !this.currentLang;
-          const agentPin = this.agent.language || this.agent.sttConfig.language || "";
-          const restoringAgentPin = Boolean(
-            detected
-            && !detected.startsWith("en-")
-            && this.currentLang.startsWith("en-")
-            && agentPin
-            && detected === agentPin
-          );
-          let commitLang = coldStart || explicitLatch || detected === this.currentLang || restoringAgentPin;
-          if (!commitLang) {
-            if (detected === this._pendingLangConfirm) {
-              this._pendingLangConfirmCount++;
-            } else {
-              this._pendingLangConfirm = detected;
-              this._pendingLangConfirmCount = 1;
-            }
-            // Require 2 consecutive agreeing finals before flipping mid-call.
-            commitLang = this._pendingLangConfirmCount >= 2;
-            if (!commitLang) {
-              logger.info(
-                {
-                  callId: this.config.callId,
-                  held: this.currentLang,
-                  pending: detected,
-                  count: this._pendingLangConfirmCount,
-                  text: transcript.slice(0, 60),
-                },
-                "Auto-detect: language flip held pending consecutive confirmation",
-              );
-            }
-          }
-          if (commitLang) {
-            this._pendingLangConfirm = "";
-            this._pendingLangConfirmCount = 0;
-            if (detected !== this.currentLang) {
+          this._pendingLangConfirm = "";
+          this._pendingLangConfirmCount = 0;
+          if (detected !== this.currentLang) {
               logger.info(
                 { callId: this.config.callId, from: this.currentLang, to: detected, text: transcript.slice(0, 60) },
                 "Auto-detect: caller language switch detected",
@@ -3974,7 +3779,6 @@ export class OrchestrationPipeline implements VoiceSession {
                 this.maybeSwitchStreamingSttLang(enTarget);
               }
             }
-          }
         }
       } else {
         // Strict single-language mode — still honor an EXPLICIT caller request
@@ -6796,21 +6600,6 @@ export class OrchestrationPipeline implements VoiceSession {
     // so TTS engines do not read them literally.
     text = text.replace(/\[[a-zA-Z0-9_\-\s]+\]|\*+[a-zA-Z0-9_\-\s]+\*+|\([a-zA-Z0-9_\-\s]+\)/gi, "");
 
-    // Strip the ₹ currency symbol before synthesis. TTS engines (especially
-    // Sarvam) expand it to the formal literary word: "ரூபாய்" (Tamil) /
-    // "रुपया" (Hindi) / "rupee" (English) — which sounds stiff and unnatural.
-    // Removing the symbol keeps "₹10 lakhs" as "10 lakhs" which TTS reads
-    // naturally in colloquial style. The LLM language rule below also prevents
-    // ₹ from being generated, but this is a safety net for any that slip through.
-    text = text.replace(/₹\s*/g, "");
-
-    // Long ALL-CAPS words (6+ letters, e.g. "CODISSIA") get spelled out
-    // letter-by-letter by TTS engines, which treat them as acronyms. Real
-    // spoken acronyms (GST, PM, EV, AI, WhatsApp caps like "OK") are short,
-    // so title-casing only 6+ letter runs is safe: CODISSIA → Codissia,
-    // which engines then pronounce as a normal word.
-    text = text.replace(/\b[A-Z]{6,}\b/g, (w) => w[0] + w.slice(1).toLowerCase());
-
     // Meter characters at request-dispatch time — TTS providers charge for the
     // text submitted when the HTTP request is sent, not when audio delivery
     // completes. Dispatch may now happen while a prior sentence is still
@@ -8671,7 +8460,6 @@ export class OrchestrationPipeline implements VoiceSession {
     let fillerTimer: ReturnType<typeof setTimeout> | null = null;
 
     let llmResponse = "";
-    let malformedContinuationDetected = false;
     let pendingText  = "";
     const cartesiaTurn = new CartesiaTurnStream();
     // One-step output guard: suppresses any second question (and everything)
@@ -9985,16 +9773,6 @@ export class OrchestrationPipeline implements VoiceSession {
           const afterEnvelope = envelopeGuard.filter(afterBrackets);
           if (!afterEnvelope) return;
           if (this.cartesiaManagedTokenStream()) {
-            if (malformedContinuationDetected) return;
-            const bufferedSpeech = `${cartesiaTurn.sent}${cartesiaTurn.pending}${afterEnvelope}`;
-            if (/(?:\.\.\.|…)[ \t]*(?:umm?|uhh?|sorry)\b/i.test(bufferedSpeech)) {
-              malformedContinuationDetected = true;
-              logger.warn(
-                { callId: this.config.callId, turnNumber: _currentTurnIndex },
-                "Suppressing malformed repeated LLM continuation before Cartesia",
-              );
-              return;
-            }
             for (const p of cartesiaTurn.push(afterEnvelope)) enqueue(p);
             return;
           }
@@ -11149,7 +10927,6 @@ export class OrchestrationPipeline implements VoiceSession {
     toolCounts[completedKey] = (toolCounts[completedKey] ?? 0) + 1;
 
     let llmResponse = "";
-    let malformedContinuationDetected = false;
     let pendingText = "";
     const cartesiaTurn = new CartesiaTurnStream();
     // One-step output guard (same as the main turn path) — truncate at the first
@@ -11393,16 +11170,6 @@ export class OrchestrationPipeline implements VoiceSession {
             if (followUpFillerTimer) { clearTimeout(followUpFillerTimer); followUpFillerTimer = null; }
           }
           if (this.cartesiaManagedTokenStream()) {
-            if (malformedContinuationDetected) return;
-            const bufferedSpeech = `${cartesiaTurn.sent}${cartesiaTurn.pending}${afterEnvelope}`;
-            if (/(?:\.\.\.|…)[ \t]*(?:umm?|uhh?|sorry)\b/i.test(bufferedSpeech)) {
-              malformedContinuationDetected = true;
-              logger.warn(
-                { callId: this.config.callId, turnNumber: this._activeTurnIndex },
-                "Suppressing malformed repeated LLM continuation before Cartesia",
-              );
-              return;
-            }
             for (const p of cartesiaTurn.push(afterEnvelope)) enqueue(p);
             return;
           }

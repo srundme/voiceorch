@@ -212,28 +212,16 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("shouldCutTtsFromCallerTranscript");
     expect(methodBody("isSameUtteranceStillArriving")).toContain("return false");
     expect(methodBody("playbackTooFreshForPartialBarge")).toContain("return false");
+    expect(methodBody("armBargeRecovery")).toMatch(/return;/);
+    expect(methodBody("flushBargeRecovery")).not.toContain("handleStreamingTranscript");
+    expect(pipelineSrc).not.toContain("answering last partial");
   });
 
   it("barge recovery waits out an open VAD instead of answering a fragment (call 21628)", () => {
-    // The 800ms backstop used to win the race against the caller finishing:
-    // it committed "No, no" 1.29s into a 4.28s segment, then the real sentence
-    // landed seconds later as a duplicate turn. The tick must re-arm while VAD
-    // is open, refresh the armed text, and keep a stuck-VAD ceiling.
-    const tick = methodBody("scheduleBargeRecoveryTick");
-    expect(tick).toContain("this._vadSpeechStartAt !== 0");
-    expect(tick).toContain("BARGE_RECOVERY_MAX_WAIT_MS");
-    expect(tick).toContain("this.scheduleBargeRecoveryTick()");
-    expect(tick).toContain("getPendingTranscript");
-    expect(tick).toContain("vad_stuck");
-    // Call 21818: do not vad_stuck while the pending transcript is still growing.
-    expect(tick).toContain("this._bargeRecoveryStableText");
-    expect(tick).toContain("frozenMs");
-    expect(tick).toContain("shouldAbandonStuckBarge");
+    expect(methodBody("flushBargeRecovery")).toContain("this.clearBargeRecovery()");
     expect(pipelineSrc).toContain("abandonFalseBarge");
     expect(pipelineSrc).toContain("BARGE_STUCK_RESUME_MS");
-    // speech_end must stay the primary commit path.
     expect(pipelineSrc).toContain('this.flushBargeRecovery("speech_end")');
-    // The cover masks our latency — it must never talk over the caller.
     expect(pipelineSrc).toContain("Cover masks OUR latency; it must not talk over the caller.");
   });
 
