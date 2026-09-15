@@ -172,6 +172,11 @@ describe("toRealtimeLanguageCode", () => {
 });
 
 describe("buildRealtimeWsUrl", () => {
+  it.each(["saaras:v4", "saaras:v4-realtime"])("honors configured %s instead of silently downgrading", (model) => {
+    const url = new URL(buildRealtimeWsUrl({ model, languageCode: "hi-IN", sampleRate: 8000, mode: "transcribe" }));
+    expect(url.searchParams.get("model")).toBe("saaras:v4-realtime");
+  });
+
   it("hits the realtime path with millisecond VAD and 8 kHz", () => {
     const url = buildRealtimeWsUrl({
       languageCode: "auto",
@@ -245,10 +250,11 @@ describe("clipRealtimePrompt", () => {
 });
 
 describe("buildSarvamTerminologyPrompt", () => {
-  it("includes B2B/CRM defaults and agent keyterms", () => {
+  it("includes only agent keyterms, not another industry's defaults", () => {
     const prompt = buildSarvamTerminologyPrompt(["TraviYo"], "GSTIN");
-    expect(prompt).toMatch(/B2B/);
-    expect(prompt).toMatch(/CRM/);
+    expect(prompt).not.toMatch(/B2B/);
+    expect(prompt).not.toMatch(/CRM/);
+    expect(buildSarvamTerminologyPrompt(undefined)).toBeUndefined();
     expect(prompt).toMatch(/TraviYo/);
     expect(prompt).toMatch(/GSTIN/);
   });

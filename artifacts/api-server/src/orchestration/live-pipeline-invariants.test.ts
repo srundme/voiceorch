@@ -138,9 +138,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("this.config.onAudioOut(holdFrame)");
     expect(pipelineSrc).toContain("Never start the wire on an empty queue");
     expect(pipelineSrc).not.toContain("STREAMING_TTS_PREBUFFER_BOOST_MS");
-    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_GREETING_MS \?\? 0\)/);
-    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 0\)/);
-    expect(pipelineSrc).toMatch(/TTS_REBUFFER_MS \?\? 0\)/);
+    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_GREETING_MS \?\? 400\)/);
+    expect(pipelineSrc).toMatch(/TTS_PREBUFFER_MS \?\? 600\)/);
+    expect(pipelineSrc).toMatch(/TTS_REBUFFER_MS \?\? 120\)/);
     expect(pipelineSrc).not.toContain("loadPresetFillerPcm");
     expect(pipelineSrc).not.toContain("preset-filler");
     expect(pipelineSrc).toContain("job.streaming && this.tts.synthesizeStream");
@@ -148,7 +148,11 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("incrementalDelayMs: 0");
     expect(pipelineSrc).toContain("shouldInjectSchedulingPhrasebook");
     expect(pipelineSrc).toContain("needSchedulingGuides");
-    expect(pipelineSrc).toContain("earlyClause: this.agent.ttsProvider !== \"cartesia\"");
+    expect(pipelineSrc).toContain("return ttsSentenceOptions(this.agent.ttsProvider)");
+    expect(methodBody("processTurn")).toContain("this.cartesiaManagedTokenStream()");
+    expect(pipelineSrc).toContain("CartesiaTurnStream");
+    expect(pipelineSrc).toContain("appendTurnRemainder");
+    expect(pipelineSrc).toContain("trim: !this.cartesiaManagedTokenStream()");
     expect(readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), "clause-stream.ts"),
       "utf8",
@@ -227,6 +231,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     // Call 21818: do not vad_stuck while the pending transcript is still growing.
     expect(tick).toContain("this._bargeRecoveryStableText");
     expect(tick).toContain("frozenMs");
+    expect(tick).toContain("shouldAbandonStuckBarge");
+    expect(pipelineSrc).toContain("abandonFalseBarge");
+    expect(pipelineSrc).toContain("BARGE_STUCK_RESUME_MS");
     // speech_end must stay the primary commit path.
     expect(pipelineSrc).toContain('this.flushBargeRecovery("speech_end")');
     // The cover masks our latency — it must never talk over the caller.

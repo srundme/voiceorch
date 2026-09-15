@@ -35,12 +35,14 @@ import { languagePrefix, resolveToolFillerPhrase } from "./tool-fillers.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
-import { isPstnStopHold, shouldCutTtsFromCallerTranscript, shouldDiscardOpenerTranscript } from "./pstn-interrupt-policy.js";
+import { isPstnStopHold, shouldAbandonStuckBarge, shouldCutTtsFromCallerTranscript, shouldDiscardOpenerTranscript, BARGE_STUCK_RESUME_MS } from "./pstn-interrupt-policy.js";
 import { shouldIgnoreSelfEcho } from "./self-echo-policy.js";
 import {
   extractSentences,
   pickStreamedGreetingHead,
+  ttsSentenceOptions,
 } from "./clause-stream.js";
+import { CartesiaTurnStream } from "./cartesia-token-coalesce.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
@@ -365,21 +367,21 @@ const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
 // Greeting is the coldest clip (TTS just warmed, and for multilingual agents the
 // opener is LLM-generated first — first byte often lands ~450-500 ms). 280 ms of
 // runway underran the wire at the opening; 400/600 rides that cold start out.
-const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 0));
+const TTS_PREBUFFER_GREETING_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_GREETING_MS ?? 400));
 const TTS_PREBUFFER_GREETING_CAP_MS = Math.max(
   TTS_PREBUFFER_GREETING_MS,
-  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 0),
+  Number(process.env.TTS_PREBUFFER_GREETING_CAP_MS ?? 800),
 );
-const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 0));
+const TTS_PREBUFFER_WARM_MS = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 600));
 const TTS_PREBUFFER_COLD_MS = Math.max(
   TTS_PREBUFFER_WARM_MS,
-  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 0),
+  Number(process.env.TTS_PREBUFFER_COLD_MS ?? 800),
 );
-const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 0));
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_COLD_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 1200));
 /** On mid-sentence underrun only: refill this much real audio. Not on the
  *  happy path — keep the carrier alive with silence, never a looped frame. */
-const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 0));
-const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 0));
+const TTS_REBUFFER_MS = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 120));
+const TTS_REBUFFER_CAP_MS = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 1000));
 const TTS_UNDERRUN_COLD_MS = 8_000;
 /**
  * Concurrency-aware prebuffer runway (restored — removed in a20aca3d).
@@ -421,6 +423,15 @@ const TTS_MIDSTREAM_MIN_REMAINDER_CHARS = Math.max(1, Number(process.env.TTS_MID
 /** Burst this many 20 ms frames into VoBiz before realtime pacing so a 40–80 ms
  *  event-loop hitch does not empty the carrier jitter buffer. */
 const TTS_WIRE_LEAD_FRAMES = Math.max(0, Math.min(8, Number(process.env.TTS_WIRE_LEAD_FRAMES ?? 0)));
+
+function sanitizeMalformedContinuation(text: string): string {
+  const marker = /(?:\.\.\.|…)[ \t]*(?:umm?|uhh?|sorry)\b/i.exec(text);
+  if (!marker || marker.index <= 0) return text;
+  let prefix = text.slice(0, marker.index).trimEnd();
+  const lastWord = prefix.match(/(?:^|\s)(\p{L}{1,3})$/u);
+  if (lastWord) prefix = prefix.slice(0, prefix.length - lastWord[1]!.length).trimEnd();
+  return prefix.replace(/[,:;\-]+$/u, "").trim();
+}
 
 /** Process-local in-flight TTS drains — drives the concurrency-aware prebuffer
  *  boost above and is surfaced on underrun logs (concurrentDrains). */
@@ -950,6 +961,8 @@ function isRetryableLlmError(err: unknown): boolean {
  * startSentenceSynthesis's doc comment for why this split exists.
  */
 type TtsSentenceJob = {
+  contextId?: string;
+  confirmedText?: string;
   text: string;
   turnNumber: number;
   /** Bolna sequence_id — stale frames from invalidated turns are BLOCKed. */
@@ -958,6 +971,7 @@ type TtsSentenceJob = {
   streaming: boolean;
   /** Streaming path: 4-byte-aligned PCM blocks (native TTS rate) awaiting drain. */
   pcmQueue: Buffer[];
+  queuedPcmBytes?: number;
   /** True once the TTS request has fully settled (success, error, or abort). */
   synthDone: boolean;
   synthError: unknown;
@@ -1107,6 +1121,8 @@ export class OrchestrationPipeline implements VoiceSession {
   // Require N consecutive speech frames before triggering barge-in to avoid
   // ambient noise / single-word false positives stopping the agent mid-sentence.
   private bargeInSpeechFrames = 0;
+  private partialBargeTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingPartialBargeText = "";
   // Consecutive below-threshold frames counter — used to delay bargeInSpeechFrames
   // reset so brief inter-syllable dips don't kill an accumulating barge-in run.
   private bargeInLowEnergyFrames = 0;
@@ -1166,6 +1182,8 @@ export class OrchestrationPipeline implements VoiceSession {
   // never clears the echo bar, nothing but our own audio reached the mic during the
   // sentence — used to veto word_count barge-ins fired by garbled echo transcripts.
   private bargeInPeakRmsSinceSentence = 0;
+  /** Last inbound frame RMS — used so room VAD does not look like a caller reply. */
+  private _lastInboundRawRms = 0;
   // Throttle for the periodic "energy barge-in monitor" diagnostic log line.
   private lastEnergyMonitorLogAt = 0;
   // Throttle for logging caller energy during agent speech (barge-in diagnostics).
@@ -1177,7 +1195,7 @@ export class OrchestrationPipeline implements VoiceSession {
   // uses this to recognize the agent's OWN words echoing back via the carrier
   // (content-based self-echo rejection — additive to the time-window tail-echo
   // guard). Entries expire so stale agent speech can't suppress later caller input.
-  private recentAgentSpeech: Array<{ tokens: Set<string>; estEndAt: number }> = [];
+  private recentAgentSpeech: Array<{ text: string; tokens: Set<string>; estEndAt: number }> = [];
   // Voicemail-delivery mode (Vobiz AMD leave_message). When set, the conversation
   // pipeline is bypassed: inbound audio only drives greeting-end detection and
   // deliverVoicemail() speaks the configured message once the machine's greeting ends.
@@ -1579,6 +1597,8 @@ export class OrchestrationPipeline implements VoiceSession {
   private _interruptionHint: string | null = null;
   /** Text of the sentence currently draining via playJob — used when barge-in cuts mid-sentence. */
   private _activePlaybackText: string | null = null;
+  private activeConfirmedPlaybackText = "";
+  private activeReceiptJob: TtsSentenceJob | null = null;
   /** Wall-clock when current sentence drain started — for mid-sentence heard estimate. */
   private _activePlaybackStartedAt: number | null = null;
   // ── Speculative / eager LLM prefill state ────────────────────────────────
@@ -1610,6 +1630,7 @@ export class OrchestrationPipeline implements VoiceSession {
   private activeAgentSequenceId = 0;
   /** Active TTS fetch abort controllers — aborted on barge-in teardown. */
   private readonly activeTtsAborts = new Set<AbortController>();
+  private readonly ttsContextJobs = new Map<string, TtsSentenceJob>();
   /** Eager LLM: last partial text + stability timer (Flux EagerEndOfTurn analogue). */
   private eagerPartialText = "";
   private eagerPartialTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1643,6 +1664,8 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private getHeardAgentText(opts?: { includeActiveEstimate?: boolean }): string {
     const completed = joinHeardSentences(this._currentTurnPlayedSentences);
+    // Carrier receipts outrank a wall-clock estimate of unacknowledged audio.
+    if (this.config.awaitPlaybackReceipt) return composeHeardWithMid(completed, this.activeConfirmedPlaybackText);
     if (!opts?.includeActiveEstimate) return completed;
     const mid = this._activePlaybackText?.trim();
     if (!mid || this._activePlaybackStartedAt == null) return completed;
@@ -1715,6 +1738,9 @@ export class OrchestrationPipeline implements VoiceSession {
     this.skipAgentPlaybackForHandoff = false;
     this.bargeInSpeechFrames = 0;
     this.streamingBargeInWordCount = 0;
+    if (this.partialBargeTimer) clearTimeout(this.partialBargeTimer);
+    this.partialBargeTimer = null;
+    this.pendingPartialBargeText = "";
     this.interruptionMgr.onUserSpeechEnd();
   }
 
@@ -1828,6 +1854,9 @@ export class OrchestrationPipeline implements VoiceSession {
     opts?: { speculative?: boolean; energyDetails?: Record<string, unknown> },
   ): void {
     if (this.bargeInRequested) return;
+    if (this.partialBargeTimer) clearTimeout(this.partialBargeTimer);
+    this.partialBargeTimer = null;
+    this.pendingPartialBargeText = "";
     // Cheap cancel: sequence_id is the hard boundary. Invalidate N first so
     // in-flight TTS tagged N cannot emit, then mute the carrier, then abort
     // synth / LLM. Do not wait for drainPlaybackTail.
@@ -2355,7 +2384,12 @@ export class OrchestrationPipeline implements VoiceSession {
       
       // Pipecat UserStartedSpeaking: provider VAD (not local energy) cancels idle
       // once echo grace has ended. Echo of our own TTS must not look like a reply.
-      if (!this.isPlaying && !this.isSendingTtsAudio && Date.now() >= this.bargeInHoldUntil) {
+      if (
+        !this.isPlaying
+        && !this.isSendingTtsAudio
+        && Date.now() >= this.bargeInHoldUntil
+        && this._lastInboundRawRms >= BACKGROUND_TALKER_MIN_RAW_RMS
+      ) {
         this.noteCallerTurnActivity("vad_start");
       }
       if (shouldAdvanceSemanticTurnOnVadStart({
@@ -2474,6 +2508,8 @@ export class OrchestrationPipeline implements VoiceSession {
         || Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs,
       isSelfEcho: this.isSelfEcho(text.trim()),
       interruptionMgr: this.interruptionMgr,
+      peakRawRms: this.bargeInPeakRmsSinceSentence,
+      minBargeRms: BACKGROUND_TALKER_MIN_RAW_RMS,
     })) {
       return false;
     }
@@ -2481,6 +2517,31 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.isSameUtteranceStillArriving(text)) return false;
     if (this.playbackTooFreshForPartialBarge(text)) return false;
     return true;
+  }
+
+  private schedulePartialBargeIn(text: string): void {
+    const candidate = text.trim();
+    if (!candidate || this.bargeInRequested || !this.isPlaying) return;
+    this.pendingPartialBargeText = candidate;
+    if (this.partialBargeTimer) clearTimeout(this.partialBargeTimer);
+    this.partialBargeTimer = setTimeout(() => {
+      this.partialBargeTimer = null;
+      const stable = this.pendingPartialBargeText;
+      this.pendingPartialBargeText = "";
+      if (
+        !stable
+        || this.closed
+        || this.bargeInRequested
+        || !this.isPlaying
+        || this.isSelfEcho(stable)
+        || !this.shouldInterruptFromCallerTranscript(stable)
+      ) return;
+      this.triggerBargeIn("vad_partial", stable, { speculative: true });
+      logger.info(
+        { callId: this.config.callId, text: stable.slice(0, 80) },
+        "Barge-in detected after stable Sarvam realtime partial",
+      );
+    }, 160);
   }
 
   private clearBargeRecovery(): void {
@@ -2495,13 +2556,48 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   private armBargeRecovery(partial?: string): void {
-    const text = partial?.trim();
-    if (!text) return;
-    this._bargeRecoveryText = text;
+    const text = partial?.trim() ?? "";
+    if (text) this._bargeRecoveryText = text;
     this._bargeRecoveryArmedAt = Date.now();
-    this._bargeRecoveryStableText = text;
+    this._bargeRecoveryStableText = this._bargeRecoveryText ?? "";
     this._bargeRecoveryStableSince = Date.now();
     this.scheduleBargeRecoveryTick();
+  }
+
+  /**
+   * Nearby / phone-crosstalk barge: TTS already stopped, VAD stays open, no
+   * caller final, stall is refreshed by room energy → mute until hangup.
+   * Release WAIT, listen again, optionally finish the cut reply.
+   */
+  private abandonFalseBarge(reason: string): void {
+    const preview = this._bargeRecoveryText || "";
+    this.clearBargeRecovery();
+    this.interruptionMgr.onUserSpeechEnd();
+    this.clearBargeWait();
+    this.interruptReplyArmed = false;
+    this.pendingTranscriptQueue = [];
+    if (preview) this.logDiscardedTranscript(preview, "room_crosstalk");
+    logger.info(
+      { callId: this.config.callId, reason },
+      "False barge abandoned — room talk; resuming listen",
+    );
+    this.logExec("Agent", "system", {
+      status: "info",
+      turnNumber: this._activeTurnIndex,
+      warningFlags: ["false_barge"],
+      metadata: { event: "False Barge Abandoned", reason },
+    });
+    const remainder = this._bargedReplyRemainder;
+    const remainderAge = Date.now() - this._bargedReplyAt;
+    if (remainder && remainderAge < 15_000 && !this.isProcessing && !this.isPlaying) {
+      this._bargedReplyRemainder = null;
+      void this.resumeBargedReply(remainder);
+      return;
+    }
+    if (!this.closed && !this.isProcessing) {
+      this.safetyNet.beginListening();
+      this.resetHangupTimer();
+    }
   }
 
   /**
@@ -2509,16 +2605,31 @@ export class OrchestrationPipeline implements VoiceSession {
    * progress. Firing while Sarvam's VAD is still open truncates the caller
    * mid-utterance and answers the fragment (call 21628: committed "No, no"
    * 1.29s into a 4.28s segment, then the real final landed as a second turn).
-   * Each tick refreshes the armed text. While VAD is open, only a frozen
-   * pending transcript for BARGE_RECOVERY_MAX_WAIT_MS is "stuck" (call 21818:
-   * growing text for 13s was committed at 8s). speech_end is the primary commit.
+   * Each tick refreshes the armed text. Growing room talk must not wait 8s
+   * then become a turn — resume after BARGE_STUCK_RESUME_MS.
    */
   private scheduleBargeRecoveryTick(): void {
     if (this._bargeRecoveryTimer) clearTimeout(this._bargeRecoveryTimer);
     this._bargeRecoveryTimer = setTimeout(() => {
       this._bargeRecoveryTimer = null;
+      if (this.closed) return;
+      if (this.isProcessing) {
+        if (this.interruptReplyArmed) {
+          this.clearBargeRecovery();
+          return;
+        }
+        this.scheduleBargeRecoveryTick();
+        return;
+      }
       const live = this.streamSTT?.getPendingTranscript?.()?.trim();
       if (live) this._bargeRecoveryText = live;
+      const bargeAge = this._bargeRecoveryArmedAt
+        ? Date.now() - this._bargeRecoveryArmedAt
+        : BARGE_STUCK_RESUME_MS;
+      if (shouldAbandonStuckBarge({ bargeAgeMs: bargeAge })) {
+        this.abandonFalseBarge("barge_stuck");
+        return;
+      }
       if (this._vadSpeechStartAt !== 0) {
         const current = (this._bargeRecoveryText || "").trim();
         if (current !== this._bargeRecoveryStableText) {
@@ -2526,8 +2637,6 @@ export class OrchestrationPipeline implements VoiceSession {
           this._bargeRecoveryStableSince = Date.now();
         }
         const frozenMs = Date.now() - (this._bargeRecoveryStableSince || Date.now());
-        // Open VAD + growing text = still talking. Only force-commit when the
-        // pending transcript has been frozen for the ceiling (true stuck VAD).
         if (frozenMs < BARGE_RECOVERY_MAX_WAIT_MS) {
           this.scheduleBargeRecoveryTick();
           return;
@@ -2543,7 +2652,11 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private flushBargeRecovery(reason: string): void {
     const text = this._bargeRecoveryText?.trim() ?? "";
-    if (!text || this.closed) return;
+    if (this.closed) return;
+    if (!text || reason === "crosstalk") {
+      this.abandonFalseBarge(reason || "empty");
+      return;
+    }
     if (this.isPlaying || this.isSendingTtsAudio) {
       this.clearBargeRecovery();
       return;
@@ -2991,7 +3104,7 @@ export class OrchestrationPipeline implements VoiceSession {
     this.recentAgentSpeech = this.recentAgentSpeech.filter(
       (e) => now <= e.estEndAt + SELF_ECHO_TAIL_MS,
     );
-    this.recentAgentSpeech.push({ tokens, estEndAt });
+    this.recentAgentSpeech.push({ text, tokens, estEndAt });
     // Hard cap so a very long call can't grow this unbounded.
     if (this.recentAgentSpeech.length > 12) {
       this.recentAgentSpeech = this.recentAgentSpeech.slice(-12);
@@ -3010,10 +3123,12 @@ export class OrchestrationPipeline implements VoiceSession {
     const t = transcript.trim();
     if (!t) return false;
     return shouldIgnoreSelfEcho({
+      recentPlaybackTail: this.lastTtsFrameAt > 0 && Date.now() - this.lastTtsFrameAt < 600,
       transcript: t,
       agentSpeaking: this.isPlaying || this.isSendingTtsAudio,
       welcomePlayed: !(this.greetingFirstClipActive || this.systemPlaybackActive),
-      isOverridePhrase: false,
+      isOverridePhrase: isPstnStopHold(t, this.interruptionMgr),
+      recentAgentText: this.recentAgentSpeech.filter((s) => Date.now() <= s.estEndAt + SELF_ECHO_TAIL_MS).map((s) => s.text),
     }).ignore;
   }
 
@@ -3619,15 +3734,7 @@ export class OrchestrationPipeline implements VoiceSession {
                 if (interimIsSelfEcho) {
                   // opener mute / content echo / room crosstalk — inspect only
                 } else if (this.shouldInterruptFromCallerTranscript(text)) {
-                  this.triggerBargeIn("vad_partial", text, { speculative: true });
-                  logger.info(
-                    {
-                      callId: this.config.callId,
-                      words: this.streamingBargeInWordCount,
-                      text: text.slice(0, 80),
-                    },
-                    "Barge-in detected (Sarvam realtime early partial)",
-                  );
+                  this.schedulePartialBargeIn(text);
                 }
               } else {
                 const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
@@ -3652,6 +3759,9 @@ export class OrchestrationPipeline implements VoiceSession {
             return;
           }
           if (!text.trim()) return;
+          if (this.partialBargeTimer) clearTimeout(this.partialBargeTimer);
+          this.partialBargeTimer = null;
+          this.pendingPartialBargeText = "";
           this.lastCallerActivityAt = Date.now();
           this.streamSTTReconnectAttempts = 0; // reset backoff on successful transcript
           this.resetHangupTimer();
@@ -3726,6 +3836,19 @@ export class OrchestrationPipeline implements VoiceSession {
    * 
    * P1 fix (call 20094): Added cancellation of pending clarification timers.
    */
+  private deferGreetingTranscript(text: string, emittedAt: number, closeReason: TurnCloseReason): boolean {
+    if (!this.greetingPlaybackActive && !this.greetingFirstClipActive) return false;
+    if (!text.trim() || this.isSelfEcho(text)) return true;
+    if (isPstnStopHold(text, this.interruptionMgr) && !this.bargeInRequested) {
+      this.triggerBargeIn("greeting_stop", text, { speculative: false });
+    }
+    if (this.pendingTranscriptQueue.at(-1)?.text !== text) {
+      this.pendingTranscriptQueue.push({ text, emittedAt, closeReason });
+      if (this.pendingTranscriptQueue.length > 8) this.pendingTranscriptQueue.shift();
+    }
+    return true; // greet() drains this queue after playback/interrupt cleanup
+  }
+
   private async handleStreamingTranscript(rawTranscript: string, sttEmittedAt = Date.now(), closeReason: TurnCloseReason = "stt_final"): Promise<void> {
     // P1 fix (call 20094): Cancel any pending clarification timers when a valid final arrives.
     if (this._eouFinalTimer) {
@@ -3776,20 +3899,7 @@ export class OrchestrationPipeline implements VoiceSession {
       this.logDiscardedTranscript(transcript, "inbound_greeting_hold");
       return;
     }
-    if (
-      this._discardInboundGreetingOverlapFinal
-      && !this.isPlaying
-      && !this._partialThisGeneration
-      && !isSemanticInterrupt(transcript)
-    ) {
-      this._discardInboundGreetingOverlapFinal = false;
-      logger.info(
-        { callId: this.config.callId, transcript: transcript.slice(0, 80) },
-        "Inbound: dropping STT captured during greeting — waiting for caller",
-      );
-      this.logDiscardedTranscript(transcript, "inbound_greeting_overlap");
-      return;
-    }
+    if (this.deferGreetingTranscript(transcript, sttEmittedAt, closeReason)) return;
     if (this._discardInboundGreetingOverlapFinal && this._partialThisGeneration) {
       this._discardInboundGreetingOverlapFinal = false;
     }
@@ -4818,6 +4928,11 @@ export class OrchestrationPipeline implements VoiceSession {
       ? this.nativePcm16kQueue.shift()!
       : pcm16k;
     if (pcm8k.length < 2 && effectivePcm16k.length < 2) return;
+
+    this._lastInboundRawRms = rawRms;
+    if ((this.isPlaying || this.isSendingTtsAudio) && rawRms > this.bargeInPeakRmsSinceSentence) {
+      this.bargeInPeakRmsSinceSentence = rawRms;
+    }
 
     // ── IVR DTMF detection ──
     // Run on every incoming frame when an IVR interaction is active.
@@ -5983,7 +6098,7 @@ export class OrchestrationPipeline implements VoiceSession {
         this.greetingPlaybackActive = false;
         this.isPlaying = false;
         this.armTailEchoGrace();
-        this._discardInboundGreetingOverlapFinal = true;
+        this._discardInboundGreetingOverlapFinal = false;
         this._partialThisGeneration = false;
       }
       // Heard-only: never fall back to full greeting text after a barge mid-open.
@@ -6032,6 +6147,8 @@ export class OrchestrationPipeline implements VoiceSession {
       if (!this.closed) this.safetyNet.beginListening();
     } finally {
       this.isProcessing = false;
+      this.greetingPlaybackActive = false;
+      this.greetingFirstClipActive = false;
       // Greeting has been delivered (or failed) — the next caller audio is their
       // intro turn. Arm detection now so we sample THAT, not the greeting echo.
       this.armGenderDetection();
@@ -6491,7 +6608,10 @@ export class OrchestrationPipeline implements VoiceSession {
         barged: this.bargeInRequested,
       },
     });
-    if (this.bargeInRequested) return;
+    if (this.bargeInRequested) {
+      if (!this._bargeRecoveryArmedAt) this.armBargeRecovery();
+      return;
+    }
     this.resetHangupTimer();
     this.safetyNet.beginListening();
   }
@@ -6714,12 +6834,20 @@ export class OrchestrationPipeline implements VoiceSession {
    * mirroring the web-call playback lifecycle.
    */
   /**
-   * Cartesia Sonic 3.5/3.6: wait for a real sentence (`.!?।`). Comma-clause
-   * dispatch turns "Hello Gopi, I'm Aisha…" into two clips plus a forced
-   * period — Sonic then speaks each fragment as a full stop, not a pause.
+   * Sarvam jobs are separate WS flushes: splitting mid-phrase resets prosody
+   * and adds serialized requests. Cartesia's non-token paths also retain
+   * natural sentence boundaries; its managed stream bypasses this extractor.
    */
   private ttsExtractOpts(): { earlyClause: boolean } {
-    return { earlyClause: this.agent.ttsProvider !== "cartesia" };
+    return ttsSentenceOptions(this.agent.ttsProvider);
+  }
+
+  /** Cartesia managed buffering: stream LLM tokens; do not wait for `.!?`.
+   *  Docs: aggregating sentences client-side *and* max_buffer_delay_ms 3000
+   *  is the "middle ground" that adds up to 3s extra
+   *  (https://docs.cartesia.ai/use-the-api/tts-websocket/buffering). */
+  private cartesiaManagedTokenStream(): boolean {
+    return this.agent.ttsProvider === "cartesia";
   }
 
   private extractSpeakable(text: string) {
@@ -6751,8 +6879,14 @@ export class OrchestrationPipeline implements VoiceSession {
     const turnContextId = cartesiaTts ? globalThis.crypto.randomUUID() : undefined;
     try {
       if (turnContextId && cartesiaTts) {
-        const jobs = sentences.map((s) =>
-          this.startSentenceSynthesis(s, this._activeTurnIndex, seqId, turnContextId, emotions),
+        const jobs = sentences.map((s, i) =>
+          this.startSentenceSynthesis(
+            i === 0 || /^\s/.test(s) ? s : ` ${s}`,
+            this._activeTurnIndex,
+            seqId,
+            turnContextId,
+            emotions,
+          ),
         );
         const owner = jobs.find((j) => !j.skipDrain) ?? jobs[0]!;
         const continuations = jobs.filter((j) => j.skipDrain);
@@ -6812,24 +6946,34 @@ export class OrchestrationPipeline implements VoiceSession {
     // Track what the agent is about to speak so the streaming-STT path can reject
     // this same audio when the carrier echoes it back (content-based self-echo).
     this.recordAgentSpeech(job.text);
-    this._activePlaybackText = job.text;
+    const playbackText = job.text;
+    this._activePlaybackText = playbackText;
+    this.activeConfirmedPlaybackText = "";
+    this.activeReceiptJob = job;
     this._activePlaybackStartedAt = Date.now();
     const _pbStart = Date.now();
     const _pbTurn = job.turnNumber;
     logPlaybackEvent(this.logFn, "Playback Started", { provider: this.agent.ttsProvider, turnNumber: _pbTurn });
     let _pacedMs: number | undefined;
+    let _speechMs: number | undefined;
     let _claimedMs: number | undefined;
+    let receipt: Awaited<ReturnType<NonNullable<SessionConfig["awaitPlaybackReceipt"]>>> | undefined;
     const isFiller = job.sequenceId === FILLER_SEQUENCE_ID;
     if (isFiller) this.fillerPlaybackActive = true;
     this.isSendingTtsAudio = true;
     try {
       const drain = await this.drainSentenceJob(job);
       _pacedMs = drain?.pacedMs;
+      _speechMs = drain?.speechMs ?? _pacedMs;
       _claimedMs = drain?.claimedMs ?? job.audioDurationMs;
+      if ((_pacedMs ?? 0) > 0 && !this.closed && !this.bargeInRequested
+        && this.interruptionMgr.isValidSequence(job.sequenceId)) {
+        receipt = await this.config.awaitPlaybackReceipt?.();
+      }
     } finally {
       this.isSendingTtsAudio = false;
       if (isFiller) this.fillerPlaybackActive = false;
-      if (this._activePlaybackText === job.text) {
+      if (this._activePlaybackText === playbackText) {
         this._activePlaybackText = null;
         this._activePlaybackStartedAt = null;
       }
@@ -6838,7 +6982,11 @@ export class OrchestrationPipeline implements VoiceSession {
         !noAudioSent
         && _claimedMs != null
         && _claimedMs > 0
-        && _pacedMs! >= _claimedMs * 0.85;
+        && (this.config.awaitPlaybackReceipt
+          ? _speechMs! >= Math.ceil(_claimedMs / 20) * 20
+          : _pacedMs! >= _claimedMs * 0.85)
+        && this.interruptionMgr.isValidSequence(job.sequenceId)
+        && (!this.config.awaitPlaybackReceipt || receipt === "played");
       const _pbEvent: PlaybackEvent = this.closed
         ? "Playback Cancelled"
         : this.bargeInRequested
@@ -6861,14 +7009,21 @@ export class OrchestrationPipeline implements VoiceSession {
               ? "audio_gated"
               : fullyPlayed
                 ? "completed"
-                : "partial_emit",
+                : receipt ? `carrier_${receipt}` : "partial_emit",
       });
       // Accumulate fully-played sentences for the interruption hint. Only count
       // sentences that completed — a mid-sentence barge-in means the caller may
       // not have heard the whole thing, so we conservatively exclude that one.
       if (_pbEvent === "Playback Completed" && !noAudioSent) {
+        this.recentAgentSpeech.push({ text: job.text,
+          tokens: new Set(this.normalizeForRepeat(job.text).split(" ").filter(Boolean)), estEndAt: Date.now() });
+        this.recentAgentSpeech = this.recentAgentSpeech.slice(-12);
         this._currentTurnPlayedSentences.push(job.text);
+      } else if (job.confirmedText) {
+        this._currentTurnPlayedSentences.push(job.confirmedText);
       }
+      this.activeConfirmedPlaybackText = "";
+      this.activeReceiptJob = null;
     }
   }
 
@@ -6933,6 +7088,7 @@ export class OrchestrationPipeline implements VoiceSession {
     let resolveReady!: () => void;
     const ready = new Promise<void>((r) => { resolveReady = r; });
     const job: TtsSentenceJob = {
+      contextId: turnContextId,
       text,
       turnNumber,
       sequenceId,
@@ -6941,6 +7097,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // (call 14235: "புரிஞ்சுது" / "அப்படியா" chopped before the real sentence).
       streaming: sequenceId !== FILLER_SEQUENCE_ID && !!this.tts.synthesizeStream,
       pcmQueue: [],
+      queuedPcmBytes: 0,
       synthDone: false,
       synthError: null,
       audioDurationMs: undefined,
@@ -6950,7 +7107,17 @@ export class OrchestrationPipeline implements VoiceSession {
     };
     if (turnContextId && sequenceId !== FILLER_SEQUENCE_ID && this.tts instanceof CartesiaTTS) {
       job.skipDrain = !this.tts.claimTurnContext(turnContextId);
+      if (job.skipDrain) {
+        const owner = this.ttsContextJobs.get(turnContextId);
+        if (owner) owner.text += text;
+      } else {
+        this.ttsContextJobs.set(turnContextId, job);
+      }
     }
+    // bargeInRequested is reset for the next turn. Sequence validity is the
+    // durable ownership check for delayed provider callbacks / REST recovery.
+    const isObsolete = (): boolean => this.closed || this.bargeInRequested
+      || !this.interruptionMgr.isValidSequence(sequenceId);
 
     // Backchannels use the agent's TTS voice (call 20282: preset WAVs were a
     // different speaker — "Mm-hmm" / "ahamm" did not match Cartesia).
@@ -6967,13 +7134,28 @@ export class OrchestrationPipeline implements VoiceSession {
       let _ttsAccumBytes = 0; // raw PCM bytes accumulated (at ttsPcmRate)
       let _ttsTotalBytes = 0;
       let _ttsFirstByteMs: number | null = null;
+      const enqueuePcm = (audio: Buffer) => {
+        if (isObsolete() || job.synthDone) return;
+        const bytes = (job.queuedPcmBytes ?? 0) + audio.length;
+        if (bytes > this.ttsPcmRate() * 2 * 60) {
+          job.synthError = new Error("TTS audio backlog exceeds 60 seconds");
+          job.synthDone = true;
+          ttsAbort.abort();
+          return;
+        }
+        job.queuedPcmBytes = bytes;
+        job.pcmQueue.push(audio);
+      };
       const streamAccumBytes = (this.ttsPcmRate() / 1000) * 2 * 20; // 20 ms at native TTS rate
 
-      // Aligns received bytes to a 4-byte boundary and buffers the result into
+      // Native 8k PCM needs sample alignment (2 bytes); 16k decimation consumes
+      // sample pairs (4 bytes). Do not lose a final native 8k sample.
+      const pcmAlignment = this.ttsPcmRate() === 8000 ? 2 : 4;
+      // Aligns received bytes and buffers the result into
       // job.pcmQueue for later draining. Pure buffering, no recording/ambient/
       // encoding — safe to run ahead of actual playback.
       const flush = (): void => {
-        if (accum.length === 0 || this.closed || this.bargeInRequested) {
+        if (accum.length === 0 || isObsolete()) {
           accum = [];
           accumSize = 0;
           return;
@@ -6983,14 +7165,14 @@ export class OrchestrationPipeline implements VoiceSession {
           : Buffer.concat(accum);
         accum = [];
         accumSize = 0;
-        const alignedLen = Math.floor(combined.length / 4) * 4;
+        const alignedLen = Math.floor(combined.length / pcmAlignment) * pcmAlignment;
         flushRemainder = alignedLen < combined.length
           ? combined.slice(alignedLen)
           : Buffer.alloc(0);
         if (alignedLen === 0) return;
         const pcm16k = combined.slice(0, alignedLen);
         _ttsAccumBytes += pcm16k.length;
-        job.pcmQueue.push(pcm16k);
+        enqueuePcm(pcm16k);
       };
 
       // AbortController lets us cancel the TTS HTTP connection when:
@@ -7001,6 +7183,9 @@ export class OrchestrationPipeline implements VoiceSession {
       // indefinitely and the caller hears complete silence until Vobiz drops.
       const ttsAbort = new AbortController();
       this.activeTtsAborts.add(ttsAbort);
+      let timedOut = false;
+      let queued = ttsAdapter.synthesisScheduling === "serial";
+      let queueTimedOut = false;
       let ttsTimerId: ReturnType<typeof setTimeout> | null = null;
       const armTtsIdleTimer = (ms: number): void => {
         // Call 19809: skipDrain leftover REST waits for Cartesia clip 1 (can be
@@ -7010,18 +7195,25 @@ export class OrchestrationPipeline implements VoiceSession {
         if (ttsTimerId) clearTimeout(ttsTimerId);
         ttsTimerId = setTimeout(() => {
           logger.warn({ callId: this.config.callId }, "TTS streaming timed out — aborting fetch");
+          queueTimedOut = queued;
+          timedOut = !queued;
           ttsAbort.abort();
         }, ms);
       };
-      if (!job.skipDrain) armTtsIdleTimer(TTS_STREAM_TIMEOUT_MS); // initial: wait for the first byte
+      const queueTimeoutMs = Math.max(TTS_STREAM_TIMEOUT_MS, 30_000);
+      if (!job.skipDrain) armTtsIdleTimer(queued ? queueTimeoutMs : TTS_STREAM_TIMEOUT_MS);
+      const onStarted = (): void => {
+        queued = false;
+        if (!ttsAbort.signal.aborted) armTtsIdleTimer(TTS_STREAM_TIMEOUT_MS);
+      };
       const closedWatcher = setInterval(() => {
-        if (this.closed || this.bargeInRequested) ttsAbort.abort();
+        if (isObsolete()) ttsAbort.abort();
       }, 50);
 
       void (async () => {
         try {
           const onTtsChunk = (chunk: Buffer): void => {
-            if (this.closed || this.bargeInRequested) return;
+            if (ttsAbort.signal.aborted || isObsolete()) return;
             if (this._tTurnTtsFirstByte === null) this._tTurnTtsFirstByte = performance.now();
             if (_ttsFirstByteMs === null) _ttsFirstByteMs = Date.now() - _ttsReqStart;
             _ttsTotalBytes += chunk.length;
@@ -7035,7 +7227,7 @@ export class OrchestrationPipeline implements VoiceSession {
           if (turnContextId && ttsAdapter instanceof CartesiaTTS) {
             await ttsAdapter.synthesizeStreamInContext(turnContextId, text, onTtsChunk, onTtsDone, ttsAbort.signal, emotions, !!job.skipDrain);
           } else {
-            await synthesizeStream(text, onTtsChunk, onTtsDone, ttsAbort.signal);
+            await synthesizeStream(text, onTtsChunk, onTtsDone, ttsAbort.signal, emotions, onStarted);
           }
         } catch (err) {
           const isAbort = err instanceof Error && err.name === "AbortError";
@@ -7043,18 +7235,24 @@ export class OrchestrationPipeline implements VoiceSession {
             job.synthError = err; // real TTS error — surfaced to the caller in drainSentenceJob
           } else {
             logger.warn({ callId: this.config.callId }, "TTS stream aborted");
+            if (queueTimedOut) job.synthError = new Error("TTS queue deadline exceeded before provider dispatch");
+            if (timedOut) job.synthError = new Error("TTS provider deadline exceeded before synthesis completed");
             // Idle timeout with zero bytes: retry once via REST/one-shot so the
             // caller still hears the sentence (call 16986: greeting + follow-up
             // streams hung, agent never spoke after "hello").
-            if (!this.closed && !this.bargeInRequested && _ttsTotalBytes === 0 && !job.skipDrain) {
+            if (timedOut && !isObsolete() && _ttsTotalBytes === 0 && !job.skipDrain) {
               try {
                 const { audio } = await this.tts.synthesize(text);
-                if (audio?.length && !this.closed && !this.bargeInRequested) {
+                if (audio?.length && !isObsolete()) {
                   // Keep job.streaming true so an in-flight drain can play
                   // these blocks from pcmQueue (switching to nonStreamAudio
                   // after drain already entered the stream path is silent).
-                  job.pcmQueue.push(audio);
+                  enqueuePcm(audio);
+                  _ttsAccumBytes += audio.length;
+                  _ttsTotalBytes += audio.length;
+                  _ttsFirstByteMs = Date.now() - _ttsReqStart;
                   job.audioDurationMs = this.ttsDurationMs(audio.length);
+                  job.synthError = null;
                   logger.info(
                     { callId: this.config.callId, textLength: text.length, audioBytes: audio.length },
                     "TTS stream timed out empty — recovered with one-shot synthesize",
@@ -7065,8 +7263,8 @@ export class OrchestrationPipeline implements VoiceSession {
               }
             } else if (
               TTS_MIDSTREAM_RESYNTH
-              && !this.closed
-              && !this.bargeInRequested
+              && timedOut
+              && !isObsolete()
               && _ttsAccumBytes > 0
               && text.length > 0
             ) {
@@ -7086,9 +7284,11 @@ export class OrchestrationPipeline implements VoiceSession {
                 const remainderChars = remainder.replace(/\s+/g, "").length;
                 if (remainderChars >= TTS_MIDSTREAM_MIN_REMAINDER_CHARS) {
                   const { audio } = await this.tts.synthesize(remainder);
-                  if (audio?.length && !this.closed && !this.bargeInRequested) {
-                    job.pcmQueue.push(audio);
-                    job.audioDurationMs = this.ttsDurationMs(_ttsAccumBytes + audio.length);
+                  if (audio?.length && !isObsolete()) {
+                    enqueuePcm(audio);
+                    _ttsAccumBytes += audio.length;
+                    _ttsTotalBytes += audio.length;
+                    job.audioDurationMs = this.ttsDurationMs(_ttsAccumBytes);
                     logger.info(
                       {
                         callId: this.config.callId,
@@ -7117,17 +7317,20 @@ export class OrchestrationPipeline implements VoiceSession {
           this.activeTtsAborts.delete(ttsAbort);
           flush(); // flush any leftover accumulator bytes after aborts
           job.audioDurationMs = this.ttsDurationMs(_ttsAccumBytes);
-          if (!job.synthError) {
+          if (!job.synthError && !isObsolete()) {
             this.logExec("TTS", "response", {
               provider: this.agent.ttsProvider,
               status: "success",
               latencyMs: Date.now() - _ttsReqStart,
               turnNumber,
               durationMs: Date.now() - _ttsReqStart,
-              responsePayload: { audioBytes: _ttsTotalBytes, textLength: text.length, firstByteMs: _ttsFirstByteMs },
+              responsePayload: job.skipDrain
+                ? { event: "Continuation text submitted", contextId: turnContextId, textLength: text.length, audioOwnedByContext: true }
+                : { audioBytes: _ttsTotalBytes, textLength: job.text.length, firstByteMs: _ttsFirstByteMs, contextId: turnContextId },
             });
           }
           job.synthDone = true;
+          if (turnContextId && !job.skipDrain) this.ttsContextJobs.delete(turnContextId);
           resolveReady();
         }
       })();
@@ -7136,11 +7339,11 @@ export class OrchestrationPipeline implements VoiceSession {
         const ttsAbort = new AbortController();
         this.activeTtsAborts.add(ttsAbort);
         const closedWatcher = setInterval(() => {
-          if (this.closed || this.bargeInRequested) ttsAbort.abort();
+          if (isObsolete()) ttsAbort.abort();
         }, 50);
         try {
           const { audio } = await this.tts.synthesize(text);
-          if (ttsAbort.signal.aborted || this.bargeInRequested || this.closed) return;
+          if (ttsAbort.signal.aborted || isObsolete()) return;
           if (!audio?.length) throw new Error("TTS returned empty audio");
           job.nonStreamAudio = audio;
           this.logExec("TTS", "response", {
@@ -7176,7 +7379,7 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private async drainSentenceJob(
     job: TtsSentenceJob,
-  ): Promise<{ pacedMs: number; claimedMs?: number } | undefined> {
+  ): Promise<{ pacedMs: number; speechMs?: number; claimedMs?: number } | undefined> {
     if (job.sequenceId === FILLER_SEQUENCE_ID && this._skipPendingFillerPlayback) return;
     if (this.bargeInRequested) return;
     // Do not wait on incrementalDelay / calleeSpeaking before first audio.
@@ -7193,7 +7396,7 @@ export class OrchestrationPipeline implements VoiceSession {
 
   private async drainSentenceJobInner(
     job: TtsSentenceJob,
-  ): Promise<{ pacedMs: number; claimedMs?: number } | undefined> {
+  ): Promise<{ pacedMs: number; speechMs?: number; claimedMs?: number } | undefined> {
     // Extend echo-grace to cover estimated sentence playback duration.
     // ~70 ms/char covers Tamil/Indic and Latin at typical TTS speech rate
     // (observed: 56-char Tamil sentence ≈ 3600 ms = 64 ms/char). Without
@@ -7218,6 +7421,26 @@ export class OrchestrationPipeline implements VoiceSession {
 
     /** Wire bytes actually sent (mulaw or PCM8k) — source of truth for pacedMs. */
     let bytesSent = 0;
+    let speechBytesSent = 0;
+    let lastCheckpointMs = 0;
+    let checkpointPending = false;
+    const checkpoint = () => {
+      const ms = speechBytesSent / (this.config.rawPcmOutput ? 16 * (this.pcmOutRate() / 8000) : 8);
+      if (!job.contextId || !(this.tts instanceof CartesiaTTS) || !this.config.awaitPlaybackReceipt
+        || checkpointPending || ms - lastCheckpointMs < 500) return;
+      checkpointPending = true;
+      lastCheckpointMs = ms;
+      const tts = this.tts;
+      void this.config.awaitPlaybackReceipt().then(receipt => {
+        if (receipt !== "played" || this.activeReceiptJob !== job || this.closed || this.bargeInRequested
+          || !this.interruptionMgr.isValidSequence(job.sequenceId)) return;
+        const prefix = tts.playedText(job.contextId!, ms);
+        if (prefix.length > (job.confirmedText?.length ?? 0)) {
+          job.confirmedText = prefix;
+          this.activeConfirmedPlaybackText = prefix;
+        }
+      }).catch(() => {}).finally(() => { checkpointPending = false; });
+    };
     const noteSent = (chunk: Buffer) => { bytesSent += chunk.length; };
 
     if (job.streaming) {
@@ -7228,11 +7451,12 @@ export class OrchestrationPipeline implements VoiceSession {
       const wireQueue: Buffer[] = [];
       const wireRem = { buf: Buffer.alloc(0) };
       let pcmIdx = 0;
+      job.queuedPcmBytes ??= job.pcmQueue.reduce((n, b) => n + b.length, 0);
       const srcRate = this.ttsPcmRate();
       const wireFrameBytes = this.config.rawPcmOutput
         ? CHUNK_SIZE_MULAW * 2 * (this.pcmOutRate() / 8000)
         : CHUNK_SIZE_MULAW;
-      const holdFrame = Buffer.alloc(wireFrameBytes, 0);
+      const holdFrame = Buffer.alloc(wireFrameBytes, this.config.rawPcmOutput ? 0 : 0xff);
       // Block-continuous decimators when TTS is 16 kHz on an 8 kHz leg.
       // Per-block stateless downsample16to8 repeats a kernel-edge defect at
       // 50 Hz (buzzy/gritty voice). Native Cartesia/Sarvam 8 kHz skips this path.
@@ -7242,6 +7466,9 @@ export class OrchestrationPipeline implements VoiceSession {
       const processNextBlock = (): boolean => {
         if (pcmIdx >= job.pcmQueue.length) return false;
         const pcmBlock = job.pcmQueue[pcmIdx++];
+        job.queuedPcmBytes = Math.max(0, job.queuedPcmBytes! - pcmBlock.length);
+        job.pcmQueue[pcmIdx - 1] = Buffer.alloc(0);
+        if (pcmIdx >= 128) { job.pcmQueue.splice(0, pcmIdx); pcmIdx = 0; }
         const pcm8k = srcRate === 8000 ? pcmBlock : speechDecim!.process(pcmBlock);
         this.recording.addAgentChunk(pcm8k);
         if (this.config.rawPcmOutput) {
@@ -7263,15 +7490,21 @@ export class OrchestrationPipeline implements VoiceSession {
       };
       const flushWireRemainder = (): void => {
         if (wireRem.buf.length === 0) return;
-        wireQueue.push(padWireFrame(wireRem.buf, wireFrameBytes));
+        const padded = Buffer.from(holdFrame);
+        wireRem.buf.copy(padded);
+        wireQueue.push(padded);
         wireRem.buf = Buffer.alloc(0);
+      };
+      const fillNextWireFrame = (): void => {
+        // Provider chunks need not be a full 20ms frame. Exhaust available
+        // fragments before declaring an underrun or end-of-stream.
+        while (wireQueue.length === 0 && processNextBlock()) { /* accumulate */ }
       };
 
       // Buffered-but-unsent audio in ms (s16le: 16 bytes/ms @8k, 32 @16k).
       const ttsBytesPerMs = (srcRate / 1000) * 2;
       const bufferedMs = () => {
-        let bytes = 0;
-        for (let i = pcmIdx; i < job.pcmQueue.length; i++) bytes += job.pcmQueue[i].length;
+        const bytes = job.queuedPcmBytes ?? 0;
         return bytes / ttsBytesPerMs + (wireQueue.length * 20);
       };
       // Jitter buffer: wait until targetMs of audio is queued (or synthesis
@@ -7291,11 +7524,13 @@ export class OrchestrationPipeline implements VoiceSession {
         // Never start the wire on an empty queue while synthesis is still
         // running — a cap expiry with 0 ms buffered is an instant underrun
         // (any streaming TTS: Sarvam, Cartesia, ElevenLabs, Deepgram).
-        const firstByteDeadline = Date.now() + TTS_STREAM_TIMEOUT_MS;
+        // The producer owns queue/provider deadlines and settles job.ready.
+        // A second consumer deadline would count serialized queue wait as a
+        // provider stall and begin sending underrun silence before dispatch.
         while (
           !this.closed && !this.bargeInRequested && !job.synthDone &&
           this.interruptionMgr.isValidSequence(job.sequenceId) &&
-          bufferedMs() <= 0 && Date.now() < firstByteDeadline
+          bufferedMs() <= 0
         ) {
           await new Promise<void>((r) => setTimeout(r, 10));
         }
@@ -7357,7 +7592,7 @@ export class OrchestrationPipeline implements VoiceSession {
           continue;
         }
 
-        if (wireQueue.length === 0) processNextBlock();
+        fillNextWireFrame();
         if (job.synthDone && pcmIdx >= job.pcmQueue.length) flushWireRemainder();
         if (wireQueue.length > 0) {
           const chunk = wireQueue.shift()!;
@@ -7372,6 +7607,8 @@ export class OrchestrationPipeline implements VoiceSession {
           if (this._tTurnFirstAudioOut === null) this._tTurnFirstAudioOut = performance.now();
           this.config.onAudioOut(outChunk);
           noteSent(outChunk);
+          speechBytesSent += outChunk.length;
+          checkpoint();
           this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
           // NOTE: do NOT re-arm the echo-grace window per chunk here (see armTailEchoGrace).
           // If TTS is already done and this was the last queued chunk, break
@@ -7403,7 +7640,7 @@ export class OrchestrationPipeline implements VoiceSession {
             bufferedMs() < TTS_REBUFFER_MS &&
             Date.now() - _uStart < TTS_REBUFFER_CAP_MS
           ) {
-            processNextBlock();
+            fillNextWireFrame();
             if (wireQueue.length > 0) break;
             const now = Date.now();
             if (now >= rebufferTick) {
@@ -7421,7 +7658,6 @@ export class OrchestrationPipeline implements VoiceSession {
             continue;
           }
           if (job.synthDone) {
-            flushWireRemainder();
             continue;
           }
           this.config.onAudioOut(holdFrame);
@@ -7464,6 +7700,7 @@ export class OrchestrationPipeline implements VoiceSession {
       const bytesPerMs = this.config.rawPcmOutput ? (this.pcmOutRate() / 1000) * 2 : 8; // s16le vs mulaw
       return {
         pacedMs: Math.round(bytesSent / bytesPerMs),
+        speechMs: Math.round(speechBytesSent / bytesPerMs),
         claimedMs: job.audioDurationMs,
       };
     } else {
@@ -7577,6 +7814,9 @@ export class OrchestrationPipeline implements VoiceSession {
     logToolExecutionStarted(this.logFn, { tool: toolName, turnNumber: this._activeTurnIndex });
     try {
       const result = await this.handleToolCallInner(toolName, args);
+      if (typeof result === "string" && /^(?:error\s*:|webhook_error\s*:)/i.test(result.trim())) {
+        throw new Error(result);
+      }
       // Terminal tools (end_call) may return undefined — they speak and hang up
       // directly. Every other tool must return a string so the LLM can continue
       // talking to the caller instead of leaving dead air after the filler.
@@ -8716,8 +8956,11 @@ export class OrchestrationPipeline implements VoiceSession {
     let fillerTimer: ReturnType<typeof setTimeout> | null = null;
 
     let llmResponse = "";
+    let malformedContinuationDetected = false;
     let pendingText  = "";
-    // One-step output guard: suppresses any second question (and everything
+    /** Cartesia: stream tokens until first `.!?`, then leftover REST of full LLM text. */
+    const cartesiaTurn = new CartesiaTurnStream();
+    // One-step output guard: suppresses any second question (and everything)
     // after it) so a turn that runs through multiple flow steps is truncated at
     // the first natural yield point. Mirrored into stored history below.
     const stepGuard = { push: (sentence: string) => sentence, truncated: () => false };
@@ -8797,9 +9040,15 @@ export class OrchestrationPipeline implements VoiceSession {
       // Extract any leading <emotion value="…"/> tag so the clean sentence goes
       // to TTS while the emotion array is forwarded to Cartesia's voice controls.
       // Skip markup-only leftovers (call 17666: truncated `<emotion value="c`).
-      const { emotion, text: cleanText } = extractEmotionTag(text);
+      // Cartesia concatenates tokens verbatim (call 24489: trim dropped " "
+      // so "நீங்க"+"முன்னாடி" became "நீங்கமுன்னாடி" and Sonic spelled junk).
+      const { emotion, text: cleanText } = extractEmotionTag(text, {
+        trim: !this.cartesiaManagedTokenStream(),
+      });
       if (!cleanText) return;
-      
+      const cartesiaSpaceOnly = this.cartesiaManagedTokenStream() && !cleanText.trim();
+      if (cartesiaSpaceOnly && sentenceQueue.length === 0) return;
+
       // P0 Fix (call 20088): Don't generate separate TTS for ultra-short fillers.
       // Fillers like "ओके", "अच्छा", "अच्छा जी" should be merged with the next
       // substantive sentence, not played as standalone clips. Separate TTS jobs for
@@ -8810,7 +9059,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // logic, so dropping standalone filler jobs does not lose content. If a filler
       // is the ONLY output (turn 1 pure "ஆமா"), it still plays (isBackchannelOnly
       // does not block a multi-word reply that STARTS with an ack).
-      if (isBackchannelOnlyUtterance(cleanText) && sentenceQueue.length > 0) {
+      if (!this.cartesiaManagedTokenStream() && isBackchannelOnlyUtterance(cleanText) && sentenceQueue.length > 0) {
         logger.info(
           { callId: this.config.callId, evt: "standalone_filler_suppressed", textSnippet: cleanText.slice(0, 80) },
           "Pipeline: suppressed standalone ultra-short filler — will merge with next substantive sentence",
@@ -9281,7 +9530,7 @@ export class OrchestrationPipeline implements VoiceSession {
       const raceTurn = this._activeTurnIndex;
       void safeKb
         .then((late) => {
-          if (late?.text) {
+          if (!this.closed && this._activeTurnIndex === raceTurn && late?.text) {
             this.lastKbContext = { text: late.text, source: late.source, turnNumber: raceTurn };
           }
         })
@@ -9301,9 +9550,6 @@ export class OrchestrationPipeline implements VoiceSession {
         source: kbResult?.source ?? "unknown",
         turnNumber: this._activeTurnIndex,
       };
-    } else if (this.lastKbContext && this.agent.knowledgeSourceIds.length > 0 && !this.agent.kbBakedOnly) {
-      kbContext = this.lastKbContext.text;
-      kbStaleFromTurn = this.lastKbContext.turnNumber;
     }
     // Per-turn Knowledge execution-log event: whether KB context was injected,
     // where it came from, how long retrieval took, and how much text landed in
@@ -9995,9 +10241,8 @@ export class OrchestrationPipeline implements VoiceSession {
             llmFirstTokenAt = Date.now();
             this._tTurnLlmFirstToken = performance.now();
             clearTtftFallbackTimer();
-            // The first token is not audible TTS — Cartesia needs a full
-            // sentence, which lands 0.3–1.5s later. The cover filler must stay
-            // up until enqueue() actually queues Talk audio (call 21546).
+            // The first token is not audible TTS — Cartesia managed buffering
+            // starts when the model has enough context (or its delay cap).
             const ttftMs = llmFirstTokenAt - llmStart;
             const slowTtft = ttftMs >= LLM_SLOW_TTFT_MS;
             this.logExec("LLM", "system", {
@@ -10025,6 +10270,20 @@ export class OrchestrationPipeline implements VoiceSession {
           // guard withholds it from TTS so a tool call is never spoken aloud.
           const afterEnvelope = envelopeGuard.filter(afterBrackets);
           if (!afterEnvelope) return;
+          if (this.cartesiaManagedTokenStream()) {
+            if (malformedContinuationDetected) return;
+            const bufferedSpeech = `${cartesiaTurn.sent}${cartesiaTurn.pending}${afterEnvelope}`;
+            if (/(?:\.\.\.|…)[ \t]*(?:umm?|uhh?|sorry)\b/i.test(bufferedSpeech)) {
+              malformedContinuationDetected = true;
+              logger.warn(
+                { callId: this.config.callId, turnNumber: _currentTurnIndex },
+                "Suppressing malformed repeated LLM continuation before Cartesia",
+              );
+              return;
+            }
+            for (const p of cartesiaTurn.push(afterEnvelope)) enqueue(p);
+            return;
+          }
           pendingText += afterEnvelope;
           const { sentences, remainder } = this.extractSpeakable(pendingText);
           for (const s of sentences) {
@@ -10160,6 +10419,25 @@ export class OrchestrationPipeline implements VoiceSession {
 
     if (llmErr) {
       _agnostTurn?.end(String(llmErr), false);
+      if (llmFirstTokenAt !== null) {
+        // Partial speech is not a completed answer or a reason to hang up.
+        // Finish only already-submitted audio; never replay the whole answer.
+        this.logExec("LLM", "response", {
+          provider: this.agent.llmProvider, status: "error", turnNumber: _currentTurnIndex,
+          errorMessage: toReadableError(llmErr, "Incomplete response"),
+          metadata: { completionState: "truncated", partialCharacters: llmResponse.length },
+        });
+        allEnqueued = true;
+        finalizeTurnCtx();
+        const wake = wakePlayer as (() => void) | null; wakePlayer = null; wake?.();
+        await playPromise;
+        if (!this.closed && !this.bargeInRequested) {
+          const heard = this.getHeardAgentText();
+          if (heard) this.conversationHistory.appendAssistant(heard);
+          await this.speakRaw(pickClarificationPhrase(this.currentLang || this.agent.sttConfig.language, String(this.config.callId)));
+        }
+        return;
+      }
       // P0-B: LLM fallback — if primary failed before producing any tokens, retry with fallback adapter
       if (this.fallbackLlm && llmFirstTokenAt === null) {
         logger.warn({ callId: this.config.callId, err: llmErr, fallbackProvider: this.agent.fallbackLlmProvider }, "Primary LLM failed (no tokens) — retrying with fallback LLM");
@@ -10175,6 +10453,7 @@ export class OrchestrationPipeline implements VoiceSession {
         });
         llmResponse = "";
         pendingText  = "";
+        cartesiaTurn.reset();
         llmFirstSentenceProcessed = false; // reset so fallback can also suppress its leading ack
         try {
           await this.fallbackLlm.chat(
@@ -10197,6 +10476,10 @@ export class OrchestrationPipeline implements VoiceSession {
               if (!filtered) return;
               const afterBrackets = filterBrackets(filtered);
               if (!afterBrackets) return;
+              if (this.cartesiaManagedTokenStream()) {
+                for (const p of cartesiaTurn.push(afterBrackets)) enqueue(p);
+                return;
+              }
               pendingText += afterBrackets;
               const { sentences, remainder } = this.extractSpeakable(pendingText);
               for (const s of sentences) {
@@ -10434,7 +10717,15 @@ export class OrchestrationPipeline implements VoiceSession {
     // they don't appear in the transcript UI or pollute conversation history.
     // Computed BEFORE the final flush so the spoken tail and the stored history
     // are derived from the exact same fully-cleaned text.
-    const cleanResponse = stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
+    const cleanResponse = sanitizeMalformedContinuation(
+      stripJsonMessageWrapper(
+        stripToolArtifacts(
+          stripBracketedInstructions(
+            stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))),
+          ),
+        ),
+      ).trim(),
+    );
     const baseSpokenResponse = cleanResponse;
 
     // Silent-turn recovery: the LLM produced no speakable text and no tool call.
@@ -10508,15 +10799,22 @@ export class OrchestrationPipeline implements VoiceSession {
     } else {
       flushText = pendingText;
     }
-    {
-      const g = stepGuard.push(flushText);
-      if (g.trim()) {
-        enqueue(g);
-      } else if (flushText.trim() && stepGuard.truncated()) {
-        // Micro-clauses during streaming exhausted the sentence cap — still speak
-        // the unsent tail so the caller does not hear a prefix then silence.
-        enqueue(flushText.trim());
+    if (this.cartesiaManagedTokenStream()) {
+      const { stream, leftover } = cartesiaTurn.finish(cleanResponse);
+      for (const p of stream) enqueue(p);
+      if (leftover) {
+        if (turnContextId && cartesiaTts) cartesiaTts.appendTurnRemainder(turnContextId, leftover);
+        else enqueue(leftover);
       }
+    } else {
+    const g = stepGuard.push(flushText);
+    if (g.trim()) {
+      enqueue(g);
+    } else if (flushText.trim() && stepGuard.truncated()) {
+      // Micro-clauses during streaming exhausted the sentence cap — still speak
+      // the unsent tail so the caller does not hear a prefix then silence.
+      enqueue(flushText.trim());
+    }
     }
     allEnqueued = true;
     finalizeTurnCtx();
@@ -10542,6 +10840,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // Bolna parity: store only what the caller actually heard (defer until playback ends).
     const heardOnly = this.getHeardAgentText();
     const spokenResponse = resolveSpokenForHistory({
+      requireDeliveryEvidence: !!this.config.awaitPlaybackReceipt,
       barged: this.bargeInRequested,
       heardOnly,
       fullResponse: baseSpokenResponse,
@@ -11106,6 +11405,9 @@ export class OrchestrationPipeline implements VoiceSession {
     toolCallId?: string,
     chainState: { bookApptFired: boolean; toolCounts?: Record<string, number> } = { bookApptFired: false },
   ): Promise<void> {
+    // A late write may have completed externally; do not revive a closed call
+    // or speak its result over a newer caller turn.
+    if (this.closed || this.bargeInRequested) return;
     if (toolCallId) {
       // Native tool call: use proper "tool" role with matching tool_call_id so
       // OpenAI-compatible APIs (Sarvam, Groq, Mistral, etc.) accept the follow-up call.
@@ -11133,7 +11435,9 @@ export class OrchestrationPipeline implements VoiceSession {
     toolCounts[completedKey] = (toolCounts[completedKey] ?? 0) + 1;
 
     let llmResponse = "";
+    let malformedContinuationDetected = false;
     let pendingText = "";
+    const cartesiaTurn = new CartesiaTurnStream();
     // One-step output guard (same as the main turn path) — truncate at the first
     // natural yield point if the post-tool reply runs through multiple steps.
     const stepGuard = { push: (sentence: string) => sentence, truncated: () => false };
@@ -11196,8 +11500,11 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       // Extract any leading <emotion value="…"/> tag so the clean sentence goes
       // to TTS while the emotion array is forwarded to Cartesia's voice controls.
-      const { emotion, text: cleanText } = extractEmotionTag(text);
+      const { emotion, text: cleanText } = extractEmotionTag(text, {
+        trim: !this.cartesiaManagedTokenStream(),
+      });
       if (!cleanText) return;
+      if (this.cartesiaManagedTokenStream() && !cleanText.trim() && sentenceQueue.length === 0) return;
       const emotions = emotion ? mapEmotionToCartesia(emotion) : undefined;
       if (emotion && emotions) {
         logger.info(
@@ -11371,6 +11678,20 @@ export class OrchestrationPipeline implements VoiceSession {
             llmFirstSpeakableAt = Date.now();
             if (followUpFillerTimer) { clearTimeout(followUpFillerTimer); followUpFillerTimer = null; }
           }
+          if (this.cartesiaManagedTokenStream()) {
+            if (malformedContinuationDetected) return;
+            const bufferedSpeech = `${cartesiaTurn.sent}${cartesiaTurn.pending}${afterEnvelope}`;
+            if (/(?:\.\.\.|…)[ \t]*(?:umm?|uhh?|sorry)\b/i.test(bufferedSpeech)) {
+              malformedContinuationDetected = true;
+              logger.warn(
+                { callId: this.config.callId, turnNumber: this._activeTurnIndex },
+                "Suppressing malformed repeated LLM continuation before Cartesia",
+              );
+              return;
+            }
+            for (const p of cartesiaTurn.push(afterEnvelope)) enqueue(p);
+            return;
+          }
           pendingText += afterEnvelope;
           const { sentences, remainder } = this.extractSpeakable(pendingText);
           for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
@@ -11467,7 +11788,15 @@ export class OrchestrationPipeline implements VoiceSession {
 
     // Compute the fully-cleaned response BEFORE the final flush so the spoken
     // tail and the stored history are derived from the exact same text.
-    const cleanResponse = stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
+    const cleanResponse = sanitizeMalformedContinuation(
+      stripJsonMessageWrapper(
+        stripToolArtifacts(
+          stripBracketedInstructions(
+            stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))),
+          ),
+        ),
+      ).trim(),
+    );
 
     // Final flush: prefer the fullReply-derived remainder over the possibly-
     // truncated pendingText, and enqueue any non-empty trailing text — a length
@@ -11496,13 +11825,20 @@ export class OrchestrationPipeline implements VoiceSession {
     } else {
       flushText = pendingText;
     }
-    {
-      const g = stepGuard.push(flushText);
-      if (g.trim()) {
-        enqueue(g);
-      } else if (flushText.trim() && stepGuard.truncated()) {
-        enqueue(flushText.trim());
+    if (this.cartesiaManagedTokenStream()) {
+      const { stream, leftover } = cartesiaTurn.finish(cleanResponse);
+      for (const p of stream) enqueue(p);
+      if (leftover) {
+        if (ctTurnContextId && ctCartesiaTts) ctCartesiaTts.appendTurnRemainder(ctTurnContextId, leftover);
+        else enqueue(leftover);
       }
+    } else {
+    const gFollow = stepGuard.push(flushText);
+    if (gFollow.trim()) {
+      enqueue(gFollow);
+    } else if (flushText.trim() && stepGuard.truncated()) {
+      enqueue(flushText.trim());
+    }
     }
     if (
       !cleanResponse.trim()
@@ -11619,6 +11955,7 @@ export class OrchestrationPipeline implements VoiceSession {
       const baseSpokenResponse = cleanResponse;
       const heardOnly = this.getHeardAgentText();
       const spokenResponse = resolveSpokenForHistory({
+        requireDeliveryEvidence: !!this.config.awaitPlaybackReceipt,
         barged: this.bargeInRequested,
         heardOnly,
         fullResponse: baseSpokenResponse,
@@ -11883,6 +12220,9 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private async drainPlaybackTail(): Promise<void> {
     if (this.closed || this.bargeInRequested) return;
+    // playJob already awaited carrier completion (or a bounded unknown result).
+    // Do not stack a second estimated playout delay on receipt-aware transports.
+    if (this.config.awaitPlaybackReceipt) return;
     // Send real silence frames during the drain window.  A passive sleep alone
     // is not sufficient for Vobiz: when audio stops arriving, Vobiz can close
     // its internal playout window and clip the last words before we even call

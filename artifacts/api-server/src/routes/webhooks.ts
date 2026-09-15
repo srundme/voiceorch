@@ -1359,8 +1359,14 @@ import {
   buildTwilioWarmTransferTwiML,
   buildPlivoWarmTransferXml,
   buildVobizWarmTransferXml,
+  buildVobizMergeCustomerXml,
+  buildVobizMergeSalesXml,
+  buildVobizMergeWaitXml,
+  vobizMergeRoom,
+  speakVobizConference,
+  hangupVobizCall,
 } from "../orchestration/telephony/transfer.js";
-import { callTransfersTable } from "@workspace/db";
+import { callTransfersTable, platformSettingsTable } from "@workspace/db";
 
 router.get("/webhooks/vobiz/transfer-xml", (req, res): void => {
   const target = String(req.query["target"] ?? "").trim();
@@ -1442,6 +1448,186 @@ router.get("/webhooks/vobiz/warm-transfer-xml", (req, res): void => {
   const baseUrl = getSelfBaseUrl();
   const whisperUrl = `${baseUrl}/api/webhooks/vobiz/warm-briefing-xml?transferId=${encodeURIComponent(transferId)}&token=${encodeURIComponent(token)}`;
   res.set("Content-Type", "text/xml").send(buildVobizWarmTransferXml(target, whisperUrl, callerId));
+});
+
+function mergeQs(query: Record<string, unknown>): { transferId: number; token: string } | null {
+  const transferId = Number(String(query["transferId"] ?? "").trim());
+  const token = String(query["token"] ?? "").trim();
+  if (!Number.isFinite(transferId) || transferId <= 0 || token.length < 32) return null;
+  return { transferId, token };
+}
+
+async function loadMergeTransfer(transferId: number, token: string) {
+  const [row] = await db
+    .select()
+    .from(callTransfersTable)
+    .where(eq(callTransfersTable.id, transferId))
+    .limit(1);
+  const stored = row?.briefingToken ?? "";
+  const tokenBuf = Buffer.from(token);
+  const storedBuf = Buffer.from(stored);
+  const ok =
+    stored.length > 0 &&
+    tokenBuf.length === storedBuf.length &&
+    timingSafeEqual(tokenBuf, storedBuf);
+  if (!ok || !row) return null;
+  return row;
+}
+
+async function resolveVobizCredsForUser(userId: string): Promise<{ authId: string; authToken: string } | null> {
+  const [prov] = await db
+    .select()
+    .from(providersTable)
+    .where(and(eq(providersTable.userId, userId), eq(providersTable.providerName, "vobiz")))
+    .limit(1);
+  let authToken = "";
+  let authId = "";
+  if (prov?.apiKey) {
+    try { authToken = decryptKey(prov.apiKey); } catch { authToken = ""; }
+  }
+  if (prov?.extraConfig) {
+    try {
+      const cfg = JSON.parse(prov.extraConfig) as Record<string, string>;
+      authId = cfg["authId"] ?? "";
+    } catch { /* ignore */ }
+  }
+  if (!authToken || !authId) {
+    const settings = await db
+      .select()
+      .from(platformSettingsTable)
+      .where(inArray(platformSettingsTable.key, ["managed_vobiz_auth_token", "managed_vobiz_auth_id"]));
+    const map = new Map(settings.map((s) => [s.key, s.value]));
+    authToken = authToken || map.get("managed_vobiz_auth_token") || process.env["VOBIZ_AUTH_TOKEN"] || "";
+    authId = authId || map.get("managed_vobiz_auth_id") || process.env["VOBIZ_AUTH_ID"] || "";
+  }
+  if (!authToken || !authId) return null;
+  return { authId, authToken };
+}
+
+router.get("/webhooks/vobiz/merge-customer-xml", async (req, res): Promise<void> => {
+  const q = mergeQs(req.query as Record<string, unknown>);
+  const forbidden = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Speak>Transfer unavailable.</Speak>\n  <Hangup/>\n</Response>`;
+  if (!q) {
+    res.status(403).set("Content-Type", "text/xml").send(forbidden);
+    return;
+  }
+  const row = await loadMergeTransfer(q.transferId, q.token);
+  if (!row) {
+    res.status(403).set("Content-Type", "text/xml").send(forbidden);
+    return;
+  }
+  const baseUrl = getSelfBaseUrl();
+  const qs = `transferId=${encodeURIComponent(String(q.transferId))}&token=${encodeURIComponent(q.token)}`;
+  const xml = buildVobizMergeCustomerXml({
+    room: vobizMergeRoom(row.callId, row.id),
+    waitSoundUrl: `${baseUrl}/api/webhooks/vobiz/merge-wait-xml?${qs}`,
+    callbackUrl: `${baseUrl}/api/webhooks/vobiz/merge-conference-callback?${qs}`,
+  });
+  res.set("Content-Type", "text/xml").send(xml);
+});
+
+router.post("/webhooks/vobiz/merge-sales-xml", async (req, res): Promise<void> => {
+  const q = mergeQs({ ...req.query, ...(typeof req.body === "object" && req.body ? req.body : {}) } as Record<string, unknown>);
+  const fromQuery = mergeQs(req.query as Record<string, unknown>);
+  const parsed = fromQuery ?? q;
+  const forbidden = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Speak>Transfer unavailable.</Speak>\n  <Hangup/>\n</Response>`;
+  if (!parsed) {
+    res.status(403).set("Content-Type", "text/xml").send(forbidden);
+    return;
+  }
+  const row = await loadMergeTransfer(parsed.transferId, parsed.token);
+  if (!row) {
+    res.status(403).set("Content-Type", "text/xml").send(forbidden);
+    return;
+  }
+  const baseUrl = getSelfBaseUrl();
+  const qs = `transferId=${encodeURIComponent(String(parsed.transferId))}&token=${encodeURIComponent(parsed.token)}`;
+  res.set("Content-Type", "text/xml").send(buildVobizMergeSalesXml({
+    room: vobizMergeRoom(row.callId, row.id),
+    callbackUrl: `${baseUrl}/api/webhooks/vobiz/merge-conference-callback?${qs}`,
+  }));
+});
+
+router.get("/webhooks/vobiz/merge-sales-xml", async (req, res): Promise<void> => {
+  const q = mergeQs(req.query as Record<string, unknown>);
+  const forbidden = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Speak>Transfer unavailable.</Speak>\n  <Hangup/>\n</Response>`;
+  if (!q) {
+    res.status(403).set("Content-Type", "text/xml").send(forbidden);
+    return;
+  }
+  const row = await loadMergeTransfer(q.transferId, q.token);
+  if (!row) {
+    res.status(403).set("Content-Type", "text/xml").send(forbidden);
+    return;
+  }
+  const baseUrl = getSelfBaseUrl();
+  const qs = `transferId=${encodeURIComponent(String(q.transferId))}&token=${encodeURIComponent(q.token)}`;
+  res.set("Content-Type", "text/xml").send(buildVobizMergeSalesXml({
+    room: vobizMergeRoom(row.callId, row.id),
+    callbackUrl: `${baseUrl}/api/webhooks/vobiz/merge-conference-callback?${qs}`,
+  }));
+});
+
+router.get("/webhooks/vobiz/merge-wait-xml", (req, res): void => {
+  const q = mergeQs(req.query as Record<string, unknown>);
+  if (!q) {
+    res.status(403).set("Content-Type", "text/xml").send(buildVobizMergeWaitXml());
+    return;
+  }
+  res.set("Content-Type", "text/xml").send(buildVobizMergeWaitXml());
+});
+
+router.post("/webhooks/vobiz/merge-conference-callback", async (req, res): Promise<void> => {
+  res.status(204).end();
+  const q = mergeQs(req.query as Record<string, unknown>);
+  if (!q) return;
+  const row = await loadMergeTransfer(q.transferId, q.token);
+  if (!row) return;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const action = String(body["ConferenceAction"] ?? body["conferenceAction"] ?? "").toLowerCase();
+  const size = Number(body["ConferenceCurrentSize"] ?? body["conferenceCurrentSize"] ?? 0);
+  if (action && action !== "enter" && action !== "conferenceenter") return;
+  if (!(size >= 2)) return;
+  if (row.status === "connected") return;
+  const summary = row.summary?.trim()
+    || "A colleague is joining. Please continue the conversation.";
+  const intro = `I am connecting you now. ${summary}`.slice(0, 800);
+  const creds = await resolveVobizCredsForUser(row.userId);
+  if (!creds) {
+    logger.warn({ transferId: row.id }, "VoBiz merge: no credentials to speak intro");
+    return;
+  }
+  try {
+    await speakVobizConference({
+      authId: creds.authId,
+      authToken: creds.authToken,
+      room: vobizMergeRoom(row.callId, row.id),
+      text: intro,
+    });
+    await db.update(callTransfersTable)
+      .set({ status: "connected", connectedAt: new Date() })
+      .where(eq(callTransfersTable.id, row.id));
+  } catch (err) {
+    logger.warn({ err, transferId: row.id }, "VoBiz merge: conference intro Speak failed");
+  }
+});
+
+router.post("/webhooks/vobiz/merge-sales-hangup", async (req, res): Promise<void> => {
+  res.status(204).end();
+  const q = mergeQs(req.query as Record<string, unknown>);
+  if (!q) return;
+  const row = await loadMergeTransfer(q.transferId, q.token);
+  if (!row) return;
+  const customerUuid = String(req.query["customerUuid"] ?? "").trim();
+  if (!customerUuid) return;
+  const creds = await resolveVobizCredsForUser(row.userId);
+  if (!creds) return;
+  try {
+    await hangupVobizCall({ authId: creds.authId, authToken: creds.authToken, callUuid: customerUuid });
+    logger.info({ transferId: row.id }, "VoBiz merge: sales call ended — hanging up customer conference leg");
+  } catch (err) {
+    logger.warn({ err, transferId: row.id }, "VoBiz merge: customer hangup after sales miss failed");
+  }
 });
 
 // ── P2-C: Warm briefing XML — spoken to the OPERATOR only when they answer ────

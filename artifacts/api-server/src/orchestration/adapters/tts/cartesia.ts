@@ -6,34 +6,29 @@ import type { TTSAdapter } from "../../types.js";
  * Cartesia — Sonic TTS
  *
  * Primary path: WebSocket (`/tts/websocket`)
- *   - One persistent WS connection per call (lazy-opened on first sentence).
- *   - No per-sentence TCP/TLS handshake → saves ~30–80ms per sentence.
- *   - max_buffer_delay_ms: 0 — we already send punctuated sentences (Cartesia
- *     docs: only lower the 3000ms default when the client buffers itself).
- *     A 200ms flush was chopping phonemes on live VoBiz (call 17873).
+ *   - One persistent WS connection per call (lazy-opened on first transcript).
+ *   - Stream LLM tokens with continue:true (managed buffering, delay 3000).
+ *     Do not wait client-side for `.!?` — that is the docs "middle ground"
+ *     and adds latency on top of Sonic's ~75–90ms TTFB.
+ *     Transcripts join verbatim (call 24404: inserting a space made Sonic spell).
+ *   - continue:false (empty transcript) when the LLM turn ends.
  *   - pcm_s16le @ the leg rate: 8000 for VoBiz, 16000 for HD webcall.
- *     Do not request 16 kHz and FIR-downsample for telephony — that stretched
- *     and grit the voice (call 17873).
- *   - One context_id per LLM turn. The first sentence owns the WS context.
- *     With max_buffer_delay_ms=0 Cartesia closes that context after the first
- *     clip (call 19809: 400 "Context has closed" / remaining sentences silent).
- *     Later sentences REST into the same PCM sink after the first clip so the
- *     caller hears the full reply. continue:true joins stay for delay>0.
  *
- * Fallback: REST (`/tts/bytes`) — WS-down, and leftover sentences after the
- *   first clip when Cartesia has already closed the turn context.
+ * Fallback: REST (`/tts/bytes`) — WS-down, or leftover text if Cartesia
+ *   closed the context (400).
  *
  * Docs:
+ *   https://docs.cartesia.ai/use-the-api/tts-websocket/buffering
+ *   https://docs.cartesia.ai/build-with-cartesia/capability-guides/stream-inputs-using-continuations
  *   https://docs.cartesia.ai/api-reference/tts/websocket
- *   https://docs.cartesia.ai/api-reference/tts/bytes
  */
 
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 300;
 const CARTESIA_VERSION = "2026-03-01";
 const WS_CONNECT_TIMEOUT_MS = 6_000;
-/** We send punctuated sentences; Cartesia should not hold a second buffer. */
-const CARTESIA_MAX_BUFFER_DELAY_MS = 0;
+/** Cartesia managed-buffering default (docs). Do not send 0 — that starts a clip per token. */
+const CARTESIA_MAX_BUFFER_DELAY_MS = 3000;
 
 /** Cartesia current TTS model (https://docs.cartesia.ai/build-with-cartesia/tts-models/latest). */
 export const CARTESIA_DEFAULT_MODEL = "sonic-3.6";
@@ -67,6 +62,11 @@ export function resolveCartesiaModelId(model: string | null | undefined): string
   return CARTESIA_VALID_MODELS.has(id) ? id : CARTESIA_DEFAULT_MODEL;
 }
 
+/** Indic languages Cartesia documents as `xx-IN` locales. */
+const CARTESIA_IN_LOCALES = new Set([
+  "bn", "gu", "hi", "kn", "ml", "mr", "or", "pa", "ta", "te", "ur",
+]);
+
 /** `en-IN` → language `en` + locale `en-IN` (Sonic 3.6 date/number reading). */
 export function parseCartesiaLang(tag: string | null | undefined): {
   language: string | null;
@@ -78,7 +78,15 @@ export function parseCartesiaLang(tag: string | null | undefined): {
   const language = (lang ?? "").toLowerCase() || null;
   if (!language) return { language: null, locale: null };
   if (region) return { language, locale: `${language}-${region.toUpperCase()}` };
+  if (CARTESIA_IN_LOCALES.has(language)) {
+    return { language, locale: `${language}-IN` };
+  }
   return { language, locale: null };
+}
+
+/** Tag to send on `language` (never also `locale` — both 400s). Prefer `ta-IN` over `ta`. */
+export function cartesiaWireLanguage(language: string | null, locale: string | null): string | null {
+  return locale ?? language;
 }
 
 /** India endpoint by default for lowest latency; override via CARTESIA_BASE_URL env var. */
@@ -112,12 +120,17 @@ export function isCartesiaContextClosedError(err: unknown): boolean {
 /** Quiet after the last WS chunk ≈ first clip finished (fallback if no `done`). */
 const FIRST_CLIP_QUIET_MS = 400;
 
-/** Cartesia continuations require the joined transcripts to be a valid string. */
-export function joinContinuationTranscript(previous: string, next: string): string {
-  if (!next) return next;
-  if (!previous) return next;
-  if (/^\s/.test(next)) return next;
-  return ` ${next}`;
+/** Cartesia concatenates continuation transcripts verbatim. Do not insert a
+ *  space — LLM tokens already carry their own whitespace (call 24404: "So"+"rry,"
+ *  became "So rry,"). Do not *drop* those spaces either (call 24489: trim made
+ *  "நீங்க"+"முன்னாடி" → "நீங்கமுன்னாடி"). */
+export function joinContinuationTranscript(_previous: string, next: string): string {
+  return next;
+}
+
+/** Remainders can be BPE tokens too; preserve their original whitespace. */
+export function appendCartesiaRemainder(prev: string, next: string): string {
+  return prev + next;
 }
 
 /** Emotion enum accepted by generation_config.emotion (2026-03-01 spec). */
@@ -220,11 +233,39 @@ export class CartesiaTTS implements TTSAdapter {
   /** First sentence's chunk sink — later continuations must not open a second stream. */
   private readonly turnChunkHandlers = new Map<string, (pcm: Buffer) => void>();
   private readonly turnLastTranscript = new Map<string, string>();
+  private readonly contextSettings = new Map<string, Record<string, unknown>>();
+  private readonly wordTimings = new Map<string, Array<{ word: string; end: number }>>();
+
+  playedText(contextId: string, audioMs: number): string {
+    return (this.wordTimings.get(contextId) ?? [])
+      .filter(w => w.end * 1000 <= audioMs).map(w => w.word).join(" ").trim();
+  }
+
+  private settingsForContext(contextId: string, emotions?: string[]): Record<string, unknown> {
+    let settings = this.contextSettings.get(contextId);
+    if (!settings) {
+      settings = { model_id: this.modelId, voice: this.buildVoice(),
+        output_format: this.outputFormat(), max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS,
+        add_timestamps: true };
+      const gc = this.buildGenerationConfig(emotions);
+      if (gc) settings.generation_config = gc;
+      this.applyLang(settings);
+      this.contextSettings.set(contextId, settings);
+      // Keep recently completed contexts until their paced audio finishes.
+      if (this.wordTimings.size >= 32) this.wordTimings.delete(this.wordTimings.keys().next().value!);
+      this.wordTimings.set(contextId, []);
+    }
+    return settings;
+  }
   private readonly claimedTurns = new Set<string>();
   private readonly turnSendChains = new Map<string, Promise<void>>();
   private readonly turnOpened = new Map<string, Promise<void>>();
   private readonly turnOpenedResolve = new Map<string, () => void>();
   private readonly finalizedTurns = new Set<string>();
+  /** Finalization requested is not the same as continue:false sent. */
+  private readonly closingTurns = new Set<string>();
+  private readonly cancelledTurns = new Set<string>();
+  private readonly turnInputs = new Map<string, Set<Promise<void>>>();
   /** First WS clip finished (premature `done`, context-closed 400, or quiet). */
   private readonly firstClipDone = new Set<string>();
   private readonly firstClipWaiters = new Map<string, Array<() => void>>();
@@ -236,6 +277,8 @@ export class CartesiaTTS implements TTSAdapter {
   private readonly leftoverPendingWaiters = new Map<string, Array<() => void>>();
   private readonly leftoverRestChains = new Map<string, Promise<void>>();
   private readonly finalizedWaiters = new Map<string, Array<() => void>>();
+  /** After clip-1 close, concatenate leftover text and REST once (not per token). */
+  private readonly closedRemainder = new Map<string, string>();
 
   constructor(
     apiKey: string,
@@ -388,6 +431,9 @@ export class CartesiaTTS implements TTSAdapter {
     this.turnOpened.clear();
     this.turnOpenedResolve.clear();
     this.finalizedTurns.clear();
+    this.closingTurns.clear();
+    this.cancelledTurns.clear();
+    this.turnInputs.clear();
     this.restFallbackTurns.clear();
     this.firstClipDone.clear();
     this.firstClipWaiters.clear();
@@ -397,6 +443,7 @@ export class CartesiaTTS implements TTSAdapter {
     this.leftoverPendingWaiters.clear();
     this.leftoverRestChains.clear();
     this.finalizedWaiters.clear();
+    this.closedRemainder.clear();
   }
 
   private buildWsUrl(): string {
@@ -444,11 +491,15 @@ export class CartesiaTTS implements TTSAdapter {
 
   /**
    * Cartesia: `language` OR `locale`, never both (docs: TTSRequest). Sending
-   * both 400s every clip — silent call. `locale` is Sonic 3.6+ only; the India
-   * endpoint we use still speaks `language` (`en`). Keep locale off the wire.
+   * both 400s every clip — silent call. The India endpoint still wants the
+   * `language` field; put the regional tag there (`ta-IN`, not `ta`) and pin
+   * `normalization` so mixed Tamil/English is not read as English (call 24440).
    */
   private applyLang(msg: Record<string, unknown>): void {
-    if (this.language) msg.language = this.language;
+    const tag = cartesiaWireLanguage(this.language, this.locale);
+    if (!tag) return;
+    msg.language = tag;
+    msg.normalization = tag;
   }
 
   private get restHeaders() {
@@ -590,6 +641,19 @@ export class CartesiaTTS implements TTSAdapter {
 
     const flushId = msg["flush_id"] as number | undefined;
 
+    if (type === "timestamps") {
+      const wt = msg["word_timestamps"] as { words?: unknown[]; end?: unknown[] } | undefined;
+      const timings = this.wordTimings.get(contextId);
+      if (timings && Array.isArray(wt?.words) && Array.isArray(wt?.end)) {
+        wt.words.forEach((word, i) => {
+          const end = wt.end![i];
+          if (typeof word === "string" && typeof end === "number" && Number.isFinite(end) && end >= 0 && timings.length < 10000) {
+            timings.push({ word, end });
+          }
+        });
+      }
+      return;
+    }
     // Route to flush-tracked pending (turn-level contexts using manual flushing).
     if (flushId != null) {
       const key = `${contextId}:${flushId}`;
@@ -640,7 +704,7 @@ export class CartesiaTTS implements TTSAdapter {
       // sentences are still queued. Mark first-clip complete so leftover REST
       // can start; do not resolve the owner until leftover audio is queued.
       this.markFirstClipDone(contextId);
-      if (this.claimedTurns.has(contextId) && !this.finalizedTurns.has(contextId)) {
+      if (this.claimedTurns.has(contextId) && !this.closingTurns.has(contextId)) {
         return;
       }
       this.pending.delete(contextId);
@@ -650,7 +714,7 @@ export class CartesiaTTS implements TTSAdapter {
       if (
         isCartesiaContextClosedError(err)
         && this.claimedTurns.has(contextId)
-        && !this.finalizedTurns.has(contextId)
+        && !this.closingTurns.has(contextId)
       ) {
         this.closedTurns.add(contextId);
         this.markFirstClipDone(contextId);
@@ -676,16 +740,6 @@ export class CartesiaTTS implements TTSAdapter {
     // made every sentence a new playJob — call 17915: two Playback Started
     // rows and a 3s stall on the second clip.
     if (this.claimedTurns.has(turnContextId) || this.finalizedTurns.has(turnContextId)) {
-      // delay=0 joins REST after clip 1. Increment here (sync, before the
-      // pipeline IIFE) so finalize can wait even if synthesizeStreamInContext
-      // has not started yet.
-      if (
-        CARTESIA_MAX_BUFFER_DELAY_MS === 0
-        && this.claimedTurns.has(turnContextId)
-        && !this.finalizedTurns.has(turnContextId)
-      ) {
-        this.bumpLeftoverPending(turnContextId, 1);
-      }
       return false;
     }
     this.claimedTurns.add(turnContextId);
@@ -697,8 +751,9 @@ export class CartesiaTTS implements TTSAdapter {
 
   private enqueueTurnSend(turnContextId: string, send: () => void): Promise<void> {
     const prev = this.turnSendChains.get(turnContextId) ?? Promise.resolve();
-    const next = prev.then(() => { send(); }).catch(() => { /* prior send failed; keep chain alive */ });
-    this.turnSendChains.set(turnContextId, next);
+    const next = prev.then(() => { send(); });
+    // Keep later sends possible, but return the actual failure to this caller.
+    this.turnSendChains.set(turnContextId, next.catch(() => undefined));
     return next;
   }
 
@@ -765,6 +820,7 @@ export class CartesiaTTS implements TTSAdapter {
   }
 
   private enqueueLeftoverRest(turnContextId: string, work: () => Promise<void>): Promise<void> {
+    this.bumpLeftoverPending(turnContextId, 1);
     const prev = this.leftoverRestChains.get(turnContextId) ?? Promise.resolve();
     const next = prev.then(() => work(), () => work());
     this.leftoverRestChains.set(turnContextId, next.then(() => undefined, () => undefined));
@@ -796,6 +852,7 @@ export class CartesiaTTS implements TTSAdapter {
   }
 
   private cleanupTurnMaps(turnContextId: string): void {
+    this.contextSettings.delete(turnContextId);
     const quiet = this.firstClipQuietTimers.get(turnContextId);
     if (quiet) clearTimeout(quiet);
     this.firstClipQuietTimers.delete(turnContextId);
@@ -806,6 +863,16 @@ export class CartesiaTTS implements TTSAdapter {
     this.leftoverPending.delete(turnContextId);
     this.closedTurns.delete(turnContextId);
     this.firstClipDone.delete(turnContextId);
+    this.closedRemainder.delete(turnContextId);
+    this.turnInputs.delete(turnContextId);
+    this.turnOpened.delete(turnContextId);
+    this.turnOpenedResolve.delete(turnContextId);
+    this.turnSendChains.delete(turnContextId);
+    this.turnChunkHandlers.delete(turnContextId);
+    this.turnLastTranscript.delete(turnContextId);
+    this.closingTurns.delete(turnContextId);
+    this.cancelledTurns.delete(turnContextId);
+    this.restFallbackTurns.delete(turnContextId);
   }
 
   /**
@@ -814,13 +881,29 @@ export class CartesiaTTS implements TTSAdapter {
    * continue:false (that 400s) and resolve the owner pending instead.
    */
   private async completeTurnContext(turnContextId: string): Promise<void> {
+    // The LLM can finish before the WS handshake. Do not close an unopened
+    // context or read its remainder before all dispatched joins have submitted.
+    await this.turnOpened.get(turnContextId);
+    await Promise.allSettled([...(this.turnInputs.get(turnContextId) ?? [])]);
+    await this.turnSendChains.get(turnContextId);
+    if (this.cancelledTurns.has(turnContextId)) {
+      this.cleanupTurnMaps(turnContextId);
+      return;
+    }
+    const remainder = this.closedRemainder.get(turnContextId);
+    this.closedRemainder.delete(turnContextId);
+    if (remainder && remainder.length > 0) {
+      const owner = this.turnChunkHandlers.get(turnContextId) ?? (() => undefined);
+      await this.enqueueLeftoverRest(turnContextId, () =>
+        this.runLeftoverRest(turnContextId, remainder, owner, () => undefined, undefined, undefined),
+      );
+    }
     await this.waitLeftoversIdle(turnContextId);
     const chain = this.leftoverRestChains.get(turnContextId);
     if (chain) await chain.catch(() => undefined);
 
     const skipClose = this.restFallbackTurns.has(turnContextId)
-      || (CARTESIA_MAX_BUFFER_DELAY_MS === 0
-        && (this.closedTurns.has(turnContextId) || this.firstClipDone.has(turnContextId)));
+      || this.closedTurns.has(turnContextId);
 
     if (skipClose || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
       const ctx = this.pending.get(turnContextId);
@@ -833,19 +916,16 @@ export class CartesiaTTS implements TTSAdapter {
       this.turnFlushCounters.delete(turnContextId);
       this.turnLastTranscript.delete(turnContextId);
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        try {
-          this.ws.send(JSON.stringify({
-            context_id: turnContextId,
-            model_id: this.modelId,
-            transcript: "",
-            voice: this.buildVoice(),
-            output_format: this.outputFormat(),
-            continue: false,
-          }));
-        } catch { /* WS closing, fine */ }
+        this.closingTurns.add(turnContextId);
+        this.ws.send(JSON.stringify({
+          ...this.settingsForContext(turnContextId),
+          context_id: turnContextId,
+          transcript: "",
+          continue: false,
+        }));
       }
     };
-    void this.enqueueTurnSend(turnContextId, sendClose);
+    await this.enqueueTurnSend(turnContextId, sendClose);
   }
 
   /**
@@ -863,21 +943,15 @@ export class CartesiaTTS implements TTSAdapter {
     emotions: string[] | undefined,
     join: boolean,
   ): Promise<void> {
-    const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
+    const streamed = text;
 
     const sendTranscript = (transcript: string): void => {
       const transcriptMsg: Record<string, unknown> = {
+        ...this.settingsForContext(turnContextId, emotions),
         context_id: turnContextId,
-        model_id: this.modelId,
         transcript,
-        voice: this.buildVoice(),
-        output_format: this.outputFormat(),
         continue: true,
-        max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS,
       };
-      const gcCtx = this.buildGenerationConfig(emotions);
-      if (gcCtx) transcriptMsg.generation_config = gcCtx;
-      this.applyLang(transcriptMsg);
       ws.send(JSON.stringify(transcriptMsg));
       this.turnLastTranscript.set(turnContextId, transcript);
     };
@@ -885,19 +959,22 @@ export class CartesiaTTS implements TTSAdapter {
     if (join) {
       const waitOpen = this.turnOpened.get(turnContextId);
       if (waitOpen) await waitOpen;
-      if (!this.pending.has(turnContextId)) {
-        // Owner already closed or fell back to REST. Do not open a fresh
-        // context_id — that is a second voice start (audible seam).
-        const owner = this.turnChunkHandlers.get(turnContextId) ?? onChunk;
-        return this.synthesizeViaRest(text, owner, onDone, signal, emotions);
+      // Managed buffering: keep continue:true on the same context (Cartesia
+      // concatenates transcripts). Remainder REST only if the context already
+      // closed (1s after last audio — contexts.md) or pending is gone.
+      if (
+        this.closedTurns.has(turnContextId)
+        || this.restFallbackTurns.has(turnContextId)
+        || !this.pending.has(turnContextId)
+      ) {
+        const prev = this.closedRemainder.get(turnContextId) ?? "";
+        this.closedRemainder.set(turnContextId, appendCartesiaRemainder(prev, streamed));
+        onDone(streamed.length);
+        return;
       }
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-      const transcript = joinContinuationTranscript(
-        this.turnLastTranscript.get(turnContextId) ?? "",
-        safeText,
-      );
-      await this.enqueueTurnSend(turnContextId, () => sendTranscript(transcript));
-      onDone(safeText.length);
+      await this.enqueueTurnSend(turnContextId, () => sendTranscript(streamed));
+      onDone(streamed.length);
       return;
     }
 
@@ -910,18 +987,27 @@ export class CartesiaTTS implements TTSAdapter {
         signal?.removeEventListener("abort", onAbort);
         this.pending.delete(turnContextId);
         this.turnChunkHandlers.delete(turnContextId);
+        this.contextSettings.delete(turnContextId);
         fn();
       };
       const onAbort = (): void => {
+        this.cancelledTurns.add(turnContextId);
+        if (ws.readyState === WebSocket.OPEN) {
+          try { ws.send(JSON.stringify({ context_id: turnContextId, cancel: true })); } catch { /* already closed */ }
+        }
         this.markFirstClipDone(turnContextId);
         cleanup(() => reject(new DOMException("Aborted", "AbortError")));
       };
       signal?.addEventListener("abort", onAbort, { once: true });
 
       this.pending.set(turnContextId, {
-        text: safeText,
+        text: streamed,
         onChunk,
-        resolve: () => cleanup(() => { onDone(safeText.length); resolve(); }),
+        resolve: () => cleanup(() => {
+          onDone(streamed.length);
+          this.cleanupTurnMaps(turnContextId);
+          resolve();
+        }),
         reject: (err) => {
           this.markFirstClipDone(turnContextId);
           cleanup(() => reject(err));
@@ -929,7 +1015,7 @@ export class CartesiaTTS implements TTSAdapter {
       });
       this.turnOpenedResolve.get(turnContextId)?.();
 
-      void this.enqueueTurnSend(turnContextId, () => sendTranscript(safeText)).catch((err) => {
+      void this.enqueueTurnSend(turnContextId, () => sendTranscript(streamed)).catch((err) => {
         cleanup(() => reject(err));
       });
     });
@@ -939,7 +1025,38 @@ export class CartesiaTTS implements TTSAdapter {
    * Public entry-point for per-sentence turn-level synthesis.
    * Falls back to normal per-sentence REST synthesis if the WS is broken.
    */
-  async synthesizeStreamInContext(
+  synthesizeStreamInContext(
+    turnContextId: string,
+    text: string,
+    onChunk: (pcm16k: Buffer) => void,
+    onDone: (characters: number) => void,
+    signal?: AbortSignal,
+    emotions?: string[],
+    join = false,
+  ): Promise<void> {
+    const work = this.synthesizeStreamInContextImpl(turnContextId, text, onChunk, onDone, signal, emotions, join);
+    if (join) {
+      const inputs = this.turnInputs.get(turnContextId) ?? new Set<Promise<void>>();
+      inputs.add(work);
+      this.turnInputs.set(turnContextId, inputs);
+      const release = (): void => { inputs.delete(work); };
+      void work.then(release, (err: unknown) => {
+        if (this.isAbortErr(err, signal)) this.cancelledTurns.add(turnContextId);
+        release();
+      });
+    } else {
+      // Includes an abort before pending/open registration, so finalization
+      // cannot wait forever for a handshake that was cancelled.
+      const release = (): void => { this.turnOpenedResolve.get(turnContextId)?.(); };
+      void work.then(release, (err: unknown) => {
+        if (this.isAbortErr(err, signal)) this.cancelledTurns.add(turnContextId);
+        release();
+      });
+    }
+    return work;
+  }
+
+  private async synthesizeStreamInContextImpl(
     turnContextId: string,
     text: string,
     onChunk: (pcm16k: Buffer) => void,
@@ -956,10 +1073,11 @@ export class CartesiaTTS implements TTSAdapter {
     // delay=0: leftover sentences REST after clip 1. Register before awaiting
     // WS so finalizeTurnContext can wait on leftoverPending even if this
     // sentence's IIFE has not reached getOrOpenWs yet.
-    if (join && CARTESIA_MAX_BUFFER_DELAY_MS === 0) {
-      return this.enqueueLeftoverRest(turnContextId, () =>
-        this.runLeftoverRest(turnContextId, text, onChunk, onDone, signal, emotions),
-      );
+    if (join && (this.closedTurns.has(turnContextId) || this.restFallbackTurns.has(turnContextId))) {
+      const prev = this.closedRemainder.get(turnContextId) ?? "";
+      this.closedRemainder.set(turnContextId, appendCartesiaRemainder(prev, text));
+      onDone(text.length);
+      return;
     }
     const sink = join
       ? (this.turnChunkHandlers.get(turnContextId) ?? onChunk)
@@ -999,10 +1117,6 @@ export class CartesiaTTS implements TTSAdapter {
             }
             releaseOwnerWait();
             await this.restIfSilent(text, sink, onDone, signal, undefined, wsBytes, "streamInContext:retry", retryErr, turnContextId);
-            if (!join && CARTESIA_MAX_BUFFER_DELAY_MS === 0) {
-              await this.waitTurnFinalized(turnContextId);
-              await this.waitLeftoversIdle(turnContextId);
-            }
             return;
           }
         } else {
@@ -1011,20 +1125,20 @@ export class CartesiaTTS implements TTSAdapter {
           }
           releaseOwnerWait();
           await this.restIfSilent(text, sink, onDone, signal, emotions, wsBytes, "streamInContext", err, turnContextId);
-          if (!join && CARTESIA_MAX_BUFFER_DELAY_MS === 0) {
-            await this.waitTurnFinalized(turnContextId);
-            await this.waitLeftoversIdle(turnContextId);
-          }
           return;
         }
       }
     }
     releaseOwnerWait();
     await this.restIfSilent(text, sink, onDone, signal, emotions, 0, "streamInContext:wsDown", new Error("WS permanently failed"), turnContextId);
-    if (!join && CARTESIA_MAX_BUFFER_DELAY_MS === 0) {
-      await this.waitTurnFinalized(turnContextId);
-      await this.waitLeftoversIdle(turnContextId);
-    }
+  }
+
+  /** Buffer text not accepted by a provider-closed context for one REST fallback. */
+  appendTurnRemainder(turnContextId: string, text: string): void {
+    if (!text) return;
+    this.closedTurns.add(turnContextId);
+    const prev = this.closedRemainder.get(turnContextId) ?? "";
+    this.closedRemainder.set(turnContextId, appendCartesiaRemainder(prev, text));
   }
 
   /**
@@ -1038,7 +1152,10 @@ export class CartesiaTTS implements TTSAdapter {
     const waiters = this.finalizedWaiters.get(turnContextId);
     this.finalizedWaiters.delete(turnContextId);
     for (const w of waiters ?? []) w();
-    void this.completeTurnContext(turnContextId);
+    void this.completeTurnContext(turnContextId).catch((err: unknown) => {
+      logger.warn({ contextId: turnContextId, err: this.errMsg(err) }, "Cartesia turn finalization failed");
+      this.pending.get(turnContextId)?.reject(err instanceof Error ? err : new Error(String(err)));
+    });
   }
 
   /**
@@ -1105,7 +1222,6 @@ export class CartesiaTTS implements TTSAdapter {
         voice: this.buildVoice(),
         output_format: this.outputFormat(),
         continue: false,
-        max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS,
       };
       const gcMsg = this.buildGenerationConfig(emotions);
       if (gcMsg) msg.generation_config = gcMsg;

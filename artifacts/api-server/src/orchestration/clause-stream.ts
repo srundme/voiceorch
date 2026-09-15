@@ -49,11 +49,18 @@ export type ExtractSentencesOpts = {
   earlyClause?: boolean;
 };
 
+/** Sarvam flushes each job independently. Keep natural clauses intact instead
+ * of cutting at arbitrary word counts. Cartesia's non-token paths do likewise. */
+export function ttsSentenceOptions(provider: string): { earlyClause: boolean } {
+  const name = provider.toLowerCase();
+  return { earlyClause: name !== "cartesia" && name !== "sarvam" };
+}
+
 export function pickStreamedGreetingHead(pending: string, opts?: ExtractSentencesOpts): string {
   const t = pending.trim();
   if (!t || isTinyLeadFragment(t)) return "";
 
-  const m = t.match(/^[\s\S]{16,}?[.!?…](?:\s|$)/);
+  const m = t.match(/^[\s\S]{16,}?[.!?…।॥](?:\s|$)/);
   if (m) {
     const head = m[0].trim();
     if (isUsableSpeakableClause(head)) return head;
@@ -243,16 +250,12 @@ export function extractSentences(
       remainder = early.rest;
     }
   } else {
+    // Cartesia: dash/semicolon only. Word-splitting the remainder glued the
+    // greeting into two clips with a lost space (call 24502).
     const dash = tryDashClauseDispatch(remainder, minCommaClauseChars);
     if (dash) {
       sentences.push(dash.clause);
       remainder = dash.rest;
-    } else {
-      const words = tryWordBoundaryDispatch(remainder, minCommaClauseChars);
-      if (words) {
-        sentences.push(words.clause);
-        remainder = words.rest;
-      }
     }
   }
 

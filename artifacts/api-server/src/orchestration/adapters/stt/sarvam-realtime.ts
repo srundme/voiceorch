@@ -47,18 +47,11 @@ export function clipRealtimePrompt(raw: unknown): string | undefined {
   return t || undefined;
 }
 
-/** Default Indian B2B / travel terms so Saaras keeps B2B/CRM in Latin. */
-const DEFAULT_SARVAM_HINTS = [
-  "B2B", "B2C", "CRM", "integration", "travel portal",
-  "flight booking", "hotel booking", "GST", "UPI",
-];
-
 export function buildSarvamTerminologyPrompt(
   keyterms: string[] | undefined,
   extraPrompt?: string | null,
 ): string | undefined {
   const parts = [
-    ...DEFAULT_SARVAM_HINTS,
     ...(keyterms ?? []),
     ...(extraPrompt ? extraPrompt.split(/[,;]/).map((s) => s.trim()).filter(Boolean) : []),
   ];
@@ -94,7 +87,7 @@ const BARE_TO_REALTIME: Record<string, string> = {
 export function isSarvamRealtimeModel(model: string | null | undefined): boolean {
   const m = (model ?? "").trim();
   if (m === "saarika:v2.5" || m.startsWith("saarika")) return false;
-  if (m === "saaras:v3-realtime") return true;
+  if (m === "saaras:v3-realtime" || m === "saaras:v4-realtime") return true;
   if (process.env["SARVAM_STT_REALTIME"] === "0") return false;
   // saaras:v3 (and v4 labels) ride the realtime socket unless explicitly disabled.
   return m === "saaras:v3" || m === "saaras:v4" || m === "" || m.startsWith("saaras");
@@ -202,7 +195,15 @@ export function isLidDriftFinal(opts: {
   return opts.languageConfidence !== undefined && opts.languageConfidence < LID_DRIFT_CONFIDENCE_BAR;
 }
 
+export function resolveSarvamRealtimeModel(model?: string | null): "saaras:v3-realtime" | "saaras:v4-realtime" {
+  const selected = model?.trim();
+  return selected === "saaras:v4" || selected === "saaras:v4-realtime"
+    ? "saaras:v4-realtime"
+    : "saaras:v3-realtime";
+}
+
 export function buildRealtimeWsUrl(opts: {
+  model?: string | null;
   languageCode: string;
   sampleRate: 8000 | 16000;
   mode: SarvamSttMode;
@@ -215,7 +216,7 @@ export function buildRealtimeWsUrl(opts: {
   returnTimestamps?: boolean;
 }): string {
   const params = new URLSearchParams({
-    model: "saaras:v3-realtime",
+    model: resolveSarvamRealtimeModel(opts.model),
     language_code: opts.languageCode,
     stream_type: opts.streamType ?? "fast",
     mode: opts.mode,
@@ -345,6 +346,7 @@ interface RealtimeMsg {
 }
 
 export class SarvamRealtimeSTT implements STTAdapter {
+  private readonly model: "saaras:v3-realtime" | "saaras:v4-realtime";
   private readonly legacy: SarvamSTT;
   private readonly key: string;
   private readonly sampleRate: 8000 | 16000;
@@ -366,8 +368,9 @@ export class SarvamRealtimeSTT implements STTAdapter {
     cfg: STTConfig,
   ) {
     this.key = apiKey;
+    this.model = resolveSarvamRealtimeModel(model);
     this.sampleRate = cfg.nativeSampleRate === 8000 ? 8000 : 16000;
-    this.legacy = new SarvamSTT(apiKey, model === "saaras:v3-realtime" ? "saaras:v3" : model, extraConfig, cfg);
+    this.legacy = new SarvamSTT(apiKey, this.model.replace(/-realtime$/, ""), extraConfig, cfg);
 
     const extra = extraConfig
       ? (JSON.parse(extraConfig) as {
@@ -409,6 +412,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
     logger.info(
       {
         languageCode: this.languageCode,
+        model: this.model,
         primaryLanguage: this.primaryLanguage,
         mode: this.mode,
         streamType: this.streamType,
@@ -553,8 +557,14 @@ export class SarvamRealtimeSTT implements STTAdapter {
           { code: msg.code, fatal: msg.is_fatal, message: msg.message, requestId: lastRequestId },
           "Sarvam STT realtime: error event",
         );
-        if (msg.is_fatal && !sessionBegan) {
-          fallbackToLegacy("fatal_error_before_session", { code: msg.code, message: msg.message });
+        if (msg.is_fatal && !intentionallyClosed) {
+          // Fatal protocol errors are terminal even if the socket remains open.
+          intentionallyClosed = true;
+          wsReady = false;
+          stopPing();
+          _onConnectionDead?.();
+          onClose?.();
+          ws?.close();
         }
         return;
       }
@@ -671,6 +681,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
 
     const openSocket = (): void => {
       const url = buildRealtimeWsUrl({
+        model: this.model,
         languageCode,
         sampleRate,
         mode,
@@ -694,7 +705,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
         logger.info({ code, reason, sessionBegan }, "Sarvam STT realtime: socket closed");
         if (intentionallyClosed || usingLegacy) return;
         // 4000 = invalid model / account not enabled — fall back once.
-        if ((code === 4000 || code === 1003) && !sessionBegan) {
+        if (code === 4000 && !sessionBegan) {
           fallbackToLegacy("ws_close", { code, reason });
           return;
         }
@@ -770,7 +781,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
           legacyStream?.setSilenceDurationMs?.(ms);
           return;
         }
-        const next = Math.max(150, Math.min(800, Math.round(ms)));
+        const next = Math.max(150, Math.min(2000, Math.round(ms)));
         if (!Number.isFinite(next) || next === silenceDurationMs) return;
         silenceDurationMs = next;
         logger.info({ silenceDurationMs: next }, "Sarvam STT realtime: silence_duration_ms");

@@ -139,7 +139,10 @@ export async function fetchUserConfiguredUrl(
   opts?: { timeoutMs?: number; retries?: number },
 ): Promise<Response> {
   const timeoutMs = opts?.timeoutMs ?? 10_000;
-  const retries = Math.max(0, opts?.retries ?? 0);
+  // A server may commit a write before returning an error. Retry only reads;
+  // arbitrary customer endpoints do not promise idempotency for POST.
+  const retrySafe = ["GET", "HEAD", "OPTIONS"].includes((init.method ?? "GET").toUpperCase());
+  const retries = retrySafe ? Math.max(0, opts?.retries ?? 0) : 0;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0) {

@@ -5,6 +5,7 @@ import {
   isUsableSpeakableClause,
   pickStreamedGreetingHead,
   tryEarlyPhraseDispatch,
+  ttsSentenceOptions,
 } from "./clause-stream.js";
 
 describe("tiny lead fragments", () => {
@@ -19,6 +20,42 @@ describe("tiny lead fragments", () => {
   it("treats a 4-word clause as usable", () => {
     expect(isUsableSpeakableClause("Sorry, the line cut out")).toBe(true);
     expect(isTinyLeadFragment("Sorry, the line cut out")).toBe(false);
+  });
+});
+
+describe("provider-aware sentence buffering", () => {
+  it.each(["sarvam", "Sarvam", "cartesia"])("keeps %s mid-phrase Hindi tokens in one synthesis job", (provider) => {
+    const opts = ttsSentenceOptions(provider);
+    let pending = "";
+    const spoken: string[] = [];
+    for (const token of ["मैं SnapServe की तरफ से हूँ", " और मेरी ज़िम्मेदारी founders के लिए demos", " schedule करना है"]) {
+      const result = extractSentences(pending + token, 5, opts);
+      spoken.push(...result.sentences);
+      pending = result.remainder;
+      expect(spoken).toEqual([]);
+    }
+    const end = extractSentences(pending + "।", 5, opts);
+    expect(end.sentences).toEqual([pending + "।"]);
+    expect(end.remainder).toBe("");
+  });
+
+  it("does not split the booking hour from बजे", () => {
+    const text = "तो बताइए, कल शनिवार 12 September को दोपहर 2 बजे या शाम 4 बजे कौन सा time आपके लिए सही रहेगा?";
+    let pending = "";
+    const spoken: string[] = [];
+    for (const token of text) {
+      const result = extractSentences(pending + token, 5, ttsSentenceOptions("sarvam"));
+      spoken.push(...result.sentences);
+      pending = result.remainder;
+    }
+    expect(spoken).toEqual([text]);
+    expect(pending).toBe("");
+  });
+
+  it("recognizes Hindi greeting punctuation without waiting for the entire reply", () => {
+    const greeting = "नमस्ते, मैं आपकी कैसे मदद कर सकता हूँ।";
+    expect(pickStreamedGreetingHead(greeting + " आगे की बात", ttsSentenceOptions("sarvam"))).toBe(greeting);
+    expect(ttsSentenceOptions("elevenlabs").earlyClause).toBe(true);
   });
 });
 
@@ -58,11 +95,10 @@ describe("clause-level dispatch", () => {
     )).toBe("Sorry, the line cut out there for a second.");
   });
 
-  it("Cartesia still starts TTS on a long clause before the period (webcall + phone latency)", () => {
+  it("Cartesia does not word-split a long greeting (call 24502 glue)", () => {
     const pending = "Hello Gopi, I'm Aisha from ILCC and I can help you today with admissions";
     const { sentences, remainder } = extractSentences(pending, 8, { earlyClause: false });
-    expect(sentences[0]).toMatch(/^Hello Gopi,/);
-    expect(sentences[0]).not.toBe("Hello Gopi");
-    expect(sentences.join(" ") + " " + remainder).toContain("admissions");
+    expect(sentences).toEqual([]);
+    expect(remainder).toBe(pending);
   });
 });

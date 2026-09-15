@@ -263,14 +263,8 @@ export function normalizeCallEngineAgentConfig(
     if (sspChanged) cfg["startSpeakingPlan"] = ssp;
   }
 
-  const eos = cfg["sarvamEndOfSpeechSilenceMs"];
-  if (
-    typeof eos === "number"
-    && (SARVAM_STT_LATENCY_DEFAULTS.legacyEndOfSpeechSilenceMs as readonly number[]).includes(eos)
-  ) {
-    reasons.push(`sarvamEndOfSpeechSilenceMs ${eos}→∅ (Saaras VAD)`);
-    delete cfg["sarvamEndOfSpeechSilenceMs"];
-  }
+  // Preserve explicit EOS values, including 300/500 ms. A numeric value alone
+  // cannot distinguish a legacy preset from an intentional user setting.
 
   const wordsLive = cfg["wordsForInterruption"];
   if (wordsLive === 2) {

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { CartesiaTTS, resolveCartesiaModelId, parseCartesiaLang, joinContinuationTranscript, isCartesiaContextClosedError } from "./cartesia.js";
+import { CartesiaTTS, resolveCartesiaModelId, parseCartesiaLang, cartesiaWireLanguage, joinContinuationTranscript, appendCartesiaRemainder, isCartesiaContextClosedError } from "./cartesia.js";
 
 /**
  * Regression test for the Cartesia emotion-voice-control bug: Cartesia can
@@ -64,7 +64,7 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
 
   it("synthesize() with no emotions passes through unaffected on success", async () => {
     const audioBytes = new Uint8Array([9, 9]).buffer;
-    const fetchMock = vi.fn(async () => ({
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
       ok: true,
       status: 200,
       arrayBuffer: async () => audioBytes,
@@ -76,7 +76,7 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.audio.length).toBe(2);
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as {
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string) as {
       voice?: Record<string, unknown>;
     };
     expect(body.voice).toEqual({ mode: "id", id: expect.any(String) });
@@ -112,7 +112,7 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
     tts.setLanguage("ta-IN");
     await tts.synthesize("வணக்கம்");
 
-    expect(languages).toEqual(["en", "ta"]);
+    expect(languages).toEqual(["en-IN", "ta-IN"]);
     expect(locales).toEqual([undefined, undefined]);
     expect(models).toEqual(["sonic-3.5", "sonic-3.5"]);
   });
@@ -146,13 +146,15 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
   });
 });
 
-describe("joinContinuationTranscript", () => {
-  it("inserts a space so Cartesia sees one valid transcript", () => {
-    expect(joinContinuationTranscript("Hello, world!", "How are you?")).toBe(" How are you?");
-    expect(joinContinuationTranscript("Hello, world!", " How are you?")).toBe(" How are you?");
-    expect(joinContinuationTranscript("", "Hello")).toBe("Hello");
+describe("appendCartesiaRemainder", () => {
+  it("preserves token boundaries and existing sentence whitespace", () => {
+    expect(appendCartesiaRemainder("வணக்கம்!", " இப்போ பேசலாமா?")).toBe("வணக்கம்! இப்போ பேசலாமா?");
+    expect(appendCartesiaRemainder("cof", "fee")).toBe("coffee");
+    expect(appendCartesiaRemainder("Hello. ", "How are you?")).toBe("Hello. How are you?");
+    expect(appendCartesiaRemainder("", "First.")).toBe("First.");
   });
 });
+
 
 describe("claimTurnContext (call 17915 — no second owner clip)", () => {
   it("lets only the first sentence own the turn, even after finalize or WS-down", () => {
@@ -191,8 +193,18 @@ describe("resolveCartesiaModelId", () => {
 describe("parseCartesiaLang", () => {
   it("splits en-IN into language + locale for Sonic 3.6", () => {
     expect(parseCartesiaLang("en-IN")).toEqual({ language: "en", locale: "en-IN" });
-    expect(parseCartesiaLang("hi")).toEqual({ language: "hi", locale: null });
+    expect(parseCartesiaLang("hi")).toEqual({ language: "hi", locale: "hi-IN" });
+    expect(parseCartesiaLang("ta")).toEqual({ language: "ta", locale: "ta-IN" });
+    expect(parseCartesiaLang("ta-IN")).toEqual({ language: "ta", locale: "ta-IN" });
     expect(parseCartesiaLang(null)).toEqual({ language: null, locale: null });
+  });
+});
+
+describe("cartesiaWireLanguage", () => {
+  it("prefers the regional locale on the language field", () => {
+    expect(cartesiaWireLanguage("ta", "ta-IN")).toBe("ta-IN");
+    expect(cartesiaWireLanguage("en", "en-IN")).toBe("en-IN");
+    expect(cartesiaWireLanguage("en", null)).toBe("en");
   });
 });
 
@@ -215,8 +227,8 @@ describe("Cartesia language vs locale", () => {
     await new CartesiaTTS("k", null, "sonic-3.5", "ta-IN").synthesize("வணக்கம்");
 
     expect(bodies).toHaveLength(2);
-    expect(bodies[0]).toMatchObject({ model_id: "sonic-3.6", language: "en" });
-    expect(bodies[1]).toMatchObject({ model_id: "sonic-3.5", language: "ta" });
+    expect(bodies[0]).toMatchObject({ model_id: "sonic-3.6", language: "en-IN", normalization: "en-IN" });
+    expect(bodies[1]).toMatchObject({ model_id: "sonic-3.5", language: "ta-IN", normalization: "ta-IN" });
     for (const b of bodies) {
       expect(b.locale).toBeUndefined();
       expect(Boolean(b.language) && Boolean(b.locale)).toBe(false);
@@ -237,29 +249,43 @@ describe("ensureTerminalPunctuation", () => {
 });
 
 describe("Cartesia adaptor contract (source)", () => {
-  it("matches current Sonic docs: /tts/websocket, voice { mode: id, id }, max_buffer_delay_ms 0", () => {
+  it("matches current Sonic docs: /tts/websocket, voice { mode: id, id }, managed buffering", () => {
     const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
     expect(src).toContain("/tts/websocket?");
     expect(src).not.toContain("/tts/websockets");
     expect(src).toContain('return { mode: "id", id: this.voiceId }');
-    expect(src).toMatch(/CARTESIA_MAX_BUFFER_DELAY_MS = 0/);
-    expect(src).toContain('CARTESIA_SONIC_36_MODEL = "sonic-3.6"');
+    expect(src).toMatch(/CARTESIA_MAX_BUFFER_DELAY_MS = 3000/);
+    expect(src).toMatch(/max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS/);
+    expect(src).toContain("CARTESIA_SONIC_36_MODEL = \"sonic-3.6\"");
     expect(src).toContain("never both");
-    expect(src).toMatch(/if \(this\.language\) msg\.language = this\.language;/);
+    expect(src).toContain("msg.language = tag");
+    expect(src).toContain("msg.normalization = tag");
   });
 
   it("sends voice on continue:false finalize so Cartesia does not 400 Voice ID required mid-clip", () => {
     const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
     expect(src).toContain('transcript: ""');
-    expect(src).toMatch(/transcript: "",\s*\n\s*voice: this\.buildVoice\(\)/);
+    expect(src).toContain("...this.settingsForContext(turnContextId)");
+    expect(src).toContain("voice: this.buildVoice()");
   });
 
   it("ignores premature context done until leftover REST + finalizeTurnContext (call 18112 / 19809)", () => {
     const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
     expect(src).toContain("claimedTurns.has(contextId)");
-    expect(src).toContain("finalizedTurns.has(contextId)");
+    expect(src).toContain("closingTurns.has(contextId)");
     expect(src).toContain("cartesia_context_closed_after_first_clip");
     expect(src).toContain("cartesia_leftover_rest");
+  });
+
+  it("sends leftover REST once from concatenated remainder after clip 1", () => {
+    const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
+    expect(src).toContain("appendTurnRemainder");
+  });
+
+  it("streams join transcripts on the open WS context (managed buffering)", () => {
+    const src = readFileSync(new URL("./cartesia.ts", import.meta.url), "utf8");
+    expect(src).toContain("sendTranscript(streamed)");
+    expect(src).toContain("middle ground");
   });
 
   it("does not arm the playJob idle timer on skipDrain leftover REST (call 19809)", () => {
@@ -330,6 +356,89 @@ describe("Cartesia delay=0 leftover REST (call 19809 mid-sentence cut)", () => {
     vi.restoreAllMocks();
   });
 
+  it("sends every continuation before closing when the LLM finishes before WS opens", async () => {
+    const sockets: FakeCartesiaWs[] = [];
+    vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
+      constructor(url: string) { super(url); sockets.push(this); }
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const tts = new CartesiaTTS("test-key", null, "sonic-3.6", "hi-IN", null, 8000);
+    const chunks: Buffer[] = [];
+    tts.claimTurnContext("fast-llm");
+    const owner = tts.synthesizeStreamInContext("fast-llm", "नमस्ते।", (pcm) => chunks.push(pcm), () => {});
+    const join = tts.synthesizeStreamInContext("fast-llm", " आप कैसे हैं?", () => {}, () => {}, undefined, undefined, true);
+    tts.finalizeTurnContext("fast-llm");
+    try {
+      await join;
+      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBe(3));
+      const requests = sockets[0]!.sent.map((s) => JSON.parse(s));
+      expect(requests.map((r) => [r.transcript, r.continue])).toEqual([
+        ["नमस्ते।", true], [" आप कैसे हैं?", true], ["", false],
+      ]);
+      expect(requests.every((r) => r.context_id === "fast-llm")).toBe(true);
+      expect(requests[0]).toMatchObject({ model_id: "sonic-3.6", output_format: { sample_rate: 8000 } });
+      sockets[0]!.emit({ type: "chunk", context_id: "fast-llm", data: Buffer.from([1, 2]).toString("base64") });
+      sockets[0]!.emit({ type: "done", context_id: "fast-llm" });
+      await owner;
+      expect(Buffer.concat(chunks)).toEqual(Buffer.from([1, 2]));
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      tts.close();
+      await owner.catch(() => {});
+    }
+  });
+
+  it("reports a send failure instead of swallowing it in the send queue", async () => {
+    const tts = new CartesiaTTS("test-key", null, null);
+    const queue = tts as unknown as { enqueueTurnSend(id: string, send: () => void): Promise<void> };
+    await expect(queue.enqueueTurnSend("send-error", () => { throw new Error("socket closed"); })).rejects.toThrow("socket closed");
+    const next = vi.fn();
+    await queue.enqueueTurnSend("send-error", next);
+    expect(next).toHaveBeenCalledOnce();
+    tts.close();
+  });
+
+  it("cancels provider synthesis on barge-in and does not REST-replay the tail", async () => {
+    const sockets: FakeCartesiaWs[] = [];
+    vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
+      constructor(url: string) { super(url); sockets.push(this); }
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const tts = new CartesiaTTS("test-key", null, null);
+    const abort = new AbortController();
+    tts.claimTurnContext("interrupted");
+    const owner = tts.synthesizeStreamInContext("interrupted", "Hello.", () => {}, () => {}, abort.signal);
+    const rejected = expect(owner).rejects.toMatchObject({ name: "AbortError" });
+    await vi.waitFor(() => expect(sockets[0]?.sent.length).toBe(1));
+    tts.appendTurnRemainder("interrupted", " Do not play this after interruption.");
+    abort.abort();
+    tts.finalizeTurnContext("interrupted");
+    await rejected;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(sockets[0]!.sent.map((s) => JSON.parse(s))).toContainEqual({ context_id: "interrupted", cancel: true });
+    expect(fetchMock).not.toHaveBeenCalled();
+    tts.close();
+  });
+
+  it("does not finalize a context aborted before the handshake completed", async () => {
+    const sockets: FakeCartesiaWs[] = [];
+    vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
+      constructor(url: string) { super(url); sockets.push(this); }
+    });
+    const tts = new CartesiaTTS("test-key", null, null);
+    const abort = new AbortController();
+    abort.abort();
+    tts.claimTurnContext("early-abort");
+    const owner = tts.synthesizeStreamInContext("early-abort", "Hello.", () => {}, () => {}, abort.signal);
+    tts.finalizeTurnContext("early-abort");
+    await expect(owner).rejects.toMatchObject({ name: "AbortError" });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(sockets.flatMap((ws) => ws.sent)).toEqual([]);
+    tts.close();
+  });
+
   it("plays remaining sentences via REST into the owner sink after Cartesia closes the context", async () => {
     const sockets: FakeCartesiaWs[] = [];
     vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
@@ -340,7 +449,7 @@ describe("Cartesia delay=0 leftover REST (call 19809 mid-sentence cut)", () => {
     });
 
     const restPcm = new Uint8Array([20, 21, 22, 23]);
-    const fetchMock = vi.fn(async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
       let n = 0;
       return {
         ok: true,
@@ -379,18 +488,6 @@ describe("Cartesia delay=0 leftover REST (call 19809 mid-sentence cut)", () => {
     await vi.waitFor(() => expect(sockets.length).toBe(1));
     await vi.waitFor(() => expect(sockets[0]!.sent.length).toBeGreaterThan(0));
 
-    expect(tts.claimTurnContext(turnId)).toBe(false);
-
-    const joinP = tts.synthesizeStreamInContext(
-      turnId,
-      "challan है।",
-      (pcm) => { joinChunks.push(pcm); },
-      (n) => { joinDoneChars = n; },
-      undefined,
-      undefined,
-      true,
-    );
-
     const wsPcm = Buffer.from([10, 11, 12, 13]);
     sockets[0]!.emit({
       type: "chunk",
@@ -405,6 +502,18 @@ describe("Cartesia delay=0 leftover REST (call 19809 mid-sentence cut)", () => {
       errorCode: null,
       detail: "Context has closed and is no longer accepting new inputs, use a new context ID. — Context closed — status=400",
     });
+
+    expect(tts.claimTurnContext(turnId)).toBe(false);
+
+    const joinP = tts.synthesizeStreamInContext(
+      turnId,
+      "challan है।",
+      (pcm) => { joinChunks.push(pcm); },
+      (n) => { joinDoneChars = n; },
+      undefined,
+      undefined,
+      true,
+    );
 
     await joinP;
     tts.finalizeTurnContext(turnId);

@@ -1,4 +1,7 @@
 import { createHash, randomBytes } from "crypto";
+import { reserveCall, type CallLease } from "./call-admission.js";
+import { assertAcceptingCalls } from "./lifecycle.js";
+const callLeases = new Map<string, CallLease>();
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, leadNotesTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, eventTypesTable, scheduledCallbacksTable, campaignsTable, executionLogsTable, squadsTable, squadRunsTable, phoneNumbersTable } from "@workspace/db";
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
@@ -44,7 +47,8 @@ import { createLLMAdapter } from "./adapters/llm/index.js";
 import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "./mic-sensitivity.js";
 import { FORCE_SOFTWARE_NOISE_GATE_KEY } from "./noise-gate.js";
 import { loadPcmLoop, TRACK_PARAMS } from "./ambient.js";
-import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics } from "./types.js";
+import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics, SessionConfig } from "./types.js";
+import { resolveSarvamEndpointingMs } from "./endpointing-settings.js";
 import { logger } from "../lib/logger.js";
 import { MEETING_BEHAVIOR_PROMPT, parseMeetingsConfig } from "../services/meeting-runtime.js";
 import {
@@ -227,6 +231,7 @@ export async function createSession(params: {
   /** Campaign lead ID — if set, lead data is merged into prompt variable resolution */
   campaignLeadId?: number;
   onAudioOut: (audio: Buffer) => void;
+  awaitPlaybackReceipt?: SessionConfig["awaitPlaybackReceipt"];
   onCallEnd: () => void;
   onBargeIn?: () => void;
   /** Forwards every finalized transcript line (user + agent) to the transport so a
@@ -299,6 +304,7 @@ export async function createSession(params: {
   squadRunId?: number;
   squadId?: number;
 }): Promise<{ sessionId: string; callDbId: number }> {
+  assertAcceptingCalls();
   const createSessionStartMs = Date.now();
 
   // Browser "Live Test" transport — labels the call record + lifecycle log so the
@@ -315,7 +321,8 @@ export async function createSession(params: {
     throw new Error(`Agent ${params.agentId} not found`);
   }
 
-  // ── Concurrent call limit (per user, hard ceiling = 10) ──────────────────
+  // Reserve before asynchronous setup: shared across all server replicas.
+  let effectiveLimit = 10;
   if (agent.userId) {
     const [user] = await withDbRetry("load-user-concurrent-limit", () =>
       db
@@ -323,16 +330,29 @@ export async function createSession(params: {
         .from(usersTable)
         .where(eq(usersTable.clerkId, agent.userId!)),
     );
-    const effectiveLimit = user?.concurrentLimit ?? 10;
-    const activeForUser = Array.from(sessions.values()).filter(
-      s => s.agentUserId === agent.userId,
-    ).length;
-    if (activeForUser >= effectiveLimit) {
-      throw new Error(
-        `Concurrent call limit reached (${effectiveLimit}). Wait for an active call to finish.`,
-      );
-    }
+    effectiveLimit = user?.concurrentLimit ?? 10;
   }
+  let admittedSessionId: string | undefined;
+  const identity = params.corrToken ?? (params.campaignLeadId ? `lead:${params.campaignLeadId}` : params.externalCallId) ?? randomBytes(16).toString("hex");
+  const lease = await reserveCall(agent.userId ?? `agent:${agent.id}`, `${params.telephonyProvider}:${identity}`, effectiveLimit, () => {
+    if (admittedSessionId) void endSession(admittedSessionId, "ownership_lost");
+  });
+  const ownedAudioOut = (audio: Buffer) => {
+    try { lease.assertOwned(); } catch { return; }
+    params.onAudioOut(audio);
+  };
+  try {
+
+  // Independent reads overlap memory-owner/context loading. Attach rejection
+  // handlers immediately so an early failure cannot become unhandled.
+  const providerRowsPromise = agent.userId
+    ? db.select().from(providersTable).where(
+        and(eq(providersTable.isActive, true), eq(providersTable.userId, agent.userId))
+      ).catch((provErr) => {
+        logger.warn({ agentId: params.agentId, provErr }, "Failed to load provider keys — continuing without user keys");
+        return [] as Array<typeof providersTable.$inferSelect>;
+      })
+    : Promise.resolve([] as Array<typeof providersTable.$inferSelect>);
 
   // Fire attached KB source IDs query immediately so DB latency overlaps with prompt building
   const knowledgeSourceIdsPromise = getAttachedSourceIds(agent.id, agent.knowledgeBaseId).catch(() => [] as number[]);
@@ -701,10 +721,7 @@ export async function createSession(params: {
     // Wall-clock VAD windows; the adapter converts them to frames at the live
     // sample rate. Null means "leave the provider default alone".
     sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
-    sarvamEndOfSpeechSilenceMs: (() => {
-      const v = optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]);
-      return v === 300 || v === 500 ? null : v;
-    })(),
+    sarvamEndOfSpeechSilenceMs: resolveSarvamEndpointingMs(agentCfg),
     sarvamVadThreshold: optionalUnitInterval(agentCfg["sarvamVadThreshold"]),
     semanticTurnDetection: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? false
@@ -895,14 +912,7 @@ export async function createSession(params: {
     })(),
 
     // 4. Provider API keys — independent of above, fetch in parallel
-    agent.userId
-      ? db.select().from(providersTable).where(
-          and(eq(providersTable.isActive, true), eq(providersTable.userId, agent.userId))
-        ).catch((provErr) => {
-          logger.warn({ agentId: params.agentId, provErr }, "Failed to load provider keys — continuing without user keys");
-          return [] as Array<typeof providersTable.$inferSelect>;
-        })
-      : Promise.resolve([] as Array<typeof providersTable.$inferSelect>),
+    providerRowsPromise,
 
     // 5. Upcoming bookings (pre-fetched in parallel). Meet bots use the contact
     // phone / source call — not meetbot-* synthetic numbers.
@@ -1710,6 +1720,8 @@ export async function createSession(params: {
     ttsVoice: agent.ttsVoice ?? null,
     extra: {
       telephonyProvider: params.telephonyProvider,
+      setupElapsedMs: Date.now() - createSessionStartMs,
+      deployedCommit: process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT_SHA ?? null,
       backchannelingEnabled: agent.backchannelingEnabled !== false,
     },
   });
@@ -1769,6 +1781,7 @@ export async function createSession(params: {
       status: "info",
       metadata: {
         event: "Provider Initialized", provider: agent.asrProvider,
+        model: agent.asrModel ?? null,
         // Use the effective language from agentConfig — may differ from agent.asrLanguage
         // when caller memory language_pref overrode it at session start.
         language: agentConfig.language ?? agent.asrLanguage ?? agent.language ?? null,
@@ -1784,7 +1797,7 @@ export async function createSession(params: {
     });
     logExec(EXEC_COMPONENTS.TTS, "system", {
       status: "info",
-      metadata: { event: "Provider Initialized", provider: agent.ttsProvider },
+      metadata: { event: "Provider Initialized", provider: agent.ttsProvider, model: agent.ttsModel ?? null },
     });
     logExec(EXEC_COMPONENTS.TTS, "system", {
       status: "info",
@@ -1991,11 +2004,12 @@ export async function createSession(params: {
         squad,
         previousPipeline: live.pipeline,
         hooks: {
+          awaitPlaybackReceipt: params.awaitPlaybackReceipt,
           callId: callRecord.id,
           telephonyProvider: params.telephonyProvider,
           callerPhone,
           campaignLeadId: params.campaignLeadId ?? null,
-          onAudioOut: params.onAudioOut,
+          onAudioOut: ownedAudioOut,
           onCallEnd: () => {
             naturalEndTriggered = true;
             params.onCallEnd();
@@ -2113,6 +2127,7 @@ export async function createSession(params: {
         transferTwilioCall, buildTwilioWarmTransferTwiML,
         transferPlivoCall,  buildPlivoWarmTransferXml,
         transferVobizCall,  buildVobizWarmTransferXml,
+        vobizMergeRoom,
       } = await import("./telephony/transfer.js");
       const tprov = params.telephonyProvider;
 
@@ -2172,13 +2187,42 @@ export async function createSession(params: {
         // toNumber is the platform number.
         const callerId = params.callDirection === "outbound" ? params.fromNumber : params.toNumber;
         const callerIdQs = callerId ? `&callerId=${encodeURIComponent(callerId)}` : "";
-        let xmlUrl: string;
         if (isWarm && transferId && briefingToken) {
-          xmlUrl = `${baseUrl}/api/webhooks/vobiz/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}${callerIdQs}`;
+          // 3-way merge: customer waits in a conference, sales is dialed into the
+          // same room, then conference Speak plays the AI briefing to everyone.
+          // Stream cannot stay in the conference (Conference XML replaces Stream).
+          const { dialVobiz } = await import("./telephony/dial.js");
+          const room = vobizMergeRoom(callRecord.id, transferId);
+          const qs = `transferId=${encodeURIComponent(String(transferId))}&token=${encodeURIComponent(briefingToken)}`;
+          const customerXml = `${baseUrl}/api/webhooks/vobiz/merge-customer-xml?${qs}`;
+          const salesAnswer = `${baseUrl}/api/webhooks/vobiz/merge-sales-xml?${qs}`;
+          const salesHangup = `${baseUrl}/api/webhooks/vobiz/merge-sales-hangup?${qs}&customerUuid=${encodeURIComponent(params.externalCallId)}`;
+          if (!callerId?.trim()) {
+            throw new Error("VoBiz merge transfer needs a platform caller ID");
+          }
+          await db.update(callTransfersTable).set({
+            providerTransferId: `vobiz-merge:${room}:${params.externalCallId}`,
+          }).where(eq(callTransfersTable.id, transferId));
+          await transferVobizCall({
+            authId, authToken, callUuid: params.externalCallId, xmlUrl: customerXml, callDirection: params.callDirection,
+          });
+          await dialVobiz({
+            authId,
+            authToken,
+            fromNumber: callerId,
+            toNumber: to,
+            answerUrl: salesAnswer,
+            hangupUrl: salesHangup,
+            maxDurationSeconds: 3600,
+          });
+          logExec(EXEC_COMPONENTS.Tool, "system", {
+            status: "info",
+            metadata: { event: "Merge Conference Started", room, target: to },
+          });
         } else {
-          xmlUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodeURIComponent(to)}${callerIdQs}`;
+          const xmlUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodeURIComponent(to)}${callerIdQs}`;
+          await transferVobizCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl, callDirection: params.callDirection });
         }
-        await transferVobizCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl, callDirection: params.callDirection });
       } else {
         // Unknown / unsupported telephony provider. We optimistically set
         // wasTransferred=true before the provider branch (to win the WS-close race),
@@ -2272,7 +2316,7 @@ export async function createSession(params: {
         meetingMuteWhenIdle: isMeetBotSession ? meetingsCfg.muteWhenIdle : false,
         memoryOwnerAgentId,
         campaignLeadId: params.campaignLeadId ?? null,
-        onAudioOut: params.onAudioOut,
+        onAudioOut: ownedAudioOut,
         rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
         rawPcmOutputRate: params.rawPcmOutputRate,
         onTranscript: (speaker, text) => {
@@ -2341,7 +2385,8 @@ export async function createSession(params: {
     meetingMuteWhenIdle: isMeetBotSession ? meetingsCfg.muteWhenIdle : false,
     memoryOwnerAgentId,
     campaignLeadId: params.campaignLeadId ?? null,
-    onAudioOut: params.onAudioOut,
+    onAudioOut: ownedAudioOut,
+    awaitPlaybackReceipt: params.awaitPlaybackReceipt,
     rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
     rawPcmOutputRate: params.rawPcmOutputRate,
     voicemailDelivery: (params.voicemailDelivery || ((params.amdMachineHint || params.amdArmed) && amdVoicemailAction === "leave_message"))
@@ -2456,6 +2501,10 @@ export async function createSession(params: {
     onProviderIssue: params.onProviderIssue,
   });
 
+  try { assertAcceptingCalls(); lease.assertOwned(); }
+  catch (err) { pipeline.close(); throw err; }
+  admittedSessionId = sessionId;
+  callLeases.set(sessionId, lease);
   sessions.set(sessionId, {
     callId: callRecord.id,
     agentId: params.agentId,
@@ -2547,6 +2596,9 @@ export async function createSession(params: {
   }
 
   return { sessionId, callDbId: callRecord.id };
+  } finally {
+    if (!admittedSessionId || !sessions.has(admittedSessionId)) await lease.release();
+  }
 }
 
 export function getSession(sessionId: string): ActiveSession | undefined {
@@ -2699,6 +2751,9 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
     : null;
 
   sessions.delete(sessionId);
+  const lease = callLeases.get(sessionId);
+  callLeases.delete(sessionId);
+  void lease?.release();
   session.pipeline.close();
   destroyAudioSession(String(session.callId));
   void patchSessionMeta(sessionId, { status: "ended" }, 3600);
@@ -4101,6 +4156,9 @@ export async function failSession(sessionId: string, errorMessage: string): Prom
   if (!session) return;
 
   sessions.delete(sessionId);
+  const lease = callLeases.get(sessionId);
+  callLeases.delete(sessionId);
+  void lease?.release();
   session.pipeline.close();
   void patchSessionMeta(sessionId, { status: "failed" }, 3600);
   void removeSession(sessionId, session.callId);

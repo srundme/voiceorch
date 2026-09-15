@@ -88,6 +88,94 @@ export function buildVobizWarmTransferXml(target: string, whisperUrl: string, ca
   return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial${c} confirmSound="${w}">\n    <Number>${e}</Number>\n  </Dial>\n</Response>`;
 }
 
+/** Stable VoBiz conference name — alphanumeric, case-sensitive, no spaces. */
+export function vobizMergeRoom(callId: number, transferId: number): string {
+  return `ssmerge${callId}t${transferId}`;
+}
+
+/**
+ * Customer joins first and waits (hold XML) until sales starts the room.
+ * stayAlone so they are not dropped before sales answers.
+ * endConferenceOnExit=false so kicking/hanging the AI stream later does not
+ * tear down customer+sales (the AI is not a conference member anyway).
+ */
+export function buildVobizMergeCustomerXml(opts: {
+  room: string;
+  waitSoundUrl: string;
+  callbackUrl: string;
+}): string {
+  const room = xmlEscape(opts.room);
+  const wait = xmlEscape(opts.waitSoundUrl);
+  const cb = xmlEscape(opts.callbackUrl);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Conference startConferenceOnEnter="false" stayAlone="true" endConferenceOnExit="false" timeLimit="3600" waitSound="${wait}" callbackUrl="${cb}" callbackMethod="POST">${room}</Conference>
+</Response>`;
+}
+
+/** Sales answers and starts the conference so the waiting customer is bridged. */
+export function buildVobizMergeSalesXml(opts: {
+  room: string;
+  callbackUrl: string;
+}): string {
+  const room = xmlEscape(opts.room);
+  const cb = xmlEscape(opts.callbackUrl);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Conference startConferenceOnEnter="true" stayAlone="true" endConferenceOnExit="false" timeLimit="3600" callbackUrl="${cb}" callbackMethod="POST">${room}</Conference>
+</Response>`;
+}
+
+export function buildVobizMergeWaitXml(holdText = "Please hold while we connect you with a specialist."): string {
+  const t = xmlEscape(holdText);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Speak loop="0">${t}</Speak>
+</Response>`;
+}
+
+/** Play TTS to every conference member (VoBiz has no room-wide Speak — use member_id=all). */
+export async function speakVobizConference(opts: {
+  authId: string;
+  authToken: string;
+  room: string;
+  text: string;
+}): Promise<void> {
+  const room = encodeURIComponent(opts.room);
+  const url = `https://api.vobiz.ai/api/v1/Account/${opts.authId}/Conference/${room}/Member/all/Speak/`;
+  const text = opts.text.slice(0, 800);
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      "X-Auth-ID": opts.authId,
+      "X-Auth-Token": opts.authToken,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ text, voice: "WOMAN", language: "en-US" }),
+  });
+  const body = await resp.text();
+  if (!resp.ok) throw new Error(`VoBiz conference Speak ${resp.status}: ${body}`);
+  logger.info({ room: opts.room, status: resp.status }, "VoBiz merge: intro spoken into conference");
+}
+
+export async function hangupVobizCall(opts: {
+  authId: string;
+  authToken: string;
+  callUuid: string;
+}): Promise<void> {
+  const url = `https://api.vobiz.ai/api/v1/Account/${opts.authId}/Call/${opts.callUuid}/`;
+  const resp = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      "X-Auth-ID": opts.authId,
+      "X-Auth-Token": opts.authToken,
+    },
+  });
+  if (!resp.ok && resp.status !== 404) {
+    throw new Error(`VoBiz hangup ${resp.status}: ${await resp.text()}`);
+  }
+}
+
 // ── Twilio ───────────────────────────────────────────────────────────────────
 
 /**

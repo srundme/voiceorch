@@ -81,8 +81,7 @@ async function pollScheduledBatches(): Promise<void> {
         .set({ status: "running" })
         .where(eq(campaignBatchesTable.id, batch.id));
 
-      // Fire the first wave up to the concurrency limit (atomic claim, shared
-      // with the event-driven refill so the limit is respected the same way).
+      await reopenCampaignIfCompleted(campaign.id);
       await refillCampaignConcurrency(campaign.id);
 
       logger.info({ batchId: batch.id, batchName: batch.name }, "Scheduled batch auto-started");
@@ -327,13 +326,43 @@ export async function reconcileCampaignBatches(campaignId: number): Promise<void
 export async function reopenCampaignIfCompleted(campaignId: number): Promise<void> {
   try {
     await db.update(campaignsTable)
-      .set({ status: "active" })
+      .set({ status: "active", isActive: true })
       .where(and(
         eq(campaignsTable.id, campaignId),
-        eq(campaignsTable.status, "completed"),
+        inArray(campaignsTable.status, ["completed", "draft"]),
       ));
   } catch (err) {
     logger.error({ err, campaignId }, "reopenCampaignIfCompleted error");
+  }
+}
+
+/** Promote due draft batches and refill slots. Used when the live-queue is open
+ *  so CSV leads do not sit in Queued until the 60s scheduler tick. */
+export async function kickQueuedCampaignDialing(campaignId: number): Promise<void> {
+  try {
+    const [campaign] = await db.select().from(campaignsTable)
+      .where(eq(campaignsTable.id, campaignId))
+      .limit(1);
+    if (!campaign || !isCampaignDialable(campaign)) return;
+
+    const dueDraft = await db.select().from(campaignBatchesTable)
+      .where(and(
+        eq(campaignBatchesTable.campaignId, campaignId),
+        eq(campaignBatchesTable.status, "draft"),
+        or(
+          isNull(campaignBatchesTable.scheduledStartAt),
+          lte(campaignBatchesTable.scheduledStartAt, new Date()),
+        ),
+      ));
+    for (const batch of dueDraft) {
+      await db.update(campaignBatchesTable)
+        .set({ status: "running" })
+        .where(eq(campaignBatchesTable.id, batch.id));
+    }
+    if (dueDraft.length > 0) await reopenCampaignIfCompleted(campaignId);
+    await refillCampaignConcurrency(campaign.id);
+  } catch (err) {
+    logger.error({ err, campaignId }, "kickQueuedCampaignDialing failed");
   }
 }
 

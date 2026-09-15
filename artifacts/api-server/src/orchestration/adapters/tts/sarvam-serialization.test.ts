@@ -2,6 +2,49 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SarvamTTS } from "./sarvam.js";
 
 describe("SarvamTTS stream serialization", () => {
+  it("aborts a waiter promptly without letting the third request overtake the first", async () => {
+    const tts = new SarvamTTS("test-key", "ritu", null, "hi-IN", "bulbul:v3");
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const ws = vi.spyOn(tts as any, "synthesizeViaWs").mockImplementation(async (text: string) => {
+      if (text === "first") await gate;
+    });
+    const first = tts.synthesizeStream("first", vi.fn(), vi.fn());
+    await vi.waitFor(() => expect(ws).toHaveBeenCalledTimes(1));
+    const ac = new AbortController();
+    const second = tts.synthesizeStream("second", vi.fn(), vi.fn(), ac.signal);
+    ac.abort(); await expect(second).rejects.toMatchObject({ name: "AbortError" });
+    const started = vi.fn();
+    const third = tts.synthesizeStream("third", vi.fn(), vi.fn(), undefined, undefined, started);
+    await Promise.resolve();
+    expect(started).not.toHaveBeenCalled();
+    release(); await Promise.all([first, third]);
+    expect(ws.mock.calls.map(([text]) => text)).toEqual(["first", "third"]);
+    expect(started).toHaveBeenCalledTimes(1);
+    tts.close();
+  });
+  it("never retries or falls back over an already audible prefix", async () => {
+    const tts = new SarvamTTS("test-key", "ritu", null, "hi-IN", "bulbul:v3");
+    const failure = new Error("socket failed after first audio");
+    const ws = vi.spyOn(tts as any, "synthesizeViaWs").mockImplementation(async (_text: string, onChunk: (pcm: Buffer) => void) => {
+      onChunk(Buffer.alloc(640));
+      throw failure;
+    });
+    const http = vi.spyOn(tts as any, "synthesizeViaHttpStream");
+    const chunk = vi.fn();
+    const done = vi.fn();
+    await expect(tts.synthesizeStream("एक ही बार बोलिए।", chunk, done)).rejects.toBe(failure);
+    expect(ws).toHaveBeenCalledTimes(1);
+    expect(http).not.toHaveBeenCalled();
+    expect(chunk).toHaveBeenCalledTimes(1);
+    expect(done).not.toHaveBeenCalled();
+    // A failed turn must release the serialization slot for the next reply.
+    ws.mockResolvedValue(undefined);
+    await tts.synthesizeStream("next", chunk, done);
+    expect(ws).toHaveBeenCalledTimes(2);
+    tts.close();
+  });
+
   it("keeps overlapping sentence prefetch on one ordered WS path", async () => {
     const tts = new SarvamTTS("test-key", "ritu", null, "ta-IN", "bulbul:v3");
     let releaseFirst!: () => void;

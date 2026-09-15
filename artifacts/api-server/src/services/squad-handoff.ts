@@ -32,6 +32,7 @@ import { optionalMs, optionalUnitInterval } from "../orchestration/stt-tuning.js
 import { clampSemanticTurnStopMs, resolveSemanticTurnEnabled } from "../orchestration/semantic-turn-gate.js";
 import { getAttachedSourceIds } from "../orchestration/kb-retrieval.js";
 import type { AgentConfig, AgentTool, SessionTransport } from "../orchestration/types.js";
+import { resolveSarvamEndpointingMs } from "../orchestration/endpointing-settings.js";
 import type { VoiceSession } from "../orchestration/voice-session.js";
 import { appendGuardrails } from "./guardrails.js";
 import {
@@ -328,10 +329,7 @@ async function buildTargetAgentConfig(
     // Wall-clock VAD windows; the adapter converts them to frames at the live
     // sample rate. Null means "leave the provider default alone".
     sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
-    sarvamEndOfSpeechSilenceMs: (() => {
-      const v = optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]);
-      return v === 300 || v === 500 ? null : v;
-    })(),
+    sarvamEndOfSpeechSilenceMs: resolveSarvamEndpointingMs(agentCfg),
     sarvamVadThreshold: optionalUnitInterval(agentCfg["sarvamVadThreshold"]),
     semanticTurnDetection: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? false
@@ -365,6 +363,7 @@ export type HandoffSessionHooks = {
   callerPhone: string | null;
   campaignLeadId: number | null;
   onAudioOut: (audio: Buffer) => void;
+  awaitPlaybackReceipt?: import("../orchestration/types.js").SessionConfig["awaitPlaybackReceipt"];
   onCallEnd: () => void;
   onBargeIn?: () => void;
   onTranscript?: (speaker: "user" | "agent", text: string) => void;
@@ -483,6 +482,7 @@ export async function performSquadAgentHandoff(opts: {
           handoffSeedTurns: opts.previousPipeline.getHistory(),
         })
       : new OrchestrationPipeline({
+          awaitPlaybackReceipt: hooks.awaitPlaybackReceipt,
           callId: hooks.callId,
           agentConfig,
           providerKeys,

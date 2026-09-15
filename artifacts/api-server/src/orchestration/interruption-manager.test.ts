@@ -108,13 +108,13 @@ describe("InterruptionManager", () => {
     expect(m.shouldTriggerInterruption(3, "wait stop இருங்க", true)).toBe(true);
   });
 
-  it("isFalseInterruption is the other half of Bolna's barge gate", () => {
+  it("preserves finalized short speech instead of using the speculative word floor to discard it", () => {
     const m = new InterruptionManager();
     // Short chatter while TTS plays — ignore, do not queue for later.
-    expect(m.isFalseInterruption(1, "Okay", true)).toBe(true);
-    expect(m.isFalseInterruption(2, "ஆமா ஆமா", true)).toBe(true);
-    expect(m.isFalseInterruption(1, "ஆ", true)).toBe(true);
-    expect(m.isFalseInterruption(2, "uh huh", true)).toBe(true);
+    for (const text of ["Okay", "ஆமா ஆமா", "ஆ", "uh huh", "No thanks", "Not interested", "I am busy", "no", "வேண்டாம்", "42"]) {
+      expect(m.isFalseInterruption(text.split(" ").length, text, true)).toBe(false);
+    }
+    expect(m.isFalseInterruption(1, "hmm", true)).toBe(true);
     // Real utterance while TTS plays — interrupt now.
     expect(m.isFalseInterruption(8, "I want a bigger coverage plan", true)).toBe(false);
     expect(m.shouldTriggerInterruption(8, "I want a bigger coverage plan", true)).toBe(true);

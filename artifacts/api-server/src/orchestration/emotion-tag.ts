@@ -4,14 +4,14 @@
  * must never reach TTS.
  */
 
-export function stripMarkupTags(text: string): string {
-  return text
+export function stripMarkupTags(text: string, trim = true): string {
+  const stripped = text
     .replace(/<\/?emotion\b[^>]*>/gi, "")
     .replace(/<break\b[^>]*\/?>/gi, "")
     // Mid-tag leftovers have no `>`, so the complete-tag regex misses them.
     .replace(/<\/?(?:emotion|break)\b[^>]*$/gi, "")
-    .replace(/[^\S\r\n]{2,}/g, " ")
-    .trim();
+    .replace(/[^\S\r\n]{2,}/g, " ");
+  return trim ? stripped.trim() : stripped;
 }
 
 /**
@@ -20,10 +20,13 @@ export function stripMarkupTags(text: string): string {
  * with complete and truncated markup stripped. Empty `text` means enqueue
  * should skip TTS.
  */
-export function extractEmotionTag(text: string): { emotion: string | null; text: string } {
+export function extractEmotionTag(
+  text: string,
+  opts?: { trim?: boolean },
+): { emotion: string | null; text: string } {
   const match = /^\s*<emotion\s+(?:value|type)=["']([^"']+)["']\s*\/?>/i.exec(text);
   const emotion = match ? match[1]!.toLowerCase() : null;
-  return { emotion, text: stripMarkupTags(text) };
+  return { emotion, text: stripMarkupTags(text, opts?.trim !== false) };
 }
 
 /**

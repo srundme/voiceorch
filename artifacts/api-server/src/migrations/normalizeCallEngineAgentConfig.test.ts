@@ -78,13 +78,12 @@ describe("normalizeCallEngineAgentConfig — Saaras-native Sarvam defaults", () 
     expect(normalizeCallEngineAgentConfig(input).changed).toBe(false);
   });
 
-  it("strips SnapServe 300/500ms Saaras EOS overlays", () => {
+  it.each([300, 500])("preserves explicit %i ms Saaras endpointing", (ms) => {
     const result = normalizeCallEngineAgentConfig({
-      sarvamEndOfSpeechSilenceMs: 500,
+      sarvamEndOfSpeechSilenceMs: ms,
     });
-    expect(result.changed).toBe(true);
-    expect(result.config.sarvamEndOfSpeechSilenceMs).toBeUndefined();
-    expect(normalizeCallEngineAgentConfig({ sarvamEndOfSpeechSilenceMs: 300 }).config.sarvamEndOfSpeechSilenceMs).toBeUndefined();
+    expect(result.config.sarvamEndOfSpeechSilenceMs).toBe(ms);
+    expect(result.reasons.some((reason) => reason.includes("sarvamEndOfSpeechSilenceMs"))).toBe(false);
   });
 
   it("leaves an intentional Patient 700ms EOS in place", () => {

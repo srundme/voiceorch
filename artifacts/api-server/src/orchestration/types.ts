@@ -724,6 +724,8 @@ export interface LLMAdapter {
 }
 
 export interface TTSAdapter {
+  /** Serial adapters notify dispatch only after acquiring their synthesis slot. */
+  synthesisScheduling?: "serial";
   /** Returns synthesized PCM audio together with the character count that was
    *  submitted to the provider (always equals text.length for all providers). */
   synthesize(text: string): Promise<{ audio: Buffer; characters: number }>;
@@ -733,7 +735,10 @@ export interface TTSAdapter {
     /** Called once when synthesis is complete; receives the character count
      *  submitted to the provider so the pipeline can accumulate usage. */
     onDone: (characters: number) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    emotions?: string[],
+    /** Serial adapters call this when their queue slot starts, before provider I/O. */
+    onStarted?: () => void,
   ): Promise<void>;
   /**
    * Hot-swap pronunciation / language tag mid-call (Cartesia, Sarvam).
@@ -777,6 +782,8 @@ export interface PipelineMetrics {
 }
 
 export interface SessionConfig {
+  /** Transport completion receipt; absent for transports without acknowledgements. */
+  awaitPlaybackReceipt?: () => Promise<import("./telephony/playback-checkpoints.js").PlaybackReceipt>;
   callId: number;
   agentConfig: AgentConfig;
   providerKeys: Map<string, string>;

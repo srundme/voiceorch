@@ -48,6 +48,14 @@ describe("buildInterruptionHint", () => {
 });
 
 describe("resolveSpokenForHistory", () => {
+  it("never invents delivered speech when the carrier receipt is missing", () => {
+    expect(resolveSpokenForHistory({
+      requireDeliveryEvidence: true, barged: false, heardOnly: "", fullResponse: "Unconfirmed reply.",
+    })).toBe("");
+    expect(resolveSpokenForHistory({
+      requireDeliveryEvidence: true, barged: false, heardOnly: "Confirmed.", fullResponse: "Confirmed. Unconfirmed.",
+    })).toBe("Confirmed.");
+  });
   it("on barge stores heard only — never the full unspoken LLM tail", () => {
     expect(
       resolveSpokenForHistory({

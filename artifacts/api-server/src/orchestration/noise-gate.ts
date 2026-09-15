@@ -4,16 +4,17 @@
  *
  * Product rule: the agent's Noise Cancellation toggle is the only user-facing
  * control, and it applies to every LLM stack (classic Sarvam/OpenAI/Groq and
- * Gemini Live alike). When the toggle is on, the audio worker runs the energy
- * NoiseCanceller (bandpass + adaptive gate). Telephony audio (VoBiz, Twilio,
+ * Gemini Live alike). When the toggle is on, the audio worker runs the
+ * speech-preserving bandpass filter. Telephony audio (VoBiz, Twilio,
  * Plivo) is processed when the toggle is on. Browser webcall is the one
- * exception: the mic already ran AEC/NS and stacking our gate erases quiet
- * speech.
+ * exception: the browser already owns mic AEC/NS. This filter is not an AEC
+ * or a neural denoiser, and does not suppress in-band background sounds.
  *
- * Historically VoBiz calls skipped the software gate because the carrier also
- * denoises. That made the toggle a no-op for almost every agent. The extra
+ * Historically VoBiz calls skipped software processing under an assumption
+ * of carrier denoising. The extra
  * forceSoftwareNoiseGate / VOBIZ_FORCE_SOFTWARE_NC knobs are kept as aliases
- * that still force the gate on, but they are no longer required.
+ * that still select the filter, but they are no longer required. Legacy names
+ * and reason strings remain stable for configuration/log compatibility.
  */
 
 /** Per-agent escape hatch key inside agents.agent_config (legacy, still honored). */

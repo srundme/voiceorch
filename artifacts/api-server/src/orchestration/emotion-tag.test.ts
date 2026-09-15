@@ -18,6 +18,11 @@ describe("extractEmotionTag", () => {
     expect(extractEmotionTag('<emotion value="c')).toEqual({ emotion: null, text: "" });
     expect(extractEmotionTag('<emotion value="curious"')).toEqual({ emotion: null, text: "" });
   });
+
+  it("keeps LLM whitespace for Cartesia continuations (call 24489)", () => {
+    expect(extractEmotionTag(" நீங்க", { trim: false })).toEqual({ emotion: null, text: " நீங்க" });
+    expect(extractEmotionTag(" ", { trim: false })).toEqual({ emotion: null, text: " " });
+  });
 });
 
 describe("stripMarkupTags", () => {
@@ -25,6 +30,12 @@ describe("stripMarkupTags", () => {
     expect(
       stripMarkupTags('தோராயமா எவ்ளோ amount தேவைப்படுதுன்னு சொல்ல முடியுமா? <emotion value="c'),
     ).toBe("தோராயமா எவ்ளோ amount தேவைப்படுதுன்னு சொல்ல முடியுமா?");
+  });
+
+  it("can leave leading and lone spaces (Cartesia token join)", () => {
+    expect(stripMarkupTags(" நீங்க", false)).toBe(" நீங்க");
+    expect(stripMarkupTags(" ", false)).toBe(" ");
+    expect(stripMarkupTags(" ")).toBe("");
   });
 });
 

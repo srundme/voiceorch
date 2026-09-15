@@ -386,15 +386,27 @@ export class SarvamLLM implements LLMAdapter {
       }
     }
 
-    if (typeof p.temperature === "number" && Number.isFinite(p.temperature))
+    if (typeof p.temperature === "number" && Number.isFinite(p.temperature)) {
       body["temperature"] = clamp(p.temperature, 0, 2);
-    if (typeof p.topP === "number" && Number.isFinite(p.topP))
+    } else if (this.model === SARVAM_CONVERSATIONS_MODEL) {
+      // Docs: sarvam-105b-conversations voice example uses temperature 1
+      // (https://docs.sarvam.ai/api/getting-started/models/sarvam-105b).
+      // Omitting it with reasoning_effort=null would fall back to 0.2.
+      body["temperature"] = 1;
+    }
+    if (typeof p.topP === "number" && Number.isFinite(p.topP)) {
       body["top_p"] = clamp(p.topP, 0, 1);
+    } else if (this.model === SARVAM_CONVERSATIONS_MODEL) {
+      body["top_p"] = 1;
+    }
 
     let maxTokens =
       typeof p.maxTokens === "number" && Number.isFinite(p.maxTokens) && p.maxTokens > 0
         ? Math.floor(p.maxTokens)
-        : undefined;
+        : this.model === SARVAM_CONVERSATIONS_MODEL
+          // Spoken range in Sarvam voice guidance is 100–500; 100 clips Indic.
+          ? 500
+          : undefined;
     // Gemma 4 answers directly with no thinking pass — keep the spoken budget
     // tight so TTFT + full-turn latency stay voice-friendly.
     if (this.model === "gemma4") {
@@ -579,6 +591,8 @@ ${systemPrompt}`
       const reader = resp.body!.getReader();
       const decoder = new TextDecoder();
       let full = "";
+      let finishReason: string | null = null;
+      let sawDone = false;
       let reasoningBuffer = "";
       let usage: LLMUsage | undefined;
 
@@ -590,7 +604,7 @@ ${systemPrompt}`
       let jsonBuffer = "";
 
       const handleData = (data: string): void => {
-        if (data === "[DONE]") return;
+        if (data === "[DONE]") { sawDone = true; return; }
         try {
           const parsed = JSON.parse(data) as {
             choices: Array<{
@@ -616,7 +630,8 @@ ${systemPrompt}`
             };
           }
 
-          const delta = parsed.choices[0]?.delta;
+          if (parsed.choices?.[0]?.finish_reason) finishReason = parsed.choices[0].finish_reason;
+          const delta = parsed.choices?.[0]?.delta;
           if (!delta) return;
 
           // Collect reasoning trace as fallback
@@ -711,10 +726,25 @@ ${systemPrompt}`
       };
 
       let buffer = "";
+      let streamTimedOut = false;
+      const responseDeadline = Date.now() + 120_000;
       try {
         while (true) {
           if (abort.signal.aborted) break;
-          const { done, value } = await reader.read();
+          let idleTimer: ReturnType<typeof setTimeout> | undefined;
+          const idleMs = Math.min(15_000, Math.max(1, responseDeadline - Date.now()));
+          const { done, value } = await Promise.race([
+            reader.read(),
+            new Promise<never>((_, reject) => {
+              idleTimer = setTimeout(() => {
+                streamTimedOut = true;
+                abort.abort();
+                void reader.cancel().catch(() => {});
+                reject(new Error("Sarvam response stalled before completion"));
+              }, idleMs);
+            }),
+          ]).finally(() => clearTimeout(idleTimer));
+          if (streamTimedOut) throw new Error("Sarvam response stalled before completion");
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
@@ -723,16 +753,18 @@ ${systemPrompt}`
           while ((nl = buffer.indexOf("\n")) !== -1) {
             const line = buffer.slice(0, nl).trim();
             buffer = buffer.slice(nl + 1);
-            if (line.startsWith("data: ")) handleData(line.slice(6));
+            if (line.startsWith("data:")) handleData(line.slice(5).trimStart());
           }
+          if (sawDone) { void reader.cancel().catch(() => {}); break; }
         }
 
         if (!abort.signal.aborted) {
           buffer += decoder.decode();
           const tail = buffer.trim();
-          if (tail.startsWith("data: ")) handleData(tail.slice(6));
+          if (tail.startsWith("data:")) handleData(tail.slice(5).trimStart());
         }
       } catch (err) {
+        if (streamTimedOut) throw new Error("Sarvam response stalled before completion");
         if (abort.signal.aborted) {
           try { await reader.cancel(); } catch { /* noop */ }
           return;
@@ -746,6 +778,57 @@ ${systemPrompt}`
       }
 
       if (usage) options?.onUsage?.(usage);
+      logger.info({ callId: this.callId, model: this.model, finishReason, sawDone,
+        outputCharacters: full.length, evt: "sarvam_stream_termination" }, "Sarvam stream termination");
+      // Repair incomplete speech once without tools or replay. Exact-prefix
+      // validation deliberately rejects rewrites (which would duplicate speech).
+      // A finish reason without the provider's stream sentinel is not a
+      // complete response: the connection may have closed immediately after a
+      // partial chunk. Do not commit that output as a successful turn.
+      const incomplete = finishReason === "length" || !sawDone;
+      if (incomplete && (sawToolDelta || bufferingJson)) {
+        throw new Error(`Sarvam tool response ended before completion (${finishReason ?? "unexpected EOF"}); tool not executed`);
+      }
+      if (incomplete && full.trim() && !sawToolDelta && !bufferingJson && !jsonBuffer) {
+        const repairAbort = new AbortController();
+        const timer = setTimeout(() => repairAbort.abort(), 3000);
+        let repaired = false;
+        try {
+          const repairBody: Record<string, unknown> = { ...body, stream: false };
+          // Reproducing the prefix consumes tokens too. Allow a small bounded
+          // suffix budget on this one recovery request, not on normal turns.
+          repairBody["max_tokens"] = Math.min(4096, Number(body["max_tokens"] ?? 500) + 128);
+          delete repairBody["tools"];
+          delete repairBody["tool_choice"];
+          repairBody["messages"] = [
+            ...(body["messages"] as Array<Record<string, unknown>>),
+            { role: "assistant", content: full },
+            { role: "user", content: "The preceding assistant reply was cut off by the transport. Return that exact reply verbatim, including its exact prefix, and finish only its interrupted sentence. Do not add a new question, action, tool call, or claim that any new action was performed." },
+          ];
+          const result = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "api-subscription-key": this.key, Authorization: `Bearer ${this.key}` },
+            body: JSON.stringify(repairBody),
+            signal: AbortSignal.any([abort.signal, repairAbort.signal]),
+          });
+          if (result.ok) {
+            const data = await result.json() as { choices?: Array<{ finish_reason?: string; message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+            if (data.usage) options?.onUsage?.({ inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0 });
+            const choice = data.choices?.[0];
+            const completed = choice?.message?.content;
+            if (!abort.signal.aborted && choice?.finish_reason === "stop" && completed?.startsWith(full) && completed.length > full.length && !parseToolEnvelope(completed)) {
+              const suffix = completed.slice(full.length);
+              full = completed;
+              onToken(suffix);
+              repaired = true;
+            }
+          }
+        } catch { /* Keep already delivered speech; never replay it on repair failure. */ }
+        finally { clearTimeout(timer); }
+        if (abort.signal.aborted) return;
+        logger.warn({ callId: this.callId, model: this.model, finishReason, sawDone, repaired, evt: "sarvam_incomplete_response" }, "Sarvam incomplete response repair result");
+        if (!repaired) throw new Error("Sarvam response truncated; repair failed (partial speech already delivered)");
+      }
 
       // Stream ended while still holding a possible XML prefix ("<", "<tool") —
       // flush it as speech rather than dropping it.

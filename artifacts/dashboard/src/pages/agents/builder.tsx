@@ -2425,8 +2425,8 @@ function VoiceTab({ form }: { form: any }) {
           <FormField control={form.control} name="noiseCancellationEnabled" render={({ field }) => (
             <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
               <div>
-                <FormLabel className="text-sm">Noise Cancellation</FormLabel>
-                <FormDescription className="text-[10px]">Removes fans/traffic/hiss. Does not ignore other people nearby — keep the phone close. Greeting echo is ignored so the agent does not cut herself. Browser web calls use the mic’s own suppression.</FormDescription>
+                <FormLabel className="text-sm">Speech-band Noise Filter</FormLabel>
+                <FormDescription className="text-[10px]">Filters out-of-band noise on phone calls without an energy gate. This is not acoustic echo cancellation and cannot remove overlapping voices or all fan noise. Browser calls also use microphone noise suppression when supported.</FormDescription>
               </div>
               <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
