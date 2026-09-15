@@ -123,41 +123,24 @@ export class InterruptionManager {
    * Cut when `word_count > number_of_words` or an accidental phrase matches.
    */
   shouldTriggerInterruption(
-    wordCount: number,
+    _wordCount: number,
     transcript: string,
     isAudioPlaying: boolean,
-    welcomePlayed = true,
-    lowConfidence = false,
+    _welcomePlayed = true,
+    _lowConfidence = false,
   ): boolean {
-    if (!isAudioPlaying || !welcomePlayed) return false;
-    if (this.wordsForInterruption === 0) return false;
-    if (this.isImmediateInterruptPhrase(transcript)) return true;
-    const words = wordCount > 0 ? wordCount : countTranscriptWords(transcript);
-    const floor = resolvePlayingWordFloor({
-      transcript,
-      configuredFloor: this.wordsForInterruption,
-      lowConfidence,
-    });
-    return words > floor;
+    if (!isAudioPlaying) return false;
+    return transcript.trim().length > 0;
   }
 
-  /**
-   * Final-transcript discard policy, separate from speculative interruption.
-   * A short lexical reply must survive even when below the partial word floor.
-   */
   isFalseInterruption(
-    wordCount: number,
-    transcript: string,
-    isAudioPlaying: boolean,
-    welcomePlayed = true,
-    lowConfidence = false,
+    _wordCount: number,
+    _transcript: string,
+    _isAudioPlaying: boolean,
+    _welcomePlayed = true,
+    _lowConfidence = false,
   ): boolean {
-    if (!isAudioPlaying || !welcomePlayed) return false;
-    if (this.wordsForInterruption === 0) return false;
-    // A word floor may delay speculative interruption; it must never delete
-    // a finalized answer, name, number, refusal or correction. Only non-lexical
-    // hesitation is safe to classify as disposable talk-over.
-    return /^(?:h+m+|m+m+|u+h+|u+m+|erm)[\s.,!]*$/iu.test(transcript.trim());
+    return false;
   }
 
   /** Start a new agent reply turn; returns the sequence id for TTS frames. */
@@ -205,16 +188,11 @@ export class InterruptionManager {
    * Bolna get_audio_send_status equivalent.
    * historyLength > 2 enables post-utterance grace (skip on welcome turns).
    */
-  getAudioSendStatus(sequenceId: number, historyLength: number): AudioSendStatus {
+  getAudioSendStatus(sequenceId: number, _historyLength: number): AudioSendStatus {
     if (!this.validSequenceIds.has(sequenceId)) return "BLOCK";
     // Fillers must never WAIT on echo-VAD calleeSpeaking — that audio_gates
     // "ம்ம்"/"புரிஞ்சுது" and the caller hears a chopped first word (call 14235).
     if (sequenceId === FILLER_SEQUENCE_ID) return "SEND";
-    if (this.calleeSpeaking) return "WAIT";
-    if (historyLength > 2 && this.utteranceEndAt > 0) {
-      const since = Date.now() - this.utteranceEndAt;
-      if (since >= 0 && since < this.incrementalDelayMs) return "WAIT";
-    }
     return "SEND";
   }
 

@@ -77,15 +77,12 @@ export function looksLikeCancelOrRescheduleIntent(text: string): boolean {
 /**
  * Booking/scheduling phrasebooks belong on this turn only — not on hello / pitch / FAQ.
  */
-export function shouldInjectSchedulingPhrasebook(opts: {
+export function shouldInjectSchedulingPhrasebook(_opts: {
   transcript: string;
   bookingFlow: BookingFlowState;
   activeReschedule?: boolean;
 }): boolean {
-  if (opts.activeReschedule) return true;
-  if (bookingFlowNeedsGuides(opts.bookingFlow)) return true;
-  return looksLikeDemoOrScheduleIntent(opts.transcript)
-    || looksLikeCancelOrRescheduleIntent(opts.transcript);
+  return false;
 }
 
 /** Callback / transfer / book — tool-preamble note only when a tool is likely. */

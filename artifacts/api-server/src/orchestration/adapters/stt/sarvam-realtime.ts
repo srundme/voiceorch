@@ -278,12 +278,7 @@ export function shouldBargeOnRealtimeVadStart(opts: {
   energyAboveEchoBar?: boolean;
   isHardInterrupt?: boolean;
 }): boolean {
-  if (!opts.agentSpeaking) return false;
-  if (!opts.hasUsablePartial) return false;
-  if (opts.isHardInterrupt) return true;
-  if (opts.greetingOrSystem) return false;
-  if (opts.inEchoGrace) return false;
-  return true;
+  return Boolean(opts.agentSpeaking && opts.hasUsablePartial);
 }
 
 /** Streaming energy may arm, but PSTN must not clearAudio on echo-loud frames. */
@@ -294,9 +289,7 @@ export function shouldCommitStreamingEnergyBarge(opts: {
   echoBarReady: boolean;
   energyAboveEchoBar: boolean;
 }): boolean {
-  if (!opts.hasUsablePending || !opts.isHardInterrupt) return false;
-  if (opts.echoBarReady && !opts.energyAboveEchoBar && !opts.isBookingAnswer) return false;
-  return true;
+  return Boolean(opts.hasUsablePending);
 }
 
 /**
@@ -306,7 +299,6 @@ export function shouldBargeOnRealtimePartial(opts: {
   greetingOrSystem: boolean;
   inEchoGrace: boolean;
   isWebcall?: boolean;
-  isSelfEcho: boolean;
   echoBarReady?: boolean;
   energyAboveEchoBar?: boolean;
   charCount: number;
@@ -316,12 +308,7 @@ export function shouldBargeOnRealtimePartial(opts: {
   isHardInterrupt?: boolean;
   isBookingAnswer?: boolean;
 }): boolean {
-  if (opts.charCount < opts.minChars) return false;
-  if (opts.isSelfEcho) return false;
-  if (opts.isGreetingOnly) return false;
-  if (opts.greetingOrSystem) return false;
-  if (opts.inEchoGrace) return false;
-  return true;
+  return opts.charCount > 0;
 }
 
 interface RealtimeMsg {

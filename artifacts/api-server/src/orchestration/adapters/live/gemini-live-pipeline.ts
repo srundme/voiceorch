@@ -477,41 +477,8 @@ export class GeminiLivePipeline implements VoiceSession {
    * Webcall legs are excluded: the browser already runs AEC, so there is no
    * echo to reject and gating there would only cost real barge-ins.
    */
-  private isSelfEcho(pcm8k: Buffer): boolean {
-    if (this.config.rawPcmOutput) return false;
-    if (!(this.isPlayingOut || this.outFrames8k.length > 0)) return false;
-
-    const rms = frameRms(pcm8k);
-    const sinceStart = Date.now() - this.agentAudioStartedAt;
-
-    // Right after a line starts, anything returning is echo — measure it.
-    if (sinceStart <= GeminiLivePipeline.ECHO_CALIBRATION_MS) {
-      const alpha = rms > this.echoFloorRms
-        ? GeminiLivePipeline.ECHO_FLOOR_RISE_ALPHA
-        : GeminiLivePipeline.ECHO_FLOOR_FALL_ALPHA;
-      this.echoFloorRms = this.echoSamples === 0
-        ? rms
-        : this.echoFloorRms + alpha * (rms - this.echoFloorRms);
-      this.echoSamples++;
-      this.echoSuppressedFrames++;
-      return true;
-    }
-    if (sinceStart <= this.agent.bargeInEchoGraceMs) {
-      this.echoSuppressedFrames++;
-      return true;
-    }
-
-    // Past the grace: a caller louder than the measured echo still gets through.
-    const bar = Math.min(
-      GeminiLivePipeline.ECHO_MAX_BAR,
-      Math.max(
-        resolveBargeInEnergyThreshold(this.agent.bargeInEnergyThreshold),
-        this.echoFloorRms * GeminiLivePipeline.ECHO_MARGIN,
-      ),
-    );
-    if (rms >= bar) return false;
-    this.echoSuppressedFrames++;
-    return true;
+  private isSelfEcho(_pcm8k: Buffer): boolean {
+    return false;
   }
 
   /** Test hook: wait until queued caller frames have been sent to Gemini. */

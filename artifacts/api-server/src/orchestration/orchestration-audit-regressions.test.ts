@@ -4,7 +4,6 @@ import { SarvamLLM } from "./adapters/llm/sarvam.js";
 import { cartesiaUnspokenTail } from "./cartesia-token-coalesce.js";
 import { fetchUserConfiguredUrl } from "../lib/ssrf.js";
 import { OrchestrationPipeline } from "./pipeline.js";
-import { shouldIgnoreSelfEcho } from "./self-echo-policy.js";
 import { callDrainMs } from "./lifecycle.js";
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -82,15 +81,6 @@ describe("orchestration audit regressions", () => {
     await vi.advanceTimersByTimeAsync(15001);
     await rejected;
     expect(done).not.toHaveBeenCalled();
-  });
-
-  it("recognizes substantial echo only within an explicit playback tail", () => {
-    const base = { agentSpeaking: false, welcomePlayed: true, isOverridePhrase: false,
-      recentAgentText: ["I am calling from the office"], transcript: "I am calling from the office" };
-    expect(shouldIgnoreSelfEcho(base).ignore).toBe(false);
-    expect(shouldIgnoreSelfEcho({ ...base, recentPlaybackTail: true }).ignore).toBe(false);
-    expect(shouldIgnoreSelfEcho({ ...base, recentPlaybackTail: true, transcript: "no thanks" }).ignore).toBe(false);
-    expect(shouldIgnoreSelfEcho({ ...base, recentPlaybackTail: true, isOverridePhrase: true }).ignore).toBe(false);
   });
 
   it("bounds the configurable deployment drain window", () => {

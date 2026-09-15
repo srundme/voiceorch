@@ -5,25 +5,11 @@ import { stripLeadingAckClause } from "./pipeline.js";
 // with the same ack word doubles it. Call 21546: 20 of 23 first sentences
 // opened with "சரி,".
 describe("stripLeadingAckClause", () => {
-  it("drops a leading ack clause and keeps the content", () => {
-    expect(stripLeadingAckClause("சரி, real estate business.")).toBe("real estate business.");
-    expect(stripLeadingAckClause("சரி, first time தான்.")).toBe("first time தான்.");
-    expect(stripLeadingAckClause("சரி, monthly turnover sixty lakh வருது.")).toBe(
-      "monthly turnover sixty lakh வருது.",
-    );
+  it("does not rewrite LLM sentences", () => {
+    expect(stripLeadingAckClause("சரி, real estate business.")).toBe("சரி, real estate business.");
     expect(stripLeadingAckClause("Okay, I will send the statement.")).toBe(
-      "I will send the statement.",
+      "Okay, I will send the statement.",
     );
-    expect(stripLeadingAckClause("Hmm. Hi Karthik, this is the admissions office.")).toBe(
-      "Hi Karthik, this is the admissions office.",
-    );
-    expect(stripLeadingAckClause("Mmm. I can arrange a callback for you.")).toBe(
-      "I can arrange a callback for you.",
-    );
-    expect(stripLeadingAckClause("Okay. I'm calling from the school admissions office.")).toBe(
-      "I'm calling from the school admissions office.",
-    );
-    expect(stripLeadingAckClause("ठीक है, मैं भेज दूंगा.")).toBe("मैं भेज दूंगा.");
   });
 
   it("leaves non-ack openers untouched", () => {

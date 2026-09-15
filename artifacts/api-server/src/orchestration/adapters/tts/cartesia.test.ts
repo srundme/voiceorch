@@ -347,4 +347,27 @@ describe("Cartesia WS continuations", () => {
     expect(sockets[0]!.sent.map((s) => JSON.parse(s))).toContainEqual({ context_id: "interrupted", cancel: true });
     tts.close();
   });
+
+  it("unblocks continuation jobs when barge-in fires before the owner WS opens (call 25042)", async () => {
+    vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
+      constructor(url: string) { super(url); }
+    });
+    vi.stubGlobal("fetch", vi.fn());
+    const tts = new CartesiaTTS("test-key", null, null);
+    const abort = new AbortController();
+    tts.claimTurnContext("hang");
+    const join = tts.synthesizeStreamInContext(
+      "hang",
+      " world",
+      () => {},
+      () => {},
+      abort.signal,
+      undefined,
+      true,
+    );
+    abort.abort();
+    tts.finalizeTurnContext("hang");
+    await expect(join).rejects.toMatchObject({ name: "AbortError" });
+    tts.close();
+  });
 });

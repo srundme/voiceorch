@@ -60,139 +60,24 @@ describe("isRealEnglishUtterance", () => {
 });
 
 describe("resolveAutoDetectLanguage", () => {
-  it("holds the current non-English language on an English filler", () => {
-    const r = resolveAutoDetectLanguage({
+  it("trusts STT/LID detected language", () => {
+    expect(resolveAutoDetectLanguage({
       detected: "en-IN",
       latchedLang: null,
       currentLang: "ta-IN",
       text: "okay thank you",
-    });
-    expect(r.lang).toBe("ta-IN");
-    expect(r.heldFiller).toBe(true);
-  });
-
-  it("holds Hindi when the first reply is Romanized Indic written in Latin letters", () => {
-    const r = resolveAutoDetectLanguage({
-      detected: "en-IN",
-      latchedLang: null,
-      currentLang: "hi-IN",
-      text: "Aa boliye Ma'am",
-    });
-    expect(r.lang).toBe("hi-IN");
-    expect(r.heldFiller).toBe(true);
-  });
-
-  it("flips passively on a real English sentence", () => {
-    const r = resolveAutoDetectLanguage({
-      detected: "en-IN",
-      latchedLang: null,
-      currentLang: "ta-IN",
-      text: "how much does the premium cost?",
-    });
-    expect(r.lang).toBe("en-IN");
-    expect(r.heldFiller).toBe(false);
-  });
-
-  it("lets the very first caller turn establish English passively (no currentLang)", () => {
-    const r = resolveAutoDetectLanguage({
-      detected: "en-IN",
-      latchedLang: null,
-      currentLang: "",
-      text: "okay",
-    });
-    expect(r.lang).toBe("en-IN");
-    expect(r.heldFiller).toBe(false);
-  });
-
-  it("does not guard when the conversation is already English", () => {
-    const r = resolveAutoDetectLanguage({
-      detected: "en-IN",
-      latchedLang: null,
-      currentLang: "en-IN",
-      text: "okay",
-    });
-    expect(r.lang).toBe("en-IN");
-    expect(r.heldFiller).toBe(false);
-  });
-
-  it("keeps a Tamil agent on Tamil when LID writes Latin — no word list (call 21546)", () => {
-    const r = resolveAutoDetectLanguage({
-      detected: "en-IN",
-      latchedLang: null,
-      currentLang: "en-IN",
-      text: "Neenga yaaru enga irundhu call pannittu irukkeenga?",
-      agentLang: "ta-IN",
-    });
-    expect(r.lang).toBe("ta-IN");
-    expect(r.heldFiller).toBe(true);
-  });
-
-  it("still allows an explicit English latch on a Tamil agent", () => {
-    const r = resolveAutoDetectLanguage({
-      detected: "en-IN",
-      latchedLang: "en-IN",
-      currentLang: "ta-IN",
-      text: "please speak in English from now",
-      agentLang: "ta-IN",
-    });
-    expect(r.lang).toBe("en-IN");
-    expect(r.heldFiller).toBe(false);
-  });
-
-  it("allows passive English only when autoSwitchToEnglish is on", () => {
-    const r = resolveAutoDetectLanguage({
-      detected: "en-IN",
-      latchedLang: null,
-      currentLang: "ta-IN",
-      text: "how much does the premium cost?",
-      agentLang: "ta-IN",
-      allowPassiveEnglish: true,
-    });
-    expect(r.lang).toBe("en-IN");
-    expect(r.heldFiller).toBe(false);
-  });
-
-  it("explicit latch always wins — even over a filler", () => {
-    const r = resolveAutoDetectLanguage({
-      detected: "ta-IN",
-      latchedLang: "en-IN",
-      currentLang: "ta-IN",
-      text: "okay",
-    });
-    expect(r.lang).toBe("en-IN");
-    expect(r.heldFiller).toBe(false);
-  });
-
-  it("explicit non-English latch wins over script-detected English", () => {
-    const r = resolveAutoDetectLanguage({
-      detected: "en-IN",
+    })).toEqual({ lang: "en-IN", heldFiller: false });
+    expect(resolveAutoDetectLanguage({
+      detected: "hi-IN",
       latchedLang: "ta-IN",
       currentLang: "ta-IN",
-      text: "Speak in Tamil.",
-    });
-    expect(r.lang).toBe("ta-IN");
-    expect(r.heldFiller).toBe(false);
-  });
-
-  it("Indic-script detection passes through untouched", () => {
-    const r = resolveAutoDetectLanguage({
-      detected: "hi-IN",
-      latchedLang: null,
-      currentLang: "ta-IN",
       text: "मुझे जानकारी चाहिए",
-    });
-    expect(r.lang).toBe("hi-IN");
-    expect(r.heldFiller).toBe(false);
-  });
-
-  it("null detection stays null (language unchanged)", () => {
-    const r = resolveAutoDetectLanguage({
+    })).toEqual({ lang: "hi-IN", heldFiller: false });
+    expect(resolveAutoDetectLanguage({
       detected: null,
       latchedLang: null,
       currentLang: "ta-IN",
       text: "…",
-    });
-    expect(r.lang).toBe(null);
-    expect(r.heldFiller).toBe(false);
+    })).toEqual({ lang: "ta-IN", heldFiller: false });
   });
 });

@@ -1167,7 +1167,7 @@ export function isAffirmationOnlyUtterance(tokens: string[]): boolean {
 /**
  * Compute the adaptive silence window (ms) to wait before flushing audio to STT.
  */
-export function computeEndpointMs(opts: {
+export function computeEndpointMs(_opts: {
   /** Last agent utterance text — used to detect digit-collection context. */
   lastAgentText: string;
   /**
@@ -1180,82 +1180,11 @@ export function computeEndpointMs(opts: {
   /** Agent-configured base silence window (user override). */
   baseSilenceMs: number;
 }): EndpointDecision {
-  const { lastAgentText, partialTranscript, audioBufferMs, baseSilenceMs } =
-    opts;
-
-  if (looksLikeSpokenEmailSpelling(partialTranscript) && !isCompleteEmailUtterance(partialTranscript)) {
-    return { ms: ENDPOINT_EMAIL_TRAIL_MS, reason: "email-collection:in-progress" };
-  }
-
-  // ── 1. Email-collection context (highest priority) ─────────────────────────
-  if (isEmailCollectionContext(lastAgentText)) {
-    const emailPartial = partialTranscript.trim();
-    if (emailPartial.length > 0 && AFFIRMATIONS.has(emailPartial.toLowerCase())) {
-      return { ms: ENDPOINT_FAST_MS, reason: "affirmation" };
-    }
-    if (emailPartial.length > 0 && isCompleteEmailUtterance(emailPartial)) {
-      return { ms: ENDPOINT_FAST_MS, reason: "email-collection:complete" };
-    }
-    if (emailPartial.length > 0 && isEmailLikeUtterance(emailPartial)) {
-      return { ms: ENDPOINT_EMAIL_TRAIL_MS, reason: "email-collection:in-progress" };
-    }
-    return { ms: ENDPOINT_EMAIL_MS, reason: "email-collection" };
-  }
-
-  // ── 2. Digit-collection context ────────────────────────────────────────────
-  if (isDigitCollectionContext(lastAgentText)) {
-    const partial = partialTranscript.trim();
-    if (partial.length > 0 && (/\d$/.test(partial) || isDigitLikeUtterance(partial))) {
-      // Still actively reading digits — extend even further
-      return {
-        ms: ENDPOINT_DIGIT_TRAIL_MS,
-        reason: "digit-collection:trailing-digit",
-      };
-    }
-    return { ms: ENDPOINT_DIGIT_MS, reason: "digit-collection" };
-  }
-
-  // ── 3. Partial transcript analysis (streaming STT active) ──────────────────
-  const partial = partialTranscript.trim().toLowerCase();
-  if (partial.length > 0) {
-    // Clearly complete: terminal punctuation added by STT smart_format
-    if (/[.?!।]$/.test(partial)) {
-      return { ms: ENDPOINT_FAST_MS, reason: "terminal-punctuation" };
-    }
-
-    // Single-word affirmation ("yes", "okay", "correct", …)
-    if (AFFIRMATIONS.has(partial)) {
-      return { ms: ENDPOINT_FAST_MS, reason: "affirmation" };
-    }
-
-    // Ends in a dangling/filler word — likely mid-utterance
-    const lastWord = (partial.split(/\s+/).pop() ?? "").replace(/[,.;:…]+$/u, "");
-    if (DANGLING_WORDS.has(lastWord)) {
-      return { ms: ENDPOINT_LONG_MS, reason: `dangling:${lastWord}` };
-    }
-
-    // Very short partial (1–2 words) with short audio — might still be mid-thought
-    const wordCount = partial.split(/\s+/).length;
-    if (wordCount <= 2 && audioBufferMs < 800) {
-      return {
-        ms: Math.max(baseSilenceMs, ENDPOINT_DEFAULT_MS),
-        reason: "short-partial",
-      };
-    }
-  }
-
-  // ── 3. Audio duration proxy (batch path — no partial transcript available) ─
-  if (partial.length === 0) {
-    // Short audio burst: likely a quick single-word answer
-    if (audioBufferMs > 0 && audioBufferMs < 600) {
-      return { ms: ENDPOINT_FAST_MS, reason: "short-audio" };
-    }
-  }
-
-  // ── 4. Fallback: agent-configured baseline ─────────────────────────────────
-  return { ms: baseSilenceMs, reason: "base" };
+  return { ms: 0, reason: "provider" };
 }
 
+// ── Silence-hangup watchdog (call 1915) ──────────────────────────────────────
+//
 // ── Silence-hangup watchdog (call 1915) ──────────────────────────────────────
 //
 // Replaces the raw per-agent silence-hangup setTimeout in the pipeline. The old

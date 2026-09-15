@@ -253,6 +253,47 @@ export class CartesiaTTS implements TTSAdapter {
     return err instanceof Error && err.name === "AbortError";
   }
 
+  private abortError(): DOMException {
+    return new DOMException("Aborted", "AbortError");
+  }
+
+  /** Joiners wait on this. If barge-in fires before the owner WS send, resolve it. */
+  private markTurnOpened(turnContextId: string): void {
+    this.turnOpenedResolve.get(turnContextId)?.();
+  }
+
+  private whenAborted(signal?: AbortSignal): Promise<never> {
+    return new Promise((_, reject) => {
+      const fail = (): void => reject(this.abortError());
+      if (!signal) return;
+      if (signal.aborted) { fail(); return; }
+      signal.addEventListener("abort", fail, { once: true });
+    });
+  }
+
+  private async waitUntilTurnOpened(turnContextId: string, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) {
+      this.cancelledTurns.add(turnContextId);
+      this.markTurnOpened(turnContextId);
+      throw this.abortError();
+    }
+    const opened = this.turnOpened.get(turnContextId);
+    if (!opened) return;
+    if (!signal) {
+      await opened;
+      return;
+    }
+    try {
+      await Promise.race([opened, this.whenAborted(signal)]);
+    } catch (err) {
+      if (this.isAbortErr(err, signal)) {
+        this.cancelledTurns.add(turnContextId);
+        this.markTurnOpened(turnContextId);
+      }
+      throw err;
+    }
+  }
+
   private outputFormat(): { container: "raw"; encoding: "pcm_s16le"; sample_rate: 8000 | 16000 } {
     return { container: "raw", encoding: "pcm_s16le", sample_rate: this.pcmSampleRate };
   }
@@ -377,6 +418,7 @@ export class CartesiaTTS implements TTSAdapter {
   }
 
   private async completeTurn(turnContextId: string): Promise<void> {
+    this.markTurnOpened(turnContextId);
     await this.turnOpened.get(turnContextId);
     await Promise.allSettled([...(this.turnInputs.get(turnContextId) ?? [])]);
     await this.turnSendChains.get(turnContextId);
@@ -603,7 +645,11 @@ export class CartesiaTTS implements TTSAdapter {
     }
 
     try {
-      const ws = await this.getOrOpenWs();
+      if (signal?.aborted) throw this.abortError();
+      const ws = signal
+        ? await Promise.race([this.getOrOpenWs(), this.whenAborted(signal)])
+        : await this.getOrOpenWs();
+      if (signal?.aborted) throw this.abortError();
       await this.sendInContext(ws, turnContextId, text, sink, onDone, signal, emotions, join);
     } catch (err) {
       if (this.isAbortErr(err, signal)) throw err;
@@ -642,7 +688,7 @@ export class CartesiaTTS implements TTSAdapter {
     };
 
     if (join) {
-      await this.turnOpened.get(turnContextId);
+      await this.waitUntilTurnOpened(turnContextId, signal);
       // Stay on this context. Dumping to remainder because `pending` is not
       // registered yet is what sent letter-sized one-shots (call 25026).
       if (this.closedTurns.has(turnContextId) || this.restFallbackTurns.has(turnContextId) || this.cancelledTurns.has(turnContextId)) {
@@ -651,14 +697,14 @@ export class CartesiaTTS implements TTSAdapter {
         onDone(text.length);
         return;
       }
-      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      if (signal?.aborted) throw this.abortError();
       await this.enqueueTurnSend(turnContextId, () => sendTranscript(text));
       onDone(text.length);
       return;
     }
 
     return new Promise<void>((resolve, reject) => {
-      if (signal?.aborted) { reject(new DOMException("Aborted", "AbortError")); return; }
+      if (signal?.aborted) { reject(this.abortError()); return; }
       const cleanup = (fn: () => void): void => {
         signal?.removeEventListener("abort", onAbort);
         this.pending.delete(turnContextId);
@@ -666,10 +712,11 @@ export class CartesiaTTS implements TTSAdapter {
       };
       const onAbort = (): void => {
         this.cancelledTurns.add(turnContextId);
+        this.markTurnOpened(turnContextId);
         if (ws.readyState === WebSocket.OPEN) {
           try { ws.send(JSON.stringify({ context_id: turnContextId, cancel: true })); } catch { /* ignore */ }
         }
-        cleanup(() => reject(new DOMException("Aborted", "AbortError")));
+        cleanup(() => reject(this.abortError()));
       };
       signal?.addEventListener("abort", onAbort, { once: true });
       this.pending.set(turnContextId, {
@@ -681,7 +728,7 @@ export class CartesiaTTS implements TTSAdapter {
         }),
         reject: (err) => cleanup(() => reject(err)),
       });
-      this.turnOpenedResolve.get(turnContextId)?.();
+      this.markTurnOpened(turnContextId);
       void this.enqueueTurnSend(turnContextId, () => sendTranscript(text)).catch((err) => {
         cleanup(() => reject(err));
       });

@@ -179,7 +179,7 @@ describe("TTS job generation ownership", () => {
 });
 
 describe("greeting caller input", () => {
-  it("retains short replies and interrupts on stop without greeting mute", () => {
+  it("lets provider STT through during greeting and barges on stop", () => {
     const { p } = harness();
     p.greetingFirstClipActive = true;
     p.greetingPlaybackActive = true;
@@ -187,10 +187,9 @@ describe("greeting caller input", () => {
     p.recentAgentSpeech = [];
     p.isPlaying = true;
     p.triggerBargeIn = vi.fn(() => { p.bargeInRequested = true; });
-    expect(p.deferGreetingTranscript("hello", 1, "stt_final")).toBe(true);
-    p.deferGreetingTranscript("hello", 1, "stt_final");
+    expect(p.deferGreetingTranscript("", 1, "stt_final")).toBe(true);
+    expect(p.deferGreetingTranscript("hello", 1, "stt_final")).toBe(false);
     p.deferGreetingTranscript("रुको", 2, "stt_final");
-    expect(p.pendingTranscriptQueue.map((x: {text: string}) => x.text)).toEqual(["hello", "रुको"]);
     expect(p.triggerBargeIn).toHaveBeenCalledTimes(1);
     p.greetingFirstClipActive = false; p.greetingPlaybackActive = false;
     expect(p.deferGreetingTranscript("next", 3, "stt_final")).toBe(false);

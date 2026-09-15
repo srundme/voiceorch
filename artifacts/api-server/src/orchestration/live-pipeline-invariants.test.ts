@@ -55,14 +55,10 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("call 14315");
   });
 
-  it("pages once when Smart Turn is missing (fail-open is degraded mode, not silent)", () => {
-    expect(pipelineSrc).toContain('["smart_turn_fail_open"]');
-    expect(pipelineSrc).toContain("_smartTurnFailOpenAlerted");
-    expect(pipelineSrc).toMatch(/Smart Turn fail-open/);
+  it("does not overlay Smart Turn on provider VAD/finals", () => {
     const evalBody = methodBody("evaluateSemanticTurn");
-    expect(evalBody).toContain("!sessionReady");
-    expect(evalBody).toContain("logWarningEvent");
-    expect(evalBody).toContain("smart_turn_fail_open");
+    expect(evalBody.replace(/\s+/g, "")).toBe("{return;}");
+    expect(evalBody).not.toContain("smart_turn_fail_open");
   });
 
   it("does not drop listening finals on RMS — STT is the turn authority (call 14351)", () => {
@@ -102,7 +98,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("shouldCutTtsFromCallerTranscript");
     expect(pipelineSrc).toContain("shouldDiscardOpenerTranscript");
     expect(pipelineSrc).toContain("Bolna has no inbound RMS barge path");
-    expect(pipelineSrc).toContain("shouldIgnoreSelfEcho");
+    expect(pipelineSrc).not.toContain("shouldIgnoreSelfEcho");
     expect(pipelineSrc).not.toContain("SELF_ECHO_MIN_OVERLAP");
     expect(pipelineSrc).toContain("vad.speech_start only");
     expect(pipelineSrc).toContain("maybeBargeFromRealtimeVadStart");
@@ -150,7 +146,8 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("needSchedulingGuides");
     expect(pipelineSrc).toContain("return ttsSentenceOptions(this.agent.ttsProvider)");
     expect(methodBody("processTurn")).toContain("this.cartesiaManagedTokenStream()");
-    expect(pipelineSrc).not.toContain("CartesiaTurnStream");
+    expect(pipelineSrc).toContain("CartesiaTurnStream");
+    expect(pipelineSrc).toContain("waitJobReadyUnlessBarged");
     expect(pipelineSrc).toContain("finalizeTurnContext");
     expect(pipelineSrc).toContain("trim: !this.cartesiaManagedTokenStream()");
     expect(readFileSync(
@@ -194,7 +191,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("event: \"Backchannel Armed\"");
     expect(pipelineSrc).toContain("if (sequenceId !== FILLER_SEQUENCE_ID) {");
     expect(pipelineSrc).toContain("partialSnapshot: _spec.partialSnapshot");
-    expect(pipelineSrc).toContain("preferNumberTranscript");
+    expect(pipelineSrc).not.toContain("preferNumberTranscript");
     expect(pipelineSrc).toContain("initialLanguage wins even in strict mode");
     expect(pipelineSrc).toContain("this.requestedLangLatch || this.lastNonEnglishLang || this.currentLang");
     expect(pipelineSrc).toContain("getLiveHandoffLanguage(): string");
@@ -212,8 +209,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("if (this.streamSTT?.flush && !this.liveSarvamRealtime())");
     expect(pipelineSrc).toContain("this.armBargeRecovery(partial)");
     expect(methodBody("processTurn")).toContain("this.clearBargeRecovery()");
-    expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("isSameUtteranceStillArriving");
-    expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("playbackTooFreshForPartialBarge");
+    expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("shouldCutTtsFromCallerTranscript");
+    expect(methodBody("isSameUtteranceStillArriving")).toContain("return false");
+    expect(methodBody("playbackTooFreshForPartialBarge")).toContain("return false");
   });
 
   it("barge recovery waits out an open VAD instead of answering a fragment (call 21628)", () => {

@@ -338,36 +338,24 @@ describe("resolveCollectionVadSilenceMs", () => {
 });
 
 describe("computeEndpointMs", () => {
-  it("waits longer for a spelled digit during phone collection", () => {
-    const d = computeEndpointMs({
+  it("does not add SnapServe silence on top of the STT provider", () => {
+    expect(computeEndpointMs({
       lastAgentText: "What is your phone number?",
       partialTranscript: "nine eight",
       audioBufferMs: 400,
       baseSilenceMs: 150,
-    });
-    expect(d.reason).toBe("digit-collection:trailing-digit");
-    expect(d.ms).toBe(900);
-  });
-
-  it("waits longer while the caller is spelling an email", () => {
-    const d = computeEndpointMs({
+    })).toEqual({ ms: 0, reason: "provider" });
+    expect(computeEndpointMs({
       lastAgentText: "Could I have your email?",
       partialTranscript: "k a r",
       audioBufferMs: 400,
       baseSilenceMs: 150,
-    });
-    expect(d.reason).toBe("email-collection:in-progress");
-    expect(d.ms).toBe(900);
-  });
-
-  it("stays fast on a complete yes", () => {
-    const d = computeEndpointMs({
+    })).toEqual({ ms: 0, reason: "provider" });
+    expect(computeEndpointMs({
       lastAgentText: "Can you hear me?",
       partialTranscript: "yes",
       audioBufferMs: 200,
       baseSilenceMs: 150,
-    });
-    expect(d.reason).toBe("affirmation");
-    expect(d.ms).toBe(150);
+    })).toEqual({ ms: 0, reason: "provider" });
   });
 });

@@ -264,7 +264,7 @@ async function buildTargetAgentConfig(
     bargeInEnabled: (agentCfg["bargeInEnabled"] as boolean | undefined) ?? true,
     bargeInEnergyThreshold: resolveBargeInEnergyThreshold(agentCfg["bargeInEnergyThreshold"]),
     bargeInMinFrames: (agentCfg["bargeInMinFrames"] as number | undefined) ?? 4,
-    bargeInEchoGraceMs: (agentCfg["bargeInEchoGraceMs"] as number | undefined) ?? 0,
+    bargeInEchoGraceMs: 0,
     micSensitivity,
     timezone: (agentCfg["timezone"] as string | undefined) ?? "Asia/Kolkata",
     recordingEnabled: (agentCfg["recordingEnabled"] as boolean | undefined) ?? false,

@@ -134,39 +134,12 @@ export interface AutoDetectResolution {
  *     English) passes through unchanged — unless rule 2 applies.
  */
 export function resolveAutoDetectLanguage(opts: {
-  /** Result of STT-provided or script-based detection (may be null). */
   detected: string | null;
-  /** Sticky explicitly-requested language, if any. */
   latchedLang: string | null;
-  /** Current conversation language ("" if not yet established). */
   currentLang: string;
-  /** The caller's transcript for this turn. */
   text: string;
-  /** Agent / STT configured language (e.g. ta-IN). */
   agentLang?: string | null;
-  /** When false (default), an Indic agent never flips to English from LID. */
   allowPassiveEnglish?: boolean;
 }): AutoDetectResolution {
-  if (opts.latchedLang) return { lang: opts.latchedLang, heldFiller: false };
-  const detected = opts.detected;
-  const agentLang = opts.agentLang ?? "";
-  const agentIsIndic = Boolean(agentLang && !agentLang.startsWith("en-"));
-  if (agentIsIndic && opts.allowPassiveEnglish !== true) {
-    if (!detected || detected.startsWith("en-")) {
-      const hold = (opts.currentLang && !opts.currentLang.startsWith("en-"))
-        ? opts.currentLang
-        : agentLang;
-      return { lang: hold, heldFiller: Boolean(detected?.startsWith("en-")) };
-    }
-  }
-  if (
-    detected &&
-    detected.startsWith("en-") &&
-    opts.currentLang &&
-    !opts.currentLang.startsWith("en-") &&
-    !isRealEnglishUtterance(opts.text)
-  ) {
-    return { lang: opts.currentLang, heldFiller: true };
-  }
-  return { lang: detected, heldFiller: false };
+  return { lang: opts.detected ?? (opts.currentLang || null), heldFiller: false };
 }

@@ -164,51 +164,20 @@ describe("caller-utterance intent gating (call 1915)", () => {
   describe("buildAntiRepeatNudge", () => {
     const prevLine = "Please install the app and let me know.";
 
-    it("hold request → wait directive, never an advance push", () => {
-      const n = buildAntiRepeatNudge({ lastUserText: "wait, I'm installing it", prevLine, escalated: false });
-      expect(n).toContain("CALLER ASKED TO WAIT");
-      expect(n).not.toMatch(/advance to the next point/i);
-    });
-
-    it("question → answer-first directive", () => {
-      const n = buildAntiRepeatNudge({ lastUserText: "claim எப்படி பண்றது", prevLine, escalated: false });
-      expect(n).toContain("ANSWER THE QUESTION FIRST");
-      expect(n).not.toMatch(/advance to the next point/i);
-    });
-
-    it("bare ack → original advance nudge", () => {
-      const n = buildAntiRepeatNudge({ lastUserText: "okay", prevLine, escalated: false });
-      expect(n).toContain("advance to the next point");
-      expect(n).toContain(prevLine);
-    });
-
-    it("bare ack + escalated → critical move-forward variant", () => {
-      const n = buildAntiRepeatNudge({ lastUserText: "hmm", prevLine, escalated: true });
-      expect(n).toContain("CRITICAL");
-      expect(n).toContain("FORWARD");
-    });
-
-    it("substantive reply → neutral do-not-repeat (no advance push)", () => {
-      const n = buildAntiRepeatNudge({ lastUserText: "I already have a policy with another company", prevLine, escalated: false });
-      expect(n).toContain("DO NOT REPEAT");
-      expect(n).toContain("Respond directly to what the caller just said");
-      expect(n).not.toMatch(/advance to the next point/i);
-    });
-
-    it("hold request wins even when escalated", () => {
-      const n = buildAntiRepeatNudge({ lastUserText: "one minute please", prevLine, escalated: true });
-      expect(n).toContain("CALLER ASKED TO WAIT");
-    });
-
-    it("lists already-asked qualification questions (call 20113)", () => {
-      const n = buildAntiRepeatNudge({
+    it("does not inject anti-repeat prompt overlays", () => {
+      const prevLine = "Please install the app and let me know.";
+      expect(buildAntiRepeatNudge({ lastUserText: "wait, I'm installing it", prevLine, escalated: false })).toBe("");
+      expect(buildAntiRepeatNudge({ lastUserText: "claim எப்படி பண்றது", prevLine, escalated: false })).toBe("");
+      expect(buildAntiRepeatNudge({ lastUserText: "okay", prevLine, escalated: false })).toBe("");
+      expect(buildAntiRepeatNudge({ lastUserText: "hmm", prevLine, escalated: true })).toBe("");
+      expect(buildAntiRepeatNudge({ lastUserText: "I already have a policy with another company", prevLine, escalated: false })).toBe("");
+      expect(buildAntiRepeatNudge({ lastUserText: "one minute please", prevLine, escalated: true })).toBe("");
+      expect(buildAntiRepeatNudge({
         lastUserText: "हां जी सही है",
         prevLine,
         escalated: false,
         alreadyAsked: ["क्या आपको फ़्लाइट और होटल बुकिंग की सुविधा चाहिए?"],
-      });
-      expect(n).toContain("already asked");
-      expect(n).toContain("फ़्लाइट");
+      })).toBe("");
     });
   });
 });

@@ -637,7 +637,7 @@ export async function createSession(params: {
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,
     // Empirical PSTN echo window (VoBiz/Twilio), not a carrier spec. See
     // pipeline.ts BARGE_IN_ECHO_GRACE_MS. Stop Speaking Plan may override.
-    bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 0,
+    bargeInEchoGraceMs:     0,
     micSensitivity:         resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined),
     // P1-E: Agent timezone
     timezone: agentTimezone,
@@ -655,11 +655,7 @@ export async function createSession(params: {
     // P1-G: Engine — interruption & pacing
     // PSTN default 2 while TTS plays; ambiguous partials raise to 3 in
     // InterruptionManager. Bare VAD never cuts. Stop/wait still bypass.
-    wordsForInterruption: (() => {
-      const v = agentCfg["wordsForInterruption"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 3;
-      return Math.max(0, Math.round(v));
-    })(),
+    wordsForInterruption: 0,
     // Post-utterance WAIT before TTS. Always 0 — saved 350/500/900 values
     // added ~1s of dead air every turn (call 20737).
     incrementalDelay: 0,
@@ -722,9 +718,7 @@ export async function createSession(params: {
     sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
     sarvamEndOfSpeechSilenceMs: resolveSarvamEndpointingMs(agentCfg),
     sarvamVadThreshold: optionalUnitInterval(agentCfg["sarvamVadThreshold"]),
-    semanticTurnDetection: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
-      ? false
-      : resolveSemanticTurnEnabled(agentCfg["semanticTurnDetection"]),
+    semanticTurnDetection: false,
     semanticTurnStopMs: clampSemanticTurnStopMs(agentCfg["semanticTurnStopMs"]),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
     voiceStack: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined),

@@ -295,9 +295,9 @@ describe("shouldBargeOnRealtimeVadStart", () => {
     expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true })).toBe(true);
   });
 
-  it("holds through greeting and echo grace unless the caller said stop/wait", () => {
-    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, greetingOrSystem: true })).toBe(false);
-    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, inEchoGrace: true })).toBe(false);
+  it("barges on usable STT even during greeting or echo window", () => {
+    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, greetingOrSystem: true })).toBe(true);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, inEchoGrace: true })).toBe(true);
     expect(shouldBargeOnRealtimeVadStart({
       ...base,
       hasUsablePartial: true,
@@ -312,16 +312,22 @@ describe("shouldBargeOnRealtimePartial", () => {
     greetingOrSystem: false,
     inEchoGrace: false,
     isWebcall: false,
-    isSelfEcho: false,
     echoBarReady: true,
     energyAboveEchoBar: true,
     charCount: 22,
     minChars: 4,
   };
 
-  it("does not barge greeting echo even when the partial looks like English (call 14227)", () => {
-    expect(shouldBargeOnRealtimePartial({ ...base, greetingOrSystem: true })).toBe(false);
-    expect(shouldBargeOnRealtimePartial({ ...base, inEchoGrace: true })).toBe(false);
+  it("barges any nonempty STT partial, including greeting and echo windows", () => {
+    expect(shouldBargeOnRealtimePartial({ ...base, greetingOrSystem: true })).toBe(true);
+    expect(shouldBargeOnRealtimePartial({ ...base, inEchoGrace: true })).toBe(true);
+    expect(shouldBargeOnRealtimePartial({ ...base, charCount: 3, minChars: 4 })).toBe(true);
+    expect(shouldBargeOnRealtimePartial({
+      ...base,
+      charCount: 5,
+      minChars: 4,
+      isGreetingOnly: true,
+    })).toBe(true);
   });
 
   it("cuts a non-echo partial without extra energy gates", () => {
@@ -337,18 +343,8 @@ describe("shouldBargeOnRealtimePartial", () => {
     })).toBe(true);
   });
 
-  it("does not barge self-echo or short scraps", () => {
-    expect(shouldBargeOnRealtimePartial({ ...base, isSelfEcho: true })).toBe(false);
-    expect(shouldBargeOnRealtimePartial({ ...base, charCount: 3, minChars: 4 })).toBe(false);
-  });
-
-  it("does not barge an isolated hello while the agent is speaking (call 16832)", () => {
-    expect(shouldBargeOnRealtimePartial({
-      ...base,
-      charCount: 5,
-      minChars: 4,
-      isGreetingOnly: true,
-    })).toBe(false);
+  it("does not barge empty partials", () => {
+    expect(shouldBargeOnRealtimePartial({ ...base, charCount: 0, minChars: 4 })).toBe(false);
   });
 
   it("barges a real caller partial on PSTN and webcall", () => {
@@ -375,8 +371,8 @@ describe("shouldCommitStreamingEnergyBarge", () => {
     energyAboveEchoBar: true,
   };
 
-  it("does not cut on energy without a hard interrupt (echo of our own TTS)", () => {
-    expect(shouldCommitStreamingEnergyBarge({ ...base, isHardInterrupt: false })).toBe(false);
+  it("commits when STT already has pending text", () => {
+    expect(shouldCommitStreamingEnergyBarge({ ...base, isHardInterrupt: false })).toBe(true);
     expect(shouldCommitStreamingEnergyBarge({ ...base, hasUsablePending: false })).toBe(false);
   });
 
