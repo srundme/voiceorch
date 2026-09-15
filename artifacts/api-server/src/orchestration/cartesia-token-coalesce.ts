@@ -1,33 +1,27 @@
 /**
- * Cartesia managed buffering (Sonic 3.6 docs): stream LLM tokens with
- * continue:true and max_buffer_delay_ms 3000. Do NOT wait for words/sentences
- * client-side — that is the documented "middle ground" (up to 3s extra per
- * chunk) and VoBiz drops the call after ~2s of no audio.
+ * Cartesia continuations docs use word-sized chunks
+ * (`Hello`, `my name`, `is Sonic.`), not BPE letters. Call 25026 sent
+ * `"N"` / `"o"` / `" p"` and Sonic spelled the sentence.
  *
- * Only hold:
- *  - a combining mark so "்" is never its own WS transcript (call 24502)
- *  - an unspaced Indic run until whitespace (virama can still attach)
- * Latin BPE ("cof"+"f") is streamed through; Sonic concatenates in the buffer.
- *
- * Sentence punctuation is not a context-close signal. Keep streaming all
- * sentences on the same context; only the adapter can observe a provider
- * context-closed response and decide whether a fallback is needed.
+ * Hold until a word boundary (whitespace or punctuation). Do not wait for a
+ * full sentence — that is the docs "middle ground" with delay=3000.
+ * Combining marks stay attached (call 24502). Do not insert or drop spaces.
  */
 
-const BREAK = /[\s.,;:!?…।॥]$/u;
-const INDIC = /[\u0900-\u0D7F]/u;
+const BREAK = /[\s.,;:!?…।॥]/u;
 
 export function pushCartesiaSpeakable(pending: string, token: string): { pieces: string[]; rest: string } {
   const buf = pending + token;
   if (!buf) return { pieces: [], rest: "" };
   if (/\p{M}$/u.test(buf)) return { pieces: [], rest: buf };
-  if (BREAK.test(buf)) return { pieces: [buf], rest: "" };
-  if (!INDIC.test(buf)) return { pieces: [buf], rest: "" };
-  const cut = buf.lastIndexOf(" ");
-  if (cut >= 0) {
-    return { pieces: [buf.slice(0, cut + 1)], rest: buf.slice(cut + 1) };
+  let last = -1;
+  for (let i = 0; i < buf.length; i++) {
+    if (BREAK.test(buf[i]!)) last = i;
   }
-  return { pieces: [], rest: buf };
+  const head = last >= 0 ? buf.slice(0, last + 1) : "";
+  const pieces = last >= 0 && head.trim() ? [head] : [];
+  const rest = pieces.length ? buf.slice(last + 1) : buf;
+  return { pieces, rest };
 }
 
 export function flushCartesiaSpeakable(pending: string): string {

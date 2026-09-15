@@ -3,13 +3,13 @@ import { logger } from "../../../lib/logger.js";
 import type { TTSAdapter } from "../../types.js";
 
 /**
- * Cartesia — Sonic TTS
+ * Cartesia — Sonic TTS (rebuilt send path after call 25026 letter-spelling)
  *
  * Primary path: WebSocket (`/tts/websocket`)
  *   - One persistent WS connection per call (lazy-opened on first transcript).
- *   - Stream LLM tokens with continue:true (managed buffering, delay 3000).
- *     Do not wait client-side for `.!?` — that is the docs "middle ground"
- *     and adds latency on top of Sonic's ~75–90ms TTFB.
+ *   - Stream WORD chunks with continue:true (managed buffering, delay 3000).
+ *     Docs examples are `Hello` / `my name` / `is Sonic.` — never `"N"`+`"o"`.
+ *     Do not wait client-side for a full sentence (docs "middle ground").
  *     Transcripts join verbatim (call 24404: inserting a space made Sonic spell).
  *   - continue:false (empty transcript) when the LLM turn ends.
  *   - pcm_s16le @ the leg rate: 8000 for VoBiz, 16000 for HD webcall.
@@ -119,6 +119,9 @@ export function isCartesiaContextClosedError(err: unknown): boolean {
 
 /** Quiet after the last WS chunk ≈ first clip finished (fallback if no `done`). */
 const FIRST_CLIP_QUIET_MS = 400;
+/** Cap leftover successor synthesis so a hung Sonic context cannot keep isPlaying. */
+const LEFTOVER_WS_MS = 12_000;
+const FIRST_CLIP_WAIT_MS = 2_000;
 
 /** Cartesia concatenates continuation transcripts verbatim. Do not insert a
  *  space — LLM tokens already carry their own whitespace (call 24404: "So"+"rry,"
@@ -131,6 +134,31 @@ export function joinContinuationTranscript(_previous: string, next: string): str
 /** Remainders can be BPE tokens too; preserve their original whitespace. */
 export function appendCartesiaRemainder(prev: string, next: string): string {
   return prev + next;
+}
+
+const WORD_BREAK = /[\s.,;:!?…।॥]/u;
+
+/**
+ * Hold BPE letters until a word boundary so Sonic does not spell (call 25026:
+ * "N"+"o"+" p"+"r"+"o"+"blem,"). Flush leftover on turn end.
+ */
+export function takeCartesiaWordChunks(buffered: string, incoming: string, flush: boolean): {
+  chunks: string[];
+  rest: string;
+} {
+  const buf = appendCartesiaRemainder(buffered, incoming);
+  if (!buf) return { chunks: [], rest: "" };
+  if (flush) return { chunks: [buf], rest: "" };
+  if (/\p{M}$/u.test(buf)) return { chunks: [], rest: buf };
+  let last = -1;
+  for (let i = 0; i < buf.length; i++) {
+    if (WORD_BREAK.test(buf[i]!)) last = i;
+  }
+  if (last >= 0) {
+    const head = buf.slice(0, last + 1);
+    if (head.trim()) return { chunks: [head], rest: buf.slice(last + 1) };
+  }
+  return { chunks: [], rest: buf };
 }
 
 /** Emotion enum accepted by generation_config.emotion (2026-03-01 spec). */
@@ -233,6 +261,8 @@ export class CartesiaTTS implements TTSAdapter {
   /** First sentence's chunk sink — later continuations must not open a second stream. */
   private readonly turnChunkHandlers = new Map<string, (pcm: Buffer) => void>();
   private readonly turnLastTranscript = new Map<string, string>();
+  /** Unsent BPE tail for this turn — flushed on word boundary or continue:false. */
+  private readonly turnOutBuf = new Map<string, string>();
   private readonly contextSettings = new Map<string, Record<string, unknown>>();
   private readonly wordTimings = new Map<string, Array<{ word: string; end: number }>>();
 
@@ -426,6 +456,7 @@ export class CartesiaTTS implements TTSAdapter {
     this.turnFlushCounters.clear();
     this.turnChunkHandlers.clear();
     this.turnLastTranscript.clear();
+    this.turnOutBuf.clear();
     this.claimedTurns.clear();
     this.turnSendChains.clear();
     this.turnOpened.clear();
@@ -718,6 +749,11 @@ export class CartesiaTTS implements TTSAdapter {
       ) {
         this.closedTurns.add(contextId);
         this.markFirstClipDone(contextId);
+        const held = this.turnOutBuf.get(contextId) ?? "";
+        this.turnOutBuf.delete(contextId);
+        if (held) {
+          this.closedRemainder.set(contextId, appendCartesiaRemainder(held, this.closedRemainder.get(contextId) ?? ""));
+        }
         const wsBytes = this.turnWsBytes.get(contextId) ?? 0;
         logger.info(
           { evt: "cartesia_context_closed_after_first_clip", contextId, wsBytes },
@@ -845,22 +881,52 @@ export class CartesiaTTS implements TTSAdapter {
       const waitOpen = this.turnOpened.get(turnContextId);
       if (waitOpen) await waitOpen;
       const owner = this.turnChunkHandlers.get(turnContextId) ?? fallbackSink;
-      await this.waitFirstClipComplete(turnContextId);
+      await Promise.race([
+        this.waitFirstClipComplete(turnContextId),
+        new Promise<void>((r) => setTimeout(r, FIRST_CLIP_WAIT_MS)),
+      ]);
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-      const ws = this.ws;
-      if (ws && ws.readyState === WebSocket.OPEN && !this.wsFailedPermanently) {
+      const leftoverAbort = new AbortController();
+      const onParentAbort = (): void => leftoverAbort.abort();
+      signal?.addEventListener("abort", onParentAbort, { once: true });
+      try {
+        const ws = this.ws;
+        if (ws && ws.readyState === WebSocket.OPEN && !this.wsFailedPermanently) {
+          logger.info(
+            { evt: "cartesia_leftover_ws", contextId: turnContextId, chars: text.length },
+            "Cartesia leftover sentence on a new WS context after first clip",
+          );
+          let timedOut = false;
+          const timer = setTimeout(() => {
+            timedOut = true;
+            leftoverAbort.abort();
+          }, LEFTOVER_WS_MS);
+          try {
+            await this.synthesizeViaWs(ws, text, owner, onDone, leftoverAbort.signal, emotions);
+          } catch (err) {
+            if (signal?.aborted) throw err;
+            if (timedOut || leftoverAbort.signal.aborted) {
+              logger.warn(
+                { evt: "cartesia_leftover_ws_timeout", contextId: turnContextId, chars: text.length },
+                "Cartesia leftover WS stalled — finishing via REST so the call is not held busy",
+              );
+              await this.synthesizeViaRest(text, owner, onDone, signal, emotions);
+              return;
+            }
+            throw err;
+          } finally {
+            clearTimeout(timer);
+          }
+          return;
+        }
         logger.info(
-          { evt: "cartesia_leftover_ws", contextId: turnContextId, chars: text.length },
-          "Cartesia leftover sentence on a new WS context after first clip",
+          { evt: "cartesia_leftover_rest", contextId: turnContextId, chars: text.length },
+          "Cartesia leftover sentence via REST because WS is down",
         );
-        await this.synthesizeViaWs(ws, text, owner, onDone, signal, emotions);
-        return;
+        await this.synthesizeViaRest(text, owner, onDone, signal, emotions);
+      } finally {
+        signal?.removeEventListener("abort", onParentAbort);
       }
-      logger.info(
-        { evt: "cartesia_leftover_rest", contextId: turnContextId, chars: text.length },
-        "Cartesia leftover sentence via REST because WS is down",
-      );
-      await this.synthesizeViaRest(text, owner, onDone, signal, emotions);
     } finally {
       this.bumpLeftoverPending(turnContextId, -1);
     }
@@ -885,6 +951,7 @@ export class CartesiaTTS implements TTSAdapter {
     this.turnSendChains.delete(turnContextId);
     this.turnChunkHandlers.delete(turnContextId);
     this.turnLastTranscript.delete(turnContextId);
+    this.turnOutBuf.delete(turnContextId);
     this.closingTurns.delete(turnContextId);
     this.cancelledTurns.delete(turnContextId);
     this.restFallbackTurns.delete(turnContextId);
@@ -905,13 +972,22 @@ export class CartesiaTTS implements TTSAdapter {
       this.cleanupTurnMaps(turnContextId);
       return;
     }
-    const remainder = this.closedRemainder.get(turnContextId);
+    const held = this.turnOutBuf.get(turnContextId) ?? "";
+    this.turnOutBuf.delete(turnContextId);
+    const remainder = appendCartesiaRemainder(held, this.closedRemainder.get(turnContextId) ?? "");
     this.closedRemainder.delete(turnContextId);
     if (remainder && remainder.length > 0) {
       const owner = this.turnChunkHandlers.get(turnContextId) ?? (() => undefined);
-      await this.enqueueLeftoverRest(turnContextId, () =>
-        this.runLeftoverRest(turnContextId, remainder, owner, () => undefined, undefined, undefined),
-      );
+      try {
+        await this.enqueueLeftoverRest(turnContextId, () =>
+          this.runLeftoverRest(turnContextId, remainder, owner, () => undefined, undefined, undefined),
+        );
+      } catch (err) {
+        logger.warn(
+          { evt: "cartesia_leftover_failed", contextId: turnContextId, err: this.errMsg(err) },
+          "Cartesia leftover synthesis failed — resolving owner so the call is not held busy",
+        );
+      }
     }
     await this.waitLeftoversIdle(turnContextId);
     const chain = this.leftoverRestChains.get(turnContextId);
@@ -932,6 +1008,17 @@ export class CartesiaTTS implements TTSAdapter {
       this.turnLastTranscript.delete(turnContextId);
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.closingTurns.add(turnContextId);
+        const held = this.turnOutBuf.get(turnContextId) ?? "";
+        this.turnOutBuf.delete(turnContextId);
+        if (held) {
+          this.ws.send(JSON.stringify({
+            ...this.settingsForContext(turnContextId),
+            context_id: turnContextId,
+            transcript: held,
+            continue: true,
+          }));
+          this.turnLastTranscript.set(turnContextId, held);
+        }
         this.ws.send(JSON.stringify({
           ...this.settingsForContext(turnContextId),
           context_id: turnContextId,
@@ -961,14 +1048,19 @@ export class CartesiaTTS implements TTSAdapter {
     const streamed = text;
 
     const sendTranscript = (transcript: string): void => {
-      const transcriptMsg: Record<string, unknown> = {
-        ...this.settingsForContext(turnContextId, emotions),
-        context_id: turnContextId,
-        transcript,
-        continue: true,
-      };
-      ws.send(JSON.stringify(transcriptMsg));
-      this.turnLastTranscript.set(turnContextId, transcript);
+      const prev = this.turnOutBuf.get(turnContextId) ?? "";
+      const { chunks, rest } = takeCartesiaWordChunks(prev, transcript, false);
+      this.turnOutBuf.set(turnContextId, rest);
+      for (const chunk of chunks) {
+        const transcriptMsg: Record<string, unknown> = {
+          ...this.settingsForContext(turnContextId, emotions),
+          context_id: turnContextId,
+          transcript: chunk,
+          continue: true,
+        };
+        ws.send(JSON.stringify(transcriptMsg));
+        this.turnLastTranscript.set(turnContextId, chunk);
+      }
     };
 
     if (join) {

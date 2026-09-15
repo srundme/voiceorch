@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { CartesiaTTS, resolveCartesiaModelId, parseCartesiaLang, cartesiaWireLanguage, joinContinuationTranscript, appendCartesiaRemainder, isCartesiaContextClosedError } from "./cartesia.js";
+import { CartesiaTTS, resolveCartesiaModelId, parseCartesiaLang, cartesiaWireLanguage, joinContinuationTranscript, appendCartesiaRemainder, isCartesiaContextClosedError, takeCartesiaWordChunks } from "./cartesia.js";
 
 /**
  * Regression test for the Cartesia emotion-voice-control bug: Cartesia can
@@ -146,6 +146,24 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
   });
 });
 
+describe("takeCartesiaWordChunks", () => {
+  it("does not send letter BPE until a word boundary (call 25026)", () => {
+    let rest = "";
+    const sent: string[] = [];
+    for (const t of ["N", "o", " p", "r", "o", "blem,"]) {
+      const r = takeCartesiaWordChunks(rest, t, false);
+      sent.push(...r.chunks);
+      rest = r.rest;
+    }
+    expect(sent.join("")).toBe("No problem,");
+    expect(rest).toBe("");
+  });
+
+  it("flushes a held word on turn end", () => {
+    expect(takeCartesiaWordChunks("Hello", "", true)).toEqual({ chunks: ["Hello"], rest: "" });
+  });
+});
+
 describe("appendCartesiaRemainder", () => {
   it("preserves token boundaries and existing sentence whitespace", () => {
     expect(appendCartesiaRemainder("வணக்கம்!", " இப்போ பேசலாமா?")).toBe("வணக்கம்! இப்போ பேசலாமா?");
@@ -275,6 +293,7 @@ describe("Cartesia adaptor contract (source)", () => {
     expect(src).toContain("closingTurns.has(contextId)");
     expect(src).toContain("cartesia_context_closed_after_first_clip");
     expect(src).toContain("cartesia_leftover_ws");
+    expect(src).toContain("cartesia_leftover_ws_timeout");
   });
 
   it("sends leftover WS once from concatenated remainder after clip 1", () => {
@@ -383,6 +402,33 @@ describe("Cartesia delay=0 leftover WS (call 19809 mid-sentence cut)", () => {
       await owner;
       expect(Buffer.concat(chunks)).toEqual(Buffer.from([1, 2]));
       expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      tts.close();
+      await owner.catch(() => {});
+    }
+  });
+
+  it("does not send letter BPE on the wire (call 25026)", async () => {
+    const sockets: FakeCartesiaWs[] = [];
+    vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
+      constructor(url: string) { super(url); sockets.push(this); }
+    });
+    vi.stubGlobal("fetch", vi.fn());
+    const tts = new CartesiaTTS("test-key", null, "sonic-3.6", "en-IN", null, 8000);
+    tts.claimTurnContext("spell");
+    const owner = tts.synthesizeStreamInContext("spell", "N", () => {}, () => {});
+    await tts.synthesizeStreamInContext("spell", "o", () => {}, () => {}, undefined, undefined, true);
+    await tts.synthesizeStreamInContext("spell", " problem.", () => {}, () => {}, undefined, undefined, true);
+    tts.finalizeTurnContext("spell");
+    try {
+      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(2));
+      const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as { transcript?: string; continue?: boolean });
+      expect(requests.some((r) => r.transcript === "N")).toBe(false);
+      expect(requests.some((r) => r.transcript === "o")).toBe(false);
+      expect(requests.map((r) => r.transcript)).toContain("No problem.");
+      sockets[0]!.emit({ type: "chunk", context_id: "spell", data: Buffer.from([1]).toString("base64") });
+      sockets[0]!.emit({ type: "done", context_id: "spell" });
+      await owner;
     } finally {
       tts.close();
       await owner.catch(() => {});

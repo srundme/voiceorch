@@ -7082,7 +7082,11 @@ export class OrchestrationPipeline implements VoiceSession {
       provider: this.agent.ttsProvider,
       status: "info",
       turnNumber,
-      requestPayload: { text },
+      requestPayload: {
+        text,
+        chars: text.length,
+        letterSized: this.agent.ttsProvider === "cartesia" && text.trim().length <= 2,
+      },
     });
 
     let resolveReady!: () => void;
