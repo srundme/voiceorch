@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRoute } from "wouter";
-import { AlertCircle, Briefcase, Loader2, Mic, UserRound } from "lucide-react";
+import { AlertCircle, Briefcase, ClipboardList, Loader2, Mic, UserRound } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -25,6 +26,8 @@ import {
   fieldToInputValue,
   intakeProgress,
   isFieldFilled,
+  type IntakeDisposition,
+  type IntakeDispositionField,
   type IntakeFieldKey,
 } from "./intake-contract";
 import { useIntakeLive } from "./use-intake-live";
@@ -61,19 +64,21 @@ function Field({
   htmlFor,
   error,
   hint,
+  required = true,
   children,
 }: {
   label: string;
   htmlFor?: string;
   error?: string;
   hint?: string;
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={htmlFor} className="flex items-center gap-1 text-[12.5px] font-medium text-slate-700">
         <span>{label}</span>
-        <span aria-hidden className="text-red-500">*</span>
+        {required ? <span aria-hidden className="text-red-500">*</span> : null}
       </label>
       {children}
       {error ? (
@@ -91,10 +96,12 @@ function Field({
 function SectionCard({
   icon,
   title,
+  subtitle = "All fields are required",
   children,
 }: {
   icon: React.ReactNode;
   title: string;
+  subtitle?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -104,9 +111,69 @@ function SectionCard({
           {icon}
           <h1 className="text-[15px] font-bold text-slate-900">{title}</h1>
         </div>
-        <p className="mt-0.5 text-[11.5px] text-slate-600">All fields are required</p>
+        <p className="mt-0.5 text-[11.5px] text-slate-600">{subtitle}</p>
       </div>
       {children}
+    </div>
+  );
+}
+
+function selectOptionsWith(options: readonly string[], current: string): string[] {
+  if (!current || options.includes(current)) return [...options];
+  return [current, ...options];
+}
+
+function RadioPills({
+  fieldId,
+  options,
+  value,
+  flashing,
+  disabled,
+  onPick,
+}: {
+  fieldId: string;
+  options: readonly string[];
+  value: string;
+  flashing: boolean;
+  disabled: boolean;
+  onPick: (value: string) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={fieldId}
+      className={cn("mt-1 flex flex-wrap gap-3 rounded-xl", flashing && "ring-2 ring-indigo-400/70")}
+    >
+      {options.map((option) => {
+        const selected = value === option;
+        return (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            disabled={disabled}
+            onClick={() => onPick(option)}
+            className={cn(
+              "flex items-center gap-2 rounded-full border px-4 py-2.5 text-[13px] font-medium transition-colors disabled:opacity-60",
+              selected
+                ? "border-indigo-400 bg-indigo-50 text-indigo-900"
+                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+            )}
+          >
+            <span
+              aria-hidden
+              className={cn(
+                "grid h-4 w-4 place-items-center rounded-full border-2",
+                selected ? "border-indigo-600" : "border-slate-300",
+              )}
+            >
+              {selected ? <span className="h-2 w-2 rounded-full bg-indigo-600" /> : null}
+            </span>
+            {option}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -119,6 +186,7 @@ export default function IntakeFormPage() {
 
   const {
     intake,
+    dispositions,
     loading,
     loadError,
     connection,
@@ -127,11 +195,13 @@ export default function IntakeFormPage() {
     saving,
     markEditing,
     writeField,
+    writeExtra,
     complete,
   } = useIntakeLive(token);
 
   /** Text inputs are buffered locally and committed on blur / Enter. */
   const [drafts, setDrafts] = useState<Partial<Record<IntakeFieldKey, string>>>({});
+  const [extraDrafts, setExtraDrafts] = useState<Record<string, string>>({});
   const [closing, setClosing] = useState(false);
   const [closeError, setCloseError] = useState<string | null>(null);
 
@@ -143,7 +213,21 @@ export default function IntakeFormPage() {
   }, []);
 
   const fields = intake?.fields;
-  const progress = useMemo(() => intakeProgress(fields ?? {}), [fields]);
+  const selectedDisposition: IntakeDisposition | undefined = dispositions.find(
+    (d) => d.id === intake?.dispositionId,
+  );
+  const progress = useMemo(
+    () => intakeProgress(
+      fields ?? {},
+      selectedDisposition
+        ? {
+            requiredIds: selectedDisposition.fields.filter((f) => f.required).map((f) => f.id),
+            answers: intake?.dispositionAnswers ?? {},
+          }
+        : undefined,
+    ),
+    [fields, selectedDisposition, intake?.dispositionAnswers],
+  );
 
   const valueOf = (key: IntakeFieldKey): string =>
     drafts[key] ?? fieldToInputValue(fields?.[key] ?? null);
@@ -183,6 +267,134 @@ export default function IntakeFormPage() {
       }),
       "px-3",
     );
+
+  const extraValueOf = (key: string): string =>
+    extraDrafts[key] ?? fieldToInputValue(intake?.dispositionAnswers?.[key] ?? null);
+
+  const extraChrome = (key: string) =>
+    fieldClass({
+      filled: isFieldFilled(intake?.dispositionAnswers?.[key] ?? null),
+      flashing: Boolean(flash[key]),
+      invalid: Boolean(fieldErrors[key]),
+    });
+
+  const commitExtra = (key: string) => {
+    markEditing(key, false);
+    const next = extraDrafts[key];
+    setExtraDrafts((d) => {
+      const { [key]: _drop, ...rest } = d;
+      return rest;
+    });
+    if (next === undefined) return;
+    if (next === fieldToInputValue(intake?.dispositionAnswers?.[key] ?? null)) return;
+    void writeExtra(key, next.trim() === "" ? null : next);
+  };
+
+  const extraTextProps = (key: string) => ({
+    value: extraValueOf(key),
+    onFocus: () => markEditing(key, true),
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setExtraDrafts((d) => ({ ...d, [key]: e.target.value })),
+    onBlur: () => commitExtra(key),
+    className: extraChrome(key),
+  });
+
+  const renderDispositionField = (spec: IntakeDispositionField) => {
+    const current = fieldToInputValue(intake?.dispositionAnswers?.[spec.id] ?? null);
+    const options = spec.options ?? [];
+    const freeText = spec.type === "text" || spec.type === "textarea"
+      || (spec.type === "select" && options.length === 0);
+
+    if (spec.type === "radio" && options.length > 0) {
+      return (
+        <Field key={spec.id} label={spec.label} error={fieldErrors[spec.id]} required={spec.required}>
+          <RadioPills
+            fieldId={spec.id}
+            options={options}
+            value={current}
+            flashing={Boolean(flash[spec.id])}
+            disabled={Boolean(saving[spec.id])}
+            onPick={(v) => void writeExtra(spec.id, v)}
+          />
+        </Field>
+      );
+    }
+
+    if (spec.type === "select" && !freeText) {
+      return (
+        <Field key={spec.id} label={spec.label} error={fieldErrors[spec.id]} required={spec.required}>
+          <Select
+            value={current || undefined}
+            onValueChange={(v) => void writeExtra(spec.id, v)}
+          >
+            <SelectTrigger className={cn(extraChrome(spec.id), "px-3")} aria-label={spec.label}>
+              <SelectValue placeholder="Select" />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              {selectOptionsWith(options, current).map((option) => (
+                <SelectItem key={option} value={option}>{option}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      );
+    }
+
+    if (spec.type === "date") {
+      return (
+        <Field key={spec.id} label={spec.label} htmlFor={spec.id} error={fieldErrors[spec.id]} required={spec.required}>
+          <Input
+            id={spec.id}
+            type="date"
+            value={current}
+            onChange={(e) => void writeExtra(spec.id, e.target.value || null)}
+            className={extraChrome(spec.id)}
+          />
+        </Field>
+      );
+    }
+
+    if (spec.type === "time") {
+      return (
+        <Field key={spec.id} label={spec.label} htmlFor={spec.id} error={fieldErrors[spec.id]} required={spec.required}>
+          <Input
+            id={spec.id}
+            type="time"
+            value={current}
+            onChange={(e) => void writeExtra(spec.id, e.target.value || null)}
+            className={extraChrome(spec.id)}
+          />
+        </Field>
+      );
+    }
+
+    if (spec.type === "textarea") {
+      return (
+        <Field key={spec.id} label={spec.label} htmlFor={spec.id} error={fieldErrors[spec.id]} required={spec.required}>
+          <Textarea
+            id={spec.id}
+            rows={3}
+            {...extraTextProps(spec.id)}
+            className={cn(extraChrome(spec.id), "min-h-[88px] py-2")}
+          />
+        </Field>
+      );
+    }
+
+    return (
+      <Field key={spec.id} label={spec.label} htmlFor={spec.id} error={fieldErrors[spec.id]} required={spec.required}>
+        <Input
+          id={spec.id}
+          inputMode={spec.type === "number" ? "numeric" : "text"}
+          autoComplete="off"
+          {...extraTextProps(spec.id)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+        />
+      </Field>
+    );
+  };
 
   if (loading) {
     return (
@@ -519,13 +731,66 @@ export default function IntakeFormPage() {
             </Field>
           </div>
         </SectionCard>
+
+        <SectionCard
+          icon={<ClipboardList className="h-4 w-4 text-indigo-700" />}
+          title="Disposition"
+          subtitle="Pick an outcome to reveal the extra fields for it"
+        >
+          <div className="grid grid-cols-1 gap-x-6 gap-y-5 px-4 py-6 md:grid-cols-3 md:px-5">
+            <Field label="Disposition" error={fieldErrors["disposition"]}>
+              <Select
+                value={intake.dispositionId ?? undefined}
+                onValueChange={(v) => {
+                  setExtraDrafts({});
+                  void writeExtra("disposition", v);
+                }}
+              >
+                <SelectTrigger
+                  className={cn(
+                    fieldClass({
+                      filled: Boolean(intake.dispositionId),
+                      flashing: Boolean(flash["disposition"]),
+                      invalid: Boolean(fieldErrors["disposition"]),
+                    }),
+                    "px-3",
+                  )}
+                  aria-label="Disposition"
+                >
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {dispositions.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+
+          {selectedDisposition?.warning ? (
+            <div className="mx-4 mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] font-medium text-amber-900 md:mx-5">
+              {selectedDisposition.warning}
+            </div>
+          ) : null}
+
+          {selectedDisposition && selectedDisposition.fields.length > 0 ? (
+            <div className="grid grid-cols-1 gap-x-6 gap-y-5 border-t border-slate-100 px-4 py-6 md:grid-cols-3 md:px-5">
+              {selectedDisposition.fields.map(renderDispositionField)}
+            </div>
+          ) : selectedDisposition ? (
+            <p className="px-4 pb-6 text-[12.5px] text-slate-500 md:px-5">
+              No extra fields for {selectedDisposition.name}.
+            </p>
+          ) : null}
+        </SectionCard>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-[11.5px] text-slate-400">
-            {intake.missingFields.length === 0
+            {intake.missingFields.length === 0 && (intake.missingDispositionFields?.length ?? 0) === 0
               ? "All call fields captured."
-              : `Still to capture: ${intake.missingFields.length}`}
+              : `Still to capture: ${intake.missingFields.length + (intake.missingDispositionFields?.length ?? 0)}`}
           </p>
           <div className="flex items-center gap-3">
             {closeError ? <span className="text-[11.5px] text-red-600">{closeError}</span> : null}

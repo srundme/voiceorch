@@ -47,6 +47,17 @@ describe("intakeProgress", () => {
       total: 12,
     });
   });
+
+  it("adds required extra fields once a disposition is picked", () => {
+    expect(intakeProgress({}, {
+      requiredIds: ["date_of_birth"],
+      answers: {},
+    })).toEqual({ filled: 0, total: 13 });
+    expect(intakeProgress({ firstName: "Arbaz" }, {
+      requiredIds: ["date_of_birth"],
+      answers: { date_of_birth: "2000-07-20" },
+    })).toEqual({ filled: 2, total: 13 });
+  });
 });
 
 describe("formatDobForDisplay", () => {

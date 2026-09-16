@@ -15,6 +15,13 @@ import {
   normalizeIntakePatch,
   type IntakeFieldKey,
 } from "../lib/candidate-intake-fields.js";
+import {
+  INTAKE_DISPOSITIONS,
+  applyDispositionPatch,
+  missingDispositionFields,
+  parseIntakeExtra,
+  type IntakeExtra,
+} from "../lib/intake-dispositions.js";
 
 /**
  * Candidate intake form — live during an inbound call.
@@ -62,14 +69,22 @@ export interface IntakeDto {
   callId: number | null;
   fields: Record<IntakeFieldKey, string | number | null>;
   missingFields: IntakeFieldKey[];
+  dispositionId: string | null;
+  dispositionAnswers: Record<string, string | number | null>;
+  missingDispositionFields: string[];
   updatedAt: string;
   createdAt: string;
+}
+
+function extraOf(row: CandidateIntake): IntakeExtra {
+  return parseIntakeExtra(row.extra);
 }
 
 function toDto(row: CandidateIntake): IntakeDto {
   const fields = Object.fromEntries(
     INTAKE_FIELD_KEYS.map((key) => [key, row[key] ?? null]),
   ) as Record<IntakeFieldKey, string | number | null>;
+  const extra = extraOf(row);
   return {
     token: row.publicToken,
     status: row.status,
@@ -80,6 +95,9 @@ function toDto(row: CandidateIntake): IntakeDto {
     callId: row.callId,
     fields,
     missingFields: missingIntakeFields(fields),
+    dispositionId: extra.dispositionId,
+    dispositionAnswers: extra.answers,
+    missingDispositionFields: missingDispositionFields(extra),
     updatedAt: row.updatedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
   };
@@ -152,6 +170,10 @@ router.get("/intake/sessions", requireAuth, async (req, res): Promise<void> => {
 });
 
 // ── Public by token: snapshot, live stream, agent writes ────────────────────
+
+router.get("/intake/schema", (_req, res): void => {
+  res.json({ dispositions: INTAKE_DISPOSITIONS });
+});
 
 router.get("/intake/:token", async (req, res): Promise<void> => {
   const token = Token.safeParse(req.params["token"]);
@@ -246,17 +268,34 @@ router.patch("/intake/:token/fields", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Invalid request", issues: parsed.error.flatten() });
     return;
   }
-  const { values, errors } = normalizeIntakePatch(parsed.data.fields);
-  const writtenKeys = Object.keys(values) as IntakeFieldKey[];
-  if (writtenKeys.length === 0) {
-    res.status(400).json({ error: "No valid fields to write", fieldErrors: errors });
-    return;
+  const typedInput: Record<string, unknown> = {};
+  const extraInput: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(parsed.data.fields)) {
+    if (INTAKE_FIELD_KEYS.includes(key as IntakeFieldKey)) typedInput[key] = value;
+    else extraInput[key] = value;
   }
+  const { values, errors: typedErrors } = normalizeIntakePatch(typedInput);
+  const typedKeys = Object.keys(values) as IntakeFieldKey[];
   try {
+    const existing = await loadByToken(token.data);
+    if (!existing) {
+      res.status(404).json({ error: "Intake form not found" });
+      return;
+    }
+    const extraResult = Object.keys(extraInput).length > 0
+      ? applyDispositionPatch(extraOf(existing), extraInput)
+      : { extra: extraOf(existing), written: [] as string[], errors: [] as Array<{ field: string; message: string }> };
+    const errors = [...typedErrors, ...extraResult.errors];
+    const writtenKeys = [...typedKeys, ...extraResult.written];
+    if (writtenKeys.length === 0) {
+      res.status(400).json({ error: "No valid fields to write", fieldErrors: errors });
+      return;
+    }
     const [row] = await db
       .update(candidateIntakesTable)
       .set({
         ...values,
+        extra: extraResult.extra as unknown as Record<string, unknown>,
         lastFieldKey: writtenKeys[writtenKeys.length - 1]!,
         lastWriteSource: parsed.data.source ?? "agent",
         revision: sql`${candidateIntakesTable.revision} + 1`,

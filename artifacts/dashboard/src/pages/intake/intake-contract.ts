@@ -53,8 +53,36 @@ export interface IntakeDto {
   callId: number | null;
   fields: Record<IntakeFieldKey, string | number | null>;
   missingFields: IntakeFieldKey[];
+  dispositionId: string | null;
+  dispositionAnswers: Record<string, string | number | null>;
+  missingDispositionFields: string[];
   updatedAt: string;
   createdAt: string;
+}
+
+export type IntakeDispositionFieldType =
+  | "select"
+  | "textarea"
+  | "text"
+  | "number"
+  | "radio"
+  | "date"
+  | "time";
+
+export interface IntakeDispositionField {
+  id: string;
+  label: string;
+  type: IntakeDispositionFieldType;
+  required: boolean;
+  options?: readonly string[];
+}
+
+export interface IntakeDisposition {
+  id: string;
+  name: string;
+  type: "conditional";
+  fields: readonly IntakeDispositionField[];
+  warning?: string;
 }
 
 export interface IntakeOption {
@@ -174,9 +202,18 @@ export function isFieldFilled(value: string | number | null | undefined): boolea
 /** How much of the call questionnaire the agent has captured so far. */
 export function intakeProgress(
   fields: Partial<Record<IntakeFieldKey, string | number | null>>,
+  disposition?: {
+    requiredIds: readonly string[];
+    answers: Record<string, string | number | null>;
+  },
 ): { filled: number; total: number } {
   const filled = INTAKE_REQUIRED_ON_CALL.filter((key) => isFieldFilled(fields[key])).length;
-  return { filled, total: INTAKE_REQUIRED_ON_CALL.length };
+  if (!disposition) return { filled, total: INTAKE_REQUIRED_ON_CALL.length };
+  const extraFilled = disposition.requiredIds.filter((id) => isFieldFilled(disposition.answers[id] ?? null)).length;
+  return {
+    filled: filled + extraFilled,
+    total: INTAKE_REQUIRED_ON_CALL.length + disposition.requiredIds.length,
+  };
 }
 
 /** Stored dates are ISO (YYYY-MM-DD); the client's form reads dd/mm/yyyy. */

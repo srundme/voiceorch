@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { IntakeDto, IntakeFieldKey } from "./intake-contract";
+import type { IntakeDisposition, IntakeDto, IntakeFieldKey } from "./intake-contract";
 
 /**
  * Live view of one intake row.
@@ -19,57 +19,81 @@ export interface IntakeFieldError {
 }
 
 /** Fields the agent changed recently, so the UI can highlight them. */
-export type IntakeFlash = Partial<Record<IntakeFieldKey, number>>;
+export type IntakeFlash = Record<string, number>;
 
 const FLASH_MS = 2_200;
 
 export interface UseIntakeLive {
   intake: IntakeDto | null;
+  dispositions: readonly IntakeDisposition[];
   loading: boolean;
   loadError: string | null;
   connection: IntakeConnection;
   flash: IntakeFlash;
   fieldErrors: Record<string, string>;
-  saving: Partial<Record<IntakeFieldKey, boolean>>;
-  markEditing: (key: IntakeFieldKey, editing: boolean) => void;
+  saving: Record<string, boolean>;
+  markEditing: (key: string, editing: boolean) => void;
   writeField: (key: IntakeFieldKey, value: string | number | null) => Promise<void>;
+  writeExtra: (key: string, value: string | number | null) => Promise<void>;
   complete: (englishCommunication: string | null) => Promise<void>;
 }
 
 export function useIntakeLive(token: string): UseIntakeLive {
   const [intake, setIntake] = useState<IntakeDto | null>(null);
+  const [dispositions, setDispositions] = useState<readonly IntakeDisposition[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [connection, setConnection] = useState<IntakeConnection>("connecting");
   const [flash, setFlash] = useState<IntakeFlash>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState<Partial<Record<IntakeFieldKey, boolean>>>({});
+  const [saving, setSaving] = useState<Record<string, boolean>>({});
 
-  const editingRef = useRef<Set<IntakeFieldKey>>(new Set());
+  const editingRef = useRef<Set<string>>(new Set());
   const lastFieldsRef = useRef<IntakeDto["fields"] | null>(null);
+  const lastAnswersRef = useRef<IntakeDto["dispositionAnswers"] | null>(null);
+  const lastDispositionRef = useRef<string | null>(null);
   const revisionRef = useRef(-1);
 
-  /** Merge a server frame, keeping locally-edited fields and flagging changes. */
   const applyFrame = useCallback((incoming: IntakeDto) => {
     if (incoming.revision < revisionRef.current) return;
     revisionRef.current = incoming.revision;
 
-    const previous = lastFieldsRef.current;
+    const previousFields = lastFieldsRef.current;
+    const previousAnswers = lastAnswersRef.current;
     const merged = { ...incoming.fields };
     for (const key of editingRef.current) {
-      if (previous) merged[key] = previous[key] ?? null;
+      if (previousFields && key in previousFields) {
+        merged[key as IntakeFieldKey] = previousFields[key as IntakeFieldKey] ?? null;
+      }
     }
 
-    if (previous) {
-      const changed: IntakeFlash = {};
-      for (const key of Object.keys(merged) as IntakeFieldKey[]) {
-        if (merged[key] !== previous[key]) changed[key] = Date.now();
+    const mergedAnswers = { ...incoming.dispositionAnswers };
+    for (const key of editingRef.current) {
+      if (previousAnswers && key in previousAnswers) {
+        mergedAnswers[key] = previousAnswers[key] ?? null;
       }
-      if (Object.keys(changed).length > 0) setFlash((f) => ({ ...f, ...changed }));
     }
+
+    const changed: IntakeFlash = {};
+    if (previousFields) {
+      for (const key of Object.keys(merged) as IntakeFieldKey[]) {
+        if (merged[key] !== previousFields[key]) changed[key] = Date.now();
+      }
+    }
+    if (previousAnswers) {
+      for (const key of Object.keys({ ...previousAnswers, ...mergedAnswers })) {
+        if (mergedAnswers[key] !== previousAnswers[key]) changed[key] = Date.now();
+      }
+    }
+    if (lastDispositionRef.current !== incoming.dispositionId) {
+      changed.disposition = Date.now();
+    }
+    if (Object.keys(changed).length > 0) setFlash((f) => ({ ...f, ...changed }));
 
     lastFieldsRef.current = merged;
-    setIntake({ ...incoming, fields: merged });
+    lastAnswersRef.current = mergedAnswers;
+    lastDispositionRef.current = incoming.dispositionId;
+    setIntake({ ...incoming, fields: merged, dispositionAnswers: mergedAnswers });
   }, []);
 
   useEffect(() => {
@@ -80,12 +104,19 @@ export function useIntakeLive(token: string): UseIntakeLive {
 
     void (async () => {
       try {
-        const res = await fetch(`${API}/intake/${token}`, { credentials: "include" });
-        if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(body.error ?? `Could not load the form (${res.status})`);
+        const [snapRes, schemaRes] = await Promise.all([
+          fetch(`${API}/intake/${token}`, { credentials: "include" }),
+          fetch(`${API}/intake/schema`, { credentials: "include" }),
+        ]);
+        if (!snapRes.ok) {
+          const body = (await snapRes.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error ?? `Could not load the form (${snapRes.status})`);
         }
-        const dto = (await res.json()) as IntakeDto;
+        const dto = (await snapRes.json()) as IntakeDto;
+        if (schemaRes.ok) {
+          const schema = (await schemaRes.json()) as { dispositions?: IntakeDisposition[] };
+          if (!cancelled && Array.isArray(schema.dispositions)) setDispositions(schema.dispositions);
+        }
         if (cancelled) return;
         applyFrame(dto);
       } catch (err) {
@@ -112,7 +143,6 @@ export function useIntakeLive(token: string): UseIntakeLive {
         /* ignore a malformed frame; the next one supersedes it */
       }
     };
-    // EventSource retries on its own; surface the gap instead of tearing down.
     source.onerror = () => setConnection("reconnecting");
     return () => {
       source.close();
@@ -120,7 +150,6 @@ export function useIntakeLive(token: string): UseIntakeLive {
     };
   }, [token, applyFrame]);
 
-  // Drop expired highlights so a field does not stay lit for the whole call.
   useEffect(() => {
     if (Object.keys(flash).length === 0) return;
     const timer = setTimeout(() => {
@@ -128,7 +157,7 @@ export function useIntakeLive(token: string): UseIntakeLive {
       setFlash((current) => {
         const next: IntakeFlash = {};
         for (const [key, at] of Object.entries(current)) {
-          if (at > cutoff) next[key as IntakeFieldKey] = at;
+          if (at > cutoff) next[key] = at;
         }
         return next;
       });
@@ -136,19 +165,33 @@ export function useIntakeLive(token: string): UseIntakeLive {
     return () => clearTimeout(timer);
   }, [flash]);
 
-  const markEditing = useCallback((key: IntakeFieldKey, editing: boolean) => {
+  const markEditing = useCallback((key: string, editing: boolean) => {
     if (editing) editingRef.current.add(key);
     else editingRef.current.delete(key);
   }, []);
 
-  const writeField = useCallback(
-    async (key: IntakeFieldKey, value: string | number | null) => {
-      // Optimistic: the operator should see their own typing land immediately.
+  const patchFields = useCallback(
+    async (key: string, value: string | number | null, kind: "typed" | "extra") => {
       setIntake((current) => {
         if (!current) return current;
-        const fields = { ...current.fields, [key]: value };
-        lastFieldsRef.current = fields;
-        return { ...current, fields };
+        if (kind === "typed") {
+          const fields = { ...current.fields, [key]: value };
+          lastFieldsRef.current = fields;
+          return { ...current, fields };
+        }
+        if (key === "disposition") {
+          lastDispositionRef.current = typeof value === "string" ? value : null;
+          lastAnswersRef.current = {};
+          return {
+            ...current,
+            dispositionId: typeof value === "string" ? value : null,
+            dispositionAnswers: {},
+            missingDispositionFields: [],
+          };
+        }
+        const dispositionAnswers = { ...current.dispositionAnswers, [key]: value };
+        lastAnswersRef.current = dispositionAnswers;
+        return { ...current, dispositionAnswers };
       });
       setSaving((s) => ({ ...s, [key]: true }));
       setFieldErrors((e) => {
@@ -183,6 +226,16 @@ export function useIntakeLive(token: string): UseIntakeLive {
     [token, applyFrame],
   );
 
+  const writeField = useCallback(
+    (key: IntakeFieldKey, value: string | number | null) => patchFields(key, value, "typed"),
+    [patchFields],
+  );
+
+  const writeExtra = useCallback(
+    (key: string, value: string | number | null) => patchFields(key, value, "extra"),
+    [patchFields],
+  );
+
   const complete = useCallback(
     async (englishCommunication: string | null) => {
       const res = await fetch(`${API}/intake/${token}/complete`, {
@@ -200,6 +253,7 @@ export function useIntakeLive(token: string): UseIntakeLive {
 
   return {
     intake,
+    dispositions,
     loading,
     loadError,
     connection,
@@ -208,6 +262,7 @@ export function useIntakeLive(token: string): UseIntakeLive {
     saving,
     markEditing,
     writeField,
+    writeExtra,
     complete,
   };
 }
