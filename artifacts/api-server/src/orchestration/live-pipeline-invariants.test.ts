@@ -84,7 +84,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
 
   it("keeps typed Welcome on resume-drop so first audio is not blocked on the greeting LLM (call 18112)", () => {
     expect(pipelineSrc).not.toContain('const typedWelcome = resumeDropped ? ""');
-    expect(pipelineSrc).toMatch(/resumeDropped \? "" : typedWelcome/);
+    expect(pipelineSrc).toMatch(/resumeDropped && !this\.isIntakeAgent \? "" : typedWelcome/);
     expect(pipelineSrc).toContain("playing welcome before greeting LLM");
   });
 

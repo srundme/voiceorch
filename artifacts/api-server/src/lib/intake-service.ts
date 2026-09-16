@@ -4,8 +4,8 @@
  * spoken to the agent are normalized, versioned and broadcast identically.
  */
 import crypto from "node:crypto";
-import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
-import { db, agentsTable, candidateIntakesTable, type CandidateIntake } from "@workspace/db";
+import { and, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { db, agentsTable, candidateIntakesTable, scheduledCallbacksTable, type CandidateIntake } from "@workspace/db";
 import { logger } from "./logger.js";
 import { getSelfBaseUrl } from "./app-domain.js";
 import { emitIntakeChange } from "./intake-events.js";
@@ -23,6 +23,8 @@ import {
 import { buildIntakeProfile, matchIntakeJobs } from "./intake-job-match.js";
 import { inferGenderFromName } from "./intake-gender.js";
 import { englishRatingForForm, updateEnglishRead, type EnglishTurnInput } from "./intake-english.js";
+import { combineCallbackAt, findIntakeForCaller, lastTenDigits } from "./intake-call-context.js";
+import { scheduleCallbackRequested, scheduleNetworkDropCallback } from "../services/autoRedial.js";
 
 /**
  * A form the operator opened just before the call rings is adopted instead of
@@ -112,6 +114,36 @@ export async function ensureIntakeForCall(params: {
   if (!userId) {
     logger.warn({ agentId: params.agentId, callId: params.callId }, "intake: agent has no owner, cannot open form");
     return null;
+  }
+
+  // Same candidate calling back — keep filling the form they already have
+  // instead of opening a blank one. Matched on last 10 digits so +91 and a
+  // 10-digit mobile land on the same row.
+  const prior = await findIntakeForCaller({ agentId: params.agentId, phone: params.callerPhone });
+  if (prior) {
+    const phone = params.callerPhone && !prior.phone
+      ? normalizeIntakePatch({ phone: params.callerPhone }).values
+      : {};
+    const reopen = prior.dnd === "ACTIVATE" ? {} : { status: "in_progress" as const };
+    const [row] = await db
+      .update(candidateIntakesTable)
+      .set({
+        callId: params.callId,
+        agentId: params.agentId,
+        ...reopen,
+        ...phone,
+        revision: sql`${candidateIntakesTable.revision} + 1`,
+      })
+      .where(eq(candidateIntakesTable.id, prior.id))
+      .returning();
+    if (row) {
+      emitIntakeChange(row.publicToken, row.revision);
+      logger.info(
+        { callId: params.callId, token: row.publicToken, priorCallId: prior.callId },
+        "intake: resumed previous form for returning caller",
+      );
+      return row;
+    }
   }
 
   const since = new Date(Date.now() - ADOPT_WINDOW_MS);
@@ -356,7 +388,86 @@ export async function attachIntakeCallArtifacts(params: {
       .where(eq(candidateIntakesTable.id, closed.id))
       .returning();
     if (row) emitIntakeChange(row.publicToken, row.revision);
+    void maybeScheduleIntakeFollowup({
+      row: row ?? closed,
+      callId: params.callId,
+      callerPhone: (row ?? closed).phone,
+    });
   } catch (err) {
     logger.warn({ err, callId: params.callId }, "intake: could not attach call artifacts");
+  }
+}
+
+async function pendingFollowupExists(agentId: number, phone: string): Promise<boolean> {
+  const tail = lastTenDigits(phone);
+  if (!tail) return false;
+  const [row] = await db
+    .select({ id: scheduledCallbacksTable.id })
+    .from(scheduledCallbacksTable)
+    .where(and(
+      eq(scheduledCallbacksTable.agentId, agentId),
+      inArray(scheduledCallbacksTable.status, ["pending", "triggering"]),
+      sql`right(regexp_replace(coalesce(${scheduledCallbacksTable.toNumber}, ''), '[^0-9]', '', 'g'), 10) = ${tail}`,
+    ))
+    .limit(1);
+  return Boolean(row);
+}
+
+/**
+ * Turns two dispositions into real outbound dials:
+ *   busy_call_me_back → schedule_callback at the captured date/time
+ *   call_disconnected → one immediate redial
+ *
+ * The LLM also has schedule_callback; this is the backstop so a recorded
+ * outcome still produces a call even if the model never invoked the tool.
+ */
+export async function maybeScheduleIntakeFollowup(opts: {
+  row: CandidateIntake;
+  callId: number;
+  callerPhone?: string | null;
+}): Promise<void> {
+  try {
+    const agentId = opts.row.agentId;
+    const toNumber = (opts.callerPhone ?? opts.row.phone ?? "").trim();
+    if (!agentId || !toNumber) return;
+
+    const extra = intakeExtraOf(opts.row);
+    const answers = extra.answers;
+    const userId = opts.row.userId ?? null;
+
+    if (extra.dispositionIds.includes("busy_call_me_back")) {
+      const at = combineCallbackAt(
+        answers["busy_call_me_back"]?.callback_date,
+        answers["busy_call_me_back"]?.callback_time,
+      );
+      if (at && !(await pendingFollowupExists(agentId, toNumber))) {
+        const name = [opts.row.firstName, opts.row.lastName].filter(Boolean).join(" ");
+        await scheduleCallbackRequested({
+          agentId,
+          toNumber,
+          userId,
+          callId: opts.callId,
+          scheduledAt: at,
+          notes: name
+            ? `Intake callback for ${name} (form ${opts.row.publicToken})`
+            : `Intake callback (form ${opts.row.publicToken})`,
+        });
+        logger.info({ callId: opts.callId, agentId, scheduledAt: at }, "intake: callback scheduled from busy_call_me_back");
+      }
+    }
+
+    if (extra.dispositionIds.includes("call_disconnected")) {
+      if (!(await pendingFollowupExists(agentId, toNumber))) {
+        await scheduleNetworkDropCallback({
+          agentId,
+          toNumber,
+          userId,
+          callId: opts.callId,
+        });
+        logger.info({ callId: opts.callId, agentId }, "intake: redial scheduled from call_disconnected");
+      }
+    }
+  } catch (err) {
+    logger.warn({ err, callId: opts.callId }, "intake: follow-up scheduling failed");
   }
 }

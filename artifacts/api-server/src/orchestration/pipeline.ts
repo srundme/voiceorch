@@ -5221,7 +5221,7 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.agent.firstSpeaker === "user") return false;
     if (this.config.isReturningCaller === true && !this.isResumeDroppedCall && this.callDirection !== "outbound") return false;
     const greetLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
-    let greeting = this.isResumeDroppedCall ? "" : (this.agent.greetingMessage ?? "");
+    let greeting = this.isResumeDroppedCall && !this.isIntakeAgent ? "" : (this.agent.greetingMessage ?? "");
     if (
       this.callDirection === "outbound"
       && !this.isResumeDroppedCall
@@ -5361,7 +5361,7 @@ export class OrchestrationPipeline implements VoiceSession {
         && !typedWelcome;
       let greeting = useInstantReturning
         ? buildInstantReturningGreeting(this.config.returningCallerName, greetLang)
-        : (resumeDropped ? "" : typedWelcome);
+        : (resumeDropped && !this.isIntakeAgent ? "" : typedWelcome);
 
       // Outbound typed Welcome (including "Hello!") is what they hear first.
       // Do not empty a stub and let the greeting LLM speak Talk/CALL FLOW —

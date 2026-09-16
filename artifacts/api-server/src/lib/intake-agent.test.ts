@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
+  INTAKE_GREETING,
   INTAKE_LLM_CATALOG,
+  INTAKE_LOCKED_AGENT_CONFIG,
   INTAKE_SPEED,
   INTAKE_SYSTEM_PROMPT,
   INTAKE_TTS_CATALOG,
+  buildIntakeSystemPrompt,
   defaultIntakeControls,
   intakeAgentTools,
   intakeVoiceLabel,
@@ -187,5 +190,20 @@ describe("intake prompt", () => {
     for (const d of INTAKE_DISPOSITIONS) {
       expect(INTAKE_SYSTEM_PROMPT).toContain(d.id);
     }
+  });
+
+  it("uses the agent name, never a hardcoded Meera", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("{{agent_name}}");
+    expect(INTAKE_SYSTEM_PROMPT).not.toContain("Meera");
+    expect(INTAKE_GREETING).toContain("{{agent_name}}");
+    expect(INTAKE_GREETING).not.toContain("Meera");
+    const spoken = buildIntakeSystemPrompt("Irfan");
+    expect(spoken).toContain("You are Irfan");
+    expect(spoken).not.toContain("{{agent_name}}");
+    expect(spoken).toContain("schedule_callback");
+  });
+
+  it("redials on a drop", () => {
+    expect(INTAKE_LOCKED_AGENT_CONFIG.autoRedial.enabled).toBe(true);
   });
 });

@@ -8,6 +8,7 @@
  */
 import { DISPOSITION_MEANINGS, INTAKE_DISPOSITIONS } from "./intake-dispositions.js";
 import { INTAKE_LOCKED_FIELDS } from "./candidate-intake-fields.js";
+import { intakeSpokenName } from "./intake-call-context.js";
 import type { AgentTool } from "../orchestration/types.js";
 
 export const INTAKE_AGENT_TYPE = "intake_inbound";
@@ -128,6 +129,8 @@ export const INTAKE_LOCKED_AGENT_CONFIG = {
   isMultilingual: false,
   summarizationEnabled: true,
   recordingEnabled: true,
+  /** Same as every other agent: drop mid-screen → one immediate redial. */
+  autoRedial: { enabled: true, maxAttempts: 3, delayMinutes: 2 },
 } as const;
 
 // ── Controls ─────────────────────────────────────────────────────────────────
@@ -288,7 +291,9 @@ const DISPOSITION_LINES = INTAKE_DISPOSITIONS.map((d) => {
  * the same fields, but it should react to what the caller actually said instead
  * of marching through numbered questions.
  */
-export const INTAKE_SYSTEM_PROMPT = `You are Meera, a recruitment coordinator. You answer inbound calls from people looking for international voice-process jobs in Bangalore. You sound like a real recruiter on a phone — warm, brief, and present — not like a form being filled in.
+export const INTAKE_SYSTEM_PROMPT = `You are {{agent_name}}, a recruitment coordinator. You answer inbound calls from people looking for international voice-process jobs in Bangalore. You sound like a real recruiter on a phone — warm, brief, and present — not like a form being filled in.
+
+Your spoken name is {{agent_name}}. Introduce yourself as that name and never as anyone else.
 
 # Language
 Speak only English. Use simple Indian English, the way you would on a live call. If the caller switches language, stay in English: "I can only continue in English — is that okay?"
@@ -317,12 +322,18 @@ The only time you may ask someone to hold is if you genuinely have to check some
 # Call flow
 Four stages. Move forward when the stage is done; do not restart a stage.
 
-1. Open — greet, say who you are and why the openings exist, get their name. One turn.
-2. Screen — collect what you need below, conversationally, reacting as you go. Most of the call.
+1. Open — the first audio of this call is already your greeting. Do not re-introduce yourself after it. On a first call, get their name. On a returning call the greeting already used their name — skip it.
+2. Screen — collect what you need below, conversationally, reacting as you go. Most of the call. If PREVIOUS INTAKE lists a field, do not ask it again.
 3. Pitch — once the details are in, call ${INTAKE_TOOL_NAMES.submit} and talk through the opening it returns.
 4. Close — confirm interest or take the reason, make sure every outcome is recorded, thank them, ${INTAKE_TOOL_NAMES.endCall}.
 
 Record outcomes as you notice them, at any stage — do not save them all up for the end.
+
+If they say you spoke before: you did. Confirm it in one clause ("yes, I have your details") and go to what they need, or the next missing question. Never restart the screen and never say you are picking up from where you left off.
+
+If they cannot talk now and ask you to call back, do both: record busy_call_me_back with the date and time, and call schedule_callback with that same time so the system actually dials them. Confirm the time out loud, then ${INTAKE_TOOL_NAMES.endCall}.
+
+If the line drops you do not need to do anything — the system calls them back. If they are still on the line and the call is clearly dying, record call_disconnected.
 
 # What you need to collect
 Their name, mobile, email, the city they live in, date of birth, fresher or experienced (and if experienced, how many companies), graduate or post graduate, and whether they can do a US / night shift.
@@ -365,8 +376,19 @@ If they are interested, tell them the team will call back with next steps, thank
 - If they ask to be removed from the list, record not_interested, set DND to Activate, confirm you will not call again, and end the call.
 - If they are abusive or it is a wrong number, record the outcome and hang up cleanly.`;
 
+/**
+ * First-call opener. `{{agent_name}}` is filled from the agent row at call
+ * start. Returning / resume / callback openers are chosen live in
+ * `intake-call-context.ts` — this string is only the cold-start default.
+ */
 export const INTAKE_GREETING =
-  "Hi, thanks for calling — this is Meera from the recruitment team. We have a few international voice openings in Bangalore right now. Could I take your name?";
+  "Hi, thanks for calling — this is {{agent_name}} from the recruitment team. We have a few international voice openings in Bangalore right now. Could I take your name?";
+
+/** Prompt with the spoken name already substituted — used at call start so a rename does not wait for a save. */
+export function buildIntakeSystemPrompt(agentName: string): string {
+  const spoken = intakeSpokenName(agentName);
+  return INTAKE_SYSTEM_PROMPT.replaceAll("{{agent_name}}", spoken);
+}
 
 /** Fields the form pre-fills on every session — never asked on the call. */
 export const INTAKE_PRESET_FIELDS = INTAKE_LOCKED_FIELDS;

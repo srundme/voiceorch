@@ -21,6 +21,7 @@ import {
   ensureIntakeForCall,
   intakeExtraOf,
   loadIntakeByToken,
+  maybeScheduleIntakeFollowup,
 } from "../lib/intake-service.js";
 import { logger } from "../lib/logger.js";
 
@@ -36,6 +37,7 @@ const HIDDEN_FIELDS = new Set<IntakeFieldKey>([
   "skill",
   "industry",
   "englishCommunication",
+  "gender",
 ]);
 
 const FIELD_LABELS: Record<string, string> = {
@@ -179,6 +181,15 @@ export async function executeIntakeDisposition(
     );
   } else {
     parts.push("Every outcome question is answered. Carry on with the remaining candidate details, or finish_intake.");
+  }
+
+  void maybeScheduleIntakeFollowup({
+    row: current,
+    callId: ctx.callId,
+    callerPhone: ctx.callerPhone ?? current.phone,
+  });
+  if (extra.dispositionIds.includes("busy_call_me_back") && missing.length === 0) {
+    parts.push("A callback has been queued for that date and time. Confirm it out loud, then end_call.");
   }
   return parts.join(" ");
 }

@@ -39,6 +39,18 @@ import {
 import { withDbRetry } from "./db-retry.js";
 import { transcriptHasFarewellEnding } from "./callFarewell.js";
 import { attachIntakeCallArtifacts } from "../lib/intake-service.js";
+import {
+  INTAKE_AGENT_TYPE,
+  buildIntakeSystemPrompt,
+} from "../lib/intake-agent.js";
+import {
+  buildIntakeReturnBlock,
+  findIntakeForCaller,
+  intakeCallerName,
+  nextIntakeAsk,
+  renderIntakeGreeting,
+  resolveIntakeOpenKind,
+} from "../lib/intake-call-context.js";
 import { shouldMarkCallVoicemail } from "../lib/voicemail-detect.js";
 import { looksLikeVoicemailOutcome } from "../services/sheet-auto-calls-helpers.js";
 import { capHandoffTranscript, mergeHandoffTranscript } from "./squad-transcript.js";
@@ -392,6 +404,12 @@ export async function createSession(params: {
     hour: "2-digit", minute: "2-digit", timeZone: agentTimezone,
   });
   let effectiveSystemPrompt = agent.generatedPrompt ?? agent.systemPrompt;
+  if (agent.agentType === INTAKE_AGENT_TYPE) {
+    // Rebuild from the live template so a rename (Irfan vs Meera) is spoken on
+    // the next call without waiting for a save, and so existing agents pick up
+    // the returning-call / callback instructions.
+    effectiveSystemPrompt = buildIntakeSystemPrompt(agent.name);
+  }
   // Meeting bots: meeting prompt replaces the call prompt when set.
   // Date/time + memory/context blocks still append below.
   const isMeetBotSession =
@@ -865,6 +883,7 @@ export async function createSession(params: {
     providerRowsResult,
     upcomingBookingsResult,
     inboundSheetLookupResult,
+    priorIntakeResult,
   ] = await Promise.all([
     // 1. Caller memory (3-layer: profile + facts + archive)
     callerPhone
@@ -964,6 +983,14 @@ export async function createSession(params: {
           lookupSheetsForSession(agent.userId, params.agentId, params.fromNumber).catch(() => null),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
         ])
+      : Promise.resolve(null),
+
+    // 7. Prior candidate intake for this number — returning-call opener + form resume
+    agent.agentType === INTAKE_AGENT_TYPE && callerPhone
+      ? findIntakeForCaller({ agentId: params.agentId, phone: callerPhone }).catch((err) => {
+          logger.warn({ agentId: params.agentId, err }, "intake: prior-form lookup failed");
+          return null;
+        })
       : Promise.resolve(null),
   ]);
 
@@ -1300,6 +1327,37 @@ export async function createSession(params: {
   // gender detection in pipeline.greet().
   if (agentConfig.greetingMessage) {
     agentConfig.greetingMessage = resolvePromptVariables(agentConfig.greetingMessage, dynVars);
+  }
+
+  if (agent.agentType === INTAKE_AGENT_TYPE) {
+    const prior = priorIntakeResult;
+    const kind = resolveIntakeOpenKind({
+      hasPriorIntake: Boolean(prior),
+      sourceCallbackReason: params.sourceCallbackReason,
+      isResumeDroppedCall: resumeDroppedCall || params.sourceCallbackReason === "network_drop",
+    });
+    const callerName = prior
+      ? intakeCallerName(prior)
+      : (callerProfileSnapshot?.name ?? dynVars["caller_name"] ?? dynVars["name"] ?? null);
+    agentConfig.greetingMessage = renderIntakeGreeting({
+      kind,
+      agentName: agent.name,
+      callerName,
+      nextAsk: prior ? nextIntakeAsk(prior) : null,
+    });
+    if (prior) {
+      agentConfig.systemPrompt = `${agentConfig.systemPrompt}\n\n${buildIntakeReturnBlock(prior)}`;
+    }
+    logger.info(
+      {
+        agentId: params.agentId,
+        kind,
+        callerName,
+        priorToken: prior?.publicToken ?? null,
+        spokenName: agent.name,
+      },
+      "intake: opening line chosen for this call",
+    );
   }
 
   // Apply knowledge base (appended AFTER the system prompt so agent-specific
@@ -3309,7 +3367,12 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       // FAREWELL / COMPLETED GUARD: suppress auto-redial when the caller said
       // goodbye (incl. Tamil பாய்), the agent already delivered a closing line,
       // or naturalEnd/end_call fired — those are successful ends, not drops.
-      const autoRedialCfg = (ag?.agentConfig as { autoRedial?: { enabled?: boolean; delayMinutes?: number; maxAttempts?: number } } | null)?.autoRedial;
+      const storedRedial = (ag?.agentConfig as { autoRedial?: { enabled?: boolean; delayMinutes?: number; maxAttempts?: number } } | null)?.autoRedial;
+      const autoRedialCfg = storedRedial?.enabled
+        ? storedRedial
+        : ag?.agentType === INTAKE_AGENT_TYPE
+          ? { enabled: true, maxAttempts: 3, delayMinutes: 2 }
+          : storedRedial;
       const wasUnexpectedDrop = !session.naturalEndTriggered && !session.wasTransferred && !conversationCompleted;
       const isRealPhoneCall = session.callerPhone && !session.callerPhone.startsWith("webcall:");
       const isNetworkDropRetry = session.sourceCallbackReason === "network_drop";
