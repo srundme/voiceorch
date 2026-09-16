@@ -53,16 +53,29 @@ export interface IntakeDto {
   callId: number | null;
   fields: Record<IntakeFieldKey, string | number | null>;
   missingFields: IntakeFieldKey[];
-  dispositionId: string | null;
-  dispositionAnswers: Record<string, string | number | null>;
+  /** A candidate can carry several outcomes at once. */
+  dispositionIds: string[];
+  /** Keyed by disposition id, then field id — ids repeat across outcomes. */
+  dispositionAnswers: Record<string, Record<string, string | number | null>>;
+  /** Unanswered required fields, namespaced `<disposition>.<field>`. */
   missingDispositionFields: string[];
+  english: IntakeEnglishRead | null;
   proposedJob: IntakeProposedJob | null;
   alternatives: IntakeProposedJob[];
   speakScript: string | null;
+  talkingPoints: string[];
   matchNote: string | null;
   profile: Record<string, unknown> | null;
   updatedAt: string;
   createdAt: string;
+}
+
+/** Scored from the caller's own speech while the call runs. */
+export interface IntakeEnglishRead {
+  rating: string;
+  confidence: number;
+  evidence: string[];
+  samples: number;
 }
 
 export interface IntakeProposedJob {
@@ -106,6 +119,8 @@ export interface IntakeDisposition {
   type: "conditional";
   fields: readonly IntakeDispositionField[];
   warning?: string;
+  /** When this outcome applies — the client's own definition. */
+  meaning?: string | null;
 }
 
 export interface IntakeOption {

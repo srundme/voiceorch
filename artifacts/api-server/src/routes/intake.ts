@@ -12,6 +12,7 @@ import {
   type IntakeFieldKey,
 } from "../lib/candidate-intake-fields.js";
 import {
+  DISPOSITION_MEANINGS,
   INTAKE_DISPOSITIONS,
   missingDispositionFields,
   type IntakeExtra,
@@ -72,12 +73,16 @@ export interface IntakeDto {
   callId: number | null;
   fields: Record<IntakeFieldKey, string | number | null>;
   missingFields: IntakeFieldKey[];
-  dispositionId: string | null;
-  dispositionAnswers: Record<string, string | number | null>;
+  dispositionIds: string[];
+  /** Keyed by disposition id, then field id. */
+  dispositionAnswers: Record<string, Record<string, string | number | null>>;
   missingDispositionFields: string[];
+  /** Live read of the caller's English, built from the call itself. */
+  english: { rating: string; confidence: number; evidence: string[]; samples: number } | null;
   proposedJob: Record<string, unknown> | null;
   alternatives: Record<string, unknown>[];
   speakScript: string | null;
+  talkingPoints: string[];
   matchNote: string | null;
   profile: Record<string, unknown> | null;
   updatedAt: string;
@@ -103,14 +108,18 @@ function toDto(row: CandidateIntake): IntakeDto {
     callId: row.callId,
     fields,
     missingFields: missingIntakeFields(fields),
-    dispositionId: extra.dispositionId,
+    dispositionIds: extra.dispositionIds,
     dispositionAnswers: extra.answers,
     missingDispositionFields: missingDispositionFields(extra),
+    english: extra.english ?? null,
     proposedJob: (extra.match?.["proposed"] as Record<string, unknown> | null) ?? null,
     alternatives: Array.isArray(extra.match?.["alternatives"])
       ? extra.match["alternatives"] as Record<string, unknown>[]
       : [],
     speakScript: typeof extra.match?.["speakScript"] === "string" ? extra.match["speakScript"] : null,
+    talkingPoints: Array.isArray(extra.match?.["talkingPoints"])
+      ? extra.match["talkingPoints"].filter((p): p is string => typeof p === "string")
+      : [],
     matchNote: typeof extra.match?.["note"] === "string" ? extra.match["note"] : null,
     profile: (extra.match?.["profile"] as Record<string, unknown> | null) ?? null,
     updatedAt: row.updatedAt.toISOString(),
@@ -168,7 +177,15 @@ router.get("/intake/sessions", requireAuth, async (req, res): Promise<void> => {
 // ── Public by token: snapshot, live stream, agent writes ────────────────────
 
 router.get("/intake/schema", (_req, res): void => {
-  res.json({ dispositions: INTAKE_DISPOSITIONS, jobs: INTAKE_JOBS });
+  res.json({
+    // The meaning rides along so the form can show the recruiter when each
+    // outcome applies, same wording the agent reasons over.
+    dispositions: INTAKE_DISPOSITIONS.map((d) => ({
+      ...d,
+      meaning: DISPOSITION_MEANINGS[d.id] ?? null,
+    })),
+    jobs: INTAKE_JOBS,
+  });
 });
 
 router.get("/intake/jobs", (_req, res): void => {

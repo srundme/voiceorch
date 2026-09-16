@@ -447,7 +447,8 @@ router.get("/admin/intake-agents/:id/sessions", requireAdmin, async (req, res): 
         callId: row.callId,
         candidateName: name || null,
         phone: row.phone,
-        dispositionId: extra.dispositionId,
+        dispositionIds: extra.dispositionIds,
+        englishRating: extra.english?.rating ?? null,
         missingCount: missingIntakeFields(row).length,
         proposedCompany: extra.match && typeof extra.match["proposed"] === "object" && extra.match["proposed"]
           ? String((extra.match["proposed"] as Record<string, unknown>)["company"] ?? "")

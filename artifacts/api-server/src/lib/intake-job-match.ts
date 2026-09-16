@@ -12,6 +12,7 @@ import {
   INTAKE_JOBS,
   type IntakeJob,
   type IntakeJobEnglish,
+  type IntakeJobShift,
 } from "./intake-jobs.js";
 
 const ENGLISH_RANK: Record<IntakeJobEnglish, number> = {
@@ -34,6 +35,12 @@ export interface IntakeJobMatch {
   proposed: IntakeJob | null;
   alternatives: IntakeJob[];
   speakScript: string | null;
+  /**
+   * The same opening broken into single facts. The agent pitches from these
+   * rather than the `speakScript` paragraph — a recruiter talks the role
+   * through a couple of points at a time, they do not read out a block.
+   */
+  talkingPoints: string[];
   note: string | null;
   blocked: boolean;
 }
@@ -57,11 +64,18 @@ export interface IntakeCandidateProfile {
   skill: string | null;
   industry: string | null;
   dnd: string | null;
-  dispositionId: string | null;
-  dispositionAnswers: Record<string, string | number | null>;
+  dispositionIds: string[];
+  dispositionAnswers: Record<string, Record<string, string | number | null>>;
   proposedJobId: string | null;
   proposedJobTitle: string | null;
   proposedCompany: string | null;
+  /** Live English read from the call, with the reasons behind it. */
+  englishEvidence: string[];
+  /** Populated after the call by the post-call writeback. */
+  recordingUrl: string | null;
+  transcript: string | null;
+  callId: number | null;
+  callDurationSeconds: number | null;
 }
 
 function ageYears(iso: string | null | undefined): number | null {
@@ -83,13 +97,24 @@ function shiftFits(candidate: string | null, job: IntakeJob): boolean {
   return false;
 }
 
+/** True when this outcome was recorded on the call. */
+function has(extra: IntakeExtra, dispositionId: string): boolean {
+  return extra.dispositionIds.includes(dispositionId);
+}
+
+/** One answer, scoped to the outcome it belongs to. */
+function ans(extra: IntakeExtra, dispositionId: string, fieldId: string): string | number | null {
+  return extra.answers[dispositionId]?.[fieldId] ?? null;
+}
+
 function excludedCompanies(extra: IntakeExtra): Set<string> {
   const out = new Set<string>();
-  const company = extra.answers["company"];
-  const rejected = extra.answers["rejected_company"];
-  if (extra.dispositionId === "non_hiring_zone" && typeof company === "string") out.add(company);
-  if (extra.dispositionId === "non_hiring_university" && typeof company === "string") out.add(company);
-  if (extra.dispositionId === "cooling_period" && typeof rejected === "string") out.add(rejected);
+  const zone = ans(extra, "non_hiring_zone", "company");
+  const university = ans(extra, "non_hiring_university", "company");
+  const rejected = ans(extra, "cooling_period", "rejected_company");
+  if (typeof zone === "string") out.add(zone);
+  if (typeof university === "string") out.add(university);
+  if (typeof rejected === "string") out.add(rejected);
   return out;
 }
 
@@ -105,24 +130,28 @@ export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): Intak
       proposed: null,
       alternatives: [],
       speakScript: null,
+      talkingPoints: [],
       note: "DND is active — no job is pitched.",
       blocked: true,
     };
   }
-  if (extra.dispositionId && BLOCKING_DISPOSITIONS.has(extra.dispositionId)) {
+  const blocking = extra.dispositionIds.filter((id) => BLOCKING_DISPOSITIONS.has(id));
+  if (blocking.length > 0) {
     return {
       proposed: null,
       alternatives: [],
       speakScript: null,
-      note: "Disposition does not go to a job lineup.",
+      talkingPoints: [],
+      note: `Outcome does not go to a job lineup (${blocking.join(", ")}).`,
       blocked: true,
     };
   }
-  if (extra.dispositionId === "call_disconnected" && extra.answers["communication_judgement"] === "No") {
+  if (has(extra, "call_disconnected") && ans(extra, "call_disconnected", "communication_judgement") === "No") {
     return {
       proposed: null,
       alternatives: [],
       speakScript: null,
+      talkingPoints: [],
       note: "Call dropped before communication could be judged.",
       blocked: true,
     };
@@ -132,6 +161,7 @@ export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): Intak
       proposed: null,
       alternatives: [],
       speakScript: null,
+      talkingPoints: [],
       note: `Demo JDs are Bangalore only. Job city is ${row.jobCity}.`,
       blocked: true,
     };
@@ -141,24 +171,27 @@ export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): Intak
   const english = (row.englishCommunication ?? "GOOD") as IntakeJobEnglish;
   const englishRank = ENGLISH_RANK[english] ?? 2;
   const excluded = excludedCompanies(extra);
-  const needWeekend = extra.dispositionId === "need_weekend_off";
-  const wfhOnly = extra.dispositionId === "work_from_home" && extra.answers["willing_to_work_from_office"] === "No";
-  const relocateNo = extra.dispositionId === "out_station_candidate" && extra.answers["will_relocate"] === "No";
+  const needWeekend = has(extra, "need_weekend_off");
+  const wfhOnly = has(extra, "work_from_home")
+    && ans(extra, "work_from_home", "willing_to_work_from_office") === "No";
+  const relocateNo = has(extra, "out_station_candidate")
+    && ans(extra, "out_station_candidate", "will_relocate") === "No";
   const candidateCity = (row.city ?? "").toUpperCase().replace(/[^A-Z]/g, "");
   const inBangalore = candidateCity === "BENGALURU" || candidateCity === "BANGALORE" || candidateCity === "BLR";
-  const expectedSalary = extra.dispositionId === "high_salary" && typeof extra.answers["expected_salary"] === "number"
-    ? extra.answers["expected_salary"]
-    : null;
-  const willTakeLower = extra.answers["willing_lower_salary"] === "Yes" || extra.answers["salary_negotiable"] === "Yes";
-  const gapMonths = extra.dispositionId === "career_gap" && typeof extra.answers["career_gap_duration"] === "number"
-    ? extra.answers["career_gap_duration"]
-    : 0;
-  const domainNotBpo = extra.dispositionId === "other_domain_experience" && extra.answers["interested_in_bpo"] === "No";
+  const rawExpected = ans(extra, "high_salary", "expected_salary");
+  const expectedSalary = typeof rawExpected === "number" ? rawExpected : null;
+  const willTakeLower = ans(extra, "high_salary", "willing_lower_salary") === "Yes"
+    || ans(extra, "high_salary", "salary_negotiable") === "Yes";
+  const rawGap = ans(extra, "career_gap", "career_gap_duration");
+  const gapMonths = typeof rawGap === "number" ? rawGap : 0;
+  const domainNotBpo = has(extra, "other_domain_experience")
+    && ans(extra, "other_domain_experience", "interested_in_bpo") === "No";
   if (domainNotBpo) {
     return {
       proposed: null,
       alternatives: [],
       speakScript: null,
+      talkingPoints: [],
       note: "Candidate is not interested in a BPO job.",
       blocked: true,
     };
@@ -168,6 +201,7 @@ export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): Intak
       proposed: null,
       alternatives: [],
       speakScript: null,
+      talkingPoints: [],
       note: "Outstation candidate will not relocate to Bangalore.",
       blocked: true,
     };
@@ -205,6 +239,7 @@ export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): Intak
       proposed: null,
       alternatives: [],
       speakScript: "I do not have a Bangalore international-voice opening that matches what we captured. I will check with my supervisor and call you back if something opens.",
+      talkingPoints: [],
       note: "No JD survived the filters.",
       blocked: false,
     };
@@ -214,9 +249,43 @@ export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): Intak
     proposed,
     alternatives,
     speakScript: proposed.pitch,
+    talkingPoints: talkingPointsFor(proposed),
     note: null,
     blocked: false,
   };
+}
+
+const SHIFT_WORDS: Record<IntakeJobShift, string> = {
+  ANY: "flexible shifts",
+  DAY_ONLY: "day shift",
+  NIGHT_ONLY: "night shift",
+  UK: "UK shift",
+  US: "US shift",
+  AUS: "Australia shift",
+  DOMESTIC: "domestic shift",
+  ROTATIONAL: "rotational shifts",
+};
+
+const inr = (n: number) => `${Math.round(n / 1000)}k`;
+
+/**
+ * Facts, not sentences. The agent decides the wording and the order, which is
+ * what stops the pitch sounding like a page being read out.
+ */
+function talkingPointsFor(job: IntakeJob): string[] {
+  const points = [
+    `company: ${job.company}`,
+    `role: ${job.title} (${job.process})`,
+    `location: ${job.area}, Bengaluru${job.workFromHome ? " — work from home available" : " — work from office"}`,
+    `shift: ${SHIFT_WORDS[job.shiftBase]}${job.weekendOff ? ", fixed weekend off" : ", rotational week-off"}`,
+    `take-home: ₹${inr(job.salaryMin)}–${inr(job.salaryMax)} a month`,
+    `eligibility: ${job.qualification === "POST_GRADUATE" ? "post graduate" : "graduate"}, ${
+      job.workStatus === "ANY" ? "freshers and experienced" : job.workStatus === "FRESHER" ? "freshers" : "experienced"
+    }`,
+  ];
+  if (job.openings > 0) points.push(`openings: ${job.openings}`);
+  for (const req of job.requirements.slice(0, 3)) points.push(`requirement: ${req}`);
+  return points;
 }
 
 export function buildIntakeProfile(
@@ -243,10 +312,17 @@ export function buildIntakeProfile(
     skill: row.skill,
     industry: row.industry,
     dnd: row.dnd,
-    dispositionId: extra.dispositionId,
+    dispositionIds: extra.dispositionIds,
     dispositionAnswers: extra.answers,
     proposedJobId: match.proposed?.id ?? null,
     proposedJobTitle: match.proposed?.title ?? null,
     proposedCompany: match.proposed?.company ?? null,
+    englishEvidence: extra.english?.evidence ?? [],
+    // Recording and transcript only exist once the leg is torn down, so the
+    // post-call writeback fills these in on the stored profile.
+    recordingUrl: null,
+    transcript: null,
+    callId: row.callId ?? null,
+    callDurationSeconds: null,
   };
 }

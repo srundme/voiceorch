@@ -13,7 +13,7 @@ import {
   INTAKE_DISPOSITION_SCHEMA,
   INTAKE_WRITE_SCHEMA,
 } from "./intake-tool-schemas.js";
-import { INTAKE_DISPOSITIONS } from "./intake-dispositions.js";
+import { DISPOSITION_MEANINGS, INTAKE_DISPOSITIONS } from "./intake-dispositions.js";
 
 const base = defaultIntakeControls();
 
@@ -121,11 +121,20 @@ describe("intake agent tool set", () => {
     expect(INTAKE_DISPOSITION_SCHEMA.required).toEqual(["disposition"]);
   });
 
-  it("exposes the follow-up answer fields alongside the outcome", () => {
+  it("namespaces follow-up answers so shared field ids stay distinguishable", () => {
     const props = Object.keys(INTAKE_DISPOSITION_SCHEMA.properties);
-    expect(props).toContain("callback_date");
-    expect(props).toContain("expected_salary");
-    expect(props).toContain("will_relocate");
+    expect(props).toContain("busy_call_me_back.callback_date");
+    expect(props).toContain("high_salary.expected_salary");
+    // `will_relocate` belongs to two outcomes; both have to be addressable.
+    expect(props).toContain("non_hiring_zone.will_relocate");
+    expect(props).toContain("out_station_candidate.will_relocate");
+    expect(props).not.toContain("will_relocate");
+  });
+
+  it("never lets the model write gender or the English rating", () => {
+    const props = Object.keys(INTAKE_WRITE_SCHEMA.properties);
+    expect(props).not.toContain("gender");
+    expect(props).not.toContain("englishCommunication");
   });
 });
 
@@ -139,8 +148,35 @@ describe("intake prompt", () => {
 
   it("tells the agent to converse, not interrogate", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("This is a conversation");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Do not recite the list in a fixed sequence");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Do not recite the list in a fixed order");
     expect(INTAKE_SYSTEM_PROMPT).not.toContain("Keep every reply under 25 words");
+  });
+
+  it("bans the per-turn stall that made the agent sound like a machine", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("one moment please");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Never stall");
+  });
+
+  it("stops the agent asking for gender or an English self-rating", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Never ask their gender");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Never ask them to rate their English");
+  });
+
+  it("says outcomes are mandatory and can stack", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("A candidate can have more than one outcome");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("A call with no outcome is a failed call");
+  });
+
+  it("explains when each outcome applies, not just its name", () => {
+    for (const d of INTAKE_DISPOSITIONS) {
+      const meaning = DISPOSITION_MEANINGS[d.id]!;
+      expect(INTAKE_SYSTEM_PROMPT).toContain(meaning);
+    }
+  });
+
+  it("frames the opening as facts to talk through rather than a script", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("They are facts, not a script");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Two or three facts per turn");
   });
 
   it("forbids inventing a job or a salary", () => {

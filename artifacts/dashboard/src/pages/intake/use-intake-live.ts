@@ -34,7 +34,9 @@ export interface UseIntakeLive {
   saving: Record<string, boolean>;
   markEditing: (key: string, editing: boolean) => void;
   writeField: (key: IntakeFieldKey, value: string | number | null) => Promise<void>;
+  /** Key is `<disposition>.<field>` — bare field ids have no single owner. */
   writeExtra: (key: string, value: string | number | null) => Promise<void>;
+  setDispositionIds: (ids: string[]) => Promise<void>;
   complete: (englishCommunication: string | null) => Promise<void>;
 }
 
@@ -67,11 +69,20 @@ export function useIntakeLive(token: string): UseIntakeLive {
       }
     }
 
-    const mergedAnswers = { ...incoming.dispositionAnswers };
+    // Answers are two levels deep now, so keep the in-flight edit at the leaf
+    // rather than replacing a whole outcome's bucket.
+    const mergedAnswers: IntakeDto["dispositionAnswers"] = {};
+    for (const [dispId, bucket] of Object.entries(incoming.dispositionAnswers)) {
+      mergedAnswers[dispId] = { ...bucket };
+    }
     for (const key of editingRef.current) {
-      if (previousAnswers && key in previousAnswers) {
-        mergedAnswers[key] = previousAnswers[key] ?? null;
-      }
+      const dot = key.indexOf(".");
+      if (dot <= 0 || !previousAnswers) continue;
+      const dispId = key.slice(0, dot);
+      const fieldId = key.slice(dot + 1);
+      const prior = previousAnswers[dispId]?.[fieldId];
+      if (prior === undefined) continue;
+      mergedAnswers[dispId] = { ...(mergedAnswers[dispId] ?? {}), [fieldId]: prior };
     }
 
     const changed: IntakeFlash = {};
@@ -81,18 +92,23 @@ export function useIntakeLive(token: string): UseIntakeLive {
       }
     }
     if (previousAnswers) {
-      for (const key of Object.keys({ ...previousAnswers, ...mergedAnswers })) {
-        if (mergedAnswers[key] !== previousAnswers[key]) changed[key] = Date.now();
+      const ids = new Set([...Object.keys(previousAnswers), ...Object.keys(mergedAnswers)]);
+      for (const dispId of ids) {
+        const before = previousAnswers[dispId] ?? {};
+        const after = mergedAnswers[dispId] ?? {};
+        for (const fieldId of new Set([...Object.keys(before), ...Object.keys(after)])) {
+          if (before[fieldId] !== after[fieldId]) changed[`${dispId}.${fieldId}`] = Date.now();
+        }
       }
     }
-    if (lastDispositionRef.current !== incoming.dispositionId) {
+    if (lastDispositionRef.current !== incoming.dispositionIds.join(",")) {
       changed.disposition = Date.now();
     }
     if (Object.keys(changed).length > 0) setFlash((f) => ({ ...f, ...changed }));
 
     lastFieldsRef.current = merged;
     lastAnswersRef.current = mergedAnswers;
-    lastDispositionRef.current = incoming.dispositionId;
+    lastDispositionRef.current = incoming.dispositionIds.join(",");
     setIntake({ ...incoming, fields: merged, dispositionAnswers: mergedAnswers });
   }, []);
 
@@ -171,25 +187,34 @@ export function useIntakeLive(token: string): UseIntakeLive {
   }, []);
 
   const patchFields = useCallback(
-    async (key: string, value: string | number | null, kind: "typed" | "extra") => {
+    async (key: string, value: string | number | string[] | null, kind: "typed" | "extra") => {
       setIntake((current) => {
         if (!current) return current;
         if (kind === "typed") {
-          const fields = { ...current.fields, [key]: value };
+          const fields = { ...current.fields, [key]: value as string | number | null };
           lastFieldsRef.current = fields;
           return { ...current, fields };
         }
         if (key === "disposition") {
-          lastDispositionRef.current = typeof value === "string" ? value : null;
-          lastAnswersRef.current = {};
-          return {
-            ...current,
-            dispositionId: typeof value === "string" ? value : null,
-            dispositionAnswers: {},
-            missingDispositionFields: [],
-          };
+          // The whole outcome list arrives at once; answers for outcomes that
+          // were just unticked go with them.
+          const ids = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+          const dispositionAnswers: IntakeDto["dispositionAnswers"] = {};
+          for (const id of ids) {
+            if (current.dispositionAnswers[id]) dispositionAnswers[id] = current.dispositionAnswers[id]!;
+          }
+          lastDispositionRef.current = ids.join(",");
+          lastAnswersRef.current = dispositionAnswers;
+          return { ...current, dispositionIds: ids, dispositionAnswers, missingDispositionFields: [] };
         }
-        const dispositionAnswers = { ...current.dispositionAnswers, [key]: value };
+        const dot = key.indexOf(".");
+        if (dot <= 0) return current;
+        const dispId = key.slice(0, dot);
+        const fieldId = key.slice(dot + 1);
+        const dispositionAnswers = {
+          ...current.dispositionAnswers,
+          [dispId]: { ...(current.dispositionAnswers[dispId] ?? {}), [fieldId]: value as string | number | null },
+        };
         lastAnswersRef.current = dispositionAnswers;
         return { ...current, dispositionAnswers };
       });
@@ -236,6 +261,12 @@ export function useIntakeLive(token: string): UseIntakeLive {
     [patchFields],
   );
 
+  /** Replaces the recorded outcomes. Ticking and unticking both come here. */
+  const setDispositionIds = useCallback(
+    (ids: string[]) => patchFields("disposition", ids, "extra"),
+    [patchFields],
+  );
+
   const complete = useCallback(
     async (englishCommunication: string | null) => {
       const res = await fetch(`${API}/intake/${token}/complete`, {
@@ -263,6 +294,7 @@ export function useIntakeLive(token: string): UseIntakeLive {
     markEditing,
     writeField,
     writeExtra,
+    setDispositionIds,
     complete,
   };
 }

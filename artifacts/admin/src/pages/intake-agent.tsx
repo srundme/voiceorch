@@ -97,7 +97,8 @@ type Session = {
   callId: number | null;
   candidateName: string | null;
   phone: string | null;
-  dispositionId: string | null;
+  dispositionIds: string[];
+  englishRating: string | null;
   missingCount: number;
   proposedCompany: string | null;
   revision: number;
@@ -622,7 +623,8 @@ export default function IntakeAgentPage() {
                                   ? `Matched — ${s.proposedCompany}`
                                   : "Completed — no match"
                                 : `${s.missingCount} field${s.missingCount === 1 ? "" : "s"} left`}
-                              {s.dispositionId ? ` · ${s.dispositionId}` : ""}
+                              {s.dispositionIds.length > 0 ? ` · ${s.dispositionIds.join(", ")}` : ""}
+                              {s.englishRating ? ` · English: ${s.englishRating}` : ""}
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-2">

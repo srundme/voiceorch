@@ -52,7 +52,7 @@ describe("INTAKE_JOBS", () => {
 
 describe("matchIntakeJobs", () => {
   it("pitches a US experienced Bangalore voice job", () => {
-    const match = matchIntakeJobs(candidate(), { dispositionId: null, answers: {} });
+    const match = matchIntakeJobs(candidate(), { dispositionIds: [], answers: {} });
     expect(match.blocked).toBe(false);
     expect(match.proposed?.city).toBe("BENGALURU");
     expect(match.proposed?.shiftBase).toBe("US");
@@ -60,22 +60,22 @@ describe("matchIntakeJobs", () => {
   });
 
   it("does not pitch when the candidate is not interested", () => {
-    const match = matchIntakeJobs(candidate(), { dispositionId: "not_interested", answers: {} });
+    const match = matchIntakeJobs(candidate(), { dispositionIds: ["not_interested"], answers: {} });
     expect(match.proposed).toBeNull();
     expect(match.blocked).toBe(true);
   });
 
   it("excludes a cooling-period company", () => {
     const match = matchIntakeJobs(candidate(), {
-      dispositionId: "cooling_period",
-      answers: { rejected_company: "Concentrix" },
+      dispositionIds: ["cooling_period"],
+      answers: { cooling_period: { rejected_company: "Concentrix" } },
     });
     expect(match.proposed?.company).not.toBe("Concentrix");
   });
 
   it("keeps only weekend-off jobs for Need WeekEnd Off", () => {
     const match = matchIntakeJobs(candidate({ shiftBase: "DAY_ONLY", englishCommunication: "VERY_GOOD" }), {
-      dispositionId: "need_weekend_off",
+      dispositionIds: ["need_weekend_off"],
       answers: {},
     });
     expect(match.proposed?.weekendOff).toBe(true);
@@ -83,15 +83,50 @@ describe("matchIntakeJobs", () => {
 
   it("keeps WFH when the candidate will not come to office", () => {
     const match = matchIntakeJobs(candidate(), {
-      dispositionId: "work_from_home",
-      answers: { willing_to_work_from_office: "No" },
+      dispositionIds: ["work_from_home"],
+      answers: { work_from_home: { willing_to_work_from_office: "No" } },
     });
     expect(match.proposed?.workFromHome).toBe(true);
   });
 
   it("refuses a non-Bangalore job city", () => {
-    const match = matchIntakeJobs(candidate({ jobCity: "PUNE" }), { dispositionId: null, answers: {} });
+    const match = matchIntakeJobs(candidate({ jobCity: "PUNE" }), { dispositionIds: [], answers: {} });
     expect(match.proposed).toBeNull();
     expect(match.note).toMatch(/Bangalore only/);
+  });
+
+  it("honours several outcomes at once", () => {
+    // Serving notice is a hold, not a block, so a weekend-off + WFH candidate
+    // still gets an opening that satisfies both preferences.
+    const match = matchIntakeJobs(candidate({ englishCommunication: "VERY_GOOD" }), {
+      dispositionIds: ["need_weekend_off", "work_from_home", "serving_notice"],
+      answers: {
+        work_from_home: { willing_to_work_from_office: "No" },
+        serving_notice: { notice_period: "30 Days" },
+      },
+    });
+    if (match.proposed) {
+      expect(match.proposed.weekendOff).toBe(true);
+      expect(match.proposed.workFromHome).toBe(true);
+    } else {
+      expect(match.blocked).toBe(false);
+    }
+  });
+
+  it("blocks as soon as any one outcome rules out a lineup", () => {
+    const match = matchIntakeJobs(candidate(), {
+      dispositionIds: ["need_weekend_off", "not_interested"],
+      answers: {},
+    });
+    expect(match.blocked).toBe(true);
+    expect(match.proposed).toBeNull();
+  });
+
+  it("hands the agent discrete facts rather than a paragraph to read", () => {
+    const match = matchIntakeJobs(candidate(), { dispositionIds: [], answers: {} });
+    expect(match.talkingPoints.length).toBeGreaterThan(4);
+    expect(match.talkingPoints.some((p) => p.startsWith("company: "))).toBe(true);
+    expect(match.talkingPoints.some((p) => p.startsWith("take-home: "))).toBe(true);
+    expect(match.talkingPoints.every((p) => p.length < 120)).toBe(true);
   });
 });

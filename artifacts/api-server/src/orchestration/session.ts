@@ -38,6 +38,7 @@ import {
 } from "@workspace/db/call-engine-defaults";
 import { withDbRetry } from "./db-retry.js";
 import { transcriptHasFarewellEnding } from "./callFarewell.js";
+import { attachIntakeCallArtifacts } from "../lib/intake-service.js";
 import { shouldMarkCallVoicemail } from "../lib/voicemail-detect.js";
 import { looksLikeVoicemailOutcome } from "../services/sheet-auto-calls-helpers.js";
 import { capHandoffTranscript, mergeHandoffTranscript } from "./squad-transcript.js";
@@ -2987,6 +2988,16 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       ...(recordingError ? { recordingError } : {}),
       ...transferMetaPatch,
     }).where(eq(callsTable.id, session.callId));
+
+    // Top up the candidate profile with the recording and transcript. Both only
+    // exist now, so the profile written mid-call carries nulls for them. No-op
+    // for every agent that is not running an intake form.
+    void attachIntakeCallArtifacts({
+      callId: session.callId,
+      recordingUrl,
+      transcript: transcript || null,
+      durationSeconds,
+    });
 
     // ── Mark campaign lead terminal (drains the active Connected count) ──────────
     if (session.campaignLeadId) {

@@ -133,7 +133,8 @@ export async function executeIntakeDisposition(
   const patch = Object.fromEntries(
     Object.entries(args ?? {}).filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== ""),
   );
-  if (!patch["disposition"] && !patch["dispositionId"] && !intakeExtraOf(form).dispositionId) {
+  const hasOutcomeArg = Boolean(patch["disposition"] ?? patch["dispositionId"] ?? patch["dispositions"]);
+  if (!hasOutcomeArg && intakeExtraOf(form).dispositionIds.length === 0) {
     return "No outcome given. Pass the outcome id in the `disposition` argument.";
   }
 
@@ -142,33 +143,42 @@ export async function executeIntakeDisposition(
   if (!current) return "Could not record the outcome. Try again.";
 
   const extra = intakeExtraOf(current);
-  const spec = getIntakeDisposition(extra.dispositionId);
-  if (!spec) {
-    const known = errors.find((e) => e.field === "disposition");
-    return known
-      ? `That is not a valid outcome. Pick one of the listed outcome ids.`
+  const recorded = extra.dispositionIds
+    .map((id) => getIntakeDisposition(id))
+    .filter((d): d is NonNullable<typeof d> => d != null);
+
+  if (recorded.length === 0) {
+    return errors.some((e) => e.field === "disposition")
+      ? "That is not a valid outcome. Pick one of the listed outcome ids."
       : "No outcome recorded yet. Pass a valid outcome id in `disposition`.";
   }
 
-  const parts = [`Outcome recorded: ${spec.name}.`];
+  const parts = [`Outcomes on this call: ${recorded.map((d) => d.name).join(", ")}.`];
   if (errors.length > 0) {
     parts.push(`Rejected ${errors.map((e) => `${e.field} (${e.message})`).join("; ")}.`);
   }
-  if (spec.warning) parts.push(`Note for the recruiter (do not read to the candidate): ${spec.warning}`);
+  for (const d of recorded) {
+    if (d.warning) parts.push(`Recruiter note on ${d.name} — do not read this to the candidate: ${d.warning}`);
+  }
 
+  // Namespaced so two outcomes that both have a `reason` stay distinguishable.
   const missing = missingDispositionFields(extra);
   if (missing.length > 0) {
-    const questions = missing.map((id) => {
-      const field = spec.fields.find((f) => f.id === id);
-      if (!field) return id;
+    const questions = missing.map((key) => {
+      const [dispId = "", fieldId = ""] = key.split(".");
+      const spec = getIntakeDisposition(dispId);
+      const field = spec?.fields.find((f) => f.id === fieldId);
+      if (!spec || !field) return key;
       const options = field.options && field.options.length > 0
-        ? ` (answer with one of: ${field.options.join(" | ")})`
+        ? ` (one of: ${field.options.join(" | ")})`
         : "";
-      return `${field.id} — "${field.label}"${options}`;
+      return `${spec.id}.${field.id} — "${field.label}"${options}`;
     });
-    parts.push(`Cover these next, one at a time in your own words, then send the answers back through set_disposition: ${questions.join("; ")}`);
+    parts.push(
+      `Still open: ${questions.join("; ")}. Work these into the conversation one at a time in your own words, then send them back through set_disposition using the dotted key.`,
+    );
   } else {
-    parts.push("No further outcome questions. Continue with the remaining candidate details or finish_intake.");
+    parts.push("Every outcome question is answered. Carry on with the remaining candidate details, or finish_intake.");
   }
   return parts.join(" ");
 }
@@ -186,31 +196,32 @@ export async function executeIntakeSubmit(ctx: IntakeToolContext): Promise<strin
   const extra = intakeExtraOf(fresh);
   const missingOutcome = missingDispositionFields(extra);
   if (missingOutcome.length > 0) {
-    return `Not ready to close. The outcome questions ${missingOutcome.join(", ")} are unanswered. Ask those, send them through set_disposition, then call finish_intake again.`;
+    return `Not ready to close. These outcome questions are unanswered: ${missingOutcome.join(", ")}. Ask those, send them through set_disposition, then call finish_intake again.`;
   }
 
   const result = await completeIntakeSession(form.publicToken);
   if (!result.row) return "Could not close the form. Try again in a moment.";
 
   const match = intakeExtraOf(result.row).match ?? {};
-  const script = typeof match["speakScript"] === "string" ? match["speakScript"].trim() : "";
   const note = typeof match["note"] === "string" ? match["note"].trim() : "";
+  const points = Array.isArray(match["talkingPoints"])
+    ? match["talkingPoints"].filter((p): p is string => typeof p === "string")
+    : [];
 
-  if (!script) {
+  if (points.length === 0) {
     return note
-      ? `No matching opening for this candidate. ${note} Tell the candidate the team will review their profile and call back, then end the call.`
+      ? `No matching opening for this candidate. ${note} Tell them the team will review their profile and call back, then end the call.`
       : "No matching opening for this candidate. Tell them the team will review their profile and call back, then end the call.";
   }
 
-  const proposed = match["proposed"];
-  const company = proposed && typeof proposed === "object" && "company" in proposed
-    ? String((proposed as Record<string, unknown>)["company"])
-    : null;
-
+  // Facts, not a paragraph. Reading a block out loud is what makes the pitch
+  // sound like a page being recited, so the agent gets the pieces and picks
+  // its own wording and order.
   return [
-    "Form closed. Read this opening out to the candidate in your own words, then ask if they are interested:",
-    script,
-    company ? `Company: ${company}.` : "",
-    "Do not mention any other company, role or salary. If they ask something not covered here, say the recruitment team will confirm it.",
-  ].filter(Boolean).join(" ");
+    "Form closed. This is the opening that matched — these are facts, not a script:",
+    points.map((p) => `- ${p}`).join("\n"),
+    "",
+    "Pitch it the way a recruiter would on a live call. Open with the company and role and ask if that sounds like something they want — do not list everything at once. Then bring in shift, location and salary across the next couple of turns, pausing for their reaction each time. Use your own words and keep every turn short.",
+    "Answer their questions using only the facts above. If something is not there, say the recruitment team will confirm it. Never name another company, role or salary.",
+  ].join("\n");
 }

@@ -1,11 +1,16 @@
 import { describe, it, expect } from "vitest";
 import {
+  DISPOSITION_MEANINGS,
   INTAKE_DISPOSITIONS,
   applyDispositionPatch,
   getIntakeDisposition,
   missingDispositionFields,
   parseIntakeExtra,
+  primaryDispositionId,
+  type IntakeExtra,
 } from "./intake-dispositions.js";
+
+const empty = (): IntakeExtra => ({ dispositionIds: [], answers: {} });
 
 describe("intake dispositions", () => {
   it("loads every client disposition", () => {
@@ -29,43 +34,101 @@ describe("intake dispositions", () => {
       "cooling_period",
       "need_weekend_off",
       "other_recruiter",
+      "no_experience_documents",
+      "serving_notice",
+      "line_up_scheduled",
     ]);
+  });
+
+  it("explains when every outcome applies", () => {
+    for (const d of INTAKE_DISPOSITIONS) {
+      expect(DISPOSITION_MEANINGS[d.id], `missing meaning for ${d.id}`).toBeTruthy();
+    }
   });
 
   it("keeps the cooling-period supervisor warning", () => {
     expect(getIntakeDisposition("cooling_period")?.warning).toMatch(/Supervisor/);
   });
 
+  it("asks for a last working day when the candidate is serving notice", () => {
+    expect(getIntakeDisposition("serving_notice")?.fields.map((f) => f.id)).toEqual([
+      "notice_period",
+      "last_working_day",
+      "notice_remarks",
+    ]);
+  });
+
   it("treats Voice Mail as a disposition with no extra fields", () => {
-    const extra = applyDispositionPatch({ dispositionId: null, answers: {} }, { disposition: "Voice Mail" });
-    expect(extra.extra.dispositionId).toBe("voice_mail");
+    const extra = applyDispositionPatch(empty(), { disposition: "Voice Mail" });
+    expect(extra.extra.dispositionIds).toEqual(["voice_mail"]);
     expect(missingDispositionFields(extra.extra)).toEqual([]);
   });
 });
 
 describe("applyDispositionPatch", () => {
   it("maps a spoken disposition name and option onto stored values", () => {
-    const first = applyDispositionPatch(
-      { dispositionId: null, answers: {} },
-      { disposition: "poor communication" },
-    );
-    expect(first.extra.dispositionId).toBe("poor_communication");
+    const first = applyDispositionPatch(empty(), { disposition: "poor communication" });
+    expect(first.extra.dispositionIds).toEqual(["poor_communication"]);
     const next = applyDispositionPatch(first.extra, { communication_issue: "language barrier" });
-    expect(next.extra.answers.communication_issue).toBe("Language Barrier");
+    expect(next.extra.answers["poor_communication"]?.communication_issue).toBe("Language Barrier");
     expect(next.errors).toEqual([]);
   });
 
-  it("clears answers when the disposition changes", () => {
-    const extra = applyDispositionPatch(
-      { dispositionId: "high_salary", answers: { expected_salary: 50000 } },
-      { disposition: "not_interested" },
-    );
-    expect(extra.extra).toEqual({ dispositionId: "not_interested", answers: {} });
+  it("keeps earlier outcomes when another one is added", () => {
+    const wfh = applyDispositionPatch(empty(), { disposition: "work_from_home" });
+    const both = applyDispositionPatch(wfh.extra, { disposition: "serving_notice", notice_period: "30 Days" });
+    expect(both.extra.dispositionIds).toEqual(["work_from_home", "serving_notice"]);
+    expect(both.extra.answers["serving_notice"]?.notice_period).toBe("30 Days");
+    expect(both.written).toContain("serving_notice.notice_period");
+  });
+
+  it("keeps same-named answers apart across outcomes", () => {
+    let extra = applyDispositionPatch(empty(), {
+      disposition: "not_interested",
+      reason: "Already Placed",
+    }).extra;
+    extra = applyDispositionPatch(extra, {
+      disposition: "work_from_home",
+      reason: "Travel Issues",
+    }).extra;
+    expect(extra.answers["not_interested"]?.reason).toBe("Already Placed");
+    expect(extra.answers["work_from_home"]?.reason).toBe("Travel Issues");
+  });
+
+  it("routes a dotted key to the outcome it names, whichever is targeted", () => {
+    let extra = applyDispositionPatch(empty(), { disposition: ["age_limit", "career_gap"] }).extra;
+    extra = applyDispositionPatch(extra, {
+      "age_limit.date_of_birth": "20 July 2000",
+      "career_gap.date_of_birth": "1999-01-05",
+    }).extra;
+    expect(extra.answers["age_limit"]?.date_of_birth).toBe("2000-07-20");
+    expect(extra.answers["career_gap"]?.date_of_birth).toBe("1999-01-05");
+  });
+
+  it("refuses a bare shared key when several outcomes could own it", () => {
+    const extra = applyDispositionPatch(empty(), { disposition: ["not_interested", "no_company"] }).extra;
+    const result = applyDispositionPatch(extra, { reason: "Other" });
+    expect(result.written).toEqual([]);
+    expect(result.errors[0]).toMatchObject({ field: "reason" });
+  });
+
+  it("replaces the list, and drops answers for outcomes removed from it", () => {
+    const extra = applyDispositionPatch(empty(), { disposition: "high_salary", expected_salary: 50000 }).extra;
+    const cleared = applyDispositionPatch(extra, { disposition: ["not_interested"] });
+    expect(cleared.extra.dispositionIds).toEqual(["not_interested"]);
+    expect(cleared.extra.answers["high_salary"]).toBeUndefined();
+  });
+
+  it("clears everything when the outcome is unset", () => {
+    const extra = applyDispositionPatch(empty(), { disposition: "high_salary", expected_salary: 50000 }).extra;
+    const cleared = applyDispositionPatch(extra, { disposition: null });
+    expect(cleared.extra.dispositionIds).toEqual([]);
+    expect(cleared.extra.answers).toEqual({});
   });
 
   it("rejects a field that does not belong to the selected disposition", () => {
     const extra = applyDispositionPatch(
-      { dispositionId: "voice_mail", answers: {} },
+      { dispositionIds: ["voice_mail"], answers: {} },
       { expected_salary: 40000 },
     );
     expect(extra.written).toEqual([]);
@@ -73,64 +136,118 @@ describe("applyDispositionPatch", () => {
   });
 
   it("reuses the company list on university and cooling-period fields", () => {
-    const uni = applyDispositionPatch(
-      { dispositionId: null, answers: {} },
-      { disposition: "non_hiring_university", company: "teleperformance" },
-    );
-    expect(uni.extra.answers.company).toBe("Teleperformance");
+    const uni = applyDispositionPatch(empty(), {
+      disposition: "non_hiring_university",
+      company: "teleperformance",
+    });
+    expect(uni.extra.answers["non_hiring_university"]?.company).toBe("Teleperformance");
     const cooling = applyDispositionPatch(
-      { dispositionId: "cooling_period", answers: {} },
+      { dispositionIds: ["cooling_period"], answers: {} },
       { rejected_company: "24 7 ai" },
     );
-    expect(cooling.extra.answers.rejected_company).toBe("[24]7.AI");
+    expect(cooling.extra.answers["cooling_period"]?.rejected_company).toBe("[24]7.AI");
   });
 
   it("lets a select with no options accept free text", () => {
-    const picked = applyDispositionPatch(
-      { dispositionId: null, answers: {} },
-      { disposition: "non_hiring_zone", select_process: "International Voice" },
-    );
-    expect(picked.extra.answers.select_process).toBe("International Voice");
+    const picked = applyDispositionPatch(empty(), {
+      disposition: "non_hiring_zone",
+      select_process: "International Voice",
+    });
+    expect(picked.extra.answers["non_hiring_zone"]?.select_process).toBe("International Voice");
     expect(picked.errors).toEqual([]);
   });
 
   it("stores salary as a number and Yes/No radios as the option labels", () => {
     const extra = applyDispositionPatch(
-      { dispositionId: "high_salary", answers: {} },
+      { dispositionIds: ["high_salary"], answers: {} },
       { expected_salary: "45,000", salary_negotiable: "yes" },
     );
-    expect(extra.extra.answers.expected_salary).toBe(45000);
-    expect(extra.extra.answers.salary_negotiable).toBe("Yes");
+    expect(extra.extra.answers["high_salary"]?.expected_salary).toBe(45000);
+    expect(extra.extra.answers["high_salary"]?.salary_negotiable).toBe("Yes");
   });
 
   it("parses callback time in 12-hour speech", () => {
     const extra = applyDispositionPatch(
-      { dispositionId: "busy_call_me_back", answers: {} },
+      { dispositionIds: ["busy_call_me_back"], answers: {} },
       { callback_time: "3:30 pm" },
     );
-    expect(extra.extra.answers.callback_time).toBe("15:30");
+    expect(extra.extra.answers["busy_call_me_back"]?.callback_time).toBe("15:30");
+  });
+
+  it("parses a line-up schedule", () => {
+    const extra = applyDispositionPatch(empty(), {
+      disposition: "line_up_scheduled",
+      scheduled_date: "2 October 2026",
+      scheduled_time: "10 am",
+      scheduled_round: "hr round",
+    });
+    expect(extra.extra.answers["line_up_scheduled"]).toEqual({
+      scheduled_date: "2026-10-02",
+      scheduled_time: "10:00",
+      scheduled_round: "HR Round",
+    });
   });
 });
 
 describe("missingDispositionFields", () => {
   it("lists required extra fields once a disposition is picked", () => {
-    expect(missingDispositionFields({ dispositionId: "age_limit", answers: {} })).toEqual(["date_of_birth"]);
+    expect(missingDispositionFields({ dispositionIds: ["age_limit"], answers: {} }))
+      .toEqual(["age_limit.date_of_birth"]);
     expect(missingDispositionFields({
-      dispositionId: "age_limit",
-      answers: { date_of_birth: "2000-07-20" },
+      dispositionIds: ["age_limit"],
+      answers: { age_limit: { date_of_birth: "2000-07-20" } },
     })).toEqual([]);
+  });
+
+  it("spans every recorded outcome", () => {
+    expect(missingDispositionFields({
+      dispositionIds: ["age_limit", "no_experience_documents"],
+      answers: {},
+    })).toEqual(["age_limit.date_of_birth", "no_experience_documents.document_type"]);
   });
 });
 
 describe("parseIntakeExtra", () => {
   it("ignores junk left in extra from earlier form sections", () => {
-    expect(parseIntakeExtra({ foo: 1 })).toEqual({ dispositionId: null, answers: {} });
-    expect(parseIntakeExtra({
-      dispositionId: "not_interested",
-      answers: { reason: "Already Placed" },
-    })).toEqual({
+    expect(parseIntakeExtra({ foo: 1 })).toMatchObject({ dispositionIds: [], answers: {} });
+  });
+
+  it("lifts a pre-multi row into the list shape", () => {
+    const extra = parseIntakeExtra({
       dispositionId: "not_interested",
       answers: { reason: "Already Placed" },
     });
+    expect(extra.dispositionIds).toEqual(["not_interested"]);
+    expect(extra.answers).toEqual({ not_interested: { reason: "Already Placed" } });
+    expect(primaryDispositionId(extra)).toBe("not_interested");
+  });
+
+  it("round-trips the nested shape", () => {
+    const extra = parseIntakeExtra({
+      dispositionIds: ["work_from_home", "serving_notice"],
+      answers: {
+        work_from_home: { reason: "Travel Issues" },
+        serving_notice: { notice_period: "30 Days" },
+      },
+    });
+    expect(extra.dispositionIds).toEqual(["work_from_home", "serving_notice"]);
+    expect(extra.answers["serving_notice"]?.notice_period).toBe("30 Days");
+  });
+
+  it("keeps a stored English read", () => {
+    const extra = parseIntakeExtra({
+      dispositionIds: [],
+      english: { rating: "Very good", confidence: 0.8, evidence: ["full sentences"], samples: 4 },
+    });
+    expect(extra.english).toEqual({
+      rating: "Very good",
+      confidence: 0.8,
+      evidence: ["full sentences"],
+      samples: 4,
+    });
+  });
+
+  it("drops an unrecognised English rating rather than trusting it", () => {
+    expect(parseIntakeExtra({ english: { rating: "Amazing" } }).english).toBeNull();
   });
 });

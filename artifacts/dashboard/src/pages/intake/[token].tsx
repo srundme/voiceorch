@@ -32,6 +32,112 @@ import {
 } from "./intake-contract";
 import { useIntakeLive } from "./use-intake-live";
 
+const PROFILE_ROWS: ReadonlyArray<[label: string, key: string]> = [
+  ["Name", "name"],
+  ["Mobile", "phone"],
+  ["Email", "email"],
+  ["Gender", "gender"],
+  ["Date of birth", "dateOfBirth"],
+  ["Lives in", "city"],
+  ["Work city", "jobCity"],
+  ["Work status", "workStatus"],
+  ["Companies", "totalCompanies"],
+  ["Qualification", "qualification"],
+  ["Shift", "shiftBase"],
+  ["English", "englishCommunication"],
+  ["Role", "skillRole"],
+  ["Skill", "skill"],
+  ["Industry", "industry"],
+  ["DND", "dnd"],
+];
+
+/**
+ * The record the recruiter keeps once the call is over.
+ *
+ * Recording and transcript land a moment after hangup, so this renders as soon
+ * as the form closes and fills in the two artifacts when they arrive rather
+ * than waiting for everything at once.
+ */
+function CandidateProfileCard({ profile }: { profile: Record<string, unknown> }) {
+  const text = (key: string): string => {
+    if (key === "name") {
+      return [profile["firstName"], profile["lastName"]].filter(Boolean).join(" ") || "—";
+    }
+    const value = profile[key];
+    return value === null || value === undefined || value === "" ? "—" : String(value);
+  };
+
+  const recordingUrl = typeof profile["recordingUrl"] === "string" ? profile["recordingUrl"] : null;
+  const transcript = typeof profile["transcript"] === "string" ? profile["transcript"] : null;
+  const outcomes = Array.isArray(profile["dispositionIds"])
+    ? (profile["dispositionIds"] as unknown[]).map(String)
+    : [];
+  const evidence = Array.isArray(profile["englishEvidence"])
+    ? (profile["englishEvidence"] as unknown[]).map(String)
+    : [];
+
+  return (
+    <div className="mt-5 overflow-hidden rounded-2xl border border-indigo-100 bg-white p-1.5 shadow-sm">
+      <div className="rounded-xl bg-gradient-to-r from-slate-300 to-slate-300/70 px-5 py-3.5">
+        <div className="flex items-center gap-2">
+          <FileText className="h-4 w-4 text-indigo-700" />
+          <h1 className="text-[15px] font-bold text-slate-900">Candidate profile</h1>
+        </div>
+        <p className="mt-0.5 text-[11.5px] text-slate-600">
+          Created when the form closed — everything captured on this call
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-6 gap-y-3 px-4 py-6 md:grid-cols-4 md:px-5">
+        {PROFILE_ROWS.map(([label, key]) => (
+          <div key={key}>
+            <p className="text-[11px] uppercase tracking-wide text-slate-400">{label}</p>
+            <p className="text-[13px] font-medium text-slate-800">{text(key)}</p>
+          </div>
+        ))}
+      </div>
+
+      {outcomes.length > 0 ? (
+        <div className="border-t border-slate-100 px-4 py-4 md:px-5">
+          <p className="text-[11px] uppercase tracking-wide text-slate-400">Outcomes</p>
+          <p className="mt-1 text-[13px] text-slate-800">{outcomes.join(", ")}</p>
+        </div>
+      ) : null}
+
+      {evidence.length > 0 ? (
+        <div className="border-t border-slate-100 px-4 py-4 md:px-5">
+          <p className="text-[11px] uppercase tracking-wide text-slate-400">English assessment notes</p>
+          <p className="mt-1 text-[12.5px] text-slate-700">{evidence.join(" · ")}</p>
+        </div>
+      ) : null}
+
+      <div className="border-t border-slate-100 px-4 py-4 md:px-5">
+        <p className="text-[11px] uppercase tracking-wide text-slate-400">Call recording</p>
+        {recordingUrl ? (
+          <audio controls preload="none" src={recordingUrl} className="mt-2 w-full max-w-md" />
+        ) : (
+          <p className="mt-1 text-[12.5px] text-slate-500">
+            Not attached yet — it appears a few seconds after the call ends.
+          </p>
+        )}
+      </div>
+
+      <div className="border-t border-slate-100 px-4 py-4 md:px-5">
+        <p className="text-[11px] uppercase tracking-wide text-slate-400">Transcript</p>
+        {transcript ? (
+          <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-50 px-3.5 py-3 text-[12.5px] leading-relaxed text-slate-700">
+            {transcript}
+          </pre>
+        ) : (
+          <p className="mt-1 text-[12.5px] text-slate-500">
+            Not attached yet — it appears a few seconds after the call ends.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Live candidate intake form.
  *
@@ -196,6 +302,7 @@ export default function IntakeFormPage() {
     markEditing,
     writeField,
     writeExtra,
+    setDispositionIds,
     complete,
   } = useIntakeLive(token);
 
@@ -213,20 +320,31 @@ export default function IntakeFormPage() {
   }, []);
 
   const fields = intake?.fields;
-  const selectedDisposition: IntakeDisposition | undefined = dispositions.find(
-    (d) => d.id === intake?.dispositionId,
-  );
+  const selectedIds = intake?.dispositionIds ?? [];
+  const selectedDispositions: IntakeDisposition[] = selectedIds
+    .map((id) => dispositions.find((d) => d.id === id))
+    .filter((d): d is IntakeDisposition => d != null);
+
   const progress = useMemo(
     () => intakeProgress(
       fields ?? {},
-      selectedDisposition
+      selectedDispositions.length > 0
         ? {
-            requiredIds: selectedDisposition.fields.filter((f) => f.required).map((f) => f.id),
-            answers: intake?.dispositionAnswers ?? {},
+            // Namespaced so `reason` under two outcomes counts twice, which is
+            // what the recruiter actually has to fill.
+            requiredIds: selectedDispositions.flatMap((d) =>
+              d.fields.filter((f) => f.required).map((f) => `${d.id}.${f.id}`),
+            ),
+            answers: Object.fromEntries(
+              Object.entries(intake?.dispositionAnswers ?? {}).flatMap(([dispId, bucket]) =>
+                Object.entries(bucket).map(([fieldId, value]) => [`${dispId}.${fieldId}`, value]),
+              ),
+            ),
           }
         : undefined,
     ),
-    [fields, selectedDisposition, intake?.dispositionAnswers],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fields, selectedIds.join(","), intake?.dispositionAnswers],
   );
 
   const valueOf = (key: IntakeFieldKey): string =>
@@ -268,12 +386,19 @@ export default function IntakeFormPage() {
       "px-3",
     );
 
+  /** Every disposition answer is addressed as `<disposition>.<field>`. */
+  const answerAt = (key: string): string | number | null => {
+    const dot = key.indexOf(".");
+    if (dot <= 0) return null;
+    return intake?.dispositionAnswers?.[key.slice(0, dot)]?.[key.slice(dot + 1)] ?? null;
+  };
+
   const extraValueOf = (key: string): string =>
-    extraDrafts[key] ?? fieldToInputValue(intake?.dispositionAnswers?.[key] ?? null);
+    extraDrafts[key] ?? fieldToInputValue(answerAt(key));
 
   const extraChrome = (key: string) =>
     fieldClass({
-      filled: isFieldFilled(intake?.dispositionAnswers?.[key] ?? null),
+      filled: isFieldFilled(answerAt(key)),
       flashing: Boolean(flash[key]),
       invalid: Boolean(fieldErrors[key]),
     });
@@ -286,7 +411,7 @@ export default function IntakeFormPage() {
       return rest;
     });
     if (next === undefined) return;
-    if (next === fieldToInputValue(intake?.dispositionAnswers?.[key] ?? null)) return;
+    if (next === fieldToInputValue(answerAt(key))) return;
     void writeExtra(key, next.trim() === "" ? null : next);
   };
 
@@ -299,22 +424,23 @@ export default function IntakeFormPage() {
     className: extraChrome(key),
   });
 
-  const renderDispositionField = (spec: IntakeDispositionField) => {
-    const current = fieldToInputValue(intake?.dispositionAnswers?.[spec.id] ?? null);
+  const renderDispositionField = (dispositionId: string, spec: IntakeDispositionField) => {
+    const key = `${dispositionId}.${spec.id}`;
+    const current = fieldToInputValue(answerAt(key));
     const options = spec.options ?? [];
     const freeText = spec.type === "text" || spec.type === "textarea"
       || (spec.type === "select" && options.length === 0);
 
     if (spec.type === "radio" && options.length > 0) {
       return (
-        <Field key={spec.id} label={spec.label} error={fieldErrors[spec.id]} required={spec.required}>
+        <Field key={key} label={spec.label} error={fieldErrors[key]} required={spec.required}>
           <RadioPills
-            fieldId={spec.id}
+            fieldId={key}
             options={options}
             value={current}
-            flashing={Boolean(flash[spec.id])}
-            disabled={Boolean(saving[spec.id])}
-            onPick={(v) => void writeExtra(spec.id, v)}
+            flashing={Boolean(flash[key])}
+            disabled={Boolean(saving[key])}
+            onPick={(v) => void writeExtra(key, v)}
           />
         </Field>
       );
@@ -322,12 +448,12 @@ export default function IntakeFormPage() {
 
     if (spec.type === "select" && !freeText) {
       return (
-        <Field key={spec.id} label={spec.label} error={fieldErrors[spec.id]} required={spec.required}>
+        <Field key={key} label={spec.label} error={fieldErrors[key]} required={spec.required}>
           <Select
             value={current || undefined}
-            onValueChange={(v) => void writeExtra(spec.id, v)}
+            onValueChange={(v) => void writeExtra(key, v)}
           >
-            <SelectTrigger className={cn(extraChrome(spec.id), "px-3")} aria-label={spec.label}>
+            <SelectTrigger className={cn(extraChrome(key), "px-3")} aria-label={spec.label}>
               <SelectValue placeholder="Select" />
             </SelectTrigger>
             <SelectContent className="max-h-72">
@@ -342,13 +468,13 @@ export default function IntakeFormPage() {
 
     if (spec.type === "date") {
       return (
-        <Field key={spec.id} label={spec.label} htmlFor={spec.id} error={fieldErrors[spec.id]} required={spec.required}>
+        <Field key={key} label={spec.label} htmlFor={key} error={fieldErrors[key]} required={spec.required}>
           <Input
-            id={spec.id}
+            id={key}
             type="date"
             value={current}
-            onChange={(e) => void writeExtra(spec.id, e.target.value || null)}
-            className={extraChrome(spec.id)}
+            onChange={(e) => void writeExtra(key, e.target.value || null)}
+            className={extraChrome(key)}
           />
         </Field>
       );
@@ -356,13 +482,13 @@ export default function IntakeFormPage() {
 
     if (spec.type === "time") {
       return (
-        <Field key={spec.id} label={spec.label} htmlFor={spec.id} error={fieldErrors[spec.id]} required={spec.required}>
+        <Field key={key} label={spec.label} htmlFor={key} error={fieldErrors[key]} required={spec.required}>
           <Input
-            id={spec.id}
+            id={key}
             type="time"
             value={current}
-            onChange={(e) => void writeExtra(spec.id, e.target.value || null)}
-            className={extraChrome(spec.id)}
+            onChange={(e) => void writeExtra(key, e.target.value || null)}
+            className={extraChrome(key)}
           />
         </Field>
       );
@@ -370,24 +496,24 @@ export default function IntakeFormPage() {
 
     if (spec.type === "textarea") {
       return (
-        <Field key={spec.id} label={spec.label} htmlFor={spec.id} error={fieldErrors[spec.id]} required={spec.required}>
+        <Field key={key} label={spec.label} htmlFor={key} error={fieldErrors[key]} required={spec.required}>
           <Textarea
-            id={spec.id}
+            id={key}
             rows={3}
-            {...extraTextProps(spec.id)}
-            className={cn(extraChrome(spec.id), "min-h-[88px] py-2")}
+            {...extraTextProps(key)}
+            className={cn(extraChrome(key), "min-h-[88px] py-2")}
           />
         </Field>
       );
     }
 
     return (
-      <Field key={spec.id} label={spec.label} htmlFor={spec.id} error={fieldErrors[spec.id]} required={spec.required}>
+      <Field key={key} label={spec.label} htmlFor={key} error={fieldErrors[key]} required={spec.required}>
         <Input
-          id={spec.id}
+          id={key}
           inputMode={spec.type === "number" ? "numeric" : "text"}
           autoComplete="off"
-          {...extraTextProps(spec.id)}
+          {...extraTextProps(key)}
           onKeyDown={(e) => {
             if (e.key === "Enter") e.currentTarget.blur();
           }}
@@ -626,8 +752,24 @@ export default function IntakeFormPage() {
                 );
               })}
             </div>
+            {intake.english && intake.english.samples > 0 ? (
+              <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/50 px-3.5 py-2.5">
+                <p className="text-[12px] font-medium text-indigo-900">
+                  Live read: {intake.english.rating}
+                  <span className="font-normal text-indigo-700">
+                    {" "}· {intake.english.samples} turn{intake.english.samples === 1 ? "" : "s"} heard
+                    {intake.english.confidence < 1 ? " · still settling" : ""}
+                  </span>
+                </p>
+                {intake.english.evidence.length > 0 ? (
+                  <p className="mt-1 text-[11.5px] text-indigo-800/80">
+                    {intake.english.evidence.join(" · ")}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <p className="mt-2 text-[11.5px] text-slate-400">
-              Scored after the call from how the candidate spoke — the agent does not ask this.
+              Judged from how the candidate speaks during the call — the agent never asks. Override it here if you disagree.
             </p>
             {fieldErrors["englishCommunication"] ? (
               <p role="alert" className="mt-1 text-[11.5px] font-medium text-red-600">
@@ -734,55 +876,76 @@ export default function IntakeFormPage() {
 
         <SectionCard
           icon={<ClipboardList className="h-4 w-4 text-indigo-700" />}
-          title="Disposition"
-          subtitle="Pick an outcome to reveal the extra fields for it"
+          title="Dispositions"
+          subtitle="A candidate can have more than one — tick every outcome that applies"
         >
-          <div className="grid grid-cols-1 gap-x-6 gap-y-5 px-4 py-6 md:grid-cols-3 md:px-5">
-            <Field label="Disposition" error={fieldErrors["disposition"]}>
-              <Select
-                value={intake.dispositionId ?? undefined}
-                onValueChange={(v) => {
-                  setExtraDrafts({});
-                  void writeExtra("disposition", v);
-                }}
-              >
-                <SelectTrigger
+          <div className="flex flex-wrap gap-2 px-4 py-5 md:px-5">
+            {dispositions.map((d) => {
+              const on = selectedIds.includes(d.id);
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  title={d.meaning ?? undefined}
+                  aria-pressed={on}
+                  onClick={() => {
+                    setExtraDrafts({});
+                    void setDispositionIds(
+                      on ? selectedIds.filter((id) => id !== d.id) : [...selectedIds, d.id],
+                    );
+                  }}
                   className={cn(
-                    fieldClass({
-                      filled: Boolean(intake.dispositionId),
-                      flashing: Boolean(flash["disposition"]),
-                      invalid: Boolean(fieldErrors["disposition"]),
-                    }),
-                    "px-3",
+                    "rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition",
+                    on
+                      ? "border-indigo-500 bg-indigo-600 text-white shadow-sm"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-700",
+                    flash["disposition"] && on ? "ring-2 ring-indigo-300" : "",
                   )}
-                  aria-label="Disposition"
                 >
-                  <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {dispositions.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+                  {d.name}
+                </button>
+              );
+            })}
           </div>
 
-          {selectedDisposition?.warning ? (
-            <div className="mx-4 mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] font-medium text-amber-900 md:mx-5">
-              {selectedDisposition.warning}
-            </div>
-          ) : null}
-
-          {selectedDisposition && selectedDisposition.fields.length > 0 ? (
-            <div className="grid grid-cols-1 gap-x-6 gap-y-5 border-t border-slate-100 px-4 py-6 md:grid-cols-3 md:px-5">
-              {selectedDisposition.fields.map(renderDispositionField)}
-            </div>
-          ) : selectedDisposition ? (
-            <p className="px-4 pb-6 text-[12.5px] text-slate-500 md:px-5">
-              No extra fields for {selectedDisposition.name}.
+          {fieldErrors["disposition"] ? (
+            <p className="px-4 pb-4 text-[12px] font-medium text-red-600 md:px-5">
+              {fieldErrors["disposition"]}
             </p>
           ) : null}
+
+          {selectedDispositions.length === 0 ? (
+            <p className="px-4 pb-6 text-[12.5px] text-slate-500 md:px-5">
+              No outcome recorded yet. The agent marks these during the call.
+            </p>
+          ) : (
+            selectedDispositions.map((d) => (
+              <div key={d.id} className="border-t border-slate-100">
+                <div className="flex flex-wrap items-baseline gap-x-2 px-4 pt-5 md:px-5">
+                  <h2 className="text-[13.5px] font-semibold text-slate-900">{d.name}</h2>
+                  {d.meaning ? (
+                    <p className="text-[11.5px] text-slate-500">{d.meaning}</p>
+                  ) : null}
+                </div>
+
+                {d.warning ? (
+                  <div className="mx-4 mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] font-medium text-amber-900 md:mx-5">
+                    {d.warning}
+                  </div>
+                ) : null}
+
+                {d.fields.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-5 px-4 py-5 md:grid-cols-3 md:px-5">
+                    {d.fields.map((spec) => renderDispositionField(d.id, spec))}
+                  </div>
+                ) : (
+                  <p className="px-4 pb-5 pt-2 text-[12.5px] text-slate-500 md:px-5">
+                    No extra fields for {d.name}.
+                  </p>
+                )}
+              </div>
+            ))
+          )}
         </SectionCard>
         </div>
 
@@ -810,7 +973,18 @@ export default function IntakeFormPage() {
                     {intake.proposedJob.workFromHome ? " · Work from home" : ""}
                   </p>
                 </div>
-                {intake.speakScript ? (
+                {intake.talkingPoints.length > 0 ? (
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3">
+                    <p className="text-[11.5px] font-medium uppercase tracking-wide text-indigo-700">
+                      What the agent pitches from
+                    </p>
+                    <ul className="mt-1.5 space-y-0.5 text-[13px] leading-relaxed text-slate-800">
+                      {intake.talkingPoints.map((point) => (
+                        <li key={point}>{point}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : intake.speakScript ? (
                   <blockquote className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-[13px] leading-relaxed text-slate-800">
                     {intake.speakScript}
                   </blockquote>
@@ -836,6 +1010,8 @@ export default function IntakeFormPage() {
             )}
           </div>
         ) : null}
+
+        {isCompleted && intake.profile ? <CandidateProfileCard profile={intake.profile} /> : null}
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-[11.5px] text-slate-400">

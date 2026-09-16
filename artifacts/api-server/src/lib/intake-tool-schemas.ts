@@ -14,16 +14,18 @@ type JsonSchema = {
 };
 
 /**
- * Fields the agent asks for on the call. `skillRole`, `skill` and `industry`
- * are fixed per campaign and `englishCommunication` is scored afterwards by a
- * human, so none of them are exposed to the model.
+ * Fields the agent asks for on the call.
+ *
+ * `skillRole`, `skill` and `industry` are fixed per campaign. `gender` is read
+ * off the candidate's name server-side, and `englishCommunication` is scored
+ * from how they speak during the call — asking for either out loud is exactly
+ * what we do not want, so neither is exposed to the model.
  */
 const ASKABLE_FIELDS: Record<string, { type: string; description: string }> = {
   firstName: { type: "string", description: "Candidate's first name, as spelled." },
   lastName: { type: "string", description: "Candidate's last name / surname, as spelled." },
   phone: { type: "string", description: "Mobile number in digits, e.g. 9876543210 or +919876543210." },
   email: { type: "string", description: "Email address, e.g. name@example.com." },
-  gender: { type: "string", description: "Male, Female or Other." },
   dateOfBirth: { type: "string", description: "Date of birth as the candidate said it, e.g. 20 July 2000 or 20/07/2000." },
   workStatus: { type: "string", description: "Fresher or Experienced." },
   totalCompanies: { type: "string", description: "How many companies the candidate has worked with. Use 0 for a fresher." },
@@ -40,7 +42,13 @@ export const INTAKE_WRITE_SCHEMA: JsonSchema = {
   required: [],
 };
 
-/** Every distinct follow-up field id across all dispositions, with its label. */
+/**
+ * Follow-up answers, keyed `<disposition>.<field>`.
+ *
+ * Dotted rather than bare because ids repeat across outcomes — `reason` and
+ * `date_of_birth` each appear under three — and a candidate can carry several
+ * outcomes at once, so a bare key has no single owner.
+ */
 function dispositionAnswerProperties(): Record<string, { type: string; description: string }> {
   const props: Record<string, { type: string; description: string }> = {};
   for (const disposition of INTAKE_DISPOSITIONS) {
@@ -48,15 +56,9 @@ function dispositionAnswerProperties(): Record<string, { type: string; descripti
       const options = field.options && field.options.length > 0
         ? ` One of: ${field.options.join(" | ")}.`
         : "";
-      const existing = props[field.id];
-      if (existing) {
-        // Shared ids such as `reason` mean different things per disposition;
-        // keep the first label and let the tool result name the live question.
-        continue;
-      }
-      props[field.id] = {
+      props[`${disposition.id}.${field.id}`] = {
         type: "string",
-        description: `${field.label} (${disposition.name}).${options}`,
+        description: `${disposition.name} — ${field.label}.${options}`,
       };
     }
   }
@@ -68,7 +70,8 @@ export const INTAKE_DISPOSITION_SCHEMA: JsonSchema = {
   properties: {
     disposition: {
       type: "string",
-      description: "The call outcome.",
+      description:
+        "The outcome you are recording. A candidate can have several outcomes on one call — call this tool once per outcome. Previously recorded outcomes are kept.",
       enum: INTAKE_DISPOSITIONS.map((d) => d.id),
     },
     ...dispositionAnswerProperties(),

@@ -21,6 +21,8 @@ import {
   type IntakeExtra,
 } from "./intake-dispositions.js";
 import { buildIntakeProfile, matchIntakeJobs } from "./intake-job-match.js";
+import { inferGenderFromName } from "./intake-gender.js";
+import { englishRatingForForm, updateEnglishRead, type EnglishTurnInput } from "./intake-english.js";
 
 /**
  * A form the operator opened just before the call rings is adopted instead of
@@ -183,10 +185,21 @@ export async function applyIntakeWrite(
   }
 
   const { values, errors: typedErrors } = normalizeIntakePatch(typedInput);
-  const typedKeys = Object.keys(values) as IntakeFieldKey[];
 
   const existing = await loadIntakeByToken(token);
   if (!existing) return { row: null, written: [], errors: [] };
+
+  // Gender is read off the name instead of being asked for. Only fill it when
+  // it is still blank and the name is unambiguous, and never override a value
+  // someone set by hand.
+  if (!existing.gender && !("gender" in values)) {
+    const first = values.firstName ?? existing.firstName;
+    const last = values.lastName ?? existing.lastName;
+    const guess = inferGenderFromName([first, last].filter(Boolean).join(" "));
+    if (guess) values.gender = guess;
+  }
+
+  const typedKeys = Object.keys(values) as IntakeFieldKey[];
 
   const extraResult = Object.keys(extraInput).length > 0
     ? applyDispositionPatch(intakeExtraOf(existing), extraInput)
@@ -214,29 +227,67 @@ export async function applyIntakeWrite(
 }
 
 /**
+ * Folds one caller turn into the live English read for this call's form.
+ *
+ * The rating is a judgement on how the candidate speaks, so it is built from
+ * their own transcripts while the call runs rather than asked for or guessed
+ * afterwards. Never throws — a scoring failure must not disturb a live call.
+ */
+export async function recordIntakeEnglishTurn(
+  callId: number,
+  turn: EnglishTurnInput,
+): Promise<void> {
+  try {
+    const existing = await loadIntakeByCallId(callId);
+    if (!existing || existing.status === "completed") return;
+
+    const extra = intakeExtraOf(existing);
+    const next = updateEnglishRead(extra.english, turn);
+    if (next.samples === (extra.english?.samples ?? 0)) return;
+
+    extra.english = next;
+    const [row] = await db
+      .update(candidateIntakesTable)
+      .set({
+        extra: extra as unknown as Record<string, unknown>,
+        revision: sql`${candidateIntakesTable.revision} + 1`,
+      })
+      .where(eq(candidateIntakesTable.id, existing.id))
+      .returning();
+    if (row) emitIntakeChange(row.publicToken, row.revision);
+  } catch (err) {
+    logger.warn({ err, callId }, "intake: english scoring failed");
+  }
+}
+
+/**
  * Closes the form, runs JD matching and stores the proposed job plus the
- * candidate profile. English communication is scored here because it is a
- * judgement on how the candidate spoke, not an answer they gave.
+ * candidate profile. When no rating is passed in, the live read built from the
+ * caller's own speech is used.
  */
 export async function completeIntakeSession(
   token: string,
   englishCommunication?: string,
 ): Promise<{ row: CandidateIntake } | { row: null; errors: FieldError[] }> {
-  const { values, errors } = englishCommunication
-    ? normalizeIntakePatch({ englishCommunication })
-    : { values: {}, errors: [] as FieldError[] };
-  if (errors.length > 0) return { row: null, errors };
-
   const existing = await loadIntakeByToken(token);
   if (!existing) return { row: null, errors: [] };
 
   const extra = intakeExtraOf(existing);
+  const rating = englishCommunication
+    ?? (existing.englishCommunication ? undefined : englishRatingForForm(extra.english) ?? undefined);
+
+  const { values, errors } = rating
+    ? normalizeIntakePatch({ englishCommunication: rating })
+    : { values: {}, errors: [] as FieldError[] };
+  if (errors.length > 0) return { row: null, errors };
+
   const forMatch = { ...existing, ...values };
   const matched = matchIntakeJobs(forMatch, extra);
   extra.match = {
     proposed: matched.proposed,
     alternatives: matched.alternatives,
     speakScript: matched.speakScript,
+    talkingPoints: matched.talkingPoints,
     note: matched.note,
     blocked: matched.blocked,
     profile: buildIntakeProfile(forMatch, extra, matched),
@@ -248,7 +299,7 @@ export async function completeIntakeSession(
       ...values,
       extra: extra as unknown as Record<string, unknown>,
       status: "completed",
-      lastFieldKey: englishCommunication ? "englishCommunication" : "disposition",
+      lastFieldKey: rating ? "englishCommunication" : "disposition",
       lastWriteSource: "human",
       revision: sql`${candidateIntakesTable.revision} + 1`,
     })
@@ -258,4 +309,54 @@ export async function completeIntakeSession(
 
   emitIntakeChange(row.publicToken, row.revision);
   return { row };
+}
+
+/**
+ * Attaches the recording and transcript to the stored candidate profile.
+ *
+ * Both only exist after the leg is torn down, so the profile written during
+ * the call carries nulls and is topped up from here. If the form was never
+ * closed on the call, close it now — a completed call should always leave a
+ * profile behind.
+ */
+export async function attachIntakeCallArtifacts(params: {
+  callId: number;
+  recordingUrl?: string | null;
+  transcript?: string | null;
+  durationSeconds?: number | null;
+}): Promise<void> {
+  try {
+    const existing = await loadIntakeByCallId(params.callId);
+    if (!existing) return;
+
+    const closed = existing.status === "completed"
+      ? existing
+      : (await completeIntakeSession(existing.publicToken)).row ?? existing;
+
+    const extra = intakeExtraOf(closed);
+    const match = (extra.match ?? {}) as Record<string, unknown>;
+    const profile = (match["profile"] ?? {}) as Record<string, unknown>;
+    extra.match = {
+      ...match,
+      profile: {
+        ...profile,
+        callId: params.callId,
+        recordingUrl: params.recordingUrl ?? profile["recordingUrl"] ?? null,
+        transcript: params.transcript ?? profile["transcript"] ?? null,
+        callDurationSeconds: params.durationSeconds ?? profile["callDurationSeconds"] ?? null,
+      },
+    };
+
+    const [row] = await db
+      .update(candidateIntakesTable)
+      .set({
+        extra: extra as unknown as Record<string, unknown>,
+        revision: sql`${candidateIntakesTable.revision} + 1`,
+      })
+      .where(eq(candidateIntakesTable.id, closed.id))
+      .returning();
+    if (row) emitIntakeChange(row.publicToken, row.revision);
+  } catch (err) {
+    logger.warn({ err, callId: params.callId }, "intake: could not attach call artifacts");
+  }
 }

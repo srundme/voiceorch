@@ -120,6 +120,7 @@ import {
   executeIntakeWrite,
   type IntakeToolContext,
 } from "./intake-tools.js";
+import { recordIntakeEnglishTurn } from "../lib/intake-service.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
@@ -3933,6 +3934,17 @@ export class OrchestrationPipeline implements VoiceSession {
     this.safetyNet.onFinal();
     this.clearEagerPartialTimer();
     this.interruptionMgr.onUserSpeechEnd();
+
+    // Grade the caller's English off their own speech. Hooked here, after the
+    // echo and quality guards, so the agent's own voice and STT scraps never
+    // count as candidate speech. Fire-and-forget — never blocks the turn.
+    if (this.isIntakeAgent) {
+      void recordIntakeEnglishTurn(this.config.callId, {
+        text: transcript,
+        confidence: this._pendingSttMeta?.languageConfidence ?? null,
+        detectedLanguage: this._pendingSttLang,
+      });
+    }
 
     // BARGE-IN FIX: If a barge-in was triggered (TTS stopped, clearAudio sent),
     // the transcript MUST process immediately — not queue. Queueing causes the
@@ -8030,6 +8042,15 @@ export class OrchestrationPipeline implements VoiceSession {
       agentId: this.agent.id,
       callerPhone: this.config.callerPhone ?? null,
     };
+  }
+
+  /**
+   * True when this agent runs the candidate intake form. Detected from the
+   * tool set rather than an agent-type flag, because the tools are what make
+   * the form exist for this call.
+   */
+  private get isIntakeAgent(): boolean {
+    return (this.agent.tools ?? []).some((t) => t.type.startsWith("intake_"));
   }
 
   private async executeSquadFollowup(args: Record<string, unknown>): Promise<string> {
