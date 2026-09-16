@@ -56,8 +56,31 @@ export interface IntakeDto {
   dispositionId: string | null;
   dispositionAnswers: Record<string, string | number | null>;
   missingDispositionFields: string[];
+  proposedJob: IntakeProposedJob | null;
+  alternatives: IntakeProposedJob[];
+  speakScript: string | null;
+  matchNote: string | null;
+  profile: Record<string, unknown> | null;
   updatedAt: string;
   createdAt: string;
+}
+
+export interface IntakeProposedJob {
+  id: string;
+  company: string;
+  title: string;
+  process: string;
+  city: string;
+  area: string;
+  shiftBase: string;
+  weekendOff: boolean;
+  workFromHome: boolean;
+  salaryMin: number;
+  salaryMax: number;
+  openings: number;
+  pitch: string;
+  description: string;
+  requirements: string[];
 }
 
 export type IntakeDispositionFieldType =

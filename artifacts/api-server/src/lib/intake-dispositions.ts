@@ -34,6 +34,8 @@ export interface IntakeDisposition {
 export interface IntakeExtra {
   dispositionId: string | null;
   answers: Record<string, string | number | null>;
+  /** Set when the form is closed — proposed JD + candidate profile snapshot. */
+  match?: Record<string, unknown> | null;
 }
 
 export interface DispositionPatchResult {
@@ -346,7 +348,11 @@ export function parseIntakeExtra(raw: unknown): IntakeExtra {
       }
     }
   }
-  return { dispositionId, answers };
+  return { dispositionId, answers, match: isRecord(rec.match) ? rec.match : rec.match === null ? null : undefined };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function collapse(raw: unknown): string {
@@ -504,7 +510,7 @@ export function applyDispositionPatch(
     written.push(key);
   }
 
-  return { extra: { dispositionId, answers }, written, errors };
+  return { extra: { ...current, dispositionId, answers }, written, errors };
 }
 
 export function missingDispositionFields(extra: IntakeExtra): string[] {

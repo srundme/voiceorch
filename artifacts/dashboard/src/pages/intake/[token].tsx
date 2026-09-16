@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRoute } from "wouter";
-import { AlertCircle, Briefcase, ClipboardList, Loader2, Mic, UserRound } from "lucide-react";
+import { AlertCircle, Briefcase, ClipboardList, FileText, Loader2, Mic, UserRound } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -785,6 +785,57 @@ export default function IntakeFormPage() {
           ) : null}
         </SectionCard>
         </div>
+
+        {isCompleted ? (
+          <div className="mt-5 overflow-hidden rounded-2xl border border-indigo-100 bg-white p-1.5 shadow-sm">
+            <div className="rounded-xl bg-gradient-to-r from-slate-300 to-slate-300/70 px-5 py-3.5">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-indigo-700" />
+                <h1 className="text-[15px] font-bold text-slate-900">Proposed job</h1>
+              </div>
+              <p className="mt-0.5 text-[11.5px] text-slate-600">
+                Matched on close — this is what the agent should pitch
+              </p>
+            </div>
+            {intake.proposedJob ? (
+              <div className="space-y-4 px-4 py-6 md:px-5">
+                <div>
+                  <p className="text-[15px] font-semibold text-slate-900">{intake.proposedJob.title}</p>
+                  <p className="text-[13px] text-slate-600">
+                    {intake.proposedJob.company} · {intake.proposedJob.area} · {intake.proposedJob.process}
+                  </p>
+                  <p className="mt-1 text-[13px] font-medium text-slate-800">
+                    ₹{intake.proposedJob.salaryMin.toLocaleString("en-IN")} – ₹{intake.proposedJob.salaryMax.toLocaleString("en-IN")} / month
+                    {intake.proposedJob.weekendOff ? " · Weekend off" : ""}
+                    {intake.proposedJob.workFromHome ? " · Work from home" : ""}
+                  </p>
+                </div>
+                {intake.speakScript ? (
+                  <blockquote className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-[13px] leading-relaxed text-slate-800">
+                    {intake.speakScript}
+                  </blockquote>
+                ) : null}
+                <p className="text-[12.5px] text-slate-600">{intake.proposedJob.description}</p>
+                {intake.alternatives.length > 0 ? (
+                  <div>
+                    <p className="text-[12px] font-medium text-slate-500">Also matching</p>
+                    <ul className="mt-1 space-y-1 text-[12.5px] text-slate-700">
+                      {intake.alternatives.map((job) => (
+                        <li key={job.id}>
+                          {job.company} — {job.title} (₹{job.salaryMin.toLocaleString("en-IN")}–₹{job.salaryMax.toLocaleString("en-IN")})
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="px-4 py-6 text-[13px] text-slate-600 md:px-5">
+                {intake.matchNote ?? "No Bangalore JD was attached to this candidate."}
+              </p>
+            )}
+          </div>
+        ) : null}
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-[11.5px] text-slate-400">

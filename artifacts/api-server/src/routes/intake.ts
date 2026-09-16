@@ -22,6 +22,8 @@ import {
   parseIntakeExtra,
   type IntakeExtra,
 } from "../lib/intake-dispositions.js";
+import { INTAKE_JOBS } from "../lib/intake-jobs.js";
+import { buildIntakeProfile, matchIntakeJobs } from "../lib/intake-job-match.js";
 
 /**
  * Candidate intake form — live during an inbound call.
@@ -72,6 +74,11 @@ export interface IntakeDto {
   dispositionId: string | null;
   dispositionAnswers: Record<string, string | number | null>;
   missingDispositionFields: string[];
+  proposedJob: Record<string, unknown> | null;
+  alternatives: Record<string, unknown>[];
+  speakScript: string | null;
+  matchNote: string | null;
+  profile: Record<string, unknown> | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -98,6 +105,13 @@ function toDto(row: CandidateIntake): IntakeDto {
     dispositionId: extra.dispositionId,
     dispositionAnswers: extra.answers,
     missingDispositionFields: missingDispositionFields(extra),
+    proposedJob: (extra.match?.["proposed"] as Record<string, unknown> | null) ?? null,
+    alternatives: Array.isArray(extra.match?.["alternatives"])
+      ? extra.match["alternatives"] as Record<string, unknown>[]
+      : [],
+    speakScript: typeof extra.match?.["speakScript"] === "string" ? extra.match["speakScript"] : null,
+    matchNote: typeof extra.match?.["note"] === "string" ? extra.match["note"] : null,
+    profile: (extra.match?.["profile"] as Record<string, unknown> | null) ?? null,
     updatedAt: row.updatedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
   };
@@ -172,7 +186,11 @@ router.get("/intake/sessions", requireAuth, async (req, res): Promise<void> => {
 // ── Public by token: snapshot, live stream, agent writes ────────────────────
 
 router.get("/intake/schema", (_req, res): void => {
-  res.json({ dispositions: INTAKE_DISPOSITIONS });
+  res.json({ dispositions: INTAKE_DISPOSITIONS, jobs: INTAKE_JOBS });
+});
+
+router.get("/intake/jobs", (_req, res): void => {
+  res.json({ jobs: INTAKE_JOBS });
 });
 
 router.get("/intake/:token", async (req, res): Promise<void> => {
@@ -338,12 +356,29 @@ router.post("/intake/:token/complete", async (req, res): Promise<void> => {
     return;
   }
   try {
+    const existing = await loadByToken(token.data);
+    if (!existing) {
+      res.status(404).json({ error: "Intake form not found" });
+      return;
+    }
+    const extra = extraOf(existing);
+    const forMatch = { ...existing, ...values };
+    const matched = matchIntakeJobs(forMatch, extra);
+    extra.match = {
+      proposed: matched.proposed,
+      alternatives: matched.alternatives,
+      speakScript: matched.speakScript,
+      note: matched.note,
+      blocked: matched.blocked,
+      profile: buildIntakeProfile(forMatch, extra, matched),
+    };
     const [row] = await db
       .update(candidateIntakesTable)
       .set({
         ...values,
+        extra: extra as unknown as Record<string, unknown>,
         status: "completed",
-        lastFieldKey: rating ? "englishCommunication" : null,
+        lastFieldKey: rating ? "englishCommunication" : "disposition",
         lastWriteSource: "human",
         revision: sql`${candidateIntakesTable.revision} + 1`,
       })
