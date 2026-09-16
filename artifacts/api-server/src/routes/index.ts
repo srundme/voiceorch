@@ -108,6 +108,7 @@ import webcallLinksRouter from "./webcall-links.js";
 import meetBotsRouter from "./meet-bots.js";
 import meetCalendarRouter from "./meet-calendar.js";
 import mcpRouter from "./mcp.js";
+import intakeRouter from "./intake.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -150,6 +151,10 @@ router.use(campaignWebhookRouter);
 router.use(whatsappRouter);
 // Public webcall join metadata + authenticated link CRUD
 router.use(webcallLinksRouter);
+
+// Live candidate intake form: token-gated snapshot/stream/write (the form is
+// opened on a screen with no login) + authenticated session create/list.
+router.use(intakeRouter);
 
 // Meeting bots (Recall.ai): public bot page (token-authed) + authed launch/status
 router.use(meetBotsRouter);

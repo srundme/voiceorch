@@ -62,6 +62,8 @@ import SchedulingBookingDetailPage from "@/pages/scheduling/Bookings";
 import SchedulingConferencingPage  from "@/pages/scheduling/Conferencing";
 import PublicBookingPage    from "@/pages/book/[slug]";
 import WebcallJoinPage      from "@/pages/join/[token]";
+import IntakeListPage       from "@/pages/intake/index";
+import IntakeFormPage       from "@/pages/intake/[token]";
 import PartnerPage          from "@/pages/partner";
 import PartnerClientPage    from "@/pages/partner-client";
 import PartnerJoinPage      from "@/pages/partner-join";
@@ -629,6 +631,9 @@ function AppRoutes() {
 
         <Route path="/app/test-simulator" component={TestSimulatorPage} />
 
+        {/* ── Candidate intake (live form filled by the agent on a call) ── */}
+        <Route path="/app/intake" component={IntakeListPage} />
+
         <Route component={NotFound} />
       </Switch>
     </Layout>
@@ -729,6 +734,8 @@ function Router() {
           <Route path="/book/reschedule" component={RescheduleBookingPage} />
           <Route path="/book/:slug" component={PublicBookingPage} />
           <Route path="/join/:token" component={WebcallJoinPage} />
+          {/* Live intake form — opened on a screen during a call, no login. */}
+          <Route path="/intake/:token" component={IntakeFormPage} />
           <Route path="/workshop/:slug" component={WorkshopFormPage} />
           <Route path="/events/judge/:token" component={JudgePortalPage} />
           <Route path="/events/certificates/:code/verify" component={CertificateVerifyPage} />
