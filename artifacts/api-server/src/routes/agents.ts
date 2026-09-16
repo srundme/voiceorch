@@ -2,7 +2,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, count, desc, asc, isNull, inArray, max, ne, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
-import { db, agentsTable, agentVersionsTable, callerProfilesTable, callerFactsTable, callerVoiceprintsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, executionLogsTable, schedulingCalendarsTable, availabilitySchedulesTable, type AgentConfig } from "@workspace/db";
+import { db, agentsTable, agentVersionsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, executionLogsTable, schedulingCalendarsTable, availabilitySchedulesTable, type AgentConfig } from "@workspace/db";
 import { PERSONA_HASH_FACT_KEY } from "../orchestration/callerMemory.js";
 
 /** Internal keys (e.g. __agent_persona_hash) stay in DB for runtime, but never surface in Memory UI. */
@@ -1079,83 +1079,23 @@ router.delete("/agents/:id/caller-memory/:phone", requireAuth, clientContext, as
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const rawPhone = decodeURIComponent(String(req.params["phone"] ?? ""));
   if (isNaN(agentId) || !rawPhone) { res.status(400).json({ error: "Invalid params" }); return; }
-  // Memory rows are stored under the canonical caller key — canonicalize the
-  // route param or deletes silently miss rows (e.g. "+91 98..." vs "9198...").
-  const { canonicalizeCallerKey } = await import("../orchestration/callerMemory.js");
-  const phoneNumber = canonicalizeCallerKey(rawPhone) ?? rawPhone;
 
-  const [agent] = await db.select({ id: agentsTable.id })
+  const [agent] = await db.select({ id: agentsTable.id, agentType: agentsTable.agentType })
     .from(agentsTable)
     .where(and(eq(agentsTable.id, agentId), (await workspaceOwned(clerkId)).owned));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
-  // 1. Break the self-referential FK on caller_facts.superseded_by_id so we can
-  //    delete all fact rows in one pass without hitting a RESTRICT constraint.
-  await db.update(callerFactsTable)
-    .set({ supersededById: null })
-    .where(and(eq(callerFactsTable.agentId, agentId), eq(callerFactsTable.phoneNumber, phoneNumber)));
-
-  // 2. Collect IDs of episodes and facts for junction-table cleanup.
-  const [episodeRows, factRows] = await Promise.all([
-    db.select({ id: callerCallArchiveTable.id })
-      .from(callerCallArchiveTable)
-      .where(and(eq(callerCallArchiveTable.agentId, agentId), eq(callerCallArchiveTable.phoneNumber, phoneNumber))),
-    db.select({ id: callerFactsTable.id })
-      .from(callerFactsTable)
-      .where(and(eq(callerFactsTable.agentId, agentId), eq(callerFactsTable.phoneNumber, phoneNumber))),
-  ]);
-  const episodeIds = episodeRows.map(e => e.id);
-  const factIds    = factRows.map(f => f.id);
-
-  // 3. Delete junction tables before their parents to satisfy FK constraints.
-  if (factIds.length > 0) {
-    await db.delete(callerFactSentenceLinksTable).where(inArray(callerFactSentenceLinksTable.factId, factIds));
-    await db.delete(callerEpisodeFactLinksTable).where(inArray(callerEpisodeFactLinksTable.factId, factIds));
-  }
-  if (episodeIds.length > 0) {
-    await db.delete(callerEpisodeFactLinksTable).where(inArray(callerEpisodeFactLinksTable.episodeId, episodeIds));
-    await db.delete(callerSentencesTable).where(inArray(callerSentencesTable.episodeId, episodeIds));
-  }
-
-  // 4. Delete the primary memory tables.
-  await db.delete(callerFactsTable)
-    .where(and(eq(callerFactsTable.agentId, agentId), eq(callerFactsTable.phoneNumber, phoneNumber)));
-  await db.delete(callerCallArchiveTable)
-    .where(and(eq(callerCallArchiveTable.agentId, agentId), eq(callerCallArchiveTable.phoneNumber, phoneNumber)));
-
-  // 5. Clear all memory-bearing fields on the caller_profiles row so the next
-  //    call is treated as a true first-time caller. The row itself is kept to
-  //    preserve identity (agentId, phoneNumber, createdAt); only the memory
-  //    fields are wiped. callCount → 0 prevents the RETURNING CALLER RULE
-  //    from firing and the old summary from being injected.
-  await db.update(callerProfilesTable)
-    .set({
-      summary:           null,
-      name:              null,
-      callCount:         0,
-      predictedIntent:   null,
-      sentimentTrend:    null,
-      riskScore:         null,
-      lastCallDropped:   false,
-      lastCallDroppedAt: null,
-      preferredLanguage: null,
-      updatedAt:         new Date(),
-    })
-    .where(and(eq(callerProfilesTable.agentId, agentId), eq(callerProfilesTable.phoneNumber, phoneNumber)));
-
-  // 6. Delete the caller's voiceprint too — deleting memory must also forget
-  //    the voice, or the "deleted" caller would still be voice-recognized and
-  //    re-linked to other numbers. Covers the squad-shared owner record as well.
-  try {
-    const { resolveSquadMemoryOwnerAgentId } = await import("../services/squad-teamwork.js");
-    const ownerAgentId = await resolveSquadMemoryOwnerAgentId(agentId, clerkId);
-    await db.delete(callerVoiceprintsTable)
-      .where(and(
-        inArray(callerVoiceprintsTable.agentId, [...new Set([agentId, ownerAgentId])]),
-        eq(callerVoiceprintsTable.phoneNumber, phoneNumber),
-      ));
-  } catch (err) {
-    logger.warn({ err, agentId, phoneNumber }, "Caller memory delete: voiceprint cleanup failed");
+  if (agent.agentType === INTAKE_AGENT_TYPE) {
+    const { forgetIntakeCaller } = await import("../lib/intake-service.js");
+    try {
+      await forgetIntakeCaller({ agentId, phone: rawPhone, clerkId });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Could not forget caller" });
+      return;
+    }
+  } else {
+    const { wipeCallerMemoryForPhone } = await import("../orchestration/caller-memory-wipe.js");
+    await wipeCallerMemoryForPhone({ agentId, phone: rawPhone, clerkId });
   }
 
   res.status(204).end();

@@ -471,3 +471,61 @@ export async function maybeScheduleIntakeFollowup(opts: {
     logger.warn({ err, callId: opts.callId }, "intake: follow-up scheduling failed");
   }
 }
+
+/**
+ * Tester reset: next inbound from this number is a first call — no prior form,
+ * no caller-memory block, no pending callback.
+ */
+export async function forgetIntakeCaller(opts: {
+  agentId: number;
+  phone: string;
+  clerkId?: string | null;
+}): Promise<{ intakes: number; callbacks: number; memoryKeys: string[] }> {
+  const tail = lastTenDigits(opts.phone);
+  if (!tail) {
+    throw new Error("Need a phone number with at least 7 digits.");
+  }
+  const lastTen = sql`right(regexp_replace(coalesce(${candidateIntakesTable.phone}, ''), '[^0-9]', '', 'g'), 10) = ${tail}`;
+  const callbackLastTen = sql`right(regexp_replace(coalesce(${scheduledCallbacksTable.toNumber}, ''), '[^0-9]', '', 'g'), 10) = ${tail}`;
+
+  const intakeRows = await db
+    .select({ id: candidateIntakesTable.id })
+    .from(candidateIntakesTable)
+    .where(and(eq(candidateIntakesTable.agentId, opts.agentId), lastTen));
+  if (intakeRows.length > 0) {
+    await db.delete(candidateIntakesTable).where(inArray(candidateIntakesTable.id, intakeRows.map((r) => r.id)));
+  }
+
+  const callbackRows = await db
+    .select({ id: scheduledCallbacksTable.id })
+    .from(scheduledCallbacksTable)
+    .where(and(
+      eq(scheduledCallbacksTable.agentId, opts.agentId),
+      callbackLastTen,
+      inArray(scheduledCallbacksTable.status, ["pending", "triggering"]),
+    ));
+  if (callbackRows.length > 0) {
+    await db.update(scheduledCallbacksTable)
+      .set({ status: "cancelled", cancelledAt: new Date() })
+      .where(inArray(scheduledCallbacksTable.id, callbackRows.map((r) => r.id)));
+  }
+
+  const { wipeCallerMemoryForPhone } = await import("../orchestration/caller-memory-wipe.js");
+  const memory = await wipeCallerMemoryForPhone({
+    agentId: opts.agentId,
+    phone: opts.phone,
+    clerkId: opts.clerkId,
+  });
+  logger.info({
+    agentId: opts.agentId,
+    tail,
+    intakes: intakeRows.length,
+    callbacks: callbackRows.length,
+    memoryKeys: memory.keys,
+  }, "intake: forgot caller for testing");
+  return {
+    intakes: intakeRows.length,
+    callbacks: callbackRows.length,
+    memoryKeys: memory.keys,
+  };
+}

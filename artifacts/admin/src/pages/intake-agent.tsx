@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { adminFetch, formatAdminError } from "@/lib/api";
-import { ExternalLink, FileJson, Loader2, Phone, Plus, RefreshCw, Save } from "lucide-react";
+import { ExternalLink, FileJson, Loader2, Phone, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { Link } from "wouter";
 
 type ModelChoice = { value: string; label: string };
@@ -124,6 +124,8 @@ export default function IntakeAgentPage() {
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newOwner, setNewOwner] = useState<string>("");
+  const [forgetPhone, setForgetPhone] = useState("");
+  const [forgetting, setForgetting] = useState<string | null>(null);
 
   const selected = useMemo(
     () => agents.find((a) => a.id === selectedId) ?? null,
@@ -295,6 +297,37 @@ export default function IntakeAgentPage() {
       toast({ title: "Create failed", description: formatAdminError(err), variant: "destructive" });
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleForgetCaller = async (phone: string) => {
+    if (!selected) return;
+    const trimmed = phone.trim();
+    if (trimmed.replace(/\D/g, "").length < 7) {
+      toast({ title: "Need a caller number", description: "Paste the number you are testing from.", variant: "destructive" });
+      return;
+    }
+    setForgetting(trimmed);
+    try {
+      const result = await adminFetch<{ intakes: number; callbacks: number; memoryKeys: string[] }>(
+        `/intake-agents/${selected.id}/forget-caller`,
+        { method: "POST", body: JSON.stringify({ phone: trimmed }) },
+      );
+      toast({
+        title: "Caller forgotten",
+        description: `Removed ${result.intakes} form${result.intakes === 1 ? "" : "s"}, cancelled ${result.callbacks} callback${result.callbacks === 1 ? "" : "s"}. Next call is a first call.`,
+      });
+      setForgetPhone("");
+      const [formRows, callRows] = await Promise.all([
+        adminFetch<Session[]>(`/intake-agents/${selected.id}/sessions`),
+        adminFetch<RecentCall[]>(`/intake-agents/${selected.id}/calls`),
+      ]);
+      setSessions(formRows);
+      setCalls(callRows);
+    } catch (err) {
+      toast({ title: "Could not forget caller", description: formatAdminError(err), variant: "destructive" });
+    } finally {
+      setForgetting(null);
     }
   };
 
@@ -542,6 +575,34 @@ export default function IntakeAgentPage() {
 
                 <Card>
                   <CardHeader className="pb-3">
+                    <CardTitle className="text-sm">Forget caller</CardTitle>
+                    <CardDescription>
+                      Wipes this number’s intake form, caller memory, and pending callbacks so the next ring is a first call.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap items-end gap-2">
+                    <div className="min-w-[220px] flex-1 space-y-1">
+                      <Label htmlFor="forget-phone">Caller number</Label>
+                      <Input
+                        id="forget-phone"
+                        value={forgetPhone}
+                        onChange={(e) => setForgetPhone(e.target.value)}
+                        placeholder="The phone you are calling from"
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => void handleForgetCaller(forgetPhone)}
+                      disabled={!!forgetting}
+                    >
+                      {forgetting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                      Forget
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
                     <CardTitle className="text-sm">Call logs</CardTitle>
                     <CardDescription>
                       Same records as dashboard Call logs. Open the page or download the JSON.
@@ -568,6 +629,16 @@ export default function IntakeAgentPage() {
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
+                            {c.fromNumber ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void handleForgetCaller(c.fromNumber!)}
+                                disabled={!!forgetting}
+                              >
+                                {forgetting === c.fromNumber ? <Loader2 className="h-3 w-3 animate-spin" /> : "Forget"}
+                              </Button>
+                            ) : null}
                             <Button variant="outline" size="sm" asChild>
                               <Link href={`/voice/calls/${c.id}`}>Call log</Link>
                             </Button>
@@ -606,14 +677,16 @@ export default function IntakeAgentPage() {
                       </div>
                     ) : (
                       sessions.map((s) => (
-                        <a
+                        <div
                           key={s.token}
-                          href={s.formUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center justify-between gap-4 rounded-md border px-3 py-2 text-sm transition hover:bg-accent/50"
+                          className="flex items-center justify-between gap-4 rounded-md border px-3 py-2 text-sm"
                         >
-                          <div className="min-w-0">
+                          <a
+                            href={s.formUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="min-w-0 flex-1 transition hover:underline"
+                          >
                             <div className="truncate font-medium">
                               {s.candidateName ?? s.phone ?? "Unnamed candidate"}
                             </div>
@@ -626,14 +699,26 @@ export default function IntakeAgentPage() {
                               {s.dispositionIds.length > 0 ? ` · ${s.dispositionIds.join(", ")}` : ""}
                               {s.englishRating ? ` · English: ${s.englishRating}` : ""}
                             </div>
-                          </div>
+                          </a>
                           <div className="flex shrink-0 items-center gap-2">
+                            {s.phone ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void handleForgetCaller(s.phone!)}
+                                disabled={!!forgetting}
+                              >
+                                {forgetting === s.phone ? <Loader2 className="h-3 w-3 animate-spin" /> : "Forget"}
+                              </Button>
+                            ) : null}
                             <Badge variant={s.status === "completed" ? "default" : "secondary"}>
                               {s.status === "completed" ? "Done" : "Live"}
                             </Badge>
-                            <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                            <a href={s.formUrl} target="_blank" rel="noreferrer">
+                              <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                            </a>
                           </div>
-                        </a>
+                        </div>
                       ))
                     )}
                   </CardContent>

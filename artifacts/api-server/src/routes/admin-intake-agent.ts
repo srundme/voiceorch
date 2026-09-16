@@ -21,7 +21,7 @@ import {
 } from "@workspace/db";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { logger } from "../lib/logger.js";
-import { intakeFormUrl } from "../lib/intake-service.js";
+import { forgetIntakeCaller, intakeFormUrl } from "../lib/intake-service.js";
 import { missingIntakeFields } from "../lib/candidate-intake-fields.js";
 import { parseIntakeExtra } from "../lib/intake-dispositions.js";
 import {
@@ -389,6 +389,35 @@ async function assignNumber(
     .where(eq(phoneNumbersTable.id, phoneNumberId));
   return {};
 }
+
+const ForgetBody = z.object({
+  phone: z.string().min(7).max(32),
+});
+
+router.post("/admin/intake-agents/:id/forget-caller", requireAdmin, async (req, res): Promise<void> => {
+  const params = IdParam.safeParse(req.params);
+  const parsed = ForgetBody.safeParse(req.body ?? {});
+  if (!params.success || !parsed.success) {
+    res.status(400).json({ error: "Need a caller phone number." });
+    return;
+  }
+  try {
+    const [agent] = await db
+      .select({ id: agentsTable.id })
+      .from(agentsTable)
+      .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.agentType, INTAKE_AGENT_TYPE)))
+      .limit(1);
+    if (!agent) {
+      res.status(404).json({ error: "Intake agent not found" });
+      return;
+    }
+    const result = await forgetIntakeCaller({ agentId: agent.id, phone: parsed.data.phone });
+    res.json(result);
+  } catch (err) {
+    logger.error({ err }, "intake agent forget caller failed");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Server error" });
+  }
+});
 
 router.post("/admin/intake-agents/:id/phone", requireAdmin, async (req, res): Promise<void> => {
   const params = IdParam.safeParse(req.params);
