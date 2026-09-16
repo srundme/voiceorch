@@ -113,6 +113,7 @@ import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, est
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { shouldSkipImmediateBackchannel, ttsContextIdForSequence } from "./filler-playback.js";
 import { countTranscriptWords, FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
+import { isSelfEcho } from "./self-echo.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
@@ -2896,6 +2897,27 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /**
+   * Is this final our own TTS coming back off the carrier leg?
+   *
+   * Carrier legs have no echo cancellation, so sidetone of the agent's own
+   * voice reaches STT as inbound audio. Browser webcall legs do their own AEC
+   * (`echoCancellation: true` in the widget), so they are left alone.
+   *
+   * Barge-in still runs purely on word count — see `self-echo.ts` for why a
+   * real caller can never match this.
+   */
+  private isCarrierSelfEcho(transcript: string): boolean {
+    if (this.config.telephonyProvider === "webcall") return false;
+    const agentAudible =
+      this.isPlaying
+      || this.isSendingTtsAudio
+      || Date.now() - this.lastTtsFrameAt < SELF_ECHO_TAIL_MS;
+    if (!agentAudible) return false;
+    const tokens = this.normalizeForRepeat(transcript).split(" ").filter(Boolean);
+    return isSelfEcho({ tokens, recentAgentSpeech: this.recentAgentSpeech, agentAudible });
+  }
+
+  /**
    * Call-log visibility when a final transcript is thrown away. Purely
    * additive telemetry; fire-and-forget, never affects call flow.
    */
@@ -2914,7 +2936,8 @@ export class OrchestrationPipeline implements VoiceSession {
       | "agent_still_speaking"
       | "inbound_greeting_hold"
       | "inbound_greeting_overlap"
-      | "room_crosstalk",
+      | "room_crosstalk"
+      | "self_echo",
   ): void {
     const now = Date.now();
     const reasonByGuard: Record<typeof guard, string> = {
@@ -2931,6 +2954,7 @@ export class OrchestrationPipeline implements VoiceSession {
       inbound_greeting_hold: "inbound greeting still playing — wait for caller after Welcome",
       inbound_greeting_overlap: "STT captured during inbound greeting — wait for a new caller turn",
       room_crosstalk: "room / meeting talk aimed at someone else — not a caller turn",
+      self_echo: "agent's own TTS echoed back by the carrier — not caller speech",
     };
     this.logExec(EXEC_COMPONENTS.STT, "system", {
       status: "info",
@@ -3586,6 +3610,18 @@ export class OrchestrationPipeline implements VoiceSession {
           discardedText: transcript.slice(0, 300),
         },
       });
+      return;
+    }
+
+    // Our own TTS echoing back off the carrier leg. Must be discarded before
+    // barge-in: otherwise the echo cuts the agent mid-sentence and the caller
+    // hears the agent interrupt itself and then answer itself.
+    if (this.isCarrierSelfEcho(transcript)) {
+      logger.info(
+        { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+        "Discarding streaming final — agent's own TTS echoed back by the carrier",
+      );
+      this.logDiscardedTranscript(transcript, "self_echo");
       return;
     }
 
