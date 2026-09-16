@@ -103,9 +103,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("vad.speech_start only");
     expect(pipelineSrc).toContain("maybeBargeFromRealtimeVadStart");
     const vadBody = methodBody("maybeBargeFromRealtimeVadStart");
-    expect(vadBody).toContain("shouldInterruptFromCallerTranscript");
-    expect(vadBody.indexOf("shouldInterruptFromCallerTranscript"))
-      .toBeLessThan(vadBody.indexOf("triggerBargeIn"));
+    expect(vadBody.replace(/\s+/g, "")).toBe("{return;}");
+    expect(methodBody("schedulePartialBargeIn").replace(/\s+/g, "")).toBe("{return;}");
+    expect(pipelineSrc).not.toContain("Barge-in detected after Sarvam realtime partial");
     const speechEndBody = methodBody("wireStreamSttCallbacks");
     expect(speechEndBody).toContain("maybeBargeFromRealtimeVadStart");
     expect(pipelineSrc).toContain("Call 20274: caller was already mid-utterance");

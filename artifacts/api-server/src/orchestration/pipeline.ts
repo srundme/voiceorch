@@ -2298,19 +2298,11 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /**
-   * Audio → STT → partial → InterruptionManager. vad.speech_start only
-   * inspects; empty transcript never cuts TTS.
+   * vad.speech_start only inspects. A realtime partial is not a Sarvam turn.
+   * Cutting TTS here is PSTN echo barge (logs 23:08: TTS aborted mid-sentence).
    */
   private maybeBargeFromRealtimeVadStart(): void {
-    if (!this.liveSarvamRealtime()) return;
-    if (!this.bargeInEnabled || this.bargeInRequested) return;
-    const pending = this.usablePendingBargeTranscript();
-    if (!this.shouldInterruptFromCallerTranscript(pending)) return;
-    this.triggerBargeIn("vad_speech_start", pending, { speculative: true });
-    logger.info(
-      { callId: this.config.callId, pending: pending.slice(0, 80) },
-      "Barge-in detected (Sarvam vad.speech_start + InterruptionManager)",
-    );
+    return;
   }
 
   /**
@@ -2345,15 +2337,9 @@ export class OrchestrationPipeline implements VoiceSession {
     });
   }
 
-  private schedulePartialBargeIn(text: string): void {
-    const candidate = text.trim();
-    if (!candidate || this.bargeInRequested || !this.isPlaying) return;
-    if (!this.shouldInterruptFromCallerTranscript(candidate)) return;
-    this.triggerBargeIn("vad_partial", candidate, { speculative: true });
-    logger.info(
-      { callId: this.config.callId, text: candidate.slice(0, 80) },
-      "Barge-in detected after Sarvam realtime partial",
-    );
+  /** Partials are not turn-complete. Only transcript.final may barge. */
+  private schedulePartialBargeIn(_text: string): void {
+    return;
   }
 
   private clearBargeRecovery(): void {
@@ -3460,20 +3446,6 @@ export class OrchestrationPipeline implements VoiceSession {
             // Soft-cancel system “can't hear” / check-in when caller speech arrives.
             if (this.systemPlaybackActive && this.isPlaying && text.trim().length >= 4) {
               this.cancelSystemPlaybackForCallerSpeech(text);
-            }
-            // Barge on provider partials while TTS is playing.
-            if (
-              this.bargeInEnabled &&
-              this.isPlaying &&
-              !this.bargeInRequested &&
-              text.trim()
-            ) {
-              if (this.systemPlaybackActive) this.systemPlaybackActive = false;
-              const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
-              this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
-              if (this.shouldInterruptFromCallerTranscript(text)) {
-                this.schedulePartialBargeIn(text);
-              }
             }
             return;
           }
