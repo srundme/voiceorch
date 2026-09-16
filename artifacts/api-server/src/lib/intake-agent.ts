@@ -112,7 +112,7 @@ const CARTESIA_VOICE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[
  */
 export const INTAKE_LOCKED_STACK = {
   asrProvider: "sarvam",
-  asrModel: "saarika:v2.5",
+  asrModel: "saaras:v3",
   asrLanguage: "en-IN",
   language: "en-IN",
   telephonyProvider: "vobiz",

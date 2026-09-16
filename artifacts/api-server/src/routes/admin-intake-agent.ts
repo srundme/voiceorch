@@ -16,6 +16,8 @@ import {
   phoneNumbersTable,
   usersTable,
   candidateIntakesTable,
+  callsTable,
+  executionLogsTable,
 } from "@workspace/db";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { logger } from "../lib/logger.js";
@@ -456,6 +458,85 @@ router.get("/admin/intake-agents/:id/sessions", requireAdmin, async (req, res): 
     }));
   } catch (err) {
     logger.error({ err }, "intake agent sessions failed");
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/** Recent voice calls for this intake agent — same records as dashboard Call logs. */
+router.get("/admin/intake-agents/:id/calls", requireAdmin, async (req, res): Promise<void> => {
+  const params = IdParam.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: "Invalid request" });
+    return;
+  }
+  try {
+    const [agent] = await db
+      .select({ id: agentsTable.id })
+      .from(agentsTable)
+      .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.agentType, INTAKE_AGENT_TYPE)))
+      .limit(1);
+    if (!agent) {
+      res.status(404).json({ error: "Intake agent not found" });
+      return;
+    }
+    const rows = await db
+      .select({
+        id: callsTable.id,
+        status: callsTable.status,
+        fromNumber: callsTable.fromNumber,
+        toNumber: callsTable.toNumber,
+        durationSeconds: callsTable.durationSeconds,
+        executionId: callsTable.executionId,
+        createdAt: callsTable.createdAt,
+      })
+      .from(callsTable)
+      .where(eq(callsTable.agentId, agent.id))
+      .orderBy(desc(callsTable.id))
+      .limit(25);
+    res.json(rows.map((row) => ({
+      ...row,
+      createdAt: row.createdAt?.toISOString() ?? null,
+    })));
+  } catch (err) {
+    logger.error({ err }, "intake agent calls failed");
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/** Same JSON the dashboard Call log downloads as `call-{id}-logs.json`. */
+router.get("/admin/intake-agents/calls/:callId/logs", requireAdmin, async (req, res): Promise<void> => {
+  const callId = Number(req.params["callId"]);
+  if (!Number.isInteger(callId) || callId <= 0) {
+    res.status(400).json({ error: "Invalid call id" });
+    return;
+  }
+  try {
+    const [call] = await db
+      .select({ id: callsTable.id, agentId: callsTable.agentId })
+      .from(callsTable)
+      .where(eq(callsTable.id, callId))
+      .limit(1);
+    if (!call) {
+      res.status(404).json({ error: "Call not found" });
+      return;
+    }
+    const [agent] = await db
+      .select({ agentType: agentsTable.agentType })
+      .from(agentsTable)
+      .where(eq(agentsTable.id, call.agentId))
+      .limit(1);
+    if (agent?.agentType !== INTAKE_AGENT_TYPE) {
+      res.status(404).json({ error: "Call not found" });
+      return;
+    }
+    const events = await db
+      .select()
+      .from(executionLogsTable)
+      .where(eq(executionLogsTable.callId, callId))
+      .orderBy(executionLogsTable.ts);
+    res.json(events);
+  } catch (err) {
+    logger.error({ err, callId }, "intake agent call logs failed");
     res.status(500).json({ error: "Server error" });
   }
 });

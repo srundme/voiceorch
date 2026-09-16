@@ -21,7 +21,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { adminFetch, formatAdminError } from "@/lib/api";
-import { ExternalLink, Loader2, Phone, Plus, RefreshCw, Save } from "lucide-react";
+import { ExternalLink, FileJson, Loader2, Phone, Plus, RefreshCw, Save } from "lucide-react";
+import { Link } from "wouter";
 
 type ModelChoice = { value: string; label: string };
 
@@ -79,6 +80,16 @@ type IntakeAgent = Controls & {
   createdAt: string;
 };
 
+type RecentCall = {
+  id: number;
+  status: string;
+  fromNumber: string | null;
+  toNumber: string | null;
+  durationSeconds: number | null;
+  executionId: string | null;
+  createdAt: string | null;
+};
+
 type Session = {
   token: string;
   formUrl: string;
@@ -106,6 +117,8 @@ export default function IntakeAgentPage() {
   const [draft, setDraft] = useState<Controls | null>(null);
   const [numberId, setNumberId] = useState<string>("none");
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [calls, setCalls] = useState<RecentCall[]>([]);
+  const [downloadingLog, setDownloadingLog] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -160,13 +173,20 @@ export default function IntakeAgentPage() {
   useEffect(() => {
     if (selectedId == null) {
       setSessions([]);
+      setCalls([]);
       return;
     }
     let cancelled = false;
     const poll = async () => {
       try {
-        const rows = await adminFetch<Session[]>(`/intake-agents/${selectedId}/sessions`);
-        if (!cancelled) setSessions(rows);
+        const [formRows, callRows] = await Promise.all([
+          adminFetch<Session[]>(`/intake-agents/${selectedId}/sessions`),
+          adminFetch<RecentCall[]>(`/intake-agents/${selectedId}/calls`),
+        ]);
+        if (!cancelled) {
+          setSessions(formRows);
+          setCalls(callRows);
+        }
       } catch {
         /* transient; the next tick retries */
       }
@@ -274,6 +294,24 @@ export default function IntakeAgentPage() {
       toast({ title: "Create failed", description: formatAdminError(err), variant: "destructive" });
     } finally {
       setCreating(false);
+    }
+  };
+
+  const downloadCallJson = async (callId: number) => {
+    setDownloadingLog(callId);
+    try {
+      const events = await adminFetch<unknown[]>(`/intake-agents/calls/${callId}/logs`);
+      const blob = new Blob([JSON.stringify(events, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `call-${callId}-logs.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({ title: "Could not download JSON log", description: formatAdminError(err), variant: "destructive" });
+    } finally {
+      setDownloadingLog(null);
     }
   };
 
@@ -498,6 +536,55 @@ export default function IntakeAgentPage() {
                     <Badge variant="secondary">Telephony: {options.locked.telephonyProvider}</Badge>
                     <Badge variant="secondary">Barge-in: {options.locked.wordsForInterruption} words</Badge>
                     <Badge variant="secondary">Recruiter script + intake tools</Badge>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm">Call logs</CardTitle>
+                    <CardDescription>
+                      Same records as dashboard Call logs. Open the page or download the JSON.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {calls.length === 0 ? (
+                      <div className="py-6 text-sm text-muted-foreground">
+                        No calls on this agent yet. After you hang up, this list refreshes automatically.
+                      </div>
+                    ) : (
+                      calls.map((c) => (
+                        <div
+                          key={c.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-medium">Call #{c.id}</div>
+                            <div className="truncate text-xs text-muted-foreground">
+                              {c.status}
+                              {c.durationSeconds != null ? ` · ${c.durationSeconds}s` : ""}
+                              {c.fromNumber ? ` · ${c.fromNumber}` : ""}
+                              {c.executionId ? ` · ${c.executionId}` : ""}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Button variant="outline" size="sm" asChild>
+                              <Link href={`/voice/calls/${c.id}`}>Call log</Link>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void downloadCallJson(c.id)}
+                              disabled={downloadingLog === c.id}
+                            >
+                              {downloadingLog === c.id
+                                ? <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                : <FileJson className="mr-1 h-3 w-3" />}
+                              JSON
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </CardContent>
                 </Card>
 
