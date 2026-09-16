@@ -72,12 +72,25 @@ describe("applyDispositionPatch", () => {
     expect(extra.errors[0]).toMatchObject({ field: "expected_salary" });
   });
 
+  it("reuses the company list on university and cooling-period fields", () => {
+    const uni = applyDispositionPatch(
+      { dispositionId: null, answers: {} },
+      { disposition: "non_hiring_university", company: "teleperformance" },
+    );
+    expect(uni.extra.answers.company).toBe("Teleperformance");
+    const cooling = applyDispositionPatch(
+      { dispositionId: "cooling_period", answers: {} },
+      { rejected_company: "24 7 ai" },
+    );
+    expect(cooling.extra.answers.rejected_company).toBe("[24]7.AI");
+  });
+
   it("lets a select with no options accept free text", () => {
     const picked = applyDispositionPatch(
       { dispositionId: null, answers: {} },
-      { disposition: "non_hiring_university", university_name: "VTU", company: "Acme Corp" },
+      { disposition: "non_hiring_zone", select_process: "International Voice" },
     );
-    expect(picked.extra.answers.company).toBe("Acme Corp");
+    expect(picked.extra.answers.select_process).toBe("International Voice");
     expect(picked.errors).toEqual([]);
   });
 

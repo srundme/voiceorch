@@ -50,6 +50,25 @@ const field = (
   options?: readonly string[],
 ): IntakeDispositionField => (options ? { id, label, type, required, options } : { id, label, type, required });
 
+/** Shared across Non Hiring Zone, Non Hiring University, and Cooling Period. */
+export const INTAKE_COMPANIES = [
+  "Concentrix",
+  "Startek",
+  "Ackoo General Insurance",
+  "LivSpace",
+  "Teleperformance",
+  "First Advantage",
+  "Globiiva",
+  "[24]7.AI",
+  "Azuga",
+  "KGISL",
+  "No Broker",
+  "Teligent",
+  "Edureka",
+  "Fidelity",
+  "Omega Health Care",
+] as const;
+
 export const INTAKE_DISPOSITIONS: readonly IntakeDisposition[] = [
   {
     id: "poor_communication",
@@ -78,23 +97,7 @@ export const INTAKE_DISPOSITIONS: readonly IntakeDisposition[] = [
         "Purudal, Shimoga - Karnataka",
         "Others",
       ]),
-      field("company", "Which company was this a no hiring zone for?", "select", true, [
-        "Concentrix",
-        "Startek",
-        "Ackoo General Insurance",
-        "LivSpace",
-        "Teleperformance",
-        "First Advantage",
-        "Globiiva",
-        "[24]7.AI",
-        "Azuga",
-        "KGISL",
-        "No Broker",
-        "Teligent",
-        "Edureka",
-        "Fidelity",
-        "Omega Health Care",
-      ]),
+      field("company", "Which company was this a no hiring zone for?", "select", true, INTAKE_COMPANIES),
       field("select_process", "Select Process", "select", true),
       field("stay_location", "Does the candidate stay in PG or with Family?", "radio", true, [
         "PG",
@@ -240,7 +243,7 @@ export const INTAKE_DISPOSITIONS: readonly IntakeDisposition[] = [
     type: "conditional",
     fields: [
       field("university_name", "University Name", "text", true),
-      field("company", "Which company?", "select", true),
+      field("company", "Which company?", "select", true, INTAKE_COMPANIES),
     ],
   },
   {
@@ -273,7 +276,7 @@ export const INTAKE_DISPOSITIONS: readonly IntakeDisposition[] = [
     type: "conditional",
     warning: "Talk to your Supervisor about this Cooling Period before proceeding. Confirm the correct duration with them — do not guess.",
     fields: [
-      field("rejected_company", "Which company was the candidate rejected from?", "select", true),
+      field("rejected_company", "Which company was the candidate rejected from?", "select", true, INTAKE_COMPANIES),
       field("rejected_round", "What round was the candidate rejected in?", "select", true, [
         "HR Round",
         "VNA Round",
