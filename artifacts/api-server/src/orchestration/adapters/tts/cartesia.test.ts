@@ -260,10 +260,10 @@ describe("Cartesia WS continuations", () => {
       ]);
       expect(requests[0]).toMatchObject({
         model_id: "sonic-3.6",
-        max_buffer_delay_ms: 0,
         voice: { mode: "id", id: expect.any(String) },
         output_format: { sample_rate: 8000 },
       });
+      expect(requests[0].max_buffer_delay_ms).toBeUndefined();
       sockets[0]!.emit({ type: "chunk", context_id: "fast-llm", data: Buffer.from([1, 2]).toString("base64") });
       sockets[0]!.emit({ type: "done", context_id: "fast-llm" });
       await owner;
@@ -365,7 +365,7 @@ describe("Cartesia WS continuations", () => {
       await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as { transcript?: string; continue?: boolean });
       expect(requests.some((r) => r.transcript === "")).toBe(false);
-      expect(requests).toContainEqual(expect.objectContaining({ transcript: "Hello", continue: false }));
+      expect(requests).toContainEqual(expect.objectContaining({ transcript: "Hello.", continue: false }));
       sockets[0]!.emit({ type: "chunk", context_id: "held", data: Buffer.from([1]).toString("base64") });
       sockets[0]!.emit({ type: "done", context_id: "held" });
       await owner;

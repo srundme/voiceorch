@@ -6270,8 +6270,8 @@ export class OrchestrationPipeline implements VoiceSession {
     return ttsSentenceOptions(this.agent.ttsProvider);
   }
 
-  /** Cartesia custom buffering: word-chunk in the adapter, max_buffer_delay_ms 0.
-   *  Docs: client aggregation *and* 3000ms managed delay is extra mute latency. */
+  /** Cartesia word continuations on one context_id. Sonic uses its default
+   *  3000ms input buffer so words join into a sentence instead of 0ms clips. */
   private cartesiaManagedTokenStream(): boolean {
     return this.agent.ttsProvider === "cartesia";
   }
@@ -6472,6 +6472,9 @@ export class OrchestrationPipeline implements VoiceSession {
         this._currentTurnPlayedSentences.push(job.text);
       } else if (job.confirmedText) {
         this._currentTurnPlayedSentences.push(job.confirmedText);
+      } else if (!noAudioSent && playbackText) {
+        const prefix = estimateHeardPrefix(playbackText, Date.now() - _pbStart);
+        if (prefix) this._currentTurnPlayedSentences.push(prefix);
       }
       this.activeConfirmedPlaybackText = "";
       this.activeReceiptJob = null;

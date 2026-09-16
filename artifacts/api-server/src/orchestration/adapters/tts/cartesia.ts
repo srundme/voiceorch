@@ -9,9 +9,11 @@
  * Word-sized transcripts (never letter BPE — call 25026). Last speakable
  * chunk uses continue:false. Never send transcript:"" or a transcript-less
  * close — Sonic India returns "No valid transcripts passed" and never emits
- * `done` (calls 25048 / 25049). We already wait for word boundaries, so
- * max_buffer_delay_ms is 0 (custom buffering). Mixing that hold with the
- * 3000ms managed default is the documented middle-ground mute.
+ * `done` (calls 25048 / 25049).
+ * Do not set max_buffer_delay_ms: 0. Docs default is 3000ms so Sonic can join
+ * word continuations; delay 0 speaks each word as its own clip (call 25061:
+ * 16s of choppy audio, then media_disconnect). Empty-transcript close was
+ * the 3000ms mute, not the buffer itself.
  * REST /tts/bytes only if the handshake never opens or a sentence has no WS audio.
  */
 import crypto from "node:crypto";
@@ -22,9 +24,6 @@ const CARTESIA_VERSION = "2026-03-01";
 const WS_CONNECT_TIMEOUT_MS = 6_000;
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 300;
-/** Custom buffering: we send word chunks, Sonic must speak them immediately. */
-const CARTESIA_MAX_BUFFER_DELAY_MS = 0;
-
 export const CARTESIA_DEFAULT_MODEL = "sonic-3.6";
 export const CARTESIA_SONIC_36_MODEL = "sonic-3.6";
 
@@ -336,7 +335,6 @@ export class CartesiaTTS implements TTSAdapter {
         model_id: this.modelId,
         voice: this.buildVoice(),
         output_format: this.outputFormat(),
-        max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS,
         add_timestamps: true,
       };
       const gc = this.buildGenerationConfig(emotions);
@@ -492,10 +490,11 @@ export class CartesiaTTS implements TTSAdapter {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
         extra.forEach((chunk, i) => {
           const last = i === extra.length - 1;
+          const transcript = last ? CartesiaTTS.ensureTerminalPunctuation(chunk) : chunk;
           this.ws!.send(JSON.stringify({
             ...this.settingsForContext(turnContextId),
             context_id: turnContextId,
-            transcript: chunk,
+            transcript,
             continue: !last,
           }));
         });
