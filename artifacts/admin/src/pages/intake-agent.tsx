@@ -37,6 +37,7 @@ type PhoneNumber = {
   id: number;
   number: string;
   userId: string;
+  ownerEmail?: string | null;
   provider: string;
   assignedAgentId: number | null;
   assignedAgentName: string | null;
@@ -187,13 +188,19 @@ export default function IntakeAgentPage() {
     [options, draft?.llmProvider],
   );
 
-  /** Numbers this agent can use: unassigned, or already on this agent. */
+  /** Numbers free to take, or already on this agent. Same-account first. */
   const assignableNumbers = useMemo(() => {
-    if (!options) return [];
-    return options.phoneNumbers.filter(
+    if (!options || !selected) return [];
+    const rows = options.phoneNumbers.filter(
       (n) => n.assignedAgentId == null || n.assignedAgentId === selectedId,
     );
-  }, [options, selectedId]);
+    return rows.slice().sort((a, b) => {
+      const aMine = a.userId === selected.userId ? 0 : 1;
+      const bMine = b.userId === selected.userId ? 0 : 1;
+      if (aMine !== bMine) return aMine - bMine;
+      return a.number.localeCompare(b.number);
+    });
+  }, [options, selected, selectedId]);
 
   const dirty = useMemo(() => {
     if (!selected || !draft) return false;
@@ -464,14 +471,18 @@ export default function IntakeAgentPage() {
                         <SelectContent>
                           <SelectItem value="none">No inbound number</SelectItem>
                           {assignableNumbers.map((n) => (
-                            <SelectItem key={n.id} value={String(n.id)}>{n.number}</SelectItem>
+                            <SelectItem key={n.id} value={String(n.id)}>
+                              {n.number}
+                              {n.ownerEmail || n.userId
+                                ? ` · ${n.ownerEmail ?? n.userId}`
+                                : ""}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
-                        Only numbers owned by{" "}
-                        <span className="font-medium">{selected.ownerEmail ?? selected.userId}</span>{" "}
-                        and not already on another agent can be used.
+                        Any purchased voice number can be used. Pick the DID you will actually call.
+                        Numbers owned by {selected.ownerEmail ?? selected.userId} are listed first.
                       </p>
                     </div>
                   </CardContent>

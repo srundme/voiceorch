@@ -162,6 +162,12 @@ router.get("/admin/intake-agents/options", requireAdmin, async (_req, res): Prom
       for (const a of agents) assignedTo.set(a.id, a.name);
     }
 
+    const ownerEmails = new Map<string, string | null>();
+    const ownerRows = await db
+      .select({ clerkId: usersTable.clerkId, email: usersTable.email })
+      .from(usersTable);
+    for (const r of ownerRows) ownerEmails.set(r.clerkId, r.email ?? null);
+
     res.json({
       llm: INTAKE_LLM_CATALOG,
       tts: INTAKE_TTS_CATALOG,
@@ -178,6 +184,7 @@ router.get("/admin/intake-agents/options", requireAdmin, async (_req, res): Prom
         id: n.id,
         number: n.number,
         userId: n.userId,
+        ownerEmail: ownerEmails.get(n.userId) ?? n.userId,
         provider: n.provider,
         assignedAgentId: n.agentId,
         assignedAgentName: n.agentId ? assignedTo.get(n.agentId) ?? null : null,
@@ -342,10 +349,14 @@ router.patch("/admin/intake-agents/:id", requireAdmin, async (req, res): Promise
 /**
  * Points a purchased DID at this agent. `phone_numbers.agent_id` is what the
  * inbound webhook looks up, so this one column is the whole binding.
+ *
+ * Admin may attach any active voice DID — inbound routing does not care who
+ * paid for the number, and the demo panel is how we pick a DID the operator
+ * already has in hand.
  */
 async function assignNumber(
   agentId: number,
-  agentOwnerId: string | null,
+  _agentOwnerId: string | null,
   phoneNumberId: number | null,
 ): Promise<{ error?: string }> {
   await db
@@ -369,9 +380,6 @@ async function assignNumber(
   if (!number) return { error: "Phone number not found." };
   if (number.service !== "voice") return { error: "That is a WhatsApp number — it cannot take voice calls." };
   if (number.status !== "active") return { error: "That number is not active." };
-  if (agentOwnerId && number.userId !== agentOwnerId) {
-    return { error: "That number belongs to a different account than the agent." };
-  }
 
   await db
     .update(phoneNumbersTable)
