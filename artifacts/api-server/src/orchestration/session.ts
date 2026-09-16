@@ -653,9 +653,11 @@ export async function createSession(params: {
     // Voice Memory — default OFF (opt-in). Remembers voiceprints + mid-call handoff.
     voiceMemoryEnabled:            (agentCfg["voiceMemoryEnabled"]            as boolean | undefined) ?? false,
     // P1-G: Engine — interruption & pacing
-    // PSTN default 2 while TTS plays; ambiguous partials raise to 3 in
-    // InterruptionManager. Bare VAD never cuts. Stop/wait still bypass.
-    wordsForInterruption: 0,
+    // Barge only when the STT final has this many words (Bolna number_of_words).
+    wordsForInterruption: (typeof agentCfg["wordsForInterruption"] === "number"
+      && agentCfg["wordsForInterruption"] > 0)
+      ? agentCfg["wordsForInterruption"]
+      : 3,
     // Post-utterance WAIT before TTS. Always 0 — saved 350/500/900 values
     // added ~1s of dead air every turn (call 20737).
     incrementalDelay: 0,

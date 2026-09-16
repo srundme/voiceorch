@@ -35,7 +35,6 @@ import { languagePrefix, resolveToolFillerPhrase } from "./tool-fillers.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
-import { isPstnStopHold, shouldAbandonStuckBarge, shouldCutTtsFromCallerTranscript, shouldDiscardOpenerTranscript, BARGE_STUCK_RESUME_MS } from "./pstn-interrupt-policy.js";
 import {
   extractSentences,
   pickStreamedGreetingHead,
@@ -113,7 +112,7 @@ import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { shouldSkipImmediateBackchannel, ttsContextIdForSequence } from "./filler-playback.js";
-import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
+import { countTranscriptWords, FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
@@ -2328,13 +2327,12 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   private shouldInterruptFromCallerTranscript(text: string): boolean {
-    return shouldCutTtsFromCallerTranscript({
-      transcript: text,
-      agentSpeaking: this.isPlaying || this.isSendingTtsAudio,
-      greetingPlaybackActive: this.greetingFirstClipActive,
-      systemPlaybackActive: this.systemPlaybackActive,
-      interruptionMgr: this.interruptionMgr,
-    });
+    const playing = this.isPlaying || this.isSendingTtsAudio;
+    return this.interruptionMgr.shouldTriggerInterruption(
+      countTranscriptWords(text),
+      text,
+      playing,
+    );
   }
 
   /** Partials are not turn-complete. Only transcript.final may barge. */
@@ -2423,7 +2421,7 @@ export class OrchestrationPipeline implements VoiceSession {
    * mid-utterance and answers the fragment (call 21628: committed "No, no"
    * 1.29s into a 4.28s segment, then the real final landed as a second turn).
    * Each tick refreshes the armed text. Growing room talk must not wait 8s
-   * then become a turn — resume after BARGE_STUCK_RESUME_MS.
+   * then become a turn.
    */
   private scheduleBargeRecoveryTick(): void {
     if (this._bargeRecoveryTimer) clearTimeout(this._bargeRecoveryTimer);
@@ -2440,13 +2438,6 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       const live = this.streamSTT?.getPendingTranscript?.()?.trim();
       if (live) this._bargeRecoveryText = live;
-      const bargeAge = this._bargeRecoveryArmedAt
-        ? Date.now() - this._bargeRecoveryArmedAt
-        : BARGE_STUCK_RESUME_MS;
-      if (shouldAbandonStuckBarge({ bargeAgeMs: bargeAge })) {
-        this.abandonFalseBarge("barge_stuck");
-        return;
-      }
       if (this._vadSpeechStartAt !== 0) {
         const current = (this._bargeRecoveryText || "").trim();
         if (current !== this._bargeRecoveryStableText) {
@@ -3039,7 +3030,6 @@ export class OrchestrationPipeline implements VoiceSession {
       if (combinedFrames > 0) this.bargeInMinFrames = combinedFrames;
     }
     this.interruptionMgr = new InterruptionManager({
-      incrementalDelayMs: 0,
       wordsForInterruption: config.agentConfig.wordsForInterruption ?? 3,
     });
     // Detection only makes sense when {caller_salutation} is actually in the prompt —
@@ -3527,12 +3517,9 @@ export class OrchestrationPipeline implements VoiceSession {
    * 
    * P1 fix (call 20094): Added cancellation of pending clarification timers.
    */
-  private deferGreetingTranscript(text: string, emittedAt: number, closeReason: TurnCloseReason): boolean {
+  private deferGreetingTranscript(text: string, _emittedAt: number, _closeReason: TurnCloseReason): boolean {
     if (!this.greetingPlaybackActive && !this.greetingFirstClipActive) return false;
     if (!text.trim()) return true;
-    if (isPstnStopHold(text, this.interruptionMgr) && !this.bargeInRequested) {
-      this.triggerBargeIn("greeting_stop", text, { speculative: false });
-    }
     return false;
   }
 
@@ -3563,17 +3550,6 @@ export class OrchestrationPipeline implements VoiceSession {
       { callId: this.config.callId, sttToProcessMs, queued: this.isProcessing },
       "Streaming STT transcript received"
     );
-    if (
-      this.greetingFirstClipActive
-      && shouldDiscardOpenerTranscript(transcript, this.interruptionMgr)
-    ) {
-      logger.info(
-        { callId: this.config.callId, transcript: transcript.slice(0, 80) },
-        "Opening greeting: discarding STT (first-speech mute)",
-      );
-      this.logDiscardedTranscript(transcript, "inbound_greeting_hold");
-      return;
-    }
     if (this.deferGreetingTranscript(transcript, sttEmittedAt, closeReason)) return;
     if (this._discardInboundGreetingOverlapFinal && this._partialThisGeneration) {
       this._discardInboundGreetingOverlapFinal = false;
@@ -3927,49 +3903,8 @@ export class OrchestrationPipeline implements VoiceSession {
     this.clearBargeRecovery();
 
     if (this.isProcessing) {
-      const playing = this.isPlaying || this.isSendingTtsAudio;
-      const welcomePlayed = !(this.greetingFirstClipActive || this.systemPlaybackActive);
-      if (
-        this.interruptionMgr.isFalseInterruption(
-          transcript.trim().split(/\s+/).filter(Boolean).length,
-          transcript,
-          playing,
-          welcomePlayed,
-        )
-      ) {
-        // Acks while we talk are chatter. A sentence-start is not — hold it
-        // so the rest of the utterance can merge (call 21818: "எனக்கு இப்போ").
-        const canHold =
-          closeReason !== "coalesced_fragment"
-          && !isBackchannelOnlyUtterance(transcript)
-          && (
-            shouldHoldFragmentForCoalesce(transcript, { expectedLang: coalesceLang })
-            || signalsConversationalContinuation(transcript)
-            || looksLikeIncompleteClauseStart(transcript)
-            || Date.now() < this.expectingShortReplyUntil
-          );
-        if (canHold) {
-          this.armFragmentCoalesce(transcript);
-          this.logDiscardedTranscript(transcript, "fragment_coalesce_hold");
-          logger.info(
-            { callId: this.config.callId, transcript: transcript.slice(0, 80) },
-            "Holding short talk-over — incomplete clause, not false interruption",
-          );
-          return;
-        }
-        this.logDiscardedTranscript(transcript, "false_interruption");
-        logger.info(
-          { callId: this.config.callId, transcript: transcript.slice(0, 80) },
-          "Ignoring transcript — false interruption while agent is speaking (Bolna)",
-        );
-        return;
-      }
-      // Call 21818: playback already ended (or between sentences) but this
-      // processTurn is still running. Queueing without cutting leftover LLM/TTS
-      // waits for the old monologue. After the false-interruption filter, this
-      // transcript is the next thing to answer — barge even if audio already stopped.
-      if (this.bargeInEnabled && !this.bargeInRequested) {
-        this.triggerBargeIn("queued_final", transcript, { speculative: true });
+      if (this.bargeInEnabled && !this.bargeInRequested && this.shouldInterruptFromCallerTranscript(transcript)) {
+        this.triggerBargeIn("queued_final", transcript);
       }
       if (!this.interruptReplyArmed) {
         this.pendingTranscriptQueue = [];

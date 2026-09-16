@@ -179,7 +179,7 @@ describe("TTS job generation ownership", () => {
 });
 
 describe("greeting caller input", () => {
-  it("lets provider STT through during greeting and barges on stop", () => {
+  it("lets provider STT through during greeting and does not barge on a one-word stop", () => {
     const { p } = harness();
     p.greetingFirstClipActive = true;
     p.greetingPlaybackActive = true;
@@ -190,7 +190,7 @@ describe("greeting caller input", () => {
     expect(p.deferGreetingTranscript("", 1, "stt_final")).toBe(true);
     expect(p.deferGreetingTranscript("hello", 1, "stt_final")).toBe(false);
     p.deferGreetingTranscript("रुको", 2, "stt_final");
-    expect(p.triggerBargeIn).toHaveBeenCalledTimes(1);
+    expect(p.triggerBargeIn).not.toHaveBeenCalled();
     p.greetingFirstClipActive = false; p.greetingPlaybackActive = false;
     expect(p.deferGreetingTranscript("next", 3, "stt_final")).toBe(false);
   });

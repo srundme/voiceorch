@@ -95,8 +95,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
 
   it("never interrupts TTS from bare VAD — Audio → STT → InterruptionManager (call 20257)", () => {
     expect(pipelineSrc).toContain("shouldInterruptFromCallerTranscript");
-    expect(pipelineSrc).toContain("shouldCutTtsFromCallerTranscript");
-    expect(pipelineSrc).toContain("shouldDiscardOpenerTranscript");
+    expect(pipelineSrc).toContain("shouldTriggerInterruption");
     expect(pipelineSrc).toContain("Bolna has no inbound RMS barge path");
     expect(pipelineSrc).not.toContain("shouldIgnoreSelfEcho");
     expect(pipelineSrc).not.toContain("SELF_ECHO_MIN_OVERLAP");
@@ -110,10 +109,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(speechEndBody).toContain("maybeBargeFromRealtimeVadStart");
     expect(pipelineSrc).toContain("Call 20274: caller was already mid-utterance");
     const streamBody = methodBody("handleStreamingTranscript");
-    expect(streamBody.indexOf("shouldDiscardOpenerTranscript"))
+    expect(streamBody.indexOf("deferGreetingTranscript"))
       .toBeLessThan(streamBody.indexOf("processTurn"));
     expect(pipelineSrc).toContain("room_crosstalk");
-    expect(pipelineSrc).toContain("first-speech mute");
     expect(pipelineSrc).toContain("greetingFirstClipActive");
     expect(pipelineSrc).toContain("turnEchoGraceAt");
     expect(pipelineSrc).not.toContain("voice-isolator");
@@ -141,7 +139,6 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).not.toContain("preset-filler");
     expect(pipelineSrc).toContain("job.streaming && this.tts.synthesizeStream");
     expect(pipelineSrc).toMatch(/TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 0/);
-    expect(pipelineSrc).toContain("incrementalDelayMs: 0");
     expect(pipelineSrc).toContain("shouldInjectSchedulingPhrasebook");
     expect(pipelineSrc).toContain("needSchedulingGuides");
     expect(pipelineSrc).toContain("return ttsSentenceOptions(this.agent.ttsProvider)");
@@ -161,13 +158,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     // Call 21803: do not start a second processTurn (21426 double-speak), but
     // cut current audio for a real queued final and drop stale acks at drain.
     expect(methodBody("handleStreamingTranscript")).toContain("queued_final");
-    expect(methodBody("handleStreamingTranscript")).toContain("isFalseInterruption");
     expect(methodBody("handleStreamingTranscript")).toContain("interruptReplyArmed");
-    // Call 21818: sentence-start talk-over is held, not dropped; a real final
-    // while isProcessing barges even after playback ended so the old monologue
-    // cannot finish first.
-    expect(methodBody("handleStreamingTranscript")).toContain("looksLikeIncompleteClauseStart");
-    expect(methodBody("handleStreamingTranscript")).toContain("fragment_coalesce_hold");
     expect(methodBody("processTurn")).toContain("interruptReplyArmed");
     expect(pipelineSrc).toContain("THIS_TURN_INSTRUCTION");
     expect(pipelineSrc).toContain("this.wakePlayTask()");
@@ -209,7 +200,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("if (this.streamSTT?.flush && !this.liveSarvamRealtime())");
     expect(pipelineSrc).toContain("this.armBargeRecovery(partial)");
     expect(methodBody("processTurn")).toContain("this.clearBargeRecovery()");
-    expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("shouldCutTtsFromCallerTranscript");
+    expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("shouldTriggerInterruption");
     expect(methodBody("isSameUtteranceStillArriving")).toContain("return false");
     expect(methodBody("playbackTooFreshForPartialBarge")).toContain("return false");
     expect(methodBody("armBargeRecovery")).toMatch(/return;/);
@@ -220,7 +211,6 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
   it("barge recovery waits out an open VAD instead of answering a fragment (call 21628)", () => {
     expect(methodBody("flushBargeRecovery")).toContain("this.clearBargeRecovery()");
     expect(pipelineSrc).toContain("abandonFalseBarge");
-    expect(pipelineSrc).toContain("BARGE_STUCK_RESUME_MS");
     expect(pipelineSrc).toContain('this.flushBargeRecovery("speech_end")');
     expect(pipelineSrc).toContain("Cover masks OUR latency; it must not talk over the caller.");
   });
