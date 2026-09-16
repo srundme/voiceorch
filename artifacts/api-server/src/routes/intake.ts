@@ -1,29 +1,30 @@
 import { Router, type IRouter } from "express";
-import crypto from "node:crypto";
 import { z } from "zod";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { db, candidateIntakesTable, type CandidateIntake } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getAuth } from "../lib/auth-compat.js";
 import { logger } from "../lib/logger.js";
-import { getSelfBaseUrl } from "../lib/app-domain.js";
-import { emitIntakeChange, onIntakeChange } from "../lib/intake-events.js";
+import { onIntakeChange } from "../lib/intake-events.js";
 import {
   INTAKE_FIELD_KEYS,
-  INTAKE_LOCKED_FIELDS,
   missingIntakeFields,
-  normalizeIntakePatch,
   type IntakeFieldKey,
 } from "../lib/candidate-intake-fields.js";
 import {
   INTAKE_DISPOSITIONS,
-  applyDispositionPatch,
   missingDispositionFields,
-  parseIntakeExtra,
   type IntakeExtra,
 } from "../lib/intake-dispositions.js";
 import { INTAKE_JOBS } from "../lib/intake-jobs.js";
-import { buildIntakeProfile, matchIntakeJobs } from "../lib/intake-job-match.js";
+import {
+  applyIntakeWrite,
+  completeIntakeSession,
+  createIntakeSession,
+  intakeExtraOf,
+  intakeFormUrl,
+  loadIntakeByToken,
+} from "../lib/intake-service.js";
 
 /**
  * Candidate intake form — live during an inbound call.
@@ -84,7 +85,7 @@ export interface IntakeDto {
 }
 
 function extraOf(row: CandidateIntake): IntakeExtra {
-  return parseIntakeExtra(row.extra);
+  return intakeExtraOf(row);
 }
 
 function toDto(row: CandidateIntake): IntakeDto {
@@ -117,19 +118,8 @@ function toDto(row: CandidateIntake): IntakeDto {
   };
 }
 
-function formUrlFor(token: string): string {
-  const base = (process.env["APP_BASE_URL"] ?? getSelfBaseUrl()).replace(/\/+$/, "");
-  return `${base}/intake/${token}`;
-}
-
-async function loadByToken(token: string): Promise<CandidateIntake | null> {
-  const [row] = await db
-    .select()
-    .from(candidateIntakesTable)
-    .where(eq(candidateIntakesTable.publicToken, token))
-    .limit(1);
-  return row ?? null;
-}
+const formUrlFor = intakeFormUrl;
+const loadByToken = loadIntakeByToken;
 
 // ── Authed: create / list intake sessions ───────────────────────────────────
 
@@ -140,22 +130,14 @@ router.post("/intake/sessions", requireAuth, async (req, res): Promise<void> => 
     res.status(400).json({ error: "Invalid request", issues: parsed.error.flatten() });
     return;
   }
-  const seed = normalizeIntakePatch({
-    ...(parsed.data.phone ? { phone: parsed.data.phone } : {}),
-    ...(parsed.data.jobCity ? { jobCity: parsed.data.jobCity } : {}),
-  });
   try {
-    const [row] = await db
-      .insert(candidateIntakesTable)
-      .values({
-        publicToken: crypto.randomBytes(16).toString("hex"),
-        userId,
-        agentId: parsed.data.agentId ?? null,
-        callId: parsed.data.callId ?? null,
-        ...INTAKE_LOCKED_FIELDS,
-        ...seed.values,
-      })
-      .returning();
+    const row = await createIntakeSession({
+      userId: userId!,
+      agentId: parsed.data.agentId ?? null,
+      callId: parsed.data.callId ?? null,
+      phone: parsed.data.phone ?? null,
+      jobCity: parsed.data.jobCity ?? null,
+    });
     if (!row) {
       res.status(500).json({ error: "Could not create intake form" });
       return;
@@ -286,46 +268,22 @@ router.patch("/intake/:token/fields", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Invalid request", issues: parsed.error.flatten() });
     return;
   }
-  const typedInput: Record<string, unknown> = {};
-  const extraInput: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(parsed.data.fields)) {
-    if (INTAKE_FIELD_KEYS.includes(key as IntakeFieldKey)) typedInput[key] = value;
-    else extraInput[key] = value;
-  }
-  const { values, errors: typedErrors } = normalizeIntakePatch(typedInput);
-  const typedKeys = Object.keys(values) as IntakeFieldKey[];
   try {
     const existing = await loadByToken(token.data);
     if (!existing) {
       res.status(404).json({ error: "Intake form not found" });
       return;
     }
-    const extraResult = Object.keys(extraInput).length > 0
-      ? applyDispositionPatch(extraOf(existing), extraInput)
-      : { extra: extraOf(existing), written: [] as string[], errors: [] as Array<{ field: string; message: string }> };
-    const errors = [...typedErrors, ...extraResult.errors];
-    const writtenKeys = [...typedKeys, ...extraResult.written];
-    if (writtenKeys.length === 0) {
+    const { row, written, errors } = await applyIntakeWrite(
+      token.data,
+      parsed.data.fields,
+      parsed.data.source ?? "agent",
+    );
+    if (!row) {
       res.status(400).json({ error: "No valid fields to write", fieldErrors: errors });
       return;
     }
-    const [row] = await db
-      .update(candidateIntakesTable)
-      .set({
-        ...values,
-        extra: extraResult.extra as unknown as Record<string, unknown>,
-        lastFieldKey: writtenKeys[writtenKeys.length - 1]!,
-        lastWriteSource: parsed.data.source ?? "agent",
-        revision: sql`${candidateIntakesTable.revision} + 1`,
-      })
-      .where(eq(candidateIntakesTable.publicToken, token.data))
-      .returning();
-    if (!row) {
-      res.status(404).json({ error: "Intake form not found" });
-      return;
-    }
-    emitIntakeChange(row.publicToken, row.revision);
-    res.json({ ...toDto(row), written: writtenKeys, fieldErrors: errors });
+    res.json({ ...toDto(row), written, fieldErrors: errors });
   } catch (err) {
     logger.error({ err }, "intake field write failed");
     res.status(500).json({ error: "Server error" });
@@ -347,49 +305,17 @@ router.post("/intake/:token/complete", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Invalid request", issues: parsed.error.flatten() });
     return;
   }
-  const rating = parsed.data.englishCommunication;
-  const { values, errors } = rating
-    ? normalizeIntakePatch({ englishCommunication: rating })
-    : { values: {}, errors: [] as Array<{ field: string; message: string }> };
-  if (errors.length > 0) {
-    res.status(400).json({ error: "Invalid English communication rating", fieldErrors: errors });
-    return;
-  }
   try {
-    const existing = await loadByToken(token.data);
-    if (!existing) {
+    const result = await completeIntakeSession(token.data, parsed.data.englishCommunication);
+    if (!result.row) {
+      if (result.errors.length > 0) {
+        res.status(400).json({ error: "Invalid English communication rating", fieldErrors: result.errors });
+        return;
+      }
       res.status(404).json({ error: "Intake form not found" });
       return;
     }
-    const extra = extraOf(existing);
-    const forMatch = { ...existing, ...values };
-    const matched = matchIntakeJobs(forMatch, extra);
-    extra.match = {
-      proposed: matched.proposed,
-      alternatives: matched.alternatives,
-      speakScript: matched.speakScript,
-      note: matched.note,
-      blocked: matched.blocked,
-      profile: buildIntakeProfile(forMatch, extra, matched),
-    };
-    const [row] = await db
-      .update(candidateIntakesTable)
-      .set({
-        ...values,
-        extra: extra as unknown as Record<string, unknown>,
-        status: "completed",
-        lastFieldKey: rating ? "englishCommunication" : "disposition",
-        lastWriteSource: "human",
-        revision: sql`${candidateIntakesTable.revision} + 1`,
-      })
-      .where(eq(candidateIntakesTable.publicToken, token.data))
-      .returning();
-    if (!row) {
-      res.status(404).json({ error: "Intake form not found" });
-      return;
-    }
-    emitIntakeChange(row.publicToken, row.revision);
-    res.json(toDto(row));
+    res.json(toDto(result.row));
   } catch (err) {
     logger.error({ err }, "intake complete failed");
     res.status(500).json({ error: "Server error" });

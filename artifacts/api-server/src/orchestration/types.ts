@@ -62,6 +62,29 @@ export interface EndCallTool {
 }
 
 /**
+ * Candidate intake tools. Their arguments are generated from the intake field
+ * and disposition catalogues at call setup, so the LLM schema can never drift
+ * from what the form actually accepts.
+ */
+export interface IntakeWriteTool {
+  type: "intake_write";
+  name: string;
+  description: string;
+}
+
+export interface IntakeDispositionTool {
+  type: "intake_disposition";
+  name: string;
+  description: string;
+}
+
+export interface IntakeSubmitTool {
+  type: "intake_submit";
+  name: string;
+  description: string;
+}
+
+/**
  * Sensible default farewell spoken when a call is ended by the AI (built-in
  * end_call tool or an end-call phrase) and the agent has no custom
  * `goodbyeMessage` configured. Prevents calls from dropping silently.
@@ -219,7 +242,7 @@ export interface SquadFollowupTool {
   description: string;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendEmailTool | SendWhatsappTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendEmailTool | SendWhatsappTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool | IntakeWriteTool | IntakeDispositionTool | IntakeSubmitTool;
 
 /** One JSON-schema property on a tool argument object. */
 export interface ToolPropertySchema {

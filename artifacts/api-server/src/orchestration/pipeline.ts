@@ -114,6 +114,12 @@ import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { shouldSkipImmediateBackchannel, ttsContextIdForSequence } from "./filler-playback.js";
 import { countTranscriptWords, FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
 import { isSelfEcho } from "./self-echo.js";
+import {
+  executeIntakeDisposition,
+  executeIntakeSubmit,
+  executeIntakeWrite,
+  type IntakeToolContext,
+} from "./intake-tools.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
@@ -7483,6 +7489,12 @@ export class OrchestrationPipeline implements VoiceSession {
       return await this.executeTransferAgent(tool, args);
     } else if (tool.type === "squad_followup") {
       return await this.executeSquadFollowup(args);
+    } else if (tool.type === "intake_write") {
+      return await executeIntakeWrite(this.intakeToolContext(), args);
+    } else if (tool.type === "intake_disposition") {
+      return await executeIntakeDisposition(this.intakeToolContext(), args);
+    } else if (tool.type === "intake_submit") {
+      return await executeIntakeSubmit(this.intakeToolContext());
     } else if (tool.type === "webhook") {
       return await this.executeWebhookTool(tool, args);
     } else if (tool.type === "send_sms") {
@@ -8006,6 +8018,18 @@ export class OrchestrationPipeline implements VoiceSession {
       type: "agent",
     });
     return undefined;
+  }
+
+  /**
+   * The intake form is keyed by call, so the tools resolve (or open) it
+   * themselves and nothing has to be threaded through the session.
+   */
+  private intakeToolContext(): IntakeToolContext {
+    return {
+      callId: this.config.callId,
+      agentId: this.agent.id,
+      callerPhone: this.config.callerPhone ?? null,
+    };
   }
 
   private async executeSquadFollowup(args: Record<string, unknown>): Promise<string> {

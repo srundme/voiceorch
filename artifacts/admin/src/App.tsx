@@ -27,6 +27,7 @@ import SignupsReport from "@/pages/reports/signups.tsx";
 import EmailsReport from "@/pages/reports/emails.tsx";
 import ManagedKeys from "@/pages/managed-keys";
 import ManagedNumbers from "@/pages/managed-numbers";
+import IntakeAgentPage from "@/pages/intake-agent";
 import Voices from "@/pages/voices";
 import PlatformSettings from "@/pages/settings";
 import DpdpPage from "@/pages/dpdp";
@@ -164,6 +165,7 @@ function Router() {
       <ProtectedRoute path="/reports/emails" component={EmailsReport} />
       <ProtectedRoute path="/managed-keys" component={ManagedKeys} />
       <ProtectedRoute path="/managed-numbers" component={ManagedNumbers} />
+      <ProtectedRoute path="/demos/intake-agent" component={IntakeAgentPage} />
       <ProtectedRoute path="/product/providers" component={ProvidersControlPage} />
       <ProtectedRoute path="/product/voices" component={Voices} />
       <ProtectedRoute path="/product/prompt-templates" component={PromptTemplatePage} />
