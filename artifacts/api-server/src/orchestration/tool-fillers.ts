@@ -61,6 +61,11 @@ const INSTANT_TOOL_FILLER_SKIP = new Set([
   "mute_meeting",
   "unmute_meeting",
   "leave_meeting",
+  // Intake writes finish in ~10ms. Speaking "One moment…" on every save is
+  // the stall the recruiter prompt already forbids.
+  "save_candidate_details",
+  "set_disposition",
+  "finish_intake",
 ]);
 
 export function languagePrefix(language: string | null | undefined): string {

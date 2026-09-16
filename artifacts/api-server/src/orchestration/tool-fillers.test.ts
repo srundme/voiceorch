@@ -16,5 +16,8 @@ describe("resolveToolFillerPhrase", () => {
   it("does not hold on instant tools", () => {
     expect(resolveToolFillerPhrase("end_call", "en")).toBeUndefined();
     expect(resolveToolFillerPhrase("next_slide", "en")).toBeUndefined();
+    expect(resolveToolFillerPhrase("save_candidate_details", "en-IN")).toBeUndefined();
+    expect(resolveToolFillerPhrase("set_disposition", "en")).toBeUndefined();
+    expect(resolveToolFillerPhrase("finish_intake", "en")).toBeUndefined();
   });
 });

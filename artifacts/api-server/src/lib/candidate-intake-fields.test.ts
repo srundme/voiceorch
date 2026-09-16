@@ -26,6 +26,10 @@ describe("normalizeIntakeField", () => {
       ok: true,
       value: "marbaazkhan@jobshop.ai",
     });
+    expect(normalizeIntakeField("email", "copy and work@gmail.com. G O P I N W R K @gmail.com.")).toEqual({
+      ok: true,
+      value: "gopinwrk@gmail.com",
+    });
     expect(normalizeIntakeField("email", "not an email")).toMatchObject({ ok: false });
   });
 

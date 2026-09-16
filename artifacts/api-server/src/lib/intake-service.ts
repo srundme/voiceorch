@@ -103,7 +103,26 @@ export async function ensureIntakeForCall(params: {
   callerPhone?: string | null;
 }): Promise<CandidateIntake | null> {
   const existing = await loadIntakeByCallId(params.callId);
-  if (existing) return existing;
+  if (existing) {
+    if (!existing.phone && params.callerPhone) {
+      const stamped = normalizeIntakePatch({ phone: params.callerPhone }).values;
+      if (stamped.phone) {
+        const [row] = await db
+          .update(candidateIntakesTable)
+          .set({
+            phone: stamped.phone,
+            revision: sql`${candidateIntakesTable.revision} + 1`,
+          })
+          .where(eq(candidateIntakesTable.id, existing.id))
+          .returning();
+        if (row) {
+          emitIntakeChange(row.publicToken, row.revision);
+          return row;
+        }
+      }
+    }
+    return existing;
+  }
 
   const [agent] = await db
     .select({ userId: agentsTable.userId })
@@ -229,6 +248,12 @@ export async function applyIntakeWrite(
     const last = values.lastName ?? existing.lastName;
     const guess = inferGenderFromName([first, last].filter(Boolean).join(" "));
     if (guess) values.gender = guess;
+  }
+
+  const cityForJob = String(values.city ?? existing.city ?? "");
+  const jobCityEmpty = !(values.jobCity ?? existing.jobCity);
+  if (jobCityEmpty && /bangalore|bengaluru|\bblr\b/i.test(cityForJob)) {
+    values.jobCity = "BANGALORE";
   }
 
   const typedKeys = Object.keys(values) as IntakeFieldKey[];

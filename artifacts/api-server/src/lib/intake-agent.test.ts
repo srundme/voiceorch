@@ -134,9 +134,10 @@ describe("intake agent tool set", () => {
     expect(props).not.toContain("will_relocate");
   });
 
-  it("never lets the model write gender or the English rating", () => {
+  it("never lets the model write gender, phone, or the English rating", () => {
     const props = Object.keys(INTAKE_WRITE_SCHEMA.properties);
     expect(props).not.toContain("gender");
+    expect(props).not.toContain("phone");
     expect(props).not.toContain("englishCommunication");
   });
 });
@@ -160,9 +161,16 @@ describe("intake prompt", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("Never stall");
   });
 
-  it("stops the agent asking for gender or an English self-rating", () => {
+  it("stops the agent asking for gender, phone, or an English self-rating", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("Never ask their gender");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Never ask for their phone number");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Never ask them to rate their English");
+  });
+
+  it("stops the agent inventing a returning call or an interview slot", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Do not say you have their details from before");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Never invent an interview date or time");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Say their name the way they said it");
   });
 
   it("says outcomes are mandatory and can stack", () => {

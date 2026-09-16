@@ -38,7 +38,7 @@ import {
 } from "@workspace/db/call-engine-defaults";
 import { withDbRetry } from "./db-retry.js";
 import { transcriptHasFarewellEnding } from "./callFarewell.js";
-import { attachIntakeCallArtifacts } from "../lib/intake-service.js";
+import { applyIntakeWrite, attachIntakeCallArtifacts } from "../lib/intake-service.js";
 import {
   INTAKE_AGENT_TYPE,
   buildIntakeSystemPrompt,
@@ -1029,7 +1029,10 @@ export async function createSession(params: {
       }
     }
 
-    if (callerProfileSnapshot || callerCtxResult.facts.length > 0 || callerCtxResult.recentCalls.length > 0) {
+    if (
+      agent.agentType !== INTAKE_AGENT_TYPE
+      && (callerProfileSnapshot || callerCtxResult.facts.length > 0 || callerCtxResult.recentCalls.length > 0)
+    ) {
       agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtxResult, {
         suppressGenderFact: !agentConfig.genderDetectionEnabled,
       });
@@ -1347,7 +1350,13 @@ export async function createSession(params: {
     });
     if (prior) {
       agentConfig.systemPrompt = `${agentConfig.systemPrompt}\n\n${buildIntakeReturnBlock(prior)}`;
+      if (!prior.phone && callerPhone) {
+        void applyIntakeWrite(prior.publicToken, { phone: callerPhone }, "agent").catch((err) => {
+          logger.warn({ err, token: prior.publicToken }, "intake: could not stamp caller ID onto form");
+        });
+      }
     }
+    agentConfig.systemPrompt = `${agentConfig.systemPrompt}\n\nThe candidate's mobile is already on the form from this call's caller ID. Never ask for their phone number.`;
     logger.info(
       {
         agentId: params.agentId,

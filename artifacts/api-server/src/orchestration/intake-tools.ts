@@ -38,6 +38,7 @@ const HIDDEN_FIELDS = new Set<IntakeFieldKey>([
   "industry",
   "englishCommunication",
   "gender",
+  "phone",
 ]);
 
 const FIELD_LABELS: Record<string, string> = {

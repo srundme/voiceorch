@@ -102,8 +102,9 @@ function phone(raw: unknown): IntakeFieldResult {
 }
 
 function email(raw: unknown): IntakeFieldResult {
-  // Callers spell addresses out loud: "arbaz at jobshop dot ai".
-  const text = collapse(raw)
+  const spoken = collapse(raw);
+  const spelled = emailFromSpelledLetters(spoken);
+  const text = (spelled ?? spoken)
     .toLowerCase()
     .replace(/\s+at\s+/g, "@")
     .replace(/\s+dot\s+/g, ".")
@@ -111,6 +112,20 @@ function email(raw: unknown): IntakeFieldResult {
   if (!/^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$/.test(text)) return bad("Email is not a valid address");
   if (text.length > 254) return bad("Email is too long");
   return ok(text);
+}
+
+/** "G O P I N W R K @gmail.com" beats a garbled "copy and work@gmail.com" in the same turn. */
+function emailFromSpelledLetters(spoken: string): string | null {
+  const re =
+    /(?:^|[\s.,;:])((?:[A-Za-z][\s.\-]){2,}[A-Za-z])\s*(?:@|\bat\b)\s*([A-Za-z0-9.-]+\.[A-Za-z]{2,})/gi;
+  let last: string | null = null;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(spoken)) !== null) {
+    const local = m[1]!.replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+    const domain = m[2]!.replace(/\s+/g, "").toLowerCase();
+    if (local.length >= 3) last = `${local}@${domain}`;
+  }
+  return last;
 }
 
 const GENDER_WORDS: Record<string, IntakeGender> = {

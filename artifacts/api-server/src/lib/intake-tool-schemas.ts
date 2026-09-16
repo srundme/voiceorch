@@ -17,14 +17,14 @@ type JsonSchema = {
  * Fields the agent asks for on the call.
  *
  * `skillRole`, `skill` and `industry` are fixed per campaign. `gender` is read
- * off the candidate's name server-side, and `englishCommunication` is scored
- * from how they speak during the call — asking for either out loud is exactly
- * what we do not want, so neither is exposed to the model.
+ * off the candidate's name server-side, `phone` is the inbound caller ID, and
+ * `englishCommunication` is scored from how they speak during the call —
+ * asking for any of those out loud is exactly what we do not want, so none
+ * of them are exposed to the model.
  */
-const ASKABLE_FIELDS: Record<string, { type: string; description: string }> = {
+const ASKABLE_FIELDS: Record<string, { type: "string"; description: string }> = {
   firstName: { type: "string", description: "Candidate's first name, as spelled." },
   lastName: { type: "string", description: "Candidate's last name / surname, as spelled." },
-  phone: { type: "string", description: "Mobile number in digits, e.g. 9876543210 or +919876543210." },
   email: { type: "string", description: "Email address, e.g. name@example.com." },
   dateOfBirth: { type: "string", description: "Date of birth as the candidate said it, e.g. 20 July 2000 or 20/07/2000." },
   workStatus: { type: "string", description: "Fresher or Experienced." },
