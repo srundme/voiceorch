@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { CandidateIntake } from "@workspace/db";
 import { INTAKE_JOBS } from "./intake-jobs.js";
-import { matchIntakeJobs } from "./intake-job-match.js";
+import { closeLineForNoJob, matchIntakeJobs, noMatchCloseFromSubmitResult } from "./intake-job-match.js";
 import { INTAKE_COMPANIES } from "./intake-dispositions.js";
 
 function candidate(over: Partial<CandidateIntake> = {}): CandidateIntake {
@@ -95,7 +95,10 @@ describe("matchIntakeJobs", () => {
   it("refuses a non-Bangalore job city", () => {
     const match = matchIntakeJobs(candidate({ jobCity: "PUNE" }), { dispositionIds: [], answers: {} });
     expect(match.proposed).toBeNull();
-    expect(match.note).toMatch(/Bangalore only/);
+    expect(match.note).toMatch(/Bangalore/i);
+    expect(match.speakScript).toMatch(/no jobs for your profile/i);
+    expect(match.speakScript).not.toMatch(/JD|survived/i);
+    expect(match.note).not.toMatch(/JD|survived/i);
   });
 
   it("honours several outcomes at once", () => {
@@ -142,5 +145,23 @@ describe("matchIntakeJobs", () => {
     });
     expect(match.blocked).toBe(false);
     expect(match.proposed).toBeTruthy();
+  });
+
+  it("treats night shift as the same pool as US voice jobs", () => {
+    const match = matchIntakeJobs(candidate({ shiftBase: "NIGHT_ONLY" }), { dispositionIds: [], answers: {} });
+    expect(match.proposed).toBeTruthy();
+    expect(match.blocked).toBe(false);
+  });
+});
+
+describe("closeLineForNoJob", () => {
+  it("tells the candidate no jobs matched and why, without JD jargon", () => {
+    const line = closeLineForNoJob("you need work from home and these openings are office-based");
+    expect(line).toMatch(/no jobs for your profile/i);
+    expect(line).toMatch(/work from home/i);
+    expect(line).not.toMatch(/JD|survived|filter/i);
+    expect(noMatchCloseFromSubmitResult(
+      "NO_JOB_MATCH\nReason: shift\nSay: Right now there are no jobs for your profile that are matched. That is because of shift.\nThen call end_call.",
+    )).toMatch(/no jobs for your profile/i);
   });
 });

@@ -102,7 +102,7 @@ describe("normalizeIntakeField", () => {
     expect(normalizeIntakeField("shiftBase", "any shift")).toEqual({ ok: true, value: "ANY" });
     expect(normalizeIntakeField("shiftBase", "night shift only")).toEqual({ ok: true, value: "NIGHT_ONLY" });
     expect(normalizeIntakeField("shiftBase", "rotational")).toEqual({ ok: true, value: "ROTATIONAL" });
-    expect(normalizeIntakeField("shiftBase", "evening")).toMatchObject({ ok: false });
+    expect(normalizeIntakeField("shiftBase", "evening")).toEqual({ ok: true, value: "US" });
   });
 
   it("marks DND Activate when the candidate is no longer interested", () => {

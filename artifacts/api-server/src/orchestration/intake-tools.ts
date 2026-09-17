@@ -23,6 +23,7 @@ import {
   maybeScheduleIntakeFollowup,
 } from "../lib/intake-service.js";
 import { evaluateIntakeScreen } from "../lib/intake-screen.js";
+import { closeLineForNoJob, INTAKE_NO_MATCH_MARKER } from "../lib/intake-job-match.js";
 import { logger } from "../lib/logger.js";
 
 export interface IntakeToolContext {
@@ -208,9 +209,17 @@ export async function executeIntakeSubmit(ctx: IntakeToolContext): Promise<strin
     : [];
 
   if (!closed.pitchAllowed || points.length === 0) {
-    return note
-      ? `No matching opening for this candidate. ${note} Tell them the team will review their profile and call back, then end the call.`
-      : "No matching opening for this candidate. Tell them the team will review their profile and call back, then end the call.";
+    const reason = note || "nothing in the current Bangalore voice lineup fits this profile";
+    const say = typeof match["speakScript"] === "string" && match["speakScript"].trim()
+      ? String(match["speakScript"]).trim()
+      : closeLineForNoJob(reason);
+    return [
+      INTAKE_NO_MATCH_MARKER,
+      `Reason: ${reason}`,
+      `Say: ${say}`,
+      "Speak that to the candidate now. Never skip it. Never say JD, filter, or survived.",
+      "Then call end_call. Do not hang up silently.",
+    ].join("\n");
   }
 
   // Recruiter facts, not labeled form rows. The first item is the opening hook

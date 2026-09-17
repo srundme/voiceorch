@@ -203,7 +203,7 @@ describe("intake prompt", () => {
 
   it("tells the agent to converse, not interrogate", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("This is a conversation");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Do not recite the list in a fixed order");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Never jump to city or shift while email or graduation is still open");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Do not ask for a pincode");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Bangalore, Bengaluru and Bengalore are the same city");
     expect(INTAKE_SYSTEM_PROMPT).toContain("building rapport");
@@ -236,6 +236,8 @@ describe("intake prompt", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("Do not say you have their details from before");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Never invent an interview date or time");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Say their name the way they said it");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("NO_JOB_MATCH");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("no jobs for their profile are matched as of now");
   });
 
   it("says outcomes are mandatory and can stack", () => {

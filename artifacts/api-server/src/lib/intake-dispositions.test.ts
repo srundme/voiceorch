@@ -90,6 +90,13 @@ describe("applyDispositionPatch", () => {
     expect(month.extra.answers["serving_notice"]?.notice_period).toBe("30 Days");
     const two = applyDispositionPatch(empty(), { disposition: "serving_notice", notice_period: "2 months" });
     expect(two.extra.answers["serving_notice"]?.notice_period).toBe("60 Days");
+    const lwd = applyDispositionPatch(empty(), {
+      disposition: "serving_notice",
+      notice_period: "15 days",
+      last_working_day: "28",
+    });
+    expect(lwd.extra.answers["serving_notice"]?.notice_period).toBe("15 Days");
+    expect(String(lwd.extra.answers["serving_notice"]?.last_working_day)).toMatch(/^\d{4}-\d{2}-28$/);
   });
 
   it("keeps same-named answers apart across outcomes", () => {
