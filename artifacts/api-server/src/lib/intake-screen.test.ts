@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IntakeExtra } from "./intake-dispositions.js";
-import { evaluateIntakeScreen, isBangalorePlace, isBangalorePincode, nonHiringAreaForPincode, parseLastCompany, parsePincode, parseScreenYesNo, parseTenure } from "./intake-screen.js";
+import { evaluateIntakeScreen, isBangalorePlace, isBangalorePincode, nonHiringAreaForPincode, parseLastCompany, parsePincode, parseScreenYesNo, parseTenure, pincodeFromPlace } from "./intake-screen.js";
 
 const emptyExtra = (): IntakeExtra => ({ dispositionIds: [], answers: {} });
 
@@ -40,7 +40,20 @@ describe("isBangalorePlace", () => {
     expect(isBangalorePlace("Whitefield")).toBe(true);
     expect(isBangalorePlace("HSR Layout")).toBe(true);
     expect(isBangalorePlace("Bengaluru")).toBe(true);
+    expect(isBangalorePlace("Bangalore")).toBe(true);
+    expect(isBangalorePlace("Bengalore")).toBe(true);
+    expect(isBangalorePlace("Banglore")).toBe(true);
     expect(isBangalorePlace("Chennai")).toBe(false);
+  });
+});
+
+describe("pincodeFromPlace", () => {
+  it("fills a Bangalore PIN from city or area and a Shimoga PIN from those names", () => {
+    expect(pincodeFromPlace("Bengalore")).toBe("560001");
+    expect(pincodeFromPlace("HSR Layout")).toBe("560102");
+    expect(pincodeFromPlace("Whitefield")).toBe("560066");
+    expect(pincodeFromPlace("Shimoga")).toBe("577201");
+    expect(pincodeFromPlace("Chennai")).toBeNull();
   });
 });
 
@@ -106,6 +119,8 @@ describe("parseScreenYesNo", () => {
     expect(parseScreenYesNo("nope")).toBe("no");
     expect(parseScreenYesNo("work from office")).toBe("no");
     expect(parseScreenYesNo("I need WFH")).toBe("yes");
+    expect(parseScreenYesNo("Yes I am serving 30 days notice")).toBe("yes");
+    expect(parseScreenYesNo("not serving notice")).toBe("no");
   });
 });
 
@@ -131,15 +146,24 @@ describe("evaluateIntakeScreen", () => {
     expect(cue.instruction).toMatch(/skip the name if they already gave it/i);
   });
 
-  it("asks pincode after city, before treating them as outstation", () => {
+  it("does not ask pincode once the city is known — Bangalore areas auto-pin, others are outstation", () => {
+    const blr = evaluateIntakeScreen({
+      ...screened,
+      city: "BENGALORE",
+      jobCity: null,
+      email: null,
+    }, emptyExtra());
+    expect(blr.waitingOn).not.toContain("pincode");
+    expect(blr.waitingOn.join(" ")).not.toMatch(/out_station/);
+
     const cue = evaluateIntakeScreen({
       ...screened,
       city: "CHENNAI",
       jobCity: null,
       email: null,
     }, emptyExtra());
-    expect(cue.waitingOn).toContain("pincode");
-    expect(cue.instruction).toMatch(/pincode/i);
+    expect(cue.waitingOn).not.toContain("pincode");
+    expect(cue.waitingOn).toContain("out_station_candidate");
   });
 
   it("opens relocate when the pincode is not Bangalore", () => {
@@ -205,6 +229,15 @@ describe("evaluateIntakeScreen", () => {
     expect(cue.waitingOn).toContain("tenure");
     expect(cue.instruction).toMatch(/company|tenure|working/i);
     expect(cue.canFinish).toBe(false);
+  });
+
+  it("does not treat Bengalore as a different job city from Bangalore", () => {
+    const cue = evaluateIntakeScreen({
+      ...screened,
+      city: "BANGALORE",
+      jobCity: "BENGALORE",
+    }, emptyExtra());
+    expect(cue.waitingOn.join(" ")).not.toMatch(/out_station|no_company|pincode/);
   });
 
   it("lets an experienced Bangalore candidate finish once company and tenure are in", () => {

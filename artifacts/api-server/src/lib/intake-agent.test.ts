@@ -161,6 +161,8 @@ describe("intake agent tool set", () => {
     expect(props).toContain("firstName");
     expect(props).toContain("qualification");
     expect(props).toContain("servingNotice");
+    expect(props).toContain("noticePeriod");
+    expect(props).toContain("lastWorkingDay");
     expect(props).toContain("wantsWfh");
     expect(props).toContain("pincode");
     expect(props).toContain("lastCompany");
@@ -202,9 +204,9 @@ describe("intake prompt", () => {
   it("tells the agent to converse, not interrogate", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("This is a conversation");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Do not recite the list in a fixed order");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Hiring zone is decided from the pincode");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Do not ask for a pincode");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Bangalore, Bengaluru and Bengalore are the same city");
     expect(INTAKE_SYSTEM_PROMPT).toContain("building rapport");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Be patient when they read a 6-digit pincode");
     expect(INTAKE_SYSTEM_PROMPT).not.toContain("Keep every reply under 25 words");
     expect(INTAKE_SYSTEM_PROMPT).not.toContain("that is the only question you may ask");
   });
