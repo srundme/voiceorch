@@ -89,6 +89,7 @@ async def handle_snapserve(snap_ws) -> None:
     pending_24 = np.zeros(0, dtype=np.int16)
     pending_in_24 = np.zeros(0, dtype=np.int16)
     pending_8 = np.zeros(0, dtype=np.int16)
+    moshi_ready = False
 
     ssl_ctx = moshi_ssl() if moshi_url.startswith("wss://") else None
 
@@ -106,8 +107,9 @@ async def handle_snapserve(snap_ws) -> None:
                             except json.JSONDecodeError:
                                 continue
                             if ctrl.get("type") == "speak":
-                                # Moshi has no text-inject on the live socket; ignore.
                                 continue
+                            continue
+                        if not moshi_ready:
                             continue
                         pcm8 = np.frombuffer(message, dtype="<i2")
                         pending_in_24 = np.concatenate([pending_in_24, upsample_8_to_24(pcm8)])
@@ -118,11 +120,13 @@ async def handle_snapserve(snap_ws) -> None:
                             blob = opus_writer.read_bytes()
                             if len(blob) > 0:
                                 await moshi.send(b"\x01" + blob)
+                except Exception:
+                    log.exception("snap_to_moshi failed")
                 finally:
                     close = True
 
             async def moshi_to_snap() -> None:
-                nonlocal close, pending_24, pending_8
+                nonlocal close, pending_24, pending_8, moshi_ready
                 try:
                     async for message in moshi:
                         if close:
@@ -132,6 +136,7 @@ async def handle_snapserve(snap_ws) -> None:
                         kind = message[0]
                         payload = message[1:]
                         if kind == 0x00:
+                            moshi_ready = True
                             await snap_ws.send(json.dumps({"type": "ready"}))
                             log.info("moshi handshake → snapserve ready")
                             continue
@@ -164,19 +169,11 @@ async def handle_snapserve(snap_ws) -> None:
                 finally:
                     close = True
 
-            done, pending = await asyncio.wait(
-                [
-                    asyncio.create_task(snap_to_moshi()),
-                    asyncio.create_task(moshi_to_snap()),
-                ],
-                return_when=asyncio.FIRST_COMPLETED,
+            await asyncio.gather(
+                snap_to_moshi(),
+                moshi_to_snap(),
+                return_exceptions=True,
             )
-            for task in pending:
-                task.cancel()
-            for task in done:
-                exc = task.exception()
-                if exc:
-                    log.warning("bridge task failed: %s", exc)
     except Exception as exc:
         log.exception("moshi connect failed")
         try:

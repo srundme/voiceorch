@@ -31,9 +31,19 @@ const KEEPALIVE_FILL_GAP_MS = 500;
 const ECHO_GRACE_MS = 220;
 const ECHO_MARGIN = 1.8;
 
-/** Node `ws` delivers both text and binary as Buffer. Only `isBinary` is audio. */
-export function isPersonaplexPcmFrame(isBinary: boolean): boolean {
-  return isBinary === true;
+/** JSON control is never PCM. Binary / even-length non-JSON is audio. */
+export function isPersonaplexPcmFrame(isBinary: boolean | undefined, buf?: Buffer): boolean {
+  if (buf && buf.length > 0 && (buf[0] === 0x7b || buf[0] === 0x5b)) {
+    try {
+      const parsed = JSON.parse(buf.toString("utf8")) as { type?: unknown };
+      if (parsed && typeof parsed === "object" && "type" in parsed) return false;
+    } catch {
+      /* not JSON */
+    }
+  }
+  if (isBinary === true) return true;
+  if (isBinary === false) return false;
+  return !!buf && buf.length >= 2 && buf.length % 2 === 0;
 }
 
 export class PersonaPlexPipeline implements VoiceSession {
@@ -59,8 +69,7 @@ export class PersonaPlexPipeline implements VoiceSession {
   private pumpTimer: ReturnType<typeof setInterval> | null = null;
   private pumpAnchorMs = 0;
   private framesSent = 0;
-  private firstAudioLogged = false;
-  private startedAtMs = Date.now();
+  private lastGpuSendAt = 0;
   private echoFloorRms = 0;
   private pendingIn: Buffer[] = [];
   private history: ConversationTurn[] = [];
@@ -120,8 +129,15 @@ export class PersonaPlexPipeline implements VoiceSession {
         : FRAME_MS * 8,
       0,
     );
+    const gpuSilence = Buffer.alloc(FRAME_BYTES_8K);
     const timer = setInterval(() => {
       if (this.closed) return;
+      if (this.ready && this.ws && this.ws.readyState === WebSocket.OPEN) {
+        if (Date.now() - this.lastGpuSendAt >= FRAME_MS) {
+          this.ws.send(gpuSilence);
+          this.lastGpuSendAt = Date.now();
+        }
+      }
       if (this.pumpTimer || this.outFrames.length > 0) return;
       if (Date.now() - this.lastRealFrameAt < KEEPALIVE_FILL_GAP_MS) return;
       if (isVobiz || this.config.rawPcmOutput) this.config.onAudioOut(silenceFrame);
@@ -221,6 +237,7 @@ export class PersonaPlexPipeline implements VoiceSession {
       return;
     }
     this.ws.send(toGpu);
+    this.lastGpuSendAt = Date.now();
   }
 
   /** PSTN returns our own voice. Mute that into the GPU so Moshi does not self-talk. */
@@ -279,7 +296,7 @@ export class PersonaPlexPipeline implements VoiceSession {
       ws.on("message", (data, isBinary) => {
         if (this.closed) return;
         const buf = toBuffer(data);
-        if (!isPersonaplexPcmFrame(isBinary)) {
+        if (!isPersonaplexPcmFrame(isBinary, buf)) {
           this.onControl(buf.toString("utf8"), () => {
             if (!settled) {
               settled = true;
@@ -344,7 +361,10 @@ export class PersonaPlexPipeline implements VoiceSession {
 
   private flushPendingIn(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    for (const chunk of this.pendingIn) this.ws.send(chunk);
+    for (const chunk of this.pendingIn) {
+      this.ws.send(chunk);
+      this.lastGpuSendAt = Date.now();
+    }
     this.pendingIn = [];
   }
 

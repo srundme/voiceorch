@@ -189,6 +189,8 @@ describe("PersonaPlexPipeline", () => {
   it("does not treat JSON control frames as PCM (that played as TV static)", () => {
     expect(isPersonaplexPcmFrame(false)).toBe(false);
     expect(isPersonaplexPcmFrame(true)).toBe(true);
+    expect(isPersonaplexPcmFrame(true, Buffer.from('{"type":"ready"}'))).toBe(false);
+    expect(isPersonaplexPcmFrame(true, Buffer.alloc(320))).toBe(true);
   });
 
   it("builds a short Jobshop intake persona, not the tool script", () => {
