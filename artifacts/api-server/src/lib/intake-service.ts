@@ -22,6 +22,19 @@ import {
 } from "./intake-dispositions.js";
 import { buildIntakeProfile, matchIntakeJobs } from "./intake-job-match.js";
 import { inferGenderFromName } from "./intake-gender.js";
+import {
+  SCREEN_FLAG_KEYS,
+  SCREEN_FLAG_TO_DISPOSITION,
+  autoAnswersForDisposition,
+  evaluateIntakeScreen,
+  isBangalorePincode,
+  isBangalorePlace,
+  mergeScreenFlags,
+  nonHiringAreaForPincode,
+  parsePincode,
+  parseScreenYesNo,
+  type ScreenFlagKey,
+} from "./intake-screen.js";
 import { englishRatingForForm, updateEnglishRead, type EnglishTurnInput } from "./intake-english.js";
 import { combineCallbackAt, findIntakeForCaller, lastTenDigits } from "./intake-call-context.js";
 import { scheduleCallbackRequested, scheduleNetworkDropCallback } from "../services/autoRedial.js";
@@ -252,18 +265,121 @@ export async function applyIntakeWrite(
 
   const cityForJob = String(values.city ?? existing.city ?? "");
   const jobCityEmpty = !(values.jobCity ?? existing.jobCity);
-  if (jobCityEmpty && /bangalore|bengaluru|\bblr\b/i.test(cityForJob)) {
+  if (jobCityEmpty && isBangalorePlace(cityForJob)) {
     values.jobCity = "BANGALORE";
   }
 
-  const typedKeys = Object.keys(values) as IntakeFieldKey[];
+  const workStatus = values.workStatus ?? existing.workStatus;
+  if (workStatus === "FRESHER" && values.totalCompanies == null && existing.totalCompanies == null) {
+    values.totalCompanies = 0;
+  }
 
-  const extraResult = Object.keys(extraInput).length > 0
-    ? applyDispositionPatch(intakeExtraOf(existing), extraInput)
+  const screenPatch: Partial<Record<ScreenFlagKey, "yes" | "no">> = {};
+  let pincodeValue: string | null = null;
+  let pincodeError: string | null = null;
+  const restExtra: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(extraInput)) {
+    if (key === "pincode" || key === "pinCode" || key === "pin") {
+      pincodeValue = parsePincode(raw);
+      if (!pincodeValue && String(raw ?? "").trim()) {
+        pincodeError = "Pincode must be a 6-digit Indian PIN";
+      }
+      continue;
+    }
+    if ((SCREEN_FLAG_KEYS as readonly string[]).includes(key)) {
+      const parsed = parseScreenYesNo(raw);
+      if (parsed) screenPatch[key as ScreenFlagKey] = parsed;
+      continue;
+    }
+    restExtra[key] = raw;
+  }
+
+  const extraResult = Object.keys(restExtra).length > 0
+    ? applyDispositionPatch(intakeExtraOf(existing), restExtra)
     : { extra: intakeExtraOf(existing), written: [] as string[], errors: [] as FieldError[] };
 
+  extraResult.extra.screen = mergeScreenFlags(extraResult.extra.screen, screenPatch);
+  const fromDispositionPin = parsePincode(extraResult.extra.answers["non_hiring_zone"]?.["candidate_pincode"]);
+  const pin = pincodeValue ?? fromDispositionPin ?? parsePincode(extraResult.extra.screen?.pincode);
+  if (pin) {
+    extraResult.extra.screen = mergeScreenFlags(extraResult.extra.screen, { pincode: pin });
+    if (pincodeValue) extraResult.written.push("pincode");
+  }
+  if (pincodeError) extraResult.errors.push({ field: "pincode", message: pincodeError });
+
+  const mergedRow = {
+    ...existing,
+    ...values,
+    city: (values.city ?? existing.city) as string | null,
+    jobCity: (values.jobCity ?? existing.jobCity) as string | null,
+    workStatus: (values.workStatus ?? existing.workStatus) as typeof existing.workStatus,
+    dateOfBirth: (values.dateOfBirth ?? existing.dateOfBirth) as string | null,
+    qualification: (values.qualification ?? existing.qualification) as typeof existing.qualification,
+    shiftBase: (values.shiftBase ?? existing.shiftBase) as typeof existing.shiftBase,
+  };
+
+  if (pin && isBangalorePincode(pin)) {
+    if (!mergedRow.city) {
+      values.city = "BANGALORE";
+      mergedRow.city = "BANGALORE";
+    }
+    if (!(values.jobCity ?? existing.jobCity)) {
+      values.jobCity = "BANGALORE";
+      mergedRow.jobCity = "BANGALORE";
+    }
+  }
+
+  const relocateYes = extraResult.extra.answers["out_station_candidate"]?.["will_relocate"] === "Yes"
+    || extraResult.extra.answers["non_hiring_zone"]?.["will_relocate"] === "Yes";
+  if (relocateYes && (!mergedRow.jobCity || !isBangalorePlace(mergedRow.jobCity))) {
+    values.jobCity = "BANGALORE";
+    mergedRow.jobCity = "BANGALORE";
+  }
+
+  const openDisposition = (id: string) => {
+    if (!extraResult.extra.dispositionIds.includes(id)) {
+      extraResult.extra.dispositionIds = [...extraResult.extra.dispositionIds, id];
+      extraResult.written.push("disposition");
+    }
+    const prefill = autoAnswersForDisposition(id, mergedRow, extraResult.extra);
+    const bucket = { ...(extraResult.extra.answers[id] ?? {}) };
+    for (const [k, v] of Object.entries(prefill)) {
+      if (v !== null && v !== "" && bucket[k] == null) bucket[k] = v;
+    }
+    extraResult.extra.answers[id] = bucket;
+  };
+
+  for (const [flag, yn] of Object.entries(screenPatch) as Array<[ScreenFlagKey, "yes" | "no"]>) {
+    extraResult.written.push(flag);
+    if (yn === "yes") {
+      const disp = SCREEN_FLAG_TO_DISPOSITION[flag];
+      if (disp) openDisposition(disp);
+    }
+  }
+
+  if (pin && !isBangalorePincode(pin)) {
+    openDisposition("out_station_candidate");
+    if (nonHiringAreaForPincode(pin)) openDisposition("non_hiring_zone");
+  }
+  if (mergedRow.jobCity && !isBangalorePlace(mergedRow.jobCity) && !relocateYes) {
+    openDisposition("no_company");
+  }
+  if (mergedRow.shiftBase && !["US", "NIGHT_ONLY", "ANY", "ROTATIONAL", "UK", "AUS"].includes(mergedRow.shiftBase)) {
+    openDisposition("shift_issues");
+  }
+  if (mergedRow.dateOfBirth) {
+    const born = new Date(`${mergedRow.dateOfBirth}T00:00:00Z`);
+    if (!Number.isNaN(born.getTime())) {
+      const now = new Date();
+      let age = now.getUTCFullYear() - born.getUTCFullYear();
+      const md = now.getUTCMonth() - born.getUTCMonth();
+      if (md < 0 || (md === 0 && now.getUTCDate() < born.getUTCDate())) age -= 1;
+      if (age < 18 || age > 40) openDisposition("age_limit");
+    }
+  }
+
   const errors = [...typedErrors, ...extraResult.errors];
-  const written = [...typedKeys, ...extraResult.written];
+  const written = [...(Object.keys(values) as IntakeFieldKey[]), ...extraResult.written];
   if (written.length === 0) return { row: null, written: [], errors };
 
   const [row] = await db
@@ -339,7 +455,19 @@ export async function completeIntakeSession(
   if (errors.length > 0) return { row: null, errors };
 
   const forMatch = { ...existing, ...values };
-  const matched = matchIntakeJobs(forMatch, extra);
+  const cue = evaluateIntakeScreen(forMatch, extra);
+  const matched = cue.pitchAllowed
+    ? matchIntakeJobs(forMatch, extra)
+    : {
+        proposed: null,
+        alternatives: [],
+        speakScript: null,
+        talkingPoints: [] as string[],
+        note: cue.killReason
+          ? `Not eligible after screening (${cue.killReason}).`
+          : "Screening is not complete — no job is pitched.",
+        blocked: true,
+      };
   extra.match = {
     proposed: matched.proposed,
     alternatives: matched.alternatives,

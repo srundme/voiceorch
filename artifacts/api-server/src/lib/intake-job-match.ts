@@ -14,6 +14,7 @@ import {
   type IntakeJobEnglish,
   type IntakeJobShift,
 } from "./intake-jobs.js";
+import { isBangalorePlace, livesInBangalore } from "./intake-screen.js";
 
 const ENGLISH_RANK: Record<IntakeJobEnglish, number> = {
   POOR: 0,
@@ -55,6 +56,7 @@ export interface IntakeCandidateProfile {
   dateOfBirth: string | null;
   city: string | null;
   jobCity: string | null;
+  pincode: string | null;
   workStatus: string | null;
   totalCompanies: number | null;
   qualification: string | null;
@@ -119,9 +121,31 @@ function excludedCompanies(extra: IntakeExtra): Set<string> {
 }
 
 function jobCityIsBangalore(jobCity: string | null): boolean {
-  if (!jobCity) return true;
-  const key = jobCity.toUpperCase().replace(/[^A-Z]/g, "");
-  return key === "BENGALURU" || key === "BANGALORE" || key === "BLR";
+  return isBangalorePlace(jobCity);
+}
+
+function englishForMatch(row: CandidateIntake, extra: IntakeExtra): IntakeJobEnglish {
+  const live = extra.english;
+  if (live && live.samples >= 2) {
+    const key = live.rating.toLowerCase().replace(/[^a-z]/g, "");
+    const mapped: Record<string, IntakeJobEnglish> = {
+      excellent: "EXCELLENT",
+      verygood: "VERY_GOOD",
+      good: "GOOD",
+      average: "AVERAGE",
+      poor: "POOR",
+    };
+    if (mapped[key]) return mapped[key]!;
+  }
+  if (row.englishCommunication) return row.englishCommunication as IntakeJobEnglish;
+  return "AVERAGE";
+}
+
+function shiftForMatch(row: CandidateIntake, extra: IntakeExtra): string | null {
+  if (has(extra, "shift_issues") && ans(extra, "shift_issues", "willing_for_alternate_shift") === "Yes") {
+    return "US";
+  }
+  return row.shiftBase;
 }
 
 export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): IntakeJobMatch {
@@ -156,7 +180,20 @@ export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): Intak
       blocked: true,
     };
   }
-  if (!jobCityIsBangalore(row.jobCity)) {
+  const english = englishForMatch(row, extra);
+  if (english === "POOR") {
+    return {
+      proposed: null,
+      alternatives: [],
+      speakScript: null,
+      talkingPoints: [],
+      note: "English on this call is below voice-process level.",
+      blocked: true,
+    };
+  }
+  const relocateYes = has(extra, "out_station_candidate")
+    && ans(extra, "out_station_candidate", "will_relocate") === "Yes";
+  if (!relocateYes && !jobCityIsBangalore(row.jobCity)) {
     return {
       proposed: null,
       alternatives: [],
@@ -168,16 +205,17 @@ export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): Intak
   }
 
   const age = ageYears(row.dateOfBirth);
-  const english = (row.englishCommunication ?? "GOOD") as IntakeJobEnglish;
-  const englishRank = ENGLISH_RANK[english] ?? 2;
+  const englishRank = ENGLISH_RANK[english] ?? 1;
   const excluded = excludedCompanies(extra);
   const needWeekend = has(extra, "need_weekend_off");
   const wfhOnly = has(extra, "work_from_home")
     && ans(extra, "work_from_home", "willing_to_work_from_office") === "No";
-  const relocateNo = has(extra, "out_station_candidate")
-    && ans(extra, "out_station_candidate", "will_relocate") === "No";
-  const candidateCity = (row.city ?? "").toUpperCase().replace(/[^A-Z]/g, "");
-  const inBangalore = candidateCity === "BENGALURU" || candidateCity === "BANGALORE" || candidateCity === "BLR";
+  const relocateNo = (has(extra, "out_station_candidate")
+      && ans(extra, "out_station_candidate", "will_relocate") === "No")
+    || (has(extra, "non_hiring_zone")
+      && ans(extra, "non_hiring_zone", "will_relocate") === "No");
+  const inBangalore = livesInBangalore(row.city, extra);
+  const shift = shiftForMatch(row, extra);
   const rawExpected = ans(extra, "high_salary", "expected_salary");
   const expectedSalary = typeof rawExpected === "number" ? rawExpected : null;
   const willTakeLower = ans(extra, "high_salary", "willing_lower_salary") === "Yes"
@@ -212,7 +250,7 @@ export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): Intak
     if (excluded.has(job.company)) continue;
     if (row.workStatus && job.workStatus !== "ANY" && job.workStatus !== row.workStatus) continue;
     if (row.qualification === "GRADUATE" && job.qualification === "POST_GRADUATE") continue;
-    if (!shiftFits(row.shiftBase, job)) continue;
+    if (!shiftFits(shift, job)) continue;
     if (englishRank < ENGLISH_RANK[job.minEnglish]) continue;
     if (age != null && (age < job.minAge || age > job.maxAge)) continue;
     if (gapMonths > job.maxCareerGapMonths) continue;
@@ -221,7 +259,7 @@ export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): Intak
     if (expectedSalary != null && expectedSalary > job.salaryMax && !willTakeLower) continue;
 
     let score = 10;
-    if (row.shiftBase && (job.shiftBase === row.shiftBase || job.shiftBase === "ANY")) score += 4;
+    if (shift && (job.shiftBase === shift || job.shiftBase === "ANY")) score += 4;
     if (job.workStatus === row.workStatus) score += 3;
     if (needWeekend && job.weekendOff) score += 5;
     if (wfhOnly && job.workFromHome) score += 5;
@@ -303,6 +341,10 @@ export function buildIntakeProfile(
     dateOfBirth: row.dateOfBirth,
     city: row.city,
     jobCity: row.jobCity,
+    pincode: extra.screen?.pincode
+      ?? (typeof extra.answers["non_hiring_zone"]?.["candidate_pincode"] === "string"
+        ? extra.answers["non_hiring_zone"]["candidate_pincode"]
+        : null),
     workStatus: row.workStatus,
     totalCompanies: row.totalCompanies,
     qualification: row.qualification,

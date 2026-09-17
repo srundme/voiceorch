@@ -48,11 +48,28 @@ export interface IntakeEnglishRead {
  * are namespaced per outcome because ids like `reason` and `date_of_birth`
  * mean different things under different outcomes.
  */
+export type ScreenYesNo = "yes" | "no";
+
+/** Parent-answer flags that drive child outcomes. Not shown as form columns. */
+export interface IntakeScreen {
+  servingNotice?: ScreenYesNo | null;
+  wantsWfh?: ScreenYesNo | null;
+  needsWeekendOff?: ScreenYesNo | null;
+  hasCareerGap?: ScreenYesNo | null;
+  otherDomain?: ScreenYesNo | null;
+  missingEduDocs?: ScreenYesNo | null;
+  missingExpDocs?: ScreenYesNo | null;
+  /** 6-digit Indian PIN — hiring zone depends on this, not only the city name. */
+  pincode?: string | null;
+}
+
 export interface IntakeExtra {
   dispositionIds: string[];
   answers: Record<string, Record<string, string | number | null>>;
   /** Live English assessment from the caller's own speech. */
   english?: IntakeEnglishRead | null;
+  /** Recruiter tree answers (notice / WFH / weekend / gap / domain / docs). */
+  screen?: IntakeScreen | null;
   /** Set when the form is closed — proposed JD + candidate profile snapshot. */
   match?: Record<string, unknown> | null;
 }
@@ -474,6 +491,29 @@ function parseEnglishRead(raw: unknown): IntakeEnglishRead | null {
 
 export const ENGLISH_RATINGS = ["Excellent", "Very good", "Good", "Average", "Poor"] as const;
 
+function parseScreen(raw: unknown): IntakeScreen | null {
+  if (!isRecord(raw)) return null;
+  const screen: IntakeScreen = {};
+  const keys = [
+    "servingNotice", "wantsWfh", "needsWeekendOff", "hasCareerGap",
+    "otherDomain", "missingEduDocs", "missingExpDocs",
+  ] as const;
+  let any = false;
+  for (const key of keys) {
+    const v = raw[key];
+    if (v === "yes" || v === "no") {
+      screen[key] = v;
+      any = true;
+    }
+  }
+  const pin = String(raw["pincode"] ?? "").replace(/\D/g, "");
+  if (/^[1-8]\d{5}$/.test(pin)) {
+    screen.pincode = pin;
+    any = true;
+  }
+  return any ? screen : null;
+}
+
 /**
  * Reads `extra` in either shape. Rows written before multi-disposition have a
  * single `dispositionId` and flat `answers`; those are lifted into the list
@@ -515,6 +555,7 @@ export function parseIntakeExtra(raw: unknown): IntakeExtra {
     dispositionIds,
     answers,
     english: parseEnglishRead(rec["english"]),
+    screen: parseScreen(rec["screen"]),
     match: isRecord(rec["match"]) ? rec["match"] : rec["match"] === null ? null : undefined,
   };
 }
@@ -655,6 +696,12 @@ function resolveDisposition(raw: unknown): IntakeDisposition | null {
     ?? null;
 }
 
+const SCREEN_INPUT_KEYS = new Set([
+  "servingNotice", "wantsWfh", "needsWeekendOff", "hasCareerGap",
+  "otherDomain", "missingEduDocs", "missingExpDocs",
+  "pincode", "pinCode", "pin",
+]);
+
 /**
  * Applies one outcome and its answers.
  *
@@ -719,6 +766,7 @@ export function applyDispositionPatch(
 
   for (const [key, raw] of Object.entries(input)) {
     if (key === "disposition" || key === "dispositionId" || key === "dispositions") continue;
+    if (SCREEN_INPUT_KEYS.has(key)) continue;
 
     // `not_interested.reason` addresses one outcome explicitly; bare `reason`
     // falls back to the outcome this patch is about.

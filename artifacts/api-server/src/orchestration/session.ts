@@ -41,6 +41,7 @@ import { transcriptHasFarewellEnding } from "./callFarewell.js";
 import { applyIntakeWrite, attachIntakeCallArtifacts } from "../lib/intake-service.js";
 import {
   INTAKE_AGENT_TYPE,
+  buildIntakeSttPrompt,
   buildIntakeSystemPrompt,
 } from "../lib/intake-agent.js";
 import {
@@ -594,7 +595,8 @@ export async function createSession(params: {
     backchannelingEnabled: agent.backchannelingEnabled !== false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
-    noiseCancellationEnabled: agent.noiseCancellationEnabled === true,
+    noiseCancellationEnabled: agent.agentType === INTAKE_AGENT_TYPE
+      || agent.noiseCancellationEnabled === true,
     forceSoftwareNoiseGate: agentCfg[FORCE_SOFTWARE_NOISE_GATE_KEY] === true,
     ambientNoiseEnabled: (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false,
     ambientNoiseTrack: (agentCfg["ambientNoiseTrack"] as string | undefined) ?? null,
@@ -728,9 +730,13 @@ export async function createSession(params: {
         )
       : ((agentCfg["sarvamSttMode"] as string | undefined) ?? null),
     sarvamSttStreamType: resolveRealtimeStreamType(agentCfg["sarvamSttStreamType"]),
-    sarvamSttPrompt: typeof agentCfg["sarvamSttPrompt"] === "string"
-      ? (agentCfg["sarvamSttPrompt"] as string)
-      : null,
+    sarvamSttPrompt: agent.agentType === INTAKE_AGENT_TYPE
+      ? (typeof agentCfg["sarvamSttPrompt"] === "string" && (agentCfg["sarvamSttPrompt"] as string).trim()
+        ? (agentCfg["sarvamSttPrompt"] as string)
+        : buildIntakeSttPrompt())
+      : (typeof agentCfg["sarvamSttPrompt"] === "string"
+        ? (agentCfg["sarvamSttPrompt"] as string)
+        : null),
     sarvamHighVadSensitivity: resolveSarvamHighVadSensitivity(agentCfg["sarvamHighVadSensitivity"]),
     sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs(agentCfg["sarvamSpeechEndFlushMs"] as number | undefined),
     sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs(agentCfg["sarvamIncompleteHoldMs"] as number | undefined),

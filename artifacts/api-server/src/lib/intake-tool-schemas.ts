@@ -31,9 +31,17 @@ const ASKABLE_FIELDS: Record<string, { type: "string"; description: string }> = 
   totalCompanies: { type: "string", description: "How many companies the candidate has worked with. Use 0 for a fresher." },
   city: { type: "string", description: "City the candidate currently lives in." },
   jobCity: { type: "string", description: "City the candidate wants to work in. Defaults to Bangalore." },
+  pincode: { type: "string", description: "6-digit Indian pincode where the candidate lives. Hiring zone is decided from this. Repeat the digits back." },
   qualification: { type: "string", description: "Graduate or Post Graduate." },
   shiftBase: { type: "string", description: "Shift the candidate can work, e.g. US Shift, UK Shift, Day Shift, Rotational." },
   dnd: { type: "string", description: "Activate only when the candidate asks never to be contacted again. Otherwise leave empty." },
+  servingNotice: { type: "string", description: "Experienced only. yes if they are currently serving notice, no otherwise." },
+  wantsWfh: { type: "string", description: "yes if they need work from home, no if office in Bangalore is fine." },
+  needsWeekendOff: { type: "string", description: "yes if they must have Saturday-Sunday off, no if rotational week-offs are fine." },
+  hasCareerGap: { type: "string", description: "Experienced only. yes if they have a career gap, no if not." },
+  otherDomain: { type: "string", description: "Experienced only. yes if their experience is not voice/BPO, no if it is voice/BPO." },
+  missingEduDocs: { type: "string", description: "yes if they cannot share education documents, no if they can." },
+  missingExpDocs: { type: "string", description: "Experienced only. yes if they cannot share experience letters, no if they can." },
 };
 
 export const INTAKE_WRITE_SCHEMA: JsonSchema = {

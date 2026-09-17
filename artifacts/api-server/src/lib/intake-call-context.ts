@@ -141,6 +141,9 @@ export function buildIntakeReturnBlock(row: CandidateIntake): string {
     if (value === null || value === undefined || value === "") continue;
     known.push(`- ${RECAP_LABELS[key] ?? key}: ${value}`);
   }
+  const pin = extra.screen?.pincode
+    ?? extra.answers["non_hiring_zone"]?.["candidate_pincode"];
+  if (typeof pin === "string" && pin.trim()) known.push(`- pincode: ${pin}`);
   if (row.englishCommunication) known.push(`- English on the previous call: ${row.englishCommunication}`);
 
   const outcomes = extra.dispositionIds

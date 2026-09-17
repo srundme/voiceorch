@@ -102,8 +102,13 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("vad.speech_start only");
     expect(pipelineSrc).toContain("maybeBargeFromRealtimeVadStart");
     const vadBody = methodBody("maybeBargeFromRealtimeVadStart");
-    expect(vadBody.replace(/\s+/g, "")).toBe("{return;}");
-    expect(methodBody("schedulePartialBargeIn").replace(/\s+/g, "")).toBe("{return;}");
+    expect(vadBody).toContain("shouldBargeOnRealtimeVadStart");
+    expect(vadBody).toContain("isCarrierSelfEcho");
+    expect(vadBody).toContain("shouldInterruptFromCallerTranscript");
+    expect(vadBody).not.toMatch(/triggerBargeIn\(\s*"energy"/);
+    expect(methodBody("schedulePartialBargeIn")).toContain("shouldInterruptFromCallerTranscript");
+    expect(methodBody("schedulePartialBargeIn")).toContain("isCarrierSelfEcho");
+    expect(methodBody("schedulePartialBargeIn")).toContain("SELF_ECHO_MIN_WORDS");
     expect(pipelineSrc).not.toContain("Barge-in detected after Sarvam realtime partial");
     const speechEndBody = methodBody("wireStreamSttCallbacks");
     expect(speechEndBody).toContain("maybeBargeFromRealtimeVadStart");
@@ -201,10 +206,11 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("this.armBargeRecovery(partial)");
     expect(methodBody("processTurn")).toContain("this.clearBargeRecovery()");
     expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("shouldTriggerInterruption");
-    expect(methodBody("isSameUtteranceStillArriving")).toContain("return false");
+    expect(methodBody("isSameUtteranceStillArriving")).toContain("isQueuedDuplicateUserTurn");
     expect(methodBody("playbackTooFreshForPartialBarge")).toContain("return false");
     expect(methodBody("armBargeRecovery")).toMatch(/return;/);
     expect(methodBody("flushBargeRecovery")).not.toContain("handleStreamingTranscript");
+    expect(methodBody("handleStreamingTranscript")).toContain("resumeBargedReply");
     expect(pipelineSrc).not.toContain("answering last partial");
   });
 

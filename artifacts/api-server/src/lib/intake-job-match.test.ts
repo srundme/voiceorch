@@ -122,11 +122,22 @@ describe("matchIntakeJobs", () => {
     expect(match.proposed).toBeNull();
   });
 
-  it("hands the agent discrete facts rather than a paragraph to read", () => {
-    const match = matchIntakeJobs(candidate(), { dispositionIds: [], answers: {} });
-    expect(match.talkingPoints.length).toBeGreaterThan(4);
-    expect(match.talkingPoints.some((p) => p.startsWith("company: "))).toBe(true);
-    expect(match.talkingPoints.some((p) => p.startsWith("take-home: "))).toBe(true);
-    expect(match.talkingPoints.every((p) => p.length < 120)).toBe(true);
+  it("blocks a live Poor English read even if the form rating is still Good", () => {
+    const match = matchIntakeJobs(candidate(), {
+      dispositionIds: [],
+      answers: {},
+      english: { rating: "Poor", confidence: 0.6, evidence: ["short answers"], samples: 3 },
+    });
+    expect(match.proposed).toBeNull();
+    expect(match.blocked).toBe(true);
+  });
+
+  it("still matches an outstation candidate who will relocate", () => {
+    const match = matchIntakeJobs(candidate({ city: "CHENNAI", jobCity: "BANGALORE" }), {
+      dispositionIds: ["out_station_candidate"],
+      answers: { out_station_candidate: { will_relocate: "Yes", candidate_location: "CHENNAI" } },
+    });
+    expect(match.blocked).toBe(false);
+    expect(match.proposed).toBeTruthy();
   });
 });

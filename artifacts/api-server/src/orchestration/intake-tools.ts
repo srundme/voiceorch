@@ -7,8 +7,6 @@
  * is done.
  */
 import {
-  INTAKE_FIELD_KEYS,
-  missingIntakeFields,
   type IntakeFieldKey,
 } from "../lib/candidate-intake-fields.js";
 import {
@@ -23,6 +21,7 @@ import {
   loadIntakeByToken,
   maybeScheduleIntakeFollowup,
 } from "../lib/intake-service.js";
+import { evaluateIntakeScreen } from "../lib/intake-screen.js";
 import { logger } from "../lib/logger.js";
 
 export interface IntakeToolContext {
@@ -52,6 +51,7 @@ const FIELD_LABELS: Record<string, string> = {
   totalCompanies: "number of companies worked with",
   city: "city they live in",
   jobCity: "city they want to work in",
+  pincode: "pincode",
   qualification: "graduate or post graduate",
   shiftBase: "shift they can work",
 };
@@ -60,11 +60,8 @@ function labelFor(key: string): string {
   return FIELD_LABELS[key] ?? key;
 }
 
-/** What the agent still has to ask, in interview order, excluding hidden fields. */
-function remainingQuestions(fields: Record<IntakeFieldKey, string | number | null>): string[] {
-  return missingIntakeFields(fields)
-    .filter((key) => !HIDDEN_FIELDS.has(key))
-    .map(labelFor);
+function cueFor(row: Parameters<typeof intakeExtraOf>[0]) {
+  return evaluateIntakeScreen(row, intakeExtraOf(row));
 }
 
 async function resolveForm(ctx: IntakeToolContext) {
@@ -79,12 +76,6 @@ async function resolveForm(ctx: IntakeToolContext) {
   return row;
 }
 
-function fieldsOf(row: { [k: string]: unknown }): Record<IntakeFieldKey, string | number | null> {
-  return Object.fromEntries(
-    INTAKE_FIELD_KEYS.map((key) => [key, (row[key] as string | number | null) ?? null]),
-  ) as Record<IntakeFieldKey, string | number | null>;
-}
-
 export async function executeIntakeWrite(
   ctx: IntakeToolContext,
   args: Record<string, unknown>,
@@ -96,10 +87,8 @@ export async function executeIntakeWrite(
     Object.entries(args ?? {}).filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== ""),
   );
   if (Object.keys(patch).length === 0) {
-    const left = remainingQuestions(fieldsOf(form));
-    return left.length > 0
-      ? `Nothing to save. Still needed: ${left.join(", ")}. Cover the next one in the conversation — do not announce it as a form field.`
-      : "Nothing to save. All required details are already captured.";
+    const cue = cueFor(form);
+    return `Nothing to save. Next: ${cue.instruction}`;
   }
 
   const { row, written, errors } = await applyIntakeWrite(form.publicToken, patch, "agent");
@@ -116,13 +105,8 @@ export async function executeIntakeWrite(
   if (errors.length > 0) {
     parts.push(`Rejected ${errors.map((e) => `${labelFor(e.field)} (${e.message})`).join("; ")} — ask for it again.`);
   }
-
-  const left = remainingQuestions(fieldsOf(row));
-  parts.push(
-    left.length > 0
-      ? `Still needed: ${left.join(", ")}. Acknowledge what they just said, then weave in the next missing piece. Do not say "next question."`
-      : `All required details captured. Stay in the conversation a beat if they have something to add, then call finish_intake.`,
-  );
+  const cue = cueFor(row);
+  parts.push(`Next: ${cue.instruction}`);
   return parts.join(" ");
 }
 
@@ -181,7 +165,8 @@ export async function executeIntakeDisposition(
       `Still open: ${questions.join("; ")}. Work these into the conversation one at a time in your own words, then send them back through set_disposition using the dotted key.`,
     );
   } else {
-    parts.push("Every outcome question is answered. Carry on with the remaining candidate details, or finish_intake.");
+    const cue = cueFor(current);
+    parts.push(`Every outcome question is answered. Next: ${cue.instruction}`);
   }
 
   void maybeScheduleIntakeFollowup({
@@ -200,27 +185,22 @@ export async function executeIntakeSubmit(ctx: IntakeToolContext): Promise<strin
   if (!form) return "The form is not available right now. Keep talking to the candidate and try again.";
 
   const fresh = (await loadIntakeByToken(form.publicToken)) ?? form;
-  const left = remainingQuestions(fieldsOf(fresh));
-  if (left.length > 0) {
-    return `Not ready to close. Still needed: ${left.join(", ")}. Ask for those first, save them, then call finish_intake again.`;
-  }
-
-  const extra = intakeExtraOf(fresh);
-  const missingOutcome = missingDispositionFields(extra);
-  if (missingOutcome.length > 0) {
-    return `Not ready to close. These outcome questions are unanswered: ${missingOutcome.join(", ")}. Ask those, send them through set_disposition, then call finish_intake again.`;
+  const cue = cueFor(fresh);
+  if (!cue.canFinish) {
+    return `Not ready to close. Screening is not complete. Next: ${cue.instruction}`;
   }
 
   const result = await completeIntakeSession(form.publicToken);
   if (!result.row) return "Could not close the form. Try again in a moment.";
 
+  const closed = cueFor(result.row);
   const match = intakeExtraOf(result.row).match ?? {};
   const note = typeof match["note"] === "string" ? match["note"].trim() : "";
   const points = Array.isArray(match["talkingPoints"])
-    ? match["talkingPoints"].filter((p): p is string => typeof p === "string")
+    ? match["talkingPoints"].filter((p: unknown): p is string => typeof p === "string")
     : [];
 
-  if (points.length === 0) {
+  if (!closed.pitchAllowed || points.length === 0) {
     return note
       ? `No matching opening for this candidate. ${note} Tell them the team will review their profile and call back, then end the call.`
       : "No matching opening for this candidate. Tell them the team will review their profile and call back, then end the call.";
@@ -231,7 +211,7 @@ export async function executeIntakeSubmit(ctx: IntakeToolContext): Promise<strin
   // its own wording and order.
   return [
     "Form closed. This is the opening that matched — these are facts, not a script:",
-    points.map((p) => `- ${p}`).join("\n"),
+    points.map((p: string) => `- ${p}`).join("\n"),
     "",
     "Pitch it the way a recruiter would on a live call. Open with the company and role and ask if that sounds like something they want — do not list everything at once. Then bring in shift, location and salary across the next couple of turns, pausing for their reaction each time. Use your own words and keep every turn short.",
     "Answer their questions using only the facts above. If something is not there, say the recruitment team will confirm it. Never name another company, role or salary.",

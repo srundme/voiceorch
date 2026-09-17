@@ -66,6 +66,7 @@ export interface IntakeDto {
   talkingPoints: string[];
   matchNote: string | null;
   profile: Record<string, unknown> | null;
+  pincode: string | null;
   updatedAt: string;
   createdAt: string;
 }

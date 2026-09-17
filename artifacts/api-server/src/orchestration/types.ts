@@ -541,7 +541,8 @@ export interface AgentConfig {
    */
   sarvamEndOfSpeechSilenceMs: number | null;
   /**
-   * Realtime connect `threshold` (0–1). Null uses Sarvam's default 0.3.
+   * Realtime connect `threshold` (0–1). Null uses the adapter default
+   * (0.7 on 8 kHz PSTN, 0.3 on 16 kHz).
    */
   sarvamVadThreshold: number | null;
   /**

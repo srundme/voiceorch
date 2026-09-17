@@ -85,6 +85,8 @@ export interface IntakeDto {
   talkingPoints: string[];
   matchNote: string | null;
   profile: Record<string, unknown> | null;
+  /** 6-digit Indian PIN from the recruiter screen. */
+  pincode: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -122,6 +124,10 @@ function toDto(row: CandidateIntake): IntakeDto {
       : [],
     matchNote: typeof extra.match?.["note"] === "string" ? extra.match["note"] : null,
     profile: (extra.match?.["profile"] as Record<string, unknown> | null) ?? null,
+    pincode: extra.screen?.pincode
+      ?? (typeof extra.answers["non_hiring_zone"]?.["candidate_pincode"] === "string"
+        ? extra.answers["non_hiring_zone"]["candidate_pincode"]
+        : null),
     updatedAt: row.updatedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
   };

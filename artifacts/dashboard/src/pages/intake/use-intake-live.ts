@@ -54,6 +54,7 @@ export function useIntakeLive(token: string): UseIntakeLive {
   const lastFieldsRef = useRef<IntakeDto["fields"] | null>(null);
   const lastAnswersRef = useRef<IntakeDto["dispositionAnswers"] | null>(null);
   const lastDispositionRef = useRef<string | null>(null);
+  const lastPincodeRef = useRef<string | null>(null);
   const revisionRef = useRef(-1);
 
   const applyFrame = useCallback((incoming: IntakeDto) => {
@@ -103,6 +104,13 @@ export function useIntakeLive(token: string): UseIntakeLive {
     }
     if (lastDispositionRef.current !== incoming.dispositionIds.join(",")) {
       changed.disposition = Date.now();
+    }
+    const nextPincode = incoming.pincode ?? null;
+    if (editingRef.current.has("pincode") && lastPincodeRef.current !== null) {
+      incoming = { ...incoming, pincode: lastPincodeRef.current };
+    } else {
+      if (previousFields && lastPincodeRef.current !== nextPincode) changed.pincode = Date.now();
+      lastPincodeRef.current = nextPincode;
     }
     if (Object.keys(changed).length > 0) setFlash((f) => ({ ...f, ...changed }));
 
@@ -194,6 +202,11 @@ export function useIntakeLive(token: string): UseIntakeLive {
           const fields = { ...current.fields, [key]: value as string | number | null };
           lastFieldsRef.current = fields;
           return { ...current, fields };
+        }
+        if (key === "pincode") {
+          const pincode = value == null || value === "" ? null : String(value);
+          lastPincodeRef.current = pincode;
+          return { ...current, pincode };
         }
         if (key === "disposition") {
           // The whole outcome list arrives at once; answers for outcomes that

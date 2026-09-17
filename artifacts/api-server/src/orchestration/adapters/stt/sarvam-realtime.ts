@@ -19,15 +19,21 @@ const WS_BASE = "wss://api.sarvam.ai/speech-to-text-realtime/ws";
 const PING_MS = 20_000;
 
 /**
- * Official saaras realtime VAD (docs.sarvam.ai realtime streaming).
- * Agent Latency Tuning can still override per call; we do not overlay a
- * third-party SIP table on top of Saaras.
+ * Official saaras realtime VAD (docs.sarvam.ai realtime streaming + LiveKit
+ * production best practices). Agent Latency Tuning can still override per call.
+ *
+ * Telephony (8 kHz PSTN/SIP): threshold 0.7 / min_speech 200 ms rejects line
+ * noise, TV, and sidetone that would otherwise become a fake caller turn.
+ * WebRTC / 16 kHz keeps the cleaner-channel defaults.
  */
-export function resolveRealtimeVadDefaults(_sampleRate: 8000 | 16000): {
+export function resolveRealtimeVadDefaults(sampleRate: 8000 | 16000): {
   silenceDurationMs: number | null;
   minSpeechDurationMs: number | null;
   threshold: number | null;
 } {
+  if (sampleRate === 8000) {
+    return { silenceDurationMs: 500, minSpeechDurationMs: 200, threshold: 0.7 };
+  }
   return { silenceDurationMs: 500, minSpeechDurationMs: 250, threshold: 0.3 };
 }
 

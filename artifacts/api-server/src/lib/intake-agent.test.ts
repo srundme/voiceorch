@@ -6,6 +6,7 @@ import {
   INTAKE_SPEED,
   INTAKE_SYSTEM_PROMPT,
   INTAKE_TTS_CATALOG,
+  buildIntakeSttPrompt,
   buildIntakeSystemPrompt,
   defaultIntakeControls,
   intakeAgentTools,
@@ -116,6 +117,9 @@ describe("intake agent tool set", () => {
     expect(props).not.toContain("englishCommunication");
     expect(props).toContain("firstName");
     expect(props).toContain("qualification");
+    expect(props).toContain("servingNotice");
+    expect(props).toContain("wantsWfh");
+    expect(props).toContain("pincode");
   });
 
   it("enumerates every disposition id for the outcome tool", () => {
@@ -153,6 +157,7 @@ describe("intake prompt", () => {
   it("tells the agent to converse, not interrogate", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("This is a conversation");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Do not recite the list in a fixed order");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Hiring zone is decided from the pincode");
     expect(INTAKE_SYSTEM_PROMPT).not.toContain("Keep every reply under 25 words");
   });
 
@@ -213,5 +218,12 @@ describe("intake prompt", () => {
 
   it("redials on a drop", () => {
     expect(INTAKE_LOCKED_AGENT_CONFIG.autoRedial.enabled).toBe(true);
+  });
+
+  it("builds the Sarvam STT prompt from the live JD catalog", () => {
+    const prompt = buildIntakeSttPrompt();
+    expect(prompt.length).toBeGreaterThan(0);
+    expect(prompt.length).toBeLessThanOrEqual(500);
+    expect(prompt).toMatch(/Concentrix/);
   });
 });

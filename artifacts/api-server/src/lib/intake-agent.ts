@@ -6,9 +6,10 @@
  * stack (Sarvam STT in English, the prompt, the intake tools) is fixed here so
  * every call behaves the same way regardless of who clicked create.
  */
-import { DISPOSITION_MEANINGS, INTAKE_DISPOSITIONS } from "./intake-dispositions.js";
+import { DISPOSITION_MEANINGS, INTAKE_COMPANIES, INTAKE_DISPOSITIONS } from "./intake-dispositions.js";
 import { INTAKE_LOCKED_FIELDS } from "./candidate-intake-fields.js";
 import { intakeSpokenName } from "./intake-call-context.js";
+import { INTAKE_JOBS } from "./intake-jobs.js";
 import type { AgentTool } from "../orchestration/types.js";
 
 export const INTAKE_AGENT_TYPE = "intake_inbound";
@@ -132,6 +133,31 @@ export const INTAKE_LOCKED_AGENT_CONFIG = {
   /** Same as every other agent: drop mid-screen → one immediate redial. */
   autoRedial: { enabled: true, maxAttempts: 3, delayMinutes: 2 },
 } as const;
+
+/**
+ * Sarvam realtime `prompt` — terminology hint on the final transcript.
+ * Built from the live JD catalog (company / title / process), not a
+ * hardcoded phrase list. Docs: docs.sarvam.ai STTStreaming `prompt`.
+ */
+export function buildIntakeSttPrompt(): string {
+  const seen = new Set<string>();
+  const terms: string[] = [];
+  const add = (raw: string): void => {
+    const t = raw.trim();
+    if (!t) return;
+    const key = t.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    terms.push(t);
+  };
+  for (const company of INTAKE_COMPANIES) add(company);
+  for (const job of INTAKE_JOBS) {
+    add(job.company);
+    add(job.title);
+    add(job.process);
+  }
+  return terms.join(", ").slice(0, 500);
+}
 
 // ── Controls ─────────────────────────────────────────────────────────────────
 
@@ -261,7 +287,7 @@ export function intakeAgentTools(): AgentTool[] {
       type: "intake_submit",
       name: INTAKE_TOOL_NAMES.submit,
       description:
-        "Close the intake form and get the matching job description to read out. Call this only after the required candidate details are saved.",
+        "Close the intake form and get the matching job description to pitch. Call this only when the last save_candidate_details result said screening is complete. Do not call it while Next still names a question.",
     },
     {
       type: "end_call",
@@ -323,8 +349,8 @@ The only time you may ask someone to hold is if you genuinely have to check some
 Four stages. Move forward when the stage is done; do not restart a stage.
 
 1. Open — the first audio of this call is already your greeting. Do not re-introduce yourself after it. On a first call, get their name. On a returning call the greeting already used their name — skip it.
-2. Screen — collect what you need below, conversationally, reacting as you go. Most of the call. If PREVIOUS INTAKE lists a field, do not ask it again.
-3. Pitch — once the details are in, call ${INTAKE_TOOL_NAMES.submit} and talk through the opening it returns.
+2. Screen — this is a recruiter screen, not a form. After every ${INTAKE_TOOL_NAMES.write} or ${INTAKE_TOOL_NAMES.disposition} the tool returns \`Next:\`. That line is the only question you may ask. Parent answers skip, unlock, or block children. Do not recite the list in a fixed order when the caller has opened a different door — still save what they volunteered, then follow \`Next:\`.
+3. Pitch — only after \`Next:\` says screening is complete. Then call ${INTAKE_TOOL_NAMES.submit}. If it returns no opening, do not invent one.
 4. Close — confirm interest or take the reason, make sure every outcome is recorded, thank them, ${INTAKE_TOOL_NAMES.endCall}.
 
 Record outcomes as you notice them, at any stage — do not save them all up for the end.
@@ -336,17 +362,29 @@ If they cannot talk now and ask you to call back, do both: record busy_call_me_b
 
 If the line drops you do not need to do anything — the system calls them back. If they are still on the line and the call is clearly dying, record call_disconnected.
 
-# What you need to collect
-Their name, email, the city they live in, date of birth, fresher or experienced (and if experienced, how many companies), graduate or post graduate, and whether they can do a US / night shift.
+# Recruiter screen
+Follow this tree. A no on a parent kills the matching child. A yes opens the child outcome and its questions. Never pitch a job while any parent is unanswered.
+
+- Name — first and last. Save both. If they give one name, ask the surname.
+- City they live in, then the 6-digit pincode. Read the pincode digits back and save pincode. Hiring zone is decided from the pincode, not the city name: 560/562 is Bangalore; anything else is outstation. Known Shimoga non-hiring pins (577201 Gopala Extension, 577211 Purudal, other 5772xx) also open non_hiring_zone. If they will not relocate to Bangalore, do not pitch. If they will, job city becomes Bangalore.
+- If they insist on working in another city, record no_company. Do not pitch.
+- Fresher or experienced. Freshers: skip notice, companies, career gap, other domain, and experience letters. Experienced: how many companies; serving notice (yes → serving_notice with notice period and last working day); career gap (yes → career_gap duration and reason); voice/BPO vs other domain (other domain → other_domain_experience; if they do not want BPO, do not pitch); experience letters when lined up (cannot → no_experience_documents).
+- Graduate or post graduate, and whether they can share education documents (cannot → no_education_documents).
+- Date of birth. Outside 18–40 → age_limit.
+- US / night shift, office-based in Bangalore. If they cannot, record shift_issues and ask if they would take the US/night shift anyway. If they still will not, do not pitch.
+- Email — spell it back.
+- Office vs work from home. Openings are office-based. If they need WFH, record work_from_home and ask if they would still come to office. If they will not come to office, do not pitch unless a WFH opening exists after finish_intake.
+- Fixed Saturday-Sunday off vs rotational week-offs. Must have weekend off → need_weekend_off.
+- English is judged from how they speak. If it is below voice-process level, record poor_communication and do not pitch.
 
 Never ask for their phone number. It is already on the form from the number they called from.
 Never ask their gender. It is recorded from their name automatically.
 Never ask them to rate their English, and never comment on their English. It is judged from how they speak on this call.
 The role, skill and industry are already set for this campaign. Never ask about them.
 
-After the name, follow the conversation rather than the list — if they mention they are already in a BPO, go to experience; if they mention another city, talk location. Do not recite the list in a fixed order when the caller has opened a different door.
+Save every answer with ${INTAKE_TOOL_NAMES.write} the moment you hear it. For the yes/no parents use servingNotice, wantsWfh, needsWeekendOff, hasCareerGap, otherDomain, missingEduDocs, missingExpDocs as yes or no. Save the 6-digit pincode as pincode.
 
-Save every answer with ${INTAKE_TOOL_NAMES.write} the moment you hear it.
+Do not call ${INTAKE_TOOL_NAMES.submit} until \`Next:\` says screening is complete. Calling it early is refused and you will be told what to ask.
 
 # Outcomes
 You must record an outcome on every call. A call with no outcome is a failed call.

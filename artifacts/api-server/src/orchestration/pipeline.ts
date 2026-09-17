@@ -17,7 +17,7 @@ import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
 import { buildAntiRepeatNudge, extractRecentAgentQuestions } from "./conversationDiscipline.js";
 import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared, isCallerClosingUtterance } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
-import { EAGER_PARTIAL_STABLE_MS, isSameUtteranceContinuation, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
+import { EAGER_PARTIAL_STABLE_MS, isQueuedDuplicateUserTurn, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
 import {
   SemanticTurnGate,
   resolveEouCommit,
@@ -34,7 +34,7 @@ import { extractEmotionTag, makeMarkupTagFilter, stripMarkupTags } from "./emoti
 import { languagePrefix, resolveToolFillerPhrase } from "./tool-fillers.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
-import { parseRealtimeDetectedLang } from "./adapters/stt/sarvam-realtime.js";
+import { parseRealtimeDetectedLang, shouldBargeOnRealtimePartial, shouldBargeOnRealtimeVadStart } from "./adapters/stt/sarvam-realtime.js";
 import {
   extractSentences,
   pickStreamedGreetingHead,
@@ -113,7 +113,7 @@ import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, est
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { shouldSkipImmediateBackchannel, ttsContextIdForSequence } from "./filler-playback.js";
 import { countTranscriptWords, FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
-import { isSelfEcho } from "./self-echo.js";
+import { isSelfEcho, SELF_ECHO_MIN_WORDS } from "./self-echo.js";
 import {
   executeIntakeDisposition,
   executeIntakeSubmit,
@@ -2306,10 +2306,24 @@ export class OrchestrationPipeline implements VoiceSession {
 
   /**
    * vad.speech_start only inspects. A realtime partial is not a Sarvam turn.
-   * Cutting TTS here is PSTN echo barge (logs 23:08: TTS aborted mid-sentence).
+   * Cutting TTS from bare VAD is PSTN echo barge; require a usable caller
+   * partial (Sarvam LiveKit: START_SPEECH / transcript.partial, not energy).
    */
   private maybeBargeFromRealtimeVadStart(): void {
-    return;
+    if (!this.bargeInEnabled || this.bargeInRequested) return;
+    if (!(this.isPlaying || this.isSendingTtsAudio)) return;
+    const partial = this.usablePendingBargeTranscript();
+    if (!partial || this.isCarrierSelfEcho(partial)) return;
+    if (this.isSameUtteranceStillArriving(partial)) return;
+    const usable = countTranscriptWords(partial) >= SELF_ECHO_MIN_WORDS
+      && this.shouldInterruptFromCallerTranscript(partial);
+    if (!shouldBargeOnRealtimeVadStart({
+      agentSpeaking: true,
+      greetingOrSystem: this.greetingFirstClipActive || this.systemPlaybackActive,
+      inEchoGrace: Date.now() < this.bargeInHoldUntil,
+      hasUsablePartial: usable,
+    })) return;
+    this.triggerBargeIn("vad_speech_start", partial);
   }
 
   /**
@@ -2324,10 +2338,12 @@ export class OrchestrationPipeline implements VoiceSession {
 
   /**
    * Caller is still finishing the utterance we already started answering
-   * (call 21450: "So, a good doctor should" → "…should be considered").
+   * (call 21450: "So, a good doctor should" → "…should be considered";
+   * call 25218: "I'm okay with it" → "I'm okay with both the shifts").
+   * Uses isSameUtteranceContinuation plus Bolna is_duplicate_user.
    */
-  private isSameUtteranceStillArriving(_text: string): boolean {
-    return false;
+  private isSameUtteranceStillArriving(text: string): boolean {
+    return isQueuedDuplicateUserTurn(this.lastUserTurnText(), text);
   }
 
   private playbackTooFreshForPartialBarge(_text: string): boolean {
@@ -2343,9 +2359,28 @@ export class OrchestrationPipeline implements VoiceSession {
     );
   }
 
-  /** Partials are not turn-complete. Only transcript.final may barge. */
-  private schedulePartialBargeIn(_text: string): void {
-    return;
+  /**
+   * Sarvam LiveKit: first usable non-echo transcript.partial cuts TTS.
+   * Word-count still goes through InterruptionManager; self-echo is dropped
+   * before barge so carrier sidetone cannot interrupt the agent.
+   */
+  private schedulePartialBargeIn(text: string): void {
+    if (!this.bargeInEnabled || this.bargeInRequested) return;
+    if (!(this.isPlaying || this.isSendingTtsAudio)) return;
+    const partial = text.trim();
+    if (!partial || this.isCarrierSelfEcho(partial)) return;
+    if (this.isSameUtteranceStillArriving(partial)) return;
+    if (!shouldBargeOnRealtimePartial({
+      greetingOrSystem: this.greetingFirstClipActive || this.systemPlaybackActive,
+      inEchoGrace: Date.now() < this.bargeInHoldUntil,
+      charCount: partial.length,
+      minChars: 1,
+    })) return;
+    // Partials shorter than the self-echo floor cannot be proven as caller
+    // vs sidetone; wait for transcript.final (InterruptionManager word count).
+    if (countTranscriptWords(partial) < SELF_ECHO_MIN_WORDS) return;
+    if (!this.shouldInterruptFromCallerTranscript(partial)) return;
+    this.triggerBargeIn("stt_partial", partial);
   }
 
   private clearBargeRecovery(): void {
@@ -3456,6 +3491,10 @@ export class OrchestrationPipeline implements VoiceSession {
           // are actually listening (not during agent playback, where partials are
           // barge-in candidates handled separately). Don't process yet.
             if (!isFinal) {
+            if ((this.isPlaying || this.isSendingTtsAudio) && text.trim()) {
+              // Sarvam LiveKit: barge from transcript.partial, not transcript.final.
+              this.schedulePartialBargeIn(text);
+            }
             if (!this.isPlaying && text.trim()) {
               this.lastCallerActivityAt = Date.now();
               this._partialThisGeneration = true;
@@ -3635,7 +3674,10 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
       const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
       this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
-      if (this.shouldInterruptFromCallerTranscript(transcript)) {
+      if (
+        !this.isSameUtteranceStillArriving(transcript)
+        && this.shouldInterruptFromCallerTranscript(transcript)
+      ) {
         this.triggerBargeIn("word_count", transcript);
         logger.info(
           { callId: this.config.callId, transcript: transcript.slice(0, 80) },
@@ -3898,10 +3940,6 @@ export class OrchestrationPipeline implements VoiceSession {
       this.clearFragmentCoalesce();
     }
 
-    // A real caller turn is being accepted — any pending barged-reply remainder
-    // is now stale (the caller moved the conversation on); never resume it.
-    this._bargedReplyRemainder = null;
-
     // Outbound call-screening bots (iPhone Ask Reason for Calling / Google
     // Call Screen): hang up and record voicemail — do not pitch the robot.
     if (this.callDirection === "outbound" && this.screeningState !== "done") {
@@ -3957,6 +3995,14 @@ export class OrchestrationPipeline implements VoiceSession {
     this.clearBargeRecovery();
 
     if (this.isProcessing) {
+      if (this.isSameUtteranceStillArriving(transcript)) {
+        this.logDiscardedTranscript(transcript, "queued_duplicate_user_turn");
+        logger.info(
+          { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+          "Dropped in-flight STT final — duplicate of the user turn already being answered (Bolna is_duplicate_user)",
+        );
+        return;
+      }
       if (this.bargeInEnabled && !this.bargeInRequested && this.shouldInterruptFromCallerTranscript(transcript)) {
         this.triggerBargeIn("queued_final", transcript);
       }
@@ -3968,6 +4014,10 @@ export class OrchestrationPipeline implements VoiceSession {
       this.wakePlayTask();
       return;
     }
+
+    // A real caller turn is being accepted — any pending barged-reply remainder
+    // is now stale (the caller moved the conversation on); never resume it.
+    this._bargedReplyRemainder = null;
 
     // Greeting (and any other isProcessing window) can leave orphans in the queue
     // without draining. A fresh final must not jump ahead of those — that is how
@@ -4001,8 +4051,17 @@ export class OrchestrationPipeline implements VoiceSession {
       if (next) {
         void this.handleStreamingTranscript(next.text, next.emittedAt, next.closeReason);
       } else if (!this.closed && !this.endCallInitiated) {
-        // Turn fully done — re-enter Listening and re-arm the stall backstop.
-        this.safetyNet.beginListening();
+        // Sarvam resume_false_interruption: a barge that resolved to a
+        // discarded duplicate must finish the cut reply instead of going mute
+        // (call 25218: 21s dead air after "I'm okay with both the shifts").
+        const remainder = this._bargedReplyRemainder;
+        const remainderAge = Date.now() - this._bargedReplyAt;
+        if (remainder && remainderAge < 15_000 && !this.isPlaying && !this.isSendingTtsAudio) {
+          this._bargedReplyRemainder = null;
+          void this.resumeBargedReply(remainder);
+        } else {
+          this.safetyNet.beginListening();
+        }
       }
     }
   }
@@ -4066,13 +4125,15 @@ export class OrchestrationPipeline implements VoiceSession {
     let remainder = baseSpokenResponse.startsWith(spokenResponse)
       ? baseSpokenResponse.slice(spokenResponse.length).trim()
       : baseSpokenResponse.trim();
-    if (!remainder) return;
     // Call 4856: barge before any paced audio left spokenResponse empty → we
-    // "resumed" the entire line from the start (glitchy double-speak). Only
-    // keep a true unheard *tail* after meaningful progress into the reply.
+    // "resumed" the entire line from the start (glitchy double-speak). Prefer
+    // the unheard tail after meaningful progress. Call 25218 barged ~400ms in
+    // and then discarded the continuation — keeping the full line is better
+    // than 21s of mute (Sarvam resume_false_interruption).
     const spokenLen = spokenResponse.trim().length;
     const minSpoken = Math.min(24, Math.max(12, Math.floor(baseSpokenResponse.length * 0.12)));
-    if (spokenLen < minSpoken) return;
+    if (spokenLen < minSpoken) remainder = baseSpokenResponse.trim();
+    if (!remainder) return;
     if (remainder.length > 400) remainder = remainder.slice(0, 400);
     this._bargedReplyRemainder = remainder;
     this._bargedReplyAt = Date.now();
@@ -10312,15 +10373,9 @@ export class OrchestrationPipeline implements VoiceSession {
 
     await playPromise;
 
-    // BARGE-IN FIX: Reset bargeInRequested AFTER playback completes, not at the start.
-    // This ensures that any transcripts arriving DURING this turn's playback are
-    // correctly identified as barge-ins and processed immediately (not queued).
-    // Resetting at the start (line 8611) caused a race: the first transcript processed
-    // immediately, but subsequent transcripts from the same interruption were queued
-    // because bargeInRequested was already reset to false.
-    this.bargeInRequested = false;
-
     // Bolna parity: store only what the caller actually heard (defer until playback ends).
+    // Capture the cut tail BEFORE clearing bargeInRequested — otherwise
+    // resume_false_interruption never has anything to resume (call 25218).
     const heardOnly = this.getHeardAgentText();
     const spokenResponse = resolveSpokenForHistory({
       requireDeliveryEvidence: !!this.config.awaitPlaybackReceipt,
@@ -10329,6 +10384,14 @@ export class OrchestrationPipeline implements VoiceSession {
       fullResponse: baseSpokenResponse,
     });
     this.captureBargedRemainder(spokenResponse, baseSpokenResponse);
+
+    // BARGE-IN FIX: Reset bargeInRequested AFTER playback completes, not at the start.
+    // This ensures that any transcripts arriving DURING this turn's playback are
+    // correctly identified as barge-ins and processed immediately (not queued).
+    // Resetting at the start (line 8611) caused a race: the first transcript processed
+    // immediately, but subsequent transcripts from the same interruption were queued
+    // because bargeInRequested was already reset to false.
+    this.bargeInRequested = false;
     if (spokenResponse) {
       this.conversationHistory.appendAssistant(spokenResponse);
       this.trackRepeat(spokenResponse);
@@ -11332,6 +11395,18 @@ export class OrchestrationPipeline implements VoiceSession {
     const wFinal = wakePlayer as (() => void) | null; wakePlayer = null; if (wFinal) wFinal();
     await playPromise;
 
+    if (cleanResponse) {
+      const baseSpokenResponse = cleanResponse;
+      const heardOnly = this.getHeardAgentText();
+      const spokenResponse = resolveSpokenForHistory({
+        requireDeliveryEvidence: !!this.config.awaitPlaybackReceipt,
+        barged: this.bargeInRequested,
+        heardOnly,
+        fullResponse: baseSpokenResponse,
+      });
+      this.captureBargedRemainder(spokenResponse, baseSpokenResponse);
+    }
+
     // BARGE-IN FIX: Reset bargeInRequested after tool-result playback completes.
     this.bargeInRequested = false;
 
@@ -11428,11 +11503,10 @@ export class OrchestrationPipeline implements VoiceSession {
       const heardOnly = this.getHeardAgentText();
       const spokenResponse = resolveSpokenForHistory({
         requireDeliveryEvidence: !!this.config.awaitPlaybackReceipt,
-        barged: this.bargeInRequested,
+        barged: false,
         heardOnly,
         fullResponse: baseSpokenResponse,
       });
-      this.captureBargedRemainder(spokenResponse, baseSpokenResponse);
       if (spokenResponse) {
         this.conversationHistory.appendAssistant(spokenResponse);
         this.trackRepeat(spokenResponse);

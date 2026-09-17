@@ -39,6 +39,7 @@ const PROFILE_ROWS: ReadonlyArray<[label: string, key: string]> = [
   ["Gender", "gender"],
   ["Date of birth", "dateOfBirth"],
   ["Lives in", "city"],
+  ["Pincode", "pincode"],
   ["Work city", "jobCity"],
   ["Work status", "workStatus"],
   ["Companies", "totalCompanies"],
@@ -388,6 +389,7 @@ export default function IntakeFormPage() {
 
   /** Every disposition answer is addressed as `<disposition>.<field>`. */
   const answerAt = (key: string): string | number | null => {
+    if (key === "pincode") return intake?.pincode ?? null;
     const dot = key.indexOf(".");
     if (dot <= 0) return null;
     return intake?.dispositionAnswers?.[key.slice(0, dot)]?.[key.slice(dot + 1)] ?? null;
@@ -686,6 +688,21 @@ export default function IntakeFormPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </Field>
+
+            <Field
+              label="Pincode"
+              htmlFor="pincode"
+              error={fieldErrors["pincode"]}
+              hint="Hiring zone is read from this PIN"
+            >
+              <Input
+                id="pincode"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={6}
+                {...extraTextProps("pincode")}
+              />
             </Field>
 
             <Field label="Job City" error={fieldErrors["jobCity"]} hint="Where the job is offered">
