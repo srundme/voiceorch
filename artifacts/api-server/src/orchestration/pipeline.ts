@@ -1591,6 +1591,8 @@ export class OrchestrationPipeline implements VoiceSession {
   private intakeCloseBeforeHangup: string | null = null;
   /** finish_intake stays off the spoken tool list until screening can close. */
   private intakeScreeningComplete = false;
+  /** Serialize background form writes so two persist LLMs do not overlap. */
+  private intakePersistChain: Promise<void> = Promise.resolve();
   // Interruption hint (inspired by Bolna): tracks sentences fully played this agent turn.
   // On barge-in these are captured into _interruptionHint; injected into the next
   // processTurn()'s historyForLlm so the LLM knows what the caller already heard and
@@ -7403,62 +7405,109 @@ export class OrchestrationPipeline implements VoiceSession {
   // ── Tool execution ───────────────────────────────────────────────────────────
 
   /**
-   * Fill the intake form from this caller turn in code. A second persist LLM
-   * was talking-and-saving at once: TTS waited, the line went dead, and the
-   * caller had to nudge. The spoken model only talks; save_candidate_details
-   * stays off its tool list.
+   * Recruiter LLM writes the form beside speech. Isolated abort so this chat
+   * cannot mute TTS. Never awaited before the spoken reply — that was the
+   * stall. Serialized so two persist calls do not overlap.
    */
+  private enqueueIntakePersist(transcript: string): Promise<void> {
+    const run = this.intakePersistChain.then(() => this.persistIntakeFromTurn(transcript));
+    this.intakePersistChain = run.catch((err) => {
+      logger.warn({ callId: this.config.callId, err }, "Background intake persist failed");
+    });
+    return this.intakePersistChain;
+  }
+
   private async persistIntakeFromTurn(transcript: string): Promise<void> {
     if (this.closed || !this.isIntakeAgent) return;
+    const persistTools = this.buildVoiceToolDefs().filter((t) => isBackgroundIntakeTool(t.name));
+    if (persistTools.length === 0) return;
     const text = transcript.trim();
     if (!text) return;
 
+    const lastAgentText =
+      this.conversationHistory.findLast((t) => t.role === "assistant")?.content
+      ?? this.lastAssistantSpokenRaw
+      ?? "";
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const persistPrompt = [
+      this.agent.systemPrompt,
+      "",
+      "[BACKGROUND SAVE — you do not speak]",
+      `The candidate just said: "${text.slice(0, 500)}"`,
+      lastAgentText ? `You had just asked: "${lastAgentText.slice(0, 280)}"` : "",
+      "Call save_candidate_details and/or set_disposition with only the fields they just gave.",
+      "Map the answer onto the question you asked. A date of birth (20 July 2000, 20/07/2000) is dateOfBirth — never pincode.",
+      "A surname like N or Sru is lastName. Spelled Gmail is email. A Bangalore area is city.",
+      "If they named a workplace or how long they have worked, save lastCompany and tenure.",
+      "Do not guess. Do not speak. Do not call finish_intake or end_call. If nothing to save, call no tool.",
+    ].filter(Boolean).join("\n");
+
     try {
-      const ctx = this.intakeToolContext();
-      let form = await ensureIntakeForCall({
-        callId: ctx.callId,
-        agentId: ctx.agentId,
-        callerPhone: ctx.callerPhone,
-      });
-      if (!form || this.closed) return;
-      const lastAgentText =
-        this.conversationHistory.findLast((t) => t.role === "assistant")?.content
-        ?? this.lastAssistantSpokenRaw
-        ?? "";
-      const patch = extractIntakePatchFromTurn({
-        transcript: text,
-        waitingOn: evaluateIntakeScreen(form, intakeExtraOf(form)).waitingOn,
-        lastAgentText,
-        already: { firstName: form.firstName, lastName: form.lastName },
-      });
-      if (Object.keys(patch).length > 0) {
-        const result = await executeIntakeWrite(ctx, patch);
-        if (this.closed) return;
-        if (result && !/^Nothing to save/i.test(result)) {
-          this.conversationHistory.appendUser(`[Form]: ${result}`);
-        }
-        form = await ensureIntakeForCall({
-          callId: ctx.callId,
-          agentId: ctx.agentId,
-          callerPhone: ctx.callerPhone,
-        }) ?? form;
-      }
-      if (this.closed || !form) return;
-      const cue = evaluateIntakeScreen(form, intakeExtraOf(form));
-      this.intakeScreeningComplete = cue.canFinish;
-      const last = this.conversationHistory.messages.at(-1);
-      const alreadyNext = typeof last?.content === "string"
-        && last.content.startsWith("[Form]:")
-        && last.content.includes("Next:");
-      if (!alreadyNext && !cue.canFinish) {
-        this.conversationHistory.appendUser(
-          `[Form]: Next: ${cue.instruction} Acknowledge what they just said, then pick this up in your own words — never read it as a form question. Do not call finish_intake until Next says screening is complete.`,
-        );
-      }
-      this.config.onConversationUpdate?.(this.conversationHistory.messages);
+      await this.llm.chat(
+        this.conversationHistory.sanitizeToolMessages(),
+        persistPrompt,
+        () => {},
+        () => {},
+        {
+          tools: persistTools,
+          isolated: true,
+          onToolCall: (name, args) => {
+            if (isBackgroundIntakeTool(name)) calls.push({ name, args });
+          },
+        },
+      );
     } catch (err) {
-      logger.warn({ callId: this.config.callId, err }, "Intake persist failed");
+      logger.warn({ callId: this.config.callId, err }, "Background intake persist LLM failed");
     }
+
+    if (this.closed) return;
+
+    if (calls.length === 0) {
+      try {
+        const form = await ensureIntakeForCall({
+          callId: this.config.callId,
+          agentId: this.agent.id,
+          callerPhone: this.config.callerPhone ?? null,
+        });
+        if (form) {
+          const patch = extractIntakePatchFromTurn({
+            transcript: text,
+            waitingOn: evaluateIntakeScreen(form, intakeExtraOf(form)).waitingOn,
+            lastAgentText,
+            already: { firstName: form.firstName, lastName: form.lastName },
+          });
+          if (Object.keys(patch).length > 0) {
+            const result = await executeIntakeWrite(this.intakeToolContext(), patch);
+            if (result && !/^Nothing to save/i.test(result)) {
+              this.conversationHistory.appendUser(`[Form]: ${result}`);
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn({ callId: this.config.callId, err }, "Intake extract fallback failed");
+      }
+    } else {
+      for (const call of calls) {
+        const result = await this.handleToolCall(call.name, call.args);
+        if (result) {
+          this.conversationHistory.appendUser(`[Background save for ${call.name}]: ${result}`);
+        }
+      }
+    }
+
+    try {
+      const form = await ensureIntakeForCall({
+        callId: this.config.callId,
+        agentId: this.agent.id,
+        callerPhone: this.config.callerPhone ?? null,
+      });
+      if (form) {
+        this.intakeScreeningComplete = evaluateIntakeScreen(form, intakeExtraOf(form)).canFinish;
+      }
+    } catch (err) {
+      logger.warn({ callId: this.config.callId, err }, "Intake screen refresh failed");
+    }
+    this.config.onConversationUpdate?.(this.conversationHistory.messages);
   }
 
   /**
@@ -8487,8 +8536,9 @@ export class OrchestrationPipeline implements VoiceSession {
     }
 
     // ── Build tool definitions from agent config ──
-    // Speak only. Form save is a code extract + DB write, not a second LLM.
-    await this.persistIntakeFromTurn(transcript);
+    // Speak immediately. Recruiter LLM fills the form beside TTS (isolated),
+    // so the line is not silent while save runs.
+    const persistDuringSpeech = this.enqueueIntakePersist(transcript);
     const speakToolDefs = this.spokenVoiceToolDefs();
 
     // Hard booking enforce: when slot + confirmed email + name are ready, book
@@ -10308,6 +10358,10 @@ export class OrchestrationPipeline implements VoiceSession {
     if (triggeredToolName && isBackgroundIntakeTool(triggeredToolName)) {
       triggeredToolName = null;
       triggeredToolArgs = {};
+    }
+
+    if (triggeredToolName === "finish_intake" || triggeredToolName === "end_call") {
+      await persistDuringSpeech;
     }
 
     // ── If LLM called a tool, execute it and skip TTS ──
