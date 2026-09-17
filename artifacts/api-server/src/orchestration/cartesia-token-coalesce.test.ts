@@ -2,44 +2,46 @@ import { describe, expect, it } from "vitest";
 import { flushCartesiaSpeakable, pushCartesiaSpeakable, cartesiaUnspokenTail, CartesiaTurnStream } from "./cartesia-token-coalesce.js";
 
 describe("pushCartesiaSpeakable", () => {
-  it("holds Latin until a word boundary so Sonic does not spell letters (call 25026)", () => {
+  it("holds Latin until a sentence end so Sonic does not speak word by word (call 25295)", () => {
     const r = pushCartesiaSpeakable("", "Hello");
     expect(r.pieces).toEqual([]);
     expect(r.rest).toBe("Hello");
-    const r2 = pushCartesiaSpeakable(r.rest, " ");
-    expect(r2.pieces).toEqual(["Hello "]);
-    expect(r2.rest).toBe("");
+    const r2 = pushCartesiaSpeakable(r.rest, " there");
+    expect(r2.pieces).toEqual([]);
+    expect(r2.rest).toBe("Hello there");
+    const r3 = pushCartesiaSpeakable(r2.rest, ".");
+    expect(r3.pieces).toEqual(["Hello there."]);
+    expect(r3.rest).toBe("");
   });
 
-  it("joins Latin BPE into a word before flushing (call 25026 N/o/p)", () => {
+  it("joins Latin BPE into a sentence before flushing (call 25026 N/o/p)", () => {
     let pending = "";
     let spoken = "";
-    for (const t of ["N", "o", " p", "r", "o", "blem,"]) {
+    for (const t of ["N", "o", " p", "r", "o", "blem."]) {
       const r = pushCartesiaSpeakable(pending, t);
       spoken += r.pieces.join("");
       pending = r.rest;
     }
-    expect(spoken).toBe("No problem,");
+    expect(spoken).toBe("No problem.");
     expect(pending).toBe("");
   });
 
-  it("joins coffee BPE on the trailing space", () => {
+  it("joins coffee BPE on the trailing period, not the space", () => {
     let pending = "";
     let spoken = "";
-    for (const t of ["cof", "f", "ee "]) {
+    for (const t of ["cof", "f", "ee ", "please."]) {
       const r = pushCartesiaSpeakable(pending, t);
       spoken += r.pieces.join("");
       pending = r.rest;
     }
-    expect(spoken).toBe("coffee ");
+    expect(spoken).toBe("coffee please.");
     expect(pending).toBe("");
   });
 
   it("does not flush a Tamil virama as its own piece (call 24502)", () => {
     const r = pushCartesiaSpeakable("லும", "் th");
-    expect(r.pieces.join("")).toBe("லும் ");
-    expect(r.rest).toBe("th");
-    expect(r.pieces.some((p) => p === "்" || p === "் th")).toBe(false);
+    expect(r.pieces).toEqual([]);
+    expect(r.rest).toBe("லும் th");
   });
 
   it("holds சொன until ்ன attaches", () => {
@@ -50,14 +52,22 @@ describe("pushCartesiaSpeakable", () => {
     expect(r.pieces).toEqual([]);
     expect(r.rest).toBe("சொன்ன");
     r = pushCartesiaSpeakable(r.rest, " ");
-    expect(r.pieces.join("")).toBe("சொன்ன ");
+    expect(r.pieces).toEqual([]);
+    expect(r.rest).toBe("சொன்ன ");
   });
 
   it("keeps spaces and does not insert them", () => {
     const r = pushCartesiaSpeakable("நீங்க", " ");
-    expect(r.pieces.join("")).toBe("நீங்க ");
+    expect(r.pieces).toEqual([]);
+    expect(r.rest).toBe("நீங்க ");
     const r2 = pushCartesiaSpeakable("", " ");
     expect(r2.pieces.join("") + r2.rest).toBe(" ");
+  });
+
+  it("does not treat 3.5 as a sentence boundary", () => {
+    const r = pushCartesiaSpeakable("The rate is 3", ".5 rupees.");
+    expect(r.pieces).toEqual(["The rate is 3.5 rupees."]);
+    expect(r.rest).toBe("");
   });
 
   it("flushes the held Indic tail at stream end", () => {
@@ -72,10 +82,10 @@ describe("pushCartesiaSpeakable", () => {
 
   it("continues on the same stream after the first sentence end", () => {
     const s = new CartesiaTurnStream();
-    expect(s.push("சரி, ")).toEqual(["சரி, "]);
-    expect(s.push("பாக்குறீங்க?")).toEqual(["பாக்குறீங்க?"]);
-    expect(s.push(" அதாவது ")).toEqual([" அதாவது "]);
-    expect(s.push("ஷாப்பா?")).toEqual(["ஷாப்பா?"]);
+    expect(s.push("சரி, ")).toEqual([]);
+    expect(s.push("பாக்குறீங்க?")).toEqual(["சரி, பாக்குறீங்க?"]);
+    expect(s.push(" அதாவது ")).toEqual([]);
+    expect(s.push("ஷாப்பா?")).toEqual([" அதாவது ஷாப்பா?"]);
     expect(s.finish("சரி, பாக்குறீங்க? அதாவது ஷாப்பா?")).toEqual({
       stream: [],
       leftover: "",

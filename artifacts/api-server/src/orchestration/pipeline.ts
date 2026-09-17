@@ -6420,8 +6420,8 @@ export class OrchestrationPipeline implements VoiceSession {
     return ttsSentenceOptions(this.agent.ttsProvider);
   }
 
-  /** Cartesia word continuations on one context_id. Sonic uses its default
-   *  3000ms input buffer so words join into a sentence instead of 0ms clips. */
+  /** Cartesia sentence continuations on one context_id. Word-sized pieces
+   *  (call 25295) made Sonic spell and overlap; wait for .?! then send. */
   private cartesiaManagedTokenStream(): boolean {
     return this.agent.ttsProvider === "cartesia";
   }

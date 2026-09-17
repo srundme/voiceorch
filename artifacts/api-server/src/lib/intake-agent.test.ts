@@ -306,12 +306,22 @@ describe("intake prompt", () => {
       .toBe("11111111-2222-3333-4444-555555555555");
   });
 
-  it("builds the Sarvam STT prompt from the live JD catalog", () => {
+  it("builds the Sarvam STT prompt from voice-process terms, not Executive titles", () => {
     const prompt = buildIntakeSttPrompt();
     expect(prompt.length).toBeGreaterThan(0);
     expect(prompt.length).toBeLessThanOrEqual(500);
+    expect(prompt).toMatch(/voice process/i);
+    expect(prompt).toMatch(/international voice process/i);
     expect(prompt).toMatch(/Concentrix/);
     expect(prompt).toMatch(/pincode/i);
     expect(prompt).toMatch(/Gmail/);
+    expect(prompt).not.toMatch(/vice president/i);
+    expect(prompt).not.toMatch(/\bVP\b/);
+    expect(prompt).not.toMatch(/Executive —/);
+  });
+
+  it("treats VP in the transcript as voice process, not a vice-president job", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("If the transcript says VP, vice president, or vice-president, they said \"voice process\"");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Never pitch a VP or senior-management opening");
   });
 });

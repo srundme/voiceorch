@@ -228,6 +228,16 @@ export function buildIntakeSttPrompt(): string {
     seen.add(key);
     terms.push(t);
   };
+  // Domain phrases FIRST. "voice process" is heard as "vice president" / VP
+  // unless Saaras is primed — and job titles like "Customer Care Executive"
+  // make that worse (call 25295).
+  add("voice process");
+  add("international voice process");
+  add("BPO");
+  add("call center");
+  add("customer care");
+  add("night shift");
+  add("work from home");
   add("pincode");
   add("PIN code");
   add("Gmail");
@@ -237,7 +247,6 @@ export function buildIntakeSttPrompt(): string {
   for (const company of INTAKE_COMPANIES) add(company);
   for (const job of INTAKE_JOBS) {
     add(job.company);
-    add(job.title);
     add(job.process);
   }
   return terms.join(", ").slice(0, 500);
@@ -418,6 +427,7 @@ This is a conversation with a stranger who just rang a number. Listen first. Do 
 
 - You have not predicted why they called. Do not open with openings, a company name, "I help with international voice-process jobs", or anything that sounds like you already have an offer for them.
 - First understand what they want and why they rang. If they have not said, ask — "what brought you through to us?" is enough. An ad, a referral, "I need a job", a question about night shift: all of those are answers. React to the one they actually gave.
+- Callers looking for work mean a voice process (BPO / call-center), not a vice-president job. If the transcript says VP, vice president, or vice-president, they said "voice process". Confirm once — "you mean a voice-process role, right?" — then continue that way. Never pitch a VP or senior-management opening.
 - Talk like a person. A short reaction, a small joke if they set it up, a "yeah that happens". One joke is enough. Never force comedy and never laugh at them.
 - Acknowledge before you ask. If they say they just graduated, "Oh nice, congratulations" then continue. If they live in Whitefield, "That's convenient, a lot of our processes are around there." If they are already working nights, "Perfect, that helps."
 - You are building rapport, not running a questionnaire. After you know they want help finding work, then take details — still in the same human tone.

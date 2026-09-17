@@ -1,26 +1,38 @@
 /**
- * Cartesia continuations docs use word-sized chunks
- * (`Hello`, `my name`, `is Sonic.`), not BPE letters. Call 25026 sent
- * `"N"` / `"o"` / `" p"` and Sonic spelled the sentence.
- *
- * Hold until a word boundary (whitespace or punctuation). Do not wait for a
- * full sentence — that is the docs "middle ground" with delay=3000.
+ * Cartesia continuations docs allow word-sized chunks, but feeding Sonic a
+ * word every token (call 25295: "Hey, I " / "don't think " / "VP-level ")
+ * makes it spell and overlap itself. Hold until a real sentence end.
  * Combining marks stay attached (call 24502). Do not insert or drop spaces.
+ * Do not treat `3.5` / `3.` as a sentence (digit + period).
  */
 
-const BREAK = /[\s.,;:!?…।॥]/u;
+const SENTENCE_MARK = /[?!…।॥]/u;
+
+function firstCartesiaSentenceEnd(buf: string): number {
+  for (let i = 0; i < buf.length; i++) {
+    const c = buf[i]!;
+    if (SENTENCE_MARK.test(c)) return i;
+    if (c !== ".") continue;
+    if (i > 0 && /\d/.test(buf[i - 1]!)) continue;
+    if (i + 1 < buf.length && /\d/.test(buf[i + 1]!)) continue;
+    return i;
+  }
+  return -1;
+}
 
 export function pushCartesiaSpeakable(pending: string, token: string): { pieces: string[]; rest: string } {
-  const buf = pending + token;
-  if (!buf) return { pieces: [], rest: "" };
-  if (/\p{M}$/u.test(buf)) return { pieces: [], rest: buf };
-  let last = -1;
-  for (let i = 0; i < buf.length; i++) {
-    if (BREAK.test(buf[i]!)) last = i;
+  let rest = pending + token;
+  if (!rest) return { pieces: [], rest: "" };
+  const pieces: string[] = [];
+  while (rest && !/\p{M}$/u.test(rest)) {
+    const last = firstCartesiaSentenceEnd(rest);
+    if (last < 0) break;
+    let end = last + 1;
+    if (end < rest.length && /\s/.test(rest[end]!)) end++;
+    const head = rest.slice(0, end);
+    rest = rest.slice(end);
+    if (head.trim()) pieces.push(head);
   }
-  const head = last >= 0 ? buf.slice(0, last + 1) : "";
-  const pieces = last >= 0 && head.trim() ? [head] : [];
-  const rest = pieces.length ? buf.slice(last + 1) : buf;
   return { pieces, rest };
 }
 

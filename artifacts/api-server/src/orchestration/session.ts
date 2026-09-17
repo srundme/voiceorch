@@ -749,9 +749,7 @@ export async function createSession(params: {
       : ((agentCfg["sarvamSttMode"] as string | undefined) ?? null),
     sarvamSttStreamType: resolveRealtimeStreamType(agentCfg["sarvamSttStreamType"]),
     sarvamSttPrompt: agent.agentType === INTAKE_AGENT_TYPE
-      ? (typeof agentCfg["sarvamSttPrompt"] === "string" && (agentCfg["sarvamSttPrompt"] as string).trim()
-        ? (agentCfg["sarvamSttPrompt"] as string)
-        : buildIntakeSttPrompt())
+      ? buildIntakeSttPrompt()
       : (typeof agentCfg["sarvamSttPrompt"] === "string"
         ? (agentCfg["sarvamSttPrompt"] as string)
         : null),
