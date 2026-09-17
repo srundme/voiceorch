@@ -164,7 +164,7 @@ const CATEGORIES: Category[] = [
         key: "managed_sarvam_key",
         label: "Sarvam API Key",
         description:
-          "One key for Sarvam STT (Saaras), TTS (Bulbul), and LLM. Catalog speakers (priya, shubh, …) work here; personal Creative Studio clones need the account that owns them.",
+          "One key for Sarvam STT (Saaras), TTS (Bulbul), and LLM. Paste, then click Rotate — Test alone does not replace the live key. Catalog speakers (priya, shubh, …) work here; personal Creative Studio clones need the account that owns them.",
         placeholder: "...",
       },
       {
@@ -354,10 +354,13 @@ export default function ManagedKeys() {
 
   function handleTest(key: string) {
     setTestingKey(key);
-    testKey.mutate(key, {
+    const typed = formValues[key]?.trim();
+    testKey.mutate({ key, value: typed || undefined }, {
       onSuccess: (res) => {
+        const ok = res.status === "healthy" || res.status === "skipped";
+        const unsavedOk = ok && res.probedUnsaved;
         toast({
-          title: res.status === "healthy" || res.status === "skipped" ? "Health check OK" : "Health check failed",
+          title: unsavedOk ? "Pasted key is OK — click Rotate to use it" : ok ? "Health check OK" : "Health check failed",
           description: res.errorMessageSafe ?? `Status: ${res.status}${res.latencyMs != null ? ` · ${res.latencyMs} ms` : ""}`,
           variant: res.status === "failed" ? "destructive" : "default",
         });
@@ -691,6 +694,9 @@ export default function ManagedKeys() {
                             {st?.lastLatencyMs != null && (
                               <p className="text-[10px] text-muted-foreground mt-1">{st.lastLatencyMs} ms</p>
                             )}
+                            {st?.lastError ? (
+                              <p className="text-[10px] text-red-500 mt-1 break-words">{st.lastError}</p>
+                            ) : null}
                           </div>
                           <div className="md:col-span-3">
                             {masked ? (
@@ -720,7 +726,7 @@ export default function ManagedKeys() {
                                   variant="outline"
                                   size="sm"
                                   className="h-7 text-xs gap-1"
-                                  disabled={testingKey === field.key || !masked}
+                                  disabled={testingKey === field.key || !(masked || formValues[field.key]?.trim())}
                                   onClick={() => handleTest(field.key)}
                                 >
                                   {testingKey === field.key ? <Loader2 className="h-3 w-3 animate-spin" /> : <FlaskConical className="h-3 w-3" />}

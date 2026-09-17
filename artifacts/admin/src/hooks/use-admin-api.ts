@@ -699,13 +699,21 @@ export function useManagedKeysStatus() {
 export function useTestManagedKey() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (key: string) =>
-      adminFetch<{ key: string; status: string; latencyMs: number | null; errorMessageSafe?: string }>(
+    mutationFn: ({ key, value }: { key: string; value?: string }) =>
+      adminFetch<{
+        key: string;
+        status: string;
+        latencyMs: number | null;
+        errorMessageSafe?: string;
+        probedUnsaved?: boolean;
+      }>(
         `/managed-keys/${encodeURIComponent(key)}/test`,
-        { method: "POST", body: "{}" },
+        { method: "POST", body: JSON.stringify(value?.trim() ? { value } : {}) },
       ),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "managed-keys", "status"] });
+    onSuccess: (_data, vars) => {
+      if (!vars.value?.trim()) {
+        queryClient.invalidateQueries({ queryKey: ["admin", "managed-keys", "status"] });
+      }
     },
   });
 }

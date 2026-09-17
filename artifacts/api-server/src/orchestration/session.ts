@@ -1539,7 +1539,7 @@ export async function createSession(params: {
         ?? (providerName === "sarvam" ? (process.env["SARVAM_API_KEY"] ?? "").trim() || undefined : undefined);
       if (managed) {
         providerKeys.set(providerName, managed);
-        logger.info({ providerName, isManaged }, "Using platform managed key for provider");
+        logger.info({ providerName, isManaged, keyLast4: managed.slice(-4) }, "Using platform managed key for provider");
       }
     }
     if (MANAGED_EXTRA[providerName] && (isManaged || !providerKeys.has(`${providerName}:extraConfig`))) {

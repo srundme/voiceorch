@@ -111,18 +111,40 @@ async function runHealthCheck(credentialKey: string, secretOverride?: string): P
       return { status: "failed", latencyMs, errorCode: String(r.status), errorMessageSafe: `Deepgram HTTP ${r.status}` };
     }
     if (credentialKey === "managed_sarvam_key") {
-      const r = await fetch("https://api.sarvam.ai/text-lid", {
+      // Probe TTS — that is what live calls use. text-lid can still 200 while Bulbul/Saaras return 402.
+      const r = await fetch("https://api.sarvam.ai/text-to-speech", {
         method: "POST",
         headers: { "api-subscription-key": secret, "Content-Type": "application/json" },
-        body: JSON.stringify({ input: "hello" }),
-        signal: AbortSignal.timeout(8000),
+        body: JSON.stringify({
+          inputs: ["ok"],
+          target_language_code: "en-IN",
+          speaker: "shubh",
+          model: "bulbul:v3",
+          speech_sample_rate: 8000,
+          output_audio_codec: "linear16",
+        }),
+        signal: AbortSignal.timeout(10000),
       });
       const latencyMs = Date.now() - started;
-      // 200 or 4xx that isn't 401/403 still proves auth path; 401/403 = bad key
+      if (r.ok) return { status: "healthy", latencyMs };
+      let detail = `Sarvam HTTP ${r.status}`;
+      try {
+        const body = await r.json() as { error?: { message?: string; code?: string } };
+        const msg = body?.error?.message || body?.error?.code;
+        if (typeof msg === "string" && msg.length > 0 && msg.length < 180) detail = msg;
+      } catch { /* ignore non-JSON */ }
+      if (r.status === 402) {
+        return {
+          status: "failed",
+          latencyMs,
+          errorCode: "402",
+          errorMessageSafe: `Sarvam credits exhausted (402). ${detail}`,
+        };
+      }
       if (r.status === 401 || r.status === 403) {
         return { status: "failed", latencyMs, errorCode: String(r.status), errorMessageSafe: `Sarvam auth failed (${r.status})` };
       }
-      return { status: "healthy", latencyMs };
+      return { status: "failed", latencyMs, errorCode: String(r.status), errorMessageSafe: detail };
     }
     if (credentialKey === "managed_cartesia_key") {
       const r = await fetch("https://api.cartesia.ai/voices?limit=1", {
@@ -283,10 +305,15 @@ router.post("/admin/managed-keys/:key/test", async (req, res): Promise<void> => 
       res.status(404).json({ error: "Unknown managed key" });
       return;
     }
-    const result = await runHealthCheck(key);
-    await recordHealth(key, result);
-    await recordAudit(key, "test", { newStatus: result.status, metadata: { latencyMs: result.latencyMs } });
-    res.json({ key, ...result });
+    const raw = (req.body as { value?: string } | undefined)?.value;
+    const override = typeof raw === "string" && raw.trim() && !raw.includes("•") ? raw.trim() : undefined;
+    const result = await runHealthCheck(key, override);
+    // An unsaved paste must not overwrite the stored key's health badge.
+    if (!override) {
+      await recordHealth(key, result);
+      await recordAudit(key, "test", { newStatus: result.status, metadata: { latencyMs: result.latencyMs } });
+    }
+    res.json({ key, ...result, probedUnsaved: !!override });
   } catch (err) {
     logger.error({ err }, "managed-keys/test failed");
     res.status(500).json({ error: "Internal server error" });
