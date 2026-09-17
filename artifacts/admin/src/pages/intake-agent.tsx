@@ -206,6 +206,11 @@ export default function IntakeAgentPage() {
     () => options?.tts.find((p) => p.value === draft?.ttsProvider) ?? null,
     [options, draft?.ttsProvider],
   );
+  const ttsVoiceChoices = useMemo(() => {
+    const voices = ttsSpec?.voices ?? [];
+    if (!draft?.ttsVoice || voices.some((v) => v.value === draft.ttsVoice)) return voices;
+    return [{ value: draft.ttsVoice, label: selected?.ttsVoiceLabel || draft.ttsVoice }, ...voices];
+  }, [ttsSpec, draft?.ttsVoice, selected?.ttsVoiceLabel]);
   const llmModels = useMemo(
     () => (draft ? options?.llm[draft.llmProvider] ?? [] : []),
     [options, draft?.llmProvider],
@@ -495,7 +500,7 @@ export default function IntakeAgentPage() {
                         <Select value={draft.ttsVoice} onValueChange={(v) => patchDraft({ ttsVoice: v })}>
                           <SelectTrigger><SelectValue placeholder="Pick a voice" /></SelectTrigger>
                           <SelectContent>
-                            {(ttsSpec?.voices ?? []).map((v) => (
+                            {(ttsVoiceChoices).map((v) => (
                               <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
                             ))}
                           </SelectContent>

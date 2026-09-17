@@ -6,6 +6,7 @@ import {
   INTAKE_SPEED,
   INTAKE_SYSTEM_PROMPT,
   INTAKE_TTS_CATALOG,
+  applyListedCartesiaVoices,
   buildIntakeSttPrompt,
   buildIntakeSystemPrompt,
   defaultIntakeControls,
@@ -53,6 +54,37 @@ describe("validateIntakeControls", () => {
   it("only offers Cartesia and Sarvam for TTS", () => {
     expect(INTAKE_TTS_CATALOG.map((p) => p.value).sort()).toEqual(["cartesia", "sarvam"]);
     expect(INTAKE_TTS_CATALOG.find((p) => p.value === "cartesia")?.model).toBe("sonic-3.6");
+  });
+
+  it("replaces the Cartesia fallback list with admin-whitelisted voices", () => {
+    const listed = [
+      { value: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", label: "Listed Indian English" },
+      { value: "11111111-2222-3333-4444-555555555555", label: "Listed Support" },
+    ];
+    const catalog = applyListedCartesiaVoices(INTAKE_TTS_CATALOG, listed);
+    expect(catalog.find((p) => p.value === "cartesia")?.voices).toEqual(listed);
+    expect(catalog.find((p) => p.value === "sarvam")?.voices).toBe(
+      INTAKE_TTS_CATALOG.find((p) => p.value === "sarvam")?.voices,
+    );
+    expect(applyListedCartesiaVoices(INTAKE_TTS_CATALOG, []).find((p) => p.value === "cartesia")?.voices)
+      .toBe(INTAKE_TTS_CATALOG.find((p) => p.value === "cartesia")?.voices);
+    expect(intakeVoiceLabel("cartesia", listed[0]!.value, listed)).toBe("Listed Indian English");
+  });
+
+  it("offers the same Bulbul v3 and Cartesia voices as the agent builder", () => {
+    const sarvam = INTAKE_TTS_CATALOG.find((p) => p.value === "sarvam")!.voices.map((v) => v.value);
+    const cartesia = INTAKE_TTS_CATALOG.find((p) => p.value === "cartesia")!.voices.map((v) => v.value);
+    expect(sarvam).toEqual(expect.arrayContaining([
+      "ritu", "roopa", "rupali", "shubh", "ratan", "manan", "sumit", "aayan",
+      "ashutosh", "advait", "tarun", "sunny", "mani", "gokul", "mohit", "rehan",
+    ]));
+    expect(sarvam).toHaveLength(37);
+    expect(cartesia).toEqual(expect.arrayContaining([
+      "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee",
+      "a0e99841-438c-4a64-b679-ae501e7d6091",
+      "f9836c38-f195-45be-b41c-91b82a5d59c8",
+    ]));
+    expect(validateIntakeControls({ ...base, ttsProvider: "sarvam", ttsVoice: "shubh" }).errors).toEqual([]);
   });
 
   it("rejects a Sarvam speaker name on Cartesia", () => {

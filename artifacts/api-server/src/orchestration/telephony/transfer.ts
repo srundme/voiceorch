@@ -158,6 +158,22 @@ export async function speakVobizConference(opts: {
   logger.info({ room: opts.room, status: resp.status }, "VoBiz merge: intro spoken into conference");
 }
 
+/** Auth id + token from the same providerKeys map used for VoBiz transfer. */
+export function vobizAuthFromProviderKeys(
+  providerKeys: Map<string, string>,
+): { authId: string; authToken: string } | null {
+  const authToken = providerKeys.get("vobiz")?.trim() ?? "";
+  let authId = "";
+  try {
+    const extra = providerKeys.get("vobiz:extraConfig");
+    if (extra) authId = String((JSON.parse(extra) as { authId?: string }).authId ?? "").trim();
+  } catch {
+    authId = "";
+  }
+  if (!authToken || !authId) return null;
+  return { authId, authToken };
+}
+
 export async function hangupVobizCall(opts: {
   authId: string;
   authToken: string;

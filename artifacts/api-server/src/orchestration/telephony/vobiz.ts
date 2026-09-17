@@ -511,8 +511,9 @@ export function getVobizAnswerXML(
   // XML with HangupCauseCode 8011 "Invalid Answer XML" and drops the call before
   // opening the WebSocket.  VoBiz decodes &amp; back to & when it reads the URL.
   const wsUrlXml = wsUrl.replace(/&/g, "&amp;");
-  // This negotiates INBOUND PCM8k only. Outbound playAudio independently
-  // declares its real format; Vobiz does not require both directions to match.
+  // keepCallAlive=true so a brief WS blip does not drop the PSTN leg. Closing
+  // the socket therefore does NOT hang up — session.ts must DELETE /Call/{uuid}
+  // on agent end_call (call 25223 stayed live after goodbye).
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-l16;rate=8000">${wsUrlXml}</Stream>

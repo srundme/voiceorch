@@ -18,6 +18,7 @@ import {
   candidateIntakesTable,
   callsTable,
   executionLogsTable,
+  platformListedVoicesTable,
 } from "@workspace/db";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { logger } from "../lib/logger.js";
@@ -33,6 +34,7 @@ import {
   INTAKE_SPEED,
   INTAKE_SYSTEM_PROMPT,
   INTAKE_TTS_CATALOG,
+  applyListedCartesiaVoices,
   defaultIntakeControls,
   intakeAgentTools,
   intakeTtsSpec,
@@ -82,8 +84,23 @@ interface IntakeAgentRow {
   createdAt: string;
 }
 
+async function listedCartesiaVoices(): Promise<{ value: string; label: string }[]> {
+  const rows = await db
+    .select({
+      voiceId: platformListedVoicesTable.voiceId,
+      voiceName: platformListedVoicesTable.voiceName,
+    })
+    .from(platformListedVoicesTable)
+    .where(eq(platformListedVoicesTable.isListed, true))
+    .orderBy(platformListedVoicesTable.voiceName);
+  return rows.map((r) => ({ value: r.voiceId, label: r.voiceName }));
+}
+
 /** Row values that are re-derived from the controls on every create and save. */
-function stackFor(controls: IntakeAgentControls) {
+function stackFor(
+  controls: IntakeAgentControls,
+  listedCartesia: { value: string; label: string }[] = [],
+) {
   const tts = intakeTtsSpec(controls.ttsProvider)!;
   return {
     name: controls.name,
@@ -91,7 +108,7 @@ function stackFor(controls: IntakeAgentControls) {
     llmModel: controls.llmModel,
     ttsProvider: controls.ttsProvider,
     ttsVoice: controls.ttsVoice,
-    ttsVoiceName: intakeVoiceLabel(controls.ttsProvider, controls.ttsVoice),
+    ttsVoiceName: intakeVoiceLabel(controls.ttsProvider, controls.ttsVoice, listedCartesia),
     ttsModel: tts.model,
     systemPrompt: INTAKE_SYSTEM_PROMPT,
     greetingMessage: INTAKE_GREETING,
@@ -128,7 +145,7 @@ function toRow(
     llmModel: agent.llmModel,
     ttsProvider: agent.ttsProvider,
     ttsVoice: agent.ttsVoice,
-    ttsVoiceLabel: intakeVoiceLabel(agent.ttsProvider, agent.ttsVoice ?? ""),
+    ttsVoiceLabel: agent.ttsVoiceName || intakeVoiceLabel(agent.ttsProvider, agent.ttsVoice ?? ""),
     ttsModel: agent.ttsModel,
     ttsSpeed: config.ttsSpeed ?? INTAKE_SPEED.default,
     asrProvider: agent.asrProvider,
@@ -164,6 +181,7 @@ router.get("/admin/intake-agents/options", requireAdmin, async (_req, res): Prom
       for (const a of agents) assignedTo.set(a.id, a.name);
     }
 
+    const listedCartesia = await listedCartesiaVoices();
     const ownerEmails = new Map<string, string | null>();
     const ownerRows = await db
       .select({ clerkId: usersTable.clerkId, email: usersTable.email })
@@ -172,7 +190,7 @@ router.get("/admin/intake-agents/options", requireAdmin, async (_req, res): Prom
 
     res.json({
       llm: INTAKE_LLM_CATALOG,
-      tts: INTAKE_TTS_CATALOG,
+      tts: applyListedCartesiaVoices(INTAKE_TTS_CATALOG, listedCartesia),
       speed: INTAKE_SPEED,
       defaults: defaultIntakeControls(),
       locked: {
@@ -254,7 +272,7 @@ router.post("/admin/intake-agents", requireAdmin, async (req, res): Promise<void
       .insert(agentsTable)
       .values({
         userId: parsed.data.userId,
-        ...stackFor(controls),
+        ...stackFor(controls, await listedCartesiaVoices()),
         agentConfig: { ...INTAKE_LOCKED_AGENT_CONFIG, ttsSpeed: controls.ttsSpeed },
       })
       .returning();
@@ -324,7 +342,7 @@ router.patch("/admin/intake-agents/:id", requireAdmin, async (req, res): Promise
     const [agent] = await db
       .update(agentsTable)
       .set({
-        ...stackFor(controls),
+        ...stackFor(controls, await listedCartesiaVoices()),
         agentConfig: {
           ...(existing.agentConfig ?? {}),
           ...INTAKE_LOCKED_AGENT_CONFIG,

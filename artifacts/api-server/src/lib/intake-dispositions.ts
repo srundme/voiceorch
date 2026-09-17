@@ -703,6 +703,61 @@ const SCREEN_INPUT_KEYS = new Set([
 ]);
 
 /**
+ * The model often sends `work_from_home: '{"reason":"..."}'` instead of
+ * `disposition` plus dotted keys. Expand a disposition-id key into
+ * `disposition` and `<id>.<field>` answers when the value is an object or a
+ * JSON object string.
+ */
+export function expandDispositionToolArgs(input: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const implied: string[] = [];
+  for (const [key, raw] of Object.entries(input)) {
+    if (key === "disposition" || key === "dispositionId" || key === "dispositions") {
+      out[key] = raw;
+      continue;
+    }
+    if (SCREEN_INPUT_KEYS.has(key) || key.includes(".")) {
+      out[key] = raw;
+      continue;
+    }
+    const spec = resolveDisposition(key);
+    if (!spec) {
+      out[key] = raw;
+      continue;
+    }
+    implied.push(spec.id);
+    const nested = parseDispositionAnswerObject(raw);
+    if (nested) {
+      for (const [fieldId, value] of Object.entries(nested)) {
+        out[`${spec.id}.${fieldId}`] = value;
+      }
+    }
+  }
+  if (
+    implied.length > 0
+    && out["disposition"] === undefined
+    && out["dispositionId"] === undefined
+    && out["dispositions"] === undefined
+  ) {
+    out["disposition"] = implied[0]!;
+  }
+  return out;
+}
+
+function parseDispositionAnswerObject(raw: unknown): Record<string, unknown> | null {
+  if (isRecord(raw)) return raw;
+  if (typeof raw !== "string") return null;
+  const text = raw.trim();
+  if (!text.startsWith("{") || !text.endsWith("}")) return null;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Applies one outcome and its answers.
  *
  * `disposition` may be a single id (added to the list) or an array (replaces
@@ -715,6 +770,7 @@ export function applyDispositionPatch(
   current: IntakeExtra,
   input: Record<string, unknown>,
 ): DispositionPatchResult {
+  input = expandDispositionToolArgs(input);
   const errors: Array<{ field: string; message: string }> = [];
   const written: string[] = [];
   let dispositionIds = [...current.dispositionIds];

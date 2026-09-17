@@ -232,3 +232,26 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).not.toContain("voice-isolator");
   });
 });
+
+describe("intake persist + VoBiz hangup (call 25223)", () => {
+  it("saves the form during TTS instead of a silent tool-only turn", () => {
+    expect(methodBody("processTurn")).toContain("persistIntakeFromTurn");
+    expect(methodBody("processTurn")).toContain("withoutBackgroundIntakeTools");
+    expect(pipelineSrc).toContain("persistDuringSpeech");
+  });
+
+  it("issues a VoBiz REST hangup because keepCallAlive leaves the PSTN up", () => {
+    const sessionSrc = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "session.ts"),
+      "utf8",
+    );
+    expect(sessionSrc).toContain("hangupVobizCall");
+    expect(sessionSrc).toContain("hangupCarrierIfAgentEnded");
+    const vobizSrc = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "telephony/vobiz.ts"),
+      "utf8",
+    );
+    expect(vobizSrc).toContain('keepCallAlive="true"');
+    expect(vobizSrc).toContain("DELETE /Call/{uuid}");
+  });
+});

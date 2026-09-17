@@ -64,6 +64,7 @@ import { loadPcmLoop, TRACK_PARAMS } from "./ambient.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics, SessionConfig } from "./types.js";
 import { resolveSarvamEndpointingMs } from "./endpointing-settings.js";
 import { logger } from "../lib/logger.js";
+import { hangupVobizCall, vobizAuthFromProviderKeys } from "./telephony/transfer.js";
 import { MEETING_BEHAVIOR_PROMPT, parseMeetingsConfig } from "../services/meeting-runtime.js";
 import {
   saveSessionMeta,
@@ -2080,8 +2081,7 @@ export async function createSession(params: {
           campaignLeadId: params.campaignLeadId ?? null,
           onAudioOut: ownedAudioOut,
           onCallEnd: () => {
-            naturalEndTriggered = true;
-            params.onCallEnd();
+            triggerNaturalEnd();
           },
           onBargeIn: params.onBargeIn,
           onTranscript: params.onTranscript,
@@ -2366,6 +2366,26 @@ export async function createSession(params: {
     }
   };
 
+  const hangupCarrierIfAgentEnded = (): void => {
+    if (wasTransferred) return;
+    if (params.telephonyProvider !== "vobiz") return;
+    const callUuid = params.externalCallId?.trim();
+    if (!callUuid) return;
+    const creds = vobizAuthFromProviderKeys(providerKeys);
+    if (!creds) {
+      logger.warn({ callId: callRecord.id, callUuid }, "Vobiz hangup skipped — missing credentials");
+      return;
+    }
+    void hangupVobizCall({ ...creds, callUuid }).catch((err) => {
+      logger.warn({ err, callId: callRecord.id, callUuid }, "Vobiz hangup after agent end_call failed");
+    });
+  };
+  const triggerNaturalEnd = (): void => {
+    naturalEndTriggered = true;
+    hangupCarrierIfAgentEnded();
+    params.onCallEnd();
+  };
+
   const pipeline: VoiceSession = agentConfig.voiceStack === "gemini_live"
     ? new GeminiLivePipeline({
         callId: callRecord.id,
@@ -2393,8 +2413,7 @@ export async function createSession(params: {
           params.onTranscript?.(speaker, text);
         },
         onCallEnd: () => {
-          naturalEndTriggered = true;
-          params.onCallEnd();
+          triggerNaturalEnd();
         },
         onCallTransfer: onCallTransferHandler,
         onBargeIn: params.onBargeIn,
@@ -2540,8 +2559,7 @@ export async function createSession(params: {
       }
     },
     onCallEnd: () => {
-      naturalEndTriggered = true;
-      params.onCallEnd();
+      triggerNaturalEnd();
     },
     onCallTransfer: onCallTransferHandler,
     onBargeIn: params.onBargeIn,

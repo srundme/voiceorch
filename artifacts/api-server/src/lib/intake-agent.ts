@@ -40,7 +40,7 @@ export const INTAKE_LLM_PROVIDERS = Object.keys(INTAKE_LLM_CATALOG);
 
 // ── Controllable: TTS ────────────────────────────────────────────────────────
 
-/** Sarvam Bulbul v3 speakers. Mirrors the dashboard catalogue. */
+/** Sarvam Bulbul v3 speakers — same list as the dashboard agent builder. */
 const SARVAM_VOICES: IntakeModelChoice[] = [
   { value: "ritu", label: "Ritu (female)" },
   { value: "priya", label: "Priya (female)" },
@@ -50,29 +50,46 @@ const SARVAM_VOICES: IntakeModelChoice[] = [
   { value: "kavya", label: "Kavya (female)" },
   { value: "ishita", label: "Ishita (female)" },
   { value: "shreya", label: "Shreya (female)" },
+  { value: "roopa", label: "Roopa (female)" },
   { value: "tanya", label: "Tanya (female)" },
   { value: "shruti", label: "Shruti (female)" },
   { value: "suhani", label: "Suhani (female)" },
   { value: "kavitha", label: "Kavitha (female)" },
+  { value: "rupali", label: "Rupali (female)" },
   { value: "rahul", label: "Rahul (male)" },
   { value: "rohan", label: "Rohan (male)" },
   { value: "aditya", label: "Aditya (male)" },
   { value: "amit", label: "Amit (male)" },
   { value: "dev", label: "Dev (male)" },
+  { value: "ratan", label: "Ratan (male)" },
   { value: "varun", label: "Varun (male)" },
+  { value: "manan", label: "Manan (male)" },
+  { value: "sumit", label: "Sumit (male)" },
   { value: "kabir", label: "Kabir (male)" },
+  { value: "aayan", label: "Aayan (male)" },
+  { value: "shubh", label: "Shubh (male)" },
+  { value: "ashutosh", label: "Ashutosh (male)" },
+  { value: "advait", label: "Advait (male)" },
   { value: "anand", label: "Anand (male)" },
+  { value: "tarun", label: "Tarun (male)" },
+  { value: "sunny", label: "Sunny (male)" },
+  { value: "mani", label: "Mani (male)" },
+  { value: "gokul", label: "Gokul (male)" },
   { value: "vijay", label: "Vijay (male)" },
+  { value: "mohit", label: "Mohit (male)" },
+  { value: "rehan", label: "Rehan (male)" },
   { value: "soham", label: "Soham (male)" },
 ];
 
-/** Cartesia Sonic voices that read Indian-English names cleanly. */
+/** Cartesia Sonic voices — same static catalogue as the dashboard agent builder. */
 const CARTESIA_VOICES: IntakeModelChoice[] = [
   { value: "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee", label: "Gayathri (female, Indian English)" },
-  { value: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478", label: "Customer Support Lady" },
-  { value: "b7d50908-b17c-442d-ad8d-810c63997ed9", label: "Calm Lady" },
+  { value: "a0e99841-438c-4a64-b679-ae501e7d6091", label: "Barbershop Man" },
   { value: "79a125e8-cd45-4c13-8a67-188112f4dd22", label: "British Narration Lady" },
+  { value: "b7d50908-b17c-442d-ad8d-810c63997ed9", label: "Calm Lady" },
   { value: "5c42302c-194b-4d0c-ba1a-8cb485c84ab9", label: "Reading Man" },
+  { value: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478", label: "Customer Support Lady" },
+  { value: "f9836c38-f195-45be-b41c-91b82a5d59c8", label: "Southern Man" },
   { value: "e00d0e4c-a5c8-443c-8230-60ea3f5b45ff", label: "Friendly Australian Man" },
 ];
 
@@ -101,6 +118,21 @@ export const INTAKE_TTS_CATALOG: IntakeTtsProviderSpec[] = [
     allowCustomVoice: true,
   },
 ];
+
+/**
+ * Cartesia on the intake panel uses the admin-whitelisted catalogue (the same
+ * list the agent builder shows). The static CARTESIA_VOICES list is only the
+ * empty-whitelist fallback.
+ */
+export function applyListedCartesiaVoices(
+  catalog: IntakeTtsProviderSpec[],
+  listed: IntakeModelChoice[],
+): IntakeTtsProviderSpec[] {
+  if (listed.length === 0) return catalog;
+  return catalog.map((spec) => (
+    spec.value === "cartesia" ? { ...spec, voices: listed } : spec
+  ));
+}
 
 export const INTAKE_SPEED = { min: 0.6, max: 1.4, step: 0.05, default: 1.0 } as const;
 
@@ -252,7 +284,13 @@ export function validateIntakeControls(input: Partial<IntakeAgentControls>): Int
 }
 
 /** Voice label for the agent row, so the admin list reads as names not UUIDs. */
-export function intakeVoiceLabel(provider: string, voice: string): string {
+export function intakeVoiceLabel(
+  provider: string,
+  voice: string,
+  extra: IntakeModelChoice[] = [],
+): string {
+  const hit = extra.find((v) => v.value === voice);
+  if (hit) return hit.label;
   return intakeTtsSpec(provider)?.voices.find((v) => v.value === voice)?.label ?? voice;
 }
 
@@ -341,7 +379,7 @@ This is a conversation. Listen first, then respond to what they actually said.
 # Never stall
 Saving is instant and invisible. Never say "one moment please", "just a second", "let me note that down", "bear with me", "please hold" or anything like it. There is nothing for the candidate to wait for.
 
-When you save something, the acknowledgement and the next thing you say go in the same breath: "Got it, Priya — and which part of Bangalore are you in?" Not "One moment please." then a question. A stall every turn is the single fastest way to sound like a machine.
+The system writes answers with ${INTAKE_TOOL_NAMES.write} in the background while you talk. Do not call ${INTAKE_TOOL_NAMES.write} or ${INTAKE_TOOL_NAMES.disposition} yourself — that forces a silent wait before the next question. Acknowledge and ask in the same breath: "Got it, Priya — and which part of Bangalore are you in?"
 
 The only time you may ask someone to hold is if you genuinely have to check something with the team, which on this call you never do.
 
@@ -349,7 +387,7 @@ The only time you may ask someone to hold is if you genuinely have to check some
 Four stages. Move forward when the stage is done; do not restart a stage.
 
 1. Open — the first audio of this call is already your greeting. Do not re-introduce yourself after it. On a first call, get their name. On a returning call the greeting already used their name — skip it.
-2. Screen — this is a recruiter screen, not a form. After every ${INTAKE_TOOL_NAMES.write} or ${INTAKE_TOOL_NAMES.disposition} the tool returns \`Next:\`. That line is the only question you may ask. Parent answers skip, unlock, or block children. Do not recite the list in a fixed order when the caller has opened a different door — still save what they volunteered, then follow \`Next:\`.
+2. Screen — this is a recruiter screen, not a form. If history has a Background save \`Next:\` line, that is the only question you may ask. Otherwise follow the tree below and never re-ask what they just answered. Parent answers skip, unlock, or block children. Do not recite the list in a fixed order when the caller has opened a different door.
 3. Pitch — only after \`Next:\` says screening is complete. Then call ${INTAKE_TOOL_NAMES.submit}. If it returns no opening, do not invent one.
 4. Close — confirm interest or take the reason, make sure every outcome is recorded, thank them, ${INTAKE_TOOL_NAMES.endCall}.
 
@@ -382,14 +420,14 @@ Never ask their gender. It is recorded from their name automatically.
 Never ask them to rate their English, and never comment on their English. It is judged from how they speak on this call.
 The role, skill and industry are already set for this campaign. Never ask about them.
 
-Save every answer with ${INTAKE_TOOL_NAMES.write} the moment you hear it. For the yes/no parents use servingNotice, wantsWfh, needsWeekendOff, hasCareerGap, otherDomain, missingEduDocs, missingExpDocs as yes or no. Save the 6-digit pincode as pincode.
+The system saves every answer with ${INTAKE_TOOL_NAMES.write} the moment you hear it. For the yes/no parents use servingNotice, wantsWfh, needsWeekendOff, hasCareerGap, otherDomain, missingEduDocs, missingExpDocs as yes or no. Save the 6-digit pincode as pincode. You still speak the next question immediately — do not wait on the save.
 
 Do not call ${INTAKE_TOOL_NAMES.submit} until \`Next:\` says screening is complete. Calling it early is refused and you will be told what to ask.
 
 # Outcomes
 You must record an outcome on every call. A call with no outcome is a failed call.
 
-Use ${INTAKE_TOOL_NAMES.disposition} as soon as you can tell which one applies — mid-conversation, not at the end. It then tells you that outcome's follow-up questions; ask them the same way as everything else, one at a time in your own words, and send the answers back through the same tool using the dotted key it gives you.
+Use ${INTAKE_TOOL_NAMES.disposition} as soon as you can tell which one applies — mid-conversation, not at the end. The background save records it; you ask that outcome's follow-up questions in your own words, one at a time. Do not wait silently for a tool result before asking.
 
 A candidate can have more than one outcome, and usually does. Someone who wants work from home, needs a fixed weekend off and is serving notice is all three — call the tool once per outcome. Earlier outcomes are kept, so recording a second one never erases the first. Record every one that genuinely applies; do not pick a single "main" one and drop the rest.
 

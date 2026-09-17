@@ -3,6 +3,7 @@ import {
   DISPOSITION_MEANINGS,
   INTAKE_DISPOSITIONS,
   applyDispositionPatch,
+  expandDispositionToolArgs,
   getIntakeDisposition,
   missingDispositionFields,
   parseIntakeExtra,
@@ -185,6 +186,58 @@ describe("applyDispositionPatch", () => {
       scheduled_date: "2026-10-02",
       scheduled_time: "10:00",
       scheduled_round: "HR Round",
+    });
+  });
+
+  it("flattens a nested object keyed by the outcome id (call 25221)", () => {
+    const result = applyDispositionPatch(empty(), {
+      work_from_home: {
+        reason: "Personal Reasons",
+        willing_to_work_from_office: "Yes",
+      },
+    });
+    expect(result.errors).toEqual([]);
+    expect(result.extra.dispositionIds).toEqual(["work_from_home"]);
+    expect(result.extra.answers["work_from_home"]).toEqual({
+      reason: "Personal Reasons",
+      willing_to_work_from_office: "Yes",
+    });
+    expect(missingDispositionFields(result.extra)).toEqual([]);
+  });
+
+  it("flattens a JSON string keyed by the outcome id after the outcome is already recorded", () => {
+    const recorded = applyDispositionPatch(empty(), { disposition: "work_from_home" }).extra;
+    const result = applyDispositionPatch(recorded, {
+      work_from_home: '{"reason": "Personal Reasons", "willing_to_work_from_office": "Yes"}',
+    });
+    expect(result.errors).toEqual([]);
+    expect(result.extra.dispositionIds).toEqual(["work_from_home"]);
+    expect(result.extra.answers["work_from_home"]).toEqual({
+      reason: "Personal Reasons",
+      willing_to_work_from_office: "Yes",
+    });
+  });
+
+  it("flattens nested JSON even when disposition is already in the same payload", () => {
+    const result = applyDispositionPatch(empty(), {
+      disposition: "work_from_home",
+      work_from_home: '{"reason": "Personal Reasons", "willing_to_work_from_office": "No"}',
+    });
+    expect(result.errors).toEqual([]);
+    expect(result.extra.answers["work_from_home"]).toEqual({
+      reason: "Personal Reasons",
+      willing_to_work_from_office: "No",
+    });
+  });
+});
+
+describe("expandDispositionToolArgs", () => {
+  it("implies disposition from a nested outcome-id key", () => {
+    expect(expandDispositionToolArgs({
+      work_from_home: { reason: "Travel Issues" },
+    })).toEqual({
+      disposition: "work_from_home",
+      "work_from_home.reason": "Travel Issues",
     });
   });
 });

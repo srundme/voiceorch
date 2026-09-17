@@ -10,6 +10,7 @@ import {
   type IntakeFieldKey,
 } from "../lib/candidate-intake-fields.js";
 import {
+  expandDispositionToolArgs,
   getIntakeDisposition,
   missingDispositionFields,
 } from "../lib/intake-dispositions.js";
@@ -117,9 +118,9 @@ export async function executeIntakeDisposition(
   const form = await resolveForm(ctx);
   if (!form) return "The form is not available right now. Keep talking to the candidate and try again.";
 
-  const patch = Object.fromEntries(
+  const patch = expandDispositionToolArgs(Object.fromEntries(
     Object.entries(args ?? {}).filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== ""),
-  );
+  ));
   const hasOutcomeArg = Boolean(patch["disposition"] ?? patch["dispositionId"] ?? patch["dispositions"]);
   if (!hasOutcomeArg && intakeExtraOf(form).dispositionIds.length === 0) {
     return "No outcome given. Pass the outcome id in the `disposition` argument.";

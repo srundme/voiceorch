@@ -31,7 +31,7 @@ import { isSmartTurnReady, predictSmartTurn, warmSmartTurn } from "./smart-turn.
 import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { extractEmotionTag, makeMarkupTagFilter, stripMarkupTags } from "./emotion-tag.js";
-import { languagePrefix, resolveToolFillerPhrase } from "./tool-fillers.js";
+import { isBackgroundIntakeTool, languagePrefix, resolveToolFillerPhrase, withoutBackgroundIntakeTools } from "./tool-fillers.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { parseRealtimeDetectedLang, shouldBargeOnRealtimePartial, shouldBargeOnRealtimeVadStart } from "./adapters/stt/sarvam-realtime.js";
@@ -7356,6 +7356,56 @@ export class OrchestrationPipeline implements VoiceSession {
   // ── Tool execution ───────────────────────────────────────────────────────────
 
   /**
+   * Call 25223: saving the form used a silent tool-only LLM turn, then a second
+   * LLM to speak. Persist after the spoken turn's LLM has finished so TTS and
+   * the write overlap, without a second adapter chat racing cancelInFlight.
+   */
+  private async persistIntakeFromTurn(transcript: string): Promise<void> {
+    if (this.closed) return;
+    const persistTools = this.buildVoiceToolDefs().filter((t) => isBackgroundIntakeTool(t.name));
+    if (persistTools.length === 0) return;
+    const text = transcript.trim();
+    if (!text) return;
+
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const persistPrompt = [
+      this.agent.systemPrompt,
+      "",
+      "[BACKGROUND SAVE]",
+      `The candidate just said: "${text.slice(0, 500)}"`,
+      "Call save_candidate_details and/or set_disposition with only the fields they just gave.",
+      "Do not speak. Do not call finish_intake or end_call.",
+    ].join("\n");
+
+    try {
+      await this.llm.chat(
+        this.conversationHistory.sanitizeToolMessages(),
+        persistPrompt,
+        () => {},
+        () => {},
+        {
+          tools: persistTools,
+          onToolCall: (name, args) => {
+            if (isBackgroundIntakeTool(name)) calls.push({ name, args });
+          },
+        },
+      );
+    } catch (err) {
+      logger.warn({ callId: this.config.callId, err }, "Background intake persist LLM failed");
+      return;
+    }
+    if (this.closed || calls.length === 0) return;
+
+    for (const call of calls) {
+      const result = await this.handleToolCall(call.name, call.args);
+      if (result) {
+        this.conversationHistory.appendUser(`[Background save for ${call.name}]: ${result}`);
+      }
+    }
+    this.config.onConversationUpdate?.(this.conversationHistory.messages);
+  }
+
+  /**
    * Public tool dispatcher: writes Tool request/response execution-log rows
    * around the actual dispatch so the Call Log timeline shows every tool call
    * (mirrors the web-call path). Errors are logged with their real reason, then
@@ -8370,6 +8420,8 @@ export class OrchestrationPipeline implements VoiceSession {
 
     // ── Build tool definitions from agent config ──
     const toolDefs = this.buildVoiceToolDefs();
+    // Speak without waiting on form writes (call 25223). Save runs during TTS.
+    const speakToolDefs = withoutBackgroundIntakeTools(toolDefs);
 
     // Hard booking enforce: when slot + confirmed email + name are ready, book
     // in code (do not rely on the LLM remembering tool_choice).
@@ -9862,9 +9914,9 @@ export class OrchestrationPipeline implements VoiceSession {
           pendingText = remainder;
         },
         (fullText) => { llmResponse = fullText; },
-        toolDefs.length > 0
+        speakToolDefs.length > 0
           ? {
-              tools: toolDefs,
+              tools: speakToolDefs,
               toolChoice: forcedToolChoice,
               onToolDetected: (info) => {
                 this.logExec("Tool", "system", {
@@ -10184,6 +10236,16 @@ export class OrchestrationPipeline implements VoiceSession {
       );
     }
 
+    // Form writes are persisted in the background; do not skip TTS for them.
+    if (triggeredToolName && isBackgroundIntakeTool(triggeredToolName)) {
+      triggeredToolName = null;
+      triggeredToolArgs = {};
+    }
+
+    if (triggeredToolName === "finish_intake" || triggeredToolName === "end_call") {
+      await this.persistIntakeFromTurn(transcript);
+    }
+
     // ── If LLM called a tool, execute it and skip TTS ──
     if (triggeredToolName) {
       // Push the assistant's tool-invocation turn with proper tool_calls metadata.
@@ -10371,7 +10433,11 @@ export class OrchestrationPipeline implements VoiceSession {
       "LLM complete"
     );
 
-    await playPromise;
+    const persistDuringSpeech = this.persistIntakeFromTurn(transcript);
+    persistDuringSpeech.catch((err) => {
+      logger.warn({ callId: this.config.callId, err }, "Background intake persist failed");
+    });
+    await Promise.all([playPromise, persistDuringSpeech]);
 
     // Bolna parity: store only what the caller actually heard (defer until playback ends).
     // Capture the cut tail BEFORE clearing bargeInRequested — otherwise
@@ -10992,7 +11058,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // single user turn (e.g. check_availability → book_appointment → end_call).
     // A depth cap forces a final tools-detached narration to prevent runaway loops.
     const MAX_TOOL_DEPTH = 5;
-    const toolDefs = this.buildVoiceToolDefs();
+    const toolDefs = withoutBackgroundIntakeTools(this.buildVoiceToolDefs());
     const fatalSchedulingConfig =
       this.schedulingConfigurationFailed && result.includes("\"no_event_type\"");
     // A missing event type cannot be recovered by another tool call. Detach all
