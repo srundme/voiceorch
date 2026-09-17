@@ -298,13 +298,19 @@ describe("shouldBargeOnRealtimeVadStart", () => {
     expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true })).toBe(true);
   });
 
-  it("barges on usable STT even during greeting or echo window", () => {
-    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, greetingOrSystem: true })).toBe(true);
-    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, inEchoGrace: true })).toBe(true);
+  it("blocks greeting and echo-grace unless the caller already hard-interrupted", () => {
+    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, greetingOrSystem: true })).toBe(false);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, inEchoGrace: true })).toBe(false);
     expect(shouldBargeOnRealtimeVadStart({
       ...base,
       hasUsablePartial: true,
       greetingOrSystem: true,
+      isHardInterrupt: true,
+    })).toBe(true);
+    expect(shouldBargeOnRealtimeVadStart({
+      ...base,
+      hasUsablePartial: true,
+      inEchoGrace: true,
       isHardInterrupt: true,
     })).toBe(true);
   });
@@ -321,15 +327,25 @@ describe("shouldBargeOnRealtimePartial", () => {
     minChars: 4,
   };
 
-  it("barges any nonempty STT partial, including greeting and echo windows", () => {
-    expect(shouldBargeOnRealtimePartial({ ...base, greetingOrSystem: true })).toBe(true);
-    expect(shouldBargeOnRealtimePartial({ ...base, inEchoGrace: true })).toBe(true);
+  it("blocks greeting and echo-grace partials unless the caller hard-interrupted", () => {
+    expect(shouldBargeOnRealtimePartial({ ...base, greetingOrSystem: true })).toBe(false);
+    expect(shouldBargeOnRealtimePartial({ ...base, inEchoGrace: true })).toBe(false);
     expect(shouldBargeOnRealtimePartial({ ...base, charCount: 3, minChars: 4 })).toBe(true);
     expect(shouldBargeOnRealtimePartial({
       ...base,
       charCount: 5,
       minChars: 4,
       isGreetingOnly: true,
+    })).toBe(true);
+    expect(shouldBargeOnRealtimePartial({
+      ...base,
+      greetingOrSystem: true,
+      isHardInterrupt: true,
+    })).toBe(true);
+    expect(shouldBargeOnRealtimePartial({
+      ...base,
+      inEchoGrace: true,
+      isHardInterrupt: true,
     })).toBe(true);
   });
 

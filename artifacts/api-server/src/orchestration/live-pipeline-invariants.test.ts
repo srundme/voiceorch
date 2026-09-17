@@ -111,6 +111,8 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(methodBody("schedulePartialBargeIn")).toContain("SELF_ECHO_MIN_WORDS");
     expect(methodBody("isEagerPartialReady")).toContain("isEagerCommitReady");
     expect(methodBody("handleStreamingTranscript")).toContain("collectionHoldMsForTranscript");
+    expect(methodBody("handleStreamingTranscript")).toContain("agent_still_speaking");
+    expect(methodBody("isCarrierSelfEcho")).toContain("ttsOnWire");
     expect(methodBody("backchannelFillerOpts")).toContain("backchannelFillers");
     expect(pipelineSrc).not.toContain("Barge-in detected after Sarvam realtime partial");
     const speechEndBody = methodBody("wireStreamSttCallbacks");
@@ -210,7 +212,10 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(methodBody("processTurn")).toContain("this.clearBargeRecovery()");
     expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("shouldTriggerInterruption");
     expect(methodBody("isSameUtteranceStillArriving")).toContain("isQueuedDuplicateUserTurn");
-    expect(methodBody("playbackTooFreshForPartialBarge")).toContain("return false");
+    expect(methodBody("playbackTooFreshForPartialBarge")).toContain("PARTIAL_BARGE_MIN_PLAY_MS");
+    expect(methodBody("playbackTooFreshForPartialBarge")).toContain("bargeInSentenceStartAt");
+    expect(methodBody("schedulePartialBargeIn")).toContain("playbackTooFreshForPartialBarge");
+    expect(methodBody("maybeBargeFromRealtimeVadStart")).toContain("playbackTooFreshForPartialBarge");
     expect(methodBody("armBargeRecovery")).toMatch(/return;/);
     expect(methodBody("flushBargeRecovery")).not.toContain("handleStreamingTranscript");
     expect(methodBody("handleStreamingTranscript")).toContain("resumeBargedReply");

@@ -108,7 +108,7 @@ import {
   RESUME_DROP_POST_GREETING_STALL_MS,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { pickClarificationPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isCallerAudioDifficulty, isTopicClarificationAsk, isBackchannelOnlyUtterance, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeIncompleteClauseStart } from "./transcriptQuality.js";
+import { pickClarificationPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isCallerAudioDifficulty, isTopicClarificationAsk, isBackchannelOnlyUtterance, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeIncompleteClauseStart, isHardInterruptTranscript } from "./transcriptQuality.js";
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
@@ -475,8 +475,9 @@ const BARGE_IN_ENERGY_THRESHOLD = 1200; // Much higher than normal VAD (300) —
 const BARGE_IN_ECHO_GRACE_MS  = 0;
                                          // gives audio time to reach the caller before we start
                                          // counting any returning echo as a real interruption.
-/** First ~400 ms of a new TTS clip is echo-dominated on PSTN (call 21450: 127 ms vad_partial). */
-const PARTIAL_BARGE_MIN_PLAY_MS = 0;
+/** First 1.5s of a new TTS clip is echo-dominated on PSTN (call 21450: 127 ms;
+ *  call 25295: 980 ms "And we want to" sidetone barge while the caller was silent). */
+const PARTIAL_BARGE_MIN_PLAY_MS = 1500;
 /** After a barge with no STT final, speak from the last partial instead of going mute. */
 const BARGE_RECOVERY_MS = 800;
 /** Ceiling for waiting out an open VAD before the backstop commits anyway. */
@@ -1947,6 +1948,7 @@ export class OrchestrationPipeline implements VoiceSession {
     const text = this.streamSTT?.getPendingTranscript?.()?.trim() ?? this.eagerPartialText.trim();
     if (!text) return;
     this.clearEagerPartialTimer();
+    if (this.isCarrierSelfEcho(text)) return;
     if (!this.isEagerPartialReady(text, true)) return;
     this.launchEagerLlmFromPartial(text, "eou_commit", pendingTurnId);
   }
@@ -2125,6 +2127,7 @@ export class OrchestrationPipeline implements VoiceSession {
 
   private maybeLaunchEagerOnPartial(text: string, metadata?: SttFinalMetadata): void {
     if (!text.trim() || this.isPlaying || this.isProcessing || this.closed || this._specLlmState) return;
+    if (this.isCarrierSelfEcho(text)) return;
     if (this.callDirection === "outbound" && this.screeningState === "idle") {
       void this.maybeHandleCallScreening(text);
       if (detectScreeningPrompt(text)) return;
@@ -2317,13 +2320,16 @@ export class OrchestrationPipeline implements VoiceSession {
     const partial = this.usablePendingBargeTranscript();
     if (!partial || this.isCarrierSelfEcho(partial)) return;
     if (this.isSameUtteranceStillArriving(partial)) return;
+    const hard = isHardInterruptTranscript(partial);
+    if (this.playbackTooFreshForPartialBarge(partial) && !hard) return;
     const usable = countTranscriptWords(partial) >= SELF_ECHO_MIN_WORDS
       && this.shouldInterruptFromCallerTranscript(partial);
     if (!shouldBargeOnRealtimeVadStart({
       agentSpeaking: true,
       greetingOrSystem: this.greetingFirstClipActive || this.systemPlaybackActive,
-      inEchoGrace: Date.now() < this.bargeInHoldUntil,
+      inEchoGrace: this.playbackTooFreshForPartialBarge(partial),
       hasUsablePartial: usable,
+      isHardInterrupt: hard,
     })) return;
     this.triggerBargeIn("vad_speech_start", partial);
   }
@@ -2348,8 +2354,11 @@ export class OrchestrationPipeline implements VoiceSession {
     return isQueuedDuplicateUserTurn(this.lastUserTurnText(), text);
   }
 
-  private playbackTooFreshForPartialBarge(_text: string): boolean {
-    return false;
+  private playbackTooFreshForPartialBarge(text: string): boolean {
+    if (isHardInterruptTranscript(text)) return false;
+    const startedAt = this.bargeInSentenceStartAt;
+    if (!startedAt) return false;
+    return Date.now() - startedAt < PARTIAL_BARGE_MIN_PLAY_MS;
   }
 
   private shouldInterruptFromCallerTranscript(text: string): boolean {
@@ -2372,11 +2381,14 @@ export class OrchestrationPipeline implements VoiceSession {
     const partial = text.trim();
     if (!partial || this.isCarrierSelfEcho(partial)) return;
     if (this.isSameUtteranceStillArriving(partial)) return;
+    const hard = isHardInterruptTranscript(partial);
+    if (this.playbackTooFreshForPartialBarge(partial) && !hard) return;
     if (!shouldBargeOnRealtimePartial({
       greetingOrSystem: this.greetingFirstClipActive || this.systemPlaybackActive,
-      inEchoGrace: Date.now() < this.bargeInHoldUntil,
+      inEchoGrace: this.playbackTooFreshForPartialBarge(partial),
       charCount: partial.length,
       minChars: 1,
+      isHardInterrupt: hard,
     })) return;
     // Partials shorter than the self-echo floor cannot be proven as caller
     // vs sidetone; wait for transcript.final (InterruptionManager word count).
@@ -2952,13 +2964,16 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private isCarrierSelfEcho(transcript: string): boolean {
     if (this.config.telephonyProvider === "webcall") return false;
-    const agentAudible =
+    const ttsOnWire =
       this.isPlaying
       || this.isSendingTtsAudio
+      || this.bargeInRequested;
+    const agentAudible =
+      ttsOnWire
       || Date.now() - this.lastTtsFrameAt < SELF_ECHO_TAIL_MS;
     if (!agentAudible) return false;
     const tokens = this.normalizeForRepeat(transcript).split(" ").filter(Boolean);
-    return isSelfEcho({ tokens, recentAgentSpeech: this.recentAgentSpeech, agentAudible });
+    return isSelfEcho({ tokens, recentAgentSpeech: this.recentAgentSpeech, agentAudible, ttsOnWire });
   }
 
   /**
@@ -3670,6 +3685,18 @@ export class OrchestrationPipeline implements VoiceSession {
         "Discarding streaming final — agent's own TTS echoed back by the carrier",
       );
       this.logDiscardedTranscript(transcript, "self_echo");
+      return;
+    }
+
+    // Call 25295: sidetone finals under the barge word floor were still fed to
+    // the LLM ("Camera", "Downward") so the agent answered itself in silence.
+    if (
+      (this.isPlaying || this.isSendingTtsAudio)
+      && !this.bargeInRequested
+      && !isHardInterruptTranscript(transcript)
+      && !this.shouldInterruptFromCallerTranscript(transcript)
+    ) {
+      this.logDiscardedTranscript(transcript, "agent_still_speaking");
       return;
     }
 

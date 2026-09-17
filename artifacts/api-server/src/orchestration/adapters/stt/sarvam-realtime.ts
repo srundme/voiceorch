@@ -284,7 +284,10 @@ export function shouldBargeOnRealtimeVadStart(opts: {
   energyAboveEchoBar?: boolean;
   isHardInterrupt?: boolean;
 }): boolean {
-  return Boolean(opts.agentSpeaking && opts.hasUsablePartial);
+  if (!opts.agentSpeaking || !opts.hasUsablePartial) return false;
+  if (opts.isHardInterrupt) return true;
+  if (opts.greetingOrSystem || opts.inEchoGrace) return false;
+  return true;
 }
 
 /** Streaming energy may arm, but PSTN must not clearAudio on echo-loud frames. */
@@ -314,7 +317,10 @@ export function shouldBargeOnRealtimePartial(opts: {
   isHardInterrupt?: boolean;
   isBookingAnswer?: boolean;
 }): boolean {
-  return opts.charCount > 0;
+  if (opts.charCount <= 0) return false;
+  if (opts.isHardInterrupt) return true;
+  if (opts.greetingOrSystem || opts.inEchoGrace) return false;
+  return true;
 }
 
 interface RealtimeMsg {

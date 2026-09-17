@@ -8,9 +8,9 @@
  * is silent.
  *
  * This is deliberately *not* a heuristic about what callers say — no phrase
- * lists, no word floors, no energy thresholds, and it never inspects audio. It
- * compares a transcript against the lines we ourselves just sent to TTS, which
- * is information we own. Barge-in policy is untouched: a real caller talking
+ * lists, no energy thresholds, and it never inspects audio. It compares a
+ * transcript against the lines we ourselves just sent to TTS, which is
+ * information we own. Barge-in policy is untouched: a real caller talking
  * over the agent is not quoting the agent, so they never match here and still
  * cut the agent off on word count alone.
  *
@@ -50,6 +50,12 @@ export interface SelfEchoCheck {
    * are always the caller's.
    */
   readonly agentAudible: boolean;
+  /**
+   * Bytes are leaving TTS right now, or we just cut TTS on a barge that may
+   * itself have been sidetone (call 25295). The 2s audible tail after a
+   * natural finish is *not* this: short answers like "Chennai" must land.
+   */
+  readonly ttsOnWire?: boolean;
 }
 
 /** Fraction of `tokens` present in `spoken`. */
@@ -62,6 +68,15 @@ function overlap(tokens: readonly string[], spoken: ReadonlySet<string>): number
   return hits / tokens.length;
 }
 
+function maxOverlap(tokens: readonly string[], lines: readonly RecentAgentLine[]): number {
+  let best = 0;
+  for (const line of lines) {
+    if (line.tokens.size === 0) continue;
+    best = Math.max(best, overlap(tokens, line.tokens));
+  }
+  return best;
+}
+
 /**
  * True when this transcript is our own voice coming back off the carrier.
  * Callers must discard such a transcript *before* barge-in evaluation —
@@ -70,8 +85,12 @@ function overlap(tokens: readonly string[], spoken: ReadonlySet<string>): number
  */
 export function isSelfEcho(check: SelfEchoCheck): boolean {
   if (!check.agentAudible) return false;
-  if (check.tokens.length < SELF_ECHO_MIN_WORDS) return false;
-  return check.recentAgentSpeech.some(
-    (line) => line.tokens.size > 0 && overlap(check.tokens, line.tokens) >= SELF_ECHO_MIN_OVERLAP,
-  );
+  if (check.tokens.length === 0) return false;
+  const hit = maxOverlap(check.tokens, check.recentAgentSpeech);
+  if (check.tokens.length >= SELF_ECHO_MIN_WORDS && hit >= SELF_ECHO_MIN_OVERLAP) return true;
+  // Sidetone STT is often a short junk fragment with none of our words
+  // (call 25295: "Camera", "Downward", "Meeting பைங்கா"). Real short answers
+  // reuse the script ("yes", "voice process") and stay caller.
+  if (check.ttsOnWire && check.tokens.length < SELF_ECHO_MIN_WORDS && hit === 0) return true;
+  return false;
 }

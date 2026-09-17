@@ -92,4 +92,24 @@ describe("isSelfEcho", () => {
       agentAudible: true,
     })).toBe(false);
   });
+
+  it("drops short zero-overlap STT junk while TTS is on the wire (call 25295)", () => {
+    for (const scrap of ["Camera", "Downward", "Meeting பைங்கா"]) {
+      expect(isSelfEcho({
+        tokens: words(scrap),
+        recentAgentSpeech: spoken(agentLine),
+        agentAudible: true,
+        ttsOnWire: true,
+      })).toBe(true);
+    }
+  });
+
+  it("keeps a city-name answer after TTS has finished (echo tail, not on the wire)", () => {
+    expect(isSelfEcho({
+      tokens: words("Chennai"),
+      recentAgentSpeech: spoken(agentLine),
+      agentAudible: true,
+      ttsOnWire: false,
+    })).toBe(false);
+  });
 });
