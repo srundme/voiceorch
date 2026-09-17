@@ -4,9 +4,11 @@ import {
   resolveCartesiaModelId,
   parseCartesiaLang,
   cartesiaWireLanguage,
+  cartesiaLangFields,
   appendCartesiaRemainder,
   isCartesiaContextClosedError,
   takeCartesiaWordChunks,
+  takeCompleteCartesiaSentences,
 } from "./cartesia.js";
 
 describe("CartesiaTTS emotion voice-control fallback", () => {
@@ -164,15 +166,43 @@ describe("parseCartesiaLang / cartesiaWireLanguage", () => {
     expect(cartesiaWireLanguage("ta", "ta-IN")).toBe("ta-IN");
     expect(cartesiaWireLanguage("en", null)).toBe("en");
   });
+
+  it("sends Sonic 3.6 regional tags as locale so English gets an Indian accent", () => {
+    expect(cartesiaLangFields("en", "en-IN", "sonic-3.6")).toEqual({
+      locale: "en-IN",
+      normalization: "en-IN",
+    });
+    expect(cartesiaLangFields("hi", "hi-IN", "sonic-3.6")).toEqual({
+      locale: "hi-IN",
+      normalization: "hi-IN",
+    });
+    expect(cartesiaLangFields("en", "en-IN", "sonic-3.5")).toEqual({
+      language: "en-IN",
+      normalization: "en-IN",
+    });
+  });
+});
+
+describe("takeCompleteCartesiaSentences", () => {
+  it("keeps a trailing fragment unsent", () => {
+    expect(takeCompleteCartesiaSentences("Hello. How")).toEqual({
+      complete: "Hello.",
+      rest: " How",
+    });
+    expect(takeCompleteCartesiaSentences("Hello there ")).toEqual({
+      complete: "",
+      rest: "Hello there ",
+    });
+  });
 });
 
 describe("Cartesia language vs locale", () => {
   it("never sends language and locale together", async () => {
-    const bodies: Array<{ language?: string; locale?: string }> = [];
+    const bodies: Array<{ language?: string; locale?: string; normalization?: string }> = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (_url: string, init: RequestInit) => {
-        bodies.push(JSON.parse(init.body as string) as { language?: string; locale?: string });
+        bodies.push(JSON.parse(init.body as string) as { language?: string; locale?: string; normalization?: string });
         return {
           ok: true,
           status: 200,
@@ -183,8 +213,8 @@ describe("Cartesia language vs locale", () => {
       }),
     );
     await new CartesiaTTS("k", null, "sonic-3.6", "en-IN").synthesize("Hello");
-    expect(bodies[0]).toMatchObject({ language: "en-IN" });
-    expect(bodies[0]!.locale).toBeUndefined();
+    expect(bodies[0]).toMatchObject({ locale: "en-IN", normalization: "en-IN" });
+    expect(bodies[0]!.language).toBeUndefined();
   });
 });
 
@@ -276,9 +306,11 @@ describe("Cartesia WS continuations", () => {
       ]);
       expect(requests[0]).toMatchObject({
         model_id: "sonic-3.6",
+        locale: "hi-IN",
         voice: { mode: "id", id: expect.any(String) },
         output_format: { sample_rate: 8000 },
       });
+      expect(requests[0]!.language).toBeUndefined();
       // Buffering is left at Cartesia's default; flush is what forces generation.
       expect(requests[0]!.max_buffer_delay_ms).toBeUndefined();
       sockets[0]!.emit({ type: "chunk", context_id: "fast-llm", data: Buffer.from([1, 2]).toString("base64") });
@@ -349,7 +381,7 @@ describe("Cartesia WS continuations", () => {
     }
   });
 
-  it("flushes an incomplete fragment so it is not held for max_buffer_delay_ms", async () => {
+  it("holds incomplete fragments until close so Sonic cannot overlap generations", async () => {
     const sockets: FakeCartesiaWs[] = [];
     vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
       constructor(url: string) { super(url); sockets.push(this); }
@@ -361,11 +393,11 @@ describe("Cartesia WS continuations", () => {
     await tts.synthesizeStreamInContext("frag", "there ", () => {}, () => {}, undefined, undefined, true);
     tts.finalizeTurnContext("frag");
     try {
-      await vi.waitFor(() => expect(sockets[0]?.sent.some((s) => JSON.parse(s).flush === true)).toBe(true));
+      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as Record<string, unknown>);
-      const flushes = requests.filter((r) => r.flush === true);
-      expect(flushes).toEqual([
-        expect.objectContaining({ context_id: "frag", transcript: "", continue: true, flush: true }),
+      expect(requests.filter((r) => r.flush === true)).toEqual([]);
+      expect(requests).toEqual([
+        expect.objectContaining({ context_id: "frag", transcript: "Hello there.", continue: false }),
       ]);
       sockets[0]!.emit({ type: "done", context_id: "frag" });
       await owner;

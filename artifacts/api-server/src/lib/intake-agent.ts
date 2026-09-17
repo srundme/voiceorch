@@ -82,8 +82,10 @@ const SARVAM_VOICES: IntakeModelChoice[] = [
 ];
 
 /** Cartesia Sonic voices — same static catalogue as the dashboard agent builder. */
+export const INTAKE_CARTESIA_INDIAN_VOICE_ID = "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee";
+
 const CARTESIA_VOICES: IntakeModelChoice[] = [
-  { value: "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee", label: "Gayathri (female, Indian English)" },
+  { value: INTAKE_CARTESIA_INDIAN_VOICE_ID, label: "Gayathri (female, Indian English)" },
   { value: "a0e99841-438c-4a64-b679-ae501e7d6091", label: "Barbershop Man" },
   { value: "79a125e8-cd45-4c13-8a67-188112f4dd22", label: "British Narration Lady" },
   { value: "b7d50908-b17c-442d-ad8d-810c63997ed9", label: "Calm Lady" },
@@ -137,6 +139,30 @@ export function applyListedCartesiaVoices(
 export const INTAKE_SPEED = { min: 0.6, max: 1.4, step: 0.05, default: 1.0 } as const;
 
 const CARTESIA_VOICE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Featured Cartesia voices that keep a US / UK / AU accent even with locale en-IN. */
+const CARTESIA_WESTERN_VOICE_IDS = new Set([
+  "a0e99841-438c-4a64-b679-ae501e7d6091",
+  "79a125e8-cd45-4c13-8a67-188112f4dd22",
+  "b7d50908-b17c-442d-ad8d-810c63997ed9",
+  "5c42302c-194b-4d0c-ba1a-8cb485c84ab9",
+  "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478",
+  "f9836c38-f195-45be-b41c-91b82a5d59c8",
+  "e00d0e4c-a5c8-443c-8230-60ea3f5b45ff",
+]);
+
+/**
+ * Intake English is Indian English. Western featured voices stay American /
+ * British even when we send locale en-IN, so swap them for Gayathri. A custom
+ * or already-Indian UUID is left alone.
+ */
+export function intakeCartesiaVoiceId(voice: string | null | undefined): string {
+  const id = (voice ?? "").trim();
+  if (!id || CARTESIA_WESTERN_VOICE_IDS.has(id.toLowerCase())) {
+    return INTAKE_CARTESIA_INDIAN_VOICE_ID;
+  }
+  return id;
+}
 
 // ── Locked stack ─────────────────────────────────────────────────────────────
 

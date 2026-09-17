@@ -7,15 +7,14 @@
  *   https://docs.cartesia.ai/build-with-cartesia/capability-guides/stream-inputs-using-continuations.md
  *
  * Model of operation: one WebSocket per call, one context per agent turn.
- * Text is written to the context as it arrives with `continue: true`. Complete
- * sentences (terminal punctuation) are left for Sonic to generate as one
- * continuation — flushing each sentence starts a *new* generation on the same
- * context, and those streams overlap in the PCM sink (call 25226: Cartesia
- * greeting heard on top of itself). Incomplete fragments are flushed so they
- * are not held for `max_buffer_delay_ms`, and the next write waits for
- * `flush_done` so the following generation cannot start in parallel.
- * `max_buffer_delay_ms` itself is left at the default — forcing it to 0
- * makes Sonic speak each word as its own clip (choppy, call 25061).
+ * Complete sentences go out with `continue: true` and no flush. Incomplete
+ * fragments stay in `held` until a sentence ends or the turn closes — flushing
+ * them starts a *new* Sonic generation on the same context, and those PCM
+ * streams overlap (call 25226). `flush_done` only means the flush was accepted,
+ * not that audio finished, so waiting on it still overlapped. The turn closes
+ * with one `continue: false` write. `max_buffer_delay_ms` stays at Cartesia's
+ * default — forcing it to 0 makes Sonic speak each word as its own clip
+ * (choppy, call 25061).
  *
  * The turn is closed by one `continue: false` write. Cartesia rejects a close
  * whose transcript is empty ("No valid transcripts passed", calls 25048/25049)
@@ -103,6 +102,30 @@ export function cartesiaWireLanguage(language: string | null, locale: string | n
   return locale ?? language;
 }
 
+function cartesiaUsesLocaleField(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  return id.includes("3.6") || id.includes("preview") || id === "sonic-latest";
+}
+
+/**
+ * Sonic 3.6: `locale` picks accent (`en-IN` = Indian English). Putting the
+ * same tag on `language` leaves many voices on their default US accent.
+ * Older models reject locale codes (400), so they keep `language`.
+ */
+export function cartesiaLangFields(
+  language: string | null,
+  locale: string | null,
+  modelId: string,
+): { language?: string; locale?: string; normalization?: string } {
+  const tag = cartesiaWireLanguage(language, locale);
+  if (!tag) return {};
+  const regional = tag.includes("-");
+  if (regional && cartesiaUsesLocaleField(modelId)) {
+    return { locale: tag, normalization: tag };
+  }
+  return { language: tag, normalization: tag };
+}
+
 export function appendCartesiaRemainder(prev: string, next: string): string {
   return prev + next;
 }
@@ -122,6 +145,17 @@ const SENTENCE_END = /[.?!…।॥]$/u;
 
 function isCompleteCartesiaUtterance(text: string): boolean {
   return SENTENCE_END.test(text.trimEnd());
+}
+
+/** Peel finished sentences off a buffer; keep a trailing fragment unsent. */
+export function takeCompleteCartesiaSentences(buf: string): { complete: string; rest: string } {
+  if (!buf) return { complete: "", rest: "" };
+  let last = -1;
+  for (let i = 0; i < buf.length; i++) {
+    if (SENTENCE_END.test(buf[i]!)) last = i;
+  }
+  if (last < 0) return { complete: "", rest: buf };
+  return { complete: buf.slice(0, last + 1), rest: buf.slice(last + 1) };
 }
 
 /**
@@ -236,8 +270,6 @@ interface TurnCtx {
   restFallback: boolean;
   /** Serializes writes so text reaches Cartesia in the order it was produced. */
   queue: Promise<void>;
-  /** Resolvers waiting for the next `flush_done` on this context. */
-  flushWaiters: Array<() => void>;
   /** Resolved when Cartesia reports `done` for the context. */
   settleOwner: ((err?: unknown) => void) | null;
   /** Characters the owner should report as billed. */
@@ -330,10 +362,7 @@ export class CartesiaTTS implements TTSAdapter {
   }
 
   private applyLang(msg: Record<string, unknown>): void {
-    const tag = cartesiaWireLanguage(this.language, this.locale);
-    if (!tag) return;
-    msg.language = tag;
-    msg.normalization = tag;
+    Object.assign(msg, cartesiaLangFields(this.language, this.locale, this.modelId));
   }
 
   /**
@@ -469,12 +498,6 @@ export class CartesiaTTS implements TTSAdapter {
       this.recordTimestamps(contextId, msg["word_timestamps"]);
       return;
     }
-    if (type === "flush_done") {
-      const ctx = contextId ? this.turns.get(contextId) : undefined;
-      ctx?.flushWaiters.shift()?.();
-      return;
-    }
-
     if (type === "error") {
       this.handleWsError(msg, contextId);
       return;
@@ -587,7 +610,6 @@ export class CartesiaTTS implements TTSAdapter {
         cancelled: false,
         restFallback: false,
         queue: Promise.resolve(),
-        flushWaiters: [],
         settleOwner: null,
         chars: 0,
       };
@@ -693,10 +715,13 @@ export class CartesiaTTS implements TTSAdapter {
   }
 
   /**
-   * Write one piece of turn text. Everything except the newest complete piece
-   * goes out immediately with `continue: true`. A flush is only used for
-   * fragments that would otherwise sit in Sonic's input buffer — flushing a
-   * finished sentence starts a parallel generation on this context (call 25226).
+   * Write one piece of turn text. The newest piece stays in `held` so the
+   * close has a real transcript (`continue: false` with empty text is a
+   * Cartesia error). Anything before that goes out with `continue: true` only
+   * when it is a finished sentence. Incomplete fragments stay in `held` —
+   * flushing them starts a parallel Sonic generation on this context (call
+   * 25226). `flush_done` is not "audio finished", so waiting on it still
+   * overlapped.
    */
   private async writeText(
     contextId: string,
@@ -724,6 +749,11 @@ export class CartesiaTTS implements TTSAdapter {
     const toSend = appendCartesiaRemainder(ctx.held, ready.slice(0, -1).join(""));
     ctx.held = ready[ready.length - 1]!;
     if (!isSpeakableCartesiaTranscript(toSend)) return;
+    if (!isCompleteCartesiaUtterance(toSend)) {
+      // Do not flush a fragment. Fold it back so the close speaks one clip.
+      ctx.held = appendCartesiaRemainder(toSend, ctx.held);
+      return;
+    }
 
     try {
       await this.getOrOpenWs();
@@ -744,22 +774,6 @@ export class CartesiaTTS implements TTSAdapter {
       return;
     }
     ctx.sentAny = true;
-    if (isCompleteCartesiaUtterance(toSend)) return;
-    // Incomplete fragment: force generation now, then wait so the next write
-    // cannot start a second overlapping Sonic generation on this context.
-    this.send({ context_id: contextId, transcript: "", continue: true, flush: true });
-    await this.waitFlushDone(ctx);
-  }
-
-  private waitFlushDone(ctx: TurnCtx): Promise<void> {
-    if (ctx.cancelled || ctx.dead) return Promise.resolve();
-    return new Promise((resolve) => {
-      const timer = setTimeout(resolve, 1_500);
-      ctx.flushWaiters.push(() => {
-        clearTimeout(timer);
-        resolve();
-      });
-    });
   }
 
   /**

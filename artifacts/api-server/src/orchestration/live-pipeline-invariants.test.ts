@@ -267,4 +267,13 @@ describe("Cartesia greeting overlap (call 25226)", () => {
     expect(body).toContain("25226");
     expect(body).not.toContain("skipDrain");
   });
+
+  it("does not flush incomplete Cartesia fragments (flush_done is not audio-done)", () => {
+    const cartesiaSrc = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "adapters/tts/cartesia.ts"),
+      "utf8",
+    );
+    expect(cartesiaSrc).not.toContain("flush: true");
+    expect(cartesiaSrc).toContain("Do not flush a fragment");
+  });
 });

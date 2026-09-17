@@ -16,7 +16,9 @@ const {
   buildIntakeSystemPrompt,
   defaultIntakeControls,
   intakeAgentTools,
+  intakeCartesiaVoiceId,
   intakeVoiceLabel,
+  INTAKE_CARTESIA_INDIAN_VOICE_ID,
   validateIntakeControls,
 } = await import("./intake-agent.js");
 import {
@@ -295,6 +297,13 @@ describe("intake prompt", () => {
     expect(INTAKE_LOCKED_STACK.backchannelingFrequency).toBe(1);
     expect(INTAKE_LOCKED_STACK.backchannelPhrases).toBe("Okay.");
     expect([...INTAKE_BACKCHANNEL_FILLERS]).toEqual(["Okay."]);
+  });
+
+  it("swaps Western Cartesia voices for Gayathri so English is Indian", () => {
+    expect(intakeCartesiaVoiceId("79a125e8-cd45-4c13-8a67-188112f4dd22")).toBe(INTAKE_CARTESIA_INDIAN_VOICE_ID);
+    expect(intakeCartesiaVoiceId("")).toBe(INTAKE_CARTESIA_INDIAN_VOICE_ID);
+    expect(intakeCartesiaVoiceId("11111111-2222-3333-4444-555555555555"))
+      .toBe("11111111-2222-3333-4444-555555555555");
   });
 
   it("builds the Sarvam STT prompt from the live JD catalog", () => {

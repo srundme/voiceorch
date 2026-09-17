@@ -46,6 +46,7 @@ import {
   INTAKE_LOCKED_AGENT_CONFIG,
   buildIntakeSttPrompt,
   buildIntakeSystemPrompt,
+  intakeCartesiaVoiceId,
 } from "../lib/intake-agent.js";
 import {
   buildIntakeReturnBlock,
@@ -391,6 +392,9 @@ export async function createSession(params: {
   // Overlay after normalize so a stale intake row cannot keep Fast barge / VAD.
   if (agent.agentType === INTAKE_AGENT_TYPE) {
     Object.assign(agentCfg, INTAKE_LOCKED_AGENT_CONFIG);
+    if (agent.ttsProvider === "cartesia") {
+      agent.ttsVoice = intakeCartesiaVoiceId(agent.ttsVoice);
+    }
   }
 
   // AMD (voicemail) config — read once, used by both the voicemail-delivery config
