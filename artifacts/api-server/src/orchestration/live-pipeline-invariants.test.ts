@@ -242,13 +242,14 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
 });
 
 describe("intake persist + VoBiz hangup (call 25223)", () => {
-  it("fills the form beside speech so the spoken LLM is not waiting on save", () => {
-    expect(methodBody("processTurn")).toContain("persistDuringSpeech");
-    expect(methodBody("processTurn")).toContain("enqueueIntakePersist");
+  it("saves the form in code so the spoken LLM is not also filling it", () => {
+    expect(methodBody("processTurn")).toContain("persistIntakeFromTurn");
     expect(methodBody("processTurn")).toContain("spokenVoiceToolDefs");
-    expect(methodBody("processTurn")).not.toContain("await this.persistIntakeFromTurn");
-    expect(methodBody("persistIntakeFromTurn")).toContain("this.llm.chat");
-    expect(methodBody("persistIntakeFromTurn")).toContain("isolated: true");
+    expect(methodBody("processTurn")).not.toContain("persistDuringSpeech");
+    expect(methodBody("persistIntakeFromTurn")).toContain("extractIntakePatchFromTurn");
+    expect(methodBody("persistIntakeFromTurn")).toContain("executeIntakeWrite");
+    expect(methodBody("persistIntakeFromTurn")).not.toContain("this.llm.chat");
+    expect(methodBody("persistIntakeFromTurn")).not.toContain("isolated: true");
     expect(methodBody("spokenVoiceToolDefs")).toContain("intakeSpokenTools");
   });
 
