@@ -7390,9 +7390,8 @@ export class OrchestrationPipeline implements VoiceSession {
 
   /**
    * Call 25223: saving the form used a silent tool-only LLM turn, then a second
-   * LLM to speak. Persist beside the spoken LLM (isolated abort) so TTS is not
-   * waiting on the write, and the next turn is not held in silence after a
-   * short reply while the form LLM finishes.
+   * LLM to speak. Persist after the spoken turn's LLM has finished so TTS and
+   * the write overlap, without a second adapter chat racing cancelInFlight.
    */
   private async persistIntakeFromTurn(transcript: string): Promise<void> {
     if (this.closed) return;
@@ -7420,7 +7419,6 @@ export class OrchestrationPipeline implements VoiceSession {
         () => {},
         {
           tools: persistTools,
-          isolated: true,
           onToolCall: (name, args) => {
             if (isBackgroundIntakeTool(name)) calls.push({ name, args });
           },
@@ -8463,12 +8461,8 @@ export class OrchestrationPipeline implements VoiceSession {
 
     // ── Build tool definitions from agent config ──
     const toolDefs = this.buildVoiceToolDefs();
-    // Speak without waiting on form writes (call 25223). Save runs beside speech.
+    // Speak without waiting on form writes (call 25223). Save runs during TTS.
     const speakToolDefs = withoutBackgroundIntakeTools(toolDefs);
-    const persistDuringSpeech = this.persistIntakeFromTurn(transcript);
-    persistDuringSpeech.catch((err) => {
-      logger.warn({ callId: this.config.callId, err }, "Background intake persist failed");
-    });
 
     // Hard booking enforce: when slot + confirmed email + name are ready, book
     // in code (do not rely on the LLM remembering tool_choice).
@@ -10290,7 +10284,7 @@ export class OrchestrationPipeline implements VoiceSession {
     }
 
     if (triggeredToolName === "finish_intake" || triggeredToolName === "end_call") {
-      await persistDuringSpeech;
+      await this.persistIntakeFromTurn(transcript);
     }
 
     // ── If LLM called a tool, execute it and skip TTS ──
@@ -10480,7 +10474,11 @@ export class OrchestrationPipeline implements VoiceSession {
       "LLM complete"
     );
 
-    await playPromise;
+    const persistDuringSpeech = this.persistIntakeFromTurn(transcript);
+    persistDuringSpeech.catch((err) => {
+      logger.warn({ callId: this.config.callId, err }, "Background intake persist failed");
+    });
+    await Promise.all([playPromise, persistDuringSpeech]);
 
     // Bolna parity: store only what the caller actually heard (defer until playback ends).
     // Capture the cut tail BEFORE clearing bargeInRequested — otherwise

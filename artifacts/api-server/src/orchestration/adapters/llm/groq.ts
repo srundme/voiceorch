@@ -100,7 +100,6 @@ export class GroqLLM implements LLMAdapter {
       toolChoice?: "auto" | "required" | { name: string };
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
       onUsage?: (usage: LLMUsage) => void;
-      isolated?: boolean;
     }
   ): Promise<void> {
     const supportsTools = TOOL_CAPABLE_MODELS.has(this.model);
@@ -136,11 +135,9 @@ When you want to call a tool:
 ${systemPrompt}`
       : systemPrompt;
 
+    this.abortController?.abort();
     const abortController = new AbortController();
-    if (!options?.isolated) {
-      this.abortController?.abort();
-      this.abortController = abortController;
-    }
+    this.abortController = abortController;
     try {
       const stream = await this.client.chat.completions.create({
         model:          this.model,

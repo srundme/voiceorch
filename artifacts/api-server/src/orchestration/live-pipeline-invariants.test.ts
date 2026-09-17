@@ -245,9 +245,7 @@ describe("intake persist + VoBiz hangup (call 25223)", () => {
   it("saves the form during TTS instead of a silent tool-only turn", () => {
     expect(methodBody("processTurn")).toContain("persistIntakeFromTurn");
     expect(methodBody("processTurn")).toContain("withoutBackgroundIntakeTools");
-    expect(methodBody("processTurn")).toContain("persistDuringSpeech");
-    expect(methodBody("processTurn")).not.toContain("Promise.all([playPromise, persistDuringSpeech])");
-    expect(methodBody("persistIntakeFromTurn")).toContain("isolated: true");
+    expect(pipelineSrc).toContain("persistDuringSpeech");
   });
 
   it("issues a VoBiz REST hangup because keepCallAlive leaves the PSTN up", () => {
