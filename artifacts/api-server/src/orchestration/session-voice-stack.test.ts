@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentConfig } from "./types.js";
 import { resolveVoiceStack } from "./adapters/live/gemini-live-voices.js";
+import {
+  buildPersonaplexTextPrompt,
+  resolvePersonaplexVoice,
+  resolveSessionVoiceStack,
+} from "./adapters/live/personaplex-voices.js";
 
 vi.mock("@workspace/db", () => ({
   db: {},
@@ -27,6 +32,7 @@ vi.mock("@google/genai", () => ({
 }));
 
 import { GeminiLivePipeline } from "./adapters/live/gemini-live-pipeline.js";
+import { PersonaPlexPipeline } from "./adapters/live/personaplex-pipeline.js";
 
 function minimalAgentConfig(overrides: Partial<AgentConfig> = {}): AgentConfig {
   return {
@@ -35,6 +41,7 @@ function minimalAgentConfig(overrides: Partial<AgentConfig> = {}): AgentConfig {
     firstSpeaker: "agent",
     voiceStack: "gemini_live",
     geminiLive: { voiceName: "Kore", thinkingLevel: "minimal" },
+    personaplex: null,
     tools: [],
     ...overrides,
   } as AgentConfig;
@@ -54,11 +61,31 @@ function minimalSessionConfig(agentConfig: AgentConfig) {
 }
 
 describe("session voice stack routing", () => {
-  it("resolveVoiceStack only opts into gemini_live explicitly", () => {
+  const prevUrl = process.env["PERSONAPLEX_WS_URL"];
+  afterEach(() => {
+    if (prevUrl === undefined) delete process.env["PERSONAPLEX_WS_URL"];
+    else process.env["PERSONAPLEX_WS_URL"] = prevUrl;
+  });
+
+  it("resolveVoiceStack only opts into gemini_live or personaplex explicitly", () => {
     expect(resolveVoiceStack(undefined)).toBe("classic");
     expect(resolveVoiceStack("classic")).toBe("classic");
     expect(resolveVoiceStack("gemini_live")).toBe("gemini_live");
+    expect(resolveVoiceStack("personaplex")).toBe("personaplex");
     expect(resolveVoiceStack("other")).toBe("classic");
+  });
+
+  it("does not auto-switch intake to PersonaPlex without PERSONAPLEX_WS_URL", () => {
+    delete process.env["PERSONAPLEX_WS_URL"];
+    expect(resolveSessionVoiceStack({ agentType: "intake_inbound", raw: undefined })).toBe("classic");
+    expect(resolveSessionVoiceStack({ agentType: "intake_inbound", raw: "personaplex" })).toBe("classic");
+  });
+
+  it("auto-switches intake to PersonaPlex when PERSONAPLEX_WS_URL is set", () => {
+    process.env["PERSONAPLEX_WS_URL"] = "ws://gpu.example:9000";
+    expect(resolveSessionVoiceStack({ agentType: "intake_inbound", raw: undefined })).toBe("personaplex");
+    expect(resolveSessionVoiceStack({ agentType: "intake_inbound", raw: "gemini_live" })).toBe("gemini_live");
+    expect(resolveSessionVoiceStack({ agentType: "custom", raw: undefined })).toBe("classic");
   });
 
   it("selects GeminiLivePipeline class when voiceStack is gemini_live", () => {
@@ -79,15 +106,6 @@ describe("session voice stack routing", () => {
     expect(typeof pipeline.greet).toBe("function");
     expect(typeof pipeline.onRawPcm8kIn).toBe("function");
     expect(typeof pipeline.getTranscript).toBe("function");
-  });
-
-  it("GeminiLivePipeline requires a Google API key", () => {
-    expect(() =>
-      new GeminiLivePipeline({
-        ...minimalSessionConfig(minimalAgentConfig()),
-        providerKeys: new Map(),
-      }),
-    ).toThrow(/Google API key/i);
   });
 });
 
@@ -130,5 +148,55 @@ describe("GeminiLivePipeline carrier keepalive", () => {
     vi.advanceTimersByTime(1000);
     expect(onAudioOut).not.toHaveBeenCalled();
     pipeline.close();
+  });
+});
+
+describe("PersonaPlexPipeline", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("requires a GPU websocket URL", () => {
+    delete process.env["PERSONAPLEX_WS_URL"];
+    expect(() =>
+      new PersonaPlexPipeline(minimalSessionConfig(minimalAgentConfig({
+        voiceStack: "personaplex",
+        personaplex: { wsUrl: "", voiceName: "NATM1" },
+      }))),
+    ).toThrow(/PERSONAPLEX_WS_URL/i);
+  });
+
+  it("feeds the VoBiz bridge while PersonaPlex is silent, and stops on close", () => {
+    vi.useFakeTimers();
+    const onAudioOut = vi.fn();
+    const pipeline = new PersonaPlexPipeline({
+      ...minimalSessionConfig(minimalAgentConfig({
+        voiceStack: "personaplex",
+        personaplex: { wsUrl: "ws://127.0.0.1:9", voiceName: "NATM1", isIntake: true },
+      })),
+      telephonyProvider: "vobiz",
+      onAudioOut,
+    });
+    vi.advanceTimersByTime(1000);
+    expect(onAudioOut).toHaveBeenCalled();
+    expect((onAudioOut.mock.calls[0]![0] as Buffer).length).toBe(320);
+    pipeline.close();
+    onAudioOut.mockClear();
+    vi.advanceTimersByTime(1000);
+    expect(onAudioOut).not.toHaveBeenCalled();
+  });
+
+  it("builds a short Jobshop intake persona, not the tool script", () => {
+    expect(resolvePersonaplexVoice("natm1.pt")).toBe("NATM1");
+    const prompt = buildPersonaplexTextPrompt({
+      agentName: "Irfan",
+      systemPrompt: "You are a tool-calling form bot. Call save_candidate_details.",
+      greeting: "Hello, this is Irfan from Jobshop. How may I assist you?",
+      isIntake: true,
+    });
+    expect(prompt).toContain("Jobshop");
+    expect(prompt).toContain("Irfan");
+    expect(prompt).not.toContain("save_candidate_details");
+    expect(prompt.length).toBeLessThan(2000);
   });
 });

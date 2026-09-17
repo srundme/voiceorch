@@ -158,13 +158,18 @@ export type AgentConfig = {
       cancel: boolean;
     };
   };
-  /** Classic STT→LLM→TTS (default) or Gemini native audio-to-audio Live stack. */
-  voiceStack?: "classic" | "gemini_live";
+  /** Classic STT→LLM→TTS (default), Gemini Live, or self-hosted NVIDIA PersonaPlex. */
+  voiceStack?: "classic" | "gemini_live" | "personaplex";
   /** Settings for voiceStack === "gemini_live" — voice is NOT stored in ttsVoice. */
   geminiLive?: {
     model?: string;
     voiceName?: string;
     thinkingLevel?: "minimal" | "low" | "medium" | "high";
+  };
+  /** Settings for voiceStack === "personaplex" — GPU pcm_bridge URL + voice embedding. */
+  personaplex?: {
+    wsUrl?: string;
+    voiceName?: string;
   };
   /** Meet/Zoom/Teams channel — meeting prompt + who joins + meeting timing. */
   meetings?: {
