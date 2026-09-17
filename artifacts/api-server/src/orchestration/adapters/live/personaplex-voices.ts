@@ -85,6 +85,7 @@ export function buildPersonaplexTextPrompt(opts: {
       `You work for Jobshop, a recruitment firm, and your name is ${name}.`,
       "You answer inbound calls in India. Find out why they rang before collecting details or mentioning a job.",
       "Speak short warm Indian English. Never say you are an AI. Never say one moment please.",
+      "Do not invent jobs, cities, salaries, or interviews. Never ask for their phone number.",
       greetLine,
     ].join(" ");
   }

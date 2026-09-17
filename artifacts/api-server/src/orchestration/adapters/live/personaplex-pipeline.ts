@@ -28,8 +28,8 @@ const FRAME_BYTES_8K = FRAME_SAMPLES_8K * 2;
 const PREBUFFER_FRAMES = 1;
 const PUMP_LEAD_MS = 80;
 const KEEPALIVE_FILL_GAP_MS = 500;
-const ECHO_GRACE_MS = 220;
-const ECHO_MARGIN = 1.8;
+const ECHO_GRACE_MS = 80;
+const ECHO_MARGIN = 1.25;
 
 /** JSON control is never PCM. Binary / even-length non-JSON is audio. */
 export function isPersonaplexPcmFrame(isBinary: boolean | undefined, buf?: Buffer): boolean {
@@ -229,10 +229,12 @@ export class PersonaPlexPipeline implements VoiceSession {
 
     const toGpu = this.shouldMuteEcho(pcm8k) ? Buffer.alloc(pcm8k.length) : pcm8k;
     try {
-      this.callerStt?.sendAudio(upsample8to16(toGpu));
+      // Form STT must hear the caller even while the agent is talking.
+      // Echo mute is only for the GPU (PSTN leak), not the sidecar transcript.
+      this.callerStt?.sendAudio(upsample8to16(pcm8k));
     } catch { /* STT tap must never break the spoken path */ }
     if (!this.ready || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      if (this.pendingIn.length < 50) this.pendingIn.push(Buffer.from(toGpu));
+      if (this.pendingIn.length < 50) this.pendingIn.push(Buffer.from(pcm8k));
       void this.ensureConnected();
       return;
     }
