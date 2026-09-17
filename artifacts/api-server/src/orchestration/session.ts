@@ -1493,7 +1493,11 @@ export async function createSession(params: {
     ...(agentConfig.voiceStack === "gemini_live" ? ["google"] : []),
   ].filter((p): p is string => !!p);
 
-  const isManaged = agent.agentMode === "managed";
+  // Null / missing agentMode must behave as managed (DB default). Only explicit
+  // "byop" uses the owner's provider rows. Intake demos always pin platform Sarvam
+  // so Admin → Managed Keys actually reaches the live call.
+  const isManaged = (agent.agentMode ?? "managed") !== "byop";
+  const pinPlatformSarvam = isManaged || agent.agentType === INTAKE_AGENT_TYPE;
 
   // ── Bulk platform_settings fetch (one DB round-trip instead of N sequential) ─
   // Collect every settings key needed, then do a single IN query.
@@ -1502,6 +1506,9 @@ export async function createSession(params: {
   const settingsKeysNeeded = new Set<string>();
   settingsKeysNeeded.add("managed_gemini_key");
   settingsKeysNeeded.add("managed_gemini_keys");
+  if (pinPlatformSarvam && requiredProviders.includes("sarvam")) {
+    settingsKeysNeeded.add("managed_sarvam_key");
+  }
   for (const providerName of requiredProviders) {
     if (MANAGED[providerName] && (isManaged || !providerKeys.has(providerName))) {
       settingsKeysNeeded.add(MANAGED[providerName]!);
@@ -1533,6 +1540,17 @@ export async function createSession(params: {
 
   // Apply managed keys for required providers
   for (const providerName of requiredProviders) {
+    if (providerName === "sarvam" && pinPlatformSarvam) {
+      const managed = (settingsMap.get("managed_sarvam_key") ?? process.env["SARVAM_API_KEY"] ?? "").trim();
+      if (managed) {
+        providerKeys.set("sarvam", managed);
+        logger.info(
+          { providerName, isManaged, pinPlatformSarvam, keyLast4: managed.slice(-4) },
+          "Using platform managed key for provider",
+        );
+      }
+      continue;
+    }
     if (MANAGED[providerName] && (isManaged || !providerKeys.has(providerName))) {
       const usesGeminiPool = MANAGED[providerName] === "managed_gemini_key";
       const managed = (usesGeminiPool ? pickedGeminiKey : settingsMap.get(MANAGED[providerName]!))

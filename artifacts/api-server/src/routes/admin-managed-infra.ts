@@ -337,22 +337,6 @@ router.post("/admin/managed-keys/:key/rotate", async (req, res): Promise<void> =
       return;
     }
 
-    let health: HealthResult = { status: "skipped", latencyMs: null };
-    if (!skipValidate && meta.testable) {
-      health = await runHealthCheck(key, next);
-      if (health.status === "failed") {
-        await recordAudit(key, "rotate", {
-          newStatus: "failed",
-          metadata: { rejected: true, reason: health.errorMessageSafe },
-        });
-        res.status(400).json({
-          error: "New key failed health check — not activated",
-          health,
-        });
-        return;
-      }
-    }
-
     const had = await getSecret(key);
     await db
       .insert(platformSettingsTable)
@@ -362,11 +346,16 @@ router.post("/admin/managed-keys/:key/rotate", async (req, res): Promise<void> =
         set: { value: next, updatedAt: new Date() },
       });
 
+    let health: HealthResult = { status: "skipped", latencyMs: null };
+    if (!skipValidate && meta.testable) {
+      health = await runHealthCheck(key, next);
+    }
+
     await recordHealth(key, health.status === "skipped" ? { status: "healthy", latencyMs: 0 } : health);
     await recordAudit(key, "rotate", {
       previousStatus: had ? "configured" : "missing",
-      newStatus: "active",
-      metadata: { validated: !skipValidate && meta.testable },
+      newStatus: health.status === "failed" ? "failed" : "active",
+      metadata: { validated: !skipValidate && meta.testable, saved: true },
     });
 
     res.json({
@@ -374,7 +363,9 @@ router.post("/admin/managed-keys/:key/rotate", async (req, res): Promise<void> =
       key,
       masked: maskSecret(next),
       health,
-      message: "Key rotated. Previous value replaced. Full secret is not returned.",
+      message: health.status === "failed"
+        ? `Key saved (${maskSecret(next)}). Health check failed: ${health.errorMessageSafe ?? health.status}`
+        : "Key rotated. Previous value replaced. Full secret is not returned.",
     });
   } catch (err) {
     logger.error({ err }, "managed-keys/rotate failed");
