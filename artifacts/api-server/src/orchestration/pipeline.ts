@@ -31,7 +31,7 @@ import { isSmartTurnReady, predictSmartTurn, warmSmartTurn } from "./smart-turn.
 import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { extractEmotionTag, makeMarkupTagFilter, stripMarkupTags } from "./emotion-tag.js";
-import { isBackgroundIntakeTool, languagePrefix, resolveToolFillerPhrase, intakeSpokenTools } from "./tool-fillers.js";
+import { isBackgroundIntakeTool, languagePrefix, resolveToolFillerPhrase, withoutBackgroundIntakeTools } from "./tool-fillers.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { parseRealtimeDetectedLang, shouldBargeOnRealtimePartial, shouldBargeOnRealtimeVadStart } from "./adapters/stt/sarvam-realtime.js";
@@ -1589,8 +1589,6 @@ export class OrchestrationPipeline implements VoiceSession {
   private consecutiveRepeats = 0;
   /** Spoken close when finish_intake found no job — hangup must say this, not drop the line. */
   private intakeCloseBeforeHangup: string | null = null;
-  /** finish_intake stays off the spoken tool list until screening can close. */
-  private intakeScreeningComplete = false;
   // Interruption hint (inspired by Bolna): tracks sentences fully played this agent turn.
   // On barge-in these are captured into _interruptionHint; injected into the next
   // processTurn()'s historyForLlm so the LLM knows what the caller already heard and
@@ -2827,13 +2825,6 @@ export class OrchestrationPipeline implements VoiceSession {
     return toolDefs;
   }
 
-  /** Speak-turn tools: no form writes, and no finish_intake until the screen is done. */
-  private spokenVoiceToolDefs(): ToolDefinition[] {
-    return intakeSpokenTools(this.buildVoiceToolDefs(), {
-      screeningComplete: !this.isIntakeAgent || this.intakeScreeningComplete,
-    });
-  }
-
   /**
    * Launch a speculative / eager LLM call using the pending partial.
    * Tokens are buffered into `_specLlmState.storedTokens` (via a redirectable
@@ -2912,7 +2903,7 @@ export class OrchestrationPipeline implements VoiceSession {
             onUsage: (u) => { if (!state.aborted) state.storedUsage = u; },
             // Must match the real turn: tools: [] made Sarvam dump <tool_call> XML
             // as "speech" (call 14160). Reconciliation still discards tool prefills.
-            tools: this.spokenVoiceToolDefs(),
+            tools: this.buildVoiceToolDefs(),
             // Prevent stateful adapters (e.g. OpenAI Responses API) from
             // advancing their previousResponseId on a speculative call.
             // A spec miss must not corrupt the real turn's conversation context.
@@ -7415,7 +7406,7 @@ export class OrchestrationPipeline implements VoiceSession {
 
     try {
       const ctx = this.intakeToolContext();
-      let form = await ensureIntakeForCall({
+      const form = await ensureIntakeForCall({
         callId: ctx.callId,
         agentId: ctx.agentId,
         callerPhone: ctx.callerPhone,
@@ -7429,32 +7420,11 @@ export class OrchestrationPipeline implements VoiceSession {
         transcript: text,
         waitingOn: evaluateIntakeScreen(form, intakeExtraOf(form)).waitingOn,
         lastAgentText,
-        already: { firstName: form.firstName, lastName: form.lastName },
       });
-      if (Object.keys(patch).length > 0) {
-        const result = await executeIntakeWrite(ctx, patch);
-        if (this.closed) return;
-        if (result && !/^Nothing to save/i.test(result)) {
-          this.conversationHistory.appendUser(`[Form]: ${result}`);
-        }
-        form = await ensureIntakeForCall({
-          callId: ctx.callId,
-          agentId: ctx.agentId,
-          callerPhone: ctx.callerPhone,
-        }) ?? form;
-      }
-      if (this.closed || !form) return;
-      const cue = evaluateIntakeScreen(form, intakeExtraOf(form));
-      this.intakeScreeningComplete = cue.canFinish;
-      const last = this.conversationHistory.messages.at(-1);
-      const alreadyNext = typeof last?.content === "string"
-        && last.content.startsWith("[Form]:")
-        && last.content.includes("Next:");
-      if (!alreadyNext && !cue.canFinish) {
-        this.conversationHistory.appendUser(
-          `[Form]: Next: ${cue.instruction} Acknowledge what they just said, then pick this up in your own words — never read it as a form question. Do not call finish_intake until Next says screening is complete.`,
-        );
-      }
+      if (Object.keys(patch).length === 0) return;
+      const result = await executeIntakeWrite(ctx, patch);
+      if (this.closed || !result || /^Nothing to save/i.test(result)) return;
+      this.conversationHistory.appendUser(`[Form]: ${result}`);
       this.config.onConversationUpdate?.(this.conversationHistory.messages);
     } catch (err) {
       logger.warn({ callId: this.config.callId, err }, "Intake persist failed");
@@ -8487,9 +8457,10 @@ export class OrchestrationPipeline implements VoiceSession {
     }
 
     // ── Build tool definitions from agent config ──
+    const toolDefs = this.buildVoiceToolDefs();
     // Speak only. Form save is a code extract + DB write, not a second LLM.
+    const speakToolDefs = withoutBackgroundIntakeTools(toolDefs);
     await this.persistIntakeFromTurn(transcript);
-    const speakToolDefs = this.spokenVoiceToolDefs();
 
     // Hard booking enforce: when slot + confirmed email + name are ready, book
     // in code (do not rely on the LLM remembering tool_choice).
@@ -11118,7 +11089,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // single user turn (e.g. check_availability → book_appointment → end_call).
     // A depth cap forces a final tools-detached narration to prevent runaway loops.
     const MAX_TOOL_DEPTH = 5;
-    const toolDefs = this.spokenVoiceToolDefs();
+    const toolDefs = withoutBackgroundIntakeTools(this.buildVoiceToolDefs());
     const fatalSchedulingConfig =
       this.schedulingConfigurationFailed && result.includes("\"no_event_type\"");
     // A missing event type cannot be recovered by another tool call. Detach all

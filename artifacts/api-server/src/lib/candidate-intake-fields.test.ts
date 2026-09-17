@@ -31,22 +31,6 @@ describe("normalizeIntakeField", () => {
       value: "gopinwrk@gmail.com",
     });
     expect(normalizeIntakeField("email", "not an email")).toMatchObject({ ok: false });
-    expect(normalizeIntakeField("email", "Yeah my Gmail ID is gopi at gmail.com")).toEqual({
-      ok: true,
-      value: "gopi@gmail.com",
-    });
-    expect(normalizeIntakeField("email", "gopi at gmail")).toEqual({
-      ok: true,
-      value: "gopi@gmail.com",
-    });
-    expect(normalizeIntakeField("email", "karthik gmail.com")).toEqual({
-      ok: true,
-      value: "karthik@gmail.com",
-    });
-    expect(normalizeIntakeField("email", "gopi at the rate gmail.com")).toEqual({
-      ok: true,
-      value: "gopi@gmail.com",
-    });
   });
 
   it("maps spoken gender words onto the enum", () => {

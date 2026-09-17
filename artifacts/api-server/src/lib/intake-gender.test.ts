@@ -5,7 +5,6 @@ describe("inferGenderFromName", () => {
   it("reads common male names", () => {
     expect(inferGenderFromName("Rahul")).toBe("MALE");
     expect(inferGenderFromName("karthik")).toBe("MALE");
-    expect(inferGenderFromName("Gopi")).toBe("MALE");
     expect(inferGenderFromName("Arbaz Khan")).toBe(null); // Arbaz is not in the list
     expect(inferGenderFromName("Vignesh Murali")).toBe("MALE");
   });

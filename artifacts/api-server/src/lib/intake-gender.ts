@@ -19,7 +19,7 @@ const MALE_NAMES = new Set([
   "dhanush", "dheeraj", "dhruv", "dinesh", "divyesh", "gaurav", "george", "girish", "gokul",
   "gopal", "govind", "guru", "harish", "harsh", "harshad", "hemant", "hitesh", "imran", "indrajit",
   "irfan", "jagdish", "jai", "james", "jatin", "jay", "jayanth", "jeevan", "john", "joseph",
-  "kabir", "kalyan", "kamal", "karan", "gopi", "karthik", "karthikeyan", "kaushik", "keshav", "kevin",
+  "kabir", "kalyan", "kamal", "karan", "karthik", "karthikeyan", "kaushik", "keshav", "kevin",
   "kiran kumar", "kishore", "krishna", "kunal", "lakshman", "lokesh", "madhav", "mahesh", "manan",
   "manish", "manoj", "mani", "manu", "mayank", "michael", "mithun", "mohammad", "mohammed",
   "mohan", "mohit", "mukesh", "murali", "nagaraj", "naveen", "navin", "neeraj", "nikhil", "nilesh",

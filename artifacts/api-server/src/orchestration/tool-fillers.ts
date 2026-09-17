@@ -82,16 +82,6 @@ export function withoutBackgroundIntakeTools<T extends { name: string }>(tools: 
   return tools.filter((t) => !BACKGROUND_INTAKE_TOOLS.has(t.name));
 }
 
-/** Speak-turn tools. finish_intake stays off until screening can actually close. */
-export function intakeSpokenTools<T extends { name: string }>(
-  tools: T[],
-  opts: { screeningComplete: boolean },
-): T[] {
-  const spoken = withoutBackgroundIntakeTools(tools);
-  if (opts.screeningComplete) return spoken;
-  return spoken.filter((t) => t.name !== "finish_intake");
-}
-
 export function languagePrefix(language: string | null | undefined): string {
   return (language ?? "en").split("-")[0] || "en";
 }
