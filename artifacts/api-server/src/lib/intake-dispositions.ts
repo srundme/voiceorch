@@ -61,6 +61,10 @@ export interface IntakeScreen {
   missingExpDocs?: ScreenYesNo | null;
   /** 6-digit Indian PIN — hiring zone depends on this, not only the city name. */
   pincode?: string | null;
+  /** Current or last employer — experienced path only. */
+  lastCompany?: string | null;
+  /** Working tenure as a display string, e.g. "2 years 6 months". */
+  tenure?: string | null;
 }
 
 export interface IntakeExtra {
@@ -511,6 +515,16 @@ function parseScreen(raw: unknown): IntakeScreen | null {
     screen.pincode = pin;
     any = true;
   }
+  const lastCompany = String(raw["lastCompany"] ?? "").replace(/\s+/g, " ").trim();
+  if (lastCompany) {
+    screen.lastCompany = lastCompany.slice(0, 80);
+    any = true;
+  }
+  const tenure = String(raw["tenure"] ?? "").replace(/\s+/g, " ").trim();
+  if (tenure) {
+    screen.tenure = tenure.slice(0, 40);
+    any = true;
+  }
   return any ? screen : null;
 }
 
@@ -700,6 +714,8 @@ const SCREEN_INPUT_KEYS = new Set([
   "servingNotice", "wantsWfh", "needsWeekendOff", "hasCareerGap",
   "otherDomain", "missingEduDocs", "missingExpDocs",
   "pincode", "pinCode", "pin",
+  "lastCompany", "companyName", "currentCompany",
+  "tenure", "tenureYears", "workingTenure",
 ]);
 
 /**

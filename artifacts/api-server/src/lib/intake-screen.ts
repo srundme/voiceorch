@@ -49,6 +49,89 @@ export function parsePincode(raw: unknown): string | null {
   return match?.[0] ?? null;
 }
 
+const COMPANY_PREFIX = /^(?:i(?:'m| am)?\s+)?(?:currently\s+)?(?:work(?:ing)?\s+)?(?:at|with|for)\s+/i;
+const COMPANY_LABEL = /^(?:it'?s|the company is|company(?: name)? is)\s+/i;
+const NOT_A_COMPANY = new Set(["yes", "no", "none", "na", "nil", "fresher", "experienced", "experience"]);
+
+/** Current or last employer as the candidate said it. */
+export function parseLastCompany(raw: unknown): string | null {
+  let text = String(raw ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  text = text.replace(COMPANY_PREFIX, "").replace(COMPANY_LABEL, "").replace(/\s+/g, " ").trim();
+  if (text.length < 2 || text.length > 80) return null;
+  const key = text.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (NOT_A_COMPANY.has(key)) return null;
+  return text;
+}
+
+const TENURE_WORDS: Record<string, number> = {
+  zero: 0, half: 0.5, a: 1, an: 1,
+  one: 1, two: 2, three: 3, four: 4, five: 5,
+  six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12,
+};
+
+function tenureWordOrNumber(raw: string): number | null {
+  if (TENURE_WORDS[raw] != null) return TENURE_WORDS[raw]!;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/** Working tenure as a display string — "2 years", "6 months", "2 years 6 months". */
+export function parseTenure(raw: unknown): string | null {
+  const text = String(raw ?? "").toLowerCase().replace(/,/g, " ").replace(/\s+/g, " ").trim();
+  if (!text) return null;
+
+  const word = Object.keys(TENURE_WORDS).join("|");
+  const yearRe = new RegExp(`\\b(?:(\\d+(?:\\.\\d+)?)|(${word}))\\s*(?:years?|yrs?)\\b`, "g");
+  const monthRe = new RegExp(`\\b(?:(\\d+(?:\\.\\d+)?)|(${word}))\\s*(?:months?|mos?)\\b`, "g");
+
+  let years = 0;
+  let months = 0;
+  let matched = false;
+  for (const m of text.matchAll(yearRe)) {
+    const n = tenureWordOrNumber(m[1] ?? m[2] ?? "");
+    if (n == null) continue;
+    years += n;
+    matched = true;
+  }
+  for (const m of text.matchAll(monthRe)) {
+    const n = tenureWordOrNumber(m[1] ?? m[2] ?? "");
+    if (n == null) continue;
+    months += n;
+    matched = true;
+  }
+  if (!matched) {
+    const bare = text.match(new RegExp(`^(?:(\\d+(?:\\.\\d+)?)|(${word}))$`));
+    const n = bare ? tenureWordOrNumber(bare[1] ?? bare[2] ?? "") : null;
+    if (n == null) return null;
+    years = n;
+  }
+
+  months += Math.round((years - Math.floor(years)) * 12);
+  years = Math.floor(years);
+  while (months >= 12) {
+    years += 1;
+    months -= 12;
+  }
+  if (years > 40 || months > 11) return null;
+  if (years === 0 && months === 0) return "0 months";
+  const parts: string[] = [];
+  if (years > 0) parts.push(years === 1 ? "1 year" : `${years} years`);
+  if (months > 0) parts.push(months === 1 ? "1 month" : `${months} months`);
+  return parts.join(" ") || null;
+}
+
+export function screenLastCompany(extra: IntakeExtra): string | null {
+  const value = extra.screen?.lastCompany?.trim();
+  return value ? value : null;
+}
+
+export function screenTenure(extra: IntakeExtra): string | null {
+  const value = extra.screen?.tenure?.trim();
+  return value ? value : null;
+}
+
 /** Bangalore Urban 560xxx and Bangalore Rural 562xxx. */
 export function isBangalorePincode(pin: string | null | undefined): boolean {
   const p = parsePincode(pin);
@@ -241,8 +324,21 @@ export function evaluateIntakeScreen(row: Row, extra: IntakeExtra): IntakeScreen
   if (!filled(row.workStatus)) {
     take("fresher or experienced", "Ask if they are a fresher or already working. Save workStatus.");
   } else if (row.workStatus === "FRESHER") {
-    // companies auto-0; skip notice / experience letters
+    // companies auto-0; skip company name, tenure, notice, experience letters
   } else {
+    const lastCompany = screenLastCompany(extra);
+    const tenure = screenTenure(extra);
+    if (!lastCompany && !tenure) {
+      take(
+        "lastCompany",
+        "They're already working. React to that, then ask where they work now and how long they have been there — one conversational ask, not two form questions. Save lastCompany and tenure. If they also say how many companies, save totalCompanies.",
+      );
+      take("tenure", "Save tenure when they say how long they have worked.");
+    } else if (!lastCompany) {
+      take("lastCompany", "Ask the current or last company name and save lastCompany.");
+    } else if (!tenure) {
+      take("tenure", "Ask how long they have been there, or their working tenure, and save tenure.");
+    }
     if (row.totalCompanies == null || Number(row.totalCompanies) < 1) {
       take("number of companies", "They are experienced. Ask how many companies they have worked with and save totalCompanies.");
     }

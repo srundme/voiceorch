@@ -23,6 +23,13 @@ export type IntakeFlash = Record<string, number>;
 
 const FLASH_MS = 2_200;
 
+const EXTRA_SCREEN_KEYS = ["pincode", "lastCompany", "tenure"] as const;
+type ExtraScreenKey = (typeof EXTRA_SCREEN_KEYS)[number];
+
+function isExtraScreenKey(key: string): key is ExtraScreenKey {
+  return (EXTRA_SCREEN_KEYS as readonly string[]).includes(key);
+}
+
 export interface UseIntakeLive {
   intake: IntakeDto | null;
   dispositions: readonly IntakeDisposition[];
@@ -54,7 +61,7 @@ export function useIntakeLive(token: string): UseIntakeLive {
   const lastFieldsRef = useRef<IntakeDto["fields"] | null>(null);
   const lastAnswersRef = useRef<IntakeDto["dispositionAnswers"] | null>(null);
   const lastDispositionRef = useRef<string | null>(null);
-  const lastPincodeRef = useRef<string | null>(null);
+  const lastExtraRef = useRef<Partial<Record<ExtraScreenKey, string | null>>>({});
   const revisionRef = useRef(-1);
 
   const applyFrame = useCallback((incoming: IntakeDto) => {
@@ -105,12 +112,16 @@ export function useIntakeLive(token: string): UseIntakeLive {
     if (lastDispositionRef.current !== incoming.dispositionIds.join(",")) {
       changed.disposition = Date.now();
     }
-    const nextPincode = incoming.pincode ?? null;
-    if (editingRef.current.has("pincode") && lastPincodeRef.current !== null) {
-      incoming = { ...incoming, pincode: lastPincodeRef.current };
-    } else {
-      if (previousFields && lastPincodeRef.current !== nextPincode) changed.pincode = Date.now();
-      lastPincodeRef.current = nextPincode;
+    for (const extraKey of EXTRA_SCREEN_KEYS) {
+      const nextVal = incoming[extraKey] ?? null;
+      if (editingRef.current.has(extraKey)) {
+        incoming = { ...incoming, [extraKey]: lastExtraRef.current[extraKey] ?? nextVal };
+      } else {
+        if (lastExtraRef.current[extraKey] !== undefined && lastExtraRef.current[extraKey] !== nextVal) {
+          changed[extraKey] = Date.now();
+        }
+        lastExtraRef.current[extraKey] = nextVal;
+      }
     }
     if (Object.keys(changed).length > 0) setFlash((f) => ({ ...f, ...changed }));
 
@@ -203,10 +214,10 @@ export function useIntakeLive(token: string): UseIntakeLive {
           lastFieldsRef.current = fields;
           return { ...current, fields };
         }
-        if (key === "pincode") {
-          const pincode = value == null || value === "" ? null : String(value);
-          lastPincodeRef.current = pincode;
-          return { ...current, pincode };
+        if (isExtraScreenKey(key)) {
+          const next = value == null || value === "" ? null : String(value);
+          lastExtraRef.current[key] = next;
+          return { ...current, [key]: next };
         }
         if (key === "disposition") {
           // The whole outcome list arrives at once; answers for outcomes that

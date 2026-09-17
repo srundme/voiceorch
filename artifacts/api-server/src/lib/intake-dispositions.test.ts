@@ -303,4 +303,16 @@ describe("parseIntakeExtra", () => {
   it("drops an unrecognised English rating rather than trusting it", () => {
     expect(parseIntakeExtra({ english: { rating: "Amazing" } }).english).toBeNull();
   });
+
+  it("keeps last company and tenure on the recruiter screen", () => {
+    const extra = parseIntakeExtra({
+      dispositionIds: [],
+      screen: { pincode: "560001", lastCompany: "Infosys", tenure: "2 years" },
+    });
+    expect(extra.screen).toMatchObject({
+      pincode: "560001",
+      lastCompany: "Infosys",
+      tenure: "2 years",
+    });
+  });
 });

@@ -74,7 +74,7 @@ export function renderIntakeGreeting(opts: {
       ? `${hi} — good to hear from you again. ${ask}`
       : `${hi} — good to hear from you again. ${help}`;
   }
-  return `Hi, thanks for calling — this is ${me} from the recruitment team. We have a few international voice openings in Bangalore right now. Could I take your name?`;
+  return `Hello, this is ${me} from Jobshop. How may I assist you?`;
 }
 
 const SKIP_IN_RECAP: ReadonlySet<IntakeFieldKey> = new Set([
@@ -144,6 +144,10 @@ export function buildIntakeReturnBlock(row: CandidateIntake): string {
   const pin = extra.screen?.pincode
     ?? extra.answers["non_hiring_zone"]?.["candidate_pincode"];
   if (typeof pin === "string" && pin.trim()) known.push(`- pincode: ${pin}`);
+  const lastCompany = extra.screen?.lastCompany?.trim();
+  if (lastCompany) known.push(`- current or last company: ${lastCompany}`);
+  const tenure = extra.screen?.tenure?.trim();
+  if (tenure) known.push(`- working tenure: ${tenure}`);
   if (row.englishCommunication) known.push(`- English on the previous call: ${row.englishCommunication}`);
 
   const outcomes = extra.dispositionIds

@@ -255,3 +255,13 @@ describe("intake persist + VoBiz hangup (call 25223)", () => {
     expect(vobizSrc).toContain("DELETE /Call/{uuid}");
   });
 });
+
+describe("Cartesia greeting overlap (call 25226)", () => {
+  it("plays known-up-front Cartesia text as one generation, not flushed sentences", () => {
+    const body = methodBody("playTextAsSentences");
+    expect(body).toContain("CartesiaTTS");
+    expect(body).toContain("playSentence");
+    expect(body).toContain("25226");
+    expect(body).not.toContain("skipDrain");
+  });
+});

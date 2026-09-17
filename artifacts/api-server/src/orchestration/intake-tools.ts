@@ -53,6 +53,8 @@ const FIELD_LABELS: Record<string, string> = {
   city: "city they live in",
   jobCity: "city they want to work in",
   pincode: "pincode",
+  lastCompany: "current or last company",
+  tenure: "working tenure",
   qualification: "graduate or post graduate",
   shiftBase: "shift they can work",
 };
@@ -63,6 +65,10 @@ function labelFor(key: string): string {
 
 function cueFor(row: Parameters<typeof intakeExtraOf>[0]) {
   return evaluateIntakeScreen(row, intakeExtraOf(row));
+}
+
+function speakNext(instruction: string): string {
+  return `Next: ${instruction} Acknowledge what they just said, then pick this up in your own words — never read it as a form question.`;
 }
 
 async function resolveForm(ctx: IntakeToolContext) {
@@ -89,7 +95,7 @@ export async function executeIntakeWrite(
   );
   if (Object.keys(patch).length === 0) {
     const cue = cueFor(form);
-    return `Nothing to save. Next: ${cue.instruction}`;
+    return `Nothing to save. ${speakNext(cue.instruction)}`;
   }
 
   const { row, written, errors } = await applyIntakeWrite(form.publicToken, patch, "agent");
@@ -107,7 +113,7 @@ export async function executeIntakeWrite(
     parts.push(`Rejected ${errors.map((e) => `${labelFor(e.field)} (${e.message})`).join("; ")} — ask for it again.`);
   }
   const cue = cueFor(row);
-  parts.push(`Next: ${cue.instruction}`);
+  parts.push(speakNext(cue.instruction));
   return parts.join(" ");
 }
 
@@ -167,7 +173,7 @@ export async function executeIntakeDisposition(
     );
   } else {
     const cue = cueFor(current);
-    parts.push(`Every outcome question is answered. Next: ${cue.instruction}`);
+    parts.push(`Every outcome question is answered. ${speakNext(cue.instruction)}`);
   }
 
   void maybeScheduleIntakeFollowup({
@@ -188,7 +194,7 @@ export async function executeIntakeSubmit(ctx: IntakeToolContext): Promise<strin
   const fresh = (await loadIntakeByToken(form.publicToken)) ?? form;
   const cue = cueFor(fresh);
   if (!cue.canFinish) {
-    return `Not ready to close. Screening is not complete. Next: ${cue.instruction}`;
+    return `Not ready to close. Screening is not complete. ${speakNext(cue.instruction)}`;
   }
 
   const result = await completeIntakeSession(form.publicToken);
@@ -207,14 +213,13 @@ export async function executeIntakeSubmit(ctx: IntakeToolContext): Promise<strin
       : "No matching opening for this candidate. Tell them the team will review their profile and call back, then end the call.";
   }
 
-  // Facts, not a paragraph. Reading a block out loud is what makes the pitch
-  // sound like a page being recited, so the agent gets the pieces and picks
-  // its own wording and order.
+  // Recruiter facts, not labeled form rows. The first item is the opening hook
+  // so the agent cannot get away with saying only the company name.
   return [
     "Form closed. This is the opening that matched — these are facts, not a script:",
     points.map((p: string) => `- ${p}`).join("\n"),
     "",
-    "Pitch it the way a recruiter would on a live call. Open with the company and role and ask if that sounds like something they want — do not list everything at once. Then bring in shift, location and salary across the next couple of turns, pausing for their reaction each time. Use your own words and keep every turn short.",
+    "Pitch it like a recruiter on a live call, not a checklist. Your first spoken turn MUST include the company AND what the work is (process or role), then ask if that sounds like what they want. Never say only the company name. Then bring in shift, location and salary across the next couple of turns, pausing for their reaction. Use your own words. Keep every turn short.",
     "Answer their questions using only the facts above. If something is not there, say the recruitment team will confirm it. Never name another company, role or salary.",
   ].join("\n");
 }

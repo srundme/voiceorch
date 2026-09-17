@@ -87,6 +87,8 @@ export interface IntakeDto {
   profile: Record<string, unknown> | null;
   /** 6-digit Indian PIN from the recruiter screen. */
   pincode: string | null;
+  lastCompany: string | null;
+  tenure: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -128,6 +130,8 @@ function toDto(row: CandidateIntake): IntakeDto {
       ?? (typeof extra.answers["non_hiring_zone"]?.["candidate_pincode"] === "string"
         ? extra.answers["non_hiring_zone"]["candidate_pincode"]
         : null),
+    lastCompany: extra.screen?.lastCompany ?? null,
+    tenure: extra.screen?.tenure ?? null,
     updatedAt: row.updatedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
   };

@@ -140,6 +140,9 @@ describe("intake agent tool set", () => {
       "intake_submit",
       "end_call",
     ]);
+    const endCall = intakeAgentTools().find((t) => t.type === "end_call");
+    expect(endCall).toMatchObject({ type: "end_call" });
+    expect(endCall && "goodbyeMessage" in endCall ? endCall.goodbyeMessage : undefined).toBeUndefined();
   });
 
   it("never exposes the campaign-fixed fields to the model", () => {
@@ -153,6 +156,8 @@ describe("intake agent tool set", () => {
     expect(props).toContain("servingNotice");
     expect(props).toContain("wantsWfh");
     expect(props).toContain("pincode");
+    expect(props).toContain("lastCompany");
+    expect(props).toContain("tenure");
   });
 
   it("enumerates every disposition id for the outcome tool", () => {
@@ -191,7 +196,9 @@ describe("intake prompt", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("This is a conversation");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Do not recite the list in a fixed order");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Hiring zone is decided from the pincode");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("building a bit of rapport");
     expect(INTAKE_SYSTEM_PROMPT).not.toContain("Keep every reply under 25 words");
+    expect(INTAKE_SYSTEM_PROMPT).not.toContain("that is the only question you may ask");
   });
 
   it("bans the per-turn stall that made the agent sound like a machine", () => {
@@ -226,6 +233,13 @@ describe("intake prompt", () => {
   it("frames the opening as facts to talk through rather than a script", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("They are facts, not a script");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Two or three facts per turn");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Never pitch only the company name");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("save lastCompany and tenure");
+  });
+
+  it("closes in words that match this call, not a fixed farewell", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Speak a close that matches THIS call");
+    expect(INTAKE_SYSTEM_PROMPT).not.toContain("tell them the team will call back with next steps, thank them");
   });
 
   it("forbids inventing a job or a salary", () => {
@@ -242,7 +256,10 @@ describe("intake prompt", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("{{agent_name}}");
     expect(INTAKE_SYSTEM_PROMPT).not.toContain("Meera");
     expect(INTAKE_GREETING).toContain("{{agent_name}}");
+    expect(INTAKE_GREETING).toContain("Jobshop");
+    expect(INTAKE_GREETING).toContain("How may I assist you");
     expect(INTAKE_GREETING).not.toContain("Meera");
+    expect(INTAKE_GREETING).not.toContain("Could I take your name");
     const spoken = buildIntakeSystemPrompt("Irfan");
     expect(spoken).toContain("You are Irfan");
     expect(spoken).not.toContain("{{agent_name}}");

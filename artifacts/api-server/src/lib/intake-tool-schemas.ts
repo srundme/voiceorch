@@ -32,6 +32,8 @@ const ASKABLE_FIELDS: Record<string, { type: "string"; description: string }> = 
   city: { type: "string", description: "City the candidate currently lives in." },
   jobCity: { type: "string", description: "City the candidate wants to work in. Defaults to Bangalore." },
   pincode: { type: "string", description: "6-digit Indian pincode where the candidate lives. Hiring zone is decided from this. Repeat the digits back." },
+  lastCompany: { type: "string", description: "Experienced only. Current or last company name, as the candidate said it." },
+  tenure: { type: "string", description: "Experienced only. How long they have worked there, e.g. 2 years or 18 months." },
   qualification: { type: "string", description: "Graduate or Post Graduate." },
   shiftBase: { type: "string", description: "Shift the candidate can work, e.g. US Shift, UK Shift, Day Shift, Rotational." },
   dnd: { type: "string", description: "Activate only when the candidate asks never to be contacted again. Otherwise leave empty." },

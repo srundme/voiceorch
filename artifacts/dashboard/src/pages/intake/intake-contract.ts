@@ -67,6 +67,8 @@ export interface IntakeDto {
   matchNote: string | null;
   profile: Record<string, unknown> | null;
   pincode: string | null;
+  lastCompany: string | null;
+  tenure: string | null;
   updatedAt: string;
   createdAt: string;
 }

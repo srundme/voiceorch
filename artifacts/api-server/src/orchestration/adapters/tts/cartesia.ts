@@ -7,12 +7,14 @@
  *   https://docs.cartesia.ai/build-with-cartesia/capability-guides/stream-inputs-using-continuations.md
  *
  * Model of operation: one WebSocket per call, one context per agent turn.
- * Text is written to the context as it arrives with `continue: true`, and every
- * write is followed by a `flush` (empty transcript + `continue: true`, which is
- * the documented flush shape). The flush is what makes Sonic generate the text
- * it is holding instead of waiting out `max_buffer_delay_ms` (3000 ms default)
- * for more input, so audio for sentence N arrives while sentence N-1 is still
- * playing. `max_buffer_delay_ms` itself is left at the default — forcing it to 0
+ * Text is written to the context as it arrives with `continue: true`. Complete
+ * sentences (terminal punctuation) are left for Sonic to generate as one
+ * continuation — flushing each sentence starts a *new* generation on the same
+ * context, and those streams overlap in the PCM sink (call 25226: Cartesia
+ * greeting heard on top of itself). Incomplete fragments are flushed so they
+ * are not held for `max_buffer_delay_ms`, and the next write waits for
+ * `flush_done` so the following generation cannot start in parallel.
+ * `max_buffer_delay_ms` itself is left at the default — forcing it to 0
  * makes Sonic speak each word as its own clip (choppy, call 25061).
  *
  * The turn is closed by one `continue: false` write. Cartesia rejects a close
@@ -116,6 +118,11 @@ export function isCartesiaContextClosedError(err: unknown): boolean {
 }
 
 const WORD_BREAK = /[\s.,;:!?…।॥]/u;
+const SENTENCE_END = /[.?!…।॥]$/u;
+
+function isCompleteCartesiaUtterance(text: string): boolean {
+  return SENTENCE_END.test(text.trimEnd());
+}
 
 /**
  * Split streamed text on the last word boundary. Writes carry whole words so
@@ -229,6 +236,8 @@ interface TurnCtx {
   restFallback: boolean;
   /** Serializes writes so text reaches Cartesia in the order it was produced. */
   queue: Promise<void>;
+  /** Resolvers waiting for the next `flush_done` on this context. */
+  flushWaiters: Array<() => void>;
   /** Resolved when Cartesia reports `done` for the context. */
   settleOwner: ((err?: unknown) => void) | null;
   /** Characters the owner should report as billed. */
@@ -460,7 +469,11 @@ export class CartesiaTTS implements TTSAdapter {
       this.recordTimestamps(contextId, msg["word_timestamps"]);
       return;
     }
-    if (type === "flush_done") return;
+    if (type === "flush_done") {
+      const ctx = contextId ? this.turns.get(contextId) : undefined;
+      ctx?.flushWaiters.shift()?.();
+      return;
+    }
 
     if (type === "error") {
       this.handleWsError(msg, contextId);
@@ -574,6 +587,7 @@ export class CartesiaTTS implements TTSAdapter {
         cancelled: false,
         restFallback: false,
         queue: Promise.resolve(),
+        flushWaiters: [],
         settleOwner: null,
         chars: 0,
       };
@@ -680,8 +694,9 @@ export class CartesiaTTS implements TTSAdapter {
 
   /**
    * Write one piece of turn text. Everything except the newest complete piece
-   * goes out immediately with `continue: true`, followed by a flush so Sonic
-   * generates it now instead of waiting for `max_buffer_delay_ms`.
+   * goes out immediately with `continue: true`. A flush is only used for
+   * fragments that would otherwise sit in Sonic's input buffer — flushing a
+   * finished sentence starts a parallel generation on this context (call 25226).
    */
   private async writeText(
     contextId: string,
@@ -729,9 +744,22 @@ export class CartesiaTTS implements TTSAdapter {
       return;
     }
     ctx.sentAny = true;
-    // Documented flush shape: empty transcript, continue: true. Without it this
-    // text sits in Sonic's input buffer for up to max_buffer_delay_ms.
+    if (isCompleteCartesiaUtterance(toSend)) return;
+    // Incomplete fragment: force generation now, then wait so the next write
+    // cannot start a second overlapping Sonic generation on this context.
     this.send({ context_id: contextId, transcript: "", continue: true, flush: true });
+    await this.waitFlushDone(ctx);
+  }
+
+  private waitFlushDone(ctx: TurnCtx): Promise<void> {
+    if (ctx.cancelled || ctx.dead) return Promise.resolve();
+    return new Promise((resolve) => {
+      const timer = setTimeout(resolve, 1_500);
+      ctx.flushWaiters.push(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
   }
 
   /**

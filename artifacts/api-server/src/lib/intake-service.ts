@@ -31,8 +31,10 @@ import {
   isBangalorePlace,
   mergeScreenFlags,
   nonHiringAreaForPincode,
+  parseLastCompany,
   parsePincode,
   parseScreenYesNo,
+  parseTenure,
   type ScreenFlagKey,
 } from "./intake-screen.js";
 import { englishRatingForForm, updateEnglishRead, type EnglishTurnInput } from "./intake-english.js";
@@ -277,12 +279,40 @@ export async function applyIntakeWrite(
   const screenPatch: Partial<Record<ScreenFlagKey, "yes" | "no">> = {};
   let pincodeValue: string | null = null;
   let pincodeError: string | null = null;
+  let lastCompanyTouched = false;
+  let lastCompanyValue: string | null = null;
+  let lastCompanyError: string | null = null;
+  let tenureTouched = false;
+  let tenureValue: string | null = null;
+  let tenureError: string | null = null;
   const restExtra: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(extraInput)) {
     if (key === "pincode" || key === "pinCode" || key === "pin") {
       pincodeValue = parsePincode(raw);
       if (!pincodeValue && String(raw ?? "").trim()) {
         pincodeError = "Pincode must be a 6-digit Indian PIN";
+      }
+      continue;
+    }
+    if (key === "lastCompany" || key === "companyName" || key === "currentCompany") {
+      lastCompanyTouched = true;
+      const text = String(raw ?? "").trim();
+      if (!text) {
+        lastCompanyValue = null;
+      } else {
+        lastCompanyValue = parseLastCompany(raw);
+        if (!lastCompanyValue) lastCompanyError = "Company name looks empty or invalid";
+      }
+      continue;
+    }
+    if (key === "tenure" || key === "tenureYears" || key === "workingTenure") {
+      tenureTouched = true;
+      const text = String(raw ?? "").trim();
+      if (!text) {
+        tenureValue = null;
+      } else {
+        tenureValue = parseTenure(raw);
+        if (!tenureValue) tenureError = "Tenure must look like 2 years or 18 months";
       }
       continue;
     }
@@ -306,6 +336,16 @@ export async function applyIntakeWrite(
     if (pincodeValue) extraResult.written.push("pincode");
   }
   if (pincodeError) extraResult.errors.push({ field: "pincode", message: pincodeError });
+  if (lastCompanyTouched && !lastCompanyError) {
+    extraResult.extra.screen = mergeScreenFlags(extraResult.extra.screen, { lastCompany: lastCompanyValue });
+    extraResult.written.push("lastCompany");
+  }
+  if (lastCompanyError) extraResult.errors.push({ field: "lastCompany", message: lastCompanyError });
+  if (tenureTouched && !tenureError) {
+    extraResult.extra.screen = mergeScreenFlags(extraResult.extra.screen, { tenure: tenureValue });
+    extraResult.written.push("tenure");
+  }
+  if (tenureError) extraResult.errors.push({ field: "tenure", message: tenureError });
 
   const mergedRow = {
     ...existing,

@@ -75,7 +75,7 @@ import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioP
 import { RecordingBuffer, WEBCALL_GAP_RESYNC_MS } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMAdapter, LLMUsage, SessionConfig, StreamSTT, STTConfig, ToolDefinition } from "./types.js";
-import { resolveGoodbyeMessage } from "./types.js";
+import { defaultGoodbyeMessage, resolveGoodbyeMessage } from "./types.js";
 import type { VoiceSession } from "./voice-session.js";
 import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, isPureNonLatinQuery, type KbRetrievalResult } from "./kb-retrieval.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
@@ -6436,52 +6436,23 @@ export class OrchestrationPipeline implements VoiceSession {
    * and absorb the next sentence's latency inside current playback.
    */
   private async playTextAsSentences(text: string, emotions?: string[]): Promise<void> {
+    // Cartesia: known-up-front text is one Sonic generation. Splitting the
+    // greeting into flushed continuations made three clips play on top of
+    // each other (call 25226).
+    if (this.tts instanceof CartesiaTTS) return this.playSentence(text, emotions);
     const { sentences, remainder } = this.extractSpeakable(text);
     if (remainder.trim()) sentences.push(remainder.trim());
     if (sentences.length <= 1) return this.playSentence(text, emotions);
     const seqId = this.interruptionMgr.beginAgentTurn();
     this.activeAgentSequenceId = seqId;
-    const cartesiaTts = this.tts instanceof CartesiaTTS ? this.tts : null;
-    const turnContextId = cartesiaTts ? globalThis.crypto.randomUUID() : undefined;
-    try {
-      if (turnContextId && cartesiaTts) {
-        const jobs = sentences.map((s, i) =>
-          this.startSentenceSynthesis(
-            i === 0 || /^\s/.test(s) ? s : ` ${s}`,
-            this._activeTurnIndex,
-            seqId,
-            turnContextId,
-            emotions,
-          ),
-        );
-        const owner = jobs.find((j) => !j.skipDrain) ?? jobs[0]!;
-        const continuations = jobs.filter((j) => j.skipDrain);
-        // Owner pending stays open until leftover WS is queued and the turn
-        // is finalized (call 19809: Cartesia closes the WS context after clip 1).
-        // Start playback immediately, wait until continuation sentences have
-        // been synthesized into the owner PCM sink, finalize, then await
-        // playback. Never await playJob before finalize — that deadlocks.
-        const playPromise = this.playJob(owner);
-        for (const job of continuations) {
-          if (this.closed || this.bargeInRequested || !this.interruptionMgr.isValidSequence(seqId)) break;
-          this.recordAgentSpeech(job.text);
-          await job.ready;
-        }
-        cartesiaTts.finalizeTurnContext(turnContextId);
-        await playPromise;
-        return;
+    let next = this.startSentenceSynthesis(sentences[0]!, this._activeTurnIndex, seqId, undefined, emotions);
+    for (let i = 0; i < sentences.length; i++) {
+      const job = next;
+      if (i + 1 < sentences.length) {
+        next = this.startSentenceSynthesis(sentences[i + 1]!, this._activeTurnIndex, seqId, undefined, emotions);
       }
-      let next = this.startSentenceSynthesis(sentences[0]!, this._activeTurnIndex, seqId, undefined, emotions);
-      for (let i = 0; i < sentences.length; i++) {
-        const job = next;
-        if (i + 1 < sentences.length) {
-          next = this.startSentenceSynthesis(sentences[i + 1]!, this._activeTurnIndex, seqId, undefined, emotions);
-        }
-        await this.playJob(job);
-        if (this.closed || this.bargeInRequested || !this.interruptionMgr.isValidSequence(seqId)) break;
-      }
-    } finally {
-      if (turnContextId && cartesiaTts) cartesiaTts.finalizeTurnContext(turnContextId);
+      await this.playJob(job);
+      if (this.closed || this.bargeInRequested || !this.interruptionMgr.isValidSequence(seqId)) break;
     }
   }
 
@@ -7374,6 +7345,7 @@ export class OrchestrationPipeline implements VoiceSession {
       "[BACKGROUND SAVE]",
       `The candidate just said: "${text.slice(0, 500)}"`,
       "Call save_candidate_details and/or set_disposition with only the fields they just gave.",
+      "If they named a workplace or how long they have worked, save lastCompany and tenure.",
       "Do not speak. Do not call finish_intake or end_call.",
     ].join("\n");
 
@@ -7482,15 +7454,7 @@ export class OrchestrationPipeline implements VoiceSession {
         this.endCallInitiated = true;
         this.safetyNet?.clear();
         this.prepareSystemPlayback();
-        const endCallTool = this.agent.tools.find(t => t.type === "end_call");
-        const goodbye = resolveGoodbyeMessage(
-          endCallTool?.type === "end_call" ? endCallTool.goodbyeMessage : undefined,
-          this.agent.endCallPhrases,
-          this.agent.language ?? this.currentLang,
-        );
-        this.conversationHistory.appendAssistant(goodbye);
-        this.config.onTranscript("agent", goodbye);
-        await this.speakRaw(goodbye);
+        await this.speakEndCallFarewellIfNeeded(undefined);
         this.config.onCallEnd();
         return undefined;
       }
@@ -7780,17 +7744,32 @@ export class OrchestrationPipeline implements VoiceSession {
     this.endCallInitiated = true;
     this.safetyNet?.clear();
     this.prepareSystemPlayback();
-    {
-      const goodbye = resolveGoodbyeMessage(
-        tool.goodbyeMessage,
-        this.agent.endCallPhrases,
-        this.agent.language ?? this.currentLang,
-      );
+    await this.speakEndCallFarewellIfNeeded(tool.goodbyeMessage);
+    this.config.onCallEnd();
+  }
+
+  /**
+   * Intake speaks its own close; a second canned farewell was the same line
+   * on every call. Other agents still get the configured goodbye.
+   */
+  private async speakEndCallFarewellIfNeeded(configured: string | undefined): Promise<void> {
+    if (this.isIntakeAgent) {
+      const alreadySpoke = this._currentTurnPlayedSentences.some((s) => s.trim().length > 0);
+      if (alreadySpoke) return;
+      const goodbye = defaultGoodbyeMessage(this.agent.language ?? this.currentLang);
       this.conversationHistory.appendAssistant(goodbye);
       this.config.onTranscript("agent", goodbye);
       await this.speakRaw(goodbye);
+      return;
     }
-    this.config.onCallEnd();
+    const goodbye = resolveGoodbyeMessage(
+      configured,
+      this.agent.endCallPhrases,
+      this.agent.language ?? this.currentLang,
+    );
+    this.conversationHistory.appendAssistant(goodbye);
+    this.config.onTranscript("agent", goodbye);
+    await this.speakRaw(goodbye);
   }
 
   private async executeCalCom(tool: AgentTool & { type: "cal_com" }, args: Record<string, unknown>): Promise<string> {

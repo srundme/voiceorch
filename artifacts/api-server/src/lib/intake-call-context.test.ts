@@ -56,11 +56,15 @@ describe("resolveIntakeOpenKind", () => {
 });
 
 describe("renderIntakeGreeting", () => {
-  it("names the agent on a first call and asks for their name", () => {
+  it("names the agent on a first call and asks how it can help", () => {
     const line = renderIntakeGreeting({ kind: "first", agentName: "Irfan" });
     expect(line).toContain("this is Irfan");
-    expect(line).toContain("Could I take your name");
+    expect(line).toContain("Jobshop");
+    expect(line).toContain("How may I assist you");
     expect(line).not.toContain("Meera");
+    expect(line).not.toContain("Could I take your name");
+    expect(line).not.toContain("recruitment team");
+    expect(line).not.toContain("openings in Bangalore");
   });
 
   it("recognises a returning caller and asks the next open question", () => {

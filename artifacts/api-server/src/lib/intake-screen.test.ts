@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IntakeExtra } from "./intake-dispositions.js";
-import { evaluateIntakeScreen, isBangalorePlace, isBangalorePincode, nonHiringAreaForPincode, parsePincode, parseScreenYesNo } from "./intake-screen.js";
+import { evaluateIntakeScreen, isBangalorePlace, isBangalorePincode, nonHiringAreaForPincode, parseLastCompany, parsePincode, parseScreenYesNo, parseTenure } from "./intake-screen.js";
 
 const emptyExtra = (): IntakeExtra => ({ dispositionIds: [], answers: {} });
 
@@ -50,6 +50,28 @@ describe("parsePincode", () => {
     expect(parsePincode("pin code 560 001")).toBe("560001");
     expect(parsePincode("five six zero zero zero one")).toBe("560001");
     expect(parsePincode("not a pin")).toBeNull();
+  });
+});
+
+describe("parseLastCompany", () => {
+  it("keeps the company name and strips I-work-at padding", () => {
+    expect(parseLastCompany("Infosys")).toBe("Infosys");
+    expect(parseLastCompany("I work at Infosys")).toBe("Infosys");
+    expect(parseLastCompany("[24]7.AI")).toBe("[24]7.AI");
+    expect(parseLastCompany("yes")).toBeNull();
+    expect(parseLastCompany("a")).toBeNull();
+  });
+});
+
+describe("parseTenure", () => {
+  it("reads years, months, and number words", () => {
+    expect(parseTenure("2 years")).toBe("2 years");
+    expect(parseTenure("two years")).toBe("2 years");
+    expect(parseTenure("18 months")).toBe("1 year 6 months");
+    expect(parseTenure("2.5 years")).toBe("2 years 6 months");
+    expect(parseTenure("6 months")).toBe("6 months");
+    expect(parseTenure("2")).toBe("2 years");
+    expect(parseTenure("not a tenure")).toBeNull();
   });
 });
 
@@ -160,6 +182,34 @@ describe("evaluateIntakeScreen", () => {
       totalCompanies: 2,
     }, { dispositionIds: [], answers: {}, screen: { pincode: "560001" } });
     expect(cue.waitingOn).toContain("servingNotice");
+  });
+
+  it("asks company and tenure after they say they are experienced", () => {
+    const cue = evaluateIntakeScreen({
+      ...screened,
+      workStatus: "EXPERIENCED",
+      totalCompanies: 2,
+    }, { dispositionIds: [], answers: {}, screen: { pincode: "560001" } });
+    expect(cue.waitingOn).toContain("lastCompany");
+    expect(cue.waitingOn).toContain("tenure");
+    expect(cue.instruction).toMatch(/company|tenure|working/i);
+    expect(cue.canFinish).toBe(false);
+  });
+
+  it("lets an experienced Bangalore candidate finish once company and tenure are in", () => {
+    const cue = evaluateIntakeScreen({
+      ...screened,
+      workStatus: "EXPERIENCED",
+      totalCompanies: 2,
+    }, {
+      dispositionIds: [],
+      answers: {},
+      screen: { ...flagsNo.screen, lastCompany: "Infosys", tenure: "2 years" },
+    });
+    expect(cue.waitingOn).not.toContain("lastCompany");
+    expect(cue.waitingOn).not.toContain("tenure");
+    expect(cue.canFinish).toBe(true);
+    expect(cue.pitchAllowed).toBe(true);
   });
 
   it("lets a fully screened Bangalore fresher finish and pitch", () => {

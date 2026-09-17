@@ -228,6 +228,12 @@ class FakeCartesiaWs {
 
   send(payload: string): void {
     this.sent.push(payload);
+    try {
+      const msg = JSON.parse(payload) as { flush?: boolean; context_id?: string };
+      if (msg.flush === true && msg.context_id) {
+        queueMicrotask(() => this.emit({ type: "flush_done", context_id: msg.context_id }));
+      }
+    } catch { /* ignore malformed */ }
   }
 
   close(): void {
@@ -261,7 +267,7 @@ describe("Cartesia WS continuations", () => {
       // The pipeline hands over every continuation before closing the turn.
       await join;
       tts.finalizeTurnContext("fast-llm");
-      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(3));
+      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(2));
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as Record<string, unknown>);
       // Both sentences ride the same context; the last one carries the close.
       expect(requests.every((r) => r.context_id === "fast-llm")).toBe(true);
@@ -317,7 +323,7 @@ describe("Cartesia WS continuations", () => {
     }
   });
 
-  it("flushes each sentence so it is not held for max_buffer_delay_ms", async () => {
+  it("does not flush complete sentences so Sonic cannot overlap generations (call 25226)", async () => {
     const sockets: FakeCartesiaWs[] = [];
     vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
       constructor(url: string) { super(url); sockets.push(this); }
@@ -330,17 +336,38 @@ describe("Cartesia WS continuations", () => {
     await tts.synthesizeStreamInContext("flushy", " Three.", () => {}, () => {}, undefined, undefined, true);
     tts.finalizeTurnContext("flushy");
     try {
-      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(4));
+      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(3));
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as Record<string, unknown>);
-      const flushes = requests.filter((r) => r.flush === true);
-      // A flush follows every mid-turn write, in the documented shape.
-      expect(flushes.length).toBe(2);
-      for (const f of flushes) {
-        expect(f).toMatchObject({ context_id: "flushy", transcript: "", continue: true, flush: true });
-      }
-      expect(requests.filter((r) => r.flush !== true).map((r) => r.transcript))
+      expect(requests.filter((r) => r.flush === true)).toEqual([]);
+      expect(requests.map((r) => r.transcript))
         .toEqual(["One.", " Two.", " Three."]);
       sockets[0]!.emit({ type: "done", context_id: "flushy" });
+      await owner;
+    } finally {
+      tts.close();
+      await owner.catch(() => {});
+    }
+  });
+
+  it("flushes an incomplete fragment so it is not held for max_buffer_delay_ms", async () => {
+    const sockets: FakeCartesiaWs[] = [];
+    vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
+      constructor(url: string) { super(url); sockets.push(this); }
+    });
+    vi.stubGlobal("fetch", vi.fn());
+    const tts = new CartesiaTTS("test-key", null, "sonic-3.6", "en-IN", null, 8000);
+    tts.claimTurnContext("frag");
+    const owner = tts.synthesizeStreamInContext("frag", "Hello ", () => {}, () => {});
+    await tts.synthesizeStreamInContext("frag", "there ", () => {}, () => {}, undefined, undefined, true);
+    tts.finalizeTurnContext("frag");
+    try {
+      await vi.waitFor(() => expect(sockets[0]?.sent.some((s) => JSON.parse(s).flush === true)).toBe(true));
+      const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as Record<string, unknown>);
+      const flushes = requests.filter((r) => r.flush === true);
+      expect(flushes).toEqual([
+        expect.objectContaining({ context_id: "frag", transcript: "", continue: true, flush: true }),
+      ]);
+      sockets[0]!.emit({ type: "done", context_id: "frag" });
       await owner;
     } finally {
       tts.close();

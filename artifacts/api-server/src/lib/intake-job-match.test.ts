@@ -57,6 +57,9 @@ describe("matchIntakeJobs", () => {
     expect(match.proposed?.city).toBe("BENGALURU");
     expect(match.proposed?.shiftBase).toBe("US");
     expect(match.speakScript).toBeTruthy();
+    expect(match.talkingPoints[0]).toMatch(/Opening hook/);
+    expect(match.talkingPoints[0]).not.toMatch(/^company:/);
+    expect(match.talkingPoints[0]).toMatch(/Concentrix|Startek|Teleperformance|customer|voice|US/i);
   });
 
   it("does not pitch when the candidate is not interested", () => {

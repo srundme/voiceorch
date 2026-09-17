@@ -59,6 +59,8 @@ export interface IntakeCandidateProfile {
   pincode: string | null;
   workStatus: string | null;
   totalCompanies: number | null;
+  lastCompany: string | null;
+  tenure: string | null;
   qualification: string | null;
   shiftBase: string | null;
   englishCommunication: string | null;
@@ -306,23 +308,37 @@ const SHIFT_WORDS: Record<IntakeJobShift, string> = {
 
 const inr = (n: number) => `${Math.round(n / 1000)}k`;
 
+function firstPitchSentence(pitch: string): string {
+  const trimmed = pitch.trim();
+  const match = trimmed.match(/^[^.!?]+[.!?]/);
+  return (match?.[0] ?? trimmed).trim();
+}
+
 /**
- * Facts, not sentences. The agent decides the wording and the order, which is
- * what stops the pitch sounding like a page being read out.
+ * Recruiter facts, not labeled form rows. The first item is the opening hook
+ * so the agent cannot get away with saying only the company name.
  */
 function talkingPointsFor(job: IntakeJob): string[] {
+  const weekend = job.weekendOff ? "Saturday and Sunday off" : "rotational week-offs";
+  const site = job.workFromHome
+    ? `${job.area}, Bengaluru — work from home is available`
+    : `${job.area}, Bengaluru — this is work from office, not WFH`;
+  const who =
+    job.workStatus === "FRESHER"
+      ? "freshers"
+      : job.workStatus === "EXPERIENCED"
+        ? "experienced voice agents"
+        : "freshers and experienced agents";
   const points = [
-    `company: ${job.company}`,
-    `role: ${job.title} (${job.process})`,
-    `location: ${job.area}, Bengaluru${job.workFromHome ? " — work from home available" : " — work from office"}`,
-    `shift: ${SHIFT_WORDS[job.shiftBase]}${job.weekendOff ? ", fixed weekend off" : ", rotational week-off"}`,
-    `take-home: ₹${inr(job.salaryMin)}–${inr(job.salaryMax)} a month`,
-    `eligibility: ${job.qualification === "POST_GRADUATE" ? "post graduate" : "graduate"}, ${
-      job.workStatus === "ANY" ? "freshers and experienced" : job.workStatus === "FRESHER" ? "freshers" : "experienced"
-    }`,
+    `Opening hook (first spoken turn — company AND the work in one breath, never the company name alone): ${firstPitchSentence(job.pitch)}`,
+    `What they actually do: ${job.description}`,
+    `Site: ${site}`,
+    `Shift: ${SHIFT_WORDS[job.shiftBase]}, ${weekend}`,
+    `Take-home: ₹${inr(job.salaryMin)}–${inr(job.salaryMax)} a month`,
+    `Who they take: ${job.qualification === "POST_GRADUATE" ? "post graduates" : "graduates"}, ${who}`,
   ];
-  if (job.openings > 0) points.push(`openings: ${job.openings}`);
-  for (const req of job.requirements.slice(0, 3)) points.push(`requirement: ${req}`);
+  if (job.openings > 0) points.push(`Openings: ${job.openings}`);
+  for (const req of job.requirements.slice(0, 3)) points.push(`Requirement: ${req}`);
   return points;
 }
 
@@ -347,6 +363,8 @@ export function buildIntakeProfile(
         : null),
     workStatus: row.workStatus,
     totalCompanies: row.totalCompanies,
+    lastCompany: extra.screen?.lastCompany ?? null,
+    tenure: extra.screen?.tenure ?? null,
     qualification: row.qualification,
     shiftBase: row.shiftBase,
     englishCommunication: row.englishCommunication,

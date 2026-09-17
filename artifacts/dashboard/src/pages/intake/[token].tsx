@@ -43,6 +43,8 @@ const PROFILE_ROWS: ReadonlyArray<[label: string, key: string]> = [
   ["Work city", "jobCity"],
   ["Work status", "workStatus"],
   ["Companies", "totalCompanies"],
+  ["Company", "lastCompany"],
+  ["Tenure", "tenure"],
   ["Qualification", "qualification"],
   ["Shift", "shiftBase"],
   ["English", "englishCommunication"],
@@ -390,6 +392,8 @@ export default function IntakeFormPage() {
   /** Every disposition answer is addressed as `<disposition>.<field>`. */
   const answerAt = (key: string): string | number | null => {
     if (key === "pincode") return intake?.pincode ?? null;
+    if (key === "lastCompany") return intake?.lastCompany ?? null;
+    if (key === "tenure") return intake?.tenure ?? null;
     const dot = key.indexOf(".");
     if (dot <= 0) return null;
     return intake?.dispositionAnswers?.[key.slice(0, dot)]?.[key.slice(dot + 1)] ?? null;
@@ -669,6 +673,33 @@ export default function IntakeFormPage() {
                 inputMode="numeric"
                 autoComplete="off"
                 {...textProps("totalCompanies")}
+              />
+            </Field>
+
+            <Field
+              label="Company name"
+              htmlFor="lastCompany"
+              error={fieldErrors["lastCompany"]}
+              hint="Current or last employer — asked when they are experienced"
+            >
+              <Input
+                id="lastCompany"
+                autoComplete="off"
+                {...extraTextProps("lastCompany")}
+              />
+            </Field>
+
+            <Field
+              label="Working tenure"
+              htmlFor="tenure"
+              error={fieldErrors["tenure"]}
+              hint="How long they have been there, e.g. 2 years"
+            >
+              <Input
+                id="tenure"
+                autoComplete="off"
+                placeholder="e.g. 2 years"
+                {...extraTextProps("tenure")}
               />
             </Field>
 
