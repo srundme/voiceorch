@@ -2,7 +2,6 @@ import OpenAI from "openai";
 import { db, platformSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
-import { isOpenAiInvalidSchemaError, toOpenAiStrictSchema } from "../lib/openai-strict-schema.js";
 
 /**
  * Minimal interface for disposition LLM extraction.
@@ -45,40 +44,22 @@ class OpenAIDispositionLLM implements DispositionLLM {
     schema: Record<string, unknown>,
     transcript: string,
   ): Promise<Record<string, unknown>> {
-    const strictSchema = toOpenAiStrictSchema(schema);
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: `TRANSCRIPT:\n${transcript}` },
-    ];
-    try {
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        temperature: 0,
-        response_format: {
-          type: "json_schema",
-          json_schema: { name: "disposition", strict: true, schema: strictSchema },
-        },
-        messages,
-      });
-      const content = response.choices[0]?.message?.content ?? "{}";
-      return JSON.parse(content) as Record<string, unknown>;
-    } catch (err) {
-      if (!isOpenAiInvalidSchemaError(err)) throw err;
-      // Call 20746: a leftover min/max/maxItems keyword 400'd every backfill
-      // and tripped the intelligence breaker. json_object still returns JSON.
-      logger.warn({ err }, "disposition: OpenAI rejected strict schema — retrying json_object");
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: withSchemaInstruction(systemPrompt, strictSchema) },
-          { role: "user", content: `TRANSCRIPT:\n${transcript}` },
-        ],
-      });
-      const content = response.choices[0]?.message?.content ?? "{}";
-      return JSON.parse(content) as Record<string, unknown>;
-    }
+    // OpenAI supports strict structured output — constrain the model to the
+    // built JSON Schema so it must emit the exact `primary`/`sub` keys.
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      temperature: 0,
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "disposition", strict: true, schema },
+      },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `TRANSCRIPT:\n${transcript}` },
+      ],
+    });
+    const content = response.choices[0]?.message?.content ?? "{}";
+    return JSON.parse(content) as Record<string, unknown>;
   }
 }
 
@@ -261,10 +242,6 @@ export async function getDispositionLLMChain(
 
 /** True when an LLM error is provider-level (auth/quota/overload) and worth retrying on another provider. */
 export function isRetryableProviderError(err: unknown): boolean {
-  // A bad structured-output schema is our bug, not an OpenAI outage. The next
-  // provider (Groq json_object) can still extract; do not trip the 30-minute
-  // intelligence breaker as "analysis model down".
-  if (isOpenAiInvalidSchemaError(err)) return true;
   const status = (err as { status?: number })?.status;
   if (typeof status === "number") {
     return status === 401 || status === 403 || status === 429 || status >= 500;

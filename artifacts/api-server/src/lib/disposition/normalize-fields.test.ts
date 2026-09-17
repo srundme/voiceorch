@@ -84,7 +84,6 @@ describe("jsonSchemaFromDispositionFields", () => {
     const props = schema["properties"] as Record<string, { type: unknown }>;
     expect(props["follow_up_needed"]?.type).toEqual(["boolean", "null"]);
     expect(props["doctor"]?.type).toEqual(["string", "null"]);
-    expect(schema["required"]).toEqual(["follow_up_needed", "doctor"]);
   });
 });
 

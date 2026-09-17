@@ -10,7 +10,7 @@ export function buildSchema(cfg: DispositionConfig): Record<string, unknown> {
   const properties: Record<string, unknown> = {
     primary:    { type: "string", enum: Object.keys(cfg.taxonomy) },
     sub:        { type: "string", enum: allSubs },
-    confidence: { type: "number" },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
     evidence:   { type: "string" },
     summary:    { type: "string" },
   };
@@ -21,9 +21,7 @@ export function buildSchema(cfg: DispositionConfig): Record<string, unknown> {
     } else if (field.type === "number") {
       properties[field.key] = { type: ["number", "null"] };
     } else if (field.enum?.length) {
-      properties[field.key] = {
-        anyOf: [{ type: "string", enum: [...field.enum] }, { type: "null" }],
-      };
+      properties[field.key] = { type: ["string", "null"], enum: [...field.enum, null] };
     } else {
       properties[field.key] = { type: ["string", "null"] };
     }

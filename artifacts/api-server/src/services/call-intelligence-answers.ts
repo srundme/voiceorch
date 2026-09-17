@@ -56,7 +56,7 @@ export function buildAnswersSchema(questions: CampaignAnalyticsQuestion[]): Reco
     if (q.type === "boolean") {
       properties[q.id] = { type: ["boolean", "null"] };
     } else if (q.type === "enum" && q.options?.length) {
-      properties[q.id] = { anyOf: [{ type: "string", enum: [...q.options] }, { type: "null" }] };
+      properties[q.id] = { type: ["string", "null"], enum: [...q.options, null] };
     } else {
       properties[q.id] = { type: ["string", "null"] };
     }
@@ -65,6 +65,5 @@ export function buildAnswersSchema(questions: CampaignAnalyticsQuestion[]): Reco
     type: "object",
     additionalProperties: false,
     properties,
-    required: Object.keys(properties),
   };
 }

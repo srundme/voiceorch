@@ -4114,14 +4114,7 @@ export class OrchestrationPipeline implements VoiceSession {
     try {
       await this.processTurn(transcript, 0);
     } catch (err) {
-      const reason = toReadableError(err, "Turn error");
       logger.error({ callId: this.config.callId, err }, "Turn error (streaming STT)");
-      this.logExec("Agent", "system", {
-        status: "error",
-        turnNumber: this._activeTurnIndex,
-        errorMessage: reason,
-        metadata: { event: "Turn Error", reason },
-      });
     } finally {
       this.isProcessing = false;
       this.interruptReplyArmed = false;
@@ -8719,7 +8712,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // Defense-in-depth tool-envelope guard: validated against the names of the
     // tools offered this turn so only a genuine serialized tool call is withheld
     // from TTS (ordinary bracketed text streams normally).
-    const envelopeGuard = makeToolEnvelopeGuard(toolNamesOf(speakToolDefs));
+    const envelopeGuard = makeToolEnvelopeGuard(toolNamesOf(toolDefs));
 
     // Cartesia turn-level continuations: one context_id per LLM turn so
     // leftover sentences share the owner PCM sink. finalizeTurnCtx() closes
@@ -9476,7 +9469,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // committed to a text response and will NOT call the tool in that turn.
     // This instruction block tells the model to skip the preamble and call the
     // tool directly so the pipeline's onToolCall fires in the same turn.
-    if (speakToolDefs.length > 0 && (needSchedulingGuides || looksLikeImmediateToolIntent(transcript))) {
+    if (toolDefs.length > 0 && (needSchedulingGuides || looksLikeImmediateToolIntent(transcript))) {
       systemPromptForTurn += [
         "",
         "",
@@ -9804,7 +9797,7 @@ export class OrchestrationPipeline implements VoiceSession {
         model: this.agent.llmModel ?? "",
         systemPromptPreview: systemPromptForTurn.substring(0, 800),
         historyLength: historyForLlm.length,
-        tools: speakToolDefs.length > 0 ? speakToolDefs.map((t) => (t as any).function?.name ?? (t as any).name).filter(Boolean) : [],
+        tools: toolDefs.length > 0 ? toolDefs.map((t) => (t as any).function?.name ?? (t as any).name).filter(Boolean) : [],
       },
     });
 
@@ -10794,18 +10787,7 @@ export class OrchestrationPipeline implements VoiceSession {
       this._turnCloseReason = "stt_final";
       this.clearEagerPartialTimer();
       this.interruptionMgr.onUserSpeechEnd();
-      try {
-        await this.processTurn(transcript, sttLatencyMs);
-      } catch (err) {
-        const reason = toReadableError(err, "Turn error");
-        logger.error({ callId: this.config.callId, err }, "Turn error (batch STT)");
-        this.logExec("Agent", "system", {
-          status: "error",
-          turnNumber: this._activeTurnIndex,
-          errorMessage: reason,
-          metadata: { event: "Turn Error", reason },
-        });
-      }
+      await this.processTurn(transcript, sttLatencyMs);
 
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Pipeline error");
