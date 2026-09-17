@@ -127,6 +127,8 @@ describe("evaluateIntakeScreen", () => {
     expect(cue.canFinish).toBe(false);
     expect(cue.pitchAllowed).toBe(false);
     expect(cue.instruction).toMatch(/name/i);
+    expect(cue.instruction).toMatch(/why they called/i);
+    expect(cue.instruction).toMatch(/skip the name if they already gave it/i);
   });
 
   it("asks pincode after city, before treating them as outstation", () => {

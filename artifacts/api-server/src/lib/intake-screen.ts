@@ -257,7 +257,10 @@ export function evaluateIntakeScreen(row: Row, extra: IntakeExtra): IntakeScreen
   }
 
   if (!filled(row.firstName)) {
-    take("first name", "Ask their name. Save firstName (and lastName if they give it).");
+    take(
+      "first name",
+      "Do not ask for the name until you know why they called. When they want help finding work, say you need a few details to match the right opening, then ask their name — skip the name if they already gave it. Save firstName (and lastName if they give it).",
+    );
   }
   if (!filled(row.lastName)) {
     take("last name", "Ask their surname and save lastName.");

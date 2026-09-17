@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import {
+
+process.env.DATABASE_URL ??= "postgres://test:test@127.0.0.1:5432/test";
+
+const {
   INTAKE_GREETING,
   INTAKE_LLM_CATALOG,
   INTAKE_LOCKED_AGENT_CONFIG,
@@ -15,7 +18,7 @@ import {
   intakeAgentTools,
   intakeVoiceLabel,
   validateIntakeControls,
-} from "./intake-agent.js";
+} = await import("./intake-agent.js");
 import {
   INTAKE_DISPOSITION_SCHEMA,
   INTAKE_WRITE_SCHEMA,
@@ -198,10 +201,20 @@ describe("intake prompt", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("This is a conversation");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Do not recite the list in a fixed order");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Hiring zone is decided from the pincode");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("building a bit of rapport");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("building rapport");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Be patient when they read a 6-digit pincode");
     expect(INTAKE_SYSTEM_PROMPT).not.toContain("Keep every reply under 25 words");
     expect(INTAKE_SYSTEM_PROMPT).not.toContain("that is the only question you may ask");
+  });
+
+  it("discovers why they called before collecting the name", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("You do not know why this person rang");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Do not collect name, city, pincode or email in this stage unless they volunteered it");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("shall I start with your name?");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Skip the name ask if they already gave it");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Never open as if you already know they want a job");
+    expect(INTAKE_SYSTEM_PROMPT).not.toContain("after they answer, get their name");
+    expect(INTAKE_SYSTEM_PROMPT).not.toContain("people looking for international voice-process jobs");
   });
 
   it("bans the per-turn stall that made the agent sound like a machine", () => {
