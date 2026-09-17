@@ -6,6 +6,7 @@
  * and whether finish_intake may pitch a JD.
  */
 import type { CandidateIntake } from "@workspace/db";
+import { expandSpokenDigits } from "./disposition/spoken-digits.js";
 import { missingDispositionFields, type IntakeExtra, type IntakeScreen, type ScreenYesNo } from "./intake-dispositions.js";
 
 export const SCREEN_FLAG_KEYS = [
@@ -33,20 +34,17 @@ export function isBangalorePlace(value: string | null | undefined): boolean {
   return BLR_AREA.some((area) => key.includes(area.replace(/[^A-Z]/g, "")));
 }
 
-const PIN_WORDS: Record<string, string> = {
-  zero: "0", oh: "0", o: "0", naught: "0",
-  one: "1", two: "2", three: "3", four: "4", five: "5",
-  six: "6", seven: "7", eight: "8", nine: "9",
-};
-
-/** Six-digit Indian PIN from digits or spoken digits ("five six zero zero zero one"). */
+/** Six-digit Indian PIN from digits or spoken digits ("five six zero double zero five"). */
 export function parsePincode(raw: unknown): string | null {
-  const text = String(raw ?? "").toLowerCase().trim();
+  const text = String(raw ?? "").trim();
   if (!text) return null;
-  const spoken = text.replace(/\b(zero|oh|o|naught|one|two|three|four|five|six|seven|eight|nine)\b/g, (w) => PIN_WORDS[w] ?? w);
-  const digits = spoken.replace(/\D/g, "");
-  const match = digits.match(/[1-8]\d{5}/);
-  return match?.[0] ?? null;
+  const expanded = expandSpokenDigits(text.toLowerCase());
+  const digits = expanded.replace(/\D/g, "");
+  // Exact 6 only — slicing 5600005 → 560000 (call 25244) is the wrong PIN.
+  if (/^[1-8]\d{5}$/.test(digits)) return digits;
+  const isolated = expanded.match(/\b([1-8]\d{5})\b/);
+  if (isolated && digits.length === 6) return isolated[1]!;
+  return null;
 }
 
 const COMPANY_PREFIX = /^(?:i(?:'m| am)?\s+)?(?:currently\s+)?(?:work(?:ing)?\s+)?(?:at|with|for)\s+/i;

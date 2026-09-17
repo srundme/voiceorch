@@ -55,6 +55,8 @@ type Options = {
     language: string;
     telephonyProvider: string;
     wordsForInterruption: number;
+    callFeel?: string;
+    backchannel?: string;
   };
   phoneNumbers: PhoneNumber[];
 };
@@ -573,6 +575,8 @@ export default function IntakeAgentPage() {
                     <Badge variant="secondary">STT: {options.locked.asrProvider} {options.locked.asrModel}</Badge>
                     <Badge variant="secondary">Language: English ({options.locked.language})</Badge>
                     <Badge variant="secondary">Telephony: {options.locked.telephonyProvider}</Badge>
+                    <Badge variant="secondary">Turn-taking: Patient</Badge>
+                    <Badge variant="secondary">Backchannel: Okay</Badge>
                     <Badge variant="secondary">Barge-in: {options.locked.wordsForInterruption} words</Badge>
                     <Badge variant="secondary">Recruiter script + intake tools</Badge>
                   </CardContent>

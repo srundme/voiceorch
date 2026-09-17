@@ -16,6 +16,7 @@ import {
   isCallerOfferingEmail,
   resolveCollectionKind,
   resolveCollectionVadSilenceMs,
+  collectionHoldMsForTranscript,
   resolveIncompleteHoldMs,
   resolveStreamingTurnHold,
 } from "./endpointing.js";
@@ -26,6 +27,7 @@ describe("isDigitCollectionContext", () => {
     expect(isDigitCollectionContext("Please enter the OTP.")).toBe(true);
     expect(isDigitCollectionContext("What is your Aadhaar number?")).toBe(true);
     expect(isDigitCollectionContext("Read the verification code.")).toBe(true);
+    expect(isDigitCollectionContext("Could you share your 6-digit pincode there? Just the digits.")).toBe(true);
   });
 
   it("does not treat a normal question as digit collection", () => {
@@ -49,6 +51,8 @@ describe("isDigitLikeUtterance", () => {
     expect(isDigitLikeUtterance("okay")).toBe(false);
     expect(isDigitLikeUtterance("I want to participate")).toBe(false);
     expect(isDigitLikeUtterance("9876543210")).toBe(false);
+    expect(isDigitLikeUtterance("560005")).toBe(false);
+    expect(isDigitLikeUtterance("five six zero zero zero five")).toBe(false);
   });
 });
 
@@ -334,6 +338,31 @@ describe("resolveCollectionVadSilenceMs", () => {
     expect(resolveCollectionVadSilenceMs(700, "digit")).toBe(700);
     expect(resolveCollectionVadSilenceMs(700, "email")).toBe(800);
     expect(resolveCollectionVadSilenceMs(900, "none")).toBe(800);
+  });
+});
+
+describe("collectionHoldMsForTranscript", () => {
+  it("holds mid-pincode fragments and spelled Gmail, but not a finished PIN (calls 25241/25244)", () => {
+    expect(collectionHoldMsForTranscript({
+      lastAgentText: "Could you share your 6-digit pincode there? Just the digits.",
+      transcript: "600",
+    })).toBeGreaterThan(0);
+    expect(collectionHoldMsForTranscript({
+      lastAgentText: "Could you share your 6-digit pincode there? Just the digits.",
+      transcript: "Five six zero zero",
+    })).toBeGreaterThan(0);
+    expect(collectionHoldMsForTranscript({
+      lastAgentText: "Could you share your 6-digit pincode there? Just the digits.",
+      transcript: "560005",
+    })).toBe(0);
+    expect(collectionHoldMsForTranscript({
+      lastAgentText: "Could I take your email? Spell it slowly.",
+      transcript: "g o p i at",
+    })).toBeGreaterThan(0);
+    expect(collectionHoldMsForTranscript({
+      lastAgentText: "How can I help you?",
+      transcript: "I am looking for a voice process job",
+    })).toBe(0);
   });
 });
 

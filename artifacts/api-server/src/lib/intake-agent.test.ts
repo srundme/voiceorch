@@ -3,6 +3,8 @@ import {
   INTAKE_GREETING,
   INTAKE_LLM_CATALOG,
   INTAKE_LOCKED_AGENT_CONFIG,
+  INTAKE_LOCKED_STACK,
+  INTAKE_BACKCHANNEL_FILLERS,
   INTAKE_SPEED,
   INTAKE_SYSTEM_PROMPT,
   INTAKE_TTS_CATALOG,
@@ -197,6 +199,7 @@ describe("intake prompt", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("Do not recite the list in a fixed order");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Hiring zone is decided from the pincode");
     expect(INTAKE_SYSTEM_PROMPT).toContain("building a bit of rapport");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Be patient when they read a 6-digit pincode");
     expect(INTAKE_SYSTEM_PROMPT).not.toContain("Keep every reply under 25 words");
     expect(INTAKE_SYSTEM_PROMPT).not.toContain("that is the only question you may ask");
   });
@@ -266,8 +269,19 @@ describe("intake prompt", () => {
     expect(spoken).toContain("schedule_callback");
   });
 
-  it("redials on a drop", () => {
+  it("redials on a drop and locks Call Engine Patient turn-taking", () => {
     expect(INTAKE_LOCKED_AGENT_CONFIG.autoRedial.enabled).toBe(true);
+    expect(INTAKE_LOCKED_AGENT_CONFIG.wordsForInterruption).toBe(4);
+    expect(INTAKE_LOCKED_AGENT_CONFIG.sarvamHighVadSensitivity).toBe(false);
+    expect(INTAKE_LOCKED_AGENT_CONFIG.sarvamEndOfSpeechSilenceMs).toBe(700);
+    expect(INTAKE_LOCKED_AGENT_CONFIG.semanticTurnStopMs).toBe(1800);
+  });
+
+  it("covers reply latency with a single Okay backchannel", () => {
+    expect(INTAKE_LOCKED_STACK.backchannelingEnabled).toBe(true);
+    expect(INTAKE_LOCKED_STACK.backchannelingFrequency).toBe(1);
+    expect(INTAKE_LOCKED_STACK.backchannelPhrases).toBe("Okay.");
+    expect([...INTAKE_BACKCHANNEL_FILLERS]).toEqual(["Okay."]);
   });
 
   it("builds the Sarvam STT prompt from the live JD catalog", () => {
@@ -275,5 +289,7 @@ describe("intake prompt", () => {
     expect(prompt.length).toBeGreaterThan(0);
     expect(prompt.length).toBeLessThanOrEqual(500);
     expect(prompt).toMatch(/Concentrix/);
+    expect(prompt).toMatch(/pincode/i);
+    expect(prompt).toMatch(/Gmail/);
   });
 });

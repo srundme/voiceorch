@@ -152,12 +152,32 @@ export const INTAKE_LOCKED_STACK = {
   telephonyProvider: "vobiz",
   firstSpeaker: "assistant",
   agentType: INTAKE_AGENT_TYPE,
+  /** Cover LLM/TTS gap with one short ack — schema default is off. */
+  backchannelingEnabled: true,
+  backchannelingFrequency: 1,
+  backchannelPhrases: "Okay.",
 } as const;
 
-/** Barge-in stays word-count driven; 3 words is the platform default. */
+/** The only spoken cover filler on intake — never Hmm / One moment please. */
+export const INTAKE_BACKCHANNEL_FILLERS = ["Okay."] as const;
+
+/**
+ * Call Engine **Patient** (dashboard Sound tab). Intake collects spelled
+ * pincodes and Gmail IDs — Fast/3-word barge cuts those mid-utterance
+ * (calls 25241 / 25244). Session overlays this on every intake call so a
+ * stale DB row cannot keep the snappy knobs.
+ */
 export const INTAKE_LOCKED_AGENT_CONFIG = {
-  wordsForInterruption: 3,
+  wordsForInterruption: 4,
   asrEndpointingSilenceMs: 500,
+  sarvamHighVadSensitivity: false,
+  sarvamEndOfSpeechSilenceMs: 700,
+  sarvamFirstTurnMinSpeechMs: 350,
+  sarvamVadThreshold: 0.35,
+  sarvamSpeechEndFlushMs: 0,
+  sarvamIncompleteHoldMs: 0,
+  semanticTurnStopMs: 1800,
+  stopSpeakingPlan: { numWords: 4, voiceSeconds: 0.6, backOffSeconds: 1 },
   autoSwitchToEnglish: false,
   isMultilingual: false,
   summarizationEnabled: true,
@@ -182,6 +202,12 @@ export function buildIntakeSttPrompt(): string {
     seen.add(key);
     terms.push(t);
   };
+  add("pincode");
+  add("PIN code");
+  add("Gmail");
+  add("gmail.com");
+  add("at the rate");
+  add("dot com");
   for (const company of INTAKE_COMPANIES) add(company);
   for (const job of INTAKE_JOBS) {
     add(job.company);
@@ -373,7 +399,8 @@ This is a conversation. Listen first, then respond to what they actually said.
 - Prefer one new ask per turn. Greeting plus a reaction plus that ask is fine. Company and tenure together is one conversational ask, not two form questions. Never stack three information questions.
 - Collect facts as they come up. The tree below is a safety net for what is still missing, not the speaking order. If they start with "I'm in Whitefield and I've been at Infosys two years", save city, lastCompany and tenure and keep going from there.
 - Keep turns short enough for a phone call — usually one or two sentences, three at most. No speeches.
-- Confirm only things that are easy to mishear: spelling of the name, and the email. Read those back slowly. Everything else, trust them unless it was garbled.
+- Be patient when they read a 6-digit pincode, spell an email (especially Gmail), or spell a name. Pauses between digits or letters are normal. Stay silent until they have clearly finished — do not jump in after the first few. Then read back what you heard, slowly.
+- Confirm only things that are easy to mishear: spelling of the name, the 6-digit pincode, and the email. Read those back slowly. Everything else, trust them unless it was garbled.
 - If an answer is unclear, ask once more in different words. If it is still unclear, leave it and move on — never invent a value.
 - Never say field names, tool names, or "I am filling a form." Never say "next question."
 - You may laugh lightly or say "got it" / "sure" / "makes sense" — small human glue is good. Do not overdo it.

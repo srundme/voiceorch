@@ -67,6 +67,10 @@ const DIGIT_KEYWORDS = [
   "claim number",
   "zip code",
   "postal code",
+  "pincode",
+  "pin code",
+  "6-digit",
+  "six digit",
   "passport number",
   "license number",
   "membership number",
@@ -126,6 +130,7 @@ export function isDigitCollectionContext(lastAgentText: string): boolean {
 const EMAIL_KEYWORDS = [
   "email id", "email-id", "email address", "e-mail id", "e-mail address",
   "mail id", "mailid", "mail address", "your email", "your mail", "your e-mail",
+  "gmail id", "gmail address", "g mail",
   "ईमेल", "मेल आईडी", "मेल आई डी", "ई-मेल",
   "மின்னஞ்சல்", "மெயில் ஐடி", "இமெயில்", "ஈமெயில்",
   "ఈమెయిల్", "ఇమెయిల్", "ಇಮೇಲ್", "ഇമെയിൽ", "ইমেইল", "ઈમેલ",
@@ -193,6 +198,8 @@ export function isDigitLikeUtterance(text: string): boolean {
   const compact = t.replace(/[\s\-./,]/g, "");
   const digitCount = (compact.match(/\d/g) ?? []).length;
   if (digitCount >= 10) return false;
+  // Complete Indian PIN — do not keep holding (call 25244: 560005).
+  if (/^[1-8]\d{5}$/.test(compact)) return false;
   if (digitCount > 0 && /^[0-9A-Za-z]+$/.test(compact) && compact.length <= 16) {
     const letters = (compact.match(/[A-Za-z]/g) ?? []).length;
     if (letters <= 2) return true;
@@ -205,6 +212,8 @@ export function isDigitLikeUtterance(text: string): boolean {
     if (!tok) continue;
     if (/^\d+$/.test(tok) || SPELLED_DIGIT_RE.test(tok)) digitish++;
   }
+  // Six spoken digits is a finished PIN readout, not a mid-spell pause.
+  if (digitish >= 6) return false;
   return digitish >= 1 && digitish >= tokens.length - 1;
 }
 
@@ -596,6 +605,30 @@ export function resolveCollectionVadSilenceMs(baseMs: number, kind: CollectionKi
     return Math.min(COLLECTION_VAD_SILENCE_MAX_MS, Math.max(base, COLLECTION_VAD_DIGIT_FLOOR_MS));
   }
   return base;
+}
+
+/**
+ * Extra silence to merge STT fragments while the caller is still reading a
+ * PIN / OTP / Gmail address. 0 when the utterance is already complete so a
+ * finished 6-digit PIN is not delayed.
+ */
+export function collectionHoldMsForTranscript(opts: {
+  lastAgentText: string;
+  transcript: string;
+}): number {
+  const hold = resolveStreamingTurnHold({
+    pending: opts.transcript,
+    lastAgentText: opts.lastAgentText,
+    lastUserText: opts.transcript,
+    textLooksIncomplete: false,
+  });
+  if (hold.reason !== "digit_collection" && hold.reason !== "email_collection") return 0;
+  if (!hold.incomplete) return 0;
+  return resolveIncompleteHoldMs({
+    baseStopMs: 800,
+    collectionKind: hold.collectionKind,
+    trailingFragment: hold.trailingFragment,
+  });
 }
 
 // ── Dangling / mid-utterance words ────────────────────────────────────────────

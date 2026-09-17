@@ -28,6 +28,7 @@ import {
 } from "@workspace/db/call-engine-defaults";
 import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "../orchestration/mic-sensitivity.js";
 import { FORCE_SOFTWARE_NOISE_GATE_KEY } from "../orchestration/noise-gate.js";
+import { parseBackchannelPhrases } from "../orchestration/backchannel.js";
 import { optionalMs, optionalUnitInterval } from "../orchestration/stt-tuning.js";
 import { clampSemanticTurnStopMs, resolveSemanticTurnEnabled } from "../orchestration/semantic-turn-gate.js";
 import { getAttachedSourceIds } from "../orchestration/kb-retrieval.js";
@@ -222,6 +223,7 @@ async function buildTargetAgentConfig(
     autoSwitchToEnglish: agentCfg["autoSwitchToEnglish"] === true,
     backchannelingEnabled: agent.backchannelingEnabled !== false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
+    backchannelFillers: parseBackchannelPhrases(agent.backchannelPhrases),
     webhookUrl: agent.webhookUrl ?? null,
     noiseCancellationEnabled: agent.noiseCancellationEnabled === true,
     forceSoftwareNoiseGate: agentCfg[FORCE_SOFTWARE_NOISE_GATE_KEY] === true,

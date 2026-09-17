@@ -109,6 +109,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(methodBody("schedulePartialBargeIn")).toContain("shouldInterruptFromCallerTranscript");
     expect(methodBody("schedulePartialBargeIn")).toContain("isCarrierSelfEcho");
     expect(methodBody("schedulePartialBargeIn")).toContain("SELF_ECHO_MIN_WORDS");
+    expect(methodBody("isEagerPartialReady")).toContain("isEagerCommitReady");
+    expect(methodBody("handleStreamingTranscript")).toContain("collectionHoldMsForTranscript");
+    expect(methodBody("backchannelFillerOpts")).toContain("backchannelFillers");
     expect(pipelineSrc).not.toContain("Barge-in detected after Sarvam realtime partial");
     const speechEndBody = methodBody("wireStreamSttCallbacks");
     expect(speechEndBody).toContain("maybeBargeFromRealtimeVadStart");

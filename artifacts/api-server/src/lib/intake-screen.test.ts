@@ -49,7 +49,16 @@ describe("parsePincode", () => {
     expect(parsePincode("560001")).toBe("560001");
     expect(parsePincode("pin code 560 001")).toBe("560001");
     expect(parsePincode("five six zero zero zero one")).toBe("560001");
+    expect(parsePincode("five six zero double zero five")).toBe("560005");
+    expect(parsePincode("See, my PIN code is 560005.")).toBe("560005");
     expect(parsePincode("not a pin")).toBeNull();
+  });
+
+  it("does not slice a 7-digit STT run into the wrong PIN (call 25244)", () => {
+    expect(parsePincode("5600005")).toBeNull();
+    expect(parsePincode("No, 5656005")).toBeNull();
+    expect(parsePincode("600")).toBeNull();
+    expect(parsePincode("600 zero one")).toBeNull();
   });
 });
 

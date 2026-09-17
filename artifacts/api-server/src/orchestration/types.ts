@@ -371,6 +371,8 @@ export interface AgentConfig {
   autoSwitchToEnglish: boolean;
   backchannelingEnabled: boolean;
   backchannelingFrequency: number | null;
+  /** Spoken cover fillers. Empty/null uses the language default pool. */
+  backchannelFillers: string[] | null;
   webhookUrl: string | null;
   noiseCancellationEnabled: boolean;
   /** Kept for existing agent_config rows. The Noise Cancellation toggle now

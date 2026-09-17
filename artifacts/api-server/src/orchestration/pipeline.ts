@@ -17,7 +17,7 @@ import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
 import { buildAntiRepeatNudge, extractRecentAgentQuestions } from "./conversationDiscipline.js";
 import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared, isCallerClosingUtterance } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
-import { EAGER_PARTIAL_STABLE_MS, isQueuedDuplicateUserTurn, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
+import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isQueuedDuplicateUserTurn, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
 import {
   SemanticTurnGate,
   resolveEouCommit,
@@ -84,6 +84,7 @@ import { ConversationHistory } from "./conversation-history.js";
 import { performance } from "perf_hooks";
 import {
   computeEndpointMs,
+  collectionHoldMsForTranscript,
   resolveCollectionKind,
   resolveCollectionVadSilenceMs,
   TurnSafetyNet,
@@ -1827,6 +1828,7 @@ export class OrchestrationPipeline implements VoiceSession {
     const lastUserTurn = [...this.conversationHistory.messages].reverse().find((t) => t.role === "user");
     return {
       englishStrictAck: this.isEnglishStrictAckMode(),
+      customFillers: this.agent.backchannelFillers ?? undefined,
       callerTranscript: callerTranscript || lastUserTurn?.content || null,
     };
   }
@@ -1949,9 +1951,9 @@ export class OrchestrationPipeline implements VoiceSession {
     this.launchEagerLlmFromPartial(text, "eou_commit", pendingTurnId);
   }
 
-  /** Prefill only needs provider text. Do not second-guess STT scraps. */
-  private isEagerPartialReady(text: string, _speechEnd = false): boolean {
-    return Boolean(text.trim());
+  /** Prefill only when the clause is stable — not PIN/email spelling scraps. */
+  private isEagerPartialReady(text: string, speechEnd = false): boolean {
+    return isEagerCommitReady(text, { speechEnd });
   }
 
   /** VAD ≠ turn complete: do not prefetch LLM while Smart Turn is deciding / holding. */
@@ -3884,6 +3886,39 @@ export class OrchestrationPipeline implements VoiceSession {
     }
 
     const coalesceLang = this.currentLang || this.agent.sttConfig.language;
+    const lastAgentForCollection =
+      this.conversationHistory.findLast((t) => t.role === "assistant")?.content
+      ?? this.lastAssistantSpokenRaw
+      ?? "";
+    const collectionHoldMs =
+      closeReason !== "coalesced_fragment" && closeReason !== "barge_recovery"
+        ? collectionHoldMsForTranscript({
+            lastAgentText: lastAgentForCollection,
+            transcript,
+          })
+        : 0;
+    if (collectionHoldMs > 0) {
+      if (this._fragmentCoalesce) {
+        clearTimeout(this._fragmentCoalesce.timer);
+        transcript = `${this._fragmentCoalesce.text} ${transcript}`.trim();
+        this._fragmentCoalesce = null;
+      }
+      this.armFragmentCoalesce(transcript, collectionHoldMs);
+      logger.info(
+        { callId: this.config.callId, fragment: transcript.slice(0, 80), holdMs: collectionHoldMs },
+        "STT collection coalesce hold — waiting for PIN/email spelling to finish",
+      );
+      this.logDiscardedTranscript(transcript, "fragment_coalesce_hold");
+      this.safetyNet.onFinal();
+      this.clearEagerPartialTimer();
+      if (this._specLlmState && !this.isProcessing) {
+        this._specLlmState.aborted = true;
+        this._specLlmState = null;
+      }
+      this.interruptionMgr.onUserSpeechEnd();
+      if (!this.closed) this.safetyNet.beginListening();
+      return;
+    }
     if (
       closeReason !== "coalesced_fragment"
       && closeReason !== "barge_recovery"
@@ -11883,10 +11918,11 @@ export class OrchestrationPipeline implements VoiceSession {
   private syncCollectionVad(kind?: ReturnType<typeof resolveCollectionKind>): void {
     const setter = this.streamSTT?.setSilenceDurationMs;
     if (!setter) return;
-    const base = this.agent.sarvamEndOfSpeechSilenceMs;
+    const base = this.agent.sarvamEndOfSpeechSilenceMs ?? this.agent.asrEndpointingSilenceMs;
     if (base == null) return;
     const lastAgentText = this.conversationHistory.findLast((t) => t.role === "assistant")?.content ?? "";
-    const collectionKind = kind ?? resolveCollectionKind(lastAgentText);
+    const lastUserText = this.conversationHistory.findLast((t) => t.role === "user")?.content ?? "";
+    const collectionKind = kind ?? resolveCollectionKind(lastAgentText, lastUserText);
     const ms = resolveCollectionVadSilenceMs(base, collectionKind);
     setter.call(this.streamSTT, ms);
   }

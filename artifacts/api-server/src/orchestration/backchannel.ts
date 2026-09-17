@@ -15,6 +15,13 @@ export const SOFT_ACK_OKAY_WEIGHT = 0.8;
 /** How many recent fillers to avoid repeating (ring buffer). */
 export const FILLER_RECENT_AVOID = 3;
 
+/** Split the agents.backchannel_phrases text column into spoken cover fillers. */
+export function parseBackchannelPhrases(raw: string | null | undefined): string[] | null {
+  if (!raw?.trim()) return null;
+  const parts = raw.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+  return parts.length > 0 ? parts : null;
+}
+
 export interface BackchannelFillerOptions {
   /** Keep English fillers for an explicitly English-locked conversation. */
   englishStrictAck?: boolean;

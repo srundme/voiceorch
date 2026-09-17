@@ -14,6 +14,7 @@ import { decryptKey } from "../lib/crypto.js";
 import { eq, and, sql, inArray, or, gt, ne, lte, isNull, desc } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
 import { optionalMs, optionalUnitInterval } from "./stt-tuning.js";
+import { parseBackchannelPhrases } from "./backchannel.js";
 import { clampSemanticTurnStopMs, resolveSemanticTurnEnabled } from "./semantic-turn-gate.js";
 import type { VoiceSession } from "./voice-session.js";
 import { GeminiLivePipeline } from "./adapters/live/gemini-live-pipeline.js";
@@ -41,6 +42,8 @@ import { transcriptHasFarewellEnding } from "./callFarewell.js";
 import { applyIntakeWrite, attachIntakeCallArtifacts } from "../lib/intake-service.js";
 import {
   INTAKE_AGENT_TYPE,
+  INTAKE_BACKCHANNEL_FILLERS,
+  INTAKE_LOCKED_AGENT_CONFIG,
   buildIntakeSttPrompt,
   buildIntakeSystemPrompt,
 } from "../lib/intake-agent.js";
@@ -385,6 +388,10 @@ export async function createSession(params: {
   const agentCfg = normalizeCallEngineAgentConfig(
     (agent.agentConfig ?? {}) as Record<string, unknown>,
   ).config;
+  // Overlay after normalize so a stale intake row cannot keep Fast barge / VAD.
+  if (agent.agentType === INTAKE_AGENT_TYPE) {
+    Object.assign(agentCfg, INTAKE_LOCKED_AGENT_CONFIG);
+  }
 
   // AMD (voicemail) config — read once, used by both the voicemail-delivery config
   // and the acoustic-confirmation config below. Default action is "hangup" (never
@@ -593,8 +600,14 @@ export async function createSession(params: {
     language: effectiveAgentLang,
     languageAutoDetect: isMultilingual,
     autoSwitchToEnglish: agentCfg["autoSwitchToEnglish"] === true,
-    backchannelingEnabled: agent.backchannelingEnabled !== false,
-    backchannelingFrequency: agent.backchannelingFrequency ?? null,
+    backchannelingEnabled: agent.agentType === INTAKE_AGENT_TYPE
+      || agent.backchannelingEnabled !== false,
+    backchannelingFrequency: agent.agentType === INTAKE_AGENT_TYPE
+      ? 1
+      : (agent.backchannelingFrequency ?? null),
+    backchannelFillers: agent.agentType === INTAKE_AGENT_TYPE
+      ? [...INTAKE_BACKCHANNEL_FILLERS]
+      : parseBackchannelPhrases(agent.backchannelPhrases),
     webhookUrl: agent.webhookUrl ?? null,
     noiseCancellationEnabled: agent.agentType === INTAKE_AGENT_TYPE
       || agent.noiseCancellationEnabled === true,
@@ -1792,7 +1805,8 @@ export async function createSession(params: {
       telephonyProvider: params.telephonyProvider,
       setupElapsedMs: Date.now() - createSessionStartMs,
       deployedCommit: process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT_SHA ?? null,
-      backchannelingEnabled: agent.backchannelingEnabled !== false,
+      backchannelingEnabled: agent.agentType === INTAKE_AGENT_TYPE
+        || agent.backchannelingEnabled !== false,
     },
   });
 
