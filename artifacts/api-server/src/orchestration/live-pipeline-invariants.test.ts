@@ -266,12 +266,6 @@ describe("intake persist + VoBiz hangup (call 25223)", () => {
     expect(vobizSrc).toContain('keepCallAlive="true"');
     expect(vobizSrc).toContain("DELETE /Call/{uuid}");
   });
-
-  it("speaks why no job matched before hanging up, instead of dropping the line", () => {
-    expect(methodBody("speakEndCallFarewellIfNeeded")).toContain("intakeCloseBeforeHangup");
-    expect(pipelineSrc).toContain("noMatchCloseFromSubmitResult");
-    expect(pipelineSrc).not.toContain("No JD survived the filters");
-  });
 });
 
 describe("Cartesia greeting overlap (call 25226)", () => {

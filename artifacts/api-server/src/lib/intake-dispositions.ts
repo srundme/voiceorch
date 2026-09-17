@@ -635,8 +635,7 @@ export function parseNoticePeriodSelect(raw: unknown, options: readonly string[]
     if (n != null) days = Math.round(n * 30);
   }
   if (days == null) {
-    const dayHit = lower.match(/\b(\d+(?:\.\d+)?)\s*days?\b/)
-      ?? lower.match(/\b(fifteen|thirty|forty[\s-]*five|sixty|ninety)\s*(?:days?)?\b/);
+    const dayHit = lower.match(/\b(\d+(?:\.\d+)?|fifteen|thirty|forty[\s-]*five|sixty|ninety)\s*(?:days?)?\b/);
     if (dayHit) days = noticeSpokenNumber(dayHit[1]!.replace(/\s+/g, " "));
   }
   if (days == null) return null;
@@ -646,37 +645,6 @@ export function parseNoticePeriodSelect(raw: unknown, options: readonly string[]
   if (days <= 60) return matchOption("60 Days", options);
   if (days <= 90) return matchOption("90 Days", options);
   return matchOption("Other", options);
-}
-
-/** Calendar date for a spoken day-of-month like "28" / "the 28th" — this month if still upcoming, else next. */
-export function upcomingIsoFromDayOfMonth(day: number): string | null {
-  if (!Number.isInteger(day) || day < 1 || day > 31) return null;
-  const now = new Date();
-  let year = now.getFullYear();
-  let month = now.getMonth() + 1;
-  const today = `${year}-${String(month).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const thisMonth = isoDate(year, month, day);
-  if (thisMonth && thisMonth >= today) return thisMonth;
-  month += 1;
-  if (month > 12) {
-    month = 1;
-    year += 1;
-  }
-  return isoDate(year, month, day);
-}
-
-/** Today plus N calendar days, as YYYY-MM-DD in local time. */
-export function addCalendarDaysIso(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-export function noticePeriodLengthDays(label: string): number | null {
-  const m = String(label ?? "").match(/(\d+)/);
-  if (!m) return null;
-  const n = Number(m[1]);
-  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 function isoDate(year: number, month: number, day: number): string | null {
@@ -698,9 +666,7 @@ function parseDate(raw: unknown, kind: "birth" | "any"): { ok: true; value: stri
   const dMonY = text.match(/^(\d{1,2})\s+([A-Za-z]+),?\s+(\d{4})$/);
   const monDY = text.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
   let out: string | null = null;
-  const dayOnly = kind === "any" ? text.match(/^(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?$/) : null;
-  if (dayOnly) out = upcomingIsoFromDayOfMonth(Number(dayOnly[1]));
-  else if (ymd) out = isoDate(Number(ymd[1]), Number(ymd[2]), Number(ymd[3]));
+  if (ymd) out = isoDate(Number(ymd[1]), Number(ymd[2]), Number(ymd[3]));
   else if (dmy) out = isoDate(Number(dmy[3]), Number(dmy[2]), Number(dmy[1]));
   else if (dMonY) {
     const w = dMonY[2]!.toLowerCase();

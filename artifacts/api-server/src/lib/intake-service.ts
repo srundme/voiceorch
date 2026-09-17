@@ -20,7 +20,7 @@ import {
   parseIntakeExtra,
   type IntakeExtra,
 } from "./intake-dispositions.js";
-import { buildIntakeProfile, closeLineForNoJob, matchIntakeJobs, SCREEN_KILL_REASON_SPEECH } from "./intake-job-match.js";
+import { buildIntakeProfile, matchIntakeJobs } from "./intake-job-match.js";
 import { inferGenderFromName } from "./intake-gender.js";
 import {
   SCREEN_FLAG_KEYS,
@@ -288,7 +288,6 @@ export async function applyIntakeWrite(
   let tenureError: string | null = null;
   let noticePeriodRaw: unknown = undefined;
   let lastWorkingDayRaw: unknown = undefined;
-  let noticeRemarksRaw: unknown = undefined;
   const restExtra: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(extraInput)) {
     if (key === "pincode" || key === "pinCode" || key === "pin") {
@@ -326,10 +325,6 @@ export async function applyIntakeWrite(
     }
     if (key === "lastWorkingDay" || key === "last_working_day" || key === "serving_notice.last_working_day") {
       lastWorkingDayRaw = raw;
-      continue;
-    }
-    if (key === "noticeRemarks" || key === "notice_remarks" || key === "serving_notice.notice_remarks") {
-      noticeRemarksRaw = raw;
       continue;
     }
     if ((SCREEN_FLAG_KEYS as readonly string[]).includes(key)) {
@@ -416,13 +411,10 @@ export async function applyIntakeWrite(
     if (yn === "yes") {
       const disp = SCREEN_FLAG_TO_DISPOSITION[flag];
       if (disp) openDisposition(disp);
-    } else if (flag === "wantsWfh") {
-      extraResult.extra.dispositionIds = extraResult.extra.dispositionIds.filter((id) => id !== "work_from_home");
-      extraResult.written.push("work_from_home:closed");
     }
   }
 
-  if (noticePeriodRaw !== undefined || lastWorkingDayRaw !== undefined || noticeRemarksRaw !== undefined) {
+  if (noticePeriodRaw !== undefined || lastWorkingDayRaw !== undefined) {
     openDisposition("serving_notice");
     if (!screenPatch.servingNotice && extraResult.extra.screen?.servingNotice !== "no") {
       extraResult.extra.screen = mergeScreenFlags(extraResult.extra.screen, { servingNotice: "yes" });
@@ -431,20 +423,10 @@ export async function applyIntakeWrite(
     const noticePatch: Record<string, unknown> = { disposition: "serving_notice" };
     if (noticePeriodRaw !== undefined) noticePatch["notice_period"] = noticePeriodRaw;
     if (lastWorkingDayRaw !== undefined) noticePatch["last_working_day"] = lastWorkingDayRaw;
-    if (noticeRemarksRaw !== undefined) noticePatch["notice_remarks"] = noticeRemarksRaw;
     const noticeResult = applyDispositionPatch(extraResult.extra, noticePatch);
     extraResult.extra = noticeResult.extra;
     extraResult.written.push(...noticeResult.written);
     extraResult.errors.push(...noticeResult.errors);
-    const bucket = extraResult.extra.answers["serving_notice"] ?? {};
-    if (!bucket.notice_remarks && (bucket.notice_period || bucket.last_working_day)) {
-      const note = [
-        bucket.notice_period ? `Notice ${bucket.notice_period}` : null,
-        bucket.last_working_day ? `last working day ${bucket.last_working_day}` : null,
-      ].filter(Boolean).join("; ");
-      extraResult.extra.answers["serving_notice"] = { ...bucket, notice_remarks: note };
-      extraResult.written.push("serving_notice.notice_remarks");
-    }
   }
 
   if (pin && !isBangalorePincode(pin)) {
@@ -550,19 +532,16 @@ export async function completeIntakeSession(
   const cue = evaluateIntakeScreen(forMatch, extra);
   const matched = cue.pitchAllowed
     ? matchIntakeJobs(forMatch, extra)
-    : (() => {
-        const why = cue.killReason
-          ? (SCREEN_KILL_REASON_SPEECH[cue.killReason] ?? "screening found this profile is not eligible")
-          : "screening is not complete";
-        return {
-          proposed: null,
-          alternatives: [],
-          speakScript: closeLineForNoJob(why),
-          talkingPoints: [] as string[],
-          note: why,
-          blocked: true,
-        };
-      })();
+    : {
+        proposed: null,
+        alternatives: [],
+        speakScript: null,
+        talkingPoints: [] as string[],
+        note: cue.killReason
+          ? `Not eligible after screening (${cue.killReason}).`
+          : "Screening is not complete — no job is pitched.",
+        blocked: true,
+      };
   extra.match = {
     proposed: matched.proposed,
     alternatives: matched.alternatives,

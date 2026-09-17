@@ -6,12 +6,7 @@
  * line dead until the caller nudges.
  */
 import { normalizeIntakeField } from "./candidate-intake-fields.js";
-import {
-  addCalendarDaysIso,
-  noticePeriodLengthDays,
-  parseNoticePeriodSelect,
-  upcomingIsoFromDayOfMonth,
-} from "./intake-dispositions.js";
+import { parseNoticePeriodSelect } from "./intake-dispositions.js";
 import {
   canonicalCityName,
   isBangaloreCityName,
@@ -49,52 +44,9 @@ function words(text: string): string[] {
   return text.split(/\s+/).filter(Boolean);
 }
 
-function primaryIs(waitingOn: readonly string[], ...needles: string[]): boolean {
-  const first = (waitingOn[0] ?? "").toLowerCase();
-  return needles.some((n) => first.includes(n.toLowerCase()));
-}
-
 function waitingHas(waitingOn: readonly string[], ...needles: string[]): boolean {
   const blob = waitingOn.join(" ").toLowerCase();
   return needles.some((n) => blob.includes(n.toLowerCase()));
-}
-
-function prefersOffice(text: string): boolean {
-  return /\b(?:don'?t|do not|not)\s+(?:want\s+|need\s+)?(?:to\s+)?(?:work\s+from\s+home|wfh)\b/i.test(text)
-    || /\bready to (?:come to|work from|join) (?:the )?office\b/i.test(text)
-    || /\bprefer(?:ring)? (?:to )?(?:come to |work from )?the office\b/i.test(text)
-    || /\bcome to (?:the )?office\b/i.test(text)
-    || /\boffice is (?:fine|okay|ok)\b/i.test(text);
-}
-
-function prefersWfh(text: string): boolean {
-  if (prefersOffice(text)) return false;
-  return /\b(?:prefer(?:ring)?|need|want)\s+(?:to\s+)?(?:work from home|wfh)\b/i.test(text)
-    || /\bwork from home\b/i.test(text)
-    || /\bwfh\b/i.test(text);
-}
-
-function lastWorkingDayFromSpeech(text: string): string | null {
-  const iso = extractIsoDate(text, true);
-  if (iso) return iso;
-  const stripped = text.replace(/\b(?:\d+|fifteen|thirty|forty[\s-]*five|sixty|ninety|one|two|three|a|an)\s*(?:days?|months?)\b/gi, " ");
-  const ordinal = stripped.match(/\b(\d{1,2})(?:st|nd|rd|th)\b/i);
-  if (ordinal) return upcomingIsoFromDayOfMonth(Number(ordinal[1]));
-  const labeled = stripped.match(
-    /\b(?:last\s+(?:working\s+)?(?:day|date)|lwd)(?:\s+is|\s+on)?\s*(?:the\s+)?(\d{1,2})\b/i,
-  );
-  if (labeled) return upcomingIsoFromDayOfMonth(Number(labeled[1]));
-  const bare = stripped.replace(/\s+/g, " ").trim();
-  if (/^\d{1,2}$/.test(bare)) return upcomingIsoFromDayOfMonth(Number(bare));
-  return null;
-}
-
-function formatNoticeRemark(period: string | null, lwd: string | null): string | null {
-  const bits = [
-    period ? `Notice ${period}` : null,
-    lwd ? `last working day ${lwd}` : null,
-  ].filter(Boolean);
-  return bits.length > 0 ? bits.join("; ") : null;
 }
 
 function agentAsked(lastAgentText: string, ...needles: string[]): boolean {
@@ -204,39 +156,41 @@ export function extractIntakePatchFromTurn(opts: IntakeExtractInput): Record<str
   const pin = parsePincode(text);
   if (pin) patch.pincode = pin;
 
-  const notice = parseNoticePeriodSelect(text, NOTICE_PERIOD_OPTIONS)
-    ?? (waitingHas(waiting, "servingNotice", "serving_notice") && /^\d{1,2}$/.test(text)
-      ? parseNoticePeriodSelect(`${text} days`, NOTICE_PERIOD_OPTIONS)
-      : null);
-  if (/\blast year\b/i.test(text) && (primaryIs(waiting, "tenure", "lastCompany", "number of companies") || waitingHas(waiting, "tenure"))) {
-    patch.tenure = "1 year";
-  } else if (/\b(?:year|yr|month|mos?)\b/i.test(text) || primaryIs(waiting, "tenure", "lastCompany")) {
-    const tenure = parseTenure(text);
-    if (tenure) patch.tenure = tenure;
+  const notice = parseNoticePeriodSelect(text, NOTICE_PERIOD_OPTIONS);
+  const tenureSpoken = /\b(?:year|yr|month|mos?)\b/i.test(text);
+  const tenure = tenureSpoken || waitingHas(waiting, "tenure", "lastCompany")
+    ? parseTenure(text)
+    : null;
+  if (tenure && (waitingHas(waiting, "tenure", "lastCompany") || tenureSpoken)) {
+    patch.tenure = tenure;
   }
 
+  const askedName = waitingHas(waiting, "first name", "last name")
+    && (agentAsked(agent, "name", "surname") || Boolean(volunteeredName(text)));
   const named = volunteeredName(text);
-  const onName = primaryIs(waiting, "first name", "last name")
-    || (waitingHas(waiting, "first name", "last name") && (agentAsked(agent, "name", "surname") || Boolean(named)));
-  if (onName && (primaryIs(waiting, "first name") || named)) {
+  if (waitingHas(waiting, "first name") && (askedName || named)) {
     const split = splitName(named ?? (looksLikeName(text) ? text : ""));
     if (split) {
       putField(patch, "firstName", split.firstName);
       if (split.lastName) putField(patch, "lastName", split.lastName);
     }
-  } else if (onName && primaryIs(waiting, "last name")) {
+  } else if (waitingHas(waiting, "last name") && (agentAsked(agent, "surname", "last name") || named)) {
     const last = named ?? (looksLikeName(text) ? text : "");
     if (last) putField(patch, "lastName", last);
   }
 
+  const askedCity = waitingHas(waiting, "city they live in", "job city")
+    || agentAsked(agent, "city", "area", "where do you live", "live in");
   const city = extractCity(text);
-  const volunteeredPlace = /\b(?:from|live|staying|based)\b/i.test(text);
-  if (city && (primaryIs(waiting, "city they live in") || volunteeredPlace)) {
+  const volunteeredPlace = isBangalorePlace(text) || /\b(?:from|live|staying|based)\b/i.test(text);
+  if (city && waitingHas(waiting, "city they live in") && (askedCity || volunteeredPlace || words(text).length <= 4)) {
+    putField(patch, "city", city);
+  } else if (city && volunteeredPlace && waitingHas(waiting, "city they live in")) {
     putField(patch, "city", city);
   }
-  if (primaryIs(waiting, "job city") && yn === "yes" && /bangalore|bengaluru|bengalore|\bthere\b/i.test(agent)) {
+  if (waitingHas(waiting, "job city") && yn === "yes" && /bangalore|bengaluru|bengalore|\bthere\b/i.test(agent)) {
     putField(patch, "jobCity", "BANGALORE");
-  } else if (city && primaryIs(waiting, "job city")) {
+  } else if (waitingHas(waiting, "job city") && city && !waitingHas(waiting, "city they live in")) {
     putField(patch, "jobCity", city);
   }
 
@@ -247,37 +201,30 @@ export function extractIntakePatchFromTurn(opts: IntakeExtractInput): Record<str
     }
   }
 
-  if (primaryIs(waiting, "lastCompany") || /\b(?:work(?:ing)?\s+(?:at|with|for))\b/i.test(text)) {
+  if (waitingHas(waiting, "lastCompany") || /\b(?:work(?:ing)?\s+(?:at|with|for)|company)\b/i.test(text)) {
     const atCompany = text.match(/\b(?:at|with|for)\s+([A-Za-z][A-Za-z0-9 .&'-]{1,60}?)(?:\s+for\b|[.,]|$)/i);
     const company = parseLastCompany(atCompany?.[1] ?? text);
-    if (company && !parseScreenYesNo(company) && !isBangalorePlace(company) && !primaryIs(waiting, "last name", "first name")) {
-      patch.lastCompany = company;
+    if (company && !parseScreenYesNo(company) && !isBangalorePlace(company)) {
+      if (waitingHas(waiting, "lastCompany") || !looksLikeName(text)) {
+        patch.lastCompany = company;
+      }
     }
   }
 
-  if (waitingHas(waiting, "number of companies") || /\bcompanies?\b/i.test(text)) {
-    if (/\b(?:one|a|single)\s+compan(?:y|ies)\b/i.test(text)) putField(patch, "totalCompanies", "1");
-    else if (/\btwo\s+compan(?:y|ies)\b/i.test(text)) putField(patch, "totalCompanies", "2");
-    else if (primaryIs(waiting, "number of companies")) putField(patch, "totalCompanies", text);
+  if (waitingHas(waiting, "number of companies")) {
+    putField(patch, "totalCompanies", text);
   }
 
-  if (waitingHas(waiting, "servingNotice", "serving_notice") || notice || /\bnotice\b|\blast (?:working )?(?:day|date)\b/i.test(text)) {
+  if (waitingHas(waiting, "servingNotice", "serving_notice")) {
     if (yn) patch.servingNotice = yn;
-    if (notice) {
-      patch.servingNotice = "yes";
-      patch.noticePeriod = notice;
-    }
-    const spokenLwd = lastWorkingDayFromSpeech(text);
-    const noticeDays = notice ? noticePeriodLengthDays(notice) : null;
-    if (spokenLwd) patch.lastWorkingDay = spokenLwd;
-    else if (noticeDays && waitingHas(waiting, "servingNotice", "serving_notice")) {
-      patch.lastWorkingDay = addCalendarDaysIso(noticeDays);
-    }
-    const remark = formatNoticeRemark(
-      typeof patch.noticePeriod === "string" ? patch.noticePeriod : null,
-      typeof patch.lastWorkingDay === "string" ? patch.lastWorkingDay : null,
-    );
-    if (remark) patch.noticeRemarks = remark;
+    if (notice) patch.noticePeriod = notice;
+    const lwd = extractIsoDate(text, true);
+    if (lwd && !patch.dateOfBirth) patch.lastWorkingDay = lwd;
+  } else if (notice && waitingHas(waiting, "serving_notice fields")) {
+    patch.servingNotice = "yes";
+    patch.noticePeriod = notice;
+    const lwd = extractIsoDate(text, true);
+    if (lwd) patch.lastWorkingDay = lwd;
   }
 
   if (waitingHas(waiting, "hasCareerGap") && yn) patch.hasCareerGap = yn;
@@ -312,25 +259,16 @@ export function extractIntakePatchFromTurn(opts: IntakeExtractInput): Record<str
     if (dob) putField(patch, "dateOfBirth", dob);
   }
 
-  if (primaryIs(waiting, "shift they can work") || agentAsked(agent, "night", "evening", "shift")) {
-    if (yn === "yes" && /night|evening|shift|us/i.test(agent)) {
+  if (waitingHas(waiting, "shift they can work")) {
+    const shift = normalizeIntakeField("shiftBase", text);
+    if (shift.ok && shift.value) {
+      patch.shiftBase = shift.value;
+    } else if (yn === "yes" && /us|night/i.test(agent)) {
       putField(patch, "shiftBase", "US");
-    } else if (/\bevening\b/i.test(text) || (/\bnight\b/i.test(text) && /\bevening\b/i.test(text))) {
-      putField(patch, "shiftBase", "US");
-    } else if (/\bnight\b/i.test(text)) {
-      putField(patch, "shiftBase", "night");
-    } else {
-      const shift = normalizeIntakeField("shiftBase", text);
-      if (shift.ok && shift.value) patch.shiftBase = shift.value;
     }
   }
 
-  if (prefersOffice(text) || (waitingHas(waiting, "work_from_home") && /office/i.test(text))) {
-    patch.wantsWfh = "no";
-    patch["work_from_home.willing_to_work_from_office"] = "Yes";
-  } else if (prefersWfh(text)) {
-    patch.wantsWfh = "yes";
-  } else if (waitingHas(waiting, "wantsWfh")) {
+  if (waitingHas(waiting, "wantsWfh")) {
     if (/\b(?:wfh|work from home|from home)\b/i.test(text)) patch.wantsWfh = "yes";
     else if (/\b(?:office|on[\s-]?site|okay|fine)\b/i.test(text) || yn === "no") patch.wantsWfh = "no";
     else if (yn === "yes" && /office/i.test(agent)) patch.wantsWfh = "no";
@@ -351,6 +289,10 @@ export function extractIntakePatchFromTurn(opts: IntakeExtractInput): Record<str
   if (relocate && waitingHas(waiting, "non_hiring_zone.will_relocate", "non_hiring_zone")) {
     patch["non_hiring_zone.will_relocate"] = relocate;
     if (!patch.disposition) patch.disposition = "non_hiring_zone";
+  }
+  if (relocate && waitingHas(waiting, "work_from_home")) {
+    patch["work_from_home.willing_to_work_from_office"] = relocate;
+    patch.disposition = "work_from_home";
   }
   if (relocate && waitingHas(waiting, "shift_issues")) {
     patch["shift_issues.willing_for_alternate_shift"] = relocate;

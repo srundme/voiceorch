@@ -146,28 +146,12 @@ describe("evaluateIntakeScreen", () => {
     expect(cue.instruction).toMatch(/skip the name if they already gave it/i);
   });
 
-  it("asks email after the name, not city", () => {
-    const cue = evaluateIntakeScreen({
-      ...screened,
-      email: null,
-      city: null,
-      jobCity: null,
-      workStatus: null,
-      qualification: null,
-      shiftBase: null,
-    }, emptyExtra());
-    expect(cue.waitingOn[0]).toBe("email");
-    expect(cue.instruction).toMatch(/email/i);
-    expect(cue.waitingOn.indexOf("email")).toBeLessThan(cue.waitingOn.indexOf("graduate or post graduate"));
-    expect(cue.waitingOn.indexOf("graduate or post graduate")).toBeLessThan(cue.waitingOn.indexOf("fresher or experienced"));
-    expect(cue.waitingOn.indexOf("fresher or experienced")).toBeLessThan(cue.waitingOn.indexOf("city they live in"));
-  });
-
   it("does not ask pincode once the city is known — Bangalore areas auto-pin, others are outstation", () => {
     const blr = evaluateIntakeScreen({
       ...screened,
       city: "BENGALORE",
       jobCity: null,
+      email: null,
     }, emptyExtra());
     expect(blr.waitingOn).not.toContain("pincode");
     expect(blr.waitingOn.join(" ")).not.toMatch(/out_station/);
@@ -176,6 +160,7 @@ describe("evaluateIntakeScreen", () => {
       ...screened,
       city: "CHENNAI",
       jobCity: null,
+      email: null,
     }, emptyExtra());
     expect(cue.waitingOn).not.toContain("pincode");
     expect(cue.waitingOn).toContain("out_station_candidate");
@@ -186,7 +171,8 @@ describe("evaluateIntakeScreen", () => {
       ...screened,
       city: "CHENNAI",
       jobCity: null,
-    }, { ...flagsNo, screen: { ...flagsNo.screen, pincode: "600001" } });
+      email: null,
+    }, { dispositionIds: [], answers: {}, screen: { pincode: "600001" } });
     expect(cue.waitingOn).toContain("out_station_candidate");
     expect(cue.instruction).toMatch(/relocate|pincode is not Bangalore/i);
   });
@@ -221,7 +207,7 @@ describe("evaluateIntakeScreen", () => {
       email: null,
     }, { dispositionIds: [], answers: {}, screen: { pincode: "560001" } });
     expect(cue.waitingOn.join(" ")).not.toMatch(/servingNotice|missingExpDocs|hasCareerGap/);
-    expect(cue.instruction).toMatch(/email/i);
+    expect(cue.instruction).toMatch(/graduate|education|shift|email|office|weekend|document/i);
   });
 
   it("unlocks serving notice for experienced candidates", () => {
@@ -238,7 +224,7 @@ describe("evaluateIntakeScreen", () => {
       ...screened,
       workStatus: "EXPERIENCED",
       totalCompanies: 2,
-    }, flagsNo);
+    }, { dispositionIds: [], answers: {}, screen: { pincode: "560001" } });
     expect(cue.waitingOn).toContain("lastCompany");
     expect(cue.waitingOn).toContain("tenure");
     expect(cue.instruction).toMatch(/company|tenure|working/i);

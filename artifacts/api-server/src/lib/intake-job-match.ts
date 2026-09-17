@@ -92,13 +92,9 @@ function ageYears(iso: string | null | undefined): number | null {
   return age;
 }
 
-const NIGHT_LIKE = new Set(["US", "NIGHT_ONLY"]);
-
 function shiftFits(candidate: string | null, job: IntakeJob): boolean {
   if (!candidate || candidate === "ANY" || job.shiftBase === "ANY") return true;
   if (candidate === job.shiftBase) return true;
-  // This campaign is US / night / evening voice — night and US are the same pool.
-  if (NIGHT_LIKE.has(candidate) && NIGHT_LIKE.has(job.shiftBase)) return true;
   if (candidate === "ROTATIONAL" && (job.shiftBase === "US" || job.shiftBase === "UK" || job.shiftBase === "NIGHT_ONLY")) {
     return true;
   }
@@ -144,8 +140,7 @@ function englishForMatch(row: CandidateIntake, extra: IntakeExtra): IntakeJobEng
     if (mapped[key]) return mapped[key]!;
   }
   if (row.englishCommunication) return row.englishCommunication as IntakeJobEnglish;
-  // Incomplete live scoring must not default to AVERAGE and wipe every GOOD JD.
-  return "GOOD";
+  return "AVERAGE";
 }
 
 function shiftForMatch(row: CandidateIntake, extra: IntakeExtra): string | null {
@@ -155,94 +150,60 @@ function shiftForMatch(row: CandidateIntake, extra: IntakeExtra): string | null 
   return row.shiftBase;
 }
 
-export const INTAKE_NO_MATCH_MARKER = "NO_JOB_MATCH";
-
-export const SCREEN_KILL_REASON_SPEECH: Record<string, string> = {
-  not_interested: "you are not interested in this process",
-  poor_communication: "the English on this call is below voice-process level",
-  will_not_relocate: "you will not relocate to Bangalore",
-  job_city_not_bangalore: "you want to work outside Bangalore and our openings are Bangalore",
-  wfh_only: "you need work from home and these openings are office-based",
-  cannot_do_shift: "you cannot do the night or evening shift these processes run",
-  not_interested_in_bpo: "you are not looking for a BPO voice-process job",
-  age_limit: "your age is outside the range these openings hire for",
-  DND: "you asked not to be contacted again",
-};
-
-/** Candidate-facing close when nothing in the catalog fits. Never say "JD" or "survived". */
-export function closeLineForNoJob(reason: string): string {
-  const why = reason.replace(/[.]+$/, "");
-  return `Right now there are no jobs for your profile that are matched. That is because ${why}. Thank you for your time — we will reach out if something comes up.`;
-}
-
-export function noMatchCloseFromSubmitResult(result: string): string | null {
-  if (!result.includes(INTAKE_NO_MATCH_MARKER)) return null;
-  const say = result.match(/^Say:\s*(.+)$/m);
-  return say?.[1]?.trim() || closeLineForNoJob("nothing in the current lineup fits this profile");
-}
-
-function emptyMatch(note: string, blocked: boolean): IntakeJobMatch {
-  return {
-    proposed: null,
-    alternatives: [],
-    speakScript: closeLineForNoJob(note),
-    talkingPoints: [],
-    note,
-    blocked,
-  };
-}
-
-const DROP_LABELS: Record<string, string> = {
-  company: "we cannot line you up with those companies on this campaign",
-  experience: "the seats we have are for a different fresher or experienced mix than yours",
-  qualification: "the seats we have need a different qualification than yours",
-  shift: "the seats we have are night and evening US processes, and that did not match the shift we captured",
-  english: "these voice processes need a stronger English level than we heard on this call",
-  age: "your age is outside the range these openings hire for",
-  careerGap: "the career gap is longer than these openings allow",
-  weekend: "you need Saturday-Sunday off and we do not have a weekend-off seat that also fits",
-  wfh: "you need work from home and these openings are office-based",
-  salary: "the salary you asked for is above what these openings can do",
-};
-
-function topDropReason(drops: Record<string, number>): string {
-  let best = "nothing in the current Bangalore voice lineup fits this profile";
-  let n = 0;
-  for (const [key, count] of Object.entries(drops)) {
-    if (count > n) {
-      n = count;
-      best = DROP_LABELS[key] ?? best;
-    }
-  }
-  return best;
-}
-
 export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): IntakeJobMatch {
   if (row.dnd === "ACTIVATE") {
-    return emptyMatch("you asked not to be contacted again", true);
+    return {
+      proposed: null,
+      alternatives: [],
+      speakScript: null,
+      talkingPoints: [],
+      note: "DND is active — no job is pitched.",
+      blocked: true,
+    };
   }
   const blocking = extra.dispositionIds.filter((id) => BLOCKING_DISPOSITIONS.has(id));
   if (blocking.length > 0) {
-    const why =
-      blocking.includes("not_interested") ? "you are not interested in this process"
-        : blocking.includes("poor_communication") ? "the English on this call is below voice-process level"
-          : blocking.includes("no_company") ? "we do not have a company for the city you want to work in"
-            : blocking.includes("other_recruiter") ? "you are already working with another recruiter"
-              : blocking.includes("voice_mail") ? "this reached voicemail"
-                : "this outcome does not go to a job lineup";
-    return emptyMatch(why, true);
+    return {
+      proposed: null,
+      alternatives: [],
+      speakScript: null,
+      talkingPoints: [],
+      note: `Outcome does not go to a job lineup (${blocking.join(", ")}).`,
+      blocked: true,
+    };
   }
   if (has(extra, "call_disconnected") && ans(extra, "call_disconnected", "communication_judgement") === "No") {
-    return emptyMatch("the call dropped before we could finish screening", true);
+    return {
+      proposed: null,
+      alternatives: [],
+      speakScript: null,
+      talkingPoints: [],
+      note: "Call dropped before communication could be judged.",
+      blocked: true,
+    };
   }
   const english = englishForMatch(row, extra);
   if (english === "POOR") {
-    return emptyMatch("the English on this call is below voice-process level", true);
+    return {
+      proposed: null,
+      alternatives: [],
+      speakScript: null,
+      talkingPoints: [],
+      note: "English on this call is below voice-process level.",
+      blocked: true,
+    };
   }
   const relocateYes = has(extra, "out_station_candidate")
     && ans(extra, "out_station_candidate", "will_relocate") === "Yes";
   if (!relocateYes && !jobCityIsBangalore(row.jobCity)) {
-    return emptyMatch("our openings right now are Bangalore office-based voice processes", true);
+    return {
+      proposed: null,
+      alternatives: [],
+      speakScript: null,
+      talkingPoints: [],
+      note: `Demo JDs are Bangalore only. Job city is ${row.jobCity}.`,
+      blocked: true,
+    };
   }
 
   const age = ageYears(row.dateOfBirth);
@@ -266,37 +227,41 @@ export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): Intak
   const domainNotBpo = has(extra, "other_domain_experience")
     && ans(extra, "other_domain_experience", "interested_in_bpo") === "No";
   if (domainNotBpo) {
-    return emptyMatch("you are not looking for a BPO voice-process job", true);
+    return {
+      proposed: null,
+      alternatives: [],
+      speakScript: null,
+      talkingPoints: [],
+      note: "Candidate is not interested in a BPO job.",
+      blocked: true,
+    };
   }
   if (relocateNo && !inBangalore) {
-    return emptyMatch("you are not in Bangalore and you will not relocate", true);
+    return {
+      proposed: null,
+      alternatives: [],
+      speakScript: null,
+      talkingPoints: [],
+      note: "Outstation candidate will not relocate to Bangalore.",
+      blocked: true,
+    };
   }
 
-  const drops: Record<string, number> = {
-    company: 0, experience: 0, qualification: 0, shift: 0, english: 0,
-    age: 0, careerGap: 0, weekend: 0, wfh: 0, salary: 0,
-  };
   const scored: Array<{ job: IntakeJob; score: number }> = [];
   for (const job of INTAKE_JOBS) {
-    if (excluded.has(job.company)) { drops.company += 1; continue; }
-    if (row.workStatus && job.workStatus !== "ANY" && job.workStatus !== row.workStatus) {
-      drops.experience += 1; continue;
-    }
-    if (row.qualification === "GRADUATE" && job.qualification === "POST_GRADUATE") {
-      drops.qualification += 1; continue;
-    }
-    if (!shiftFits(shift, job)) { drops.shift += 1; continue; }
-    if (englishRank < ENGLISH_RANK[job.minEnglish]) { drops.english += 1; continue; }
-    if (age != null && (age < job.minAge || age > job.maxAge)) { drops.age += 1; continue; }
-    if (gapMonths > job.maxCareerGapMonths) { drops.careerGap += 1; continue; }
-    if (needWeekend && !job.weekendOff) { drops.weekend += 1; continue; }
-    if (wfhOnly && !job.workFromHome) { drops.wfh += 1; continue; }
-    if (expectedSalary != null && expectedSalary > job.salaryMax && !willTakeLower) {
-      drops.salary += 1; continue;
-    }
+    if (excluded.has(job.company)) continue;
+    if (row.workStatus && job.workStatus !== "ANY" && job.workStatus !== row.workStatus) continue;
+    if (row.qualification === "GRADUATE" && job.qualification === "POST_GRADUATE") continue;
+    if (!shiftFits(shift, job)) continue;
+    if (englishRank < ENGLISH_RANK[job.minEnglish]) continue;
+    if (age != null && (age < job.minAge || age > job.maxAge)) continue;
+    if (gapMonths > job.maxCareerGapMonths) continue;
+    if (needWeekend && !job.weekendOff) continue;
+    if (wfhOnly && !job.workFromHome) continue;
+    if (expectedSalary != null && expectedSalary > job.salaryMax && !willTakeLower) continue;
 
     let score = 10;
-    if (shift && (job.shiftBase === shift || job.shiftBase === "ANY" || (NIGHT_LIKE.has(shift) && NIGHT_LIKE.has(job.shiftBase)))) score += 4;
+    if (shift && (job.shiftBase === shift || job.shiftBase === "ANY")) score += 4;
     if (job.workStatus === row.workStatus) score += 3;
     if (needWeekend && job.weekendOff) score += 5;
     if (wfhOnly && job.workFromHome) score += 5;
@@ -310,7 +275,14 @@ export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): Intak
   const alternatives = scored.slice(1, 4).map((s) => s.job);
 
   if (!proposed) {
-    return emptyMatch(topDropReason(drops), false);
+    return {
+      proposed: null,
+      alternatives: [],
+      speakScript: "I do not have a Bangalore international-voice opening that matches what we captured. I will check with my supervisor and call you back if something opens.",
+      talkingPoints: [],
+      note: "No JD survived the filters.",
+      blocked: false,
+    };
   }
 
   return {

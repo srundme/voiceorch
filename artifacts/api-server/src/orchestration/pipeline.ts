@@ -123,7 +123,6 @@ import {
 } from "./intake-tools.js";
 import { extractIntakePatchFromTurn } from "../lib/intake-extract.js";
 import { evaluateIntakeScreen } from "../lib/intake-screen.js";
-import { noMatchCloseFromSubmitResult } from "../lib/intake-job-match.js";
 import { ensureIntakeForCall, intakeExtraOf, recordIntakeEnglishTurn } from "../lib/intake-service.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
@@ -1587,8 +1586,6 @@ export class OrchestrationPipeline implements VoiceSession {
   // to quote the previous line and forbid a verbatim repeat, escalating if stuck.
   private lastAssistantSpokenRaw = "";
   private consecutiveRepeats = 0;
-  /** Spoken close when finish_intake found no job — hangup must say this, not drop the line. */
-  private intakeCloseBeforeHangup: string | null = null;
   // Interruption hint (inspired by Bolna): tracks sentences fully played this agent turn.
   // On barge-in these are captured into _interruptionHint; injected into the next
   // processTurn()'s historyForLlm so the LLM knows what the caller already heard and
@@ -7635,10 +7632,7 @@ export class OrchestrationPipeline implements VoiceSession {
     } else if (tool.type === "intake_disposition") {
       return await executeIntakeDisposition(this.intakeToolContext(), args);
     } else if (tool.type === "intake_submit") {
-      const result = await executeIntakeSubmit(this.intakeToolContext());
-      const close = noMatchCloseFromSubmitResult(result);
-      if (close) this.intakeCloseBeforeHangup = close;
-      return result;
+      return await executeIntakeSubmit(this.intakeToolContext());
     } else if (tool.type === "webhook") {
       return await this.executeWebhookTool(tool, args);
     } else if (tool.type === "send_sms") {
@@ -7813,9 +7807,7 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.isIntakeAgent) {
       const alreadySpoke = this._currentTurnPlayedSentences.some((s) => s.trim().length > 0);
       if (alreadySpoke) return;
-      const goodbye = this.intakeCloseBeforeHangup
-        ?? defaultGoodbyeMessage(this.agent.language ?? this.currentLang);
-      this.intakeCloseBeforeHangup = null;
+      const goodbye = defaultGoodbyeMessage(this.agent.language ?? this.currentLang);
       this.conversationHistory.appendAssistant(goodbye);
       this.config.onTranscript("agent", goodbye);
       await this.speakRaw(goodbye);

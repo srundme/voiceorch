@@ -330,85 +330,6 @@ export function evaluateIntakeScreen(row: Row, extra: IntakeExtra): IntakeScreen
     take("last name", "Ask their surname and save lastName.");
   }
 
-  if (!filled(row.email)) {
-    take("email", "Ask their email, spell it back, and save email.");
-  }
-
-  if (!filled(row.qualification)) {
-    take("graduate or post graduate", "Ask if they are a graduate or post graduate and save qualification.");
-  }
-  if (!flag(extra, "missingEduDocs")) {
-    take(
-      "missingEduDocs",
-      "Ask if they can share education documents for verification. Save missingEduDocs as no if they can, yes if they cannot.",
-    );
-  }
-
-  if (!filled(row.workStatus)) {
-    take("fresher or experienced", "Ask if they are a fresher or already working. Save workStatus.");
-  } else if (row.workStatus === "FRESHER") {
-    // companies auto-0; skip company name, tenure, notice, experience letters
-  } else {
-    const lastCompany = screenLastCompany(extra);
-    const tenure = screenTenure(extra);
-    const companyCount = row.totalCompanies == null ? null : Number(row.totalCompanies);
-    if (companyCount == null || companyCount < 1) {
-      take(
-        "number of companies",
-        "Ask how many companies they have worked with, including last year. Save totalCompanies. One company → ask that name next; more than one → ask those company names.",
-      );
-    } else if (!lastCompany) {
-      take(
-        "lastCompany",
-        companyCount > 1
-          ? `They worked with ${companyCount} companies. Ask those company names and save lastCompany as the list.`
-          : "They worked with one company. Ask that company name and save lastCompany. If they said last year, save tenure as 1 year.",
-      );
-    }
-    if (companyCount != null && companyCount >= 1 && !tenure) {
-      take("tenure", "If they have not already said how long, ask working tenure and save tenure. Last year means 1 year.");
-    }
-    if (!flag(extra, "servingNotice")) {
-      take(
-        "servingNotice",
-        "Ask if they are serving notice. Save servingNotice as yes or no. If yes, save noticePeriod (15/30/45/60/90 Days) and lastWorkingDay on the same save — a day like 28 is the 28th, and add a short notice remark. Do not re-ask after both are saved.",
-      );
-    } else if (flag(extra, "servingNotice") === "yes") {
-      const missing = missingDispositionFields(extra).filter((k) => k.startsWith("serving_notice.") && k !== "serving_notice.notice_remarks");
-      if (missing.length > 0 || !has(extra, "serving_notice")) {
-        take(
-          "serving_notice fields",
-          "They are serving notice. Save noticePeriod as 15 Days, 30 Days, 45 Days, 60 Days or 90 Days, lastWorkingDay (a spoken 28 is the 28th), and a short notice_remarks note. Do not ask the same question again once those are in.",
-        );
-      }
-    }
-    if (!flag(extra, "hasCareerGap")) {
-      take(
-        "hasCareerGap",
-        "Ask if they have a career gap. Save hasCareerGap as yes or no. If yes, set_disposition career_gap and take duration and reason.",
-      );
-    } else if (flag(extra, "hasCareerGap") === "yes" && (!has(extra, "career_gap") || missingDispositionFields(extra).some((k) => k.startsWith("career_gap.")))) {
-      take("career_gap fields", "Record career_gap and ask gap duration and reason.");
-    }
-    if (!flag(extra, "otherDomain")) {
-      take(
-        "otherDomain",
-        "Ask if their experience is voice/BPO or another domain. Save otherDomain as no for voice/BPO, yes otherwise. If yes, set_disposition other_domain_experience with the domain and whether they want a BPO job.",
-      );
-    } else if (flag(extra, "otherDomain") === "yes" && (!has(extra, "other_domain_experience") || missingDispositionFields(extra).some((k) => k.startsWith("other_domain_experience.")))) {
-      take(
-        "other_domain_experience fields",
-        "Record other_domain_experience. Ask the domain and whether they want a BPO voice job. Save other_domain_experience.domain and other_domain_experience.interested_in_bpo.",
-      );
-    }
-    if (!flag(extra, "missingExpDocs")) {
-      take(
-        "missingExpDocs",
-        "Ask if they can share experience or relieving letters when lined up. Save missingExpDocs as no if they can, yes if they cannot.",
-      );
-    }
-  }
-
   if (!filled(row.city)) {
     take("city they live in", "Ask which city or area they live in now and save city. Bangalore, Bengaluru and Bengalore are the same city. If they name a Bangalore area (HSR, Whitefield), save that. Do not ask for a pincode — the system fills it from the city or area.");
   }
@@ -459,6 +380,78 @@ export function evaluateIntakeScreen(row: Row, extra: IntakeExtra): IntakeScreen
     || ans(extra, "non_hiring_zone", "will_relocate") === "No";
   const jobNotBlr = filled(row.jobCity) && !isBangalorePlace(row.jobCity);
 
+  if (!filled(row.workStatus)) {
+    take("fresher or experienced", "Ask if they are a fresher or already working. Save workStatus.");
+  } else if (row.workStatus === "FRESHER") {
+    // companies auto-0; skip company name, tenure, notice, experience letters
+  } else {
+    const lastCompany = screenLastCompany(extra);
+    const tenure = screenTenure(extra);
+    if (!lastCompany && !tenure) {
+      take(
+        "lastCompany",
+        "They're already working. React to that, then ask where they work now and how long they have been there — one conversational ask, not two form questions. Save lastCompany and tenure. If they also say how many companies, save totalCompanies.",
+      );
+      take("tenure", "Save tenure when they say how long they have worked.");
+    } else if (!lastCompany) {
+      take("lastCompany", "Ask the current or last company name and save lastCompany.");
+    } else if (!tenure) {
+      take("tenure", "Ask how long they have been there, or their working tenure, and save tenure.");
+    }
+    if (row.totalCompanies == null || Number(row.totalCompanies) < 1) {
+      take("number of companies", "They are experienced. Ask how many companies they have worked with and save totalCompanies.");
+    }
+    if (!flag(extra, "servingNotice")) {
+      take(
+        "servingNotice",
+        "Ask if they are currently employed and serving notice. Save servingNotice as yes or no on save_candidate_details. If yes, also save noticePeriod (15/30/45/60/90 Days) and lastWorkingDay on that same save — do not wait for a second tool.",
+      );
+    } else if (flag(extra, "servingNotice") === "yes") {
+      const missing = missingDispositionFields(extra).filter((k) => k.startsWith("serving_notice."));
+      if (missing.length > 0 || !has(extra, "serving_notice")) {
+        take(
+          "serving_notice fields",
+          "They are serving notice. Save noticePeriod as 15 Days, 30 Days, 45 Days, 60 Days or 90 Days, and lastWorkingDay, on save_candidate_details.",
+        );
+      }
+    }
+    if (!flag(extra, "hasCareerGap")) {
+      take(
+        "hasCareerGap",
+        "Ask if they have a career gap. Save hasCareerGap as yes or no. If yes, set_disposition career_gap and take duration and reason.",
+      );
+    } else if (flag(extra, "hasCareerGap") === "yes" && (!has(extra, "career_gap") || missingDispositionFields(extra).some((k) => k.startsWith("career_gap.")))) {
+      take("career_gap fields", "Record career_gap and ask gap duration and reason.");
+    }
+    if (!flag(extra, "otherDomain")) {
+      take(
+        "otherDomain",
+        "Ask if their experience is voice/BPO or another domain. Save otherDomain as no for voice/BPO, yes otherwise. If yes, set_disposition other_domain_experience with the domain and whether they want a BPO job.",
+      );
+    } else if (flag(extra, "otherDomain") === "yes" && (!has(extra, "other_domain_experience") || missingDispositionFields(extra).some((k) => k.startsWith("other_domain_experience.")))) {
+      take(
+        "other_domain_experience fields",
+        "Record other_domain_experience. Ask the domain and whether they want a BPO voice job. Save other_domain_experience.domain and other_domain_experience.interested_in_bpo.",
+      );
+    }
+    if (!flag(extra, "missingExpDocs")) {
+      take(
+        "missingExpDocs",
+        "Ask if they can share experience or relieving letters when lined up. Save missingExpDocs as no if they can, yes if they cannot.",
+      );
+    }
+  }
+
+  if (!filled(row.qualification)) {
+    take("graduate or post graduate", "Ask if they are a graduate or post graduate and save qualification.");
+  }
+  if (!flag(extra, "missingEduDocs")) {
+    take(
+      "missingEduDocs",
+      "Ask if they can share education documents for verification. Save missingEduDocs as no if they can, yes if they cannot.",
+    );
+  }
+
   if (!filled(row.dateOfBirth)) {
     take("date of birth", "Ask date of birth and save dateOfBirth.");
   } else {
@@ -474,26 +467,30 @@ export function evaluateIntakeScreen(row: Row, extra: IntakeExtra): IntakeScreen
   if (!filled(row.shiftBase)) {
     take(
       "shift they can work",
-      "Ask once whether they can do night shift and evening shift. If they can do either or both, save shiftBase as US and do not ask again.",
+      "These processes are US / night shift, office-based. Ask if they can do that and save shiftBase (US, night, rotational, etc.).",
     );
   } else if (!US_OK.has(String(row.shiftBase))) {
     if (!has(extra, "shift_issues") || !filled(ans(extra, "shift_issues", "willing_for_alternate_shift"))) {
       take(
         "shift_issues",
-        "They cannot do night or evening. Ask once if they would take that shift anyway. Save shift_issues.willing_for_alternate_shift as Yes or No. Do not repeat the shift question.",
+        "They cannot do US/night. Record shift_issues and ask if they would take an alternate (US/night) shift. Save shift_issues.willing_for_alternate_shift as Yes or No.",
       );
     }
+  }
+
+  if (!filled(row.email)) {
+    take("email", "Ask their email, spell it back, and save email.");
   }
 
   if (!flag(extra, "wantsWfh")) {
     take(
       "wantsWfh",
-      "Tell them openings are office-based in Bangalore. Ask if that is okay or they need work from home. Save wantsWfh as no if office is fine, yes if they need WFH. If they later say they will come to office, uncheck WFH (wantsWfh no) and save willing_to_work_from_office as Yes — do not keep asking for a WFH reason.",
+      "Tell them openings are office-based in Bangalore. Ask if that is okay or they need work from home. Save wantsWfh as no if office is fine, yes if they need WFH.",
     );
   } else if (flag(extra, "wantsWfh") === "yes" && (!has(extra, "work_from_home") || !filled(ans(extra, "work_from_home", "willing_to_work_from_office")))) {
     take(
       "work_from_home",
-      "They said WFH. Confirm once: will they come to office? If they will, save wantsWfh as no and work_from_home.willing_to_work_from_office as Yes, and stop asking for a WFH reason.",
+      "They want WFH. Record work_from_home, take the reason, and ask if they would still come to office. Save work_from_home.willing_to_work_from_office.",
     );
   }
 
@@ -513,8 +510,6 @@ export function evaluateIntakeScreen(row: Row, extra: IntakeExtra): IntakeScreen
 
   const missingOpened = missingDispositionFields(extra);
   for (const key of missingOpened) {
-    if (flag(extra, "wantsWfh") !== "yes" && key.startsWith("work_from_home.")) continue;
-    if (key === "serving_notice.notice_remarks") continue;
     if (!waitingOn.includes(key)) {
       take(key, `An outcome is still missing ${key}. Ask it in your own words and send it through set_disposition.`);
     }
@@ -550,7 +545,7 @@ export function evaluateIntakeScreen(row: Row, extra: IntakeExtra): IntakeScreen
     instruction: instruction
       ?? (pitchAllowed
         ? "Screening is complete and they are eligible. Call finish_intake and pitch the opening it returns."
-        : `Screening is complete but they are not eligible (${killReason}). Call finish_intake. Speak the reason, say no jobs for their profile are matched as of now, then end_call. Do not hang up silently.`),
+        : `Screening is complete but they are not eligible (${killReason}). Call finish_intake — you will get no opening. Tell them the team will review and call back, then end_call.`),
     waitingOn,
     canFinish,
     pitchAllowed,
