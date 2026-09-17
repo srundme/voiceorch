@@ -204,6 +204,6 @@ describe("PersonaPlexPipeline", () => {
     expect(prompt).toContain("Jobshop");
     expect(prompt).toContain("Irfan");
     expect(prompt).not.toContain("save_candidate_details");
-    expect(prompt.length).toBeLessThan(2000);
+    expect(prompt.length).toBeLessThan(600);
   });
 });
