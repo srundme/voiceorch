@@ -10,7 +10,7 @@ import type { AgentConfig, ConversationTurn, SessionConfig } from "../../types.j
 import type { VoiceSession } from "../../voice-session.js";
 import type { StreamSTT } from "../../types.js";
 import { RecordingBuffer, WEBCALL_GAP_RESYNC_MS } from "../../recorder.js";
-import { decodeMulaw, encodeMulaw, frameRms, upsample8to16 } from "../../audio.js";
+import { decodeMulaw, encodeMulaw, upsample8to16 } from "../../audio.js";
 import { logger } from "../../../lib/logger.js";
 import { createLLMAdapter } from "../llm/index.js";
 import { createSTTAdapter } from "../stt/index.js";
@@ -28,8 +28,6 @@ const FRAME_BYTES_8K = FRAME_SAMPLES_8K * 2;
 const PREBUFFER_FRAMES = 1;
 const PUMP_LEAD_MS = 80;
 const KEEPALIVE_FILL_GAP_MS = 500;
-const ECHO_GRACE_MS = 80;
-const ECHO_MARGIN = 1.25;
 
 /** JSON control is never PCM. Binary / even-length non-JSON is audio. */
 export function isPersonaplexPcmFrame(isBinary: boolean | undefined, buf?: Buffer): boolean {
@@ -63,14 +61,12 @@ export class PersonaPlexPipeline implements VoiceSession {
   private greetingSent = false;
   private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
   private lastRealFrameAt = 0;
-  private lastAgentAudioAt = 0;
   private outPending = Buffer.alloc(0);
   private outFrames: Buffer[] = [];
   private pumpTimer: ReturnType<typeof setInterval> | null = null;
   private pumpAnchorMs = 0;
   private framesSent = 0;
   private lastGpuSendAt = 0;
-  private echoFloorRms = 0;
   private pendingIn: Buffer[] = [];
   private history: ConversationTurn[] = [];
   private lastUserText: string | null = null;
@@ -227,10 +223,7 @@ export class PersonaPlexPipeline implements VoiceSession {
     this.config.callerAudioTap?.(pcm8k);
     this.lastMediaAtMs = Date.now();
 
-    const toGpu = this.shouldMuteEcho(pcm8k) ? Buffer.alloc(pcm8k.length) : pcm8k;
     try {
-      // Form STT must hear the caller even while the agent is talking.
-      // Echo mute is only for the GPU (PSTN leak), not the sidecar transcript.
       this.callerStt?.sendAudio(upsample8to16(pcm8k));
     } catch { /* STT tap must never break the spoken path */ }
     if (!this.ready || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -238,21 +231,10 @@ export class PersonaPlexPipeline implements VoiceSession {
       void this.ensureConnected();
       return;
     }
-    this.ws.send(toGpu);
+    // Full-duplex S2S: never replace the caller with zeros. PSTN echo mute
+    // on call 25573 blocked barge-in so Moshi kept inventing jobs.
+    this.ws.send(pcm8k);
     this.lastGpuSendAt = Date.now();
-  }
-
-  /** PSTN returns our own voice. Mute that into the GPU so Moshi does not self-talk. */
-  private shouldMuteEcho(pcm8k: Buffer): boolean {
-    if (this.config.telephonyProvider === "webcall") return false;
-    if (Date.now() - this.lastAgentAudioAt > ECHO_GRACE_MS) return false;
-    const rms = frameRms(pcm8k);
-    if (this.echoFloorRms <= 0) {
-      this.echoFloorRms = Math.max(rms, 80);
-      return true;
-    }
-    this.echoFloorRms = this.echoFloorRms * 0.95 + rms * 0.05;
-    return rms < this.echoFloorRms * ECHO_MARGIN;
   }
 
   async greet(): Promise<void> {
@@ -410,7 +392,6 @@ export class PersonaPlexPipeline implements VoiceSession {
       const pcm8k = this.outFrames.shift()!;
       this.framesSent++;
       this.lastRealFrameAt = Date.now();
-      this.lastAgentAudioAt = Date.now();
       this.lastMediaAtMs = Date.now();
       if (!this.firstAudioLogged) {
         this.firstAudioLogged = true;
