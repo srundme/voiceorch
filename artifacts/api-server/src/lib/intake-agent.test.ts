@@ -52,6 +52,7 @@ describe("validateIntakeControls", () => {
 
   it("only offers Cartesia and Sarvam for TTS", () => {
     expect(INTAKE_TTS_CATALOG.map((p) => p.value).sort()).toEqual(["cartesia", "sarvam"]);
+    expect(INTAKE_TTS_CATALOG.find((p) => p.value === "cartesia")?.model).toBe("sonic-3.6");
   });
 
   it("rejects a Sarvam speaker name on Cartesia", () => {

@@ -56,11 +56,25 @@ const CARTESIA_VALID_MODELS = new Set([
   "sonic-english", "sonic-multilingual",
 ]);
 
+/**
+ * sonic-2 / turbo (and aliases) sunset 20 Oct 2026. They also do not list
+ * `en-IN` — REST `/tts/bytes` may still speak a filler, but the WebSocket
+ * continuation used for Talk errors, so the caller only hears hmm/okay.
+ * https://docs.cartesia.ai/build-with-cartesia/tts-models/older-models.md
+ */
+const CARTESIA_RETIRED_PREFIXES = ["sonic-2", "sonic-turbo", "sonic-english", "sonic-multilingual"];
+
+function isRetiredCartesiaModel(id: string): boolean {
+  const key = id.toLowerCase();
+  return CARTESIA_RETIRED_PREFIXES.some((prefix) => key === prefix || key.startsWith(`${prefix}-`));
+}
+
 export function resolveCartesiaModelId(model: string | null | undefined): string {
   const raw = (model ?? "").trim();
   if (!raw) return CARTESIA_DEFAULT_MODEL;
   const key = raw.toLowerCase().replace(/\s+/g, "-");
   const id = CARTESIA_MODEL_ALIASES[key] ?? raw;
+  if (isRetiredCartesiaModel(id)) return CARTESIA_DEFAULT_MODEL;
   return CARTESIA_VALID_MODELS.has(id) ? id : CARTESIA_DEFAULT_MODEL;
 }
 
@@ -199,6 +213,12 @@ interface TurnCtx {
   spill: string;
   /** At least one non-empty transcript reached Cartesia on this context. */
   sentAny: boolean;
+  /** Every write's text, so a WS error can REST the whole turn if no audio arrived. */
+  full: string;
+  /** True once a PCM chunk landed in this turn's sink. */
+  gotAudio: boolean;
+  /** `continue: false` went out; we are waiting for `done`. */
+  awaitingDone: boolean;
   /** closeContext has run (or is running) — no further writes. */
   closed: boolean;
   /** Cartesia closed the context, or the turn was aborted. */
@@ -450,7 +470,11 @@ export class CartesiaTTS implements TTSAdapter {
 
     if (type === "chunk") {
       const b64 = msg["data"] as string | undefined;
-      if (b64) this.sinkFor(contextId)?.(Buffer.from(b64, "base64"));
+      if (b64) {
+        const ctx = this.turns.get(contextId);
+        if (ctx) ctx.gotAudio = true;
+        this.sinkFor(contextId)?.(Buffer.from(b64, "base64"));
+      }
       return;
     }
     if (type === "done") {
@@ -463,7 +487,10 @@ export class CartesiaTTS implements TTSAdapter {
       const ctx = this.turns.get(contextId);
       // `done` before the close went out means Cartesia finished the text it
       // had; the turn is still open and more sentences are coming.
-      if (ctx?.closed) ctx.settleOwner?.();
+      if (ctx?.closed) {
+        ctx.awaitingDone = false;
+        ctx.settleOwner?.();
+      }
     }
   }
 
@@ -507,15 +534,25 @@ export class CartesiaTTS implements TTSAdapter {
     }
     const ctx = this.turns.get(contextId);
     if (!ctx) return;
+    ctx.dead = true;
     // A closed context is recoverable: remaining text is spoken on a fresh
-    // context rather than lost. Anything else ends the turn.
+    // context rather than lost. Other WS generation errors (unsupported
+    // language on sonic-2, rejected flush, etc.) must not abort Talk —
+    // fillers already use REST, so the caller would only hear hmm/okay.
     if (isCartesiaContextClosedError(err)) {
-      ctx.dead = true;
       if (ctx.closed) ctx.settleOwner?.();
       return;
     }
-    ctx.dead = true;
-    ctx.settleOwner?.(err);
+    ctx.restFallback = true;
+    if (ctx.awaitingDone) {
+      ctx.awaitingDone = false;
+      const text = ctx.gotAudio ? "" : ctx.full;
+      if (isSpeakableCartesiaTranscript(text)) {
+        void this.speakDetached(CartesiaTTS.ensureTerminalPunctuation(text), ctx);
+      } else {
+        ctx.settleOwner?.();
+      }
+    }
   }
 
   // ── turn contexts ─────────────────────────────────────────────────────────
@@ -529,6 +566,9 @@ export class CartesiaTTS implements TTSAdapter {
         tail: "",
         spill: "",
         sentAny: false,
+        full: "",
+        gotAudio: false,
+        awaitingDone: false,
         closed: false,
         dead: false,
         cancelled: false,
@@ -555,6 +595,7 @@ export class CartesiaTTS implements TTSAdapter {
     const ctx = this.turns.get(turnContextId);
     if (!ctx) return;
     ctx.spill = appendCartesiaRemainder(ctx.spill, text);
+    ctx.full = appendCartesiaRemainder(ctx.full, text);
   }
 
   /** No more text for this turn — flush what is held and close the context. */
@@ -651,6 +692,7 @@ export class CartesiaTTS implements TTSAdapter {
   ): Promise<void> {
     if (ctx.cancelled || signal?.aborted) throw abortError();
     if (!text) return;
+    ctx.full = appendCartesiaRemainder(ctx.full, text);
     // The context can no longer take writes — keep the text so the close can
     // still speak it on a fresh context.
     if (ctx.closed || ctx.dead || ctx.restFallback) {
@@ -713,6 +755,10 @@ export class CartesiaTTS implements TTSAdapter {
     if (!isSpeakableCartesiaTranscript(pending)) {
       // Nothing left to say. If text did go out, Cartesia's `done` for it is
       // what ends the turn; if nothing ever did, there is no audio to wait for.
+      if (ctx.restFallback && !ctx.gotAudio && isSpeakableCartesiaTranscript(ctx.full)) {
+        await this.speakDetached(CartesiaTTS.ensureTerminalPunctuation(ctx.full), ctx);
+        return;
+      }
       if (!ctx.sentAny) ctx.settleOwner?.();
       return;
     }
@@ -723,9 +769,14 @@ export class CartesiaTTS implements TTSAdapter {
       await this.getOrOpenWs().catch((err: unknown) => { this.onWsUnusable(ctx, err); });
     }
     // The context died mid-turn (closed by Cartesia, or the socket went away).
-    // Speak the tail on its own context so the turn still finishes.
+    // Speak the tail on its own context so the turn still finishes. When no
+    // PCM arrived at all, REST the full transcript — not just the held tail —
+    // otherwise the caller only heard fillers (REST one-shots) and never Talk.
     if (ctx.dead || ctx.restFallback || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      await this.speakDetached(closing, ctx);
+      const text = (ctx.restFallback && !ctx.gotAudio)
+        ? (ctx.full || closing)
+        : closing;
+      await this.speakDetached(CartesiaTTS.ensureTerminalPunctuation(text), ctx);
       return;
     }
     const sent = this.send({
@@ -736,6 +787,7 @@ export class CartesiaTTS implements TTSAdapter {
     });
     if (sent) {
       ctx.sentAny = true;
+      ctx.awaitingDone = true;
       return; // owner settles on `done`
     }
     await this.speakDetached(closing, ctx);

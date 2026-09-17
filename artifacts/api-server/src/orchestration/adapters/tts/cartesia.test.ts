@@ -148,6 +148,13 @@ describe("resolveCartesiaModelId", () => {
     expect(resolveCartesiaModelId("Sonic 3.6")).toBe("sonic-3.6");
     expect(resolveCartesiaModelId("not-a-model")).toBe("sonic-3.6");
   });
+
+  it("migrates retired sonic-2 / turbo ids so Talk is not stuck on fillers-only REST", () => {
+    expect(resolveCartesiaModelId("sonic-2")).toBe("sonic-3.6");
+    expect(resolveCartesiaModelId("sonic-2-2025-06-11")).toBe("sonic-3.6");
+    expect(resolveCartesiaModelId("sonic-turbo")).toBe("sonic-3.6");
+    expect(new CartesiaTTS("k", null, "sonic-2", "en-IN").resolvedModelId).toBe("sonic-3.6");
+  });
 });
 
 describe("parseCartesiaLang / cartesiaWireLanguage", () => {
@@ -371,6 +378,48 @@ describe("Cartesia WS continuations", () => {
         .find((r) => r.transcript === " Second sentence." && r.context_id !== "reopen")!;
       sockets[0]!.emit({ type: "done", context_id: detached.context_id as string });
       await owner;
+    } finally {
+      tts.close();
+      await owner.catch(() => {});
+    }
+  });
+
+  it("speaks Talk over REST when the WebSocket generation errors (fillers-only regression)", async () => {
+    const sockets: FakeCartesiaWs[] = [];
+    const restBodies: Array<{ transcript?: string; model_id?: string }> = [];
+    vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
+      constructor(url: string) { super(url); sockets.push(this); }
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        restBodies.push(JSON.parse(init.body as string) as { transcript?: string; model_id?: string });
+        return {
+          ok: true,
+          status: 200,
+          body: new ReadableStream({
+            start(c) { c.enqueue(new Uint8Array([9, 8, 7, 6])); c.close(); },
+          }),
+        } as unknown as Response;
+      }),
+    );
+    const tts = new CartesiaTTS("test-key", null, "sonic-3.6", "en-IN", null, 8000);
+    const chunks: Buffer[] = [];
+    tts.claimTurnContext("ws-fail");
+    const owner = tts.synthesizeStreamInContext("ws-fail", "What is your name?", (pcm) => chunks.push(pcm), () => {});
+    await tts.synthesizeStreamInContext("ws-fail", " Please tell me.", () => {}, () => {}, undefined, undefined, true);
+    await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
+    sockets[0]!.emit({
+      type: "error",
+      context_id: "ws-fail",
+      error_code: "invalid_request",
+      message: "invalid language: en-IN",
+    });
+    tts.finalizeTurnContext("ws-fail");
+    try {
+      await owner;
+      expect(Buffer.concat(chunks)).toEqual(Buffer.from([9, 8, 7, 6]));
+      expect(restBodies.some((b) => (b.transcript ?? "").includes("What is your name?"))).toBe(true);
     } finally {
       tts.close();
       await owner.catch(() => {});

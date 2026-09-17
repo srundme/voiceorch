@@ -96,7 +96,7 @@ export const INTAKE_TTS_CATALOG: IntakeTtsProviderSpec[] = [
   {
     value: "cartesia",
     label: "Cartesia (Sonic)",
-    model: "sonic-2",
+    model: "sonic-3.6",
     voices: CARTESIA_VOICES,
     allowCustomVoice: true,
   },
