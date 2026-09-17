@@ -252,6 +252,15 @@ describe("intake persist + VoBiz hangup (call 25223)", () => {
     expect(methodBody("spokenVoiceToolDefs")).toContain("intakeSpokenTools");
   });
 
+  it("uses speakToolDefs in processTurn — leftover toolDefs is a ReferenceError that mutes the agent (call 25474)", () => {
+    const body = methodBody("processTurn");
+    expect(body).toContain("const speakToolDefs = this.spokenVoiceToolDefs()");
+    expect(body).toContain("toolNamesOf(speakToolDefs)");
+    expect(body).not.toContain("toolNamesOf(toolDefs)");
+    expect(body).not.toMatch(/(?<!speak)toolDefs\.length/);
+    expect(methodBody("handleStreamingTranscript")).toContain("Turn Error");
+  });
+
   it("issues a VoBiz REST hangup because keepCallAlive leaves the PSTN up", () => {
     const sessionSrc = readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), "session.ts"),

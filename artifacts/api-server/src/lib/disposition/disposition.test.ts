@@ -61,8 +61,8 @@ describe("buildSchema", () => {
 
   it("adds domain fields with correct types", () => {
     const schema = buildSchema(cfgWithDomain) as any;
-    expect(schema.properties.product_type.enum).toContain("term");
-    expect(schema.properties.product_type.enum).toContain(null);
+    expect(schema.properties.product_type.anyOf[0].enum).toContain("term");
+    expect(schema.properties.product_type.anyOf[1].type).toBe("null");
     expect(schema.properties.premium_quoted.type).toContain("number");
     expect(schema.properties.consent_given.type).toContain("boolean");
   });

@@ -169,8 +169,7 @@ export function jsonSchemaFromDispositionFields(
       properties[f.key] = { type: ["number", "null"], description: f.label };
     } else if (f.type === "choice" && f.options?.length) {
       properties[f.key] = {
-        type: ["string", "null"],
-        enum: [...f.options, null],
+        anyOf: [{ type: "string", enum: [...f.options] }, { type: "null" }],
         description: f.label,
       };
     } else {
@@ -183,6 +182,7 @@ export function jsonSchemaFromDispositionFields(
   return {
     type: "object",
     properties,
+    required: Object.keys(properties),
     additionalProperties: false,
   };
 }

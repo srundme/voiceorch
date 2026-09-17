@@ -73,38 +73,46 @@ export interface AnalyzeCallIntelligenceInput {
   force?: boolean;
 }
 
+const AGENT_PERFORMANCE_KEYS = [
+  "talkListenBalance",
+  "empathy",
+  "objectionHandling",
+  "scriptAdherence",
+  "clarity",
+  "notes",
+] as const;
+
+const INTELLIGENCE_PROPERTIES: Record<string, unknown> = {
+  sentiment: { type: "string", enum: [...SENTIMENTS] },
+  detectedIntent: { type: "string", enum: [...INTENTS] },
+  keyTopics: { type: "array", items: { type: "string" } },
+  summary: { type: ["string", "null"] },
+  purchaseIntentScore: { type: "integer" },
+  urgency: { type: "string", enum: [...URGENCIES] },
+  objections: { type: "array", items: { type: "string" } },
+  buyingSignals: { type: "array", items: { type: "string" } },
+  nextBestAction: { type: ["string", "null"] },
+  emotion: { anyOf: [{ type: "string", enum: [...EMOTIONS] }, { type: "null" }] },
+  agentPerformance: {
+    type: ["object", "null"],
+    additionalProperties: false,
+    properties: {
+      talkListenBalance: { type: ["integer", "null"] },
+      empathy: { type: ["integer", "null"] },
+      objectionHandling: { type: ["integer", "null"] },
+      scriptAdherence: { type: ["integer", "null"] },
+      clarity: { type: ["integer", "null"] },
+      notes: { type: ["string", "null"] },
+    },
+    required: [...AGENT_PERFORMANCE_KEYS],
+  },
+};
+
 const INTELLIGENCE_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
-  properties: {
-    sentiment: { type: "string", enum: [...SENTIMENTS] },
-    detectedIntent: { type: "string", enum: [...INTENTS] },
-    keyTopics: {
-      type: "array",
-      items: { type: "string" },
-      maxItems: 6,
-    },
-    summary: { type: "string" },
-    purchaseIntentScore: { type: "integer", minimum: 0, maximum: 100 },
-    urgency: { type: "string", enum: [...URGENCIES] },
-    objections: { type: "array", items: { type: "string" }, maxItems: 5 },
-    buyingSignals: { type: "array", items: { type: "string" }, maxItems: 5 },
-    nextBestAction: { type: "string" },
-    emotion: { type: "string", enum: [...EMOTIONS] },
-    agentPerformance: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        talkListenBalance: { type: "integer", minimum: 1, maximum: 5 },
-        empathy: { type: "integer", minimum: 1, maximum: 5 },
-        objectionHandling: { type: "integer", minimum: 1, maximum: 5 },
-        scriptAdherence: { type: "integer", minimum: 1, maximum: 5 },
-        clarity: { type: "integer", minimum: 1, maximum: 5 },
-        notes: { type: "string" },
-      },
-    },
-  },
-  required: ["sentiment", "detectedIntent", "keyTopics", "purchaseIntentScore", "urgency"],
+  properties: INTELLIGENCE_PROPERTIES,
+  required: Object.keys(INTELLIGENCE_PROPERTIES),
 };
 
 function buildIntelligencePrompt(opts: {
@@ -329,6 +337,9 @@ async function analyzeCallIntelligenceInternal(
   const answersSchema = buildAnswersSchema(questions);
   if (answersSchema) {
     (schema.properties as Record<string, unknown>)["answers"] = answersSchema;
+    const required = Array.isArray(schema.required) ? [...schema.required] : [];
+    if (!required.includes("answers")) required.push("answers");
+    schema.required = required;
   }
 
   let raw: Record<string, unknown> | null = null;
