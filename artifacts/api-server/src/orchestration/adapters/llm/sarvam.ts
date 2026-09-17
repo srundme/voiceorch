@@ -445,6 +445,7 @@ export class SarvamLLM implements LLMAdapter {
       onToolDetected?: (info: { format: ToolEnvelopeFormat }) => void;
       onToolParsed?: (info: { name: string; format: ToolEnvelopeFormat; args: Record<string, unknown> }) => void;
       onUsage?: (usage: LLMUsage) => void;
+      isolated?: boolean;
     }
   ): Promise<void> {
     const supportsTools = TOOL_CAPABLE_MODELS.has(this.model);
@@ -512,11 +513,12 @@ ${systemPrompt}`
 
     const endpoint = sarvamChatCompletionsUrl(this.model);
 
-    // Cancel any prior in-flight stream (barge-in / overlapping turns) before
-    // opening a new one, then arm a fresh AbortController for this call.
-    this.abortController?.abort();
+    // Isolated chats (intake form persist) must not abort the spoken turn.
     const abort = new AbortController();
-    this.abortController = abort;
+    if (!options?.isolated) {
+      this.abortController?.abort();
+      this.abortController = abort;
+    }
     // Timeout covers connect + first headers only — clear once the SSE body is
     // open so a long spoken reply is not cut mid-sentence.
     let connectTimedOut = false;

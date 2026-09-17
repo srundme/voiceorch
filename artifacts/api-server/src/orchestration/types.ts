@@ -732,6 +732,12 @@ export interface LLMAdapter {
        *  previousResponseId) MUST bypass that state on speculative calls so a
        *  spec miss does not corrupt the real turn's conversation context. */
       speculative?: boolean;
+      /**
+       * Do not abort or replace the adapter's shared in-flight stream.
+       * Intake form-save runs beside the spoken turn; sharing cancelInFlight
+       * muted the agent (call 25223 silence while the form filled).
+       */
+      isolated?: boolean;
     }
   ): Promise<void>;
   /** Optional: pre-create the provider-side context cache before the first turn
