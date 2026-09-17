@@ -32,6 +32,7 @@ LISTEN_HOST = os.environ.get("PCM_BRIDGE_HOST", "0.0.0.0")
 LISTEN_PORT = int(os.environ.get("PCM_BRIDGE_PORT", "9000"))
 MOSHI_RATE = 24000
 SNAP_RATE = 8000
+SNAP_FRAME = 160  # 20 ms @ 8 kHz — VoBiz playAudio needs paced telephony frames
 # sphn OpusStreamWriter only accepts these 24 kHz frame sizes.
 OPUS_FRAME_24 = 960  # 40 ms
 
@@ -87,6 +88,7 @@ async def handle_snapserve(snap_ws) -> None:
     close = False
     pending_24 = np.zeros(0, dtype=np.int16)
     pending_in_24 = np.zeros(0, dtype=np.int16)
+    pending_8 = np.zeros(0, dtype=np.int16)
 
     ssl_ctx = moshi_ssl() if moshi_url.startswith("wss://") else None
 
@@ -120,7 +122,7 @@ async def handle_snapserve(snap_ws) -> None:
                     close = True
 
             async def moshi_to_snap() -> None:
-                nonlocal close, pending_24
+                nonlocal close, pending_24, pending_8
                 try:
                     async for message in moshi:
                         if close:
@@ -155,7 +157,10 @@ async def handle_snapserve(snap_ws) -> None:
                             continue
                         pcm8 = downsample_24_to_8(pending_24[:emit_n])
                         pending_24 = pending_24[emit_n:]
-                        await snap_ws.send(pcm8.tobytes())
+                        pending_8 = np.concatenate([pending_8, pcm8])
+                        while pending_8.size >= SNAP_FRAME:
+                            await snap_ws.send(pending_8[:SNAP_FRAME].tobytes())
+                            pending_8 = pending_8[SNAP_FRAME:]
                 finally:
                     close = True
 
@@ -180,7 +185,28 @@ async def handle_snapserve(snap_ws) -> None:
             pass
 
 
+async def warmup_voice() -> None:
+    """Load NATM1 into Moshi once so the first real call is not a 10s torch.load."""
+    voice = os.environ.get("PERSONAPLEX_VOICE", "NATM1").replace(".pt", "")
+    params = urllib.parse.urlencode({
+        "voice_prompt": f"{voice}.pt",
+        "text_prompt": "warmup",
+    })
+    url = f"{MOSHI_URL}?{params}"
+    ssl_ctx = moshi_ssl() if url.startswith("wss://") else None
+    log.info("warming moshi voice=%s", voice)
+    try:
+        async with websockets.connect(url, ssl=ssl_ctx, max_size=None, open_timeout=30) as moshi:
+            async for message in moshi:
+                if isinstance(message, (bytes, bytearray)) and len(message) > 0 and message[0] == 0x00:
+                    log.info("moshi voice warmup ready")
+                    break
+    except Exception:
+        log.exception("moshi voice warmup failed — first call will load the voice cold")
+
+
 async def main() -> None:
+    await warmup_voice()
     log.info("listening ws://%s:%s  →  %s", LISTEN_HOST, LISTEN_PORT, MOSHI_URL)
     async with websockets.serve(handle_snapserve, LISTEN_HOST, LISTEN_PORT, max_size=None):
         await asyncio.Future()

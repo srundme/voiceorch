@@ -32,7 +32,7 @@ vi.mock("@google/genai", () => ({
 }));
 
 import { GeminiLivePipeline } from "./adapters/live/gemini-live-pipeline.js";
-import { PersonaPlexPipeline } from "./adapters/live/personaplex-pipeline.js";
+import { PersonaPlexPipeline, isPersonaplexPcmFrame } from "./adapters/live/personaplex-pipeline.js";
 
 function minimalAgentConfig(overrides: Partial<AgentConfig> = {}): AgentConfig {
   return {
@@ -184,6 +184,11 @@ describe("PersonaPlexPipeline", () => {
     onAudioOut.mockClear();
     vi.advanceTimersByTime(1000);
     expect(onAudioOut).not.toHaveBeenCalled();
+  });
+
+  it("does not treat JSON control frames as PCM (that played as TV static)", () => {
+    expect(isPersonaplexPcmFrame(false)).toBe(false);
+    expect(isPersonaplexPcmFrame(true)).toBe(true);
   });
 
   it("builds a short Jobshop intake persona, not the tool script", () => {

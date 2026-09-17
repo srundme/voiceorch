@@ -23,9 +23,18 @@ import {
 } from "./personaplex-voices.js";
 
 const FRAME_MS = 20;
+const FRAME_SAMPLES_8K = 160;
+const FRAME_BYTES_8K = FRAME_SAMPLES_8K * 2;
+const PREBUFFER_FRAMES = 5;
+const PUMP_LEAD_MS = 80;
 const KEEPALIVE_FILL_GAP_MS = 500;
 const ECHO_GRACE_MS = 220;
 const ECHO_MARGIN = 1.8;
+
+/** Node `ws` delivers both text and binary as Buffer. Only `isBinary` is audio. */
+export function isPersonaplexPcmFrame(isBinary: boolean): boolean {
+  return isBinary === true;
+}
 
 export class PersonaPlexPipeline implements VoiceSession {
   public endReasonHint: string | null = null;
@@ -45,6 +54,13 @@ export class PersonaPlexPipeline implements VoiceSession {
   private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
   private lastRealFrameAt = 0;
   private lastAgentAudioAt = 0;
+  private outPending = Buffer.alloc(0);
+  private outFrames: Buffer[] = [];
+  private pumpTimer: ReturnType<typeof setInterval> | null = null;
+  private pumpAnchorMs = 0;
+  private framesSent = 0;
+  private firstAudioLogged = false;
+  private startedAtMs = Date.now();
   private echoFloorRms = 0;
   private pendingIn: Buffer[] = [];
   private history: ConversationTurn[] = [];
@@ -77,6 +93,9 @@ export class PersonaPlexPipeline implements VoiceSession {
     if (config.answeredAt) this.recording.anchorStart(config.answeredAt);
     this.startKeepalive();
     this.startIntakeSidecar();
+    void this.ensureConnected().catch((err) => {
+      logger.warn({ callId: config.callId, err }, "PersonaPlex GPU connect at session start failed — will retry on audio");
+    });
     logger.info(
       {
         callId: config.callId,
@@ -103,6 +122,7 @@ export class PersonaPlexPipeline implements VoiceSession {
     );
     const timer = setInterval(() => {
       if (this.closed) return;
+      if (this.pumpTimer || this.outFrames.length > 0) return;
       if (Date.now() - this.lastRealFrameAt < KEEPALIVE_FILL_GAP_MS) return;
       if (isVobiz || this.config.rawPcmOutput) this.config.onAudioOut(silenceFrame);
     }, FRAME_MS);
@@ -259,8 +279,7 @@ export class PersonaPlexPipeline implements VoiceSession {
       ws.on("message", (data, isBinary) => {
         if (this.closed) return;
         const buf = toBuffer(data);
-        const binary = isBinary || Buffer.isBuffer(data);
-        if (!binary) {
+        if (!isPersonaplexPcmFrame(isBinary)) {
           this.onControl(buf.toString("utf8"), () => {
             if (!settled) {
               settled = true;
@@ -278,7 +297,7 @@ export class PersonaPlexPipeline implements VoiceSession {
             resolve();
           }
         }
-        this.emitAgentPcm8k(buf);
+        this.enqueueAgentPcm8k(buf);
       });
 
       ws.on("error", (err) => {
@@ -329,16 +348,61 @@ export class PersonaPlexPipeline implements VoiceSession {
     this.pendingIn = [];
   }
 
-  private emitAgentPcm8k(pcm8k: Buffer): void {
+  private enqueueAgentPcm8k(pcm8k: Buffer): void {
     if (pcm8k.length < 2) return;
-    this.lastRealFrameAt = Date.now();
-    this.lastAgentAudioAt = Date.now();
-    this.lastMediaAtMs = Date.now();
-    this.recording.addAgentChunk(pcm8k);
-    const out = this.config.rawPcmOutput
-      ? (this.pcmOutRate() === 16000 ? upsample8to16(pcm8k) : pcm8k)
-      : encodeMulaw(pcm8k);
-    this.config.onAudioOut(out);
+    const aligned = pcm8k.length % 2 === 0 ? pcm8k : pcm8k.subarray(0, pcm8k.length - 1);
+    this.outPending = this.outPending.length ? Buffer.concat([this.outPending, aligned]) : aligned;
+    while (this.outPending.length >= FRAME_BYTES_8K) {
+      this.outFrames.push(this.outPending.subarray(0, FRAME_BYTES_8K));
+      this.outPending = this.outPending.subarray(FRAME_BYTES_8K);
+    }
+    if (this.pumpTimer || this.outFrames.length >= PREBUFFER_FRAMES) this.ensurePump();
+  }
+
+  private ensurePump(): void {
+    if (this.pumpTimer) return;
+    this.pumpAnchorMs = Date.now();
+    this.framesSent = 0;
+    this.pumpTimer = setInterval(() => this.pumpTick(), 10);
+    (this.pumpTimer as unknown as { unref?: () => void }).unref?.();
+  }
+
+  private stopPump(): void {
+    if (this.pumpTimer) {
+      clearInterval(this.pumpTimer);
+      this.pumpTimer = null;
+    }
+  }
+
+  private pumpTick(): void {
+    if (this.closed) {
+      this.stopPump();
+      return;
+    }
+    if (this.outFrames.length === 0) {
+      this.stopPump();
+      return;
+    }
+    const elapsedMs = Date.now() - this.pumpAnchorMs + PUMP_LEAD_MS;
+    while (this.outFrames.length > 0 && this.framesSent * FRAME_MS < elapsedMs) {
+      const pcm8k = this.outFrames.shift()!;
+      this.framesSent++;
+      this.lastRealFrameAt = Date.now();
+      this.lastAgentAudioAt = Date.now();
+      this.lastMediaAtMs = Date.now();
+      if (!this.firstAudioLogged) {
+        this.firstAudioLogged = true;
+        logger.info(
+          { callId: this.config.callId, bootMs: Date.now() - this.startedAtMs },
+          "PersonaPlex: first agent audio on the wire",
+        );
+      }
+      this.recording.addAgentChunk(pcm8k);
+      const out = this.config.rawPcmOutput
+        ? (this.pcmOutRate() === 16000 ? upsample8to16(pcm8k) : pcm8k)
+        : encodeMulaw(pcm8k);
+      this.config.onAudioOut(out);
+    }
   }
 
   private appendTranscript(role: "user" | "assistant", fragment: string): void {
@@ -442,6 +506,9 @@ export class PersonaPlexPipeline implements VoiceSession {
     this.closed = true;
     this.ready = false;
     this.flushAgentBuf();
+    this.stopPump();
+    this.outFrames = [];
+    this.outPending = Buffer.alloc(0);
     if (this.keepaliveTimer) {
       clearInterval(this.keepaliveTimer);
       this.keepaliveTimer = null;
