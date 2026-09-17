@@ -607,46 +607,6 @@ function matchOption(raw: string, options: readonly string[]): string | null {
   return options.find((o) => slug(o) === want) ?? null;
 }
 
-const NOTICE_DAY_WORDS: Record<string, number> = {
-  one: 1, two: 2, three: 3, a: 1, an: 1,
-  fifteen: 15, thirty: 30, sixty: 60, ninety: 90,
-};
-
-function noticeSpokenNumber(raw: string): number | null {
-  if (NOTICE_DAY_WORDS[raw] != null) return NOTICE_DAY_WORDS[raw]!;
-  if (/^forty[\s-]*five$/.test(raw)) return 45;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-/** Map "30 days" / "one month" onto the serving-notice dropdown. */
-export function parseNoticePeriodSelect(raw: unknown, options: readonly string[]): string | null {
-  const text = collapse(raw);
-  if (!text) return null;
-  const matched = matchOption(text, options);
-  if (matched) return matched;
-  const lower = text.toLowerCase().replace(/,/g, " ");
-  if (/\bother\b/.test(lower)) return options.find((o) => slug(o) === "other") ?? null;
-
-  let days: number | null = null;
-  const monthHit = lower.match(/\b(\d+(?:\.\d+)?|one|two|three|a|an)\s*months?\b/);
-  if (monthHit) {
-    const n = noticeSpokenNumber(monthHit[1]!);
-    if (n != null) days = Math.round(n * 30);
-  }
-  if (days == null) {
-    const dayHit = lower.match(/\b(\d+(?:\.\d+)?|fifteen|thirty|forty[\s-]*five|sixty|ninety)\s*(?:days?)?\b/);
-    if (dayHit) days = noticeSpokenNumber(dayHit[1]!.replace(/\s+/g, " "));
-  }
-  if (days == null) return null;
-  if (days <= 15) return matchOption("15 Days", options);
-  if (days <= 30) return matchOption("30 Days", options);
-  if (days <= 45) return matchOption("45 Days", options);
-  if (days <= 60) return matchOption("60 Days", options);
-  if (days <= 90) return matchOption("90 Days", options);
-  return matchOption("Other", options);
-}
-
 function isoDate(year: number, month: number, day: number): string | null {
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
   const d = new Date(Date.UTC(year, month - 1, day));
@@ -724,9 +684,7 @@ function normalizeFieldValue(
   }
   if (spec.type === "time") return parseTime(raw);
   if ((spec.type === "select" || spec.type === "radio") && spec.options && spec.options.length > 0) {
-    const matched = spec.id === "notice_period"
-      ? parseNoticePeriodSelect(raw, spec.options)
-      : matchOption(collapse(raw), spec.options);
+    const matched = matchOption(collapse(raw), spec.options);
     if (!matched) return { ok: false, error: `${spec.label} is not a valid option` };
     return { ok: true, value: matched };
   }

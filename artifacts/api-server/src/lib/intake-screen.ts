@@ -21,79 +21,17 @@ export const SCREEN_FLAG_KEYS = [
 
 export type ScreenFlagKey = (typeof SCREEN_FLAG_KEYS)[number];
 
-function lettersKey(value: string): string {
-  return value.toUpperCase().replace(/[^A-Z]/g, "");
-}
-
-/** Spoken / typed spellings of the city itself — all store as BANGALORE. */
-const BLR_CITY_ALIASES = [
-  "BANGALORE", "BENGALURU", "BENGALORE", "BANGALURU", "BANGLORE",
-  "BENGLORE", "BANGLURU", "BENGALOORU", "BANGALOORU", "BENGALOORE",
+const BLR_AREA = [
+  "BANGALORE", "BENGALURU", "BLR", "JAYANAGAR", "WHITEFIELD", "HSR",
+  "BELLANDUR", "KORAMANGALA", "INDIRANAGAR", "MARATHAHALLI", "HEBBAL",
+  "MANYATA", "BANASHANKARI", "ELECTRONICCITY", "ELECTRONICCITY", "SARJAPUR",
+  "MAHADEVAPURA", "YELAHANKA", "JP NAGAR", "JPNAGAR", "BTM", "MALLESHWARAM",
 ];
-
-const BLR_AREAS = [
-  "JAYANAGAR", "WHITEFIELD", "HSR", "BELLANDUR", "KORAMANGALA", "INDIRANAGAR",
-  "MARATHAHALLI", "HEBBAL", "MANYATA", "BANASHANKARI", "ELECTRONICCITY",
-  "SARJAPUR", "MAHADEVAPURA", "YELAHANKA", "JPNAGAR", "BTM", "MALLESHWARAM",
-];
-
-/** Longest-first so HSR Layout / Whitefield beat the generic city PIN. */
-const PIN_FOR_PLACE: Array<{ needle: string; pin: string }> = [
-  { needle: "ELECTRONICCITY", pin: "560100" },
-  { needle: "MAHADEVAPURA", pin: "560048" },
-  { needle: "MARATHAHALLI", pin: "560037" },
-  { needle: "BANASHANKARI", pin: "560070" },
-  { needle: "KORAMANGALA", pin: "560034" },
-  { needle: "INDIRANAGAR", pin: "560038" },
-  { needle: "MALLESHWARAM", pin: "560003" },
-  { needle: "WHITEFIELD", pin: "560066" },
-  { needle: "JAYANAGAR", pin: "560041" },
-  { needle: "BELLANDUR", pin: "560103" },
-  { needle: "YELAHANKA", pin: "560064" },
-  { needle: "SARJAPUR", pin: "560035" },
-  { needle: "JPNAGAR", pin: "560078" },
-  { needle: "MANYATA", pin: "560045" },
-  { needle: "HEBBAL", pin: "560024" },
-  { needle: "HSR", pin: "560102" },
-  { needle: "BTM", pin: "560076" },
-  { needle: "GOPALA", pin: "577201" },
-  { needle: "PURUDAL", pin: "577211" },
-  { needle: "SHIVAMOGGA", pin: "577201" },
-  { needle: "SHIMOGA", pin: "577201" },
-  ...BLR_CITY_ALIASES.map((needle) => ({ needle, pin: "560001" })),
-];
-
-export function isBangaloreCityName(value: string | null | undefined): boolean {
-  const key = lettersKey(String(value ?? ""));
-  if (!key) return false;
-  if (key === "BLR") return true;
-  return BLR_CITY_ALIASES.some((alias) => key === alias || key.startsWith(alias));
-}
 
 export function isBangalorePlace(value: string | null | undefined): boolean {
-  if (isBangaloreCityName(value)) return true;
-  const key = lettersKey(String(value ?? ""));
+  const key = String(value ?? "").toUpperCase().replace(/[^A-Z]/g, "");
   if (!key) return false;
-  return BLR_AREAS.some((area) => key.includes(lettersKey(area)));
-}
-
-/** Form spelling: Bangalore / Bengaluru / Bengalore all store as BANGALORE. */
-export function canonicalCityName(value: string): string {
-  const trimmed = value.replace(/\s+/g, " ").trim();
-  if (!trimmed) return trimmed;
-  if (isBangaloreCityName(trimmed)) return "BANGALORE";
-  return trimmed.toUpperCase();
-}
-
-/** 6-digit PIN inferred from a spoken city or Bangalore area. */
-export function pincodeFromPlace(value: string | null | undefined): string | null {
-  const key = lettersKey(String(value ?? ""));
-  if (!key) return null;
-  for (const row of PIN_FOR_PLACE) {
-    const needle = lettersKey(row.needle);
-    if (key === needle || key.includes(needle)) return row.pin;
-  }
-  return null;
+  return BLR_AREA.some((area) => key.includes(area.replace(/[^A-Z]/g, "")));
 }
 
 /** Six-digit Indian PIN from digits or spoken digits ("five six zero double zero five"). */
@@ -232,14 +170,12 @@ export function livesInBangalore(city: string | null | undefined, extra: IntakeE
 }
 
 export function parseScreenYesNo(raw: unknown): ScreenYesNo | null {
-  const text = String(raw ?? "").toLowerCase();
-  const key = text.replace(/[^a-z]/g, "");
+  const key = String(raw ?? "").toLowerCase().replace(/[^a-z]/g, "");
   if (!key) return null;
   if (/^(yes|y|true|yeah|yep|haan|ha|ok|okay|sure)$/.test(key)) return "yes";
   if (/^(no|n|false|nah|nope)$/.test(key)) return "no";
-  // Word "not", not the letters inside "notice".
-  if (/\bnot\b/.test(text) && /\bnotice\b/.test(text)) return "no";
-  if (/\bserving\b/.test(text) || /\bnotice\b/.test(text)) return "yes";
+  if (key.includes("not") && key.includes("notice")) return "no";
+  if (key.includes("serving") || key.includes("notice")) return "yes";
   if (key.includes("office") && !key.includes("home")) return "no";
   if (key.includes("wfh") || key.includes("fromhome") || key.includes("workfromhome")) return "yes";
   return null;
@@ -331,17 +267,23 @@ export function evaluateIntakeScreen(row: Row, extra: IntakeExtra): IntakeScreen
   }
 
   if (!filled(row.city)) {
-    take("city they live in", "Ask which city or area they live in now and save city. Bangalore, Bengaluru and Bengalore are the same city. If they name a Bangalore area (HSR, Whitefield), save that. Do not ask for a pincode — the system fills it from the city or area.");
+    take("city they live in", "Ask which city they live in now and save city.");
   }
 
   const pin = screenPincode(extra);
-  const inBlr = livesInBangalore(row.city, extra);
+  if (filled(row.city) && !pin) {
+    take(
+      "pincode",
+      "Ask their 6-digit pincode and save pincode. Read the digits back to confirm. Hiring zone depends on the pincode, not only the city name.",
+    );
+  }
 
-  if (filled(row.city) && !inBlr) {
+  const inBlr = livesInBangalore(row.city, extra);
+  if (filled(row.city) && pin && !inBlr) {
     if (!has(extra, "out_station_candidate")) {
       take(
         "out_station_candidate",
-        "They are not in Bangalore. Record set_disposition out_station_candidate, save out_station_candidate.candidate_location, and ask whether they will relocate to Bangalore. Send will_relocate as Yes or No. Do not ask for a pincode.",
+        "This pincode is not Bangalore. Record set_disposition out_station_candidate, save out_station_candidate.candidate_location, and ask whether they will relocate to Bangalore. Send will_relocate as Yes or No.",
       );
     } else if (!filled(ans(extra, "out_station_candidate", "will_relocate"))) {
       take(
@@ -349,11 +291,11 @@ export function evaluateIntakeScreen(row: Row, extra: IntakeExtra): IntakeScreen
         "Ask if they will relocate to Bangalore for an office-based voice process. Save out_station_candidate.will_relocate as Yes or No.",
       );
     }
-    const zone = nonHiringAreaForPincode(pin ?? pincodeFromPlace(row.city));
+    const zone = nonHiringAreaForPincode(pin);
     if (zone && !has(extra, "non_hiring_zone")) {
       take(
         "non_hiring_zone",
-        `This location is a non-hiring zone (${zone}). Record non_hiring_zone, save non_hiring_zone.select_area, then ask PG vs family and whether they will relocate.`,
+        `Pincode ${pin} is a non-hiring zone (${zone}). Record non_hiring_zone, save non_hiring_zone.candidate_pincode as ${pin} and non_hiring_zone.select_area, then ask PG vs family and whether they will relocate.`,
       );
     } else if (has(extra, "non_hiring_zone") && !filled(ans(extra, "non_hiring_zone", "will_relocate"))) {
       take(
@@ -364,9 +306,9 @@ export function evaluateIntakeScreen(row: Row, extra: IntakeExtra): IntakeScreen
   }
 
   if (!filled(row.jobCity)) {
-    if (filled(row.city) && inBlr) {
-      take("job city", "They live in Bangalore — confirm they want to work there and save jobCity as Bangalore.");
-    } else if (filled(row.city)) {
+    if (filled(row.city) && pin && inBlr) {
+      take("job city", "They are in a Bangalore pincode — confirm they want to work there and save jobCity as Bangalore.");
+    } else if (filled(row.city) && pin) {
       take("job city", "Ask which city they want to work in. Our openings are Bangalore. Save jobCity.");
     }
   } else if (!isBangalorePlace(row.jobCity) && !has(extra, "no_company") && !has(extra, "out_station_candidate")) {
@@ -404,14 +346,14 @@ export function evaluateIntakeScreen(row: Row, extra: IntakeExtra): IntakeScreen
     if (!flag(extra, "servingNotice")) {
       take(
         "servingNotice",
-        "Ask if they are currently employed and serving notice. Save servingNotice as yes or no on save_candidate_details. If yes, also save noticePeriod (15/30/45/60/90 Days) and lastWorkingDay on that same save — do not wait for a second tool.",
+        "Ask if they are currently employed and serving notice. Save servingNotice as yes or no on save_candidate_details. If yes, also set_disposition serving_notice and take notice period and last working day.",
       );
     } else if (flag(extra, "servingNotice") === "yes") {
       const missing = missingDispositionFields(extra).filter((k) => k.startsWith("serving_notice."));
       if (missing.length > 0 || !has(extra, "serving_notice")) {
         take(
           "serving_notice fields",
-          "They are serving notice. Save noticePeriod as 15 Days, 30 Days, 45 Days, 60 Days or 90 Days, and lastWorkingDay, on save_candidate_details.",
+          "They are serving notice. Record serving_notice if needed, then ask notice period and last working day. Send serving_notice.notice_period and serving_notice.last_working_day.",
         );
       }
     }

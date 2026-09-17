@@ -17,7 +17,6 @@ import type {
   IntakeShiftBase,
   IntakeWorkStatus,
 } from "@workspace/db/schema";
-import { canonicalCityName } from "./intake-screen.js";
 
 export const INTAKE_FIELD_KEYS = [
   "firstName",
@@ -213,12 +212,12 @@ function totalCompanies(raw: unknown): IntakeFieldResult {
   return ok(n);
 }
 
-/** The client's form shows cities upper-cased. Bangalore spellings share one value. */
+/** The client's form shows cities upper-cased (BENGALURU), so store them that way. */
 function cityName(raw: unknown, label: string): IntakeFieldResult {
   const text = collapse(raw);
   if (text.length > 80) return bad(`${label} is too long`);
   if (/[0-9]/.test(text)) return bad(`${label} cannot contain digits`);
-  return ok(canonicalCityName(text));
+  return ok(text.toUpperCase());
 }
 
 const ENGLISH_WORDS: Record<string, IntakeEnglishCommunication> = {

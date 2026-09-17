@@ -35,7 +35,6 @@ import {
   parsePincode,
   parseScreenYesNo,
   parseTenure,
-  pincodeFromPlace,
   type ScreenFlagKey,
 } from "./intake-screen.js";
 import { englishRatingForForm, updateEnglishRead, type EnglishTurnInput } from "./intake-english.js";
@@ -286,8 +285,6 @@ export async function applyIntakeWrite(
   let tenureTouched = false;
   let tenureValue: string | null = null;
   let tenureError: string | null = null;
-  let noticePeriodRaw: unknown = undefined;
-  let lastWorkingDayRaw: unknown = undefined;
   const restExtra: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(extraInput)) {
     if (key === "pincode" || key === "pinCode" || key === "pin") {
@@ -319,14 +316,6 @@ export async function applyIntakeWrite(
       }
       continue;
     }
-    if (key === "noticePeriod" || key === "notice_period" || key === "serving_notice.notice_period") {
-      noticePeriodRaw = raw;
-      continue;
-    }
-    if (key === "lastWorkingDay" || key === "last_working_day" || key === "serving_notice.last_working_day") {
-      lastWorkingDayRaw = raw;
-      continue;
-    }
     if ((SCREEN_FLAG_KEYS as readonly string[]).includes(key)) {
       const parsed = parseScreenYesNo(raw);
       if (parsed) screenPatch[key as ScreenFlagKey] = parsed;
@@ -341,16 +330,10 @@ export async function applyIntakeWrite(
 
   extraResult.extra.screen = mergeScreenFlags(extraResult.extra.screen, screenPatch);
   const fromDispositionPin = parsePincode(extraResult.extra.answers["non_hiring_zone"]?.["candidate_pincode"]);
-  const cityForPin = String(values.city ?? existing.city ?? "");
-  let pin = pincodeValue ?? fromDispositionPin ?? parsePincode(extraResult.extra.screen?.pincode);
-  if (isBangalorePlace(cityForPin) && pin && !isBangalorePincode(pin)) {
-    pin = pincodeFromPlace(cityForPin);
-  } else if (!pin) {
-    pin = pincodeFromPlace(cityForPin);
-  }
+  const pin = pincodeValue ?? fromDispositionPin ?? parsePincode(extraResult.extra.screen?.pincode);
   if (pin) {
     extraResult.extra.screen = mergeScreenFlags(extraResult.extra.screen, { pincode: pin });
-    extraResult.written.push("pincode");
+    if (pincodeValue) extraResult.written.push("pincode");
   }
   if (pincodeError) extraResult.errors.push({ field: "pincode", message: pincodeError });
   if (lastCompanyTouched && !lastCompanyError) {
@@ -414,26 +397,9 @@ export async function applyIntakeWrite(
     }
   }
 
-  if (noticePeriodRaw !== undefined || lastWorkingDayRaw !== undefined) {
-    openDisposition("serving_notice");
-    if (!screenPatch.servingNotice && extraResult.extra.screen?.servingNotice !== "no") {
-      extraResult.extra.screen = mergeScreenFlags(extraResult.extra.screen, { servingNotice: "yes" });
-      extraResult.written.push("servingNotice");
-    }
-    const noticePatch: Record<string, unknown> = { disposition: "serving_notice" };
-    if (noticePeriodRaw !== undefined) noticePatch["notice_period"] = noticePeriodRaw;
-    if (lastWorkingDayRaw !== undefined) noticePatch["last_working_day"] = lastWorkingDayRaw;
-    const noticeResult = applyDispositionPatch(extraResult.extra, noticePatch);
-    extraResult.extra = noticeResult.extra;
-    extraResult.written.push(...noticeResult.written);
-    extraResult.errors.push(...noticeResult.errors);
-  }
-
   if (pin && !isBangalorePincode(pin)) {
     openDisposition("out_station_candidate");
     if (nonHiringAreaForPincode(pin)) openDisposition("non_hiring_zone");
-  } else if (!pin && mergedRow.city && !isBangalorePlace(mergedRow.city)) {
-    openDisposition("out_station_candidate");
   }
   if (mergedRow.jobCity && !isBangalorePlace(mergedRow.jobCity) && !relocateYes) {
     openDisposition("no_company");

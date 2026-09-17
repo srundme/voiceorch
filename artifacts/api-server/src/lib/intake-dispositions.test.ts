@@ -83,15 +83,6 @@ describe("applyDispositionPatch", () => {
     expect(both.written).toContain("serving_notice.notice_period");
   });
 
-  it("maps spoken notice periods onto the dropdown", () => {
-    const days = applyDispositionPatch(empty(), { disposition: "serving_notice", notice_period: "30 days" });
-    expect(days.extra.answers["serving_notice"]?.notice_period).toBe("30 Days");
-    const month = applyDispositionPatch(empty(), { disposition: "serving_notice", notice_period: "one month" });
-    expect(month.extra.answers["serving_notice"]?.notice_period).toBe("30 Days");
-    const two = applyDispositionPatch(empty(), { disposition: "serving_notice", notice_period: "2 months" });
-    expect(two.extra.answers["serving_notice"]?.notice_period).toBe("60 Days");
-  });
-
   it("keeps same-named answers apart across outcomes", () => {
     let extra = applyDispositionPatch(empty(), {
       disposition: "not_interested",

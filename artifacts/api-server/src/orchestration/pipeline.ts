@@ -121,9 +121,7 @@ import {
   executeIntakeWrite,
   type IntakeToolContext,
 } from "./intake-tools.js";
-import { extractIntakePatchFromTurn } from "../lib/intake-extract.js";
-import { evaluateIntakeScreen } from "../lib/intake-screen.js";
-import { ensureIntakeForCall, intakeExtraOf, recordIntakeEnglishTurn } from "../lib/intake-service.js";
+import { recordIntakeEnglishTurn } from "../lib/intake-service.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
@@ -7391,41 +7389,56 @@ export class OrchestrationPipeline implements VoiceSession {
   // ── Tool execution ───────────────────────────────────────────────────────────
 
   /**
-   * Fill the intake form from this caller turn in code. A second persist LLM
-   * was talking-and-saving at once: TTS waited, the line went dead, and the
-   * caller had to nudge. The spoken model only talks; save_candidate_details
-   * stays off its tool list.
+   * Call 25223: saving the form used a silent tool-only LLM turn, then a second
+   * LLM to speak. Persist beside the spoken LLM (isolated abort) so TTS is not
+   * waiting on the write, and the next turn is not held in silence after a
+   * short reply while the form LLM finishes.
    */
   private async persistIntakeFromTurn(transcript: string): Promise<void> {
-    if (this.closed || !this.isIntakeAgent) return;
+    if (this.closed) return;
+    const persistTools = this.buildVoiceToolDefs().filter((t) => isBackgroundIntakeTool(t.name));
+    if (persistTools.length === 0) return;
     const text = transcript.trim();
     if (!text) return;
 
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const persistPrompt = [
+      this.agent.systemPrompt,
+      "",
+      "[BACKGROUND SAVE]",
+      `The candidate just said: "${text.slice(0, 500)}"`,
+      "Call save_candidate_details and/or set_disposition with only the fields they just gave.",
+      "If they named a workplace or how long they have worked, save lastCompany and tenure.",
+      "Do not speak. Do not call finish_intake or end_call.",
+    ].join("\n");
+
     try {
-      const ctx = this.intakeToolContext();
-      const form = await ensureIntakeForCall({
-        callId: ctx.callId,
-        agentId: ctx.agentId,
-        callerPhone: ctx.callerPhone,
-      });
-      if (!form || this.closed) return;
-      const lastAgentText =
-        this.conversationHistory.findLast((t) => t.role === "assistant")?.content
-        ?? this.lastAssistantSpokenRaw
-        ?? "";
-      const patch = extractIntakePatchFromTurn({
-        transcript: text,
-        waitingOn: evaluateIntakeScreen(form, intakeExtraOf(form)).waitingOn,
-        lastAgentText,
-      });
-      if (Object.keys(patch).length === 0) return;
-      const result = await executeIntakeWrite(ctx, patch);
-      if (this.closed || !result || /^Nothing to save/i.test(result)) return;
-      this.conversationHistory.appendUser(`[Form]: ${result}`);
-      this.config.onConversationUpdate?.(this.conversationHistory.messages);
+      await this.llm.chat(
+        this.conversationHistory.sanitizeToolMessages(),
+        persistPrompt,
+        () => {},
+        () => {},
+        {
+          tools: persistTools,
+          isolated: true,
+          onToolCall: (name, args) => {
+            if (isBackgroundIntakeTool(name)) calls.push({ name, args });
+          },
+        },
+      );
     } catch (err) {
-      logger.warn({ callId: this.config.callId, err }, "Intake persist failed");
+      logger.warn({ callId: this.config.callId, err }, "Background intake persist LLM failed");
+      return;
     }
+    if (this.closed || calls.length === 0) return;
+
+    for (const call of calls) {
+      const result = await this.handleToolCall(call.name, call.args);
+      if (result) {
+        this.conversationHistory.appendUser(`[Background save for ${call.name}]: ${result}`);
+      }
+    }
+    this.config.onConversationUpdate?.(this.conversationHistory.messages);
   }
 
   /**
@@ -8450,9 +8463,12 @@ export class OrchestrationPipeline implements VoiceSession {
 
     // ── Build tool definitions from agent config ──
     const toolDefs = this.buildVoiceToolDefs();
-    // Speak only. Form save is a code extract + DB write, not a second LLM.
+    // Speak without waiting on form writes (call 25223). Save runs beside speech.
     const speakToolDefs = withoutBackgroundIntakeTools(toolDefs);
-    await this.persistIntakeFromTurn(transcript);
+    const persistDuringSpeech = this.persistIntakeFromTurn(transcript);
+    persistDuringSpeech.catch((err) => {
+      logger.warn({ callId: this.config.callId, err }, "Background intake persist failed");
+    });
 
     // Hard booking enforce: when slot + confirmed email + name are ready, book
     // in code (do not rely on the LLM remembering tool_choice).
@@ -10267,10 +10283,14 @@ export class OrchestrationPipeline implements VoiceSession {
       );
     }
 
-    // Speak LLM never silent-saves; leftover save tools must not skip TTS.
+    // Form writes are persisted in the background; do not skip TTS for them.
     if (triggeredToolName && isBackgroundIntakeTool(triggeredToolName)) {
       triggeredToolName = null;
       triggeredToolArgs = {};
+    }
+
+    if (triggeredToolName === "finish_intake" || triggeredToolName === "end_call") {
+      await persistDuringSpeech;
     }
 
     // ── If LLM called a tool, execute it and skip TTS ──

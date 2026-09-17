@@ -65,8 +65,7 @@ describe("normalizeIntakeField", () => {
   });
 
   it("upper-cases city names the way the client's form shows them", () => {
-    expect(normalizeIntakeField("city", "bengaluru")).toEqual({ ok: true, value: "BANGALORE" });
-    expect(normalizeIntakeField("city", "Bengalore")).toEqual({ ok: true, value: "BANGALORE" });
+    expect(normalizeIntakeField("city", "bengaluru")).toEqual({ ok: true, value: "BENGALURU" });
     expect(normalizeIntakeField("jobCity", " Hyderabad ")).toEqual({ ok: true, value: "HYDERABAD" });
   });
 
