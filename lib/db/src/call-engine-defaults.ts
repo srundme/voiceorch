@@ -5,7 +5,7 @@
 
 export const CALL_ENGINE_SAFE = {
   bargeInEnergyThreshold: 1200,
-  asrEndpointingSilenceMs: 250,
+  asrEndpointingSilenceMs: 500,
   /** Extra post-transcript wait before LLM — 0 keeps turn latency snappy. */
   incrementalDelay: 0,
   wordsForInterruption: 3,
@@ -38,7 +38,7 @@ export const TTS_STREAM_DEFAULTS = {
 
 /** Sarvam STT — trust Saaras VAD; no SnapServe artificial holds. */
 export const SARVAM_STT_LATENCY_DEFAULTS = {
-  /** Match Sarvam docs / LiveKit agents: STT owns end-of-speech. */
+  /** Match Sarvam realtime docs: STT owns end-of-speech. */
   highVadSensitivity: true,
   /** Emit immediately when Saaras ends speech / returns transcript. */
   speechEndFlushMs: 0,

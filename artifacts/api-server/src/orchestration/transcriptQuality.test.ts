@@ -444,7 +444,6 @@ describe("isHardInterruptTranscript", () => {
     expect(isHardInterruptTranscript("2 pm")).toBe(true);
     expect(isHardInterruptTranscript("Then you need to learn")).toBe(false);
     expect(isHardInterruptTranscript("okay madam")).toBe(false);
-    expect(isHardInterruptTranscript("wait", true)).toBe(false);
   });
 
   it("does not treat a long pitch echo as a slot answer just because it says today/two", () => {

@@ -4,6 +4,7 @@ import {
   isRiskyFillerContext,
   pickBackchannelFiller,
   rememberFillerPhrase,
+  parseBackchannelPhrases,
 } from "./backchannel.js";
 
 const ONLY_OKAY_HMM_MMM = ["Okay.", "Hmm.", "Mmm."];
@@ -80,6 +81,24 @@ describe("backchannel fillers — okay / hmm / mmm only", () => {
       callerTranscript: "Can you help?",
       rng: () => 0,
     })).not.toBe("Okay.");
+  });
+
+  it("honors a custom Okay-only pool", () => {
+    expect(getBackchannelFillers("en-IN", {
+      customFillers: ["Okay."],
+      callerTranscript: "Can you help?",
+    })).toEqual(["Okay."]);
+    expect(pickBackchannelFiller("en-IN", [], {
+      customFillers: ["Okay."],
+      callerTranscript: "How can you help me?",
+    })).toBe("Okay.");
+  });
+
+  it("parses the backchannel_phrases column", () => {
+    expect(parseBackchannelPhrases("Okay.")).toEqual(["Okay."]);
+    expect(parseBackchannelPhrases("Okay., Hmm.")).toEqual(["Okay.", "Hmm."]);
+    expect(parseBackchannelPhrases("  ")).toBeNull();
+    expect(parseBackchannelPhrases(null)).toBeNull();
   });
 
   it("rememberFillerPhrase keeps a ring of 3", () => {

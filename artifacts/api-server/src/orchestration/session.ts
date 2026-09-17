@@ -14,6 +14,7 @@ import { decryptKey } from "../lib/crypto.js";
 import { eq, and, sql, inArray, or, gt, ne, lte, isNull, desc } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
 import { optionalMs, optionalUnitInterval } from "./stt-tuning.js";
+import { parseBackchannelPhrases } from "./backchannel.js";
 import { clampSemanticTurnStopMs, resolveSemanticTurnEnabled } from "./semantic-turn-gate.js";
 import type { VoiceSession } from "./voice-session.js";
 import { GeminiLivePipeline } from "./adapters/live/gemini-live-pipeline.js";
@@ -38,6 +39,22 @@ import {
 } from "@workspace/db/call-engine-defaults";
 import { withDbRetry } from "./db-retry.js";
 import { transcriptHasFarewellEnding } from "./callFarewell.js";
+import { applyIntakeWrite, attachIntakeCallArtifacts } from "../lib/intake-service.js";
+import {
+  INTAKE_AGENT_TYPE,
+  INTAKE_BACKCHANNEL_FILLERS,
+  INTAKE_LOCKED_AGENT_CONFIG,
+  buildIntakeSttPrompt,
+  buildIntakeSystemPrompt,
+} from "../lib/intake-agent.js";
+import {
+  buildIntakeReturnBlock,
+  findIntakeForCaller,
+  intakeCallerName,
+  nextIntakeAsk,
+  renderIntakeGreeting,
+  resolveIntakeOpenKind,
+} from "../lib/intake-call-context.js";
 import { shouldMarkCallVoicemail } from "../lib/voicemail-detect.js";
 import { looksLikeVoicemailOutcome } from "../services/sheet-auto-calls-helpers.js";
 import { capHandoffTranscript, mergeHandoffTranscript } from "./squad-transcript.js";
@@ -50,6 +67,7 @@ import { loadPcmLoop, TRACK_PARAMS } from "./ambient.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics, SessionConfig } from "./types.js";
 import { resolveSarvamEndpointingMs } from "./endpointing-settings.js";
 import { logger } from "../lib/logger.js";
+import { hangupVobizCall, vobizAuthFromProviderKeys } from "./telephony/transfer.js";
 import { MEETING_BEHAVIOR_PROMPT, parseMeetingsConfig } from "../services/meeting-runtime.js";
 import {
   saveSessionMeta,
@@ -128,7 +146,7 @@ import { lookupSheetsForSession } from "../services/sheets-writeback.js";
  * Override the default via SILENCE_TIMEOUT_DEFAULT_SECONDS.
  */
 const DEFAULT_SILENCE_TIMEOUT_SECONDS =
-  parseInt(process.env["SILENCE_TIMEOUT_DEFAULT_SECONDS"] ?? "", 10) || 15;
+  parseInt(process.env["SILENCE_TIMEOUT_DEFAULT_SECONDS"] ?? "", 10) || 30;
 
 interface MetricsAcc {
   sttTotal: number;
@@ -370,6 +388,10 @@ export async function createSession(params: {
   const agentCfg = normalizeCallEngineAgentConfig(
     (agent.agentConfig ?? {}) as Record<string, unknown>,
   ).config;
+  // Overlay after normalize so a stale intake row cannot keep Fast barge / VAD.
+  if (agent.agentType === INTAKE_AGENT_TYPE) {
+    Object.assign(agentCfg, INTAKE_LOCKED_AGENT_CONFIG);
+  }
 
   // AMD (voicemail) config — read once, used by both the voicemail-delivery config
   // and the acoustic-confirmation config below. Default action is "hangup" (never
@@ -391,6 +413,12 @@ export async function createSession(params: {
     hour: "2-digit", minute: "2-digit", timeZone: agentTimezone,
   });
   let effectiveSystemPrompt = agent.generatedPrompt ?? agent.systemPrompt;
+  if (agent.agentType === INTAKE_AGENT_TYPE) {
+    // Rebuild from the live template so a rename (Irfan vs Meera) is spoken on
+    // the next call without waiting for a save, and so existing agents pick up
+    // the returning-call / callback instructions.
+    effectiveSystemPrompt = buildIntakeSystemPrompt(agent.name);
+  }
   // Meeting bots: meeting prompt replaces the call prompt when set.
   // Date/time + memory/context blocks still append below.
   const isMeetBotSession =
@@ -572,10 +600,17 @@ export async function createSession(params: {
     language: effectiveAgentLang,
     languageAutoDetect: isMultilingual,
     autoSwitchToEnglish: agentCfg["autoSwitchToEnglish"] === true,
-    backchannelingEnabled: agent.backchannelingEnabled !== false,
-    backchannelingFrequency: agent.backchannelingFrequency ?? null,
+    backchannelingEnabled: agent.agentType === INTAKE_AGENT_TYPE
+      || agent.backchannelingEnabled !== false,
+    backchannelingFrequency: agent.agentType === INTAKE_AGENT_TYPE
+      ? 1
+      : (agent.backchannelingFrequency ?? null),
+    backchannelFillers: agent.agentType === INTAKE_AGENT_TYPE
+      ? [...INTAKE_BACKCHANNEL_FILLERS]
+      : parseBackchannelPhrases(agent.backchannelPhrases),
     webhookUrl: agent.webhookUrl ?? null,
-    noiseCancellationEnabled: agent.noiseCancellationEnabled !== false,
+    noiseCancellationEnabled: agent.agentType === INTAKE_AGENT_TYPE
+      || agent.noiseCancellationEnabled === true,
     forceSoftwareNoiseGate: agentCfg[FORCE_SOFTWARE_NOISE_GATE_KEY] === true,
     ambientNoiseEnabled: (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false,
     ambientNoiseTrack: (agentCfg["ambientNoiseTrack"] as string | undefined) ?? null,
@@ -628,7 +663,7 @@ export async function createSession(params: {
     // P1-C: Webhook HMAC secret
     webhookSecret: (agentCfg["webhookSecret"] as string | undefined) ?? null,
     // P1-D: VAD / Barge-in tuning (defaults match the hardcoded pipeline constants)
-    vadSilenceMs:           (agentCfg["vadSilenceMs"]           as number  | undefined) ?? 350,
+    vadSilenceMs:           (agentCfg["vadSilenceMs"]           as number  | undefined) ?? 0,
     bargeInEnabled:         (agentCfg["bargeInEnabled"]         as boolean | undefined) ?? true,
     // Mic Sensitivity is not in Builder — all calls use Low. Legacy saved
     // bargeInEnergyThreshold=1200 (Normal form default) is rewritten to Low's
@@ -637,7 +672,7 @@ export async function createSession(params: {
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,
     // Empirical PSTN echo window (VoBiz/Twilio), not a carrier spec. See
     // pipeline.ts BARGE_IN_ECHO_GRACE_MS. Stop Speaking Plan may override.
-    bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 600,
+    bargeInEchoGraceMs:     0,
     micSensitivity:         resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined),
     // P1-E: Agent timezone
     timezone: agentTimezone,
@@ -653,14 +688,11 @@ export async function createSession(params: {
     // Voice Memory — default OFF (opt-in). Remembers voiceprints + mid-call handoff.
     voiceMemoryEnabled:            (agentCfg["voiceMemoryEnabled"]            as boolean | undefined) ?? false,
     // P1-G: Engine — interruption & pacing
-    // PSTN default 2 while TTS plays; ambiguous partials raise to 3 in
-    // InterruptionManager. Bare VAD never cuts. Stop/wait still bypass.
-    wordsForInterruption: (() => {
-      const v = agentCfg["wordsForInterruption"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 3;
-      const n = Math.max(0, Math.round(v));
-      return n === 2 ? 3 : n;
-    })(),
+    // Barge only when the STT final has this many words (Bolna number_of_words).
+    wordsForInterruption: (typeof agentCfg["wordsForInterruption"] === "number"
+      && agentCfg["wordsForInterruption"] > 0)
+      ? agentCfg["wordsForInterruption"]
+      : 3,
     // Post-utterance WAIT before TTS. Always 0 — saved 350/500/900 values
     // added ~1s of dead air every turn (call 20737).
     incrementalDelay: 0,
@@ -684,7 +716,7 @@ export async function createSession(params: {
     stagedPromptStages: (agent.stagedPromptStages as Array<{ name: string; content: string }> | null) ?? [],
     stagedPromptCoreIdentity: agent.stagedPromptCoreIdentity ?? null,
     // Latency tuning
-    asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 250,
+    asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 500,
     llmMaxTokens: (agentCfg["llmMaxTokens"] as number | null | undefined) ?? null,
     ttsMinSentenceChars: resolveTtsMinSentenceChars(
       agentCfg["ttsMinSentenceChars"] as number | undefined,
@@ -712,9 +744,13 @@ export async function createSession(params: {
         )
       : ((agentCfg["sarvamSttMode"] as string | undefined) ?? null),
     sarvamSttStreamType: resolveRealtimeStreamType(agentCfg["sarvamSttStreamType"]),
-    sarvamSttPrompt: typeof agentCfg["sarvamSttPrompt"] === "string"
-      ? (agentCfg["sarvamSttPrompt"] as string)
-      : null,
+    sarvamSttPrompt: agent.agentType === INTAKE_AGENT_TYPE
+      ? (typeof agentCfg["sarvamSttPrompt"] === "string" && (agentCfg["sarvamSttPrompt"] as string).trim()
+        ? (agentCfg["sarvamSttPrompt"] as string)
+        : buildIntakeSttPrompt())
+      : (typeof agentCfg["sarvamSttPrompt"] === "string"
+        ? (agentCfg["sarvamSttPrompt"] as string)
+        : null),
     sarvamHighVadSensitivity: resolveSarvamHighVadSensitivity(agentCfg["sarvamHighVadSensitivity"]),
     sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs(agentCfg["sarvamSpeechEndFlushMs"] as number | undefined),
     sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs(agentCfg["sarvamIncompleteHoldMs"] as number | undefined),
@@ -723,9 +759,7 @@ export async function createSession(params: {
     sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
     sarvamEndOfSpeechSilenceMs: resolveSarvamEndpointingMs(agentCfg),
     sarvamVadThreshold: optionalUnitInterval(agentCfg["sarvamVadThreshold"]),
-    semanticTurnDetection: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
-      ? false
-      : resolveSemanticTurnEnabled(agentCfg["semanticTurnDetection"]),
+    semanticTurnDetection: false,
     semanticTurnStopMs: clampSemanticTurnStopMs(agentCfg["semanticTurnStopMs"]),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
     voiceStack: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined),
@@ -869,6 +903,7 @@ export async function createSession(params: {
     providerRowsResult,
     upcomingBookingsResult,
     inboundSheetLookupResult,
+    priorIntakeResult,
   ] = await Promise.all([
     // 1. Caller memory (3-layer: profile + facts + archive)
     callerPhone
@@ -969,6 +1004,14 @@ export async function createSession(params: {
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
         ])
       : Promise.resolve(null),
+
+    // 7. Prior candidate intake for this number — returning-call opener + form resume
+    agent.agentType === INTAKE_AGENT_TYPE && callerPhone
+      ? findIntakeForCaller({ agentId: params.agentId, phone: callerPhone }).catch((err) => {
+          logger.warn({ agentId: params.agentId, err }, "intake: prior-form lookup failed");
+          return null;
+        })
+      : Promise.resolve(null),
   ]);
 
   // Apply caller memory to system prompt
@@ -1006,7 +1049,10 @@ export async function createSession(params: {
       }
     }
 
-    if (callerProfileSnapshot || callerCtxResult.facts.length > 0 || callerCtxResult.recentCalls.length > 0) {
+    if (
+      agent.agentType !== INTAKE_AGENT_TYPE
+      && (callerProfileSnapshot || callerCtxResult.facts.length > 0 || callerCtxResult.recentCalls.length > 0)
+    ) {
       agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtxResult, {
         suppressGenderFact: !agentConfig.genderDetectionEnabled,
       });
@@ -1304,6 +1350,43 @@ export async function createSession(params: {
   // gender detection in pipeline.greet().
   if (agentConfig.greetingMessage) {
     agentConfig.greetingMessage = resolvePromptVariables(agentConfig.greetingMessage, dynVars);
+  }
+
+  if (agent.agentType === INTAKE_AGENT_TYPE) {
+    const prior = priorIntakeResult;
+    const kind = resolveIntakeOpenKind({
+      hasPriorIntake: Boolean(prior),
+      sourceCallbackReason: params.sourceCallbackReason,
+      isResumeDroppedCall: resumeDroppedCall || params.sourceCallbackReason === "network_drop",
+    });
+    const callerName = prior
+      ? intakeCallerName(prior)
+      : (callerProfileSnapshot?.name ?? dynVars["caller_name"] ?? dynVars["name"] ?? null);
+    agentConfig.greetingMessage = renderIntakeGreeting({
+      kind,
+      agentName: agent.name,
+      callerName,
+      nextAsk: prior ? nextIntakeAsk(prior) : null,
+    });
+    if (prior) {
+      agentConfig.systemPrompt = `${agentConfig.systemPrompt}\n\n${buildIntakeReturnBlock(prior)}`;
+      if (!prior.phone && callerPhone) {
+        void applyIntakeWrite(prior.publicToken, { phone: callerPhone }, "agent").catch((err) => {
+          logger.warn({ err, token: prior.publicToken }, "intake: could not stamp caller ID onto form");
+        });
+      }
+    }
+    agentConfig.systemPrompt = `${agentConfig.systemPrompt}\n\nThe candidate's mobile is already on the form from this call's caller ID. Never ask for their phone number.`;
+    logger.info(
+      {
+        agentId: params.agentId,
+        kind,
+        callerName,
+        priorToken: prior?.publicToken ?? null,
+        spokenName: agent.name,
+      },
+      "intake: opening line chosen for this call",
+    );
   }
 
   // Apply knowledge base (appended AFTER the system prompt so agent-specific
@@ -1722,7 +1805,8 @@ export async function createSession(params: {
       telephonyProvider: params.telephonyProvider,
       setupElapsedMs: Date.now() - createSessionStartMs,
       deployedCommit: process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT_SHA ?? null,
-      backchannelingEnabled: agent.backchannelingEnabled !== false,
+      backchannelingEnabled: agent.agentType === INTAKE_AGENT_TYPE
+        || agent.backchannelingEnabled !== false,
     },
   });
 
@@ -2011,8 +2095,7 @@ export async function createSession(params: {
           campaignLeadId: params.campaignLeadId ?? null,
           onAudioOut: ownedAudioOut,
           onCallEnd: () => {
-            naturalEndTriggered = true;
-            params.onCallEnd();
+            triggerNaturalEnd();
           },
           onBargeIn: params.onBargeIn,
           onTranscript: params.onTranscript,
@@ -2297,6 +2380,26 @@ export async function createSession(params: {
     }
   };
 
+  const hangupCarrierIfAgentEnded = (): void => {
+    if (wasTransferred) return;
+    if (params.telephonyProvider !== "vobiz") return;
+    const callUuid = params.externalCallId?.trim();
+    if (!callUuid) return;
+    const creds = vobizAuthFromProviderKeys(providerKeys);
+    if (!creds) {
+      logger.warn({ callId: callRecord.id, callUuid }, "Vobiz hangup skipped — missing credentials");
+      return;
+    }
+    void hangupVobizCall({ ...creds, callUuid }).catch((err) => {
+      logger.warn({ err, callId: callRecord.id, callUuid }, "Vobiz hangup after agent end_call failed");
+    });
+  };
+  const triggerNaturalEnd = (): void => {
+    naturalEndTriggered = true;
+    hangupCarrierIfAgentEnded();
+    params.onCallEnd();
+  };
+
   const pipeline: VoiceSession = agentConfig.voiceStack === "gemini_live"
     ? new GeminiLivePipeline({
         callId: callRecord.id,
@@ -2324,8 +2427,7 @@ export async function createSession(params: {
           params.onTranscript?.(speaker, text);
         },
         onCallEnd: () => {
-          naturalEndTriggered = true;
-          params.onCallEnd();
+          triggerNaturalEnd();
         },
         onCallTransfer: onCallTransferHandler,
         onBargeIn: params.onBargeIn,
@@ -2471,8 +2573,7 @@ export async function createSession(params: {
       }
     },
     onCallEnd: () => {
-      naturalEndTriggered = true;
-      params.onCallEnd();
+      triggerNaturalEnd();
     },
     onCallTransfer: onCallTransferHandler,
     onBargeIn: params.onBargeIn,
@@ -2993,6 +3094,16 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       ...transferMetaPatch,
     }).where(eq(callsTable.id, session.callId));
 
+    // Top up the candidate profile with the recording and transcript. Both only
+    // exist now, so the profile written mid-call carries nulls for them. No-op
+    // for every agent that is not running an intake form.
+    void attachIntakeCallArtifacts({
+      callId: session.callId,
+      recordingUrl,
+      transcript: transcript || null,
+      durationSeconds,
+    });
+
     // ── Mark campaign lead terminal (drains the active Connected count) ──────────
     if (session.campaignLeadId) {
       const leadId = session.campaignLeadId;
@@ -3303,7 +3414,12 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       // FAREWELL / COMPLETED GUARD: suppress auto-redial when the caller said
       // goodbye (incl. Tamil பாய்), the agent already delivered a closing line,
       // or naturalEnd/end_call fired — those are successful ends, not drops.
-      const autoRedialCfg = (ag?.agentConfig as { autoRedial?: { enabled?: boolean; delayMinutes?: number; maxAttempts?: number } } | null)?.autoRedial;
+      const storedRedial = (ag?.agentConfig as { autoRedial?: { enabled?: boolean; delayMinutes?: number; maxAttempts?: number } } | null)?.autoRedial;
+      const autoRedialCfg = storedRedial?.enabled
+        ? storedRedial
+        : ag?.agentType === INTAKE_AGENT_TYPE
+          ? { enabled: true, maxAttempts: 3, delayMinutes: 2 }
+          : storedRedial;
       const wasUnexpectedDrop = !session.naturalEndTriggered && !session.wasTransferred && !conversationCompleted;
       const isRealPhoneCall = session.callerPhone && !session.callerPhone.startsWith("webcall:");
       const isNetworkDropRetry = session.sourceCallbackReason === "network_drop";

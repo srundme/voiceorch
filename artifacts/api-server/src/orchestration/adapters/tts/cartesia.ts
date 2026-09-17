@@ -1,38 +1,43 @@
+/**
+ * Cartesia Sonic TTS.
+ *
+ * Built against the current WebSocket contract (Cartesia-Version 2026-03-01):
+ *   https://docs.cartesia.ai/api-reference/tts/websocket.md
+ *   https://docs.cartesia.ai/use-the-api/tts-websocket/context-flushing-and-flush-i-ds.md
+ *   https://docs.cartesia.ai/build-with-cartesia/capability-guides/stream-inputs-using-continuations.md
+ *
+ * Model of operation: one WebSocket per call, one context per agent turn.
+ * Text is written to the context as it arrives with `continue: true`. Complete
+ * sentences (terminal punctuation) are left for Sonic to generate as one
+ * continuation — flushing each sentence starts a *new* generation on the same
+ * context, and those streams overlap in the PCM sink (call 25226: Cartesia
+ * greeting heard on top of itself). Incomplete fragments are flushed so they
+ * are not held for `max_buffer_delay_ms`, and the next write waits for
+ * `flush_done` so the following generation cannot start in parallel.
+ * `max_buffer_delay_ms` itself is left at the default — forcing it to 0
+ * makes Sonic speak each word as its own clip (choppy, call 25061).
+ *
+ * The turn is closed by one `continue: false` write. Cartesia rejects a close
+ * whose transcript is empty ("No valid transcripts passed", calls 25048/25049)
+ * and then never emits `done`, so exactly one piece of text is held back to
+ * carry that close. Holding text back is only safe because `closeContext` is the
+ * single place that can flush it and it has no early exits — the previous
+ * implementation held the same piece but had six return paths that dropped or
+ * re-routed it onto a throwaway context, which is why turns lost their last
+ * sentence.
+ */
 import crypto from "node:crypto";
 import { logger } from "../../../lib/logger.js";
 import type { TTSAdapter } from "../../types.js";
 
-/**
- * Cartesia — Sonic TTS
- *
- * Primary path: WebSocket (`/tts/websocket`)
- *   - One persistent WS connection per call (lazy-opened on first transcript).
- *   - Stream LLM tokens with continue:true (managed buffering, delay 3000).
- *     Do not wait client-side for `.!?` — that is the docs "middle ground"
- *     and adds latency on top of Sonic's ~75–90ms TTFB.
- *     Transcripts join verbatim (call 24404: inserting a space made Sonic spell).
- *   - continue:false (empty transcript) when the LLM turn ends.
- *   - pcm_s16le @ the leg rate: 8000 for VoBiz, 16000 for HD webcall.
- *
- * Fallback: REST (`/tts/bytes`) — WS-down, or leftover text if Cartesia
- *   closed the context (400).
- *
- * Docs:
- *   https://docs.cartesia.ai/use-the-api/tts-websocket/buffering
- *   https://docs.cartesia.ai/build-with-cartesia/capability-guides/stream-inputs-using-continuations
- *   https://docs.cartesia.ai/api-reference/tts/websocket
- */
-
-const MAX_RETRIES = 2;
-const RETRY_BASE_MS = 300;
 const CARTESIA_VERSION = "2026-03-01";
 const WS_CONNECT_TIMEOUT_MS = 6_000;
-/** Cartesia managed-buffering default (docs). Do not send 0 — that starts a clip per token. */
-const CARTESIA_MAX_BUFFER_DELAY_MS = 3000;
+const MAX_RETRIES = 2;
+const RETRY_BASE_MS = 300;
+/** Contexts whose word timings stay queryable after the turn ends. */
+const WORD_TIMING_CONTEXTS = 32;
 
-/** Cartesia current TTS model (https://docs.cartesia.ai/build-with-cartesia/tts-models/latest). */
 export const CARTESIA_DEFAULT_MODEL = "sonic-3.6";
-/** Production Sonic 3.6 id. `sonic-preview` stays a separate beta snapshot. */
 export const CARTESIA_SONIC_36_MODEL = "sonic-3.6";
 
 const CARTESIA_MODEL_ALIASES: Record<string, string> = {
@@ -53,21 +58,32 @@ const CARTESIA_VALID_MODELS = new Set([
   "sonic-english", "sonic-multilingual",
 ]);
 
-/** Map agent TTS model ids to a Cartesia `model_id`. 3.5 stays 3.5; 3.6 stays 3.6. */
+/**
+ * sonic-2 / turbo (and aliases) sunset 20 Oct 2026. They also do not list
+ * `en-IN` — REST `/tts/bytes` may still speak a filler, but the WebSocket
+ * continuation used for Talk errors, so the caller only hears hmm/okay.
+ * https://docs.cartesia.ai/build-with-cartesia/tts-models/older-models.md
+ */
+const CARTESIA_RETIRED_PREFIXES = ["sonic-2", "sonic-turbo", "sonic-english", "sonic-multilingual"];
+
+function isRetiredCartesiaModel(id: string): boolean {
+  const key = id.toLowerCase();
+  return CARTESIA_RETIRED_PREFIXES.some((prefix) => key === prefix || key.startsWith(`${prefix}-`));
+}
+
 export function resolveCartesiaModelId(model: string | null | undefined): string {
   const raw = (model ?? "").trim();
   if (!raw) return CARTESIA_DEFAULT_MODEL;
   const key = raw.toLowerCase().replace(/\s+/g, "-");
   const id = CARTESIA_MODEL_ALIASES[key] ?? raw;
+  if (isRetiredCartesiaModel(id)) return CARTESIA_DEFAULT_MODEL;
   return CARTESIA_VALID_MODELS.has(id) ? id : CARTESIA_DEFAULT_MODEL;
 }
 
-/** Indic languages Cartesia documents as `xx-IN` locales. */
 const CARTESIA_IN_LOCALES = new Set([
   "bn", "gu", "hi", "kn", "ml", "mr", "or", "pa", "ta", "te", "ur",
 ]);
 
-/** `en-IN` → language `en` + locale `en-IN` (Sonic 3.6 date/number reading). */
 export function parseCartesiaLang(tag: string | null | undefined): {
   language: string | null;
   locale: string | null;
@@ -78,62 +94,71 @@ export function parseCartesiaLang(tag: string | null | undefined): {
   const language = (lang ?? "").toLowerCase() || null;
   if (!language) return { language: null, locale: null };
   if (region) return { language, locale: `${language}-${region.toUpperCase()}` };
-  if (CARTESIA_IN_LOCALES.has(language)) {
-    return { language, locale: `${language}-IN` };
-  }
+  if (CARTESIA_IN_LOCALES.has(language)) return { language, locale: `${language}-IN` };
   return { language, locale: null };
 }
 
-/** Tag to send on `language` (never also `locale` — both 400s). Prefer `ta-IN` over `ta`. */
+/** `language` and `locale` accept the same values; sending both is a 400. */
 export function cartesiaWireLanguage(language: string | null, locale: string | null): string | null {
   return locale ?? language;
 }
 
-/** India endpoint by default for lowest latency; override via CARTESIA_BASE_URL env var. */
-const CARTESIA_BASE_URL = (process.env["CARTESIA_BASE_URL"] ?? "https://api-india.cartesia.ai").replace(/\/+$/, "");
-
-/** wss:// equivalent of CARTESIA_BASE_URL for the WebSocket endpoint. */
-const CARTESIA_WS_BASE = CARTESIA_BASE_URL.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
-
-/**
- * Detects Cartesia's "invalid voice controls" family of errors (400s caused by
- * an `__experimental_controls.emotion` value the API no longer accepts, e.g.
- * "invalid emotion level: medium" after Cartesia deprecated/renamed levels).
- * Used to trigger a one-time same-sentence retry with emotion controls
- * stripped, instead of letting the error propagate and end the call.
- */
-function isInvalidVoiceControlsError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return /invalid voice controls|invalid emotion|generation_config/i.test(msg);
+export function appendCartesiaRemainder(prev: string, next: string): string {
+  return prev + next;
 }
 
-/**
- * Cartesia closes a continue:true context after the first clip when
- * max_buffer_delay_ms is 0 (call 19809). That is a per-context 400, not a
- * dead WebSocket — leftover sentences must REST, not kill the session.
- */
+/** Continuations replace nothing — each write is appended by the model. */
+export function joinContinuationTranscript(_previous: string, next: string): string {
+  return next;
+}
+
 export function isCartesiaContextClosedError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return /context has closed|no longer accepting new inputs|use a new context id/i.test(msg);
 }
 
-/** Quiet after the last WS chunk ≈ first clip finished (fallback if no `done`). */
-const FIRST_CLIP_QUIET_MS = 400;
+const WORD_BREAK = /[\s.,;:!?…।॥]/u;
+const SENTENCE_END = /[.?!…।॥]$/u;
 
-/** Cartesia concatenates continuation transcripts verbatim. Do not insert a
- *  space — LLM tokens already carry their own whitespace (call 24404: "So"+"rry,"
- *  became "So rry,"). Do not *drop* those spaces either (call 24489: trim made
- *  "நீங்க"+"முன்னாடி" → "நீங்கமுன்னாடி"). */
-export function joinContinuationTranscript(_previous: string, next: string): string {
-  return next;
+function isCompleteCartesiaUtterance(text: string): boolean {
+  return SENTENCE_END.test(text.trimEnd());
 }
 
-/** Remainders can be BPE tokens too; preserve their original whitespace. */
-export function appendCartesiaRemainder(prev: string, next: string): string {
-  return prev + next;
+/**
+ * Split streamed text on the last word boundary. Writes carry whole words so
+ * Sonic never receives a bare BPE fragment and spell it out (call 25026); the
+ * trailing partial word stays buffered until more text or the close arrives.
+ * Callers that already hold a complete sentence get it back unchanged.
+ */
+export function takeCartesiaWordChunks(buffered: string, incoming: string, flush: boolean): {
+  chunks: string[];
+  rest: string;
+} {
+  const buf = appendCartesiaRemainder(buffered, incoming);
+  if (!buf) return { chunks: [], rest: "" };
+  if (flush) return { chunks: [buf], rest: "" };
+  // Never cut between a base character and its combining mark (Indic scripts).
+  if (/\p{M}$/u.test(buf)) return { chunks: [], rest: buf };
+  let last = -1;
+  for (let i = 0; i < buf.length; i++) {
+    if (WORD_BREAK.test(buf[i]!)) last = i;
+  }
+  if (last >= 0) {
+    const head = buf.slice(0, last + 1);
+    if (head.trim()) return { chunks: [head], rest: buf.slice(last + 1) };
+  }
+  return { chunks: [], rest: buf };
 }
 
-/** Emotion enum accepted by generation_config.emotion (2026-03-01 spec). */
+export function isSpeakableCartesiaTranscript(text: string): boolean {
+  return text.trim().length > 0;
+}
+
+function isInvalidVoiceControlsError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /invalid voice controls|invalid emotion|generation_config/i.test(msg);
+}
+
 const CARTESIA_EMOTIONS = new Set([
   "neutral", "happy", "excited", "enthusiastic", "elated", "euphoric",
   "triumphant", "amazed", "surprised", "flirtatious", "curious", "content",
@@ -147,7 +172,6 @@ const CARTESIA_EMOTIONS = new Set([
   "skeptical", "contemplative", "determined",
 ]);
 
-/** Legacy "family:level" bases → nearest current enum value. */
 const LEGACY_EMOTION_MAP: Record<string, string> = {
   positivity: "happy",
   sadness: "sad",
@@ -156,12 +180,6 @@ const LEGACY_EMOTION_MAP: Record<string, string> = {
   surprise: "surprised",
 };
 
-/**
- * Current Cartesia API takes ONE emotion enum string; the old scheme was an
- * array of "family:level" tags (now rejected — see the strip-and-retry
- * fallback). Accept both shapes from callers: plain enum names pass through,
- * legacy pairs map to the nearest enum value, unknowns are dropped.
- */
 function normalizeEmotion(emotions?: string[]): string | undefined {
   const first = emotions?.[0]?.trim().toLowerCase();
   if (!first) return undefined;
@@ -171,18 +189,18 @@ function normalizeEmotion(emotions?: string[]): string | undefined {
   return mapped && CARTESIA_EMOTIONS.has(mapped) ? mapped : undefined;
 }
 
-async function fetchWithRetry(
-  url: string,
-  init: RequestInit,
-  retries = MAX_RETRIES,
-): Promise<Response> {
+/** Defaults to the India gateway; override for other regions. */
+const CARTESIA_BASE_URL = (process.env["CARTESIA_BASE_URL"] ?? "https://api-india.cartesia.ai").replace(/\/+$/, "");
+const CARTESIA_WS_BASE = CARTESIA_BASE_URL.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
+
+async function fetchWithRetry(url: string, init: RequestInit, retries = MAX_RETRIES): Promise<Response> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       return await fetch(url, init);
     } catch (err) {
       lastErr = err;
-      const isNetwork = err instanceof TypeError && !(err.name === "AbortError");
+      const isNetwork = err instanceof TypeError && err.name !== "AbortError";
       if (!isNetwork || attempt === retries) throw err;
       await new Promise<void>((r) => setTimeout(r, RETRY_BASE_MS * 2 ** attempt));
     }
@@ -190,21 +208,40 @@ async function fetchWithRetry(
   throw lastErr;
 }
 
-interface PendingCtx {
-  text: string;
-  onChunk: (pcm: Buffer) => void;
-  resolve: () => void;
-  reject: (err: unknown) => void;
-}
-
-/**
- * Pending entry for a sentence within a turn-level context (manual flushing).
- * Keyed by `${contextId}:${flushId}` in CartesiaTTS.flushPending.
- */
-interface FlushPendingCtx {
-  onChunk: (pcm: Buffer) => void;
-  resolve: () => void;
-  reject: (err: unknown) => void;
+/** A single agent turn's Cartesia context. */
+interface TurnCtx {
+  /** Owner's PCM sink — every write on this context drains into it. */
+  sink: ((pcm: Buffer) => void) | null;
+  /** Complete text held back to carry the `continue: false` close. */
+  held: string;
+  /** Trailing partial word, not yet a legal write. */
+  tail: string;
+  /** Text handed over after the context stopped accepting writes. */
+  spill: string;
+  /** At least one non-empty transcript reached Cartesia on this context. */
+  sentAny: boolean;
+  /** Every write's text, so a WS error can REST the whole turn if no audio arrived. */
+  full: string;
+  /** True once a PCM chunk landed in this turn's sink. */
+  gotAudio: boolean;
+  /** `continue: false` went out; we are waiting for `done`. */
+  awaitingDone: boolean;
+  /** closeContext has run (or is running) — no further writes. */
+  closed: boolean;
+  /** Cartesia closed the context, or the turn was aborted. */
+  dead: boolean;
+  /** Barge-in / abort — drop remaining text instead of speaking it. */
+  cancelled: boolean;
+  /** WS unusable; writes go out over REST instead. */
+  restFallback: boolean;
+  /** Serializes writes so text reaches Cartesia in the order it was produced. */
+  queue: Promise<void>;
+  /** Resolvers waiting for the next `flush_done` on this context. */
+  flushWaiters: Array<() => void>;
+  /** Resolved when Cartesia reports `done` for the context. */
+  settleOwner: ((err?: unknown) => void) | null;
+  /** Characters the owner should report as billed. */
+  chars: number;
 }
 
 export class CartesiaTTS implements TTSAdapter {
@@ -212,73 +249,22 @@ export class CartesiaTTS implements TTSAdapter {
   private voiceId: string;
   private modelId: string;
   private language: string | null;
-  /** Sonic 3.6 locale (`en-IN`, `en-GB`) — dates/numbers read the local way. */
   private locale: string | null;
   private speed: number | null;
-  /** Native PCM rate Cartesia should emit. 8 kHz on VoBiz; 16 kHz on HD webcall. */
   readonly pcmSampleRate: 8000 | 16000;
 
   private ws: WebSocket | null = null;
   private wsConnecting: Promise<WebSocket> | null = null;
   private wsFailedPermanently = false;
-  /** Log handshake-level WS death only once per call. */
-  private wsFallbackLogged = false;
-  /** Turns that already spoke via REST — do not also send WS continue:false (second voice). */
-  private readonly restFallbackTurns = new Set<string>();
-  private readonly pending = new Map<string, PendingCtx>();
-  /** Turn-level flush tracking: key = `${contextId}:${flushId}` */
-  private readonly flushPending = new Map<string, FlushPendingCtx>();
-  /** Client-side flush_id counter per turn context (legacy flush path; unused for continuations). */
-  private readonly turnFlushCounters = new Map<string, number>();
-  /** First sentence's chunk sink — later continuations must not open a second stream. */
-  private readonly turnChunkHandlers = new Map<string, (pcm: Buffer) => void>();
-  private readonly turnLastTranscript = new Map<string, string>();
+
+  private readonly turns = new Map<string, TurnCtx>();
+  /** One-shot (non-context) synthesis awaiting `done`. */
+  private readonly oneShots = new Map<string, {
+    onChunk: (pcm: Buffer) => void;
+    settle: (err?: unknown) => void;
+  }>();
   private readonly contextSettings = new Map<string, Record<string, unknown>>();
   private readonly wordTimings = new Map<string, Array<{ word: string; end: number }>>();
-
-  playedText(contextId: string, audioMs: number): string {
-    return (this.wordTimings.get(contextId) ?? [])
-      .filter(w => w.end * 1000 <= audioMs).map(w => w.word).join(" ").trim();
-  }
-
-  private settingsForContext(contextId: string, emotions?: string[]): Record<string, unknown> {
-    let settings = this.contextSettings.get(contextId);
-    if (!settings) {
-      settings = { model_id: this.modelId, voice: this.buildVoice(),
-        output_format: this.outputFormat(), max_buffer_delay_ms: CARTESIA_MAX_BUFFER_DELAY_MS,
-        add_timestamps: true };
-      const gc = this.buildGenerationConfig(emotions);
-      if (gc) settings.generation_config = gc;
-      this.applyLang(settings);
-      this.contextSettings.set(contextId, settings);
-      // Keep recently completed contexts until their paced audio finishes.
-      if (this.wordTimings.size >= 32) this.wordTimings.delete(this.wordTimings.keys().next().value!);
-      this.wordTimings.set(contextId, []);
-    }
-    return settings;
-  }
-  private readonly claimedTurns = new Set<string>();
-  private readonly turnSendChains = new Map<string, Promise<void>>();
-  private readonly turnOpened = new Map<string, Promise<void>>();
-  private readonly turnOpenedResolve = new Map<string, () => void>();
-  private readonly finalizedTurns = new Set<string>();
-  /** Finalization requested is not the same as continue:false sent. */
-  private readonly closingTurns = new Set<string>();
-  private readonly cancelledTurns = new Set<string>();
-  private readonly turnInputs = new Map<string, Set<Promise<void>>>();
-  /** First WS clip finished (premature `done`, context-closed 400, or quiet). */
-  private readonly firstClipDone = new Set<string>();
-  private readonly firstClipWaiters = new Map<string, Array<() => void>>();
-  private readonly firstClipQuietTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private readonly turnWsBytes = new Map<string, number>();
-  private readonly closedTurns = new Set<string>();
-  /** Join sentences claimed while delay=0 — leftover REST still in flight. */
-  private readonly leftoverPending = new Map<string, number>();
-  private readonly leftoverPendingWaiters = new Map<string, Array<() => void>>();
-  private readonly leftoverRestChains = new Map<string, Promise<void>>();
-  private readonly finalizedWaiters = new Map<string, Array<() => void>>();
-  /** After clip-1 close, concatenate leftover text and REST once (not per token). */
-  private readonly closedRemainder = new Map<string, string>();
 
   constructor(
     apiKey: string,
@@ -289,27 +275,17 @@ export class CartesiaTTS implements TTSAdapter {
     sampleRate?: number | null,
   ) {
     this.key = apiKey;
-    // Treat null, undefined, and empty string the same — fall back to Arushi.
     this.voiceId = (voice && voice.trim()) ? voice : "2ee87190-8f84-4925-97da-e52547f9462c";
-    // generation_config.speed documented range is [0.6, 1.5] — out-of-range
-    // values are rejected, so clamp instead of forwarding raw agent config.
-    this.speed = (speed != null && Number.isFinite(speed) && speed !== 1)
-      ? Math.min(1.5, Math.max(0.6, speed))
-      : null;
+    this.speed = normalizeSpeed(speed);
     this.modelId = resolveCartesiaModelId(model);
-    const parsedLang = parseCartesiaLang(language);
-    this.language = parsedLang.language;
-    this.locale = parsedLang.locale;
+    const parsed = parseCartesiaLang(language);
+    this.language = parsed.language;
+    this.locale = parsed.locale;
     this.pcmSampleRate = sampleRate === 8000 ? 8000 : 16000;
   }
 
-  /** Cartesia `model_id` actually sent (3.5 or 3.6 as selected). */
   get resolvedModelId(): string {
     return this.modelId;
-  }
-
-  private outputFormat(): { container: "raw"; encoding: "pcm_s16le"; sample_rate: 8000 | 16000 } {
-    return { container: "raw", encoding: "pcm_s16le", sample_rate: this.pcmSampleRate };
   }
 
   setLanguage(lang: string): void {
@@ -319,182 +295,40 @@ export class CartesiaTTS implements TTSAdapter {
   }
 
   setSpeed(speed: number | null): void {
-    this.speed = (speed != null && Number.isFinite(speed) && speed !== 1)
-      ? Math.min(1.5, Math.max(0.6, speed))
-      : null;
+    this.speed = normalizeSpeed(speed);
   }
 
-  /** Fire-and-forget WS pre-warm — called at session start so the greeting
-   *  doesn't pay the TCP+TLS+WS handshake cost on first synthesis. */
   warmup(): void {
-    void this.getOrOpenWs().catch(() => {
-      // Failure here is fine — synthesizeStream will retry or fall back to REST.
-    });
+    void this.getOrOpenWs().catch(() => undefined);
   }
 
-  private errMsg(err: unknown): string {
-    return err instanceof Error ? err.message : String(err);
+  /** Words whose audio has already been played, for interrupted-turn history. */
+  playedText(contextId: string, audioMs: number): string {
+    return (this.wordTimings.get(contextId) ?? [])
+      .filter((w) => w.end * 1000 <= audioMs)
+      .map((w) => w.word)
+      .join(" ")
+      .trim();
   }
 
-  private isAbortErr(err: unknown, signal?: AbortSignal): boolean {
-    if (signal?.aborted) return true;
-    if (err instanceof DOMException && err.name === "AbortError") return true;
-    return err instanceof Error && err.name === "AbortError";
+  // ── message shapes ────────────────────────────────────────────────────────
+
+  private outputFormat(): { container: "raw"; encoding: "pcm_s16le"; sample_rate: 8000 | 16000 } {
+    return { container: "raw", encoding: "pcm_s16le", sample_rate: this.pcmSampleRate };
   }
 
-  /**
-   * Handshake cannot be established — REST for the rest of this call.
-   * Do NOT use this for a single context/synthesis error: that was forcing
-   * every later sentence onto slow REST (timeouts / word-jump) and replaying
-   * the same text after WS already streamed audio (speaking twice).
-   */
-  private markWsFailed(err: unknown, where: string): void {
-    this.wsFailedPermanently = true;
-    if (!this.wsFallbackLogged) {
-      this.wsFallbackLogged = true;
-      const msg = this.errMsg(err);
-      logger.warn(
-        { evt: "cartesia_ws_fallback_rest", where, err: msg },
-        `CartesiaTTS: WebSocket handshake failed (${msg.slice(0, 160)}) — REST for the rest of this call`,
-      );
-    }
-  }
-
-  /** Finish this sentence on REST only when WS produced no PCM (no double-speak). */
-  private async restIfSilent(
-    text: string,
-    onChunk: (pcm16k: Buffer) => void,
-    onDone: (characters: number) => void,
-    signal: AbortSignal | undefined,
-    emotions: string[] | undefined,
-    wsBytes: number,
-    where: string,
-    err: unknown,
-    turnContextId?: string,
-  ): Promise<void> {
-    const msg = this.errMsg(err);
-    if (wsBytes > 0) {
-      logger.warn(
-        { evt: "cartesia_skip_rest_duplicate", where, wsBytes, err: msg },
-        `CartesiaTTS: WS already delivered audio (${wsBytes} bytes) — skipping REST replay (${msg.slice(0, 120)})`,
-      );
-      onDone(text.length);
-      return;
-    }
-    if (turnContextId) this.restFallbackTurns.add(turnContextId);
-    logger.warn(
-      { evt: "cartesia_rest_sentence", where, err: msg },
-      `CartesiaTTS: WS sentence failed with no audio (${msg.slice(0, 160)}) — REST this sentence only`,
-    );
-    try {
-      await this.synthesizeViaRest(text, onChunk, onDone, signal, emotions);
-    } catch (restErr) {
-      if (this.isAbortErr(restErr, signal)) throw restErr;
-      if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(restErr)) {
-        await this.synthesizeViaRest(text, onChunk, onDone, signal, undefined);
-        return;
-      }
-      throw restErr;
-    }
-  }
-
-  close(): void {
-    this.wsFailedPermanently = true;
-    if (this.ws) {
-      try { this.ws.close(1000, "call ended"); } catch {}
-      this.ws = null;
-    }
-    this.wsConnecting = null;
-    for (const timer of this.firstClipQuietTimers.values()) clearTimeout(timer);
-    this.firstClipQuietTimers.clear();
-    for (const resolveOpen of this.turnOpenedResolve.values()) resolveOpen();
-    for (const id of [...this.claimedTurns]) {
-      this.markFirstClipDone(id);
-      this.bumpLeftoverPending(id, -(this.leftoverPending.get(id) ?? 0));
-      const fw = this.finalizedWaiters.get(id);
-      this.finalizedWaiters.delete(id);
-      for (const w of fw ?? []) w();
-    }
-    for (const [, ctx] of this.pending) {
-      ctx.reject(new Error("CartesiaTTS: WebSocket closed (call ended)"));
-    }
-    this.pending.clear();
-    for (const [, ctx] of this.flushPending) {
-      ctx.reject(new Error("CartesiaTTS: WebSocket closed (call ended)"));
-    }
-    this.flushPending.clear();
-    this.turnFlushCounters.clear();
-    this.turnChunkHandlers.clear();
-    this.turnLastTranscript.clear();
-    this.claimedTurns.clear();
-    this.turnSendChains.clear();
-    this.turnOpened.clear();
-    this.turnOpenedResolve.clear();
-    this.finalizedTurns.clear();
-    this.closingTurns.clear();
-    this.cancelledTurns.clear();
-    this.turnInputs.clear();
-    this.restFallbackTurns.clear();
-    this.firstClipDone.clear();
-    this.firstClipWaiters.clear();
-    this.closedTurns.clear();
-    this.turnWsBytes.clear();
-    this.leftoverPending.clear();
-    this.leftoverPendingWaiters.clear();
-    this.leftoverRestChains.clear();
-    this.finalizedWaiters.clear();
-    this.closedRemainder.clear();
-  }
-
-  private buildWsUrl(): string {
-    return `${CARTESIA_WS_BASE}/tts/websocket?api_key=${encodeURIComponent(this.key)}&cartesia_version=${encodeURIComponent(CARTESIA_VERSION)}`;
-  }
-
-  /**
-   * Cartesia-Version 2026-03-01 WS requires `{ mode: "id", id }`.
-   * `{ id }` alone is rejected as "Voice ID required" (call 19760) after
-   * partial audio — that abort is the audible mid-sentence break.
-   */
   private buildVoice(): { mode: "id"; id: string } {
     return { mode: "id", id: this.voiceId };
   }
 
-  /**
-   * Current API (2026-03-01): speed/volume/emotion live in a top-level
-   * `generation_config` object — `voice.__experimental_controls` is gone from
-   * the spec (it was silently ignored/rejected). Speed is a double in
-   * [0.6, 1.5]; emotion is a SINGLE enum string, not the legacy array.
-   */
   private buildGenerationConfig(emotions?: string[]): Record<string, unknown> | undefined {
     const gc: Record<string, unknown> = {};
     if (this.speed != null) gc.speed = this.speed;
     const emotion = normalizeEmotion(emotions);
-    if (emotion) {
-      gc.emotion = emotion;
-      logger.info({ evt: "cartesia_emotion_controls", emotion }, "Injecting emotion into Cartesia generation_config");
-    }
+    if (emotion) gc.emotion = emotion;
     return Object.keys(gc).length > 0 ? gc : undefined;
   }
 
-  private buildRestBody(text: string, emotions?: string[]): string {
-    const body: Record<string, unknown> = {
-      transcript: text,
-      model_id: this.modelId,
-      voice: this.buildVoice(),
-      output_format: this.outputFormat(),
-    };
-    const gc = this.buildGenerationConfig(emotions);
-    if (gc) body.generation_config = gc;
-    this.applyLang(body);
-    return JSON.stringify(body);
-  }
-
-  /**
-   * Cartesia: `language` OR `locale`, never both (docs: TTSRequest). Sending
-   * both 400s every clip — silent call. The India endpoint still wants the
-   * `language` field; put the regional tag there (`ta-IN`, not `ta`) and pin
-   * `normalization` so mixed Tamil/English is not read as English (call 24440).
-   */
   private applyLang(msg: Record<string, unknown>): void {
     const tag = cartesiaWireLanguage(this.language, this.locale);
     if (!tag) return;
@@ -502,16 +336,51 @@ export class CartesiaTTS implements TTSAdapter {
     msg.normalization = tag;
   }
 
-  private get restHeaders() {
+  /**
+   * Per-context request fields. Cartesia requires model / voice / output_format
+   * on every generation request and that they stay identical for the life of
+   * the context, so they are resolved once and replayed.
+   */
+  settingsForContext(contextId: string, emotions?: string[]): Record<string, unknown> {
+    let settings = this.contextSettings.get(contextId);
+    if (!settings) {
+      settings = {
+        model_id: this.modelId,
+        voice: this.buildVoice(),
+        output_format: this.outputFormat(),
+        add_timestamps: true,
+      };
+      const gc = this.buildGenerationConfig(emotions);
+      if (gc) settings.generation_config = gc;
+      this.applyLang(settings);
+      this.contextSettings.set(contextId, settings);
+      if (this.wordTimings.size >= WORD_TIMING_CONTEXTS) {
+        this.wordTimings.delete(this.wordTimings.keys().next().value!);
+      }
+      this.wordTimings.set(contextId, []);
+    }
+    return settings;
+  }
+
+  /** A close must end a sentence or Sonic trails off mid-phrase. */
+  static ensureTerminalPunctuation(text: string): string {
+    const trimmed = text.trimEnd();
+    if (!trimmed) return text;
+    const last = trimmed[trimmed.length - 1]!;
+    if (".?!…।,;:".includes(last)) return text;
+    return trimmed + ".";
+  }
+
+  private get restHeaders(): Record<string, string> {
     return {
-      // Documented auth for 2026-03-01 is Authorization: Bearer; X-API-Key is
-      // the legacy header, kept during the transition for compatibility.
       "Authorization": `Bearer ${this.key}`,
       "X-API-Key": this.key,
       "Cartesia-Version": CARTESIA_VERSION,
       "Content-Type": "application/json",
     };
   }
+
+  // ── socket ────────────────────────────────────────────────────────────────
 
   private async getOrOpenWs(): Promise<WebSocket> {
     if (this.wsFailedPermanently) throw new Error("CartesiaTTS: WS permanently failed");
@@ -520,38 +389,29 @@ export class CartesiaTTS implements TTSAdapter {
 
     this.wsConnecting = new Promise<WebSocket>((resolve, reject) => {
       let settled = false;
-      const settle = (fn: () => void) => {
+      const settle = (fn: () => void): void => {
         if (!settled) { settled = true; fn(); }
       };
-
-      const ws = new WebSocket(this.buildWsUrl());
-
+      const url = `${CARTESIA_WS_BASE}/tts/websocket`
+        + `?api_key=${encodeURIComponent(this.key)}`
+        + `&cartesia_version=${encodeURIComponent(CARTESIA_VERSION)}`;
+      const ws = new WebSocket(url);
       const timer = setTimeout(() => {
         settle(() => {
           this.wsConnecting = null;
-          logger.warn(
-            { evt: "cartesia_ws_connect_timeout", timeoutMs: WS_CONNECT_TIMEOUT_MS },
-            "CartesiaTTS: WebSocket handshake exceeded connect timeout — will fall back to REST",
-          );
           reject(new Error("CartesiaTTS: WS connect timeout"));
-          try { ws.close(); } catch {}
+          try { ws.close(); } catch { /* already gone */ }
         });
       }, WS_CONNECT_TIMEOUT_MS);
 
       ws.addEventListener("open", () => {
         clearTimeout(timer);
         this.ws = ws;
-        logger.info(
-          { evt: "cartesia_ws_open" },
-          "CartesiaTTS: WebSocket connected — using streaming WS path",
-        );
         settle(() => { this.wsConnecting = null; resolve(ws); });
       });
-
       ws.addEventListener("message", (event: MessageEvent) => {
         this.handleWsMessage(String(event.data));
       });
-
       ws.addEventListener("error", () => {
         clearTimeout(timer);
         settle(() => {
@@ -559,14 +419,8 @@ export class CartesiaTTS implements TTSAdapter {
           reject(new Error("CartesiaTTS: WS connection error"));
         });
       });
-
       ws.addEventListener("close", () => {
         clearTimeout(timer);
-        // Only the *live* socket may clear singleton state. Warmup opens WS
-        // ~2–3s before greeting TTS (AMD + greeting LLM). If that idle socket
-        // closes while a newer socket is already open — or while greeting
-        // pending is registered — the old handler used to null `this.ws` and
-        // reject EVERY context (call 19742: ws_open then instant REST fallback).
         if (!settled) {
           settle(() => {
             this.wsConnecting = null;
@@ -577,643 +431,457 @@ export class CartesiaTTS implements TTSAdapter {
         if (this.ws !== ws) return;
         this.ws = null;
         this.wsConnecting = null;
-        logger.warn(
-          { evt: "cartesia_ws_closed" },
-          "CartesiaTTS: live WebSocket closed — next sentence will reconnect",
-        );
-        for (const [id, ctx] of this.pending) {
-          ctx.reject(new Error("CartesiaTTS: WS closed mid-stream"));
-          this.pending.delete(id);
-        }
-        for (const [, ctx] of this.flushPending) {
-          ctx.reject(new Error("CartesiaTTS: WS closed mid-stream"));
-        }
-        this.flushPending.clear();
+        this.failAllInFlight(new Error("CartesiaTTS: WS closed mid-stream"));
       });
     });
-
     return this.wsConnecting;
   }
 
-  private formatWsError(msg: Record<string, unknown>): string {
-    const bits = [
-      msg["error_code"] ?? msg["errorCode"],
-      msg["title"],
-      msg["message"],
-      msg["error"],
-      msg["detail"],
-      msg["status_code"] != null
-        ? `status=${String(msg["status_code"])}`
-        : (msg["status"] != null ? `status=${String(msg["status"])}` : null),
-    ].filter((v) => v != null && String(v).trim() !== "" && String(v) !== "undefined");
-    return bits.length > 0 ? bits.map(String).join(" — ") : "unknown";
+  private failAllInFlight(err: Error): void {
+    for (const [id, shot] of this.oneShots) {
+      this.oneShots.delete(id);
+      shot.settle(err);
+    }
+    for (const ctx of this.turns.values()) {
+      ctx.dead = true;
+      ctx.settleOwner?.(err);
+    }
   }
 
-  private handleWsMessage(raw: string): void {
+  private send(msg: Record<string, unknown>): boolean {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    try {
+      this.ws.send(JSON.stringify(msg));
+      return true;
+    } catch (err) {
+      logger.warn({ err: errMsg(err) }, "CartesiaTTS: WS send failed");
+      return false;
+    }
+  }
+
+  handleWsMessage(raw: string): void {
     let msg: Record<string, unknown>;
     try { msg = JSON.parse(raw) as Record<string, unknown>; } catch { return; }
-
     const type = msg["type"] as string | undefined;
     const contextId = msg["context_id"] as string | undefined;
 
-    // 2026-03-01 errors use { type, error_code, title, message, status_code }.
-    // `context_id` is optional — dropping those used to look like a silent WS death.
-    if (type === "error") {
-      const detail = this.formatWsError(msg);
-      logger.warn(
-        { evt: "cartesia_ws_error", contextId, errorCode: msg["error_code"] ?? msg["errorCode"], status: msg["status_code"] ?? msg["status"], detail },
-        `CartesiaTTS: WebSocket error — ${detail.slice(0, 240)}`,
-      );
-      if (!contextId) {
-        for (const [id, ctx] of this.pending) {
-          ctx.reject(new Error(`Cartesia WS synthesis error: ${detail}`));
-          this.pending.delete(id);
-        }
-        for (const [key, flushCtx] of this.flushPending) {
-          flushCtx.reject(new Error(`Cartesia WS turn error: ${detail}`));
-          this.flushPending.delete(key);
-        }
-        return;
-      }
-    }
-
-    if (!contextId) return;
-
-    const flushId = msg["flush_id"] as number | undefined;
-
     if (type === "timestamps") {
-      const wt = msg["word_timestamps"] as { words?: unknown[]; end?: unknown[] } | undefined;
-      const timings = this.wordTimings.get(contextId);
-      if (timings && Array.isArray(wt?.words) && Array.isArray(wt?.end)) {
-        wt.words.forEach((word, i) => {
-          const end = wt.end![i];
-          if (typeof word === "string" && typeof end === "number" && Number.isFinite(end) && end >= 0 && timings.length < 10000) {
-            timings.push({ word, end });
-          }
-        });
-      }
+      this.recordTimestamps(contextId, msg["word_timestamps"]);
       return;
     }
-    // Route to flush-tracked pending (turn-level contexts using manual flushing).
-    if (flushId != null) {
-      const key = `${contextId}:${flushId}`;
-      const flushCtx = this.flushPending.get(key);
-      if (flushCtx) {
-        if (type === "chunk") {
-          const b64 = msg["data"] as string | undefined;
-          if (b64) flushCtx.onChunk(Buffer.from(b64, "base64"));
-        } else if (type === "done" || type === "flush_done") {
-          // "flush_done" is the documented per-flush ack; "done" kept for
-          // compatibility with servers that send per-flush dones.
-          this.flushPending.delete(key);
-          flushCtx.resolve();
-        } else if (type === "error") {
-          this.flushPending.delete(key);
-          flushCtx.reject(new Error(`Cartesia WS turn error: ${this.formatWsError(msg)}`));
-        }
-        return;
-      }
+    if (type === "flush_done") {
+      const ctx = contextId ? this.turns.get(contextId) : undefined;
+      ctx?.flushWaiters.shift()?.();
+      return;
     }
 
-    // Context-level done without flush_id: safety net — resolves any remaining
-    // flush entries for this context in case the server sends a single done
-    // instead of per-flush dones.
-    if (type === "done" && flushId == null) {
-      for (const [key, flushCtx] of this.flushPending) {
-        if (key.startsWith(`${contextId}:`)) {
-          this.flushPending.delete(key);
-          flushCtx.resolve();
-        }
-      }
+    if (type === "error") {
+      this.handleWsError(msg, contextId);
+      return;
     }
-
-    // Route to per-sentence pending (single-sentence contexts, no flushing).
-    const ctx = this.pending.get(contextId);
-    if (!ctx) return;
+    if (!contextId) return;
 
     if (type === "chunk") {
       const b64 = msg["data"] as string | undefined;
       if (b64) {
-        const buf = Buffer.from(b64, "base64");
-        this.turnWsBytes.set(contextId, (this.turnWsBytes.get(contextId) ?? 0) + buf.length);
-        this.armFirstClipQuiet(contextId);
-        ctx.onChunk(buf);
+        const ctx = this.turns.get(contextId);
+        if (ctx) ctx.gotAudio = true;
+        this.sinkFor(contextId)?.(Buffer.from(b64, "base64"));
       }
-    } else if (type === "done") {
-      // Call 18112 / 19809: delay=0 emits `done` after clip 1 while more
-      // sentences are still queued. Mark first-clip complete so leftover REST
-      // can start; do not resolve the owner until leftover audio is queued.
-      this.markFirstClipDone(contextId);
-      if (this.claimedTurns.has(contextId) && !this.closingTurns.has(contextId)) {
+      return;
+    }
+    if (type === "done") {
+      const shot = this.oneShots.get(contextId);
+      if (shot) {
+        this.oneShots.delete(contextId);
+        shot.settle();
         return;
       }
-      this.pending.delete(contextId);
-      ctx.resolve();
-    } else if (type === "error") {
-      const err = new Error(`Cartesia WS synthesis error: ${this.formatWsError(msg)}`);
-      if (
-        isCartesiaContextClosedError(err)
-        && this.claimedTurns.has(contextId)
-        && !this.closingTurns.has(contextId)
-      ) {
-        this.closedTurns.add(contextId);
-        this.markFirstClipDone(contextId);
-        const wsBytes = this.turnWsBytes.get(contextId) ?? 0;
-        logger.info(
-          { evt: "cartesia_context_closed_after_first_clip", contextId, wsBytes },
-          "Cartesia closed turn context after first clip — leftover sentences via REST",
-        );
-        if (wsBytes > 0) return;
+      const ctx = this.turns.get(contextId);
+      // `done` before the close went out means Cartesia finished the text it
+      // had; the turn is still open and more sentences are coming.
+      if (ctx?.closed) {
+        ctx.awaitingDone = false;
+        ctx.settleOwner?.();
       }
-      this.markFirstClipDone(contextId);
-      this.pending.delete(contextId);
-      ctx.reject(err);
     }
   }
 
-  /**
-   * First sentence of a Cartesia turn claims the context. Later sentences join
-   * it (skipDrain) so one PCM stream plays instead of N clipped jobs.
-   */
+  private sinkFor(contextId: string): ((pcm: Buffer) => void) | null {
+    return this.oneShots.get(contextId)?.onChunk ?? this.turns.get(contextId)?.sink ?? null;
+  }
+
+  private recordTimestamps(contextId: string | undefined, payload: unknown): void {
+    const wt = payload as { words?: unknown[]; end?: unknown[] } | undefined;
+    const timings = contextId ? this.wordTimings.get(contextId) : undefined;
+    if (!timings || !Array.isArray(wt?.words) || !Array.isArray(wt?.end)) return;
+    wt.words.forEach((word, i) => {
+      const end = wt.end![i];
+      if (
+        typeof word === "string" && typeof end === "number"
+        && Number.isFinite(end) && end >= 0 && timings.length < 10_000
+      ) {
+        timings.push({ word, end });
+      }
+    });
+  }
+
+  private handleWsError(msg: Record<string, unknown>, contextId: string | undefined): void {
+    const detail = [msg["error_code"], msg["title"], msg["message"], msg["error"]]
+      .filter(Boolean).map(String).join(" — ");
+    logger.warn(
+      { evt: "cartesia_ws_error", contextId, detail },
+      `CartesiaTTS: WebSocket error — ${detail.slice(0, 240)}`,
+    );
+    const err = new Error(`Cartesia WS synthesis error: ${detail || "unknown"}`);
+
+    if (!contextId) {
+      this.failAllInFlight(err);
+      return;
+    }
+    const shot = this.oneShots.get(contextId);
+    if (shot) {
+      this.oneShots.delete(contextId);
+      shot.settle(err);
+      return;
+    }
+    const ctx = this.turns.get(contextId);
+    if (!ctx) return;
+    ctx.dead = true;
+    // A closed context is recoverable: remaining text is spoken on a fresh
+    // context rather than lost. Other WS generation errors (unsupported
+    // language on sonic-2, rejected flush, etc.) must not abort Talk —
+    // fillers already use REST, so the caller would only hear hmm/okay.
+    if (isCartesiaContextClosedError(err)) {
+      if (ctx.closed) ctx.settleOwner?.();
+      return;
+    }
+    ctx.restFallback = true;
+    if (ctx.awaitingDone) {
+      ctx.awaitingDone = false;
+      const text = ctx.gotAudio ? "" : ctx.full;
+      if (isSpeakableCartesiaTranscript(text)) {
+        void this.speakDetached(CartesiaTTS.ensureTerminalPunctuation(text), ctx);
+      } else {
+        ctx.settleOwner?.();
+      }
+    }
+  }
+
+  // ── turn contexts ─────────────────────────────────────────────────────────
+
+  private ctx(contextId: string): TurnCtx {
+    let ctx = this.turns.get(contextId);
+    if (!ctx) {
+      ctx = {
+        sink: null,
+        held: "",
+        tail: "",
+        spill: "",
+        sentAny: false,
+        full: "",
+        gotAudio: false,
+        awaitingDone: false,
+        closed: false,
+        dead: false,
+        cancelled: false,
+        restFallback: false,
+        queue: Promise.resolve(),
+        flushWaiters: [],
+        settleOwner: null,
+        chars: 0,
+      };
+      this.turns.set(contextId, ctx);
+    }
+    return ctx;
+  }
+
+  /** First caller for a turn owns the context (and its PCM sink). */
   claimTurnContext(turnContextId: string): boolean {
-    // Always one owner per turn. Returning true on WS-down (old behavior)
-    // made every sentence a new playJob — call 17915: two Playback Started
-    // rows and a 3s stall on the second clip.
-    if (this.claimedTurns.has(turnContextId) || this.finalizedTurns.has(turnContextId)) {
-      return false;
-    }
-    this.claimedTurns.add(turnContextId);
-    this.turnOpened.set(turnContextId, new Promise<void>((r) => {
-      this.turnOpenedResolve.set(turnContextId, r);
-    }));
-    return true;
+    const fresh = !this.turns.has(turnContextId);
+    const ctx = this.ctx(turnContextId);
+    return fresh && !ctx.closed;
   }
 
-  private enqueueTurnSend(turnContextId: string, send: () => void): Promise<void> {
-    const prev = this.turnSendChains.get(turnContextId) ?? Promise.resolve();
-    const next = prev.then(() => { send(); });
-    // Keep later sends possible, but return the actual failure to this caller.
-    this.turnSendChains.set(turnContextId, next.catch(() => undefined));
-    return next;
+  /** Text produced after the context stopped accepting writes. */
+  appendTurnRemainder(turnContextId: string, text: string): void {
+    if (!text) return;
+    const ctx = this.turns.get(turnContextId);
+    if (!ctx) return;
+    ctx.spill = appendCartesiaRemainder(ctx.spill, text);
+    ctx.full = appendCartesiaRemainder(ctx.full, text);
   }
 
-  private markFirstClipDone(turnContextId: string): void {
-    if (this.firstClipDone.has(turnContextId)) return;
-    this.firstClipDone.add(turnContextId);
-    const quiet = this.firstClipQuietTimers.get(turnContextId);
-    if (quiet) {
-      clearTimeout(quiet);
-      this.firstClipQuietTimers.delete(turnContextId);
-    }
-    const waiters = this.firstClipWaiters.get(turnContextId);
-    this.firstClipWaiters.delete(turnContextId);
-    for (const w of waiters ?? []) w();
-  }
-
-  private waitFirstClipComplete(turnContextId: string): Promise<void> {
-    if (this.firstClipDone.has(turnContextId) || this.closedTurns.has(turnContextId)) {
-      return Promise.resolve();
-    }
-    return new Promise<void>((r) => {
-      const arr = this.firstClipWaiters.get(turnContextId) ?? [];
-      arr.push(r);
-      this.firstClipWaiters.set(turnContextId, arr);
-    });
-  }
-
-  private armFirstClipQuiet(turnContextId: string): void {
-    if (this.firstClipDone.has(turnContextId) || this.finalizedTurns.has(turnContextId)) return;
-    const prev = this.firstClipQuietTimers.get(turnContextId);
-    if (prev) clearTimeout(prev);
-    this.firstClipQuietTimers.set(turnContextId, setTimeout(() => {
-      this.firstClipQuietTimers.delete(turnContextId);
-      this.markFirstClipDone(turnContextId);
-    }, FIRST_CLIP_QUIET_MS));
-  }
-
-  private bumpLeftoverPending(turnContextId: string, delta: number): void {
-    const n = Math.max(0, (this.leftoverPending.get(turnContextId) ?? 0) + delta);
-    this.leftoverPending.set(turnContextId, n);
-    if (n === 0) {
-      const waiters = this.leftoverPendingWaiters.get(turnContextId);
-      this.leftoverPendingWaiters.delete(turnContextId);
-      for (const w of waiters ?? []) w();
-    }
-  }
-
-  private waitLeftoversIdle(turnContextId: string): Promise<void> {
-    if ((this.leftoverPending.get(turnContextId) ?? 0) === 0) return Promise.resolve();
-    return new Promise<void>((r) => {
-      const arr = this.leftoverPendingWaiters.get(turnContextId) ?? [];
-      arr.push(r);
-      this.leftoverPendingWaiters.set(turnContextId, arr);
-    });
-  }
-
-  private waitTurnFinalized(turnContextId: string): Promise<void> {
-    if (this.finalizedTurns.has(turnContextId)) return Promise.resolve();
-    return new Promise<void>((r) => {
-      const arr = this.finalizedWaiters.get(turnContextId) ?? [];
-      arr.push(r);
-      this.finalizedWaiters.set(turnContextId, arr);
-    });
-  }
-
-  private enqueueLeftoverRest(turnContextId: string, work: () => Promise<void>): Promise<void> {
-    this.bumpLeftoverPending(turnContextId, 1);
-    const prev = this.leftoverRestChains.get(turnContextId) ?? Promise.resolve();
-    const next = prev.then(() => work(), () => work());
-    this.leftoverRestChains.set(turnContextId, next.then(() => undefined, () => undefined));
-    return next;
-  }
-
-  private async runLeftoverRest(
-    turnContextId: string,
-    text: string,
-    fallbackSink: (pcm: Buffer) => void,
-    onDone: (characters: number) => void,
-    signal: AbortSignal | undefined,
-    emotions: string[] | undefined,
-  ): Promise<void> {
-    try {
-      const waitOpen = this.turnOpened.get(turnContextId);
-      if (waitOpen) await waitOpen;
-      const owner = this.turnChunkHandlers.get(turnContextId) ?? fallbackSink;
-      await this.waitFirstClipComplete(turnContextId);
-      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-      logger.info(
-        { evt: "cartesia_leftover_rest", contextId: turnContextId, chars: text.length },
-        "Cartesia leftover sentence via REST after first clip (call 19809)",
-      );
-      await this.synthesizeViaRest(text, owner, onDone, signal, emotions);
-    } finally {
-      this.bumpLeftoverPending(turnContextId, -1);
-    }
-  }
-
-  private cleanupTurnMaps(turnContextId: string): void {
-    this.contextSettings.delete(turnContextId);
-    const quiet = this.firstClipQuietTimers.get(turnContextId);
-    if (quiet) clearTimeout(quiet);
-    this.firstClipQuietTimers.delete(turnContextId);
-    this.firstClipWaiters.delete(turnContextId);
-    this.leftoverPendingWaiters.delete(turnContextId);
-    this.turnWsBytes.delete(turnContextId);
-    this.leftoverRestChains.delete(turnContextId);
-    this.leftoverPending.delete(turnContextId);
-    this.closedTurns.delete(turnContextId);
-    this.firstClipDone.delete(turnContextId);
-    this.closedRemainder.delete(turnContextId);
-    this.turnInputs.delete(turnContextId);
-    this.turnOpened.delete(turnContextId);
-    this.turnOpenedResolve.delete(turnContextId);
-    this.turnSendChains.delete(turnContextId);
-    this.turnChunkHandlers.delete(turnContextId);
-    this.turnLastTranscript.delete(turnContextId);
-    this.closingTurns.delete(turnContextId);
-    this.cancelledTurns.delete(turnContextId);
-    this.restFallbackTurns.delete(turnContextId);
-  }
-
-  /**
-   * After leftover REST, close the Cartesia context if it is still open.
-   * Call 19809: delay=0 already closed it after clip 1 — do not send
-   * continue:false (that 400s) and resolve the owner pending instead.
-   */
-  private async completeTurnContext(turnContextId: string): Promise<void> {
-    // The LLM can finish before the WS handshake. Do not close an unopened
-    // context or read its remainder before all dispatched joins have submitted.
-    await this.turnOpened.get(turnContextId);
-    await Promise.allSettled([...(this.turnInputs.get(turnContextId) ?? [])]);
-    await this.turnSendChains.get(turnContextId);
-    if (this.cancelledTurns.has(turnContextId)) {
-      this.cleanupTurnMaps(turnContextId);
-      return;
-    }
-    const remainder = this.closedRemainder.get(turnContextId);
-    this.closedRemainder.delete(turnContextId);
-    if (remainder && remainder.length > 0) {
-      const owner = this.turnChunkHandlers.get(turnContextId) ?? (() => undefined);
-      await this.enqueueLeftoverRest(turnContextId, () =>
-        this.runLeftoverRest(turnContextId, remainder, owner, () => undefined, undefined, undefined),
-      );
-    }
-    await this.waitLeftoversIdle(turnContextId);
-    const chain = this.leftoverRestChains.get(turnContextId);
-    if (chain) await chain.catch(() => undefined);
-
-    const skipClose = this.restFallbackTurns.has(turnContextId)
-      || this.closedTurns.has(turnContextId);
-
-    if (skipClose || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      const ctx = this.pending.get(turnContextId);
-      if (ctx) ctx.resolve();
-      this.cleanupTurnMaps(turnContextId);
-      return;
-    }
-
-    const sendClose = (): void => {
-      this.turnFlushCounters.delete(turnContextId);
-      this.turnLastTranscript.delete(turnContextId);
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.closingTurns.add(turnContextId);
-        this.ws.send(JSON.stringify({
-          ...this.settingsForContext(turnContextId),
-          context_id: turnContextId,
-          transcript: "",
-          continue: false,
-        }));
-      }
-    };
-    await this.enqueueTurnSend(turnContextId, sendClose);
-  }
-
-  /**
-   * Synthesis within a shared turn context. First call owns the PCM sink and
-   * waits until the context is finalized. Later calls only append transcript
-   * (continue:true, no flush) so Sonic keeps one prosody contour.
-   */
-  private async synthesizeViaWsInContext(
-    ws: WebSocket,
-    turnContextId: string,
-    text: string,
-    onChunk: (pcm16k: Buffer) => void,
-    onDone: (characters: number) => void,
-    signal: AbortSignal | undefined,
-    emotions: string[] | undefined,
-    join: boolean,
-  ): Promise<void> {
-    const streamed = text;
-
-    const sendTranscript = (transcript: string): void => {
-      const transcriptMsg: Record<string, unknown> = {
-        ...this.settingsForContext(turnContextId, emotions),
-        context_id: turnContextId,
-        transcript,
-        continue: true,
-      };
-      ws.send(JSON.stringify(transcriptMsg));
-      this.turnLastTranscript.set(turnContextId, transcript);
-    };
-
-    if (join) {
-      const waitOpen = this.turnOpened.get(turnContextId);
-      if (waitOpen) await waitOpen;
-      // Managed buffering: keep continue:true on the same context (Cartesia
-      // concatenates transcripts). Remainder REST only if the context already
-      // closed (1s after last audio — contexts.md) or pending is gone.
-      if (
-        this.closedTurns.has(turnContextId)
-        || this.restFallbackTurns.has(turnContextId)
-        || !this.pending.has(turnContextId)
-      ) {
-        const prev = this.closedRemainder.get(turnContextId) ?? "";
-        this.closedRemainder.set(turnContextId, appendCartesiaRemainder(prev, streamed));
-        onDone(streamed.length);
-        return;
-      }
-      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-      await this.enqueueTurnSend(turnContextId, () => sendTranscript(streamed));
-      onDone(streamed.length);
-      return;
-    }
-
-    this.turnChunkHandlers.set(turnContextId, onChunk);
-
-    return new Promise<void>((resolve, reject) => {
-      if (signal?.aborted) { reject(new DOMException("Aborted", "AbortError")); return; }
-
-      const cleanup = (fn: () => void): void => {
-        signal?.removeEventListener("abort", onAbort);
-        this.pending.delete(turnContextId);
-        this.turnChunkHandlers.delete(turnContextId);
-        this.contextSettings.delete(turnContextId);
-        fn();
-      };
-      const onAbort = (): void => {
-        this.cancelledTurns.add(turnContextId);
-        if (ws.readyState === WebSocket.OPEN) {
-          try { ws.send(JSON.stringify({ context_id: turnContextId, cancel: true })); } catch { /* already closed */ }
-        }
-        this.markFirstClipDone(turnContextId);
-        cleanup(() => reject(new DOMException("Aborted", "AbortError")));
-      };
-      signal?.addEventListener("abort", onAbort, { once: true });
-
-      this.pending.set(turnContextId, {
-        text: streamed,
-        onChunk,
-        resolve: () => cleanup(() => {
-          onDone(streamed.length);
-          this.cleanupTurnMaps(turnContextId);
-          resolve();
-        }),
-        reject: (err) => {
-          this.markFirstClipDone(turnContextId);
-          cleanup(() => reject(err));
-        },
+  /** No more text for this turn — flush what is held and close the context. */
+  finalizeTurnContext(turnContextId: string): void {
+    const ctx = this.turns.get(turnContextId);
+    if (!ctx || ctx.closed) return;
+    ctx.closed = true;
+    ctx.queue = ctx.queue
+      .then(() => this.closeContext(turnContextId, ctx))
+      .catch((err: unknown) => {
+        logger.warn({ contextId: turnContextId, err: errMsg(err) }, "Cartesia turn close failed");
+        ctx.settleOwner?.(err);
       });
-      this.turnOpenedResolve.get(turnContextId)?.();
-
-      void this.enqueueTurnSend(turnContextId, () => sendTranscript(streamed)).catch((err) => {
-        cleanup(() => reject(err));
-      });
-    });
   }
 
-  /**
-   * Public entry-point for per-sentence turn-level synthesis.
-   * Falls back to normal per-sentence REST synthesis if the WS is broken.
-   */
   synthesizeStreamInContext(
     turnContextId: string,
     text: string,
-    onChunk: (pcm16k: Buffer) => void,
+    onChunk: (pcm: Buffer) => void,
     onDone: (characters: number) => void,
     signal?: AbortSignal,
     emotions?: string[],
     join = false,
   ): Promise<void> {
-    const work = this.synthesizeStreamInContextImpl(turnContextId, text, onChunk, onDone, signal, emotions, join);
+    const ctx = this.ctx(turnContextId);
+    if (!join && !ctx.sink) ctx.sink = onChunk;
+
+    // Writes are chained so Cartesia receives sentences in production order.
+    const written = this.enqueueWrite(turnContextId, ctx, text, signal, emotions);
+
     if (join) {
-      const inputs = this.turnInputs.get(turnContextId) ?? new Set<Promise<void>>();
-      inputs.add(work);
-      this.turnInputs.set(turnContextId, inputs);
-      const release = (): void => { inputs.delete(work); };
-      void work.then(release, (err: unknown) => {
-        if (this.isAbortErr(err, signal)) this.cancelledTurns.add(turnContextId);
-        release();
-      });
-    } else {
-      // Includes an abort before pending/open registration, so finalization
-      // cannot wait forever for a handshake that was cancelled.
-      const release = (): void => { this.turnOpenedResolve.get(turnContextId)?.(); };
-      void work.then(release, (err: unknown) => {
-        if (this.isAbortErr(err, signal)) this.cancelledTurns.add(turnContextId);
-        release();
-      });
+      // Continuations report back as soon as their text is on the wire; their
+      // audio lands in the owner's sink and is awaited by the owner.
+      return written.then(() => { onDone(text.length); });
     }
-    return work;
+
+    ctx.chars += text.length;
+    return new Promise<void>((resolve, reject) => {
+      const finish = (err?: unknown): void => {
+        if (ctx.settleOwner === null) return;
+        ctx.settleOwner = null;
+        signal?.removeEventListener("abort", onAbort);
+        if (err) { reject(err); return; }
+        onDone(ctx.chars);
+        this.cleanupTurn(turnContextId);
+        resolve();
+      };
+      const onAbort = (): void => {
+        ctx.cancelled = true;
+        ctx.dead = true;
+        // Only worth cancelling if Cartesia is already generating for this turn.
+        if (ctx.sentAny) this.send({ context_id: turnContextId, cancel: true });
+        finish(abortError());
+      };
+      ctx.settleOwner = finish;
+      if (signal?.aborted) { onAbort(); return; }
+      signal?.addEventListener("abort", onAbort, { once: true });
+      // A write that fails outright (no socket, provider error) must not leave
+      // the owner hanging — the pipeline is waiting on this promise to drain.
+      void written.catch((err: unknown) => finish(err));
+    });
   }
 
-  private async synthesizeStreamInContextImpl(
-    turnContextId: string,
+  private enqueueWrite(
+    contextId: string,
+    ctx: TurnCtx,
     text: string,
-    onChunk: (pcm16k: Buffer) => void,
-    onDone: (characters: number) => void,
-    signal?: AbortSignal,
-    emotions?: string[],
-    join = false,
+    signal: AbortSignal | undefined,
+    emotions: string[] | undefined,
   ): Promise<void> {
-    // Register the owner sink before awaiting WS so a later sentence can
-    // append into the same PCM queue even if this call falls back to REST.
-    if (!join) {
-      this.turnChunkHandlers.set(turnContextId, onChunk);
-    }
-    // delay=0: leftover sentences REST after clip 1. Register before awaiting
-    // WS so finalizeTurnContext can wait on leftoverPending even if this
-    // sentence's IIFE has not reached getOrOpenWs yet.
-    if (join && (this.closedTurns.has(turnContextId) || this.restFallbackTurns.has(turnContextId))) {
-      const prev = this.closedRemainder.get(turnContextId) ?? "";
-      this.closedRemainder.set(turnContextId, appendCartesiaRemainder(prev, text));
-      onDone(text.length);
-      return;
-    }
-    const sink = join
-      ? (this.turnChunkHandlers.get(turnContextId) ?? onChunk)
-      : onChunk;
-    const releaseOwnerWait = (): void => {
-      if (!join) this.turnOpenedResolve.get(turnContextId)?.();
-    };
-
-    let wsBytes = 0;
-    const countedSink = (buf: Buffer): void => {
-      wsBytes += buf.length;
-      sink(buf);
-    };
-
-    if (!this.wsFailedPermanently) {
-      try {
-        const ws = await this.getOrOpenWs();
-        return await this.synthesizeViaWsInContext(ws, turnContextId, text, countedSink, onDone, signal, emotions, join);
-      } catch (err) {
-        if (this.isAbortErr(err, signal)) throw err;
-        if (isCartesiaContextClosedError(err)) {
-          this.closedTurns.add(turnContextId);
-          this.markFirstClipDone(turnContextId);
-        }
-        if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(err)) {
-          try {
-            const ws = await this.getOrOpenWs();
-            return await this.synthesizeViaWsInContext(ws, turnContextId, text, countedSink, onDone, signal, undefined, join);
-          } catch (retryErr) {
-            if (this.isAbortErr(retryErr, signal)) throw retryErr;
-            if (isCartesiaContextClosedError(retryErr)) {
-              this.closedTurns.add(turnContextId);
-              this.markFirstClipDone(turnContextId);
-            }
-            if (/connect timeout|connection error|permanently failed|closed before open/i.test(this.errMsg(retryErr))) {
-              this.markWsFailed(retryErr, "streamInContext:retry");
-            }
-            releaseOwnerWait();
-            await this.restIfSilent(text, sink, onDone, signal, undefined, wsBytes, "streamInContext:retry", retryErr, turnContextId);
-            return;
-          }
-        } else {
-          if (/connect timeout|connection error|permanently failed|closed before open/i.test(this.errMsg(err))) {
-            this.markWsFailed(err, "streamInContext");
-          }
-          releaseOwnerWait();
-          await this.restIfSilent(text, sink, onDone, signal, emotions, wsBytes, "streamInContext", err, turnContextId);
-          return;
-        }
-      }
-    }
-    releaseOwnerWait();
-    await this.restIfSilent(text, sink, onDone, signal, emotions, 0, "streamInContext:wsDown", new Error("WS permanently failed"), turnContextId);
-  }
-
-  /** Buffer text not accepted by a provider-closed context for one REST fallback. */
-  appendTurnRemainder(turnContextId: string, text: string): void {
-    if (!text) return;
-    this.closedTurns.add(turnContextId);
-    const prev = this.closedRemainder.get(turnContextId) ?? "";
-    this.closedRemainder.set(turnContextId, appendCartesiaRemainder(prev, text));
+    const next = ctx.queue
+      .then(() => this.writeText(contextId, ctx, text, signal, emotions))
+      .catch((err: unknown) => {
+        // One aborted write means the whole turn is gone — stop the rest of the
+        // queue (and the close) from speaking text the caller already cut off.
+        if (isAbortErr(err, signal)) ctx.cancelled = true;
+        throw err;
+      });
+    ctx.queue = next.catch(() => undefined);
+    return next;
   }
 
   /**
-   * Finalizes a turn context after all sentences have been dispatched.
-   * delay=0 leftover REST must finish before the owner pending resolves so
-   * playJob drain does not exit with remaining sentence PCM still in flight.
+   * Write one piece of turn text. Everything except the newest complete piece
+   * goes out immediately with `continue: true`. A flush is only used for
+   * fragments that would otherwise sit in Sonic's input buffer — flushing a
+   * finished sentence starts a parallel generation on this context (call 25226).
    */
-  finalizeTurnContext(turnContextId: string): void {
-    if (this.finalizedTurns.has(turnContextId)) return;
-    this.finalizedTurns.add(turnContextId);
-    const waiters = this.finalizedWaiters.get(turnContextId);
-    this.finalizedWaiters.delete(turnContextId);
-    for (const w of waiters ?? []) w();
-    void this.completeTurnContext(turnContextId).catch((err: unknown) => {
-      logger.warn({ contextId: turnContextId, err: this.errMsg(err) }, "Cartesia turn finalization failed");
-      this.pending.get(turnContextId)?.reject(err instanceof Error ? err : new Error(String(err)));
+  private async writeText(
+    contextId: string,
+    ctx: TurnCtx,
+    text: string,
+    signal: AbortSignal | undefined,
+    emotions: string[] | undefined,
+  ): Promise<void> {
+    if (ctx.cancelled || signal?.aborted) throw abortError();
+    if (!text) return;
+    ctx.full = appendCartesiaRemainder(ctx.full, text);
+    // The context can no longer take writes — keep the text so the close can
+    // still speak it on a fresh context.
+    if (ctx.closed || ctx.dead || ctx.restFallback) {
+      ctx.spill = appendCartesiaRemainder(ctx.spill, text);
+      return;
+    }
+
+    const { chunks, rest } = takeCartesiaWordChunks(ctx.tail, text, false);
+    ctx.tail = rest;
+    const ready = chunks.filter(isSpeakableCartesiaTranscript);
+    if (ready.length === 0) return;
+
+    // Promote the previously held piece; hold the newest one for the close.
+    const toSend = appendCartesiaRemainder(ctx.held, ready.slice(0, -1).join(""));
+    ctx.held = ready[ready.length - 1]!;
+    if (!isSpeakableCartesiaTranscript(toSend)) return;
+
+    try {
+      await this.getOrOpenWs();
+    } catch (err) {
+      this.onWsUnusable(ctx, err);
+      ctx.spill = appendCartesiaRemainder(toSend, appendCartesiaRemainder(ctx.held, ctx.spill));
+      ctx.held = "";
+      return;
+    }
+    if (ctx.cancelled || signal?.aborted) throw abortError();
+
+    const settings = this.settingsForContext(contextId, emotions);
+    const sent = this.send({ ...settings, context_id: contextId, transcript: toSend, continue: true });
+    if (!sent) {
+      ctx.spill = appendCartesiaRemainder(toSend, appendCartesiaRemainder(ctx.held, ctx.spill));
+      ctx.held = "";
+      ctx.dead = true;
+      return;
+    }
+    ctx.sentAny = true;
+    if (isCompleteCartesiaUtterance(toSend)) return;
+    // Incomplete fragment: force generation now, then wait so the next write
+    // cannot start a second overlapping Sonic generation on this context.
+    this.send({ context_id: contextId, transcript: "", continue: true, flush: true });
+    await this.waitFlushDone(ctx);
+  }
+
+  private waitFlushDone(ctx: TurnCtx): Promise<void> {
+    if (ctx.cancelled || ctx.dead) return Promise.resolve();
+    return new Promise((resolve) => {
+      const timer = setTimeout(resolve, 1_500);
+      ctx.flushWaiters.push(() => {
+        clearTimeout(timer);
+        resolve();
+      });
     });
   }
 
   /**
-   * Cartesia docs: text without terminal punctuation (`.`, `?`, `!`) can cause
-   * audio artifacts — the model may treat incomplete text as still-incoming and
-   * generate an oddly-ended or distorted clip. We always add a period when the
-   * final printable character isn't already sentence-ending punctuation.
-   *
-   * Handles trailing SSML/nonverbalism tags correctly:
-   *   "Your ID is <spell>AB12</spell>"  → "Your ID is <spell>AB12</spell>."
-   *   "Great question! [laughter]"      → "Great question! [laughter]."
-   *   "How can I help you?"             → unchanged
+   * Single exit for a turn. Sends the held text plus anything that spilled as
+   * one `continue: false` write, which both speaks the tail of the turn and
+   * closes the context. Never sends an empty close: Cartesia answers
+   * "No valid transcripts passed" and stops emitting `done`.
    */
-  static ensureTerminalPunctuation(text: string): string {
-    const trimmed = text.trimEnd();
-    if (!trimmed) return text;
-    // Check the trimmed form — no need to strip tags, just look at the last char.
-    const last = trimmed[trimmed.length - 1]!;
-    if (last === "." || last === "?" || last === "!" || last === "…" || last === "।") return text;
-    // Sonic 3.5/3.6: a comma is a pause, not a missing period. Adding "." here
-    // makes "Hello Gopi," speak as a full stop ("Hello Gopi.") — robotic cadence.
-    if (last === "," || last === ";" || last === ":") return text;
-    return trimmed + ".";
+  private async closeContext(contextId: string, ctx: TurnCtx): Promise<void> {
+    const pending = [ctx.held, ctx.tail, ctx.spill]
+      .filter(isSpeakableCartesiaTranscript)
+      .join("");
+    ctx.held = "";
+    ctx.tail = "";
+    ctx.spill = "";
+
+    if (ctx.cancelled) {
+      ctx.settleOwner?.(abortError());
+      return;
+    }
+    if (!isSpeakableCartesiaTranscript(pending)) {
+      // Nothing left to say. If text did go out, Cartesia's `done` for it is
+      // what ends the turn; if nothing ever did, there is no audio to wait for.
+      if (ctx.restFallback && !ctx.gotAudio && isSpeakableCartesiaTranscript(ctx.full)) {
+        await this.speakDetached(CartesiaTTS.ensureTerminalPunctuation(ctx.full), ctx);
+        return;
+      }
+      if (!ctx.sentAny) ctx.settleOwner?.();
+      return;
+    }
+
+    const closing = CartesiaTTS.ensureTerminalPunctuation(pending);
+    // A short turn can reach the close before any write needed the socket.
+    if (!ctx.dead && !ctx.restFallback && !this.ws) {
+      await this.getOrOpenWs().catch((err: unknown) => { this.onWsUnusable(ctx, err); });
+    }
+    // The context died mid-turn (closed by Cartesia, or the socket went away).
+    // Speak the tail on its own context so the turn still finishes. When no
+    // PCM arrived at all, REST the full transcript — not just the held tail —
+    // otherwise the caller only heard fillers (REST one-shots) and never Talk.
+    if (ctx.dead || ctx.restFallback || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      const text = (ctx.restFallback && !ctx.gotAudio)
+        ? (ctx.full || closing)
+        : closing;
+      await this.speakDetached(CartesiaTTS.ensureTerminalPunctuation(text), ctx);
+      return;
+    }
+    const sent = this.send({
+      ...this.settingsForContext(contextId),
+      context_id: contextId,
+      transcript: closing,
+      continue: false,
+    });
+    if (sent) {
+      ctx.sentAny = true;
+      ctx.awaitingDone = true;
+      return; // owner settles on `done`
+    }
+    await this.speakDetached(closing, ctx);
   }
 
-  private synthesizeViaWs(
-    ws: WebSocket,
+  /** Last resort for turn-tail text: its own context, or REST. */
+  private async speakDetached(text: string, ctx: TurnCtx): Promise<void> {
+    const sink = ctx.sink ?? ((): void => undefined);
+    try {
+      if (ctx.restFallback || this.wsFailedPermanently) {
+        await this.synthesizeViaRest(text, sink, () => undefined);
+      } else {
+        await this.synthesizeViaWsOneShot(text, sink, () => undefined);
+      }
+      ctx.settleOwner?.();
+    } catch (err) {
+      logger.warn({ err: errMsg(err) }, "Cartesia turn-tail synthesis failed");
+      ctx.settleOwner?.(err);
+    }
+  }
+
+  private onWsUnusable(ctx: TurnCtx, err: unknown): void {
+    if (/connect timeout|connection error|permanently failed|closed before open/i.test(errMsg(err))) {
+      this.wsFailedPermanently = true;
+    }
+    ctx.restFallback = true;
+  }
+
+  private cleanupTurn(contextId: string): void {
+    this.turns.delete(contextId);
+    this.contextSettings.delete(contextId);
+  }
+
+  // ── one-shot synthesis ────────────────────────────────────────────────────
+
+  private async synthesizeViaWsOneShot(
     text: string,
-    onChunk: (pcm16k: Buffer) => void,
+    onChunk: (pcm: Buffer) => void,
     onDone: (characters: number) => void,
     signal?: AbortSignal,
     emotions?: string[],
   ): Promise<void> {
+    if (!isSpeakableCartesiaTranscript(text)) {
+      onDone(0);
+      return;
+    }
+    const ws = await this.getOrOpenWs();
     const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
-
+    const contextId = crypto.randomUUID();
     return new Promise<void>((resolve, reject) => {
-      if (signal?.aborted) {
-        reject(new DOMException("Aborted", "AbortError"));
-        return;
-      }
-
-      const contextId = crypto.randomUUID();
-
-      const cleanup = (fn: () => void) => {
+      if (signal?.aborted) { reject(abortError()); return; }
+      let settled = false;
+      const settle = (err?: unknown): void => {
+        if (settled) return;
+        settled = true;
         signal?.removeEventListener("abort", onAbort);
-        this.pending.delete(contextId);
-        fn();
+        this.oneShots.delete(contextId);
+        if (err) reject(err);
+        else { onDone(safeText.length); resolve(); }
       };
-
-      const onAbort = () => cleanup(() => reject(new DOMException("Aborted", "AbortError")));
+      const onAbort = (): void => {
+        try { ws.send(JSON.stringify({ context_id: contextId, cancel: true })); } catch { /* gone */ }
+        settle(abortError());
+      };
       signal?.addEventListener("abort", onAbort, { once: true });
-
-      this.pending.set(contextId, {
-        text: safeText,
-        onChunk,
-        resolve: () => cleanup(() => { onDone(safeText.length); resolve(); }),
-        reject: (err) => cleanup(() => reject(err)),
-      });
+      this.oneShots.set(contextId, { onChunk, settle });
 
       const msg: Record<string, unknown> = {
         context_id: contextId,
@@ -1221,47 +889,44 @@ export class CartesiaTTS implements TTSAdapter {
         transcript: safeText,
         voice: this.buildVoice(),
         output_format: this.outputFormat(),
+        add_timestamps: true,
         continue: false,
       };
-      const gcMsg = this.buildGenerationConfig(emotions);
-      if (gcMsg) msg.generation_config = gcMsg;
+      const gc = this.buildGenerationConfig(emotions);
+      if (gc) msg.generation_config = gc;
       this.applyLang(msg);
-
-      try {
-        ws.send(JSON.stringify(msg));
-      } catch (err) {
-        cleanup(() => reject(err));
-      }
+      try { ws.send(JSON.stringify(msg)); } catch (err) { settle(err); }
     });
   }
 
   private async synthesizeViaRest(
     text: string,
-    onChunk: (pcm16k: Buffer) => void,
+    onChunk: (pcm: Buffer) => void,
     onDone: (characters: number) => void,
     signal?: AbortSignal,
     emotions?: string[],
   ): Promise<void> {
     const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
+    const body: Record<string, unknown> = {
+      transcript: safeText,
+      model_id: this.modelId,
+      voice: this.buildVoice(),
+      output_format: this.outputFormat(),
+    };
+    const gc = this.buildGenerationConfig(emotions);
+    if (gc) body.generation_config = gc;
+    this.applyLang(body);
+
     const resp = await fetchWithRetry(`${CARTESIA_BASE_URL}/tts/bytes`, {
       method: "POST",
       headers: this.restHeaders,
-      body: this.buildRestBody(safeText, emotions),
+      body: JSON.stringify(body),
       signal,
     });
-
     if (!resp.ok) {
-      const err = await resp.text();
-      logger.warn(
-        { evt: "cartesia_rest_error", status: resp.status, body: err.slice(0, 300) },
-        resp.status === 429
-          ? "CartesiaTTS: REST /tts/bytes rate-limited (429 concurrency_limited/quota_exceeded)"
-          : "CartesiaTTS: REST /tts/bytes non-OK response",
-      );
-      throw new Error(`Cartesia TTS stream error ${resp.status}: ${err}`);
+      throw new Error(`Cartesia TTS stream error ${resp.status}: ${await resp.text()}`);
     }
     if (!resp.body) throw new Error("Cartesia TTS: no response body");
-
     const reader = resp.body.getReader();
     try {
       while (true) {
@@ -1276,77 +941,78 @@ export class CartesiaTTS implements TTSAdapter {
   }
 
   async synthesize(text: string, emotions?: string[]): Promise<{ audio: Buffer; characters: number }> {
-    const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
-    const doRequest = async (withEmotions?: string[]): Promise<{ audio: Buffer; characters: number }> => {
-      const resp = await fetchWithRetry(`${CARTESIA_BASE_URL}/tts/bytes`, {
-        method: "POST",
-        headers: this.restHeaders,
-        body: this.buildRestBody(safeText, withEmotions),
-      });
-
-      if (!resp.ok) {
-        const errText = await resp.text();
-        if (resp.status === 429) {
-          logger.warn(
-            { evt: "cartesia_rest_error", status: 429, body: errText.slice(0, 300) },
-            "CartesiaTTS: one-shot /tts/bytes rate-limited (429 concurrency_limited/quota_exceeded)",
-          );
+    const chunks: Buffer[] = [];
+    const collect = (pcm: Buffer): void => { chunks.push(pcm); };
+    await this.synthesizeViaRest(text, collect, () => undefined, undefined, emotions)
+      .catch(async (err: unknown) => {
+        if (emotions?.length && isInvalidVoiceControlsError(err)) {
+          await this.synthesizeViaRest(text, collect, () => undefined);
+          return;
         }
-        throw new Error(`Cartesia TTS error ${resp.status}: ${errText}`);
-      }
-
-      return { audio: Buffer.from(await resp.arrayBuffer()), characters: safeText.length };
+        throw err;
+      });
+    return {
+      audio: Buffer.concat(chunks),
+      characters: CartesiaTTS.ensureTerminalPunctuation(text).length,
     };
-
-    try {
-      return await doRequest(emotions);
-    } catch (err) {
-      // Cartesia rejected the emotion/voice controls — retry once without them
-      // instead of failing the whole call for a single sentence's styling.
-      if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(err)) {
-        return doRequest(undefined);
-      }
-      throw err;
-    }
   }
 
   async synthesizeStream(
     text: string,
-    onChunk: (pcm16k: Buffer) => void,
+    onChunk: (pcm: Buffer) => void,
     onDone: (characters: number) => void,
     signal?: AbortSignal,
     emotions?: string[],
   ): Promise<void> {
-    let wsBytes = 0;
-    const countedSink = (buf: Buffer): void => {
-      wsBytes += buf.length;
-      onChunk(buf);
-    };
-    if (!this.wsFailedPermanently) {
-      try {
-        const ws = await this.getOrOpenWs();
-        return await this.synthesizeViaWs(ws, text, countedSink, onDone, signal, emotions);
-      } catch (err) {
-        if (this.isAbortErr(err, signal)) throw err;
-        if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(err)) {
-          try {
-            const ws = await this.getOrOpenWs();
-            return await this.synthesizeViaWs(ws, text, countedSink, onDone, signal, undefined);
-          } catch (retryErr) {
-            if (this.isAbortErr(retryErr, signal)) throw retryErr;
-            if (/connect timeout|connection error|permanently failed|closed before open/i.test(this.errMsg(retryErr))) {
-              this.markWsFailed(retryErr, "stream:retry");
-            }
-            return await this.restIfSilent(text, onChunk, onDone, signal, undefined, wsBytes, "stream:retry", retryErr);
-          }
-        } else {
-          if (/connect timeout|connection error|permanently failed|closed before open/i.test(this.errMsg(err))) {
-            this.markWsFailed(err, "stream");
-          }
-          return await this.restIfSilent(text, onChunk, onDone, signal, emotions, wsBytes, "stream", err);
-        }
-      }
+    if (this.wsFailedPermanently) {
+      return this.synthesizeViaRest(text, onChunk, onDone, signal, emotions);
     }
-    return await this.restIfSilent(text, onChunk, onDone, signal, emotions, 0, "stream:wsDown", new Error("WS permanently failed"));
+    try {
+      await this.synthesizeViaWsOneShot(text, onChunk, onDone, signal, emotions);
+    } catch (err) {
+      if (isAbortErr(err, signal)) throw err;
+      if (emotions?.length && isInvalidVoiceControlsError(err)) {
+        return this.synthesizeViaWsOneShot(text, onChunk, onDone, signal);
+      }
+      this.onWsUnusableGlobal(err);
+      return this.synthesizeViaRest(text, onChunk, onDone, signal, emotions);
+    }
   }
+
+  private onWsUnusableGlobal(err: unknown): void {
+    if (/connect timeout|connection error|permanently failed|closed before open/i.test(errMsg(err))) {
+      this.wsFailedPermanently = true;
+    }
+  }
+
+  close(): void {
+    this.wsFailedPermanently = true;
+    if (this.ws) {
+      try { this.ws.close(1000, "call ended"); } catch { /* already gone */ }
+      this.ws = null;
+    }
+    this.wsConnecting = null;
+    this.failAllInFlight(new Error("CartesiaTTS: WebSocket closed (call ended)"));
+    this.turns.clear();
+    this.oneShots.clear();
+    this.contextSettings.clear();
+  }
+}
+
+function normalizeSpeed(speed: number | null | undefined): number | null {
+  if (speed == null || !Number.isFinite(speed) || speed === 1) return null;
+  return Math.min(1.5, Math.max(0.6, speed));
+}
+
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function abortError(): DOMException {
+  return new DOMException("Aborted", "AbortError");
+}
+
+function isAbortErr(err: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true;
+  return err instanceof Error && err.name === "AbortError";
 }

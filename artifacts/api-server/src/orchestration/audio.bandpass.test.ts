@@ -33,10 +33,12 @@ describe("telephony bandpass", () => {
   it("keeps filter state continuous between 20 ms input frames", () => {
     const input = tone(1300, 3200);
     const expected = telephonyBandpass(input);
-    const nc = new NoiseCanceller(); // stays in calibration for these 20 frames
-    const output: Buffer[] = [];
     const bytes = Buffer.from(input.buffer);
-    for (let i = 0; i < bytes.length; i += 320) output.push(nc.process(bytes.subarray(i, i + 320)));
-    expect(Buffer.concat(output)).toEqual(Buffer.from(expected.buffer));
+    const samples = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.length / 2);
+    expect(telephonyBandpass(samples)).toEqual(expected);
+    const nc = new NoiseCanceller();
+    const frames: Buffer[] = [];
+    for (let i = 0; i < bytes.length; i += 320) frames.push(nc.process(bytes.subarray(i, i + 320)));
+    expect(Buffer.concat(frames)).toEqual(bytes);
   });
 });

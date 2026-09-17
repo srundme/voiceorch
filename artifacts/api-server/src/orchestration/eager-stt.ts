@@ -14,7 +14,7 @@
 import { createHash } from "node:crypto";
 import { isCompleteEmailUtterance, looksLikeSpokenEmailSpelling } from "./endpointing.js";
 import { isRealEnglishUtterance } from "./language-filler-guard.js";
-import { isBackchannelOnlyUtterance } from "./transcriptQuality.js";
+import { isBackchannelOnlyUtterance, isNearDuplicateUtterance } from "./transcriptQuality.js";
 import { envInt } from "./utils.js";
 
 /** Stable-partial timer before launching eager LLM (Path A Bolna-feel: 180ms). */
@@ -72,6 +72,18 @@ export function isSameUtteranceContinuation(prev: string, next: string): boolean
   if (!p || !n) return false;
   if (p === n) return true;
   return n.startsWith(`${p} `) || p.startsWith(`${n} `);
+}
+
+/**
+ * Queued STT while we are already answering this utterance — Bolna
+ * `is_duplicate_user` plus a prefix continuation (call 25218: "I'm okay
+ * with it" → "I'm okay with both the shifts"). Cutting TTS here is a
+ * false barge; the duplicate is then discarded and the agent goes mute.
+ */
+export function isQueuedDuplicateUserTurn(lastUserTurn: string, incoming: string): boolean {
+  if (!lastUserTurn.trim() || !incoming.trim()) return false;
+  return isSameUtteranceContinuation(lastUserTurn, incoming)
+    || isNearDuplicateUtterance(incoming, lastUserTurn);
 }
 
 /** Identity of the text the speculative LLM was launched on. */

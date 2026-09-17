@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   buildRealtimeConfigUpdate,
@@ -73,41 +74,37 @@ describe("nextRealtimeLanguageOnSwitch", () => {
 });
 
 describe("resolveRealtimeVadDefaults", () => {
-  it("does not overlay Sarvam VAD milliseconds", () => {
+  it("uses Sarvam LiveKit telephony VAD on 8 kHz PSTN", () => {
     expect(resolveRealtimeVadDefaults(8000)).toEqual({
-      silenceDurationMs: null,
-      minSpeechDurationMs: null,
-      threshold: null,
+      silenceDurationMs: 500,
+      minSpeechDurationMs: 200,
+      threshold: 0.7,
     });
+  });
+
+  it("uses the cleaner-channel VAD on 16 kHz WebRTC", () => {
     expect(resolveRealtimeVadDefaults(16000)).toEqual({
-      silenceDurationMs: null,
-      minSpeechDurationMs: null,
-      threshold: null,
+      silenceDurationMs: 500,
+      minSpeechDurationMs: 250,
+      threshold: 0.3,
     });
   });
 });
 
+describe("Sarvam realtime mid-call socket close", () => {
+  it("reconnects the Saaras socket instead of hanging up the PSTN call", () => {
+    const src = readFileSync(new URL("./sarvam-realtime.ts", import.meta.url), "utf8");
+    expect(src).toContain("scheduleReconnect");
+    expect(src).toContain("do not hang up the PSTN call");
+    expect(src).toContain("MAX_RECONNECT = 10");
+  });
+});
+
 describe("isLidDriftFinal", () => {
-  const tamil = { primaryLanguage: "ta-IN" };
-
-  it("flags a low-confidence English read on a Tamil agent (call 13919)", () => {
-    expect(isLidDriftFinal({ ...tamil, detectedLanguage: "en-IN", languageConfidence: 0.23 })).toBe(true);
-    expect(isLidDriftFinal({ ...tamil, detectedLanguage: "en-IN", languageConfidence: 0.1 })).toBe(true);
-  });
-
-  it("trusts a confident English read — that is a real English caller", () => {
-    expect(isLidDriftFinal({ ...tamil, detectedLanguage: "en-IN", languageConfidence: 0.88 })).toBe(false);
-    expect(isLidDriftFinal({ ...tamil, detectedLanguage: "en-IN", languageConfidence: undefined })).toBe(false);
-  });
-
-  it("never fires for an English or unpinnable agent language", () => {
-    expect(isLidDriftFinal({ primaryLanguage: "en-IN", detectedLanguage: "en-IN", languageConfidence: 0.1 })).toBe(false);
-    expect(isLidDriftFinal({ primaryLanguage: "auto", detectedLanguage: "en-IN", languageConfidence: 0.1 })).toBe(false);
-  });
-
-  it("ignores non-English detections and missing LID", () => {
-    expect(isLidDriftFinal({ ...tamil, detectedLanguage: "hi-IN", languageConfidence: 0.2 })).toBe(false);
-    expect(isLidDriftFinal({ ...tamil, detectedLanguage: undefined, languageConfidence: 0.2 })).toBe(false);
+  it("never pins over Saaras LID", () => {
+    expect(isLidDriftFinal({ primaryLanguage: "ta-IN", detectedLanguage: "en-IN", languageConfidence: 0.23 })).toBe(false);
+    expect(isLidDriftFinal({ primaryLanguage: "ta-IN", detectedLanguage: "en-IN", languageConfidence: 0.1 })).toBe(false);
+    expect(isLidDriftFinal({ primaryLanguage: "hi-IN", detectedLanguage: "en-IN", languageConfidence: 0.2 })).toBe(false);
   });
 });
 
@@ -301,9 +298,9 @@ describe("shouldBargeOnRealtimeVadStart", () => {
     expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true })).toBe(true);
   });
 
-  it("holds through greeting and echo grace unless the caller said stop/wait", () => {
-    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, greetingOrSystem: true })).toBe(false);
-    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, inEchoGrace: true })).toBe(false);
+  it("barges on usable STT even during greeting or echo window", () => {
+    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, greetingOrSystem: true })).toBe(true);
+    expect(shouldBargeOnRealtimeVadStart({ ...base, hasUsablePartial: true, inEchoGrace: true })).toBe(true);
     expect(shouldBargeOnRealtimeVadStart({
       ...base,
       hasUsablePartial: true,
@@ -318,19 +315,25 @@ describe("shouldBargeOnRealtimePartial", () => {
     greetingOrSystem: false,
     inEchoGrace: false,
     isWebcall: false,
-    isSelfEcho: false,
     echoBarReady: true,
     energyAboveEchoBar: true,
     charCount: 22,
     minChars: 4,
   };
 
-  it("does not barge greeting echo even when the partial looks like English (call 14227)", () => {
-    expect(shouldBargeOnRealtimePartial({ ...base, greetingOrSystem: true })).toBe(false);
-    expect(shouldBargeOnRealtimePartial({ ...base, inEchoGrace: true })).toBe(false);
+  it("barges any nonempty STT partial, including greeting and echo windows", () => {
+    expect(shouldBargeOnRealtimePartial({ ...base, greetingOrSystem: true })).toBe(true);
+    expect(shouldBargeOnRealtimePartial({ ...base, inEchoGrace: true })).toBe(true);
+    expect(shouldBargeOnRealtimePartial({ ...base, charCount: 3, minChars: 4 })).toBe(true);
+    expect(shouldBargeOnRealtimePartial({
+      ...base,
+      charCount: 5,
+      minChars: 4,
+      isGreetingOnly: true,
+    })).toBe(true);
   });
 
-  it("cuts a non-echo partial without energy or hard-interrupt extras (LiveKit min_words)", () => {
+  it("cuts a non-echo partial without extra energy gates", () => {
     expect(shouldBargeOnRealtimePartial({
       ...base,
       echoBarReady: false,
@@ -343,18 +346,8 @@ describe("shouldBargeOnRealtimePartial", () => {
     })).toBe(true);
   });
 
-  it("does not barge self-echo or short scraps", () => {
-    expect(shouldBargeOnRealtimePartial({ ...base, isSelfEcho: true })).toBe(false);
-    expect(shouldBargeOnRealtimePartial({ ...base, charCount: 3, minChars: 4 })).toBe(false);
-  });
-
-  it("does not barge an isolated hello while the agent is speaking (call 16832)", () => {
-    expect(shouldBargeOnRealtimePartial({
-      ...base,
-      charCount: 5,
-      minChars: 4,
-      isGreetingOnly: true,
-    })).toBe(false);
+  it("does not barge empty partials", () => {
+    expect(shouldBargeOnRealtimePartial({ ...base, charCount: 0, minChars: 4 })).toBe(false);
   });
 
   it("barges a real caller partial on PSTN and webcall", () => {
@@ -381,8 +374,8 @@ describe("shouldCommitStreamingEnergyBarge", () => {
     energyAboveEchoBar: true,
   };
 
-  it("does not cut on energy without a hard interrupt (echo of our own TTS)", () => {
-    expect(shouldCommitStreamingEnergyBarge({ ...base, isHardInterrupt: false })).toBe(false);
+  it("commits when STT already has pending text", () => {
+    expect(shouldCommitStreamingEnergyBarge({ ...base, isHardInterrupt: false })).toBe(true);
     expect(shouldCommitStreamingEnergyBarge({ ...base, hasUsablePending: false })).toBe(false);
   });
 

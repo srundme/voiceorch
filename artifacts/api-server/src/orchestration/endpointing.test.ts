@@ -16,6 +16,7 @@ import {
   isCallerOfferingEmail,
   resolveCollectionKind,
   resolveCollectionVadSilenceMs,
+  collectionHoldMsForTranscript,
   resolveIncompleteHoldMs,
   resolveStreamingTurnHold,
 } from "./endpointing.js";
@@ -26,6 +27,7 @@ describe("isDigitCollectionContext", () => {
     expect(isDigitCollectionContext("Please enter the OTP.")).toBe(true);
     expect(isDigitCollectionContext("What is your Aadhaar number?")).toBe(true);
     expect(isDigitCollectionContext("Read the verification code.")).toBe(true);
+    expect(isDigitCollectionContext("Could you share your 6-digit pincode there? Just the digits.")).toBe(true);
   });
 
   it("does not treat a normal question as digit collection", () => {
@@ -49,6 +51,8 @@ describe("isDigitLikeUtterance", () => {
     expect(isDigitLikeUtterance("okay")).toBe(false);
     expect(isDigitLikeUtterance("I want to participate")).toBe(false);
     expect(isDigitLikeUtterance("9876543210")).toBe(false);
+    expect(isDigitLikeUtterance("560005")).toBe(false);
+    expect(isDigitLikeUtterance("five six zero zero zero five")).toBe(false);
   });
 });
 
@@ -337,37 +341,50 @@ describe("resolveCollectionVadSilenceMs", () => {
   });
 });
 
+describe("collectionHoldMsForTranscript", () => {
+  it("holds mid-pincode fragments and spelled Gmail, but not a finished PIN (calls 25241/25244)", () => {
+    expect(collectionHoldMsForTranscript({
+      lastAgentText: "Could you share your 6-digit pincode there? Just the digits.",
+      transcript: "600",
+    })).toBeGreaterThan(0);
+    expect(collectionHoldMsForTranscript({
+      lastAgentText: "Could you share your 6-digit pincode there? Just the digits.",
+      transcript: "Five six zero zero",
+    })).toBeGreaterThan(0);
+    expect(collectionHoldMsForTranscript({
+      lastAgentText: "Could you share your 6-digit pincode there? Just the digits.",
+      transcript: "560005",
+    })).toBe(0);
+    expect(collectionHoldMsForTranscript({
+      lastAgentText: "Could I take your email? Spell it slowly.",
+      transcript: "g o p i at",
+    })).toBeGreaterThan(0);
+    expect(collectionHoldMsForTranscript({
+      lastAgentText: "How can I help you?",
+      transcript: "I am looking for a voice process job",
+    })).toBe(0);
+  });
+});
+
 describe("computeEndpointMs", () => {
-  it("waits longer for a spelled digit during phone collection", () => {
-    const d = computeEndpointMs({
+  it("does not add SnapServe silence on top of the STT provider", () => {
+    expect(computeEndpointMs({
       lastAgentText: "What is your phone number?",
       partialTranscript: "nine eight",
       audioBufferMs: 400,
       baseSilenceMs: 150,
-    });
-    expect(d.reason).toBe("digit-collection:trailing-digit");
-    expect(d.ms).toBe(900);
-  });
-
-  it("waits longer while the caller is spelling an email", () => {
-    const d = computeEndpointMs({
+    })).toEqual({ ms: 0, reason: "provider" });
+    expect(computeEndpointMs({
       lastAgentText: "Could I have your email?",
       partialTranscript: "k a r",
       audioBufferMs: 400,
       baseSilenceMs: 150,
-    });
-    expect(d.reason).toBe("email-collection:in-progress");
-    expect(d.ms).toBe(900);
-  });
-
-  it("stays fast on a complete yes", () => {
-    const d = computeEndpointMs({
+    })).toEqual({ ms: 0, reason: "provider" });
+    expect(computeEndpointMs({
       lastAgentText: "Can you hear me?",
       partialTranscript: "yes",
       audioBufferMs: 200,
       baseSilenceMs: 150,
-    });
-    expect(d.reason).toBe("affirmation");
-    expect(d.ms).toBe(150);
+    })).toEqual({ ms: 0, reason: "provider" });
   });
 });

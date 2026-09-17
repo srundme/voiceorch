@@ -2,13 +2,28 @@ import { describe, expect, it } from "vitest";
 import { flushCartesiaSpeakable, pushCartesiaSpeakable, cartesiaUnspokenTail, CartesiaTurnStream } from "./cartesia-token-coalesce.js";
 
 describe("pushCartesiaSpeakable", () => {
-  it("does not wait for a Latin word boundary (VoBiz dies if we add 3000ms per word)", () => {
+  it("holds Latin until a word boundary so Sonic does not spell letters (call 25026)", () => {
     const r = pushCartesiaSpeakable("", "Hello");
-    expect(r.pieces).toEqual(["Hello"]);
-    expect(r.rest).toBe("");
+    expect(r.pieces).toEqual([]);
+    expect(r.rest).toBe("Hello");
+    const r2 = pushCartesiaSpeakable(r.rest, " ");
+    expect(r2.pieces).toEqual(["Hello "]);
+    expect(r2.rest).toBe("");
   });
 
-  it("streams Latin BPE through for Cartesia managed buffering (not word-wait)", () => {
+  it("joins Latin BPE into a word before flushing (call 25026 N/o/p)", () => {
+    let pending = "";
+    let spoken = "";
+    for (const t of ["N", "o", " p", "r", "o", "blem,"]) {
+      const r = pushCartesiaSpeakable(pending, t);
+      spoken += r.pieces.join("");
+      pending = r.rest;
+    }
+    expect(spoken).toBe("No problem,");
+    expect(pending).toBe("");
+  });
+
+  it("joins coffee BPE on the trailing space", () => {
     let pending = "";
     let spoken = "";
     for (const t of ["cof", "f", "ee "]) {

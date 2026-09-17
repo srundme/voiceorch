@@ -52,6 +52,7 @@ export type NavGroupId =
   | "voice"
   | "product"
   | "operations"
+  | "demos"
   | "programs"
   | "settings";
 
@@ -176,6 +177,19 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/operations/emails", label: "Emails", icon: EmailIcon, keywords: "send users transactional" },
       { href: "/reports/emails", label: "Email Reports", icon: EmailIcon },
       { href: "/operations/audit", label: "Audit Logs", icon: AuditIcon, keywords: "users actions" },
+    ],
+  },
+  {
+    id: "demos",
+    label: "Demos",
+    defaultOpen: true,
+    items: [
+      {
+        href: "/demos/intake-agent",
+        label: "Candidate Intake",
+        icon: AgentIcon,
+        keywords: "recruiter intake form inbound jd bpo hiring demo",
+      },
     ],
   },
   {

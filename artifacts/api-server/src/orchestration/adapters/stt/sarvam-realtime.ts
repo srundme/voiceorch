@@ -19,17 +19,22 @@ const WS_BASE = "wss://api.sarvam.ai/speech-to-text-realtime/ws";
 const PING_MS = 20_000;
 
 /**
- * Sarvam LiveKit production VAD table
- * (https://docs.sarvam.ai/api/integration/livekit-production-best-practices).
- * Telephony (8 kHz) needs a higher onset bar and longer EOS than headset audio.
+ * Official saaras realtime VAD (docs.sarvam.ai realtime streaming + LiveKit
+ * production best practices). Agent Latency Tuning can still override per call.
+ *
+ * Telephony (8 kHz PSTN/SIP): threshold 0.7 / min_speech 200 ms rejects line
+ * noise, TV, and sidetone that would otherwise become a fake caller turn.
+ * WebRTC / 16 kHz keeps the cleaner-channel defaults.
  */
-export function resolveRealtimeVadDefaults(_sampleRate: 8000 | 16000): {
+export function resolveRealtimeVadDefaults(sampleRate: 8000 | 16000): {
   silenceDurationMs: number | null;
   minSpeechDurationMs: number | null;
   threshold: number | null;
 } {
-  // Bolna does not overlay VAD milliseconds. Omit unless the agent set them.
-  return { silenceDurationMs: null, minSpeechDurationMs: null, threshold: null };
+  if (sampleRate === 8000) {
+    return { silenceDurationMs: 500, minSpeechDurationMs: 200, threshold: 0.7 };
+  }
+  return { silenceDurationMs: 500, minSpeechDurationMs: 250, threshold: 0.3 };
 }
 
 export type SarvamRealtimeStreamType = "fast" | "balanced" | "simulated";
@@ -182,17 +187,14 @@ export function parseRealtimeLanguageConfidence(raw: unknown): number | undefine
 export const LID_DRIFT_CONFIDENCE_BAR = 0.6;
 export const LID_DRIFT_FINALS_TO_PIN = 2;
 
-export function isLidDriftFinal(opts: {
+export function isLidDriftFinal(_opts: {
   /** Agent's own language as a realtime code — "auto"/English disables the guard. */
   primaryLanguage: string;
   detectedLanguage: string | undefined;
   languageConfidence: number | undefined;
 }): boolean {
-  const primary = opts.primaryLanguage.trim().toLowerCase();
-  if (!primary || primary === "auto" || primary.startsWith("en")) return false;
-  if (!opts.detectedLanguage?.toLowerCase().startsWith("en")) return false;
-  // A confident English read is a real English caller, not LID drift.
-  return opts.languageConfidence !== undefined && opts.languageConfidence < LID_DRIFT_CONFIDENCE_BAR;
+  // Trust Saaras LID. Do not pin language_code over the provider's read.
+  return false;
 }
 
 export function resolveSarvamRealtimeModel(model?: string | null): "saaras:v3-realtime" | "saaras:v4-realtime" {
@@ -282,12 +284,7 @@ export function shouldBargeOnRealtimeVadStart(opts: {
   energyAboveEchoBar?: boolean;
   isHardInterrupt?: boolean;
 }): boolean {
-  if (!opts.agentSpeaking) return false;
-  if (!opts.hasUsablePartial) return false;
-  if (opts.isHardInterrupt) return true;
-  if (opts.greetingOrSystem) return false;
-  if (opts.inEchoGrace) return false;
-  return true;
+  return Boolean(opts.agentSpeaking && opts.hasUsablePartial);
 }
 
 /** Streaming energy may arm, but PSTN must not clearAudio on echo-loud frames. */
@@ -298,20 +295,16 @@ export function shouldCommitStreamingEnergyBarge(opts: {
   echoBarReady: boolean;
   energyAboveEchoBar: boolean;
 }): boolean {
-  if (!opts.hasUsablePending || !opts.isHardInterrupt) return false;
-  if (opts.echoBarReady && !opts.energyAboveEchoBar && !opts.isBookingAnswer) return false;
-  return true;
+  return Boolean(opts.hasUsablePending);
 }
 
 /**
- * Official LiveKit recipe: first non-echo partial (`min_words` ≥ 1) cuts TTS.
- * Greeting lock, echo grace, and self-echo stay. No energy / hard-interrupt extras.
+ * First usable non-echo partial cuts TTS. Greeting lock and echo grace stay.
  */
 export function shouldBargeOnRealtimePartial(opts: {
   greetingOrSystem: boolean;
   inEchoGrace: boolean;
   isWebcall?: boolean;
-  isSelfEcho: boolean;
   echoBarReady?: boolean;
   energyAboveEchoBar?: boolean;
   charCount: number;
@@ -321,12 +314,7 @@ export function shouldBargeOnRealtimePartial(opts: {
   isHardInterrupt?: boolean;
   isBookingAnswer?: boolean;
 }): boolean {
-  if (opts.charCount < opts.minChars) return false;
-  if (opts.isSelfEcho) return false;
-  if (opts.isGreetingOnly) return false;
-  if (opts.greetingOrSystem) return false;
-  if (opts.inEchoGrace) return false;
-  return true;
+  return opts.charCount > 0;
 }
 
 interface RealtimeMsg {
@@ -461,6 +449,9 @@ export class SarvamRealtimeSTT implements STTAdapter {
     let usingLegacy = false;
     let legacyStream: StreamSTT | null = null;
     let pingTimer: ReturnType<typeof setInterval> | null = null;
+    let reconnectAttempts = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    const MAX_RECONNECT = 10;
     let lastPartial = "";
     let lastPartialLang: string | undefined;
     let speechEndAt = 0;
@@ -508,6 +499,30 @@ export class SarvamRealtimeSTT implements STTAdapter {
       }, PING_MS);
     };
 
+    const scheduleReconnect = (code: number, reason: string): void => {
+      if (intentionallyClosed || usingLegacy) return;
+      if (reconnectAttempts >= MAX_RECONNECT) {
+        logger.error({ code, reason, reconnectAttempts }, "Sarvam STT realtime: max reconnects — handing off");
+        _onConnectionDead?.();
+        onClose?.();
+        return;
+      }
+      const delay = Math.min(500 * 2 ** reconnectAttempts, 8_000);
+      reconnectAttempts++;
+      logger.info(
+        { code, reason, delay, reconnectAttempts },
+        "Sarvam STT realtime: socket closed — reconnecting (do not hang up the PSTN call)",
+      );
+      _onConnectionDead?.();
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (intentionallyClosed || usingLegacy) return;
+        sessionBegan = false;
+        wsReady = false;
+        openSocket();
+      }, delay);
+    };
+
     const fallbackToLegacy = (reason: string, detail?: Record<string, unknown>): void => {
       if (usingLegacy || intentionallyClosed) return;
       usingLegacy = true;
@@ -540,6 +555,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
       if (event === "session.begin") {
         sessionBegan = true;
         wsReady = true;
+        reconnectAttempts = 0;
         logger.info(
           { requestId: lastRequestId, languageCode },
           "Sarvam STT realtime: session.begin",
@@ -695,6 +711,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
       ws = new WebSocket(url, { headers: { "api-subscription-key": key } });
       ws.on("open", () => {
         wsReady = true;
+        reconnectAttempts = 0;
         startPing();
       });
       ws.on("message", handleMessage);
@@ -713,10 +730,10 @@ export class SarvamRealtimeSTT implements STTAdapter {
           fallbackToLegacy("inactivity_before_session", { code });
           return;
         }
-        if (!intentionallyClosed) {
-          _onConnectionDead?.();
-          onClose?.();
-        }
+        // Mid-call 1008 (idle / max session) used to call pipeline onClose,
+        // which left 1–16s with no STT and the silence watchdog hung up the
+        // phone. Reconnect the Saaras socket; keep the PSTN leg up.
+        scheduleReconnect(code, reason);
       });
       ws.on("error", (err) => {
         logger.warn({ err }, "Sarvam STT realtime: socket error");
@@ -796,6 +813,10 @@ export class SarvamRealtimeSTT implements STTAdapter {
       close(): void {
         intentionallyClosed = true;
         stopPing();
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
         if (usingLegacy) {
           legacyStream?.close();
           return;

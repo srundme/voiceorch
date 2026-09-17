@@ -28,6 +28,7 @@ import {
 } from "@workspace/db/call-engine-defaults";
 import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "../orchestration/mic-sensitivity.js";
 import { FORCE_SOFTWARE_NOISE_GATE_KEY } from "../orchestration/noise-gate.js";
+import { parseBackchannelPhrases } from "../orchestration/backchannel.js";
 import { optionalMs, optionalUnitInterval } from "../orchestration/stt-tuning.js";
 import { clampSemanticTurnStopMs, resolveSemanticTurnEnabled } from "../orchestration/semantic-turn-gate.js";
 import { getAttachedSourceIds } from "../orchestration/kb-retrieval.js";
@@ -222,8 +223,9 @@ async function buildTargetAgentConfig(
     autoSwitchToEnglish: agentCfg["autoSwitchToEnglish"] === true,
     backchannelingEnabled: agent.backchannelingEnabled !== false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
+    backchannelFillers: parseBackchannelPhrases(agent.backchannelPhrases),
     webhookUrl: agent.webhookUrl ?? null,
-    noiseCancellationEnabled: agent.noiseCancellationEnabled !== false,
+    noiseCancellationEnabled: agent.noiseCancellationEnabled === true,
     forceSoftwareNoiseGate: agentCfg[FORCE_SOFTWARE_NOISE_GATE_KEY] === true,
     ambientNoiseEnabled: (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false,
     ambientNoiseTrack: (agentCfg["ambientNoiseTrack"] as string | undefined) ?? null,
@@ -260,11 +262,11 @@ async function buildTargetAgentConfig(
     knowledgeBaseId: agent.knowledgeBaseId ?? null,
     knowledgeSourceIds: await getAttachedSourceIds(agent.id, agent.knowledgeBaseId),
     webhookSecret: (agentCfg["webhookSecret"] as string | undefined) ?? null,
-    vadSilenceMs: (agentCfg["vadSilenceMs"] as number | undefined) ?? 350,
+    vadSilenceMs: (agentCfg["vadSilenceMs"] as number | undefined) ?? 0,
     bargeInEnabled: (agentCfg["bargeInEnabled"] as boolean | undefined) ?? true,
     bargeInEnergyThreshold: resolveBargeInEnergyThreshold(agentCfg["bargeInEnergyThreshold"]),
     bargeInMinFrames: (agentCfg["bargeInMinFrames"] as number | undefined) ?? 4,
-    bargeInEchoGraceMs: (agentCfg["bargeInEchoGraceMs"] as number | undefined) ?? 600,
+    bargeInEchoGraceMs: 0,
     micSensitivity,
     timezone: (agentCfg["timezone"] as string | undefined) ?? "Asia/Kolkata",
     recordingEnabled: (agentCfg["recordingEnabled"] as boolean | undefined) ?? false,
@@ -276,8 +278,7 @@ async function buildTargetAgentConfig(
     wordsForInterruption: (() => {
       const v = agentCfg["wordsForInterruption"];
       if (typeof v !== "number" || !Number.isFinite(v)) return 3;
-      const n = Math.max(0, Math.round(v));
-      return n === 2 ? 3 : n;
+      return Math.max(0, Math.round(v));
     })(),
     incrementalDelay: 0,
     hangupAfterLlmCall: false,
@@ -292,7 +293,7 @@ async function buildTargetAgentConfig(
     stagedPromptEnabled: agent.stagedPromptEnabled ?? false,
     stagedPromptStages: (agent.stagedPromptStages as Array<{ name: string; content: string }> | null) ?? [],
     stagedPromptCoreIdentity: agent.stagedPromptCoreIdentity ?? null,
-    asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 250,
+    asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 500,
     llmMaxTokens: (agentCfg["llmMaxTokens"] as number | null | undefined) ?? null,
     ttsMinSentenceChars: resolveTtsMinSentenceChars(
       agentCfg["ttsMinSentenceChars"] as number | undefined,

@@ -287,7 +287,7 @@ export function clampBargeInEnergyThreshold(value: number | null | undefined): n
 }
 
 export function clampEndpointingMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 250;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 500;
   return Math.max(100, Math.min(800, Math.round(v)));
 }
 

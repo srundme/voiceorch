@@ -55,14 +55,10 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("call 14315");
   });
 
-  it("pages once when Smart Turn is missing (fail-open is degraded mode, not silent)", () => {
-    expect(pipelineSrc).toContain('["smart_turn_fail_open"]');
-    expect(pipelineSrc).toContain("_smartTurnFailOpenAlerted");
-    expect(pipelineSrc).toMatch(/Smart Turn fail-open/);
+  it("does not overlay Smart Turn on provider VAD/finals", () => {
     const evalBody = methodBody("evaluateSemanticTurn");
-    expect(evalBody).toContain("!sessionReady");
-    expect(evalBody).toContain("logWarningEvent");
-    expect(evalBody).toContain("smart_turn_fail_open");
+    expect(evalBody.replace(/\s+/g, "")).toBe("{return;}");
+    expect(evalBody).not.toContain("smart_turn_fail_open");
   });
 
   it("does not drop listening finals on RMS — STT is the turn authority (call 14351)", () => {
@@ -88,7 +84,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
 
   it("keeps typed Welcome on resume-drop so first audio is not blocked on the greeting LLM (call 18112)", () => {
     expect(pipelineSrc).not.toContain('const typedWelcome = resumeDropped ? ""');
-    expect(pipelineSrc).toMatch(/resumeDropped \? "" : typedWelcome/);
+    expect(pipelineSrc).toMatch(/resumeDropped && !this\.isIntakeAgent \? "" : typedWelcome/);
     expect(pipelineSrc).toContain("playing welcome before greeting LLM");
   });
 
@@ -99,25 +95,31 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
 
   it("never interrupts TTS from bare VAD — Audio → STT → InterruptionManager (call 20257)", () => {
     expect(pipelineSrc).toContain("shouldInterruptFromCallerTranscript");
-    expect(pipelineSrc).toContain("shouldCutTtsFromCallerTranscript");
-    expect(pipelineSrc).toContain("shouldDiscardOpenerTranscript");
+    expect(pipelineSrc).toContain("shouldTriggerInterruption");
     expect(pipelineSrc).toContain("Bolna has no inbound RMS barge path");
-    expect(pipelineSrc).toContain("shouldIgnoreSelfEcho");
+    expect(pipelineSrc).not.toContain("shouldIgnoreSelfEcho");
     expect(pipelineSrc).not.toContain("SELF_ECHO_MIN_OVERLAP");
     expect(pipelineSrc).toContain("vad.speech_start only");
     expect(pipelineSrc).toContain("maybeBargeFromRealtimeVadStart");
     const vadBody = methodBody("maybeBargeFromRealtimeVadStart");
+    expect(vadBody).toContain("shouldBargeOnRealtimeVadStart");
+    expect(vadBody).toContain("isCarrierSelfEcho");
     expect(vadBody).toContain("shouldInterruptFromCallerTranscript");
-    expect(vadBody.indexOf("shouldInterruptFromCallerTranscript"))
-      .toBeLessThan(vadBody.indexOf("triggerBargeIn"));
+    expect(vadBody).not.toMatch(/triggerBargeIn\(\s*"energy"/);
+    expect(methodBody("schedulePartialBargeIn")).toContain("shouldInterruptFromCallerTranscript");
+    expect(methodBody("schedulePartialBargeIn")).toContain("isCarrierSelfEcho");
+    expect(methodBody("schedulePartialBargeIn")).toContain("SELF_ECHO_MIN_WORDS");
+    expect(methodBody("isEagerPartialReady")).toContain("isEagerCommitReady");
+    expect(methodBody("handleStreamingTranscript")).toContain("collectionHoldMsForTranscript");
+    expect(methodBody("backchannelFillerOpts")).toContain("backchannelFillers");
+    expect(pipelineSrc).not.toContain("Barge-in detected after Sarvam realtime partial");
     const speechEndBody = methodBody("wireStreamSttCallbacks");
     expect(speechEndBody).toContain("maybeBargeFromRealtimeVadStart");
     expect(pipelineSrc).toContain("Call 20274: caller was already mid-utterance");
     const streamBody = methodBody("handleStreamingTranscript");
-    expect(streamBody.indexOf("shouldDiscardOpenerTranscript"))
+    expect(streamBody.indexOf("deferGreetingTranscript"))
       .toBeLessThan(streamBody.indexOf("processTurn"));
     expect(pipelineSrc).toContain("room_crosstalk");
-    expect(pipelineSrc).toContain("first-speech mute");
     expect(pipelineSrc).toContain("greetingFirstClipActive");
     expect(pipelineSrc).toContain("turnEchoGraceAt");
     expect(pipelineSrc).not.toContain("voice-isolator");
@@ -145,13 +147,13 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).not.toContain("preset-filler");
     expect(pipelineSrc).toContain("job.streaming && this.tts.synthesizeStream");
     expect(pipelineSrc).toMatch(/TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 0/);
-    expect(pipelineSrc).toContain("incrementalDelayMs: 0");
     expect(pipelineSrc).toContain("shouldInjectSchedulingPhrasebook");
     expect(pipelineSrc).toContain("needSchedulingGuides");
     expect(pipelineSrc).toContain("return ttsSentenceOptions(this.agent.ttsProvider)");
     expect(methodBody("processTurn")).toContain("this.cartesiaManagedTokenStream()");
     expect(pipelineSrc).toContain("CartesiaTurnStream");
-    expect(pipelineSrc).toContain("appendTurnRemainder");
+    expect(pipelineSrc).toContain("waitJobReadyUnlessBarged");
+    expect(pipelineSrc).toContain("finalizeTurnContext");
     expect(pipelineSrc).toContain("trim: !this.cartesiaManagedTokenStream()");
     expect(readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), "clause-stream.ts"),
@@ -164,14 +166,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     // Call 21803: do not start a second processTurn (21426 double-speak), but
     // cut current audio for a real queued final and drop stale acks at drain.
     expect(methodBody("handleStreamingTranscript")).toContain("queued_final");
-    expect(methodBody("handleStreamingTranscript")).toContain("isFalseInterruption");
     expect(methodBody("handleStreamingTranscript")).toContain("interruptReplyArmed");
-    // Call 21818: sentence-start talk-over is held, not dropped; a real final
-    // while isProcessing barges even after playback ended so the old monologue
-    // cannot finish first.
-    expect(methodBody("handleStreamingTranscript")).toContain("looksLikeIncompleteClauseStart");
-    expect(methodBody("handleStreamingTranscript")).toContain("fragment_coalesce_hold");
-    expect(methodBody("handleStreamingTranscript")).toContain("collapseRepeatedUtterance");
     expect(methodBody("processTurn")).toContain("interruptReplyArmed");
     expect(pipelineSrc).toContain("THIS_TURN_INSTRUCTION");
     expect(pipelineSrc).toContain("this.wakePlayTask()");
@@ -195,7 +190,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("event: \"Backchannel Armed\"");
     expect(pipelineSrc).toContain("if (sequenceId !== FILLER_SEQUENCE_ID) {");
     expect(pipelineSrc).toContain("partialSnapshot: _spec.partialSnapshot");
-    expect(pipelineSrc).toContain("preferNumberTranscript");
+    expect(pipelineSrc).not.toContain("preferNumberTranscript");
     expect(pipelineSrc).toContain("initialLanguage wins even in strict mode");
     expect(pipelineSrc).toContain("this.requestedLangLatch || this.lastNonEnglishLang || this.currentLang");
     expect(pipelineSrc).toContain("getLiveHandoffLanguage(): string");
@@ -213,30 +208,19 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("if (this.streamSTT?.flush && !this.liveSarvamRealtime())");
     expect(pipelineSrc).toContain("this.armBargeRecovery(partial)");
     expect(methodBody("processTurn")).toContain("this.clearBargeRecovery()");
-    expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("isSameUtteranceStillArriving");
-    expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("playbackTooFreshForPartialBarge");
+    expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("shouldTriggerInterruption");
+    expect(methodBody("isSameUtteranceStillArriving")).toContain("isQueuedDuplicateUserTurn");
+    expect(methodBody("playbackTooFreshForPartialBarge")).toContain("return false");
+    expect(methodBody("armBargeRecovery")).toMatch(/return;/);
+    expect(methodBody("flushBargeRecovery")).not.toContain("handleStreamingTranscript");
+    expect(methodBody("handleStreamingTranscript")).toContain("resumeBargedReply");
+    expect(pipelineSrc).not.toContain("answering last partial");
   });
 
   it("barge recovery waits out an open VAD instead of answering a fragment (call 21628)", () => {
-    // The 800ms backstop used to win the race against the caller finishing:
-    // it committed "No, no" 1.29s into a 4.28s segment, then the real sentence
-    // landed seconds later as a duplicate turn. The tick must re-arm while VAD
-    // is open, refresh the armed text, and keep a stuck-VAD ceiling.
-    const tick = methodBody("scheduleBargeRecoveryTick");
-    expect(tick).toContain("this._vadSpeechStartAt !== 0");
-    expect(tick).toContain("BARGE_RECOVERY_MAX_WAIT_MS");
-    expect(tick).toContain("this.scheduleBargeRecoveryTick()");
-    expect(tick).toContain("getPendingTranscript");
-    expect(tick).toContain("vad_stuck");
-    // Call 21818: do not vad_stuck while the pending transcript is still growing.
-    expect(tick).toContain("this._bargeRecoveryStableText");
-    expect(tick).toContain("frozenMs");
-    expect(tick).toContain("shouldAbandonStuckBarge");
+    expect(methodBody("flushBargeRecovery")).toContain("this.clearBargeRecovery()");
     expect(pipelineSrc).toContain("abandonFalseBarge");
-    expect(pipelineSrc).toContain("BARGE_STUCK_RESUME_MS");
-    // speech_end must stay the primary commit path.
     expect(pipelineSrc).toContain('this.flushBargeRecovery("speech_end")');
-    // The cover masks our latency — it must never talk over the caller.
     expect(pipelineSrc).toContain("Cover masks OUR latency; it must not talk over the caller.");
   });
 
@@ -249,5 +233,38 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(workerSrc).not.toContain("voice-isolator");
     expect(workerSrc).not.toContain("gtcrn");
     expect(pipelineSrc).not.toContain("voice-isolator");
+  });
+});
+
+describe("intake persist + VoBiz hangup (call 25223)", () => {
+  it("saves the form during TTS instead of a silent tool-only turn", () => {
+    expect(methodBody("processTurn")).toContain("persistIntakeFromTurn");
+    expect(methodBody("processTurn")).toContain("withoutBackgroundIntakeTools");
+    expect(pipelineSrc).toContain("persistDuringSpeech");
+  });
+
+  it("issues a VoBiz REST hangup because keepCallAlive leaves the PSTN up", () => {
+    const sessionSrc = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "session.ts"),
+      "utf8",
+    );
+    expect(sessionSrc).toContain("hangupVobizCall");
+    expect(sessionSrc).toContain("hangupCarrierIfAgentEnded");
+    const vobizSrc = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "telephony/vobiz.ts"),
+      "utf8",
+    );
+    expect(vobizSrc).toContain('keepCallAlive="true"');
+    expect(vobizSrc).toContain("DELETE /Call/{uuid}");
+  });
+});
+
+describe("Cartesia greeting overlap (call 25226)", () => {
+  it("plays known-up-front Cartesia text as one generation, not flushed sentences", () => {
+    const body = methodBody("playTextAsSentences");
+    expect(body).toContain("CartesiaTTS");
+    expect(body).toContain("playSentence");
+    expect(body).toContain("25226");
+    expect(body).not.toContain("skipDrain");
   });
 });

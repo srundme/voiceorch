@@ -247,30 +247,13 @@ export function isBareAcknowledgement(text: string): boolean {
  *  - anything else → neutral do-not-repeat (respond to what was said).
  * `escalated` = a verbatim repeat was already detected this call.
  */
-export function buildAntiRepeatNudge(opts: {
+export function buildAntiRepeatNudge(_opts: {
   lastUserText: string;
   prevLine: string;
   escalated: boolean;
   alreadyAsked?: string[];
 }): string {
-  const { lastUserText, prevLine, escalated } = opts;
-  const asked = opts.alreadyAsked?.length
-    ? ` You already asked: ${opts.alreadyAsked.map((q) => `"${q}"`).join("; ")}. Do NOT re-ask those topics or a paraphrase — treat garbled answers as answered and move FORWARD.`
-    : "";
-  if (isHoldRequest(lastUserText)) {
-    return `[CALLER ASKED TO WAIT] The caller asked you to wait. Do NOT advance the flow, do NOT continue the pitch, and do NOT repeat your previous line ("${prevLine}"). Reply with ONE short sentence confirming you are waiting (e.g. "Sure, take your time") and then stop.`;
-  }
-  if (isQuestionUtterance(lastUserText)) {
-    return `[ANSWER THE QUESTION FIRST] The caller just asked a question. Answer it directly and completely NOW, using the knowledge provided — do not skip it, do not reply with a filler and move on, do not continue the script until you have answered. Do not repeat your previous line ("${prevLine}"). After answering, resume the flow from where you left off.${asked}`;
-  }
-  if (isBareAcknowledgement(lastUserText)) {
-    return escalated
-      ? `[DO NOT REPEAT — CRITICAL] You have already repeated yourself. You said: "${prevLine}". Do NOT say this again in any form. The caller has responded — move the conversation FORWARD to the next step or question. Say something different now.${asked}`
-      : `[DO NOT REPEAT] You just said: "${prevLine}". Do not repeat this line verbatim. The caller acknowledged (e.g. "okay") — acknowledge briefly and advance to the next point — do not re-ask or restate.${asked}`;
-  }
-  return escalated
-    ? `[DO NOT REPEAT — CRITICAL] You have already repeated yourself. You said: "${prevLine}". Do NOT say this again in any form. Respond directly to what the caller just said, then continue the flow.${asked}`
-    : `[DO NOT REPEAT] You just said: "${prevLine}". Do not repeat this line verbatim. Respond directly to what the caller just said, then continue the flow.${asked}`;
+  return "";
 }
 
 /** Recent agent questions so the model cannot replay qualification (call 20113). */

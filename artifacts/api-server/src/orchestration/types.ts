@@ -62,6 +62,29 @@ export interface EndCallTool {
 }
 
 /**
+ * Candidate intake tools. Their arguments are generated from the intake field
+ * and disposition catalogues at call setup, so the LLM schema can never drift
+ * from what the form actually accepts.
+ */
+export interface IntakeWriteTool {
+  type: "intake_write";
+  name: string;
+  description: string;
+}
+
+export interface IntakeDispositionTool {
+  type: "intake_disposition";
+  name: string;
+  description: string;
+}
+
+export interface IntakeSubmitTool {
+  type: "intake_submit";
+  name: string;
+  description: string;
+}
+
+/**
  * Sensible default farewell spoken when a call is ended by the AI (built-in
  * end_call tool or an end-call phrase) and the agent has no custom
  * `goodbyeMessage` configured. Prevents calls from dropping silently.
@@ -219,7 +242,7 @@ export interface SquadFollowupTool {
   description: string;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendEmailTool | SendWhatsappTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendEmailTool | SendWhatsappTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool | IntakeWriteTool | IntakeDispositionTool | IntakeSubmitTool;
 
 /** One JSON-schema property on a tool argument object. */
 export interface ToolPropertySchema {
@@ -252,7 +275,7 @@ export interface STTConfig {
   endOfTurnConfidence: number;
   endOfTurnTimeout: number;
   keyterms: string[];
-  /** "off" | "vapi" | "livekit" — "vapi" enables Deepgram utterance-end VAD events */
+  /** "off" | "vapi" | "livekit" — Deepgram utterance-end VAD (legacy livekit alias) */
   smartEndpointing: string;
   autoFallback: boolean;
   fallbackProviders: Array<{ provider: string; model: string | null }>;
@@ -348,6 +371,8 @@ export interface AgentConfig {
   autoSwitchToEnglish: boolean;
   backchannelingEnabled: boolean;
   backchannelingFrequency: number | null;
+  /** Spoken cover fillers. Empty/null uses the language default pool. */
+  backchannelFillers: string[] | null;
   webhookUrl: string | null;
   noiseCancellationEnabled: boolean;
   /** Kept for existing agent_config rows. The Noise Cancellation toggle now
@@ -518,7 +543,8 @@ export interface AgentConfig {
    */
   sarvamEndOfSpeechSilenceMs: number | null;
   /**
-   * Realtime connect `threshold` (0–1). Null uses Sarvam's default 0.3.
+   * Realtime connect `threshold` (0–1). Null uses the adapter default
+   * (0.7 on 8 kHz PSTN, 0.3 on 16 kHz).
    */
   sarvamVadThreshold: number | null;
   /**

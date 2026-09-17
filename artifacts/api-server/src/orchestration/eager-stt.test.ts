@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isEagerCommitReady,
+  isQueuedDuplicateUserTurn,
   isSameUtteranceContinuation,
   isSpeculativeHit,
   looksLikeRepeatedSttHallucination,
@@ -128,6 +129,22 @@ describe("isSameUtteranceContinuation", () => {
       "Wait, I need to stop you",
     )).toBe(false);
     expect(isSameUtteranceContinuation("yes", "no I want to book")).toBe(false);
+  });
+});
+
+describe("isQueuedDuplicateUserTurn", () => {
+  it("does not barge a restated shift answer (call 25218)", () => {
+    expect(isQueuedDuplicateUserTurn(
+      "I'm okay with it",
+      "I'm okay with both the shifts.",
+    )).toBe(true);
+  });
+
+  it("still treats a new question as a real barge", () => {
+    expect(isQueuedDuplicateUserTurn(
+      "I'm okay with it",
+      "What was the reason like don't you have any job opening",
+    )).toBe(false);
   });
 });
 

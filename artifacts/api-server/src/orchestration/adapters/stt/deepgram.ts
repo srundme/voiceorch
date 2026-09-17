@@ -121,7 +121,7 @@ export class DeepgramSTT implements STTAdapter {
     if (this.cfg.backgroundDenoising) params.set("noise_reduction", "true");
 
     if (useSmartEndpointing) {
-      // VAPI/LiveKit mode — use Deepgram's VAD utterance-end events (ML-based endpointing)
+      // VAPI / utterance-end mode — Deepgram's VAD events (ML-based endpointing)
       // Prefer Latency Tuning UI (endpointingSilenceMs) over legacy endOfTurnTimeout.
       const utteranceEndMs = Math.min(
         this.cfg.endpointingSilenceMs ?? this.cfg.endOfTurnTimeout,
@@ -185,7 +185,7 @@ export class DeepgramSTT implements STTAdapter {
         return;
       }
 
-      // ── UtteranceEnd event (smart endpointing: vapi/livekit mode) ──────────
+      // ── UtteranceEnd event (smart endpointing: vapi / utterance-end mode) ──
       if (msg.type === "UtteranceEnd" && useSmartEndpointing) {
         const text = pendingInterim.trim();
         pendingInterim = "";

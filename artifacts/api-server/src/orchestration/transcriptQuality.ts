@@ -845,9 +845,9 @@ export function isSemanticInterrupt(text: string): boolean {
  * PSTN barge-in must only cut TTS on a clear interrupt (stop/wait) or a slot
  * answer. Generic / garbled echo of our own pitch must not clearAudio.
  */
-export function isHardInterruptTranscript(text: string, isSelfEcho = false): boolean {
+export function isHardInterruptTranscript(text: string): boolean {
   const t = text.trim();
-  if (!t || isSelfEcho) return false;
+  if (!t) return false;
   if (isBackchannelOnlyUtterance(t) || isCallerAttentionUtterance(t)) return false;
   if (isSemanticInterrupt(t)) return true;
   // Slot answers are short ("2 pm", "காலை"). A long echo of our pitch that

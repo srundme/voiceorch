@@ -47,21 +47,21 @@ describe("shouldInjectSchedulingPhrasebook", () => {
       .toBe(false);
   });
 
-  it("attaches on book / cancel / mid-funnel / active reschedule", () => {
+  it("never injects a scheduling phrasebook overlay", () => {
     expect(shouldInjectSchedulingPhrasebook({ transcript: "book a meeting", bookingFlow: idle }))
-      .toBe(true);
+      .toBe(false);
     expect(looksLikeCancelOrRescheduleIntent("cancel my appointment")).toBe(true);
     expect(shouldInjectSchedulingPhrasebook({ transcript: "cancel my appointment", bookingFlow: idle }))
-      .toBe(true);
+      .toBe(false);
     expect(shouldInjectSchedulingPhrasebook({
       transcript: "yes",
       bookingFlow: { ...idle, availabilityChecked: true, lastSlotIso: "2026-08-28T10:00:00+05:30" },
-    })).toBe(true);
+    })).toBe(false);
     expect(shouldInjectSchedulingPhrasebook({
       transcript: "okay",
       bookingFlow: idle,
       activeReschedule: true,
-    })).toBe(true);
+    })).toBe(false);
   });
 
   it("attaches the tool-preamble note for callback, not for hello", () => {

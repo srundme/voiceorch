@@ -77,3 +77,4 @@ export * from "./mcp-oauth";
 export * from "./cost-pricing-rates";
 export * from "./managed-keys";
 export * from "./landing-partner-leads";
+export * from "./candidate-intakes";

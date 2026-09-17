@@ -867,7 +867,21 @@
       "idx": 123,
       "version": "7",
       "when": 1791600023000,
-      "tag": "0123_calls_language_memory",
+      "tag": "0123_candidate_intakes",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1791600024000,
+      "tag": "0124_candidate_intake_job",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1791600025000,
+      "tag": "0125_calls_language_memory",
       "breakpoints": true
     }
   ]

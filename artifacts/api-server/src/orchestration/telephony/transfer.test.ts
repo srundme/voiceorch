@@ -3,6 +3,7 @@ import {
   buildVobizMergeCustomerXml,
   buildVobizMergeSalesXml,
   buildVobizMergeWaitXml,
+  vobizAuthFromProviderKeys,
   vobizMergeRoom,
 } from "./transfer.js";
 
@@ -34,5 +35,19 @@ describe("VoBiz 3-way merge XML", () => {
 
   it("loops hold speech for waitSound", () => {
     expect(buildVobizMergeWaitXml()).toContain('loop="0"');
+  });
+});
+
+describe("vobizAuthFromProviderKeys", () => {
+  it("reads authId from extraConfig", () => {
+    const keys = new Map<string, string>([
+      ["vobiz", "token"],
+      ["vobiz:extraConfig", JSON.stringify({ authId: "MAID" })],
+    ]);
+    expect(vobizAuthFromProviderKeys(keys)).toEqual({ authId: "MAID", authToken: "token" });
+  });
+
+  it("returns null when credentials are missing", () => {
+    expect(vobizAuthFromProviderKeys(new Map())).toBeNull();
   });
 });
