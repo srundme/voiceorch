@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IntakeExtra } from "./intake-dispositions.js";
-import { evaluateIntakeScreen, isBangalorePlace, isBangalorePincode, nonHiringAreaForPincode, parseLastCompany, parsePincode, parseScreenYesNo, parseTenure, pincodeFromPlace } from "./intake-screen.js";
+import { evaluateIntakeScreen, isBangalorePlace, isBangalorePincode, nonHiringAreaForPincode, parseLastCompany, parsePincode, parseScreenYesNo, parseTenure, pincodeFromPlace, spokenBangaloreCity } from "./intake-screen.js";
 
 const emptyExtra = (): IntakeExtra => ({ dispositionIds: [], answers: {} });
 
@@ -73,6 +73,13 @@ describe("parsePincode", () => {
     expect(parsePincode("600")).toBeNull();
     expect(parsePincode("600 zero one")).toBeNull();
   });
+
+  it("does not treat a date of birth as a pincode", () => {
+    expect(parsePincode("20 July 2000")).toBeNull();
+    expect(parsePincode("12 July 1998")).toBeNull();
+    expect(parsePincode("20/07/2000")).toBeNull();
+    expect(parsePincode("My date of birth is 20 July 2000")).toBeNull();
+  });
 });
 
 describe("parseLastCompany", () => {
@@ -110,6 +117,12 @@ describe("Bangalore vs non-hiring pincodes", () => {
     expect(nonHiringAreaForPincode("577211")).toBe("Purudal, Shimoga - Karnataka");
     expect(nonHiringAreaForPincode("577220")).toBe("Others");
     expect(nonHiringAreaForPincode("560001")).toBeNull();
+  });
+
+  it("pulls Jayanagar out of a long spoken turn", () => {
+    expect(spokenBangaloreCity("I mean Bengaluru Jayanagar Fourth Block")).toBe("JAYANAGAR");
+    expect(spokenBangaloreCity("HSR Layout")).toBe("HSR LAYOUT");
+    expect(spokenBangaloreCity("Bengalore")).toBe("BANGALORE");
   });
 });
 

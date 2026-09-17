@@ -3,6 +3,7 @@ import {
   isBackgroundIntakeTool,
   resolveToolFillerPhrase,
   withoutBackgroundIntakeTools,
+  intakeSpokenTools,
 } from "./tool-fillers.js";
 
 describe("resolveToolFillerPhrase", () => {
@@ -33,5 +34,18 @@ describe("resolveToolFillerPhrase", () => {
       { name: "finish_intake" },
       { name: "end_call" },
     ]).map((t) => t.name)).toEqual(["finish_intake", "end_call"]);
+  });
+
+  it("hides finish_intake until screening can close", () => {
+    expect(intakeSpokenTools([
+      { name: "save_candidate_details" },
+      { name: "finish_intake" },
+      { name: "end_call" },
+    ], { screeningComplete: false }).map((t) => t.name)).toEqual(["end_call"]);
+    expect(intakeSpokenTools([
+      { name: "save_candidate_details" },
+      { name: "finish_intake" },
+      { name: "end_call" },
+    ], { screeningComplete: true }).map((t) => t.name)).toEqual(["finish_intake", "end_call"]);
   });
 });

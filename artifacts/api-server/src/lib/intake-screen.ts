@@ -85,6 +85,29 @@ export function canonicalCityName(value: string): string {
   return trimmed.toUpperCase();
 }
 
+/**
+ * Bangalore city or area anywhere in a spoken turn — "I mean Bengaluru
+ * Jayanagar Fourth Block" must still save Jayanagar, not wait for a
+ * two-word "I live in" phrase.
+ */
+export function spokenBangaloreCity(raw: string): string | null {
+  const key = lettersKey(raw);
+  if (!key) return null;
+  const areas = PIN_FOR_PLACE
+    .filter((row) => !BLR_CITY_ALIASES.includes(row.needle))
+    .slice()
+    .sort((a, b) => b.needle.length - a.needle.length);
+  for (const { needle } of areas) {
+    if (!key.includes(lettersKey(needle))) continue;
+    if (needle === "HSR") return "HSR LAYOUT";
+    return needle;
+  }
+  if (key.includes("BLR") || BLR_CITY_ALIASES.some((alias) => key.includes(lettersKey(alias)))) {
+    return "BANGALORE";
+  }
+  return null;
+}
+
 /** 6-digit PIN inferred from a spoken city or Bangalore area. */
 export function pincodeFromPlace(value: string | null | undefined): string | null {
   const key = lettersKey(String(value ?? ""));
@@ -96,10 +119,24 @@ export function pincodeFromPlace(value: string | null | undefined): string | nul
   return null;
 }
 
+const MONTH_WORD =
+  "(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)";
+
+/** True when the utterance is a calendar date, not a PIN (20 July 2000 → 202000). */
+export function looksLikeCalendarDate(raw: unknown): boolean {
+  const text = String(raw ?? "").replace(/(\d+)(st|nd|rd|th)\b/gi, "$1");
+  if (/\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\b/.test(text)) return true;
+  if (/\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b/.test(text)) return true;
+  if (new RegExp(`\\b\\d{1,2}\\s+${MONTH_WORD}\\s+\\d{4}\\b`, "i").test(text)) return true;
+  if (new RegExp(`\\b${MONTH_WORD}\\s+\\d{1,2},?\\s+\\d{4}\\b`, "i").test(text)) return true;
+  return false;
+}
+
 /** Six-digit Indian PIN from digits or spoken digits ("five six zero double zero five"). */
 export function parsePincode(raw: unknown): string | null {
   const text = String(raw ?? "").trim();
   if (!text) return null;
+  if (looksLikeCalendarDate(text)) return null;
   const expanded = expandSpokenDigits(text.toLowerCase());
   const digits = expanded.replace(/\D/g, "");
   // Exact 6 only — slicing 5600005 → 560000 (call 25244) is the wrong PIN.

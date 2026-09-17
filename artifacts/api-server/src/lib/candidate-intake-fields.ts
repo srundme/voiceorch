@@ -102,29 +102,89 @@ function phone(raw: unknown): IntakeFieldResult {
   return ok(plus ? `+${digits}` : digits);
 }
 
+function isValidEmailAddress(text: string): boolean {
+  return /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(text) && text.length <= 254;
+}
+
+function withDefaultMailboxTld(domain: string): string {
+  if (/\./.test(domain)) return domain;
+  if (/^(gmail|yahoo|outlook|hotmail|icloud|rediffmail|protonmail)$/.test(domain)) {
+    return `${domain}.com`;
+  }
+  return domain;
+}
+
 function email(raw: unknown): IntakeFieldResult {
-  const spoken = collapse(raw);
-  const spelled = emailFromSpelledLetters(spoken);
-  const text = (spelled ?? spoken)
+  const rebuilt = rebuildSpokenEmail(collapse(raw));
+  if (!rebuilt) return bad("Email is not a valid address");
+  return ok(rebuilt);
+}
+
+/**
+ * Pull the mailbox out of a spoken turn instead of gluing the whole
+ * sentence together ("yeah my gmail id is gopi at gmail.com" must not
+ * become yeahmygmailidisgopi@gmail.com).
+ */
+function rebuildSpokenEmail(spoken: string): string | null {
+  let s = spoken
     .toLowerCase()
-    .replace(/\s+at\s+/g, "@")
-    .replace(/\s+dot\s+/g, ".")
-    .replace(/\s+/g, "");
-  if (!/^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$/.test(text)) return bad("Email is not a valid address");
-  if (text.length > 254) return bad("Email is too long");
-  return ok(text);
+    .replace(/\bat[\s-]*the[\s-]*rate\b/g, " at ")
+    .replace(/\bunderscore\b/g, "_")
+    .replace(/\b(?:hyphen|dash)\b/g, "-")
+    .replace(/\s+dot\s+/g, ".");
+
+  const spelled = emailFromSpelledLetters(s);
+  if (spelled && isValidEmailAddress(spelled)) return spelled;
+
+  s = s.replace(/^.*?\b(?:e-?mail|gmail|mail)\s*(?:id|address)?\s*(?:is|:)?\s+/i, " ");
+  s = s.replace(/\s+at\s+/g, "@").replace(/\s+/g, " ").trim();
+
+  const atHit = s.match(
+    /\b([a-z0-9._%+-]{2,64})\s*@\s*([a-z0-9][a-z0-9.-]*?)(?:\s*\.\s*([a-z]{2,24}))?\b/i,
+  );
+  if (atHit) {
+    const local = atHit[1]!.replace(/\s+/g, "");
+    const host = `${atHit[2]}${atHit[3] ? `.${atHit[3]}` : ""}`.replace(/\s+/g, "").replace(/[.,;:]+$/g, "");
+    const addr = `${local}@${withDefaultMailboxTld(host)}`.toLowerCase();
+    if (isValidEmailAddress(addr)) return addr;
+  }
+
+  const hostHit = s.match(
+    /\b([a-z0-9._%+-]{2,64})\s+(gmail|yahoo|outlook|hotmail|icloud|rediffmail|protonmail)(?:\s*\.\s*([a-z]{2,}))?\b/i,
+  );
+  if (hostHit) {
+    const addr = `${hostHit[1]}@${hostHit[2]}.${hostHit[3] || "com"}`.toLowerCase();
+    if (isValidEmailAddress(addr)) return addr;
+  }
+
+  const compact = s.replace(/\s+/g, "");
+  const compactHit = compact.match(/([a-z0-9._%+-]{2,64})@([a-z0-9.-]+\.[a-z]{2,})/i);
+  if (compactHit) {
+    const local = compactHit[1]!.toLowerCase();
+    if (!/^(yeah|yes|ok|okay|my|the|gmail|email|mail)/.test(local) && !/gmailid|emailis|mygmail/.test(local)) {
+      const addr = `${local}@${compactHit[2]!.toLowerCase()}`;
+      if (isValidEmailAddress(addr)) return addr;
+    }
+  }
+  return null;
 }
 
 /** "G O P I N W R K @gmail.com" beats a garbled "copy and work@gmail.com" in the same turn. */
 function emailFromSpelledLetters(spoken: string): string | null {
   const re =
-    /(?:^|[\s.,;:])((?:[A-Za-z][\s.\-]){2,}[A-Za-z])\s*(?:@|\bat\b)\s*([A-Za-z0-9.-]+\.[A-Za-z]{2,})/gi;
+    /(?:^|[\s.,;:])((?:[A-Za-z][\s.\-]){2,}[A-Za-z])\s*(?:@|\bat\b)\s*([A-Za-z0-9.-]+(?:\.[A-Za-z]{2,})?)/gi;
   let last: string | null = null;
   let m: RegExpExecArray | null;
   while ((m = re.exec(spoken)) !== null) {
     const local = m[1]!.replace(/[^A-Za-z0-9]/g, "").toLowerCase();
-    const domain = m[2]!.replace(/\s+/g, "").toLowerCase();
-    if (local.length >= 3) last = `${local}@${domain}`;
+    const domain = withDefaultMailboxTld(m[2]!.replace(/\s+/g, "").replace(/[.,;:]+$/g, "").toLowerCase());
+    if (local.length >= 3 && isValidEmailAddress(`${local}@${domain}`)) last = `${local}@${domain}`;
+  }
+  if (last) return last;
+  const noAt = /(?:^|[\s.,;:])((?:[A-Za-z][\s.\-]){2,}[A-Za-z])\s+(gmail|yahoo|outlook|hotmail)\b/gi;
+  while ((m = noAt.exec(spoken)) !== null) {
+    const local = m[1]!.replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+    if (local.length >= 3) last = `${local}@${m[2]!.toLowerCase()}.com`;
   }
   return last;
 }

@@ -195,7 +195,7 @@ export async function executeIntakeSubmit(ctx: IntakeToolContext): Promise<strin
   const fresh = (await loadIntakeByToken(form.publicToken)) ?? form;
   const cue = cueFor(fresh);
   if (!cue.canFinish) {
-    return `Not ready to close. Screening is not complete. ${speakNext(cue.instruction)}`;
+    return `Not ready to close. Screening is not complete. ${speakNext(cue.instruction)} Do not call finish_intake again until that is saved.`;
   }
 
   const result = await completeIntakeSession(form.publicToken);
