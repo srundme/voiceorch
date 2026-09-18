@@ -32,7 +32,7 @@ MOSHI_RATE = 24000
 SNAP_RATE = 8000
 SNAP_FRAME = 160
 OPUS_FRAME_24 = 960
-HANDSHAKE_S = float(os.environ.get("MOSHI_HANDSHAKE_TIMEOUT_S", "20"))
+HANDSHAKE_S = float(os.environ.get("MOSHI_HANDSHAKE_TIMEOUT_S", "45"))
 WARM_VOICE = os.environ.get("PERSONAPLEX_VOICE", "NATM1").replace(".pt", "")
 WARM_PROMPT = os.environ.get(
     "PERSONAPLEX_WARM_PROMPT",
@@ -79,12 +79,38 @@ def pcm_rms(pcm_i16: np.ndarray) -> float:
     return float(np.sqrt(np.mean(x * x)))
 
 
+def dither_f32(n: int, amp: float = 40.0 / 32768.0) -> np.ndarray:
+    """Room-tone instead of digital zeros — zeros make Moshi emit 'aahhh' (call 25599)."""
+    return (np.random.randn(n).astype(np.float32) * amp)
+
+
+def dither_i16(n: int, amp: int = 40) -> np.ndarray:
+    return np.clip(np.random.randint(-amp, amp + 1, size=n), -32768, 32767).astype(np.int16)
+
+
 def trim_leading_silence(pcm_i16: np.ndarray) -> np.ndarray:
     hop = SNAP_FRAME
     i = 0
     while i + hop <= pcm_i16.size and pcm_rms(pcm_i16[i:i + hop]) < GREETING_SILENCE_RMS:
         i += hop
     return pcm_i16[i:]
+
+
+def keep_speech(pcm_i16: np.ndarray, hang_ms: float = 250.0) -> np.ndarray:
+    """Keep spoken frames plus a short hangover; drop idle so the phone queue cannot grow."""
+    hop = SNAP_FRAME
+    hang_left = 0
+    hang_frames = max(1, int(hang_ms * SNAP_RATE / 1000.0 / hop))
+    parts: list[np.ndarray] = []
+    for i in range(0, pcm_i16.size - hop + 1, hop):
+        frame = pcm_i16[i:i + hop]
+        if pcm_rms(frame) >= GREETING_SILENCE_RMS:
+            hang_left = hang_frames
+            parts.append(frame)
+        elif hang_left > 0:
+            hang_left -= 1
+            parts.append(frame)
+    return np.concatenate(parts) if parts else np.zeros(0, dtype=np.int16)
 
 
 def moshi_ssl() -> ssl.SSLContext:
@@ -136,7 +162,7 @@ async def _incoming_recv(incoming: asyncio.Queue, timeout: float):
 async def _send_silence(sess: WarmSession) -> None:
     """Moshi only generates while it is fed frames. Keep the stream alive until steal."""
     while not sess.steal.is_set():
-        sess.opus_writer.append_pcm(np.zeros(OPUS_FRAME_24, dtype=np.float32))
+        sess.opus_writer.append_pcm(dither_f32(OPUS_FRAME_24))
         blob = sess.opus_writer.read_bytes()
         if len(blob) > 0:
             try:
@@ -215,7 +241,6 @@ class WarmPool:
                 pass
             self.start()
             return
-        sess.greeting_8k = np.zeros(0, dtype=np.int16)
         sess.steal = asyncio.Event()
         sess.silence_task = None
         sess.discard_task = None
@@ -303,7 +328,7 @@ class WarmPool:
 
         async def send_silence() -> None:
             while not steal.is_set():
-                writer.append_pcm(np.zeros(OPUS_FRAME_24, dtype=np.float32))
+                writer.append_pcm(dither_f32(OPUS_FRAME_24))
                 blob = writer.read_bytes()
                 if len(blob) > 0:
                     try:
@@ -400,14 +425,22 @@ POOL = WarmPool()
 async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> None:
     close = False
     pending_in_24 = np.zeros(0, dtype=np.int16)
-    pending_24 = sess.pending_24
-    pending_8 = sess.pending_8
+    pending_24 = np.zeros(0, dtype=np.int16)
+    pending_8 = np.zeros(0, dtype=np.int16)
     moshi = sess.moshi
     opus_writer = sess.opus_writer
     opus_reader = sess.opus_reader
     t_first_in = t_first_out = None
     send_lock = asyncio.Lock()
-    last_real_at = time.monotonic()
+    last_in_at = time.monotonic()
+    t_caller_turn = 0.0
+    last_agent_speech_at = 0.0
+    heard_caller = False
+    greeting_s = float(sess.greeting_8k.size) / SNAP_RATE
+    live_at = time.monotonic() + greeting_s
+    held_8 = np.zeros(0, dtype=np.int16)
+    flushed_hold = False
+    quiet_ms = 0.0
 
     while True:
         try:
@@ -427,7 +460,7 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
                 await moshi.send(b"\x01" + blob)
 
     async def snap_to_moshi() -> None:
-        nonlocal close, pending_in_24, t_first_in, last_real_at
+        nonlocal close, pending_in_24, t_first_in, last_in_at, t_caller_turn, heard_caller
         try:
             async for message in snap_ws:
                 if close:
@@ -438,7 +471,11 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
                     t_first_in = time.monotonic()
                     log.info("latency T1_first_pcm_to_moshi_ms=%.0f", (t_first_in - t_hello) * 1000)
                 pcm8 = np.frombuffer(message, dtype="<i2")
-                last_real_at = time.monotonic()
+                last_in_at = time.monotonic()
+                if pcm_rms(pcm8) >= GREETING_SILENCE_RMS:
+                    heard_caller = True
+                    if t_caller_turn <= 0.0 or (time.monotonic() - last_agent_speech_at) > 0.4:
+                        t_caller_turn = time.monotonic()
                 pending_in_24 = np.concatenate([pending_in_24, upsample_8_to_24(pcm8)])
                 while pending_in_24.size >= OPUS_FRAME_24:
                     frame = pending_in_24[:OPUS_FRAME_24]
@@ -450,16 +487,30 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
             await abort()
 
     async def pad_moshi_gaps() -> None:
-        zeros = np.zeros(OPUS_FRAME_24, dtype=np.int16)
+        # Only clock Moshi if SnapServe actually stalled. Padding on low RMS
+        # doubled input during every pause (caller silence + dither) so Moshi
+        # generated faster than realtime and the phone queued 10s+ per turn.
+        padded = False
         while not close:
             await asyncio.sleep(OPUS_FRAME_24 / MOSHI_RATE)
             if close:
                 return
-            if time.monotonic() - last_real_at >= 0.08:
-                await emit_opus(zeros)
+            if time.monotonic() - last_in_at >= 0.08:
+                if not padded:
+                    log.info("moshi pad: SnapServe PCM stalled")
+                    padded = True
+                await emit_opus(dither_i16(OPUS_FRAME_24))
+
+    async def send_pcm8(pcm8: np.ndarray) -> None:
+        nonlocal pending_8
+        pending_8 = np.concatenate([pending_8, pcm8])
+        while pending_8.size >= SNAP_FRAME:
+            await snap_ws.send(pending_8[:SNAP_FRAME].tobytes())
+            pending_8 = pending_8[SNAP_FRAME:]
 
     async def moshi_to_snap() -> None:
-        nonlocal close, pending_24, pending_8, t_first_out
+        nonlocal close, pending_24, t_first_out, t_caller_turn, last_agent_speech_at
+        nonlocal held_8, flushed_hold, quiet_ms
         try:
             while not close:
                 try:
@@ -485,13 +536,6 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
                     continue
                 if kind != 0x01 or not payload:
                     continue
-                if t_first_out is None:
-                    t_first_out = time.monotonic()
-                    log.info(
-                        "latency T2_live_opus_ms=%.0f warm=%s",
-                        (t_first_out - t_hello) * 1000,
-                        warm,
-                    )
                 opus_reader.append_bytes(payload)
                 pcm_f = opus_reader.read_pcm()
                 if pcm_f is None or np.asarray(pcm_f).size == 0:
@@ -503,10 +547,45 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
                     continue
                 pcm8 = downsample_24_to_8(pending_24[:emit_n])
                 pending_24 = pending_24[emit_n:]
-                pending_8 = np.concatenate([pending_8, pcm8])
-                while pending_8.size >= SNAP_FRAME:
-                    await snap_ws.send(pending_8[:SNAP_FRAME].tobytes())
-                    pending_8 = pending_8[SNAP_FRAME:]
+                if t_first_out is None:
+                    t_first_out = time.monotonic()
+                    log.info(
+                        "latency T2_live_opus_ms=%.0f warm=%s",
+                        (t_first_out - t_hello) * 1000,
+                        warm,
+                    )
+                now = time.monotonic()
+                speaking = pcm_rms(pcm8) >= GREETING_SILENCE_RMS
+                if speaking:
+                    if t_caller_turn > 0.0 and now - last_agent_speech_at > 0.25:
+                        log.info("latency turn_ms=%.0f", (now - t_caller_turn) * 1000)
+                        t_caller_turn = 0.0
+                    last_agent_speech_at = now
+                    quiet_ms = 0.0
+                elif flushed_hold:
+                    quiet_ms += 1000.0 * pcm8.size / SNAP_RATE
+                # Greeting is dumped instantly; Railway plays it over greeting_s.
+                # Buffer live Moshi during that window (do not drop it) and flush
+                # only speech so the phone queue does not keep a 5s offset.
+                if now < live_at:
+                    held_8 = np.concatenate([held_8, pcm8])
+                    continue
+                if not flushed_hold:
+                    flushed_hold = True
+                    quiet_ms = 0.0
+                    speech = keep_speech(held_8)
+                    log.info(
+                        "greeting hold done hold_ms=%.0f buffered_ms=%.0f speech_ms=%.0f heard_caller=%s",
+                        greeting_s * 1000,
+                        1000.0 * held_8.size / SNAP_RATE,
+                        1000.0 * speech.size / SNAP_RATE,
+                        heard_caller,
+                    )
+                    if speech.size >= SNAP_FRAME:
+                        await send_pcm8(speech)
+                    held_8 = np.zeros(0, dtype=np.int16)
+                if speaking or quiet_ms < 250:
+                    await send_pcm8(pcm8)
         except Exception:
             if not close:
                 log.exception("moshi_to_snap failed")
@@ -525,7 +604,8 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
         while buf.size >= SNAP_FRAME:
             await snap_ws.send(buf[:SNAP_FRAME].tobytes())
             buf = buf[SNAP_FRAME:]
-        sess.greeting_8k = np.zeros(0, dtype=np.int16)
+        live_at = time.monotonic() + greeting_s
+        log.info("greeting hold_ms=%.0f", greeting_s * 1000)
 
         async def t2_watchdog() -> None:
             await asyncio.sleep(3)
