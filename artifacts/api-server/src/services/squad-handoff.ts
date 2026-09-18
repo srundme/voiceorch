@@ -26,7 +26,9 @@ import {
   resolveStartSpeakingPlan,
   resolveTtsMinSentenceChars,
 } from "@workspace/db/call-engine-defaults";
+import { compilePromptCore, hasPromptCore } from "@workspace/db/prompt-core";
 import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "../orchestration/mic-sensitivity.js";
+import { INTAKE_AGENT_TYPE } from "../lib/intake-agent.js";
 import { FORCE_SOFTWARE_NOISE_GATE_KEY } from "../orchestration/noise-gate.js";
 import { parseBackchannelPhrases } from "../orchestration/backchannel.js";
 import { optionalMs, optionalUnitInterval } from "../orchestration/stt-tuning.js";
@@ -144,6 +146,14 @@ async function buildTargetAgentConfig(
     : [];
 
   let systemPrompt = agent.generatedPrompt ?? agent.systemPrompt ?? "";
+  if (agent.agentType !== INTAKE_AGENT_TYPE && hasPromptCore(agentCfg["promptCore"])) {
+    systemPrompt = compilePromptCore({
+      core: agentCfg["promptCore"],
+      fallbackPrompt: systemPrompt,
+      agentName: agent.name,
+      agentLanguage: agent.language,
+    });
+  }
   systemPrompt = appendGuardrails(systemPrompt, agent.name);
   systemPrompt = `${systemPrompt}\n\n${buildHandoffPromptBlock(packet)}`;
 

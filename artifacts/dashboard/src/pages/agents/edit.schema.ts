@@ -135,6 +135,30 @@ export const agentFormSchema = z.object({
   agentComposition: z.enum(["single", "team"]).optional(),
   /** Create-time: phone only vs phone + meetings (dual prompt). */
   agentSurfaces: z.enum(["phone", "phone_and_meet"]).optional(),
+  /** Structured prompt core — compiled at call start. Empty = use systemPrompt only. */
+  promptCore: z.object({
+    identity: z.object({
+      name: z.string().optional(),
+      role: z.string().optional(),
+      company: z.string().optional(),
+      persona: z.string().optional(),
+      language: z.string().optional(),
+    }).optional(),
+    callContext: z.object({
+      direction: z.enum(["inbound", "outbound", "both"]).optional(),
+      whyThisCall: z.string().optional(),
+      primaryObjective: z.string().optional(),
+      successCriteria: z.string().optional(),
+    }).optional(),
+    flow: z.array(z.object({
+      title: z.string().optional(),
+      objective: z.string().optional(),
+    })).optional(),
+    mustDo: z.string().optional(),
+    mustNotDo: z.string().optional(),
+    escalation: z.string().optional(),
+    behavioural: z.string().optional(),
+  }).optional(),
   /** Meeting-room system prompt (agentConfig.meetings.meetingPrompt). */
   meetingPrompt: z.string().optional(),
   /** Meeting hard cut-off seconds (default 45 min). Independent of phone maxDuration. */

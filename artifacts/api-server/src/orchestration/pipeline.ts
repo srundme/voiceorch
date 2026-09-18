@@ -78,6 +78,12 @@ import type { AgentConfig, AgentTool, ConversationTurn, LLMAdapter, LLMUsage, Se
 import { defaultGoodbyeMessage, resolveGoodbyeMessage } from "./types.js";
 import type { VoiceSession } from "./voice-session.js";
 import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, isPureNonLatinQuery, type KbRetrievalResult } from "./kb-retrieval.js";
+import {
+  resolveKbRetrievalGateMode,
+  runKbRetrievalGate,
+  shouldSkipKbRetrieval,
+  type KbRetrievalGateResult,
+} from "./kb-retrieval-gate.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { getBackchannelFillers, pickBackchannelFiller, rememberFillerPhrase, type BackchannelFillerOptions } from "./backchannel.js";
 import { ConversationHistory } from "./conversation-history.js";
@@ -8903,6 +8909,10 @@ export class OrchestrationPipeline implements VoiceSession {
     //    live retrieval misses its budget, errors, or finds nothing.
     // Previously the prefetch ALWAYS won when present, which made the query
     // path effectively dead on live calls.
+    //
+    // Retrieval gate (Phase 2): does this utterance need KB at all?
+    // off = current production. shadow = current production + log. on = skip
+    // live search (and prefetch inject) when the gate says skip. Fail open.
     let kbContextPromise: Promise<KbRetrievalResult | null>;
     // Outer KB race window for THIS turn — scales up on skipFts (vector-only)
     // turns so the wider inner budget can actually elapse and surface the
@@ -8910,6 +8920,41 @@ export class OrchestrationPipeline implements VoiceSession {
     let kbOuterRaceMs = KB_CONTEXT_RACE_MS;
     const kbPrefetch = this.kbPrefetchPromise;
     this.kbPrefetchPromise = null;
+    const kbGateMode = resolveKbRetrievalGateMode();
+    let kbGate: KbRetrievalGateResult | null = null;
+    if (
+      kbGateMode !== "off"
+      && !this.agent.kbBakedOnly
+      && this.agent.knowledgeSourceIds.length > 0
+      && transcript.trim().length > 0
+    ) {
+      kbGate = runKbRetrievalGate(transcript);
+      logger.info(
+        {
+          callId: this.config.callId,
+          decision: kbGate.decision,
+          reason: kbGate.reason,
+          utterance: kbGate.utterance,
+          decisionMs: kbGate.decisionMs,
+          mode: kbGateMode,
+        },
+        "KB Retrieval Gate",
+      );
+      this.logExec(EXEC_COMPONENTS.Knowledge, "system", {
+        status: "info",
+        turnNumber: this._activeTurnIndex,
+        latencyMs: kbGate.decisionMs,
+        metadata: {
+          event: "KB Retrieval Gate",
+          decision: kbGate.decision,
+          reason: kbGate.reason,
+          utterance: kbGate.utterance,
+          decisionMs: kbGate.decisionMs,
+          mode: kbGateMode,
+        },
+      });
+    }
+    const kbGateSkip = kbGate ? shouldSkipKbRetrieval(kbGateMode, kbGate.decision) : false;
     // Relabel a prefetch result as source:"prefetch" when it WINS the turn, so
     // the execution log distinguishes fallback context from a real query hit.
     const asPrefetch = (r: KbRetrievalResult | null): KbRetrievalResult | null =>
@@ -8918,6 +8963,9 @@ export class OrchestrationPipeline implements VoiceSession {
       // Per-turn KB retrieval is intentionally disabled — the KB is fully baked into
       // the system prompt. Skip the embed+vector-search round-trip (~150-200ms saved).
       logger.debug({ callId: this.config.callId }, "KB per-turn retrieval skipped (kbBakedOnly=true)");
+      kbContextPromise = Promise.resolve(null);
+    } else if (kbGateSkip) {
+      logger.debug({ callId: this.config.callId, reason: kbGate?.reason }, "KB per-turn retrieval skipped (retrieval gate)");
       kbContextPromise = Promise.resolve(null);
     } else if (this.agent.knowledgeSourceIds.length > 0 && transcript.trim().length > 0) {
       // Pure non-Latin transcripts (e.g. Tamil-only) skip English-config FTS
@@ -9206,13 +9254,15 @@ export class OrchestrationPipeline implements VoiceSession {
       const hit = this.agent.kbBakedOnly ? true : !!kbContext;
       const source = this.agent.kbBakedOnly
         ? "baked"
-        : kbStaleFromTurn !== null
-          ? "stale"
-          : (kbResult?.source ?? "none");
+        : kbGateSkip
+          ? "gated_skip"
+          : kbStaleFromTurn !== null
+            ? "stale"
+            : (kbResult?.source ?? "none");
       this.logExec(EXEC_COMPONENTS.Knowledge, "response", {
         status: "info",
         turnNumber: this._activeTurnIndex,
-        latencyMs: this.agent.kbBakedOnly ? 0 : (kbResult?.latencyMs ?? Date.now() - kbAwaitStart),
+        latencyMs: this.agent.kbBakedOnly || kbGateSkip ? (kbGate?.decisionMs ?? 0) : (kbResult?.latencyMs ?? Date.now() - kbAwaitStart),
         metadata: {
           event: "KB Context",
           hit,
@@ -9227,6 +9277,12 @@ export class OrchestrationPipeline implements VoiceSession {
           ...(kbResult?.truncated ? { truncated: true } : {}),
           ...(kbStaleFromTurn !== null ? { staleReuse: true, staleFromTurn: kbStaleFromTurn } : {}),
           ...(kbRaceTimedOut ? { raceTimedOut: true, raceMs: kbOuterRaceMs } : {}),
+          ...(kbGate ? {
+            gateMode: kbGateMode,
+            gateDecision: kbGate.decision,
+            gateReason: kbGate.reason,
+            gateMs: kbGate.decisionMs,
+          } : {}),
         },
       });
     }

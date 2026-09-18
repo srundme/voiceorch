@@ -2,6 +2,7 @@ import { pgTable, text, serial, timestamp, integer, real, boolean, json, jsonb }
 import { knowledgeBasesTable } from "./knowledge-base";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import type { PromptCore } from "../prompt-core";
 
 export type AgentConfig = {
   // Tab 2 — LLM
@@ -185,6 +186,11 @@ export type AgentConfig = {
     /** Auto-start screenshare when the bot joins. */
     presentationAutoStart?: boolean;
   };
+  /**
+   * Structured prompt core (Identity / purpose / flow / instructions).
+   * Compiled at call start; empty/absent means use `systemPrompt` as today.
+   */
+  promptCore?: PromptCore | null;
 };
 
 export const agentsTable = pgTable("agents", {

@@ -37,6 +37,7 @@ import {
   resolveStartSpeakingPlan,
   resolveTtsMinSentenceChars,
 } from "@workspace/db/call-engine-defaults";
+import { compilePromptCore, hasPromptCore } from "@workspace/db/prompt-core";
 import { withDbRetry } from "./db-retry.js";
 import { transcriptHasFarewellEnding } from "./callFarewell.js";
 import { applyIntakeWrite, attachIntakeCallArtifacts } from "../lib/intake-service.js";
@@ -425,6 +426,18 @@ export async function createSession(params: {
     hour: "2-digit", minute: "2-digit", timeZone: agentTimezone,
   });
   let effectiveSystemPrompt = agent.generatedPrompt ?? agent.systemPrompt;
+  if (agent.agentType !== INTAKE_AGENT_TYPE && hasPromptCore(agentCfg["promptCore"])) {
+    effectiveSystemPrompt = compilePromptCore({
+      core: agentCfg["promptCore"],
+      fallbackPrompt: effectiveSystemPrompt,
+      agentName: agent.name,
+      agentLanguage: agent.language,
+    });
+    logger.info(
+      { agentId: params.agentId, compiledChars: effectiveSystemPrompt.length },
+      "Compiled structured prompt core",
+    );
+  }
   if (agent.agentType === INTAKE_AGENT_TYPE) {
     // Rebuild from the live template so a rename (Irfan vs Meera) is spoken on
     // the next call without waiting for a save, and so existing agents pick up

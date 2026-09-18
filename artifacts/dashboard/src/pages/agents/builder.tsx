@@ -11,6 +11,7 @@ import {
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
   Upload, Archive, Info, AlertCircle, Calendar, Star, BadgeCheck, Video, ExternalLink,
+  Target, ListChecks,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -40,6 +41,12 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, hydrateSarvamRealtimeVad, clampInterruptWords, voiceSecondsFromInterruptWords, clampSemanticTurnStopMs, WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER } from "./edit.schema";
+import {
+  DEFAULT_FLOW_STARTERS,
+  emptyPromptCoreForm,
+  hasPromptCore,
+  promptCoreToForm,
+} from "@workspace/db/prompt-core";
 import { AgentWebsiteEmbedPanel } from "./website-embed";
 import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
@@ -202,7 +209,8 @@ function BuilderStatusChip({ ok, label }: { ok: boolean; label: string }) {
 }
 
 function BuilderPipelineStatus({ form }: { form: any }) {
-  const promptOk = String(form.watch("systemPrompt") ?? "").trim().length >= 40;
+  const promptOk = String(form.watch("systemPrompt") ?? "").trim().length >= 40
+    || hasPromptCore(form.watch("promptCore"));
   const greetOk = String(form.watch("greetingMessage") ?? "").trim().length >= 4;
   const isGeminiLive = isGeminiLiveAgent({
     llmModel: form.watch("llmModel"),
@@ -895,7 +903,7 @@ function OverviewTab({
   const voiceReady = isGeminiLive
     ? true
     : Boolean(ttsVoice && ttsVoice !== "__custom__");
-  const promptReady = systemPrompt.length >= 40;
+  const promptReady = systemPrompt.length >= 40 || hasPromptCore(form.watch("promptCore"));
   const greetingReady = greetingMessage.length >= 4;
 
   const { data: overviewPhones } = useListPhoneNumbers({
@@ -1540,6 +1548,193 @@ function OverviewTab({
   );
 }
 
+/* ── Structured prompt core (Identity / purpose / flow / instructions) ──── */
+
+function PromptCorePanels({ form }: { form: any }) {
+  const { fields, append, remove, replace } = useFieldArray({ control: form.control, name: "promptCore.flow" });
+  const flowEmpty = fields.length === 0;
+  return (
+    <>
+      <BuilderPanel title="Identity" icon={<User2 />} description="Who is speaking — keep this tiny" bodyClassName="gap-3 px-4 py-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <FormField control={form.control} name="promptCore.identity.name" render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel className="text-[11px] text-muted-foreground">Spoken name</FormLabel>
+              <FormControl><Input className="h-8 text-xs" placeholder="Same as agent name if blank" {...field} value={field.value ?? ""} /></FormControl>
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="promptCore.identity.role" render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel className="text-[11px] text-muted-foreground">Role</FormLabel>
+              <FormControl><Input className="h-8 text-xs" placeholder="Recruitment consultant" {...field} value={field.value ?? ""} /></FormControl>
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="promptCore.identity.company" render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel className="text-[11px] text-muted-foreground">Company</FormLabel>
+              <FormControl><Input className="h-8 text-xs" placeholder="XYZ Staffing" {...field} value={field.value ?? ""} /></FormControl>
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="promptCore.identity.persona" render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel className="text-[11px] text-muted-foreground">Tone</FormLabel>
+              <FormControl><Input className="h-8 text-xs" placeholder="Professional, warm, concise" {...field} value={field.value ?? ""} /></FormControl>
+            </FormItem>
+          )} />
+        </div>
+        <FormField control={form.control} name="promptCore.identity.language" render={({ field }) => (
+          <FormItem className="space-y-1">
+            <FormLabel className="text-[11px] text-muted-foreground">Language note</FormLabel>
+            <FormControl><Input className="h-8 text-xs" placeholder="English; switch to Tamil when the caller does" {...field} value={field.value ?? ""} /></FormControl>
+          </FormItem>
+        )} />
+      </BuilderPanel>
+
+      <BuilderPanel title="Call purpose" icon={<Target />} description="Why this call exists" bodyClassName="gap-3 px-4 py-3">
+        <FormField control={form.control} name="promptCore.callContext.direction" render={({ field }) => (
+          <FormItem className="space-y-1">
+            <FormLabel className="text-[11px] text-muted-foreground">Direction</FormLabel>
+            <Select
+              value={field.value || "unset"}
+              onValueChange={(v) => field.onChange(v === "unset" ? undefined : v)}
+            >
+              <SelectTrigger className="h-8 w-full text-xs sm:w-56"><SelectValue placeholder="Not set" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unset" className="text-xs">Not set</SelectItem>
+                <SelectItem value="inbound" className="text-xs">Inbound</SelectItem>
+                <SelectItem value="outbound" className="text-xs">Outbound</SelectItem>
+                <SelectItem value="both" className="text-xs">Inbound and outbound</SelectItem>
+              </SelectContent>
+            </Select>
+          </FormItem>
+        )} />
+        <FormField control={form.control} name="promptCore.callContext.whyThisCall" render={({ field }) => (
+          <FormItem className="space-y-1">
+            <FormLabel className="text-[11px] text-muted-foreground">Why this call</FormLabel>
+            <FormControl>
+              <Textarea className="min-h-[64px] resize-none text-[13px] leading-relaxed" placeholder="You are handling an inbound call from a candidate." {...field} value={field.value ?? ""} />
+            </FormControl>
+          </FormItem>
+        )} />
+        <FormField control={form.control} name="promptCore.callContext.primaryObjective" render={({ field }) => (
+          <FormItem className="space-y-1">
+            <FormLabel className="text-[11px] text-muted-foreground">Objective</FormLabel>
+            <FormControl>
+              <Textarea className="min-h-[72px] resize-none text-[13px] leading-relaxed" placeholder="Understand the profile, check eligibility, recommend openings." {...field} value={field.value ?? ""} />
+            </FormControl>
+          </FormItem>
+        )} />
+        <FormField control={form.control} name="promptCore.callContext.successCriteria" render={({ field }) => (
+          <FormItem className="space-y-1">
+            <FormLabel className="text-[11px] text-muted-foreground">Success</FormLabel>
+            <FormControl>
+              <Input className="h-8 text-xs" placeholder="Qualified candidate agrees to the next step" {...field} value={field.value ?? ""} />
+            </FormControl>
+          </FormItem>
+        )} />
+      </BuilderPanel>
+
+      <BuilderPanel
+        title="Conversation flow"
+        icon={<GitBranch />}
+        description="States and objectives — not an essay"
+        action={
+          <div className="flex items-center gap-1.5">
+            {flowEmpty && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 px-2.5 text-[11px]"
+                onClick={() => replace(DEFAULT_FLOW_STARTERS.map((s) => ({ title: s.title, objective: s.objective ?? "" })))}
+              >
+                Insert starter
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1 px-2.5 text-[11px]"
+              onClick={() => append({ title: "", objective: "" })}
+            >
+              <Plus className="size-3" />
+              Step
+            </Button>
+          </div>
+        }
+        bodyClassName="p-0"
+      >
+        {flowEmpty ? (
+          <p className="px-4 py-5 text-[12px] leading-relaxed text-muted-foreground">
+            Add numbered stages (Greeting → Profile → Close). Each step is a goal, not a script.
+          </p>
+        ) : (
+          <div className="divide-y divide-border">
+            {fields.map((f, i) => (
+              <div key={f.id} className="flex gap-2 px-4 py-3">
+                <span className="w-5 shrink-0 pt-2 text-[11px] font-mono text-muted-foreground">{i + 1}.</span>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <FormField control={form.control} name={`promptCore.flow.${i}.title`} render={({ field }) => (
+                    <FormItem className="space-y-0">
+                      <FormControl><Input className="h-8 text-xs font-medium uppercase tracking-wide" placeholder="GREETING" {...field} value={field.value ?? ""} /></FormControl>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name={`promptCore.flow.${i}.objective`} render={({ field }) => (
+                    <FormItem className="space-y-0">
+                      <FormControl>
+                        <Textarea className="min-h-[64px] resize-y text-[12.5px] leading-relaxed" placeholder="What must happen in this stage" {...field} value={field.value ?? ""} />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                </div>
+                <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => remove(i)}>
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </BuilderPanel>
+
+      <BuilderPanel title="Instructions" icon={<ListChecks />} description="Global must / must-not — one line each" bodyClassName="gap-3 px-4 py-3">
+        <FormField control={form.control} name="promptCore.mustDo" render={({ field }) => (
+          <FormItem className="space-y-1">
+            <FormLabel className="text-[11px] text-muted-foreground">Must do</FormLabel>
+            <FormControl>
+              <Textarea className="min-h-[72px] resize-y text-[12.5px] leading-relaxed" placeholder={"Ask one question at a time.\nKeep spoken answers concise."} {...field} value={field.value ?? ""} />
+            </FormControl>
+          </FormItem>
+        )} />
+        <FormField control={form.control} name="promptCore.mustNotDo" render={({ field }) => (
+          <FormItem className="space-y-1">
+            <FormLabel className="text-[11px] text-muted-foreground">Must not do</FormLabel>
+            <FormControl>
+              <Textarea className="min-h-[72px] resize-y text-[12.5px] leading-relaxed" placeholder={"Never invent salary, eligibility, or company facts.\nDo not repeat what the caller already said."} {...field} value={field.value ?? ""} />
+            </FormControl>
+          </FormItem>
+        )} />
+        <FormField control={form.control} name="promptCore.escalation" render={({ field }) => (
+          <FormItem className="space-y-1">
+            <FormLabel className="text-[11px] text-muted-foreground">Escalation</FormLabel>
+            <FormControl>
+              <Textarea className="min-h-[56px] resize-y text-[12.5px] leading-relaxed" placeholder="If they ask for a human, offer a callback." {...field} value={field.value ?? ""} />
+            </FormControl>
+          </FormItem>
+        )} />
+        <FormField control={form.control} name="promptCore.behavioural" render={({ field }) => (
+          <FormItem className="space-y-1">
+            <FormLabel className="text-[11px] text-muted-foreground">Behaviour</FormLabel>
+            <FormControl>
+              <Textarea className="min-h-[72px] resize-y text-[12.5px] leading-relaxed" placeholder={"Handle interruptions naturally.\nNever claim an action succeeded unless confirmed."} {...field} value={field.value ?? ""} />
+            </FormControl>
+          </FormItem>
+        )} />
+      </BuilderPanel>
+    </>
+  );
+}
+
 /* ── Tab: Prompt ────────────────────────────────────────────────────────────── */
 
 function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }) {
@@ -1562,7 +1757,7 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
     <div className={cn("relative flex min-h-full flex-col gap-6", BUILDER_TAB_PAD)}>
       <BuilderTabHeader
         title="Script"
-        description="Welcome first, then the instructions for the whole call. Live-test from the header before you publish."
+        description="Identity, purpose, and flow stay small. Product facts go in Knowledge — not this prompt."
       />
       <GeneratePromptSheet
         open={generateOpen}
@@ -1612,13 +1807,15 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
               If this is empty, the opener comes from the agent prompt.
             </p>
           </FormItem>
-        )} />
+        )}         />
       </BuilderPanel>
 
+      <PromptCorePanels form={form} />
+
       <BuilderPanel
-        title="Talk"
+        title="Additional script"
         icon={<FileText />}
-        description={canAttendMeetings ? "Phone calls and meetings" : "Instructions for phone calls"}
+        description={canAttendMeetings ? "Legacy essay — phone and meetings" : "Legacy essay for the whole call (optional once Identity and Flow are filled)"}
         hint={
           <>
             <Badge variant="secondary" className="h-5 rounded-md px-1.5 py-0 text-[10px] font-medium">
@@ -1663,7 +1860,7 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
                 <FormControl>
                   <Textarea
                     className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-4 py-4 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                    placeholder="You are a helpful voice assistant on phone calls…"
+                    placeholder="Optional extra instructions. Prefer Identity, Flow, and Knowledge above stuffing facts here."
                     {...field}
                   />
                 </FormControl>
@@ -1714,7 +1911,7 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
             <FormControl>
               <Textarea
                 className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-4 py-4 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                placeholder="You are a helpful voice assistant on phone calls…"
+                placeholder="Optional extra instructions. Prefer Identity, Flow, and Knowledge above stuffing facts here."
                 {...field}
               />
             </FormControl>
@@ -6924,6 +7121,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       llmProvider: "sarvam", llmModel: "sarvam-105b-conversations", ttsProvider: "cartesia",
       ttsVoice: DEFAULT_CARTESIA_VOICE_ID, ttsModel: "sonic-3.6", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 480,
+      promptCore: emptyPromptCoreForm(),
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-IN", asrLanguage: "", backchannelingEnabled: true,
       backchannelingFrequency: 0.5, webhookUrl: "",
@@ -7039,6 +7237,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       ttsModel:                 agent.ttsModel ?? "",
       telephonyProvider:        agent.telephonyProvider,
       systemPrompt:             agent.systemPrompt,
+      promptCore:               promptCoreToForm((agent as any).agentConfig?.promptCore),
       temperature:              agent.temperature ?? 0.40,
       maxDuration:              agent.maxDuration ?? 300,
       greetingMessage:          agent.greetingMessage ?? "Hello",
@@ -7779,7 +7978,7 @@ function PromptReadinessAside({
   const canAttendMeetings = form.watch("agentSurfaces") === "phone_and_meet";
   const rows = [
     { label: "Welcome", ready: greeting.length >= 4, detail: firstSpeaker },
-    { label: "Call prompt", ready: systemPrompt.length >= 40, detail: `${systemPrompt.length.toLocaleString()} chars` },
+    { label: "Call prompt", ready: systemPrompt.length >= 40 || hasPromptCore(form.watch("promptCore")), detail: `${systemPrompt.length.toLocaleString()} chars` },
     ...(canAttendMeetings
       ? [{ label: "Meeting prompt", ready: meetingPrompt.length > 0, detail: meetingPrompt ? `${meetingPrompt.length.toLocaleString()} chars` : "Uses call prompt", optional: true as const }]
       : []),

@@ -159,6 +159,7 @@ export default defineConfig({
       "@": path.resolve(import.meta.dirname, "src"),
       "@assets": path.resolve(import.meta.dirname, "..", "..", "attached_assets"),
       "@workspace/brand-icons": path.resolve(import.meta.dirname, "..", "..", "lib", "brand-icons", "src", "index.ts"),
+      "@workspace/db/prompt-core": path.resolve(import.meta.dirname, "..", "..", "lib", "db", "src", "prompt-core.ts"),
     },
     dedupe: ["react", "react-dom"],
   },

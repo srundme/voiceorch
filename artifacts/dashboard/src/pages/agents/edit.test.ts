@@ -101,6 +101,33 @@ describe("buildUpdateAgentPayload", () => {
     expect(result.success, JSON.stringify(result)).toBe(true);
   });
 
+  it("persists structured promptCore on agentConfig and clears when empty", () => {
+    const filled = buildUpdateAgentPayload({
+      ...BASE,
+      promptCore: {
+        identity: { name: "Irfan", role: "Recruitment consultant" },
+        callContext: { direction: "inbound", primaryObjective: "Collect profile." },
+        flow: [{ title: "GREETING", objective: "Identify yourself." }],
+        mustDo: "Ask one question at a time.",
+        mustNotDo: "Never invent salary.",
+      },
+    });
+    const cfg = filled.agentConfig as Record<string, unknown>;
+    expect(cfg["promptCore"]).toEqual({
+      identity: { name: "Irfan", role: "Recruitment consultant" },
+      callContext: { direction: "inbound", primaryObjective: "Collect profile." },
+      flow: [{ title: "GREETING", objective: "Identify yourself." }],
+      instructions: {
+        mustDo: ["Ask one question at a time."],
+        mustNotDo: ["Never invent salary."],
+      },
+    });
+    expect(UpdateAgentBody.safeParse(filled).success).toBe(true);
+
+    const cleared = buildUpdateAgentPayload({ ...BASE, promptCore: { identity: { name: "  " } } });
+    expect((cleared.agentConfig as Record<string, unknown>)["promptCore"]).toBeNull();
+  });
+
   it("partial update — only name and systemPrompt changed — still valid", () => {
     const data: AgentFormValues = {
       ...BASE,

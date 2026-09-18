@@ -34,6 +34,7 @@ import {
   WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER,
   type AgentFormValues,
 } from "./edit.schema";
+import { compactPromptCore, emptyPromptCoreForm, promptCoreToForm } from "@workspace/db/prompt-core";
 import { findBySchedulingId, normalizeSchedulingId } from "@/lib/scheduling-setup";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SnapServeAgentIcon } from "@/components/logo";
@@ -124,7 +125,8 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     sarvamEndOfSpeechSilenceMs, sarvamFirstTurnMinSpeechMs, sarvamVadThreshold,
     semanticTurnStopMs,
     voiceStack, geminiLiveVoiceName, geminiLiveThinkingLevel,
-    agentComposition, agentSurfaces, meetingPrompt,
+    agentComposition, agentSurfaces, promptCore,
+    meetingPrompt,
     meetingMaxDurationSeconds, meetingSilenceTimeoutSeconds, meetingSilenceHangupEnabled,
     // Inbound/outbound phone number assignment is read-only in the agent form —
     // it's managed exclusively from the Phone Numbers page now. Never forward
@@ -285,6 +287,10 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
         : {}),
     };
   }
+
+  // Always persist so clearing the Behaviour fields actually drops stored core
+  // (agentConfig is merged server-side).
+  agentConfig["promptCore"] = compactPromptCore(promptCore);
 
   const NATIVE_BOOKING_TYPES = new Set(["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"]);
 
@@ -479,6 +485,7 @@ export default function AgentEdit() {
       llmProvider: "sarvam", llmModel: "sarvam-105b-conversations", ttsProvider: "sarvam",
       ttsVoice: "priya", ttsModel: "bulbul:v3", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
+      promptCore: emptyPromptCoreForm(),
       firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-IN", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: false,
@@ -768,6 +775,7 @@ export default function AgentEdit() {
       ttsModel:          agent.ttsModel || TTS_MODELS[agent.ttsProvider]?.[0]?.value || "",
       telephonyProvider: agent.telephonyProvider,
       systemPrompt:      agent.systemPrompt,
+      promptCore:        promptCoreToForm((agent as any).agentConfig?.promptCore),
       temperature:       agent.temperature ?? 0.10,
       maxDuration:       agent.maxDuration ?? 300,
       firstSpeaker:            ((agent as any).firstSpeaker === "user" ? "user" : "assistant") as AgentFormValues["firstSpeaker"],

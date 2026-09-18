@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema/index.ts",
-    "./call-engine-defaults": "./src/call-engine-defaults.ts"
+    "./call-engine-defaults": "./src/call-engine-defaults.ts",
+    "./prompt-core": "./src/prompt-core.ts"
   },
   "scripts": {
     "push": "drizzle-kit push --config ./drizzle.config.ts",
