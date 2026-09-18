@@ -26,6 +26,18 @@ describe("RecruiterBrain", () => {
     expect(afterJob.question).not.toMatch(/what kind of job/i);
   });
 
+  it("does not fall back to the job question once BPO and city are known", () => {
+    let profile = emptyRecruiterProfile();
+    const afterJob = decideNext(profile, "I am looking for a BPO voice process");
+    profile = { ...profile, ...afterJob.profile_patch, current_state: afterJob.state };
+    const afterCity = decideNext(profile, "I am in Bangalore");
+    profile = { ...profile, ...afterCity.profile_patch, current_state: afterCity.state };
+    const again = decideNext(profile, "yes");
+    expect(again.state).not.toBe("JOB_PREFERENCE");
+    expect(again.question).not.toMatch(/what kind of job/i);
+    expect(again.coachText).not.toMatch(/What kind of job/i);
+  });
+
   it("disqualifies non-BPO", () => {
     const d = decideNext(emptyRecruiterProfile(), "I want a Java developer work from home job");
     expect(d.outcome).toBe("DISQUALIFIED");

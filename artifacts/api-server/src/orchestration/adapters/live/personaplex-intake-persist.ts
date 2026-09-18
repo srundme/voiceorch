@@ -19,7 +19,6 @@ import { logger } from "../../../lib/logger.js";
 import {
   decideNext,
   emptyRecruiterProfile,
-  parseRecruiterProfile,
   sanitizeIntakeWrite,
   type RecruiterDecision,
   type RecruiterProfile,
@@ -113,6 +112,7 @@ export class PersonaplexIntakePersist {
   private queued: string | null = null;
   private profile: RecruiterProfile = emptyRecruiterProfile();
   private readonly userTurns: string[] = [];
+  private lastCoach = "";
 
   constructor(
     private readonly opts: {
@@ -139,12 +139,13 @@ export class PersonaplexIntakePersist {
     this.inFlight = true;
     const t0 = Date.now();
     try {
-      const row = await loadIntakeByCallId(this.opts.ctx.callId);
-      if (row?.extra) this.profile = parseRecruiterProfile(intakeExtraOf(row).recruiter);
+      // In-memory profile is the live source of truth. Reloading extra.recruiter
+      // every STT final wiped facts when the intake row had no recruiter yet
+      // (08:42 call: coach bounced back to "what job" after Bangalore).
       this.userTurns.push(userText);
       const decision = decideNext(this.profile, userText, this.userTurns);
       this.profile = { ...this.profile, ...decision.profile_patch, current_state: decision.state };
-      await persistRecruiterProfile(this.opts.ctx.callId, decision.profile_patch);
+      await persistRecruiterProfile(this.opts.ctx.callId, this.profile);
       writeExecutionLog(this.opts.ctx.callId, this.opts.ctx.agentId, "RecruiterBrain", "system", {
         status: "info",
         latencyMs: Date.now() - t0,
@@ -157,7 +158,10 @@ export class PersonaplexIntakePersist {
           outcome: decision.outcome,
         },
       });
-      try { this.opts.onDecision?.(decision); } catch { /* coach must never break persist */ }
+      if (decision.coachText && decision.coachText !== this.lastCoach) {
+        this.lastCoach = decision.coachText;
+        try { this.opts.onDecision?.(decision); } catch { /* coach must never break persist */ }
+      }
       await persistIntakeFromSpokenTurn({
         llm: this.opts.llm,
         ctx: this.opts.ctx,

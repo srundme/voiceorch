@@ -361,7 +361,12 @@ class WarmPool:
             async with self._lock:
                 self._session = sess
                 self._ready.set()
-            log.info("warm moshi ready greeting_ms=%.0f voice=%s prompt_chars=%s", sess.greeting_8k.size / 8, sess.voice, len(sess.prompt))
+            log.info(
+                "warm moshi ready handshake_only greeting_ms=%.0f voice=%s prompt_chars=%s",
+                sess.greeting_8k.size / 8,
+                sess.voice,
+                len(sess.prompt),
+            )
             steal_task = asyncio.create_task(sess.steal.wait())
             waiters = {steal_task}
             if sess.pump_task is not None:
@@ -406,81 +411,21 @@ class WarmPool:
         )
         writer = sphn.OpusStreamWriter(MOSHI_RATE)
         reader = sphn.OpusStreamReader(MOSHI_RATE)
-        pending_24 = np.zeros(0, dtype=np.int16)
-        pending_8 = np.zeros(0, dtype=np.int16)
-        greeting = np.zeros(0, dtype=np.int16)
         steal = asyncio.Event()
         incoming: asyncio.Queue = asyncio.Queue()
         pump_task = asyncio.create_task(_pump_moshi(moshi, incoming), name="moshi-pump")
         t0 = time.monotonic()
         handshake = False
-        heard_speech = False
-        silent_ms = 0.0
-        sil_task: asyncio.Task | None = None
-
-        async def send_silence() -> None:
-            while not steal.is_set():
-                writer.append_pcm(dither_f32(OPUS_FRAME_24))
-                blob = writer.read_bytes()
-                if len(blob) > 0:
-                    try:
-                        await moshi.send(b"\x01" + blob)
-                    except Exception:
-                        steal.set()
-                        return
-                await asyncio.sleep(OPUS_FRAME_24 / MOSHI_RATE)
-
         try:
             while True:
-                try:
-                    message = await _incoming_recv(
-                        incoming,
-                        HANDSHAKE_S if not handshake else 0.4,
-                    )
-                except TimeoutError:
-                    if not handshake:
-                        raise RuntimeError("warm handshake timed out")
-                    if heard_speech and greeting.size >= SNAP_FRAME:
-                        break
-                    continue
+                message = await _incoming_recv(incoming, HANDSHAKE_S)
                 if not isinstance(message, (bytes, bytearray)) or len(message) == 0:
                     continue
-                kind = message[0]
-                payload = message[1:]
-                if kind == 0x00:
+                if message[0] == 0x00:
                     handshake = True
                     log.info("warm handshake bake_ms=%.0f", (time.monotonic() - t0) * 1000)
-                    # Moshi's is_alive() steals any audio sent during bake and then
-                    # the session dies. Feed silence only after 0x00.
-                    sil_task = asyncio.create_task(send_silence())
-                    continue
-                if kind != 0x01 or not payload:
-                    continue
-                reader.append_bytes(payload)
-                pcm_f = reader.read_pcm()
-                if pcm_f is None or np.asarray(pcm_f).size == 0:
-                    continue
-                pcm24 = f32_to_i16(np.asarray(pcm_f).reshape(-1))
-                pending_24 = np.concatenate([pending_24, pcm24])
-                emit_n = (pending_24.size // 3) * 3
-                if emit_n == 0:
-                    continue
-                pcm8 = downsample_24_to_8(pending_24[:emit_n])
-                pending_24 = pending_24[emit_n:]
-                rms = pcm_rms(pcm8)
-                if rms >= GREETING_SILENCE_RMS:
-                    heard_speech = True
-                    silent_ms = 0.0
-                elif heard_speech:
-                    silent_ms += 1000.0 * pcm8.size / SNAP_RATE
-                greeting = np.concatenate([greeting, pcm8])
-                if heard_speech and silent_ms >= 350:
-                    break
-                if (time.monotonic() - t0) > GREETING_MAX_S + HANDSHAKE_S:
                     break
         except Exception:
-            if sil_task is not None:
-                sil_task.cancel()
             pump_task.cancel()
             try:
                 await moshi.close()
@@ -488,8 +433,6 @@ class WarmPool:
                 pass
             raise
         if not handshake:
-            if sil_task is not None:
-                sil_task.cancel()
             pump_task.cancel()
             await moshi.close()
             raise RuntimeError("warm bake closed before handshake")
@@ -497,20 +440,21 @@ class WarmPool:
             moshi=moshi,
             opus_writer=writer,
             opus_reader=reader,
-            greeting_8k=trim_leading_silence(greeting),
-            pending_24=pending_24,
-            pending_8=pending_8,
+            greeting_8k=np.zeros(0, dtype=np.int16),
+            pending_24=np.zeros(0, dtype=np.int16),
+            pending_8=np.zeros(0, dtype=np.int16),
             incoming=incoming,
             voice=voice,
             prompt=norm_prompt(prompt),
             steal=steal,
-            silence_task=sil_task,
+            silence_task=None,
+            discard_task=None,
             pump_task=pump_task,
         )
-        # Keep feeding silence so Mimi/LM stay live until the phone attaches
-        # (call 25589: stopping here left Moshi mute after the greeting).
-        start_idle_feed(sess)
-        _maybe_write_hello_pcm(sess.greeting_8k)
+        # Do not feed dither here. That made Moshi greet into the void during
+        # warm; attach then had speech_ms=0 and no turns (08:33 PSTN).
+        # First Moshi speech happens on the live call, after recorded hello.
+        log.info("warm handshake-only — first speech on attach")
         return sess
 
 
@@ -562,12 +506,6 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool, skip_
     live_at = time.monotonic() + greeting_s
     held_8 = np.zeros(0, dtype=np.int16)
     flushed_hold = replay
-
-    while True:
-        try:
-            sess.incoming.get_nowait()
-        except asyncio.QueueEmpty:
-            break
 
     async def abort() -> None:
         nonlocal close
