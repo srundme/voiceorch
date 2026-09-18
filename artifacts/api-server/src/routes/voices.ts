@@ -325,78 +325,78 @@ router.post("/voices/sarvam-register", requireAuth, async (req, res): Promise<vo
   };
 
   const speakerId = typeof body.speakerId === "string" ? body.speakerId.trim() : "";
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  const languageRaw = typeof body.language === "string" ? body.language : "";
-  const description =
-    typeof body.description === "string" ? body.description.trim() || null : null;
-
-  if (!body.consent) {
-    res.status(400).json({
-      error: "Confirm you have rights to use this voice and created it in Sarvam Creative Studio.",
-    });
-    return;
-  }
-  if (!isValidSarvamSpeakerId(speakerId)) {
-    res.status(400).json({
-      error: "Provide a valid Sarvam speaker / clone id (letters, numbers, _ or -; not a UUID).",
-    });
-    return;
-  }
-  if (!name || name.length > 80) {
-    res.status(400).json({ error: "Provide a voice name (1–80 characters)." });
-    return;
-  }
-  if (!languageRaw.trim()) {
-    res.status(400).json({ error: "Select a language for the clone." });
-    return;
-  }
-
-  // Verify speaker against user key if present, else managed/GCP key.
-  // Clones work on managed TTS when managed_sarvam_key is from the same Sarvam project that created the clone.
-  const keyInfo = await getSarvamKeyForUser(userId);
-  if (!keyInfo) {
-    res.status(400).json({
-      error:
-        "No Sarvam API key available. Set Admin → Managed Keys → Sarvam (or GCP SARVAM_API_KEY), "
-        + "using the same Sarvam project that owns the clone.",
-    });
-    return;
-  }
-
-  const probe = await probeSarvamSpeaker(keyInfo.key, speakerId, toBaseLanguage(languageRaw));
-  if (!probe.ok) {
-    res.status(400).json({ error: probe.message });
-    return;
-  }
-
-  const [{ value: cloneCount } = { value: 0 }] = await db
-    .select({ value: count() })
-    .from(userClonedVoicesTable)
-    .where(eq(userClonedVoicesTable.userId, userId));
-
-  if (Number(cloneCount) >= MAX_CLONES_PER_USER) {
-    res.status(400).json({
-      error: `You can keep up to ${MAX_CLONES_PER_USER} cloned voices. Delete one to add another.`,
-    });
-    return;
-  }
-
-  const [existing] = await db
-    .select()
-    .from(userClonedVoicesTable)
-    .where(
-      and(
-        eq(userClonedVoicesTable.userId, userId),
-        eq(userClonedVoicesTable.provider, "sarvam"),
-        eq(userClonedVoicesTable.cartesiaVoiceId, speakerId),
-      ),
-    );
-  if (existing) {
-    res.status(200).json({ voice: serializeClone(existing) });
-    return;
-  }
-
   try {
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const languageRaw = typeof body.language === "string" ? body.language : "";
+    const description =
+      typeof body.description === "string" ? body.description.trim() || null : null;
+
+    if (!body.consent) {
+      res.status(400).json({
+        error: "Confirm you have rights to use this voice and created it in Sarvam Creative Studio.",
+      });
+      return;
+    }
+    if (!isValidSarvamSpeakerId(speakerId)) {
+      res.status(400).json({
+        error: "Provide a valid Sarvam speaker / clone id (letters, numbers, _ or -; not a UUID).",
+      });
+      return;
+    }
+    if (!name || name.length > 80) {
+      res.status(400).json({ error: "Provide a voice name (1–80 characters)." });
+      return;
+    }
+    if (!languageRaw.trim()) {
+      res.status(400).json({ error: "Select a language for the clone." });
+      return;
+    }
+
+    // Verify speaker against user key if present, else managed/GCP key.
+    // Clones work on managed TTS when managed_sarvam_key is from the same Sarvam project that created the clone.
+    const keyInfo = await getSarvamKeyForUser(userId);
+    if (!keyInfo) {
+      res.status(400).json({
+        error:
+          "No Sarvam API key available. Set Admin → Managed Keys → Sarvam (or GCP SARVAM_API_KEY), "
+          + "using the same Sarvam project that owns the clone.",
+      });
+      return;
+    }
+
+    const probe = await probeSarvamSpeaker(keyInfo.key, speakerId, toBaseLanguage(languageRaw));
+    if (!probe.ok) {
+      res.status(400).json({ error: probe.message });
+      return;
+    }
+
+    const [{ value: cloneCount } = { value: 0 }] = await db
+      .select({ value: count() })
+      .from(userClonedVoicesTable)
+      .where(eq(userClonedVoicesTable.userId, userId));
+
+    if (Number(cloneCount) >= MAX_CLONES_PER_USER) {
+      res.status(400).json({
+        error: `You can keep up to ${MAX_CLONES_PER_USER} cloned voices. Delete one to add another.`,
+      });
+      return;
+    }
+
+    const [existing] = await db
+      .select()
+      .from(userClonedVoicesTable)
+      .where(
+        and(
+          eq(userClonedVoicesTable.userId, userId),
+          eq(userClonedVoicesTable.provider, "sarvam"),
+          eq(userClonedVoicesTable.cartesiaVoiceId, speakerId),
+        ),
+      );
+    if (existing) {
+      res.status(200).json({ voice: serializeClone(existing) });
+      return;
+    }
+
     const [row] = await db
       .insert(userClonedVoicesTable)
       .values({
@@ -412,8 +412,15 @@ router.post("/voices/sarvam-register", requireAuth, async (req, res): Promise<vo
     logger.info({ userId, speakerId, language: languageRaw }, "Sarvam cloned voice registered");
     res.status(201).json({ voice: serializeClone(row!) });
   } catch (err) {
+    const e = err as { code?: unknown; cause?: { code?: unknown } };
+    if (e?.code === "23505" || e?.cause?.code === "23505") {
+      res.status(400).json({ error: "This speaker id is already registered." });
+      return;
+    }
     logger.error({ err, userId, speakerId }, "Sarvam voice register failed");
-    res.status(500).json({ error: "Could not register Sarvam voice. Please try again." });
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Could not register Sarvam voice. Please try again." });
+    }
   }
 });
 

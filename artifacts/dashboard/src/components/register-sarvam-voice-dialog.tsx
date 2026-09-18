@@ -114,18 +114,23 @@ export function RegisterSarvamVoiceDialog({
           consent: true,
         }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch(() => ({})) as { error?: string; voice?: ClonedVoiceResult };
       if (!res.ok) {
-        throw new Error(formatApiError(data) || `Register failed (${res.status})`);
+        const msg =
+          (typeof data.error === "string" && data.error.trim())
+            ? data.error.trim()
+            : `Register failed (${res.status})`;
+        throw new Error(msg);
       }
-      const voice = (data as { voice: ClonedVoiceResult }).voice;
+      const voice = data.voice;
+      if (!voice) throw new Error("Register succeeded but no voice was returned.");
       toast({ title: "Sarvam voice added", description: `${voice.name} is ready to use.` });
       onRegistered(voice);
       onOpenChange(false);
     } catch (err) {
       toast({
         title: "Could not register voice",
-        description: err instanceof Error ? err.message : "Try again.",
+        description: formatApiError(err),
         variant: "destructive",
       });
     } finally {

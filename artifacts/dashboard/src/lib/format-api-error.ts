@@ -76,6 +76,18 @@ export function formatApiError(err: unknown): string {
     }
     return err.message;
   }
+
+  // Raw JSON bodies from fetch() (`{ error: "…" }`) — not wrapped in ApiError.
+  if (err && typeof err === "object" && !Array.isArray(err)) {
+    const maybe = (err as { error?: unknown }).error;
+    if (typeof maybe === "string" && maybe.trim()) {
+      if (carrierUnavailable(maybe) || looksLikeHtml(maybe)) {
+        return "Carrier unavailable, try again";
+      }
+      return maybe.trim();
+    }
+  }
+
   return "An unexpected error occurred.";
 }
 

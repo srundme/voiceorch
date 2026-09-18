@@ -158,5 +158,11 @@ describe("formatApiError", () => {
     it("returns the generic fallback for an arbitrary object", () => {
       expect(formatApiError({ code: "ERR_UNKNOWN" })).toBe("An unexpected error occurred.");
     });
+
+    it("returns the server error string from a raw fetch JSON body", () => {
+      expect(formatApiError({
+        error: 'Sarvam does not recognize speaker "svc-abc" on this API key.',
+      })).toBe('Sarvam does not recognize speaker "svc-abc" on this API key.');
+    });
   });
 });
