@@ -28,8 +28,6 @@ const FRAME_BYTES_8K = FRAME_SAMPLES_8K * 2;
 const PREBUFFER_FRAMES = 1;
 const PUMP_LEAD_MS = 80;
 const KEEPALIVE_FILL_GAP_MS = 500;
-/** Only pad Moshi with silence if the caller stream actually stalled. */
-const GPU_SILENCE_GAP_MS = 80;
 /** Caller-frame RMS that counts as speech for T0 (barge-in / turn start). */
 const SPEECH_RMS = 400;
 
@@ -71,7 +69,6 @@ export class PersonaPlexPipeline implements VoiceSession {
   private pumpTimer: ReturnType<typeof setInterval> | null = null;
   private pumpAnchorMs = 0;
   private framesSent = 0;
-  private lastGpuSendAt = 0;
   private pendingIn: Buffer[] = [];
   private readonly startedAtMs = Date.now();
   private helloSentAt = 0;
@@ -141,16 +138,8 @@ export class PersonaPlexPipeline implements VoiceSession {
         : FRAME_MS * 8,
       0,
     );
-    const gpuSilence = Buffer.alloc(FRAME_BYTES_8K);
     const timer = setInterval(() => {
       if (this.closed) return;
-      if (this.ready && this.ws && this.ws.readyState === WebSocket.OPEN) {
-        // 20ms zeros between VoBiz bursts chop the caller so Moshi waits ~5s to reply.
-        if (Date.now() - this.lastGpuSendAt >= GPU_SILENCE_GAP_MS) {
-          this.ws.send(gpuSilence);
-          this.lastGpuSendAt = Date.now();
-        }
-      }
       if (this.pumpTimer || this.outFrames.length > 0) return;
       // Before first agent audio, VoBiz early-ambient owns the wire. Zeros here
       // call stopSilence() and can fill playAudio until VoBiz closes the socket
@@ -263,7 +252,6 @@ export class PersonaPlexPipeline implements VoiceSession {
     // Full-duplex S2S: never replace the caller with zeros. PSTN echo mute
     // on call 25573 blocked barge-in so Moshi kept inventing jobs.
     this.ws.send(pcm8k);
-    this.lastGpuSendAt = now;
     if (this.awaitingTurnReply && this.t0CallerSpeechAt && !this.t1GpuSendAt) {
       this.t1GpuSendAt = now;
     }
@@ -384,7 +372,6 @@ export class PersonaPlexPipeline implements VoiceSession {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     for (const chunk of this.pendingIn) {
       this.ws.send(chunk);
-      this.lastGpuSendAt = Date.now();
     }
     this.pendingIn = [];
   }

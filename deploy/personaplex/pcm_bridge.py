@@ -43,6 +43,9 @@ WARM_PROMPT = os.environ.get(
 )
 GREETING_MAX_S = 5.0
 GREETING_SILENCE_RMS = 250
+# VoBiz/Railway often drop and reopen the media WS. Closing Moshi on that
+# drop forces an 8s rebake (call 25582). Park the baked session instead.
+PARK_S = float(os.environ.get("MOSHI_PARK_S", "15"))
 
 
 def upsample_8_to_24(pcm_i16: np.ndarray) -> np.ndarray:
@@ -76,6 +79,14 @@ def pcm_rms(pcm_i16: np.ndarray) -> float:
     return float(np.sqrt(np.mean(x * x)))
 
 
+def trim_leading_silence(pcm_i16: np.ndarray) -> np.ndarray:
+    hop = SNAP_FRAME
+    i = 0
+    while i + hop <= pcm_i16.size and pcm_rms(pcm_i16[i:i + hop]) < GREETING_SILENCE_RMS:
+        i += hop
+    return pcm_i16[i:]
+
+
 def moshi_ssl() -> ssl.SSLContext:
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.check_hostname = False
@@ -102,6 +113,7 @@ class WarmSession:
     incoming: asyncio.Queue
     steal: asyncio.Event = field(default_factory=asyncio.Event)
     silence_task: asyncio.Task | None = None
+    discard_task: asyncio.Task | None = None
     pump_task: asyncio.Task | None = None
 
 
@@ -119,6 +131,44 @@ async def _incoming_recv(incoming: asyncio.Queue, timeout: float):
     if isinstance(item, Exception):
         raise item
     return item
+
+
+async def _send_silence(sess: WarmSession) -> None:
+    """Moshi only generates while it is fed frames. Keep the stream alive until steal."""
+    while not sess.steal.is_set():
+        sess.opus_writer.append_pcm(np.zeros(OPUS_FRAME_24, dtype=np.float32))
+        blob = sess.opus_writer.read_bytes()
+        if len(blob) > 0:
+            try:
+                await sess.moshi.send(b"\x01" + blob)
+            except Exception:
+                sess.steal.set()
+                return
+        await asyncio.sleep(OPUS_FRAME_24 / MOSHI_RATE)
+
+
+async def _discard_idle(sess: WarmSession) -> None:
+    """Drop Moshi audio produced by keepalive silence so the queue cannot grow."""
+    while not sess.steal.is_set():
+        try:
+            item = await asyncio.wait_for(sess.incoming.get(), timeout=0.4)
+        except TimeoutError:
+            continue
+        except asyncio.CancelledError:
+            raise
+        if sess.steal.is_set():
+            sess.incoming.put_nowait(item)
+            return
+        if isinstance(item, Exception):
+            sess.incoming.put_nowait(item)
+            return
+
+
+def start_idle_feed(sess: WarmSession) -> None:
+    if sess.silence_task is None or sess.silence_task.done():
+        sess.silence_task = asyncio.create_task(_send_silence(sess), name="moshi-silence")
+    if sess.discard_task is None or sess.discard_task.done():
+        sess.discard_task = asyncio.create_task(_discard_idle(sess), name="moshi-discard")
 
 
 class WarmPool:
@@ -148,9 +198,53 @@ class WarmPool:
             sess.steal.set()
             if sess.silence_task is not None:
                 sess.silence_task.cancel()
+            if sess.discard_task is not None:
+                sess.discard_task.cancel()
             return sess
 
     def rearm(self) -> None:
+        self.start()
+
+    async def park_then_rearm(self, sess: WarmSession) -> None:
+        """Keep the baked Moshi alive briefly so a reconnect does not pay 8s."""
+        pump = sess.pump_task
+        if pump is None or pump.done():
+            try:
+                await sess.moshi.close()
+            except Exception:
+                pass
+            self.start()
+            return
+        sess.greeting_8k = np.zeros(0, dtype=np.int16)
+        sess.steal = asyncio.Event()
+        sess.silence_task = None
+        sess.discard_task = None
+        start_idle_feed(sess)
+        async with self._lock:
+            self._session = sess
+            self._ready.set()
+        log.info("warm moshi parked for %.0fs", PARK_S)
+        steal_task = asyncio.create_task(sess.steal.wait())
+        done, pending = await asyncio.wait(
+            {steal_task, pump},
+            timeout=PARK_S,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if sess.steal.is_set():
+            log.info("parked moshi stolen by next call")
+            steal_task.cancel()
+            return
+        for task in pending:
+            task.cancel()
+        async with self._lock:
+            if self._session is sess:
+                self._session = None
+                self._ready.clear()
+        try:
+            await sess.moshi.close()
+        except Exception:
+            pass
+        log.info("park expired — rebaking")
         self.start()
 
     async def _maintain(self) -> None:
@@ -170,8 +264,9 @@ class WarmPool:
             if sess.pump_task is not None:
                 waiters.add(sess.pump_task)
             done, pending = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
-            for task in pending:
-                task.cancel()
+            steal_task.cancel()
+            # Never cancel pump_task here — that is the Moshi recv loop. Attaching
+            # used to starve T2 and leave Irfan mute after the greeting.
             if sess.pump_task in done and not sess.steal.is_set():
                 log.warning("warm moshi died while idle — rebaking")
                 async with self._lock:
@@ -190,7 +285,7 @@ class WarmPool:
         ssl_ctx = moshi_ssl() if url.startswith("wss://") else None
         log.info("warm bake voice=%s prompt_chars=%s", WARM_VOICE, len(WARM_PROMPT))
         moshi = await websockets.connect(
-            url, ssl=ssl_ctx, max_size=None, open_timeout=30, ping_interval=20, ping_timeout=20,
+            url, ssl=ssl_ctx, max_size=None, open_timeout=30, ping_interval=None,
         )
         writer = sphn.OpusStreamWriter(MOSHI_RATE)
         reader = sphn.OpusStreamReader(MOSHI_RATE)
@@ -281,16 +376,11 @@ class WarmPool:
             pump_task.cancel()
             await moshi.close()
             raise RuntimeError("warm bake closed before handshake")
-        # Stop feeding silence so Moshi idles without filling the queue.
-        # The pump keeps draining whatever leftover audio still arrives.
-        if sil_task is not None:
-            sil_task.cancel()
-            sil_task = None
-        return WarmSession(
+        sess = WarmSession(
             moshi=moshi,
             opus_writer=writer,
             opus_reader=reader,
-            greeting_8k=greeting,
+            greeting_8k=trim_leading_silence(greeting),
             pending_24=pending_24,
             pending_8=pending_8,
             incoming=incoming,
@@ -298,6 +388,10 @@ class WarmPool:
             silence_task=sil_task,
             pump_task=pump_task,
         )
+        # Keep feeding silence so Mimi/LM stay live until the phone attaches
+        # (call 25589: stopping here left Moshi mute after the greeting).
+        start_idle_feed(sess)
+        return sess
 
 
 POOL = WarmPool()
@@ -312,19 +406,28 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
     opus_writer = sess.opus_writer
     opus_reader = sess.opus_reader
     t_first_in = t_first_out = None
+    send_lock = asyncio.Lock()
+    last_real_at = time.monotonic()
+
+    while True:
+        try:
+            sess.incoming.get_nowait()
+        except asyncio.QueueEmpty:
+            break
 
     async def abort() -> None:
         nonlocal close
         close = True
-        if sess.pump_task is not None:
-            sess.pump_task.cancel()
-        try:
-            await moshi.close()
-        except Exception:
-            pass
+
+    async def emit_opus(frame_i16: np.ndarray) -> None:
+        async with send_lock:
+            opus_writer.append_pcm(i16_to_f32(frame_i16))
+            blob = opus_writer.read_bytes()
+            if len(blob) > 0:
+                await moshi.send(b"\x01" + blob)
 
     async def snap_to_moshi() -> None:
-        nonlocal close, pending_in_24, t_first_in
+        nonlocal close, pending_in_24, t_first_in, last_real_at
         try:
             async for message in snap_ws:
                 if close:
@@ -335,18 +438,25 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
                     t_first_in = time.monotonic()
                     log.info("latency T1_first_pcm_to_moshi_ms=%.0f", (t_first_in - t_hello) * 1000)
                 pcm8 = np.frombuffer(message, dtype="<i2")
+                last_real_at = time.monotonic()
                 pending_in_24 = np.concatenate([pending_in_24, upsample_8_to_24(pcm8)])
                 while pending_in_24.size >= OPUS_FRAME_24:
                     frame = pending_in_24[:OPUS_FRAME_24]
                     pending_in_24 = pending_in_24[OPUS_FRAME_24:]
-                    opus_writer.append_pcm(i16_to_f32(frame))
-                    blob = opus_writer.read_bytes()
-                    if len(blob) > 0:
-                        await moshi.send(b"\x01" + blob)
+                    await emit_opus(frame)
         except Exception:
             log.exception("snap_to_moshi failed")
         finally:
             await abort()
+
+    async def pad_moshi_gaps() -> None:
+        zeros = np.zeros(OPUS_FRAME_24, dtype=np.int16)
+        while not close:
+            await asyncio.sleep(OPUS_FRAME_24 / MOSHI_RATE)
+            if close:
+                return
+            if time.monotonic() - last_real_at >= 0.08:
+                await emit_opus(zeros)
 
     async def moshi_to_snap() -> None:
         nonlocal close, pending_24, pending_8, t_first_out
@@ -415,7 +525,23 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
         while buf.size >= SNAP_FRAME:
             await snap_ws.send(buf[:SNAP_FRAME].tobytes())
             buf = buf[SNAP_FRAME:]
-        await asyncio.gather(snap_to_moshi(), moshi_to_snap(), return_exceptions=True)
+        sess.greeting_8k = np.zeros(0, dtype=np.int16)
+
+        async def t2_watchdog() -> None:
+            await asyncio.sleep(3)
+            if t_first_out is None and not close:
+                log.warning(
+                    "no T2 live opus 3s after attach T1=%s — Moshi is mute",
+                    None if t_first_in is None else round((t_first_in - t_hello) * 1000),
+                )
+
+        await asyncio.gather(
+            snap_to_moshi(),
+            moshi_to_snap(),
+            pad_moshi_gaps(),
+            t2_watchdog(),
+            return_exceptions=True,
+        )
     finally:
         await abort()
 
@@ -440,7 +566,7 @@ async def handle_snapserve(snap_ws) -> None:
         try:
             url = moshi_chat_url(voice or WARM_VOICE, WARM_PROMPT)
             ssl_ctx = moshi_ssl() if url.startswith("wss://") else None
-            moshi = await websockets.connect(url, ssl=ssl_ctx, max_size=None)
+            moshi = await websockets.connect(url, ssl=ssl_ctx, max_size=None, ping_interval=None)
             writer = sphn.OpusStreamWriter(MOSHI_RATE)
             reader = sphn.OpusStreamReader(MOSHI_RATE)
             incoming: asyncio.Queue = asyncio.Queue()
@@ -472,7 +598,7 @@ async def handle_snapserve(snap_ws) -> None:
     try:
         await run_call(snap_ws, sess, t_hello, warm)
     finally:
-        POOL.rearm()
+        await POOL.park_then_rearm(sess)
 
 
 async def main() -> None:
