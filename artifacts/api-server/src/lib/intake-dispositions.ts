@@ -6,6 +6,8 @@
  * typed customer/job columns stay untouched. Selects with no options are
  * free text — the JSON left those lists empty on purpose.
  */
+import { parseRecruiterProfile } from "./recruiter-brain.js";
+
 export type IntakeDispositionFieldType =
   | "select"
   | "textarea"
@@ -76,6 +78,8 @@ export interface IntakeExtra {
   screen?: IntakeScreen | null;
   /** Set when the form is closed — proposed JD + candidate profile snapshot. */
   match?: Record<string, unknown> | null;
+  /** RecruiterBrain eligibility facts. Not a table migration. */
+  recruiter?: import("./recruiter-brain.js").RecruiterProfile | null;
 }
 
 export interface DispositionPatchResult {
@@ -571,6 +575,9 @@ export function parseIntakeExtra(raw: unknown): IntakeExtra {
     english: parseEnglishRead(rec["english"]),
     screen: parseScreen(rec["screen"]),
     match: isRecord(rec["match"]) ? rec["match"] : rec["match"] === null ? null : undefined,
+    recruiter: isRecord(rec["recruiter"])
+      ? parseRecruiterProfile(rec["recruiter"])
+      : rec["recruiter"] === null ? null : undefined,
   };
 }
 

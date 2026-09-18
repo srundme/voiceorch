@@ -14,8 +14,17 @@ import {
   type IntakeToolContext,
 } from "../../intake-tools.js";
 import { evaluateIntakeScreen } from "../../../lib/intake-screen.js";
-import { intakeExtraOf, loadIntakeByCallId } from "../../../lib/intake-service.js";
+import { intakeExtraOf, loadIntakeByCallId, persistRecruiterProfile } from "../../../lib/intake-service.js";
 import { logger } from "../../../lib/logger.js";
+import {
+  decideNext,
+  emptyRecruiterProfile,
+  parseRecruiterProfile,
+  sanitizeIntakeWrite,
+  type RecruiterDecision,
+  type RecruiterProfile,
+} from "../../../lib/recruiter-brain.js";
+import { writeExecutionLog } from "../../../services/execution-log.js";
 
 export function buildIntakePersistTools(agentTools?: AgentTool[]): ToolDefinition[] {
   const tools = agentTools?.some((t) => t.type === "intake_write")
@@ -31,6 +40,7 @@ export async function persistIntakeFromSpokenTurn(opts: {
   history: ConversationTurn[];
   userText: string;
   agentText?: string | null;
+  profile?: RecruiterProfile;
 }): Promise<{ tools: string[] }> {
   const persistTools = buildIntakePersistTools();
   const userText = opts.userText.trim();
@@ -44,6 +54,7 @@ export async function persistIntakeFromSpokenTurn(opts: {
     `The candidate just said: "${userText.slice(0, 500)}"`,
     agentLine ? `The agent last said: "${agentLine.slice(0, 300)}"` : "",
     "Call save_candidate_details and/or set_disposition with only the fields they just gave.",
+    "Never copy a salary, company, or opening the agent invented. Only what the candidate said.",
     "If they named a workplace or how long they have worked, save lastCompany and tenure.",
     "6-digit Indian PIN goes in pincode, never dateOfBirth.",
     "Do not speak. Do not call finish_intake or end_call.",
@@ -71,7 +82,8 @@ export async function persistIntakeFromSpokenTurn(opts: {
   const ran: string[] = [];
   for (const call of calls) {
     if (call.name === "save_candidate_details") {
-      await executeIntakeWrite(opts.ctx, call.args);
+      const args = opts.profile ? sanitizeIntakeWrite(call.args, opts.profile) : call.args;
+      await executeIntakeWrite(opts.ctx, args);
       ran.push(call.name);
     } else if (call.name === "set_disposition") {
       await executeIntakeDisposition(opts.ctx, call.args);
@@ -99,6 +111,8 @@ export async function persistIntakeFromSpokenTurn(opts: {
 export class PersonaplexIntakePersist {
   private inFlight = false;
   private queued: string | null = null;
+  private profile: RecruiterProfile = emptyRecruiterProfile();
+  private readonly userTurns: string[] = [];
 
   constructor(
     private readonly opts: {
@@ -107,6 +121,7 @@ export class PersonaplexIntakePersist {
       systemPrompt: string;
       history: () => ConversationTurn[];
       lastAgentText: () => string | null;
+      onDecision?: (decision: RecruiterDecision) => void;
     },
   ) {}
 
@@ -122,7 +137,27 @@ export class PersonaplexIntakePersist {
 
   private async run(userText: string): Promise<void> {
     this.inFlight = true;
+    const t0 = Date.now();
     try {
+      const row = await loadIntakeByCallId(this.opts.ctx.callId);
+      if (row?.extra) this.profile = parseRecruiterProfile(intakeExtraOf(row).recruiter);
+      this.userTurns.push(userText);
+      const decision = decideNext(this.profile, userText, this.userTurns);
+      this.profile = { ...this.profile, ...decision.profile_patch, current_state: decision.state };
+      await persistRecruiterProfile(this.opts.ctx.callId, decision.profile_patch);
+      writeExecutionLog(this.opts.ctx.callId, this.opts.ctx.agentId, "RecruiterBrain", "system", {
+        status: "info",
+        latencyMs: Date.now() - t0,
+        metadata: {
+          current_state: decision.state,
+          previous_state: decision.previous_state,
+          question_reason: decision.reason,
+          profile_patch: decision.profile_patch,
+          communication_class: decision.communication_class,
+          outcome: decision.outcome,
+        },
+      });
+      try { this.opts.onDecision?.(decision); } catch { /* coach must never break persist */ }
       await persistIntakeFromSpokenTurn({
         llm: this.opts.llm,
         ctx: this.opts.ctx,
@@ -130,6 +165,7 @@ export class PersonaplexIntakePersist {
         history: this.opts.history(),
         userText,
         agentText: this.opts.lastAgentText(),
+        profile: this.profile,
       });
     } catch (err) {
       logger.warn({ callId: this.opts.ctx.callId, err }, "PersonaPlex intake persist turn failed");

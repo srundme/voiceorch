@@ -33,7 +33,7 @@ export const EXEC_COMPONENTS = {
   VariableResolver: "VariableResolver",
   Webhook: "Webhook",
   Recording: "Recording",
-  Diagnostics: "Diagnostics",
+  RecruiterBrain: "RecruiterBrain",
   Compliance: "Compliance",
   Billing: "Billing",
 } as const;

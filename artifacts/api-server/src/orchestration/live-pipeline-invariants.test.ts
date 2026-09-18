@@ -260,6 +260,9 @@ describe("intake persist + VoBiz hangup (call 25223)", () => {
       "utf8",
     );
     expect(vobizSrc).toContain('keepCallAlive="true"');
+    expect(vobizSrc).toContain('maxRetries="0"');
+    expect(vobizSrc).toContain("stale media epoch");
+    expect(vobizSrc).toContain("ownsMedia()");
     expect(vobizSrc).toContain("DELETE /Call/{uuid}");
   });
 });
@@ -280,5 +283,26 @@ describe("Cartesia greeting overlap (call 25226)", () => {
     );
     expect(cartesiaSrc).not.toContain("flush: true");
     expect(cartesiaSrc).toContain("Do not flush a fragment");
+  });
+});
+
+describe("JobShop Irfan serving", () => {
+  it("plays recorded hello, skips Moshi dump, and destroys spoken-to sessions", () => {
+    const personaplexSrc = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "adapters/live/personaplex-pipeline.ts"),
+      "utf8",
+    );
+    expect(personaplexSrc).toContain("skipGreeting: true");
+    expect(personaplexSrc).toContain("playRecordedHello");
+    expect(personaplexSrc).toContain("playingRecordedHello");
+    const bridge = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "../../../../deploy/personaplex/pcm_bridge.py"),
+      "utf8",
+    );
+    expect(bridge).toContain("destroy moshi after hangup");
+    expect(bridge).toContain('MOSHI_IDLE_REBAKE_S", "40"');
+    expect(bridge).toContain("Do not greet first");
+    expect(bridge).not.toContain("jobshop_recruiter.txt");
+    expect(existsSync(resolve(dirname(fileURLToPath(import.meta.url)), "adapters/live/irfan_hello_8k.pcm"))).toBe(true);
   });
 });

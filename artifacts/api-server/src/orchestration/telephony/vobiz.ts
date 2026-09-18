@@ -159,6 +159,10 @@ export async function handleVobizWebSocket(
    * nominally big-endian per RFC 2586 — byte-swapping causes silence/garble.
    */
   function sendAudioToVobiz(pcmChunk: Buffer): void {
+    if (!ownsMedia()) {
+      logger.info({ sessionId, myEpoch }, "Vobiz playAudio DROP — stale media epoch");
+      return;
+    }
     if (ws.readyState !== ws.OPEN) return;
     if (ws.bufferedAmount > 64 * 1024) {
       logger.error({ streamId, bufferedBytes: ws.bufferedAmount }, "Vobiz output backpressure exceeded; closing stalled transport");
@@ -180,6 +184,7 @@ export async function handleVobizWebSocket(
    * Called by the pipeline when the caller speaks during agent playback.
    */
   function sendBargeIn(): void {
+    if (!ownsMedia()) return;
     playback.clear();
     if (!streamId || ws.readyState !== ws.OPEN) return;
     ws.send(JSON.stringify({ event: "clearAudio", streamId }));
@@ -358,8 +363,9 @@ export async function handleVobizWebSocket(
             },
             onBargeIn: sendBargeIn,
           });
-          stopSilence();                // safety-net: session ready with no audio yet
+          stopSilence();
           sessionId = sid;
+          myEpoch = getSession(sid)?.mediaEpoch ?? 1;
           if (sessionEndedBeforeReady) {
             clearPendingInput();
             // VoBiz sent stop/closed the socket while createSession was still
@@ -548,8 +554,10 @@ export function getVobizAnswerXML(
   // keepCallAlive=true so a brief WS blip does not drop the PSTN leg. Closing
   // the socket therefore does NOT hang up — session.ts must DELETE /Call/{uuid}
   // on agent end_call (call 25223 stayed live after goodbye).
+  // maxRetries=0: VoBiz otherwise reopens a second media WS when it thinks the
+  // first dropped (call 25681 — Moshi talked, caller heard silence).
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-l16;rate=8000">${wsUrlXml}</Stream>
+  <Stream bidirectional="true" keepCallAlive="true" maxRetries="0" contentType="audio/x-l16;rate=8000">${wsUrlXml}</Stream>
 </Response>`;
 }

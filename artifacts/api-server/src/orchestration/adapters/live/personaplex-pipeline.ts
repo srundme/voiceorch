@@ -16,6 +16,7 @@ import { createLLMAdapter } from "../llm/index.js";
 import { createSTTAdapter } from "../stt/index.js";
 import { resolveSarvamSttMode } from "../stt/sarvam-mode.js";
 import { PersonaplexIntakePersist } from "./personaplex-intake-persist.js";
+import { IRFAN_HELLO_TEXT, irfanHelloFrames } from "./irfan-hello.js";
 import {
   buildPersonaplexTextPrompt,
   personaplexWsUrlFromEnv,
@@ -62,6 +63,7 @@ export class PersonaPlexPipeline implements VoiceSession {
   private closed = false;
   private ready = false;
   private greetingSent = false;
+  private playingRecordedHello = false;
   private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
   private lastRealFrameAt = 0;
   private outPending = Buffer.alloc(0);
@@ -187,6 +189,7 @@ export class PersonaPlexPipeline implements VoiceSession {
       systemPrompt: this.agent.systemPrompt,
       history: () => this.getHistory(),
       lastAgentText: () => this.lastAgentText,
+      onDecision: (decision) => this.sendCoach(decision.coachText),
     });
     this.startCallerSttTap();
   }
@@ -238,7 +241,12 @@ export class PersonaPlexPipeline implements VoiceSession {
     } catch { /* STT tap must never break the spoken path */ }
 
     const now = Date.now();
-    if (frameRms(pcm8k) >= SPEECH_RMS && !this.awaitingTurnReply) {
+    const speaking = frameRms(pcm8k) >= SPEECH_RMS;
+    if (speaking && this.playingRecordedHello) {
+      this.stopRecordedHello("barge-in");
+      this.config.onBargeIn?.();
+    }
+    if (speaking && !this.awaitingTurnReply) {
       this.t0CallerSpeechAt = now;
       this.t1GpuSendAt = 0;
       this.awaitingTurnReply = true;
@@ -259,11 +267,45 @@ export class PersonaPlexPipeline implements VoiceSession {
 
   async greet(): Promise<void> {
     if (this.closed || this.greetingSent) return;
-    await this.ensureConnected();
     this.greetingSent = true;
-    if (this.agent.firstSpeaker === "user") {
+    if (this.agent.firstSpeaker !== "user") {
+      this.playRecordedHello();
+    } else {
       logger.info({ callId: this.config.callId }, "PersonaPlex: first speaker = user");
     }
+    void this.ensureConnected().catch((err) => {
+      logger.warn({ callId: this.config.callId, err }, "PersonaPlex GPU connect after recorded hello failed");
+    });
+  }
+
+  private playRecordedHello(): void {
+    const frames = irfanHelloFrames();
+    if (frames.length === 0) {
+      logger.warn({ callId: this.config.callId }, "PersonaPlex: recorded Irfan hello PCM missing");
+      return;
+    }
+    this.playingRecordedHello = true;
+    this.outFrames.push(...frames);
+    this.ensurePump();
+    this.appendTranscript("assistant", IRFAN_HELLO_TEXT);
+    logger.info(
+      { evt: "personaplex_recorded_hello", callId: this.config.callId, frames: frames.length, ms: frames.length * FRAME_MS },
+      "PersonaPlex: playing recorded Irfan hello",
+    );
+  }
+
+  private stopRecordedHello(reason: string): void {
+    if (!this.playingRecordedHello) return;
+    this.playingRecordedHello = false;
+    this.outFrames = [];
+    this.outPending = Buffer.alloc(0);
+    logger.info({ callId: this.config.callId, reason }, "PersonaPlex: stopped recorded hello");
+  }
+
+  private sendCoach(text: string): void {
+    const line = text.trim();
+    if (!line || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({ type: "coach", text: line.slice(0, 500) }));
   }
 
   private async ensureConnected(): Promise<void> {
@@ -295,6 +337,7 @@ export class PersonaPlexPipeline implements VoiceSession {
           voice: this.voice,
           textPrompt: this.textPrompt,
           sampleRate: 8000,
+          skipGreeting: true,
         }));
       });
 
@@ -393,6 +436,8 @@ export class PersonaPlexPipeline implements VoiceSession {
 
   private enqueueAgentPcm8k(pcm8k: Buffer): void {
     if (pcm8k.length < 2) return;
+    // Recorded hello owns the wire. Keep feeding caller PCM to Moshi; drop GPU dump.
+    if (this.playingRecordedHello) return;
     if (!this.firstGpuPcmAt) {
       this.firstGpuPcmAt = Date.now();
       logger.info(
@@ -459,6 +504,7 @@ export class PersonaPlexPipeline implements VoiceSession {
       return;
     }
     if (this.outFrames.length === 0) {
+      if (this.playingRecordedHello) this.playingRecordedHello = false;
       this.stopPump();
       return;
     }
@@ -590,6 +636,7 @@ export class PersonaPlexPipeline implements VoiceSession {
     if (this.closed) return;
     this.closed = true;
     this.ready = false;
+    this.playingRecordedHello = false;
     this.flushAgentBuf();
     this.stopPump();
     this.outFrames = [];

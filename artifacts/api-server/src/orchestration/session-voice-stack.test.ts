@@ -193,7 +193,7 @@ describe("PersonaPlexPipeline", () => {
     expect(isPersonaplexPcmFrame(false, Buffer.alloc(320))).toBe(true);
   });
 
-  it("locks intake Moshi to the JobShop BPO recruiter flow", () => {
+  it("locks intake Moshi to a short Irfan persona, not the playbook", () => {
     expect(resolvePersonaplexVoice("natm1.pt")).toBe("NATM1");
     const prompt = buildPersonaplexTextPrompt({
       agentName: "Asha",
@@ -204,10 +204,30 @@ describe("PersonaPlexPipeline", () => {
     expect(prompt).toContain("JobShop");
     expect(prompt).toContain("BPO");
     expect(prompt).toContain("Bangalore");
-    expect(prompt).toContain("Naukri");
-    expect(prompt).toContain("9964080000");
     expect(prompt).toContain("Never invent company names");
+    expect(prompt).toContain("Do not greet first");
+    expect(prompt).not.toContain("9964080000");
+    expect(prompt).not.toContain("Naukri");
+    expect(prompt.length).toBeLessThan(900);
     expect(prompt).not.toContain("real estate");
     expect(prompt).not.toContain("save_candidate_details");
+  });
+
+  it("plays recorded Irfan hello without waiting for GPU", async () => {
+    vi.useFakeTimers();
+    const onAudioOut = vi.fn();
+    const pipeline = new PersonaPlexPipeline({
+      ...minimalSessionConfig(minimalAgentConfig({
+        voiceStack: "personaplex",
+        personaplex: { wsUrl: "ws://127.0.0.1:9", voiceName: "NATM1", isIntake: true },
+      })),
+      telephonyProvider: "vobiz",
+      onAudioOut,
+    });
+    await pipeline.greet();
+    vi.advanceTimersByTime(80);
+    expect(onAudioOut).toHaveBeenCalled();
+    expect((onAudioOut.mock.calls[0]![0] as Buffer).length).toBe(320);
+    pipeline.close();
   });
 });

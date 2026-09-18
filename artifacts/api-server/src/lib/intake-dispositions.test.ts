@@ -315,4 +315,16 @@ describe("parseIntakeExtra", () => {
       tenure: "2 years",
     });
   });
+
+  it("keeps RecruiterBrain facts under extra.recruiter", () => {
+    const extra = parseIntakeExtra({
+      dispositionIds: [],
+      recruiter: { current_state: "CITY", wants_bpo: true, city: "Bangalore" },
+    });
+    expect(extra.recruiter).toMatchObject({
+      current_state: "CITY",
+      wants_bpo: true,
+      city: "Bangalore",
+    });
+  });
 });

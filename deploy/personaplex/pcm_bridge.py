@@ -34,31 +34,32 @@ SNAP_FRAME = 160
 OPUS_FRAME_24 = 960
 HANDSHAKE_S = float(os.environ.get("MOSHI_HANDSHAKE_TIMEOUT_S", "90"))
 WARM_VOICE = os.environ.get("PERSONAPLEX_VOICE", "NATM1").replace(".pt", "")
-PARK_S = float(os.environ.get("MOSHI_PARK_S", "180"))
+# Spoken-to chats are destroyed on hangup. Park only for a VoBiz socket steal.
+PARK_S = float(os.environ.get("MOSHI_PARK_S", "8"))
+# Unused warm Moshi eating dither goes mute (07:47 call: 10 min idle, hello, then dead air).
+IDLE_REBAKE_S = float(os.environ.get("MOSHI_IDLE_REBAKE_S", "40"))
 # VoBiz often opens a second media socket a few seconds after the first.
-# Only skip the cached hello on that steal — a later call must hear Irfan.
 RECONNECT_S = float(os.environ.get("MOSHI_RECONNECT_S", "8"))
 GREETING_MAX_S = 5.0
 GREETING_SILENCE_RMS = 250
+HELLO_PCM_PATH = os.environ.get("IRFAN_HELLO_PCM", "/workspace/irfan_hello_8k.pcm")
+
+# Role only. Playbook lives in SnapServe RecruiterBrain — do not bake it here.
+IRFAN_PERSONA = (
+    "You are Irfan, recruiter at JobShop, India's largest BPO recruitment company. "
+    "You only screen BPO jobs. Interviews are face to face in Bangalore. "
+    "No work from home. No virtual interviews. "
+    "Never invent company names, openings, cities, kilometres, or salaries. "
+    "Never ask for their phone number. Never say you are an AI. "
+    "Do not greet first — the phone already played Hello this is Irfan from JobShop. "
+    "Simple Indian English. One question at a time. Let them finish. "
+    "Do not re-ask facts the candidate already gave. "
+    "Start by asking what job they want. If not BPO, politely end."
+)
 
 
 def _default_warm_prompt() -> str:
-    here = os.path.dirname(os.path.abspath(__file__))
-    for path in (
-        os.path.join(here, "jobshop_recruiter.txt"),
-        "/workspace/jobshop_recruiter.txt",
-    ):
-        try:
-            with open(path, encoding="utf-8") as f:
-                text = f.read().strip()
-            if text:
-                return text
-        except OSError:
-            continue
-    return (
-        "You are Irfan, recruiter at JobShop. Only BPO, Bangalore face to face. "
-        'Never invent jobs or salaries. Speak first: "Hello, this is Irfan from JobShop."'
-    )
+    return IRFAN_PERSONA
 
 
 # This GPU is the JobShop recruiter for life. SnapServe hello text is ignored.
@@ -175,6 +176,7 @@ class WarmSession:
     last_call_s: float = 0.0
     reconnect_pending: bool = False
     parking: bool = False
+    spoke: bool = False
 
 
 async def _pump_moshi(moshi, incoming: asyncio.Queue) -> None:
@@ -277,13 +279,28 @@ class WarmPool:
         self.start()
 
     async def park_then_rearm(self, sess: WarmSession) -> None:
-        """Keep the baked Moshi alive briefly so a reconnect does not pay 8s."""
+        """Destroy spoken-to Moshi. Park only for a VoBiz socket steal."""
         if sess.parking:
             log.info("park skipped — already parking")
             return
         sess.parking = True
+        if sess.attached_at > 0:
+            sess.last_call_s = time.monotonic() - sess.attached_at
+        sess.last_detach_at = time.monotonic()
         pump = sess.pump_task
-        if pump is None or pump.done():
+        dead = pump is None or pump.done()
+        async with self._lock:
+            waiters = self._take_waiters
+        # Fresh bake after hangup. Do not keep a dither conversation for 180s.
+        # Park only when a second socket is already waiting AND Moshi already spoke.
+        steal_only = (not dead) and sess.spoke and waiters > 0
+        if not steal_only:
+            log.info(
+                "destroy moshi after hangup spoke=%s waiters=%s last_call_s=%.1f",
+                sess.spoke,
+                waiters,
+                sess.last_call_s,
+            )
             try:
                 await sess.moshi.close()
             except Exception:
@@ -292,20 +309,18 @@ class WarmPool:
             self._next_prompt = WARM_PROMPT
             self.start()
             return
-        if sess.attached_at > 0:
-            sess.last_call_s = time.monotonic() - sess.attached_at
-        sess.last_detach_at = time.monotonic()
         sess.steal = asyncio.Event()
         sess.silence_task = None
         sess.discard_task = None
         start_idle_feed(sess)
         async with self._lock:
-            sess.reconnect_pending = self._take_waiters > 0
+            sess.reconnect_pending = True
             self._session = sess
             self._ready.set()
+        park_s = min(PARK_S, RECONNECT_S)
         log.info(
             "warm moshi parked for %.0fs persona_chars=%s last_call_s=%.1f reconnect=%s",
-            PARK_S,
+            park_s,
             len(sess.prompt),
             sess.last_call_s,
             sess.reconnect_pending,
@@ -313,7 +328,7 @@ class WarmPool:
         steal_task = asyncio.create_task(sess.steal.wait())
         done, pending = await asyncio.wait(
             {steal_task, pump},
-            timeout=PARK_S,
+            timeout=park_s,
             return_when=asyncio.FIRST_COMPLETED,
         )
         if sess.steal.is_set():
@@ -351,22 +366,34 @@ class WarmPool:
             waiters = {steal_task}
             if sess.pump_task is not None:
                 waiters.add(sess.pump_task)
-            done, pending = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+            done, pending = await asyncio.wait(
+                waiters,
+                timeout=IDLE_REBAKE_S,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
             steal_task.cancel()
             # Never cancel pump_task here — that is the Moshi recv loop. Attaching
             # used to starve T2 and leave Irfan mute after the greeting.
-            if sess.pump_task in done and not sess.steal.is_set():
+            if sess.steal.is_set():
+                return
+            if sess.pump_task in done:
                 log.warning("warm moshi died while idle — rebaking")
+            else:
                 async with self._lock:
-                    if self._session is sess:
-                        self._session = None
-                        self._ready.clear()
-                try:
-                    await sess.moshi.close()
-                except Exception:
-                    pass
-                continue
-            return
+                    if self._take_waiters > 0 or sess.steal.is_set():
+                        steal_task = asyncio.create_task(sess.steal.wait())
+                        await steal_task
+                        return
+                log.info("warm moshi idle %.0fs — rebaking before it goes mute", IDLE_REBAKE_S)
+            async with self._lock:
+                if self._session is sess:
+                    self._session = None
+                    self._ready.clear()
+            try:
+                await sess.moshi.close()
+            except Exception:
+                pass
+            continue
 
     async def _bake(self) -> WarmSession:
         voice = self._next_voice or WARM_VOICE
@@ -483,13 +510,32 @@ class WarmPool:
         # Keep feeding silence so Mimi/LM stay live until the phone attaches
         # (call 25589: stopping here left Moshi mute after the greeting).
         start_idle_feed(sess)
+        _maybe_write_hello_pcm(sess.greeting_8k)
         return sess
+
+
+def _maybe_write_hello_pcm(pcm8: np.ndarray) -> None:
+    if pcm8.size < SNAP_RATE:
+        return
+    try:
+        pcm8.astype("<i2").tofile(HELLO_PCM_PATH)
+        log.info("wrote irfan hello pcm samples=%s path=%s", pcm8.size, HELLO_PCM_PATH)
+    except OSError:
+        log.warning("could not write irfan hello pcm path=%s", HELLO_PCM_PATH)
+
+
+class IrfanRuntime:
+    """Today: unused short bake. Later: clone of IRFAN_BASE_STATE without Railway changes."""
+
+    @staticmethod
+    async def acquire_fresh_session(voice: str, prompt: str) -> WarmSession | None:
+        return await POOL.take(voice, prompt)
 
 
 POOL = WarmPool()
 
 
-async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> None:
+async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool, skip_greeting: bool = True) -> None:
     close = False
     pending_in_24 = np.zeros(0, dtype=np.int16)
     pending_24 = np.zeros(0, dtype=np.int16)
@@ -505,11 +551,12 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
     heard_caller = False
     sess.attached_at = time.monotonic()
     elapsed = (time.monotonic() - sess.last_detach_at) if sess.last_detach_at > 0 else 1e9
-    # Skip hello only for VoBiz stealing the same call (second socket already
-    # waiting, or a ~2s ghost socket). A new dial after a real talk must hear Irfan.
-    replay = sess.greeted and (
-        sess.reconnect_pending
-        or (0 < sess.last_call_s < 4.0 and elapsed < RECONNECT_S)
+    # SnapServe plays recorded Irfan hello. Skip Moshi greeting dump unless asked.
+    replay = skip_greeting or (
+        sess.greeted and (
+            sess.reconnect_pending
+            or (0 < sess.last_call_s < 4.0 and elapsed < RECONNECT_S)
+        )
     )
     greeting_s = 0.0 if replay else float(sess.greeting_8k.size) / SNAP_RATE
     live_at = time.monotonic() + greeting_s
@@ -539,7 +586,12 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
             async for message in snap_ws:
                 if close:
                     return
-                if isinstance(message, str):
+                if isinstance(message, str) or (
+                    isinstance(message, (bytes, bytearray))
+                    and len(message) > 0
+                    and message[0] in (0x7B, 0x5B)
+                ):
+                    _handle_snap_control(message)
                     continue
                 if t_first_in is None:
                     t_first_in = time.monotonic()
@@ -633,6 +685,8 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
                 now = time.monotonic()
                 speaking = pcm_rms(pcm8) >= 80.0
                 if speaking:
+                    if flushed_hold:
+                        sess.spoke = True
                     if t_caller_turn > 0.0 and now - last_agent_speech_at > 0.25:
                         log.info("latency turn_ms=%.0f", (now - t_caller_turn) * 1000)
                         t_caller_turn = 0.0
@@ -713,6 +767,22 @@ def _snap_open(snap_ws) -> bool:
     return getattr(snap_ws, "close_code", None) is None
 
 
+def _handle_snap_control(raw) -> None:
+    try:
+        msg = json.loads(raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else raw)
+    except Exception:
+        return
+    kind = str(msg.get("type") or "")
+    if kind == "coach":
+        text = str(msg.get("text") or "").strip()
+        log.info("coach chars=%s text=%s", len(text), text[:240])
+        # Moshi handshake is already done; mid-chat text is usually ignored.
+        # RecruiterBrain still owns the profile. Packet is here for later text-in.
+        return
+    if kind == "speak":
+        log.info("speak ignored after handshake chars=%s", len(str(msg.get("text") or "")))
+
+
 async def handle_snapserve(snap_ws) -> None:
     try:
         raw = await asyncio.wait_for(snap_ws.recv(), timeout=10)
@@ -724,13 +794,21 @@ async def handle_snapserve(snap_ws) -> None:
         return
     voice = str(hello.get("voice") or WARM_VOICE).replace(".pt", "")
     prompt = norm_prompt(str(hello.get("textPrompt") or "")) or WARM_PROMPT
+    skip_greeting = hello.get("skipGreeting") is True
+    known = str(hello.get("knownFacts") or "").strip()
     t_hello = time.monotonic()
-    log.info("snap hello voice=%s prompt_chars=%s", voice, len(prompt))
+    log.info(
+        "snap hello voice=%s prompt_chars=%s skip_greeting=%s known_chars=%s",
+        voice,
+        len(prompt),
+        skip_greeting,
+        len(known),
+    )
 
     # VoBiz often opens a ghost socket that dies while take() is still waiting.
     # That used to steal the warm Moshi, dump hello into the void, and leave
     # the real caller on a silent line (call 25681).
-    take_task = asyncio.create_task(POOL.take(voice, prompt), name="moshi-take")
+    take_task = asyncio.create_task(IrfanRuntime.acquire_fresh_session(voice, prompt), name="moshi-take")
     closed_task = asyncio.create_task(snap_ws.wait_closed(), name="snap-closed")
     sess: WarmSession | None = None
     try:
@@ -793,7 +871,7 @@ async def handle_snapserve(snap_ws) -> None:
             POOL.rearm()
             return
     try:
-        await run_call(snap_ws, sess, t_hello, warm)
+        await run_call(snap_ws, sess, t_hello, warm, skip_greeting=skip_greeting)
     except Exception:
         log.exception("connection handler failed")
     finally:

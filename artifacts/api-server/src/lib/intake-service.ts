@@ -23,6 +23,11 @@ import {
 import { buildIntakeProfile, matchIntakeJobs } from "./intake-job-match.js";
 import { inferGenderFromName } from "./intake-gender.js";
 import {
+  mergeRecruiterProfile,
+  parseRecruiterProfile,
+  type RecruiterProfile,
+} from "./recruiter-brain.js";
+import {
   SCREEN_FLAG_KEYS,
   SCREEN_FLAG_TO_DISPOSITION,
   autoAnswersForDisposition,
@@ -721,4 +726,23 @@ export async function forgetIntakeCaller(opts: {
     callbacks: callbackRows.length,
     memoryKeys: memory.keys,
   };
+}
+
+export async function persistRecruiterProfile(
+  callId: number,
+  patch: Partial<RecruiterProfile>,
+): Promise<RecruiterProfile | null> {
+  const existing = await loadIntakeByCallId(callId);
+  if (!existing) return null;
+  const extra = intakeExtraOf(existing);
+  const merged = mergeRecruiterProfile(parseRecruiterProfile(extra.recruiter), patch);
+  extra.recruiter = merged;
+  await db
+    .update(candidateIntakesTable)
+    .set({
+      extra: extra as unknown as Record<string, unknown>,
+      revision: sql`${candidateIntakesTable.revision} + 1`,
+    })
+    .where(eq(candidateIntakesTable.id, existing.id));
+  return merged;
 }
