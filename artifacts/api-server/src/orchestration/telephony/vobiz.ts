@@ -127,6 +127,7 @@ export async function handleVobizWebSocket(
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
+  let myEpoch = 1;
   // True when VoBiz sent "stop" or closed the socket while createSession was still
   // awaiting.  In that case sessionId was null at the time, so endSession was
   // skipped.  We detect this and call endSession immediately once sessionId is set.
@@ -136,6 +137,11 @@ export async function handleVobizWebSocket(
     ws.send(JSON.stringify({ event: "checkpoint", streamId, name }));
   });
   let sessionStarting = false;
+  function ownsMedia(): boolean {
+    if (!sessionId) return true;
+    const sess = getSession(sessionId);
+    return !sess || sess.mediaEpoch === myEpoch;
+  }
   // Caller audio can arrive while DB/config/provider setup is awaited. Retain
   // at most 5 seconds of PCM8k, not an unbounded queue during a stuck setup.
   const pendingInput: Buffer[] = [];
@@ -236,6 +242,24 @@ export async function handleVobizWebSocket(
           legStartInFlight: legKey ? vobizLegStartsInFlight.has(legKey) : false,
         });
         if (decision.close) {
+          const live = existing ?? existingLeg;
+          if (live?.voiceStack === "personaplex") {
+            myEpoch = live.retargetAudioOut((audio) => sendAudioToVobiz(audio));
+            sessionId = live.sessionId;
+            logger.warn(
+              {
+                agentId,
+                resolvedCallId,
+                callId: live.callId,
+                sessionId,
+                streamId,
+                mediaEpoch: myEpoch,
+                reason: decision.reason,
+              },
+              "Vobiz start: second media socket — moved Irfan audio onto this stream",
+            );
+            break;
+          }
           logger.warn(
             {
               agentId,
@@ -369,6 +393,7 @@ export async function handleVobizWebSocket(
       }
 
       case "media": {
+        if (!ownsMedia()) break;
         if (!msg.media?.payload || sessionEndedBeforeReady) break;
         if (msg.media.track && msg.media.track !== "inbound") break;
         if (!sessionId) {
@@ -416,6 +441,10 @@ export async function handleVobizWebSocket(
         clearPendingInput();
         logger.info({ sessionId }, "Vobiz stream stopped");
         if (sessionId) {
+          if (!ownsMedia()) {
+            logger.info({ sessionId, myEpoch }, "Vobiz stop after media handoff — session stays on the new socket");
+            break;
+          }
           getSession(sessionId)?.pipeline.noteMediaDropIfWaitingForReply();
           await endSession(sessionId);
         } else {
@@ -430,6 +459,10 @@ export async function handleVobizWebSocket(
     clearPendingInput();
     logger.info({ sessionId }, "Vobiz WS closed");
     if (sessionId) {
+      if (!ownsMedia()) {
+        logger.info({ sessionId, myEpoch }, "Vobiz WS closed after media handoff — session stays live");
+        return;
+      }
       getSession(sessionId)?.pipeline.noteMediaDropIfWaitingForReply();
       endSession(sessionId).catch((err: unknown) =>
         logger.error({ sessionId, err }, "Vobiz WS close: endSession failed"),
@@ -444,6 +477,7 @@ export async function handleVobizWebSocket(
     clearPendingInput();
     logger.error({ sessionId, err }, "Vobiz WS error");
     if (sessionId) {
+      if (!ownsMedia()) return;
       failSession(sessionId, toReadableError(err, "Telephony error")).catch((e: unknown) =>
         logger.error({ sessionId, err: e }, "Vobiz WS error: failSession failed"),
       );

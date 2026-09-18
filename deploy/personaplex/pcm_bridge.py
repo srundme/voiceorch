@@ -32,20 +32,38 @@ MOSHI_RATE = 24000
 SNAP_RATE = 8000
 SNAP_FRAME = 160
 OPUS_FRAME_24 = 960
-HANDSHAKE_S = float(os.environ.get("MOSHI_HANDSHAKE_TIMEOUT_S", "45"))
+HANDSHAKE_S = float(os.environ.get("MOSHI_HANDSHAKE_TIMEOUT_S", "90"))
 WARM_VOICE = os.environ.get("PERSONAPLEX_VOICE", "NATM1").replace(".pt", "")
-WARM_PROMPT = os.environ.get(
-    "PERSONAPLEX_WARM_PROMPT",
-    "You are Irfan at Jobshop, a recruitment firm in India. "
-    "Answer the phone. Ask why they called. Do not invent jobs, cities, or salaries. "
-    "Never ask for their phone number. Never say you are an AI. "
-    'Speak first: "Hello, this is Irfan from Jobshop."',
-)
+PARK_S = float(os.environ.get("MOSHI_PARK_S", "180"))
+# VoBiz often opens a second media socket a few seconds after the first.
+# Only skip the cached hello on that steal — a later call must hear Irfan.
+RECONNECT_S = float(os.environ.get("MOSHI_RECONNECT_S", "8"))
 GREETING_MAX_S = 5.0
 GREETING_SILENCE_RMS = 250
-# VoBiz/Railway often drop and reopen the media WS. Closing Moshi on that
-# drop forces an 8s rebake (call 25582). Park the baked session instead.
-PARK_S = float(os.environ.get("MOSHI_PARK_S", "15"))
+
+
+def _default_warm_prompt() -> str:
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in (
+        os.path.join(here, "jobshop_recruiter.txt"),
+        "/workspace/jobshop_recruiter.txt",
+    ):
+        try:
+            with open(path, encoding="utf-8") as f:
+                text = f.read().strip()
+            if text:
+                return text
+        except OSError:
+            continue
+    return (
+        "You are Irfan, recruiter at JobShop. Only BPO, Bangalore face to face. "
+        'Never invent jobs or salaries. Speak first: "Hello, this is Irfan from JobShop."'
+    )
+
+
+# This GPU is the JobShop recruiter for life. SnapServe hello text is ignored.
+WARM_PROMPT = (os.environ.get("PERSONAPLEX_WARM_PROMPT") or "").strip() or _default_warm_prompt()
+log.info("recruiter prompt_chars=%s", len(WARM_PROMPT))
 
 
 def upsample_8_to_24(pcm_i16: np.ndarray) -> np.ndarray:
@@ -96,7 +114,7 @@ def trim_leading_silence(pcm_i16: np.ndarray) -> np.ndarray:
     return pcm_i16[i:]
 
 
-def keep_speech(pcm_i16: np.ndarray, hang_ms: float = 250.0) -> np.ndarray:
+def keep_speech(pcm_i16: np.ndarray, hang_ms: float = 250.0, rms_min: float = 80.0) -> np.ndarray:
     """Keep spoken frames plus a short hangover; drop idle so the phone queue cannot grow."""
     hop = SNAP_FRAME
     hang_left = 0
@@ -104,7 +122,7 @@ def keep_speech(pcm_i16: np.ndarray, hang_ms: float = 250.0) -> np.ndarray:
     parts: list[np.ndarray] = []
     for i in range(0, pcm_i16.size - hop + 1, hop):
         frame = pcm_i16[i:i + hop]
-        if pcm_rms(frame) >= GREETING_SILENCE_RMS:
+        if pcm_rms(frame) >= rms_min:
             hang_left = hang_frames
             parts.append(frame)
         elif hang_left > 0:
@@ -121,11 +139,19 @@ def moshi_ssl() -> ssl.SSLContext:
 
 
 def moshi_chat_url(voice: str, prompt: str) -> str:
+    # Moshi takes text_prompt on the query string. ~8k raw → HTTP 400 LineTooLong.
+    if len(prompt) > 4000:
+        log.warning("recruiter prompt truncated %s → 4000 (Moshi URL limit)", len(prompt))
+        prompt = prompt[:4000]
     params = urllib.parse.urlencode({
         "voice_prompt": f"{voice}.pt",
         "text_prompt": prompt,
     })
     return f"{MOSHI_URL}?{params}"
+
+
+def norm_prompt(p: str) -> str:
+    return " ".join((p or "").split())
 
 
 @dataclass
@@ -137,10 +163,18 @@ class WarmSession:
     pending_24: np.ndarray
     pending_8: np.ndarray
     incoming: asyncio.Queue
+    voice: str = WARM_VOICE
+    prompt: str = ""
     steal: asyncio.Event = field(default_factory=asyncio.Event)
     silence_task: asyncio.Task | None = None
     discard_task: asyncio.Task | None = None
     pump_task: asyncio.Task | None = None
+    greeted: bool = False
+    attached_at: float = 0.0
+    last_detach_at: float = 0.0
+    last_call_s: float = 0.0
+    reconnect_pending: bool = False
+    parking: bool = False
 
 
 async def _pump_moshi(moshi, incoming: asyncio.Queue) -> None:
@@ -205,50 +239,77 @@ class WarmPool:
         self._session: WarmSession | None = None
         self._ready = asyncio.Event()
         self._task: asyncio.Task | None = None
+        self._next_voice = WARM_VOICE
+        self._next_prompt = WARM_PROMPT
+        self._take_waiters = 0
 
     def start(self) -> None:
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._maintain(), name="moshi-warm")
 
-    async def take(self) -> WarmSession | None:
+    async def take(self, voice: str, prompt: str) -> WarmSession | None:
+        # One recruiter on this GPU. Never rebake because SnapServe's hello
+        # prompt differs — that 9s bake on a live line killed the POC calls.
+        del voice, prompt
+        self._take_waiters += 1
         try:
-            await asyncio.wait_for(self._ready.wait(), timeout=HANDSHAKE_S + 2)
-        except TimeoutError:
-            return None
-        async with self._lock:
-            sess = self._session
-            self._session = None
-            self._ready.clear()
-            if sess is None:
+            try:
+                await asyncio.wait_for(self._ready.wait(), timeout=HANDSHAKE_S + 2)
+            except TimeoutError:
                 return None
-            sess.steal.set()
-            if sess.silence_task is not None:
-                sess.silence_task.cancel()
-            if sess.discard_task is not None:
-                sess.discard_task.cancel()
-            return sess
+            async with self._lock:
+                sess = self._session
+                self._session = None
+                self._ready.clear()
+                if sess is None:
+                    return None
+                sess.steal.set()
+                sess.parking = False
+                if sess.silence_task is not None:
+                    sess.silence_task.cancel()
+                if sess.discard_task is not None:
+                    sess.discard_task.cancel()
+                return sess
+        finally:
+            self._take_waiters -= 1
 
     def rearm(self) -> None:
         self.start()
 
     async def park_then_rearm(self, sess: WarmSession) -> None:
         """Keep the baked Moshi alive briefly so a reconnect does not pay 8s."""
+        if sess.parking:
+            log.info("park skipped — already parking")
+            return
+        sess.parking = True
         pump = sess.pump_task
         if pump is None or pump.done():
             try:
                 await sess.moshi.close()
             except Exception:
                 pass
+            self._next_voice = WARM_VOICE
+            self._next_prompt = WARM_PROMPT
             self.start()
             return
+        if sess.attached_at > 0:
+            sess.last_call_s = time.monotonic() - sess.attached_at
+        sess.last_detach_at = time.monotonic()
         sess.steal = asyncio.Event()
         sess.silence_task = None
         sess.discard_task = None
         start_idle_feed(sess)
         async with self._lock:
+            sess.reconnect_pending = self._take_waiters > 0
             self._session = sess
             self._ready.set()
-        log.info("warm moshi parked for %.0fs", PARK_S)
+        log.info(
+            "warm moshi parked for %.0fs persona_chars=%s last_call_s=%.1f reconnect=%s",
+            PARK_S,
+            len(sess.prompt),
+            sess.last_call_s,
+            sess.reconnect_pending,
+        )
         steal_task = asyncio.create_task(sess.steal.wait())
         done, pending = await asyncio.wait(
             {steal_task, pump},
@@ -270,6 +331,8 @@ class WarmPool:
         except Exception:
             pass
         log.info("park expired — rebaking")
+        self._next_voice = WARM_VOICE
+        self._next_prompt = WARM_PROMPT
         self.start()
 
     async def _maintain(self) -> None:
@@ -283,7 +346,7 @@ class WarmPool:
             async with self._lock:
                 self._session = sess
                 self._ready.set()
-            log.info("warm moshi ready greeting_ms=%.0f", sess.greeting_8k.size / 8)
+            log.info("warm moshi ready greeting_ms=%.0f voice=%s prompt_chars=%s", sess.greeting_8k.size / 8, sess.voice, len(sess.prompt))
             steal_task = asyncio.create_task(sess.steal.wait())
             waiters = {steal_task}
             if sess.pump_task is not None:
@@ -306,9 +369,11 @@ class WarmPool:
             return
 
     async def _bake(self) -> WarmSession:
-        url = moshi_chat_url(WARM_VOICE, WARM_PROMPT)
+        voice = self._next_voice or WARM_VOICE
+        prompt = self._next_prompt or WARM_PROMPT
+        url = moshi_chat_url(voice, prompt)
         ssl_ctx = moshi_ssl() if url.startswith("wss://") else None
-        log.info("warm bake voice=%s prompt_chars=%s", WARM_VOICE, len(WARM_PROMPT))
+        log.info("warm bake voice=%s prompt_chars=%s", voice, len(prompt))
         moshi = await websockets.connect(
             url, ssl=ssl_ctx, max_size=None, open_timeout=30, ping_interval=None,
         )
@@ -409,6 +474,8 @@ class WarmPool:
             pending_24=pending_24,
             pending_8=pending_8,
             incoming=incoming,
+            voice=voice,
+            prompt=norm_prompt(prompt),
             steal=steal,
             silence_task=sil_task,
             pump_task=pump_task,
@@ -436,11 +503,18 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
     t_caller_turn = 0.0
     last_agent_speech_at = 0.0
     heard_caller = False
-    greeting_s = float(sess.greeting_8k.size) / SNAP_RATE
+    sess.attached_at = time.monotonic()
+    elapsed = (time.monotonic() - sess.last_detach_at) if sess.last_detach_at > 0 else 1e9
+    # Skip hello only for VoBiz stealing the same call (second socket already
+    # waiting, or a ~2s ghost socket). A new dial after a real talk must hear Irfan.
+    replay = sess.greeted and (
+        sess.reconnect_pending
+        or (0 < sess.last_call_s < 4.0 and elapsed < RECONNECT_S)
+    )
+    greeting_s = 0.0 if replay else float(sess.greeting_8k.size) / SNAP_RATE
     live_at = time.monotonic() + greeting_s
     held_8 = np.zeros(0, dtype=np.int16)
-    flushed_hold = False
-    quiet_ms = 0.0
+    flushed_hold = replay
 
     while True:
         try:
@@ -473,7 +547,9 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
                 pcm8 = np.frombuffer(message, dtype="<i2")
                 last_in_at = time.monotonic()
                 if pcm_rms(pcm8) >= GREETING_SILENCE_RMS:
-                    heard_caller = True
+                    if not heard_caller:
+                        heard_caller = True
+                        log.info("caller speech at_ms=%.0f", (time.monotonic() - t_hello) * 1000)
                     if t_caller_turn <= 0.0 or (time.monotonic() - last_agent_speech_at) > 0.4:
                         t_caller_turn = time.monotonic()
                 pending_in_24 = np.concatenate([pending_in_24, upsample_8_to_24(pcm8)])
@@ -510,7 +586,7 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
 
     async def moshi_to_snap() -> None:
         nonlocal close, pending_24, t_first_out, t_caller_turn, last_agent_speech_at
-        nonlocal held_8, flushed_hold, quiet_ms
+        nonlocal held_8, flushed_hold
         try:
             while not close:
                 try:
@@ -555,24 +631,20 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
                         warm,
                     )
                 now = time.monotonic()
-                speaking = pcm_rms(pcm8) >= GREETING_SILENCE_RMS
+                speaking = pcm_rms(pcm8) >= 80.0
                 if speaking:
                     if t_caller_turn > 0.0 and now - last_agent_speech_at > 0.25:
                         log.info("latency turn_ms=%.0f", (now - t_caller_turn) * 1000)
                         t_caller_turn = 0.0
                     last_agent_speech_at = now
-                    quiet_ms = 0.0
-                elif flushed_hold:
-                    quiet_ms += 1000.0 * pcm8.size / SNAP_RATE
                 # Greeting is dumped instantly; Railway plays it over greeting_s.
-                # Buffer live Moshi during that window (do not drop it) and flush
-                # only speech so the phone queue does not keep a 5s offset.
+                # Buffer live Moshi during that window, then forward everything.
+                # Skipping "quiet" frames after hello muted Irfan (call 06:18).
                 if now < live_at:
                     held_8 = np.concatenate([held_8, pcm8])
                     continue
                 if not flushed_hold:
                     flushed_hold = True
-                    quiet_ms = 0.0
                     speech = keep_speech(held_8)
                     log.info(
                         "greeting hold done hold_ms=%.0f buffered_ms=%.0f speech_ms=%.0f heard_caller=%s",
@@ -584,8 +656,7 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
                     if speech.size >= SNAP_FRAME:
                         await send_pcm8(speech)
                     held_8 = np.zeros(0, dtype=np.int16)
-                if speaking or quiet_ms < 250:
-                    await send_pcm8(pcm8)
+                await send_pcm8(pcm8)
         except Exception:
             if not close:
                 log.exception("moshi_to_snap failed")
@@ -595,17 +666,25 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
     try:
         await snap_ws.send(json.dumps({"type": "ready"}))
         log.info(
-            "snapserve ready warm=%s attach_ms=%.0f greeting_bytes=%s",
+            "snapserve ready warm=%s attach_ms=%.0f greeting_bytes=%s replay=%s last_call_s=%.1f reconnect=%s",
             warm,
             (time.monotonic() - t_hello) * 1000,
-            int(sess.greeting_8k.size * 2),
+            0 if replay else int(sess.greeting_8k.size * 2),
+            replay,
+            sess.last_call_s,
+            sess.reconnect_pending,
         )
-        buf = sess.greeting_8k
-        while buf.size >= SNAP_FRAME:
-            await snap_ws.send(buf[:SNAP_FRAME].tobytes())
-            buf = buf[SNAP_FRAME:]
-        live_at = time.monotonic() + greeting_s
-        log.info("greeting hold_ms=%.0f", greeting_s * 1000)
+        if replay:
+            live_at = time.monotonic()
+            log.info("reconnect skip greeting — live now")
+        else:
+            buf = sess.greeting_8k
+            while buf.size >= SNAP_FRAME:
+                await snap_ws.send(buf[:SNAP_FRAME].tobytes())
+                buf = buf[SNAP_FRAME:]
+            sess.greeted = True
+            live_at = time.monotonic() + greeting_s
+            log.info("greeting hold_ms=%.0f", greeting_s * 1000)
 
         async def t2_watchdog() -> None:
             await asyncio.sleep(3)
@@ -626,6 +705,14 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool) -> No
         await abort()
 
 
+def _snap_open(snap_ws) -> bool:
+    state = getattr(snap_ws, "state", None)
+    name = getattr(state, "name", None)
+    if name:
+        return name == "OPEN"
+    return getattr(snap_ws, "close_code", None) is None
+
+
 async def handle_snapserve(snap_ws) -> None:
     try:
         raw = await asyncio.wait_for(snap_ws.recv(), timeout=10)
@@ -636,15 +723,43 @@ async def handle_snapserve(snap_ws) -> None:
     except Exception:
         return
     voice = str(hello.get("voice") or WARM_VOICE).replace(".pt", "")
+    prompt = norm_prompt(str(hello.get("textPrompt") or "")) or WARM_PROMPT
     t_hello = time.monotonic()
-    log.info("snap hello voice=%s prompt_chars=%s", voice, len(str(hello.get("textPrompt") or "")))
+    log.info("snap hello voice=%s prompt_chars=%s", voice, len(prompt))
 
-    sess = await POOL.take()
+    # VoBiz often opens a ghost socket that dies while take() is still waiting.
+    # That used to steal the warm Moshi, dump hello into the void, and leave
+    # the real caller on a silent line (call 25681).
+    take_task = asyncio.create_task(POOL.take(voice, prompt), name="moshi-take")
+    closed_task = asyncio.create_task(snap_ws.wait_closed(), name="snap-closed")
+    sess: WarmSession | None = None
+    try:
+        done, _pending = await asyncio.wait(
+            {take_task, closed_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if take_task not in done:
+            take_task.cancel()
+            try:
+                await take_task
+            except asyncio.CancelledError:
+                pass
+            log.info("snapserve closed before moshi attach — warm session kept")
+            return
+        sess = take_task.result()
+        if closed_task.done() or not _snap_open(snap_ws):
+            log.info("snapserve closed as moshi attached — park without talking")
+            if sess is not None:
+                await POOL.park_then_rearm(sess)
+            return
+    finally:
+        closed_task.cancel()
+
     warm = sess is not None
     if sess is None:
         log.warning("no warm moshi — cold bake this call")
         try:
-            url = moshi_chat_url(voice or WARM_VOICE, WARM_PROMPT)
+            url = moshi_chat_url(voice or WARM_VOICE, prompt)
             ssl_ctx = moshi_ssl() if url.startswith("wss://") else None
             moshi = await websockets.connect(url, ssl=ssl_ctx, max_size=None, ping_interval=None)
             writer = sphn.OpusStreamWriter(MOSHI_RATE)
@@ -665,6 +780,8 @@ async def handle_snapserve(snap_ws) -> None:
                 pending_24=np.zeros(0, dtype=np.int16),
                 pending_8=np.zeros(0, dtype=np.int16),
                 incoming=incoming,
+                voice=voice or WARM_VOICE,
+                prompt=prompt,
                 pump_task=pump_task,
             )
         except Exception as exc:
@@ -677,6 +794,8 @@ async def handle_snapserve(snap_ws) -> None:
             return
     try:
         await run_call(snap_ws, sess, t_hello, warm)
+    except Exception:
+        log.exception("connection handler failed")
     finally:
         await POOL.park_then_rearm(sess)
 

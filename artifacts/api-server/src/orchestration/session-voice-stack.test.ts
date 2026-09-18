@@ -193,19 +193,21 @@ describe("PersonaPlexPipeline", () => {
     expect(isPersonaplexPcmFrame(false, Buffer.alloc(320))).toBe(true);
   });
 
-  it("builds a short Jobshop intake persona, not the tool script", () => {
+  it("locks intake Moshi to the JobShop BPO recruiter flow", () => {
     expect(resolvePersonaplexVoice("natm1.pt")).toBe("NATM1");
     const prompt = buildPersonaplexTextPrompt({
-      agentName: "Irfan",
-      systemPrompt: "You are a tool-calling form bot. Call save_candidate_details.",
-      greeting: "Hello, this is Irfan from Jobshop. How may I assist you?",
+      agentName: "Asha",
+      systemPrompt: "You are a real estate agent. Call save_candidate_details.",
+      greeting: "Hello from Homes.",
       isIntake: true,
     });
-    expect(prompt).toContain("Jobshop");
-    expect(prompt).toContain("Irfan");
+    expect(prompt).toContain("JobShop");
+    expect(prompt).toContain("BPO");
+    expect(prompt).toContain("Bangalore");
+    expect(prompt).toContain("Naukri");
+    expect(prompt).toContain("9964080000");
+    expect(prompt).toContain("Never invent company names");
+    expect(prompt).not.toContain("real estate");
     expect(prompt).not.toContain("save_candidate_details");
-    expect(prompt).toContain("Do not invent jobs");
-    expect(prompt).not.toContain("Speak first, exactly");
-    expect(prompt.length).toBeLessThan(400);
   });
 });

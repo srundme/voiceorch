@@ -162,6 +162,7 @@ interface MetricsAcc {
 }
 
 interface ActiveSession {
+  sessionId: string;
   callId: number;
   agentId: number;
   pipeline: VoiceSession;
@@ -173,6 +174,13 @@ interface ActiveSession {
   metricsAcc: MetricsAcc;
   wasTransferred: boolean;
   transferredTo: string | null;
+  /** Voice stack running this session. PersonaPlex must retarget a second
+   *  VoBiz media socket instead of closing it — closing it left Irfan mute
+   *  on the phone while Moshi kept talking (call 25681). */
+  voiceStack: AgentConfig["voiceStack"];
+  /** Bumped when playAudio is moved onto a newer VoBiz WebSocket. */
+  mediaEpoch: number;
+  retargetAudioOut(send: (audio: Buffer) => void): number;
   /** Imperatively mark/unmark the call as transferred from OUTSIDE createSession
    *  (e.g. the manual POST /calls/:id/transfer path via triggerTransfer). Sets the
    *  in-memory closure flag the vobiz.ts WS-close guard reads synchronously. Pass
@@ -363,8 +371,10 @@ export async function createSession(params: {
   });
   const ownedAudioOut = (audio: Buffer) => {
     try { lease.assertOwned(); } catch { return; }
-    params.onAudioOut(audio);
+    mediaOut.send(audio);
   };
+  let mediaEpoch = 1;
+  const mediaOut = { send: params.onAudioOut };
   try {
 
   // Independent reads overlap memory-owner/context loading. Attach rejection
@@ -2689,10 +2699,18 @@ export async function createSession(params: {
   admittedSessionId = sessionId;
   callLeases.set(sessionId, lease);
   sessions.set(sessionId, {
+    sessionId,
     callId: callRecord.id,
     agentId: params.agentId,
     pipeline,
     externalCallId: params.externalCallId ?? null,
+    voiceStack: agentConfig.voiceStack,
+    get mediaEpoch() { return mediaEpoch; },
+    retargetAudioOut(send: (audio: Buffer) => void) {
+      mediaEpoch += 1;
+      mediaOut.send = send;
+      return mediaEpoch;
+    },
     // Anchor the duration clock to the carrier answer time when known, so the
     // gap between carrier answer and media-stream connect/session creation is
     // counted. Falls back to now for webcall (no carrier answer gap).
