@@ -285,28 +285,3 @@ describe("Cartesia greeting overlap (call 25226)", () => {
     expect(cartesiaSrc).toContain("Do not flush a fragment");
   });
 });
-
-describe("JobShop Irfan serving", () => {
-  it("plays recorded hello, skips Moshi dump, and destroys spoken-to sessions", () => {
-    const personaplexSrc = readFileSync(
-      resolve(dirname(fileURLToPath(import.meta.url)), "adapters/live/personaplex-pipeline.ts"),
-      "utf8",
-    );
-    expect(personaplexSrc).toContain("skipGreeting: false");
-    expect(personaplexSrc).toContain("playRecordedHello");
-    expect(personaplexSrc).not.toContain('type: "coach"');
-    expect(personaplexSrc).not.toContain("sendCoach");
-    expect(personaplexSrc).toContain("enqueueSidecarStt");
-    expect(personaplexSrc).toContain("setImmediate");
-    expect(personaplexSrc).toContain("playingRecordedHello");
-    const bridge = readFileSync(
-      resolve(dirname(fileURLToPath(import.meta.url)), "../../../../deploy/personaplex/pcm_bridge.py"),
-      "utf8",
-    );
-    expect(bridge).toContain("destroy moshi after hangup");
-    expect(bridge).toContain('MOSHI_IDLE_REBAKE_S", "40"');
-    expect(bridge).toContain("Do not greet first");
-    expect(bridge).not.toContain("jobshop_recruiter.txt");
-    expect(existsSync(resolve(dirname(fileURLToPath(import.meta.url)), "adapters/live/irfan_hello_8k.pcm"))).toBe(true);
-  });
-});

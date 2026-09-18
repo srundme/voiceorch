@@ -9,17 +9,12 @@ import { decryptKey } from "../lib/crypto.js";
 import { logger } from "../lib/logger.js";
 import { OrchestrationPipeline } from "../orchestration/pipeline.js";
 import { GeminiLivePipeline } from "../orchestration/adapters/live/gemini-live-pipeline.js";
-import { PersonaPlexPipeline } from "../orchestration/adapters/live/personaplex-pipeline.js";
 import {
   resolveGeminiLiveModel,
   resolveGeminiLiveThinkingLevel,
   resolveGeminiLiveVoice,
+  resolveVoiceStack,
 } from "../orchestration/adapters/live/gemini-live-voices.js";
-import {
-  personaplexWsUrlFromEnv,
-  resolvePersonaplexVoice,
-  resolveSessionVoiceStack,
-} from "../orchestration/adapters/live/personaplex-voices.js";
 import { resolveSarvamSttMode } from "../orchestration/adapters/stt/sarvam-mode.js";
 import { resolveRealtimeStreamType } from "../orchestration/adapters/stt/sarvam-realtime.js";
 import {
@@ -175,10 +170,7 @@ async function buildTargetAgentConfig(
   const handoffLang = resolveSquadHandoffLanguage(packet.language, configuredLang);
   const effectiveAgentLang = handoffLang.bcp47;
 
-  const voiceStack = resolveSessionVoiceStack({
-    agentType: agent.agentType,
-    raw: agentCfg["voiceStack"] as string | undefined,
-  });
+  const voiceStack = resolveVoiceStack(agentCfg["voiceStack"] as string | undefined);
   const micSensitivity = resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined);
 
   const isSarvamLlm = (agent.llmProvider ?? "").toLowerCase() === "sarvam";
@@ -359,16 +351,6 @@ async function buildTargetAgentConfig(
           ),
         }
       : null,
-    personaplex: voiceStack === "personaplex"
-      ? {
-          wsUrl: personaplexWsUrlFromEnv()
-            ?? String((agentCfg["personaplex"] as Record<string, unknown> | undefined)?.["wsUrl"] ?? ""),
-          voiceName: resolvePersonaplexVoice(
-            (agentCfg["personaplex"] as Record<string, unknown> | undefined)?.["voiceName"] as string | undefined,
-          ),
-          isIntake: false,
-        }
-      : null,
   };
   agentConfig.sttConfig.endpointingSilenceMs = agentConfig.asrEndpointingSilenceMs;
 
@@ -482,26 +464,6 @@ export async function performSquadAgentHandoff(opts: {
   try {
     newPipeline = agentConfig.voiceStack === "gemini_live"
       ? new GeminiLivePipeline({
-          callId: hooks.callId,
-          agentConfig,
-          providerKeys,
-          telephonyProvider: hooks.telephonyProvider,
-          callerPhone: hooks.callerPhone,
-          campaignLeadId: hooks.campaignLeadId,
-          onAudioOut: hooks.onAudioOut,
-          rawPcmOutput: hooks.rawPcmOutput ?? (hooks.telephonyProvider === "vobiz"),
-          rawPcmOutputRate: hooks.rawPcmOutputRate,
-          onTranscript: (speaker, text) => hooks.onTranscript?.(speaker, text),
-          onCallEnd: hooks.onCallEnd,
-          onBargeIn: hooks.onBargeIn,
-          callDirection: hooks.callDirection,
-          memoryOwnerAgentId: hooks.memoryOwnerAgentId,
-          callerMemoryLanguage: packet.language ?? null,
-          isSquadHandoffTakeover: true,
-          handoffSeedTurns: opts.previousPipeline.getHistory(),
-        })
-      : agentConfig.voiceStack === "personaplex"
-      ? new PersonaPlexPipeline({
           callId: hooks.callId,
           agentConfig,
           providerKeys,

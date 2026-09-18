@@ -247,24 +247,6 @@ export async function handleVobizWebSocket(
           legStartInFlight: legKey ? vobizLegStartsInFlight.has(legKey) : false,
         });
         if (decision.close) {
-          const live = existing ?? existingLeg;
-          if (live?.voiceStack === "personaplex") {
-            myEpoch = live.retargetAudioOut((audio) => sendAudioToVobiz(audio));
-            sessionId = live.sessionId;
-            logger.warn(
-              {
-                agentId,
-                resolvedCallId,
-                callId: live.callId,
-                sessionId,
-                streamId,
-                mediaEpoch: myEpoch,
-                reason: decision.reason,
-              },
-              "Vobiz start: second media socket — moved Irfan audio onto this stream",
-            );
-            break;
-          }
           logger.warn(
             {
               agentId,

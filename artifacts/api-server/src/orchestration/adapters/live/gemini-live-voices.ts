@@ -77,4 +77,8 @@ export function resolveGeminiLiveThinkingLevel(
   return "minimal";
 }
 
-export { resolveVoiceStack, type VoiceStackId } from "./personaplex-voices.js";
+export type VoiceStackId = "classic" | "gemini_live";
+
+export function resolveVoiceStack(raw: string | undefined | null): VoiceStackId {
+  return raw === "gemini_live" ? "gemini_live" : "classic";
+}

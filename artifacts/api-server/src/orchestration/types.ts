@@ -562,19 +562,13 @@ export interface AgentConfig {
    */
   kbBakedOnly: boolean;
 
-  /** Classic STT→LLM→TTS (default), Gemini Live, or self-hosted NVIDIA PersonaPlex. */
-  voiceStack: "classic" | "gemini_live" | "personaplex";
+  /** Classic STT→LLM→TTS (default) or Gemini Live. */
+  voiceStack: "classic" | "gemini_live";
   /** Resolved Live settings when voiceStack === "gemini_live". */
   geminiLive: {
     model: string;
     voiceName: string;
     thinkingLevel: "minimal" | "low" | "medium" | "high";
-  } | null;
-  /** Resolved PersonaPlex settings when voiceStack === "personaplex". */
-  personaplex: {
-    wsUrl: string;
-    voiceName: string;
-    isIntake?: boolean;
   } | null;
 }
 

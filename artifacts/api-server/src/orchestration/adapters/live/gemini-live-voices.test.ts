@@ -24,7 +24,7 @@ describe("gemini-live-voices", () => {
     expect(resolveVoiceStack(undefined)).toBe("classic");
     expect(resolveVoiceStack("classic")).toBe("classic");
     expect(resolveVoiceStack("gemini_live")).toBe("gemini_live");
-    expect(resolveVoiceStack("personaplex")).toBe("personaplex");
+    expect(resolveVoiceStack("personaplex")).toBe("classic");
     expect(resolveVoiceStack("other")).toBe("classic");
   });
 

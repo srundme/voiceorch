@@ -149,12 +149,6 @@ async function copyAssets(distDir) {
   const fillersSrc = path.resolve(artifactDir, "src/orchestration/fillers");
   const fillersDest = path.resolve(distDir, "orchestration", "fillers");
   await cp(fillersSrc, fillersDest, { recursive: true });
-  const helloSrc = path.resolve(artifactDir, "src/orchestration/adapters/live/irfan_hello_8k.pcm");
-  const helloDest = path.resolve(distDir, "orchestration/adapters/live/irfan_hello_8k.pcm");
-  await mkdir(path.dirname(helloDest), { recursive: true });
-  await cp(helloSrc, helloDest);
-  // Bundled index.mjs resolves import.meta.url to dist/, not adapters/live/.
-  await cp(helloSrc, path.resolve(distDir, "irfan_hello_8k.pcm"));
 }
 
 buildAll().catch((err) => {

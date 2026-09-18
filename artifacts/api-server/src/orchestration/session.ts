@@ -18,18 +18,13 @@ import { parseBackchannelPhrases } from "./backchannel.js";
 import { clampSemanticTurnStopMs, resolveSemanticTurnEnabled } from "./semantic-turn-gate.js";
 import type { VoiceSession } from "./voice-session.js";
 import { GeminiLivePipeline } from "./adapters/live/gemini-live-pipeline.js";
-import { PersonaPlexPipeline } from "./adapters/live/personaplex-pipeline.js";
 import {
   DEFAULT_GEMINI_LIVE_MODEL,
   resolveGeminiLiveModel,
   resolveGeminiLiveThinkingLevel,
   resolveGeminiLiveVoice,
+  resolveVoiceStack,
 } from "./adapters/live/gemini-live-voices.js";
-import {
-  personaplexWsUrlFromEnv,
-  resolvePersonaplexVoice,
-  resolveSessionVoiceStack,
-} from "./adapters/live/personaplex-voices.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { resolveRealtimeStreamType } from "./adapters/stt/sarvam-realtime.js";
 import { isSarvamCatalogSpeaker } from "./adapters/tts/sarvam.js";
@@ -174,9 +169,7 @@ interface ActiveSession {
   metricsAcc: MetricsAcc;
   wasTransferred: boolean;
   transferredTo: string | null;
-  /** Voice stack running this session. PersonaPlex must retarget a second
-   *  VoBiz media socket instead of closing it — closing it left Irfan mute
-   *  on the phone while Moshi kept talking (call 25681). */
+  /** Voice stack running this session. */
   voiceStack: AgentConfig["voiceStack"];
   /** Bumped when playAudio is moved onto a newer VoBiz WebSocket. */
   mediaEpoch: number;
@@ -557,10 +550,7 @@ export async function createSession(params: {
     );
   }
 
-  const voiceStack = resolveSessionVoiceStack({
-    agentType: agent.agentType,
-    raw: agentCfg["voiceStack"] as string | undefined,
-  });
+  const voiceStack = resolveVoiceStack(agentCfg["voiceStack"] as string | undefined);
 
   const agentConfig: AgentConfig = {
     id: agent.id,
@@ -796,16 +786,6 @@ export async function createSession(params: {
           thinkingLevel: resolveGeminiLiveThinkingLevel(
             (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["thinkingLevel"] as string | undefined,
           ),
-        }
-      : null,
-    personaplex: voiceStack === "personaplex"
-      ? {
-          wsUrl: personaplexWsUrlFromEnv()
-            ?? String((agentCfg["personaplex"] as Record<string, unknown> | undefined)?.["wsUrl"] ?? ""),
-          voiceName: resolvePersonaplexVoice(
-            (agentCfg["personaplex"] as Record<string, unknown> | undefined)?.["voiceName"] as string | undefined,
-          ),
-          isIntake: agent.agentType === INTAKE_AGENT_TYPE,
         }
       : null,
   };
@@ -1910,18 +1890,6 @@ export async function createSession(params: {
         voice: agentConfig.geminiLive?.voiceName ?? null,
       },
     });
-  } else if (agentConfig.voiceStack === "personaplex") {
-    logExec(EXEC_COMPONENTS.Agent, "system", {
-      status: "info",
-      metadata: {
-        event: "Provider Initialized",
-        provider: "personaplex",
-        voice: agentConfig.personaplex?.voiceName ?? null,
-        wsHost: (() => {
-          try { return new URL(agentConfig.personaplex?.wsUrl ?? "").host; } catch { return null; }
-        })(),
-      },
-    });
   } else {
     logExec(EXEC_COMPONENTS.STT, "system", {
       status: "info",
@@ -2527,36 +2495,6 @@ export async function createSession(params: {
           ).catch((err) => logger.error({ callId: callRecord.id, err }, "Failed to persist AMD result"));
         },
         onVoicemailAction: () => { voicemailActionExecuted = true; },
-        callDirection,
-        answeredAt: params.answeredAt,
-      })
-    : agentConfig.voiceStack === "personaplex"
-    ? new PersonaPlexPipeline({
-        callId: callRecord.id,
-        agentConfig,
-        providerKeys,
-        telephonyProvider: params.telephonyProvider,
-        callerPhone,
-        memoryOwnerAgentId,
-        campaignLeadId: params.campaignLeadId ?? null,
-        onAudioOut: ownedAudioOut,
-        rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
-        rawPcmOutputRate: params.rawPcmOutputRate,
-        onTranscript: (speaker, text) => {
-          logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
-          params.onTranscript?.(speaker, text);
-        },
-        onCallEnd: () => {
-          triggerNaturalEnd();
-        },
-        onCallTransfer: onCallTransferHandler,
-        onBargeIn: params.onBargeIn,
-        onConversationUpdate: (history) => {
-          void saveConversation(callRecord.id, history, redisTtl);
-        },
-        onFatalError: (reason) => {
-          void failSession(sessionId, reason);
-        },
         callDirection,
         answeredAt: params.answeredAt,
       })

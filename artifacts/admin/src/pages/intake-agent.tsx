@@ -627,7 +627,7 @@ export default function IntakeAgentPage() {
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm">Call from {selected.name}</CardTitle>
                     <CardDescription>
-                      {selected.name} rings this number. One PersonaPlex call at a time — hang up before you dial again.
+                      {selected.name} rings this number. Hang up before you dial again.
                       {selected.inboundNumber ? ` Caller ID ${selected.inboundNumber.number}.` : ""}
                     </CardDescription>
                   </CardHeader>
