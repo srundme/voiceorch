@@ -33,7 +33,7 @@ SNAP_RATE = 8000
 SNAP_FRAME = 160
 OPUS_FRAME_24 = 960
 HANDSHAKE_S = float(os.environ.get("MOSHI_HANDSHAKE_TIMEOUT_S", "90"))
-WARM_VOICE = os.environ.get("PERSONAPLEX_VOICE", "NATM3.pt").strip().replace(" ", "")
+WARM_VOICE = os.environ.get("PERSONAPLEX_VOICE", "IRFAN_IN.pt").strip().replace(" ", "")
 # Spoken-to chats are destroyed on hangup. Park only for a VoBiz socket steal.
 PARK_S = float(os.environ.get("MOSHI_PARK_S", "8"))
 # Unused warm Moshi eating dither goes mute (07:47 call: 10 min idle, hello, then dead air).
@@ -142,7 +142,7 @@ def moshi_ssl() -> ssl.SSLContext:
 
 
 def voice_prompt_name(voice: str) -> str:
-    v = (voice or "NATM3.pt").strip()
+    v = (voice or "IRFAN_IN.pt").strip()
     if v.lower().endswith((".pt", ".wav")):
         return v
     return f"{v}.pt"
