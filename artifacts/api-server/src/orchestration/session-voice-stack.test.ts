@@ -209,6 +209,8 @@ describe("PersonaPlexPipeline", () => {
     expect(prompt).toContain("Never invent company names");
     expect(prompt).toContain("Do not greet first");
     expect(prompt).toContain("Information:");
+    expect(prompt).toContain("You enjoy having a good conversation");
+    expect(prompt).toMatch(/laugh/i);
     expect(prompt).toMatch(/jolly|friendly/i);
     expect(prompt).toMatch(/Indian English/i);
     expect(prompt).not.toContain("9964080000");
