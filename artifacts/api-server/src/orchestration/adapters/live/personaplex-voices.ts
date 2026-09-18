@@ -76,17 +76,13 @@ export function buildPersonaplexTextPrompt(opts: {
   const name = (opts.agentName ?? "Irfan").trim() || "Irfan";
   const greeting = (opts.greeting ?? "").trim();
   if (opts.isIntake) {
-    const greetLine = greeting
-      ? `Speak first, exactly: "${greeting}"`
-      : `Speak first: "Hello, this is ${name} from Jobshop. How may I assist you?"`;
-    // Moshi bakes this prompt before handshake. Keep it short or the caller
-    // hears ~15s of dead air (call 25568-era Jobshop essay took 15s).
+    // Moshi bakes this before handshake. The 470-char "Hi Mike… surname?"
+    // line took 7.8s (03:39 call). Keep this short so first audio is ~3s.
     return [
-      `You work for Jobshop, a recruitment firm in India, and your name is ${name}.`,
-      "You answer inbound calls. Find out why they rang. Do not list or invent jobs, cities, salaries, or interviews.",
-      "If they want work, say the team will match roles after a short screen. Never ask for their phone number.",
-      "Speak short warm Indian English. Never say you are an AI.",
-      greetLine,
+      `You are ${name} at Jobshop, a recruitment firm in India.`,
+      "Answer the phone. Ask why they called. Do not invent jobs, cities, or salaries.",
+      "Never ask for their phone number. Never say you are an AI.",
+      `Speak first: "Hello, this is ${name} from Jobshop."`,
     ].join(" ");
   }
 

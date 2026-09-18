@@ -28,6 +28,8 @@ const FRAME_BYTES_8K = FRAME_SAMPLES_8K * 2;
 const PREBUFFER_FRAMES = 1;
 const PUMP_LEAD_MS = 80;
 const KEEPALIVE_FILL_GAP_MS = 500;
+/** Only pad Moshi with silence if the caller stream actually stalled. */
+const GPU_SILENCE_GAP_MS = 80;
 /** Caller-frame RMS that counts as speech for T0 (barge-in / turn start). */
 const SPEECH_RMS = 400;
 
@@ -143,7 +145,8 @@ export class PersonaPlexPipeline implements VoiceSession {
     const timer = setInterval(() => {
       if (this.closed) return;
       if (this.ready && this.ws && this.ws.readyState === WebSocket.OPEN) {
-        if (Date.now() - this.lastGpuSendAt >= FRAME_MS) {
+        // 20ms zeros between VoBiz bursts chop the caller so Moshi waits ~5s to reply.
+        if (Date.now() - this.lastGpuSendAt >= GPU_SILENCE_GAP_MS) {
           this.ws.send(gpuSilence);
           this.lastGpuSendAt = Date.now();
         }
