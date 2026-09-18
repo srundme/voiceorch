@@ -25,6 +25,9 @@ import { logger } from "../lib/logger.js";
 import { forgetIntakeCaller, intakeFormUrl } from "../lib/intake-service.js";
 import { missingIntakeFields } from "../lib/candidate-intake-fields.js";
 import { parseIntakeExtra } from "../lib/intake-dispositions.js";
+import { normalizePhone } from "../lib/phone-normalize.js";
+import { getSelfBaseUrl } from "../lib/app-domain.js";
+import { dialOutboundAgent, OutboundDialError } from "../services/outbound-agent-dial.js";
 import {
   INTAKE_AGENT_TYPE,
   INTAKE_GREETING,
@@ -414,6 +417,16 @@ const ForgetBody = z.object({
   phone: z.string().min(7).max(32),
 });
 
+const OutboundBody = z.object({
+  toNumber: z.string().min(7).max(32),
+});
+
+function intakeWebhookBase(): string {
+  const pinned = (process.env["WEBHOOK_BASE_URL"] ?? "").trim();
+  if (pinned) return pinned.replace(/\/+$/, "");
+  return getSelfBaseUrl().replace(/\/+$/, "");
+}
+
 router.post("/admin/intake-agents/:id/forget-caller", requireAdmin, async (req, res): Promise<void> => {
   const params = IdParam.safeParse(req.params);
   const parsed = ForgetBody.safeParse(req.body ?? {});
@@ -435,6 +448,51 @@ router.post("/admin/intake-agents/:id/forget-caller", requireAdmin, async (req, 
     res.json(result);
   } catch (err) {
     logger.error({ err }, "intake agent forget caller failed");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Server error" });
+  }
+});
+
+router.post("/admin/intake-agents/:id/outbound", requireAdmin, async (req, res): Promise<void> => {
+  const params = IdParam.safeParse(req.params);
+  const parsed = OutboundBody.safeParse(req.body ?? {});
+  if (!params.success || !parsed.success) {
+    res.status(400).json({ error: "Need a destination phone number." });
+    return;
+  }
+  try {
+    const [agent] = await db
+      .select({ id: agentsTable.id, userId: agentsTable.userId, name: agentsTable.name })
+      .from(agentsTable)
+      .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.agentType, INTAKE_AGENT_TYPE)))
+      .limit(1);
+    if (!agent) {
+      res.status(404).json({ error: "Intake agent not found" });
+      return;
+    }
+    if (!agent.userId) {
+      res.status(400).json({ error: "This intake agent has no owner account, so it cannot dial out." });
+      return;
+    }
+    const toNumber = normalizePhone(parsed.data.toNumber);
+    if (toNumber.replace(/\D/g, "").length < 10) {
+      res.status(400).json({ error: "Enter a full mobile number with country code, e.g. +919876543210." });
+      return;
+    }
+    const result = await dialOutboundAgent({
+      userId: agent.userId,
+      agentId: agent.id,
+      toNumber,
+      webhookBaseUrl: intakeWebhookBase(),
+      skipDestinationOtp: true,
+      metadata: { source: "admin_intake_outbound" },
+    });
+    res.json({ ...result, toNumber, agentName: agent.name });
+  } catch (err) {
+    if (err instanceof OutboundDialError) {
+      res.status(err.status).json({ error: err.message, code: err.code });
+      return;
+    }
+    logger.error({ err }, "intake agent outbound failed");
     res.status(500).json({ error: err instanceof Error ? err.message : "Server error" });
   }
 });

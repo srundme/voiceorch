@@ -33,7 +33,7 @@ SNAP_RATE = 8000
 SNAP_FRAME = 160
 OPUS_FRAME_24 = 960
 HANDSHAKE_S = float(os.environ.get("MOSHI_HANDSHAKE_TIMEOUT_S", "90"))
-WARM_VOICE = os.environ.get("PERSONAPLEX_VOICE", "NATM1").replace(".pt", "")
+WARM_VOICE = os.environ.get("PERSONAPLEX_VOICE", "IRFAN_IN.wav").strip().replace(" ", "")
 # Spoken-to chats are destroyed on hangup. Park only for a VoBiz socket steal.
 PARK_S = float(os.environ.get("MOSHI_PARK_S", "8"))
 # Unused warm Moshi eating dither goes mute (07:47 call: 10 min idle, hello, then dead air).
@@ -44,17 +44,19 @@ GREETING_MAX_S = 5.0
 GREETING_SILENCE_RMS = 250
 HELLO_PCM_PATH = os.environ.get("IRFAN_HELLO_PCM", "/workspace/irfan_hello_8k.pcm")
 
-# Role only. Playbook lives in SnapServe RecruiterBrain — do not bake it here.
+# NVIDIA customer-service style: role + vibe, then Information facts. Keep under 900 chars.
 IRFAN_PERSONA = (
-    "You are Irfan, recruiter at JobShop, India's largest BPO recruitment company. "
-    "You only screen BPO jobs. Interviews are face to face in Bangalore. "
+    "You are Irfan, a warm Bangalore recruiter at JobShop, India's largest BPO hiring company. "
+    "Speak like a real Indian recruiter on a live phone call — friendly, a bit jolly, never flat or robotic. "
+    "Indian English from Bangalore, not American. Short sentences. Backchannel while they talk: haan, okay, achha, right. "
+    "Sound like you care. One question at a time. Let them finish. "
+    "Information: You only screen BPO jobs. Interviews are face to face in Bangalore. "
     "No work from home. No virtual interviews. "
     "Never invent company names, openings, cities, kilometres, or salaries. "
-    "Never ask for their phone number. Never say you are an AI. "
+    "Never ask for their phone number or email. Never say you are an AI. "
     "Do not greet first — the phone already played Hello this is Irfan from JobShop. "
-    "Simple Indian English. One question at a time. Let them finish. "
-    "Do not re-ask facts the candidate already gave. "
-    "Start by asking what job they want. If not BPO, politely end."
+    "Start by asking what job they want. If not BPO, thank them politely and end. "
+    "Do not re-ask facts the candidate already gave."
 )
 
 
@@ -139,13 +141,20 @@ def moshi_ssl() -> ssl.SSLContext:
     return ctx
 
 
+def voice_prompt_name(voice: str) -> str:
+    v = (voice or "IRFAN_IN.wav").strip()
+    if v.lower().endswith((".pt", ".wav")):
+        return v
+    return f"{v}.pt"
+
+
 def moshi_chat_url(voice: str, prompt: str) -> str:
     # Moshi takes text_prompt on the query string. ~8k raw → HTTP 400 LineTooLong.
     if len(prompt) > 4000:
         log.warning("recruiter prompt truncated %s → 4000 (Moshi URL limit)", len(prompt))
         prompt = prompt[:4000]
     params = urllib.parse.urlencode({
-        "voice_prompt": f"{voice}.pt",
+        "voice_prompt": voice_prompt_name(voice),
         "text_prompt": prompt,
     })
     return f"{MOSHI_URL}?{params}"
@@ -739,14 +748,16 @@ async def handle_snapserve(snap_ws) -> None:
         hello = json.loads(raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else raw)
     except Exception:
         return
-    voice = str(hello.get("voice") or WARM_VOICE).replace(".pt", "")
-    prompt = norm_prompt(str(hello.get("textPrompt") or "")) or WARM_PROMPT
+    requested_voice = str(hello.get("voice") or "")
+    voice = WARM_VOICE
+    prompt = WARM_PROMPT
     skip_greeting = hello.get("skipGreeting") is True
     known = str(hello.get("knownFacts") or "").strip()
     t_hello = time.monotonic()
     log.info(
-        "snap hello voice=%s prompt_chars=%s skip_greeting=%s known_chars=%s",
+        "snap hello voice=%s requested=%s prompt_chars=%s skip_greeting=%s known_chars=%s",
         voice,
+        requested_voice,
         len(prompt),
         skip_greeting,
         len(known),

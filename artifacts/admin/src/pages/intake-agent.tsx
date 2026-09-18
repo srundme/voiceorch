@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { adminFetch, formatAdminError } from "@/lib/api";
-import { ExternalLink, FileJson, Loader2, Phone, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
+import { ExternalLink, FileJson, Loader2, Phone, PhoneOutgoing, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { Link } from "wouter";
 
 type ModelChoice = { value: string; label: string };
@@ -111,6 +111,19 @@ type AdminUser = { clerkId: string; email: string | null };
 
 const SESSION_POLL_MS = 3000;
 
+function parseAdminJsonError(err: unknown): string {
+  const raw = formatAdminError(err);
+  const jsonStart = raw.indexOf("{");
+  if (jsonStart < 0) return raw;
+  try {
+    const parsed = JSON.parse(raw.slice(jsonStart)) as { error?: string };
+    if (parsed.error) return parsed.error;
+  } catch {
+    /* keep raw HTTP body */
+  }
+  return raw;
+}
+
 export default function IntakeAgentPage() {
   const { toast } = useToast();
   const [options, setOptions] = useState<Options | null>(null);
@@ -128,6 +141,8 @@ export default function IntakeAgentPage() {
   const [newOwner, setNewOwner] = useState<string>("");
   const [forgetPhone, setForgetPhone] = useState("");
   const [forgetting, setForgetting] = useState<string | null>(null);
+  const [outboundTo, setOutboundTo] = useState("");
+  const [outboundDialing, setOutboundDialing] = useState(false);
 
   const selected = useMemo(
     () => agents.find((a) => a.id === selectedId) ?? null,
@@ -304,6 +319,32 @@ export default function IntakeAgentPage() {
       toast({ title: "Create failed", description: formatAdminError(err), variant: "destructive" });
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleOutbound = async () => {
+    if (!selected) return;
+    const trimmed = outboundTo.trim();
+    if (trimmed.replace(/\D/g, "").length < 7) {
+      toast({ title: "Need a number", description: "Enter the mobile Irfan should dial, with country code.", variant: "destructive" });
+      return;
+    }
+    setOutboundDialing(true);
+    try {
+      const result = await adminFetch<{ callId: number; toNumber: string; agentName: string }>(
+        `/intake-agents/${selected.id}/outbound`,
+        { method: "POST", body: JSON.stringify({ toNumber: trimmed }) },
+      );
+      toast({
+        title: `${result.agentName} is calling`,
+        description: `Dialing ${result.toNumber} · call #${result.callId}. Answer the phone.`,
+      });
+      const callRows = await adminFetch<RecentCall[]>(`/intake-agents/${selected.id}/calls`);
+      setCalls(callRows);
+    } catch (err) {
+      toast({ title: "Could not start the call", description: parseAdminJsonError(err), variant: "destructive" });
+    } finally {
+      setOutboundDialing(false);
     }
   };
 
@@ -579,6 +620,40 @@ export default function IntakeAgentPage() {
                     <Badge variant="secondary">Backchannel: Okay</Badge>
                     <Badge variant="secondary">Barge-in: {options.locked.wordsForInterruption} words</Badge>
                     <Badge variant="secondary">Recruiter script + intake tools</Badge>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm">Call from {selected.name}</CardTitle>
+                    <CardDescription>
+                      {selected.name} rings this number. One PersonaPlex call at a time — hang up before you dial again.
+                      {selected.inboundNumber ? ` Caller ID ${selected.inboundNumber.number}.` : ""}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap items-end gap-2">
+                    <div className="min-w-[220px] flex-1 space-y-1">
+                      <Label htmlFor="irfan-outbound">Destination number</Label>
+                      <Input
+                        id="irfan-outbound"
+                        value={outboundTo}
+                        onChange={(e) => setOutboundTo(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void handleOutbound();
+                        }}
+                        placeholder="+91 98765 43210"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        disabled={outboundDialing}
+                      />
+                    </div>
+                    <Button
+                      onClick={() => void handleOutbound()}
+                      disabled={outboundDialing || outboundTo.replace(/\D/g, "").length < 7}
+                    >
+                      {outboundDialing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PhoneOutgoing className="mr-2 h-4 w-4" />}
+                      {outboundDialing ? "Dialing…" : "Call now"}
+                    </Button>
                   </CardContent>
                 </Card>
 

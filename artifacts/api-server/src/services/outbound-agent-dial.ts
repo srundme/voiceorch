@@ -42,9 +42,12 @@ export async function dialOutboundAgent(opts: {
   toNumber: string;
   webhookBaseUrl: string;
   metadata?: Record<string, unknown>;
+  /** Admin test dials skip destination OTP (owner KYC / wallet still apply). */
+  skipDestinationOtp?: boolean;
 }): Promise<{ callId: number; executionId: string }> {
   const { userId, agentId, toNumber, webhookBaseUrl } = opts;
   const extraMeta = opts.metadata ?? {};
+  const skipDestinationOtp = opts.skipDestinationOtp === true;
 
   if (await isOnDnc(userId, toNumber)) {
     throw new OutboundDialError("Number is on Do Not Call list", "DNC_BLOCKED", 403);
@@ -186,7 +189,7 @@ export async function dialOutboundAgent(opts: {
             .from(vobizAccountsTable)
             .where(eq(vobizAccountsTable.userId, agent.userId));
           const hasKyc = kycAccount?.kycStatus === "completed";
-          if (!hasKyc) {
+          if (!hasKyc && !skipDestinationOtp) {
             const now = new Date();
             const [verified] = await db
               .select()

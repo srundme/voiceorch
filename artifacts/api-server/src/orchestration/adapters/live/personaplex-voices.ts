@@ -6,6 +6,11 @@
  * to `python -m moshi.server` on /api/chat.
  */
 
+/**
+ * NVIDIA: voice .pt = timbre/accent; text prompt = role + facts + vibe.
+ * NAT* = natural US-leaning conversational. VAR* = more varied accent/pitch.
+ * None of the 18 stock embeddings are labeled Indian — audition male VARM/NATM.
+ */
 export const PERSONAPLEX_VOICES = [
   "NATF0", "NATF1", "NATF2", "NATF3",
   "NATM0", "NATM1", "NATM2", "NATM3",
@@ -15,8 +20,8 @@ export const PERSONAPLEX_VOICES = [
 
 export type PersonaplexVoice = (typeof PERSONAPLEX_VOICES)[number];
 
-/** Natural male — closest to Irfan on the Jobshop intake line. */
-export const DEFAULT_PERSONAPLEX_VOICE: PersonaplexVoice = "NATM1";
+/** Natural male 3 — live JobShop Irfan. Accent is this .pt; stock pack is not Indian. */
+export const DEFAULT_PERSONAPLEX_VOICE: PersonaplexVoice = "NATM3";
 
 const VOICE_SET = new Set<string>(PERSONAPLEX_VOICES);
 
@@ -62,17 +67,19 @@ export function resolveSessionVoiceStack(opts: {
 
 const PERSONAPLEX_PROMPT_MAX = 1800;
 
-/** Role only. Playbook lives in RecruiterBrain — do not bake the 17-step flow. */
+/** NVIDIA customer-service style: role + vibe, then Information facts. Keep under 900 chars (bake URL). */
 export const IRFAN_PERSONA =
-  "You are Irfan, recruiter at JobShop, India's largest BPO recruitment company. " +
-  "You only screen BPO jobs. Interviews are face to face in Bangalore. " +
+  "You are Irfan, a warm Bangalore recruiter at JobShop, India's largest BPO hiring company. " +
+  "Speak like a real Indian recruiter on a live phone call — friendly, a bit jolly, never flat or robotic. " +
+  "Indian English from Bangalore, not American. Short sentences. Backchannel while they talk: haan, okay, achha, right. " +
+  "Sound like you care. One question at a time. Let them finish. " +
+  "Information: You only screen BPO jobs. Interviews are face to face in Bangalore. " +
   "No work from home. No virtual interviews. " +
   "Never invent company names, openings, cities, kilometres, or salaries. " +
-  "Never ask for their phone number. Never say you are an AI. " +
+  "Never ask for their phone number or email. Never say you are an AI. " +
   "Do not greet first — the phone already played Hello this is Irfan from JobShop. " +
-  "Simple Indian English. One question at a time. Let them finish. " +
-  "Do not re-ask facts the candidate already gave. " +
-  "Start by asking what job they want. If not BPO, politely end.";
+  "Start by asking what job they want. If not BPO, thank them politely and end. " +
+  "Do not re-ask facts the candidate already gave.";
 
 /**
  * Moshi bakes this before handshake. Intake on this GPU is a short Irfan

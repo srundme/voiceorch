@@ -3,6 +3,9 @@
  *
  * The GPU sidecar talks NVIDIA moshi.server (OGG Opus 24 kHz on /api/chat).
  * This Node process never encodes Opus: it sends/receives s16le PCM @ 8 kHz.
+ *
+ * Call path is VoBiz PCM ↔ Moshi only. Sidecar STT + RecruiterBrain observe
+ * after the GPU frame is sent; they must never delay, mute, or steer S2S.
  */
 
 import { WebSocket } from "ws";
@@ -221,7 +224,7 @@ export class PersonaPlexPipeline implements VoiceSession {
         this.appendTranscript("user", spoken);
         this.intakePersist?.noteUserTurn(spoken);
       });
-      logger.info({ callId: this.config.callId, provider }, "PersonaPlex caller STT tap for form fill");
+      logger.info({ callId: this.config.callId, provider }, "PersonaPlex sidecar STT observer (off call path)");
     } catch (err) {
       logger.warn({ callId: this.config.callId, err }, "PersonaPlex caller STT tap failed to start");
     }
@@ -236,10 +239,6 @@ export class PersonaPlexPipeline implements VoiceSession {
     this.recording.addCallerChunk(pcm8k);
     this.config.callerAudioTap?.(pcm8k);
     this.lastMediaAtMs = Date.now();
-
-    try {
-      this.callerStt?.sendAudio(upsample8to16(pcm8k));
-    } catch { /* STT tap must never break the spoken path */ }
 
     const now = Date.now();
     const speaking = frameRms(pcm8k) >= SPEECH_RMS;
@@ -256,6 +255,7 @@ export class PersonaPlexPipeline implements VoiceSession {
     if (!this.ready || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
       if (this.pendingIn.length < 50) this.pendingIn.push(Buffer.from(pcm8k));
       void this.ensureConnected();
+      this.enqueueSidecarStt(pcm8k);
       return;
     }
     // Full-duplex S2S: never replace the caller with zeros. PSTN echo mute
@@ -264,6 +264,19 @@ export class PersonaPlexPipeline implements VoiceSession {
     if (this.awaitingTurnReply && this.t0CallerSpeechAt && !this.t1GpuSendAt) {
       this.t1GpuSendAt = now;
     }
+    this.enqueueSidecarStt(pcm8k);
+  }
+
+  /** Observer only. Runs after Moshi already has the frame. */
+  private enqueueSidecarStt(pcm8k: Buffer): void {
+    if (!this.callerStt) return;
+    const copy = Buffer.from(pcm8k);
+    setImmediate(() => {
+      if (this.closed || !this.callerStt) return;
+      try {
+        this.callerStt.sendAudio(upsample8to16(copy));
+      } catch { /* sidecar STT must never break the spoken path */ }
+    });
   }
 
   async greet(): Promise<void> {

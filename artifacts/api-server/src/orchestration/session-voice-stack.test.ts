@@ -195,6 +195,8 @@ describe("PersonaPlexPipeline", () => {
 
   it("locks intake Moshi to a short Irfan persona, not the playbook", () => {
     expect(resolvePersonaplexVoice("natm1.pt")).toBe("NATM1");
+    expect(resolvePersonaplexVoice("")).toBe("NATM3");
+    expect(resolvePersonaplexVoice("NATM3")).toBe("NATM3");
     const prompt = buildPersonaplexTextPrompt({
       agentName: "Asha",
       systemPrompt: "You are a real estate agent. Call save_candidate_details.",
@@ -206,6 +208,9 @@ describe("PersonaPlexPipeline", () => {
     expect(prompt).toContain("Bangalore");
     expect(prompt).toContain("Never invent company names");
     expect(prompt).toContain("Do not greet first");
+    expect(prompt).toContain("Information:");
+    expect(prompt).toMatch(/jolly|friendly/i);
+    expect(prompt).toMatch(/Indian English/i);
     expect(prompt).not.toContain("9964080000");
     expect(prompt).not.toContain("Naukri");
     expect(prompt.length).toBeLessThan(900);
