@@ -213,6 +213,14 @@ describe("PersonaPlexPipeline", () => {
     expect(prompt).not.toContain("save_candidate_details");
   });
 
+  it("resolves recorded hello PCM next to the bundled dist, not only src/", async () => {
+    const { irfanHelloPcmCandidates, loadIrfanHelloPcm } = await import("./adapters/live/irfan-hello.js");
+    const paths = irfanHelloPcmCandidates();
+    expect(paths.some((p: string) => p.endsWith("orchestration/adapters/live/irfan_hello_8k.pcm") || p.endsWith("dist/irfan_hello_8k.pcm") || p.endsWith("irfan_hello_8k.pcm"))).toBe(true);
+    expect(paths.some((p: string) => p.includes("dist"))).toBe(true);
+    expect(loadIrfanHelloPcm()?.length).toBeGreaterThan(8000);
+  });
+
   it("plays recorded Irfan hello without waiting for GPU", async () => {
     vi.useFakeTimers();
     const onAudioOut = vi.fn();

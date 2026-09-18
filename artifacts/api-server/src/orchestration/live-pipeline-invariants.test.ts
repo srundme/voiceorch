@@ -292,7 +292,7 @@ describe("JobShop Irfan serving", () => {
       resolve(dirname(fileURLToPath(import.meta.url)), "adapters/live/personaplex-pipeline.ts"),
       "utf8",
     );
-    expect(personaplexSrc).toContain("skipGreeting: true");
+    expect(personaplexSrc).toContain("skipGreeting: false");
     expect(personaplexSrc).toContain("playRecordedHello");
     expect(personaplexSrc).toContain("playingRecordedHello");
     const bridge = readFileSync(

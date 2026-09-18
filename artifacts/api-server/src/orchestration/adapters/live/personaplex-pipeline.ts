@@ -16,7 +16,7 @@ import { createLLMAdapter } from "../llm/index.js";
 import { createSTTAdapter } from "../stt/index.js";
 import { resolveSarvamSttMode } from "../stt/sarvam-mode.js";
 import { PersonaplexIntakePersist } from "./personaplex-intake-persist.js";
-import { IRFAN_HELLO_TEXT, irfanHelloFrames } from "./irfan-hello.js";
+import { IRFAN_HELLO_TEXT, irfanHelloFrames, irfanHelloPcmPath } from "./irfan-hello.js";
 import {
   buildPersonaplexTextPrompt,
   personaplexWsUrlFromEnv,
@@ -281,7 +281,7 @@ export class PersonaPlexPipeline implements VoiceSession {
   private playRecordedHello(): void {
     const frames = irfanHelloFrames();
     if (frames.length === 0) {
-      logger.warn({ callId: this.config.callId }, "PersonaPlex: recorded Irfan hello PCM missing");
+      logger.warn({ callId: this.config.callId }, "PersonaPlex: recorded Irfan hello PCM missing — GPU dump is the greeting");
       return;
     }
     this.playingRecordedHello = true;
@@ -289,7 +289,13 @@ export class PersonaPlexPipeline implements VoiceSession {
     this.ensurePump();
     this.appendTranscript("assistant", IRFAN_HELLO_TEXT);
     logger.info(
-      { evt: "personaplex_recorded_hello", callId: this.config.callId, frames: frames.length, ms: frames.length * FRAME_MS },
+      {
+        evt: "personaplex_recorded_hello",
+        callId: this.config.callId,
+        frames: frames.length,
+        ms: frames.length * FRAME_MS,
+        path: irfanHelloPcmPath(),
+      },
       "PersonaPlex: playing recorded Irfan hello",
     );
   }
@@ -337,7 +343,10 @@ export class PersonaPlexPipeline implements VoiceSession {
           voice: this.voice,
           textPrompt: this.textPrompt,
           sampleRate: 8000,
-          skipGreeting: true,
+          // Never skip Moshi's bake dump+hold. skipGreeting=true left Irfan mute
+          // after hello (08:18 / 08:19 PSTN: spoke=False, no turn_ms). Recorded
+          // hello still owns the wire; GPU dump is dropped while it plays.
+          skipGreeting: false,
         }));
       });
 
