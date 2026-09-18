@@ -294,6 +294,8 @@ describe("JobShop Irfan serving", () => {
     );
     expect(personaplexSrc).toContain("skipGreeting: false");
     expect(personaplexSrc).toContain("playRecordedHello");
+    expect(personaplexSrc).not.toContain('type: "coach"');
+    expect(personaplexSrc).not.toContain("sendCoach");
     expect(personaplexSrc).toContain("playingRecordedHello");
     const bridge = readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), "../../../../deploy/personaplex/pcm_bridge.py"),

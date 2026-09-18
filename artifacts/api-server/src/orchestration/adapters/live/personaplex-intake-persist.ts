@@ -53,7 +53,8 @@ export async function persistIntakeFromSpokenTurn(opts: {
     `The candidate just said: "${userText.slice(0, 500)}"`,
     agentLine ? `The agent last said: "${agentLine.slice(0, 300)}"` : "",
     "Call save_candidate_details and/or set_disposition with only the fields they just gave.",
-    "Never copy a salary, company, or opening the agent invented. Only what the candidate said.",
+    "Never copy a salary, company, opening, name, or email the agent invented or restated. Only what the candidate said.",
+    "Do not save email unless the candidate's own words contain a full address (including the domain).",
     "If they named a workplace or how long they have worked, save lastCompany and tenure.",
     "6-digit Indian PIN goes in pincode, never dateOfBirth.",
     "Do not speak. Do not call finish_intake or end_call.",
@@ -81,7 +82,9 @@ export async function persistIntakeFromSpokenTurn(opts: {
   const ran: string[] = [];
   for (const call of calls) {
     if (call.name === "save_candidate_details") {
-      const args = opts.profile ? sanitizeIntakeWrite(call.args, opts.profile) : call.args;
+      const args = opts.profile
+        ? sanitizeIntakeWrite(call.args, opts.profile, userText)
+        : call.args;
       await executeIntakeWrite(opts.ctx, args);
       ran.push(call.name);
     } else if (call.name === "set_disposition") {

@@ -577,11 +577,15 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool, skip_
     async def moshi_to_snap() -> None:
         nonlocal close, pending_24, t_first_out, t_caller_turn, last_agent_speech_at
         nonlocal held_8, flushed_hold
+        text_buf = ""
         try:
             while not close:
                 try:
                     message = await asyncio.wait_for(sess.incoming.get(), timeout=1.0)
                 except TimeoutError:
+                    if text_buf.strip():
+                        log.info("moshi_0x02 text=%s", text_buf.strip()[:400])
+                        text_buf = ""
                     continue
                 if isinstance(message, Exception):
                     raise message
@@ -594,12 +598,18 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool, skip_
                 if kind == 0x02:
                     token = payload.decode("utf-8", errors="replace")
                     if token:
+                        text_buf += token
                         await snap_ws.send(json.dumps({
                             "type": "text",
                             "role": "assistant",
                             "text": token,
                         }))
+                        if len(text_buf) >= 80 or token.strip().endswith((".", "?", "!")):
+                            log.info("moshi_0x02 text=%s", text_buf.strip()[:400])
+                            text_buf = ""
                     continue
+                if kind not in (0x00, 0x01, 0x02):
+                    log.info("moshi opcode=0x%02x bytes=%s", kind, len(payload))
                 if kind != 0x01 or not payload:
                     continue
                 opus_reader.append_bytes(payload)
@@ -653,6 +663,8 @@ async def run_call(snap_ws, sess: WarmSession, t_hello: float, warm: bool, skip_
             if not close:
                 log.exception("moshi_to_snap failed")
         finally:
+            if text_buf.strip():
+                log.info("moshi_0x02 text=%s", text_buf.strip()[:400])
             await abort()
 
     try:
@@ -712,10 +724,7 @@ def _handle_snap_control(raw) -> None:
         return
     kind = str(msg.get("type") or "")
     if kind == "coach":
-        text = str(msg.get("text") or "").strip()
-        log.info("coach chars=%s text=%s", len(text), text[:240])
-        # Moshi handshake is already done; mid-chat text is usually ignored.
-        # RecruiterBrain still owns the profile. Packet is here for later text-in.
+        log.info("coach ignored — moshi /api/chat is audio-in only chars=%s", len(str(msg.get("text") or "")))
         return
     if kind == "speak":
         log.info("speak ignored after handshake chars=%s", len(str(msg.get("text") or "")))

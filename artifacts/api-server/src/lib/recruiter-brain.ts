@@ -5,6 +5,8 @@
  * question, and the coach line. Job matching is an interface only.
  */
 
+import { normalizeIntakeField } from "./candidate-intake-fields.js";
+
 export const RECRUITER_STATES = [
   "INITIAL",
   "JOB_PREFERENCE",
@@ -431,10 +433,41 @@ export function mergeRecruiterProfile(
   return { ...current, ...patch };
 }
 
-/** Never persist a salary/company Moshi invented — only facts the brain extracted. */
+const EMAIL_WRITE_KEYS = ["email", "emailAddress", "candidateEmail"] as const;
+
+/**
+ * Email from the candidate's own STT turn — never Moshi 0x02 restatement.
+ * Call 09:03 saved kj@sir.com because persist copied Irfan saying "Okay, so kj@sir.com".
+ */
+export function emailFromCandidateSpeech(userText: string): string | null {
+  const spoken = userText.replace(/\s+/g, " ").trim();
+  if (!spoken) return null;
+  const take = (raw: string): string | null => {
+    const n = normalizeIntakeField("email", raw);
+    if (!n.ok || typeof n.value !== "string") return null;
+    const local = n.value.split("@")[0] ?? "";
+    if (local.length < 3) return null;
+    if (/email|mailid|address/i.test(local)) return null;
+    return n.value;
+  };
+  const rewritten = spoken.replace(/\s+at\s+/gi, "@").replace(/\s+dot\s+/gi, ".");
+  const hits: string[] = [];
+  for (const raw of rewritten.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) ?? []) {
+    const hit = take(raw);
+    if (hit) hits.push(hit);
+  }
+  if (hits.length > 0) {
+    hits.sort((a, b) => (b.split("@")[0] ?? "").length - (a.split("@")[0] ?? "").length);
+    return hits[0] ?? null;
+  }
+  return take(spoken);
+}
+
+/** Never persist a salary/company/email Moshi invented — only facts the candidate said. */
 export function sanitizeIntakeWrite(
   args: Record<string, unknown>,
   profile: RecruiterProfile,
+  userText = "",
 ): Record<string, unknown> {
   const out = { ...args };
   if (!profile.expected_salary && !profile.last_ctc) {
@@ -444,6 +477,12 @@ export function sanitizeIntakeWrite(
     delete out["currentCtc"];
     delete out["salary"];
     delete out["ctc"];
+  }
+  const spokenEmail = emailFromCandidateSpeech(userText);
+  for (const key of EMAIL_WRITE_KEYS) {
+    if (!(key in out)) continue;
+    if (spokenEmail) out[key] = spokenEmail;
+    else delete out[key];
   }
   if ((profile.experience_history?.length ?? 0) === 0 && !profile.experience_type) {
     // lastCompany from Moshi hallucination — keep only if candidate named one in history

@@ -66,6 +66,31 @@ describe("RecruiterBrain", () => {
     expect(no.profile_patch.disqualify_reason).toBe("no_relocate");
   });
 
+  it("does not persist Moshi's restated email", () => {
+    const profile = emptyRecruiterProfile();
+    const fromMoshi = sanitizeIntakeWrite(
+      { firstName: "Sarah", email: "kj@sir.com" },
+      profile,
+      "yes I have BPO experience",
+    );
+    expect(fromMoshi["email"]).toBeUndefined();
+    expect(fromMoshi["firstName"]).toBe("Sarah");
+
+    const fromSpeech = sanitizeIntakeWrite(
+      { email: "kj@sir.com" },
+      profile,
+      "my email is karthi at gmail dot com",
+    );
+    expect(fromSpeech["email"]).toBe("karthi@gmail.com");
+
+    const fragment = sanitizeIntakeWrite(
+      { email: "kj@sir.com" },
+      profile,
+      "kj@sir.com",
+    );
+    expect(fragment["email"]).toBeUndefined();
+  });
+
   it("does not invent a salary Moshi mentioned", () => {
     const profile = emptyRecruiterProfile();
     const facts = extractFacts("I live in Bangalore and want BPO", profile);

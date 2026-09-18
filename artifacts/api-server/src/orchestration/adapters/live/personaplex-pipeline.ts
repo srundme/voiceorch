@@ -86,6 +86,8 @@ export class PersonaPlexPipeline implements VoiceSession {
   private history: ConversationTurn[] = [];
   private lastUserText: string | null = null;
   private lastAgentText: string | null = null;
+  /** Latest Irfan sentence only — persist must not see the whole 0x02 dump. */
+  private lastAgentSentence: string | null = null;
   private agentTextBuf = "";
   private lastMediaAtMs: number | null = null;
   private intakePersist: PersonaplexIntakePersist | null = null;
@@ -188,8 +190,7 @@ export class PersonaPlexPipeline implements VoiceSession {
       },
       systemPrompt: this.agent.systemPrompt,
       history: () => this.getHistory(),
-      lastAgentText: () => this.lastAgentText,
-      onDecision: (decision) => this.sendCoach(decision.coachText),
+      lastAgentText: () => this.lastAgentSentence,
     });
     this.startCallerSttTap();
   }
@@ -306,12 +307,6 @@ export class PersonaPlexPipeline implements VoiceSession {
     this.outFrames = [];
     this.outPending = Buffer.alloc(0);
     logger.info({ callId: this.config.callId, reason }, "PersonaPlex: stopped recorded hello");
-  }
-
-  private sendCoach(text: string): void {
-    const line = text.trim();
-    if (!line || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    this.ws.send(JSON.stringify({ type: "coach", text: line.slice(0, 500) }));
   }
 
   private async ensureConnected(): Promise<void> {
@@ -559,6 +554,7 @@ export class PersonaPlexPipeline implements VoiceSession {
       const flushed = flushSentence(this.agentTextBuf);
       if (flushed) {
         this.agentTextBuf = flushed.rest;
+        this.lastAgentSentence = flushed.sentence;
         this.lastAgentText = this.lastAgentText
           ? `${this.lastAgentText} ${flushed.sentence}`.trim()
           : flushed.sentence;
@@ -664,6 +660,7 @@ export class PersonaPlexPipeline implements VoiceSession {
     const leftover = this.agentTextBuf.trim();
     if (!leftover) return;
     this.agentTextBuf = "";
+    this.lastAgentSentence = leftover;
     this.lastAgentText = this.lastAgentText ? `${this.lastAgentText} ${leftover}`.trim() : leftover;
     const last = this.history[this.history.length - 1];
     if (last?.role === "assistant") last.content = `${last.content} ${leftover}`.trim();
