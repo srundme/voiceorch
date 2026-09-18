@@ -166,7 +166,7 @@ describe("PersonaPlexPipeline", () => {
     ).toThrow(/PERSONAPLEX_WS_URL/i);
   });
 
-  it("feeds the VoBiz bridge while PersonaPlex is silent, and stops on close", () => {
+  it("does not play PCM zeros to VoBiz before the first agent frame", () => {
     vi.useFakeTimers();
     const onAudioOut = vi.fn();
     const pipeline = new PersonaPlexPipeline({
@@ -178,8 +178,7 @@ describe("PersonaPlexPipeline", () => {
       onAudioOut,
     });
     vi.advanceTimersByTime(1000);
-    expect(onAudioOut).toHaveBeenCalled();
-    expect((onAudioOut.mock.calls[0]![0] as Buffer).length).toBe(320);
+    expect(onAudioOut).not.toHaveBeenCalled();
     pipeline.close();
     onAudioOut.mockClear();
     vi.advanceTimersByTime(1000);
@@ -191,6 +190,7 @@ describe("PersonaPlexPipeline", () => {
     expect(isPersonaplexPcmFrame(true)).toBe(true);
     expect(isPersonaplexPcmFrame(true, Buffer.from('{"type":"ready"}'))).toBe(false);
     expect(isPersonaplexPcmFrame(true, Buffer.alloc(320))).toBe(true);
+    expect(isPersonaplexPcmFrame(false, Buffer.alloc(320))).toBe(true);
   });
 
   it("builds a short Jobshop intake persona, not the tool script", () => {

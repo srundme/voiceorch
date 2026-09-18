@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import ssl
+import time
 import urllib.parse
 
 import numpy as np
@@ -82,6 +83,8 @@ async def handle_snapserve(snap_ws) -> None:
     })
     moshi_url = f"{MOSHI_URL}?{params}"
     log.info("opening moshi voice=%s prompt_chars=%s", voice, len(text_prompt))
+    t_hello = time.monotonic()
+    t_open = t_hs = t_first_in = t_first_out = None
 
     opus_writer = sphn.OpusStreamWriter(MOSHI_RATE)
     opus_reader = sphn.OpusStreamReader(MOSHI_RATE)
@@ -95,8 +98,11 @@ async def handle_snapserve(snap_ws) -> None:
 
     try:
         async with websockets.connect(moshi_url, ssl=ssl_ctx, max_size=None) as moshi:
+            t_open = time.monotonic()
+            log.info("latency moshi_open_ms=%.0f", (t_open - t_hello) * 1000)
+
             async def snap_to_moshi() -> None:
-                nonlocal close, pending_in_24
+                nonlocal close, pending_in_24, t_first_in
                 try:
                     async for message in snap_ws:
                         if close:
@@ -111,6 +117,9 @@ async def handle_snapserve(snap_ws) -> None:
                             continue
                         if not moshi_ready:
                             continue
+                        if t_first_in is None:
+                            t_first_in = time.monotonic()
+                            log.info("latency T1_first_pcm_to_moshi_ms=%.0f", (t_first_in - t_hello) * 1000)
                         pcm8 = np.frombuffer(message, dtype="<i2")
                         pending_in_24 = np.concatenate([pending_in_24, upsample_8_to_24(pcm8)])
                         while pending_in_24.size >= OPUS_FRAME_24:
@@ -126,7 +135,7 @@ async def handle_snapserve(snap_ws) -> None:
                     close = True
 
             async def moshi_to_snap() -> None:
-                nonlocal close, pending_24, pending_8, moshi_ready
+                nonlocal close, pending_24, pending_8, moshi_ready, t_hs, t_first_out
                 try:
                     async for message in moshi:
                         if close:
@@ -137,8 +146,12 @@ async def handle_snapserve(snap_ws) -> None:
                         payload = message[1:]
                         if kind == 0x00:
                             moshi_ready = True
+                            t_hs = time.monotonic()
                             await snap_ws.send(json.dumps({"type": "ready"}))
-                            log.info("moshi handshake → snapserve ready")
+                            log.info(
+                                "moshi handshake → snapserve ready  bake_ms=%.0f",
+                                (t_hs - (t_open or t_hello)) * 1000,
+                            )
                             continue
                         if kind == 0x02:
                             token = payload.decode("utf-8", errors="replace")
@@ -151,6 +164,13 @@ async def handle_snapserve(snap_ws) -> None:
                             continue
                         if kind != 0x01 or not payload:
                             continue
+                        if t_first_out is None:
+                            t_first_out = time.monotonic()
+                            log.info(
+                                "latency T2_first_opus_from_moshi handshake_to_audio_ms=%.0f first_in_to_out_ms=%s",
+                                (t_first_out - (t_hs or t_hello)) * 1000,
+                                f"{(t_first_out - t_first_in) * 1000:.0f}" if t_first_in else "n/a",
+                            )
                         opus_reader.append_bytes(payload)
                         pcm_f = opus_reader.read_pcm()
                         if pcm_f is None or np.asarray(pcm_f).size == 0:

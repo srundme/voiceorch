@@ -10,7 +10,7 @@ import type { AgentConfig, ConversationTurn, SessionConfig } from "../../types.j
 import type { VoiceSession } from "../../voice-session.js";
 import type { StreamSTT } from "../../types.js";
 import { RecordingBuffer, WEBCALL_GAP_RESYNC_MS } from "../../recorder.js";
-import { decodeMulaw, encodeMulaw, upsample8to16 } from "../../audio.js";
+import { decodeMulaw, encodeMulaw, frameRms, upsample8to16 } from "../../audio.js";
 import { logger } from "../../../lib/logger.js";
 import { createLLMAdapter } from "../llm/index.js";
 import { createSTTAdapter } from "../stt/index.js";
@@ -28,8 +28,10 @@ const FRAME_BYTES_8K = FRAME_SAMPLES_8K * 2;
 const PREBUFFER_FRAMES = 1;
 const PUMP_LEAD_MS = 80;
 const KEEPALIVE_FILL_GAP_MS = 500;
+/** Caller-frame RMS that counts as speech for T0 (barge-in / turn start). */
+const SPEECH_RMS = 400;
 
-/** JSON control is never PCM. Binary / even-length non-JSON is audio. */
+/** JSON control is never PCM. Telephony frames are 320-byte s16le even if a proxy marks them as text. */
 export function isPersonaplexPcmFrame(isBinary: boolean | undefined, buf?: Buffer): boolean {
   if (buf && buf.length > 0 && (buf[0] === 0x7b || buf[0] === 0x5b)) {
     try {
@@ -39,6 +41,7 @@ export function isPersonaplexPcmFrame(isBinary: boolean | undefined, buf?: Buffe
       /* not JSON */
     }
   }
+  if (buf && buf.length >= FRAME_BYTES_8K && buf.length % 2 === 0) return true;
   if (isBinary === true) return true;
   if (isBinary === false) return false;
   return !!buf && buf.length >= 2 && buf.length % 2 === 0;
@@ -68,6 +71,17 @@ export class PersonaPlexPipeline implements VoiceSession {
   private framesSent = 0;
   private lastGpuSendAt = 0;
   private pendingIn: Buffer[] = [];
+  private readonly startedAtMs = Date.now();
+  private helloSentAt = 0;
+  private readyAt = 0;
+  private firstGpuPcmAt = 0;
+  private firstWireAt = 0;
+  private firstAudioLogged = false;
+  private handshakeLogged = false;
+  private t0CallerSpeechAt = 0;
+  private t1GpuSendAt = 0;
+  private awaitingTurnReply = false;
+  private lastGpuPcmAt = 0;
   private history: ConversationTurn[] = [];
   private lastUserText: string | null = null;
   private lastAgentText: string | null = null;
@@ -135,6 +149,10 @@ export class PersonaPlexPipeline implements VoiceSession {
         }
       }
       if (this.pumpTimer || this.outFrames.length > 0) return;
+      // Before first agent audio, VoBiz early-ambient owns the wire. Zeros here
+      // call stopSilence() and can fill playAudio until VoBiz closes the socket
+      // (call felt like 20s+ dead air while Moshi had already spoken).
+      if (this.lastRealFrameAt === 0) return;
       if (Date.now() - this.lastRealFrameAt < KEEPALIVE_FILL_GAP_MS) return;
       if (isVobiz || this.config.rawPcmOutput) this.config.onAudioOut(silenceFrame);
     }, FRAME_MS);
@@ -226,6 +244,14 @@ export class PersonaPlexPipeline implements VoiceSession {
     try {
       this.callerStt?.sendAudio(upsample8to16(pcm8k));
     } catch { /* STT tap must never break the spoken path */ }
+
+    const now = Date.now();
+    if (frameRms(pcm8k) >= SPEECH_RMS && !this.awaitingTurnReply) {
+      this.t0CallerSpeechAt = now;
+      this.t1GpuSendAt = 0;
+      this.awaitingTurnReply = true;
+    }
+
     if (!this.ready || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
       if (this.pendingIn.length < 50) this.pendingIn.push(Buffer.from(pcm8k));
       void this.ensureConnected();
@@ -234,7 +260,10 @@ export class PersonaPlexPipeline implements VoiceSession {
     // Full-duplex S2S: never replace the caller with zeros. PSTN echo mute
     // on call 25573 blocked barge-in so Moshi kept inventing jobs.
     this.ws.send(pcm8k);
-    this.lastGpuSendAt = Date.now();
+    this.lastGpuSendAt = now;
+    if (this.awaitingTurnReply && this.t0CallerSpeechAt && !this.t1GpuSendAt) {
+      this.t1GpuSendAt = now;
+    }
   }
 
   async greet(): Promise<void> {
@@ -269,6 +298,7 @@ export class PersonaPlexPipeline implements VoiceSession {
       };
 
       ws.on("open", () => {
+        this.helloSentAt = Date.now();
         ws.send(JSON.stringify({
           type: "hello",
           voice: this.voice,
@@ -292,7 +322,9 @@ export class PersonaPlexPipeline implements VoiceSession {
         // Ready can also be implied by the first audio if the bridge skipped JSON.
         if (!this.ready) {
           this.ready = true;
+          this.readyAt = Date.now();
           this.flushPendingIn();
+          this.logHandshakeIfReady();
           if (!settled) {
             settled = true;
             resolve();
@@ -327,7 +359,9 @@ export class PersonaPlexPipeline implements VoiceSession {
     }
     if (msg.type === "ready") {
       this.ready = true;
+      this.readyAt = Date.now();
       this.flushPendingIn();
+      this.logHandshakeIfReady();
       onReady();
       return;
     }
@@ -352,8 +386,59 @@ export class PersonaPlexPipeline implements VoiceSession {
     this.pendingIn = [];
   }
 
+  private logHandshakeIfReady(): void {
+    if (this.handshakeLogged || !this.helloSentAt || !this.readyAt) return;
+    this.handshakeLogged = true;
+    logger.info(
+      {
+        evt: "personaplex_handshake",
+        callId: this.config.callId,
+        helloToReadyMs: this.readyAt - this.helloSentAt,
+        bootToReadyMs: this.readyAt - this.startedAtMs,
+        promptChars: this.textPrompt.length,
+      },
+      "PersonaPlex: Moshi handshake (prompt bake)",
+    );
+  }
+
   private enqueueAgentPcm8k(pcm8k: Buffer): void {
     if (pcm8k.length < 2) return;
+    if (!this.firstGpuPcmAt) {
+      this.firstGpuPcmAt = Date.now();
+      logger.info(
+        {
+          evt: "personaplex_latency",
+          stage: "T2_first_gpu_pcm",
+          callId: this.config.callId,
+          readyToFirstPcmMs: this.readyAt ? this.firstGpuPcmAt - this.readyAt : null,
+          helloToFirstPcmMs: this.helloSentAt ? this.firstGpuPcmAt - this.helloSentAt : null,
+        },
+        "PersonaPlex: first model audio (T2)",
+      );
+    }
+    if (this.awaitingTurnReply && this.t0CallerSpeechAt) {
+      const now = Date.now();
+      const greetingWindow = this.readyAt > 0 && now - this.readyAt < 800;
+      const agentGapMs = this.lastGpuPcmAt ? now - this.lastGpuPcmAt : 9999;
+      if (!greetingWindow && agentGapMs > 200) {
+        logger.info(
+          {
+            evt: "personaplex_latency",
+            stage: "turn",
+            callId: this.config.callId,
+            t1MinusT0Ms: this.t1GpuSendAt ? this.t1GpuSendAt - this.t0CallerSpeechAt : null,
+            t2MinusT1Ms: this.t1GpuSendAt ? now - this.t1GpuSendAt : now - this.t0CallerSpeechAt,
+            t2MinusT0Ms: now - this.t0CallerSpeechAt,
+            agentGapMs,
+          },
+          "PersonaPlex: turn first-audio (T2-T0)",
+        );
+        this.awaitingTurnReply = false;
+        this.t0CallerSpeechAt = 0;
+        this.t1GpuSendAt = 0;
+      }
+    }
+    this.lastGpuPcmAt = Date.now();
     const aligned = pcm8k.length % 2 === 0 ? pcm8k : pcm8k.subarray(0, pcm8k.length - 1);
     this.outPending = this.outPending.length ? Buffer.concat([this.outPending, aligned]) : aligned;
     while (this.outPending.length >= FRAME_BYTES_8K) {
@@ -395,9 +480,16 @@ export class PersonaPlexPipeline implements VoiceSession {
       this.lastMediaAtMs = Date.now();
       if (!this.firstAudioLogged) {
         this.firstAudioLogged = true;
+        this.firstWireAt = Date.now();
         logger.info(
-          { callId: this.config.callId, bootMs: Date.now() - this.startedAtMs },
-          "PersonaPlex: first agent audio on the wire",
+          {
+            evt: "personaplex_latency",
+            stage: "T4_first_wire",
+            callId: this.config.callId,
+            bootMs: this.firstWireAt - this.startedAtMs,
+            t4MinusT2Ms: this.firstGpuPcmAt ? this.firstWireAt - this.firstGpuPcmAt : null,
+          },
+          "PersonaPlex: first agent audio on the wire (T4)",
         );
       }
       this.recording.addAgentChunk(pcm8k);
