@@ -7,6 +7,7 @@ import {
   formatGymTranscript,
   mergeGymPromptAddendum,
   parseScorecard,
+  planGymLlmSource,
   runGymConversation,
   type GymChatFn,
 } from "./agent-gym-engine.js";
@@ -84,5 +85,52 @@ describe("gym scorecard + prompt apply", () => {
     const second = mergeGymPromptAddendum(first.next, "If interrupted, recover in one sentence.");
     expect(second.applied).toBe(false);
     expect(second.next).toBe(first.next);
+  });
+});
+
+describe("gym LLM key plan", () => {
+  it("ignores leftover BYO keys on managed agents and uses platform Sarvam", () => {
+    const plan = planGymLlmSource({
+      agentMode: "managed",
+      llmProvider: "sarvam",
+      llmModel: "sarvam-105b-conversations",
+      hasByopKey: true,
+    });
+    expect(plan.source).toBe("managed");
+    expect(plan.provider).toBe("sarvam");
+    expect(plan.managedKeys[0]).toBe("managed_sarvam_key");
+  });
+
+  it("uses the owner key only for BYOP agents", () => {
+    const plan = planGymLlmSource({
+      agentMode: "byop",
+      llmProvider: "sarvam",
+      llmModel: "sarvam-105b-conversations",
+      hasByopKey: true,
+    });
+    expect(plan.source).toBe("byop");
+    expect(plan.managedKeys).toEqual([]);
+  });
+
+  it("keeps the agent's provider and model instead of swapping to Groq", () => {
+    const sarvam = planGymLlmSource({
+      agentMode: "managed",
+      llmProvider: "sarvam",
+      llmModel: "gemma4",
+      hasByopKey: false,
+    });
+    expect(sarvam.provider).toBe("sarvam");
+    expect(sarvam.model).toBe("gemma4");
+    expect(sarvam.managedKeys).toEqual(["managed_sarvam_key"]);
+
+    const google = planGymLlmSource({
+      agentMode: "managed",
+      llmProvider: "google",
+      llmModel: "gemini-2.0-flash",
+      hasByopKey: false,
+    });
+    expect(google.provider).toBe("google");
+    expect(google.model).toBe("gemini-2.0-flash");
+    expect(google.managedKeys).toEqual(["managed_gemini_key"]);
   });
 });

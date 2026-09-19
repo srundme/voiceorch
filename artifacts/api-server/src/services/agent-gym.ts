@@ -17,13 +17,14 @@ import {
 import { decryptKey } from "../lib/crypto.js";
 import { logger } from "../lib/logger.js";
 import { createLLMAdapter } from "../orchestration/adapters/llm/index.js";
-import type { ConversationTurn, LLMAdapter } from "../orchestration/types.js";
+import type { ConversationTurn, LLMAdapter, LLMGenerationParams } from "../orchestration/types.js";
 import {
   GYM_PERSONAS,
   formatGymTranscript,
   gymScoreSystemPrompt,
   mergeGymPromptAddendum,
   parseScorecard,
+  planGymLlmSource,
   runGymConversation,
   scorecardUserPrompt,
   type GymPersona,
@@ -95,46 +96,133 @@ async function chatOnce(llm: LLMAdapter, system: string, messages: ConversationT
   return (full || "").trim();
 }
 
+async function readPlatformSetting(key: string): Promise<string | null> {
+  const [row] = await db
+    .select()
+    .from(platformSettingsTable)
+    .where(eq(platformSettingsTable.key, key))
+    .limit(1);
+  const raw = (row?.value ?? "").trim();
+  if (!raw) return null;
+  try {
+    return decryptKey(raw).trim() || null;
+  } catch {
+    return raw;
+  }
+}
+
+async function readByopLlmKey(userId: string, providerName: string): Promise<string | null> {
+  const rows = await db
+    .select()
+    .from(providersTable)
+    .where(
+      and(
+        eq(providersTable.isActive, true),
+        eq(providersTable.userId, userId),
+        eq(providersTable.providerName, providerName),
+      ),
+    );
+  const row = rows.find((r) => r.providerType === "llm") ?? rows[0];
+  if (!row) return null;
+  try {
+    return decryptKey(row.apiKey).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+const PROVIDER_ENV: Record<string, string[]> = {
+  sarvam: ["SARVAM_API_KEY"],
+  groq: ["GROQ_API_KEY"],
+  qwen: ["GROQ_API_KEY"],
+  google: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+  gemini: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+  openai: ["OPENAI_API_KEY"],
+};
+
+function envKeyForProvider(provider: string): string | null {
+  for (const name of PROVIDER_ENV[provider] ?? []) {
+    const value = process.env[name]?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+function gymGenParams(agent: {
+  llmProvider: string;
+  temperature: number | null;
+  agentConfig: unknown;
+}): LLMGenerationParams {
+  const cfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+  const isSarvam = agent.llmProvider.toLowerCase() === "sarvam";
+  const configuredMax = "llmMaxTokens" in cfg ? cfg["llmMaxTokens"] : cfg["maxTokens"];
+  const maxTokens = typeof configuredMax === "number"
+    ? configuredMax
+    : (isSarvam ? 500 : 200);
+  const reasoning = cfg["reasoningEffort"];
+  return {
+    ...(typeof agent.temperature === "number" ? { temperature: agent.temperature } : {}),
+    maxTokens,
+    ...(reasoning === "medium" || reasoning === "high"
+      ? { reasoningEffort: reasoning }
+      : isSarvam ? { reasoningEffort: null } : {}),
+  };
+}
+
+async function resolveManagedGymKey(
+  plan: ReturnType<typeof planGymLlmSource>,
+): Promise<string | null> {
+  if (plan.provider === "google" || plan.provider === "gemini") {
+    const { parseGeminiKeyList, pickGeminiKeyFromList } = await import("../lib/gemini-key-pool.js");
+    return pickGeminiKeyFromList(parseGeminiKeyList(
+      await readPlatformSetting("managed_gemini_key"),
+      await readPlatformSetting("managed_gemini_keys"),
+      process.env["GEMINI_API_KEY"] ?? process.env["GOOGLE_API_KEY"],
+    ));
+  }
+  for (const key of plan.managedKeys) {
+    const value = await readPlatformSetting(key);
+    if (value) return value;
+  }
+  return envKeyForProvider(plan.provider);
+}
+
 async function resolveGymLlm(agent: {
   userId: string | null;
   llmProvider: string;
   llmModel: string | null;
+  agentMode?: string | null;
+  temperature?: number | null;
+  agentConfig?: unknown;
 }): Promise<LLMAdapter | null> {
-  let provider = agent.llmProvider;
-  let model = agent.llmModel;
-  let apiKey: string | null = null;
-  if (agent.userId) {
-    const rows = await db
-      .select()
-      .from(providersTable)
-      .where(
-        and(
-          eq(providersTable.isActive, true),
-          eq(providersTable.userId, agent.userId),
-          eq(providersTable.providerName, agent.llmProvider),
-        ),
-      );
-    if (rows[0]) {
-      try {
-        apiKey = decryptKey(rows[0].apiKey);
-      } catch {
-        apiKey = null;
-      }
-    }
-  }
-  if (!apiKey) {
-    const [row] = await db
-      .select()
-      .from(platformSettingsTable)
-      .where(eq(platformSettingsTable.key, "managed_qwen_key"));
-    apiKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
-    if (apiKey) {
-      provider = "groq";
-      model = "llama-3.1-70b-versatile";
-    }
-  }
+  const byopKey = (agent.agentMode ?? "managed") === "byop" && agent.userId
+    ? await readByopLlmKey(agent.userId, agent.llmProvider)
+    : null;
+  const plan = planGymLlmSource({
+    agentMode: agent.agentMode,
+    llmProvider: agent.llmProvider,
+    llmModel: agent.llmModel,
+    hasByopKey: Boolean(byopKey),
+  });
+
+  const apiKey = plan.source === "byop" ? byopKey : await resolveManagedGymKey(plan);
   if (!apiKey) return null;
-  return createLLMAdapter(provider, apiKey, model);
+
+  logger.info(
+    { provider: plan.provider, model: plan.model, source: plan.source, keyLast4: apiKey.slice(-4) },
+    "Gym LLM resolved",
+  );
+  return createLLMAdapter(
+    plan.provider,
+    apiKey,
+    plan.model,
+    undefined,
+    gymGenParams({
+      llmProvider: plan.provider,
+      temperature: agent.temperature ?? null,
+      agentConfig: agent.agentConfig,
+    }),
+  );
 }
 
 function personaFromCase(row: {
@@ -233,7 +321,11 @@ export async function runGymPersona(opts: {
   if (!testCase && !builtIn) throw new Error("Unknown gym persona");
   const persona = testCase ? personaFromCase(testCase) : builtIn!;
   const llm = await resolveGymLlm(agent);
-  if (!llm) throw new Error("No LLM key configured for this agent");
+  if (!llm) {
+    throw new Error(
+      `No ${agent.llmProvider} key configured for this agent's model (${agent.llmModel || "default"})`,
+    );
+  }
 
   const [run] = await db
     .insert(simulationRunsTable)
@@ -341,7 +433,11 @@ export async function learnFromCampaignCalls(opts: { agentId: number; userId: st
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, opts.agentId)).limit(1);
   if (!agent) throw new Error("Agent not found");
   const llm = await resolveGymLlm(agent);
-  if (!llm) throw new Error("No LLM key configured for this agent");
+  if (!llm) {
+    throw new Error(
+      `No ${agent.llmProvider} key configured for this agent's model (${agent.llmModel || "default"})`,
+    );
+  }
 
   const prior = await db
     .select({ result: simulationRunsTable.result })

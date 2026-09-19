@@ -343,3 +343,50 @@ ${opts.agentPrompt.slice(0, 2500)}
 Transcript:
 ${opts.transcript.slice(0, 8000)}`;
 }
+
+/** Live calls on managed agents use platform keys. Gym must do the same. */
+export type GymLlmSource = "byop" | "managed";
+
+export interface GymLlmPlan {
+  source: GymLlmSource;
+  provider: string;
+  model: string | null;
+  managedKeys: string[];
+}
+
+export function managedKeysForProvider(provider: string): string[] {
+  switch (provider) {
+    case "google":
+    case "gemini":
+      return ["managed_gemini_key"];
+    case "groq":
+      return ["managed_groq_key", "managed_qwen_key"];
+    case "qwen":
+      return ["managed_qwen_key", "managed_groq_key"];
+    case "openai":
+      return ["managed_openai_key"];
+    case "sarvam":
+      return ["managed_sarvam_key"];
+    default:
+      return [`managed_${provider}_key`];
+  }
+}
+
+export function planGymLlmSource(opts: {
+  agentMode?: string | null;
+  llmProvider: string;
+  llmModel: string | null;
+  hasByopKey: boolean;
+}): GymLlmPlan {
+  const provider = (opts.llmProvider || "sarvam").toLowerCase();
+  const isByop = (opts.agentMode ?? "managed") === "byop";
+  if (isByop && opts.hasByopKey) {
+    return { source: "byop", provider, model: opts.llmModel, managedKeys: [] };
+  }
+  return {
+    source: "managed",
+    provider,
+    model: opts.llmModel,
+    managedKeys: managedKeysForProvider(provider),
+  };
+}

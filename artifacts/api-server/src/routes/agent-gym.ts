@@ -75,7 +75,7 @@ router.post("/agents/:id/gym/run", requireAuth, clientContext, async (req, res):
     const message = err instanceof Error ? err.message : "Gym run failed";
     logger.warn({ err, agentId, personaId }, "Gym run failed");
     const status = message.includes("Unknown gym persona") ? 400
-      : message.includes("No LLM key") ? 422
+      : message.includes("key configured") ? 422
       : 500;
     res.status(status).json({ error: message });
   }
@@ -94,7 +94,7 @@ router.post("/agents/:id/gym/learn", requireAuth, clientContext, async (req, res
   } catch (err) {
     const message = err instanceof Error ? err.message : "Campaign learn failed";
     logger.warn({ err, agentId }, "Gym campaign learn failed");
-    const status = message.includes("No LLM key") ? 422 : 500;
+    const status = message.includes("key configured") ? 422 : 500;
     res.status(status).json({ error: message });
   }
 });
