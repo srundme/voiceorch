@@ -183,6 +183,8 @@ router.get("/campaigns/:id/leads/:leadId/workspace", async (req, res): Promise<v
       email:              lead.email,
       leadData:           lead.leadData,
       callStatus:         lead.callStatus,
+      answeredEver:       lead.answeredEver,
+      lastAttemptStatus:  lead.lastAttemptStatus,
       callAttempts:       lead.callAttempts,
       disposition:        lead.disposition,
       operationalOutcome: lead.operationalOutcome,

@@ -461,7 +461,7 @@ export default function CampaignAnalyticsTab({
         <div className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <StatChip label="Analysed" value={snap.analysed} />
-            <StatChip label="Connected" value={snap.connected} />
+            <StatChip label="Answered (analysed)" value={snap.connected} />
             <StatChip label="High purchase intent" value={snap.purchaseIntent?.high ?? 0} />
             <StatChip label="Avg purchase score" value={snap.purchaseIntent?.avg ?? "—"} />
           </div>

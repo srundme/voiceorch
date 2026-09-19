@@ -200,6 +200,26 @@ router.post("/campaigns/:id/leads/:leadId/retry", async (req, res): Promise<void
   res.json({ queued: true });
 });
 
+router.post("/campaigns/:id/leads/:leadId/retries/cancel", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const leadId     = parseInt(req.params["leadId"]!, 10);
+
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+  const lead = await requireLead(leadId, campaignId);
+  if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
+
+  const cancelled = await db.update(callRetriesTable)
+    .set({ status: "cancelled" })
+    .where(and(eq(callRetriesTable.leadId, leadId), eq(callRetriesTable.status, "pending")))
+    .returning({ id: callRetriesTable.id });
+
+  res.json({ cancelled: cancelled.length });
+});
+
 function serializeCall(c: typeof callsTable.$inferSelect) {
   return {
     id:               c.id,

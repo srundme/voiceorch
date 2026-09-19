@@ -3,7 +3,6 @@ import { useRoute, useLocation, useSearch, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
   useDeleteCampaign, useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
-  useGetBatchWorkspaceKpis,
   getListCampaignBatchesQueryKey, getGetCampaignQueryKey, getGetCampaignAnalyticsQueryKey,
   getGetBatchAnalyticsQueryOptions,
   useListCrmConnections, useUpdateCrmConnection, getListCrmConnectionsQueryKey,
@@ -48,12 +47,17 @@ import { TablePagination } from "@/components/table-pagination";
 import { RecampaignDialog } from "./recampaign-dialog";
 import { format, formatDistanceToNow } from "date-fns";
 import { BATCH_STATUS_MAP, CAMPAIGN_STATUS_MAP } from "@/lib/campaign-status";
-import LiveQueueTab from "./live-queue";
-import IncomingCallsTab from "./incoming";
-import CallbacksTab from "./callbacks";
-import TransfersTab from "./transfers";
-import BookingsTab from "./bookings";
 import CampaignAnalyticsTab from "./campaign-analytics-tab";
+import { CampaignOverviewPanel } from "@/components/campaign-ops/overview";
+import { CampaignFunnel } from "@/components/campaign-ops/funnel";
+import { CampaignLeadsWorkspace } from "@/components/campaign-ops/leads-workspace";
+import { CampaignExecutionStrip } from "@/components/campaign-ops/campaign-header";
+import {
+  isLegacyCampaignTab,
+  resolveCampaignTab,
+  type CampaignReportingPayload,
+  type PrimaryCampaignTab,
+} from "@/lib/campaign-lead-reporting";
 import {
   EMPTY_LEAD_TRANSFER,
   LeadTransferSettings,
@@ -67,17 +71,13 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 // ── Tabs ───────────────────────────────────────────────────────────────────────
 
-type CampaignTab = "overview" | "analytics" | "live-queue" | "incoming" | "callbacks" | "transfers" | "bookings" | "config";
+type CampaignTab = PrimaryCampaignTab;
 
-const CAMPAIGN_TABS: { id: CampaignTab; label: string; icon: React.ReactNode }[] = [
-  { id: "overview",   label: "Overview",      icon: null },
-  { id: "analytics",  label: "Analytics",     icon: <BarChart3 className="h-3 w-3" /> },
-  { id: "live-queue", label: "Live Queue",    icon: <Radio className="h-3 w-3" /> },
-  { id: "incoming",   label: "Incoming",      icon: <PhoneIncoming className="h-3 w-3" /> },
-  { id: "callbacks",  label: "Callbacks",     icon: <PhoneCall className="h-3 w-3" /> },
-  { id: "transfers",  label: "Transfers",     icon: <ArrowRightLeft className="h-3 w-3" /> },
-  { id: "bookings",   label: "Bookings",      icon: <Calendar className="h-3 w-3" /> },
-  { id: "config",     label: "Configuration", icon: <Settings className="h-3 w-3" /> },
+const CAMPAIGN_TABS: { id: CampaignTab; label: string }[] = [
+  { id: "overview",  label: "Overview" },
+  { id: "leads",     label: "Leads" },
+  { id: "analytics", label: "Analytics" },
+  { id: "settings",  label: "Settings" },
 ];
 
 // ── Business hours helpers ────────────────────────────────────────────────────
@@ -760,185 +760,6 @@ function CreateBatchWizard({
   );
 }
 
-// ── Batch row ────────────────────────────────────────────────────────────────
-
-// ── ScheduledChip ─────────────────────────────────────────────────────────────
-// Shows clock icon + formatted date. When launch is ≤24 h away, turns amber
-// and shows a live "in Xh Ym" countdown ticking every minute.
-
-function ScheduledChip({ scheduledStartAt }: { scheduledStartAt: string | null | undefined }) {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    if (!scheduledStartAt) return;
-    const id = setInterval(() => setTick(t => t + 1), 60_000);
-    return () => clearInterval(id);
-  }, [scheduledStartAt]);
-  void tick;
-
-  if (!scheduledStartAt) return null;
-  const target = new Date(scheduledStartAt);
-  const diffMs = target.getTime() - Date.now();
-  if (diffMs <= 0) return null;
-
-  const within24h = diffMs < 86_400_000;
-  const totalMin  = Math.floor(diffMs / 60_000);
-  const h         = Math.floor(totalMin / 60);
-  const m         = totalMin % 60;
-  const inLabel   = h > 0 ? `in ${h}h ${m}m` : `in ${m}m`;
-
-  return (
-    <span className={cn(
-      "inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md border font-medium",
-      within24h
-        ? "bg-amber-500/10 text-amber-500 border-amber-500/25"
-        : "bg-muted/40 text-muted-foreground/60 border-border/60",
-    )}>
-      <Clock className="h-2.5 w-2.5" />
-      {format(target, "MMM d, HH:mm")}
-      {within24h && <span className="opacity-80 ml-0.5 font-normal">· {inLabel}</span>}
-    </span>
-  );
-}
-
-function BatchRow({ batch, index, campaignId, onDelete }: {
-  batch: CampaignBatch; index: number; campaignId: number; onDelete: (b: CampaignBatch) => void;
-}) {
-  const calledPct = batch.totalLeads > 0 ? Math.round((batch.calledLeads / batch.totalLeads) * 100) : 0;
-  return (
-    <div className="group flex items-center gap-4 px-5 py-4 hover:bg-elevated/20 transition-colors cursor-pointer border-b border-border/60 last:border-0"
-      onClick={() => { window.location.href = `${BASE}/app/campaigns/${campaignId}/batches/${batch.id}`; }}>
-      <div className="h-8 w-8 rounded-lg bg-elevated border border-border flex items-center justify-center shrink-0">
-        <span className="text-xs font-semibold text-muted-foreground">{index}</span>
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <p className="text-sm font-medium text-foreground">{batch.name}</p>
-          <StatusBadge status={batch.status} />
-          {batch.name.startsWith("Live — ") && batch.status === "running" && (
-            <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-medium">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
-              </span>
-              Live
-            </span>
-          )}
-          {(batch as unknown as Record<string, unknown>)["leadSource"] !== "csv" && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 border border-purple-500/20 capitalize">
-              {String((batch as unknown as Record<string, unknown>)["leadSource"] ?? "csv")}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground/50">
-          <span className="flex items-center gap-1"><Users className="h-3 w-3" />{batch.totalLeads} leads</span>
-          <span>{batch.calledLeads} called ({calledPct}%)</span>
-          <ScheduledChip scheduledStartAt={batch.scheduledStartAt} />
-        </div>
-      </div>
-      <div className="hidden sm:flex items-center gap-2 w-28">
-        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-          <div className="h-full bg-foreground/20 rounded-full transition-all" style={{ width: `${calledPct}%` }} />
-        </div>
-        <span className="text-xs text-muted-foreground/40 w-7 text-right font-mono">{calledPct}%</span>
-      </div>
-      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button type="button" className="h-6 w-6 flex items-center justify-center rounded-md hover:bg-muted transition-colors"
-          onClick={e => { e.stopPropagation(); onDelete(batch); }}>
-          <Trash2 className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-destructive" />
-        </button>
-        <ChevronRight className="h-4 w-4 text-muted-foreground/30" />
-      </div>
-    </div>
-  );
-}
-
-// ── Batch KPI Card (overview tab) ────────────────────────────────────────────
-
-function BatchKpiCard({ batch, index, campaignId }: {
-  batch: CampaignBatch; index: number; campaignId: number;
-}) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: kpis } = useGetBatchWorkspaceKpis(campaignId, batch.id, { query: { refetchInterval: 30_000 } as any });
-  // Use live aggregated counts; fall back to batch row only before first KPI load
-  const total  = kpis?.total  ?? batch.totalLeads;
-  const called = kpis?.called ?? batch.calledLeads;
-  const bPct   = total > 0 ? Math.round((called / total) * 100) : 0;
-  const chips = [
-    { label: "Connected",  value: kpis?.connected  ?? 0, cls: "text-blue-500" },
-    { label: "Booked",     value: kpis?.booked     ?? 0, cls: "text-emerald-500" },
-    { label: "Interested", value: kpis?.interested ?? 0, cls: "text-emerald-400" },
-    { label: "Failed",     value: kpis?.failed     ?? 0, cls: "text-red-500" },
-    { label: "Busy",       value: kpis?.busy       ?? 0, cls: "text-orange-500" },
-    { label: "No pickup",  value: kpis?.noPickup   ?? 0, cls: "text-amber-500" },
-    { label: "Callbacks",  value: kpis?.callbacks  ?? 0, cls: "text-amber-500" },
-  ];
-  const lastActivity = kpis?.lastActivityAt
-    ? formatDistanceToNow(new Date(kpis.lastActivityAt), { addSuffix: true })
-    : null;
-  const etrMins = kpis?.estimatedTimeRemainingMins ?? null;
-  const etrLabel = etrMins != null
-    ? etrMins < 60
-      ? `~${etrMins}m remaining`
-      : `~${Math.round(etrMins / 60)}h remaining`
-    : null;
-  return (
-    <div
-      className="group bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-foreground/20 transition-all"
-      onClick={() => { window.location.href = `${BASE}/app/campaigns/${campaignId}/batches/${batch.id}`; }}>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground truncate">{batch.name || `Batch ${index + 1}`}</p>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <StatusBadge status={batch.status} />
-            <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-muted/50 text-muted-foreground/70 border border-border/60">
-              {batch.leadSource}
-            </span>
-            {kpis?.agentName && (
-              <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
-                <Users className="h-2.5 w-2.5" />{kpis.agentName}
-              </span>
-            )}
-            <span className="text-xs text-muted-foreground/40">{total.toLocaleString()} leads</span>
-            {lastActivity && (
-              <span className="text-xs text-muted-foreground/30 flex items-center gap-1">
-                <Clock className="h-2.5 w-2.5" />{lastActivity}
-              </span>
-            )}
-            {batch.status === "draft" && (
-              <ScheduledChip scheduledStartAt={batch.scheduledStartAt} />
-            )}
-          </div>
-        </div>
-        <div className="flex flex-col items-end shrink-0 gap-1">
-          {etrLabel && (
-            <span className="text-xs text-muted-foreground/30 whitespace-nowrap">{etrLabel}</span>
-          )}
-          <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:translate-x-0.5 transition-transform" />
-        </div>
-      </div>
-      {/* Progress bar — always from live data once kpis loaded */}
-      {total > 0 && (
-        <div className="mb-2">
-          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-            <div className="h-full bg-foreground/20 rounded-full transition-all" style={{ width: `${bPct}%` }} />
-          </div>
-          <p className="text-xs text-muted-foreground/40 mt-1 font-mono">{bPct}% called ({called.toLocaleString()} / {total.toLocaleString()})</p>
-        </div>
-      )}
-      {/* KPI chips */}
-      {kpis && (
-        <div className="flex items-center gap-3 flex-wrap">
-          {chips.filter(c => c.value > 0).map(c => (
-            <span key={c.label} className={cn("text-xs font-semibold", c.cls)}>
-              {c.value.toLocaleString()} {c.label}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Webhook Intake URL Card ───────────────────────────────────────────────────
 
 function WebhookIntakeCard({ webhookUrl }: { webhookUrl: string }) {
@@ -1316,28 +1137,13 @@ export default function CampaignDetailPage() {
   const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { enabled: campaignId > 0, refetchInterval: 10_000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: analytics } = useGetCampaignAnalytics(campaignId, { query: { enabled: campaignId > 0, refetchInterval: 10_000 } as any });
-  const { data: liveQueueMetrics } = useQuery({
-    queryKey: ["lq-metrics", campaignId],
-    queryFn: () => customFetch<{
-      total: number;
-      queued: number;
-      calling: number;
-      connected: number;
-      nopickup: number;
-      failed: number;
-    }>(`/api/campaigns/${campaignId}/live-queue/metrics`),
+  const reportingQuery = useQuery({
+    queryKey: ["campaign-lead-reporting", campaignId],
+    queryFn: () => customFetch<CampaignReportingPayload>(`/api/campaigns/${campaignId}/lead-reporting`),
     refetchInterval: 10_000,
     enabled: campaignId > 0,
   });
-  const isSheetAuto = (campaign as { leadSource?: string } | undefined)?.leadSource === "google_sheets";
-  const { data: autoPipelines } = useQuery({
-    queryKey: ["automatic-calls"],
-    queryFn: () => customFetch<Array<{ id: string; campaignId: number | null; name: string; status: string }>>(
-      "/api/automatic-calls",
-    ),
-    enabled: isSheetAuto,
-  });
-  const sheetPipeline = autoPipelines?.find((p) => p.campaignId === campaignId);
+  const reporting = reportingQuery.data;
 
   // Business hours editor state — declared after campaign so the useEffect dep is valid
   const [editingHours, setEditingHours] = useState(false);
@@ -1347,16 +1153,32 @@ export default function CampaignDetailPage() {
   const [hoursEnabled, setHoursEnabled] = useState<boolean>(true);
   const tabFromUrl = useMemo(() => {
     const raw = new URLSearchParams(search).get("tab");
-    return CAMPAIGN_TABS.some((t) => t.id === raw) ? (raw as CampaignTab) : "overview";
+    return resolveCampaignTab(raw).tab;
   }, [search]);
   const activeTab = tabFromUrl;
   const setActiveTab = useCallback((id: CampaignTab) => {
     const sp = new URLSearchParams(search);
     if (id === "overview") sp.delete("tab");
     else sp.set("tab", id);
+    if (id !== "leads") {
+      sp.delete("view");
+    }
     const qs = sp.toString();
     setLocation(`/app/campaigns/${campaignId}${qs ? `?${qs}` : ""}`);
   }, [search, setLocation, campaignId]);
+
+  useEffect(() => {
+    const sp = new URLSearchParams(search);
+    const raw = sp.get("tab");
+    if (!isLegacyCampaignTab(raw)) return;
+    const resolved = resolveCampaignTab(raw);
+    if (resolved.tab === "overview") sp.delete("tab");
+    else sp.set("tab", resolved.tab);
+    if (resolved.view) sp.set("view", resolved.view);
+    if (resolved.operationalOutcome) sp.set("operationalOutcome", resolved.operationalOutcome);
+    const qs = sp.toString();
+    setLocation(`/app/campaigns/${campaignId}${qs ? `?${qs}` : ""}`);
+  }, [search, campaignId, setLocation]);
   const [leadTransferForm, setLeadTransferForm] = useState<LeadTransferForm>(EMPTY_LEAD_TRANSFER);
   const [savingTransfer, setSavingTransfer] = useState(false);
   const [actingDisposition, setActingDisposition] = useState<string | null>(null);
@@ -1460,13 +1282,11 @@ export default function CampaignDetailPage() {
     : "";
 
   const fm = campaign?.fieldMappings as Record<string, string> | undefined;
-  const liveTotal = liveQueueMetrics?.total ?? 0;
   const overviewMetrics = resolveCampaignOverviewMetrics({
     analytics,
     campaign,
   });
   const { failed } = overviewMetrics;
-  const hasCsvSource = batches?.some(b => b.leadSource === "csv") ?? false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isContinuous = ["webhook", "meta_ads", "crm", "google_sheets"].includes((campaign as any)?.leadSource ?? "");
 
@@ -1558,7 +1378,7 @@ export default function CampaignDetailPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
       {/* Header */}
       <div className="px-6 pt-5 pb-0 border-b border-border shrink-0">
         {/* Breadcrumb */}
@@ -1587,49 +1407,49 @@ export default function CampaignDetailPage() {
               } />
             </div>
             <div className="flex items-center gap-3 mt-1 flex-wrap">
-              <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Users className="h-3 w-3" /> Agent #{campaign.agentId ?? "—"}
               </span>
               {campaign.fromNumber && (
-                <span className="text-xs text-muted-foreground/50 font-mono flex items-center gap-1">
+                <span className="text-xs text-muted-foreground font-mono flex items-center gap-1">
                   <Phone className="h-3 w-3" /> {campaign.fromNumber}
                 </span>
               )}
-              {hasCsvSource && (
-                <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
-                  <FileText className="h-3 w-3" /> csv
-                </span>
-              )}
-              {(campaign as any).leadSource === "meta_ads" && (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-purple-400 border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 rounded-md">
-                  <Instagram className="h-3 w-3" /> Meta Ads
-                </span>
-              )}
-              {isSheetAuto && (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 rounded-md">
-                  <Table2 className="h-3 w-3" /> Google Sheets
-                </span>
-              )}
+              <span className="text-xs text-muted-foreground capitalize">
+                {(campaign as { leadSource?: string }).leadSource?.replace(/_/g, " ") || "source"}
+              </span>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {totalBatches} batch{totalBatches === 1 ? "" : "es"}
+              </span>
             </div>
+            <CampaignExecutionStrip
+              calling={reporting?.liveFloor.calling ?? 0}
+              talking={reporting?.liveFloor.talking ?? 0}
+              slotsUsed={reporting?.liveFloor.slotsUsed ?? 0}
+              concurrencyLimit={reporting?.liveFloor.concurrencyLimit ?? "—"}
+            />
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs gap-1.5"
-              onClick={() => setLocation(`/app/analytics?campaignId=${campaignId}`)}
-            >
-              <BarChart3 className="h-3 w-3" /> View Analytics
-            </Button>
-            {/* Delete campaign — always visible */}
-            <Button
-              size="icon" variant="ghost"
-              className="h-8 w-8 text-foreground/70 hover:text-red-500 hover:bg-red-500/10"
-              title="Delete campaign"
-              onClick={() => { setDeleteNameInput(""); setShowDeleteCamp(true); }}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5">
+                  <MoreVertical className="h-3.5 w-3.5" /> More
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setActiveTab("analytics")}>Analytics</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLocation(`/app/analytics?campaignId=${campaignId}`)}>
+                  Workspace analytics
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setRecampaignOpen(true)}>Re-campaign</DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-destructive"
+                  onClick={() => { setDeleteNameInput(""); setShowDeleteCamp(true); }}
+                >
+                  Delete campaign
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {/* Continuous campaigns never show "finished" badge — they are always-on pipelines */}
             {!isContinuous && campaignFinished && (
               <>
@@ -1708,133 +1528,42 @@ export default function CampaignDetailPage() {
                   : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
-              {tab.icon}
               {tab.label}
             </button>
           ))}
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: "calc(100vh - 248px)" }}>
+        <div className="overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-5 space-y-5 min-w-0" style={{ maxHeight: "calc(100vh - 248px)" }}>
 
-          {/* ── OVERVIEW tab ─────────────────────────────────────────────── */}
-          {activeTab === "overview" && (<>
-
-          {isSheetAuto && (
-            <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-foreground">Automatic Calls from Google Sheets</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {liveTotal > 0
-                    ? "Sheet rows that were queued show in Live Queue and in the numbers below. Sentiment needs a real conversation (someone picked up)."
-                    : "Overview fills after sheet rows are queued and dialled. Stopping the pipeline does not mean calls ran — open Live Queue or the pipeline activity for the real row list."}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
-                  onClick={() => setActiveTab("live-queue")}>
-                  <Radio className="h-3 w-3" /> Live Queue
-                </Button>
-                {sheetPipeline && (
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
-                    onClick={() => setLocation(`/app/automatic-calls/${sheetPipeline.id}`)}>
-                    <ExternalLink className="h-3 w-3" /> Pipeline
-                  </Button>
-                )}
-              </div>
-            </div>
+          {activeTab === "overview" && (
+            <CampaignOverviewPanel
+              campaignId={campaignId}
+              reporting={reporting}
+              loading={reportingQuery.isLoading}
+              error={reportingQuery.isError}
+              onRetry={() => void reportingQuery.refetch()}
+            />
           )}
 
-          {/* Disposition breakdown — act on slice */}
-          {(analytics?.dispositions?.length ?? 0) > 0 && (
-            <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-              <div>
-                <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">Dispositions</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Act on a slice: export, transfer to CRM, create a redial batch, or use Re-campaign for multi-slice dials.
-                </p>
-              </div>
-              <div className="space-y-2">
-                {analytics!.dispositions!.map((d) => (
-                  <div
-                    key={d.label}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/50 px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{d.label}</p>
-                      <p className="text-[11px] text-muted-foreground tabular-nums">{d.count} leads</p>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-[11px] gap-1"
-                        disabled={actingDisposition === `${d.label}:export`}
-                        onClick={() => void handleActOnDisposition(d.label, "export")}
-                      >
-                        <Download className="h-3 w-3" /> Export
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-[11px] gap-1"
-                        disabled={actingDisposition === `${d.label}:transfer`}
-                        onClick={() => void handleActOnDisposition(d.label, "transfer")}
-                      >
-                        <ArrowRightLeft className="h-3 w-3" /> Transfer
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-[11px] gap-1"
-                        disabled={actingDisposition === `${d.label}:create_batch`}
-                        onClick={() => void handleActOnDisposition(d.label, "create_batch")}
-                      >
-                        <Layers className="h-3 w-3" /> Create batch
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {activeTab === "leads" && (
+            <CampaignLeadsWorkspace campaignId={campaignId} />
           )}
 
-          {/* Queued leads banner — fallback: leads without a batch (auto-dial failed or pre-existing) */}
-          {(() => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const queued: number = (campaign as any).queuedLeadsCount ?? 0;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const isWebhook = (campaign as any).leadSource === "webhook";
-            if (queued === 0) return null;
-            return (
-              <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/8">
-                <div className="h-8 w-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0">
-                  <Clock className="h-4 w-4 text-amber-500" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">
-                    {queued} lead{queued !== 1 ? "s" : ""} pending dial
-                  </p>
-                  <p className="text-xs text-muted-foreground/70 mt-0.5">
-                    {isWebhook
-                      ? "These leads are queued and will be dialled as soon as a live batch is active."
-                      : "These arrived while no batch was running. Start a batch to begin dialling them."}
-                  </p>
-                </div>
-                {!isWebhook && (
-                  <Button size="sm" className="h-8 text-xs gap-1.5 shrink-0"
-                    onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                    <Zap className="h-3.5 w-3.5" /> Start batch
-                  </Button>
-                )}
-              </div>
-            );
-          })()}
+          {/* ── SETTINGS tab ──────────────────────────────────────── */}
+          {activeTab === "settings" && (<>
 
-          </>)}
+          <section className="space-y-1">
+            <h2 className="text-sm font-semibold">General</h2>
+            <p className="text-xs text-muted-foreground">
+              Agent #{campaign.agentId ?? "—"}
+              {campaign.fromNumber ? ` · ${campaign.fromNumber}` : ""}
+              {" · "}
+              {(campaign as { leadSource?: string }).leadSource?.replace(/_/g, " ") || "source"}
+            </p>
+          </section>
 
-          {/* ── CONFIGURATION tab ──────────────────────────────────────── */}
-          {activeTab === "config" && (<>
+          <h2 className="text-sm font-semibold">Source / Integrations</h2>
 
           {/* Webhook Intake URL — only for webhook/Meta intake campaigns */}
           {campaign.webhookToken && (campaign as any).leadSource !== "csv" && (
@@ -1999,145 +1728,67 @@ export default function CampaignDetailPage() {
             </div>
           )}
 
-          {/* CSV campaigns — no extra configuration needed */}
-          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-          {(campaign as any).leadSource === "csv" && (
-            <div className="py-12 text-center border border-dashed border-border rounded-xl">
-              <FileText className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground/50">No extra configuration needed</p>
-              <p className="text-xs text-muted-foreground/30 mt-0.5">Upload a CSV file when creating a new batch</p>
+          <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <h2 className="text-sm font-semibold">Danger zone</h2>
+            <p className="text-xs text-muted-foreground">
+              Stop ends outbound dialling. Delete permanently removes this campaign and its leads.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs text-red-600 border-red-500/40"
+                disabled={campaign.status === "stopped"}
+                onClick={() => void handleStatusChange("stopped")}
+              >
+                Stop campaign
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs text-red-600 border-red-500/40"
+                onClick={() => { setDeleteNameInput(""); setShowDeleteCamp(true); }}
+              >
+                Delete campaign
+              </Button>
             </div>
-          )}
+          </section>
 
           </>)}
+
 
           {activeTab === "analytics" && (
-            <CampaignAnalyticsTab
-              campaignId={campaignId}
-              onAnalysed={() => {
-                void qc.invalidateQueries({ queryKey: getGetCampaignAnalyticsQueryKey(campaignId) });
-              }}
-            />
-          )}
-
-          {/* ── Live Queue / Incoming / Callbacks / Transfers / Bookings ── */}
-          {activeTab === "live-queue" && <LiveQueueTab campaignId={campaignId} />}
-          {activeTab === "incoming"   && <IncomingCallsTab campaignId={campaignId} />}
-          {activeTab === "callbacks"  && <CallbacksTab campaignId={campaignId} />}
-          {activeTab === "transfers"  && <TransfersTab campaignId={campaignId} />}
-          {activeTab === "bookings"   && <BookingsTab campaignId={campaignId} />}
-
-          {/* ── OVERVIEW continued: batches ──────────────────────── */}
-          {activeTab === "overview" && (<>
-
-          {/* Batches — batch-mode campaigns only */}
-          {(campaign as unknown as Record<string, unknown>)["triggerMode"] !== "instant" ? (
-          <div>
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Batches</h3>
-                <p className="text-xs text-muted-foreground/50 mt-0.5">Manage and monitor your batches</p>
+            <div className="space-y-5">
+              <CampaignFunnel
+                data={reporting?.funnel}
+                rates={reporting?.rates}
+                loading={reportingQuery.isLoading}
+              />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <section className="space-y-2">
+                  <h2 className="text-sm font-semibold">Business analytics</h2>
+                  <p className="text-xs text-muted-foreground">Interest, bookings, transfers, and dispositions. These are not telephony statuses.</p>
+                </section>
+                <section className="space-y-2">
+                  <h2 className="text-sm font-semibold">Telephony / technical</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Busy {reporting?.workTechnical.busy ?? 0} · No pickup {reporting?.workTechnical.noPickup ?? 0} · Voicemail {reporting?.workTechnical.voicemail ?? 0} · Technical failed {reporting?.workTechnical.technicalFailed ?? 0}
+                  </p>
+                  {reporting?.rates && (
+                    <p className="text-[11px] text-muted-foreground/70">
+                      Legacy success rate {reporting.rates.legacySuccessRate}% is kept for compatibility and is not a primary KPI.
+                    </p>
+                  )}
+                </section>
               </div>
-              {(campaign as any).leadSource === "crm" && (
-                <CrmImportButton campaignId={campaignId} />
-              )}
+              <CampaignAnalyticsTab
+                campaignId={campaignId}
+                onAnalysed={() => {
+                  void qc.invalidateQueries({ queryKey: getGetCampaignAnalyticsQueryKey(campaignId) });
+                }}
+              />
             </div>
-            {batchLoading ? (
-              <div className="grid grid-cols-1 gap-3">
-                {[1, 2].map(i => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}
-              </div>
-            ) : !batches?.length ? (
-              <div className="py-10 text-center border border-dashed border-border rounded-xl">
-                <Layers className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground/50">No batches yet</p>
-                <p className="text-xs text-muted-foreground/30 mt-0.5 mb-4">Create a batch to start calling leads</p>
-                <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs"
-                  onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                  <Plus className="h-3 w-3" /> Create First Batch
-                </Button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-3">
-                {batches.map((batch, i) => (
-                  <BatchKpiCard key={batch.id} batch={batch} index={i} campaignId={campaignId} />
-                ))}
-              </div>
-            )}
-          </div>
-          ) : (
-          <div>
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Daily Batches</h3>
-                <p className="text-xs text-muted-foreground/50 mt-0.5">
-                  {isSheetAuto
-                    ? "Created per day when Automatic Calls enqueues sheet rows"
-                    : "Auto-created per day as leads arrive via the webhook"}
-                </p>
-              </div>
-              {(campaign as any).leadSource === "crm" && (
-                <CrmImportButton campaignId={campaignId} />
-              )}
-            </div>
-            {batchLoading ? (
-              <div className="grid grid-cols-1 gap-3">
-                {[1, 2].map(i => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}
-              </div>
-            ) : !batches?.length && liveTotal > 0 ? (
-              <div className="py-8 text-center border border-dashed border-border rounded-xl">
-                <Radio className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground/50">{liveTotal} lead{liveTotal === 1 ? "" : "s"} in Live Queue</p>
-                <p className="text-xs text-muted-foreground/30 mt-0.5 mb-3">
-                  Dials ran without a daily batch card. Open Live Queue for names, status, and cost.
-                </p>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
-                  onClick={() => setActiveTab("live-queue")}>
-                  Open Live Queue
-                </Button>
-              </div>
-            ) : !batches?.length ? (
-              <div className="py-10 text-center border border-dashed border-border rounded-xl">
-                <Zap className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground/50">
-                  {isSheetAuto ? "No sheet rows dialled yet" : "No leads yet"}
-                </p>
-                <p className="text-xs text-muted-foreground/30 mt-0.5">
-                  {isSheetAuto
-                    ? "Start (or keep running) Automatic Calls so existing or new sheet rows enqueue. Activity lives on the pipeline page; this campaign stays empty until a row is actually queued."
-                    : "A batch is auto-created the moment the first lead arrives today."}
-                </p>
-              </div>
-            ) : (() => {
-              // Group batches by their date label (extracted from "Live — Jun 30" names)
-              const groups: { dateLabel: string; items: CampaignBatch[] }[] = [];
-              const seen = new Map<string, CampaignBatch[]>();
-              [...batches].sort((a, b) => b.id - a.id).forEach(batch => {
-                const match = batch.name.match(/Live — (.+)/);
-                const label = match ? match[1]! : batch.name;
-                if (!seen.has(label)) { seen.set(label, []); groups.push({ dateLabel: label, items: seen.get(label)! }); }
-                seen.get(label)!.push(batch);
-              });
-              return (
-                <div className="space-y-4">
-                  {groups.map(({ dateLabel, items }) => (
-                    <div key={dateLabel}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Calendar className="h-3 w-3 text-muted-foreground/40" />
-                        <span className="text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider">{dateLabel}</span>
-                        <div className="flex-1 h-px bg-border/40" />
-                      </div>
-                      <div className="grid grid-cols-1 gap-3">
-                        {items.map((batch, i) => <BatchKpiCard key={batch.id} batch={batch} index={i} campaignId={campaignId} />)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </div>
           )}
-
-          </>)}
 
         </div>
       </div>

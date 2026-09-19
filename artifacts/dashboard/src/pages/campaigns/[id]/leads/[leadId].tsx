@@ -30,6 +30,8 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { AttemptStatusBadge, BusinessOutcomeBadge, ContactStateBadge } from "@/components/campaign-ops/badges";
+import { businessOutcomeLabel, contactStateLabel, formatDuration, formatRetryAt } from "@/lib/campaign-lead-reporting";
 
 /**
  * Plays a call recording served from the authenticated
@@ -81,7 +83,10 @@ type LeadWorkspace = {
     id: number; campaignId: number; batchId: number | null;
     phone: string; normalizedPhone: string | null; name: string | null;
     email: string | null; leadData: Record<string, unknown> | null;
-    callStatus: string; callAttempts: number;
+    callStatus: string;
+    answeredEver?: boolean;
+    lastAttemptStatus?: string | null;
+    callAttempts: number;
     disposition: string | null;
     operationalOutcome: string | null; leadScore: number | null;
     source: string; notes: string | null; lastAttemptAt: string | null; createdAt: string;
@@ -143,19 +148,16 @@ function fmtDuration(secs: number | null | undefined) {
 function fmtDate(iso: string) { return format(new Date(iso), "MMM d, yyyy · h:mm a"); }
 function fmtRelative(iso: string) { return formatDistanceToNow(new Date(iso), { addSuffix: true }); }
 
-// ── Status maps ───────────────────────────────────────────────────────────────
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-0.5 text-sm font-medium capitalize">{value || "—"}</p>
+    </div>
+  );
+}
 
-const CALL_STATUS_MAP: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
-  pending:     { label: "Pending",     icon: <PauseCircle className="h-3 w-3" />,    cls: "bg-muted/60 text-muted-foreground border-border"          },
-  calling:     { label: "Calling",     icon: <PhoneCall className="h-3 w-3" />,      cls: "bg-sky-500/10 text-sky-600 border-sky-500/20"             },
-  connected:   { label: "Connected",   icon: <PhoneCall className="h-3 w-3" />,      cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
-  completed:   { label: "Completed",   icon: <CheckCircle2 className="h-3 w-3" />,   cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
-  transferred: { label: "Transferred", icon: <ArrowRightLeft className="h-3 w-3" />, cls: "bg-sky-500/10 text-sky-600 border-sky-500/20"             },
-  failed:      { label: "Failed",      icon: <XCircle className="h-3 w-3" />,        cls: "bg-red-500/10 text-red-600 border-red-500/20"             },
-  busy:        { label: "Busy",        icon: <XCircle className="h-3 w-3" />,        cls: "bg-amber-500/10 text-amber-600 border-amber-500/20"       },
-  no_pickup:   { label: "No Answer",   icon: <XCircle className="h-3 w-3" />,        cls: "bg-amber-500/10 text-amber-600 border-amber-500/20"       },
-  skipped:     { label: "Skipped",     icon: <AlertCircle className="h-3 w-3" />,    cls: "bg-amber-500/10 text-amber-600 border-amber-500/20"       },
-};
+// ── Status maps ───────────────────────────────────────────────────────────────
 
 const SENTIMENT_MAP: Record<string, { label: string; color: string; bg: string }> = {
   positive: { label: "Positive", color: "text-emerald-600", bg: "bg-emerald-500/10 border-emerald-500/20" },
@@ -189,8 +191,11 @@ const TL_CFG: Record<string, { label: string; icon: React.ReactNode; bg: string 
 function ExecutionCard({ exec, idx }: { exec: ExecutionItem; idx: number }) {
   const [open, setOpen] = useState(idx === 0);
   const call = exec.call;
-  const sc = CALL_STATUS_MAP[call?.status ?? ""] ?? CALL_STATUS_MAP["pending"]!;
   const sent = exec.sentiment ? SENTIMENT_MAP[exec.sentiment] : null;
+  const answeredThisAttempt = (call?.durationSeconds ?? 0) > 0
+    || call?.status === "completed"
+    || call?.status === "connected"
+    || call?.status === "transferred";
 
   return (
     <div className="border border-border/50 rounded-xl overflow-hidden">
@@ -198,27 +203,24 @@ function ExecutionCard({ exec, idx }: { exec: ExecutionItem; idx: number }) {
         className="w-full flex items-center gap-3 px-4 py-3 bg-muted/10 hover:bg-muted/30 transition-colors text-left"
         onClick={() => setOpen(o => !o)}
       >
-        <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 text-xs font-bold">
+        <div className="h-7 w-7 rounded-full bg-muted text-foreground flex items-center justify-center shrink-0 text-xs font-bold">
           {exec.attemptNumber}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium">Attempt #{exec.attemptNumber}</p>
           <p className="text-[11px] text-muted-foreground/60">{fmtDate(exec.createdAt)}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {call?.status && (
-            <span className={cn("inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border", sc.cls)}>
-              {sc.icon}{sc.label}
-            </span>
+            <AttemptStatusBadge status={call.status} answeredEver={answeredThisAttempt} />
           )}
+          <span className="text-[11px] tabular-nums text-muted-foreground">
+            {fmtDuration(call?.durationSeconds)}
+          </span>
+          {exec.outcome && <BusinessOutcomeBadge outcome={exec.outcome} />}
           {sent && (
             <span className={cn("hidden sm:inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full border", sent.bg, sent.color)}>
               {sent.label}
-            </span>
-          )}
-          {call?.durationSeconds != null && (
-            <span className="hidden md:flex items-center gap-1 text-[11px] text-muted-foreground/60">
-              <Clock className="h-3 w-3" />{fmtDuration(call.durationSeconds)}
             </span>
           )}
           {open ? <ChevronDown className="h-4 w-4 text-muted-foreground/40" /> : <ChevronRight className="h-4 w-4 text-muted-foreground/40" />}
@@ -350,9 +352,30 @@ function OverviewTab({ ws, campaignId, leadId, onRefresh }: {
   const operatorUpdate = typeof lead.leadData?.["operator_update"] === "string"
     ? lead.leadData["operator_update"].trim() || null
     : null;
+  const contactState = lead.answeredEver ? "answered" as const
+    : lead.callAttempts > 0 ? "attempted" as const
+    : "never_attempted" as const;
+  const pendingRetry = ws.pendingRetries.find((r) => r.status === "pending");
+  const latestAnsweredDuration = ws.executions
+    .map((e) => e.call?.durationSeconds)
+    .find((d) => d != null && d > 0) ?? null;
 
   return (
     <div className="p-5 space-y-4">
+      <div className="rounded-xl border border-border bg-card p-4 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+        <Fact label="Business result" value={businessOutcomeLabel(lead.operationalOutcome)} />
+        <Fact label="Contact" value={contactStateLabel(contactState)} />
+        <Fact label="Answered ever" value={lead.answeredEver ? "Yes" : "No"} />
+        <Fact label="Attempts" value={String(lead.callAttempts)} />
+        <Fact label="Latest attempt" value={lead.lastAttemptStatus?.replace(/_/g, " ") ?? lead.callStatus} />
+        <Fact label="Latest answered duration" value={formatDuration(latestAnsweredDuration)} />
+        <Fact label="Retry" value={pendingRetry ? `Scheduled ${formatRetryAt(pendingRetry.scheduledAt) ?? ""}` : "None"} />
+        <Fact label="Callback" value={ws.callbacks[0]?.callbackAt ? formatRetryAt(ws.callbacks[0].callbackAt) ?? "Requested" : "—"} />
+        <Fact label="Booking" value={ws.bookings[0]?.meetingTime ? "Booked" : "—"} />
+        <Fact label="Transfer" value={ws.transfers[0]?.transferredTo ?? "—"} />
+        <Fact label="Source" value={source?.name ?? lead.source.replace(/_/g, " ") ?? "—"} />
+        <Fact label="Disposition" value={lead.disposition ?? "—"} />
+      </div>
       {/* Agent memory — operators write request status for the next dial */}
       <div className="rounded-xl border border-border/40 bg-card p-4 space-y-3">
         <div className="flex items-center gap-2">
@@ -1099,7 +1122,9 @@ export default function LeadCrmWorkspacePage() {
     );
   }
 
-  const sc = CALL_STATUS_MAP[lead.callStatus] ?? CALL_STATUS_MAP["pending"]!;
+  const contactState = lead.answeredEver ? "answered" as const
+    : lead.callAttempts > 0 ? "attempted" as const
+    : "never_attempted" as const;
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
@@ -1132,11 +1157,10 @@ export default function LeadCrmWorkspacePage() {
             <div>
               <div className="flex items-center gap-2.5 flex-wrap mb-1">
                 <h1 className="text-xl font-semibold leading-tight">{lead.name ?? "Unknown Lead"}</h1>
-                <span className={cn("inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-full border", sc.cls)}>
-                  {sc.icon}{sc.label}
-                </span>
+                <ContactStateBadge state={contactState} />
+                <BusinessOutcomeBadge outcome={lead.operationalOutcome} />
                 {lead.disposition && (
-                  <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full border border-border/50 bg-muted/50">
+                  <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-md border border-border bg-muted/50">
                     <Tag className="h-2.5 w-2.5" />{lead.disposition}
                   </span>
                 )}

@@ -1,7 +1,14 @@
 /**
- * One lead-funnel definition for campaign analytics and batch workspace KPIs.
- * Overview tiles must read these same buckets — not Live Queue (which uses
- * operational statuses: connected-in-progress vs failed=exhausted).
+ * LEGACY production lead-funnel SQL.
+ *
+ * Campaign analytics, batch workspace KPIs, and overview tiles still use this
+ * until a later phase switches cards. Do not change these expressions here.
+ *
+ * Canonical four-layer reporting (answered_ever, lifecycle, retries, business)
+ * lives in `services/campaign-lead-reporting.ts` and is additive only.
+ *
+ * Overview tiles must not mix Live Queue meanings (connected-in-progress vs
+ * failed=exhausted) into these buckets.
  */
 import { sql } from "drizzle-orm";
 
