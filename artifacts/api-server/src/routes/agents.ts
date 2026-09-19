@@ -50,7 +50,6 @@ import { resolveWorkspaceScope } from "../services/workspace-scope.js";
 import { unsupportedAgentModel } from "../services/agent-model-validation.js";
 import { INTAKE_AGENT_TYPE } from "../lib/intake-agent.js";
 import { applyAsrSmartEndpointing, normalizeAsrSmartEndpointing } from "../lib/agent-response.js";
-import { seedGymPersonas } from "../services/agent-gym.js";
 
 const router: IRouter = Router();
 
@@ -377,12 +376,6 @@ router.post("/agents", requireAuth, clientContext, async (req, res): Promise<voi
     req.log.info({ agentId: agent.id, calendarId: newCal.id }, "Auto-created workspace calendar for new agent");
   } catch (err) {
     req.log.warn({ err, agentId: agent.id }, "Auto-calendar creation failed (non-fatal)");
-  }
-
-  try {
-    await seedGymPersonas(agent.id, clerkId);
-  } catch (err) {
-    req.log.warn({ err, agentId: agent.id }, "Gym persona seed failed (non-fatal)");
   }
 
   await logActivity({ userId: clerkId, eventType: "agent.created", resourceType: "agent", resourceId: String(agent.id), description: `Agent "${agent.name}" created` });
