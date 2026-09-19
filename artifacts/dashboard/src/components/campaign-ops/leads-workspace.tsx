@@ -9,7 +9,8 @@ import { CallInspectorPanel } from "@/components/campaign-ops/call-inspector";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import {
-  PRIMARY_LEAD_VIEWS,
+  WORK_LEAD_VIEWS,
+  displayDispositionLabel,
   parseLeadsSearch,
   reportingLeadsQuery,
   type CampaignReportingFilter,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/campaign-lead-reporting";
 import { useLocation, useSearch } from "wouter";
 import { useEffect, useMemo, useState } from "react";
+import { Search } from "lucide-react";
 
 type LeadsPage = {
   items: CampaignReportingLead[];
@@ -45,10 +47,26 @@ export function CampaignLeadsWorkspace({
     const parsed = parseLeadsSearch(search);
     return lockedBatchId ? { ...parsed, batchId: lockedBatchId } : parsed;
   }, [search, lockedBatchId]);
+  const [searchDraft, setSearchDraft] = useState(filter.search ?? "");
 
   useEffect(() => {
     setPage(0);
   }, [search]);
+
+  useEffect(() => {
+    setSearchDraft(filter.search ?? "");
+  }, [filter.search]);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      const next = searchDraft.trim() || null;
+      if (next === (filter.search || null)) return;
+      patchFilter({ search: next });
+    }, 250);
+    return () => window.clearTimeout(handle);
+    // patchFilter is stable enough for debounce; listing it retriggers the timer on every keystroke anyway.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchDraft]);
 
   const qs = reportingLeadsQuery(filter, page, 50);
   const query = useQuery({
@@ -131,20 +149,25 @@ export function CampaignLeadsWorkspace({
 
   function inspectLead(lead: CampaignReportingLead) {
     setSelectedLead(lead);
-    if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1280px)").matches) {
+    if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1024px)").matches) {
       setMobileInspector(true);
     }
   }
 
   const funnel = summary.data?.funnel;
   const rates = summary.data?.rates;
+  const listLabel = filter.dispositionBucket
+    ? displayDispositionLabel(filter.dispositionBucket)
+    : filter.view
+      ? (WORK_LEAD_VIEWS.find((v) => v.id === filter.view)?.label ?? filter.view)
+      : "Calls";
 
   return (
     <div className="flex flex-col gap-3 min-h-0 flex-1 max-w-full">
       {funnel && (
-        <p className="text-xs text-muted-foreground tabular-nums">
-          Imported {funnel.imported} · Attempted {funnel.attempted} · Answered {funnel.answered}
-          {rates ? ` · Answer rate ${rates.answerRatePct}%` : ""}
+        <p className="text-xs text-muted-foreground tabular-nums shrink-0">
+          {funnel.imported} imported · {funnel.answered} answered
+          {rates ? ` · ${rates.answerRatePct}% answer rate` : ""}
         </p>
       )}
 
@@ -155,20 +178,6 @@ export function CampaignLeadsWorkspace({
         onSelect={(bucket) => patchFilter({ dispositionBucket: bucket, view: null }, true)}
       />
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <LeadFilterChips
-          views={PRIMARY_LEAD_VIEWS}
-          active={filter.view ?? "all"}
-          onSelect={(id) => patchFilter({ view: id === "all" ? null : id, dispositionBucket: null })}
-        />
-        <Input
-          value={filter.search ?? ""}
-          onChange={(e) => patchFilter({ search: e.target.value || null })}
-          placeholder="Search name or phone"
-          className="h-9 sm:w-64"
-        />
-      </div>
-
       {query.isError && !query.data ? (
         <EmptyState
           variant="panel"
@@ -176,33 +185,56 @@ export function CampaignLeadsWorkspace({
           action={{ label: "Retry", onClick: () => void query.refetch() }}
         />
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)] gap-3 min-h-0 flex-1">
-          <div className="min-w-0 min-h-0 overflow-auto">
-            <LeadReportingTable
-              campaignId={campaignId}
-              items={query.data?.items ?? []}
-              total={query.data?.total ?? 0}
-              loading={query.isLoading}
-              error={query.isError ? "The reporting API could not be reached." : null}
-              emptyView={filter.view}
-              selectedLeadId={selectedLead?.leadId}
-              onSelectLead={inspectLead}
-              onRetry={retryLead}
-              onCancelRetry={cancelRetry}
-              onRefresh={() => void query.refetch()}
-            />
-            {(query.data?.total ?? 0) > 50 && (
-              <TablePagination
-                page={page + 1}
-                totalPages={Math.max(1, Math.ceil((query.data?.total ?? 0) / 50))}
-                pageSize={50}
-                totalItems={query.data?.total ?? 0}
-                onPageChange={(p) => setPage(Math.max(0, p - 1))}
-                onPageSizeChange={() => undefined}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(300px,400px)] gap-3 min-h-0 flex-1">
+          <div className="min-w-0 min-h-0 flex flex-col rounded-xl border border-border bg-card overflow-hidden">
+            <div className="shrink-0 px-3 py-2 border-b border-border flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-medium tabular-nums mr-auto">
+                {query.data?.total ?? 0} {listLabel.toLowerCase()}
+              </p>
+              <LeadFilterChips
+                views={WORK_LEAD_VIEWS}
+                active={filter.view ?? null}
+                onSelect={(id) => patchFilter({ view: id === "all" ? null : id, dispositionBucket: null })}
               />
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  value={searchDraft}
+                  onChange={(e) => setSearchDraft(e.target.value)}
+                  placeholder="Phone"
+                  className="h-8 w-36 pl-7 text-xs"
+                />
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto">
+              <LeadReportingTable
+                campaignId={campaignId}
+                items={query.data?.items ?? []}
+                total={query.data?.total ?? 0}
+                loading={query.isLoading}
+                error={query.isError ? "The reporting API could not be reached." : null}
+                emptyView={filter.view}
+                selectedLeadId={selectedLead?.leadId}
+                onSelectLead={inspectLead}
+                onRetry={retryLead}
+                onCancelRetry={cancelRetry}
+                onRefresh={() => void query.refetch()}
+              />
+            </div>
+            {(query.data?.total ?? 0) > 50 && (
+              <div className="shrink-0 border-t border-border px-2 py-1">
+                <TablePagination
+                  page={page + 1}
+                  totalPages={Math.max(1, Math.ceil((query.data?.total ?? 0) / 50))}
+                  pageSize={50}
+                  totalItems={query.data?.total ?? 0}
+                  onPageChange={(p) => setPage(Math.max(0, p - 1))}
+                  onPageSizeChange={() => undefined}
+                />
+              </div>
             )}
           </div>
-          <div className="hidden xl:block min-h-0 h-full">
+          <div className="hidden lg:block min-h-0 h-full">
             <CallInspectorPanel campaignId={campaignId} lead={selectedLead} />
           </div>
         </div>

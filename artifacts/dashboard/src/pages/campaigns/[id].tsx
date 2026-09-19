@@ -1422,12 +1422,14 @@ export default function CampaignDetailPage() {
                 {totalBatches} batch{totalBatches === 1 ? "" : "es"}
               </span>
             </div>
-            <CampaignExecutionStrip
-              calling={reporting?.liveFloor.calling ?? 0}
-              talking={reporting?.liveFloor.talking ?? 0}
-              slotsUsed={reporting?.liveFloor.slotsUsed ?? 0}
-              concurrencyLimit={reporting?.liveFloor.concurrencyLimit ?? "—"}
-            />
+            {((reporting?.liveFloor.calling ?? 0) > 0 || (reporting?.liveFloor.talking ?? 0) > 0) && (
+              <CampaignExecutionStrip
+                calling={reporting?.liveFloor.calling ?? 0}
+                talking={reporting?.liveFloor.talking ?? 0}
+                slotsUsed={reporting?.liveFloor.slotsUsed ?? 0}
+                concurrencyLimit={reporting?.liveFloor.concurrencyLimit ?? "—"}
+              />
+            )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <DropdownMenu>

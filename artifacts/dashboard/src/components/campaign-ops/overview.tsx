@@ -1,9 +1,7 @@
 import { EmptyState } from "@/components/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CampaignFunnel } from "@/components/campaign-ops/funnel";
 import { LiveFloor } from "@/components/campaign-ops/live-floor";
 import { DispositionHero } from "@/components/campaign-ops/disposition-hero";
-import { OutcomeChips } from "@/components/campaign-ops/outcome-filters";
 import {
   campaignLeadsHref,
   type CampaignReportingPayload,
@@ -72,25 +70,10 @@ export function CampaignOverviewPanel({
           data={reporting ? { ...reporting.liveFloor, retryPending: reporting.workTechnical.retryPending } : undefined}
         />
       )}
-      <CampaignFunnel loading={loading} data={reporting?.funnel} rates={reporting?.rates} />
-      <OutcomeChips
-        loading={loading}
-        counts={{
-          interested: reporting?.funnel.interested,
-          callback: reporting?.workTechnical.callbacks,
-          retry: reporting?.workTechnical.retryPending,
-          no_pickup: reporting?.workTechnical.noPickup,
-          busy: reporting?.workTechnical.busy,
-          voicemail: reporting?.workTechnical.voicemail,
-          technical_failed: reporting?.workTechnical.technicalFailed,
-        }}
-        onSelect={(view) => openLeads({ view })}
-      />
-      {reporting?.compare?.callbackSources
-        && reporting.compare.callbackSources.callbackTables !== reporting.compare.callbackSources.operationalOutcome && (
-        <p className="text-[11px] text-muted-foreground">
-          Callback chip uses operational outcome ({reporting.compare.callbackSources.operationalOutcome}).
-          Callback tables list {reporting.compare.callbackSources.callbackTables} distinct leads.
+      {reporting?.funnel && (
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {reporting.funnel.imported} imported · {reporting.funnel.answered} answered
+          {reporting.rates ? ` · ${reporting.rates.answerRatePct}% answer rate` : ""}
         </p>
       )}
 

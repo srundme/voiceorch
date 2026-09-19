@@ -132,6 +132,13 @@ export const PRIMARY_LEAD_VIEWS: { id: CampaignReportingView | "all"; label: str
   { id: "technical_failed", label: "Technical Failed" },
 ];
 
+/** Compact list filters that are not already a disposition chip. */
+export const WORK_LEAD_VIEWS: { id: CampaignReportingView; label: string }[] = [
+  { id: "answered", label: "Answered" },
+  { id: "retry", label: "Retry" },
+  { id: "technical_failed", label: "Failed" },
+];
+
 export const OUTCOME_CARDS: { view: CampaignReportingView; label: string; empty: string }[] = [
   { view: "interested", label: "Interested", empty: "No leads have been marked interested yet." },
   { view: "callback", label: "Callback", empty: "No callback requests yet." },
@@ -266,7 +273,7 @@ export function businessOutcomeLabel(outcome: string | null | undefined): string
 }
 
 export function displayDispositionLabel(bucket: string | null | undefined): string {
-  if (!bucket || bucket === "unlabeled") return "Unlabeled";
+  if (!bucket || bucket === "unlabeled") return "No label";
   return bucket.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 

@@ -65,7 +65,7 @@ export function DispositionBadge({
 }) {
   const shown = bucket && bucket !== "unlabeled"
     ? displayDispositionLabel(bucket)
-    : (label || "Unlabeled");
+    : (label && label.trim() ? label : "No label");
   if (bucket === "voicemail") {
     return chip("border-border bg-foreground text-background", shown);
   }

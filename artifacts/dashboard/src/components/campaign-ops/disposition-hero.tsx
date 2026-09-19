@@ -15,28 +15,24 @@ export function DispositionHero({
 }) {
   if (loading) return <Skeleton className="h-20 w-full rounded-xl" />;
   const chips = items ?? [];
+  const total = chips.reduce((n, c) => n + c.count, 0);
 
   return (
-    <section className="space-y-2 min-w-0">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-semibold">Dispositions</h2>
-        <p className="text-[11px] text-muted-foreground">Click a result to list those calls</p>
-      </div>
-      <div className="flex flex-wrap gap-1.5">
+    <section className="space-y-2 min-w-0 shrink-0">
+      <h2 className="text-sm font-semibold">Dispositions</h2>
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1.5">
         <button
           type="button"
           onClick={() => onSelect(null)}
           className={cn(
-            "rounded-lg border px-3.5 py-2.5 text-left transition-colors cursor-pointer min-w-[5rem]",
+            "rounded-xl border px-3 py-2.5 text-left transition-colors cursor-pointer min-w-0",
             !active
               ? "border-foreground bg-foreground text-background"
               : "border-border bg-card hover:bg-muted/40",
           )}
         >
-          <p className={cn("text-[10px] uppercase tracking-wider", !active ? "text-background/70" : "text-muted-foreground")}>All</p>
-          <p className="text-2xl font-semibold tabular-nums leading-none">
-            {chips.reduce((n, c) => n + c.count, 0)}
-          </p>
+          <p className={cn("text-[11px] truncate", !active ? "text-background/70" : "text-muted-foreground")}>All</p>
+          <p className="text-xl font-semibold tabular-nums leading-tight">{total}</p>
         </button>
         {chips.map((chip) => {
           const selected = active === chip.bucket;
@@ -46,7 +42,7 @@ export function DispositionHero({
               type="button"
               onClick={() => onSelect(selected ? null : chip.bucket)}
               className={cn(
-                "rounded-lg border px-3.5 py-2.5 text-left transition-colors cursor-pointer min-w-[6rem] max-w-[12rem]",
+                "rounded-xl border px-3 py-2.5 text-left transition-colors cursor-pointer min-w-0",
                 selected
                   ? "border-foreground bg-foreground text-background"
                   : "border-border bg-card hover:bg-muted/40",
@@ -54,12 +50,12 @@ export function DispositionHero({
               )}
             >
               <p className={cn(
-                "text-[10px] uppercase tracking-wider truncate",
+                "text-[11px] truncate",
                 selected ? "text-background/70" : "text-muted-foreground",
               )}>
                 {displayDispositionLabel(chip.bucket)}
               </p>
-              <p className="text-2xl font-semibold tabular-nums leading-none">{chip.count}</p>
+              <p className="text-xl font-semibold tabular-nums leading-tight">{chip.count}</p>
             </button>
           );
         })}

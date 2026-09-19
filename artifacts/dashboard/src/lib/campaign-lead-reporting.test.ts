@@ -166,6 +166,6 @@ describe("disposition display", () => {
     expect(displayDispositionLabel("no pickup")).toBe("No Pickup");
     expect(displayDispositionLabel("voicemail")).toBe("Voicemail");
     expect(displayDispositionLabel("callback requested")).toBe("Callback Requested");
-    expect(displayDispositionLabel("unlabeled")).toBe("Unlabeled");
+    expect(displayDispositionLabel("unlabeled")).toBe("No label");
   });
 });

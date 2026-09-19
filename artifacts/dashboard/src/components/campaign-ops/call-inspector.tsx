@@ -2,16 +2,17 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch, getClientContext } from "@workspace/api-client-react";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/auth";
 import { stripTranscriptMarkup } from "@/lib/transcript-display";
 import {
+  attemptStatusLabel,
   formatDuration,
   type CampaignReportingLead,
 } from "@/lib/campaign-lead-reporting";
 import { DispositionBadge } from "@/components/campaign-ops/badges";
 import { ExternalLink } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type CallPayload = {
   id: number;
@@ -39,6 +40,10 @@ function transcriptLines(raw: string | null | undefined): Array<{ who: string; t
     if (m) return { who: m[1]!, text: stripTranscriptMarkup(m[2] ?? "") };
     return { who: "", text: stripTranscriptMarkup(line) };
   }).filter((row) => row.text);
+}
+
+function isAgent(who: string): boolean {
+  return /agent|bot/i.test(who);
 }
 
 function InspectorAudio({ callId }: { callId: number }) {
@@ -74,7 +79,7 @@ function InspectorAudio({ callId }: { callId: number }) {
     };
   }, [callId, getToken]);
 
-  if (error) return <p className="text-[11px] text-muted-foreground">{error}</p>;
+  if (error) return null;
   if (!url) return <Skeleton className="h-8 w-full" />;
   return <audio controls src={url} className="w-full h-8" preload="none" />;
 }
@@ -96,53 +101,64 @@ export function CallInspectorPanel({
   if (!lead) {
     return (
       <div className="h-full rounded-xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground">
-        Select a lead to read the transcript.
+        Select a call to read the transcript.
       </div>
     );
   }
 
   const lines = transcriptLines(call.data?.transcript);
   const bucket = lead.dispositionBucket || (lead.lastAttemptStatus === "voicemail" ? "voicemail" : null);
+  const name = (lead.name || "").trim();
+  const title = name && name.toLowerCase() !== "unknown" ? name : lead.phone;
 
   return (
     <div className="h-full min-h-0 flex flex-col rounded-xl border border-border bg-card overflow-hidden">
       <div className="px-4 py-3 border-b border-border shrink-0 space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="font-medium truncate">{lead.name || "Unknown"}</p>
-            <p className="text-xs font-mono text-muted-foreground">{lead.phone}</p>
+            <p className="font-medium truncate">{title}</p>
+            {title !== lead.phone ? (
+              <p className="text-xs font-mono text-muted-foreground">{lead.phone}</p>
+            ) : null}
           </div>
           <DispositionBadge bucket={bucket} label={lead.disposition} />
         </div>
         <p className="text-[11px] text-muted-foreground tabular-nums">
           {formatDuration(call.data?.durationSeconds ?? lead.latestAnsweredDuration)}
-          {call.data?.status ? ` · ${call.data.status.replace(/_/g, " ")}` : ""}
+          {call.data?.status || lead.lastAttemptStatus
+            ? ` · ${attemptStatusLabel(call.data?.status ?? lead.lastAttemptStatus)}`
+            : ""}
         </p>
         {callId != null && <InspectorAudio callId={callId} />}
-        <Button asChild size="sm" variant="outline" className="h-8 text-xs cursor-pointer">
-          <Link href={`/app/campaigns/${campaignId}/leads/${lead.leadId}`}>
-            Open lead
-            <ExternalLink className="ml-1.5 h-3 w-3" />
-          </Link>
-        </Button>
+        <Link
+          href={`/app/campaigns/${campaignId}/leads/${lead.leadId}`}
+          className="inline-flex items-center text-[11px] text-muted-foreground hover:text-foreground"
+        >
+          Open lead
+          <ExternalLink className="ml-1 h-3 w-3" />
+        </Link>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Transcript</h3>
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2.5">
         {call.isLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : lines.length === 0 ? (
           <p className="text-sm text-muted-foreground">No transcript on this call.</p>
         ) : (
-          lines.map((row, i) => (
-            <div key={`${i}-${row.text.slice(0, 12)}`} className="text-sm leading-5">
-              {row.who ? (
-                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mr-1.5">
-                  {row.who}
-                </span>
-              ) : null}
-              <span className="text-foreground">{row.text}</span>
-            </div>
-          ))
+          lines.map((row, i) => {
+            const agent = isAgent(row.who);
+            return (
+              <div key={`${i}-${row.text.slice(0, 12)}`} className={cn("flex", agent ? "justify-start" : "justify-end")}>
+                <div className={cn("max-w-[90%] rounded-2xl px-3 py-2", agent ? "bg-muted" : "bg-foreground text-background")}>
+                  {row.who ? (
+                    <p className={cn("text-[10px] font-medium mb-0.5", agent ? "text-muted-foreground" : "text-background/70")}>
+                      {row.who}
+                    </p>
+                  ) : null}
+                  <p className="text-sm leading-5">{row.text}</p>
+                </div>
+              </div>
+            );
+          })
         )}
         {call.data?.callSummary ? (
           <p className="pt-3 text-xs text-muted-foreground border-t border-border">
