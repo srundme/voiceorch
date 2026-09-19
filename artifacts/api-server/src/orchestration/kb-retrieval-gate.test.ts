@@ -98,6 +98,99 @@ describe("decideKbRetrieval — fail open", () => {
   });
 });
 
+  describe("decideKbRetrieval — skip language control", () => {
+  const skip = [
+    "Can you speak in Tamil?",
+    "Tamil please.",
+    "Speak in English.",
+    "தமிழ்ல பேசுங்க.",
+    "Hindi mein bolo.",
+    "தமிழ்",
+    "English-ல பேசுறீங்களா? Can you speak to English?",
+    "Are you speaking in Tamil?",
+    "Why are you speaking in English?",
+    "Which language is easier for you to speak in?",
+    "Ma'am, can you talk in Hindi?",
+    "Can you speak Malayalam?",
+    "I only understand Hindi.",
+    "I am comfortable only with Hindi",
+    "தமிழ்ல பேசுங்க",
+    "தமிழில் பேச முடியுமா?",
+    "മലയാളത്തിൽ സംസാരിക്കാമോ?",
+    "മലയാളത്തിൽ പറയാമോ?",
+    "తెలుగులో మాట్లాడగలరా?",
+    "తెలుగులో చెప్పండి",
+    "ಕನ್ನಡದಲ್ಲಿ ಮಾತನಾಡಬಹುದಾ?",
+    "மலையாளத்துல பேசலாமா?",
+    "എനിക്ക് മലയാളത്തിൽ സംസാരിക്കാമോ?",
+    "തമിഴിൽ സംസാരിക്കുന്നത് ആണോ?",
+  ];
+  for (const utterance of skip) {
+    it(`skips "${utterance}"`, () => {
+      const r = decideKbRetrieval(utterance);
+      expect(r.decision).toBe("skip");
+      expect(r.reason).toBe("language_control");
+      expect(r.utteranceClass).toBe("language_control");
+    });
+  }
+
+  it("still retrieves a knowledge question asked in a language", () => {
+    const r = decideKbRetrieval("Can you explain the premium in Tamil?");
+    expect(r.decision).toBe("retrieve");
+    expect(r.reason).toBe("factual_question");
+  });
+
+  it("retrieves mixed knowledge + language control", () => {
+    for (const utterance of [
+      "Explain the premium in Malayalam.",
+      "Tell me the coverage in Tamil.",
+      "இந்த plan-ஐ தமிழ்ல explain பண்ணுங்க.",
+    ]) {
+      const r = decideKbRetrieval(utterance);
+      expect(r.decision).toBe("retrieve");
+      expect(r.reason).toBe("factual_question");
+    }
+  });
+});
+
+describe("decideKbRetrieval — skip non-KB person questions", () => {
+  const offerings = ["Elevate", "Care Supreme"];
+
+  it("skips a person-issue question when the name is not a knowledge object", () => {
+    for (const utterance of [
+      "What's Bhavya's issue?",
+      "So what is the issue for Pabya?",
+      "Can you mention what is the issue for Bhavya?",
+    ]) {
+      const r = decideKbRetrieval(utterance, { knownOfferings: offerings });
+      expect(r.decision).toBe("skip");
+      expect(r.utteranceClass).toBe("caller_fact");
+    }
+  });
+
+  it("retrieves when the named thing is an attached knowledge object", () => {
+    const r = decideKbRetrieval("What's Elevate's waiting period?", { knownOfferings: offerings });
+    expect(r.decision).toBe("retrieve");
+    expect(r.utteranceClass).toBe("knowledge_query");
+  });
+});
+
+describe("decideKbRetrieval — other conversation-control skips", () => {
+  it("skips specialist-call booking", () => {
+    const r = decideKbRetrieval("Okay Ma'am shall we book specialist call?");
+    expect(r.decision).toBe("skip");
+    expect(r.utteranceClass).toBe("call_control");
+  });
+
+  it("skips hear/repair as repeat", () => {
+    const r = decideKbRetrieval(
+      "One thing, please speak clearly as you are mixing the sentences, I couldn't able to hear what you are saying.",
+    );
+    expect(r.decision).toBe("skip");
+    expect(r.utteranceClass).toBe("repeat_request");
+  });
+});
+
 describe("shouldSkipKbRetrieval", () => {
   it("only skips when mode is on", () => {
     expect(shouldSkipKbRetrieval("off", "skip")).toBe(false);

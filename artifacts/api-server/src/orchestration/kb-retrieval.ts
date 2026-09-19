@@ -1,4 +1,4 @@
-import { db, knowledgeEntriesTable, agentKnowledgeSourcesTable } from "@workspace/db";
+import { db, knowledgeEntriesTable, agentKnowledgeSourcesTable, knowledgeSourcesTable } from "@workspace/db";
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { embedKbQuery, isKbVectorReady } from "../services/kb-embeddings.js";
@@ -691,6 +691,41 @@ export async function getAttachedSourceIds(
     logger.warn({ err, agentId }, "Failed to load attached knowledge sources — falling back to legacy id only");
   }
   return Array.from(ids);
+}
+
+const OFFERING_TITLE_CAP = 200;
+
+/** Distinct entry titles + source names for grounded entity aliases. Fail open to []. */
+export async function listKbOfferingTitles(sourceIds: number[]): Promise<string[]> {
+  const unique = Array.from(new Set(sourceIds.filter((n) => Number.isInteger(n))));
+  if (!unique.length) return [];
+  try {
+    const [entries, sources] = await Promise.all([
+      db
+        .select({ title: knowledgeEntriesTable.title })
+        .from(knowledgeEntriesTable)
+        .where(inArray(knowledgeEntriesTable.sourceId, unique))
+        .limit(OFFERING_TITLE_CAP),
+      db
+        .select({ name: knowledgeSourcesTable.name })
+        .from(knowledgeSourcesTable)
+        .where(inArray(knowledgeSourcesTable.id, unique)),
+    ]);
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const row of [...sources, ...entries]) {
+      const title = ("title" in row ? row.title : row.name)?.trim();
+      if (!title) continue;
+      const key = title.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(title);
+    }
+    return out;
+  } catch (err) {
+    logger.warn({ err, sourceIds: unique }, "KB offering titles failed — builder will use caller-explicit entities only");
+    return [];
+  }
 }
 
 /**

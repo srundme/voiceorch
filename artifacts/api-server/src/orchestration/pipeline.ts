@@ -77,13 +77,26 @@ import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMAdapter, LLMUsage, SessionConfig, StreamSTT, STTConfig, ToolDefinition } from "./types.js";
 import { defaultGoodbyeMessage, resolveGoodbyeMessage } from "./types.js";
 import type { VoiceSession } from "./voice-session.js";
-import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, isPureNonLatinQuery, type KbRetrievalResult } from "./kb-retrieval.js";
+import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, isPureNonLatinQuery, listKbOfferingTitles, type KbRetrievalResult } from "./kb-retrieval.js";
 import {
   resolveKbRetrievalGateMode,
   runKbRetrievalGate,
   shouldSkipKbRetrieval,
+  classifyKbUtterance,
   type KbRetrievalGateResult,
 } from "./kb-retrieval-gate.js";
+import {
+  resolveKbQueryBuilderMode,
+  runKbQueryBuilderConservative,
+  recentKbTurns,
+  type KbActiveEntity,
+  type KbQueryBuildResult,
+} from "./kb-query-builder.js";
+import {
+  isKbPhase3CanaryAgent,
+  kbQueryChanged,
+  phase3RetrievalBucket,
+} from "./kb-phase3-flags.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { getBackchannelFillers, pickBackchannelFiller, rememberFillerPhrase, type BackchannelFillerOptions } from "./backchannel.js";
 import { ConversationHistory } from "./conversation-history.js";
@@ -1472,6 +1485,13 @@ export class OrchestrationPipeline implements VoiceSession {
    *  presentation call) and made the prompt prefix churn between sizes, which also
    *  defeats provider prompt caching. Stale reference material beats none. */
   private lastKbContext: { text: string; source: string; turnNumber: number } | null = null;
+  /** Sticky offering/entity for contextual KB queries (Phase 3). Unused unless the builder is on. */
+  private kbActiveEntity: KbActiveEntity | null = null;
+  private kbActiveTopic: string | null = null;
+  private kbEntityEstablishedTurn: number | null = null;
+  private kbTopicEstablishedTurn: number | null = null;
+  private kbKnownOfferings: string[] = [];
+  private kbOfferingsLoaded = false;
 
   // Gender detection — fires once per call using early caller speech
   private genderDetector: GenderDetector | GenderDetectorML | GenderDetectorMLv2 | GenderDetectorChained;
@@ -3043,6 +3063,18 @@ export class OrchestrationPipeline implements VoiceSession {
   // retrieval so their behavior is completely unchanged.
   private krutrimSummaryExcludeTitles(): string[] | undefined {
     return this.agent.llmProvider?.toLowerCase() === "krutrim" ? undefined : [KRUTRIM_AUTO_SUMMARY_TITLE];
+  }
+
+  private warmKbOfferings(): void {
+    if (this.kbOfferingsLoaded || this.agent.knowledgeSourceIds.length === 0) return;
+    this.kbOfferingsLoaded = true;
+    void listKbOfferingTitles(this.agent.knowledgeSourceIds)
+      .then((titles) => {
+        this.kbKnownOfferings = titles;
+      })
+      .catch(() => {
+        this.kbKnownOfferings = [];
+      });
   }
 
   constructor(config: SessionConfig) {
@@ -8920,23 +8952,30 @@ export class OrchestrationPipeline implements VoiceSession {
     let kbOuterRaceMs = KB_CONTEXT_RACE_MS;
     const kbPrefetch = this.kbPrefetchPromise;
     this.kbPrefetchPromise = null;
-    const kbGateMode = resolveKbRetrievalGateMode();
+    const kbGateMode = resolveKbRetrievalGateMode(process.env, this.agent.id);
+    const kbBuilderMode = resolveKbQueryBuilderMode(process.env, this.agent.id);
+    const kbPhase3Canary = isKbPhase3CanaryAgent(this.agent.id);
     let kbGate: KbRetrievalGateResult | null = null;
+    const kbUtteranceClass = (kbGateMode !== "off" || kbBuilderMode !== "off")
+      ? classifyKbUtterance(transcript, { knownOfferings: this.kbKnownOfferings }).utteranceClass
+      : "unclear";
     if (
       kbGateMode !== "off"
       && !this.agent.kbBakedOnly
       && this.agent.knowledgeSourceIds.length > 0
       && transcript.trim().length > 0
     ) {
-      kbGate = runKbRetrievalGate(transcript);
+      kbGate = runKbRetrievalGate(transcript, { knownOfferings: this.kbKnownOfferings });
       logger.info(
         {
           callId: this.config.callId,
           decision: kbGate.decision,
           reason: kbGate.reason,
+          utteranceClass: kbGate.utteranceClass,
           utterance: kbGate.utterance,
           decisionMs: kbGate.decisionMs,
           mode: kbGateMode,
+          canary: kbPhase3Canary,
         },
         "KB Retrieval Gate",
       );
@@ -8948,13 +8987,88 @@ export class OrchestrationPipeline implements VoiceSession {
           event: "KB Retrieval Gate",
           decision: kbGate.decision,
           reason: kbGate.reason,
+          utteranceClass: kbGate.utteranceClass,
           utterance: kbGate.utterance,
           decisionMs: kbGate.decisionMs,
           mode: kbGateMode,
+          canary: kbPhase3Canary,
         },
       });
     }
     const kbGateSkip = kbGate ? shouldSkipKbRetrieval(kbGateMode, kbGate.decision) : false;
+    let kbQuery: KbQueryBuildResult | null = null;
+    if (kbBuilderMode !== "off" && this.agent.knowledgeSourceIds.length > 0 && transcript.trim().length > 0) {
+      this.warmKbOfferings();
+      const turns = recentKbTurns(this.conversationHistory.messages);
+      kbQuery = runKbQueryBuilderConservative({
+        utterance: transcript,
+        previousAgentTurn: turns.previousAgentTurn,
+        previousCallerTurn: turns.previousCallerTurn,
+        activeEntity: this.kbActiveEntity,
+        activeTopic: this.kbActiveTopic,
+        knownOfferings: this.kbKnownOfferings,
+        turnIndex: this._activeTurnIndex,
+        utteranceClass: kbGate?.utteranceClass ?? kbUtteranceClass,
+        entityEstablishedTurn: this.kbEntityEstablishedTurn,
+        topicEstablishedTurn: this.kbTopicEstablishedTurn,
+      });
+      this.kbActiveEntity = kbQuery.activeEntity;
+      this.kbActiveTopic = kbQuery.activeTopic;
+      if (kbQuery.entityChanged) this.kbEntityEstablishedTurn = this._activeTurnIndex;
+      if (kbQuery.topicCleared) this.kbTopicEstablishedTurn = null;
+      else if (kbQuery.activeTopic) this.kbTopicEstablishedTurn = kbQuery.topicSource === "previous_validated"
+        ? this.kbTopicEstablishedTurn
+        : this._activeTurnIndex;
+      const builtQueryChanged = kbQueryChanged(kbQuery.rawQuery, kbQuery.searchQuery);
+      logger.info(
+        {
+          callId: this.config.callId,
+          agentId: this.agent.id,
+          mode: kbBuilderMode,
+          canary: kbPhase3Canary,
+          rawQuery: kbQuery.rawQuery,
+          searchQuery: kbQuery.searchQuery,
+          queryChanged: builtQueryChanged,
+          queryStrategy: kbQuery.queryStrategy,
+          activeEntity: kbQuery.activeEntity?.name ?? null,
+          activeTopic: kbQuery.activeTopic,
+          utteranceClass: kbGate?.utteranceClass ?? kbUtteranceClass,
+          gateDecision: kbGate?.decision ?? null,
+          builderMs: kbQuery.builderMs,
+          fallbackUsed: kbQuery.fallbackUsed,
+        },
+        "KB Query Builder",
+      );
+      this.logExec(EXEC_COMPONENTS.Knowledge, "system", {
+        status: "info",
+        turnNumber: this._activeTurnIndex,
+        latencyMs: kbQuery.builderMs,
+        metadata: {
+          event: "KB Query Builder",
+          mode: kbBuilderMode,
+          canary: kbPhase3Canary,
+          rawQuery: kbQuery.rawQuery,
+          searchQuery: kbQuery.searchQuery,
+          queryChanged: builtQueryChanged,
+          queryStrategy: kbQuery.queryStrategy,
+          activeEntity: kbQuery.activeEntity?.name ?? null,
+          activeTopic: kbQuery.activeTopic,
+          utteranceClass: kbGate?.utteranceClass ?? kbUtteranceClass,
+          gateDecision: kbGate?.decision ?? null,
+          builderMs: kbQuery.builderMs,
+          fallbackUsed: kbQuery.fallbackUsed,
+        },
+      });
+    }
+    const kbSearchQuery = kbBuilderMode === "on" && kbQuery?.searchQuery
+      ? kbQuery.searchQuery
+      : transcript;
+    const queryChanged = kbQueryChanged(kbQuery?.rawQuery ?? transcript, kbSearchQuery);
+    const retrievalBucket = phase3RetrievalBucket({
+      gateDecision: kbGate?.decision ?? (kbGateSkip ? "skip" : null),
+      queryChanged,
+      fallbackUsed: kbBuilderMode === "on" ? Boolean(kbQuery?.fallbackUsed) : false,
+    });
     // Relabel a prefetch result as source:"prefetch" when it WINS the turn, so
     // the execution log distinguishes fallback context from a real query hit.
     const asPrefetch = (r: KbRetrievalResult | null): KbRetrievalResult | null =>
@@ -8970,7 +9084,7 @@ export class OrchestrationPipeline implements VoiceSession {
     } else if (this.agent.knowledgeSourceIds.length > 0 && transcript.trim().length > 0) {
       // Pure non-Latin transcripts (e.g. Tamil-only) skip English-config FTS
       // and go vector-only; code-mixed transcripts keep the hybrid path.
-      const skipFts = isPureNonLatinQuery(transcript);
+      const skipFts = isPureNonLatinQuery(kbSearchQuery);
       // Inner budget: how long the live query retrieval gets before we settle
       // for the speech-start prefetch instead. skipFts (vector-only) turns get
       // a wider, MEASURED budget (default 800ms ≈ Tamil embed p90 + margin —
@@ -8984,7 +9098,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // the (already-resolved) prefetch surfaces almost immediately, so the
       // worst-case turn stall stays ≈ budgetMs even on skipFts turns.
       kbOuterRaceMs = Math.max(KB_CONTEXT_RACE_MS, budgetMs + 100);
-      const live = retrieveKbContextMultiEx(this.agent.knowledgeSourceIds, transcript, undefined, { skipFts, excludeTitles: this.krutrimSummaryExcludeTitles() })
+      const live = retrieveKbContextMultiEx(this.agent.knowledgeSourceIds, kbSearchQuery, undefined, { skipFts, excludeTitles: this.krutrimSummaryExcludeTitles() })
         .catch((err) => {
           logger.warn({ callId: this.config.callId, err }, "KB retrieval failed — falling back to prefetch");
           return null;
@@ -9010,7 +9124,7 @@ export class OrchestrationPipeline implements VoiceSession {
       kbContextPromise = kbPrefetch.then(asPrefetch);
       logger.debug({ callId: this.config.callId }, "KB context: using speech-start prefetch");
     } else if (this.agent.knowledgeSourceIds.length > 0) {
-      kbContextPromise = retrieveKbContextMultiEx(this.agent.knowledgeSourceIds, transcript, undefined, { skipFts: isPureNonLatinQuery(transcript), excludeTitles: this.krutrimSummaryExcludeTitles() })
+      kbContextPromise = retrieveKbContextMultiEx(this.agent.knowledgeSourceIds, kbSearchQuery, undefined, { skipFts: isPureNonLatinQuery(kbSearchQuery), excludeTitles: this.krutrimSummaryExcludeTitles() })
         .catch((err) => {
           logger.warn({ callId: this.config.callId, err }, "KB retrieval failed — continuing without context");
           return null;
@@ -9282,6 +9396,20 @@ export class OrchestrationPipeline implements VoiceSession {
             gateDecision: kbGate.decision,
             gateReason: kbGate.reason,
             gateMs: kbGate.decisionMs,
+          } : {}),
+          ...(kbPhase3Canary ? {
+            phase3Bucket: retrievalBucket,
+            canary: true,
+            rawQuery: kbQuery?.rawQuery ?? transcript,
+            searchQuery: kbSearchQuery,
+            queryChanged,
+            gateDecision: kbGate?.decision ?? (kbGateSkip ? "skip" : "retrieve"),
+            activeEntity: kbQuery?.activeEntity?.name ?? null,
+            activeTopic: kbQuery?.activeTopic ?? null,
+            queryStrategy: kbBuilderMode === "on" ? (kbQuery?.queryStrategy ?? "raw") : "raw",
+            fallbackUsed: kbBuilderMode === "on" ? Boolean(kbQuery?.fallbackUsed) : false,
+            searchMs: this.agent.kbBakedOnly || kbGateSkip ? 0 : (kbResult?.latencyMs ?? Date.now() - kbAwaitStart),
+            topResultIds: kbResult?.entries?.slice(0, 5).map((e) => e.id) ?? [],
           } : {}),
         },
       });
