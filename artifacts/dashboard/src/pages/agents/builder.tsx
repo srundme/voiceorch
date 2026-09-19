@@ -11,7 +11,7 @@ import {
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
   Upload, Archive, Info, AlertCircle, Calendar, Star, BadgeCheck, Video, ExternalLink,
-  Target, ListChecks,
+  Target, ListChecks, Dumbbell,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -133,6 +133,7 @@ import {
 import { ToolsWhatsappSetup, ToolsEmailSetup, connectionsSetupHref } from "./tools-messaging";
 import { WhatsappTemplateSelect, type WaCatalogEntry, type WaTplChoice } from "@/components/whatsapp/agent-template-picks";
 import { AgentAnalyticsPanel } from "./agent-analytics-panel";
+import { GymTab } from "./gym-tab";
 import {
   PropertyRow,
   StatusDot,
@@ -145,7 +146,7 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "outcomes" | "analytics" | "voicemail" | "settings" | "versions";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "outcomes" | "gym" | "analytics" | "voicemail" | "settings" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
@@ -155,6 +156,7 @@ const TABS: TabDef[] = [
   { id: "voice",     label: "Sound",     icon: <Mic className="h-3.5 w-3.5" /> },
   { id: "tools",     label: "Actions",   icon: <Wrench className="h-3.5 w-3.5" /> },
   { id: "outcomes",  label: "After the call", icon: <Tag className="h-3.5 w-3.5" /> },
+  { id: "gym",       label: "Gym",       icon: <Dumbbell className="h-3.5 w-3.5" /> },
   { id: "analytics", label: "Activity",  icon: <BarChart3 className="h-3.5 w-3.5" /> },
   { id: "settings",  label: "Settings",  icon: <Settings className="h-3.5 w-3.5" /> },
   { id: "versions",  label: "Versions",  icon: <History className="h-3.5 w-3.5" /> },
@@ -7842,6 +7844,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
                     <VoicemailTab form={form} embedded />
                   </div>
                 )}
+                {activeTab === "gym" && <GymTab agentId={agentId} />}
                 {activeTab === "analytics" && (
                   <AgentAnalyticsPanel agentId={agent?.id ?? 0} embedded />
                 )}
