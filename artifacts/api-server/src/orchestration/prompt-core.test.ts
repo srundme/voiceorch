@@ -41,6 +41,7 @@ describe("prompt core compiler", () => {
     expect(compiled).toContain("Name: Irfan");
     expect(compiled).toContain("Role: Recruitment consultant");
     expect(compiled).toContain("CALL PURPOSE");
+    expect(compiled).toContain("CALL FLOW");
     expect(compiled).toContain("inbound");
     expect(compiled).toContain("1. GREETING");
     expect(compiled).toContain("2. PROFILE");

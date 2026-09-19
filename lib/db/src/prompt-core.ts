@@ -264,7 +264,7 @@ function compileFlow(steps: PromptCoreFlowStep[] | undefined): string | null {
     const head = `${i + 1}. ${s.title.toUpperCase()}`;
     return s.objective ? `${head}\n${s.objective}` : head;
   }).join("\n\n");
-  return `FLOW\n${body}`;
+  return `CALL FLOW\n${body}`;
 }
 
 function compileBehaviour(instructions: PromptCoreInstructions | undefined): string | null {

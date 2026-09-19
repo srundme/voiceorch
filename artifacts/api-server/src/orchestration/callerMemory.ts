@@ -38,6 +38,7 @@ import {
   resolveCallerKey,
   type CallDirection,
 } from "@workspace/db";
+import { compactPromptCore } from "@workspace/db/prompt-core";
 
 // Re-export the shared caller-identity helpers so existing importers
 // (session.ts, etc.) keep working through callerMemory's public surface.
@@ -340,6 +341,48 @@ export function computePersonaHash(systemPrompt: string | null | undefined): str
   const src = (systemPrompt ?? "").trim();
   if (!src) return "";
   return createHash("sha1").update(src).digest("hex").slice(0, 16);
+}
+
+/**
+ * Prefix on hashes derived from promptCore Identity (name/role/company).
+ * Lets us tell leftover-script fingerprints apart from identity fingerprints
+ * so migrating an essay into Identity/Flow does not look like a domain swap.
+ */
+export const PERSONA_IDENTITY_HASH_PREFIX = "id:";
+
+/**
+ * Fingerprint used for caller-memory persona-swap detection.
+ *
+ * Structured agents (promptCore with Identity) hash name/role/company only —
+ * editing Additional script, Flow, or Instructions must not wipe returning-caller
+ * memory. Legacy agents without Identity still hash the raw system prompt.
+ */
+export function computeAgentPersonaHash(opts: {
+  systemPrompt?: string | null;
+  promptCore?: unknown;
+}): string {
+  const identity = compactPromptCore(opts.promptCore)?.identity;
+  const identitySrc = [identity?.name, identity?.role, identity?.company]
+    .map((v) => (v ?? "").trim())
+    .filter(Boolean)
+    .join("\n");
+  if (identitySrc) {
+    return PERSONA_IDENTITY_HASH_PREFIX + computePersonaHash(`identity\n${identitySrc}`);
+  }
+  return computePersonaHash(opts.systemPrompt);
+}
+
+/** True when stored vs current hashes mean the agent was actually repurposed. */
+export function isPersonaSwap(
+  stored: string | null | undefined,
+  current: string | null | undefined,
+): boolean {
+  if (!stored || !current) return false;
+  const storedIdentity = stored.startsWith(PERSONA_IDENTITY_HASH_PREFIX);
+  const currentIdentity = current.startsWith(PERSONA_IDENTITY_HASH_PREFIX);
+  // Scheme change (essay-hash ↔ identity-hash) is a migration, not a new business.
+  if (storedIdentity !== currentIdentity) return false;
+  return stored !== current;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -665,8 +708,7 @@ export async function loadCallerContext(
   // was repurposed — flag it so domain memory is suppressed for this call.
   // Absence = first persona ever seen = no mismatch (nothing stale to suppress).
   const storedPersonaHash = sanitizedFacts.find(r => r.key === PERSONA_HASH_FACT_KEY)?.value ?? null;
-  const personaChanged =
-    !!currentPersonaHash && !!storedPersonaHash && storedPersonaHash !== currentPersonaHash;
+  const personaChanged = isPersonaSwap(storedPersonaHash, currentPersonaHash);
   if (personaChanged) {
     logger.warn(
       { agentId, phoneNumber, storedPersonaHash, currentPersonaHash },
@@ -1646,8 +1688,7 @@ export async function updateCallerProfile(opts: {
   // persona changed since this caller's memory was written, retire it for good
   // here (before extraction) so it can neither contaminate this call's fact
   // extraction nor resurface on later calls once the marker matches again.
-  const personaSwapped =
-    !!personaHash && !!storedPersonaMarker && storedPersonaMarker !== personaHash;
+  const personaSwapped = isPersonaSwap(storedPersonaMarker, personaHash);
   if (personaSwapped) {
     try {
       const markerId = await supersedeFact({

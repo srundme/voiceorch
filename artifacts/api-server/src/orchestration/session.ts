@@ -111,7 +111,7 @@ import {
   injectCallerMemory,
   injectEnhancedMemory,
   isResumeDroppedCall,
-  computePersonaHash,
+  computeAgentPersonaHash,
   updateCallerProfile,
   latchCallerName,
   latchCallerFact,
@@ -836,9 +836,13 @@ export async function createSession(params: {
   }
   // Persona fingerprint for caller-memory whiplash detection: when the agent is
   // repurposed (e.g. real-estate → insurance), stale domain memory keyed on
-  // (agentId, phone) must not bleed into the new persona. Derived from the RAW
-  // system prompt, not effectiveSystemPrompt (which varies per call).
-  const personaHash = computePersonaHash(agent.systemPrompt);
+  // (agentId, phone) must not bleed into the new persona. Identity (name/role/
+  // company) when promptCore is set; otherwise the RAW system prompt — never
+  // effectiveSystemPrompt (which varies per call with date/KB/memory).
+  const personaHash = computeAgentPersonaHash({
+    systemPrompt: agent.systemPrompt,
+    promptCore: agentCfg["promptCore"],
+  });
   let callerProfileSnapshot: CallerProfile | null = null;
   let resumeDroppedCall = false;
   let latchedFactsMap = new Map<string, string>();
