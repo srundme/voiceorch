@@ -22,6 +22,7 @@ import {
   parseCampaignReportingFilter,
   projectCampaignLeadReporting,
   summarizeCampaignReporting,
+  summarizeDispositionHero,
   type CampaignReportingLeadInput,
 } from "./campaign-lead-reporting";
 
@@ -253,6 +254,18 @@ describe("no-pickup / busy / voicemail / technical failed", () => {
     expect(leadMatchesReportingFilter(row, { dispositionBucket: "voicemail" })).toBe(true);
     expect(leadMatchesReportingFilter(row, { dispositionBucket: "no pickup" })).toBe(false);
     expect(countReportingMetric([row], "no_pickup")).toBe(0);
+  });
+
+  it("hero chips count technical voicemail even when the label is no pickup", () => {
+    expect(summarizeDispositionHero([
+      { disposition: "outcome: no pickup", lastAttemptStatus: "voicemail", callStatus: "voicemail", count: 4 },
+      { disposition: "outcome: no pickup", lastAttemptStatus: "caller_hangup", callStatus: "completed", count: 13 },
+      { disposition: null, lastAttemptStatus: "busy", callStatus: "busy", count: 31 },
+    ])).toEqual([
+      { bucket: "voicemail", count: 4 },
+      { bucket: "no pickup", count: 13 },
+      { bucket: "unlabeled", count: 31 },
+    ]);
   });
 });
 

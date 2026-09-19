@@ -108,6 +108,37 @@ export function displayDispositionBucket(lead: {
   return canonicalDispositionFromLabel(lead.disposition);
 }
 
+/** Collapse raw disposition + technical status rows into hero chips. Do not GROUP BY the SQL CASE. */
+export function summarizeDispositionHero(
+  rows: Array<{
+    disposition?: string | null;
+    lastAttemptStatus?: string | null;
+    callStatus: string;
+    count: number;
+  }>,
+): Array<{ bucket: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const bucket = displayDispositionBucket(row).trim() || "unlabeled";
+    counts.set(bucket, (counts.get(bucket) ?? 0) + row.count);
+  }
+  return [...counts.entries()]
+    .map(([bucket, count]) => ({ bucket, count }))
+    .filter((row) => row.count > 0)
+    .sort((a, b) => {
+      const rank = (bucket: string) => {
+        if (bucket === "interested") return 0;
+        if (bucket === "callback requested") return 1;
+        if (bucket === "voicemail") return 2;
+        if (bucket === "not interested") return 3;
+        if (bucket === "unlabeled") return 99;
+        return 10;
+      };
+      const d = rank(a.bucket) - rank(b.bucket);
+      return d !== 0 ? d : b.count - a.count;
+    });
+}
+
 export function campaignContactState(lead: {
   answeredEver: boolean;
   callAttempts: number;
