@@ -5,6 +5,7 @@ import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { scheduleRetry, processRetries, resolveRetryConfig } from "./retryEngine.js";
 import { isCampaignDialable } from "./campaign-dialable.js";
 import { logger } from "../lib/logger.js";
+import { startMeetingBotAutoDispatcher } from "./meet-auto-dispatch.js";
 
 let started = false;
 
@@ -41,7 +42,27 @@ export function getAllCampaignConcurrency(): Map<number, number> {
 const STUCK_CALLING_TIMEOUT_MS =
   parseInt(process.env["STUCK_CALLING_TIMEOUT_MS"] ?? "0", 10) || 15 * 60 * 1000;
 
-import { startMeetingBotAutoDispatcher } from "./meet-auto-dispatch.js";
+/**
+ * True when a calling/connected lead should be treated as a ghost slot.
+ *
+ * Pre-claim used to set status=calling without last_attempt_at. If the process
+ * restarted during callDelaySeconds, those rows stayed calling forever, filled
+ * PLATFORM_MAX_CONCURRENT_CALLS, and new CSV batches never dialed.
+ * NULL last_attempt_at + zero attempts is always stuck (never a live call).
+ */
+export function isGhostCallingLead(opts: {
+  callStatus: string;
+  lastAttemptAt: Date | null | undefined;
+  callAttempts: number;
+  now?: Date;
+  timeoutMs?: number;
+}): boolean {
+  if (opts.callStatus !== "calling" && opts.callStatus !== "connected") return false;
+  if (opts.lastAttemptAt == null) return (opts.callAttempts ?? 0) === 0;
+  const timeoutMs = opts.timeoutMs ?? STUCK_CALLING_TIMEOUT_MS;
+  const now = opts.now ?? new Date();
+  return opts.lastAttemptAt.getTime() < now.getTime() - timeoutMs;
+}
 
 export function startBatchScheduler(): void {
   if (started) return;
@@ -510,7 +531,7 @@ async function doRefillCampaignConcurrency(campaignId: number): Promise<void> {
       const claimed = isWorkflow
         ? await db.execute<{ id: number }>(sql`
             UPDATE campaign_leads
-            SET call_status = 'calling'
+            SET call_status = 'calling', last_attempt_at = now()
             WHERE id IN (
               SELECT cl.id FROM campaign_leads cl
               JOIN workflow_runs wr ON wr.lead_id = cl.id AND wr.status = 'waiting_call'
@@ -533,7 +554,7 @@ async function doRefillCampaignConcurrency(campaignId: number): Promise<void> {
           `)
         : await db.execute<{ id: number }>(sql`
             UPDATE campaign_leads
-            SET call_status = 'calling'
+            SET call_status = 'calling', last_attempt_at = now()
             WHERE id IN (
               SELECT id FROM campaign_leads
               WHERE campaign_id = ${campaign.id}
@@ -606,6 +627,8 @@ export async function refillCampaignForLead(leadId: number): Promise<void> {
  *
  * Stuck leads are transitioned to "failed" and offered for retry so they do
  * not permanently block the concurrency counter and are eventually re-dialed.
+ * Also fails pre-claimed ghosts (`last_attempt_at IS NULL` and `call_attempts = 0`)
+ * — SQL `NULL < cutoff` is unknown, so those rows previously escaped this sweep.
  */
 async function sweepStuckCallingLeads(): Promise<void> {
   try {
@@ -618,7 +641,10 @@ async function sweepStuckCallingLeads(): Promise<void> {
     const stuck = await db.select().from(campaignLeadsTable)
       .where(and(
         inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
-        lt(campaignLeadsTable.lastAttemptAt, cutoff),
+        or(
+          lt(campaignLeadsTable.lastAttemptAt, cutoff),
+          and(isNull(campaignLeadsTable.lastAttemptAt), eq(campaignLeadsTable.callAttempts, 0)),
+        ),
       ))
       .limit(200);
 

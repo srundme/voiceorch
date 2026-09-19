@@ -9,8 +9,9 @@ import {
 } from "@workspace/db";
 import { eq, and, count, desc, inArray, sql, isNull } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
-import { reopenCampaignIfCompleted, platformConcurrencyHeadroom } from "../services/batchScheduler.js";
+import { reopenCampaignIfCompleted, platformConcurrencyHeadroom, platformConcurrencyCap } from "../services/batchScheduler.js";
 import { csvBatchShouldStartNow } from "../services/campaign-dialable.js";
+import { logger } from "../lib/logger.js";
 import { normalizePhone as normalizePhoneSimple } from "../lib/phone-normalize.js";
 import { normalizePhone as normalizePhoneService, INDIA_PHONE_CONFIG, type WorkspacePhoneConfig } from "../services/phone-normalization.js";
 
@@ -154,7 +155,13 @@ async function fireStartBatch(batch: BatchRow, campaign: CampaignRow): Promise<v
   // bursting past the server's sustainable live-call count (→ audio underruns).
   const headroom = await platformConcurrencyHeadroom();
   if (headroom !== null) {
-    if (headroom <= 0) return;
+    if (headroom <= 0) {
+      logger.warn(
+        { campaignId: campaign.id, batchId: batch.id, platformCap: platformConcurrencyCap() },
+        "CSV batch start deferred — platform-wide concurrent-call cap reached; pending leads stay queued until a slot frees",
+      );
+      return;
+    }
     if (headroom < slots) slots = headroom;
   }
 
@@ -163,12 +170,11 @@ async function fireStartBatch(batch: BatchRow, campaign: CampaignRow): Promise<v
   // READ COMMITTED isolation, a second concurrent UPDATE on the same rows sees
   // the already-committed 'calling' status and skips them — preventing
   // double-scheduling when the batch scheduler and a manual /start race.
-  // NB: only call_status is written here. last_attempt_at is set by
-  // fireCampaignCall at the moment a real dial is placed, so "Last Activity"
-  // reflects an actual outbound attempt and never a mere pre-claim.
+  // Stamp last_attempt_at on claim so a process restart during callDelaySeconds
+  // cannot leave ghost 'calling' rows that occupy PLATFORM_MAX_CONCURRENT_CALLS.
   const claimed = await db.execute<{ id: number }>(sql`
     UPDATE campaign_leads
-    SET call_status = 'calling'
+    SET call_status = 'calling', last_attempt_at = now()
     WHERE id IN (
       SELECT id FROM campaign_leads
       WHERE campaign_id = ${campaign.id}
