@@ -20,7 +20,7 @@ export function OutcomeChips({
 
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-semibold">Outcomes</h2>
+        <h2 className="text-sm font-semibold">Technical</h2>
       <div className="flex gap-2 overflow-x-auto pb-1 min-w-0 max-w-full">
         {visible.map((card) => (
           <button

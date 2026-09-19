@@ -14,8 +14,10 @@ import {
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { computeOperationalOutcome, setOperationalOutcome } from "./operational-outcome.js";
+import { canonicalDispositionFromLabel } from "../lib/disposition/canonical.js";
 import {
   CAMPAIGN_LEAD_STATE_V2_EVENT,
+  isBusinessEndingDisposition,
   isCampaignLeadStateV2Writer,
   shouldCancelDroppedRetryAfterDisposition,
   shouldPreserveBusinessDisposition,
@@ -26,6 +28,25 @@ import {
   loadAgentMeaningMap,
   meaningFlagsForOutcome,
 } from "./disposition-meaning.js";
+
+/**
+ * AMD/transcript already marked the call voicemail. Do not let the LLM stamp
+ * "outcome: no pickup" over that — operators filter by disposition first.
+ */
+export function resolveDispositionLabelForCall(opts: {
+  incomingLabel: string;
+  callStatus?: string | null;
+  lastAttemptStatus?: string | null;
+}): string {
+  const incoming = opts.incomingLabel.trim();
+  const isVoicemail =
+    opts.callStatus === "voicemail" || opts.lastAttemptStatus === "voicemail";
+  if (!isVoicemail) return incoming;
+  if (isBusinessEndingDisposition(incoming)) return incoming;
+  const bucket = canonicalDispositionFromLabel(incoming);
+  if (bucket === "voicemail") return incoming || "outcome: voicemail";
+  return "outcome: voicemail";
+}
 
 export async function applyCampaignDispositionOutcome(opts: {
   campaignLeadId: number;
@@ -43,7 +64,11 @@ export async function applyCampaignDispositionOutcome(opts: {
   if (!lead) return;
 
   const v2Writer = isCampaignLeadStateV2Writer(lead.campaignId);
-  const label = dispositionLabelForLead(opts.dispositionResult);
+  const label = resolveDispositionLabelForCall({
+    incomingLabel: dispositionLabelForLead(opts.dispositionResult),
+    callStatus: opts.callStatus ?? lead.callStatus,
+    lastAttemptStatus: lead.lastAttemptStatus,
+  });
   const preserveExisting = v2Writer && shouldPreserveBusinessDisposition({
     existing: lead.disposition,
     incoming: label,

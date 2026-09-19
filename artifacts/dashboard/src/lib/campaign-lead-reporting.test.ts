@@ -7,6 +7,7 @@ import {
   businessOutcomeLabel,
   campaignLeadsHref,
   contactStateLabel,
+  displayDispositionLabel,
   leadsSearchFromFilter,
   nextWorkLabel,
   parseLeadsSearch,
@@ -27,6 +28,7 @@ function lead(partial: Partial<CampaignReportingLead>): CampaignReportingLead {
     operationalOutcome: "pending",
     disposition: null,
     callAttempts: 0,
+    latestCallId: null,
     latestAnsweredCallId: null,
     latestAnsweredDuration: null,
     retryPending: false,
@@ -75,6 +77,12 @@ describe("leads URL filters are linkable", () => {
     const batchHref = batchLeadsHref(449, 412, { view: "busy" });
     expect(batchHref).toBe("/app/campaigns/449/batches/412?view=busy");
     expect(batchHref).not.toContain("tab=leads");
+  });
+
+  it("round-trips dispositionBucket=voicemail", () => {
+    const href = campaignLeadsHref(449, { dispositionBucket: "voicemail" });
+    expect(href).toBe("/app/campaigns/449?tab=leads&dispositionBucket=voicemail");
+    expect(parseLeadsSearch(href.split("?")[1] ?? "").dispositionBucket).toBe("voicemail");
   });
 
   it("combines search with view=", () => {
@@ -150,5 +158,14 @@ describe("historical answered+failed presentation", () => {
       callAttempts: 2,
     });
     expect(primaryLeadTone(row)).toBe("attention");
+  });
+});
+
+describe("disposition display", () => {
+  it("title-cases canonical buckets", () => {
+    expect(displayDispositionLabel("no pickup")).toBe("No Pickup");
+    expect(displayDispositionLabel("voicemail")).toBe("Voicemail");
+    expect(displayDispositionLabel("callback requested")).toBe("Callback Requested");
+    expect(displayDispositionLabel("unlabeled")).toBe("Unlabeled");
   });
 });

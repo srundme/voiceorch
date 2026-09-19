@@ -1532,9 +1532,17 @@ export default function CampaignDetailPage() {
             </button>
           ))}
         </div>
+      </div>
 
         {/* Content */}
-        <div className="overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-5 space-y-5 min-w-0" style={{ maxHeight: "calc(100vh - 248px)" }}>
+        <div
+          className={cn(
+            "px-4 sm:px-6 py-4 min-w-0 flex-1 min-h-0",
+            activeTab === "leads"
+              ? "overflow-hidden flex flex-col"
+              : "overflow-y-auto overflow-x-hidden space-y-5",
+          )}
+        >
 
           {activeTab === "overview" && (
             <CampaignOverviewPanel
@@ -1791,7 +1799,6 @@ export default function CampaignDetailPage() {
           )}
 
         </div>
-      </div>
 
       <CallDetailDrawer
         open={selectedCallId !== null}

@@ -9,17 +9,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
-import { AttemptStatusBadge, BusinessOutcomeBadge, ContactStateBadge, RetryState } from "@/components/campaign-ops/badges";
+import { AttemptStatusBadge, DispositionBadge, RetryState } from "@/components/campaign-ops/badges";
 import {
   formatDuration,
   formatRetryAt,
-  nextWorkLabel,
   type CampaignReportingLead,
   type CampaignReportingView,
   OUTCOME_CARDS,
 } from "@/lib/campaign-lead-reporting";
 import { cn } from "@/lib/utils";
-import { MoreHorizontal, Phone, StickyNote } from "lucide-react";
+import { FileText, MoreHorizontal, Phone, StickyNote } from "lucide-react";
 import { useState } from "react";
 
 export function LeadReportingTable({
@@ -29,6 +28,8 @@ export function LeadReportingTable({
   loading,
   error,
   emptyView,
+  selectedLeadId,
+  onSelectLead,
   onRetry,
   onCancelRetry,
   onRefresh,
@@ -39,6 +40,8 @@ export function LeadReportingTable({
   loading?: boolean;
   error?: string | null;
   emptyView?: CampaignReportingView | null;
+  selectedLeadId?: number | null;
+  onSelectLead?: (lead: CampaignReportingLead) => void;
   onRetry?: (leadId: number) => void;
   onCancelRetry?: (leadId: number) => void;
   onRefresh?: () => void;
@@ -48,6 +51,15 @@ export function LeadReportingTable({
   const [selected, setSelected] = useState<Record<number, boolean>>({});
   const emptyCopy = OUTCOME_CARDS.find((c) => c.view === emptyView);
   const showRetryQueue = emptyView === "retry";
+
+  function openCall(lead: CampaignReportingLead) {
+    const id = lead.latestCallId ?? lead.latestAnsweredCallId;
+    if (id != null) setCallId(id);
+  }
+
+  function selectLead(lead: CampaignReportingLead) {
+    onSelectLead?.(lead);
+  }
 
   if (loading) {
     return (
@@ -85,30 +97,30 @@ export function LeadReportingTable({
           <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="w-8 px-3 py-2.5" />
-              <th className="text-left font-medium px-4 py-2.5">Lead</th>
+              <th className="text-left font-medium px-4 py-2.5">Disposition</th>
+              <th className="text-left font-medium px-3 py-2.5">Lead</th>
               <th className="text-left font-medium px-3 py-2.5 hidden lg:table-cell">Phone</th>
-              <th className="text-left font-medium px-3 py-2.5">Contact</th>
-              <th className="text-left font-medium px-3 py-2.5">Business</th>
-              <th className="text-left font-medium px-3 py-2.5 hidden lg:table-cell">Disposition</th>
               <th className="text-left font-medium px-3 py-2.5">Latest attempt</th>
-              <th className="text-right font-medium px-3 py-2.5">Attempts</th>
               <th className="text-right font-medium px-3 py-2.5 hidden xl:table-cell">Duration</th>
+              <th className="text-right font-medium px-3 py-2.5">Attempts</th>
               {showRetryQueue && (
                 <>
                   <th className="text-left font-medium px-3 py-2.5">Retry</th>
                   <th className="text-left font-medium px-3 py-2.5">Scheduled</th>
                 </>
               )}
-              <th className="text-left font-medium px-3 py-2.5">Next work</th>
-              <th className="w-10" />
+              <th className="w-24" />
             </tr>
           </thead>
           <tbody>
             {items.map((lead) => (
               <tr
                 key={lead.leadId}
-                className="border-t border-border/70 hover:bg-muted/30 cursor-pointer"
-                onClick={() => navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`)}
+                className={cn(
+                  "border-t border-border/70 cursor-pointer",
+                  selectedLeadId === lead.leadId ? "bg-muted/60" : "hover:bg-muted/30",
+                )}
+                onClick={() => selectLead(lead)}
               >
                 <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                   <input
@@ -119,38 +131,47 @@ export function LeadReportingTable({
                   />
                 </td>
                 <td className="px-4 py-3">
+                  <DispositionBadge bucket={lead.dispositionBucket} label={lead.disposition} />
+                </td>
+                <td className="px-3 py-3">
                   <p className="font-medium truncate max-w-[180px]">{lead.name || "Unknown"}</p>
                   <p className="text-xs text-muted-foreground font-mono lg:hidden">{lead.phone}</p>
                 </td>
                 <td className="px-3 py-3 hidden lg:table-cell font-mono text-xs text-muted-foreground">{lead.phone}</td>
-                <td className="px-3 py-3"><ContactStateBadge state={lead.contactState} /></td>
-                <td className="px-3 py-3"><BusinessOutcomeBadge outcome={lead.operationalOutcome} /></td>
-                <td className="px-3 py-3 hidden lg:table-cell text-xs text-muted-foreground truncate max-w-[160px]">
-                  {lead.disposition || "—"}
-                </td>
                 <td className="px-3 py-3">
                   <AttemptStatusBadge status={lead.lastAttemptStatus} answeredEver={lead.answeredEver} />
                 </td>
-                <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">{lead.callAttempts}</td>
                 <td className="px-3 py-3 text-right tabular-nums text-muted-foreground hidden xl:table-cell">
                   {formatDuration(lead.latestAnsweredDuration)}
                 </td>
+                <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">{lead.callAttempts}</td>
                 {showRetryQueue && (
                   <>
                     <td className="px-3 py-3"><RetryState lead={lead} /></td>
                     <td className="px-3 py-3 text-xs text-muted-foreground">{formatRetryAt(lead.retryScheduledAt) ?? "—"}</td>
                   </>
                 )}
-                <td className="px-3 py-3 text-xs">{nextWorkLabel(lead)}</td>
                 <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
-                  <RowMenu
-                    lead={lead}
-                    campaignId={campaignId}
-                    onOpen={() => navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`)}
-                    onCall={() => lead.latestAnsweredCallId && setCallId(lead.latestAnsweredCallId)}
-                    onRetry={onRetry}
-                    onCancelRetry={onCancelRetry}
-                  />
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs gap-1 cursor-pointer"
+                      onClick={() => selectLead(lead)}
+                      disabled={(lead.latestCallId ?? lead.latestAnsweredCallId) == null}
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Transcript
+                    </Button>
+                    <RowMenu
+                      lead={lead}
+                      campaignId={campaignId}
+                      onOpen={() => navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`)}
+                      onCall={() => openCall(lead)}
+                      onRetry={onRetry}
+                      onCancelRetry={onCancelRetry}
+                    />
+                  </div>
                 </td>
               </tr>
             ))}
@@ -160,38 +181,46 @@ export function LeadReportingTable({
 
       <div className="md:hidden space-y-2">
         {items.map((lead) => (
-          <div key={lead.leadId} className="rounded-xl border border-border bg-card px-4 py-3">
+          <div
+            key={lead.leadId}
+            className={cn(
+              "rounded-xl border bg-card px-4 py-3",
+              selectedLeadId === lead.leadId ? "border-foreground" : "border-border",
+            )}
+          >
             <button
               type="button"
-              onClick={() => navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`)}
-              className="w-full text-left"
+              onClick={() => selectLead(lead)}
+              className="w-full text-left cursor-pointer"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-medium truncate">{lead.name || "Unknown"}</p>
                   <p className="text-xs text-muted-foreground font-mono">{lead.phone}</p>
                 </div>
-                <BusinessOutcomeBadge outcome={lead.operationalOutcome} />
+                <DispositionBadge bucket={lead.dispositionBucket} label={lead.disposition} />
               </div>
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                <ContactStateBadge state={lead.contactState} />
                 <AttemptStatusBadge status={lead.lastAttemptStatus} answeredEver={lead.answeredEver} />
-                <span className="text-xs text-muted-foreground">{nextWorkLabel(lead)}</span>
+                <span className="text-xs text-muted-foreground">{formatDuration(lead.latestAnsweredDuration)}</span>
               </div>
             </button>
             <div className="mt-3 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
               <Button
                 size="sm"
-                className="h-8 text-xs"
-                onClick={() => onRetry?.(lead.leadId)}
+                variant="outline"
+                className="h-8 text-xs gap-1 cursor-pointer"
+                onClick={() => selectLead(lead)}
+                disabled={(lead.latestCallId ?? lead.latestAnsweredCallId) == null}
               >
-                Call
+                <FileText className="h-3.5 w-3.5" />
+                Transcript
               </Button>
               <RowMenu
                 lead={lead}
                 campaignId={campaignId}
                 onOpen={() => navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`)}
-                onCall={() => lead.latestAnsweredCallId && setCallId(lead.latestAnsweredCallId)}
+                onCall={() => openCall(lead)}
                 onRetry={onRetry}
                 onCancelRetry={onCancelRetry}
               />
@@ -231,7 +260,7 @@ function RowMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={onOpen}>Open lead</DropdownMenuItem>
-        {lead.latestAnsweredCallId != null && (
+        {(lead.latestCallId != null || lead.latestAnsweredCallId != null) && (
           <DropdownMenuItem onClick={onCall} className="gap-2">
             <Phone className="h-3.5 w-3.5" /> Transcript / recording
           </DropdownMenuItem>

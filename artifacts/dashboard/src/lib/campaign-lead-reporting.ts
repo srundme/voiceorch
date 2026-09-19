@@ -29,7 +29,9 @@ export type CampaignReportingLead = {
   lastAttemptStatus: string | null;
   operationalOutcome: string;
   disposition: string | null;
+  dispositionBucket?: string | null;
   callAttempts: number;
+  latestCallId: number | null;
   latestAnsweredCallId: number | null;
   latestAnsweredDuration: number | null;
   retryPending: boolean;
@@ -101,11 +103,13 @@ export type CampaignReportingPayload = {
     retryPending: number;
     progressPct: number;
   }>;
+  dispositions?: Array<{ bucket: string; count: number }>;
 };
 
 export type CampaignReportingFilter = {
   view?: CampaignReportingView | null;
   disposition?: string | null;
+  dispositionBucket?: string | null;
   operationalOutcome?: string | null;
   answeredEver?: boolean | null;
   lifecycleStatus?: string | null;
@@ -120,10 +124,11 @@ export const PRIMARY_LEAD_VIEWS: { id: CampaignReportingView | "all"; label: str
   { id: "all", label: "All" },
   { id: "interested", label: "Interested" },
   { id: "callback", label: "Callback" },
-  { id: "retry", label: "Retry" },
   { id: "answered", label: "Answered" },
+  { id: "voicemail", label: "Voicemail" },
   { id: "no_pickup", label: "No Pickup" },
   { id: "busy", label: "Busy" },
+  { id: "retry", label: "Retry" },
   { id: "technical_failed", label: "Technical Failed" },
 ];
 
@@ -179,6 +184,7 @@ export function parseLeadsSearch(search: string): CampaignReportingFilter {
   return {
     view: isCampaignReportingView(viewRaw) ? viewRaw : null,
     disposition: sp.get("disposition") || null,
+    dispositionBucket: sp.get("dispositionBucket") || null,
     operationalOutcome: sp.get("operationalOutcome") || null,
     answeredEver: answeredRaw === "true" || answeredRaw === "1" ? true
       : answeredRaw === "false" || answeredRaw === "0" ? false
@@ -199,6 +205,7 @@ export function leadsSearchFromFilter(filter: CampaignReportingFilter, tab = "le
   if (tab && tab !== "overview") sp.set("tab", tab);
   if (filter.view) sp.set("view", filter.view);
   if (filter.disposition) sp.set("disposition", filter.disposition);
+  if (filter.dispositionBucket) sp.set("dispositionBucket", filter.dispositionBucket);
   if (filter.operationalOutcome) sp.set("operationalOutcome", filter.operationalOutcome);
   if (filter.answeredEver != null) sp.set("answeredEver", String(filter.answeredEver));
   if (filter.lifecycleStatus) sp.set("lifecycleStatus", filter.lifecycleStatus);
@@ -223,6 +230,7 @@ export function reportingLeadsQuery(filter: CampaignReportingFilter, page: numbe
   const sp = new URLSearchParams();
   if (filter.view) sp.set("view", filter.view);
   if (filter.disposition) sp.set("disposition", filter.disposition);
+  if (filter.dispositionBucket) sp.set("dispositionBucket", filter.dispositionBucket);
   if (filter.operationalOutcome) sp.set("operationalOutcome", filter.operationalOutcome);
   if (filter.answeredEver != null) sp.set("answeredEver", String(filter.answeredEver));
   if (filter.lifecycleStatus) sp.set("lifecycleStatus", filter.lifecycleStatus);
@@ -255,6 +263,11 @@ export function businessOutcomeLabel(outcome: string | null | undefined): string
     case "pending": return "Pending";
     default: return outcome ? outcome.replace(/_/g, " ") : "—";
   }
+}
+
+export function displayDispositionLabel(bucket: string | null | undefined): string {
+  if (!bucket || bucket === "unlabeled") return "Unlabeled";
+  return bucket.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function attemptStatusLabel(status: string | null | undefined): string {

@@ -19,6 +19,10 @@ import {
   callsTable,
 } from "@workspace/db";
 import { SUCCESS_OUTCOMES } from "../lib/campaign-lead-funnel.js";
+import {
+  canonicalDispositionFromLabel,
+  dispositionBucketSql,
+} from "../lib/disposition/canonical.js";
 
 export const CAMPAIGN_REPORTING_VIEWS = [
   "interested",
@@ -60,6 +64,8 @@ export type CampaignReportingLeadInput = {
 export type CampaignReportingFilter = {
   view?: CampaignReportingView | null;
   disposition?: string | null;
+  /** Canonical bucket, e.g. "voicemail" | "no pickup" | "unlabeled". */
+  dispositionBucket?: string | null;
   operationalOutcome?: string | null;
   answeredEver?: boolean | null;
   lifecycleStatus?: string | null;
@@ -87,6 +93,19 @@ export function latestTechnicalStatus(lead: {
 }): string {
   const last = (lead.lastAttemptStatus ?? "").trim();
   return last || lead.callStatus;
+}
+
+/**
+ * What operators should see as the disposition chip.
+ * Technical voicemail wins over an LLM "no pickup" stamp.
+ */
+export function displayDispositionBucket(lead: {
+  disposition?: string | null;
+  lastAttemptStatus?: string | null;
+  callStatus: string;
+}): string {
+  if (latestTechnicalStatus(lead) === "voicemail") return "voicemail";
+  return canonicalDispositionFromLabel(lead.disposition);
 }
 
 export function campaignContactState(lead: {
@@ -210,6 +229,14 @@ export function leadMatchesReportingFilter(
   if (filter.disposition != null && filter.disposition !== "" && lead.disposition !== filter.disposition) {
     return false;
   }
+  if (filter.dispositionBucket != null && filter.dispositionBucket !== "") {
+    const bucket = displayDispositionBucket(lead);
+    if (filter.dispositionBucket === "unlabeled") {
+      if (bucket) return false;
+    } else if (bucket !== filter.dispositionBucket) {
+      return false;
+    }
+  }
   if (filter.operationalOutcome != null && filter.operationalOutcome !== ""
     && lead.operationalOutcome !== filter.operationalOutcome) {
     return false;
@@ -286,8 +313,10 @@ export function projectCampaignLeadReporting(lead: CampaignReportingLeadInput) {
     operationalOutcome: lead.operationalOutcome ?? "pending",
     disposition: lead.disposition ?? null,
     callAttempts: lead.callAttempts,
+    latestCallId: lead.callId ?? null,
     latestAnsweredCallId: lead.answeredEver ? (lead.callId ?? null) : null,
-    latestAnsweredDuration: lead.answeredEver ? (lead.latestAnsweredDuration ?? null) : null,
+    latestAnsweredDuration: lead.latestAnsweredDuration ?? null,
+    dispositionBucket: displayDispositionBucket(lead),
     retryPending: isRetryPending(lead),
     retryScheduledAt: lead.retryScheduledAt ? String(lead.retryScheduledAt) : null,
     retryReason: lead.retryReason ?? null,
@@ -375,6 +404,14 @@ export const campaignReportingSql = {
   slotsUsed: sql`${campaignLeadsTable.callStatus} in ('calling','connected')`,
 };
 
+/** SQL twin of displayDispositionBucket. Voicemail attempt beats a no-pickup label. */
+export function campaignDispositionHeroSql(): SQL<string> {
+  return sql<string>`(case
+    when ${latestTechnicalSql} = 'voicemail' then 'voicemail'
+    else ${dispositionBucketSql(campaignLeadsTable.disposition)}
+  end)`;
+}
+
 const VIEW_SQL: Record<CampaignReportingView, SQL> = {
   interested: campaignReportingSql.interested,
   callback: campaignReportingSql.callbacks,
@@ -395,6 +432,11 @@ export function campaignReportingFilterSql(filter: CampaignReportingFilter): SQL
   const parts: SQL[] = [];
   if (filter.view) parts.push(campaignReportingViewSql(filter.view));
   if (filter.disposition) parts.push(eq(campaignLeadsTable.disposition, filter.disposition));
+  if (filter.dispositionBucket === "unlabeled") {
+    parts.push(sql`coalesce(${campaignDispositionHeroSql()}, '') = ''`);
+  } else if (filter.dispositionBucket) {
+    parts.push(sql`${campaignDispositionHeroSql()} = ${filter.dispositionBucket}`);
+  }
   if (filter.operationalOutcome) {
     parts.push(eq(campaignLeadsTable.operationalOutcome, filter.operationalOutcome));
   }
@@ -473,6 +515,7 @@ export function parseCampaignReportingFilter(query: Record<string, unknown>): Ca
   return {
     view: isCampaignReportingView(viewRaw) ? viewRaw : null,
     disposition: String(query["disposition"] ?? "").trim() || null,
+    dispositionBucket: String(query["dispositionBucket"] ?? "").trim() || null,
     operationalOutcome: String(query["operationalOutcome"] ?? "").trim() || null,
     answeredEver: answeredRaw === "true" || answeredRaw === "1" ? true
       : answeredRaw === "false" || answeredRaw === "0" ? false

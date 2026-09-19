@@ -1,9 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
-import { customFetch } from "@workspace/api-client-react";
 import { EmptyState } from "@/components/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CampaignFunnel } from "@/components/campaign-ops/funnel";
 import { LiveFloor } from "@/components/campaign-ops/live-floor";
+import { DispositionHero } from "@/components/campaign-ops/disposition-hero";
 import { OutcomeChips } from "@/components/campaign-ops/outcome-filters";
 import {
   campaignLeadsHref,
@@ -13,15 +12,6 @@ import {
 import { BATCH_STATUS_MAP } from "@/lib/campaign-status";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
-import { formatDistanceToNow } from "date-fns";
-
-type ActivityItem = {
-  id: string | number;
-  eventType: string;
-  createdAt: string;
-  leadName?: string | null;
-  leadPhone?: string | null;
-};
 
 export function CampaignOverviewPanel({
   campaignId,
@@ -41,18 +31,20 @@ export function CampaignOverviewPanel({
   leadsHref?: (view: CampaignReportingView) => string;
 }) {
   const [, navigate] = useLocation();
+  const liveBusy = ((reporting?.liveFloor.queued ?? 0)
+    + (reporting?.liveFloor.calling ?? 0)
+    + (reporting?.liveFloor.talking ?? 0)
+    + (reporting?.workTechnical.retryPending ?? 0)) > 0;
 
-  function openView(view: CampaignReportingView) {
-    navigate(leadsHref ? leadsHref(view) : campaignLeadsHref(campaignId, { view }));
+  function openLeads(next: { view?: CampaignReportingView; dispositionBucket?: string | null }) {
+    if (next.dispositionBucket) {
+      navigate(`/app/campaigns/${campaignId}?tab=leads&dispositionBucket=${encodeURIComponent(next.dispositionBucket)}`);
+      return;
+    }
+    if (next.view) {
+      navigate(leadsHref ? leadsHref(next.view) : campaignLeadsHref(campaignId, { view: next.view }));
+    }
   }
-
-  const activity = useQuery({
-    queryKey: ["campaign-activity", campaignId],
-    queryFn: () => customFetch<{ items?: ActivityItem[]; events?: ActivityItem[] }>(
-      `/api/campaigns/${campaignId}/activity?limit=12`,
-    ),
-    enabled: campaignId > 0,
-  });
 
   if (error) {
     return (
@@ -64,14 +56,22 @@ export function CampaignOverviewPanel({
     );
   }
 
-  const events = activity.data?.items ?? activity.data?.events ?? [];
-
   return (
-    <div className="space-y-6">
-      <LiveFloor
+    <div className="space-y-5">
+      <DispositionHero
         loading={loading}
-        data={reporting ? { ...reporting.liveFloor, retryPending: reporting.workTechnical.retryPending } : undefined}
+        items={reporting?.dispositions}
+        onSelect={(bucket) => {
+          if (!bucket) navigate(`/app/campaigns/${campaignId}?tab=leads`);
+          else openLeads({ dispositionBucket: bucket });
+        }}
       />
+      {(loading || liveBusy) && (
+        <LiveFloor
+          loading={loading}
+          data={reporting ? { ...reporting.liveFloor, retryPending: reporting.workTechnical.retryPending } : undefined}
+        />
+      )}
       <CampaignFunnel loading={loading} data={reporting?.funnel} rates={reporting?.rates} />
       <OutcomeChips
         loading={loading}
@@ -84,7 +84,7 @@ export function CampaignOverviewPanel({
           voicemail: reporting?.workTechnical.voicemail,
           technical_failed: reporting?.workTechnical.technicalFailed,
         }}
-        onSelect={openView}
+        onSelect={(view) => openLeads({ view })}
       />
       {reporting?.compare?.callbackSources
         && reporting.compare.callbackSources.callbackTables !== reporting.compare.callbackSources.operationalOutcome && (
@@ -95,29 +95,6 @@ export function CampaignOverviewPanel({
       )}
 
       {!hideBatches && <BatchesSection campaignId={campaignId} batches={reporting?.batches} loading={loading} />}
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Recent activity</h2>
-        {activity.isLoading ? (
-          <Skeleton className="h-32 w-full rounded-xl" />
-        ) : events.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No recent events.</p>
-        ) : (
-          <ul className="divide-y divide-border rounded-xl border border-border bg-card">
-            {events.slice(0, 10).map((ev) => (
-              <li key={String(ev.id)} className="px-4 py-2.5 flex items-center justify-between gap-3">
-                <p className="text-xs text-foreground truncate">
-                  {String(ev.eventType).replace(/_/g, " ")}
-                  {ev.leadName ? ` · ${ev.leadName}` : ""}
-                </p>
-                <p className="text-[11px] text-muted-foreground shrink-0">
-                  {formatDistanceToNow(new Date(ev.createdAt), { addSuffix: true })}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </div>
   );
 }

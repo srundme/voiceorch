@@ -3,6 +3,7 @@ import {
   attemptStatusLabel,
   businessOutcomeLabel,
   contactStateLabel,
+  displayDispositionLabel,
   primaryLeadTone,
   type CampaignContactState,
   type CampaignReportingLead,
@@ -53,6 +54,28 @@ export function AttemptStatusBadge({
     return chip("border-destructive/40 bg-destructive/10 text-destructive", label);
   }
   return chip("border-border bg-muted/40 text-muted-foreground", label);
+}
+
+export function DispositionBadge({
+  bucket,
+  label,
+}: {
+  bucket?: string | null;
+  label?: string | null;
+}) {
+  const shown = bucket && bucket !== "unlabeled"
+    ? displayDispositionLabel(bucket)
+    : (label || "Unlabeled");
+  if (bucket === "voicemail") {
+    return chip("border-border bg-foreground text-background", shown);
+  }
+  if (bucket === "interested" || bucket === "callback requested") {
+    return chip("border-border bg-foreground/90 text-background", shown);
+  }
+  if (bucket === "not interested" || bucket === "do not call") {
+    return chip("border-destructive/40 bg-destructive/10 text-destructive", shown);
+  }
+  return chip("border-border bg-muted/50 text-foreground", shown);
 }
 
 export function RetryState({ lead }: { lead: Pick<CampaignReportingLead, "retryPending" | "retryReason" | "retryScheduledAt" | "retryAttemptNumber" | "workState"> }) {

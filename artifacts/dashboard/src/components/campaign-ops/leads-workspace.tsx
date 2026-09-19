@@ -4,6 +4,9 @@ import { Input } from "@/components/ui/input";
 import { TablePagination } from "@/components/table-pagination";
 import { EmptyState } from "@/components/empty-state";
 import { LeadFilterChips, LeadReportingTable } from "@/components/campaign-ops/lead-table";
+import { DispositionHero } from "@/components/campaign-ops/disposition-hero";
+import { CallInspectorPanel } from "@/components/campaign-ops/call-inspector";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import {
   PRIMARY_LEAD_VIEWS,
@@ -36,6 +39,8 @@ export function CampaignLeadsWorkspace({
   const { toast } = useToast();
   const qc = useQueryClient();
   const [page, setPage] = useState(0);
+  const [selectedLead, setSelectedLead] = useState<CampaignReportingLead | null>(null);
+  const [mobileInspector, setMobileInspector] = useState(false);
   const filter = useMemo(() => {
     const parsed = parseLeadsSearch(search);
     return lockedBatchId ? { ...parsed, batchId: lockedBatchId } : parsed;
@@ -52,10 +57,25 @@ export function CampaignLeadsWorkspace({
     enabled: campaignId > 0,
   });
   const summary = useQuery({
-    queryKey: ["campaign-lead-reporting", campaignId],
-    queryFn: () => customFetch<CampaignReportingPayload>(`/api/campaigns/${campaignId}/lead-reporting`),
-    enabled: campaignId > 0 && !lockedBatchId,
+    queryKey: ["campaign-lead-reporting", campaignId, lockedBatchId ?? "all"],
+    queryFn: () => customFetch<CampaignReportingPayload>(
+      lockedBatchId
+        ? `/api/campaigns/${campaignId}/batches/${lockedBatchId}/lead-reporting`
+        : `/api/campaigns/${campaignId}/lead-reporting`,
+    ),
+    enabled: campaignId > 0,
   });
+
+  useEffect(() => {
+    const items = query.data?.items ?? [];
+    if (items.length === 0) {
+      setSelectedLead(null);
+      return;
+    }
+    if (!selectedLead || !items.some((l) => l.leadId === selectedLead.leadId)) {
+      setSelectedLead(items[0] ?? null);
+    }
+  }, [query.data, selectedLead]);
 
   function patchFilter(next: Partial<CampaignReportingFilter>, resetView?: boolean) {
     const merged: CampaignReportingFilter = {
@@ -71,7 +91,7 @@ export function CampaignLeadsWorkspace({
       sp.set("tab", "leads");
     }
     const keys = [
-      "view", "disposition", "operationalOutcome", "answeredEver",
+      "view", "disposition", "dispositionBucket", "operationalOutcome", "answeredEver",
       "lifecycleStatus", "lastAttemptStatus", "retryPending", "batchId", "source", "search",
     ] as const;
     for (const key of keys) {
@@ -109,12 +129,38 @@ export function CampaignLeadsWorkspace({
     }
   }
 
-  const callbackNote = filter.view === "callback";
+  function inspectLead(lead: CampaignReportingLead) {
+    setSelectedLead(lead);
+    if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1280px)").matches) {
+      setMobileInspector(true);
+    }
+  }
+
+  const funnel = summary.data?.funnel;
+  const rates = summary.data?.rates;
 
   return (
-    <div className="space-y-4 min-w-0 max-w-full">
+    <div className="flex flex-col gap-3 min-h-0 flex-1 max-w-full">
+      {funnel && (
+        <p className="text-xs text-muted-foreground tabular-nums">
+          Imported {funnel.imported} · Attempted {funnel.attempted} · Answered {funnel.answered}
+          {rates ? ` · Answer rate ${rates.answerRatePct}%` : ""}
+        </p>
+      )}
+
+      <DispositionHero
+        loading={summary.isLoading}
+        items={summary.data?.dispositions}
+        active={filter.dispositionBucket ?? null}
+        onSelect={(bucket) => patchFilter({ dispositionBucket: bucket, view: null }, true)}
+      />
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold">Leads</h2>
+        <LeadFilterChips
+          views={PRIMARY_LEAD_VIEWS}
+          active={filter.view ?? "all"}
+          onSelect={(id) => patchFilter({ view: id === "all" ? null : id, dispositionBucket: null })}
+        />
         <Input
           value={filter.search ?? ""}
           onChange={(e) => patchFilter({ search: e.target.value || null })}
@@ -123,112 +169,6 @@ export function CampaignLeadsWorkspace({
         />
       </div>
 
-      <LeadFilterChips
-        views={PRIMARY_LEAD_VIEWS}
-        active={filter.view ?? "all"}
-        onSelect={(id) => patchFilter({ view: id === "all" ? null : id })}
-      />
-
-      <div className="flex flex-wrap gap-2">
-        <SecondarySelect
-          label="Lifecycle"
-          value={filter.lifecycleStatus ?? ""}
-          options={[
-            ["", "All"],
-            ["calling", "Calling"],
-            ["connected", "Talking"],
-            ["pending", "Pending"],
-            ["completed", "Completed"],
-            ["failed", "Failed (raw)"],
-          ]}
-          onChange={(v) => patchFilter({ lifecycleStatus: v || null })}
-        />
-        <SecondarySelect
-          label="Latest attempt"
-          value={filter.lastAttemptStatus ?? ""}
-          options={[
-            ["", "All"],
-            ["completed", "Completed"],
-            ["caller_hangup", "Caller hangup"],
-            ["busy", "Busy"],
-            ["no_pickup", "No pickup"],
-            ["voicemail", "Voicemail"],
-            ["dropped", "Dropped"],
-            ["failed", "Failed"],
-          ]}
-          onChange={(v) => patchFilter({ lastAttemptStatus: v || null })}
-        />
-        <SecondarySelect
-          label="Outcome"
-          value={filter.operationalOutcome ?? ""}
-          options={[
-            ["", "All"],
-            ["interest_confirmed", "Interested"],
-            ["callback_requested", "Callback"],
-            ["booking_created", "Booked"],
-            ["transfer_completed", "Transferred"],
-            ["no_contact", "No contact"],
-            ["not_interested", "Not interested"],
-            ["dnc_blocked", "DNC"],
-          ]}
-          onChange={(v) => patchFilter({ operationalOutcome: v || null })}
-        />
-        <SecondarySelect
-          label="Answered ever"
-          value={filter.answeredEver == null ? "" : String(filter.answeredEver)}
-          options={[["", "All"], ["true", "Yes"], ["false", "No"]]}
-          onChange={(v) => patchFilter({ answeredEver: v === "" ? null : v === "true" })}
-        />
-        <SecondarySelect
-          label="Retry"
-          value={filter.retryPending == null ? "" : String(filter.retryPending)}
-          options={[["", "All"], ["true", "Pending"], ["false", "None"]]}
-          onChange={(v) => patchFilter({ retryPending: v === "" ? null : v === "true" })}
-        />
-        <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          Disposition
-          <Input
-            value={filter.disposition ?? ""}
-            onChange={(e) => patchFilter({ disposition: e.target.value || null })}
-            placeholder="Exact label"
-            className="h-8 w-36 text-xs"
-          />
-        </label>
-        <SecondarySelect
-          label="Source"
-          value={filter.source ?? ""}
-          options={[
-            ["", "All"],
-            ["csv", "CSV"],
-            ["crm", "CRM"],
-            ["meta_ads", "Meta Ads"],
-            ["google_sheets", "Google Sheets"],
-            ["webhook", "Webhook"],
-          ]}
-          onChange={(v) => patchFilter({ source: v || null })}
-        />
-        {!lockedBatchId && (
-          <SecondarySelect
-            label="Batch"
-            value={filter.batchId ? String(filter.batchId) : ""}
-            options={[
-              ["", "All batches"],
-              ...(summary.data?.batches ?? [])
-                .filter((b) => b.batchId != null)
-                .map((b) => [String(b.batchId), b.name] as [string, string]),
-            ]}
-            onChange={(v) => patchFilter({ batchId: v ? Number(v) : null })}
-          />
-        )}
-      </div>
-
-      {callbackNote && (
-        <p className="text-[11px] text-muted-foreground">
-          This list is <span className="text-foreground">operational_outcome = callback_requested</span>.
-          A separate callbacks table may include extra rows; those counts are shown on Overview when they differ.
-        </p>
-      )}
-
       {query.isError && !query.data ? (
         <EmptyState
           variant="panel"
@@ -236,56 +176,46 @@ export function CampaignLeadsWorkspace({
           action={{ label: "Retry", onClick: () => void query.refetch() }}
         />
       ) : (
-        <LeadReportingTable
-          campaignId={campaignId}
-          items={query.data?.items ?? []}
-          total={query.data?.total ?? 0}
-          loading={query.isLoading}
-          error={query.isError ? "The reporting API could not be reached." : null}
-          emptyView={filter.view}
-          onRetry={retryLead}
-          onCancelRetry={cancelRetry}
-          onRefresh={() => void query.refetch()}
-        />
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)] gap-3 min-h-0 flex-1">
+          <div className="min-w-0 min-h-0 overflow-auto">
+            <LeadReportingTable
+              campaignId={campaignId}
+              items={query.data?.items ?? []}
+              total={query.data?.total ?? 0}
+              loading={query.isLoading}
+              error={query.isError ? "The reporting API could not be reached." : null}
+              emptyView={filter.view}
+              selectedLeadId={selectedLead?.leadId}
+              onSelectLead={inspectLead}
+              onRetry={retryLead}
+              onCancelRetry={cancelRetry}
+              onRefresh={() => void query.refetch()}
+            />
+            {(query.data?.total ?? 0) > 50 && (
+              <TablePagination
+                page={page + 1}
+                totalPages={Math.max(1, Math.ceil((query.data?.total ?? 0) / 50))}
+                pageSize={50}
+                totalItems={query.data?.total ?? 0}
+                onPageChange={(p) => setPage(Math.max(0, p - 1))}
+                onPageSizeChange={() => undefined}
+              />
+            )}
+          </div>
+          <div className="hidden xl:block min-h-0 h-full">
+            <CallInspectorPanel campaignId={campaignId} lead={selectedLead} />
+          </div>
+        </div>
       )}
 
-      {(query.data?.total ?? 0) > 50 && (
-        <TablePagination
-          page={page + 1}
-          totalPages={Math.max(1, Math.ceil((query.data?.total ?? 0) / 50))}
-          pageSize={50}
-          totalItems={query.data?.total ?? 0}
-          onPageChange={(p) => setPage(Math.max(0, p - 1))}
-          onPageSizeChange={() => undefined}
-        />
-      )}
+      <Sheet open={mobileInspector} onOpenChange={setMobileInspector}>
+        <SheetContent side="right" className="w-[min(100vw,420px)] sm:max-w-none p-0">
+          <SheetTitle className="sr-only">Call transcript</SheetTitle>
+          <div className="h-full p-3">
+            <CallInspectorPanel campaignId={campaignId} lead={selectedLead} />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
-  );
-}
-
-function SecondarySelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: Array<[string, string]>;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-      {label}
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground"
-      >
-        {options.map(([v, l]) => (
-          <option key={v} value={v}>{l}</option>
-        ))}
-      </select>
-    </label>
   );
 }

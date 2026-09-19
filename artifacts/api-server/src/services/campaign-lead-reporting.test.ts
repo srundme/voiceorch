@@ -8,6 +8,7 @@ import {
   campaignReportingViewSql,
   campaignWorkState,
   countReportingMetric,
+  displayDispositionBucket,
   isAnswered,
   isBusy,
   isCallingNow,
@@ -238,6 +239,21 @@ describe("no-pickup / busy / voicemail / technical failed", () => {
     expect(countReportingMetric([row], "voicemail")).toBe(1);
     expect(countReportingMetric([row], "answered")).toBe(1);
   });
+
+  it("treats a voicemail attempt with an LLM no-pickup stamp as voicemail", () => {
+    const row = lead({
+      id: 5,
+      answeredEver: true,
+      callStatus: "voicemail",
+      lastAttemptStatus: "voicemail",
+      disposition: "outcome: no pickup",
+      callAttempts: 1,
+    });
+    expect(displayDispositionBucket(row)).toBe("voicemail");
+    expect(leadMatchesReportingFilter(row, { dispositionBucket: "voicemail" })).toBe(true);
+    expect(leadMatchesReportingFilter(row, { dispositionBucket: "no pickup" })).toBe(false);
+    expect(countReportingMetric([row], "no_pickup")).toBe(0);
+  });
 });
 
 describe("rates and work/contact state", () => {
@@ -278,6 +294,7 @@ describe("filter contract", () => {
     })).toEqual({
       view: "interested",
       disposition: null,
+      dispositionBucket: null,
       operationalOutcome: null,
       answeredEver: true,
       lifecycleStatus: "failed",

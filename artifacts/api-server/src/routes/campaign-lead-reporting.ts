@@ -31,6 +31,7 @@ import {
   campaignReportingLeadProjectionSelect,
   campaignReportingRates,
   campaignReportingSql,
+  campaignDispositionHeroSql,
   parseCampaignReportingFilter,
   projectCampaignLeadReporting,
 } from "../services/campaign-lead-reporting.js";
@@ -142,6 +143,32 @@ async function loadReporting(opts: {
     .where(and(where, campaignReportingSql.historicalAnsweredFailed))
     .groupBy(campaignLeadsTable.lastAttemptStatus, campaignLeadsTable.operationalOutcome);
 
+  const dispositionHero = campaignDispositionHeroSql();
+  const dispositionRows = await db.select({
+    bucket: dispositionHero,
+    n: count(),
+  }).from(campaignLeadsTable)
+    .where(where)
+    .groupBy(dispositionHero);
+  const dispositions = dispositionRows
+    .map((r) => ({
+      bucket: (r.bucket ?? "").trim() || "unlabeled",
+      count: Number(r.n) || 0,
+    }))
+    .filter((r) => r.count > 0)
+    .sort((a, b) => {
+      const rank = (bucket: string) => {
+        if (bucket === "interested") return 0;
+        if (bucket === "callback requested") return 1;
+        if (bucket === "voicemail") return 2;
+        if (bucket === "not interested") return 3;
+        if (bucket === "unlabeled") return 99;
+        return 10;
+      };
+      const d = rank(a.bucket) - rank(b.bucket);
+      return d !== 0 ? d : b.count - a.count;
+    });
+
   const imported = canonical?.imported ?? 0;
   const attempted = canonical?.attempted ?? 0;
   const answered = canonical?.answered ?? 0;
@@ -207,6 +234,7 @@ async function loadReporting(opts: {
       },
     },
     batches,
+    dispositions,
     historicalAnsweredFailed: {
       count: canonical?.historicalAnsweredFailed ?? 0,
       landing: landing.map((r) => ({

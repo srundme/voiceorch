@@ -1,17 +1,13 @@
 /**
- * Batch Workspace — Phase 4
- * Transforms a batch from "import container" → Operational Command Center.
- * Layout: Header → KPI Strip → Tabs (Overview | Leads)
- * Keeps existing controls (Start / Pause / Stop / Redial) intact.
+ * Batch workspace: header + disposition/leads split (transcript on the right).
  */
 
-import { useState, useEffect, useMemo, useRef } from "react";
-import { TablePagination } from "@/components/table-pagination";
-import { useRoute, Link } from "wouter";
+import { useState, useEffect, useRef } from "react";
+import { useRoute } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useUpdateCampaignBatch, useRedialBatchNoPickup,
-  useRetryCampaignLead, useGetBatchAnalytics,
+  useGetBatchAnalytics,
   getListCampaignBatchesQueryKey,
   getListBatchLeadsQueryKey,
   customFetch,
@@ -19,33 +15,22 @@ import {
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DetailNav } from "@/components/detail-nav";
-import {
-  ArrowLeft, Play, Pause, Square, RotateCcw, ChevronRight,
-  Users, Phone, PhoneCall, ArrowRightLeft, XCircle,
-  Voicemail, PhoneOff, PhoneMissed,
-  Eye, Database, RefreshCw, DollarSign,
-  User, Search, X, CheckCircle2, Clock, Pencil, Check,
-  Info, ChevronDown, FileDown, Package, Lock, BarChart2, Maximize2,
-} from "lucide-react";
-import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DetailNav } from "@/components/detail-nav";
+import {
+  Play, Pause, Square, RotateCcw,
+  Phone, Database, User, CheckCircle2, Clock, Pencil, FileDown,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getIrdaiBlockedError } from "@/lib/irdai-block";
-import { getExecutionId } from "@/lib/execution-id";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNow, format, parseISO } from "date-fns";
-import { BATCH_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
-import { CallDetailDrawer } from "@/components/call-detail-drawer";
-import { CampaignOverviewPanel } from "@/components/campaign-ops/overview";
+import { BATCH_STATUS_MAP } from "@/lib/campaign-status";
 import { CampaignLeadsWorkspace } from "@/components/campaign-ops/leads-workspace";
 import { CampaignExecutionStrip } from "@/components/campaign-ops/campaign-header";
-import { batchLeadsHref, type CampaignReportingPayload } from "@/lib/campaign-lead-reporting";
+import { type CampaignReportingPayload } from "@/lib/campaign-lead-reporting";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -245,44 +230,6 @@ function ScheduledInlineChip({
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type BatchWorkspaceKpis = {
-  total: number; connected: number; failed: number; busy: number; noPickup: number; pending: number;
-  callbacks: number; incoming: number; bookings: number; transfers: number;
-  voicemail: number; successRate: number; transferred: number;
-  /**
-   * Lead counts per agent disposition, keyed by the canonical bucket the API
-   * derives from the taxonomy plus what leads actually carry.
-   */
-  dispositions?: { key: string; count: number }[];
-  /** Leads with no agent disposition, so the row reconciles with `total`. */
-  undispositioned?: number;
-};
-
-type LeadAttemptCall = { attemptNumber: number; callId: number };
-
-type BatchWorkspaceLead = {
-  id: number; name: string | null; phone: string;
-  callStatus: string; operationalOutcome: string;
-  disposition: string | null; callAttempts: number;
-  lastAttemptAt: string | null; nextRetryAt: string | null; callId: number | null; createdAt: string;
-  durationSeconds: number | null; costCents: number | null; executionId: string | null; notes: string | null;
-  callback: { status: string; callbackAt: string | null } | null;
-  booking: { meetingTime: string | null; meetingStatus: string; meetingLink: string | null } | null;
-  transfer: { status: string; transferTo: string } | null;
-  attempts?: LeadAttemptCall[];
-};
-
-function leadAttemptCalls(lead: BatchWorkspaceLead): LeadAttemptCall[] {
-  const fromApi = (lead.attempts ?? []).filter((a) => a.callId > 0);
-  if (fromApi.length > 0) {
-    return [...fromApi].sort((a, b) => a.attemptNumber - b.attemptNumber || a.callId - b.callId);
-  }
-  if (lead.callId) return [{ attemptNumber: 1, callId: lead.callId }];
-  return [];
-}
-
-type BatchLeadsPage = { items: BatchWorkspaceLead[]; total: number; page: number; limit: number };
-
 type BatchHeader = {
   batch: {
     id: number; name: string; status: string; leadSource: string;
@@ -296,18 +243,6 @@ type BatchHeader = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function fmtDuration(s: number | null | undefined): string {
-  if (!s) return "—";
-  const m = Math.floor(s / 60);
-  return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
-}
-
-function fmtRelative(iso: string): string {
-  return formatDistanceToNow(new Date(iso), { addSuffix: true });
-}
-
-// ── BatchStatusBadge ──────────────────────────────────────────────────────────
 
 function BatchStatusBadge({ status }: { status: string }) {
   const cfg = BATCH_STATUS_MAP[status] ?? { label: status, cls: "bg-muted/50 text-muted-foreground border-border" };
@@ -558,16 +493,7 @@ export default function BatchWorkspacePage() {
         />
       )}
 
-      <div className="flex-1 overflow-auto min-h-0 min-w-0 px-4 sm:px-6 py-4 space-y-5">
-        <CampaignOverviewPanel
-          campaignId={campaignId}
-          reporting={reporting}
-          loading={reportingQuery.isLoading}
-          error={reportingQuery.isError}
-          onRetry={() => void reportingQuery.refetch()}
-          hideBatches
-          leadsHref={(view) => batchLeadsHref(campaignId, batchId, { view })}
-        />
+      <div className="flex-1 overflow-hidden min-h-0 min-w-0 px-4 sm:px-6 py-3 flex flex-col">
         <CampaignLeadsWorkspace campaignId={campaignId} lockedBatchId={batchId} />
       </div>
 
