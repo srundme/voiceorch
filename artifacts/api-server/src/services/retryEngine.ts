@@ -124,6 +124,11 @@ export async function processRetries(): Promise<void> {
         continue;
       }
 
+      if (lead.callStatus === "connected") {
+        // Still a live answered session — leave the retry pending; do not fire.
+        continue;
+      }
+
       if (lead.callStatus === "calling" || lead.callStatus === "completed") {
         await db.update(callRetriesTable)
           .set({ status: "cancelled" })
@@ -202,14 +207,20 @@ export async function processRetries(): Promise<void> {
  * Schedule an automatic retry for a lead.
  * Respects campaign.maxAttempts and campaign.retryDelayMinutes.
  */
-export async function scheduleRetry(opts: {
+export type ScheduleRetryResult = {
+  scheduled: boolean;
+  alreadyPending: boolean;
+  retryId: number | null;
+};
+
+export async function scheduleRetryResult(opts: {
   leadId: number;
   campaignId: number;
   currentAttempts: number;
   maxAttempts: number;
   retryDelayMinutes: number;
   reason: string;
-}): Promise<boolean> {
+}): Promise<ScheduleRetryResult> {
   const { leadId, campaignId, currentAttempts, maxAttempts, retryDelayMinutes, reason } = opts;
 
   // Use a fresh, authoritative attempts value so every caller (webhook terminal
@@ -223,7 +234,7 @@ export async function scheduleRetry(opts: {
   const effectiveAttempts = Math.max(currentAttempts, leadRow?.callAttempts ?? 0);
 
   if (effectiveAttempts >= maxAttempts) {
-    return false;
+    return { scheduled: false, alreadyPending: false, retryId: null };
   }
 
   // Idempotent per lead: if a pending retry already exists for this lead, do not
@@ -239,21 +250,21 @@ export async function scheduleRetry(opts: {
     ))
     .limit(1);
   if (existing) {
-    logger.info({ leadId, campaignId }, "Retry already pending — skipping duplicate schedule");
-    return false;
+    logger.info({ leadId, campaignId, retryId: existing.id }, "Retry already pending — skipping duplicate schedule");
+    return { scheduled: false, alreadyPending: true, retryId: existing.id };
   }
 
   const nextAttempt = effectiveAttempts + 1;
   const scheduledAt = new Date(Date.now() + retryDelayMinutes * 60 * 1000);
 
-  await db.insert(callRetriesTable).values({
+  const [inserted] = await db.insert(callRetriesTable).values({
     leadId,
     campaignId,
     attemptNumber: nextAttempt,
     scheduledAt,
     status:        "pending",
     reason,
-  });
+  }).returning({ id: callRetriesTable.id });
 
   await db.insert(leadTimelineTable).values({
     leadId,
@@ -262,6 +273,52 @@ export async function scheduleRetry(opts: {
     data:      { attemptNumber: nextAttempt, scheduledAt: scheduledAt.toISOString(), reason, retryDelayMinutes },
   });
 
-  logger.info({ leadId, campaignId, nextAttempt, scheduledAt }, "Retry scheduled");
-  return true;
+  logger.info({ leadId, campaignId, nextAttempt, scheduledAt, retryId: inserted?.id ?? null }, "Retry scheduled");
+  return { scheduled: true, alreadyPending: false, retryId: inserted?.id ?? null };
+}
+
+/**
+ * Schedule an automatic retry for a lead.
+ * Respects campaign.maxAttempts and campaign.retryDelayMinutes.
+ * Returns true only when a *new* retry row was inserted.
+ */
+export async function scheduleRetry(opts: {
+  leadId: number;
+  campaignId: number;
+  currentAttempts: number;
+  maxAttempts: number;
+  retryDelayMinutes: number;
+  reason: string;
+}): Promise<boolean> {
+  const result = await scheduleRetryResult(opts);
+  return result.scheduled;
+}
+
+/** Cancel pending *dropped* campaign retries. Never touches scheduled_callbacks. */
+export async function cancelPendingDroppedRetries(opts: {
+  leadId: number;
+  reason: string;
+}): Promise<{ cancelledIds: number[] }> {
+  const pending = await db
+    .select({ id: callRetriesTable.id })
+    .from(callRetriesTable)
+    .where(and(
+      eq(callRetriesTable.leadId, opts.leadId),
+      eq(callRetriesTable.status, "pending"),
+      eq(callRetriesTable.reason, "dropped"),
+    ));
+  const cancelledIds = pending.map((r) => r.id);
+  if (cancelledIds.length === 0) return { cancelledIds };
+  await db.update(callRetriesTable)
+    .set({ status: "cancelled" })
+    .where(and(
+      eq(callRetriesTable.leadId, opts.leadId),
+      eq(callRetriesTable.status, "pending"),
+      eq(callRetriesTable.reason, "dropped"),
+    ));
+  logger.info(
+    { leadId: opts.leadId, cancelledIds, reason: opts.reason },
+    "Cancelled pending dropped retry after disposition",
+  );
+  return { cancelledIds };
 }

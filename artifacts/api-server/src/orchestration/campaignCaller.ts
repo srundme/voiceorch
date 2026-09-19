@@ -17,7 +17,8 @@ import { logger } from "../lib/logger.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
 import { isOnDnc } from "../lib/dnc-check.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
-import { scheduleRetry, resolveRetryConfig } from "../services/retryEngine.js";
+import { scheduleRetry, scheduleRetryResult, resolveRetryConfig } from "../services/retryEngine.js";
+import { isCampaignLeadStateV2Writer, v2ParkNeverAnsweredFailed } from "../services/campaign-lead-state-v2.js";
 import { syncSheetAutoCallDialStatus } from "../services/sheet-auto-call-status.js";
 import { createHmac } from "node:crypto";
 import { APP_SECRET } from "../lib/app-secret.js";
@@ -220,8 +221,16 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
     // Free any pre-claimed 'calling' slot so rolling refill is not starved and
     // the lead settles into a terminal (exhausted) state instead of stuck.
     if (isPreClaimed) {
+      const v2Writer = isCampaignLeadStateV2Writer(campaign.id);
+      const parked = v2Writer && lead.answeredEver
+        ? "completed"
+        : "failed";
       await db.update(campaignLeadsTable)
-        .set({ callStatus: "failed", notes: `Max attempts (${maxAttempts}) reached` })
+        .set({
+          callStatus: parked,
+          notes: `Max attempts (${maxAttempts}) reached`,
+          lastAttemptStatus: "failed",
+        })
         .where(and(
           eq(campaignLeadsTable.id, lead.id),
           eq(campaignLeadsTable.callStatus, "calling"),
@@ -430,23 +439,49 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
   } catch (err) {
     logger.error({ leadId: lead.id, campaignId: campaign.id, err }, "Campaign call failed");
     const errMsg = err instanceof Error ? err.message : String(err);
-    await db.update(campaignLeadsTable)
-      .set({ callStatus: "failed", notes: errMsg })
-      .where(eq(campaignLeadsTable.id, lead.id));
+    const v2Writer = isCampaignLeadStateV2Writer(campaign.id);
+    if (v2Writer && lead.answeredEver) {
+      let retryOk = false;
+      try {
+        const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(lead.batchId, campaign);
+        const result = await scheduleRetryResult({
+          leadId:            lead.id,
+          campaignId:        campaign.id,
+          currentAttempts:   newAttempts,
+          maxAttempts,
+          retryDelayMinutes,
+          reason:            "failed",
+        });
+        retryOk = result.scheduled || result.alreadyPending;
+      } catch (retryErr) {
+        logger.error({ leadId: lead.id, retryErr }, "V2 dial-error retry insert failed — parking completed");
+      }
+      const parked = v2ParkNeverAnsweredFailed({
+        answeredEver: true,
+        mappedStatus: "failed",
+        retryOk,
+      });
+      await db.update(campaignLeadsTable)
+        .set({ callStatus: parked, notes: errMsg, lastAttemptStatus: "dial_error" })
+        .where(eq(campaignLeadsTable.id, lead.id));
+    } else {
+      await db.update(campaignLeadsTable)
+        .set({ callStatus: "failed", notes: errMsg, lastAttemptStatus: "dial_error" })
+        .where(eq(campaignLeadsTable.id, lead.id));
+
+      const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(lead.batchId, campaign);
+      await scheduleRetry({
+        leadId:            lead.id,
+        campaignId:        campaign.id,
+        currentAttempts:   newAttempts,
+        maxAttempts,
+        retryDelayMinutes,
+        reason:            "failed",
+      });
+    }
 
     await addTimelineEvent(lead.id, campaign.id, "call_failed", { reason: errMsg, attempt: newAttempts });
     await syncSheetAutoCallDialStatus(lead, { status: "failed", error: errMsg, bumpFailed: true });
-
-    // Schedule auto-retry if attempts remaining
-    const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(lead.batchId, campaign);
-    await scheduleRetry({
-      leadId:            lead.id,
-      campaignId:        campaign.id,
-      currentAttempts:   newAttempts,
-      maxAttempts,
-      retryDelayMinutes,
-      reason:            "failed",
-    });
   }
 }
 
@@ -472,11 +507,12 @@ export async function recordCallExecution(opts: {
         batchId:       opts.batchId,
         callId:        opts.callId,
         attemptNumber: opts.attemptNumber,
+        outcome:       "answered",
       });
     }
 
     await tx.update(campaignLeadsTable)
-      .set({ callId: opts.callId })
+      .set({ callId: opts.callId, answeredEver: true })
       .where(eq(campaignLeadsTable.id, opts.leadId));
   });
 }

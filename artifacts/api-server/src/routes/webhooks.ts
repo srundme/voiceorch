@@ -12,11 +12,17 @@ import { decryptKey } from "../lib/crypto.js";
 import { validateTwilioSignature, validatePlivoSignature } from "../lib/webhook-signature.js";
 import { logger } from "../lib/logger.js";
 import { scheduleNextRedial, scheduleNoAnswerRedial, cancelPendingRedials } from "../services/autoRedial.js";
-import { scheduleRetry, resolveRetryConfig } from "../services/retryEngine.js";
+import { scheduleRetry, scheduleRetryResult, resolveRetryConfig } from "../services/retryEngine.js";
 import { refillCampaignConcurrency, refillCampaignForLead, reconcileCampaignBatches } from "../services/batchScheduler.js";
 import { computeOperationalOutcome, setOperationalOutcome } from "../services/operational-outcome.js";
 import { APP_SECRET } from "../lib/app-secret.js";
 import { buildByonOtpRecordXml } from "../services/whatsapp/byon-otp-xml.js";
+import {
+  isCampaignLeadStateV2Writer,
+  lastAttemptStatusFromCarrierTerminal,
+  shouldDeferCarrierTerminalOnAnsweredLead,
+  v2ParkNeverAnsweredFailed,
+} from "../services/campaign-lead-state-v2.js";
 
 const router: IRouter = Router();
 
@@ -176,8 +182,68 @@ async function handleCampaignLeadTerminalStatus(opts: {
     leadStatus = mapped;
   }
 
+  const v2Writer = isCampaignLeadStateV2Writer(lead.campaignId);
+  const answeredEver = lead.answeredEver === true;
+
+  // V2: an answered live session is owned by endSession. Do not map a racing
+  // carrier failed/busy/no_pickup onto call_status. Always write last_attempt_status.
+  if (shouldDeferCarrierTerminalOnAnsweredLead({
+    v2: v2Writer,
+    answeredEver,
+    callStatus: lead.callStatus,
+  })) {
+    await db.update(campaignLeadsTable)
+      .set({ lastAttemptStatus: lastAttemptStatusFromCarrierTerminal(leadStatus) })
+      .where(eq(campaignLeadsTable.id, campaignLeadId));
+    logger.info(
+      { campaignLeadId, rawCallStatus, leadStatus },
+      "Campaign lead terminal status: answered connected lead — deferring call_status to endSession",
+    );
+    return;
+  }
+
+  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, lead.campaignId));
+  let retryScheduled = false;
+  let retryOk = false;
+  if (campaign) {
+    const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(lead.batchId, campaign);
+    if (v2Writer && answeredEver && leadStatus === "failed") {
+      try {
+        const result = await scheduleRetryResult({
+          leadId:            campaignLeadId,
+          campaignId:        lead.campaignId,
+          currentAttempts:   lead.callAttempts ?? 0,
+          maxAttempts,
+          retryDelayMinutes,
+          reason:            "failed",
+        });
+        retryOk = result.scheduled || result.alreadyPending;
+        retryScheduled = result.scheduled;
+      } catch (err) {
+        logger.error({ campaignLeadId, err }, "V2 webhook retry insert failed — parking completed");
+        retryOk = false;
+      }
+    } else {
+      retryScheduled = await scheduleRetry({
+        leadId:            campaignLeadId,
+        campaignId:        lead.campaignId,
+        currentAttempts:   lead.callAttempts ?? 0,
+        maxAttempts,
+        retryDelayMinutes,
+        reason:            leadStatus,
+      });
+    }
+  }
+
+  const parkedStatus = v2Writer
+    ? v2ParkNeverAnsweredFailed({ answeredEver, mappedStatus: leadStatus, retryOk })
+    : leadStatus;
+
   await db.update(campaignLeadsTable)
-    .set({ callStatus: leadStatus })
+    .set({
+      callStatus: parkedStatus,
+      lastAttemptStatus: lastAttemptStatusFromCarrierTerminal(leadStatus),
+    })
     .where(eq(campaignLeadsTable.id, campaignLeadId));
 
   // Mirror the terminal status onto the calls table row so the Calls Log shows
@@ -197,23 +263,8 @@ async function handleCampaignLeadTerminalStatus(opts: {
     leadId:     campaignLeadId,
     campaignId: lead.campaignId,
     eventType:  "call_ended",
-    data:       { callStatus: rawCallStatus, leadStatus },
+    data:       { callStatus: rawCallStatus, leadStatus, parkedStatus },
   });
-
-  // Schedule a retry if the campaign allows more attempts
-  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, lead.campaignId));
-  let retryScheduled = false;
-  if (campaign) {
-    const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(lead.batchId, campaign);
-    retryScheduled = await scheduleRetry({
-      leadId:            campaignLeadId,
-      campaignId:        lead.campaignId,
-      currentAttempts:   lead.callAttempts ?? 0,
-      maxAttempts,
-      retryDelayMinutes,
-      reason:            leadStatus,
-    });
-  }
 
   // Compute and persist operational outcome for no-contact / failed cases.
   // If a retry was scheduled the outcome stays "pending"; once attempts are
@@ -221,15 +272,16 @@ async function handleCampaignLeadTerminalStatus(opts: {
   try {
     const maxAttemptsReached = !retryScheduled && campaign != null;
     const outcome = computeOperationalOutcome({
-      callStatus:           leadStatus,
-      disposition:          null,
+      callStatus:           parkedStatus,
+      disposition:          v2Writer ? lead.disposition : null,
       hasBooking:           false,
       hasCompletedTransfer: false,
       hasPendingCallback:   false,
       maxAttemptsReached,
       isDncBlocked:         false,
     });
-    if (outcome !== "pending") {
+    const skipFailed = v2Writer && answeredEver && outcome === "failed";
+    if (outcome !== "pending" && !skipFailed) {
       await setOperationalOutcome(db, campaignLeadId, lead.campaignId, outcome);
     }
   } catch (outcomeErr) {

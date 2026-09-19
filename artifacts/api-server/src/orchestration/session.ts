@@ -91,6 +91,19 @@ import {
   serializeAgentWebhookBody,
 } from "../lib/webhook-payload-template.js";
 import { computeOperationalOutcome, setOperationalOutcome } from "../services/operational-outcome.js";
+import {
+  CAMPAIGN_LEAD_STATE_V2_EVENT,
+  buildCampaignLeadStateV2CanaryLog,
+  buildCampaignLeadStateV2Shadow,
+  classifyCampaignCallEnd,
+  classifyCampaignHangupLegacy,
+  inferExpectedDisconnect,
+  isCampaignLeadStateV2Writer,
+  resolveCallEndedReason,
+  shouldLogCampaignLeadStateV2Canary,
+  shouldLogCampaignLeadStateV2Shadow,
+} from "../services/campaign-lead-state-v2.js";
+import { applyV2AnsweredHangup, recordCallExecutionOutcome } from "../services/campaign-attempt-status.js";
 import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
 import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
@@ -1805,7 +1818,7 @@ export async function createSession(params: {
   // ── Mark campaign lead as connected + record call execution row ───────────────
   if (params.campaignLeadId && campaignLeadResult) {
     void db.update(campaignLeadsTable)
-      .set({ callStatus: "connected" })
+      .set({ callStatus: "connected", answeredEver: true, lastAttemptStatus: "answered" })
       .where(eq(campaignLeadsTable.id, params.campaignLeadId))
       .catch((err) => {
         logger.warn({ campaignLeadId: params.campaignLeadId, err }, "Failed to mark campaign lead connected");
@@ -1821,7 +1834,7 @@ export async function createSession(params: {
     });
   } else if (params.campaignLeadId) {
     void db.update(campaignLeadsTable)
-      .set({ callStatus: "connected" })
+      .set({ callStatus: "connected", answeredEver: true, lastAttemptStatus: "answered" })
       .where(eq(campaignLeadsTable.id, params.campaignLeadId))
       .catch((err) => {
         logger.warn({ campaignLeadId: params.campaignLeadId, err }, "Failed to mark campaign lead connected");
@@ -3196,21 +3209,150 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       //   update status → schedule retry → set outcome (using !retryScheduled)
       //   → refill/reconcile (which keeps the batch open while a retry is pending).
       void (async () => {
+        const { lastUser: hangupLastUser } = session.pipeline.getLastTurnTexts();
+        const callEndedReason = resolveCallEndedReason({
+          reason,
+          wasTransferred: session.wasTransferred,
+          endReasonHint: session.pipeline.endReasonHint,
+          naturalEndTriggered: session.naturalEndTriggered,
+          turnCount: metricsAcc.count,
+          durationSeconds,
+          direction: "outbound",
+        });
+        const expectedDisconnect = inferExpectedDisconnect(callEndedReason);
+        let answeredEver = true;
+        let existingDisposition: string | null = null;
+        let previousCallStatus: string | null = "connected";
+        let campaignId: number | null = null;
+        let batchId: number | null = null;
+        let callAttempts = 0;
+        try {
+          const [leadRow] = await db
+            .select({
+              answeredEver: campaignLeadsTable.answeredEver,
+              disposition: campaignLeadsTable.disposition,
+              callStatus: campaignLeadsTable.callStatus,
+              campaignId: campaignLeadsTable.campaignId,
+              batchId: campaignLeadsTable.batchId,
+              callAttempts: campaignLeadsTable.callAttempts,
+            })
+            .from(campaignLeadsTable)
+            .where(eq(campaignLeadsTable.id, leadId))
+            .limit(1);
+          answeredEver = true;
+          existingDisposition = leadRow?.disposition ?? null;
+          previousCallStatus = leadRow?.callStatus ?? "connected";
+          campaignId = leadRow?.campaignId ?? null;
+          batchId = leadRow?.batchId ?? null;
+          callAttempts = leadRow?.callAttempts ?? 0;
+        } catch {
+          /* classify still proceeds with session defaults */
+        }
+
+        const v2Classification = classifyCampaignCallEnd({
+          naturalEndTriggered: session.naturalEndTriggered,
+          wasTransferred: session.wasTransferred,
+          conversationCompleted,
+          transcriptHasFarewellEnding: transcriptHasFarewellEnding(transcript),
+          endReasonHint: session.pipeline.endReasonHint,
+          callEndedReason,
+          expectedDisconnect,
+          turnCount: metricsAcc.count,
+          durationSeconds,
+          isVoicemail,
+          waitingForReply: session.pipeline.endReasonHint === "media_disconnect",
+          disposition: existingDisposition,
+          lastUserTranscript: hangupLastUser,
+        });
+        const legacyHangup = classifyCampaignHangupLegacy({
+          isVoicemail,
+          naturalEndTriggered: session.naturalEndTriggered,
+          wasTransferred: session.wasTransferred,
+          durationSeconds,
+        });
+
+        if (shouldLogCampaignLeadStateV2Shadow()) {
+          logger.info(
+            {
+              event: "campaign_lead_state_v2_shadow",
+              campaignLeadId: leadId,
+              campaignId,
+              callId: session.callId,
+              ...buildCampaignLeadStateV2Shadow({
+                answeredEver,
+                classification: v2Classification,
+                legacy: legacyHangup,
+                endReasonHint: session.pipeline.endReasonHint,
+                callEndedReason,
+                expectedDisconnect,
+                durationSeconds,
+                turnCount: metricsAcc.count,
+                conversationCompleted,
+                naturalEndTriggered: session.naturalEndTriggered,
+              }),
+            },
+            "Campaign lead state V2 shadow comparison",
+          );
+        }
+
+        const v2Writer = isCampaignLeadStateV2Writer(campaignId);
+        let retryScheduled = false;
+        let retryId: number | null = null;
+        let retryReasonUsed: string | null = retryReason;
+        let parkedStatus = terminalLeadStatus;
+        let lastAttemptStatus = v2Classification.lastAttemptStatus;
+
+        if (v2Writer) {
+          try {
+            const [camp] = campaignId
+              ? await db
+                  .select({ maxAttempts: campaignsTable.maxAttempts, retryDelayMinutes: campaignsTable.retryDelayMinutes })
+                  .from(campaignsTable)
+                  .where(eq(campaignsTable.id, campaignId))
+                  .limit(1)
+              : [undefined];
+            const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(batchId, camp ?? null);
+            const applied = await applyV2AnsweredHangup({
+              leadId,
+              campaignId: campaignId ?? 0,
+              callId: session.callId,
+              currentAttempts: callAttempts,
+              maxAttempts,
+              retryDelayMinutes,
+              classification: v2Classification,
+            });
+            parkedStatus = applied.finalCallStatus;
+            lastAttemptStatus = applied.lastAttemptStatus;
+            retryScheduled = applied.retryScheduled;
+            retryId = applied.retryId;
+            retryReasonUsed = applied.retryReason;
+          } catch (err) {
+            logger.warn({ campaignLeadId: leadId, err }, "Failed to apply V2 answered hangup");
+            return;
+          }
+        } else {
         try {
           await db.update(campaignLeadsTable)
-            .set({ callStatus: terminalLeadStatus })
+            .set({
+              callStatus: terminalLeadStatus,
+              lastAttemptStatus: v2Classification.lastAttemptStatus,
+            })
             .where(eq(campaignLeadsTable.id, leadId));
         } catch (err) {
           logger.warn({ campaignLeadId: leadId, err }, "Failed to mark campaign lead terminal");
           return;
         }
 
+        void recordCallExecutionOutcome(session.callId, v2Classification.lastAttemptStatus)
+          .catch((err) => {
+            logger.warn({ campaignLeadId: leadId, callId: session.callId, err }, "Failed to record call execution outcome");
+          });
+
         // ── Schedule a retry for retryable terminal outcomes (drop / voicemail) ──
         // Uses the same path as BUSY/NO_ANSWER so the lead is redialled if
         // attempts remain. scheduleRetry returns false once attempts are
         // exhausted (or a pending retry already exists) — the terminal status
         // then "sticks".
-        let retryScheduled = false;
         if (shouldRetry) {
           try {
             const [freshLead] = await db
@@ -3243,7 +3385,9 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             logger.warn({ campaignLeadId: leadId, retryErr }, "Failed to schedule campaign retry");
           }
         }
+        }
 
+        let operationalOutcome: string | null = null;
         // ── Compute & persist operational outcome ─────────────────────────────
         // Checks for a booking created during this call (bookings.call_id =
         // session.callId), a pending callback, and max-attempts exhaustion, then
@@ -3299,9 +3443,10 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           }
 
+          const outcomeCallStatus = v2Writer ? parkedStatus : terminalLeadStatus;
           const outcome = computeOperationalOutcome({
-            callStatus:           terminalLeadStatus,
-            disposition:          null, // disposeCall runs async; a later taxonomy run may update this
+            callStatus:           outcomeCallStatus,
+            disposition:          v2Writer ? existingDisposition : null,
             hasBooking,
             hasCompletedTransfer: session.wasTransferred,
             hasPendingCallback,
@@ -3309,15 +3454,45 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             isDncBlocked:         false,
           });
 
-          if (freshLead) {
-            await setOperationalOutcome(db, leadId, freshLead.campaignId, outcome);
-            logger.info(
-              { leadId, outcome, hasBooking, wasTransferred: session.wasTransferred, hasPendingCallback, retryScheduled },
-              "Campaign lead operational outcome set",
-            );
+          if (v2Writer && outcome === "failed") {
+            operationalOutcome = "pending";
+          } else {
+            operationalOutcome = outcome;
+            if (freshLead) {
+              await setOperationalOutcome(db, leadId, freshLead.campaignId, outcome);
+              logger.info(
+                { leadId, outcome, hasBooking, wasTransferred: session.wasTransferred, hasPendingCallback, retryScheduled },
+                "Campaign lead operational outcome set",
+              );
+            }
           }
         } catch (outcomeErr) {
           logger.warn({ campaignLeadId: leadId, outcomeErr }, "Failed to set campaign lead operational outcome");
+        }
+
+        if (shouldLogCampaignLeadStateV2Canary(campaignId)) {
+          logger.info(
+            buildCampaignLeadStateV2CanaryLog({
+              campaignId,
+              leadId,
+              callId: session.callId,
+              answeredEver: true,
+              classifierClass: v2Classification.class,
+              endReason: callEndedReason,
+              expectedDisconnect,
+              previousCallStatus,
+              finalCallStatus: parkedStatus,
+              lastAttemptStatus,
+              retryScheduled,
+              retryReason: retryReasonUsed,
+              retryId,
+              retryCancelledAfterDisposition: false,
+              disposition: existingDisposition,
+              operationalOutcome,
+              attempts: callAttempts,
+            }),
+            CAMPAIGN_LEAD_STATE_V2_EVENT,
+          );
         }
 
         // Rolling concurrency + reconcile: this call freed a slot, so top the

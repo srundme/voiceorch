@@ -15,6 +15,13 @@ import {
 import { logger } from "../lib/logger.js";
 import { computeOperationalOutcome, setOperationalOutcome } from "./operational-outcome.js";
 import {
+  CAMPAIGN_LEAD_STATE_V2_EVENT,
+  isCampaignLeadStateV2Writer,
+  shouldCancelDroppedRetryAfterDisposition,
+  shouldPreserveBusinessDisposition,
+} from "./campaign-lead-state-v2.js";
+import { cancelPendingDroppedRetries } from "./retryEngine.js";
+import {
   dispositionLabelForLead,
   loadAgentMeaningMap,
   meaningFlagsForOutcome,
@@ -35,8 +42,13 @@ export async function applyCampaignDispositionOutcome(opts: {
     .limit(1);
   if (!lead) return;
 
+  const v2Writer = isCampaignLeadStateV2Writer(lead.campaignId);
   const label = dispositionLabelForLead(opts.dispositionResult);
-  if (label) {
+  const preserveExisting = v2Writer && shouldPreserveBusinessDisposition({
+    existing: lead.disposition,
+    incoming: label,
+  });
+  if (label && !preserveExisting) {
     await db
       .update(campaignLeadsTable)
       .set({ disposition: label })
@@ -49,7 +61,12 @@ export async function applyCampaignDispositionOutcome(opts: {
   }
 
   const map = await loadAgentMeaningMap(opts.agentId);
-  const flags = meaningFlagsForOutcome(opts.dispositionResult, map, label || lead.disposition);
+  const dispositionForOutcome = (preserveExisting ? lead.disposition : label) || lead.disposition;
+  const flags = meaningFlagsForOutcome(
+    preserveExisting ? null : opts.dispositionResult,
+    map,
+    dispositionForOutcome,
+  );
 
   let hasBooking = false;
   if (opts.callId) {
@@ -105,7 +122,7 @@ export async function applyCampaignDispositionOutcome(opts: {
 
   const outcome = computeOperationalOutcome({
     callStatus: opts.callStatus ?? lead.callStatus,
-    disposition: label || lead.disposition,
+    disposition: dispositionForOutcome,
     hasBooking,
     hasCompletedTransfer: opts.wasTransferred === true || !!xfer,
     hasPendingCallback: !!cbRow || !!legacyCb,
@@ -117,7 +134,43 @@ export async function applyCampaignDispositionOutcome(opts: {
     dispositionIsInterested: flags.meaning === "interested",
   });
 
-  await setOperationalOutcome(db, lead.id, lead.campaignId, outcome);
+  if (!(v2Writer && lead.answeredEver && outcome === "failed")) {
+    await setOperationalOutcome(db, lead.id, lead.campaignId, outcome);
+  }
+
+  let retryCancelledAfterDisposition = false;
+  const dispositionForCancel = dispositionForOutcome;
+  if (v2Writer && shouldCancelDroppedRetryAfterDisposition(dispositionForCancel)) {
+    const { cancelledIds } = await cancelPendingDroppedRetries({
+      leadId: lead.id,
+      reason: `disposition:${dispositionForCancel ?? "business"}`,
+    });
+    retryCancelledAfterDisposition = cancelledIds.length > 0;
+    if (retryCancelledAfterDisposition && (lead.callStatus === "pending" || lead.callStatus === "failed")) {
+      const parked = lead.answeredEver ? "completed" : lead.callStatus;
+      if (parked === "completed") {
+        await db
+          .update(campaignLeadsTable)
+          .set({ callStatus: "completed" })
+          .where(eq(campaignLeadsTable.id, lead.id));
+      }
+    }
+    if (retryCancelledAfterDisposition) {
+      logger.info(
+        {
+          event: "campaign_lead_state_v2",
+          campaignId: lead.campaignId,
+          leadId: lead.id,
+          callId: opts.callId ?? null,
+          retryCancelledAfterDisposition: true,
+          disposition: dispositionForCancel,
+          cancelledRetryIds: cancelledIds,
+        },
+        CAMPAIGN_LEAD_STATE_V2_EVENT,
+      );
+    }
+  }
+
   logger.info(
     {
       leadId: lead.id,

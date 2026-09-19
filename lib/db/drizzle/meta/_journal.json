@@ -876,6 +876,13 @@
       "when": 1791600024000,
       "tag": "0124_candidate_intake_job",
       "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1791600025000,
+      "tag": "0125_campaign_lead_state_v2",
+      "breakpoints": true
     }
   ]
 }

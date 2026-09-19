@@ -2,8 +2,9 @@ import { db, campaignsTable, campaignBatchesTable, campaignLeadsTable, leadTimel
 import { eq, and, lte, isNull, or, sql, inArray, lt } from "drizzle-orm";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
-import { scheduleRetry, processRetries, resolveRetryConfig } from "./retryEngine.js";
+import { scheduleRetry, scheduleRetryResult, processRetries, resolveRetryConfig } from "./retryEngine.js";
 import { isCampaignDialable } from "./campaign-dialable.js";
+import { isCampaignLeadStateV2Writer, v2ParkStuckAnswered } from "./campaign-lead-state-v2.js";
 import { logger } from "../lib/logger.js";
 import { startMeetingBotAutoDispatcher } from "./meet-auto-dispatch.js";
 
@@ -654,10 +655,56 @@ async function sweepStuckCallingLeads(): Promise<void> {
 
     for (const lead of stuck) {
       try {
+        const v2Writer = isCampaignLeadStateV2Writer(lead.campaignId);
+        const answeredEver = lead.answeredEver === true;
+        let retryOk = false;
+        const [campaign] = await db.select().from(campaignsTable)
+          .where(eq(campaignsTable.id, lead.campaignId));
+
+        if (v2Writer && answeredEver) {
+          if (campaign) {
+            try {
+              const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(lead.batchId, campaign);
+              const result = await scheduleRetryResult({
+                leadId:            lead.id,
+                campaignId:        lead.campaignId,
+                currentAttempts:   lead.callAttempts ?? 0,
+                maxAttempts,
+                retryDelayMinutes,
+                reason:            "stuck_calling",
+              });
+              retryOk = result.scheduled || result.alreadyPending;
+            } catch (err) {
+              logger.error({ err, leadId: lead.id }, "V2 stuck sweep retry insert failed — parking completed");
+              retryOk = false;
+            }
+          }
+          const parked = v2ParkStuckAnswered({ answeredEver: true, retryOk });
+          await db.update(campaignLeadsTable)
+            .set({
+              callStatus: parked,
+              notes: `Stuck in ${lead.callStatus} — no terminal webhook received; auto-parked by scheduler`,
+              lastAttemptStatus: "stuck_calling",
+            })
+            .where(and(
+              eq(campaignLeadsTable.id, lead.id),
+              eq(campaignLeadsTable.callStatus, lead.callStatus),
+            ));
+          await db.insert(leadTimelineTable).values({
+            leadId:     lead.id,
+            campaignId: lead.campaignId,
+            eventType:  "call_ended",
+            data:       { callStatus: parked, reason: "stuck_calling_sweep", timeoutMs: STUCK_CALLING_TIMEOUT_MS, retryOk },
+          });
+        } else {
         // Guard the update on the lead's OWN observed status so a terminal
         // webhook that lands between the SELECT and this UPDATE wins the race.
         await db.update(campaignLeadsTable)
-          .set({ callStatus: "failed", notes: `Stuck in ${lead.callStatus} — no terminal webhook received; auto-failed by scheduler` })
+          .set({
+            callStatus: "failed",
+            notes: `Stuck in ${lead.callStatus} — no terminal webhook received; auto-failed by scheduler`,
+            lastAttemptStatus: "stuck_calling",
+          })
           .where(and(
             eq(campaignLeadsTable.id, lead.id),
             eq(campaignLeadsTable.callStatus, lead.callStatus),
@@ -670,9 +717,6 @@ async function sweepStuckCallingLeads(): Promise<void> {
           data:       { callStatus: "failed", reason: "stuck_calling_sweep", timeoutMs: STUCK_CALLING_TIMEOUT_MS },
         });
 
-        const [campaign] = await db.select().from(campaignsTable)
-          .where(eq(campaignsTable.id, lead.campaignId));
-
         if (campaign) {
           const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(lead.batchId, campaign);
           await scheduleRetry({
@@ -684,9 +728,10 @@ async function sweepStuckCallingLeads(): Promise<void> {
             reason:            "stuck_calling",
           });
         }
+        }
 
         affectedCampaigns.add(lead.campaignId);
-        logger.warn({ leadId: lead.id, campaignId: lead.campaignId, lastAttemptAt: lead.lastAttemptAt }, "Stuck calling lead auto-failed by sweep");
+        logger.warn({ leadId: lead.id, campaignId: lead.campaignId, lastAttemptAt: lead.lastAttemptAt, v2Writer, answeredEver }, "Stuck calling lead auto-parked by sweep");
       } catch (leadErr) {
         logger.error({ err: leadErr, leadId: lead.id }, "sweepStuckCallingLeads: error processing lead");
       }
