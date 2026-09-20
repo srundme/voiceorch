@@ -133,7 +133,7 @@ import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, est
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { shouldSkipImmediateBackchannel, ttsContextIdForSequence } from "./filler-playback.js";
 import { countTranscriptWords, FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
-import { isSelfEcho, SELF_ECHO_MIN_WORDS } from "./self-echo.js";
+import { isSelfEcho, isTtsOnWireForEcho, SELF_ECHO_MIN_WORDS } from "./self-echo.js";
 import {
   executeIntakeDisposition,
   executeIntakeSubmit,
@@ -2872,10 +2872,16 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private isCarrierSelfEcho(transcript: string): boolean {
     if (this.config.telephonyProvider === "webcall") return false;
-    const ttsOnWire =
-      this.isPlaying
-      || this.isSendingTtsAudio
-      || this.bargeInRequested;
+    // Call 26668: bargeInRequested stayed true after a false echo barge with
+    // no follow-up processTurn. Counting that flag alone as ttsOnWire discarded
+    // later real speech ("Hello") even with isPlaying=false and the echo window at 0.
+    const ttsOnWire = isTtsOnWireForEcho({
+      isPlaying: this.isPlaying,
+      isSendingTtsAudio: this.isSendingTtsAudio,
+      bargeInRequested: this.bargeInRequested,
+      msSinceLastTtsFrame: Date.now() - this.lastTtsFrameAt,
+      tailMs: SELF_ECHO_TAIL_MS,
+    });
     const agentAudible =
       ttsOnWire
       || Date.now() - this.lastTtsFrameAt < SELF_ECHO_TAIL_MS;
@@ -4151,6 +4157,11 @@ export class OrchestrationPipeline implements VoiceSession {
       this.isPlaying = false;
       this.systemPlaybackActive = false;
       this.armTailEchoGrace();
+      // Call 26668: resume itself was echo-barged; no processTurn will clear
+      // WAIT. Drop the sticky flag so later caller speech is heard.
+      if (this.bargeInRequested && !this.isProcessing) {
+        this.bargeInRequested = false;
+      }
     }
     await this.drainPlaybackTail();
     if (!this.closed) {

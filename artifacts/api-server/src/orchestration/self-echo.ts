@@ -34,6 +34,18 @@ export const SELF_ECHO_MIN_WORDS = 4;
  */
 export const SELF_ECHO_MIN_OVERLAP = 0.8;
 
+/**
+ * Latin STT of Indic TTS is often a 4–7 word hallucination with zero lexical
+ * overlap (call 26668: "There's the lamb, the lamb." while the agent asked a
+ * Tamil funds question). The short-junk path only covers <4 words, so those
+ * partials used to barge the agent. Cap the script-mismatch rule below a
+ * real English sentence so a bilingual caller can still interrupt.
+ */
+export const SELF_ECHO_SCRIPT_MISMATCH_MAX_WORDS = 8;
+
+/** Devanagari through Malayalam — the Indic scripts SnapServe PSTN agents speak. */
+const INDIC_SCRIPT_RE = /[\u0900-\u0D7F]/;
+
 export interface RecentAgentLine {
   /** Normalized word set for a line the agent spoke (or is speaking). */
   readonly tokens: ReadonlySet<string>;
@@ -84,6 +96,41 @@ function maxOverlap(tokens: readonly string[], lines: readonly RecentAgentLine[]
   return best;
 }
 
+function tokensLookLatinOnly(tokens: readonly string[]): boolean {
+  let hasLatin = false;
+  for (const t of tokens) {
+    if (INDIC_SCRIPT_RE.test(t)) return false;
+    if (/[a-z]/i.test(t)) hasLatin = true;
+  }
+  return hasLatin;
+}
+
+function recentSpeechHasIndic(lines: readonly RecentAgentLine[]): boolean {
+  for (const line of lines) {
+    for (const t of line.tokens) {
+      if (INDIC_SCRIPT_RE.test(t)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Bytes are leaving TTS, or we just cut TTS on a barge whose tail is still
+ * on the leg. A sticky `bargeInRequested` with no recent TTS frame is *not*
+ * on the wire (call 26668 discarded "Hello" 17s later with isPlaying=false).
+ */
+export function isTtsOnWireForEcho(opts: {
+  isPlaying: boolean;
+  isSendingTtsAudio: boolean;
+  bargeInRequested: boolean;
+  msSinceLastTtsFrame: number;
+  tailMs: number;
+}): boolean {
+  if (opts.isPlaying || opts.isSendingTtsAudio) return true;
+  if (!opts.bargeInRequested) return false;
+  return opts.msSinceLastTtsFrame >= 0 && opts.msSinceLastTtsFrame < opts.tailMs;
+}
+
 /**
  * True when this transcript is our own voice coming back off the carrier.
  * Callers must discard such a transcript *before* barge-in evaluation —
@@ -103,6 +150,15 @@ export function isSelfEcho(check: SelfEchoCheck): boolean {
     && check.ttsOnWire
     && check.tokens.length < SELF_ECHO_MIN_WORDS
     && hit === 0
+  ) return true;
+  // Call 26668: five Latin words, zero overlap, Tamil TTS still playing.
+  if (
+    !check.protectedShortIntent
+    && check.ttsOnWire
+    && hit === 0
+    && check.tokens.length <= SELF_ECHO_SCRIPT_MISMATCH_MAX_WORDS
+    && tokensLookLatinOnly(check.tokens)
+    && recentSpeechHasIndic(check.recentAgentSpeech)
   ) return true;
   return false;
 }

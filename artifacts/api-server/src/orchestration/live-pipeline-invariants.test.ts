@@ -120,6 +120,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(methodBody("handleStreamingTranscript")).toContain("agent_still_speaking");
     expect(methodBody("isCarrierSelfEcho")).toContain("ttsOnWire");
     expect(methodBody("isCarrierSelfEcho")).toContain("protectedShortIntent");
+    expect(methodBody("isCarrierSelfEcho")).toContain("isTtsOnWireForEcho");
+    expect(methodBody("isCarrierSelfEcho")).toContain("lastTtsFrameAt");
+    expect(methodBody("resumeBargedReply")).toContain("bargeInRequested && !this.isProcessing");
     expect(methodBody("backchannelFillerOpts")).toContain("backchannelFillers");
     expect(pipelineSrc).not.toContain("Barge-in detected after Sarvam realtime partial");
     const speechEndBody = methodBody("wireStreamSttCallbacks");

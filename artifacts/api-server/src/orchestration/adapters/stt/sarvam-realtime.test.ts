@@ -74,19 +74,19 @@ describe("nextRealtimeLanguageOnSwitch", () => {
 });
 
 describe("resolveRealtimeVadDefaults", () => {
-  it("leaves 8 kHz PSTN VAD ownership with Saaras", () => {
+  it("uses the telephony table on 8 kHz PSTN so sidetone does not become VAD (call 26668)", () => {
     expect(resolveRealtimeVadDefaults(8000)).toEqual({
-      silenceDurationMs: null,
-      minSpeechDurationMs: null,
-      threshold: null,
+      silenceDurationMs: 500,
+      minSpeechDurationMs: 200,
+      threshold: 0.7,
     });
   });
 
-  it("leaves 16 kHz WebRTC VAD ownership with Saaras", () => {
+  it("uses the cleaner-channel table on 16 kHz WebRTC", () => {
     expect(resolveRealtimeVadDefaults(16000)).toEqual({
-      silenceDurationMs: null,
-      minSpeechDurationMs: null,
-      threshold: null,
+      silenceDurationMs: 500,
+      minSpeechDurationMs: 250,
+      threshold: 0.3,
     });
   });
 });

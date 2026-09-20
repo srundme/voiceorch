@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { isSelfEcho, SELF_ECHO_MIN_WORDS, type RecentAgentLine } from "./self-echo.js";
+import {
+  isSelfEcho,
+  isTtsOnWireForEcho,
+  SELF_ECHO_MIN_WORDS,
+  type RecentAgentLine,
+} from "./self-echo.js";
 
 const words = (s: string): string[] => s.toLowerCase().split(/\s+/).filter(Boolean);
 const spoken = (...lines: string[]): RecentAgentLine[] =>
@@ -122,6 +127,73 @@ describe("isSelfEcho", () => {
       recentAgentSpeech: spoken(agentLine),
       agentAudible: true,
       ttsOnWire: false,
+    })).toBe(false);
+  });
+
+  it("drops Latin STT hallucination of Indic TTS while the agent is speaking (call 26668)", () => {
+    const tamilLine = "okay உங்க business-க்கு இப்போ funds தேவைப்படுதா";
+    expect(isSelfEcho({
+      tokens: words("There's the lamb, the lamb."),
+      recentAgentSpeech: spoken(tamilLine),
+      agentAudible: true,
+      ttsOnWire: true,
+    })).toBe(true);
+    expect(isSelfEcho({
+      tokens: words("There's the lamb, the"),
+      recentAgentSpeech: spoken(tamilLine),
+      agentAudible: true,
+      ttsOnWire: true,
+    })).toBe(true);
+  });
+
+  it("keeps a longer English barge over Tamil TTS so bilingual callers can interrupt", () => {
+    expect(isSelfEcho({
+      tokens: words("sorry i am not interested in this job right now"),
+      recentAgentSpeech: spoken("okay உங்க business-க்கு இப்போ funds தேவைப்படுதா"),
+      agentAudible: true,
+      ttsOnWire: true,
+    })).toBe(false);
+  });
+
+  it("keeps the Latin hallucination once TTS is no longer on the wire", () => {
+    expect(isSelfEcho({
+      tokens: words("There's the lamb, the lamb."),
+      recentAgentSpeech: spoken("okay உங்க business-க்கு இப்போ funds தேவைப்படுதா"),
+      agentAudible: true,
+      ttsOnWire: false,
+    })).toBe(false);
+  });
+});
+
+describe("isTtsOnWireForEcho", () => {
+  const tailMs = 2000;
+
+  it("is on the wire while playback or TTS send is live", () => {
+    expect(isTtsOnWireForEcho({
+      isPlaying: true, isSendingTtsAudio: false, bargeInRequested: false,
+      msSinceLastTtsFrame: 10_000, tailMs,
+    })).toBe(true);
+    expect(isTtsOnWireForEcho({
+      isPlaying: false, isSendingTtsAudio: true, bargeInRequested: false,
+      msSinceLastTtsFrame: 10_000, tailMs,
+    })).toBe(true);
+  });
+
+  it("treats a just-cut barge as still on the wire for the echo tail (call 25295)", () => {
+    expect(isTtsOnWireForEcho({
+      isPlaying: false, isSendingTtsAudio: false, bargeInRequested: true,
+      msSinceLastTtsFrame: 400, tailMs,
+    })).toBe(true);
+  });
+
+  it("does not treat a sticky barge flag as TTS on the wire (call 26668)", () => {
+    expect(isTtsOnWireForEcho({
+      isPlaying: false, isSendingTtsAudio: false, bargeInRequested: true,
+      msSinceLastTtsFrame: 17_000, tailMs,
+    })).toBe(false);
+    expect(isTtsOnWireForEcho({
+      isPlaying: false, isSendingTtsAudio: false, bargeInRequested: true,
+      msSinceLastTtsFrame: 2000, tailMs,
     })).toBe(false);
   });
 });
