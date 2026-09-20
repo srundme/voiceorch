@@ -32,6 +32,7 @@ import { isSmartTurnReady, predictSmartTurn, warmSmartTurn } from "./smart-turn.
 import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { extractEmotionTag, makeMarkupTagFilter, stripMarkupTags } from "./emotion-tag.js";
+import { normalizeTtsNonverbals } from "./tts-nonverbal.js";
 import { isBackgroundIntakeTool, languagePrefix, resolveToolFillerPhrase, withoutBackgroundIntakeTools } from "./tool-fillers.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
@@ -6688,9 +6689,10 @@ export class OrchestrationPipeline implements VoiceSession {
     emotions?: string[],
   ): TtsSentenceJob {
     // ── TTS text normalization ────────────────────────────────────────────────
-    // Strip bracketed, starred, or parenthesized non-verbal tags (e.g. [laughter], *laughs*, (sigh), [gasp])
-    // so TTS engines do not read them literally.
-    text = text.replace(/\[[a-zA-Z0-9_\-\s]+\]|\*+[a-zA-Z0-9_\-\s]+\*+|\([a-zA-Z0-9_\-\s]+\)/gi, "");
+    // Cartesia Sonic 3.5+ implements `[laughter]` as a real nonverbal control.
+    // Preserve that exact token for Cartesia while stripping unsupported stage
+    // directions (and all such tags for providers that would read them aloud).
+    text = normalizeTtsNonverbals(text, this.agent.ttsProvider);
 
     // Meter characters at request-dispatch time — TTS providers charge for the
     // text submitted when the HTTP request is sent, not when audio delivery
