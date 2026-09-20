@@ -11,6 +11,7 @@ import {
 } from "./callScreening.js";
 import { resolveInboundGreetingTtsSpeed } from "./call-direction-rules.js";
 import { buildDatetimeInjection, buildTurnClockBlock, THIS_TURN_INSTRUCTION } from "./datetimeInject.js";
+import { buildScheduleCallbackSpeakInstruction } from "./spokenCallbackConfirm.js";
 import { demoteResumeMemoryAfterOpening } from "./callerMemory.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
@@ -610,6 +611,7 @@ const KB_PREFETCH_MAX_CHARS   = 8000;
 const ACK_WORDS = new Set([
   // Tamil
   "சரி", "சரிங்க", "சரிங்கம்", "ஆமா", "ஆம்", "நல்லது",
+  "seri", "sari",
   // English
   "okay", "ok", "got it", "i see", "sure", "right", "alright",
   "understood", "great", "perfect", "mm-hmm", "mhm", "mmhm", "hmm", "mmm", "mm",
@@ -630,7 +632,9 @@ function isLlmLeadingAck(sentence: string): boolean {
     .toLowerCase()
     .replace(/[.!?,\s]+$/g, "") // strip trailing punctuation/whitespace
     .trim();
-  return ACK_WORDS.has(t);
+  if (ACK_WORDS.has(t)) return true;
+  const words = t.split(/\s+/).map((w) => w.replace(/[,.]+$/g, "")).filter(Boolean);
+  return words.length >= 2 && words.length <= 3 && words.every((w) => ACK_WORDS.has(w));
 }
 
 /**
@@ -643,7 +647,19 @@ function isLlmLeadingAck(sentence: string): boolean {
  * whole bare-ack sentence, which would throw the content away instead.
  */
 export function stripLeadingAckClause(sentence: string): string {
-  return sentence;
+  const t = sentence.trim();
+  if (!t) return sentence;
+  const ack = String.raw`சரிங்க(?:ம்)?|சரி|ஆமா|ஆம்|நல்லது|okay|ok|sure|right|alright|got it|i see|understood|great|perfect|yes|yeah|हाँ|अच्छा|ठीक है|సరే|ಸರಿ|ശരി|seri|sari`;
+  const leadRe = new RegExp(`^((?:(?:${ack})[\\s,.]*)+)`, "iu");
+  const m = leadRe.exec(t);
+  if (!m?.[1]) return sentence;
+  const lead = m[1];
+  const rest = t.slice(lead.length).trim();
+  const doubled = /^(?:சரி|seri|sari|okay|ok)(?:[\s,]+(?:சரி|seri|sari|okay|ok))+/iu.test(lead.trim());
+  const commaClause = /[,.]\s*$/.test(lead);
+  if (!commaClause && !doubled) return sentence;
+  if (!rest || isLlmLeadingAck(rest) || rest.length < 8) return sentence;
+  return rest;
 }
 
 /** BCP-47 locale → display name used in LLM language-switch instructions. */
@@ -7558,12 +7574,16 @@ export class OrchestrationPipeline implements VoiceSession {
             callId,
             notes,
           });
-          const cbLocal = scheduledAt.toLocaleString("en-IN", {
-            weekday: "long", day: "numeric", month: "long",
-            hour: "numeric", minute: "2-digit", hour12: true, timeZone: cbTz,
-          });
           this._scheduledCallbackThisCall = true;
-          return `Callback recorded for ${cbLocal} (${cbTz}). Speak ONE short confirmation of THIS exact time, thank them, and ask if they need anything else. After that, if they say okay, thanks, that's all, avlo, or no more help, you MUST call end_call. Do not repeat the confirmation.`;
+          return (
+            `${buildScheduleCallbackSpeakInstruction({
+              callerText: this.lastUserTurnText(),
+              notes,
+              scheduledAt,
+              tz: cbTz,
+            })} ` +
+            `After they confirm, if they say okay, thanks, that's all, avlo, or no more help, you MUST call end_call. Do not repeat the confirmation.`
+          );
         }
         return "Callback noted — I'll arrange for someone to call you back.";
       }

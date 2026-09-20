@@ -8,7 +8,7 @@ import {
 } from "./backchannel.js";
 
 const ONLY_OKAY_HMM_MMM = ["Okay.", "Hmm.", "Mmm."];
-const ONLY_TAMIL_FILLERS = ["சரி.", "ம்.", "ஹ்ம்ம்."];
+const ONLY_TAMIL_FILLERS = ["ம்.", "ஹ்ம்ம்."];
 
 describe("backchannel fillers — okay / hmm / mmm only", () => {
   it("uses hmm/mmm only for questions (no Okay, no language acks)", () => {
@@ -31,11 +31,12 @@ describe("backchannel fillers — okay / hmm / mmm only", () => {
     expect(pool).not.toContain("Okay.");
   });
 
-  it("allows Okay on safe statements, still only the three words", () => {
+  it("does not inject சரி on Tamil statements — the LLM already says it", () => {
     const pool = getBackchannelFillers("ta-IN", {
       callerTranscript: "நான் சென்னையில இருக்கேன்",
     });
     expect(pool.sort()).toEqual([...ONLY_TAMIL_FILLERS].sort());
+    expect(pool).not.toContain("சரி.");
     expect(pool).not.toContain("Okay.");
     expect(pool).not.toContain("Got it.");
     expect(pool).not.toContain("अच्छा");

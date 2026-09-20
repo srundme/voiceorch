@@ -60,24 +60,40 @@ describe("isRealEnglishUtterance", () => {
 });
 
 describe("resolveAutoDetectLanguage", () => {
-  it("trusts STT/LID detected language", () => {
+  it("does not flip a Tamil agent to English on LID junk (call 26703)", () => {
     expect(resolveAutoDetectLanguage({
       detected: "en-IN",
       latchedLang: null,
       currentLang: "ta-IN",
-      text: "okay thank you",
-    })).toEqual({ lang: "en-IN", heldFiller: false });
+      text: "All right",
+      agentLang: "ta-IN",
+    })).toEqual({ lang: "ta-IN", heldFiller: true });
+    expect(resolveAutoDetectLanguage({
+      detected: "en-IN",
+      latchedLang: null,
+      currentLang: "ta-IN",
+      text: "I need ten crore, Madam.",
+      agentLang: "ta-IN",
+    })).toEqual({ lang: "ta-IN", heldFiller: true });
+  });
+
+  it("honors an explicit language latch", () => {
     expect(resolveAutoDetectLanguage({
       detected: "hi-IN",
       latchedLang: "ta-IN",
       currentLang: "ta-IN",
       text: "मुझे जानकारी चाहिए",
-    })).toEqual({ lang: "hi-IN", heldFiller: false });
+      agentLang: "ta-IN",
+    })).toEqual({ lang: "ta-IN", heldFiller: false });
+  });
+
+  it("keeps current language when LID is missing", () => {
     expect(resolveAutoDetectLanguage({
       detected: null,
       latchedLang: null,
       currentLang: "ta-IN",
       text: "…",
+      agentLang: "ta-IN",
     })).toEqual({ lang: "ta-IN", heldFiller: false });
   });
 });

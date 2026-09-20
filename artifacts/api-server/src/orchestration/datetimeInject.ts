@@ -70,7 +70,9 @@ export function buildDatetimeInjection(timezone?: string | null): string {
   return (
     `[CURRENT DATE & TIME] ${formatClock(now, tz)} (${tz}). ` +
     `Today is ${today}. Yesterday was ${yesterday}. Tomorrow is ${tomorrow}. ` +
-    `Any calendar date before today is already past — do not treat it as an upcoming deadline.`
+    `Any calendar date before today is already past — do not treat it as an upcoming deadline. ` +
+    `When you SPEAK to the caller, use today / tomorrow / the weekday or clock they said. ` +
+    `Never read the calendar date, month, or year out loud unless they asked which date.`
   );
 }
 
@@ -87,6 +89,7 @@ export function buildTurnClockBlock(timezone?: string | null): string {
     `[TODAY] ${formatClock(now, tz)} (${tz}). ` +
     `Yesterday was ${yesterday}. Tomorrow is ${tomorrow}. ` +
     `Today is ${today}. Dates before today are already past — do not pitch them as upcoming deadlines. ` +
+    `When confirming a callback or time, echo today/tomorrow/the clock the caller used — never speak a calendar date, month, or year unless they asked for it. ` +
     `Read back emails and phone numbers exactly as written in the caller's last message.`
   );
 }

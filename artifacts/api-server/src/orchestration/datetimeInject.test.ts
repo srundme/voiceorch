@@ -9,6 +9,7 @@ describe("buildDatetimeInjection", () => {
     expect(text).toMatch(/Yesterday was /);
     expect(text).toMatch(/Tomorrow is /);
     expect(text).toMatch(/already past/);
+    expect(text).toMatch(/Never read the calendar date/);
     expect(text).toContain("Asia/Kolkata");
   });
 
@@ -19,6 +20,7 @@ describe("buildDatetimeInjection", () => {
     expect(text).toMatch(/Tomorrow is /);
     expect(text).toContain("Asia/Kolkata");
     expect(text).toMatch(/already past/);
+    expect(text).toMatch(/echo today\/tomorrow/);
     expect(text).toMatch(/exactly as written/);
   });
 

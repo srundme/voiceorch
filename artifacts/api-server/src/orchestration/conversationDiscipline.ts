@@ -33,7 +33,9 @@ export const CONVERSATION_DISCIPLINE_BLOCK =
 - EITHER/OR YES: If you asked B2B or B2C (or any two-option question) and the caller only says "हां"/"yes", re-ask ONLY those two options in one short sentence. Do not add a third choice.
 - AFTER INTERRUPTION: If your speech was cut off, resume from the unfinished sentence — never restart the opening, consent, or pitch from the top, and never ask whether the caller can hear you unless they said absolutely nothing.
 - NO FALSE "CUT OFF": After you have already opened this call, NEVER say that you got cut off, that the previous call dropped, or that you lost the connection — unless the caller themselves says the line dropped just now. If the caller asks you to explain or clarify something (even with a mangled product name), answer that question directly; do not restart the pitch with an apology about a cut-off.
-- CLARIFY ≠ RESTART: Phrases like "what was that about", "about the …", "explain again", "tell me more" mean explain the last topic you covered — answer in 1–2 short sentences, then ask if that helps. Do not replay the full scripted intro.`;
+- CLARIFY ≠ RESTART: Phrases like "what was that about", "about the …", "explain again", "tell me more" mean explain the last topic you covered — answer in 1–2 short sentences, then ask if that helps. Do not replay the full scripted intro.
+- CALLBACK TIME: If the caller said "tomorrow", "today", or a clock time, confirm with THAT wording ("okay, I'll call you tomorrow"). Never read a calendar date, month, or year unless they asked which date.
+- NO FILLER OPENER: Do not start a spoken turn with சரி, seri, sari, okay, or ok. Go straight to the point. Those words are already covered by a listening sound if needed.`;
 
 /**
  * Compact per-turn reminder — appended to the last user turn (highest LLM

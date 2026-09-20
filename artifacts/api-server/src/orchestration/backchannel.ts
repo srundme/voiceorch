@@ -7,7 +7,8 @@ const TAMIL_LISTENING_FILLERS = ["ம்.", "ஹ்ம்ம்."];
 
 /** Soft ack — only when the caller turn is not a question / risk turn. */
 const ENGLISH_SOFT_ACK_FILLERS = ["Okay.", "Hmm.", "Mmm."];
-const TAMIL_SOFT_ACK_FILLERS = ["சரி.", "ம்.", "ஹ்ம்ம்."];
+// Tamil LLMs already open with "சரி," / "seri" — a சரி cover makes "seri seri".
+const TAMIL_SOFT_ACK_FILLERS = ["ம்.", "ஹ்ம்ம்."];
 
 /** Share of safe-statement backchannels that should be "Okay." */
 export const SOFT_ACK_OKAY_WEIGHT = 0.8;
@@ -124,7 +125,7 @@ export function pickBackchannelFiller(
     .filter(Boolean);
 
   const usingCustom = Boolean(opts?.customFillers && opts.customFillers.length > 0);
-  const positiveAck = pool.includes("Okay.") ? "Okay." : pool.includes("சரி.") ? "சரி." : null;
+  const positiveAck = pool.includes("Okay.") ? "Okay." : null;
   if (!usingCustom && positiveAck) {
     if (nextRandom(opts) < SOFT_ACK_OKAY_WEIGHT) return positiveAck;
     const listening = pool.filter((phrase) => phrase !== positiveAck);

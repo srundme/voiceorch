@@ -1,14 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { stripLeadingAckClause } from "./pipeline.js";
+
+process.env.DATABASE_URL ??= "postgres://test:test@127.0.0.1:5432/test";
+const { stripLeadingAckClause } = await import("./pipeline.js");
 
 // The cover filler plays before the LLM sentence, so a sentence that opens
 // with the same ack word doubles it. Call 21546: 20 of 23 first sentences
 // opened with "சரி,".
 describe("stripLeadingAckClause", () => {
-  it("does not rewrite LLM sentences", () => {
-    expect(stripLeadingAckClause("சரி, real estate business.")).toBe("சரி, real estate business.");
+  it("strips a leading சரி / okay clause so it is not doubled after the cover", () => {
+    expect(stripLeadingAckClause("சரி, real estate business.")).toBe("real estate business.");
     expect(stripLeadingAckClause("Okay, I will send the statement.")).toBe(
-      "Okay, I will send the statement.",
+      "I will send the statement.",
+    );
+    expect(stripLeadingAckClause("Seri seri, நாளைக்கு call பண்ணுறேன்.")).toBe(
+      "நாளைக்கு call பண்ணுறேன்.",
     );
   });
 

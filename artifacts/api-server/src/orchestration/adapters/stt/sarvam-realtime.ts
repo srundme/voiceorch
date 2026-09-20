@@ -114,17 +114,15 @@ export function toRealtimeLanguageCode(code: string | null | undefined, auto: bo
 }
 
 /**
- * Realtime `language_code` per Sarvam docs + speech-to-text skill:
- *   • auto-detect ON  → `auto` (LID on every partial/final)
- *   • auto-detect OFF → agent BCP-47 (skill: pin language for audio <3s)
- * Never invent auto for a single-language agent — short "haan"/"ok" turns
- * lose LID. Mixed Hinglish is `mode=codemix`, not a language pin.
+ * Realtime `language_code` is the agent's pinned STT language.
+ * Never open `auto` and never follow LID confidence — short PSTN turns
+ * get labeled en-IN and decoded as English (call 26703).
  */
 export function resolveRealtimeSocketLanguage(
   configuredLang?: string | null,
-  languageAutoDetect?: boolean,
+  _languageAutoDetect?: boolean,
 ): string {
-  return toRealtimeLanguageCode(configuredLang, languageAutoDetect === true);
+  return toRealtimeLanguageCode(configuredLang, false);
 }
 
 /**
@@ -144,8 +142,10 @@ export function nextRealtimeLanguageOnSwitch(
   pin = false,
 ): string {
   if (pin) return toRealtimeLanguageCode(requested, false);
-  if (current === "auto") return "auto";
-  return toRealtimeLanguageCode(requested, false);
+  // Keep the websocket on whatever STT was pinned. Passive LID / confidence
+  // must not retarget language_code (call 26703).
+  if (current !== "auto") return current;
+  return "auto";
 }
 
 /** Empty `transcript.final` used to be dropped silently; recover the last partial. */
@@ -195,7 +195,7 @@ export function isLidDriftFinal(_opts: {
   detectedLanguage: string | undefined;
   languageConfidence: number | undefined;
 }): boolean {
-  // Trust Saaras LID. Do not pin language_code over the provider's read.
+  // Do not retarget the socket from LID confidence. language_code stays pinned.
   return false;
 }
 

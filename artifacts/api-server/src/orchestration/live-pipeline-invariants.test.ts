@@ -241,6 +241,9 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(methodBody("resumeBargedReply")).toContain("False barge remainder already spoken");
     expect(methodBody("processTurn")).toContain("_scheduledCallbackThisCall");
     expect(methodBody("handleToolCallInner")).toContain("you MUST call end_call");
+    expect(methodBody("handleToolCallInner")).toContain("buildScheduleCallbackSpeakInstruction");
+    expect(methodBody("handleToolCallInner")).not.toContain("toLocaleString(\"en-IN\"");
+    expect(methodBody("handleToolCallInner")).not.toContain("Confirm THIS exact time");
     expect(methodBody("handleToolCallInner")).not.toContain("Do NOT call end_call automatically");
     expect(pipelineSrc).toContain("outbound stub Welcome is not a complete opener");
   });

@@ -141,5 +141,28 @@ export function resolveAutoDetectLanguage(opts: {
   agentLang?: string | null;
   allowPassiveEnglish?: boolean;
 }): AutoDetectResolution {
-  return { lang: opts.detected ?? (opts.currentLang || null), heldFiller: false };
+  if (opts.latchedLang) {
+    return { lang: opts.latchedLang, heldFiller: false };
+  }
+  const detected = opts.detected;
+  if (!detected) {
+    return { lang: opts.currentLang || null, heldFiller: false };
+  }
+
+  const agentLang = (opts.agentLang ?? "").trim();
+  const agentIsIndic = !!agentLang && !agentLang.toLowerCase().startsWith("en");
+  const detectedIsEnglish = detected.toLowerCase().startsWith("en");
+  const currentIsNonEnglish = !!opts.currentLang && !opts.currentLang.toLowerCase().startsWith("en");
+
+  // Call 26703: Tamil agent + auto LID returned "All right" / "I need ten crore"
+  // as en-IN. Do not let that flip the conversation (or STT) to English.
+  if (agentIsIndic && detectedIsEnglish && !opts.allowPassiveEnglish) {
+    return { lang: opts.currentLang || agentLang, heldFiller: true };
+  }
+
+  if (detectedIsEnglish && currentIsNonEnglish && !isRealEnglishUtterance(opts.text)) {
+    return { lang: opts.currentLang, heldFiller: true };
+  }
+
+  return { lang: detected, heldFiller: false };
 }

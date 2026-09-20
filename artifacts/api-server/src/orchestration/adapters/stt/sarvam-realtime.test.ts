@@ -42,15 +42,13 @@ describe("isSarvamRealtimeModel", () => {
 });
 
 describe("resolveRealtimeSocketLanguage", () => {
-  it("pins the agent language when auto-detect is off (short turns need it)", () => {
+  it("always pins the configured STT language — never auto, never confidence", () => {
     expect(resolveRealtimeSocketLanguage("hi-IN", false)).toBe("hi-IN");
     expect(resolveRealtimeSocketLanguage("ta-IN", undefined)).toBe("ta-IN");
+    expect(resolveRealtimeSocketLanguage("ta-IN", true)).toBe("ta-IN");
+    expect(resolveRealtimeSocketLanguage("hi-IN", true)).toBe("hi-IN");
+    expect(resolveRealtimeSocketLanguage("en-IN", true)).toBe("en-IN");
     expect(resolveRealtimeSocketLanguage(undefined, false)).toBe("en-IN");
-  });
-
-  it("opens with auto LID only when auto-detect is on", () => {
-    expect(resolveRealtimeSocketLanguage("hi-IN", true)).toBe("auto");
-    expect(resolveRealtimeSocketLanguage("ta-IN", true)).toBe("auto");
   });
 });
 
@@ -67,9 +65,10 @@ describe("nextRealtimeLanguageOnSwitch", () => {
     expect(nextRealtimeLanguageOnSwitch("hi-IN", "en-IN", true)).toBe("en-IN");
   });
 
-  it("still maps a pinned socket to a realtime code", () => {
-    expect(nextRealtimeLanguageOnSwitch("hi-IN", "ta-IN")).toBe("ta-IN");
-    expect(nextRealtimeLanguageOnSwitch("en-IN", "od-IN")).toBe("or-IN");
+  it("keeps a pinned socket on that pin unless the caller asked (call 26703)", () => {
+    expect(nextRealtimeLanguageOnSwitch("hi-IN", "ta-IN")).toBe("hi-IN");
+    expect(nextRealtimeLanguageOnSwitch("ta-IN", "en-IN")).toBe("ta-IN");
+    expect(nextRealtimeLanguageOnSwitch("en-IN", "od-IN")).toBe("en-IN");
   });
 });
 
@@ -101,7 +100,7 @@ describe("Sarvam realtime mid-call socket close", () => {
 });
 
 describe("isLidDriftFinal", () => {
-  it("never pins over Saaras LID", () => {
+  it("never retargets the socket from LID confidence", () => {
     expect(isLidDriftFinal({ primaryLanguage: "ta-IN", detectedLanguage: "en-IN", languageConfidence: 0.23 })).toBe(false);
     expect(isLidDriftFinal({ primaryLanguage: "ta-IN", detectedLanguage: "en-IN", languageConfidence: 0.1 })).toBe(false);
     expect(isLidDriftFinal({ primaryLanguage: "hi-IN", detectedLanguage: "en-IN", languageConfidence: 0.2 })).toBe(false);

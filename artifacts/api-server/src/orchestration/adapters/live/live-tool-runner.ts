@@ -25,6 +25,7 @@ import {
   executeMuteMeetingTool,
 } from "../../../services/meet-control.js";
 import { logger } from "../../../lib/logger.js";
+import { buildScheduleCallbackSpeakInstruction } from "../../spokenCallbackConfirm.js";
 import { liveToolTimeoutMs } from "./live-tool-timeout.js";
 import { LIVE_BOOKING_EMAIL_BLOCKED, liveBookingConfirmEmailBlocked } from "./live-booking-email.js";
 
@@ -85,17 +86,17 @@ export async function runLiveToolCall(
         callId: config.callId,
         notes,
       });
-      const cbLocal = scheduledAt.toLocaleString("en-IN", {
-        weekday: "long", day: "numeric", month: "long",
-        hour: "numeric", minute: "2-digit", hour12: true, timeZone: cbTz,
-      });
       logger.info(
         { callId: config.callId, agentId: agent.id, toNumber, scheduledAtRaw, scheduledAt, tz: cbTz, wasDefaulted, wasClamped, wasRolled },
         "Live: schedule_callback invoked by LLM",
       );
       return {
-        output:
-          `Callback recorded for ${cbLocal} (${cbTz}). Confirm THIS exact time to the caller, then close with a proper goodbye.`,
+        output: buildScheduleCallbackSpeakInstruction({
+          callerText: typeof notes === "string" ? notes : "",
+          notes,
+          scheduledAt,
+          tz: cbTz,
+        }),
       };
     }
     return { output: "Callback noted." };
