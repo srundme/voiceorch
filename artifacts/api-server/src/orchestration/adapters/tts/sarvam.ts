@@ -86,6 +86,29 @@ const SARVAM_LANG: Record<string, string> = {
   "or":    "od-IN", "or-IN": "od-IN", "od": "od-IN", "od-IN": "od-IN",
 };
 
+/**
+ * Bulbul v3 language for this utterance. Indic script in the text wins over
+ * the session tag — otherwise Tamil LLM output tagged `en-IN`/`hi-IN` is
+ * spoken with a North-Indian accent (call 26668 / Tamil-like-Hindi reports).
+ * Latin-only text keeps `fallback` so "Okay" on a Tamil call does not flip TTS.
+ */
+export function resolveSarvamTtsLanguageCode(text: string, fallback: string): string {
+  const t = text ?? "";
+  if (/[\u0B80-\u0BFF]/.test(t)) return "ta-IN";
+  if (/[\u0C00-\u0C7F]/.test(t)) return "te-IN";
+  if (/[\u0C80-\u0CFF]/.test(t)) return "kn-IN";
+  if (/[\u0D00-\u0D7F]/.test(t)) return "ml-IN";
+  if (/[\u0A80-\u0AFF]/.test(t)) return "gu-IN";
+  if (/[\u0A00-\u0A7F]/.test(t)) return "pa-IN";
+  if (/[\u0B00-\u0B7F]/.test(t)) return "od-IN";
+  if (/[\u0980-\u09FF]/.test(t)) return "bn-IN";
+  if (/[\u0900-\u097F]/.test(t)) {
+    const mapped = SARVAM_LANG[fallback] ?? fallback;
+    return mapped === "mr-IN" ? "mr-IN" : "hi-IN";
+  }
+  return SARVAM_LANG[fallback] ?? SARVAM_LANG[fallback.split("-")[0] ?? ""] ?? "en-IN";
+}
+
 const DEFAULT_SPEAKER: Record<string, string> = {
   "bulbul:v3":      "ritu",
   "bulbul:v3-beta": "ritu",
@@ -320,8 +343,10 @@ export class SarvamTTS implements TTSAdapter {
   private buildConfigPayload(): Record<string, unknown> {
     const data: Record<string, unknown> = {
       speaker: this.speaker,
-      // WS wire format: language_code (required). REST uses target_language_code.
+      // Bulbul v3: language_code. Also send the older REST name so fallbacks
+      // that still read target_language_code keep the same tag.
       language_code: this.langCode,
+      target_language_code: this.langCode,
       speech_sample_rate: this.pcmSampleRate,
       output_audio_codec: "linear16",
       min_buffer_size: this.minBufferChars(),
@@ -329,6 +354,12 @@ export class SarvamTTS implements TTSAdapter {
     };
     this.applyPace(data);
     return data;
+  }
+
+  /** Pin WS/REST language to Indic script in this utterance before synth. */
+  private pinLanguageForText(text: string): void {
+    const next = resolveSarvamTtsLanguageCode(text, this.langCode);
+    if (next !== this.langCode) this.setLanguage(next);
   }
 
   private dropWarmWs(): void {
@@ -485,6 +516,7 @@ export class SarvamTTS implements TTSAdapter {
   private async synthesizeOne(text: string): Promise<Buffer> {
     const body: Record<string, unknown> = {
       inputs: [text],
+      language_code: this.langCode,
       target_language_code: this.langCode,
       speaker: this.speaker,
       model: this.model,
@@ -512,6 +544,7 @@ export class SarvamTTS implements TTSAdapter {
   }
 
   async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
+    this.pinLanguageForText(text);
     const parts = SarvamTTS.splitForLimit(text, MAX_TTS_CHARS);
     const buffers: Buffer[] = [];
     for (const part of parts) buffers.push(await this.synthesizeOne(part));
@@ -557,6 +590,7 @@ export class SarvamTTS implements TTSAdapter {
       });
       if (signal?.aborted) throw abortError();
       if (this.closed) throw new Error("SarvamTTS: closed");
+      this.pinLanguageForText(text);
       onStarted?.();
 
       let lastErr: unknown;
@@ -751,6 +785,7 @@ export class SarvamTTS implements TTSAdapter {
   ): Promise<void> {
     const body: Record<string, unknown> = {
       text,
+      language_code: this.langCode,
       target_language_code: this.langCode,
       speaker: this.speaker,
       model: apiModel(this.model),

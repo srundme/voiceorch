@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SarvamTTS } from "./sarvam.js";
+import { SarvamTTS, resolveSarvamTtsLanguageCode } from "./sarvam.js";
 
 describe("SarvamTTS stream serialization", () => {
   it("aborts a waiter promptly without letting the third request overtake the first", async () => {
@@ -150,6 +150,60 @@ describe("SarvamTTS sample rate", () => {
     expect(tts.pcmSampleRate).toBe(8000);
     await tts.synthesize("Hello");
     expect(sampleRate).toBe(8000);
+    tts.close();
+  });
+});
+
+describe("resolveSarvamTtsLanguageCode", () => {
+  it("pins Tamil script even when the session language is English or Hindi", () => {
+    expect(resolveSarvamTtsLanguageCode(
+      "Okay, உங்க business-க்கு இப்போ funds தேவைப்படுதா?",
+      "en-IN",
+    )).toBe("ta-IN");
+    expect(resolveSarvamTtsLanguageCode("வணக்கம் நண்பரே", "hi-IN")).toBe("ta-IN");
+  });
+
+  it("keeps Latin-only text on the session language so a Tamil call does not flip to English", () => {
+    expect(resolveSarvamTtsLanguageCode("Okay", "ta-IN")).toBe("ta-IN");
+    expect(resolveSarvamTtsLanguageCode("Hello", "en-IN")).toBe("en-IN");
+  });
+
+  it("pins Devanagari to Hindi unless the session is already Marathi", () => {
+    expect(resolveSarvamTtsLanguageCode("नमस्ते, आप कैसे हैं", "en-IN")).toBe("hi-IN");
+    expect(resolveSarvamTtsLanguageCode("नमस्कार, तुम्ही कसे आहात", "mr-IN")).toBe("mr-IN");
+  });
+});
+
+describe("SarvamTTS language on the wire", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("sends language_code on REST (Bulbul v3 no longer reads target_language_code alone)", async () => {
+    let body: Record<string, unknown> | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        body = JSON.parse(init.body as string) as Record<string, unknown>;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ audios: [Buffer.alloc(4).toString("base64")] }),
+        } as unknown as Response;
+      }),
+    );
+    const tts = new SarvamTTS("test-key", "shubh", null, "en-IN", "bulbul:v3", null, 8000);
+    await tts.synthesize("Okay, உங்க business-க்கு இப்போ funds தேவைப்படுதா?");
+    expect(body?.language_code).toBe("ta-IN");
+    expect(body?.target_language_code).toBe("ta-IN");
+    tts.close();
+  });
+
+  it("puts language_code on the WS config payload", () => {
+    const tts = new SarvamTTS("test-key", "shubh", null, "ta-IN", "bulbul:v3");
+    const cfg = (tts as any).buildConfigPayload() as { language_code: string };
+    expect(cfg.language_code).toBe("ta-IN");
     tts.close();
   });
 });
