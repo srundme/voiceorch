@@ -5,6 +5,7 @@ import {
   parseCartesiaLang,
   cartesiaWireLanguage,
   cartesiaLangFields,
+  resolveCartesiaTtsLanguage,
   appendCartesiaRemainder,
   isCartesiaContextClosedError,
   takeCartesiaWordChunks,
@@ -183,6 +184,18 @@ describe("parseCartesiaLang / cartesiaWireLanguage", () => {
   });
 });
 
+describe("resolveCartesiaTtsLanguage", () => {
+  it("lets Indic script win over an English session tag", () => {
+    expect(resolveCartesiaTtsLanguage("வணக்கம் நண்பரே", "en-IN")).toBe("ta-IN");
+    expect(resolveCartesiaTtsLanguage("नमस्ते, आप कैसे हैं", "en-IN")).toBe("hi-IN");
+  });
+
+  it("keeps the session tag for Latin-only text", () => {
+    expect(resolveCartesiaTtsLanguage("Okay", "ta-IN")).toBe("ta-IN");
+    expect(resolveCartesiaTtsLanguage("Hello", "en-IN")).toBe("en-IN");
+  });
+});
+
 describe("takeCompleteCartesiaSentences", () => {
   it("keeps a trailing fragment unsent", () => {
     expect(takeCompleteCartesiaSentences("Hello. How")).toEqual({
@@ -197,6 +210,11 @@ describe("takeCompleteCartesiaSentences", () => {
 });
 
 describe("Cartesia language vs locale", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   it("never sends language and locale together", async () => {
     const bodies: Array<{ language?: string; locale?: string; normalization?: string }> = [];
     vi.stubGlobal(
@@ -214,6 +232,26 @@ describe("Cartesia language vs locale", () => {
     );
     await new CartesiaTTS("k", null, "sonic-3.6", "en-IN").synthesize("Hello");
     expect(bodies[0]).toMatchObject({ locale: "en-IN", normalization: "en-IN" });
+    expect(bodies[0]!.language).toBeUndefined();
+  });
+
+  it("tags Tamil script as ta-IN even when the session language is English", async () => {
+    const bodies: Array<{ language?: string; locale?: string }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(init.body as string) as { language?: string; locale?: string });
+        return {
+          ok: true,
+          status: 200,
+          body: new ReadableStream({
+            start(c) { c.enqueue(new Uint8Array([1])); c.close(); },
+          }),
+        } as unknown as Response;
+      }),
+    );
+    await new CartesiaTTS("k", null, "sonic-3.6", "en-IN").synthesize("வணக்கம், நான் உங்களுக்கு உதவி செய்கிறேன்.");
+    expect(bodies[0]).toMatchObject({ locale: "ta-IN" });
     expect(bodies[0]!.language).toBeUndefined();
   });
 });
@@ -282,7 +320,7 @@ describe("Cartesia WS continuations", () => {
     vi.restoreAllMocks();
   });
 
-  it("streams each sentence on one context and closes with continue:false", async () => {
+  it("speaks the full turn as one continue:false generation so Sonic cannot overlap", async () => {
     const sockets: FakeCartesiaWs[] = [];
     vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
       constructor(url: string) { super(url); sockets.push(this); }
@@ -297,12 +335,11 @@ describe("Cartesia WS continuations", () => {
       // The pipeline hands over every continuation before closing the turn.
       await join;
       tts.finalizeTurnContext("fast-llm");
-      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(2));
+      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as Record<string, unknown>);
-      // Both sentences ride the same context; the last one carries the close.
       expect(requests.every((r) => r.context_id === "fast-llm")).toBe(true);
       expect(requests.filter((r) => r.flush !== true).map((r) => [r.transcript, r.continue])).toEqual([
-        ["नमस्ते।", true], [" आप कैसे हैं?", false],
+        ["नमस्ते। आप कैसे हैं?", false],
       ]);
       expect(requests[0]).toMatchObject({
         model_id: "sonic-3.6",
@@ -311,8 +348,6 @@ describe("Cartesia WS continuations", () => {
         output_format: { sample_rate: 8000 },
       });
       expect(requests[0]!.language).toBeUndefined();
-      // The adapter already buffers complete sentences, so Cartesia must not
-      // add its default server-side buffer on top.
       expect(requests[0]!.max_buffer_delay_ms).toBe(0);
       sockets[0]!.emit({ type: "chunk", context_id: "fast-llm", data: Buffer.from([1, 2]).toString("base64") });
       sockets[0]!.emit({ type: "done", context_id: "fast-llm" });
@@ -369,11 +404,11 @@ describe("Cartesia WS continuations", () => {
     await tts.synthesizeStreamInContext("flushy", " Three.", () => {}, () => {}, undefined, undefined, true);
     tts.finalizeTurnContext("flushy");
     try {
-      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(3));
+      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as Record<string, unknown>);
       expect(requests.filter((r) => r.flush === true)).toEqual([]);
-      expect(requests.map((r) => r.transcript))
-        .toEqual(["One.", " Two.", " Three."]);
+      expect(requests.map((r) => r.transcript)).toEqual(["One. Two. Three."]);
+      expect(requests.every((r) => r.continue === false)).toBe(true);
       sockets[0]!.emit({ type: "done", context_id: "flushy" });
       await owner;
     } finally {
@@ -408,7 +443,7 @@ describe("Cartesia WS continuations", () => {
     }
   });
 
-  it("speaks the whole turn when Cartesia closes the context mid-turn", async () => {
+  it("speaks the whole turn on one context when Cartesia would have split generations", async () => {
     const sockets: FakeCartesiaWs[] = [];
     vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
       constructor(url: string) { super(url); sockets.push(this); }
@@ -418,25 +453,14 @@ describe("Cartesia WS continuations", () => {
     tts.claimTurnContext("reopen");
     const owner = tts.synthesizeStreamInContext("reopen", "First sentence.", () => {}, () => {});
     await tts.synthesizeStreamInContext("reopen", " Second sentence.", () => {}, () => {}, undefined, undefined, true);
-    await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
-    sockets[0]!.emit({
-      type: "error",
-      context_id: "reopen",
-      message: "Context has closed and is no longer accepting new inputs",
-    });
     tts.finalizeTurnContext("reopen");
     try {
-      // The tail is re-spoken on a fresh context rather than dropped.
-      await vi.waitFor(() => {
-        const tail = sockets[0]!.sent
-          .map((s) => JSON.parse(s) as Record<string, unknown>)
-          .find((r) => r.transcript === " Second sentence." && r.context_id !== "reopen");
-        expect(tail).toMatchObject({ continue: false });
-      });
-      const detached = sockets[0]!.sent
-        .map((s) => JSON.parse(s) as Record<string, unknown>)
-        .find((r) => r.transcript === " Second sentence." && r.context_id !== "reopen")!;
-      sockets[0]!.emit({ type: "done", context_id: detached.context_id as string });
+      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
+      const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as Record<string, unknown>);
+      expect(requests.filter((r) => r.flush !== true).map((r) => [r.transcript, r.continue])).toEqual([
+        ["First sentence. Second sentence.", false],
+      ]);
+      sockets[0]!.emit({ type: "done", context_id: "reopen" });
       await owner;
     } finally {
       tts.close();
@@ -468,6 +492,7 @@ describe("Cartesia WS continuations", () => {
     tts.claimTurnContext("ws-fail");
     const owner = tts.synthesizeStreamInContext("ws-fail", "What is your name?", (pcm) => chunks.push(pcm), () => {});
     await tts.synthesizeStreamInContext("ws-fail", " Please tell me.", () => {}, () => {}, undefined, undefined, true);
+    tts.finalizeTurnContext("ws-fail");
     await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
     sockets[0]!.emit({
       type: "error",
@@ -475,7 +500,6 @@ describe("Cartesia WS continuations", () => {
       error_code: "invalid_request",
       message: "invalid language: en-IN",
     });
-    tts.finalizeTurnContext("ws-fail");
     try {
       await owner;
       expect(Buffer.concat(chunks)).toEqual(Buffer.from([9, 8, 7, 6]));
@@ -599,16 +623,13 @@ describe("Cartesia WS continuations", () => {
     tts.claimTurnContext("interrupted");
     const owner = tts.synthesizeStreamInContext("interrupted", "Hello there.", () => {}, () => {}, abort.signal);
     const rejected = expect(owner).rejects.toMatchObject({ name: "AbortError" });
-    // Barge-in only has something to cancel once a sentence is on the wire.
     await tts.synthesizeStreamInContext("interrupted", " How are you?", () => {}, () => {}, abort.signal, undefined, true);
-    await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
     abort.abort();
     tts.finalizeTurnContext("interrupted");
     await rejected;
-    expect(sockets[0]!.sent.map((s) => JSON.parse(s))).toContainEqual({ context_id: "interrupted", cancel: true });
-    // The interrupted tail is never spoken after the cut.
-    expect(sockets[0]!.sent.map((s) => JSON.parse(s) as Record<string, unknown>)
-      .some((r) => r.transcript === " How are you?")).toBe(false);
+    const payloads = (sockets[0]?.sent ?? []).map((s) => JSON.parse(s) as Record<string, unknown>);
+    // Barge happened before the single close write — nothing is spoken.
+    expect(payloads.some((r) => typeof r.transcript === "string")).toBe(false);
     tts.close();
   });
 
