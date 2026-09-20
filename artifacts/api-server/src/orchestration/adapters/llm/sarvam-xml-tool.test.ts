@@ -61,6 +61,20 @@ describe("parseToolEnvelope", () => {
   it("does not treat emotion markup as a tool", () => {
     expect(parseToolEnvelope('<emotion value="curious"/> Are you looking at flights?', new Set(["end_call"]))).toBeNull();
   });
+
+  it("does not treat Cartesia laughter as an unoffered tool", () => {
+    const valid = new Set(["end_call", "schedule_callback"]);
+    expect(parseToolEnvelope("[laughter]ஆமாப்பா நான்தான்ப்பா.", valid)).toBeNull();
+  });
+
+  it("still recovers an offered bracket tool", () => {
+    const valid = new Set(["end_call", "schedule_callback"]);
+    expect(parseToolEnvelope("[end_call]", valid)).toEqual({
+      name: "end_call",
+      args: {},
+      format: "bracket",
+    });
+  });
 });
 
 describe("xmlToolSniff", () => {

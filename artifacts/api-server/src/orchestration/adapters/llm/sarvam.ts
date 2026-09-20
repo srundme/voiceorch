@@ -816,7 +816,7 @@ ${systemPrompt}`
             if (data.usage) options?.onUsage?.({ inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0 });
             const choice = data.choices?.[0];
             const completed = choice?.message?.content;
-            if (!abort.signal.aborted && choice?.finish_reason === "stop" && completed?.startsWith(full) && completed.length > full.length && !parseToolEnvelope(completed)) {
+            if (!abort.signal.aborted && choice?.finish_reason === "stop" && completed?.startsWith(full) && completed.length > full.length && !parseToolEnvelope(completed, validToolNames)) {
               const suffix = completed.slice(full.length);
               full = completed;
               onToken(suffix);

@@ -8696,7 +8696,8 @@ export class OrchestrationPipeline implements VoiceSession {
     // Defense-in-depth tool-envelope guard: validated against the names of the
     // tools offered this turn so only a genuine serialized tool call is withheld
     // from TTS (ordinary bracketed text streams normally).
-    const envelopeGuard = makeToolEnvelopeGuard(toolNamesOf(toolDefs));
+    const validToolNames = toolNamesOf(toolDefs);
+    const envelopeGuard = makeToolEnvelopeGuard(validToolNames);
 
     // Cartesia turn-level continuations: one context_id per LLM turn so
     // leftover sentences share the owner PCM sink. finalizeTurnCtx() closes
@@ -10430,7 +10431,15 @@ export class OrchestrationPipeline implements VoiceSession {
     }
 
     if (!triggeredToolName) {
-      const recovered = parseToolEnvelope(llmResponse) ?? parseToolEnvelope(envelopeGuard.captured());
+      // Only recover envelopes for tools that were actually offered this turn.
+      // Cartesia nonverbals such as `[laughter]` deliberately use the same
+      // bracket-at-start shape as one of Sarvam's textual tool fallbacks. Calling
+      // parseToolEnvelope without the allow-list turned `[laughter]Hello` into a
+      // fake `laughter` tool call (call 27235), discarded the speech, and sent
+      // the tool failure back to the model as a "technical issue".
+      const recovered =
+        parseToolEnvelope(llmResponse, validToolNames) ??
+        parseToolEnvelope(envelopeGuard.captured(), validToolNames);
       if (recovered) {
         triggeredToolName = recovered.name;
         triggeredToolArgs = recovered.args;
@@ -11323,7 +11332,8 @@ export class OrchestrationPipeline implements VoiceSession {
     const filterBrackets = makeBracketFilter();
     // Defense-in-depth tool-envelope guard (same as the main turn) — withholds a
     // leaked serialized tool envelope from TTS on chained tool turns too.
-    const envelopeGuard = makeToolEnvelopeGuard(toolNamesOf(toolDefs));
+    const validToolNames = toolNamesOf(toolDefs);
+    const envelopeGuard = makeToolEnvelopeGuard(validToolNames);
 
     // Cartesia turn-level continuations (mirrors processTurn logic).
     const ctCartesiaTts = this.tts instanceof CartesiaTTS ? this.tts : null;
@@ -11617,7 +11627,9 @@ export class OrchestrationPipeline implements VoiceSession {
     if (followUpFillerTimer) { clearTimeout(followUpFillerTimer); followUpFillerTimer = null; }
 
     if (!triggeredToolName) {
-      const recovered = parseToolEnvelope(llmResponse) ?? parseToolEnvelope(envelopeGuard.captured());
+      const recovered =
+        parseToolEnvelope(llmResponse, validToolNames) ??
+        parseToolEnvelope(envelopeGuard.captured(), validToolNames);
       if (recovered) {
         triggeredToolName = recovered.name;
         triggeredToolArgs = recovered.args;
