@@ -188,6 +188,13 @@ describe("collapseRepeatedUtterance — STT stutter loops", () => {
     expect(collapseRepeatedUtterance(real)).toBe(real);
     expect(isStutterLoopTranscript(real, real)).toBe(false);
   });
+
+  it("collapses romanised Tamil closer loops from call 26692", () => {
+    const loop = Array.from({ length: 12 }, () => "avlo").join(" ");
+    const collapsed = collapseRepeatedUtterance(loop);
+    expect(collapsed.toLowerCase()).toBe("avlo");
+    expect(isStutterLoopTranscript(loop, collapsed)).toBe(true);
+  });
 });
 
 describe("pickClarificationPhrase", () => {
@@ -432,9 +439,13 @@ describe("looksLikeBookingTimeAnswer", () => {
     expect(looksLikeBookingTimeAnswer("ரெண்டு மணிக்கு வேணும்")).toBe(true);
   });
 
-  it("rejects ordinary acks", () => {
+  it("rejects ordinary acks and bare number-words that are not clock times (call 26692)", () => {
     expect(looksLikeBookingTimeAnswer("हाँ।")).toBe(false);
     expect(looksLikeBookingTimeAnswer("okay madam")).toBe(false);
+    expect(looksLikeBookingTimeAnswer("Eight")).toBe(false);
+    expect(looksLikeBookingTimeAnswer("eight")).toBe(false);
+    expect(looksLikeBookingTimeAnswer("Monday")).toBe(false);
+    expect(looksLikeBookingTimeAnswer("today")).toBe(false);
   });
 });
 
@@ -444,6 +455,7 @@ describe("isHardInterruptTranscript", () => {
     expect(isHardInterruptTranscript("2 pm")).toBe(true);
     expect(isHardInterruptTranscript("Then you need to learn")).toBe(false);
     expect(isHardInterruptTranscript("okay madam")).toBe(false);
+    expect(isHardInterruptTranscript("Eight")).toBe(false);
   });
 
   it("preserves first-20-second opt-out and identity interruptions", () => {

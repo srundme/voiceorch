@@ -24,6 +24,14 @@ describe("isCallerFarewellUtterance", () => {
     expect(isCallerClosingUtterance("வேற ஒன்னும் இல்ல")).toBe(true);
   });
 
+  it("matches romanised Tamil that's-all closers (call 26692)", () => {
+    expect(isCallerClosingUtterance("Avvalavutha Madam")).toBe(true);
+    expect(isCallerClosingUtterance("Illa illa Madam, alva Madam, Thank you")).toBe(true);
+    expect(isCallerClosingUtterance("அவ்ளோதானா")).toBe(true);
+    expect(isCallerClosingUtterance("avlo")).toBe(true);
+    expect(isCallerClosingUtterance("No no, avlo avlo avlo avlo avlo avlo")).toBe(true);
+  });
+
   it("rejects mid-call questions that mention tomorrow", () => {
     expect(isCallerClosingUtterance("நாளைக்கு 5 மணிக்கு call பண்ணுங்க")).toBe(false);
   });

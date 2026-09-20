@@ -14,7 +14,7 @@ import { buildDatetimeInjection, buildTurnClockBlock, THIS_TURN_INSTRUCTION } fr
 import { demoteResumeMemoryAfterOpening } from "./callerMemory.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
-import { buildAntiRepeatNudge, extractRecentAgentQuestions } from "./conversationDiscipline.js";
+import { buildAntiRepeatNudge, extractRecentAgentQuestions, isBareAcknowledgement, isQuestionUtterance } from "./conversationDiscipline.js";
 import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared, isCallerClosingUtterance } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
 import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isQueuedDuplicateUserTurn, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
@@ -127,7 +127,7 @@ import {
   RESUME_DROP_POST_GREETING_STALL_MS,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { pickClarificationPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isCallerAudioDifficulty, isTopicClarificationAsk, isBackchannelOnlyUtterance, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeIncompleteClauseStart, isHardInterruptTranscript } from "./transcriptQuality.js";
+import { pickClarificationPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isCallerAudioDifficulty, isTopicClarificationAsk, isBackchannelOnlyUtterance, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeIncompleteClauseStart, isHardInterruptTranscript, collapseRepeatedUtterance, isStutterLoopTranscript } from "./transcriptQuality.js";
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
@@ -1489,6 +1489,8 @@ export class OrchestrationPipeline implements VoiceSession {
   // to quote the previous line and forbid a verbatim repeat, escalating if stuck.
   private lastAssistantSpokenRaw = "";
   private consecutiveRepeats = 0;
+  /** Call 26692: after schedule_callback the LLM replayed the same closer four times. */
+  private _scheduledCallbackThisCall = false;
   // Interruption hint (inspired by Bolna): tracks sentences fully played this agent turn.
   // On barge-in these are captured into _interruptionHint; injected into the next
   // processTurn()'s historyForLlm so the LLM knows what the caller already heard and
@@ -2892,7 +2894,10 @@ export class OrchestrationPipeline implements VoiceSession {
       recentAgentSpeech: this.recentAgentSpeech,
       agentAudible,
       ttsOnWire,
-      protectedShortIntent: isHardInterruptTranscript(transcript),
+      protectedShortIntent:
+        isHardInterruptTranscript(transcript)
+        || isCallerClosingUtterance(transcript)
+        || isCallerFarewellUtteranceShared(transcript),
     });
   }
 
@@ -3554,6 +3559,30 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     
     let transcript = rawTranscript.trim();
+    // Call 26692: Saaras looped "avlo avlo avlo…" into a real LLM turn, so the
+    // agent spoke the hardcoded-sounding closer again. Collapse first so a
+    // genuine short close ("avlo") can still hang up.
+    {
+      const collapsed = collapseRepeatedUtterance(transcript);
+      if (collapsed !== transcript && isStutterLoopTranscript(transcript, collapsed)) {
+        if (
+          isCallerClosingUtterance(collapsed)
+          || isCallerFarewellUtteranceShared(collapsed)
+          || isBareAcknowledgement(collapsed)
+        ) {
+          transcript = collapsed;
+        } else {
+          logger.info(
+            { callId: this.config.callId, original: transcript.slice(0, 80), collapsed: collapsed.slice(0, 40) },
+            "Discarding streaming final — STT stutter loop",
+          );
+          this.logDiscardedTranscript(transcript, "stutter_loop");
+          return;
+        }
+      } else if (collapsed !== transcript) {
+        transcript = collapsed;
+      }
+    }
     this._turnCloseReason = closeReason;
     const _tStreamNow = performance.now();
     // For Azure streaming, use lastPartialToFinalMs to back-compute when the caller
@@ -4127,8 +4156,23 @@ export class OrchestrationPipeline implements VoiceSession {
     // than 21s of mute (Sarvam resume_false_interruption).
     const spokenLen = spokenResponse.trim().length;
     const minSpoken = Math.min(24, Math.max(12, Math.floor(baseSpokenResponse.length * 0.12)));
-    if (spokenLen < minSpoken) remainder = baseSpokenResponse.trim();
+    const played = this._currentTurnPlayedSentences.map((s) => s.trim()).filter(Boolean);
+    if (spokenLen < minSpoken) {
+      // Call 26692: barge after several sentences left spokenResponse short, so
+      // we "resumed" the FULL LLM paragraph and the caller heard it twice.
+      if (played.length > 0) {
+        const heard = played.join(" ");
+        remainder = baseSpokenResponse.startsWith(heard)
+          ? baseSpokenResponse.slice(heard.length).trim()
+          : "";
+      } else {
+        remainder = baseSpokenResponse.trim();
+      }
+    }
     if (!remainder) return;
+    if (played.length > 0 && remainder.length > baseSpokenResponse.length * 0.7) {
+      return;
+    }
     if (remainder.length > 400) remainder = remainder.slice(0, 400);
     this._bargedReplyRemainder = remainder;
     this._bargedReplyAt = Date.now();
@@ -4137,6 +4181,19 @@ export class OrchestrationPipeline implements VoiceSession {
   /** Speak the unheard remainder of a falsely-barged reply (system-playback style). */
   private async resumeBargedReply(text: string): Promise<void> {
     if (this.closed || this.isProcessing || this.isPlaying) return;
+    const remainderNorm = this.normalizeForRepeat(text);
+    const prevNorm = this.normalizeForRepeat(this.lastAssistantSpokenRaw);
+    if (
+      remainderNorm
+      && prevNorm
+      && (remainderNorm === prevNorm || prevNorm.includes(remainderNorm) || remainderNorm.includes(prevNorm))
+    ) {
+      logger.info(
+        { callId: this.config.callId, chars: text.length },
+        "False barge remainder already spoken — not resuming",
+      );
+      return;
+    }
     logger.info(
       { callId: this.config.callId, chars: text.length },
       "False barge-in — resuming cut-off reply",
@@ -5216,6 +5273,7 @@ export class OrchestrationPipeline implements VoiceSession {
             // coalesced until a real clause exists (call 20274).
             const first = pickStreamedGreetingHead(pendingSpeak, this.ttsExtractOpts());
             if (!first) return;
+            if (this.callDirection === "outbound" && isStubGreeting(first)) return;
             firstSentenceSent = true;
             onFirstSentence(first);
           };
@@ -5457,6 +5515,22 @@ export class OrchestrationPipeline implements VoiceSession {
         greeting = "";
       }
 
+      // Call 26692: typed Welcome "Hello" was spoken as the complete opener
+      // (greetingLen=5), then CALL FLOW dumped on the caller's "Hi".
+      if (
+        this.callDirection === "outbound"
+        && !handoffTakeover
+        && !useInstantReturning
+        && greeting.trim()
+        && isStubGreeting(greeting)
+      ) {
+        logger.info(
+          { callId: this.config.callId, greetLang, stub: greeting.slice(0, 40) },
+          "Pipeline: outbound stub Welcome is not a complete opener — generating a full greeting",
+        );
+        greeting = "";
+      }
+
       let greetingEmotions: string[] | undefined;
       let welcomeAlreadySpoken = false;
 
@@ -5511,6 +5585,7 @@ export class OrchestrationPipeline implements VoiceSession {
         let streamedHead = "";
         if (!this._greetingPrewarmReady && this._greetingFirstSentence) {
           streamedHead = (await this._greetingFirstSentence).trim();
+          if (streamedHead && isStubGreeting(streamedHead)) streamedHead = "";
           if (streamedHead && !this.closed && !this.bargeInRequested) {
             this.beginOpeningGreetingPlayback(streamedHead.length);
             logger.info(
@@ -5579,6 +5654,11 @@ export class OrchestrationPipeline implements VoiceSession {
             },
           });
           greeting = safe;
+        }
+        if (this.callDirection === "outbound" && isStubGreeting(greeting)) {
+          greeting = (this.agent.greetingMessage ?? "").trim();
+          if (isStubGreeting(greeting)) greeting = "";
+          greeting = greeting || neutralGreeting(greetLang);
         }
         if (resumeDropped && greeting.trim()) {
           this.logExec("Agent", "system", {
@@ -7482,7 +7562,8 @@ export class OrchestrationPipeline implements VoiceSession {
             weekday: "long", day: "numeric", month: "long",
             hour: "numeric", minute: "2-digit", hour12: true, timeZone: cbTz,
           });
-          return `Callback recorded for ${cbLocal} (${cbTz}). Now speak naturally to the caller: confirm THIS exact time back to them (e.g. "Great, I've noted that — we'll call you ${cbLocal}"), thank them, then close the conversation. Do NOT call end_call automatically — only end the call after you have spoken a proper goodbye.`;
+          this._scheduledCallbackThisCall = true;
+          return `Callback recorded for ${cbLocal} (${cbTz}). Speak ONE short confirmation of THIS exact time, thank them, and ask if they need anything else. After that, if they say okay, thanks, that's all, avlo, or no more help, you MUST call end_call. Do not repeat the confirmation.`;
         }
         return "Callback noted — I'll arrange for someone to call you back.";
       }
@@ -8354,11 +8435,31 @@ export class OrchestrationPipeline implements VoiceSession {
     // ("சரிங்க") and keeps waiting — the caller has to hang up manually.
     // In group meetings, "thank you"/"bye" is usually participants talking to
     // EACH OTHER — never auto-leave the meeting on a farewell phrase.
-    if (!this.isMeetingMode && this.turnIndex >= 3 && isCallerClosingUtterance(transcript)) {
+    const callerWantsOut =
+      isCallerClosingUtterance(transcript) || isCallerFarewellUtteranceShared(transcript);
+    const postCallbackAck =
+      this._scheduledCallbackThisCall
+      && (
+        callerWantsOut
+        || isBareAcknowledgement(transcript)
+        || /^(no|nope|nah|illa|இல்ல)(?:\s+(?:sir|madam|thanks|thank you))?\.?$/i.test(transcript.trim())
+      );
+    const postCallbackRepeatClose =
+      this._scheduledCallbackThisCall
+      && this.consecutiveRepeats >= 1
+      && !isQuestionUtterance(transcript);
+    if (
+      !this.isMeetingMode
+      && (
+        (this.turnIndex >= 3 && callerWantsOut)
+        || postCallbackAck
+        || postCallbackRepeatClose
+      )
+    ) {
       const endCallTool = this.agent.tools.find((t) => t.type === "end_call");
       if (endCallTool) {
         logger.info(
-          { callId: this.config.callId, transcript, turnIndex: this.turnIndex },
+          { callId: this.config.callId, transcript, turnIndex: this.turnIndex, postCallbackAck, postCallbackRepeatClose },
           "Pipeline: caller farewell detected — auto-triggering end_call (skipping LLM)",
         );
         this.logExec("Agent", "system", {

@@ -100,6 +100,12 @@ export function isCallerClosingUtterance(transcript: string): boolean {
   if (/வேற\s*(எதுவும்|ஒன்னும்|ஏதும்).{0,24}(பண்ண|help)/u.test(t)) return true;
   if (/\b(nothing else|no more help|thats all|that's all|that is all|im done|i'm done)\b/.test(t)) return true;
   if (/\bno\s+(more\s+)?(thanks|thank you|help)\b/.test(t)) return true;
+  // Call 26692: romanised Tamil "that's all" / thanks-while-closing was not
+  // a farewell, so the closer ("வேற ஏதாச்சும் help வேணுமா?") replayed 4×.
+  if (/\b(avlo|avvalavu|avvalavutha|athu than|athuthaan|athuthan)\b/.test(t)) return true;
+  if (/அவ்ளோ|அவ்வளவு|அவ்ளோதான்|அவ்வளவுதான்/.test(t)) return true;
+  if (/\billa\b/.test(t) && /\bthank\s*you\b/.test(t)) return true;
+  if (/இல்ல/.test(t) && /நன்றி/.test(t)) return true;
   return false;
 }
 

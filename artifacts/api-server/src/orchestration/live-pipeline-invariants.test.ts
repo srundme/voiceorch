@@ -232,6 +232,19 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).not.toContain("answering last partial");
   });
 
+  it("does not replay a spoken pitch or loop the callback closer (call 26692)", () => {
+    expect(methodBody("isCarrierSelfEcho")).toContain("isCallerClosingUtterance");
+    expect(methodBody("isCarrierSelfEcho")).toContain("isCallerFarewellUtteranceShared");
+    expect(methodBody("handleStreamingTranscript")).toContain("collapseRepeatedUtterance");
+    expect(methodBody("handleStreamingTranscript")).toContain("isStutterLoopTranscript");
+    expect(methodBody("captureBargedRemainder")).toContain("_currentTurnPlayedSentences");
+    expect(methodBody("resumeBargedReply")).toContain("False barge remainder already spoken");
+    expect(methodBody("processTurn")).toContain("_scheduledCallbackThisCall");
+    expect(methodBody("handleToolCallInner")).toContain("you MUST call end_call");
+    expect(methodBody("handleToolCallInner")).not.toContain("Do NOT call end_call automatically");
+    expect(pipelineSrc).toContain("outbound stub Welcome is not a complete opener");
+  });
+
   it("barge recovery waits out an open VAD instead of answering a fragment (call 21628)", () => {
     expect(methodBody("flushBargeRecovery")).toContain("this.clearBargeRecovery()");
     expect(pipelineSrc).toContain("abandonFalseBarge");

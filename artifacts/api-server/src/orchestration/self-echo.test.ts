@@ -110,7 +110,7 @@ describe("isSelfEcho", () => {
   });
 
   it("never drops a protected short caller intent while TTS is on the wire", () => {
-    for (const reply of ["stop", "wrong number", "call me later"]) {
+    for (const reply of ["stop", "wrong number", "call me later", "thank you", "avvalavutha madam"]) {
       expect(isSelfEcho({
         tokens: words(reply),
         recentAgentSpeech: spoken(agentLine),

@@ -870,15 +870,30 @@ export function looksLikeBookingTimeAnswer(text: string): boolean {
   if (/\b\d{1,2}[:.]\d{2}\b/.test(t)) return true;
   if (/\b\d{1,2}\s*(?:a\.?m\.?|p\.?m\.?)\b/i.test(t)) return true;
   if (
-    /\b(?:ten|eleven|twelve|one|two|three|four|five|six|seven|eight|nine)\s*(?:thirty|fifteen|forty[\s-]?five|o'?clock)?\b/i.test(
+    /\b(?:ten|eleven|twelve|one|two|three|four|five|six|seven|eight|nine)\s+(?:thirty|fifteen|forty[\s-]?five|o'?clock)\b/i.test(
       t,
     )
   ) {
     return true;
   }
   if (
+    /\b(?:ten|eleven|twelve|one|two|three|four|five|six|seven|eight|nine)\s*(?:a\.?m\.?|p\.?m\.?)\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  // Bare "eight" / "Monday" / "today" is not a slot. Call 26692: STT partial
+  // "Eight" (from "18 to") hard-interrupted TTS and the remainder replayed
+  // the whole pitch.
+  if (
     /\b(?:tomorrow|today|tonight|morning|afternoon|evening|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(
       t,
+    )
+    && (
+      /\b\d{1,2}\b/.test(t)
+      || /\b(?:a\.?m\.?|p\.?m\.?|o'?clock|morning|afternoon|evening|night)\b/i.test(t)
+      || /[:.]/.test(t)
     )
   ) {
     return true;

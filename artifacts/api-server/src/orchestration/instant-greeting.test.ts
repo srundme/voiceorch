@@ -93,9 +93,10 @@ describe("stripWelcomePrefix", () => {
 });
 
 describe("outboundTypedWelcomeBlocksGreetingLlm", () => {
-  it("blocks a second spoken greeting when Welcome is just Hello (call 17455)", () => {
-    expect(outboundTypedWelcomeBlocksGreetingLlm("Hello!", "en-IN")).toBe(true);
-    expect(outboundTypedWelcomeBlocksGreetingLlm("Hi", "en")).toBe(true);
+  it("does not treat Hello as a complete outbound opener (call 26692)", () => {
+    expect(outboundTypedWelcomeBlocksGreetingLlm("Hello!", "en-IN")).toBe(false);
+    expect(outboundTypedWelcomeBlocksGreetingLlm("Hi", "en")).toBe(false);
+    expect(outboundTypedWelcomeBlocksGreetingLlm("Hello!", "ta-IN")).toBe(false);
   });
 
   it("still generates an opener when Welcome is empty", () => {
@@ -103,8 +104,13 @@ describe("outboundTypedWelcomeBlocksGreetingLlm", () => {
     expect(outboundTypedWelcomeBlocksGreetingLlm("   ", "en-IN")).toBe(false);
   });
 
-  it("keeps typed English Welcome even when start language is Indic (memory LID)", () => {
-    expect(outboundTypedWelcomeBlocksGreetingLlm("Hello!", "ta-IN")).toBe(true);
+  it("still blocks a second opener when Welcome is a real identity line (call 17455)", () => {
+    expect(
+      outboundTypedWelcomeBlocksGreetingLlm(
+        "Hi, this is Infant from SnapServe. Got two minutes?",
+        "en-IN",
+      ),
+    ).toBe(true);
   });
 });
 

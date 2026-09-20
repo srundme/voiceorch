@@ -906,7 +906,14 @@ export function outboundTypedWelcomeBlocksGreetingLlm(
   typedWelcome: string,
   _greetLang?: string,
 ): boolean {
-  return typedWelcome.trim().length > 0;
+  const t = typedWelcome.trim();
+  if (!t) return false;
+  // Call 26692: Welcome "Hello" was treated as the complete outbound opener,
+  // then CALL FLOW dumped on the caller's "Hi". A stub is not a finished
+  // greeting — still run the compact greeting LLM. A real typed Welcome
+  // (identity + ask) still blocks a second opener (call 17455).
+  if (isStubGreeting(t)) return false;
+  return true;
 }
 
 /** True when the static Welcome is a one-word stub that cannot be the whole outbound opener. */
