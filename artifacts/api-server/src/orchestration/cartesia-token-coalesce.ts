@@ -44,10 +44,25 @@ export function flushCartesiaSpeakable(pending: string): string {
 export function cartesiaUnspokenTail(sent: string, full: string): string {
   if (!full) return "";
   if (!sent) return full;
-  if (full.startsWith(sent)) return full.slice(sent.length);
-  // A rewrite/normalization mismatch is not evidence of an unspoken suffix.
-  // Never replay words the caller may already have heard.
+  const a = sent.normalize("NFC");
+  const b = full.normalize("NFC");
+  if (b.startsWith(a)) return b.slice(a.length);
+  const aTrim = a.trimEnd();
+  if (b.startsWith(aTrim)) return b.slice(aTrim.length);
   return "";
+}
+
+/**
+ * If the held last fragment is a truncated prefix of the unspoken remainder,
+ * speak the remainder (call 27214: "நல்லா " vs "நல்லா கேக்குதா?").
+ */
+export function completeCartesiaHeldTail(held: string, restOfFull: string): string {
+  if (!restOfFull) return held;
+  if (!held) return restOfFull;
+  const h = held.normalize("NFC");
+  const r = restOfFull.normalize("NFC");
+  if (r.startsWith(h) || r.startsWith(h.trimEnd())) return r;
+  return held;
 }
 
 export class CartesiaTurnStream {
@@ -66,12 +81,14 @@ export class CartesiaTurnStream {
   }
 
   finish(fullReply: string): { stream: string[]; leftover: string } {
+    const restOfFull = cartesiaUnspokenTail(this.sent, fullReply);
     const held = flushCartesiaSpeakable(this.pending);
     this.pending = "";
+    const last = completeCartesiaHeldTail(held, restOfFull);
     const stream: string[] = [];
-    if (held) {
-      stream.push(held);
-      this.sent += held;
+    if (last) {
+      stream.push(last);
+      this.sent += last;
     }
     return { stream, leftover: cartesiaUnspokenTail(this.sent, fullReply) };
   }

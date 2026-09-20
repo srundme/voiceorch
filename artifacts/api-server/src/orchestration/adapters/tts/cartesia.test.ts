@@ -370,6 +370,46 @@ describe("Cartesia WS continuations", () => {
     }
   });
 
+  it("speaks leftover last word after the held fragment, not before it (call 27214)", async () => {
+    const sockets: FakeCartesiaWs[] = [];
+    vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {
+      constructor(url: string) { super(url); sockets.push(this); }
+    });
+    vi.stubGlobal("fetch", vi.fn());
+    const tts = new CartesiaTTS("test-key", null, "sonic-3.6", "ta-IN", null, 8000);
+    tts.claimTurnContext("tail-word");
+    const owner = tts.synthesizeStreamInContext("tail-word", "நல்லா இருக்கேன் சனா. ", () => {}, () => {});
+    await tts.synthesizeStreamInContext("tail-word", "நீங்க எப்படி இருக்கீங்க? ", () => {}, () => {}, undefined, undefined, true);
+    const last = tts.synthesizeStreamInContext(
+      "tail-word",
+      "அங்க இருக்குற எல்லாரும் நல்லா ",
+      () => {},
+      () => {},
+      undefined,
+      undefined,
+      true,
+    );
+    tts.appendTurnRemainder("tail-word", "கேக்குதா?");
+    tts.finalizeTurnContext("tail-word");
+    try {
+      await last;
+      await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
+      const spoken = sockets[0]!.sent
+        .map((s) => JSON.parse(s) as Record<string, unknown>)
+        .filter((r) => r.flush !== true)
+        .map((r) => r.transcript as string)
+        .join("");
+      expect(spoken).toContain("கேக்குதா?");
+      expect(spoken.indexOf("கேக்குதா?")).toBeGreaterThan(spoken.indexOf("நல்லா "));
+      expect(spoken).toMatch(/நல்லா கேக்குதா\?/);
+      sockets[0]!.emit({ type: "done", context_id: "tail-word" });
+      await owner;
+    } finally {
+      tts.close();
+      await owner.catch(() => {});
+    }
+  });
+
   it("speaks every sentence when finalize races ahead of the writes", async () => {
     const sockets: FakeCartesiaWs[] = [];
     vi.stubGlobal("WebSocket", class extends FakeCartesiaWs {

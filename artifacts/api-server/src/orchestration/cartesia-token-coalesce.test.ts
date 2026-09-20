@@ -80,6 +80,18 @@ describe("pushCartesiaSpeakable", () => {
     expect(cartesiaUnspokenTail(sent, full)).toBe(" அதாவது ஷாப்பா, ரெஸ்டாரண்ட்டா இல்ல ஆபீஸா?");
   });
 
+  it("speaks கேக்குதா? with the last sentence, not as a dropped leftover (call 27214)", () => {
+    const s = new CartesiaTurnStream();
+    expect(s.push("நல்லா இருக்கேன் சனா. ")).toEqual(["நல்லா இருக்கேன் சனா. "]);
+    expect(s.push("நீங்க எப்படி இருக்கீங்க? ")).toEqual(["நீங்க எப்படி இருக்கீங்க? "]);
+    expect(s.push("அங்க இருக்குற எல்லாரும் நல்லா ")).toEqual([]);
+    const full = "நல்லா இருக்கேன் சனா. நீங்க எப்படி இருக்கீங்க? அங்க இருக்குற எல்லாரும் நல்லா கேக்குதா?";
+    expect(s.finish(full)).toEqual({
+      stream: ["அங்க இருக்குற எல்லாரும் நல்லா கேக்குதா?"],
+      leftover: "",
+    });
+  });
+
   it("continues on the same stream after the first sentence end", () => {
     const s = new CartesiaTurnStream();
     expect(s.push("சரி, ")).toEqual([]);

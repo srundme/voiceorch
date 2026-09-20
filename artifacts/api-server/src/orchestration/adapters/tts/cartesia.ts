@@ -292,6 +292,8 @@ interface TurnCtx {
   awaitingDone: boolean;
   /** closeContext has run (or is running) — no further writes. */
   closed: boolean;
+  /** finalize queued; in-flight writes must still reach `held` (call 27214). */
+  closing: boolean;
   /** Cartesia closed the context, or the turn was aborted. */
   dead: boolean;
   /** Barge-in / abort — drop remaining text instead of speaking it. */
@@ -666,6 +668,7 @@ export class CartesiaTTS implements TTSAdapter {
         gotAudio: false,
         awaitingDone: false,
         closed: false,
+        closing: false,
         dead: false,
         cancelled: false,
         restFallback: false,
@@ -697,10 +700,13 @@ export class CartesiaTTS implements TTSAdapter {
   /** No more text for this turn — flush what is held and close the context. */
   finalizeTurnContext(turnContextId: string): void {
     const ctx = this.turns.get(turnContextId);
-    if (!ctx || ctx.closed) return;
-    ctx.closed = true;
+    if (!ctx || ctx.closed || ctx.closing) return;
+    ctx.closing = true;
     ctx.queue = ctx.queue
-      .then(() => this.closeContext(turnContextId, ctx))
+      .then(() => {
+        ctx.closed = true;
+        return this.closeContext(turnContextId, ctx);
+      })
       .catch((err: unknown) => {
         logger.warn({ contextId: turnContextId, err: errMsg(err) }, "Cartesia turn close failed");
         ctx.settleOwner?.(err);
