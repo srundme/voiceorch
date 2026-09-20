@@ -75,6 +75,13 @@ export function buildCompactGreetingPrompt(
   }
   const langName = LANG_DISPLAY_NAMES[language] ?? language;
   const languageInstruction = `[LANGUAGE] Respond in ${langName}.`;
+  const outbound = opts?.callDirection === "outbound";
+  const firstContactRule = outbound
+    ? "[FIRST-CONTACT UX] This is a phone call, not a demo. The caller must understand who is calling before hearing a pitch. " +
+      "Speak ONE short sentence only: your name/company exactly as scripted, a very brief reason for the call, and ask permission to continue. " +
+      "Target 18 words or fewer when natural in this language. Do NOT list features, benefits, prices, or multiple questions. Then stop and listen."
+    : "[FIRST-CONTACT UX] Speak ONE short sentence only: greet briefly, identify the company exactly as scripted when available, and ask how you can help. " +
+      "Target 18 words or fewer when natural in this language. Do NOT list features or ask multiple questions. Then stop and listen.";
   const handoffTakeover = opts?.squadHandoffTakeover === true;
   const isReturningCaller = !resumeDropped && !handoffTakeover && isReturningCallerMemoryBlock(memoryBlock);
   const squadHandoffMatch = fullSystemPrompt.match(
@@ -98,8 +105,8 @@ export function buildCompactGreetingPrompt(
         "Speak 1 short sentence only: greet the caller (by name only if CALLER MEMORY has a real person name) " +
         "and ask if it is a good time to talk. Then wait. Do not recap the previous call."
     : scriptBlock
-      ? "[OPENING] Speak the GREETING / opening from CALL FLOW / FLOW above as a single uninterrupted turn. " +
-        "Use the caller's company/contact name when present. Do not replace the scripted pitch with a one-word Hello."
+      ? "[OPENING] Use the GREETING / opening from CALL FLOW / FLOW above only as source material for the short first-contact line. " +
+        "Use the caller's company/contact name when present. Do not deliver the full pitch yet."
       : "[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.";
   // Call 7943: agent display name "voiceathon new agent" leaked into spoken opener
   // as "Thanks for calling voiceathon" even though the prompt never named that brand.
@@ -124,12 +131,13 @@ export function buildCompactGreetingPrompt(
     // later turn, so the opener can no longer contradict the conversation.
     const fullOpeningRule = resumeDropped || handoffTakeover || isReturningCaller
       ? openingLengthRule
-      : "[OPENING] Produce ONLY your first spoken line of this call, following the opening/greeting " +
-        "instructions in your prompt above. Keep it short and natural — do not continue past the opener.";
+      : "[OPENING] Produce ONLY your first spoken line of this call, using the opening/greeting " +
+        "instructions in your prompt above as source material. Do not deliver the full pitch yet.";
     return [
       fullSystemPrompt,
       languageInstruction,
       fullOpeningRule,
+      resumeDropped || handoffTakeover || isReturningCaller ? "" : firstContactRule,
       returningCallerRule,
       antiInventionRule,
     ].filter(Boolean).join("\n\n");
@@ -140,6 +148,7 @@ export function buildCompactGreetingPrompt(
     scriptBlock,
     languageInstruction,
     openingLengthRule,
+    resumeDropped || handoffTakeover || isReturningCaller ? "" : firstContactRule,
     returningCallerRule,
     antiInventionRule,
   ].filter(Boolean);

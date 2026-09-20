@@ -74,19 +74,19 @@ describe("nextRealtimeLanguageOnSwitch", () => {
 });
 
 describe("resolveRealtimeVadDefaults", () => {
-  it("uses Sarvam LiveKit telephony VAD on 8 kHz PSTN", () => {
+  it("leaves 8 kHz PSTN VAD ownership with Saaras", () => {
     expect(resolveRealtimeVadDefaults(8000)).toEqual({
-      silenceDurationMs: 500,
-      minSpeechDurationMs: 200,
-      threshold: 0.7,
+      silenceDurationMs: null,
+      minSpeechDurationMs: null,
+      threshold: null,
     });
   });
 
-  it("uses the cleaner-channel VAD on 16 kHz WebRTC", () => {
+  it("leaves 16 kHz WebRTC VAD ownership with Saaras", () => {
     expect(resolveRealtimeVadDefaults(16000)).toEqual({
-      silenceDurationMs: 500,
-      minSpeechDurationMs: 250,
-      threshold: 0.3,
+      silenceDurationMs: null,
+      minSpeechDurationMs: null,
+      threshold: null,
     });
   });
 });

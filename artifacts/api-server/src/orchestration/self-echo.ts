@@ -56,6 +56,13 @@ export interface SelfEchoCheck {
    * natural finish is *not* this: short answers like "Chennai" must land.
    */
   readonly ttsOnWire?: boolean;
+  /**
+   * A short, high-priority caller intent (for example "stop", "wrong number",
+   * or "call later"). Content overlap can still prove that a longer utterance
+   * is echo, but an unrelated short command must never be discarded merely
+   * because TTS happens to be on the wire.
+   */
+  readonly protectedShortIntent?: boolean;
 }
 
 /** Fraction of `tokens` present in `spoken`. */
@@ -91,6 +98,11 @@ export function isSelfEcho(check: SelfEchoCheck): boolean {
   // Sidetone STT is often a short junk fragment with none of our words
   // (call 25295: "Camera", "Downward", "Meeting பைங்கா"). Real short answers
   // reuse the script ("yes", "voice process") and stay caller.
-  if (check.ttsOnWire && check.tokens.length < SELF_ECHO_MIN_WORDS && hit === 0) return true;
+  if (
+    !check.protectedShortIntent
+    && check.ttsOnWire
+    && check.tokens.length < SELF_ECHO_MIN_WORDS
+    && hit === 0
+  ) return true;
   return false;
 }

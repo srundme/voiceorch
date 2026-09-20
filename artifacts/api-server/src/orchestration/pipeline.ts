@@ -2227,8 +2227,10 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.isSameUtteranceStillArriving(partial)) return;
     const hard = isHardInterruptTranscript(partial);
     if (this.playbackTooFreshForPartialBarge(partial) && !hard) return;
-    const usable = countTranscriptWords(partial) >= SELF_ECHO_MIN_WORDS
-      && this.shouldInterruptFromCallerTranscript(partial);
+    const usable = hard || (
+      countTranscriptWords(partial) >= SELF_ECHO_MIN_WORDS
+      && this.shouldInterruptFromCallerTranscript(partial)
+    );
     if (!shouldBargeOnRealtimeVadStart({
       agentSpeaking: true,
       greetingOrSystem: this.greetingFirstClipActive || this.systemPlaybackActive,
@@ -2295,10 +2297,11 @@ export class OrchestrationPipeline implements VoiceSession {
       minChars: 1,
       isHardInterrupt: hard,
     })) return;
-    // Partials shorter than the self-echo floor cannot be proven as caller
-    // vs sidetone; wait for transcript.final (InterruptionManager word count).
-    if (countTranscriptWords(partial) < SELF_ECHO_MIN_WORDS) return;
-    if (!this.shouldInterruptFromCallerTranscript(partial)) return;
+    // Ordinary short partials wait for transcript.final, but explicit stop /
+    // opt-out / identity intents must interrupt immediately regardless of the
+    // normal word floor.
+    if (!hard && countTranscriptWords(partial) < SELF_ECHO_MIN_WORDS) return;
+    if (!hard && !this.shouldInterruptFromCallerTranscript(partial)) return;
     this.triggerBargeIn("stt_partial", partial);
   }
 
@@ -2878,7 +2881,13 @@ export class OrchestrationPipeline implements VoiceSession {
       || Date.now() - this.lastTtsFrameAt < SELF_ECHO_TAIL_MS;
     if (!agentAudible) return false;
     const tokens = this.normalizeForRepeat(transcript).split(" ").filter(Boolean);
-    return isSelfEcho({ tokens, recentAgentSpeech: this.recentAgentSpeech, agentAudible, ttsOnWire });
+    return isSelfEcho({
+      tokens,
+      recentAgentSpeech: this.recentAgentSpeech,
+      agentAudible,
+      ttsOnWire,
+      protectedShortIntent: isHardInterruptTranscript(transcript),
+    });
   }
 
   /**
@@ -3619,10 +3628,11 @@ export class OrchestrationPipeline implements VoiceSession {
 
     if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
       const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
+      const hard = isHardInterruptTranscript(transcript);
       this.streamingBargeInWordCount = Math.max(this.streamingBargeInWordCount, wordCount);
       if (
         !this.isSameUtteranceStillArriving(transcript)
-        && this.shouldInterruptFromCallerTranscript(transcript)
+        && (hard || this.shouldInterruptFromCallerTranscript(transcript))
       ) {
         this.triggerBargeIn("word_count", transcript);
         logger.info(

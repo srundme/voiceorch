@@ -35,7 +35,22 @@ describe("buildCompactGreetingPrompt", () => {
   it("still asks first-time calls to speak the scripted GREETING / FLOW opener", () => {
     const out = buildCompactGreetingPrompt(SCRIPT, "ta-IN");
     expect(out).not.toContain("OPENING — RETURNING CALLER");
-    expect(out).toMatch(/Speak the GREETING|following the opening\/greeting instructions/);
+    expect(out).toMatch(/GREETING \/ opening|opening\/greeting instructions/);
+  });
+
+  it("turns an outbound first greeting into a short identity-first permission opener", () => {
+    const out = buildCompactGreetingPrompt(SCRIPT, "en-IN", false, { callDirection: "outbound" });
+    expect(out).toContain("This is a phone call, not a demo");
+    expect(out).toContain("your name/company exactly as scripted");
+    expect(out).toContain("ask permission to continue");
+    expect(out).toContain("18 words or fewer");
+    expect(out).toContain("Do not deliver the full pitch yet");
+  });
+
+  it("does not override returning-call pickup with the first-contact script", () => {
+    const out = buildCompactGreetingPrompt(`${RETURNING_MEMORY}\n\n${SCRIPT}`, "en-IN", false, { callDirection: "outbound" });
+    expect(out).toContain("OPENING — RETURNING CALLER");
+    expect(out).not.toContain("This is a phone call, not a demo");
   });
 
   it("clips a promptCore FLOW heading the same way as CALL FLOW on huge prompts", () => {

@@ -140,7 +140,11 @@ export async function handleVobizWebSocket(
   function ownsMedia(): boolean {
     if (!sessionId) return true;
     const sess = getSession(sessionId);
-    return !sess || sess.mediaEpoch === myEpoch;
+    // Sessions created before media-epoch handoff support (and lightweight
+    // session implementations used during startup) do not expose an epoch.
+    // They still own their only socket. Treating an absent epoch as stale drops
+    // both barge-in clearAudio and live caller frames immediately after setup.
+    return !sess || sess.mediaEpoch == null || sess.mediaEpoch === myEpoch;
   }
   // Caller audio can arrive while DB/config/provider setup is awaited. Retain
   // at most 5 seconds of PCM8k, not an unbounded queue during a stuck setup.

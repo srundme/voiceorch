@@ -756,6 +756,13 @@ const SEMANTIC_INTERRUPT_PATTERNS: RegExp[] = [
   /\bdobara\b/i,                   // Hindi: again
   /\bphir se\b/i,                  // Hindi: once more
 
+  // Production-critical short intents. These commonly arrive in the first
+  // seconds of an outbound call and must cut a long introduction immediately.
+  /\b(?:not interested|don'?t call|do not call|wrong number|call (?:me )?later|busy (?:now|right now))\b/i,
+  /\b(?:who (?:is this|are you)|what(?:'s| is) your name|where are you calling from)\b/i,
+  /(?:मुझे\s*दिलचस्पी\s*नहीं|फोन\s*मत\s*कर|गलत\s*नंबर|बाद\s*में\s*(?:फोन|कॉल)|अभी\s*व्यस्त)/u,
+  /(?:வேண்டாம்|ஆர்வம்\s*இல்லை|தவறான\s*எண்|பிறகு\s*(?:கால்|கூப்பிடு)|இப்போ\s*பிஸி)/u,
+
   // Tamil / Tanglish stop + language-switch cues
   /\b(english|inglish)\s*(la|le|ah|a)?\s*(pesu|pesunga|pesanum|pannunga|pannalam)\b/i,
   /\b(wait|stop)\s*(pannunga|pannalam|pannu)\b/i,
@@ -1161,4 +1168,3 @@ export function coalescePendingTranscripts<TCloseReason>(
   const merged = parts.slice(-maxParts).join(" ");
   return { text: merged, emittedAt: last.emittedAt, closeReason: last.closeReason };
 }
-

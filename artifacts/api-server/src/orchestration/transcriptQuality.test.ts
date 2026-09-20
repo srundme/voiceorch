@@ -446,6 +446,21 @@ describe("isHardInterruptTranscript", () => {
     expect(isHardInterruptTranscript("okay madam")).toBe(false);
   });
 
+  it("preserves first-20-second opt-out and identity interruptions", () => {
+    for (const phrase of [
+      "not interested",
+      "wrong number",
+      "call me later",
+      "busy right now",
+      "who is this",
+      "where are you calling from",
+      "फोन मत कर",
+      "தவறான எண்",
+    ]) {
+      expect(isHardInterruptTranscript(phrase)).toBe(true);
+    }
+  });
+
   it("does not treat a long pitch echo as a slot answer just because it says today/two", () => {
     expect(
       isHardInterruptTranscript(

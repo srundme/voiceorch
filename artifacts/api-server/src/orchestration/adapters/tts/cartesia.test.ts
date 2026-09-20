@@ -311,8 +311,9 @@ describe("Cartesia WS continuations", () => {
         output_format: { sample_rate: 8000 },
       });
       expect(requests[0]!.language).toBeUndefined();
-      // Buffering is left at Cartesia's default; flush is what forces generation.
-      expect(requests[0]!.max_buffer_delay_ms).toBeUndefined();
+      // The adapter already buffers complete sentences, so Cartesia must not
+      // add its default server-side buffer on top.
+      expect(requests[0]!.max_buffer_delay_ms).toBe(0);
       sockets[0]!.emit({ type: "chunk", context_id: "fast-llm", data: Buffer.from([1, 2]).toString("base64") });
       sockets[0]!.emit({ type: "done", context_id: "fast-llm" });
       await owner;

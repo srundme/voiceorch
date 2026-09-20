@@ -12,9 +12,12 @@
  * them starts a *new* Sonic generation on the same context, and those PCM
  * streams overlap (call 25226). `flush_done` only means the flush was accepted,
  * not that audio finished, so waiting on it still overlapped. The turn closes
- * with one `continue: false` write. `max_buffer_delay_ms` stays at Cartesia's
- * default — forcing it to 0 makes Sonic speak each word as its own clip
- * (choppy, call 25061).
+ * with one `continue: false` write. Because this adapter already performs its
+ * own sentence buffering, every generation explicitly sets
+ * `max_buffer_delay_ms: 0`. Leaving Cartesia's server-side 3000 ms default in
+ * place would buffer an already-complete sentence a second time. This does not
+ * recreate call 25061's word-by-word clips: incomplete word fragments never
+ * reach the socket in this implementation.
  *
  * The turn is closed by one `continue: false` write. Cartesia rejects a close
  * whose transcript is empty ("No valid transcripts passed", calls 25048/25049)
@@ -378,6 +381,8 @@ export class CartesiaTTS implements TTSAdapter {
         voice: this.buildVoice(),
         output_format: this.outputFormat(),
         add_timestamps: true,
+        // We send complete phrases; do not add Cartesia's server-side buffer.
+        max_buffer_delay_ms: 0,
       };
       const gc = this.buildGenerationConfig(emotions);
       if (gc) settings.generation_config = gc;
@@ -904,6 +909,8 @@ export class CartesiaTTS implements TTSAdapter {
         voice: this.buildVoice(),
         output_format: this.outputFormat(),
         add_timestamps: true,
+        // One-shot input is already a complete, punctuated utterance.
+        max_buffer_delay_ms: 0,
         continue: false,
       };
       const gc = this.buildGenerationConfig(emotions);

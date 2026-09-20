@@ -19,22 +19,19 @@ const WS_BASE = "wss://api.sarvam.ai/speech-to-text-realtime/ws";
 const PING_MS = 20_000;
 
 /**
- * Official saaras realtime VAD (docs.sarvam.ai realtime streaming + LiveKit
- * production best practices). Agent Latency Tuning can still override per call.
- *
- * Telephony (8 kHz PSTN/SIP): threshold 0.7 / min_speech 200 ms rejects line
- * noise, TV, and sidetone that would otherwise become a fake caller turn.
- * WebRTC / 16 kHz keeps the cleaner-channel defaults.
+ * Leave Saaras realtime VAD parameters unset unless the agent explicitly tunes
+ * them. Sarvam's production guide treats `None` as the safe baseline and calls
+ * out `min_speech_duration_ms` (not an aggressive threshold) as the main dial
+ * for clicks/coughs. Hard-coding 0.7 on 8 kHz PSTN suppressed quiet callers and
+ * diverged from the server's documented 0.3 default.
  */
 export function resolveRealtimeVadDefaults(sampleRate: 8000 | 16000): {
   silenceDurationMs: number | null;
   minSpeechDurationMs: number | null;
   threshold: number | null;
 } {
-  if (sampleRate === 8000) {
-    return { silenceDurationMs: 500, minSpeechDurationMs: 200, threshold: 0.7 };
-  }
-  return { silenceDurationMs: 500, minSpeechDurationMs: 250, threshold: 0.3 };
+  void sampleRate;
+  return { silenceDurationMs: null, minSpeechDurationMs: null, threshold: null };
 }
 
 export type SarvamRealtimeStreamType = "fast" | "balanced" | "simulated";
@@ -352,6 +349,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
   private readonly silenceDurationMs: number | null;
   private readonly minSpeechDurationMs: number | null;
   private readonly threshold: number | null;
+  private readonly prefixPaddingMs: number | null;
   private readonly streamType: SarvamRealtimeStreamType;
   private readonly prompt?: string;
 
@@ -373,6 +371,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
           firstTurnMinSpeechMs?: number | null;
           endOfSpeechSilenceMs?: number | null;
           vadThreshold?: number | null;
+          prefixPaddingMs?: number | null;
           streamType?: string;
           prompt?: string;
         })
@@ -400,6 +399,12 @@ export class SarvamRealtimeSTT implements STTAdapter {
       typeof th === "number" && Number.isFinite(th)
         ? Math.min(1, Math.max(0, th))
         : vadDefaults.threshold;
+    this.prefixPaddingMs = resolveOptionalMsSetting(
+      extra.prefixPaddingMs,
+      "SARVAM_PREFIX_PADDING_MS",
+      null,
+      { min: 0, max: 2000 },
+    );
     this.streamType = resolveRealtimeStreamType(extra.streamType);
     this.prompt = buildSarvamTerminologyPrompt(cfg.keyterms, extra.prompt);
 
@@ -410,7 +415,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
         primaryLanguage: this.primaryLanguage,
         mode: this.mode,
         streamType: this.streamType,
-        prefixPaddingMs: null,
+        prefixPaddingMs: this.prefixPaddingMs,
         prompt: this.prompt ? this.prompt.slice(0, 40) : undefined,
         sampleRate: this.sampleRate,
         silenceDurationMs: this.silenceDurationMs,
@@ -444,6 +449,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
     let silenceDurationMs = this.silenceDurationMs;
     const minSpeechDurationMs = this.minSpeechDurationMs;
     const threshold = this.threshold;
+    const prefixPaddingMs = this.prefixPaddingMs;
     const streamType = this.streamType;
     const prompt = this.prompt;
     const legacy = this.legacy;
@@ -711,6 +717,7 @@ export class SarvamRealtimeSTT implements STTAdapter {
         silenceDurationMs,
         minSpeechDurationMs,
         threshold,
+        prefixPaddingMs,
         prompt,
         returnTimestamps: true,
       });

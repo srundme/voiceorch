@@ -104,6 +104,18 @@ describe("isSelfEcho", () => {
     }
   });
 
+  it("never drops a protected short caller intent while TTS is on the wire", () => {
+    for (const reply of ["stop", "wrong number", "call me later"]) {
+      expect(isSelfEcho({
+        tokens: words(reply),
+        recentAgentSpeech: spoken(agentLine),
+        agentAudible: true,
+        ttsOnWire: true,
+        protectedShortIntent: true,
+      })).toBe(false);
+    }
+  });
+
   it("keeps a city-name answer after TTS has finished (echo tail, not on the wire)", () => {
     expect(isSelfEcho({
       tokens: words("Chennai"),

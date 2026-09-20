@@ -14,6 +14,10 @@ const pipelineSrc = readFileSync(
   resolve(dirname(fileURLToPath(import.meta.url)), "pipeline.ts"),
   "utf8",
 );
+const compactGreetingSrc = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), "compact-greeting-prompt.ts"),
+  "utf8",
+);
 
 function methodBody(name: string): string {
   const start = pipelineSrc.search(new RegExp(`private (?:async )?${name}\\s*\\(`));
@@ -109,10 +113,13 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(methodBody("schedulePartialBargeIn")).toContain("shouldInterruptFromCallerTranscript");
     expect(methodBody("schedulePartialBargeIn")).toContain("isCarrierSelfEcho");
     expect(methodBody("schedulePartialBargeIn")).toContain("SELF_ECHO_MIN_WORDS");
+    expect(methodBody("schedulePartialBargeIn")).toMatch(/if \(!hard && countTranscriptWords\(partial\) < SELF_ECHO_MIN_WORDS\) return/);
+    expect(methodBody("schedulePartialBargeIn")).toMatch(/if \(!hard && !this\.shouldInterruptFromCallerTranscript\(partial\)\) return/);
     expect(methodBody("isEagerPartialReady")).toContain("isEagerCommitReady");
     expect(methodBody("handleStreamingTranscript")).toContain("collectionHoldMsForTranscript");
     expect(methodBody("handleStreamingTranscript")).toContain("agent_still_speaking");
     expect(methodBody("isCarrierSelfEcho")).toContain("ttsOnWire");
+    expect(methodBody("isCarrierSelfEcho")).toContain("protectedShortIntent");
     expect(methodBody("backchannelFillerOpts")).toContain("backchannelFillers");
     expect(pipelineSrc).not.toContain("Barge-in detected after Sarvam realtime partial");
     const speechEndBody = methodBody("wireStreamSttCallbacks");
@@ -197,7 +204,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("this.requestedLangLatch || this.lastNonEnglishLang || this.currentLang");
     expect(pipelineSrc).toContain("getLiveHandoffLanguage(): string");
     expect(pipelineSrc).toContain("Live squad handoff language");
-    expect(pipelineSrc).toContain("[OPENING — SQUAD HANDOFF]");
+    expect(compactGreetingSrc).toContain("[OPENING — SQUAD HANDOFF]");
     expect(pipelineSrc).toContain("squadHandoffTakeover");
   });
 
