@@ -46,7 +46,8 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
     const tts = new CartesiaTTS("test-key", null, null, null, null);
     const result = await tts.synthesize("Great news!", ["positivity:medium"]);
     expect(callCount).toBe(2);
-    expect(result.audio.length).toBe(4);
+    expect(result.audio.subarray(0, 4)).toEqual(Buffer.from([1, 2, 3, 4]));
+    expect(result.audio.length).toBeGreaterThan(4);
   });
 
   it("synthesize() still throws for unrelated Cartesia errors", async () => {
@@ -260,7 +261,14 @@ describe("ensureTerminalPunctuation", () => {
   it("adds a period only when the sentence has no terminal mark", () => {
     expect(CartesiaTTS.ensureTerminalPunctuation("How can I help you?")).toBe("How can I help you?");
     expect(CartesiaTTS.ensureTerminalPunctuation("Hello there")).toBe("Hello there.");
-    expect(CartesiaTTS.ensureTerminalPunctuation("Hello Gopi,")).toBe("Hello Gopi,");
+    expect(CartesiaTTS.ensureTerminalPunctuation("Hello Gopi,")).toBe("Hello Gopi.");
+    expect(CartesiaTTS.ensureTerminalPunctuation("எல்லாரும் நல்லா இருக்கீங்க")).toBe("எல்லாரும் நல்லா இருக்கீங்க.");
+  });
+
+  it("puts Sonic's fade on a trailing space, not the last word", () => {
+    expect(CartesiaTTS.padCartesiaUtterance("Hello there")).toBe("Hello there. ");
+    expect(CartesiaTTS.padCartesiaUtterance("How are you?")).toBe("How are you? ");
+    expect(CartesiaTTS.padCartesiaUtterance("Hello Gopi,")).toBe("Hello Gopi. ");
   });
 });
 
@@ -339,7 +347,7 @@ describe("Cartesia WS continuations", () => {
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as Record<string, unknown>);
       expect(requests.every((r) => r.context_id === "fast-llm")).toBe(true);
       expect(requests.filter((r) => r.flush !== true).map((r) => [r.transcript, r.continue])).toEqual([
-        ["नमस्ते। आप कैसे हैं?", false],
+        ["नमस्ते। आप कैसे हैं? ", false],
       ]);
       expect(requests[0]).toMatchObject({
         model_id: "sonic-3.6",
@@ -352,7 +360,10 @@ describe("Cartesia WS continuations", () => {
       sockets[0]!.emit({ type: "chunk", context_id: "fast-llm", data: Buffer.from([1, 2]).toString("base64") });
       sockets[0]!.emit({ type: "done", context_id: "fast-llm" });
       await owner;
-      expect(Buffer.concat(chunks)).toEqual(Buffer.from([1, 2]));
+      const pcm = Buffer.concat(chunks);
+      expect(pcm.subarray(0, 2)).toEqual(Buffer.from([1, 2]));
+      expect(pcm.length).toBeGreaterThan(2);
+      expect(pcm.subarray(2).every((b) => b === 0)).toBe(true);
     } finally {
       tts.close();
       await owner.catch(() => {});
@@ -380,7 +391,7 @@ describe("Cartesia WS continuations", () => {
         .filter((r) => r.flush !== true)
         .map((r) => r.transcript as string)
         .join("");
-      expect(spoken).toBe("One. Two.");
+      expect(spoken).toBe("One. Two. ");
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as Record<string, unknown>);
       expect(requests.filter((r) => r.flush !== true).at(-1)).toMatchObject({ continue: false });
       sockets[0]!.emit({ type: "done", context_id: "race-close" });
@@ -407,7 +418,7 @@ describe("Cartesia WS continuations", () => {
       await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as Record<string, unknown>);
       expect(requests.filter((r) => r.flush === true)).toEqual([]);
-      expect(requests.map((r) => r.transcript)).toEqual(["One. Two. Three."]);
+      expect(requests.map((r) => r.transcript)).toEqual(["One. Two. Three. "]);
       expect(requests.every((r) => r.continue === false)).toBe(true);
       sockets[0]!.emit({ type: "done", context_id: "flushy" });
       await owner;
@@ -433,7 +444,7 @@ describe("Cartesia WS continuations", () => {
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as Record<string, unknown>);
       expect(requests.filter((r) => r.flush === true)).toEqual([]);
       expect(requests).toEqual([
-        expect.objectContaining({ context_id: "frag", transcript: "Hello there.", continue: false }),
+        expect.objectContaining({ context_id: "frag", transcript: "Hello there. ", continue: false }),
       ]);
       sockets[0]!.emit({ type: "done", context_id: "frag" });
       await owner;
@@ -458,7 +469,7 @@ describe("Cartesia WS continuations", () => {
       await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as Record<string, unknown>);
       expect(requests.filter((r) => r.flush !== true).map((r) => [r.transcript, r.continue])).toEqual([
-        ["First sentence. Second sentence.", false],
+        ["First sentence. Second sentence. ", false],
       ]);
       sockets[0]!.emit({ type: "done", context_id: "reopen" });
       await owner;
@@ -502,7 +513,7 @@ describe("Cartesia WS continuations", () => {
     });
     try {
       await owner;
-      expect(Buffer.concat(chunks)).toEqual(Buffer.from([9, 8, 7, 6]));
+      expect(Buffer.concat(chunks).subarray(0, 4)).toEqual(Buffer.from([9, 8, 7, 6]));
       expect(restBodies.some((b) => (b.transcript ?? "").includes("What is your name?"))).toBe(true);
     } finally {
       tts.close();
@@ -527,7 +538,7 @@ describe("Cartesia WS continuations", () => {
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as { transcript?: string; continue?: boolean });
       expect(requests.some((r) => r.transcript === "N")).toBe(false);
       expect(requests.some((r) => r.transcript === "o")).toBe(false);
-      expect(requests).toContainEqual(expect.objectContaining({ transcript: "No problem.", continue: false }));
+      expect(requests).toContainEqual(expect.objectContaining({ transcript: "No problem. ", continue: false }));
       sockets[0]!.emit({ type: "chunk", context_id: "spell", data: Buffer.from([1]).toString("base64") });
       sockets[0]!.emit({ type: "done", context_id: "spell" });
       await owner;
@@ -555,7 +566,7 @@ describe("Cartesia WS continuations", () => {
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as { transcript?: string; continue?: boolean });
       expect(requests.some((r) => r.transcript === "N")).toBe(false);
       expect(requests.some((r) => r.transcript === "o")).toBe(false);
-      expect(requests).toContainEqual(expect.objectContaining({ transcript: "No problem.", continue: false }));
+      expect(requests).toContainEqual(expect.objectContaining({ transcript: "No problem. ", continue: false }));
       sockets[0]!.emit({ type: "chunk", context_id: "race", data: Buffer.from([1]).toString("base64") });
       sockets[0]!.emit({ type: "done", context_id: "race" });
       await owner;
@@ -602,7 +613,7 @@ describe("Cartesia WS continuations", () => {
       await vi.waitFor(() => expect(sockets[0]?.sent.length).toBeGreaterThanOrEqual(1));
       const requests = sockets[0]!.sent.map((s) => JSON.parse(s) as { transcript?: string; continue?: boolean });
       expect(requests.some((r) => r.transcript === "")).toBe(false);
-      expect(requests).toContainEqual(expect.objectContaining({ transcript: "Hello.", continue: false }));
+      expect(requests).toContainEqual(expect.objectContaining({ transcript: "Hello. ", continue: false }));
       sockets[0]!.emit({ type: "chunk", context_id: "held", data: Buffer.from([1]).toString("base64") });
       sockets[0]!.emit({ type: "done", context_id: "held" });
       await owner;

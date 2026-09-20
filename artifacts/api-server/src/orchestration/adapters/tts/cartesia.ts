@@ -13,10 +13,10 @@
  * the fragment and the PCM stacks on top of the previous clip — that is the
  * "blabbering" / "not reading the sentence" failure. Flushing is the same
  * bug (`flush_done` only means the flush was accepted, not that audio
- * finished). The turn therefore closes with exactly one `continue: false`
- * write of the full transcript. Because that write is already a complete
- * utterance, every generation sets `max_buffer_delay_ms: 0`. Incomplete
- * word fragments never reach the socket.
+ * finished). Do not flush a fragment. The turn therefore closes with exactly
+ * one `continue: false` write of the full transcript. Because that write is
+ * already a complete utterance, every generation sets `max_buffer_delay_ms: 0`.
+ * Incomplete word fragments never reach the socket.
  *
  * The turn is closed by one `continue: false` write. Cartesia rejects a close
  * whose transcript is empty ("No valid transcripts passed", calls 25048/25049)
@@ -26,6 +26,11 @@
  * implementation held the same piece but had six return paths that dropped or
  * re-routed it onto a throwaway context, which is why turns lost their last
  * sentence.
+ *
+ * Sonic fades at the last grapheme of `continue: false`. A comma is not a
+ * sentence end (the model trails off mid-word). Close with `.?!` and a trailing
+ * space so the fade sits on the pause; then append a short PCM silence so the
+ * carrier does not clip that last word.
  */
 import crypto from "node:crypto";
 import { logger } from "../../../lib/logger.js";
@@ -37,6 +42,9 @@ const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 300;
 /** Contexts whose word timings stay queryable after the turn ends. */
 const WORD_TIMING_CONTEXTS = 32;
+/** Silence after Sonic `done` so the last syllable is inside the clip, not in the fade/carrier cut. */
+const CARTESIA_UTTERANCE_TAIL_SILENCE_MS = 160;
+const SENTENCE_END_MARKS = ".?!…।॥";
 
 export const CARTESIA_DEFAULT_MODEL = "sonic-3.6";
 export const CARTESIA_SONIC_36_MODEL = "sonic-3.6";
@@ -422,13 +430,32 @@ export class CartesiaTTS implements TTSAdapter {
     return settings;
   }
 
-  /** A close must end a sentence or Sonic trails off mid-phrase. */
+  /** A close must end a sentence or Sonic trails off and clips the last word. */
   static ensureTerminalPunctuation(text: string): string {
     const trimmed = text.trimEnd();
     if (!trimmed) return text;
     const last = trimmed[trimmed.length - 1]!;
-    if (".?!…।,;:".includes(last)) return text;
-    return trimmed + ".";
+    if (SENTENCE_END_MARKS.includes(last)) return trimmed;
+    // Commas/colons are mid-thought. Sending them as the close makes Sonic
+    // fade on the last syllable instead of finishing the word.
+    const withoutMid = trimmed.replace(/[,;:]+$/u, "").trimEnd();
+    if (!withoutMid) return trimmed + ".";
+    const end = withoutMid[withoutMid.length - 1]!;
+    if (SENTENCE_END_MARKS.includes(end)) return withoutMid;
+    return withoutMid + ".";
+  }
+
+  /** Fade-out belongs on the pause after the last word, not on the word itself. */
+  static padCartesiaUtterance(text: string): string {
+    const closed = CartesiaTTS.ensureTerminalPunctuation(text);
+    return closed.endsWith(" ") ? closed : `${closed} `;
+  }
+
+  private pushTailSilence(sink: ((pcm: Buffer) => void) | null | undefined): void {
+    if (!sink) return;
+    const bytes = Math.round((this.pcmSampleRate / 1000) * 2 * CARTESIA_UTTERANCE_TAIL_SILENCE_MS);
+    const aligned = bytes - (bytes % 2);
+    if (aligned > 0) sink(Buffer.alloc(aligned));
   }
 
   private get restHeaders(): Record<string, string> {
@@ -548,6 +575,7 @@ export class CartesiaTTS implements TTSAdapter {
       const shot = this.oneShots.get(contextId);
       if (shot) {
         this.oneShots.delete(contextId);
+        this.pushTailSilence(shot.onChunk);
         shot.settle();
         return;
       }
@@ -556,6 +584,7 @@ export class CartesiaTTS implements TTSAdapter {
       // had; the turn is still open and more sentences are coming.
       if (ctx?.closed) {
         ctx.awaitingDone = false;
+        if (!ctx.cancelled) this.pushTailSilence(ctx.sink);
         ctx.settleOwner?.();
       }
     }
@@ -615,7 +644,7 @@ export class CartesiaTTS implements TTSAdapter {
       ctx.awaitingDone = false;
       const text = ctx.gotAudio ? "" : ctx.full;
       if (isSpeakableCartesiaTranscript(text)) {
-        void this.speakDetached(CartesiaTTS.ensureTerminalPunctuation(text), ctx);
+        void this.speakDetached(CartesiaTTS.padCartesiaUtterance(text), ctx);
       } else {
         ctx.settleOwner?.();
       }
@@ -796,14 +825,14 @@ export class CartesiaTTS implements TTSAdapter {
       // Nothing left to say. If text did go out, Cartesia's `done` for it is
       // what ends the turn; if nothing ever did, there is no audio to wait for.
       if (ctx.restFallback && !ctx.gotAudio && isSpeakableCartesiaTranscript(ctx.full)) {
-        await this.speakDetached(CartesiaTTS.ensureTerminalPunctuation(ctx.full), ctx);
+        await this.speakDetached(CartesiaTTS.padCartesiaUtterance(ctx.full), ctx);
         return;
       }
       if (!ctx.sentAny) ctx.settleOwner?.();
       return;
     }
 
-    const closing = CartesiaTTS.ensureTerminalPunctuation(pending);
+    const closing = CartesiaTTS.padCartesiaUtterance(pending);
     // A short turn can reach the close before any write needed the socket.
     if (!ctx.dead && !ctx.restFallback && !this.ws) {
       await this.getOrOpenWs().catch((err: unknown) => { this.onWsUnusable(ctx, err); });
@@ -816,7 +845,7 @@ export class CartesiaTTS implements TTSAdapter {
       const text = (ctx.restFallback && !ctx.gotAudio)
         ? (ctx.full || closing)
         : closing;
-      await this.speakDetached(CartesiaTTS.ensureTerminalPunctuation(text), ctx);
+      await this.speakDetached(CartesiaTTS.padCartesiaUtterance(text), ctx);
       return;
     }
     const sent = this.send({
@@ -875,7 +904,7 @@ export class CartesiaTTS implements TTSAdapter {
       return;
     }
     const ws = await this.getOrOpenWs();
-    const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
+    const safeText = CartesiaTTS.padCartesiaUtterance(text);
     const contextId = crypto.randomUUID();
     return new Promise<void>((resolve, reject) => {
       if (signal?.aborted) { reject(abortError()); return; }
@@ -920,7 +949,7 @@ export class CartesiaTTS implements TTSAdapter {
     signal?: AbortSignal,
     emotions?: string[],
   ): Promise<void> {
-    const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
+    const safeText = CartesiaTTS.padCartesiaUtterance(text);
     const body: Record<string, unknown> = {
       transcript: safeText,
       model_id: this.modelId,
@@ -951,6 +980,7 @@ export class CartesiaTTS implements TTSAdapter {
     } finally {
       reader.releaseLock();
     }
+    this.pushTailSilence(onChunk);
     onDone(safeText.length);
   }
 
@@ -967,7 +997,7 @@ export class CartesiaTTS implements TTSAdapter {
       });
     return {
       audio: Buffer.concat(chunks),
-      characters: CartesiaTTS.ensureTerminalPunctuation(text).length,
+      characters: CartesiaTTS.padCartesiaUtterance(text).length,
     };
   }
 
