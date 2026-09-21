@@ -138,6 +138,10 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("this.streamSTT.sendAudio(sttFrame)");
     expect(pipelineSrc).toContain("sileroStream?.push8k");
     expect(pipelineSrc).not.toMatch(/if\s*\([^)]*sileroSustainedNow[^)]*\)\s*\{[^}]{0,80}sendAudio/s);
+    // Turn Acceptance Gate sits before processTurn; default shadow does not block.
+    expect(pipelineSrc).toContain("evaluateTurnAcceptance");
+    expect(pipelineSrc).toContain("voice_canary_turn_acceptance");
+    expect(pipelineSrc).toContain("resolveTurnAcceptanceMode");
     expect(methodBody("isEagerPartialReady")).toContain("isEagerCommitReady");
     expect(methodBody("handleStreamingTranscript")).toContain("collectionHoldMsForTranscript");
     expect(methodBody("handleStreamingTranscript")).toContain("agent_still_speaking");

@@ -164,6 +164,14 @@ import {
   isSileroSustained,
   shouldDiscardAsRoomCrosstalk,
 } from "./caller-speaking.js";
+import {
+  evaluateTurnAcceptance,
+  clarificationPromptForSlot,
+  resolveTurnAcceptanceMode,
+  shouldEnforceTurnDecision,
+  type BargeStrength,
+  type ExpectedSlot,
+} from "./turn-acceptance.js";
 import { SileroStream } from "../voice_engine/silero-stream.js";
 import type { AecFrameDiagnostics } from "./audioPool.js";
 import {
@@ -1238,6 +1246,12 @@ export class OrchestrationPipeline implements VoiceSession {
   private _softDuckTimer: ReturnType<typeof setTimeout> | null = null;
   /** Recent weak barge / cancelled soft-duck — room-crosstalk window. */
   private _weakBargeEvidenceUntil = 0;
+  /** Consecutive turn-acceptance IGNORE (incl. shadow) — background speech history. */
+  private _turnAcceptanceIgnoreStreak = 0;
+  /** Clarification loop protection for structured-slot mismatches. */
+  private _turnAcceptanceClarifyCount = 0;
+  private _turnAcceptanceClarifyAt = 0;
+  private _turnAcceptanceClarifyQuestionKey = "";
   /** Classic-path Silero shadow (advisory only — never gates STT feed). */
   private sileroStream: SileroStream | null = null;
   private _sileroSpeaking = false;
@@ -2445,6 +2459,15 @@ export class OrchestrationPipeline implements VoiceSession {
     return Date.now() < this.expectingShortReplyUntil;
   }
 
+  /** Map soft duck / weak-evidence windows → barge strength for the turn gate. */
+  private currentBargeStrengthForGate(): BargeStrength {
+    if (this._lastTurnWasBargedIn && this.bargeInRequested) return "hard";
+    if (Date.now() < this._weakBargeEvidenceUntil) return "weak";
+    if (this._ttsDuckAt && Date.now() < this._ttsDuckUntil + 500) return "soft";
+    if (this._lastTurnWasBargedIn) return "hard";
+    return "none";
+  }
+
   /**
    * vad.speech_start only inspects. A realtime partial is not a Sarvam turn.
    * Cutting TTS from bare VAD is PSTN echo barge; require a usable caller
@@ -2906,6 +2929,24 @@ export class OrchestrationPipeline implements VoiceSession {
       return;
     }
     const clarification = pickClarificationPhrase(sttLang, String(this.config.callId));
+    await this.playTurnAcceptanceClarificationUtterance(clarification);
+  }
+
+  /**
+   * Slot-specific clarification for the turn-acceptance gate.
+   * Does not replay old TTS clips; does not append a user turn.
+   */
+  private async respondWithTurnAcceptanceClarification(
+    slot: ExpectedSlot,
+    lastAgentText: string,
+    sttLang: string | null | undefined,
+  ): Promise<void> {
+    if (this.closed) return;
+    const clarification = clarificationPromptForSlot(slot, lastAgentText, sttLang);
+    await this.playTurnAcceptanceClarificationUtterance(clarification);
+  }
+
+  private async playTurnAcceptanceClarificationUtterance(clarification: string): Promise<void> {
     this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
     this._currentTurnPlayedSentences = [];
     this.isPlaying = true;
@@ -2917,9 +2958,6 @@ export class OrchestrationPipeline implements VoiceSession {
       this.config.onTranscript("agent", heard);
       this.config.onConversationUpdate?.(this.conversationHistory.messages);
     }
-    // Drain the carrier's jitter buffer before returning to listening so the
-    // last word of the clarification isn't clipped. This short branch bypasses
-    // playTask's drain, so it must replicate it (see drainPlaybackTail).
     await this.drainPlaybackTail();
     this.onBotStoppedSpeaking("system");
   }
@@ -3178,7 +3216,8 @@ export class OrchestrationPipeline implements VoiceSession {
       | "inbound_greeting_hold"
       | "inbound_greeting_overlap"
       | "room_crosstalk"
-      | "self_echo",
+      | "self_echo"
+      | "turn_acceptance_ignore",
   ): void {
     const now = Date.now();
     const reasonByGuard: Record<typeof guard, string> = {
@@ -3196,6 +3235,7 @@ export class OrchestrationPipeline implements VoiceSession {
       inbound_greeting_overlap: "STT captured during inbound greeting — wait for a new caller turn",
       room_crosstalk: "room / meeting talk aimed at someone else — not a caller turn",
       self_echo: "agent's own TTS echoed back by the carrier — not caller speech",
+      turn_acceptance_ignore: "turn acceptance gate — stage mismatch / background speech (not a caller turn)",
     };
     this.logExec(EXEC_COMPONENTS.STT, "system", {
       status: "info",
@@ -4348,6 +4388,97 @@ export class OrchestrationPipeline implements VoiceSession {
       transcript = merged.text;
       sttEmittedAt = merged.emittedAt;
       closeReason = merged.closeReason;
+    }
+
+    // Turn Acceptance Gate — decide ACCEPT / CLARIFY / IGNORE before processTurn.
+    // Shadow (default): log only. Enforce: block junk from LLM/history/tools
+    // for structured slots only (`open` stays fail-open).
+    const gateMode = resolveTurnAcceptanceMode();
+    if (gateMode !== "off") {
+      const lastAgent =
+        this.conversationHistory.findLast((t) => t.role === "assistant")?.content
+        ?? this.lastAssistantSpokenRaw
+        ?? "";
+      const questionKey = lastAgent.trim().slice(0, 160).toLowerCase();
+      // Clarification prompts must not reset the per-question clarify budget
+      // (otherwise TV audio loops "Sorry…?" forever).
+      const isClarificationPrompt = /^sorry[,.]?\s/i.test(lastAgent.trim())
+        || /^மன்னிக்கவும்/u.test(lastAgent.trim());
+      if (
+        questionKey
+        && !isClarificationPrompt
+        && questionKey !== this._turnAcceptanceClarifyQuestionKey
+      ) {
+        this._turnAcceptanceClarifyQuestionKey = questionKey;
+        this._turnAcceptanceClarifyCount = 0;
+        this._turnAcceptanceClarifyAt = 0;
+      }
+      const gate = evaluateTurnAcceptance({
+        transcript,
+        lastAgentText: lastAgent,
+        expectingShortAnswer: this.expectingShortAnswerNow(),
+        rawNearRms: this._lastInboundRawRms,
+        sileroConfidence: this._sileroProb,
+        sileroSustained: this.sileroSustainedNow(),
+        speechDurationMs: this._lastVadSegmentMs || 0,
+        bargeStrength: this.currentBargeStrengthForGate(),
+        selfEcho: false,
+        backgroundSpeechHistory: this._turnAcceptanceIgnoreStreak,
+        clarificationsForQuestion: this._turnAcceptanceClarifyCount,
+        msSinceLastClarification: this._turnAcceptanceClarifyAt > 0
+          ? Date.now() - this._turnAcceptanceClarifyAt
+          : Number.POSITIVE_INFINITY,
+      });
+      const enforced = shouldEnforceTurnDecision(gateMode, gate.decision, gate.expectedSlot);
+      this.logVoiceCanary("voice_canary_turn_acceptance", {
+        decision: gate.decision,
+        reason: gate.reason,
+        expectedSlot: gate.expectedSlot,
+        isStructuredSlot: gate.isStructuredSlot,
+        acousticStrength: gate.acousticStrength,
+        semanticScore: Number(gate.semanticScore.toFixed(3)),
+        slotMatchScore: Number(gate.slotMatchScore.toFixed(3)),
+        globalIntentScore: gate.globalIntentScore,
+        trustedTopicChangeScore: Number(gate.trustedTopicChangeScore.toFixed(3)),
+        utteranceCoherence: Number(gate.utteranceCoherence.toFixed(3)),
+        trustedTopicChange: gate.trustedTopicChange,
+        mode: gateMode,
+        enforced,
+        clarificationsForQuestion: this._turnAcceptanceClarifyCount,
+        transcriptPreview: transcript.slice(0, 120),
+        sileroConfidence: this._sileroProb,
+        rawNearRms: this._lastInboundRawRms,
+        speechDurationMs: this._lastVadSegmentMs || 0,
+        backgroundSpeechHistory: this._turnAcceptanceIgnoreStreak,
+      });
+
+      if (gate.decision === "ignore" || gate.decision === "clarify") {
+        this._turnAcceptanceIgnoreStreak++;
+      } else {
+        this._turnAcceptanceIgnoreStreak = 0;
+      }
+
+      if (enforced) {
+        if (gate.decision === "ignore") {
+          this.logDiscardedTranscript(transcript, "turn_acceptance_ignore");
+          this.dumpCanaryAudioStages("turn_acceptance_ignore", transcript);
+          if (!this.closed && !this.isProcessing) {
+            this.safetyNet.beginListening();
+            this.resetHangupTimer();
+          }
+          return;
+        }
+        // clarify — slot-specific re-ask; no user history / CRM / tools
+        this._turnAcceptanceClarifyCount++;
+        this._turnAcceptanceClarifyAt = Date.now();
+        this.dumpCanaryAudioStages("turn_acceptance_clarify", transcript);
+        void this.respondWithTurnAcceptanceClarification(
+          gate.expectedSlot,
+          lastAgent,
+          this._pendingSttLang ?? this.ttsLang,
+        );
+        return;
+      }
     }
 
     this.isProcessing = true;
