@@ -27,6 +27,7 @@ function lead(partial: Partial<CampaignReportingLead>): CampaignReportingLead {
     lastAttemptStatus: null,
     operationalOutcome: "pending",
     disposition: null,
+    dispositionState: "not_applicable",
     callAttempts: 0,
     latestCallId: null,
     latestAnsweredCallId: null,
@@ -79,10 +80,10 @@ describe("leads URL filters are linkable", () => {
     expect(batchHref).not.toContain("tab=leads");
   });
 
-  it("round-trips dispositionBucket=voicemail", () => {
-    const href = campaignLeadsHref(449, { dispositionBucket: "voicemail" });
-    expect(href).toBe("/app/campaigns/449?tab=leads&dispositionBucket=voicemail");
-    expect(parseLeadsSearch(href.split("?")[1] ?? "").dispositionBucket).toBe("voicemail");
+  it("round-trips the needs-classification business filter", () => {
+    const href = campaignLeadsHref(449, { dispositionBucket: "needs_classification" });
+    expect(href).toBe("/app/campaigns/449?tab=leads&dispositionBucket=needs_classification");
+    expect(parseLeadsSearch(href.split("?")[1] ?? "").dispositionBucket).toBe("needs_classification");
   });
 
   it("combines search with view=", () => {
@@ -166,6 +167,7 @@ describe("disposition display", () => {
     expect(displayDispositionLabel("no pickup")).toBe("No Pickup");
     expect(displayDispositionLabel("voicemail")).toBe("Voicemail");
     expect(displayDispositionLabel("callback requested")).toBe("Callback Requested");
-    expect(displayDispositionLabel("unlabeled")).toBe("No label");
+    expect(displayDispositionLabel("unlabeled")).toBe("Needs classification");
+    expect(displayDispositionLabel("needs_classification")).toBe("Needs classification");
   });
 });

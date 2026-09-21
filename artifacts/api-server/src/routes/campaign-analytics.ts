@@ -13,13 +13,18 @@ import {
   db, campaignsTable, campaignLeadsTable, campaignBatchesTable,
   callCallbacksTable, callRetriesTable, workspaceDncTable,
   leadTimelineTable, callsTable, callExecutionsTable,
+  agentDispositionsTable,
 } from "@workspace/db";
 import { eq, and, count, sql, desc, isNotNull, inArray, ne, or } from "drizzle-orm";
 import { normalizePhone } from "../lib/phone-normalize.js";
 import { logger } from "../lib/logger.js";
-import { canonicalDispositionBucket, canonicalDispositionFromLabel, dispositionBucketSql } from "../lib/disposition/canonical.js";
+import { canonicalDispositionBucket, dispositionBucketSql } from "../lib/disposition/canonical.js";
 import { safelyReconcileCampaignTabs } from "../services/campaign-tab-sync.js";
-import { campaignLeadFunnelSelect, funnelFromRow } from "../lib/campaign-lead-funnel.js";
+import {
+  campaignReportingKpiSelect,
+  summarizeConfiguredDispositionHero,
+  type CampaignDispositionTaxonomy,
+} from "../services/campaign-lead-reporting.js";
 
 const router: IRouter = Router();
 
@@ -32,6 +37,17 @@ async function requireCampaign(campaignId: number, userId: string) {
   const [row] = await db.select().from(campaignsTable)
     .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)));
   return row ?? null;
+}
+
+async function loadCampaignTaxonomy(agentId: number | null): Promise<CampaignDispositionTaxonomy> {
+  if (agentId == null) return {};
+  const [row] = await db.select({ taxonomy: agentDispositionsTable.taxonomy })
+    .from(agentDispositionsTable)
+    .where(eq(agentDispositionsTable.agentId, agentId))
+    .limit(1);
+  return row?.taxonomy && typeof row.taxonomy === "object" && !Array.isArray(row.taxonomy)
+    ? row.taxonomy as CampaignDispositionTaxonomy
+    : {};
 }
 
 // ── GET /campaigns/:id/batches/:batchId/analytics ────────────────────────────
@@ -64,19 +80,30 @@ router.get("/campaigns/:id/batches/:batchId/analytics", async (req, res): Promis
 
   // Disposition breakdown
   const dispRows = await db
-    .select({ disposition: campaignLeadsTable.disposition, cnt: count() })
+    .select({
+      answeredEver: campaignLeadsTable.answeredEver,
+      disposition: campaignLeadsTable.disposition,
+      lastAttemptStatus: campaignLeadsTable.lastAttemptStatus,
+      callStatus: campaignLeadsTable.callStatus,
+      cnt: count(),
+    })
     .from(campaignLeadsTable)
     .where(and(
       eq(campaignLeadsTable.campaignId, campaignId),
       sql`${campaignLeadsTable.batchId} = ${batchId}`,
-      isNotNull(campaignLeadsTable.disposition),
     ))
-    .groupBy(campaignLeadsTable.disposition);
+    .groupBy(
+      campaignLeadsTable.answeredEver,
+      campaignLeadsTable.disposition,
+      campaignLeadsTable.lastAttemptStatus,
+      campaignLeadsTable.callStatus,
+    );
 
-  const dispositions: Array<{ label: string; count: number }> = dispRows.map(r => ({
-    label: r.disposition ?? "unknown",
-    count: Number(r.cnt),
-  }));
+  const dispositions: Array<{ label: string; count: number }> = summarizeConfiguredDispositionHero(
+    dispRows.map((r) => ({ ...r, count: Number(r.cnt) })),
+    await loadCampaignTaxonomy(campaign.agentId),
+  ).filter((item) => item.kind === "configured")
+    .map((item) => ({ label: item.key, count: item.count }));
 
   // Callback count
   const [{ callbackCount }] = await db
@@ -97,14 +124,20 @@ router.get("/campaigns/:id/batches/:batchId/analytics", async (req, res): Promis
       sql`EXISTS (SELECT 1 FROM campaign_leads cl WHERE cl.id = ${callRetriesTable.leadId} AND cl.batch_id = ${batchId})`,
     ));
 
-  const total    = batch.totalLeads;
-  const called   = statusMap["completed"] ?? 0;
-  const failed   = (statusMap["failed"] ?? 0) + (statusMap["skipped"] ?? 0);
-  const calling  = statusMap["calling"] ?? 0;
-  const pending  = statusMap["pending"] ?? 0;
-  const voicemail = statusMap["voicemail"] ?? 0;
-  const answered = called;
-  const notPicked = failed;
+  const [canonical] = await db.select(campaignReportingKpiSelect())
+    .from(campaignLeadsTable)
+    .where(and(
+      eq(campaignLeadsTable.campaignId, campaignId),
+      eq(campaignLeadsTable.batchId, batchId),
+    ));
+  const total = canonical?.imported ?? 0;
+  const called = canonical?.attempted ?? 0;
+  const failed = canonical?.technicalFailed ?? 0;
+  const calling = canonical?.calling ?? 0;
+  const pending = canonical?.queued ?? 0;
+  const voicemail = canonical?.voicemail ?? 0;
+  const answered = canonical?.answered ?? 0;
+  const notPicked = canonical?.noPickup ?? 0;
 
   res.json({
     batchId,
@@ -121,7 +154,7 @@ router.get("/campaigns/:id/batches/:batchId/analytics", async (req, res): Promis
       notPicked,
       callbacks:   Number(callbackCount),
       pendingRetries: Number(retryCount),
-      completionPct: total > 0 ? Math.round(((called + failed + voicemail) / total) * 100) : 0,
+      completionPct: total > 0 ? Math.round((called / total) * 100) : 0,
     },
     statusBreakdown: statusMap,
     dispositions,
@@ -143,32 +176,36 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
   await safelyReconcileCampaignTabs(campaignId);
 
   // Same funnel as GET .../batches/:batchId/workspace/kpis (campaign-wide).
-  const [funnelRow] = await db.select(campaignLeadFunnelSelect())
+  const [funnel] = await db.select(campaignReportingKpiSelect())
     .from(campaignLeadsTable)
     .where(eq(campaignLeadsTable.campaignId, campaignId));
-  const funnel = funnelFromRow(funnelRow);
 
   // Bucket in JS. GROUP BY of dispositionBucketSql() parameterized CASE
   // disagrees between SELECT and GROUP BY in Postgres (500 on this route).
   const dispRaw = await db
-    .select({ disposition: campaignLeadsTable.disposition, cnt: count() })
+    .select({
+      answeredEver: campaignLeadsTable.answeredEver,
+      disposition: campaignLeadsTable.disposition,
+      lastAttemptStatus: campaignLeadsTable.lastAttemptStatus,
+      callStatus: campaignLeadsTable.callStatus,
+      cnt: count(),
+    })
     .from(campaignLeadsTable)
     .where(and(
       eq(campaignLeadsTable.campaignId, campaignId),
-      isNotNull(campaignLeadsTable.disposition),
-      sql`btrim(${campaignLeadsTable.disposition}) <> ''`,
     ))
-    .groupBy(campaignLeadsTable.disposition);
+    .groupBy(
+      campaignLeadsTable.answeredEver,
+      campaignLeadsTable.disposition,
+      campaignLeadsTable.lastAttemptStatus,
+      campaignLeadsTable.callStatus,
+    );
 
-  const dispCounts = new Map<string, number>();
-  for (const r of dispRaw) {
-    const bucket = canonicalDispositionFromLabel(r.disposition);
-    if (!bucket) continue;
-    dispCounts.set(bucket, (dispCounts.get(bucket) ?? 0) + Number(r.cnt));
-  }
-  const dispositions: Array<{ label: string; count: number }> = [...dispCounts.entries()]
-    .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  const dispositions: Array<{ label: string; count: number }> = summarizeConfiguredDispositionHero(
+    dispRaw.map((r) => ({ ...r, count: Number(r.cnt) })),
+    await loadCampaignTaxonomy(campaign.agentId),
+  ).filter((item) => item.kind === "configured")
+    .map((item) => ({ label: item.key, count: item.count }));
 
   // Status breakdown (per callStatus value)
   const statusRows = await db
@@ -202,20 +239,20 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
     logger.warn({ err, campaignId }, "Campaign analytics cost join failed");
   }
 
-  const imported    = funnel.imported;
-  const called      = funnel.called;
-  const connected   = funnel.connected;
-  const interested  = funnel.interested;
-  const booked      = funnel.booked;
-  const transferred = funnel.transferred;
-  const failed      = funnel.failed;
-  const busy        = funnel.busy;
-  const noPickup    = funnel.noPickup;
-  const voicemail   = funnel.voicemail;
-  const pending     = funnel.pending;
+  const imported    = funnel?.imported ?? 0;
+  const called      = funnel?.attempted ?? 0;
+  const connected   = funnel?.answered ?? 0;
+  const interested  = funnel?.interested ?? 0;
+  const booked      = funnel?.booked ?? 0;
+  const transferred = funnel?.transferred ?? 0;
+  const failed      = funnel?.technicalFailed ?? 0;
+  const busy        = funnel?.busy ?? 0;
+  const noPickup    = funnel?.noPickup ?? 0;
+  const voicemail   = funnel?.voicemail ?? 0;
+  const pending     = funnel?.queued ?? 0;
 
   // successRate matches batch workspace KPIs (interested / called).
-  const successRate    = funnel.successRate;
+  const successRate    = called > 0 ? Math.round((interested / called) * 100) : 0;
   const connectionRate = called > 0 ? Math.round((connected / called) * 100) : 0;
   const bookingRate    = connected > 0 ? Math.round((booked / connected) * 100) : 0;
   const totalCostCents = costDuration?.totalCostCents ?? 0;
@@ -824,10 +861,10 @@ router.post("/campaigns/:id/recampaign", async (req, res): Promise<void> => {
     email: l.email,
     leadData: {
       ...(typeof l.leadData === "object" && l.leadData !== null ? l.leadData as Record<string, unknown> : {}),
-      recampaignedFromLeadId: l.id,
-      previousDisposition: l.disposition,
+      recampaignedFromLeadId: String(l.id),
+      previousDisposition: l.disposition ?? "",
       previousCallStatus: l.callStatus,
-    },
+    } as Record<string, string>,
     source: "csv",
     callStatus: "pending",
   }));

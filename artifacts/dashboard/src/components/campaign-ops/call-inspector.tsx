@@ -10,7 +10,7 @@ import {
   formatDuration,
   type CampaignReportingLead,
 } from "@/lib/campaign-lead-reporting";
-import { DispositionBadge } from "@/components/campaign-ops/badges";
+import { AttemptStatusBadge, DispositionBadge } from "@/components/campaign-ops/badges";
 import { ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -107,7 +107,6 @@ export function CallInspectorPanel({
   }
 
   const lines = transcriptLines(call.data?.transcript);
-  const bucket = lead.dispositionBucket || (lead.lastAttemptStatus === "voicemail" ? "voicemail" : null);
   const name = (lead.name || "").trim();
   const title = name && name.toLowerCase() !== "unknown" ? name : lead.phone;
 
@@ -121,7 +120,14 @@ export function CallInspectorPanel({
               <p className="text-xs font-mono text-muted-foreground">{lead.phone}</p>
             ) : null}
           </div>
-          <DispositionBadge bucket={bucket} label={lead.disposition} />
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+            <AttemptStatusBadge status={lead.lastAttemptStatus} answeredEver={lead.answeredEver} />
+            <DispositionBadge
+              bucket={lead.dispositionBucket}
+              label={lead.disposition}
+              state={lead.dispositionState}
+            />
+          </div>
         </div>
         <p className="text-[11px] text-muted-foreground tabular-nums">
           {formatDuration(call.data?.durationSeconds ?? lead.latestAnsweredDuration)}

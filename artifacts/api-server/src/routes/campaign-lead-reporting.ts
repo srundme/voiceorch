@@ -20,6 +20,7 @@ import {
   callsTable,
   callCallbacksTable,
   scheduledCallbacksTable,
+  agentDispositionsTable,
 } from "@workspace/db";
 import { getAuth } from "../lib/auth-compat.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
@@ -33,7 +34,8 @@ import {
   campaignReportingSql,
   parseCampaignReportingFilter,
   projectCampaignLeadReporting,
-  summarizeDispositionHero,
+  summarizeConfiguredDispositionHero,
+  type CampaignDispositionTaxonomy,
 } from "../services/campaign-lead-reporting.js";
 
 const router: IRouter = Router();
@@ -43,10 +45,22 @@ async function requireCampaign(campaignId: number, userId: string) {
   const [row] = await db.select({
     id: campaignsTable.id,
     name: campaignsTable.name,
+    agentId: campaignsTable.agentId,
     concurrentCallLimit: campaignsTable.concurrentCallLimit,
   }).from(campaignsTable)
     .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)));
   return row ?? null;
+}
+
+async function loadAgentDispositionTaxonomy(agentId: number | null): Promise<CampaignDispositionTaxonomy> {
+  if (agentId == null) return {};
+  const [row] = await db.select({ taxonomy: agentDispositionsTable.taxonomy })
+    .from(agentDispositionsTable)
+    .where(eq(agentDispositionsTable.agentId, agentId))
+    .limit(1);
+  return row?.taxonomy && typeof row.taxonomy === "object" && !Array.isArray(row.taxonomy)
+    ? row.taxonomy as CampaignDispositionTaxonomy
+    : {};
 }
 
 async function requireBatch(campaignId: number, batchId: number) {
@@ -66,6 +80,7 @@ async function loadReporting(opts: {
   campaignId: number;
   batchId?: number;
   concurrentCallLimit: number;
+  dispositionTaxonomy: CampaignDispositionTaxonomy;
 }) {
   const where = scopeWhere(opts.campaignId, opts.batchId);
   const [canonical] = await db.select(campaignReportingKpiSelect())
@@ -146,6 +161,7 @@ async function loadReporting(opts: {
   // Bucket in JS. GROUP BY of campaignDispositionHeroSql() parameterized CASE
   // disagrees between SELECT and GROUP BY in Postgres (500 on this route).
   const dispRaw = await db.select({
+    answeredEver: campaignLeadsTable.answeredEver,
     disposition: campaignLeadsTable.disposition,
     lastAttemptStatus: campaignLeadsTable.lastAttemptStatus,
     callStatus: campaignLeadsTable.callStatus,
@@ -153,18 +169,24 @@ async function loadReporting(opts: {
   }).from(campaignLeadsTable)
     .where(where)
     .groupBy(
+      campaignLeadsTable.answeredEver,
       campaignLeadsTable.disposition,
       campaignLeadsTable.lastAttemptStatus,
       campaignLeadsTable.callStatus,
     );
-  const dispositions = summarizeDispositionHero(
+  const dispositions = summarizeConfiguredDispositionHero(
     dispRaw.map((r) => ({
+      answeredEver: r.answeredEver,
       disposition: r.disposition,
-      lastAttemptStatus: r.lastAttemptStatus,
-      callStatus: r.callStatus,
       count: Number(r.n) || 0,
     })),
+    opts.dispositionTaxonomy,
   );
+  const dispositionClassified = dispositions
+    .filter((item) => item.kind === "configured")
+    .reduce((sum, item) => sum + item.count, 0);
+  const dispositionNeedsClassification = dispositions
+    .find((item) => item.kind === "needs_classification")?.count ?? 0;
 
   const imported = canonical?.imported ?? 0;
   const attempted = canonical?.attempted ?? 0;
@@ -207,6 +229,12 @@ async function loadReporting(opts: {
       busy: canonical?.busy ?? 0,
       voicemail: canonical?.voicemail ?? 0,
       technicalFailed: canonical?.technicalFailed ?? 0,
+    },
+    classification: {
+      eligible: canonical?.dispositionEligible ?? 0,
+      classified: dispositionClassified,
+      needsClassification: dispositionNeedsClassification,
+      notApplicable: Math.max(0, imported - (canonical?.dispositionEligible ?? 0)),
     },
     rates: campaignReportingRates({
       attempted,
@@ -254,6 +282,7 @@ router.get("/campaigns/:id/lead-reporting", async (req, res): Promise<void> => {
   const payload = await loadReporting({
     campaignId,
     concurrentCallLimit: campaign.concurrentCallLimit ?? 20,
+    dispositionTaxonomy: await loadAgentDispositionTaxonomy(campaign.agentId),
   });
   res.json({
     campaignId,
@@ -275,6 +304,7 @@ router.get("/campaigns/:id/batches/:batchId/lead-reporting", async (req, res): P
     campaignId,
     batchId,
     concurrentCallLimit: campaign.concurrentCallLimit ?? 20,
+    dispositionTaxonomy: await loadAgentDispositionTaxonomy(campaign.agentId),
   });
   res.json({
     campaignId,
@@ -292,12 +322,13 @@ router.get("/campaigns/:id/lead-reporting/leads", async (req, res): Promise<void
   if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
 
   const filter = parseCampaignReportingFilter(req.query as Record<string, unknown>);
+  const dispositionTaxonomy = await loadAgentDispositionTaxonomy(campaign.agentId);
   const page = Math.max(0, parseInt(String(req.query["page"] ?? "0"), 10) || 0);
   const limit = Math.min(100, Math.max(1, parseInt(String(req.query["limit"] ?? "50"), 10) || 50));
 
   const where = and(
     eq(campaignLeadsTable.campaignId, campaignId),
-    ...campaignReportingFilterSql(filter),
+    ...campaignReportingFilterSql(filter, dispositionTaxonomy),
   )!;
 
   const [{ total }] = await db.select({ total: sql<number>`count(*)::int` })
@@ -337,7 +368,7 @@ router.get("/campaigns/:id/lead-reporting/leads", async (req, res): Promise<void
       retryReason: row.retryReason,
       retryCount: Number(row.retryCount ?? 0),
       retryAttemptNumber: row.retryAttemptNumber == null ? null : Number(row.retryAttemptNumber),
-    })),
+    }, dispositionTaxonomy)),
   });
 });
 

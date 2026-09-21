@@ -9,9 +9,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
-import { DispositionBadge } from "@/components/campaign-ops/badges";
+import { AttemptStatusBadge, DispositionBadge } from "@/components/campaign-ops/badges";
 import {
-  attemptStatusLabel,
   formatDuration,
   formatRetryAt,
   type CampaignReportingLead,
@@ -108,12 +107,17 @@ export function LeadReportingTable({
                   <p className="font-medium truncate">
                     {showName ? name : lead.phone || "Unknown"}
                   </p>
-                  <DispositionBadge bucket={lead.dispositionBucket} label={lead.disposition} />
+                  <AttemptStatusBadge status={lead.lastAttemptStatus} answeredEver={lead.answeredEver} />
+                  <DispositionBadge
+                    bucket={lead.dispositionBucket}
+                    label={lead.disposition}
+                    state={lead.dispositionState}
+                  />
                 </div>
                 <p className="mt-0.5 text-[11px] text-muted-foreground truncate">
                   {showName ? lead.phone : null}
                   {showName && lead.phone ? " · " : ""}
-                  {attemptStatusLabel(lead.lastAttemptStatus)}
+                  {lead.contactState === "answered" ? "Answered call" : "Contact attempt"}
                   {showRetryQueue ? ` · ${formatRetryAt(lead.retryScheduledAt) ?? "retry"}` : ""}
                 </p>
               </div>

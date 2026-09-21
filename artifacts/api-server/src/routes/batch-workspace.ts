@@ -19,9 +19,14 @@ import {
   agentDispositionsTable,
 } from "@workspace/db";
 import { eq, and, sql, desc, isNotNull, inArray, asc, or, ilike } from "drizzle-orm";
-import { canonicalDispositionBucket, dispositionBucketSql, splitDispositionLabel, normalizeDispositionToken } from "../lib/disposition/canonical.js";
 import { logger } from "../lib/logger.js";
-import { campaignLeadFunnelSelect } from "../lib/campaign-lead-funnel.js";
+import {
+  campaignConfiguredDispositionFilterSql,
+  campaignHasConfiguredDispositionSql,
+  campaignReportingKpiSelect,
+  summarizeConfiguredDispositionHero,
+  type CampaignDispositionTaxonomy,
+} from "../services/campaign-lead-reporting.js";
 
 const router: IRouter = Router();
 
@@ -34,13 +39,6 @@ function aggCount(rows: Array<{ [k: string]: number } | undefined> | undefined, 
   return typeof n === "number" && Number.isFinite(n) ? n : 0;
 }
 
-/**
- * Leads store the agent taxonomy label as "PRIMARY: sub" (formatDispositionLabel).
- * Counting the raw primary produced one card per spelling of the same outcome, so
- * KPI cards and filters are both keyed on the canonical bucket instead.
- */
-const DISPOSITION_BUCKET_SQL = dispositionBucketSql(sql`${campaignLeadsTable.disposition}`);
-
 async function requireBatch(campaignId: number, batchId: number, userId: string) {
   const [campaign] = await db.select({ id: campaignsTable.id })
     .from(campaignsTable)
@@ -51,6 +49,25 @@ async function requireBatch(campaignId: number, batchId: number, userId: string)
     .from(campaignBatchesTable)
     .where(and(eq(campaignBatchesTable.id, batchId), eq(campaignBatchesTable.campaignId, campaignId)));
   return batch ?? null;
+}
+
+async function loadAgentDispositionTaxonomy(agentId: number | null): Promise<CampaignDispositionTaxonomy> {
+  if (agentId == null) return {};
+  const [row] = await db.select({ taxonomy: agentDispositionsTable.taxonomy })
+    .from(agentDispositionsTable)
+    .where(eq(agentDispositionsTable.agentId, agentId))
+    .limit(1);
+  return row?.taxonomy && typeof row.taxonomy === "object" && !Array.isArray(row.taxonomy)
+    ? row.taxonomy as CampaignDispositionTaxonomy
+    : {};
+}
+
+async function loadCampaignDispositionTaxonomy(campaignId: number): Promise<CampaignDispositionTaxonomy> {
+  const [campaign] = await db.select({ agentId: campaignsTable.agentId })
+    .from(campaignsTable)
+    .where(eq(campaignsTable.id, campaignId))
+    .limit(1);
+  return loadAgentDispositionTaxonomy(campaign?.agentId ?? null);
 }
 
 // ── GET /campaigns/:id/batches/:batchId/workspace/kpis ────────────────────────
@@ -75,7 +92,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
     : null;
   const agentName = agentRow?.name ?? null;
 
-  const [leadKpis] = await db.select(campaignLeadFunnelSelect())
+  const [leadKpis] = await db.select(campaignReportingKpiSelect())
     .from(campaignLeadsTable)
     .where(eq(campaignLeadsTable.batchId, batchId));
 
@@ -89,7 +106,6 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
   let costDuration: { avgDurationS: number | null; totalCostCents: number } | undefined;
   let lastActivity: { lastAt: string | null } | undefined;
   let dispositions: { key: string; count: number }[] = [];
-  let dispositionedCount = 0;
 
   try {
     // Callbacks. Two tables record them: callCallbacks (transcript detector +
@@ -151,54 +167,33 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
   }
 
   try {
-    // Per-disposition counts, grouped on the canonical bucket so "no pickup",
-    // "not pickup" and "NOT_CONNECTED: no_answer" land on one card.
+    // Business dispositions only. Carrier outcomes have dedicated KPI fields.
     const dispositionRows = await db.select({
-      key:   DISPOSITION_BUCKET_SQL,
+      answeredEver: campaignLeadsTable.answeredEver,
+      disposition: campaignLeadsTable.disposition,
+      lastAttemptStatus: campaignLeadsTable.lastAttemptStatus,
+      callStatus: campaignLeadsTable.callStatus,
       count: sql<number>`count(*)::int`,
     }).from(campaignLeadsTable)
-      .where(and(
-        eq(campaignLeadsTable.batchId, batchId),
-        isNotNull(campaignLeadsTable.disposition),
-        sql`btrim(${campaignLeadsTable.disposition}) <> ''`,
-      ))
-      .groupBy(DISPOSITION_BUCKET_SQL)
-      .orderBy(desc(sql`count(*)`));
+      .where(eq(campaignLeadsTable.batchId, batchId))
+      .groupBy(
+        campaignLeadsTable.answeredEver,
+        campaignLeadsTable.disposition,
+        campaignLeadsTable.lastAttemptStatus,
+        campaignLeadsTable.callStatus,
+      );
 
-    const observed = dispositionRows
-      .filter(r => (r.key ?? "").trim() !== "")
-      .map(r => ({ key: r.key, count: r.count }));
-
-    dispositionedCount = observed.reduce((sum, d) => sum + d.count, 0);
-
-    // Configured categories should show at 0 rather than disappear, but they have
-    // to be bucketed the same way as the observed values or the same outcome gets
-    // two cards. Building the union here keeps one canonicalization, server-side.
-    const configuredTaxonomy = campaign?.agentId
-      ? (await db.select({ taxonomy: agentDispositionsTable.taxonomy })
-          .from(agentDispositionsTable)
-          .where(eq(agentDispositionsTable.agentId, campaign.agentId)))[0]?.taxonomy
-      : null;
-
-    const dispositionMap = new Map(observed.map(d => [d.key, d.count]));
-    const taxonomyObj =
-      configuredTaxonomy && typeof configuredTaxonomy === "object" && !Array.isArray(configuredTaxonomy)
-        ? configuredTaxonomy as Record<string, unknown>
-        : {};
-    for (const key of Object.keys(taxonomyObj)) {
-      const bucket = canonicalDispositionBucket(key, "");
-      if (bucket && !dispositionMap.has(bucket)) dispositionMap.set(bucket, 0);
-    }
-
-    dispositions = [...dispositionMap.entries()]
-      .map(([key, count]) => ({ key, count }))
-      .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+    // The agent taxonomy is the only source of business-outcome cards. Unknown
+    // historical/provider values are review work, never new ad-hoc categories.
+    const taxonomyObj = await loadAgentDispositionTaxonomy(campaign?.agentId ?? null);
+    dispositions = summarizeConfiguredDispositionHero(dispositionRows, taxonomyObj)
+      .map((item) => ({ key: item.key, count: item.count }));
   } catch (err) {
     logger.warn({ err, campaignId, batchId }, "batch workspace KPIs: disposition rollup failed — core funnel still returned");
   }
 
   const total        = leadKpis?.imported     ?? 0;
-  const called       = leadKpis?.called       ?? 0;
+  const called       = leadKpis?.attempted    ?? 0;
   const successCount = leadKpis?.interested   ?? 0;
   const successRate  = called > 0 ? Math.round((successCount / called) * 100) : 0;
 
@@ -209,7 +204,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
   if (firstAttemptAt && called > 0) {
     const elapsedMins = (Date.now() - new Date(firstAttemptAt).getTime()) / 60_000;
     const ratePerMin = elapsedMins > 0 ? called / elapsedMins : 0;
-    const remaining = total - called - (leadKpis?.failed ?? 0);
+    const remaining = total - called;
     if (ratePerMin > 0 && remaining > 0) {
       estimatedTimeRemainingMins = Math.round(remaining / ratePerMin);
     }
@@ -218,22 +213,22 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
   res.json({
     total,
     called,
-    connected:        leadKpis?.connected   ?? 0,
+    connected:        leadKpis?.answered    ?? 0,
     interested:       leadKpis?.interested  ?? 0,
     booked:           leadKpis?.booked      ?? 0,
     transferred:      leadKpis?.transferred ?? 0,
-    failed:           leadKpis?.failed      ?? 0,
+    failed:           leadKpis?.technicalFailed ?? 0,
     busy:             leadKpis?.busy        ?? 0,
     noPickup:         leadKpis?.noPickup    ?? 0,
     voicemail:        leadKpis?.voicemail   ?? 0,
-    pending:          leadKpis?.pending     ?? 0,
+    pending:          leadKpis?.queued      ?? 0,
     callbacks,
     incoming,
     bookings,
     transfers,
     successRate,
     dispositions,
-    undispositioned: Math.max(0, total - dispositionedCount),
+    undispositioned: leadKpis?.dispositionNeedsClassification ?? 0,
     lastActivityAt:             lastActivity?.lastAt ?? null,
     avgCallDurationS:           costDuration?.avgDurationS ?? null,
     totalCostCents:             costDuration?.totalCostCents ?? 0,
@@ -254,20 +249,14 @@ router.get("/campaigns/:id/batches/:batchId/workspace/funnel", async (req, res):
     res.status(404).json({ error: "Not found" }); return;
   }
 
-  const [r] = await db.select({
-    imported:    sql<number>`count(*)::int`,
-    called:      sql<number>`count(*) filter (where ${campaignLeadsTable.callAttempts} > 0)::int`,
-    connected:   sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('connected', 'completed', 'transferred'))::int`,
-    interested:  sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} in ('interest_confirmed','booking_created','transfer_completed'))::int`,
-    booked:      sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'booking_created')::int`,
-    transferred: sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'transfer_completed')::int`,
-  }).from(campaignLeadsTable).where(eq(campaignLeadsTable.batchId, batchId));
+  const [r] = await db.select(campaignReportingKpiSelect())
+    .from(campaignLeadsTable).where(eq(campaignLeadsTable.batchId, batchId));
 
   res.json({
     stages: [
       { key: "imported",    label: "Imported",    value: r?.imported    ?? 0 },
-      { key: "called",      label: "Called",       value: r?.called      ?? 0 },
-      { key: "connected",   label: "Connected",    value: r?.connected   ?? 0 },
+      { key: "called",      label: "Called",       value: r?.attempted   ?? 0 },
+      { key: "connected",   label: "Answered",     value: r?.answered    ?? 0 },
       { key: "interested",  label: "Interested",   value: r?.interested  ?? 0 },
       { key: "booked",      label: "Booked",       value: r?.booked      ?? 0 },
       { key: "transferred", label: "Transferred",  value: r?.transferred ?? 0 },
@@ -293,6 +282,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
   const status = String(req.query["status"] ?? "all");
   const outcome = String(req.query["outcome"] ?? "all");
   const search = String(req.query["search"] ?? "").trim();
+  const dispositionTaxonomy = await loadCampaignDispositionTaxonomy(campaignId);
 
   const baseWhere = and(
     eq(campaignLeadsTable.campaignId, campaignId),
@@ -310,32 +300,20 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
     status === "connected" ? inArray(campaignLeadsTable.callStatus, ["connected", "completed", "transferred"]) :
     undefined;
 
-  // Fixed system outcomes filter on operationalOutcome. Agent-configured
-  // labels ("Interested" or "Interested: Hot") match the stored taxonomy
-  // string, not the rolled-up KPI bucket — otherwise a sub-value never
-  // finds its rows.
-  const configured = splitDispositionLabel(outcome);
-  const configuredPrimary = normalizeDispositionToken(configured.primary);
-  const configuredSub = normalizeDispositionToken(configured.sub);
-  const storedPrimary = sql`btrim(regexp_replace(regexp_replace(lower(split_part(${campaignLeadsTable.disposition}, ':', 1)), '[_-]+', ' ', 'g'), '\\s+', ' ', 'g'))`;
-  const storedSub = sql`btrim(regexp_replace(regexp_replace(lower(split_part(${campaignLeadsTable.disposition}, ':', 2)), '[_-]+', ' ', 'g'), '\\s+', ' ', 'g'))`;
-
   const outcomeFilter =
     outcome === "all"                ? undefined :
-    outcome === "booking_created"    ? eq(campaignLeadsTable.operationalOutcome, "booking_created")    :
-    outcome === "transfer_completed" ? eq(campaignLeadsTable.operationalOutcome, "transfer_completed") :
-    outcome === "callback_requested" ? eq(campaignLeadsTable.operationalOutcome, "callback_requested") :
-    outcome === "__undispositioned__"
-      ? or(
-          sql`${campaignLeadsTable.disposition} is null`,
-          sql`btrim(${campaignLeadsTable.disposition}) = ''`,
+    outcome === "booking_created"    ? and(eq(campaignLeadsTable.answeredEver, true), eq(campaignLeadsTable.operationalOutcome, "booking_created"))    :
+    outcome === "transfer_completed" ? and(eq(campaignLeadsTable.answeredEver, true), eq(campaignLeadsTable.operationalOutcome, "transfer_completed")) :
+    outcome === "callback_requested" ? and(eq(campaignLeadsTable.answeredEver, true), eq(campaignLeadsTable.operationalOutcome, "callback_requested")) :
+    outcome === "__undispositioned__" || outcome === "needs_classification"
+      ? and(
+          sql`${campaignLeadsTable.answeredEver} is true`,
+          sql`not (${campaignHasConfiguredDispositionSql(dispositionTaxonomy)})`,
         )
-      : configuredSub
-        ? and(sql`${storedPrimary} = ${configuredPrimary}`, sql`${storedSub} = ${configuredSub}`)
-        : or(
-            sql`${storedPrimary} = ${configuredPrimary}`,
-            sql`${DISPOSITION_BUCKET_SQL} = ${canonicalDispositionBucket(outcome, "")}`,
-          );
+      : and(
+          eq(campaignLeadsTable.answeredEver, true),
+          campaignConfiguredDispositionFilterSql(outcome, dispositionTaxonomy),
+        );
 
   const searchFilter = search
     ? or(

@@ -6,8 +6,8 @@
  *
  * For each affected row that has a transcript and an agent with a configured
  * taxonomy, this re-runs the LLM classification (now schema-constrained), and
- * updates BOTH the `call_dispositions.result` row and the flat
- * `calls.disposition_result` column. Calls with genuinely no signal (no
+ * updates `call_dispositions.result`, `calls.disposition_result`, and the
+ * matching campaign lead's business projection. Calls with genuinely no signal (no
  * transcript / no agent taxonomy / still-empty classification) are left as-is.
  *
  * Run:  pnpm --filter @workspace/api-server run backfill-dispositions
@@ -19,6 +19,7 @@ import {
   agentDispositionsTable,
   callDispositionsTable,
   callsTable,
+  campaignLeadsTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import {
@@ -28,6 +29,7 @@ import {
   type DispositionConfig,
 } from "../lib/disposition/index.js";
 import { getDispositionLLM } from "../services/disposition-llm.js";
+import { applyCampaignDispositionOutcome } from "../services/campaign-disposition-outcome.js";
 
 function isEmpty(v: unknown): boolean {
   return v == null || (typeof v === "string" && v.trim() === "");
@@ -119,6 +121,8 @@ async function main(): Promise<void> {
 
       const flat: Record<string, string | number | boolean> = {
         [result.primary]: result.sub,
+        primary: result.primary,
+        sub: result.sub,
       };
       if (typeof result.confidence === "number") flat["confidence"] = result.confidence;
       if (result.summary) flat["summary"] = result.summary;
@@ -127,6 +131,26 @@ async function main(): Promise<void> {
         .update(callsTable)
         .set({ dispositionResult: flat })
         .where(eq(callsTable.id, callId));
+
+      const [lead] = await db
+        .select({ id: campaignLeadsTable.id })
+        .from(campaignLeadsTable)
+        .where(eq(campaignLeadsTable.callId, callId))
+        .limit(1);
+      const [call] = await db
+        .select({ status: callsTable.status })
+        .from(callsTable)
+        .where(eq(callsTable.id, callId))
+        .limit(1);
+      if (lead) {
+        await applyCampaignDispositionOutcome({
+          campaignLeadId: lead.id,
+          agentId,
+          callId,
+          dispositionResult: flat,
+          callStatus: call?.status ?? "completed",
+        });
+      }
 
       updated++;
       console.log(

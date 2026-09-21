@@ -1,7 +1,7 @@
 import { EmptyState } from "@/components/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LiveFloor } from "@/components/campaign-ops/live-floor";
-import { DispositionHero } from "@/components/campaign-ops/disposition-hero";
+import { ContactOutcomeHero, DispositionHero } from "@/components/campaign-ops/disposition-hero";
 import {
   campaignLeadsHref,
   type CampaignReportingPayload,
@@ -34,7 +34,15 @@ export function CampaignOverviewPanel({
     + (reporting?.liveFloor.talking ?? 0)
     + (reporting?.workTechnical.retryPending ?? 0)) > 0;
 
-  function openLeads(next: { view?: CampaignReportingView; dispositionBucket?: string | null }) {
+  function openLeads(next: {
+    view?: CampaignReportingView;
+    disposition?: string | null;
+    dispositionBucket?: string | null;
+  }) {
+    if (next.disposition) {
+      navigate(campaignLeadsHref(campaignId, { disposition: next.disposition }));
+      return;
+    }
     if (next.dispositionBucket) {
       navigate(`/app/campaigns/${campaignId}?tab=leads&dispositionBucket=${encodeURIComponent(next.dispositionBucket)}`);
       return;
@@ -56,12 +64,21 @@ export function CampaignOverviewPanel({
 
   return (
     <div className="space-y-5">
+      <ContactOutcomeHero
+        loading={loading}
+        reporting={reporting}
+        onSelect={(view) => {
+          if (!view) navigate(`/app/campaigns/${campaignId}?tab=leads`);
+          else openLeads({ view });
+        }}
+      />
       <DispositionHero
         loading={loading}
         items={reporting?.dispositions}
-        onSelect={(bucket) => {
-          if (!bucket) navigate(`/app/campaigns/${campaignId}?tab=leads`);
-          else openLeads({ dispositionBucket: bucket });
+        onSelect={(key) => {
+          if (!key) navigate(`/app/campaigns/${campaignId}?tab=leads`);
+          else if (key === "needs_classification") openLeads({ dispositionBucket: key });
+          else openLeads({ disposition: key });
         }}
       />
       {(loading || liveBusy) && (

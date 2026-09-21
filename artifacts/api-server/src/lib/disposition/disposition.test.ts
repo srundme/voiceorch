@@ -203,10 +203,12 @@ describe("validate", () => {
     expect(result.flags).toHaveLength(0);
   });
 
-  it("snaps invalid sub to first valid sub and caps confidence at 0.5", () => {
+  it("quarantines an invalid sub instead of inventing the first configured value", () => {
     const out = { primary: "INTERESTED", sub: "voicemail", confidence: 0.85, evidence: "e", summary: "s" };
     const result = validate(cfg, out, []);
-    expect(result.sub).toBe("wants_callback"); // first valid sub for INTERESTED
+    expect(result.sub).toBe("voicemail");
+    expect(result.error).toBe("sub_outside_configured_taxonomy");
+    expect(result.flags).toContain("sub_outside_configured_taxonomy");
     expect(result.confidence).toBeLessThanOrEqual(0.5);
     expect(result.needsReview).toBe(true);
   });
@@ -277,12 +279,13 @@ describe("validate", () => {
     expect(result.confidence).toBe(0.8);
   });
 
-  it("snaps an out-of-list sub on a valid category to a non-empty first sub", () => {
+  it("preserves and quarantines an out-of-list sub on a valid category", () => {
     const out = { primary: "intent", sub: "totally_made_up", confidence: 0.9, evidence: "e", summary: "s" };
     const result = validate(singleCat, out, []);
-    expect(result.sub).toBe("interested"); // first valid sub
+    expect(result.sub).toBe("totally_made_up");
     expect(result.sub).not.toBe("");
     expect(result.confidence).toBeLessThanOrEqual(0.5);
+    expect(result.error).toBe("sub_outside_configured_taxonomy");
   });
 });
 

@@ -12,7 +12,7 @@
  * Do not remap historical call_status. Do not change the V2 writer from here.
  */
 
-import { eq, ilike, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import {
   campaignLeadsTable,
   callRetriesTable,
@@ -22,7 +22,24 @@ import { SUCCESS_OUTCOMES } from "../lib/campaign-lead-funnel.js";
 import {
   canonicalDispositionFromLabel,
   dispositionBucketSql,
+  normalizeDispositionToken,
+  splitDispositionLabel,
 } from "../lib/disposition/canonical.js";
+
+export type CampaignDispositionTaxonomy = Record<string, string[]>;
+
+export type CampaignBusinessDisposition = {
+  /** Exact value persisted on campaign_leads.disposition and used for filtering. */
+  key: string;
+  /** Operator-facing outcome label from the agent configuration. */
+  label: string;
+  /** Agent-configured taxonomy category. */
+  primary: string;
+  /** Agent-configured outcome within the category, when present. */
+  sub: string | null;
+  count: number;
+  kind: "configured" | "needs_classification";
+};
 
 export const CAMPAIGN_REPORTING_VIEWS = [
   "interested",
@@ -39,6 +56,7 @@ export type CampaignReportingView = (typeof CAMPAIGN_REPORTING_VIEWS)[number];
 
 export type CampaignContactState = "never_attempted" | "attempted" | "answered";
 export type CampaignWorkState = "live" | "retry_scheduled" | "callback_due" | "terminal";
+export type CampaignDispositionState = "not_applicable" | "needs_classification" | "classified";
 
 export type CampaignReportingLeadInput = {
   id: number;
@@ -82,6 +100,14 @@ const VOICEMAIL_TECHNICAL = new Set(["voicemail"]);
 const TECHNICAL_FAILED = new Set(["failed", "exhausted", "dial_error", "stuck_calling"]);
 const LIVE_LIFECYCLE = new Set(["calling", "connected"]);
 const QUEUED_LIFECYCLE = new Set(["pending", "queued"]);
+const TECHNICAL_DISPOSITION_BUCKETS = new Set([
+  "busy", "no pickup", "voicemail", "failed", "technical failed",
+  "dial error", "stuck calling", "not connected",
+]);
+
+export function isTechnicalDispositionBucket(bucket: string | null | undefined): boolean {
+  return TECHNICAL_DISPOSITION_BUCKETS.has(String(bucket ?? ""));
+}
 
 export function isCampaignReportingView(value: string | null | undefined): value is CampaignReportingView {
   return !!value && (CAMPAIGN_REPORTING_VIEWS as readonly string[]).includes(value);
@@ -95,22 +121,140 @@ export function latestTechnicalStatus(lead: {
   return last || lead.callStatus;
 }
 
-/**
- * What operators should see as the disposition chip.
- * Technical voicemail wins over an LLM "no pickup" stamp.
- */
+/** Business dispositions apply only to answered human conversations. */
 export function displayDispositionBucket(lead: {
+  answeredEver?: boolean;
   disposition?: string | null;
   lastAttemptStatus?: string | null;
   callStatus: string;
 }): string {
-  if (latestTechnicalStatus(lead) === "voicemail") return "voicemail";
-  return canonicalDispositionFromLabel(lead.disposition);
+  if (lead.answeredEver !== true) return "";
+  const bucket = canonicalDispositionFromLabel(lead.disposition);
+  return isTechnicalDispositionBucket(bucket) ? "" : bucket;
+}
+
+export function campaignDispositionState(lead: {
+  answeredEver: boolean;
+  disposition?: string | null;
+  lastAttemptStatus?: string | null;
+  callStatus: string;
+}, taxonomy?: CampaignDispositionTaxonomy): CampaignDispositionState {
+  if (!lead.answeredEver) return "not_applicable";
+  if (taxonomy !== undefined) {
+    return resolveConfiguredDisposition(lead.disposition, taxonomy)
+      ? "classified"
+      : "needs_classification";
+  }
+  return displayDispositionBucket(lead) ? "classified" : "needs_classification";
+}
+
+function dispositionIdentity(primary: string, sub = ""): string {
+  const p = normalizeDispositionToken(primary);
+  const s = normalizeDispositionToken(sub);
+  return s ? `${p}:${s}` : p;
+}
+
+/** Flatten the agent taxonomy without introducing platform-owned outcome names. */
+export function flattenDispositionTaxonomy(
+  taxonomy: CampaignDispositionTaxonomy | null | undefined,
+): Array<Omit<CampaignBusinessDisposition, "count" | "kind">> {
+  if (!taxonomy || typeof taxonomy !== "object" || Array.isArray(taxonomy)) return [];
+  const out: Array<Omit<CampaignBusinessDisposition, "count" | "kind">> = [];
+  const seen = new Set<string>();
+  for (const [rawPrimary, rawSubs] of Object.entries(taxonomy)) {
+    const primary = rawPrimary.trim();
+    if (!primary) continue;
+    const subs = Array.isArray(rawSubs)
+      ? rawSubs.map((value) => String(value).trim()).filter(Boolean)
+      : [];
+    const values = subs.length > 0 ? subs : [""];
+    for (const sub of values) {
+      const key = sub ? `${primary}: ${sub}` : primary;
+      const identity = dispositionIdentity(primary, sub);
+      if (!identity || seen.has(identity)) continue;
+      seen.add(identity);
+      out.push({
+        key,
+        label: sub || primary,
+        primary,
+        sub: sub || null,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Resolve a stored lead label against the exact agent-defined taxonomy.
+ * A sub-only legacy label is accepted only when it is unique in the taxonomy.
+ */
+export function resolveConfiguredDisposition(
+  label: string | null | undefined,
+  taxonomy: CampaignDispositionTaxonomy | null | undefined,
+): Omit<CampaignBusinessDisposition, "count" | "kind"> | null {
+  const configured = flattenDispositionTaxonomy(taxonomy);
+  if (!label?.trim() || configured.length === 0) return null;
+  const parsed = splitDispositionLabel(label);
+  const identity = dispositionIdentity(parsed.primary, parsed.sub);
+  const exact = configured.find((item) => dispositionIdentity(item.primary, item.sub ?? "") === identity);
+  if (exact) return exact;
+
+  // Older rows sometimes contain only the sub-outcome. Never guess when two
+  // configured categories use the same sub label.
+  if (!parsed.sub) {
+    const subMatches = configured.filter(
+      (item) => item.sub && normalizeDispositionToken(item.sub) === normalizeDispositionToken(parsed.primary),
+    );
+    if (subMatches.length === 1) return subMatches[0]!;
+  }
+  return null;
+}
+
+/** Build cards exclusively from the agent taxonomy, in the configured order. */
+export function summarizeConfiguredDispositionHero(
+  rows: Array<{
+    answeredEver: boolean;
+    disposition?: string | null;
+    count: number;
+  }>,
+  taxonomy: CampaignDispositionTaxonomy | null | undefined,
+): CampaignBusinessDisposition[] {
+  const configured = flattenDispositionTaxonomy(taxonomy);
+  const counts = new Map(configured.map((item) => [item.key, 0]));
+  let needsClassification = 0;
+
+  for (const row of rows) {
+    if (!row.answeredEver) continue;
+    const match = resolveConfiguredDisposition(row.disposition, taxonomy);
+    if (!match) {
+      needsClassification += row.count;
+      continue;
+    }
+    counts.set(match.key, (counts.get(match.key) ?? 0) + row.count);
+  }
+
+  const cards: CampaignBusinessDisposition[] = configured.map((item) => ({
+    ...item,
+    count: counts.get(item.key) ?? 0,
+    kind: "configured",
+  }));
+  if (needsClassification > 0) {
+    cards.push({
+      key: "needs_classification",
+      label: "Needs classification",
+      primary: "",
+      sub: null,
+      count: needsClassification,
+      kind: "needs_classification",
+    });
+  }
+  return cards;
 }
 
 /** Collapse raw disposition + technical status rows into hero chips. Do not GROUP BY the SQL CASE. */
 export function summarizeDispositionHero(
   rows: Array<{
+    answeredEver: boolean;
     disposition?: string | null;
     lastAttemptStatus?: string | null;
     callStatus: string;
@@ -119,7 +263,9 @@ export function summarizeDispositionHero(
 ): Array<{ bucket: string; count: number }> {
   const counts = new Map<string, number>();
   for (const row of rows) {
-    const bucket = displayDispositionBucket(row).trim() || "unlabeled";
+    const state = campaignDispositionState(row);
+    if (state === "not_applicable") continue;
+    const bucket = displayDispositionBucket(row).trim() || "needs_classification";
     counts.set(bucket, (counts.get(bucket) ?? 0) + row.count);
   }
   return [...counts.entries()]
@@ -129,9 +275,8 @@ export function summarizeDispositionHero(
       const rank = (bucket: string) => {
         if (bucket === "interested") return 0;
         if (bucket === "callback requested") return 1;
-        if (bucket === "voicemail") return 2;
-        if (bucket === "not interested") return 3;
-        if (bucket === "unlabeled") return 99;
+        if (bucket === "not interested") return 2;
+        if (bucket === "needs_classification") return 99;
         return 10;
       };
       const d = rank(a.bucket) - rank(b.bucket);
@@ -184,19 +329,19 @@ export function isQueuedNow(lead: CampaignReportingLeadInput): boolean {
 }
 
 export function isInterested(lead: CampaignReportingLeadInput): boolean {
-  return lead.operationalOutcome === "interest_confirmed";
+  return lead.answeredEver && lead.operationalOutcome === "interest_confirmed";
 }
 
 export function isBooked(lead: CampaignReportingLeadInput): boolean {
-  return lead.operationalOutcome === "booking_created";
+  return lead.answeredEver && lead.operationalOutcome === "booking_created";
 }
 
 export function isTransferred(lead: CampaignReportingLeadInput): boolean {
-  return lead.operationalOutcome === "transfer_completed";
+  return lead.answeredEver && lead.operationalOutcome === "transfer_completed";
 }
 
 export function isCallback(lead: CampaignReportingLeadInput): boolean {
-  return lead.operationalOutcome === "callback_requested";
+  return lead.answeredEver && lead.operationalOutcome === "callback_requested";
 }
 
 export function isRetryPending(lead: CampaignReportingLeadInput): boolean {
@@ -255,15 +400,23 @@ export function leadMatchesReportingView(
 export function leadMatchesReportingFilter(
   lead: CampaignReportingLeadInput,
   filter: CampaignReportingFilter = {},
+  taxonomy?: CampaignDispositionTaxonomy,
 ): boolean {
   if (filter.view && !leadMatchesReportingView(lead, filter.view)) return false;
-  if (filter.disposition != null && filter.disposition !== "" && lead.disposition !== filter.disposition) {
-    return false;
+  if (filter.disposition != null && filter.disposition !== "") {
+    if (taxonomy === undefined) {
+      if (lead.disposition !== filter.disposition) return false;
+    } else {
+      const selected = resolveConfiguredDisposition(filter.disposition, taxonomy);
+      const actual = resolveConfiguredDisposition(lead.disposition, taxonomy);
+      if (!selected || !actual || actual.key !== selected.key) return false;
+    }
   }
   if (filter.dispositionBucket != null && filter.dispositionBucket !== "") {
     const bucket = displayDispositionBucket(lead);
-    if (filter.dispositionBucket === "unlabeled") {
-      if (bucket) return false;
+    if (filter.dispositionBucket === "unlabeled" || filter.dispositionBucket === "needs_classification") {
+      if (campaignDispositionState(lead, taxonomy) !== "needs_classification") return false;
+      if (taxonomy === undefined && bucket) return false;
     } else if (bucket !== filter.dispositionBucket) {
       return false;
     }
@@ -272,6 +425,9 @@ export function leadMatchesReportingFilter(
     && lead.operationalOutcome !== filter.operationalOutcome) {
     return false;
   }
+  if (filter.operationalOutcome && [
+    "interest_confirmed", "booking_created", "transfer_completed", "callback_requested",
+  ].includes(filter.operationalOutcome) && !lead.answeredEver) return false;
   if (filter.answeredEver != null && lead.answeredEver !== filter.answeredEver) return false;
   if (filter.lifecycleStatus != null && filter.lifecycleStatus !== ""
     && lead.callStatus !== filter.lifecycleStatus) {
@@ -332,7 +488,13 @@ export function campaignReportingRates(counts: {
   };
 }
 
-export function projectCampaignLeadReporting(lead: CampaignReportingLeadInput) {
+export function projectCampaignLeadReporting(
+  lead: CampaignReportingLeadInput,
+  taxonomy?: CampaignDispositionTaxonomy,
+) {
+  const configuredDisposition = taxonomy === undefined
+    ? null
+    : resolveConfiguredDisposition(lead.disposition, taxonomy);
   return {
     leadId: lead.id,
     batchId: lead.batchId ?? null,
@@ -347,7 +509,10 @@ export function projectCampaignLeadReporting(lead: CampaignReportingLeadInput) {
     latestCallId: lead.callId ?? null,
     latestAnsweredCallId: lead.answeredEver ? (lead.callId ?? null) : null,
     latestAnsweredDuration: lead.latestAnsweredDuration ?? null,
-    dispositionBucket: displayDispositionBucket(lead),
+    dispositionBucket: taxonomy === undefined
+      ? displayDispositionBucket(lead)
+      : configuredDisposition?.key ?? "",
+    dispositionState: campaignDispositionState(lead, taxonomy),
     retryPending: isRetryPending(lead),
     retryScheduledAt: lead.retryScheduledAt ? String(lead.retryScheduledAt) : null,
     retryReason: lead.retryReason ?? null,
@@ -418,10 +583,10 @@ export const campaignReportingSql = {
   talking: sql`${campaignLeadsTable.callStatus} = 'connected'`,
   calling: sql`${campaignLeadsTable.callStatus} = 'calling'`,
   queued: sql`${campaignLeadsTable.callStatus} in ('pending','queued')`,
-  interested: sql`${campaignLeadsTable.operationalOutcome} = 'interest_confirmed'`,
-  booked: sql`${campaignLeadsTable.operationalOutcome} = 'booking_created'`,
-  transferred: sql`${campaignLeadsTable.operationalOutcome} = 'transfer_completed'`,
-  callbacks: sql`${campaignLeadsTable.operationalOutcome} = 'callback_requested'`,
+  interested: sql`${campaignLeadsTable.answeredEver} is true and ${campaignLeadsTable.operationalOutcome} = 'interest_confirmed'`,
+  booked: sql`${campaignLeadsTable.answeredEver} is true and ${campaignLeadsTable.operationalOutcome} = 'booking_created'`,
+  transferred: sql`${campaignLeadsTable.answeredEver} is true and ${campaignLeadsTable.operationalOutcome} = 'transfer_completed'`,
+  callbacks: sql`${campaignLeadsTable.answeredEver} is true and ${campaignLeadsTable.operationalOutcome} = 'callback_requested'`,
   retryPending: sql`exists (select 1 from ${callRetriesTable} r where r.lead_id = ${campaignLeadsTable.id} and r.status = 'pending')`,
   retryRowCount: sql`(select count(*)::int from ${callRetriesTable} r where r.lead_id = ${campaignLeadsTable.id} and r.status = 'pending')`,
   retryScheduledAt: sql`(select min(r.scheduled_at) from ${callRetriesTable} r where r.lead_id = ${campaignLeadsTable.id} and r.status = 'pending')`,
@@ -435,11 +600,13 @@ export const campaignReportingSql = {
   slotsUsed: sql`${campaignLeadsTable.callStatus} in ('calling','connected')`,
 };
 
-/** SQL twin of displayDispositionBucket. Voicemail attempt beats a no-pickup label. */
+/** SQL twin of displayDispositionBucket. */
 export function campaignDispositionHeroSql(): SQL<string> {
   return sql<string>`(case
-    when ${latestTechnicalSql} = 'voicemail' then 'voicemail'
-    else ${dispositionBucketSql(campaignLeadsTable.disposition)}
+    when ${campaignLeadsTable.answeredEver} is not true then ''
+    when ${dispositionBucketSql(sql`${campaignLeadsTable.disposition}`)} in
+      ('busy','no pickup','voicemail','failed','technical failed','dial error','stuck calling','not connected') then ''
+    else ${dispositionBucketSql(sql`${campaignLeadsTable.disposition}`)}
   end)`;
 }
 
@@ -458,18 +625,83 @@ export function campaignReportingViewSql(view: CampaignReportingView): SQL {
   return VIEW_SQL[view];
 }
 
-/** Same predicates as KPI counts. AND-composed so Interested-N always lists N rows. */
-export function campaignReportingFilterSql(filter: CampaignReportingFilter): SQL[] {
+const storedDispositionPrimarySql = sql`btrim(regexp_replace(regexp_replace(lower(split_part(coalesce(${campaignLeadsTable.disposition}, ''), ':', 1)), '[_-]+', ' ', 'g'), '\\s+', ' ', 'g'))`;
+const storedDispositionSubSql = sql`btrim(regexp_replace(regexp_replace(lower(split_part(coalesce(${campaignLeadsTable.disposition}, ''), ':', 2)), '[_-]+', ' ', 'g'), '\\s+', ' ', 'g'))`;
+
+function configuredDispositionMatchSql(
+  item: Omit<CampaignBusinessDisposition, "count" | "kind">,
+  taxonomy: CampaignDispositionTaxonomy,
+): SQL {
+  const primary = normalizeDispositionToken(item.primary);
+  const sub = normalizeDispositionToken(item.sub ?? "");
+  const exact = and(
+    sql`${storedDispositionPrimarySql} = ${primary}`,
+    sql`${storedDispositionSubSql} = ${sub}`,
+  )!;
+  if (!sub) return exact;
+
+  const sameSubCount = flattenDispositionTaxonomy(taxonomy)
+    .filter((candidate) => normalizeDispositionToken(candidate.sub ?? "") === sub)
+    .length;
+  if (sameSubCount !== 1) return exact;
+
+  // Older rows may contain only the sub-outcome. Accept it only when it maps
+  // unambiguously to one configured item, matching resolveConfiguredDisposition.
+  return or(
+    exact,
+    and(
+      sql`${storedDispositionPrimarySql} = ${sub}`,
+      sql`${storedDispositionSubSql} = ''`,
+    )!,
+  )!;
+}
+
+/** SQL twin of resolveConfiguredDisposition for one selected card. */
+export function campaignConfiguredDispositionFilterSql(
+  label: string,
+  taxonomy: CampaignDispositionTaxonomy,
+): SQL {
+  const item = resolveConfiguredDisposition(label, taxonomy);
+  return item ? configuredDispositionMatchSql(item, taxonomy) : sql`false`;
+}
+
+/** True only when a stored value belongs to the configured agent taxonomy. */
+export function campaignHasConfiguredDispositionSql(
+  taxonomy: CampaignDispositionTaxonomy,
+): SQL {
+  const items = flattenDispositionTaxonomy(taxonomy);
+  if (items.length === 0) return sql`false`;
+  return or(...items.map((item) => configuredDispositionMatchSql(item, taxonomy)))!;
+}
+
+/** Same predicates as KPI counts. AND-composed so a card count always lists the same rows. */
+export function campaignReportingFilterSql(
+  filter: CampaignReportingFilter,
+  taxonomy?: CampaignDispositionTaxonomy,
+): SQL[] {
   const parts: SQL[] = [];
   if (filter.view) parts.push(campaignReportingViewSql(filter.view));
-  if (filter.disposition) parts.push(eq(campaignLeadsTable.disposition, filter.disposition));
-  if (filter.dispositionBucket === "unlabeled") {
-    parts.push(sql`coalesce(${campaignDispositionHeroSql()}, '') = ''`);
+  if (filter.disposition) {
+    parts.push(taxonomy === undefined
+      ? sql`lower(btrim(coalesce(${campaignLeadsTable.disposition}, ''))) = lower(btrim(${filter.disposition}))`
+      : campaignConfiguredDispositionFilterSql(filter.disposition, taxonomy));
+  }
+  if (filter.dispositionBucket === "unlabeled" || filter.dispositionBucket === "needs_classification") {
+    parts.push(sql`${campaignLeadsTable.answeredEver} is true`);
+    if (taxonomy !== undefined) {
+      parts.push(sql`not (${campaignHasConfiguredDispositionSql(taxonomy)})`);
+    } else {
+      parts.push(sql`coalesce(${campaignDispositionHeroSql()}, '') = ''`);
+    }
   } else if (filter.dispositionBucket) {
+    parts.push(sql`${campaignLeadsTable.answeredEver} is true`);
     parts.push(sql`${campaignDispositionHeroSql()} = ${filter.dispositionBucket}`);
   }
   if (filter.operationalOutcome) {
     parts.push(eq(campaignLeadsTable.operationalOutcome, filter.operationalOutcome));
+    if (["interest_confirmed", "booking_created", "transfer_completed", "callback_requested"].includes(filter.operationalOutcome)) {
+      parts.push(campaignReportingSql.answered);
+    }
   }
   if (filter.answeredEver === true) parts.push(campaignReportingSql.answered);
   if (filter.answeredEver === false) parts.push(sql`${campaignLeadsTable.answeredEver} is not true`);
@@ -511,6 +743,18 @@ export function campaignReportingKpiSelect() {
     technicalFailed: sql<number>`count(*) filter (where ${campaignReportingSql.technicalFailed})::int`,
     historicalAnsweredFailed: sql<number>`count(*) filter (where ${campaignReportingSql.historicalAnsweredFailed})::int`,
     slotsUsed: sql<number>`count(*) filter (where ${campaignReportingSql.slotsUsed})::int`,
+    dispositionEligible: sql<number>`count(*) filter (where ${campaignLeadsTable.answeredEver} is true)::int`,
+    dispositionClassified: sql<number>`count(*) filter (
+      where ${campaignLeadsTable.answeredEver} is true
+        and coalesce(${campaignDispositionHeroSql()}, '') <> ''
+    )::int`,
+    dispositionNeedsClassification: sql<number>`count(*) filter (
+      where ${campaignLeadsTable.answeredEver} is true
+        and coalesce(${campaignDispositionHeroSql()}, '') = ''
+    )::int`,
+    firstAttemptAt: sql<string | null>`min(${campaignLeadsTable.lastAttemptAt}) filter (
+      where ${campaignLeadsTable.callAttempts} > 0
+    )::text`,
   };
 }
 

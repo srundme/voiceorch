@@ -18,6 +18,16 @@ export type CampaignReportingView = (typeof CAMPAIGN_REPORTING_VIEWS)[number];
 
 export type CampaignContactState = "never_attempted" | "attempted" | "answered";
 export type CampaignWorkState = "live" | "retry_scheduled" | "callback_due" | "terminal";
+export type CampaignDispositionState = "not_applicable" | "needs_classification" | "classified";
+
+export type CampaignBusinessDisposition = {
+  key: string;
+  label: string;
+  primary: string;
+  sub: string | null;
+  count: number;
+  kind: "configured" | "needs_classification";
+};
 
 export type CampaignReportingLead = {
   leadId: number;
@@ -30,6 +40,7 @@ export type CampaignReportingLead = {
   operationalOutcome: string;
   disposition: string | null;
   dispositionBucket?: string | null;
+  dispositionState: CampaignDispositionState;
   callAttempts: number;
   latestCallId: number | null;
   latestAnsweredCallId: number | null;
@@ -78,6 +89,12 @@ export type CampaignReportingPayload = {
     voicemail: number;
     technicalFailed: number;
   };
+  classification: {
+    eligible: number;
+    classified: number;
+    needsClassification: number;
+    notApplicable: number;
+  };
   rates: {
     answerRate: number;
     interestRate: number;
@@ -103,7 +120,8 @@ export type CampaignReportingPayload = {
     retryPending: number;
     progressPct: number;
   }>;
-  dispositions?: Array<{ bucket: string; count: number }>;
+  /** Exact agent-configured taxonomy outcomes, followed by the system review bucket when needed. */
+  dispositions?: CampaignBusinessDisposition[];
 };
 
 export type CampaignReportingFilter = {
@@ -134,8 +152,15 @@ export const PRIMARY_LEAD_VIEWS: { id: CampaignReportingView | "all"; label: str
 
 /** Compact list filters that are not already a disposition chip. */
 export const WORK_LEAD_VIEWS: { id: CampaignReportingView; label: string }[] = [
-  { id: "answered", label: "Answered" },
   { id: "retry", label: "Retry" },
+];
+
+export const CONTACT_OUTCOME_VIEWS: { id: CampaignReportingView | "all"; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "answered", label: "Answered" },
+  { id: "busy", label: "Busy" },
+  { id: "no_pickup", label: "No Pickup" },
+  { id: "voicemail", label: "Voicemail" },
   { id: "technical_failed", label: "Failed" },
 ];
 
@@ -273,7 +298,7 @@ export function businessOutcomeLabel(outcome: string | null | undefined): string
 }
 
 export function displayDispositionLabel(bucket: string | null | undefined): string {
-  if (!bucket || bucket === "unlabeled") return "No label";
+  if (!bucket || bucket === "unlabeled" || bucket === "needs_classification") return "Needs classification";
   return bucket.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CONNECTED_CALL_STATUSES, campaignLeadFunnelSelect, funnelFromRow } from "../lib/campaign-lead-funnel";
 import {
   campaignContactState,
+  campaignDispositionState,
   campaignReportingRates,
   campaignReportingFilterSql,
   campaignReportingSql,
@@ -9,6 +10,7 @@ import {
   campaignWorkState,
   countReportingMetric,
   displayDispositionBucket,
+  flattenDispositionTaxonomy,
   isAnswered,
   isBusy,
   isCallingNow,
@@ -21,8 +23,10 @@ import {
   leadMatchesReportingView,
   parseCampaignReportingFilter,
   projectCampaignLeadReporting,
+  resolveConfiguredDisposition,
   summarizeCampaignReporting,
   summarizeDispositionHero,
+  summarizeConfiguredDispositionHero,
   type CampaignReportingLeadInput,
 } from "./campaign-lead-reporting";
 
@@ -241,7 +245,7 @@ describe("no-pickup / busy / voicemail / technical failed", () => {
     expect(countReportingMetric([row], "answered")).toBe(1);
   });
 
-  it("treats a voicemail attempt with an LLM no-pickup stamp as voicemail", () => {
+  it("keeps technical labels out of business dispositions after an answered call", () => {
     const row = lead({
       id: 5,
       answeredEver: true,
@@ -250,22 +254,166 @@ describe("no-pickup / busy / voicemail / technical failed", () => {
       disposition: "outcome: no pickup",
       callAttempts: 1,
     });
-    expect(displayDispositionBucket(row)).toBe("voicemail");
-    expect(leadMatchesReportingFilter(row, { dispositionBucket: "voicemail" })).toBe(true);
+    expect(displayDispositionBucket(row)).toBe("");
+    expect(campaignDispositionState(row)).toBe("needs_classification");
+    expect(leadMatchesReportingFilter(row, { dispositionBucket: "voicemail" })).toBe(false);
     expect(leadMatchesReportingFilter(row, { dispositionBucket: "no pickup" })).toBe(false);
     expect(countReportingMetric([row], "no_pickup")).toBe(0);
   });
 
-  it("hero chips count technical voicemail even when the label is no pickup", () => {
+  it("preserves a real business disposition when a later attempt reaches voicemail", () => {
+    const row = lead({
+      id: 6,
+      answeredEver: true,
+      callStatus: "voicemail",
+      lastAttemptStatus: "voicemail",
+      disposition: "Interested: eligible",
+      callAttempts: 2,
+    });
+    expect(displayDispositionBucket(row)).toBe("interested");
+    expect(campaignDispositionState(row)).toBe("classified");
+  });
+
+  it("hero chips contain only answered business dispositions", () => {
     expect(summarizeDispositionHero([
-      { disposition: "outcome: no pickup", lastAttemptStatus: "voicemail", callStatus: "voicemail", count: 4 },
-      { disposition: "outcome: no pickup", lastAttemptStatus: "caller_hangup", callStatus: "completed", count: 13 },
-      { disposition: null, lastAttemptStatus: "busy", callStatus: "busy", count: 31 },
+      { answeredEver: true, disposition: "outcome: no pickup", lastAttemptStatus: "voicemail", callStatus: "voicemail", count: 4 },
+      { answeredEver: true, disposition: "outcome: interested", lastAttemptStatus: "caller_hangup", callStatus: "completed", count: 13 },
+      { answeredEver: true, disposition: null, lastAttemptStatus: "caller_hangup", callStatus: "completed", count: 2 },
+      { answeredEver: false, disposition: null, lastAttemptStatus: "busy", callStatus: "busy", count: 31 },
     ])).toEqual([
-      { bucket: "voicemail", count: 4 },
-      { bucket: "no pickup", count: 13 },
-      { bucket: "unlabeled", count: 31 },
+      { bucket: "interested", count: 13 },
+      { bucket: "needs_classification", count: 6 },
     ]);
+  });
+
+  it("never-answered leads are not mislabeled as needing classification", () => {
+    const unanswered = lead({ id: 8, answeredEver: false, callStatus: "busy", lastAttemptStatus: "busy", callAttempts: 1 });
+    const answered = lead({ id: 9, answeredEver: true, callStatus: "completed", lastAttemptStatus: "caller_hangup", callAttempts: 1 });
+    expect(campaignDispositionState(unanswered)).toBe("not_applicable");
+    expect(campaignDispositionState(answered)).toBe("needs_classification");
+    expect(leadMatchesReportingFilter(unanswered, { dispositionBucket: "needs_classification" })).toBe(false);
+    expect(leadMatchesReportingFilter(answered, { dispositionBucket: "needs_classification" })).toBe(true);
+  });
+
+  it("does not count a stale business outcome on a never-answered lead", () => {
+    const stale = lead({
+      id: 10,
+      answeredEver: false,
+      callStatus: "busy",
+      lastAttemptStatus: "busy",
+      operationalOutcome: "interest_confirmed",
+      disposition: "Interested: eligible",
+      callAttempts: 1,
+    });
+    expect(isInterested(stale)).toBe(false);
+    expect(countReportingMetric([stale], "interested")).toBe(0);
+  });
+});
+
+describe("agent-configured business dispositions", () => {
+  const taxonomy = {
+    "Lead Status": ["Hot Lead", "Warm Lead", "Not Interested"],
+    "Next Action": ["Call Back Tomorrow"],
+  };
+
+  it("flattens the exact agent taxonomy in configured order", () => {
+    expect(flattenDispositionTaxonomy(taxonomy)).toEqual([
+      { key: "Lead Status: Hot Lead", label: "Hot Lead", primary: "Lead Status", sub: "Hot Lead" },
+      { key: "Lead Status: Warm Lead", label: "Warm Lead", primary: "Lead Status", sub: "Warm Lead" },
+      { key: "Lead Status: Not Interested", label: "Not Interested", primary: "Lead Status", sub: "Not Interested" },
+      { key: "Next Action: Call Back Tomorrow", label: "Call Back Tomorrow", primary: "Next Action", sub: "Call Back Tomorrow" },
+    ]);
+  });
+
+  it("does not remap configured labels to platform hardcoded meanings", () => {
+    expect(resolveConfiguredDisposition("Lead Status: Hot Lead", taxonomy)?.key)
+      .toBe("Lead Status: Hot Lead");
+    expect(resolveConfiguredDisposition("Interested: eligible", taxonomy)).toBeNull();
+  });
+
+  it("renders zero-count configured outcomes and quarantines unknown values", () => {
+    expect(summarizeConfiguredDispositionHero([
+      { answeredEver: true, disposition: "Lead Status: Hot Lead", count: 7 },
+      { answeredEver: true, disposition: "Hot Lead", count: 2 },
+      { answeredEver: true, disposition: "provider invented value", count: 3 },
+      { answeredEver: false, disposition: null, count: 20 },
+    ], taxonomy)).toEqual([
+      { key: "Lead Status: Hot Lead", label: "Hot Lead", primary: "Lead Status", sub: "Hot Lead", count: 9, kind: "configured" },
+      { key: "Lead Status: Warm Lead", label: "Warm Lead", primary: "Lead Status", sub: "Warm Lead", count: 0, kind: "configured" },
+      { key: "Lead Status: Not Interested", label: "Not Interested", primary: "Lead Status", sub: "Not Interested", count: 0, kind: "configured" },
+      { key: "Next Action: Call Back Tomorrow", label: "Call Back Tomorrow", primary: "Next Action", sub: "Call Back Tomorrow", count: 0, kind: "configured" },
+      { key: "needs_classification", label: "Needs classification", primary: "", sub: null, count: 3, kind: "needs_classification" },
+    ]);
+  });
+
+  it("projects a lead against the configured taxonomy", () => {
+    const configured = projectCampaignLeadReporting(lead({
+      id: 70,
+      answeredEver: true,
+      disposition: "Lead Status: Warm Lead",
+      callStatus: "completed",
+      callAttempts: 1,
+    }), taxonomy);
+    expect(configured.dispositionBucket).toBe("Lead Status: Warm Lead");
+    expect(configured.dispositionState).toBe("classified");
+
+    const invalid = projectCampaignLeadReporting(lead({
+      id: 71,
+      answeredEver: true,
+      disposition: "Interested",
+      callStatus: "completed",
+      callAttempts: 1,
+    }), taxonomy);
+    expect(invalid.dispositionBucket).toBe("");
+    expect(invalid.dispositionState).toBe("needs_classification");
+  });
+
+  it("uses the same taxonomy resolution for card filters as card counts", () => {
+    const exact = lead({
+      id: 72,
+      answeredEver: true,
+      disposition: "Lead Status: Hot Lead",
+      callStatus: "completed",
+      callAttempts: 1,
+    });
+    const legacySubOnly = lead({
+      id: 73,
+      answeredEver: true,
+      disposition: "hot_lead",
+      callStatus: "completed",
+      callAttempts: 1,
+    });
+    const unknown = lead({
+      id: 74,
+      answeredEver: true,
+      disposition: "provider invented value",
+      callStatus: "completed",
+      callAttempts: 1,
+    });
+
+    expect([exact, legacySubOnly, unknown].filter((row) => leadMatchesReportingFilter(
+      row,
+      { disposition: "Lead Status: Hot Lead" },
+      taxonomy,
+    )).map((row) => row.id)).toEqual([72, 73]);
+    expect([exact, legacySubOnly, unknown].filter((row) => leadMatchesReportingFilter(
+      row,
+      { dispositionBucket: "needs_classification" },
+      taxonomy,
+    )).map((row) => row.id)).toEqual([74]);
+  });
+
+  it("does not guess when the same legacy sub-label exists in two categories", () => {
+    const ambiguous = {
+      "Lead Status": ["Qualified"],
+      "Eligibility": ["Qualified"],
+    };
+    expect(resolveConfiguredDisposition("Qualified", ambiguous)).toBeNull();
+    expect(campaignDispositionState({
+      answeredEver: true,
+      disposition: "Qualified",
+      callStatus: "completed",
+    }, ambiguous)).toBe("needs_classification");
   });
 });
 

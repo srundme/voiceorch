@@ -6,6 +6,7 @@ import {
   displayDispositionLabel,
   primaryLeadTone,
   type CampaignContactState,
+  type CampaignDispositionState,
   type CampaignReportingLead,
 } from "@/lib/campaign-lead-reporting";
 
@@ -59,13 +60,21 @@ export function AttemptStatusBadge({
 export function DispositionBadge({
   bucket,
   label,
+  state,
 }: {
   bucket?: string | null;
   label?: string | null;
+  state?: CampaignDispositionState;
 }) {
+  if (state === "not_applicable") {
+    return chip("border-border bg-transparent text-muted-foreground", "Disposition N/A");
+  }
+  if (state === "needs_classification") {
+    return chip("border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300", "Needs classification");
+  }
   const shown = bucket && bucket !== "unlabeled"
     ? displayDispositionLabel(bucket)
-    : (label && label.trim() ? label : "No label");
+    : (label && label.trim() ? label : "Needs classification");
   if (bucket === "voicemail") {
     return chip("border-border bg-foreground text-background", shown);
   }

@@ -4250,16 +4250,19 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
 
           // ── Stamp lead disposition + meaning-map operational outcome ────────
           if (session.campaignLeadId && dispositionResult) {
-            import("../services/campaign-disposition-outcome.js").then(({ applyCampaignDispositionOutcome }) => {
-              applyCampaignDispositionOutcome({
+            try {
+              const { applyCampaignDispositionOutcome } = await import("../services/campaign-disposition-outcome.js");
+              await applyCampaignDispositionOutcome({
                 campaignLeadId: session.campaignLeadId!,
                 agentId: call.agentId,
                 callId: session.callId,
                 dispositionResult,
                 callStatus,
                 wasTransferred: session.wasTransferred,
-              }).catch((err) => logger.warn({ sessionId, err }, "Campaign disposition outcome failed"));
-            }).catch(() => {});
+              });
+            } catch (err) {
+              logger.warn({ sessionId, err }, "Campaign disposition outcome failed");
+            }
           }
 
           // ── Campaign lead transfer (disposition-gated webhook / Sheets) ─────

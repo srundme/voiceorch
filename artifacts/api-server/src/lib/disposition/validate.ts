@@ -33,7 +33,7 @@ function buildFlags(primary: string, _sub: string, stats: CallStats): string[] {
 
 /**
  * Validates and reconciles the LLM output against the agent's taxonomy.
- * - Snaps invalid sub to first valid sub and caps confidence at 0.5
+ * - Quarantines values outside the configured taxonomy and caps confidence
  * - Sets flags for anomalies (SALE_CLOSED on short call, CALLBACK without consent)
  * - needsReview = confidence < 0.7 OR any flag
  */
@@ -71,10 +71,11 @@ export function validate(
   }
 
   const primary = matchedKey ?? rawPrimary;
+  let taxonomyError: string | undefined;
+  if (!matchedKey) taxonomyError = "primary_outside_configured_taxonomy";
 
-  // Match the sub against the chosen category's allowed values, normalizing to
-  // the configured spelling. If it's out of list, snap to the first valid sub
-  // (keeps a non-empty sub) and cap confidence.
+  // Never coerce an unknown sub to the first configured option: that turns a
+  // provider mistake into confident-looking business data.
   const validSubs: string[] = cfg.taxonomy[primary] ?? [];
   const canonicalSub = canonicalDispositionBucket(sub, "");
   const matchedSub = validSubs.find(
@@ -82,13 +83,16 @@ export function validate(
   );
   if (matchedSub) {
     sub = matchedSub;
+  } else if (validSubs.length === 0 && sub === "") {
+    // A primary-only taxonomy intentionally has no sub-disposition.
   } else if (!validSubs.includes(sub)) {
-    sub = validSubs[0] ?? sub;
     confidence = Math.min(confidence, 0.5);
+    taxonomyError ??= "sub_outside_configured_taxonomy";
   }
 
   const stats = extractStats(events);
   const flags = buildFlags(primary, sub, stats);
+  if (taxonomyError) flags.push(taxonomyError);
 
   const domainFields: Record<string, unknown> = {};
   for (const field of cfg.domainFields) {
@@ -111,6 +115,7 @@ export function validate(
     summary,
     flags,
     needsReview: confidence < 0.7 || flags.length > 0,
+    ...(taxonomyError ? { error: taxonomyError } : {}),
     ...(Object.keys(domainFields).length > 0 ? { domainFields } : {}),
   };
 }

@@ -4,12 +4,13 @@ import { Input } from "@/components/ui/input";
 import { TablePagination } from "@/components/table-pagination";
 import { EmptyState } from "@/components/empty-state";
 import { LeadFilterChips, LeadReportingTable } from "@/components/campaign-ops/lead-table";
-import { DispositionHero } from "@/components/campaign-ops/disposition-hero";
+import { ContactOutcomeHero, DispositionHero } from "@/components/campaign-ops/disposition-hero";
 import { CallInspectorPanel } from "@/components/campaign-ops/call-inspector";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import {
   WORK_LEAD_VIEWS,
+  CONTACT_OUTCOME_VIEWS,
   displayDispositionLabel,
   parseLeadsSearch,
   reportingLeadsQuery,
@@ -156,10 +157,14 @@ export function CampaignLeadsWorkspace({
 
   const funnel = summary.data?.funnel;
   const rates = summary.data?.rates;
-  const listLabel = filter.dispositionBucket
+  const listLabel = filter.disposition
+    ? (summary.data?.dispositions?.find((item) => item.key === filter.disposition)?.label ?? filter.disposition)
+    : filter.dispositionBucket
     ? displayDispositionLabel(filter.dispositionBucket)
     : filter.view
-      ? (WORK_LEAD_VIEWS.find((v) => v.id === filter.view)?.label ?? filter.view)
+      ? (CONTACT_OUTCOME_VIEWS.find((v) => v.id === filter.view)?.label
+        ?? WORK_LEAD_VIEWS.find((v) => v.id === filter.view)?.label
+        ?? filter.view)
       : "Calls";
 
   return (
@@ -171,11 +176,23 @@ export function CampaignLeadsWorkspace({
         </p>
       )}
 
+      <ContactOutcomeHero
+        loading={summary.isLoading}
+        reporting={summary.data}
+        active={filter.view ?? null}
+        allSelected={!filter.view && !filter.disposition && !filter.dispositionBucket}
+        onSelect={(view) => patchFilter({ view, disposition: null, dispositionBucket: null })}
+      />
+
       <DispositionHero
         loading={summary.isLoading}
         items={summary.data?.dispositions}
-        active={filter.dispositionBucket ?? null}
-        onSelect={(bucket) => patchFilter({ dispositionBucket: bucket, view: null }, true)}
+        active={filter.disposition ?? filter.dispositionBucket ?? null}
+        onSelect={(key) => patchFilter({
+          disposition: key && key !== "needs_classification" ? key : null,
+          dispositionBucket: key === "needs_classification" ? key : null,
+          view: null,
+        })}
       />
 
       {query.isError && !query.data ? (
@@ -194,7 +211,11 @@ export function CampaignLeadsWorkspace({
               <LeadFilterChips
                 views={WORK_LEAD_VIEWS}
                 active={filter.view ?? null}
-                onSelect={(id) => patchFilter({ view: id === "all" ? null : id, dispositionBucket: null })}
+                onSelect={(id) => patchFilter({
+                  view: id === "all" ? null : id,
+                  disposition: null,
+                  dispositionBucket: null,
+                })}
               />
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
