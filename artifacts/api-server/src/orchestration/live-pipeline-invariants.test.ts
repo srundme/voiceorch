@@ -127,6 +127,17 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(methodBody("schedulePartialBargeIn")).toContain("shouldInterruptFromCallerTranscript");
     expect(methodBody("schedulePartialBargeIn")).toContain("isCarrierSelfEcho");
     expect(methodBody("schedulePartialBargeIn")).not.toContain("SELF_ECHO_MIN_WORDS");
+    expect(methodBody("schedulePartialBargeIn")).toContain("requestBargeIn");
+    expect(pipelineSrc).toContain("beginSoftDuck");
+    expect(pipelineSrc).toContain("preferSoftDuckBeforeBarge");
+    expect(pipelineSrc).toContain("SileroStream");
+    expect(pipelineSrc).toContain("fuseCallerSpeaking");
+    expect(pipelineSrc).toContain("shouldDiscardAsRoomCrosstalk");
+    // Soft duck applies to transmitted frames; STT feed stays ungated.
+    expect(pipelineSrc).toContain("emitAudioOut");
+    expect(pipelineSrc).toContain("this.streamSTT.sendAudio(sttFrame)");
+    expect(pipelineSrc).toContain("sileroStream?.push8k");
+    expect(pipelineSrc).not.toMatch(/if\s*\([^)]*sileroSustainedNow[^)]*\)\s*\{[^}]{0,80}sendAudio/s);
     expect(methodBody("isEagerPartialReady")).toContain("isEagerCommitReady");
     expect(methodBody("handleStreamingTranscript")).toContain("collectionHoldMsForTranscript");
     expect(methodBody("handleStreamingTranscript")).toContain("agent_still_speaking");
@@ -161,7 +172,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("TTS_WIRE_LEAD_FRAMES");
     // Underrun keeps the carrier alive with silence, never a looped speech frame.
     expect(pipelineSrc).not.toContain("concealFrame");
-    expect(pipelineSrc).toContain("this.config.onAudioOut(holdFrame)");
+    expect(pipelineSrc).toContain("this.emitAudioOut(holdFrame)");
     expect(pipelineSrc).toContain("Never start the wire on an empty queue");
     expect(pipelineSrc).not.toContain("STREAMING_TTS_PREBUFFER_BOOST_MS");
     expect(pipelineSrc).toMatch(/TTS_PREBUFFER_GREETING_MS \?\? 400\)/);

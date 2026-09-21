@@ -94,6 +94,19 @@ Set your Google OAuth callback URL to:
 | `GMAIL_USER` | Gmail for scheduling email notifications |
 | `GMAIL_APP_PASSWORD` | Gmail app password |
 
+### Hard-condition canary (not quiet-room vanity)
+
+Quiet rooms already clear STT without Quail/AEC — treat them as **regression only**. Prove value on hard conditions:
+
+| Condition | How to run | Success signal |
+|-----------|------------|----------------|
+| Shop / AC / fan | Same script twice: NC on vs NC off | Fewer garbage STT finals with NC on |
+| Speakerphone + light double-talk | Talk over agent briefly | `voice_canary_tts_duck` then barge or resolve; `ttsDuckAt` non-null on hard barge; false barge under ~2% |
+| Reels / TV beside phone | Best-effort only (mono PSTN) | Fewer committed nonsense turns; residual misses OK to document |
+| Quiet room | Baseline | Must not regress vs pre-change |
+
+Filter Railway logs: `voice_canary_tts_duck`, `voice_canary_barge_in`, `voice_canary_room_crosstalk`, `aec3_delay_adjust`. After ~5 audio-dump calls set `VOICE_CANARY_AUDIO=0`.
+
 ---
 
 ## Step 4 — Configure the Gender service (snapserve-gender)

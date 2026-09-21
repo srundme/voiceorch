@@ -154,6 +154,19 @@ import {
   type CanaryAudioStages,
 } from "./voice-canary.js";
 import {
+  TTS_DUCK_MS,
+  applyLinearGainMulaw,
+  applyLinearGainPcm16,
+  preferSoftDuckBeforeBarge,
+} from "./tts-duck.js";
+import {
+  fuseCallerSpeaking,
+  isSileroSustained,
+  shouldDiscardAsRoomCrosstalk,
+} from "./caller-speaking.js";
+import { SileroStream } from "../voice_engine/silero-stream.js";
+import type { AecFrameDiagnostics } from "./audioPool.js";
+import {
   executeIntakeDisposition,
   executeIntakeSubmit,
   executeIntakeWrite,
@@ -1216,6 +1229,20 @@ export class OrchestrationPipeline implements VoiceSession {
   private _firstPartialLogged = false;
   /** Last inbound stage PCM for failed-call dumps (VOICE_CANARY_AUDIO). Short TTL. */
   private _canaryStages: CanaryAudioStages | null = null;
+  /** Latest AEC frame diagnostics (always-on; soft duck / canary). */
+  private _aecDiag: AecFrameDiagnostics | null = null;
+  /** Soft TTS duck window — attenuate outbound until hard barge or resolve. */
+  private _ttsDuckUntil = 0;
+  private _ttsDuckAt: number | null = null;
+  private _softBargePending: { trigger: string; partial?: string; startedAt: number } | null = null;
+  private _softDuckTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Recent weak barge / cancelled soft-duck — room-crosstalk window. */
+  private _weakBargeEvidenceUntil = 0;
+  /** Classic-path Silero shadow (advisory only — never gates STT feed). */
+  private sileroStream: SileroStream | null = null;
+  private _sileroSpeaking = false;
+  private _sileroProb = 0;
+  private _sileroSpeechSince = 0;
   // Azure STT endpointing metadata — set in streaming callback, consumed in processTurn
   private _pendingSttMeta: {
     endDetectToFinalMs?: number;
@@ -1739,6 +1766,8 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.partialBargeTimer) clearTimeout(this.partialBargeTimer);
     this.partialBargeTimer = null;
     this.pendingPartialBargeText = "";
+    this.clearSoftDuckTimer();
+    this._softBargePending = null;
     // Cheap cancel: sequence_id is the hard boundary. Invalidate N first so
     // in-flight TTS tagged N cannot emit, then mute the carrier, then abort
     // synth / LLM. Do not wait for drainPlaybackTail.
@@ -1753,17 +1782,28 @@ export class OrchestrationPipeline implements VoiceSession {
       text: partial ?? "",
       expectingShortAnswer: this.expectingShortAnswerNow(),
     });
+    const fusion = this.callerSpeakingAdvisory();
     this.logVoiceCanary("voice_canary_barge_in", {
-      bargeSource: classifyBargeSource(shortAccepted ? "contextual_short_answer" : trigger),
+      bargeSource: classifyBargeSource(
+        shortAccepted
+          ? "contextual_short_answer"
+          : fusion.tippedBy === "silero" && (trigger === "vad_speech_start" || trigger === "energy")
+            ? "silero"
+            : trigger,
+      ),
       trigger,
       shortAnswerAccepted: shortAccepted,
       expectingShortAnswer: this.expectingShortAnswerNow(),
       ttsCancelAt,
-      // Soft duck (−10..−15 dB) is next-pass; today we hard-cancel.
-      ttsDuckAt: null,
+      ttsDuckAt: this._ttsDuckAt,
+      sileroConfidence: this._sileroProb,
+      sileroSpeaking: this._sileroSpeaking,
+      callerSpeakingTippedBy: fusion.tippedBy,
       transcriptPreview: partial?.slice(0, 80) ?? null,
-      aec: this._canaryStages?.aec ?? null,
+      aec: this._aecDiag ?? this._canaryStages?.aec ?? null,
     });
+    this._ttsDuckAt = null;
+    this._ttsDuckUntil = 0;
     for (const ac of this.activeTtsAborts) {
       try { ac.abort(); } catch { /* noop */ }
     }
@@ -1808,6 +1848,135 @@ export class OrchestrationPipeline implements VoiceSession {
         ...opts?.energyDetails,
       },
     });
+  }
+
+  /** Advisory fusion — never gates the streaming STT feed. */
+  private callerSpeakingAdvisory(): ReturnType<typeof fuseCallerSpeaking> {
+    const partial = this.usablePendingBargeTranscript() || this.streamSTT?.getPendingTranscript?.()?.trim() || "";
+    const sileroForMs = this._sileroSpeaking && this._sileroSpeechSince > 0
+      ? Date.now() - this._sileroSpeechSince
+      : 0;
+    return fuseCallerSpeaking({
+      hasSttPartial: partial.length > 0 && !this.isCarrierSelfEcho(partial),
+      shortAnswerWithEnergy:
+        this.expectingShortAnswerNow()
+        && this._lastInboundRawRms >= BACKGROUND_TALKER_MIN_RAW_RMS,
+      sileroSpeaking: this._sileroSpeaking,
+      sileroSpeakingForMs: sileroForMs,
+      rawEnergyAboveFloor: this._lastInboundRawRms >= BACKGROUND_TALKER_MIN_RAW_RMS,
+    });
+  }
+
+  private sileroSustainedNow(): boolean {
+    const forMs = this._sileroSpeaking && this._sileroSpeechSince > 0
+      ? Date.now() - this._sileroSpeechSince
+      : 0;
+    return isSileroSustained(this._sileroSpeaking, forMs);
+  }
+
+  private clearSoftDuckTimer(): void {
+    if (this._softDuckTimer) {
+      clearTimeout(this._softDuckTimer);
+      this._softDuckTimer = null;
+    }
+  }
+
+  /**
+   * Soft duck (−12 dB / ~150 ms) before hard barge for weak evidence.
+   * Clear interrupts still hard-cancel immediately.
+   */
+  private requestBargeIn(
+    trigger: string,
+    partial?: string,
+    opts?: { speculative?: boolean; energyDetails?: Record<string, unknown> },
+  ): void {
+    if (this.bargeInRequested) return;
+    if (!(this.isPlaying || this.isSendingTtsAudio)) {
+      this.triggerBargeIn(trigger, partial, opts);
+      return;
+    }
+    const shortAccepted = shouldAcceptContextualShortAnswer({
+      text: partial ?? "",
+      expectingShortAnswer: this.expectingShortAnswerNow(),
+    });
+    const hard = isHardInterruptTranscript(partial ?? "");
+    const decision = preferSoftDuckBeforeBarge({
+      trigger,
+      text: partial,
+      hardInterrupt: hard,
+      shortAnswerAccepted: shortAccepted,
+    });
+    // AEC double-talk or Silero sustained → still allow soft duck for fragments,
+    // but promote faster if already ducking.
+    if (decision === "hard_barge") {
+      this.triggerBargeIn(trigger, partial, opts);
+      return;
+    }
+    this.beginSoftDuck(trigger, partial);
+  }
+
+  private beginSoftDuck(trigger: string, partial?: string): void {
+    if (this.bargeInRequested) return;
+    const now = Date.now();
+    if (!this._ttsDuckAt) this._ttsDuckAt = now;
+    this._ttsDuckUntil = Math.max(this._ttsDuckUntil, now + TTS_DUCK_MS);
+    this._softBargePending = { trigger, partial, startedAt: now };
+    this.logVoiceCanary("voice_canary_tts_duck", {
+      trigger,
+      ttsDuckAt: this._ttsDuckAt,
+      duckMs: TTS_DUCK_MS,
+      transcriptPreview: partial?.slice(0, 80) ?? null,
+      sileroConfidence: this._sileroProb,
+      aec: this._aecDiag,
+    });
+    this.clearSoftDuckTimer();
+    this._softDuckTimer = setTimeout(() => {
+      this._softDuckTimer = null;
+      this.maybePromoteSoftDuckToBarge();
+    }, Math.max(0, this._ttsDuckUntil - Date.now()));
+  }
+
+  private maybePromoteSoftDuckToBarge(): void {
+    if (this.bargeInRequested || this.closed) return;
+    const pending = this._softBargePending;
+    if (!pending) return;
+    if (Date.now() < this._ttsDuckUntil) {
+      this.clearSoftDuckTimer();
+      this._softDuckTimer = setTimeout(() => {
+        this._softDuckTimer = null;
+        this.maybePromoteSoftDuckToBarge();
+      }, Math.max(0, this._ttsDuckUntil - Date.now()));
+      return;
+    }
+    const fusion = this.callerSpeakingAdvisory();
+    const aecDt = this._aecDiag?.doubleTalk === true;
+    if (fusion.speaking || aecDt) {
+      this._softBargePending = null;
+      this.triggerBargeIn(pending.trigger, pending.partial);
+      return;
+    }
+    // Click / shop noise — restore full TTS gain, mark weak evidence for crosstalk.
+    this._softBargePending = null;
+    this._ttsDuckUntil = 0;
+    this._weakBargeEvidenceUntil = Date.now() + 2_000;
+    this.logVoiceCanary("voice_canary_tts_duck_resolved", {
+      trigger: pending.trigger,
+      reason: "speech_did_not_persist",
+      transcriptPreview: pending.partial?.slice(0, 80) ?? null,
+      sileroConfidence: this._sileroProb,
+    });
+    this._ttsDuckAt = null;
+  }
+
+  /** Transmit outbound media (applies soft TTS duck when active). */
+  private emitAudioOut(chunk: Buffer): void {
+    let out = chunk;
+    if (Date.now() < this._ttsDuckUntil && chunk.length > 0) {
+      out = this.config.rawPcmOutput
+        ? applyLinearGainPcm16(chunk)
+        : applyLinearGainMulaw(chunk);
+    }
+    this.config.onAudioOut(out);
   }
 
   private clearEagerPartialTimer(): void {
@@ -2303,7 +2472,7 @@ export class OrchestrationPipeline implements VoiceSession {
       hasUsablePartial: usable,
       isHardInterrupt: hard,
     })) return;
-    this.triggerBargeIn("vad_speech_start", partial);
+    this.requestBargeIn("vad_speech_start", partial);
   }
 
   /**
@@ -2376,7 +2545,7 @@ export class OrchestrationPipeline implements VoiceSession {
       isHardInterrupt: hard,
     })) return;
     if (!this.shouldInterruptFromCallerTranscript(partial)) return;
-    this.triggerBargeIn("stt_partial", partial);
+    this.requestBargeIn("stt_partial", partial);
   }
 
   private clearBargeRecovery(): void {
@@ -2402,6 +2571,15 @@ export class OrchestrationPipeline implements VoiceSession {
   private abandonFalseBarge(reason: string): void {
     const preview = this._bargeRecoveryText || "";
     this.clearBargeRecovery();
+    this._weakBargeEvidenceUntil = Date.now() + 2_000;
+    this.logVoiceCanary("voice_canary_room_crosstalk", {
+      reason,
+      phase: "false_barge_abandoned",
+      transcriptPreview: preview.slice(0, 80) || null,
+      sileroConfidence: this._sileroProb,
+      sileroSpeaking: this._sileroSpeaking,
+      aec: this._aecDiag,
+    });
     this.interruptionMgr.onUserSpeechEnd();
     // Call 25042: abandoning while processTurn is still awaiting skipDrain
     // TTS would clear bargeInRequested and re-enable the cut reply, then wipe
@@ -3319,6 +3497,21 @@ export class OrchestrationPipeline implements VoiceSession {
       },
     });
 
+    // Classic-path Silero shadow: advisory caller_speaking only (never gates STT).
+    this.sileroStream = new SileroStream({
+      callId: config.callId,
+      onFrame: (r) => {
+        this._sileroProb = r.probability;
+        if (r.state === "SPEECH" || r.state === "END_CANDIDATE") {
+          if (!this._sileroSpeaking) this._sileroSpeechSince = Date.now();
+          this._sileroSpeaking = true;
+        } else {
+          this._sileroSpeaking = false;
+          this._sileroSpeechSince = 0;
+        }
+      },
+    });
+
     // Ambient noise — start looping silence-fill interval
     if (this.agent.ambientNoiseEnabled && this.agent.ambientNoiseTrack) {
       const track = this.agent.ambientNoiseTrack;
@@ -3441,7 +3634,7 @@ export class OrchestrationPipeline implements VoiceSession {
                   ? upsample8to16(this.ambientStream.nextPcmChunk())
                   : this.ambientStream.nextPcmChunk())
               : this.ambientStream.nextMulawChunk();
-            this.config.onAudioOut(chunk);
+            this.emitAudioOut(chunk);
             // Prove (once per call) that ambient audio actually went out on the
             // wire — distinguishes "enabled but never emitted" from a genuine
             // carrier-level audibility issue when debugging from prod logs.
@@ -3455,7 +3648,7 @@ export class OrchestrationPipeline implements VoiceSession {
           } else if (this.config.telephonyProvider === "vobiz") {
             // No ambient stream — send PCM zeros to keep the VoBiz audio
             // bridge alive during listening (prevents 4010 hangup on pauses).
-            this.config.onAudioOut(vobizSilenceFrame);
+            this.emitAudioOut(vobizSilenceFrame);
           }
         }
       }, KEEPALIVE_FRAME_MS);
@@ -3722,9 +3915,31 @@ export class OrchestrationPipeline implements VoiceSession {
       this.logVoiceCanary("voice_canary_self_echo", {
         match: true,
         transcriptPreview: transcript.slice(0, 80),
-        aec: this._canaryStages?.aec ?? null,
+        aec: this._aecDiag ?? this._canaryStages?.aec ?? null,
       });
       this.dumpCanaryAudioStages("self_echo", transcript);
+      return;
+    }
+
+    // Competing speech / room talk after a weak soft-duck or false barge —
+    // Silero never sustained and we are not expecting a short answer.
+    if (
+      shouldDiscardAsRoomCrosstalk({
+        transcript,
+        sileroSustained: this.sileroSustainedNow(),
+        expectingShortAnswer: this.expectingShortAnswerNow(),
+        recentWeakBargeEvidence: Date.now() < this._weakBargeEvidenceUntil,
+      })
+    ) {
+      this.logDiscardedTranscript(transcript, "room_crosstalk");
+      this.logVoiceCanary("voice_canary_room_crosstalk", {
+        reason: "weak_barge_silero_inconsistent",
+        transcriptPreview: transcript.slice(0, 80),
+        sileroConfidence: this._sileroProb,
+        sileroSpeaking: this._sileroSpeaking,
+        aec: this._aecDiag,
+      });
+      this.dumpCanaryAudioStages("room_crosstalk", transcript);
       return;
     }
 
@@ -3748,7 +3963,7 @@ export class OrchestrationPipeline implements VoiceSession {
         !this.isSameUtteranceStillArriving(transcript)
         && (hard || this.shouldInterruptFromCallerTranscript(transcript))
       ) {
-        this.triggerBargeIn("word_count", transcript);
+        this.requestBargeIn("word_count", transcript);
         logger.info(
           { callId: this.config.callId, transcript: transcript.slice(0, 80) },
           "Barge-in detected (streaming STT final + InterruptionManager)",
@@ -4107,7 +4322,7 @@ export class OrchestrationPipeline implements VoiceSession {
         return;
       }
       if (this.bargeInEnabled && !this.bargeInRequested && this.shouldInterruptFromCallerTranscript(transcript)) {
-        this.triggerBargeIn("queued_final", transcript);
+        this.requestBargeIn("queued_final", transcript);
       }
       if (!this.interruptReplyArmed) {
         this.pendingTranscriptQueue = [];
@@ -4535,10 +4750,14 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /** Handles pre-processed audio returned by the audio worker pool. */
-  private handleProcessedAudio({ pcm8k, pcm16k, hasSpeech, rawRms = 0, canary }: AudioProcessResult): void {
+  private handleProcessedAudio({ pcm8k, pcm16k, hasSpeech, rawRms = 0, canary, aec }: AudioProcessResult): void {
     if (this.closed) return;
+    if (aec) {
+      this._aecDiag = aec;
+      if (this._canaryStages) this._canaryStages = { ...this._canaryStages, aec };
+    }
     if (canary && voiceCanaryAudioDumpEnabled()) {
-      this._canaryStages = { ...canary, capturedAtMs: Date.now() };
+      this._canaryStages = { ...canary, aec: canary.aec ?? aec, capturedAtMs: Date.now() };
     } else if (this._canaryStages && !canaryStagesStillFresh(this._canaryStages)) {
       this._canaryStages = null;
     }
@@ -4554,6 +4773,13 @@ export class OrchestrationPipeline implements VoiceSession {
     if (pcm8k.length < 2 && effectivePcm16k.length < 2) return;
 
     this._lastInboundRawRms = rawRms;
+    // Silero advisory shadow (post-AEC/Quail 8 kHz) — never gates STT below.
+    try {
+      this.sileroStream?.push8k(pcm8k);
+    } catch { /* silero optional */ }
+    if (this._softBargePending && Date.now() >= this._ttsDuckUntil) {
+      this.maybePromoteSoftDuckToBarge();
+    }
 
     // ── IVR DTMF detection ──
     // Run on every incoming frame when an IVR interaction is active.
@@ -4616,6 +4842,15 @@ export class OrchestrationPipeline implements VoiceSession {
         )
       ) {
         this.noteCallerTurnActivity("near_talker_energy");
+      }
+      // Silero sustained (advisory) also keeps idle / stall watchdogs honest.
+      if (
+        this.sileroSustainedNow()
+        && !this.isPlaying
+        && !this.isSendingTtsAudio
+        && Date.now() >= this.bargeInHoldUntil
+      ) {
+        this.noteCallerTurnActivity("silero");
       }
       // Soft-cancel system TTS on caller energy (before STT catches up).
       if (hasSpeech && this.systemPlaybackActive && this.isPlaying) {
@@ -5941,7 +6176,7 @@ export class OrchestrationPipeline implements VoiceSession {
     let windowMs = AMD_CONFIRM_WINDOW_MS;
     let windowExtended = false;
     while (!this.closed) {
-      this.config.onAudioOut(silenceFrame);
+      this.emitAudioOut(silenceFrame);
       const now = Date.now();
       const elapsed = now - startedAt;
       const sinceSpeech = this.amdLastSpeechAt ? now - this.amdLastSpeechAt : Infinity;
@@ -6089,7 +6324,7 @@ export class OrchestrationPipeline implements VoiceSession {
     let nextTick = Date.now() + FRAME_MS;
     while (!this.closed && trigger !== "beep") {
       // Keep the Vobiz audio bridge alive while we wait silently.
-      this.config.onAudioOut(silenceFrame);
+      this.emitAudioOut(silenceFrame);
       const now = Date.now();
       if (this.vmBeepHeard) { trigger = "beep"; break; }
       // Fallback: sustained silence after greeting speech ≈ beep already happened.
@@ -6124,7 +6359,7 @@ export class OrchestrationPipeline implements VoiceSession {
       const leadStart = Date.now();
       let leadTick = leadStart + FRAME_MS;
       while (!this.closed && Date.now() - leadStart < leadInMs) {
-        this.config.onAudioOut(silenceFrame);
+        this.emitAudioOut(silenceFrame);
         const now = Date.now();
         const delay = Math.max(0, leadTick - now);
         leadTick += FRAME_MS;
@@ -6312,7 +6547,7 @@ export class OrchestrationPipeline implements VoiceSession {
    * Real caller activity that cancels idle — STT partial/final already call
    * this indirectly; VAD speech_start and near-talker energy use it directly.
    */
-  private noteCallerTurnActivity(_source: "vad_start" | "near_talker_energy"): void {
+  private noteCallerTurnActivity(_source: "vad_start" | "near_talker_energy" | "silero"): void {
     this.lastCallerActivityAt = Date.now();
     this.silenceWatchdog?.onSpeechEnergy();
     if (!this.isPlaying && !this.isSendingTtsAudio && !this.isProcessing) {
@@ -7280,7 +7515,7 @@ export class OrchestrationPipeline implements VoiceSession {
           if (this.bargeInRequested || !this.interruptionMgr.isValidSequence(job.sequenceId)) break;
           this.markFirstAudioSent();
           if (this._tTurnFirstAudioOut === null) this._tTurnFirstAudioOut = performance.now();
-          this.config.onAudioOut(outChunk);
+          this.emitAudioOut(outChunk);
           noteSent(outChunk);
           speechBytesSent += outChunk.length;
           checkpoint();
@@ -7319,7 +7554,7 @@ export class OrchestrationPipeline implements VoiceSession {
             if (wireQueue.length > 0) break;
             const now = Date.now();
             if (now >= rebufferTick) {
-              this.config.onAudioOut(holdFrame);
+              this.emitAudioOut(holdFrame);
               noteSent(holdFrame);
               this.lastTtsFrameAt = now;
               rebufferTick = now + 20;
@@ -7335,7 +7570,7 @@ export class OrchestrationPipeline implements VoiceSession {
           if (job.synthDone) {
             continue;
           }
-          this.config.onAudioOut(holdFrame);
+          this.emitAudioOut(holdFrame);
           noteSent(holdFrame);
           this.lastTtsFrameAt = Date.now();
           await new Promise<void>((r) => setTimeout(r, Math.max(0, nextTick - Date.now())));
@@ -7419,7 +7654,7 @@ export class OrchestrationPipeline implements VoiceSession {
           }
           this.markFirstAudioSent();
           const slice = padWireFrame(out8k.slice(i, i + PCM_CHUNK), PCM_CHUNK);
-          this.config.onAudioOut(slice);
+          this.emitAudioOut(slice);
           noteSent(slice);
           this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
           // Do NOT re-arm echo grace per chunk (see the drain-loop note above):
@@ -7449,7 +7684,7 @@ export class OrchestrationPipeline implements VoiceSession {
           this.markFirstAudioSent();
           const chunk = padWireFrame(ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW), CHUNK_SIZE_MULAW);
           const outChunk = this.ambientStream ? this.ambientStream.mixIntoMulaw(chunk) : chunk;
-          this.config.onAudioOut(outChunk);
+          this.emitAudioOut(outChunk);
           noteSent(outChunk);
           this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
           // Do NOT re-arm echo grace per chunk (see the drain-loop note above):
@@ -12181,7 +12416,7 @@ export class OrchestrationPipeline implements VoiceSession {
               : this.ambientStream.nextPcmChunk())
           : this.ambientStream.nextMulawChunk();
       }
-      this.config.onAudioOut(frame);
+      this.emitAudioOut(frame);
       const delay = Math.max(0, nextTick - Date.now());
       nextTick += FRAME_MS;
       await new Promise<void>((r) => setTimeout(r, delay));
@@ -12286,6 +12521,12 @@ export class OrchestrationPipeline implements VoiceSession {
     this.closed = true;
     this.clearVadFlushBackstop();
     this.clearBargeRecovery();
+    this.clearSoftDuckTimer();
+    this._softBargePending = null;
+    this._ttsDuckUntil = 0;
+    this._ttsDuckAt = null;
+    try { this.sileroStream?.destroy(); } catch { /* noop */ }
+    this.sileroStream = null;
     this.cancelLostTurnRecovery();
     // Persist the refined full-call voiceprint (fire-and-forget; DB/HTTP only).
     void this.speakerVerifier?.finalize();

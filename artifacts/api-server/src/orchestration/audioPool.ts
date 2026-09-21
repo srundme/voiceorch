@@ -35,23 +35,27 @@ export function resolveAudioPoolSize(
 }
 const POOL_SIZE = resolveAudioPoolSize();
 
+export type AecFrameDiagnostics = {
+  delayMs: number;
+  renderActive: boolean;
+  doubleTalk: boolean;
+  adaptiveDelay: boolean;
+};
+
 export interface AudioProcessResult {
   pcm8k: Buffer;
   pcm16k: Buffer;
   hasSpeech: boolean;
   /** Pre-gate / pre-AEC frame RMS. Used to reject far-field bystanders. */
   rawRms: number;
+  /** Always-on AEC frame diagnostics (soft duck / canary). */
+  aec?: AecFrameDiagnostics;
   /** Optional canary stage PCM (VOICE_CANARY_AUDIO=1). */
   canary?: {
     rawPcm8k: Buffer;
     postAecPcm8k: Buffer;
     postQuailPcm8k: Buffer;
-    aec?: {
-      delayMs: number;
-      renderActive: boolean;
-      doubleTalk: boolean;
-      adaptiveDelay: boolean;
-    };
+    aec?: AecFrameDiagnostics;
   };
 }
 
@@ -68,6 +72,7 @@ interface WorkerResponse {
   aecRenderActive?: boolean;
   aecDoubleTalk?: boolean;
   aecAdaptiveDelay?: boolean;
+  hasAecDiag?: boolean;
   error?: string;
 }
 
@@ -100,24 +105,26 @@ export class AudioWorkerThread {
         p.reject(new Error(msg.error ?? "Audio worker returned empty audio"));
         return;
       }
+      const aec: AecFrameDiagnostics | undefined = msg.hasAecDiag
+        ? {
+            delayMs: msg.aecDelayMs ?? 0,
+            renderActive: msg.aecRenderActive ?? false,
+            doubleTalk: msg.aecDoubleTalk ?? false,
+            adaptiveDelay: msg.aecAdaptiveDelay ?? false,
+          }
+        : undefined;
       p.resolve({
         pcm8k:    Buffer.from(msg.pcm8k),
         pcm16k:   Buffer.from(msg.pcm16kAb),
         hasSpeech: msg.hasSpeech ?? false,
         rawRms: msg.rawRms ?? 0,
+        aec,
         canary: msg.canaryRaw && msg.canaryPostAec && msg.canaryPostQuail
           ? {
               rawPcm8k: Buffer.from(msg.canaryRaw),
               postAecPcm8k: Buffer.from(msg.canaryPostAec),
               postQuailPcm8k: Buffer.from(msg.canaryPostQuail),
-              aec: msg.aecDelayMs !== undefined
-                ? {
-                    delayMs: msg.aecDelayMs,
-                    renderActive: msg.aecRenderActive ?? false,
-                    doubleTalk: msg.aecDoubleTalk ?? false,
-                    adaptiveDelay: msg.aecAdaptiveDelay ?? false,
-                  }
-                : undefined,
+              aec,
             }
           : undefined,
       });
@@ -433,24 +440,26 @@ async function processInline(
   }
   const pcm16k = upsample8to16(pcm8k);
   const diag = aec?.getDiagnostics();
+  const aecDiag = diag
+    ? {
+        delayMs: diag.delayMs,
+        renderActive: diag.renderActive,
+        doubleTalk: diag.doubleTalk,
+        adaptiveDelay: diag.adaptiveDelay,
+      }
+    : undefined;
   return {
     pcm8k,
     pcm16k,
     hasSpeech: pcm8k.length >= 2 && hasSpeechEnergy(pcm8k, vadThreshold),
     rawRms,
+    aec: aecDiag,
     canary: rawCopy && postAecCopy
       ? {
           rawPcm8k: rawCopy,
           postAecPcm8k: postAecCopy,
           postQuailPcm8k: Buffer.from(pcm8k),
-          aec: diag
-            ? {
-                delayMs: diag.delayMs,
-                renderActive: diag.renderActive,
-                doubleTalk: diag.doubleTalk,
-                adaptiveDelay: diag.adaptiveDelay,
-              }
-            : undefined,
+          aec: aecDiag,
         }
       : undefined,
   };

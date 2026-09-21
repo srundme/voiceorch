@@ -189,6 +189,13 @@ async function processChunk(msg: ProcessMulaw | ProcessPcm8k): Promise<void> {
     hasSpeech,
     rawRms,
   };
+  if (diag) {
+    payload.hasAecDiag = true;
+    payload.aecDelayMs = diag.delayMs;
+    payload.aecRenderActive = diag.renderActive;
+    payload.aecDoubleTalk = diag.doubleTalk;
+    payload.aecAdaptiveDelay = diag.adaptiveDelay;
+  }
   if (rawCopy && postAecCopy) {
     const canaryRaw = toTransferable(rawCopy);
     const canaryPostAec = toTransferable(postAecCopy);
@@ -197,12 +204,6 @@ async function processChunk(msg: ProcessMulaw | ProcessPcm8k): Promise<void> {
     payload.canaryRaw = canaryRaw;
     payload.canaryPostAec = canaryPostAec;
     payload.canaryPostQuail = canaryPostQuail;
-    if (diag) {
-      payload.aecDelayMs = diag.delayMs;
-      payload.aecRenderActive = diag.renderActive;
-      payload.aecDoubleTalk = diag.doubleTalk;
-      payload.aecAdaptiveDelay = diag.adaptiveDelay;
-    }
   }
 
   parentPort!.postMessage(payload, transfer);

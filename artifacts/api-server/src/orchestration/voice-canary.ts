@@ -11,7 +11,7 @@
  *   AEC3_STREAM_DELAY_MS=<known-safe seed>
  */
 
-export type BargeSourceKind = "stt" | "context" | "energy" | "vad" | "other";
+export type BargeSourceKind = "stt" | "context" | "energy" | "vad" | "silero" | "other";
 
 export type VoiceCanaryRouteMeta = {
   callId: string | number;
@@ -71,6 +71,9 @@ export function classifyBargeSource(trigger: string): BargeSourceKind {
     case "energy":
     case "near_talker_energy":
       return "energy";
+    case "silero":
+    case "silero_sustained":
+      return "silero";
     case "short_answer":
     case "contextual_short_answer":
       return "context";
@@ -78,6 +81,32 @@ export function classifyBargeSource(trigger: string): BargeSourceKind {
       return "other";
   }
 }
+
+/**
+ * Hard-condition canary scoring (not quiet-room vanity).
+ * Quiet room = regression only. Prove Quail / duck / Silero where quiet rooms already win.
+ */
+export const HARD_CONDITION_CANARY = {
+  /** Shop / AC / fan — compare NC on vs NC off on the same script. */
+  ambientNoise: {
+    condition: "shop_ac_fan",
+    success: "Fewer garbage STT finals with NC on vs NC-off control",
+  },
+  /** Speakerphone + light double-talk — soft duck then recover. */
+  doubleTalk: {
+    condition: "speakerphone_double_talk",
+    success: "ttsDuckAt non-null; false barge < ~2%",
+  },
+  /** Reels / TV beside phone — best-effort only on mono PSTN. */
+  competingSpeech: {
+    condition: "reels_tv_beside_phone",
+    success: "Fewer committed nonsense turns; residual misses documented",
+  },
+  quietRoom: {
+    condition: "quiet_room",
+    success: "Regression only — must not worsen vs pre-canary baseline",
+  },
+} as const;
 
 /** Last ~200 ms of 8 kHz s16le as base64 for failed-call inspection. */
 export function pcmSnippetB64(pcm8k: Buffer, maxMs = 200): string {

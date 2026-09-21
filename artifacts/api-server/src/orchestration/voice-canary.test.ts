@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canaryStagesStillFresh,
   classifyBargeSource,
+  HARD_CONDITION_CANARY,
   pcmSnippetB64,
   voiceCanaryAudioDumpEnabled,
   voiceCanaryAudioTtlMs,
@@ -55,6 +56,13 @@ describe("voice-canary", () => {
     expect(classifyBargeSource("vad_speech_start")).toBe("vad");
     expect(classifyBargeSource("contextual_short_answer")).toBe("context");
     expect(classifyBargeSource("energy")).toBe("energy");
+    expect(classifyBargeSource("silero")).toBe("silero");
+  });
+
+  it("documents hard-condition canary bars", () => {
+    expect(HARD_CONDITION_CANARY.quietRoom.success).toMatch(/regression/i);
+    expect(HARD_CONDITION_CANARY.ambientNoise.condition).toBe("shop_ac_fan");
+    expect(HARD_CONDITION_CANARY.doubleTalk.condition).toBe("speakerphone_double_talk");
   });
 
   it("encodes a short PCM snippet", () => {
