@@ -330,14 +330,15 @@ describe("resolveIncompleteHoldMs", () => {
 describe("resolveCollectionVadSilenceMs", () => {
   it("stretches Fast 300 ms VAD during digit and email collection", () => {
     expect(resolveCollectionVadSilenceMs(300, "none")).toBe(300);
-    expect(resolveCollectionVadSilenceMs(300, "digit")).toBe(700);
-    expect(resolveCollectionVadSilenceMs(300, "email")).toBe(800);
+    expect(resolveCollectionVadSilenceMs(300, "digit")).toBe(1200);
+    expect(resolveCollectionVadSilenceMs(300, "email")).toBe(1400);
   });
 
-  it("does not shrink Patient VAD, and never exceeds 800 ms", () => {
-    expect(resolveCollectionVadSilenceMs(700, "digit")).toBe(700);
-    expect(resolveCollectionVadSilenceMs(700, "email")).toBe(800);
-    expect(resolveCollectionVadSilenceMs(900, "none")).toBe(800);
+  it("does not shrink Patient VAD, and never exceeds 1500 ms", () => {
+    expect(resolveCollectionVadSilenceMs(700, "digit")).toBe(1200);
+    expect(resolveCollectionVadSilenceMs(700, "email")).toBe(1400);
+    expect(resolveCollectionVadSilenceMs(900, "none")).toBe(900);
+    expect(resolveCollectionVadSilenceMs(2000, "none")).toBe(1500);
   });
 });
 
@@ -367,24 +368,63 @@ describe("collectionHoldMsForTranscript", () => {
 });
 
 describe("computeEndpointMs", () => {
-  it("does not add SnapServe silence on top of the STT provider", () => {
+  it("uses short silence for clear yes/no answers", () => {
+    const d = computeEndpointMs({
+      lastAgentText: "Are you free tonight?",
+      partialTranscript: "yes",
+      audioBufferMs: 200,
+      baseSilenceMs: 500,
+    });
+    expect(d.reason).toBe("short_answer");
+    expect(d.ms).toBeGreaterThanOrEqual(350);
+    expect(d.ms).toBeLessThanOrEqual(500);
+  });
+
+  it("extends silence for incomplete connectors", () => {
+    const d = computeEndpointMs({
+      lastAgentText: "Tell me more.",
+      partialTranscript: "I want to participate but",
+      audioBufferMs: 800,
+      baseSilenceMs: 500,
+    });
+    expect(d.reason).toBe("incomplete");
+    expect(d.ms).toBeGreaterThanOrEqual(900);
+  });
+
+  it("uses collection windows for phone / email", () => {
     expect(computeEndpointMs({
       lastAgentText: "What is your phone number?",
       partialTranscript: "nine eight",
       audioBufferMs: 400,
-      baseSilenceMs: 150,
-    })).toEqual({ ms: 0, reason: "provider" });
+      baseSilenceMs: 500,
+    }).ms).toBeGreaterThanOrEqual(1200);
     expect(computeEndpointMs({
       lastAgentText: "Could I have your email?",
       partialTranscript: "k a r",
       audioBufferMs: 400,
-      baseSilenceMs: 150,
-    })).toEqual({ ms: 0, reason: "provider" });
-    expect(computeEndpointMs({
-      lastAgentText: "Can you hear me?",
-      partialTranscript: "yes",
-      audioBufferMs: 200,
-      baseSilenceMs: 150,
-    })).toEqual({ ms: 0, reason: "provider" });
+      baseSilenceMs: 500,
+    }).ms).toBeGreaterThanOrEqual(1200);
+  });
+
+  it("uses 550–750 ms for normal complete / default speech (not short-answer floor)", () => {
+    const complete = computeEndpointMs({
+      lastAgentText: "How can I help you?",
+      partialTranscript: "I need a callback tomorrow.",
+      audioBufferMs: 1200,
+      baseSilenceMs: 500,
+    });
+    expect(complete.reason).toBe("complete");
+    expect(complete.ms).toBeGreaterThanOrEqual(550);
+    expect(complete.ms).toBeLessThanOrEqual(750);
+
+    const def = computeEndpointMs({
+      lastAgentText: "How can I help you?",
+      partialTranscript: "I need a callback tomorrow",
+      audioBufferMs: 1200,
+      baseSilenceMs: 500,
+    });
+    expect(def.reason).toBe("default");
+    expect(def.ms).toBeGreaterThanOrEqual(550);
+    expect(def.ms).toBeLessThanOrEqual(750);
   });
 });

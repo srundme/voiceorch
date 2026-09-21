@@ -2,6 +2,23 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SarvamTTS, resolveSarvamTtsLanguageCode } from "./sarvam.js";
 
 describe("SarvamTTS stream serialization", () => {
+  it("keeps Creative Studio clone ids instead of swapping them for a catalog speaker", () => {
+    const clone = "svc-3a9897f8-73f6-46f6-82ad-c615491d4c28";
+    const tts = new SarvamTTS("test-key", clone, null, "en-IN", "bulbul:v3");
+    expect((tts as unknown as { speaker: string }).speaker).toBe(clone);
+    const uuidOnly = new SarvamTTS(
+      "test-key",
+      "3a9897f8-73f6-46f6-82ad-c615491d4c28",
+      null,
+      "ta-IN",
+      "bulbul:v3",
+    );
+    expect((uuidOnly as unknown as { speaker: string }).speaker)
+      .toBe("3a9897f8-73f6-46f6-82ad-c615491d4c28");
+    tts.close();
+    uuidOnly.close();
+  });
+
   it("aborts a waiter promptly without letting the third request overtake the first", async () => {
     const tts = new SarvamTTS("test-key", "ritu", null, "hi-IN", "bulbul:v3");
     let release!: () => void;

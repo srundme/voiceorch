@@ -74,6 +74,14 @@ Set your Google OAuth callback URL to:
 | Variable | Notes |
 |----------|-------|
 | `GROQ_API_KEY` | Seeds the managed Qwen key at startup |
+| `AIC_SDK_LICENSE` | ai-coustics Quail Voice Focus (inbound NC). From developers.ai-coustics.com. Agent Noise Cancellation must be ON. |
+| `AIC_MODEL_ID` | Optional; default `quail-vf-2.2-l-16khz` |
+| `AEC3_ENABLED` | WebRTC AEC3 on VoBiz/PSTN (default on). Set `0` to disable. Browser webcall always skips (uses getUserMedia AEC). |
+| `AEC3_STREAM_DELAY_MS` | Initial far-end→near-end delay hint (default `100`, clamped 40–800 ms). Adaptive updates only while render is active, skip double-talk (raw near energy), require corr ≥ 0.4, step ≤ 15 ms. |
+| `AEC3_ADAPTIVE_DELAY` | Default on. Set `0` to freeze `AEC3_STREAM_DELAY_MS` (immediate rollback if delay tracking oscillates). Reset on every `mediaEpoch` (VoBiz media retarget). |
+| `VOICE_CANARY` | Structured per-call canary logs (default on). Set `0` to silence. Every event includes `callId`, `mediaEpoch`, `carrier`, `route`, `wallTsMs`, `monoTsNs`. |
+| `VOICE_CANARY_AUDIO` | When `1`, dump raw / post-AEC / post-Quail PCM snippets (~200 ms base64) on failed-call events. **Canary-only** — may contain personal speech. Cleared after dump; TTL via `VOICE_CANARY_AUDIO_TTL_MS` (default 60s, max 5 min). Off by default. |
+| `VOICE_CANARY_AUDIO_TTL_MS` | Max age of held stage PCM before auto-drop (default `60000`). |
 | `RAZORPAY_KEY_ID` | Razorpay payments |
 | `RAZORPAY_KEY_SECRET` | Razorpay payments |
 | `BREVO_API_KEY` | Email transactional |

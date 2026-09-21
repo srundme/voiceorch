@@ -38,6 +38,7 @@ const vobizLegStartsInFlight = new Set<string>();
  *   { event: "playAudio", media: { contentType: "audio/x-l16", sampleRate: 8000, payload: "<base64 PCM>" } }
  *
  * Barge-in: send { event: "clearAudio", streamId } to discard Vobiz's playback buffer.
+ * AEC3 far-end is tapped in the pipeline onAudioOut wrap (same PCM playAudio sends).
  *
  * Audio format: LINEAR16 PCM at 8000 Hz (NOT mulaw like Twilio/Plivo)
  *

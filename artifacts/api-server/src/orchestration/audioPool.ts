@@ -1,13 +1,13 @@
 /**
  * Audio worker pool — manages a fixed set of worker threads for CPU-intensive
- * audio processing (mulaw decode, noise cancellation, upsampling, VAD).
+ * audio processing (AEC3, mulaw decode, Quail VF, upsampling, VAD).
  *
  * Pool size: max(2, cpuCount - 1).
  *
- * Routing: consistent hash on callId so every chunk for the same call goes to
- * the same worker. This guarantees:
- *   1. NoiseCanceller state is always in the right worker.
- *   2. Chunks resolve in the order they were posted (FIFO per worker).
+ * Routing: sticky callId → worker. This guarantees:
+ *   1. WebRTC AEC3 far-end (FEED_RENDER) and near-end (PROCESS_*) share state.
+ *   2. ai-coustics Quail VF processor state stays on the right worker.
+ *   3. Chunks resolve in the order they were posted (FIFO per call on that worker).
  */
 
 import { Worker } from "worker_threads";
@@ -39,8 +39,20 @@ export interface AudioProcessResult {
   pcm8k: Buffer;
   pcm16k: Buffer;
   hasSpeech: boolean;
-  /** Pre-gate frame RMS. Used to reject far-field bystanders. */
+  /** Pre-gate / pre-AEC frame RMS. Used to reject far-field bystanders. */
   rawRms: number;
+  /** Optional canary stage PCM (VOICE_CANARY_AUDIO=1). */
+  canary?: {
+    rawPcm8k: Buffer;
+    postAecPcm8k: Buffer;
+    postQuailPcm8k: Buffer;
+    aec?: {
+      delayMs: number;
+      renderActive: boolean;
+      doubleTalk: boolean;
+      adaptiveDelay: boolean;
+    };
+  };
 }
 
 interface WorkerResponse {
@@ -49,6 +61,13 @@ interface WorkerResponse {
   pcm16kAb?: ArrayBuffer;
   hasSpeech?: boolean;
   rawRms?: number;
+  canaryRaw?: ArrayBuffer;
+  canaryPostAec?: ArrayBuffer;
+  canaryPostQuail?: ArrayBuffer;
+  aecDelayMs?: number;
+  aecRenderActive?: boolean;
+  aecDoubleTalk?: boolean;
+  aecAdaptiveDelay?: boolean;
   error?: string;
 }
 
@@ -86,6 +105,21 @@ export class AudioWorkerThread {
         pcm16k:   Buffer.from(msg.pcm16kAb),
         hasSpeech: msg.hasSpeech ?? false,
         rawRms: msg.rawRms ?? 0,
+        canary: msg.canaryRaw && msg.canaryPostAec && msg.canaryPostQuail
+          ? {
+              rawPcm8k: Buffer.from(msg.canaryRaw),
+              postAecPcm8k: Buffer.from(msg.canaryPostAec),
+              postQuailPcm8k: Buffer.from(msg.canaryPostQuail),
+              aec: msg.aecDelayMs !== undefined
+                ? {
+                    delayMs: msg.aecDelayMs,
+                    renderActive: msg.aecRenderActive ?? false,
+                    doubleTalk: msg.aecDoubleTalk ?? false,
+                    adaptiveDelay: msg.aecAdaptiveDelay ?? false,
+                  }
+                : undefined,
+            }
+          : undefined,
       });
     });
     const fail = (err: Error) => {
@@ -126,16 +160,48 @@ export class AudioWorkerThread {
   destroySession(callId: string): void {
     if (this.healthy) this.worker.postMessage({ type: "DESTROY_SESSION", callId });
   }
+
+  /** New mediaEpoch — reset AEC3 state without tearing down Quail VF. */
+  resetAec(
+    callId: string,
+    meta?: { mediaEpoch?: number; carrier?: string; route?: string },
+  ): void {
+    if (this.healthy) {
+      this.worker.postMessage({ type: "RESET_AEC", callId, ...meta });
+    }
+  }
+
+  setCanaryMeta(
+    callId: string,
+    meta: { mediaEpoch?: number; carrier?: string; route?: string },
+  ): void {
+    if (this.healthy) {
+      this.worker.postMessage({ type: "SET_CANARY_META", callId, ...meta });
+    }
+  }
+
+  /**
+   * Far-end reference for AEC3 — fire-and-forget into the sticky call chain.
+   * Must be the same bytes (after μ-law decode) that the carrier plays to the caller.
+   */
+  feedRender(callId: string, data: Buffer, encoding: "pcm8k" | "mulaw"): void {
+    if (!this.healthy) return;
+    const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+    try {
+      this.worker.postMessage({ type: "FEED_RENDER", callId, data: ab, encoding }, [ab]);
+    } catch {
+      /* overloaded / terminating — skip this far-end frame */
+    }
+  }
 }
 
 /**
  * Sticky worker assignment per callId.
  *
- * A call's NoiseCanceller state lives on exactly one worker, so once a callId
+ * A call's AEC3 + ai-coustics state lives on exactly one worker, so once a callId
  * has been routed we must keep sending it to the same worker for the entire
  * duration of the call.  New callIds are assigned to the least-loaded worker
- * at the time of their first chunk to spread load when noise cancellation is
- * heavy on some workers.
+ * at the time of their first chunk to spread load when AEC/NC is heavy.
  *
  * Entries are deleted by destroyAudioSession() at call end to prevent unbounded growth.
  */
@@ -164,7 +230,7 @@ export function initAudioPool(workerUrl: URL): void {
  * Return the worker for a callId, using sticky assignment.
  *
  * - If the callId already has an assigned worker (from a previous chunk in this
- *   call), return that worker — NoiseCanceller state must not move mid-call.
+ *   call), return that worker — Quail VF enhancer state must not move mid-call.
  * - If this is the first chunk for the callId, pick the least-loaded worker
  *   and record the assignment.  Ties are broken by worker index (stable).
  */
@@ -214,8 +280,72 @@ export function processRawPcm8kIn(
   return workerFor(callId).process("PROCESS_PCM8K", callId, pcm8k, noiseCancel, gateRatio, vadThreshold);
 }
 
+/**
+ * Tap far-end audio for WebRTC AEC3. Call from the pipeline's onAudioOut wrap
+ * with the exact bytes about to hit VoBiz playAudio (or μ-law for other carriers).
+ * No-op when AEC3 is disabled or the pool is not ready (inline path buffers separately).
+ */
+export function feedFarEndRender(
+  callId: string,
+  data: Buffer,
+  encoding: "pcm8k" | "mulaw" = "pcm8k",
+): void {
+  if (!aec3Enabled()) return;
+  if (data.length === 0) return;
+  if (!ready) {
+    void feedFarEndInline(callId, data, encoding);
+    return;
+  }
+  workerFor(callId).feedRender(callId, data, encoding);
+}
+
+/**
+ * New VoBiz media WS / mediaEpoch — recreate AEC3 + clear correlation history.
+ * Quail VF enhancer is left intact (same call, new socket).
+ */
+export function resetAecSession(
+  callId: string,
+  meta?: { mediaEpoch?: number; carrier?: string; route?: string },
+): void {
+  if (!aec3Enabled()) return;
+  const aec = fallbackAec.get(callId);
+  if (aec) {
+    if (meta) aec.setCanaryRouteMeta(meta);
+    aec.reset();
+  }
+  if (!ready) return;
+  const idx = callWorkerIndex.get(callId);
+  if (idx === undefined) return;
+  pool[idx]!.resetAec(callId, meta);
+}
+
+/** Align worker AEC canary logs with pipeline mediaEpoch / carrier / route. */
+export function setAudioCanaryMeta(
+  callId: string,
+  meta: { mediaEpoch?: number; carrier?: string; route?: string },
+): void {
+  if (!aec3Enabled()) return;
+  const aec = fallbackAec.get(callId);
+  if (aec) aec.setCanaryRouteMeta(meta);
+  if (!ready) return;
+  const idx = callWorkerIndex.get(callId);
+  if (idx === undefined) return;
+  pool[idx]!.setCanaryMeta(callId, meta);
+}
+
 export function destroyAudioSession(callId: string): void {
-  fallbackNc.delete(callId);
+  const enh = fallbackAic.get(callId);
+  if (enh) {
+    enh.dispose();
+    fallbackAic.delete(callId);
+  }
+  fallbackAicInit.delete(callId);
+  const aec = fallbackAec.get(callId);
+  if (aec) {
+    aec.dispose();
+    fallbackAec.delete(callId);
+  }
+  fallbackAecInit.delete(callId);
   if (!ready) return;
   const worker = workerFor(callId);
   worker.destroySession(callId);
@@ -229,36 +359,99 @@ import {
   upsample8to16,
   hasSpeechEnergy,
   frameRms,
-  NoiseCanceller,
 } from "./audio.js";
+import {
+  aiCousticsConfigured,
+  AiCousticsCallEnhancer,
+} from "./ai-coustics.js";
+import { aec3Enabled, Aec3CallCanceller } from "./aec3.js";
+import { voiceCanaryAudioDumpEnabled } from "./voice-canary.js";
+
 const VAD_THRESHOLD = 100;
 const GATE_RATIO_DEFAULT = 4.0;
-const fallbackNc = new Map<string, NoiseCanceller>();
+const fallbackAic = new Map<string, AiCousticsCallEnhancer>();
+const fallbackAicInit = new Map<string, Promise<boolean>>();
+const fallbackAec = new Map<string, Aec3CallCanceller>();
+const fallbackAecInit = new Map<string, Promise<boolean>>();
+
+async function getFallbackAec(callId: string): Promise<Aec3CallCanceller | null> {
+  if (!aec3Enabled()) return null;
+  let aec = fallbackAec.get(callId);
+  if (!aec) {
+    aec = new Aec3CallCanceller(callId);
+    fallbackAec.set(callId, aec);
+    fallbackAecInit.set(callId, aec.init());
+  }
+  const ok = await (fallbackAecInit.get(callId) ?? Promise.resolve(false));
+  if (!ok) {
+    fallbackAec.delete(callId);
+    aec.dispose();
+    return null;
+  }
+  return aec;
+}
+
+async function feedFarEndInline(
+  callId: string,
+  data: Buffer,
+  encoding: "pcm8k" | "mulaw",
+): Promise<void> {
+  const aec = await getFallbackAec(callId);
+  if (!aec) return;
+  const pcm8k = encoding === "mulaw" ? decodeMulaw(data) : data;
+  aec.analyzePcm8k(pcm8k);
+}
 
 async function processInline(
   callId: string,
   data: Buffer,
   noiseCancel: boolean,
   alreadyPcm = false,
-  gateRatio: number = GATE_RATIO_DEFAULT,
+  _gateRatio: number = GATE_RATIO_DEFAULT,
   vadThreshold: number = VAD_THRESHOLD,
 ): Promise<AudioProcessResult> {
   let pcm8k = alreadyPcm ? data : decodeMulaw(data);
   const rawRms = frameRms(pcm8k);
-  let pcm16k: Buffer | null = null;
-  if (noiseCancel) {
-    let nc = fallbackNc.get(callId);
-    if (!nc) {
-      nc = new NoiseCanceller(gateRatio);
-      fallbackNc.set(callId, nc);
-    }
-    pcm8k = nc.process(pcm8k);
+  const rawCopy = voiceCanaryAudioDumpEnabled() ? Buffer.from(pcm8k) : null;
+  const aec = await getFallbackAec(callId);
+  let postAecCopy: Buffer | null = null;
+  if (aec) {
+    pcm8k = aec.processPcm8k(pcm8k);
+    if (rawCopy) postAecCopy = Buffer.from(pcm8k);
+  } else if (rawCopy) {
+    postAecCopy = Buffer.from(pcm8k);
   }
-  if (!pcm16k) pcm16k = upsample8to16(pcm8k);
+  if (noiseCancel && aiCousticsConfigured()) {
+    let enh = fallbackAic.get(callId);
+    if (!enh) {
+      enh = new AiCousticsCallEnhancer(callId);
+      fallbackAic.set(callId, enh);
+      fallbackAicInit.set(callId, enh.init());
+    }
+    const ok = await (fallbackAicInit.get(callId) ?? Promise.resolve(false));
+    if (ok) pcm8k = enh.processPcm8k(pcm8k);
+  }
+  const pcm16k = upsample8to16(pcm8k);
+  const diag = aec?.getDiagnostics();
   return {
     pcm8k,
     pcm16k,
     hasSpeech: pcm8k.length >= 2 && hasSpeechEnergy(pcm8k, vadThreshold),
     rawRms,
+    canary: rawCopy && postAecCopy
+      ? {
+          rawPcm8k: rawCopy,
+          postAecPcm8k: postAecCopy,
+          postQuailPcm8k: Buffer.from(pcm8k),
+          aec: diag
+            ? {
+                delayMs: diag.delayMs,
+                renderActive: diag.renderActive,
+                doubleTalk: diag.doubleTalk,
+                adaptiveDelay: diag.adaptiveDelay,
+              }
+            : undefined,
+        }
+      : undefined,
   };
 }

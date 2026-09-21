@@ -2,6 +2,8 @@
 
 # compiled output
 dist
+!vendor/@ennuicastr/webrtcaec3.js/dist/
+!vendor/@ennuicastr/webrtcaec3.js/dist/**
 tmp
 out-tsc
 *.tsbuildinfo
@@ -64,6 +66,10 @@ backup.sql
 .env
 .env.*
 *.env
+
+# ai-coustics Quail model cache (downloaded at runtime via Model.download)
+models/ai-coustics/
+**/models/ai-coustics/
 
 # Local development files
 surat.js

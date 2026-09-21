@@ -33,10 +33,12 @@ export function resolveRealtimeVadDefaults(sampleRate: 8000 | 16000): {
   minSpeechDurationMs: number | null;
   threshold: number | null;
 } {
+  // 550 ms default silence — between short-answer (350–500) and complete (500–650).
+  // Mid-call syncCollectionVad / computeEndpointMs adapts further.
   if (sampleRate === 8000) {
-    return { silenceDurationMs: 500, minSpeechDurationMs: 200, threshold: 0.7 };
+    return { silenceDurationMs: 550, minSpeechDurationMs: 150, threshold: 0.55 };
   }
-  return { silenceDurationMs: 500, minSpeechDurationMs: 250, threshold: 0.3 };
+  return { silenceDurationMs: 550, minSpeechDurationMs: 200, threshold: 0.3 };
 }
 
 export type SarvamRealtimeStreamType = "fast" | "balanced" | "simulated";

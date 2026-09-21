@@ -14,6 +14,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-coustics/aic-sdk": "^0.24.0",
+    "@ennuicastr/webrtcaec3.js": "file:../../vendor/@ennuicastr/webrtcaec3.js",
     "@google-cloud/storage": "^7.19.0",
     "@google/genai": "^1.52.0",
     "@google/generative-ai": "^0.24.1",

@@ -75,16 +75,16 @@ describe("nextRealtimeLanguageOnSwitch", () => {
 describe("resolveRealtimeVadDefaults", () => {
   it("uses the telephony table on 8 kHz PSTN so sidetone does not become VAD (call 26668)", () => {
     expect(resolveRealtimeVadDefaults(8000)).toEqual({
-      silenceDurationMs: 500,
-      minSpeechDurationMs: 200,
-      threshold: 0.7,
+      silenceDurationMs: 550,
+      minSpeechDurationMs: 150,
+      threshold: 0.55,
     });
   });
 
   it("uses the cleaner-channel table on 16 kHz WebRTC", () => {
     expect(resolveRealtimeVadDefaults(16000)).toEqual({
-      silenceDurationMs: 500,
-      minSpeechDurationMs: 250,
+      silenceDurationMs: 550,
+      minSpeechDurationMs: 200,
       threshold: 0.3,
     });
   });
@@ -178,7 +178,7 @@ describe("buildRealtimeWsUrl", () => {
       languageCode: "auto",
       sampleRate: 8000,
       mode: "transcribe",
-      silenceDurationMs: 500,
+      silenceDurationMs: 550,
       minSpeechDurationMs: 250,
       threshold: 0.3,
     });
@@ -188,7 +188,7 @@ describe("buildRealtimeWsUrl", () => {
     expect(url).toContain("sample_rate=8000");
     expect(url).toContain("stream_type=fast");
     expect(url).toContain("endpointing=vad");
-    expect(url).toContain("silence_duration_ms=500");
+    expect(url).toContain("silence_duration_ms=550");
     expect(url).toContain("min_speech_duration_ms=250");
     expect(url).toContain("encoding=linear16");
     expect(url).toContain("threshold=0.3");
@@ -214,7 +214,7 @@ describe("buildRealtimeWsUrl", () => {
       languageCode: "hi-IN",
       sampleRate: 8000,
       mode: "transcribe",
-      silenceDurationMs: 500,
+      silenceDurationMs: 550,
       minSpeechDurationMs: 250,
       threshold: 0.3,
       prompt: "UPI GSTIN",
@@ -229,7 +229,7 @@ describe("buildRealtimeWsUrl", () => {
       sampleRate: 16000,
       mode: "codemix",
       streamType: "balanced",
-      silenceDurationMs: 500,
+      silenceDurationMs: 550,
       minSpeechDurationMs: 250,
       threshold: 0.3,
     });

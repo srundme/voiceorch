@@ -1,20 +1,14 @@
 /**
- * Software noise-gate arbitration — decides whether the NoiseCanceller runs on
- * a given call, and records WHY.
+ * Software noise-cancellation arbitration — decides whether ai-coustics Quail
+ * Voice Focus runs on a given call, and records WHY.
  *
  * Product rule: the agent's Noise Cancellation toggle is the only user-facing
- * control, and it applies to every LLM stack (classic Sarvam/OpenAI/Groq and
- * Gemini Live alike). When the toggle is on, the audio worker runs the
- * speech-preserving bandpass filter. Telephony audio (VoBiz, Twilio,
- * Plivo) is processed when the toggle is on. Browser webcall is the one
- * exception: the browser already owns mic AEC/NS. This filter is not an AEC
- * or a neural denoiser, and does not suppress in-band background sounds.
+ * control. When on, inbound telephony audio is enhanced with Quail VF (primary
+ * speaker isolation) before STT. Browser webcall is bypassed (mic AEC/NS).
  *
- * Historically VoBiz calls skipped software processing under an assumption
- * of carrier denoising. The extra
- * forceSoftwareNoiseGate / VOBIZ_FORCE_SOFTWARE_NC knobs are kept as aliases
- * that still select the filter, but they are no longer required. Legacy names
- * and reason strings remain stable for configuration/log compatibility.
+ * Legacy forceSoftwareNoiseGate / VOBIZ_FORCE_SOFTWARE_NC still force the same
+ * ai-coustics path (kept for config/log compatibility). There is no separate
+ * bandpass/RMS "software gate" anymore — that was an identity no-op.
  */
 
 /** Per-agent escape hatch key inside agents.agent_config (legacy, still honored). */
@@ -29,7 +23,7 @@ export type NoiseGateReason =
   | "agent-override"
   /** VOBIZ_FORCE_SOFTWARE_NC=1 (legacy fleet-wide VoBiz opt-in). */
   | "env-override"
-  /** Toggle on — software gate runs for this telephony call. */
+  /** Toggle on — ai-coustics Quail VF runs for this telephony call. */
   | "software-gate";
 
 export interface NoiseGateDecision {
@@ -41,18 +35,18 @@ export interface NoiseGateInput {
   telephonyProvider: string | null | undefined;
   /** agents.noise_cancellation_enabled */
   agentEnabled: boolean;
-  /** agent_config.forceSoftwareNoiseGate — still forces the gate on if set. */
+  /** agent_config.forceSoftwareNoiseGate — still forces NC on if set. */
   agentOverride?: unknown;
   /** VOBIZ_FORCE_SOFTWARE_NC === "1" */
   envForceVobiz?: boolean;
 }
 
 /**
- * Resolve the software noise gate for one call.
+ * Resolve whether ai-coustics NC runs for one call.
  *
  * The agent toggle is checked first — an explicitly disabled gate is never
  * re-enabled by an override. Webcall is always bypassed. Every other provider
- * (including VoBiz) runs the gate when the toggle is on, for every LLM.
+ * (including VoBiz) runs Quail VF when the toggle is on.
  */
 export function resolveSoftwareNoiseGate(input: NoiseGateInput): NoiseGateDecision {
   if (!input.agentEnabled) return { enabled: false, reason: "agent-toggle-off" };

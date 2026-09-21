@@ -1,11 +1,10 @@
 /**
  * Carrier self-echo rejection.
  *
- * PSTN legs (Vobiz / Twilio / Plivo) route a portion of our own TTS back to us
- * as inbound "caller" audio. There is no AEC on a carrier leg, so STT happily
- * transcribes it and the pipeline sees a caller turn that never happened: the
- * agent barges in on itself and answers its own last sentence while the caller
- * is silent.
+ * PSTN legs (Vobiz / Twilio / Plivo) can still route a portion of our own TTS
+ * back as inbound "caller" audio. WebRTC AEC3 cancels linear echo on the PCM
+ * path; this module is the transcript-level belt-and-suspenders filter for
+ * residual / non-linear cases AEC3 misses.
  *
  * This is deliberately *not* a heuristic about what callers say — no phrase
  * lists, no energy thresholds, and it never inspects audio. It compares a

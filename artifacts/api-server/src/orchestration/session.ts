@@ -69,6 +69,7 @@ import { loadPcmLoop, TRACK_PARAMS } from "./ambient.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics, SessionConfig } from "./types.js";
 import { resolveSarvamEndpointingMs } from "./endpointing-settings.js";
 import { logger } from "../lib/logger.js";
+import { voiceCanaryBaseFields } from "./voice-canary.js";
 import { hangupVobizCall, vobizAuthFromProviderKeys } from "./telephony/transfer.js";
 import { MEETING_BEHAVIOR_PROMPT, parseMeetingsConfig } from "../services/meeting-runtime.js";
 import {
@@ -77,7 +78,7 @@ import {
   saveConversation,
   removeSession,
 } from "./sessionStore.js";
-import { destroyAudioSession } from "./audioPool.js";
+import { destroyAudioSession, resetAecSession } from "./audioPool.js";
 import { disposeCall, extractFlatDispositionSchema } from "../services/disposition.js";
 import { schemaFieldsNeedFill } from "../lib/disposition/normalize-fields.js";
 import {
@@ -712,8 +713,8 @@ export async function createSession(params: {
     // 1800 so existing agents pick it up without a UI re-save (call 5718).
     bargeInEnergyThreshold: resolveBargeInEnergyThreshold(agentCfg["bargeInEnergyThreshold"]),
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,
-    // Empirical PSTN echo window (VoBiz/Twilio), not a carrier spec. See
-    // pipeline.ts BARGE_IN_ECHO_GRACE_MS. Stop Speaking Plan may override.
+    // Empirical PSTN soft-guard window (VoBiz/Twilio). AEC3 handles linear
+    // echo; residual policy still uses bargeInEchoGraceMs / PARTIAL_BARGE_MIN_PLAY_MS.
     bargeInEchoGraceMs:     0,
     micSensitivity:         resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined),
     // P1-E: Agent timezone
@@ -2484,6 +2485,8 @@ export async function createSession(params: {
         onAudioOut: ownedAudioOut,
         rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
         rawPcmOutputRate: params.rawPcmOutputRate,
+        getMediaEpoch: () => mediaEpoch,
+        canaryRoute: sessionId,
         onTranscript: (speaker, text) => {
           logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
           params.onTranscript?.(speaker, text);
@@ -2553,6 +2556,8 @@ export async function createSession(params: {
     awaitPlaybackReceipt: params.awaitPlaybackReceipt,
     rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
     rawPcmOutputRate: params.rawPcmOutputRate,
+    getMediaEpoch: () => mediaEpoch,
+    canaryRoute: sessionId,
     voicemailDelivery: (params.voicemailDelivery || ((params.amdMachineHint || params.amdArmed) && amdVoicemailAction === "leave_message"))
       ? {
           message: (typeof agentCfg["voicemailMessage"] === "string" && (agentCfg["voicemailMessage"] as string).trim())
@@ -2679,6 +2684,25 @@ export async function createSession(params: {
     retargetAudioOut(send: (audio: Buffer) => void) {
       mediaEpoch += 1;
       mediaOut.send = send;
+      const canaryMeta = {
+        mediaEpoch,
+        carrier: params.telephonyProvider,
+        route: sessionId,
+      };
+      // Applies canary meta + recreates AEC (no separate setAudioCanaryMeta).
+      resetAecSession(String(callRecord.id), canaryMeta);
+      logger.info(
+        {
+          ...voiceCanaryBaseFields({
+            callId: callRecord.id,
+            mediaEpoch,
+            carrier: params.telephonyProvider,
+            route: sessionId,
+          }),
+          event: "voice_canary_media_epoch_reset",
+        },
+        "voice_canary_media_epoch_reset",
+      );
       return mediaEpoch;
     },
     // Anchor the duration clock to the carrier answer time when known, so the

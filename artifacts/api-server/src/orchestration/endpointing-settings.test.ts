@@ -11,8 +11,8 @@ describe("Sarvam endpointing ownership", () => {
     expect(resolveSarvamEndpointingMs({ asrEndpointingSilenceMs: 300, sarvamEndOfSpeechSilenceMs: 900 })).toBe(900);
   });
   it("ignores invalid overrides and clamps to the adapter range", () => {
-    expect(resolveSarvamEndpointingMs({ sarvamEndOfSpeechSilenceMs: NaN, asrEndpointingSilenceMs: 300 })).toBe(400);
-    expect(resolveSarvamEndpointingMs({ asrEndpointingSilenceMs: 50 })).toBe(400);
+    expect(resolveSarvamEndpointingMs({ sarvamEndOfSpeechSilenceMs: NaN, asrEndpointingSilenceMs: 300 })).toBe(350);
+    expect(resolveSarvamEndpointingMs({ asrEndpointingSilenceMs: 50 })).toBe(350);
     expect(resolveSarvamEndpointingMs({ asrEndpointingSilenceMs: 9000 })).toBe(2000);
   });
 });

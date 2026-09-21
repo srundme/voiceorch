@@ -14,6 +14,10 @@ const pipelineSrc = readFileSync(
   resolve(dirname(fileURLToPath(import.meta.url)), "pipeline.ts"),
   "utf8",
 );
+const audioWorkerSrc = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), "audioWorker.ts"),
+  "utf8",
+);
 const compactGreetingSrc = readFileSync(
   resolve(dirname(fileURLToPath(import.meta.url)), "compact-greeting-prompt.ts"),
   "utf8",
@@ -99,8 +103,18 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
 
   it("never interrupts TTS from bare VAD — Audio → STT → InterruptionManager (call 20257)", () => {
     expect(pipelineSrc).toContain("shouldInterruptFromCallerTranscript");
-    expect(pipelineSrc).toContain("shouldTriggerInterruption");
-    expect(pipelineSrc).toContain("Bolna has no inbound RMS barge path");
+    expect(pipelineSrc).toContain("shouldAcceptCallerInterrupt");
+    // Linear echo is WebRTC AEC3 (audio worker); no SnapServe RMS barge path.
+    expect(pipelineSrc).not.toContain("tryEnergyBargeIn");
+    expect(pipelineSrc).toContain("feedFarEndRender");
+    // Far-end tap is on transmitted onAudioOut bytes (survives TTS cancel / drain).
+    expect(pipelineSrc).toMatch(/onAudioOut:\s*\(audio:\s*Buffer\)\s*=>\s*\{[\s\S]*?feedFarEndRender/);
+    // Preferred PSTN chain: AEC3 → Quail VF → STT (never Quail before AEC3).
+    const aecIdx = audioWorkerSrc.indexOf("aec.processPcm8k");
+    const quailIdx = audioWorkerSrc.indexOf("aic.processPcm8k");
+    expect(aecIdx).toBeGreaterThan(-1);
+    expect(quailIdx).toBeGreaterThan(aecIdx);
+    expect(audioWorkerSrc).toContain('type: "RESET_AEC"');
     expect(pipelineSrc).not.toContain("shouldIgnoreSelfEcho");
     expect(pipelineSrc).not.toContain("SELF_ECHO_MIN_OVERLAP");
     expect(pipelineSrc).toContain("vad.speech_start only");
@@ -108,13 +122,11 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     const vadBody = methodBody("maybeBargeFromRealtimeVadStart");
     expect(vadBody).toContain("shouldBargeOnRealtimeVadStart");
     expect(vadBody).toContain("isCarrierSelfEcho");
-    expect(vadBody).toContain("shouldInterruptFromCallerTranscript");
+    expect(vadBody).toContain("shouldAcceptCallerInterrupt");
     expect(vadBody).not.toMatch(/triggerBargeIn\(\s*"energy"/);
     expect(methodBody("schedulePartialBargeIn")).toContain("shouldInterruptFromCallerTranscript");
     expect(methodBody("schedulePartialBargeIn")).toContain("isCarrierSelfEcho");
-    expect(methodBody("schedulePartialBargeIn")).toContain("SELF_ECHO_MIN_WORDS");
-    expect(methodBody("schedulePartialBargeIn")).toMatch(/if \(!hard && countTranscriptWords\(partial\) < SELF_ECHO_MIN_WORDS\) return/);
-    expect(methodBody("schedulePartialBargeIn")).toMatch(/if \(!hard && !this\.shouldInterruptFromCallerTranscript\(partial\)\) return/);
+    expect(methodBody("schedulePartialBargeIn")).not.toContain("SELF_ECHO_MIN_WORDS");
     expect(methodBody("isEagerPartialReady")).toContain("isEagerCommitReady");
     expect(methodBody("handleStreamingTranscript")).toContain("collectionHoldMsForTranscript");
     expect(methodBody("handleStreamingTranscript")).toContain("agent_still_speaking");
@@ -220,7 +232,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("if (this.streamSTT?.flush && !this.liveSarvamRealtime())");
     expect(pipelineSrc).toContain("this.armBargeRecovery(partial)");
     expect(methodBody("processTurn")).toContain("this.clearBargeRecovery()");
-    expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("shouldTriggerInterruption");
+    expect(methodBody("shouldInterruptFromCallerTranscript")).toContain("shouldAcceptCallerInterrupt");
     expect(methodBody("isSameUtteranceStillArriving")).toContain("isQueuedDuplicateUserTurn");
     expect(methodBody("playbackTooFreshForPartialBarge")).toContain("PARTIAL_BARGE_MIN_PLAY_MS");
     expect(methodBody("playbackTooFreshForPartialBarge")).toContain("bargeInSentenceStartAt");

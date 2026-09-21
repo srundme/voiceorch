@@ -135,19 +135,16 @@ export function isSarvamCatalogSpeaker(speaker: string | null | undefined): bool
   return CATALOG_SPEAKERS.has(speaker.trim().toLowerCase());
 }
 
-/** Cartesia-style UUIDs — reject so a pasted Cartesia id never hits Sarvam. */
-function looksLikeUuid(s: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
-}
-
 function resolveSpeaker(voice: string | null, model: string): string {
   const fallback = DEFAULT_SPEAKER[model] ?? "ritu";
   if (!voice) return fallback;
   const trimmed = voice.trim();
-  if (!trimmed || looksLikeUuid(trimmed)) return fallback;
+  if (!trimmed) return fallback;
   if (model === "bulbul:v2") return V2_SPEAKERS.has(trimmed) ? trimmed : fallback;
-  // v3: reject known v2-only names; accept catalog speakers AND Creative Studio
-  // cloned speaker ids (hyphenated custom ids are allowed — only UUIDs are rejected).
+  // v3: reject known v2-only names; pass through catalog speakers and Creative
+  // Studio clone ids (`svc-…` or the uuid after the prefix). Never remap a
+  // clone id to a catalog voice — that made probe/save look fine while calls
+  // spoke as ritu.
   if (V2_SPEAKERS.has(trimmed)) {
     logger.warn(
       { voice: trimmed, model, fallback },

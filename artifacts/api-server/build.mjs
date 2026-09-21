@@ -70,6 +70,13 @@ async function buildAll() {
       "typeorm",
       "protobufjs",
       "onnxruntime-node",
+      // ai-coustics native NAPI bindings + platform packages — must load from
+      // node_modules at runtime (bundling breaks .node resolution).
+      "@ai-coustics/aic-sdk",
+      "@ai-coustics/*",
+      // WebRTC AEC3 WASM (embedded base64 + locateFile) — keep external so
+      // worker threads resolve the same package copy as the main process.
+      "@ennuicastr/webrtcaec3.js",
       "@tensorflow/*",
       "@prisma/client",
       "@mikro-orm/*",

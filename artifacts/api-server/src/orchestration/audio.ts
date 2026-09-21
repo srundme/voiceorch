@@ -322,11 +322,9 @@ export function telephonyBandpass(samples: Int16Array): Int16Array {
 }
 
 /**
- * Optional software noise path. PSTN echo is not cancelled here — VoBiz/Twilio
- * already ran their AEC. Bandpass + RMS gating of 8 kHz caller audio was
- * clipping speech and triggering false barge-in, so this is a pass-through
- * unless a future neural denoiser is wired in. telephonyBandpass() remains
- * for explicit analysis tests.
+ * Optional inbound NC hook. Quail Voice Focus (ai-coustics) is the real
+ * denoiser — see ai-coustics.ts / audioWorker.ts. This class remains only as a
+ * documented no-op for older tests; do not wire new call paths through it.
  */
 export class NoiseCanceller {
   constructor(_legacyGateRatio?: number) {}

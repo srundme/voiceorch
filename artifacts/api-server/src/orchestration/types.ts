@@ -833,6 +833,13 @@ export interface SessionConfig {
   /** Campaign lead ID for outbound calls — enables transfer DB writes + lead timeline */
   campaignLeadId?: number | null;
   onAudioOut: (audio: Buffer) => void;
+  /**
+   * Current VoBiz/media socket generation — included on every voice-canary event
+   * so AEC / STT / endpoint / barge lines can be reconstructed across retargets.
+   */
+  getMediaEpoch?: () => number;
+  /** Session / stream route id for canary correlation (e.g. `vobiz-123-…`). */
+  canaryRoute?: string;
   onTranscript: (speaker: "user" | "agent", text: string) => void;
   onCallEnd: () => void;
   /**

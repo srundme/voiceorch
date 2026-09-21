@@ -1,4 +1,6 @@
 // Deployment rebuild marker: orchestration playback and caller-audio fixes.
+import { loadLocalEnv } from "./lib/load-local-env.js";
+loadLocalEnv(); // local AIC_SDK_LICENSE etc from gitignored .env
 import http from "http";
 import { beginDraining, callDrainMs } from "./orchestration/lifecycle.js";
 import { initializeCallAdmission } from "./orchestration/call-admission.js";
@@ -34,6 +36,8 @@ import { endSession, getAllSessions } from "./orchestration/session.js";
 import { verifySessionToken } from "./lib/session.js";
 import { parseCookieHeader, SESSION_COOKIE_NAME } from "./lib/session-cookie.js";
 import { warmSileroVAD } from "./orchestration/silero-vad.js";
+import { aiCousticsConfigured, ensureAiCousticsModel } from "./orchestration/ai-coustics.js";
+import { aec3Enabled, ensureAec3Module } from "./orchestration/aec3.js";
 import { warmSmartTurn } from "./orchestration/smart-turn.js";
 import { probeGenderService } from "./orchestration/genderService.js";
 
@@ -544,6 +548,27 @@ server.listen(port, () => {
   logger.info({ port }, "Server listening");
   initAudioPool(new URL(`file://${workerFile}`));
   void warmSileroVAD(); // preload Silero VAD ONNX session so first call doesn't pay load cost
+  if (aec3Enabled()) {
+    void ensureAec3Module().then((status) => {
+      if (status.ok) {
+        logger.info("WebRTC AEC3 WASM ready (8 kHz PSTN far-end cancel)");
+      } else {
+        logger.warn({ reason: status.reason }, "WebRTC AEC3 warm failed — inbound echo cancel skipped");
+      }
+    });
+  }
+  if (aiCousticsConfigured()) {
+    void ensureAiCousticsModel().then((status) => {
+      if (status.ok) {
+        logger.info(
+          { modelId: status.modelId, sampleRate: status.sampleRate, blockSize: status.blockSize },
+          "ai-coustics Quail Voice Focus model ready",
+        );
+      } else {
+        logger.warn({ reason: status.reason }, "ai-coustics model warm failed — NC falls back to identity");
+      }
+    });
+  }
   void warmSmartTurn(); // preload Smart Turn v3 so first speech_end doesn't pay load cost
   void probeGenderService(); // loudly log the resolved gender-service URL + reachability so misconfig isn't silent
   void import("./services/meet-bots.js")

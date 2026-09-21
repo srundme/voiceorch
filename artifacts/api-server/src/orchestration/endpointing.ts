@@ -541,6 +541,17 @@ export function resolveStreamingTurnHold(opts: {
       trailingFragment: false,
     };
   }
+  if (endsWithDanglingConnector(pending)) {
+    return {
+      incomplete: true,
+      reason: "text_continuation",
+      digitCollection,
+      emailCollection,
+      collectionKind,
+      trailingDigit: false,
+      trailingFragment: false,
+    };
+  }
   return {
     incomplete: false,
     reason: null,
@@ -552,6 +563,8 @@ export function resolveStreamingTurnHold(opts: {
   };
 }
 
+/** Extra incomplete-hold after VAD when the caller is still mid-sentence. */
+const TEXT_INCOMPLETE_HOLD_MS = 1100;
 /** Extra incomplete-hold after VAD when the caller is still reading digits. */
 const DIGIT_HOLD_MS = 1200;
 const DIGIT_TRAIL_HOLD_MS = 1600;
@@ -571,6 +584,7 @@ export function resolveIncompleteHoldMs(opts: {
   digitCollection?: boolean;
   trailingDigit?: boolean;
   trailingFragment?: boolean;
+  textIncomplete?: boolean;
 }): number {
   const base = clampSemanticTurnStopMs(opts.baseStopMs);
   const kind = opts.collectionKind ?? (opts.digitCollection ? "digit" : "none");
@@ -583,14 +597,17 @@ export function resolveIncompleteHoldMs(opts: {
     const floor = trailing ? DIGIT_TRAIL_HOLD_MS : DIGIT_HOLD_MS;
     return clampSemanticTurnStopMs(Math.max(base, floor));
   }
+  if (opts.textIncomplete) {
+    return clampSemanticTurnStopMs(Math.max(base, TEXT_INCOMPLETE_HOLD_MS));
+  }
   return base;
 }
 
 /** Saaras Fast default is 300 ms; collection floors stretch VAD before the next pause. */
 export const COLLECTION_VAD_SILENCE_MIN_MS = 150;
-export const COLLECTION_VAD_SILENCE_MAX_MS = 800;
-export const COLLECTION_VAD_DIGIT_FLOOR_MS = 700;
-export const COLLECTION_VAD_EMAIL_FLOOR_MS = 800;
+export const COLLECTION_VAD_SILENCE_MAX_MS = 1500;
+export const COLLECTION_VAD_DIGIT_FLOOR_MS = 1200;
+export const COLLECTION_VAD_EMAIL_FLOOR_MS = 1400;
 
 export function resolveCollectionVadSilenceMs(baseMs: number, kind: CollectionKind): number {
   const raw = Number.isFinite(baseMs) ? Math.round(baseMs) : 300;
@@ -622,12 +639,15 @@ export function collectionHoldMsForTranscript(opts: {
     lastUserText: opts.transcript,
     textLooksIncomplete: false,
   });
-  if (hold.reason !== "digit_collection" && hold.reason !== "email_collection") return 0;
+  if (hold.reason !== "digit_collection" && hold.reason !== "email_collection" && hold.reason !== "text_continuation") {
+    return 0;
+  }
   if (!hold.incomplete) return 0;
   return resolveIncompleteHoldMs({
     baseStopMs: 800,
     collectionKind: hold.collectionKind,
     trailingFragment: hold.trailingFragment,
+    textIncomplete: hold.reason === "text_continuation",
   });
 }
 
@@ -692,7 +712,26 @@ const DANGLING_WORDS = new Set([
   "however",
   "actually",
   "basically",
+  // Tamil mid-sentence connectors (Indian PSTN)
+  "எனக்கு",
+  "வந்து",
+  "ஆனா",
+  "ஆனால்",
+  "அதனால",
+  "அதனால்",
+  "இன்னும்",
+  "அப்புறம்",
+  "கிட்ட",
 ]);
+
+/** True when the last token is a dangling connector / incomplete cue. */
+export function endsWithDanglingConnector(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  const last = t.split(/\s+/).filter(Boolean).pop()?.toLowerCase().replace(/[^\p{L}\p{N}]+$/gu, "") ?? "";
+  if (!last) return false;
+  return DANGLING_WORDS.has(last);
+}
 
 // ── Turn safety-net constants (env-configurable) ──────────────────────────────
 // These guard against the "Listening…" hang where streaming STT emits partial
@@ -1205,9 +1244,16 @@ export function isAffirmationOnlyUtterance(tokens: string[]): boolean {
 }
 
 /**
- * Compute the adaptive silence window (ms) to wait before flushing audio to STT.
+ * Adaptive silence window before treating the caller turn as complete.
+ *
+ * Situations (Indian PSTN):
+ *   closed yes/ஆம்       350–500 ms
+ *   normal complete      550–750 ms
+ *   incomplete sentence  900–1200 ms
+ *   numbers/email        1200–1500 ms
+ *   no STT partial       700–900 ms
  */
-export function computeEndpointMs(_opts: {
+export function computeEndpointMs(opts: {
   /** Last agent utterance text — used to detect digit-collection context. */
   lastAgentText: string;
   /**
@@ -1220,11 +1266,55 @@ export function computeEndpointMs(_opts: {
   /** Agent-configured base silence window (user override). */
   baseSilenceMs: number;
 }): EndpointDecision {
-  return { ms: 0, reason: "provider" };
+  const base = Number.isFinite(opts.baseSilenceMs) && opts.baseSilenceMs > 0
+    ? opts.baseSilenceMs
+    : ENDPOINT_DEFAULT_MS;
+  const collection = resolveCollectionKind(opts.lastAgentText);
+  if (collection === "email" || collection === "digit") {
+    return { ms: Math.min(1500, Math.max(1200, base)), reason: "collection" };
+  }
+
+  const partial = opts.partialTranscript.trim();
+  if (!partial) {
+    return { ms: Math.min(900, Math.max(700, base || 800)), reason: "no_partial" };
+  }
+
+  const tokens = partial.toLowerCase().split(/\s+/).filter(Boolean);
+  if (isAffirmationOnlyUtterance(tokens)) {
+    // Closed-answer mode only — not for normal speech.
+    return { ms: Math.min(500, Math.max(350, base || 400)), reason: "short_answer" };
+  }
+
+  if (
+    endsWithDanglingConnector(partial)
+    || signalsConversationalContinuationFromEndpointing(partial)
+  ) {
+    return { ms: Math.min(1200, Math.max(900, base || 1000)), reason: "incomplete" };
+  }
+
+  if (/[.?!।]\s*$/u.test(partial)) {
+    return { ms: Math.min(750, Math.max(550, base || 600)), reason: "complete" };
+  }
+
+  // Mid-utterance without a clear dangling token — provisional hold.
+  if (opts.audioBufferMs > 0 && opts.audioBufferMs < 400) {
+    return { ms: Math.min(900, Math.max(700, base || 800)), reason: "short_burst" };
+  }
+
+  // Normal complete / default speech — not the short-answer floor.
+  return { ms: Math.min(750, Math.max(550, base || 600)), reason: "default" };
 }
 
-// ── Silence-hangup watchdog (call 1915) ──────────────────────────────────────
-//
+/** Local dangling check used by computeEndpointMs (avoid circular import on transcriptQuality). */
+function signalsConversationalContinuationFromEndpointing(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (/[…]|\.{2,}\s*$/.test(t)) return true;
+  if (/\b(and|but|because|actually|so|then)\s*[,.…]*\s*$/i.test(t)) return true;
+  if (/(எனக்கு|வந்து|ஆனா|ஆனால்|அதனால|அதனால்|இன்னும்)\s*[,.…]*\s*$/u.test(t)) return true;
+  return false;
+}
+
 // ── Silence-hangup watchdog (call 1915) ──────────────────────────────────────
 //
 // Replaces the raw per-agent silence-hangup setTimeout in the pipeline. The old

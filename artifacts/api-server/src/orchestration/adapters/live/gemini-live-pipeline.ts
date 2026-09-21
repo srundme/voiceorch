@@ -17,7 +17,8 @@ import {
   frameRms,
   upsample8to16,
 } from "../../audio.js";
-import { processRawPcm8kIn } from "../../audioPool.js";
+import { processRawPcm8kIn, feedFarEndRender, setAudioCanaryMeta } from "../../audioPool.js";
+import { aec3Enabled } from "../../aec3.js";
 import {
   envForceVobizSoftwareNc,
   resolveSoftwareNoiseGate,
@@ -307,11 +308,29 @@ export class GeminiLivePipeline implements VoiceSession {
       ...config,
       onAudioOut: (audio: Buffer) => {
         if (this.blocksMeetingAudioOut()) return;
+        if (
+          config.telephonyProvider !== "webcall"
+          && aec3Enabled()
+          && audio.length > 0
+        ) {
+          feedFarEndRender(
+            String(config.callId),
+            audio,
+            config.rawPcmOutput ? "pcm8k" : "mulaw",
+          );
+        }
         rawAudioOut(audio);
       },
     };
     this.meetingMuteWhenIdle = config.meetingMuteWhenIdle === true;
     this.agent = config.agentConfig;
+    if (config.telephonyProvider !== "webcall" && aec3Enabled()) {
+      setAudioCanaryMeta(String(config.callId), {
+        mediaEpoch: config.getMediaEpoch?.() ?? 1,
+        carrier: config.telephonyProvider,
+        route: config.canaryRoute ?? `${config.telephonyProvider}:${config.callId}`,
+      });
+    }
     const key = config.providerKeys.get("google") ?? config.providerKeys.get("gemini");
     if (!key) {
       throw new Error("Gemini Live requires a Google API key (managed or BYOP)");
@@ -332,6 +351,9 @@ export class GeminiLivePipeline implements VoiceSession {
       agentOverride: this.agent.forceSoftwareNoiseGate,
       envForceVobiz: envForceVobizSoftwareNc(),
     });
+    const aicBackend = this.noiseGate.enabled && !!process.env["AIC_SDK_LICENSE"]?.trim()
+      ? "ai-coustics"
+      : this.noiseGate.enabled ? "passthrough-no-license" : "off";
     logger.info(
       {
         callId: config.callId,
@@ -341,6 +363,8 @@ export class GeminiLivePipeline implements VoiceSession {
         toggle: this.agent.noiseCancellationEnabled,
         softwareGate: this.noiseGate.enabled,
         reason: this.noiseGate.reason,
+        backend: aicBackend,
+        aec3: config.telephonyProvider !== "webcall" && aec3Enabled(),
         gateRatio: this.noiseGate.enabled ? this.gateRatio : undefined,
       },
       "Noise cancellation resolved",

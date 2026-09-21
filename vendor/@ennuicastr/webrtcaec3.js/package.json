@@ -1,0 +1,32 @@
+{
+  "name": "@ennuicastr/webrtcaec3.js",
+  "//version": "When changing the version, make sure you update it below (version, main), in Makefile, and in the demo.",
+  "version": "0.3.0",
+  "description": "Port of WebRTC's AEC3 (acoustic echo canceller, version 3) library to WebAssembly/JavaScript",
+  "main": "dist/webrtcaec3-0.3.0.js",
+  "types": "dist/webrtcaec3.types.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ennuicastr/webrtcaec3.js.git"
+  },
+  "keywords": [
+    "audio",
+    "echo",
+    "cancellation",
+    "echo",
+    "cancellation",
+    "echo",
+    "suppression",
+    "suppression",
+    "webrtc"
+  ],
+  "author": "Yahweasel",
+  "license": "BSD-3-Clause",
+  "bugs": {
+    "url": "https://github.com/ennuicastr/webrtcaec3.js/issues"
+  },
+  "homepage": "https://github.com/ennuicastr/webrtcaec3.js#readme"
+}
