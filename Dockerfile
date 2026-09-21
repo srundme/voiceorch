@@ -17,6 +17,8 @@ COPY artifacts/api-server/package.json ./artifacts/api-server/
 COPY artifacts/dashboard/package.json ./artifacts/dashboard/
 COPY artifacts/admin/package.json ./artifacts/admin/
 COPY artifacts/snapserve-book/package.json ./artifacts/snapserve-book/
+# file: dep for @ennuicastr/webrtcaec3.js — must exist before pnpm install
+COPY vendor/ ./vendor/
 
 RUN pnpm install --frozen-lockfile
 
@@ -59,6 +61,8 @@ COPY lib/sdk-node/package.json ./lib/sdk-node/
 COPY lib/mcp/package.json ./lib/mcp/
 COPY lib/snapserve-mcp/package.json ./lib/snapserve-mcp/
 COPY artifacts/api-server/package.json ./artifacts/api-server/
+# file: dep for @ennuicastr/webrtcaec3.js — must exist before prod install
+COPY vendor/ ./vendor/
 
 RUN pnpm install --frozen-lockfile --prod
 
