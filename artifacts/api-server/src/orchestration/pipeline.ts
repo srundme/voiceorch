@@ -73,6 +73,7 @@ import {
 } from "./booking-flow-enforce.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, peekCachedPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
+import { VoicemailBeepDetector } from "./voicemail-beep.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
 import { RecordingBuffer, WEBCALL_GAP_RESYNC_MS } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
@@ -558,30 +559,35 @@ const VOICEMAIL_MAX_WAIT_MS =
   Number(process.env["VOICEMAIL_MAX_WAIT_MS"]) || 12000;            // fallback: speak anyway after this long
 const VOICEMAIL_GREETING_ENERGY_THRESHOLD = 300;                    // RMS bar for "machine is speaking its greeting"
 
-// ── Acoustic AMD confirmation (VoBiz unreliable machine-hint) ────────────────
-// When the answer webhook reports a "machine" hint we NEVER enact the voicemail
-// action outright (VoBiz false-positives on live humans). Instead we open the
-// media stream and confirm acoustically first. All thresholds bias strongly
-// toward "human": ambiguity, silence, or a short utterance resolve to human.
-const AMD_CONFIRM_WINDOW_MS =                                       // hard cap: resolve human after this long
+// ── Acoustic AMD confirmation (VoBiz / outbound answering-machine gate) ──────
+// Carrier AMD is off by default (connect delay). Classify FAST so a live human
+// is not left in silence for seconds:
+//   HUMAN   — short "hello?" + pause, OR quiet for ~1.2s (caller waiting on us)
+//   MACHINE — record BEEP (primary), OR a continuous monologue (~2s)
+// leave_message then waits for the beep (or greeting-end silence) before
+// speaking — not a fixed multi-second hold on every outbound answer.
+const AMD_CONFIRM_WINDOW_MS =                                       // quiet → human (do NOT park live callers)
   Number(process.env["AMD_CONFIRM_WINDOW_MS"]) || 1200;
-const AMD_CONTINUOUS_GREETING_MS =                                  // continuous speech run that CONFIRMS a machine
-  Number(process.env["AMD_CONTINUOUS_GREETING_MS"]) || 2500;
+const AMD_CONFIRM_HARD_CAP_MS =                                     // absolute ceiling while speech is ongoing
+  Number(process.env["AMD_CONFIRM_HARD_CAP_MS"]) || 3500;
+const AMD_CONTINUOUS_GREETING_MS =                                  // continuous monologue that CONFIRMS a machine
+  Number(process.env["AMD_CONTINUOUS_GREETING_MS"]) || 2000;
 const AMD_SPEECH_GAP_MS =                                           // silence gap that ends a continuous speech run
-  Number(process.env["AMD_SPEECH_GAP_MS"]) || 300;
+  Number(process.env["AMD_SPEECH_GAP_MS"]) || 400;
 const AMD_HUMAN_PAUSE_MS =                                          // pause after a SHORT utterance ("hello?") → human
-  Number(process.env["AMD_HUMAN_PAUSE_MS"]) || 400;
-const AMD_NO_SPEECH_HUMAN_MS =                                      // no greeting heard at all by this point → human
-  Number(process.env["AMD_NO_SPEECH_HUMAN_MS"]) || 250;
+  Number(process.env["AMD_HUMAN_PAUSE_MS"]) || 500;
+const AMD_NO_SPEECH_HUMAN_MS =                                      // quiet after answer → human (fast greet)
+  Number(process.env["AMD_NO_SPEECH_HUMAN_MS"]) || 1200;
 const AMD_CONFIRM_ENERGY_THRESHOLD =                               // RMS bar for "someone is speaking" during confirm
   Number(process.env["AMD_CONFIRM_ENERGY_THRESHOLD"]) || VOICEMAIL_GREETING_ENERGY_THRESHOLD;
-// External (async provider callback) AMD corroboration — VoBiz delivers its
-// verdict via the machine_detection_url callback mid-window. A "machine"
+const AMD_NEAR_MACHINE_MS = Math.floor(AMD_CONTINUOUS_GREETING_MS * 0.75);
+// External (async provider callback) AMD corroboration — when dials re-enable
+// machine_detection_url, VoBiz can feed a mid-window verdict. A "machine"
 // callback is NOT blindly trusted: it lowers the continuous-speech bar to this
 // reduced threshold (still requiring real acoustic corroboration) …
 const AMD_EXTERNAL_MACHINE_CONTINUOUS_MS =
   Number(process.env["AMD_EXTERNAL_MACHINE_CONTINUOUS_MS"]) || 2000;
-// … and extends the hard confirmation cap by this much (once), giving the
+// … and extends the soft confirmation cap by this much (once), giving the
 // acoustics time to corroborate a callback that arrives late in the window.
 const AMD_EXTERNAL_MACHINE_EXTEND_MS =
   Number(process.env["AMD_EXTERNAL_MACHINE_EXTEND_MS"]) || 2000;
@@ -1143,6 +1149,10 @@ export class OrchestrationPipeline implements VoiceSession {
   private amdRunStartAt = 0;       // start (ms) of the current continuous speech run; 0 = in silence
   private amdLastSpeechAt = 0;     // ms timestamp of the last energetic frame during confirm
   private amdMaxContinuousMs = 0;  // longest continuous speech run observed during confirm
+  private amdBeepHeard = false;    // true once a VM record-beep tone is confirmed
+  private readonly amdBeepDetector = new VoicemailBeepDetector();
+  private readonly vmBeepDetector = new VoicemailBeepDetector();
+  private vmBeepHeard = false;
   // External AMD verdict from the async provider callback (VoBiz
   // machine_detection_url → /webhooks/vobiz/amd → onExternalAmdSignal). Read by
   // the confirmation loop: "human" resolves human immediately; "machine" lowers
@@ -4364,6 +4374,9 @@ export class OrchestrationPipeline implements VoiceSession {
         }
         return;
       }
+      if (this.amdBeepDetector.feed(pcm8k)) {
+        this.amdBeepHeard = true;
+      }
       const now = Date.now();
       if (hasSpeechEnergy(pcm8k, AMD_CONFIRM_ENERGY_THRESHOLD)) {
         this.amdHeardSpeech = true;
@@ -4377,9 +4390,12 @@ export class OrchestrationPipeline implements VoiceSession {
       return;
     }
     // Voicemail-delivery mode: inbound audio is the answering machine's outgoing
-    // greeting, NOT a conversation. Drive greeting-end detection only and skip the
-    // STT / conversation path entirely (no streamSTT is ever opened).
+    // greeting, NOT a conversation. Drive greeting-end / beep detection only and
+    // skip the STT / conversation path entirely (no streamSTT is ever opened).
     if (this.vmDelivering) {
+      if (this.vmBeepDetector.feed(pcm8k)) {
+        this.vmBeepHeard = true;
+      }
       if (hasSpeechEnergy(pcm8k, VOICEMAIL_GREETING_ENERGY_THRESHOLD)) {
         this.vmHeardSpeech = true;
         this.vmLastSpeechAt = Date.now();
@@ -5900,12 +5916,12 @@ export class OrchestrationPipeline implements VoiceSession {
     const silenceFrame = Buffer.alloc(FRAME_BYTES, 0);
 
     this.amdConfirming = true;
+    this.amdBeepHeard = false;
+    this.amdBeepDetector.reset();
     // This loop is now the SOLE frame sender — silence the keepalive watchdog
     // so two pumps never interleave on the same socket (helicopter chop).
     this.amdVmManualPumpActive = true;
-    // Outbound dead-air fix: the greeting LLM (1–3s) used to start only AFTER
-    // this confirmation window (1.2–3.2s). Prewarm it in parallel; greet()
-    // consumes the promise. Wasted only when the verdict is machine + hangup.
+    // Outbound dead-air fix: prewarm greeting LLM in parallel; greet() consumes it.
     if (this.greetingWillNeedLlm() && !this._greetingPrewarm) {
       const preLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
       this.startGreetingLlmPrewarm(this.isResumeDroppedCall, preLang);
@@ -5915,18 +5931,15 @@ export class OrchestrationPipeline implements VoiceSession {
     logger.info(
       {
         callId: this.config.callId, agentId: this.agent.id, action,
-        windowMs: AMD_CONFIRM_WINDOW_MS, hint: this.amdConfirm?.hint ?? false,
+        windowMs: AMD_CONFIRM_WINDOW_MS, hardCapMs: AMD_CONFIRM_HARD_CAP_MS,
+        continuousMs: AMD_CONTINUOUS_GREETING_MS, hint: this.amdConfirm?.hint ?? false,
       },
-      this.amdConfirm?.hint
-        ? "AMD acoustic confirmation: machine hint received — holding greeting to confirm before enacting"
-        : "AMD acoustic confirmation: armed unconditionally (AMD enabled, async callback pending) — holding greeting to confirm",
+      "AMD acoustic confirmation: listening for beep / short hello / continuous monologue (human-fast)",
     );
 
     let verdict: "human" | "machine" = "human";
     let signal = "window-elapsed";
     let nextTick = Date.now() + FRAME_MS;
-    // Window may be extended ONCE when an external "machine" callback arrives,
-    // giving the acoustics time to corroborate a late verdict.
     let windowMs = AMD_CONFIRM_WINDOW_MS;
     let windowExtended = false;
     while (!this.closed) {
@@ -5934,46 +5947,69 @@ export class OrchestrationPipeline implements VoiceSession {
       const now = Date.now();
       const elapsed = now - startedAt;
       const sinceSpeech = this.amdLastSpeechAt ? now - this.amdLastSpeechAt : Infinity;
-      // External async callback said HUMAN → trust it, greet immediately.
+
+      // Primary machine signal: answering-machine record beep.
+      if (this.amdBeepHeard) {
+        verdict = "machine"; signal = "beep"; break;
+      }
       if (this.amdExternalVerdict === "human") {
         verdict = "human"; signal = `external-human:${this.amdExternalSource}`; break;
       }
-      // External "machine" pending: extend the hard cap once and lower the
-      // continuous-speech bar — but still require acoustic corroboration.
       if (this.amdExternalVerdict === "machine" && !windowExtended) {
         windowExtended = true;
-        windowMs = elapsed + AMD_EXTERNAL_MACHINE_EXTEND_MS > AMD_CONFIRM_WINDOW_MS
-          ? elapsed + AMD_EXTERNAL_MACHINE_EXTEND_MS
-          : AMD_CONFIRM_WINDOW_MS;
+        windowMs = Math.max(windowMs, elapsed + AMD_EXTERNAL_MACHINE_EXTEND_MS);
       }
       const continuousBarMs = this.amdExternalVerdict === "machine"
         ? Math.min(AMD_CONTINUOUS_GREETING_MS, AMD_EXTERNAL_MACHINE_CONTINUOUS_MS)
         : AMD_CONTINUOUS_GREETING_MS;
-      // Machine: sustained continuous greeting monologue.
+      // Machine: sustained continuous greeting monologue (no beep yet).
       if (this.amdMaxContinuousMs >= continuousBarMs) {
         verdict = "machine";
         signal = this.amdExternalVerdict === "machine"
           ? "continuous-greeting+external-machine" : "continuous-greeting";
         break;
       }
-      // Human: short utterance ("hello?") then a pause, with no long run so far.
-      // Skipped while an external "machine" verdict is pending corroboration —
-      // some voicemail greetings start with a short phrase + pause.
+      // Human: short "hello?" then a pause.
       if (this.amdExternalVerdict !== "machine"
           && this.amdHeardSpeech && this.amdRunStartAt === 0
-          && this.amdMaxContinuousMs < AMD_CONTINUOUS_GREETING_MS
+          && this.amdMaxContinuousMs < continuousBarMs
           && sinceSpeech >= AMD_HUMAN_PAUSE_MS) {
         verdict = "human"; signal = "short-utterance-pause"; break;
       }
-      // Human: no greeting heard at all shortly after answer (a machine greets at once).
-      // Also skipped while an external "machine" verdict awaits corroboration.
+      // Human: quiet shortly after answer — greet fast (do not park ~8s).
       if (this.amdExternalVerdict !== "machine"
           && !this.amdHeardSpeech && elapsed >= AMD_NO_SPEECH_HUMAN_MS) {
         verdict = "human"; signal = "no-speech"; break;
       }
-      // Ambiguous by the hard cap → human (bias toward not harming a live caller).
-      if (elapsed >= windowMs) {
-        verdict = "human"; signal = windowExtended ? "window-elapsed-extended" : "window-elapsed"; break;
+      // Absolute ceiling while a monologue is still running.
+      if (elapsed >= AMD_CONFIRM_HARD_CAP_MS) {
+        if (this.amdBeepHeard
+            || this.amdMaxContinuousMs >= AMD_NEAR_MACHINE_MS
+            || this.amdExternalVerdict === "machine") {
+          verdict = "machine";
+          signal = this.amdBeepHeard ? "hard-cap+beep"
+            : this.amdExternalVerdict === "machine" ? "hard-cap+external-machine"
+            : "hard-cap-near-continuous";
+        } else {
+          verdict = "human";
+          signal = "hard-cap";
+        }
+        break;
+      }
+      // Soft window while quiet → human (or machine if we already heard a long run / beep).
+      if (elapsed >= windowMs && this.amdRunStartAt === 0) {
+        if (this.amdBeepHeard
+            || this.amdMaxContinuousMs >= AMD_NEAR_MACHINE_MS
+            || this.amdExternalVerdict === "machine") {
+          verdict = "machine";
+          signal = this.amdBeepHeard ? "window-elapsed+beep"
+            : this.amdExternalVerdict === "machine" ? "window-elapsed+external-machine"
+            : "window-elapsed-near-continuous";
+        } else {
+          verdict = "human";
+          signal = windowExtended ? "window-elapsed-extended" : "window-elapsed";
+        }
+        break;
       }
       const delay = Math.max(0, nextTick - now);
       nextTick += FRAME_MS;
@@ -5981,10 +6017,8 @@ export class OrchestrationPipeline implements VoiceSession {
     }
 
     this.amdConfirming = false;
-    // Hand the channel back to the watchdog until the next manual pump (the
-    // voicemail wait loop re-takes it; greet() uses the normal watchdog path).
     this.amdVmManualPumpActive = false;
-    this.amdResolved = true; // single resolution — later external callbacks are ignored
+    this.amdResolved = true;
     if (this.closed) return;
 
     logger.info(
@@ -5996,11 +6030,12 @@ export class OrchestrationPipeline implements VoiceSession {
         externalSource: this.amdExternalSource,
         waitedMs: Date.now() - startedAt,
         heardSpeech: this.amdHeardSpeech,
+        beepHeard: this.amdBeepHeard,
         maxContinuousMs: this.amdMaxContinuousMs,
       },
       verdict === "machine"
         ? "AMD acoustic confirmation: MACHINE confirmed — enacting voicemail action"
-        : "AMD acoustic confirmation: HUMAN — proceeding with normal greeting (machine hint rejected)",
+        : "AMD acoustic confirmation: HUMAN — proceeding with normal greeting",
     );
 
     // Persist the acoustically-confirmed verdict (never the raw provider flag).
@@ -6028,6 +6063,10 @@ export class OrchestrationPipeline implements VoiceSession {
     if (!vd || this.closed) return;
     // Arm the voicemail-listening branch in onRawPcm8kIn (see vmDelivering note).
     this.vmDelivering = true;
+    this.vmBeepHeard = false;
+    this.vmBeepDetector.reset();
+    // If AMD already heard the beep during confirm, do not wait again.
+    if (this.amdBeepHeard) this.vmBeepHeard = true;
     // The wait/lead-in loops below are the SOLE frame sender — silence the
     // keepalive watchdog so two pumps never interleave (helicopter chop).
     // Released just before playback so the watchdog's first-byte/stall
@@ -6044,16 +6083,18 @@ export class OrchestrationPipeline implements VoiceSession {
 
     const startedAt = Date.now();
     logger.info(
-      { callId: this.config.callId, marginMs: margin, maxWaitMs: maxWait },
-      "Voicemail delivery: listening for the machine greeting to end before speaking",
+      { callId: this.config.callId, marginMs: margin, maxWaitMs: maxWait, beepAlready: this.vmBeepHeard },
+      "Voicemail delivery: waiting for record beep (or greeting-end silence) before speaking",
     );
 
-    let trigger: "greeting-end" | "max-wait" = "max-wait";
+    let trigger: "beep" | "greeting-end" | "max-wait" = this.vmBeepHeard ? "beep" : "max-wait";
     let nextTick = Date.now() + FRAME_MS;
-    while (!this.closed) {
+    while (!this.closed && trigger !== "beep") {
       // Keep the Vobiz audio bridge alive while we wait silently.
       this.config.onAudioOut(silenceFrame);
       const now = Date.now();
+      if (this.vmBeepHeard) { trigger = "beep"; break; }
+      // Fallback: sustained silence after greeting speech ≈ beep already happened.
       if (this.vmHeardSpeech && (now - this.vmLastSpeechAt) >= margin) { trigger = "greeting-end"; break; }
       if (now - startedAt >= maxWait) { trigger = "max-wait"; break; }
       const delay = Math.max(0, nextTick - now);
@@ -6068,11 +6109,14 @@ export class OrchestrationPipeline implements VoiceSession {
         trigger,
         waitedMs: Date.now() - startedAt,
         heardGreeting: this.vmHeardSpeech,
+        beepHeard: this.vmBeepHeard,
         messagePreview: vd.message.slice(0, 80),
       },
-      trigger === "greeting-end"
+      trigger === "beep"
+        ? "Voicemail delivery: record beep heard — speaking the full message"
+        : trigger === "greeting-end"
         ? "Voicemail delivery: greeting ended — speaking the full message"
-        : "Voicemail delivery: max-wait fallback fired (no greeting end heard) — speaking the full message",
+        : "Voicemail delivery: max-wait fallback fired (no beep/greeting end) — speaking the full message",
     );
 
     // Configured Lead-in Pause: after the greeting/beep ends, wait a bit longer so a

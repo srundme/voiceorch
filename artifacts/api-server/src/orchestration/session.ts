@@ -97,8 +97,10 @@ import {
   buildCampaignLeadStateV2Shadow,
   classifyCampaignCallEnd,
   classifyCampaignHangupLegacy,
+  finalizeV2Park,
   inferExpectedDisconnect,
   isCampaignLeadStateV2Writer,
+  planV2AnsweredHangup,
   resolveCallEndedReason,
   shouldLogCampaignLeadStateV2Canary,
   shouldLogCampaignLeadStateV2Shadow,
@@ -3176,33 +3178,11 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
     if (session.campaignLeadId) {
       const leadId = session.campaignLeadId;
 
-      // A mid-conversation drop (naturalEnd=false, not transferred, duration >15s)
-      // should be retried just like a BUSY/NO_ANSWER: mark the lead "failed" and
-      // let scheduleRetry decide whether attempts remain. Without this, dropped
-      // campaign calls are silently marked "completed" and never retried.
-      const midConvDrop =
-        !markedVoicemail &&
-        !session.naturalEndTriggered &&
-        !session.wasTransferred &&
-        durationSeconds > 15;
-
-      // A confirmed voicemail counts as ONE attempt and is retryable (respecting
-      // Max Attempts / Retry Delay), exactly like a mid-conversation drop — NOT a
-      // final terminal status on the first attempt. It only "sticks" as terminal
-      // once every configured attempt has ended in voicemail (scheduleRetry then
-      // returns false). This mirrors the pre-connect webhook path, which already
-      // treats voicemail/machine as retryable.
+      // Park answered hangups with classifyCampaignCallEnd — never mark a real
+      // conversation Failed just because duration>15 and naturalEnd was false
+      // (legacy midConvDrop inflated Failed KPIs; audit: ~81% of Failed had
+      // completed call duration). Genuine media drops still retry.
       const isVoicemail = markedVoicemail || callStatus === "voicemail";
-      const shouldRetry = midConvDrop || isVoicemail;
-      const retryReason = isVoicemail ? "voicemail" : "network_drop";
-
-      const terminalLeadStatus = isVoicemail
-        ? "voicemail"
-        : session.wasTransferred
-          ? "transferred"
-          : midConvDrop
-            ? "failed"
-            : "completed";
 
       // Single sequential flow so retry scheduling, operational-outcome
       // computation, and reconcile run in a deterministic order:
@@ -3298,8 +3278,8 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         const v2Writer = isCampaignLeadStateV2Writer(campaignId);
         let retryScheduled = false;
         let retryId: number | null = null;
-        let retryReasonUsed: string | null = retryReason;
-        let parkedStatus = terminalLeadStatus;
+        let retryReasonUsed: string | null = v2Classification.proposedRetryReason;
+        let parkedStatus = v2Classification.proposedLeadStatus;
         let lastAttemptStatus = v2Classification.lastAttemptStatus;
 
         if (v2Writer) {
@@ -3331,60 +3311,71 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             return;
           }
         } else {
-        try {
-          await db.update(campaignLeadsTable)
-            .set({
-              callStatus: terminalLeadStatus,
-              lastAttemptStatus: v2Classification.lastAttemptStatus,
-            })
-            .where(eq(campaignLeadsTable.id, leadId));
-        } catch (err) {
-          logger.warn({ campaignLeadId: leadId, err }, "Failed to mark campaign lead terminal");
-          return;
-        }
-
-        void recordCallExecutionOutcome(session.callId, v2Classification.lastAttemptStatus)
-          .catch((err) => {
-            logger.warn({ campaignLeadId: leadId, callId: session.callId, err }, "Failed to record call execution outcome");
+          // Default path: same classifier as V2 for park/retry (no midConvDrop).
+          const plan = planV2AnsweredHangup({
+            answeredEver: true,
+            classification: v2Classification,
           });
-
-        // ── Schedule a retry for retryable terminal outcomes (drop / voicemail) ──
-        // Uses the same path as BUSY/NO_ANSWER so the lead is redialled if
-        // attempts remain. scheduleRetry returns false once attempts are
-        // exhausted (or a pending retry already exists) — the terminal status
-        // then "sticks".
-        if (shouldRetry) {
           try {
-            const [freshLead] = await db
-              .select({ callAttempts: campaignLeadsTable.callAttempts, campaignId: campaignLeadsTable.campaignId, batchId: campaignLeadsTable.batchId })
-              .from(campaignLeadsTable)
-              .where(eq(campaignLeadsTable.id, leadId))
-              .limit(1);
-            if (freshLead) {
-              const [camp] = await db
-                .select({ maxAttempts: campaignsTable.maxAttempts, retryDelayMinutes: campaignsTable.retryDelayMinutes })
-                .from(campaignsTable)
-                .where(eq(campaignsTable.id, freshLead.campaignId))
+            if (plan.wantsRetry && plan.retryReason) {
+              const [freshLead] = await db
+                .select({
+                  callAttempts: campaignLeadsTable.callAttempts,
+                  campaignId: campaignLeadsTable.campaignId,
+                  batchId: campaignLeadsTable.batchId,
+                })
+                .from(campaignLeadsTable)
+                .where(eq(campaignLeadsTable.id, leadId))
                 .limit(1);
-              const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(freshLead.batchId, camp);
-              retryScheduled = await import("../services/retryEngine.js")
-                .then(m => m.scheduleRetry({
-                  leadId,
-                  campaignId:         freshLead.campaignId,
-                  currentAttempts:    freshLead.callAttempts ?? 0,
-                  maxAttempts,
-                  retryDelayMinutes,
-                  reason:             retryReason,
-                }));
-              logger.info(
-                { campaignLeadId: leadId, durationSeconds, terminalLeadStatus, retryReason, retryScheduled },
-                "Campaign call terminal — retry decision",
-              );
+              if (freshLead) {
+                const [camp] = await db
+                  .select({ maxAttempts: campaignsTable.maxAttempts, retryDelayMinutes: campaignsTable.retryDelayMinutes })
+                  .from(campaignsTable)
+                  .where(eq(campaignsTable.id, freshLead.campaignId))
+                  .limit(1);
+                const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(freshLead.batchId, camp);
+                retryScheduled = await import("../services/retryEngine.js")
+                  .then((m) => m.scheduleRetry({
+                    leadId,
+                    campaignId: freshLead.campaignId,
+                    currentAttempts: freshLead.callAttempts ?? 0,
+                    maxAttempts,
+                    retryDelayMinutes,
+                    reason: plan.retryReason!,
+                  }));
+              }
             }
-          } catch (retryErr) {
-            logger.warn({ campaignLeadId: leadId, retryErr }, "Failed to schedule campaign retry");
+            const finalized = finalizeV2Park({ plan, retryOk: retryScheduled });
+            parkedStatus = finalized.callStatus;
+            lastAttemptStatus = finalized.lastAttemptStatus;
+            retryReasonUsed = plan.retryReason;
+            await db.update(campaignLeadsTable)
+              .set({
+                callStatus: parkedStatus,
+                lastAttemptStatus,
+              })
+              .where(eq(campaignLeadsTable.id, leadId));
+            logger.info(
+              {
+                campaignLeadId: leadId,
+                durationSeconds,
+                parkedStatus,
+                lastAttemptStatus,
+                retryReason: retryReasonUsed,
+                retryScheduled,
+                classifierClass: v2Classification.class,
+              },
+              "Campaign call terminal — classifier park",
+            );
+          } catch (err) {
+            logger.warn({ campaignLeadId: leadId, err }, "Failed to mark campaign lead terminal");
+            return;
           }
-        }
+
+          void recordCallExecutionOutcome(session.callId, lastAttemptStatus)
+            .catch((err) => {
+              logger.warn({ campaignLeadId: leadId, callId: session.callId, err }, "Failed to record call execution outcome");
+            });
         }
 
         let operationalOutcome: string | null = null;
@@ -3443,7 +3434,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           }
 
-          const outcomeCallStatus = v2Writer ? parkedStatus : terminalLeadStatus;
+          const outcomeCallStatus = parkedStatus;
           const outcome = computeOperationalOutcome({
             callStatus:           outcomeCallStatus,
             disposition:          v2Writer ? existingDisposition : null,

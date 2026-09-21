@@ -661,7 +661,8 @@ async function sweepStuckCallingLeads(): Promise<void> {
         const [campaign] = await db.select().from(campaignsTable)
           .where(eq(campaignsTable.id, lead.campaignId));
 
-        if (v2Writer && answeredEver) {
+        if (answeredEver) {
+          // Answered stuck sessions must never park as Failed (same rule as hangup classifier).
           if (campaign) {
             try {
               const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(lead.batchId, campaign);
@@ -675,7 +676,7 @@ async function sweepStuckCallingLeads(): Promise<void> {
               });
               retryOk = result.scheduled || result.alreadyPending;
             } catch (err) {
-              logger.error({ err, leadId: lead.id }, "V2 stuck sweep retry insert failed — parking completed");
+              logger.error({ err, leadId: lead.id }, "Stuck sweep retry insert failed — parking completed");
               retryOk = false;
             }
           }
@@ -694,11 +695,10 @@ async function sweepStuckCallingLeads(): Promise<void> {
             leadId:     lead.id,
             campaignId: lead.campaignId,
             eventType:  "call_ended",
-            data:       { callStatus: parked, reason: "stuck_calling_sweep", timeoutMs: STUCK_CALLING_TIMEOUT_MS, retryOk },
+            data:       { callStatus: parked, reason: "stuck_calling_sweep", timeoutMs: STUCK_CALLING_TIMEOUT_MS, retryOk, v2Writer },
           });
         } else {
-        // Guard the update on the lead's OWN observed status so a terminal
-        // webhook that lands between the SELECT and this UPDATE wins the race.
+        // Never-connected stuck dial — Failed is correct; offer retry.
         await db.update(campaignLeadsTable)
           .set({
             callStatus: "failed",

@@ -542,9 +542,11 @@ export class GeminiLivePipeline implements VoiceSession {
   async confirmAmdMachineThenBranch(): Promise<void> {
     if (this.closed) return;
     const action = this.config.amdConfirm?.action ?? "hangup";
-    // amdArmed with no sync hint: wait briefly for the async machine_detection callback.
+    // amdArmed with no sync hint: wait for an optional async machine_detection
+    // callback (only fires when AMD_VOBIZ_CARRIER=1). Without it, Live cannot
+    // classify acoustically — fall through to greet so humans are not dropped.
     if (this.config.amdConfirm && this.config.amdConfirm.hint !== true && this.amdExternalVerdict == null) {
-      const waitMs = 2_500;
+      const waitMs = Number(process.env["AMD_CONFIRM_WINDOW_MS"]) || 4000;
       const t0 = Date.now();
       while (!this.closed && Date.now() - t0 < waitMs && this.amdExternalVerdict == null) {
         await new Promise((r) => setTimeout(r, 50));

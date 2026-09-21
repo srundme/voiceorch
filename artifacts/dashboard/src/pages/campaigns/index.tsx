@@ -34,20 +34,19 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Copy, Check, Phone, Megaphone, ChevronRight, X,
-  PhoneCall, Clock, MoreHorizontal,
+  Clock, MoreHorizontal,
   Pencil, Trash2, Users, CalendarDays,
   CheckCircle2, PlayCircle, PauseCircle, XCircle,
   Target, Layers, ArrowRight,
   Globe, Zap, Upload, Instagram, Loader2,
   Wifi, WifiOff,
-  AlertTriangle, ShieldAlert, Timer, BookMarked,
-  Activity, ChevronDown, HelpCircle, FileText, Webhook,
-  Building2, ChevronUp, Info, Sparkles, ArrowUpRight,
+  AlertTriangle, ShieldAlert,
+  ChevronDown, HelpCircle, FileText, Webhook,
+  Building2, ChevronUp, Info, Sparkles, ArrowUpRight, Search,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { MetricCard, MetricStrip } from "@/components/metric-strip";
 import { BrandLogo, BrandLogoBadge } from "@/components/brand-logos";
 import {
   canActivateCampaign,
@@ -1645,23 +1644,23 @@ export default function CampaignsPage() {
           </div>
 
           {hasCampaigns && (
-            <div className="shrink-0">
-              <MetricStrip cols={6}>
-                <MetricCard label="Active" value={stats?.activeCampaigns ?? 0} icon={<Megaphone />} loading={isLoading} />
-                <MetricCard label="Listening" value={stats?.listeningCampaigns ?? 0} sub="Real-time intake" icon={<Wifi />} loading={isLoading} />
-                <MetricCard label="Live calls" value={stats?.liveCalls ?? 0} sub="In progress" icon={<PhoneCall />} loading={isLoading} />
-                <MetricCard label="Queued" value={stats?.queuedLeads ?? 0} sub="Pending call" icon={<Timer />} loading={isLoading} />
-                <MetricCard label="Leads" value={stats?.todayLeads ?? 0} sub="Today" icon={<Users />} loading={isLoading} />
-                <MetricCard label="Booked" value={stats?.todayBookings ?? 0} sub="Today" icon={<BookMarked />} loading={isLoading} />
-              </MetricStrip>
+            <div className="shrink-0 flex flex-wrap items-center gap-x-4 gap-y-1 px-0.5 text-xs text-muted-foreground tabular-nums">
+              <span><span className="font-semibold text-foreground">{stats?.activeCampaigns ?? 0}</span> active</span>
+              <span><span className="font-semibold text-foreground">{stats?.liveCalls ?? 0}</span> live</span>
+              <span><span className="font-semibold text-foreground">{stats?.queuedLeads ?? 0}</span> queued</span>
+              <span><span className="font-semibold text-foreground">{stats?.todayLeads ?? 0}</span> leads today</span>
+              <span><span className="font-semibold text-foreground">{stats?.todayBookings ?? 0}</span> booked</span>
+              {(stats?.listeningCampaigns ?? 0) > 0 && (
+                <span><span className="font-semibold text-foreground">{stats?.listeningCampaigns}</span> listening</span>
+              )}
             </div>
           )}
 
           {hasCampaigns && (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card">
-              <div className="flex shrink-0 flex-wrap items-center gap-2.5 border-b border-border/60 px-4 py-3">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border">
+              <div className="flex shrink-0 flex-wrap items-center gap-2.5 border-b border-border/60 px-0 py-3">
                 <div className="relative min-w-[160px] max-w-xs flex-1">
-                  <Activity className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/40" />
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/40" />
                   <input
                     className="h-8 w-full rounded-lg border border-border/60 bg-muted/40 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     placeholder="Search campaigns…"

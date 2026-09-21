@@ -100,6 +100,14 @@ export function LeadReportingTable({
                 selected ? "bg-muted" : "hover:bg-muted/40",
               )}
               onClick={() => onSelectLead?.(lead)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectLead?.(lead);
+                }
+              }}
+              role="link"
+              tabIndex={0}
             >
               <div className={cn("w-0.5 self-stretch rounded-full shrink-0", selected ? "bg-foreground" : "bg-transparent")} />
               <div className="min-w-0 flex-1">

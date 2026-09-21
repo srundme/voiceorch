@@ -1,45 +1,77 @@
 import { Skeleton } from "@/components/ui/skeleton";
-import type { CampaignReportingPayload } from "@/lib/campaign-lead-reporting";
+import type { CampaignReportingPayload, CampaignReportingView } from "@/lib/campaign-lead-reporting";
 
-function Cell({ label, value, live }: { label: string; value: number; live?: boolean }) {
-  return (
-    <div className="min-w-0">
+function Cell({
+  label,
+  value,
+  live,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  live?: boolean;
+  onClick?: () => void;
+}) {
+  const body = (
+    <>
       <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight">
+      <p className="mt-0.5 text-xl font-semibold tabular-nums tracking-tight">
         {value}
-        {live && <span className="ml-1.5 align-middle text-[10px] font-medium uppercase tracking-wider text-muted-foreground">now</span>}
+        {live && (
+          <span className="ml-1.5 align-middle text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            now
+          </span>
+        )}
       </p>
-    </div>
+    </>
   );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="min-w-0 text-left rounded-lg -m-1 p-1 hover:bg-muted/50 transition-colors cursor-pointer"
+      >
+        {body}
+      </button>
+    );
+  }
+  return <div className="min-w-0">{body}</div>;
 }
 
 export function LiveFloor({
   data,
   loading,
+  onSelect,
 }: {
   data?: CampaignReportingPayload["liveFloor"] & { retryPending: number };
   loading?: boolean;
+  onSelect?: (view: CampaignReportingView | "queued" | "calling" | "talking") => void;
 }) {
   if (loading) {
-    return <Skeleton className="h-24 w-full rounded-xl" />;
+    return <Skeleton className="h-16 w-full rounded-lg" />;
   }
   if (!data) return null;
   return (
-    <section className="rounded-xl border border-border bg-card px-5 py-4">
-      <div className="flex items-baseline justify-between gap-3 mb-4">
-        <h2 className="text-sm font-semibold">Live floor</h2>
+    <section className="border-b border-border pb-4 mb-1">
+      <div className="flex items-baseline justify-between gap-3 mb-3">
+        <h2 className="text-sm font-medium text-muted-foreground">Live</h2>
         <p className="text-xs text-muted-foreground tabular-nums">
-          Slots {data.slotsUsed} / {data.concurrencyLimit}
+          Slots {data.slotsUsed}/{data.concurrencyLimit}
           {data.availableConcurrency != null && (
             <span className="text-muted-foreground/70"> · {data.availableConcurrency} free</span>
           )}
         </p>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-        <Cell label="Queued" value={data.queued} />
-        <Cell label="Calling" value={data.calling} live />
-        <Cell label="Talking" value={data.talking} live />
-        <Cell label="Retry pending" value={data.retryPending} />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Cell label="Queued" value={data.queued} onClick={onSelect ? () => onSelect("queued") : undefined} />
+        <Cell label="Calling" value={data.calling} live onClick={onSelect ? () => onSelect("calling") : undefined} />
+        <Cell label="Talking" value={data.talking} live onClick={onSelect ? () => onSelect("talking") : undefined} />
+        <Cell
+          label="Retry"
+          value={data.retryPending}
+          onClick={onSelect ? () => onSelect("retry") : undefined}
+        />
       </div>
     </section>
   );

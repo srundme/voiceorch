@@ -161,10 +161,26 @@ export async function dialVobiz(opts: {
     // Vobiz max is 86400 s (24 h); cap to avoid 400 on large wallet balances
     body["time_limit"] = Math.min(Math.floor(opts.maxDurationSeconds), 86400);
   }
-  // NOTE: We do NOT send body["machine_detection"] = "true" to VoBiz because VoBiz's
-  // carrier-side AMD pauses the call for 5,000–10,000 ms before sending the answer webhook.
-  // SnapServe's in-pipeline acoustic Silero VAD handles AMD in real-time (<250ms)
-  // without any carrier connect delay.
+  // Carrier-side VoBiz AMD (`machine_detection=true`) delays the answer webhook
+  // by ~5–10s, so it stays OFF by default. Outbound voicemail gating runs in
+  // pipeline.confirmAmdMachineThenBranch() after the media stream opens
+  // (acoustic continuous-greeting vs short "hello?"). Set AMD_VOBIZ_CARRIER=1
+  // to also request VoBiz async machine_detection_url corroboration (accepts
+  // the connect delay).
+  if (opts.machineDetectionEnabled && process.env["AMD_VOBIZ_CARRIER"] === "1") {
+    body["machine_detection"] = "true";
+    const rawTime = Number(process.env["AMD_VOBIZ_DETECTION_TIME_MS"]) || 3000;
+    body["machine_detection_time"] = Math.min(10000, Math.max(2000, Math.floor(rawTime)));
+    if (opts.machineDetectionUrl) {
+      body["machine_detection_url"] = opts.machineDetectionUrl;
+      body["machine_detection_method"] = "POST";
+    }
+  } else if (opts.machineDetectionEnabled) {
+    logger.info(
+      { to: opts.toNumber, from: opts.fromNumber },
+      "VoBiz dial: AMD enabled — using in-pipeline acoustic confirmation (carrier machine_detection omitted; set AMD_VOBIZ_CARRIER=1 to opt in)",
+    );
+  }
   const resp = await fetch(url, {
     method: "POST",
     headers: {

@@ -525,7 +525,7 @@ export function assertV2AnsweredNotFailed(opts: {
 
 export function v2ParkNeverAnsweredFailed(opts: {
   answeredEver: boolean;
-  mappedStatus: "no_pickup" | "busy" | "failed";
+  mappedStatus: "no_pickup" | "busy" | "failed" | "voicemail";
   retryOk: boolean;
 }): string {
   if (opts.answeredEver && opts.mappedStatus === "failed") {

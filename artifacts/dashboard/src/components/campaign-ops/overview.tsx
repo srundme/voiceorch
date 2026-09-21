@@ -85,6 +85,11 @@ export function CampaignOverviewPanel({
         <LiveFloor
           loading={loading}
           data={reporting ? { ...reporting.liveFloor, retryPending: reporting.workTechnical.retryPending } : undefined}
+          onSelect={(key) => {
+            if (key === "retry") openLeads({ view: "retry" });
+            else if (key === "talking" || key === "calling") openLeads({ view: "answered" });
+            else navigate(`/app/campaigns/${campaignId}?tab=leads`);
+          }}
         />
       )}
       {reporting?.funnel && (

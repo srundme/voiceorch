@@ -392,12 +392,12 @@ function OverviewTab({ ws, campaignId, leadId, onRefresh }: {
           onSaved={onRefresh}
         />
       </div>
-      {/* AI Intelligence Panel */}
+      {/* Call intelligence */}
       {interactionSummary && (interactionSummary.latestSummary || interactionSummary.latestIntent || (interactionSummary.latestTopics?.length > 0)) && (
-        <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4 space-y-3">
+        <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-3.5 w-3.5 text-violet-500" />
-            <p className="text-[9px] font-semibold uppercase tracking-widest text-violet-500/70">AI Intelligence</p>
+            <Brain className="h-3.5 w-3.5 text-muted-foreground" />
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">Call intelligence</p>
             <div className="ml-auto flex items-center gap-1.5 flex-wrap">
               {sent && (
                 <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full border", sent.bg, sent.color)}>
@@ -405,7 +405,7 @@ function OverviewTab({ ws, campaignId, leadId, onRefresh }: {
                 </span>
               )}
               {interactionSummary.latestIntent && (
-                <span className="text-[10px] flex items-center gap-1 text-violet-600 bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 rounded-full">
+                <span className="text-[10px] flex items-center gap-1 text-muted-foreground bg-muted border border-border px-2 py-0.5 rounded-full">
                   <Target className="h-2.5 w-2.5" /> {interactionSummary.latestIntent}
                 </span>
               )}
@@ -421,7 +421,7 @@ function OverviewTab({ ws, campaignId, leadId, onRefresh }: {
           {interactionSummary.latestTopics && interactionSummary.latestTopics.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {interactionSummary.latestTopics.map((t, i) => (
-                <span key={i} className="text-[11px] bg-violet-500/10 text-violet-600/80 border border-violet-500/15 px-2 py-0.5 rounded-full">
+                <span key={i} className="text-[11px] bg-muted text-muted-foreground border border-border px-2 py-0.5 rounded-full">
                   {t}
                 </span>
               ))}
@@ -1075,7 +1075,7 @@ export default function LeadCrmWorkspacePage() {
   }
 
   const TABS: { key: CrmTab; label: string; icon: React.ReactNode; badge?: number }[] = [
-    { key: "overview",      label: "Overview",      icon: <Sparkles className="h-3 w-3"   /> },
+    { key: "overview",      label: "Overview",      icon: <User className="h-3 w-3"   /> },
     { key: "interactions",  label: "Interactions",  icon: <PhoneCall className="h-3 w-3"  />, badge: ws?.executions.length },
     { key: "timeline",      label: "Timeline",      icon: <Activity className="h-3 w-3"   /> },
     { key: "notes",         label: "Notes",         icon: <MessageSquare className="h-3 w-3" />, badge: ws?.notes.length },
@@ -1149,8 +1149,8 @@ export default function LeadCrmWorkspacePage() {
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3.5">
             {/* Avatar */}
-            <div className="h-11 w-11 rounded-full bg-gradient-to-br from-violet-500/20 to-sky-500/20 border border-border/50 flex items-center justify-center shrink-0">
-              <User className="h-5 w-5 text-muted-foreground/50" />
+            <div className="h-11 w-11 rounded-full bg-muted border border-border flex items-center justify-center shrink-0">
+              <User className="h-5 w-5 text-muted-foreground" />
             </div>
 
             {/* Identity */}

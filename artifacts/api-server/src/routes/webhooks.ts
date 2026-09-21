@@ -112,12 +112,17 @@ const FAILED_STATUSES = new Set<string>([
   "failed", "fail", "canceled", "cancelled", "cancel", "congestion",
   "rejected", "declined", "call-rejected", "unallocated", "unallocated-number",
   "error", "invalid", "invalid-number", "no-route-destination",
-  "no-route-to-destination", "machine", "voicemail", "blocked", "forbidden",
+  "no-route-to-destination", "blocked", "forbidden",
+]);
+
+/** AMD / machine detection — park as voicemail, not Failed. */
+const VOICEMAIL_STATUSES = new Set<string>([
+  "machine", "voicemail", "answering-machine", "amd_machine",
 ]);
 
 /**
  * Map a raw telephony call status to the campaign lead callStatus value.
- *  - a terminal non-connected status → "no_pickup" | "busy" | "failed"
+ *  - a terminal non-connected status → "no_pickup" | "busy" | "failed" | "voicemail"
  *  - a still-progressing / connected status → "ignore" (owned by endSession)
  *  - anything unrecognized → null (caller decides based on the lead's state)
  *
@@ -126,11 +131,12 @@ const FAILED_STATUSES = new Set<string>([
  * than silently swallowed — an unmapped terminal status used to leave the lead
  * stuck in "calling", inflating the active count and starving rolling refill.
  */
-function mapRawStatusToLeadStatus(raw: string): "no_pickup" | "busy" | "failed" | "ignore" | null {
+function mapRawStatusToLeadStatus(raw: string): "no_pickup" | "busy" | "failed" | "voicemail" | "ignore" | null {
   const s = normalizeRawStatus(raw);
   if (NON_TERMINAL_OR_CONNECTED_STATUSES.has(s)) return "ignore";
   if (s === "busy" || s === "busy-here" || s === "user-busy" || s === "user-busy-here") return "busy";
   if (NO_PICKUP_STATUSES.has(s)) return "no_pickup";
+  if (VOICEMAIL_STATUSES.has(s)) return "voicemail";
   if (FAILED_STATUSES.has(s)) return "failed";
   return null;
 }
@@ -170,7 +176,7 @@ async function handleCampaignLeadTerminalStatus(opts: {
   // is still 'calling' (never connected) is treated as a non-connected failure
   // so the slot is freed and rolling refill is not starved. If the lead has
   // 'connected', endSession() owns its terminal transition — leave it alone.
-  let leadStatus: "no_pickup" | "busy" | "failed";
+  let leadStatus: "no_pickup" | "busy" | "failed" | "voicemail";
   if (mapped === null) {
     if (lead.callStatus === "connected") {
       logger.info({ campaignLeadId, rawCallStatus }, "Campaign lead terminal status: unknown status on a connected lead — deferring to endSession");
