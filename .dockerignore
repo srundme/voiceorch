@@ -6,11 +6,13 @@ node_modules
 **/node_modules
 **/.tsbuildinfo
 **/dist
-# Keep vendored AEC3 WASM package (file: dep) in the Docker build context.
+# Vendored AEC3 WASM must be in the image (file: dependency + runtime resolve).
 !vendor/
 !vendor/@ennuicastr/
 !vendor/@ennuicastr/webrtcaec3.js/
 !vendor/@ennuicastr/webrtcaec3.js/**
+!vendor/@ennuicastr/webrtcaec3.js/dist/
+!vendor/@ennuicastr/webrtcaec3.js/dist/**
 attached_assets
 mockups
 *.md
