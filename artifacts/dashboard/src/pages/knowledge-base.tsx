@@ -82,9 +82,36 @@ type KnowledgeSourceView = KnowledgeSource & {
 
 function sourceStatusMeta(source: KnowledgeSourceView) {
   if (source.indexing) return { label: "Indexing…", color: "text-muted-foreground", spin: true as const };
-  if (source.indexingBlocked) return { label: "Keyword search only", color: "text-amber-600 dark:text-amber-500", spin: false as const };
+  // Hybrid FTS still answers on calls even if embeddings are catching up — never
+  // brand the pack as "paused" / keyword-only in the primary badge.
   if (source.needsAttention) return { label: "Needs attention", color: "text-muted-foreground", spin: false as const };
   return STATUS_META[source.status] ?? STATUS_META["ready"]!;
+}
+
+/** Live call path — gate + contextual query + hybrid retrieval (production). */
+function SmartKbHowItWorks() {
+  return (
+    <div className="rounded-xl border border-border bg-card/60 px-4 py-3.5 space-y-2.5">
+      <div className="flex items-center gap-2">
+        <Brain className="w-4 h-4 text-foreground shrink-0" />
+        <p className="text-sm font-medium text-foreground">Smart Knowledge is live on calls</p>
+      </div>
+      <ul className="grid gap-1.5 sm:grid-cols-3 text-[11px] leading-snug text-muted-foreground">
+        <li className="flex gap-1.5">
+          <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+          <span>Matches meaning and keywords together</span>
+        </li>
+        <li className="flex gap-1.5">
+          <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+          <span>Skips small talk — retrieves only when the caller asks a fact</span>
+        </li>
+        <li className="flex gap-1.5">
+          <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+          <span>Keeps the product/topic in mind for follow-ups (“what about transport?”)</span>
+        </li>
+      </ul>
+    </div>
+  );
 }
 
 /* ── Source Card ─────────────────────────────────────────────────────────── */
@@ -726,10 +753,12 @@ function TestPanel({ sourceId }: { sourceId: number }) {
   return (
     <div className="border border-border rounded-xl p-5 bg-card space-y-4">
       <div className="flex items-center gap-2">
-        <FlaskConical className="w-4 h-4 text-primary" />
+        <FlaskConical className="w-4 h-4 text-foreground" />
         <div>
           <h3 className="font-semibold text-sm">Test search</h3>
-          <p className="text-[11px] text-muted-foreground">Uses the same search as live calls</p>
+          <p className="text-[11px] text-muted-foreground">
+            Same hybrid search as live calls (gate + context apply on the phone)
+          </p>
         </div>
       </div>
 
@@ -748,10 +777,10 @@ function TestPanel({ sourceId }: { sourceId: number }) {
 
       {data && (
         <div className="space-y-4">
-          <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+          <div className="bg-muted/40 border border-border rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
-              <Brain className="w-3.5 h-3.5 text-primary" />
-              <span className="text-xs font-medium text-primary">
+              <Brain className="w-3.5 h-3.5 text-foreground" />
+              <span className="text-xs font-medium text-foreground">
                 What the agent would see
                 {data.mode ? <span className="text-muted-foreground font-normal"> · {data.mode}</span> : null}
               </span>
@@ -915,17 +944,10 @@ function DetailView({ sourceId, onBack }: { sourceId: number; onBack: () => void
           Importing website pages. This updates automatically.
         </div>
       )}
-      {source.indexingBlocked && (
-        <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 text-sm text-foreground">
-          <XCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-500" />
-          <div>
-            <p className="font-medium">Smart matching paused — using keyword search</p>
-            <p className="text-muted-foreground text-xs mt-0.5">
-              {source.indexingError ?? "The embedding provider is unavailable."} Your agents still
-              answer from this pack using keyword search. Indexing resumes automatically once the
-              provider works again.
-            </p>
-          </div>
+      {source.indexing && (
+        <div className="flex items-center gap-3 bg-muted/50 border border-border rounded-lg px-4 py-3 text-sm text-foreground">
+          <Loader2 className="w-4 h-4 animate-spin shrink-0 text-muted-foreground" />
+          Building smart match index… Agents can already use this pack on calls.
         </div>
       )}
       {(source.needsAttention || source.status === "partial") && source.status !== "crawling" && (
@@ -1029,7 +1051,7 @@ export default function KnowledgeBasePage() {
   return (
     <StripePage
       title="Knowledge"
-      description="Teach your agents facts from text, files, or a website — then attach a pack on the agent."
+      description="Smart Knowledge on live calls: meaning match, ask-only retrieve, and follow-up context. Attach a pack on the agent."
       actions={
         <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
           <Plus className="w-3.5 h-3.5" />
@@ -1037,6 +1059,10 @@ export default function KnowledgeBasePage() {
         </Button>
       }
     >
+      <div className="mb-5">
+        <SmartKbHowItWorks />
+      </div>
+
       {/* Source grid */}
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1047,7 +1073,7 @@ export default function KnowledgeBasePage() {
           variant="hero"
           icon={<BookOpen />}
           title="No knowledge yet"
-          description="Paste text, upload a document, or import a website — then attach it on an agent so callers get accurate answers."
+          description="Paste text, upload a document, or import a website — Smart Knowledge will answer caller facts from it on the call."
           action={{
             label: "Add your first pack",
             onClick: () => setCreateOpen(true),
@@ -1077,6 +1103,10 @@ export default function KnowledgeBasePage() {
           <span className="flex items-center gap-1.5">
             <FileText className="w-3.5 h-3.5 text-muted-foreground" />
             {sources.reduce((s, x) => s + x.entryCount, 0)} total pieces
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Brain className="w-3.5 h-3.5 text-muted-foreground" />
+            Smart match · ask-only · follow-up context
           </span>
         </div>
       )}

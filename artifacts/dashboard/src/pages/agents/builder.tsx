@@ -1043,7 +1043,7 @@ function OverviewTab({
               }
             >
               <p className="text-[12px] leading-relaxed text-muted-foreground">
-                Documents searched during live calls and injected into context.
+                Smart Knowledge on live calls: meaning match, skips small talk, keeps topic for follow-ups.
               </p>
               <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
                 <FormItem className="mt-3 space-y-0">
