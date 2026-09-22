@@ -1,15 +1,14 @@
 /**
  * Streaming 8 kHz PCM → leftover buffer → upsample → exact Silero 16 kHz frames.
  *
- * VoBiz inbound chunks are not aligned to Silero's 512-sample window. Leftover
- * PCM is kept between WebSocket messages. The ONNX session is process-global
- * (silero-vad.ts); this adapter is per-call.
+ * Used on the classic pipeline for advisory caller_speaking / soft-duck fusion.
+ * Never gates the STT feed. VoBiz inbound chunks are not aligned to Silero's
+ * 512-sample window — leftover PCM is kept between WebSocket messages.
  */
 
-import { upsample8to16 } from "../orchestration/audio.js";
-import { SileroVAD } from "../orchestration/silero-vad.js";
-import { HysteresisVad, type VadFrameResult } from "./hysteresis-vad.js";
-import { resolveSileroHysteresis } from "./voice-engine-flag.js";
+import { upsample8to16 } from "./audio.js";
+import { SileroVAD } from "./silero-vad.js";
+import { HysteresisVad, resolveSileroHysteresis, type VadFrameResult } from "./hysteresis-vad.js";
 
 /** 256 samples @ 8 kHz = 512 samples @ 16 kHz = one Silero window (32 ms). */
 export const SILERO_FRAME_8K_SAMPLES = 256;

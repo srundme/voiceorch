@@ -102,6 +102,7 @@ import {
 } from "./kb-phase3-flags.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { getBackchannelFillers, pickBackchannelFiller, rememberFillerPhrase, type BackchannelFillerOptions } from "./backchannel.js";
+import { ClassicTurnCoordinator } from "./classic-turn-coordinator.js";
 import { ConversationHistory } from "./conversation-history.js";
 import { performance } from "perf_hooks";
 import {
@@ -172,7 +173,7 @@ import {
   type BargeStrength,
   type ExpectedSlot,
 } from "./turn-acceptance.js";
-import { SileroStream } from "../voice_engine/silero-stream.js";
+import { SileroStream } from "./silero-stream.js";
 import type { AecFrameDiagnostics } from "./audioPool.js";
 import {
   executeIntakeDisposition,
@@ -1550,6 +1551,11 @@ export class OrchestrationPipeline implements VoiceSession {
   } | null = null;
   /** Bolna-parity interruption manager (sequence ids + grace gating). */
   private interruptionMgr: InterruptionManager;
+  /**
+   * Phase 1 turn routing facade — sole entry for conversational interrupt +
+   * caller commit. Policies remain in existing helpers.
+   */
+  private turnCoord: ClassicTurnCoordinator;
   /** Sequence id for the in-flight agent reply turn. */
   private activeAgentSequenceId = 0;
   /** Active TTS fetch abort controllers — aborted on barge-in teardown. */
@@ -1782,6 +1788,7 @@ export class OrchestrationPipeline implements VoiceSession {
     this.pendingPartialBargeText = "";
     this.clearSoftDuckTimer();
     this._softBargePending = null;
+    this.turnCoord.clearFillerParent();
     // Cheap cancel: sequence_id is the hard boundary. Invalidate N first so
     // in-flight TTS tagged N cannot emit, then mute the carrier, then abort
     // synth / LLM. Do not wait for drainPlaybackTail.
@@ -1966,7 +1973,11 @@ export class OrchestrationPipeline implements VoiceSession {
     const aecDt = this._aecDiag?.doubleTalk === true;
     if (fusion.speaking || aecDt) {
       this._softBargePending = null;
-      this.triggerBargeIn(pending.trigger, pending.partial);
+      this.turnCoord.requestInterrupt({
+        trigger: pending.trigger,
+        partial: pending.partial,
+        forceHard: true,
+      });
       return;
     }
     // Click / shop noise — restore full TTS gain, mark weak evidence for crosstalk.
@@ -2359,6 +2370,7 @@ export class OrchestrationPipeline implements VoiceSession {
       const agentAudioLive = this.isPlaying || this.isSendingTtsAudio;
       if (!(agentAudioLive && this.streamingBargeInWordCount === 0)) {
         this.interruptionMgr.onUserSpeechStart();
+        this.turnCoord.noteCallerSpeech();
       }
       this.handleSttSpeechResumed();
     };
@@ -2495,7 +2507,7 @@ export class OrchestrationPipeline implements VoiceSession {
       hasUsablePartial: usable,
       isHardInterrupt: hard,
     })) return;
-    this.requestBargeIn("vad_speech_start", partial);
+    this.turnCoord.requestInterrupt({ trigger: "vad_speech_start", partial });
   }
 
   /**
@@ -2568,7 +2580,7 @@ export class OrchestrationPipeline implements VoiceSession {
       isHardInterrupt: hard,
     })) return;
     if (!this.shouldInterruptFromCallerTranscript(partial)) return;
-    this.requestBargeIn("stt_partial", partial);
+    this.turnCoord.requestInterrupt({ trigger: "stt_partial", partial });
   }
 
   private clearBargeRecovery(): void {
@@ -3337,6 +3349,25 @@ export class OrchestrationPipeline implements VoiceSession {
     this.interruptionMgr = new InterruptionManager({
       wordsForInterruption: config.agentConfig.wordsForInterruption ?? 3,
     });
+    this.turnCoord = new ClassicTurnCoordinator({
+      callId: config.callId,
+      getMediaEpoch: () => this.config.getMediaEpoch?.() ?? 1,
+      getResponseId: () => this.interruptionMgr.currentSequenceId(),
+      isResponseValid: (id) => this.interruptionMgr.isValidSequence(id),
+      executeConversationalInterrupt: (req) => {
+        this.requestBargeIn(req.trigger, req.partial, {
+          speculative: req.speculative,
+          energyDetails: req.energyDetails,
+        });
+      },
+      executeHardInterrupt: (req) => {
+        this.triggerBargeIn(req.trigger, req.partial, {
+          speculative: req.speculative,
+          energyDetails: req.energyDetails,
+        });
+      },
+      executeCommit: (req) => this.processTurn(req.transcript, req.sttLatencyMs),
+    });
     // Detection only makes sense when {caller_salutation} is actually in the prompt —
     // otherwise there is nothing to fill in and we must NOT call the gender service.
     this.genderSalutationInPrompt =
@@ -4003,7 +4034,7 @@ export class OrchestrationPipeline implements VoiceSession {
         !this.isSameUtteranceStillArriving(transcript)
         && (hard || this.shouldInterruptFromCallerTranscript(transcript))
       ) {
-        this.requestBargeIn("word_count", transcript);
+        this.turnCoord.requestInterrupt({ trigger: "word_count", partial: transcript });
         logger.info(
           { callId: this.config.callId, transcript: transcript.slice(0, 80) },
           "Barge-in detected (streaming STT final + InterruptionManager)",
@@ -4362,7 +4393,7 @@ export class OrchestrationPipeline implements VoiceSession {
         return;
       }
       if (this.bargeInEnabled && !this.bargeInRequested && this.shouldInterruptFromCallerTranscript(transcript)) {
-        this.requestBargeIn("queued_final", transcript);
+        this.turnCoord.requestInterrupt({ trigger: "queued_final", partial: transcript });
       }
       if (!this.interruptReplyArmed) {
         this.pendingTranscriptQueue = [];
@@ -4483,7 +4514,11 @@ export class OrchestrationPipeline implements VoiceSession {
 
     this.isProcessing = true;
     try {
-      await this.processTurn(transcript, 0);
+      await this.turnCoord.requestCommit({
+        source: ClassicTurnCoordinator.commitSourceFromCloseReason(closeReason),
+        transcript,
+        sttLatencyMs: 0,
+      });
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Turn error (streaming STT)");
     } finally {
@@ -9598,6 +9633,7 @@ export class OrchestrationPipeline implements VoiceSession {
           "Tool hold spoken before LLM (forced booking tool)",
         );
         enqueue(hold, FILLER_SEQUENCE_ID);
+        this.turnCoord.bindFillerToResponse(this.activeAgentSequenceId);
         this._fillerPlayedThisTurn = true;
         toolHoldSpokenThisTurn = true;
       }
@@ -9705,6 +9741,7 @@ export class OrchestrationPipeline implements VoiceSession {
                 "Backchannel filler selected (language-aware)",
               );
               enqueue(phrase, FILLER_SEQUENCE_ID);
+              this.turnCoord.bindFillerToResponse(this.activeAgentSequenceId);
               backchanneledThisTurn = true;
               this._fillerPlayedThisTurn = true;
               this.fillerPlayedCount++;
@@ -10290,6 +10327,7 @@ export class OrchestrationPipeline implements VoiceSession {
             "Dead-air filler enqueued (language-aware, LLM > filler threshold)",
           );
           enqueue(phrase, FILLER_SEQUENCE_ID);
+          this.turnCoord.bindFillerToResponse(this.activeAgentSequenceId);
           this.fillerPlayedCount++;
           this._fillerPlayedThisTurn = true;
         }
@@ -10951,6 +10989,7 @@ export class OrchestrationPipeline implements VoiceSession {
           "Tool filler enqueued (language-aware)",
         );
         enqueue(filler, FILLER_SEQUENCE_ID);
+        this.turnCoord.bindFillerToResponse(this.activeAgentSequenceId);
       } else if (!filler) {
         logger.info(
           { callId: this.config.callId, fillerType: "tool", language: langPrefix },
@@ -11345,7 +11384,11 @@ export class OrchestrationPipeline implements VoiceSession {
       this._turnCloseReason = "stt_final";
       this.clearEagerPartialTimer();
       this.interruptionMgr.onUserSpeechEnd();
-      await this.processTurn(transcript, sttLatencyMs);
+      await this.turnCoord.requestCommit({
+        source: "batch_stt",
+        transcript,
+        sttLatencyMs,
+      });
 
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Pipeline error");
@@ -11934,6 +11977,7 @@ export class OrchestrationPipeline implements VoiceSession {
           "Post-tool dead-air filler enqueued",
         );
         enqueue(phrase, FILLER_SEQUENCE_ID);
+        this.turnCoord.bindFillerToResponse(this.activeAgentSequenceId);
         this.fillerPlayedCount++;
         this._fillerPlayedThisTurn = true;
       }, FILLER_THRESHOLD_MS);
@@ -12407,7 +12451,11 @@ export class OrchestrationPipeline implements VoiceSession {
       return;
     }
     this.isProcessing = true;
-    void this.processTurn(line, 0)
+    void this.turnCoord.requestCommit({
+      source: "meeting_chat",
+      transcript: line,
+      sttLatencyMs: 0,
+    })
       .catch((err) => {
         logger.error({ callId: this.config.callId, err }, "Meeting chat turn error");
       })
@@ -12417,7 +12465,11 @@ export class OrchestrationPipeline implements VoiceSession {
         const next = this.drainPendingTranscripts();
         if (next) {
           this.isProcessing = true;
-          void this.processTurn(next.text, 0)
+          void this.turnCoord.requestCommit({
+            source: "queued_drain",
+            transcript: next.text,
+            sttLatencyMs: 0,
+          })
             .catch((err) => {
               logger.error({ callId: this.config.callId, err }, "Queued turn error after meeting chat");
             })

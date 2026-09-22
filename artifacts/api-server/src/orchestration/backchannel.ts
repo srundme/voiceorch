@@ -1,20 +1,73 @@
 // Fillers play BEFORE the LLM reply is known, so positive acknowledgements stay
 // off questions and refusals where they could sound like agreement.
+//
+// Pools are short, human phone-style covers — varied by caller-turn context so
+// the same "Hmm / Okay" loop does not dominate a call.
 
-/** Pure listening sounds — safe before any answer polarity. */
-const ENGLISH_LISTENING_FILLERS = ["Hmm.", "Mmm."];
-const TAMIL_LISTENING_FILLERS = ["ம்.", "ஹ்ம்ம்."];
+export type BackchannelContext = "risky" | "story" | "numeric" | "neutral";
 
-/** Soft ack — only when the caller turn is not a question / risk turn. */
-const ENGLISH_SOFT_ACK_FILLERS = ["Okay.", "Hmm.", "Mmm."];
-// Tamil LLMs already open with "சரி," / "seri" — a சரி cover makes "seri seri".
-const TAMIL_SOFT_ACK_FILLERS = ["ம்.", "ஹ்ம்ம்."];
+/** Pure listening — safe before any answer polarity. */
+const ENGLISH_LISTENING_FILLERS = [
+  "Hmm.",
+  "Mmm.",
+  "Mhmm.",
+  "Mm-hmm.",
+  "Uh-huh.",
+];
 
-/** Share of safe-statement backchannels that should be "Okay." */
-export const SOFT_ACK_OKAY_WEIGHT = 0.8;
+const TAMIL_LISTENING_FILLERS = [
+  "ம்.",
+  "ஹ்ம்ம்.",
+  "ம்ம்.",
+  "ஹ்ம்.",
+];
+
+/**
+ * Soft engage — only when the caller turn is not a question / risk turn.
+ * Avoid language acks the LLM already opens with (Tamil "சரி").
+ */
+const ENGLISH_SOFT_ACK_FILLERS = [
+  "Okay.",
+  "Got it.",
+  "I see.",
+  "Right.",
+  "Alright.",
+  "Mhm.",
+  "Mm-hmm.",
+];
+
+const ENGLISH_STORY_FILLERS = [
+  "I see.",
+  "Got it.",
+  "Right.",
+  "Mhm.",
+  "Mm-hmm.",
+  "Okay.",
+  "Uh-huh.",
+];
+
+const ENGLISH_NUMERIC_FILLERS = [
+  "Okay.",
+  "Got it.",
+  "Mhm.",
+  "Right.",
+  "Mm-hmm.",
+];
+
+// Tamil LLMs already open with "சரி," / "seri" — keep soft covers as listen sounds.
+const TAMIL_SOFT_ACK_FILLERS = [
+  "ம்.",
+  "ஹ்ம்ம்.",
+  "ம்ம்.",
+  "ஹ்ம்.",
+  "ஓ.",
+];
+
+/** @deprecated Prefer uniform pick + recent-avoid; kept for callers that still import it. */
+export const SOFT_ACK_OKAY_WEIGHT = 0.35;
 
 /** How many recent fillers to avoid repeating (ring buffer). */
-export const FILLER_RECENT_AVOID = 3;
+export const FILLER_RECENT_AVOID = 5;
 
 /** Split the agents.backchannel_phrases text column into spoken cover fillers. */
 export function parseBackchannelPhrases(raw: string | null | undefined): string[] | null {
@@ -44,9 +97,10 @@ export function isRiskyFillerContext(transcript: string): boolean {
 
   if (t.endsWith("?")) return true;
 
-  // Questions / capability / availability (any language markers we care about)
+  // Questions / capability / availability — avoid bare is/are/do (too common in statements).
   if (
-    /\b(what|why|when|where|how|who|can|could|would|will|is|are|do|does|did|may|might)\b/i.test(t)
+    /\b(what|why|when|where|how|who|can|could|would|may|might)\b/i.test(t)
+    || /^(will|is|are|do|does|did|have|has)\b/i.test(t)
     || /\b(என்ன|எப்போ|ஏன்|எப்படி|யாரு|இருக்கா|வருமா|முடியுமா|கிடைக்குமா|இருக்காங்களா)\b/i.test(t)
     || /\b(क्या|कब|कहाँ|क्यों|कैसा|कैसे|है\s*क्या|मिल\s*सकता)\b/i.test(t)
   ) {
@@ -66,7 +120,36 @@ export function isRiskyFillerContext(transcript: string): boolean {
 }
 
 /**
- * Resolve the backchannel filler set (okay / hmm / mmm only).
+ * Bucket the caller turn so fillers feel situational instead of a fixed 3-word loop.
+ */
+export function classifyBackchannelContext(transcript: string | null | undefined): BackchannelContext {
+  const t = transcript?.trim() || "";
+  if (!t || isRiskyFillerContext(t)) return "risky";
+
+  if (
+    /\d|₹|\$|rs\.?\b|rupees?|lakh|crore|percent|%|\b(am|pm)\b/i.test(t)
+    || /\b(today|tomorrow|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(t)
+    || /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b/i.test(t)
+    || /\b\d{1,2}[\/\-.]\d{1,2}([\/\-.]\d{2,4})?\b/.test(t)
+    || /\b(நாளை|நேத்து|இன்னைக்கு|ரூபாய்|லட்சம்|கோடி)\b/i.test(t)
+  ) {
+    return "numeric";
+  }
+
+  const wordCount = t.split(/\s+/).filter(Boolean).length;
+  if (
+    wordCount >= 12
+    || /\b(and then|after that|also|because|so i|i was|we were|first|second|then i|plus)\b/i.test(t)
+    || /\b(அப்பறம்|அப்புறம்|கூடவே|அதனால|முதல்ல|அடுத்தது)\b/i.test(t)
+  ) {
+    return "story";
+  }
+
+  return "neutral";
+}
+
+/**
+ * Resolve the backchannel filler set for the current language + caller context.
  */
 export function getBackchannelFillers(
   language: string | null | undefined,
@@ -78,16 +161,23 @@ export function getBackchannelFillers(
 
   if (!language) return [];
   const isTamil = !opts?.englishStrictAck && language.toLowerCase().split("-")[0] === "ta";
-  const listeningFillers = isTamil ? TAMIL_LISTENING_FILLERS : ENGLISH_LISTENING_FILLERS;
-  const softAckFillers = isTamil ? TAMIL_SOFT_ACK_FILLERS : ENGLISH_SOFT_ACK_FILLERS;
-  const transcript = opts?.callerTranscript?.trim() || "";
+  const context = classifyBackchannelContext(opts?.callerTranscript);
 
-  // Unknown next-sentence polarity → listening only (safe before "no").
-  if (!transcript || isRiskyFillerContext(transcript)) {
-    return [...listeningFillers];
+  if (isTamil) {
+    if (context === "risky") return [...TAMIL_LISTENING_FILLERS];
+    return [...TAMIL_SOFT_ACK_FILLERS];
   }
 
-  return [...softAckFillers];
+  switch (context) {
+    case "risky":
+      return [...ENGLISH_LISTENING_FILLERS];
+    case "story":
+      return [...ENGLISH_STORY_FILLERS];
+    case "numeric":
+      return [...ENGLISH_NUMERIC_FILLERS];
+    default:
+      return [...ENGLISH_SOFT_ACK_FILLERS];
+  }
 }
 
 function nextRandom(opts?: BackchannelFillerOptions): number {
@@ -98,18 +188,9 @@ function pickFrom(choices: string[], opts?: BackchannelFillerOptions): string {
   return choices[Math.floor(nextRandom(opts) * choices.length)]!;
 }
 
-function pickListeningFiller(
-  choices: string[],
-  recent: string[],
-  opts?: BackchannelFillerOptions,
-): string {
-  const filtered = choices.filter((p) => !recent.includes(p.trim().toLowerCase()));
-  return pickFrom(filtered.length > 0 ? filtered : choices, opts);
-}
-
 /**
  * Pick one filler for the language, or null when none is available.
- * Safe statements: 80% Okay, 20% Hmm/Mmm. Questions / refusals stay listening-only.
+ * Uses context pools + recent-avoid so covers stay human and non-repetitive.
  */
 export function pickBackchannelFiller(
   language: string | null | undefined,
@@ -123,14 +204,6 @@ export function pickBackchannelFiller(
   const recent = (Array.isArray(lastPhrase) ? lastPhrase : lastPhrase ? [lastPhrase] : [])
     .map((p) => p.trim().toLowerCase())
     .filter(Boolean);
-
-  const usingCustom = Boolean(opts?.customFillers && opts.customFillers.length > 0);
-  const positiveAck = pool.includes("Okay.") ? "Okay." : null;
-  if (!usingCustom && positiveAck) {
-    if (nextRandom(opts) < SOFT_ACK_OKAY_WEIGHT) return positiveAck;
-    const listening = pool.filter((phrase) => phrase !== positiveAck);
-    return pickListeningFiller(listening, recent, opts);
-  }
 
   let choices = pool;
   if (recent.length > 0) {

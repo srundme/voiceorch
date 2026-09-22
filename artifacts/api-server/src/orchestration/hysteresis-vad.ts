@@ -24,6 +24,30 @@ export type HysteresisVadConfig = {
   endFrames: number;
 };
 
+export const DEFAULT_SILERO_START_THRESHOLD = 0.5;
+export const DEFAULT_SILERO_END_THRESHOLD = 0.35;
+export const DEFAULT_SILERO_START_FRAMES = 2;
+export const DEFAULT_SILERO_END_FRAMES = 3;
+
+function envNumber(name: string, def: number, min: number, max: number, env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env[name];
+  if (raw == null || raw.trim() === "") return def;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return def;
+  return Math.min(max, Math.max(min, n));
+}
+
+/** Env-tunable hysteresis for classic-path Silero advisory. */
+export function resolveSileroHysteresis(env: NodeJS.ProcessEnv = process.env): HysteresisVadConfig {
+  return {
+    startThreshold: envNumber("SILERO_START_THRESHOLD", DEFAULT_SILERO_START_THRESHOLD, 0.1, 0.95, env),
+    endThreshold: envNumber("SILERO_END_THRESHOLD", DEFAULT_SILERO_END_THRESHOLD, 0.05, 0.9, env),
+    // Spec: a single frame must not start or stop speech.
+    startFrames: Math.max(2, Math.round(envNumber("SILERO_START_FRAMES", DEFAULT_SILERO_START_FRAMES, 2, 12, env))),
+    endFrames: Math.max(2, Math.round(envNumber("SILERO_END_FRAMES", DEFAULT_SILERO_END_FRAMES, 2, 16, env))),
+  };
+}
+
 export class HysteresisVad {
   private state: VadHysteresisState = "SILENCE";
   private run = 0;

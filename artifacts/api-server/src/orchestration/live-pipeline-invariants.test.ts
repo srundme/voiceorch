@@ -127,7 +127,8 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(methodBody("schedulePartialBargeIn")).toContain("shouldInterruptFromCallerTranscript");
     expect(methodBody("schedulePartialBargeIn")).toContain("isCarrierSelfEcho");
     expect(methodBody("schedulePartialBargeIn")).not.toContain("SELF_ECHO_MIN_WORDS");
-    expect(methodBody("schedulePartialBargeIn")).toContain("requestBargeIn");
+    expect(methodBody("schedulePartialBargeIn")).toContain("turnCoord.requestInterrupt");
+    expect(methodBody("maybeBargeFromRealtimeVadStart")).toContain("turnCoord.requestInterrupt");
     expect(pipelineSrc).toContain("beginSoftDuck");
     expect(pipelineSrc).toContain("preferSoftDuckBeforeBarge");
     expect(pipelineSrc).toContain("SileroStream");
@@ -142,6 +143,15 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).toContain("evaluateTurnAcceptance");
     expect(pipelineSrc).toContain("voice_canary_turn_acceptance");
     expect(pipelineSrc).toContain("resolveTurnAcceptanceMode");
+    // Phase 1 ClassicTurnCoordinator — sole commit/interrupt routing facade.
+    expect(pipelineSrc).toContain("ClassicTurnCoordinator");
+    expect(pipelineSrc).toContain("this.turnCoord = new ClassicTurnCoordinator");
+    expect(pipelineSrc).toContain("turnCoord.requestCommit");
+    expect(pipelineSrc).toContain("bindFillerToResponse");
+    // External call sites must not bypass the coordinator.
+    expect(pipelineSrc).not.toMatch(/this\.requestBargeIn\(\s*"/);
+    expect(pipelineSrc).not.toMatch(/await this\.processTurn\(/);
+    expect(pipelineSrc).not.toMatch(/void this\.processTurn\(/);
     expect(methodBody("isEagerPartialReady")).toContain("isEagerCommitReady");
     expect(methodBody("handleStreamingTranscript")).toContain("collectionHoldMsForTranscript");
     expect(methodBody("handleStreamingTranscript")).toContain("agent_still_speaking");

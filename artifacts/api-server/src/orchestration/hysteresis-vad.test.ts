@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HysteresisVad } from "./hysteresis-vad.js";
+import { HysteresisVad, resolveSileroHysteresis } from "./hysteresis-vad.js";
 
 const cfg = { startThreshold: 0.5, endThreshold: 0.35, startFrames: 2, endFrames: 3 };
 
@@ -36,5 +36,15 @@ describe("HysteresisVad", () => {
     const resumed = vad.push(0.7);
     expect(resumed.state).toBe("SPEECH");
     expect(resumed.event).toBe("SPEECH_CONTINUE");
+  });
+});
+
+describe("resolveSileroHysteresis", () => {
+  it("uses Silero-like thresholds and refuses a 1-frame start/stop", () => {
+    const h = resolveSileroHysteresis({ SILERO_START_FRAMES: "1", SILERO_END_FRAMES: "1" });
+    expect(h.startThreshold).toBe(0.5);
+    expect(h.endThreshold).toBe(0.35);
+    expect(h.startFrames).toBe(2);
+    expect(h.endFrames).toBe(2);
   });
 });
