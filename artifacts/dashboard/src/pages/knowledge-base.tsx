@@ -71,8 +71,6 @@ const NON_TERMINAL_STATUSES = new Set(["validating", "processing", "crawling"]);
 /** List/detail rows may include enrichments from the API (optional for older clients). */
 type KnowledgeSourceView = KnowledgeSource & {
   indexing?: boolean;
-  indexingBlocked?: boolean;
-  indexingError?: string | null;
   needsAttention?: boolean;
   failedPageCount?: number;
   attachedAgentCount?: number;
@@ -82,8 +80,6 @@ type KnowledgeSourceView = KnowledgeSource & {
 
 function sourceStatusMeta(source: KnowledgeSourceView) {
   if (source.indexing) return { label: "Indexing…", color: "text-muted-foreground", spin: true as const };
-  // Hybrid FTS still answers on calls even if embeddings are catching up — never
-  // brand the pack as "paused" / keyword-only in the primary badge.
   if (source.needsAttention) return { label: "Needs attention", color: "text-muted-foreground", spin: false as const };
   return STATUS_META[source.status] ?? STATUS_META["ready"]!;
 }
