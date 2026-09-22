@@ -87,7 +87,8 @@ export interface IntakeSubmitTool {
 /**
  * Sensible default farewell spoken when a call is ended by the AI (built-in
  * end_call tool or an end-call phrase) and the agent has no custom
- * `goodbyeMessage` configured. Prevents calls from dropping silently.
+ * `goodbyeMessage` configured. Prefer skipping when the LLM already closed.
+ * Kept for intake / silent-turn fallback only — not forced on every hangup.
  */
 export const DEFAULT_GOODBYE_MESSAGE = "Thank you for calling. Have a great day. Goodbye!";
 
@@ -113,25 +114,25 @@ export function defaultGoodbyeMessage(language?: string | null): string {
 }
 
 /**
- * Resolve the spoken goodbye for an AI-driven end-call in a single, consistent
- * priority order so every end-call path behaves identically:
- *   1. The `end_call` tool's own `goodbyeMessage` (most specific — wins if set)
- *   2. A non-stub End Call Phrase (skip detectors like "thankyou" / "bye")
- *   3. Language-aware default (last resort — never hang up silently)
+ * Resolve the spoken goodbye for an AI-driven end-call.
+ *   1. Explicit `goodbyeMessage` on the end_call tool (End greeting box) — always wins
+ *   2. A non-stub End Call Phrase (full sentence, not detectors like "bye")
+ *   3. `null` — hang up without a platform canned line (call 28817: hardcoded
+ *      Tamil default overrode the prompt / already-spoken farewell)
  */
 export function resolveGoodbyeMessage(
   goodbyeMessage: string | undefined | null,
   endCallPhrases: string[],
-  language?: string | null,
-): string {
-  const fallback = defaultGoodbyeMessage(language);
+  _language?: string | null,
+): string | null {
   const explicit = goodbyeMessage?.trim();
-  if (explicit && !isStubGoodbye(explicit)) return explicit;
+  // User-authored end greeting — honor even short lines ("thank you", "bye").
+  if (explicit) return explicit;
   for (const phrase of endCallPhrases) {
     const t = phrase.trim();
     if (t && !isStubGoodbye(t)) return t;
   }
-  return fallback;
+  return null;
 }
 
 export interface CalComTool {

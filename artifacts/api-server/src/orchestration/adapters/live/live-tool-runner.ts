@@ -66,8 +66,10 @@ export async function runLiveToolCall(
       agent.endCallPhrases,
       agent.language,
     );
-    onAgentText(goodbye);
-    await speakText(goodbye);
+    if (goodbye) {
+      onAgentText(goodbye);
+      await speakText(goodbye);
+    }
     endCall();
     return { output: "call_ended" };
   }
@@ -288,8 +290,10 @@ async function executeLiveAgentTool(
         return "ignored_end_call_no_caller_turn";
       }
       const goodbye = resolveGoodbyeMessage(tool.goodbyeMessage, agent.endCallPhrases, agent.language);
-      onAgentText(goodbye);
-      await speakText(goodbye);
+      if (goodbye) {
+        onAgentText(goodbye);
+        await speakText(goodbye);
+      }
       endCall();
       return undefined;
     }

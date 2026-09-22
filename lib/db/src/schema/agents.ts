@@ -189,8 +189,14 @@ export type AgentConfig = {
   /**
    * Structured prompt core (Identity / purpose / flow / instructions).
    * Compiled at call start; empty/absent means use `systemPrompt` as today.
+   * Cleared when `scriptMode` is `free_text`.
    */
   promptCore?: PromptCore | null;
+  /**
+   * free_text = Call script only (skip Identity/Flow compile).
+   * structured = compile promptCore + optional additional script.
+   */
+  scriptMode?: "free_text" | "structured";
 };
 
 export const agentsTable = pgTable("agents", {

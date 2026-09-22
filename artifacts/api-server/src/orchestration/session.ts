@@ -442,7 +442,13 @@ export async function createSession(params: {
     hour: "2-digit", minute: "2-digit", timeZone: agentTimezone,
   });
   let effectiveSystemPrompt = agent.generatedPrompt ?? agent.systemPrompt;
-  if (agent.agentType !== INTAKE_AGENT_TYPE && hasPromptCore(agentCfg["promptCore"])) {
+  const scriptMode = (agentCfg["scriptMode"] as string | undefined) ?? "structured";
+  // Free-text agents: ignore Identity / Flow / stages — Call script only (call 28884).
+  if (
+    scriptMode !== "free_text"
+    && agent.agentType !== INTAKE_AGENT_TYPE
+    && hasPromptCore(agentCfg["promptCore"])
+  ) {
     effectiveSystemPrompt = compilePromptCore({
       core: agentCfg["promptCore"],
       fallbackPrompt: effectiveSystemPrompt,
@@ -453,6 +459,8 @@ export async function createSession(params: {
       { agentId: params.agentId, compiledChars: effectiveSystemPrompt.length },
       "Compiled structured prompt core",
     );
+  } else if (scriptMode === "free_text") {
+    logger.info({ agentId: params.agentId }, "Using free-text call script (prompt core skipped)");
   }
   if (agent.agentType === INTAKE_AGENT_TYPE) {
     // Rebuild from the live template so a rename (Irfan vs Meera) is spoken on

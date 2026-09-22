@@ -34,7 +34,7 @@ import {
   WEBHOOK_PAYLOAD_TEMPLATE_PLACEHOLDER,
   type AgentFormValues,
 } from "./edit.schema";
-import { compactPromptCore, emptyPromptCoreForm, promptCoreToForm } from "@workspace/db/prompt-core";
+import { compactPromptCore, emptyPromptCoreForm, hasPromptCore, promptCoreToForm } from "@workspace/db/prompt-core";
 import { findBySchedulingId, normalizeSchedulingId } from "@/lib/scheduling-setup";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SnapServeAgentIcon } from "@/components/logo";
@@ -125,7 +125,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     sarvamEndOfSpeechSilenceMs, sarvamFirstTurnMinSpeechMs, sarvamVadThreshold,
     semanticTurnStopMs,
     voiceStack, geminiLiveVoiceName, geminiLiveThinkingLevel,
-    agentComposition, agentSurfaces, promptCore,
+    agentComposition, agentSurfaces, promptCore, scriptMode,
     meetingPrompt,
     meetingMaxDurationSeconds, meetingSilenceTimeoutSeconds, meetingSilenceHangupEnabled,
     // Inbound/outbound phone number assignment is read-only in the agent form —
@@ -289,8 +289,11 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   }
 
   // Always persist so clearing the Behaviour fields actually drops stored core
-  // (agentConfig is merged server-side).
-  agentConfig["promptCore"] = compactPromptCore(promptCore);
+  // (agentConfig is merged server-side). Free-text mode clears Identity/Flow so
+  // persona agents (e.g. Vijay) are not forced through recruitment stages.
+  const freeText = scriptMode === "free_text";
+  agentConfig["scriptMode"] = freeText ? "free_text" : "structured";
+  agentConfig["promptCore"] = freeText ? null : compactPromptCore(promptCore);
 
   const NATIVE_BOOKING_TYPES = new Set(["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"]);
 
@@ -325,9 +328,9 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     asrLanguage: rest.asrLanguage || null,
     snapserveAgentId: snapserveAgentId || null,
     contextWindowTurns: contextWindowTurns ?? null,
-    stagedPromptEnabled: stagedPromptEnabled ?? false,
-    stagedPromptStages: stagedPromptStages ?? [],
-    stagedPromptCoreIdentity: stagedPromptCoreIdentity || undefined,
+    stagedPromptEnabled: freeText ? false : (stagedPromptEnabled ?? false),
+    stagedPromptStages: freeText ? [] : (stagedPromptStages ?? []),
+    stagedPromptCoreIdentity: freeText ? undefined : (stagedPromptCoreIdentity || undefined),
     ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
   };
 }
@@ -486,6 +489,7 @@ export default function AgentEdit() {
       ttsVoice: "priya", ttsModel: "bulbul:v3", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
       promptCore: emptyPromptCoreForm(),
+      scriptMode: "structured" as const,
       firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-IN", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: false,
@@ -776,6 +780,11 @@ export default function AgentEdit() {
       telephonyProvider: agent.telephonyProvider,
       systemPrompt:      agent.systemPrompt,
       promptCore:        promptCoreToForm((agent as any).agentConfig?.promptCore),
+      scriptMode: (() => {
+        const saved = (agent as any).agentConfig?.scriptMode;
+        if (saved === "free_text" || saved === "structured") return saved;
+        return hasPromptCore((agent as any).agentConfig?.promptCore) ? "structured" : "free_text";
+      })(),
       temperature:       agent.temperature ?? 0.10,
       maxDuration:       agent.maxDuration ?? 300,
       firstSpeaker:            ((agent as any).firstSpeaker === "user" ? "user" : "assistant") as AgentFormValues["firstSpeaker"],

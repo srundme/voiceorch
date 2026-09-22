@@ -39,6 +39,9 @@ const FAREWELL_PHRASES = [
   "சரியாய்",
   "வேற எதுவும்",
   "வேற ஒன்னும்",
+  "உடம்பப் பார்த்து",
+  "உடம்ப பார்த்து",
+  "நல்ல நாள்",
   // Hindi / Hinglish romanised + Devanagari
   "alvida",
   "phir milte",

@@ -128,6 +128,24 @@ describe("buildUpdateAgentPayload", () => {
     expect((cleared.agentConfig as Record<string, unknown>)["promptCore"]).toBeNull();
   });
 
+  it("free_text mode clears promptCore and disables staged prompts", () => {
+    const payload = buildUpdateAgentPayload({
+      ...BASE,
+      scriptMode: "free_text",
+      stagedPromptEnabled: true,
+      stagedPromptStages: [{ name: "Open", content: "Hi" }],
+      promptCore: {
+        identity: { role: "Recruitment consultant", company: "XYZ Staffing" },
+        flow: [{ title: "PROFILE", objective: "Collect experience" }],
+      },
+    });
+    const cfg = payload.agentConfig as Record<string, unknown>;
+    expect(cfg["scriptMode"]).toBe("free_text");
+    expect(cfg["promptCore"]).toBeNull();
+    expect(payload.stagedPromptEnabled).toBe(false);
+    expect(payload.stagedPromptStages).toEqual([]);
+  });
+
   it("partial update — only name and systemPrompt changed — still valid", () => {
     const data: AgentFormValues = {
       ...BASE,

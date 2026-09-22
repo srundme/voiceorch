@@ -159,6 +159,11 @@ export const agentFormSchema = z.object({
     escalation: z.string().optional(),
     behavioural: z.string().optional(),
   }).optional(),
+  /**
+   * free_text = Call script only (no Identity / Flow / stages).
+   * structured = Identity + Flow + optional additional script.
+   */
+  scriptMode: z.enum(["free_text", "structured"]).optional(),
   /** Meeting-room system prompt (agentConfig.meetings.meetingPrompt). */
   meetingPrompt: z.string().optional(),
   /** Meeting hard cut-off seconds (default 45 min). Independent of phone maxDuration. */

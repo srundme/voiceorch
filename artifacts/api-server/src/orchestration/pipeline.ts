@@ -16,7 +16,11 @@ import { demoteResumeMemoryAfterOpening } from "./callerMemory.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
 import { buildAntiRepeatNudge, extractRecentAgentQuestions, isBareAcknowledgement, isQuestionUtterance } from "./conversationDiscipline.js";
-import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared, isCallerClosingUtterance } from "./callFarewell.js";
+import {
+  isCallerFarewellUtterance as isCallerFarewellUtteranceShared,
+  isCallerClosingUtterance,
+  transcriptHasFarewellEnding,
+} from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
 import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isQueuedDuplicateUserTurn, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
 import {
@@ -8302,8 +8306,9 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /**
-   * Intake speaks its own close; a second canned farewell was the same line
-   * on every call. Other agents still get the configured goodbye.
+   * Speak a farewell only when configured (End greeting / real end-call phrase).
+   * Never inject the language hardcoded default when the prompt/LLM already
+   * closed (call 28817: "Take care, bye" then "நேரம் ஒதுக்கியதுக்கு நன்றி…").
    */
   private async speakEndCallFarewellIfNeeded(configured: string | undefined): Promise<void> {
     if (this.isIntakeAgent) {
@@ -8315,11 +8320,29 @@ export class OrchestrationPipeline implements VoiceSession {
       await this.speakRaw(goodbye);
       return;
     }
+    const recent =
+      this.lastAssistantSpokenRaw
+      || this._currentTurnPlayedSentences.join(" ")
+      || "";
+    if (recent.trim() && transcriptHasFarewellEnding(recent)) {
+      logger.info(
+        { callId: this.config.callId, preview: recent.slice(0, 120) },
+        "Skipping end-call farewell — agent already closed in this call",
+      );
+      return;
+    }
     const goodbye = resolveGoodbyeMessage(
       configured,
       this.agent.endCallPhrases,
       this.agent.language ?? this.currentLang,
     );
+    if (!goodbye) {
+      logger.info(
+        { callId: this.config.callId },
+        "Skipping end-call farewell — no End greeting configured (no hardcoded default)",
+      );
+      return;
+    }
     this.conversationHistory.appendAssistant(goodbye);
     this.config.onTranscript("agent", goodbye);
     await this.speakRaw(goodbye);

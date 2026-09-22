@@ -1744,6 +1744,8 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
   const agentName  = form.watch("name")     as string | undefined;
   const agentLang  = form.watch("language") as string | undefined;
   const canAttendMeetings = form.watch("agentSurfaces") === "phone_and_meet";
+  const scriptMode = (form.watch("scriptMode") as "free_text" | "structured" | undefined) ?? "structured";
+  const freeText = scriptMode === "free_text";
   const callPromptLen = String(form.watch("systemPrompt") ?? "").length;
   const meetPromptLen = String(form.watch("meetingPrompt") ?? "").length;
   const promptLen = promptSurface === "calls" ? callPromptLen : meetPromptLen;
@@ -1753,12 +1755,55 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
     if (!canAttendMeetings && promptSurface === "meetings") setPromptSurface("calls");
   }, [canAttendMeetings, promptSurface]);
 
+  const setScriptMode = (mode: "free_text" | "structured") => {
+    form.setValue("scriptMode", mode, { shouldDirty: true });
+    if (mode === "free_text") {
+      form.setValue("promptCore", emptyPromptCoreForm(), { shouldDirty: true });
+      form.setValue("stagedPromptEnabled", false, { shouldDirty: true });
+      form.setValue("stagedPromptStages", [], { shouldDirty: true });
+      form.setValue("stagedPromptCoreIdentity", "", { shouldDirty: true });
+    }
+  };
+
   return (
     <div className={cn("relative flex min-h-full flex-col gap-6", BUILDER_TAB_PAD)}>
       <BuilderTabHeader
         title="Script"
-        description="Identity, purpose, and flow stay small. Product facts go in Knowledge — not this prompt."
+        description={
+          freeText
+            ? "Free text — paste the full call script. No Identity / Flow stages."
+            : "Identity, purpose, and flow stay small. Product facts go in Knowledge — not this prompt."
+        }
       />
+
+      <BuilderPanel title="Script mode" icon={<FileText />} bodyClassName="gap-3 px-4 py-3">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={freeText ? "default" : "outline"}
+            className="h-8 text-[12px]"
+            onClick={() => setScriptMode("free_text")}
+          >
+            Free text only
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={!freeText ? "default" : "outline"}
+            className="h-8 text-[12px]"
+            onClick={() => setScriptMode("structured")}
+          >
+            Identity + Flow
+          </Button>
+        </div>
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          {freeText
+            ? "Best for persona / campaign scripts (e.g. Vijay). Welcome + Call script only — stages are off."
+            : "Best for recruiting / sales flows with numbered stages. Your essay becomes Additional script."}
+        </p>
+      </BuilderPanel>
+
       <GeneratePromptSheet
         open={generateOpen}
         onOpenChange={setGenerateOpen}
@@ -1797,7 +1842,7 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
             <FormControl>
               <Textarea
                 className="min-h-[72px] max-h-[120px] resize-none rounded-lg border-border bg-background px-3.5 py-2.5 text-[13px] leading-relaxed shadow-none focus-visible:border-foreground/20 focus-visible:ring-0"
-                placeholder="Hello, how can I help?"
+                placeholder={freeText ? "வணக்கம்… (or leave empty — opener comes from Call script)" : "Hello, how can I help?"}
                 {...field}
               />
             </FormControl>
@@ -1805,17 +1850,24 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
             <p className="pt-1.5 text-[11px] leading-relaxed text-muted-foreground">
               Spoken first on inbound and outbound. What you type here is what they hear — including a short “Hello”.
               If this is empty, the opener comes from the agent prompt.
+              {freeText ? " Do not put business / recruitment lines here for persona agents." : ""}
             </p>
           </FormItem>
         )}         />
       </BuilderPanel>
 
-      <PromptCorePanels form={form} />
+      {!freeText ? <PromptCorePanels form={form} /> : null}
 
       <BuilderPanel
-        title="Additional script"
+        title={freeText ? "Call script" : "Additional script"}
         icon={<FileText />}
-        description={canAttendMeetings ? "Legacy essay — phone and meetings" : "Legacy essay for the whole call (optional once Identity and Flow are filled)"}
+        description={
+          freeText
+            ? "Full free-text prompt for the whole call"
+            : canAttendMeetings
+              ? "Legacy essay — phone and meetings"
+              : "Legacy essay for the whole call (optional once Identity and Flow are filled)"
+        }
         hint={
           <>
             <Badge variant="secondary" className="h-5 rounded-md px-1.5 py-0 text-[10px] font-medium">
@@ -1860,7 +1912,11 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
                 <FormControl>
                   <Textarea
                     className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-4 py-4 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                    placeholder="Optional extra instructions. Prefer Identity, Flow, and Knowledge above stuffing facts here."
+                    placeholder={
+                      freeText
+                        ? "Paste the full call script here (persona, language, flow, objections)."
+                        : "Optional extra instructions. Prefer Identity, Flow, and Knowledge above stuffing facts here."
+                    }
                     {...field}
                   />
                 </FormControl>
@@ -1911,7 +1967,11 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
             <FormControl>
               <Textarea
                 className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-4 py-4 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                placeholder="Optional extra instructions. Prefer Identity, Flow, and Knowledge above stuffing facts here."
+                placeholder={
+                  freeText
+                    ? "Paste the full call script here (persona, language, flow, objections)."
+                    : "Optional extra instructions. Prefer Identity, Flow, and Knowledge above stuffing facts here."
+                }
                 {...field}
               />
             </FormControl>
@@ -3346,6 +3406,8 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         >
         {CALL_CONTROL_TOOLS.filter((t) => t.type === "end_call").map(({ type, icon, label, description }) => {
           const isOn = hasNativeTool(type);
+          const endCallIdx = (form.watch("tools") as Array<{ type?: string }> | undefined)
+            ?.findIndex((t) => t?.type === "end_call") ?? -1;
           return (
             <div key={type}>
               <div className="flex w-full items-start gap-3 p-4 text-left">
@@ -3362,6 +3424,27 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} />
                 </div>
               </div>
+              {isOn && endCallIdx >= 0 ? (
+                <div className="space-y-2 border-t border-border bg-muted/20 px-4 pb-4 pt-3">
+                  <FormField control={form.control} name={`tools.${endCallIdx}.goodbyeMessage`} render={({ field: f }) => (
+                    <FormItem className="space-y-1">
+                      <FormLabel className="text-[10px] text-muted-foreground">End greeting (spoken on hangup)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          className="min-h-[64px] resize-none text-xs"
+                          placeholder="Leave empty to use your prompt farewell only — no platform canned line."
+                          {...f}
+                          value={f.value ?? ""}
+                        />
+                      </FormControl>
+                      <p className="text-[10px] leading-relaxed text-muted-foreground">
+                        Optional. Spoken only if the agent has not already said goodbye in the call.
+                        End-call phrases above are hangup detectors, not this spoken line.
+                      </p>
+                    </FormItem>
+                  )} />
+                </div>
+              ) : null}
             </div>
           );
         })}
@@ -7121,6 +7204,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       ttsVoice: DEFAULT_CARTESIA_VOICE_ID, ttsModel: "sonic-3.6", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 480,
       promptCore: emptyPromptCoreForm(),
+      scriptMode: "free_text" as const,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-IN", asrLanguage: "", backchannelingEnabled: true,
       backchannelingFrequency: 0.5, webhookUrl: "",
@@ -7237,6 +7321,12 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       telephonyProvider:        agent.telephonyProvider,
       systemPrompt:             agent.systemPrompt,
       promptCore:               promptCoreToForm((agent as any).agentConfig?.promptCore),
+      scriptMode: (() => {
+        const saved = (agent as any).agentConfig?.scriptMode;
+        if (saved === "free_text" || saved === "structured") return saved;
+        // Prefer free text when they already pasted a long script and never filled Identity/Flow.
+        return hasPromptCore((agent as any).agentConfig?.promptCore) ? "structured" : "free_text";
+      })(),
       temperature:              agent.temperature ?? 0.40,
       maxDuration:              agent.maxDuration ?? 300,
       greetingMessage:          agent.greetingMessage ?? "Hello",
