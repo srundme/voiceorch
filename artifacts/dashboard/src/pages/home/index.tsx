@@ -21,7 +21,6 @@ import {
   Phone,
   PhoneCall,
   Plus,
-  Sparkles,
   TrendingUp,
   Wallet,
   Zap,
@@ -46,7 +45,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { StripePage } from "@/components/stripe-page";
-import { PageHero, SnapBarsVisual } from "@/components/page-hero";
+import { PageHero } from "@/components/page-hero";
+import { GhostEmpty, MomentCard } from "@/components/brand-moments";
 import { StatusDot } from "@/components/workspace/workspace";
 import { MetricCard, MetricStrip } from "@/components/metric-strip";
 import { useChartTheme } from "@/hooks/use-chart-theme";
@@ -245,49 +245,13 @@ export default function HomePage() {
   if (!hasAgent && !agentsQ.isLoading) {
     return (
       <main className="flex min-h-full items-center justify-center px-5 py-12">
-        <div className="w-full max-w-lg">
-          <div className="mb-8">
-            <div className="mb-5 flex size-9 items-center justify-center rounded-lg border border-border bg-card">
-              <Bot className="size-4" />
-            </div>
-            <h1 className="text-2xl font-semibold tracking-[-0.03em]">Create your first agent</h1>
-            <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              Build the voice agent first, then create a campaign to dial leads.
-            </p>
-          </div>
-          <div className={`grid gap-px overflow-hidden rounded-lg border border-border bg-border ${isManagedWorkspace ? "" : "sm:grid-cols-2"}`}>
-            {!isManagedWorkspace && (
-            <button
-              type="button"
-              onClick={() => navigate("/app/vibe")}
-              className="group cursor-pointer bg-background p-5 text-left transition-colors duration-200 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-            >
-              <Sparkles className="mb-7 size-4 text-muted-foreground group-hover:text-foreground" />
-              <p className="text-sm font-medium">Build with AI</p>
-              <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-                Describe the job and generate a configured agent.
-              </p>
-              <span className="mt-4 inline-flex items-center gap-1 text-[11px] font-medium">
-                Start building <ArrowRight className="size-3" />
-              </span>
-            </button>
-            )}
-            <button
-              type="button"
-              onClick={() => navigate("/app/agents?create=1")}
-              className="group cursor-pointer bg-background p-5 text-left transition-colors duration-200 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-            >
-              <Plus className="mb-7 size-4 text-muted-foreground group-hover:text-foreground" />
-              <p className="text-sm font-medium">Configure manually</p>
-              <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-                Choose every provider, voice, prompt, and runtime setting.
-              </p>
-              <span className="mt-4 inline-flex items-center gap-1 text-[11px] font-medium">
-                Open builder <ArrowRight className="size-3" />
-              </span>
-            </button>
-          </div>
-        </div>
+        <GhostEmpty
+          className="w-full max-w-md"
+          title="Create your first agent"
+          description="Build the voice agent first, then create a campaign to dial leads."
+          primary={{ label: "Configure manually", href: "/app/agents?create=1", icon: <Plus className="size-3.5" /> }}
+          secondary={!isManagedWorkspace ? { label: "Build with AI", href: "/app/vibe" } : undefined}
+        />
       </main>
     );
   }
@@ -328,12 +292,21 @@ export default function HomePage() {
     >
       <div className="space-y-5">
         <PageHero
+          variant="stage"
           title={nextAction.title}
           description={nextAction.description}
           primary={nextAction.primary}
           secondary={nextAction.secondary}
-          visual={<SnapBarsVisual />}
         />
+
+        {!isManagedWorkspace && lowBalance ? (
+          <MomentCard
+            title="Upgrade for more minutes."
+            description="Top up your wallet so campaigns and live calls keep running."
+            action="See plans"
+            href="/app/wallet"
+          />
+        ) : null}
 
         {/* Recents */}
         {(agents.length > 0 || recentReach.length > 0) && (

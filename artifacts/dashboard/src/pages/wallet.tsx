@@ -8,6 +8,7 @@ import { useGetWallet, useCreateTopup, useVerifyPayment, useListTransactions, us
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
+import { MomentCard } from "@/components/brand-moments";
 
 declare global {
   interface Window {
@@ -307,6 +308,18 @@ export default function WalletPage() {
       <div className="flex-1 overflow-auto p-4 sm:p-6">
         <div className="max-w-4xl mx-auto space-y-6">
 
+          {!isManagedWorkspace && balanceLow ? (
+            <MomentCard
+              title="Upgrade for more minutes."
+              description="Top up so campaigns and live calls keep running without interruption."
+              action="See plans"
+              onClick={() => {
+                const el = document.getElementById("wallet-add-funds");
+                el?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+            />
+          ) : null}
+
           <div className={`rounded-xl border p-6 ${balanceLow ? "border-border bg-zinc-500/5" : "border-border bg-card"}`}>
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
               <div>
@@ -352,7 +365,7 @@ export default function WalletPage() {
             </p>
           </div>
           ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div id="wallet-add-funds" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="rounded-xl border border-border bg-card p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-muted-foreground" />

@@ -100,12 +100,12 @@ import {
   type UiDomainFieldType,
   type StoredDomainField,
 } from "@/lib/disposition-fields";
-import { SnapServeAgentIcon } from "@/components/logo";
+import { GhostEmpty } from "@/components/brand-moments";
 import { hostProductName } from "@/lib/white-label";
 import { findBySchedulingId, normalizeSchedulingId } from "@/lib/scheduling-setup";
 import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import {
-  LLM_PROVIDERS, TTS_PROVIDERS,
+  LLM_PROVIDERS, TTS_PROVIDERS, ASR_PROVIDERS,
   LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, asrModelsForPicker, SARVAM_PRODUCT_ASR_MODEL,
   llmModelsForPicker, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   DEFAULT_CARTESIA_VOICE_ID, DEFAULT_CARTESIA_VOICE_NAME,
@@ -2163,6 +2163,9 @@ function VoiceTab({ form }: { form: any }) {
   const voiceStack     = (form.watch("voiceStack") as string) ?? "classic";
   const geminiLiveVoiceName = (form.watch("geminiLiveVoiceName") as string) ?? "Kore";
   const isGeminiLive   = isGeminiLiveAgent({ llmModel, voiceStack });
+  const asrProvider    = form.watch("asrProvider") as string | undefined;
+  const asrModel       = form.watch("asrModel") as string | undefined;
+  const asrModelOpts   = asrModelsForPicker(asrProvider ?? "sarvam", asrModel);
   const [cloneOpenV, setCloneOpenV] = useState(false);
   const [sarvamCloneOpenV, setSarvamCloneOpenV] = useState(false);
   const queryClient = useQueryClient();
@@ -2444,37 +2447,256 @@ function VoiceTab({ form }: { form: any }) {
   };
 
   const previewVoiceControl = (
-    <div className="flex items-center gap-2 pt-1">
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        onClick={handlePreviewVoice}
-        disabled={!ttsVoice || previewState === "loading"}
-        className="h-9 text-sm gap-2 font-medium"
-      >
-        {previewState === "loading" ? (
-          <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
-        ) : previewState === "playing" ? (
-          <><Square className="h-4 w-4" /> Stop</>
-        ) : (
-          <><Play className="h-4 w-4 fill-current" /> Preview Voice</>
-        )}
-      </Button>
-      {!ttsVoice && (
-        <span className="text-[10px] text-muted-foreground">
-          Select a voice to preview
-        </span>
+    <Button
+      type="button"
+      variant="secondary"
+      size="sm"
+      onClick={handlePreviewVoice}
+      disabled={!ttsVoice || previewState === "loading"}
+      className="h-8 gap-1.5 text-[11px] font-medium"
+    >
+      {previewState === "loading" ? (
+        <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+      ) : previewState === "playing" ? (
+        <><Square className="h-3.5 w-3.5" /> Stop</>
+      ) : (
+        <><Play className="h-3.5 w-3.5 fill-current" /> Preview</>
       )}
-    </div>
+    </Button>
   );
 
   return (
     <div className={cn("relative flex min-h-full flex-col gap-6", BUILDER_TAB_PAD)}>
       <BuilderTabHeader
         title="Voice"
-        description="How the agent sounds — voice, reply speed, and listening."
+        description="How the agent hears and sounds — transcriber, voice, reply speed."
       />
+
+      {/* ── Transcriber / Language (was on Overview; Overview nav is gone) ── */}
+      <BuilderPanel
+        title={isGeminiLive ? "Language" : "Transcriber"}
+        icon={<Mic />}
+        description={
+          isGeminiLive
+            ? "Conversation language for Gemini Live"
+            : "Language and speech-to-text (STT)"
+        }
+        bodyClassName="gap-3"
+      >
+        <div className="space-y-3">
+          {isGeminiLive ? (
+            <p className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
+              Gemini Live has no separate STT — language is enforced in the conversation. Classic STT settings appear when Voice stack is Classic.
+            </p>
+          ) : null}
+
+          <FormField control={form.control} name="language" render={({ field }) => {
+            const langOpts = languagesForAgent(isGeminiLive);
+            const current = field.value ?? "";
+            const inList = langOpts.some((l) => l.value === current);
+            const options = (!current || inList)
+              ? langOpts
+              : [{ value: current, label: LANGUAGES.find((l) => l.value === current)?.label ?? current }, ...langOpts];
+            return (
+              <FormItem className="space-y-1">
+                <FormLabel className="text-xs text-muted-foreground">Language</FormLabel>
+                <SmallSelect
+                  value={field.value}
+                  onChange={field.onChange}
+                  options={options.map((l) => ({ value: l.value, label: l.label }))}
+                  placeholder="Select language"
+                />
+              </FormItem>
+            );
+          }} />
+
+          {!isGeminiLive ? (
+            <>
+              <FormField control={form.control} name="asrProvider" render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-xs text-muted-foreground">STT provider</FormLabel>
+                  <SmallSelect
+                    value={field.value ?? "sarvam"}
+                    onChange={(v) => {
+                      field.onChange(v);
+                      const nextModels = asrModelsForPicker(v);
+                      form.setValue("asrModel", nextModels[0]?.value ?? "", { shouldDirty: true });
+                    }}
+                    options={ASR_PROVIDERS.map((p) => ({ value: p.value, label: p.label }))}
+                  />
+                </FormItem>
+              )} />
+
+              {asrProvider === "sarvam" && asrModel && asrModel !== SARVAM_PRODUCT_ASR_MODEL ? (
+                <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2">
+                  <p className="text-[12px] leading-snug text-foreground/80">
+                    This agent is on a legacy transcriber. Switch to Saaras v3 for live calls.
+                  </p>
+                  <button
+                    type="button"
+                    className="text-[12px] font-medium text-foreground underline-offset-2 hover:underline"
+                    onClick={() => form.setValue("asrModel", SARVAM_PRODUCT_ASR_MODEL, { shouldDirty: true })}
+                  >
+                    Use Saaras v3
+                  </button>
+                </div>
+              ) : null}
+
+              {asrModelOpts.length > 0 ? (
+                <FormField control={form.control} name="asrModel" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-xs text-muted-foreground">STT model</FormLabel>
+                    <SmallSelect
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      options={asrModelOpts.map((m: { value: string; label: string }) => ({ value: m.value, label: m.label }))}
+                      placeholder="Default"
+                    />
+                    <FormMessage className="text-[10px]" />
+                  </FormItem>
+                )} />
+              ) : null}
+
+              {asrProvider === "sarvam" ? (
+                <FormField control={form.control} name="sarvamSttMode" render={({ field }) => {
+                  const currentValue = field.value ?? "codemix";
+                  return (
+                    <FormItem className="space-y-1">
+                      <FormLabel className="text-xs text-muted-foreground">How speech is written</FormLabel>
+                      <SmallSelect
+                        value={currentValue}
+                        onChange={field.onChange}
+                        options={[
+                          { value: "codemix", label: "Mixed — Hinglish, Tanglish, …" },
+                          { value: "transcribe", label: "Native script — हिंदी, தமிழ்" },
+                          { value: "translate", label: "English text — any language spoken" },
+                          ...(currentValue === "verbatim"
+                            ? [{ value: "verbatim", label: "Verbatim — include fillers" }]
+                            : []),
+                          ...(currentValue === "translit"
+                            ? [{ value: "translit", label: "Roman script — Indic in Latin letters" }]
+                            : []),
+                        ]}
+                      />
+                      <p className="text-[11px] leading-snug text-muted-foreground">
+                        {currentValue === "transcribe"
+                          ? "Every word in native script. Not for Hinglish."
+                          : currentValue === "codemix"
+                            ? "English stays English, Hindi stays हिंदी — default for Indian calls."
+                            : currentValue === "translate"
+                              ? "Whatever the caller speaks is written as English."
+                              : "Defaults to mixed speech so Hinglish is captured."}
+                      </p>
+                    </FormItem>
+                  );
+                }} />
+              ) : null}
+
+              {asrProvider === "sarvam" ? (
+                <FormField control={form.control} name="sarvamSttPrompt" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-xs text-muted-foreground">Brand names & terms</FormLabel>
+                    <Input
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      placeholder="e.g. SuperBae, IRDAI, UPI, GSTIN"
+                      className="h-9 text-sm"
+                      maxLength={500}
+                    />
+                    <p className="text-[11px] leading-snug text-muted-foreground">
+                      Helps the transcriber spell these words correctly.
+                    </p>
+                  </FormItem>
+                )} />
+              ) : null}
+
+              {asrProvider === "sarvam" && form.watch("sarvamSttStreamType") === "simulated" ? (
+                <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2">
+                  <p className="text-[12px] leading-snug text-foreground/80">
+                    Partials are off, so the agent waits for a full sentence before it can hear an interrupt.
+                  </p>
+                  <button
+                    type="button"
+                    className="text-[12px] font-medium text-foreground underline-offset-2 hover:underline"
+                    onClick={() => form.setValue("sarvamSttStreamType", "fast", { shouldDirty: true })}
+                  >
+                    Use fast partials
+                  </button>
+                </div>
+              ) : null}
+
+              <div className="space-y-3 border-t border-border pt-3">
+                <p className="text-[12px] font-semibold tracking-tight text-foreground">Language personalisation</p>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-medium text-foreground">Switch language during call</p>
+                    <p className="text-[11px] text-muted-foreground">Follow the caller if they switch languages mid-call.</p>
+                  </div>
+                  <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
+                    <Switch
+                      checked={field.value ?? false}
+                      onCheckedChange={(v) => {
+                        field.onChange(v);
+                        if (v && !(form.getValues("multilingualLanguages")?.length)) {
+                          const start = form.getValues("language") || "en-IN";
+                          const seed = ["en-IN", "hi-IN", "ta-IN"].includes(start)
+                            ? ["en-IN", "hi-IN", "ta-IN"]
+                            : [start, "en-IN"];
+                          form.setValue("multilingualLanguages", [...new Set(seed)], { shouldDirty: true });
+                        }
+                      }}
+                    />
+                  )} />
+                </div>
+                {!!form.watch("languageAutoDetect") ? (
+                  <FormField control={form.control} name="multilingualLanguages" render={({ field }) => {
+                    const selected = new Set(field.value ?? []);
+                    return (
+                      <FormItem className="space-y-1.5">
+                        <FormLabel className="text-xs text-muted-foreground">Languages allowed</FormLabel>
+                        <div className="flex flex-wrap gap-1.5">
+                          {SARVAM_PERSONALISATION_LANGUAGES.map((lang) => {
+                            const on = selected.has(lang.value);
+                            return (
+                              <button
+                                key={lang.value}
+                                type="button"
+                                onClick={() => {
+                                  const next = new Set(selected);
+                                  if (on) next.delete(lang.value);
+                                  else next.add(lang.value);
+                                  field.onChange([...next]);
+                                }}
+                                className={cn(
+                                  "rounded-full border px-2 py-0.5 text-[11px] transition-colors",
+                                  on
+                                    ? "border-foreground bg-foreground text-background"
+                                    : "border-border bg-background text-muted-foreground hover:border-foreground/30",
+                                )}
+                              >
+                                {lang.label.replace(" (India)", "")}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </FormItem>
+                    );
+                  }} />
+                ) : null}
+                <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2">
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-medium text-foreground">Output numbers in Indic</p>
+                    <p className="text-[11px] text-muted-foreground">e.g. &apos;500&apos; → &apos;paanch sau&apos; (Sarvam TTS).</p>
+                  </div>
+                  <FormField control={form.control} name="sarvamIndicNumbers" render={({ field }) => (
+                    <Switch checked={field.value !== false} onCheckedChange={field.onChange} />
+                  )} />
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </BuilderPanel>
 
       <BuilderPanel
         title="Speaking"
@@ -2542,35 +2764,9 @@ function VoiceTab({ form }: { form: any }) {
             {ttsVoiceOptsV.length > 0 && (
               <FormField control={form.control} name="ttsVoice" render={({ field }) => (
                 <FormItem className="space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <FormLabel className="text-xs text-muted-foreground">Choose voice</FormLabel>
-                    {ttsProvider === "cartesia" && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-[10px] gap-1 px-2"
-                        onClick={() => setCloneOpenV(true)}
-                      >
-                        <CopyPlus className="h-3 w-3" />
-                        Clone voice
-                      </Button>
-                    )}
-                    {ttsProvider === "sarvam" && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-[10px] gap-1 px-2"
-                        onClick={() => setSarvamCloneOpenV(true)}
-                      >
-                        <CopyPlus className="h-3 w-3" />
-                        Add Sarvam clone
-                      </Button>
-                    )}
-                  </div>
+                  <FormLabel className="text-xs text-muted-foreground">Choose voice</FormLabel>
                   {ttsProvider === "sarvam" && (
-                    <p className="text-[10px] text-muted-foreground leading-relaxed -mt-0.5 mb-1">
+                    <p className="text-[11px] leading-relaxed text-muted-foreground -mt-0.5">
                       Default stack
                     </p>
                   )}
@@ -2600,7 +2796,33 @@ function VoiceTab({ form }: { form: any }) {
                       ))}
                     </SelectContent>
                   </Select>
-                  {previewVoiceControl}
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                    {previewVoiceControl}
+                    {ttsProvider === "cartesia" && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                        onClick={() => setCloneOpenV(true)}
+                      >
+                        <CopyPlus className="h-3 w-3" />
+                        Clone voice
+                      </Button>
+                    )}
+                    {ttsProvider === "sarvam" && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                        onClick={() => setSarvamCloneOpenV(true)}
+                      >
+                        <CopyPlus className="h-3 w-3" />
+                        Add Sarvam clone
+                      </Button>
+                    )}
+                  </div>
                 </FormItem>
               )} />
             )}
@@ -2965,7 +3187,7 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
       </div>
       {asrProviderVal === "sarvam" && !realtime && (
         <p className="text-[11px] text-muted-foreground">
-          This agent is on a legacy transcriber. Switch it to Saaras v3 in Transcriber.
+          This agent is on a legacy transcriber. Switch it to Saaras v3 under Voice → Transcriber.
         </p>
       )}
     </BuilderPanel>
@@ -8825,28 +9047,18 @@ function StudioEmptyCanvas({ onCreate }: { onCreate: () => void }) {
   const [, navigate] = useLocation();
   const { isManagedWorkspace } = usePartnerManagedWorkspace();
   return (
-    <div className="flex-1 flex items-center justify-center p-8 bg-background">
-      <div className="text-center max-w-sm space-y-4">
-        <div className="mx-auto h-12 w-12 rounded-2xl border border-border/50 bg-muted/30 flex items-center justify-center">
-          <SnapServeAgentIcon size={20} className="text-muted-foreground" />
-        </div>
-        <div className="space-y-1.5">
-          <h2 className="text-lg font-semibold tracking-tight">Select an agent</h2>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Pick one from the list, or create a new agent for phone — or phone plus meetings.
-          </p>
-        </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2 pt-1 w-full max-w-sm mx-auto">
-          <Button className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={onCreate}>
-            <Plus className="h-3.5 w-3.5" /> New agent
-          </Button>
-          {!isManagedWorkspace && (
-          <Button variant="outline" className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={() => navigate("/app/vibe")}>
-            <Sparkles className="h-3.5 w-3.5" /> Build with AI
-          </Button>
-          )}
-        </div>
-      </div>
+    <div className="flex flex-1 items-center justify-center bg-background p-8">
+      <GhostEmpty
+        className="w-full max-w-md"
+        title="Select an agent"
+        description="Pick one from the list, or create a new agent for phone — or phone plus meetings."
+        primary={{ label: "New agent", onClick: onCreate, icon: <Plus className="size-3.5" /> }}
+        secondary={
+          !isManagedWorkspace
+            ? { label: "Build with AI", onClick: () => navigate("/app/vibe") }
+            : undefined
+        }
+      />
     </div>
   );
 }

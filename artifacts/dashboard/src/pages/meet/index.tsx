@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { Video, Loader2, LogOut, Bot, Plus, CalendarDays, Unplug } from "lucide-react";
 import { MeetingsChannelCard } from "@/pages/agents/meetings-channel-card";
+import { GhostEmpty } from "@/components/brand-moments";
 
 const API = "/api";
 
@@ -323,19 +324,16 @@ export default function MeetPage() {
           {agentsLoading ? (
             <div className="h-10 animate-pulse rounded-lg bg-muted/40" />
           ) : agents.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border px-4 py-5 text-center">
-              <p className="text-sm text-muted-foreground">
-                {allAgents.length === 0
-                  ? "No agents yet."
-                  : "No phone + meetings agents yet. Create one with meetings enabled, or add a meeting prompt."}
-              </p>
-              <Button asChild size="sm" className="mt-3 h-8 gap-1.5 text-xs">
-                <Link href="/app/agents?create=1">
-                  <Plus className="size-3.5" />
-                  Create phone + meetings agent
-                </Link>
-              </Button>
-            </div>
+            <GhostEmpty
+              className="rounded-xl border border-border bg-card/40 py-12"
+              title={allAgents.length === 0 ? "No agents yet" : "No meeting agents"}
+              description={
+                allAgents.length === 0
+                  ? "Create a phone + meetings agent, then join Meet from here."
+                  : "Enable meetings on an agent, or add a meeting prompt, then come back."
+              }
+              primary={{ label: "Create agent", href: "/app/agents?create=1", icon: <Plus className="size-3.5" /> }}
+            />
           ) : (
             <div className="flex flex-wrap items-center gap-2">
               <Select
