@@ -7,14 +7,15 @@ import {
 } from "./kb-retrieval-gate.js";
 
 describe("resolveKbRetrievalGateMode", () => {
-  it("defaults to off", () => {
-    expect(resolveKbRetrievalGateMode({})).toBe("off");
-    expect(resolveKbRetrievalGateMode({ KB_RETRIEVAL_GATE: "" })).toBe("off");
-    expect(resolveKbRetrievalGateMode({ KB_RETRIEVAL_GATE: "nope" })).toBe("off");
+  it("defaults to on (production)", () => {
+    expect(resolveKbRetrievalGateMode({})).toBe("on");
+    expect(resolveKbRetrievalGateMode({ KB_RETRIEVAL_GATE: "" })).toBe("on");
+    expect(resolveKbRetrievalGateMode({ KB_RETRIEVAL_GATE: "nope" })).toBe("on");
   });
 
-  it("accepts shadow and on", () => {
+  it("accepts shadow and explicit off", () => {
     expect(resolveKbRetrievalGateMode({ KB_RETRIEVAL_GATE: "shadow" })).toBe("shadow");
+    expect(resolveKbRetrievalGateMode({ KB_RETRIEVAL_GATE: "OFF" })).toBe("off");
     expect(resolveKbRetrievalGateMode({ KB_RETRIEVAL_GATE: "ON" })).toBe("on");
   });
 });

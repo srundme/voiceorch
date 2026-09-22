@@ -16,8 +16,12 @@ describe("KB Phase 3 canary flags", () => {
     expect(parseKbPhase3CanaryAgentIds({ KB_PHASE3_CANARY_AGENT_IDS: "nope,0,-1" }).size).toBe(0);
   });
 
-  it("enables gate+builder on only for listed agents", () => {
-    const env = { KB_PHASE3_CANARY_AGENT_IDS: "1234,1231" };
+  it("enables gate+builder on only for listed agents when global is off", () => {
+    const env = {
+      KB_PHASE3_CANARY_AGENT_IDS: "1234,1231",
+      KB_RETRIEVAL_GATE: "off",
+      KB_QUERY_BUILDER: "off",
+    };
     expect(isKbPhase3CanaryAgent(1234, env)).toBe(true);
     expect(resolveKbRetrievalGateMode(env, 1234)).toBe("on");
     expect(resolveKbQueryBuilderMode(env, 1234)).toBe("on");
@@ -35,12 +39,12 @@ describe("KB Phase 3 canary flags", () => {
     expect(resolveKbQueryBuilderMode(env, 99)).toBe("on");
   });
 
-  it("keeps everyone off when the canary list is empty and flags are off", () => {
-    expect(resolveKbRetrievalGateMode({}, 1234)).toBe("off");
-    expect(resolveKbQueryBuilderMode({}, 1234)).toBe("off");
+  it("defaults everyone to on when env is unset", () => {
+    expect(resolveKbRetrievalGateMode({}, 1234)).toBe("on");
+    expect(resolveKbQueryBuilderMode({}, 1234)).toBe("on");
   });
 
-  it("turns Phase 3 on for the five PSTN canary agents only, with global flags off", () => {
+  it("turns Phase 3 on for the five PSTN canary agents when global is off", () => {
     const env = {
       KB_RETRIEVAL_GATE: "off",
       KB_QUERY_BUILDER: "off",

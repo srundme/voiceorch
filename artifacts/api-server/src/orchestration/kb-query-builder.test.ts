@@ -19,9 +19,10 @@ const CONCENTRIX: Parameters<typeof buildKbQuery>[0]["activeEntity"] = {
 };
 
 describe("resolveKbQueryBuilderMode", () => {
-  it("defaults to off", () => {
-    expect(resolveKbQueryBuilderMode({})).toBe("off");
+  it("defaults to on (production)", () => {
+    expect(resolveKbQueryBuilderMode({})).toBe("on");
     expect(resolveKbQueryBuilderMode({ KB_QUERY_BUILDER: "shadow" })).toBe("shadow");
+    expect(resolveKbQueryBuilderMode({ KB_QUERY_BUILDER: "OFF" })).toBe("off");
     expect(resolveKbQueryBuilderMode({ KB_QUERY_BUILDER: "ON" })).toBe("on");
   });
 });

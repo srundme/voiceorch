@@ -6,10 +6,10 @@
  * stay unchanged; only the query string fed into retrieveKbContextMultiEx may
  * change when KB_QUERY_BUILDER=on.
  *
- * KB_QUERY_BUILDER=off     raw STT query (default)
+ * KB_QUERY_BUILDER=on      existing search receives the built query (default)
  * KB_QUERY_BUILDER=shadow  raw STT query to the LLM path; log (and optionally
  *                          dual-search) the built query
- * KB_QUERY_BUILDER=on      existing search receives the built query
+ * KB_QUERY_BUILDER=off     raw STT query only (legacy)
  * KB_PHASE3_CANARY_AGENT_IDS  listed agents run as builder=on (Strategy B)
  *                             regardless of the global flag. Empty = nobody extra.
  *
@@ -269,9 +269,10 @@ export function resolveKbQueryBuilderMode(
   agentId?: number | null,
 ): KbQueryBuilderMode {
   if (isKbPhase3CanaryAgent(agentId, env)) return "on";
-  const raw = (env["KB_QUERY_BUILDER"] ?? "off").trim().toLowerCase();
-  if (raw === "shadow" || raw === "on") return raw;
-  return "off";
+  const raw = (env["KB_QUERY_BUILDER"] ?? "on").trim().toLowerCase();
+  if (raw === "shadow") return "shadow";
+  if (raw === "off" || raw === "0" || raw === "false") return "off";
+  return "on";
 }
 
 /** Dual raw-vs-built search in shadow. Default on; set 0 to disable. */

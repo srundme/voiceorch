@@ -4,9 +4,9 @@
  * One question: does this utterance need external factual knowledge?
  * Deterministic, no LLM. Fail open (uncertain / error → retrieve).
  *
- * KB_RETRIEVAL_GATE=off     current production (default)
- * KB_RETRIEVAL_GATE=shadow  current production + log the decision
- * KB_RETRIEVAL_GATE=on      skip live KB search when the gate says skip
+ * KB_RETRIEVAL_GATE=on      skip live KB search when the gate says skip (default)
+ * KB_RETRIEVAL_GATE=shadow  retrieve always + log the decision
+ * KB_RETRIEVAL_GATE=off     always retrieve (legacy)
  * KB_PHASE3_CANARY_AGENT_IDS  listed agents run as gate=on regardless of the
  *                             global flag. Empty = nobody extra.
  *
@@ -279,9 +279,10 @@ export function resolveKbRetrievalGateMode(
   agentId?: number | null,
 ): KbRetrievalGateMode {
   if (isKbPhase3CanaryAgent(agentId, env)) return "on";
-  const raw = (env["KB_RETRIEVAL_GATE"] ?? "off").trim().toLowerCase();
-  if (raw === "shadow" || raw === "on") return raw;
-  return "off";
+  const raw = (env["KB_RETRIEVAL_GATE"] ?? "on").trim().toLowerCase();
+  if (raw === "shadow") return "shadow";
+  if (raw === "off" || raw === "0" || raw === "false") return "off";
+  return "on";
 }
 
 function isRepeatOrHearAsk(text: string): boolean {

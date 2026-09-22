@@ -1,11 +1,12 @@
 /**
- * Phase 3 production canary.
+ * Phase 2/3 KB retrieval defaults (production).
  *
- * Global defaults stay off. Listed agent IDs run as:
+ * Global defaults are ON for every agent:
  *   KB_RETRIEVAL_GATE=on
  *   KB_QUERY_BUILDER=on
  *
- * Promotion to every agent is still the explicit global flags, not this list.
+ * Set either env to `off` / `shadow` to dial back. Optional canary list still
+ * forces ON for listed agents even when global is off:
  *
  *   KB_PHASE3_CANARY_AGENT_IDS=1234,1231
  */
