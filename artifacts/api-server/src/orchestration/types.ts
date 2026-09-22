@@ -350,6 +350,11 @@ export interface AgentConfig {
 
   // Tier 1 — Conversation Behavior
   greetingMessage: string | null;
+  /**
+   * free_text = Call script only (no Identity/Flow compile).
+   * Affects greeting-LLM first-contact rules.
+   */
+  scriptMode?: "free_text" | "structured" | null;
   endCallPhrases: string[];
   silenceTimeoutSeconds: number | null;
   /**

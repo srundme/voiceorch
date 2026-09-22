@@ -16,7 +16,9 @@ import {
   getListCallsQueryKey,
   useListAgents,
   getListAgentsQueryKey,
+  customFetch,
 } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -37,7 +39,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 import { EmptyState } from "@/components/empty-state";
 import { MetricCard, MetricStrip } from "@/components/metric-strip";
-import { getDispositionValues } from "@/lib/disposition-display";
+import {
+  getDispositionValues,
+  callMatchesDispositionLabel,
+  labelsFromDispositionSchema,
+  labelsFromDispositionTaxonomy,
+} from "@/lib/disposition-display";
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
 
@@ -363,22 +370,64 @@ export default function CallsList() {
     query: { queryKey: getListAgentsQueryKey() },
   });
 
+  // Admin-configured disposition labels for the selected agent (or union across agents).
+  const dispositionConfigQ = useQuery({
+    queryKey: ["history-disposition-labels", agentFilter, agents?.map((a) => a.id).join(",") ?? ""],
+    enabled: !!agents?.length,
+    queryFn: async () => {
+      const ids = agentFilter !== "all"
+        ? [parseInt(agentFilter, 10)].filter((n) => Number.isFinite(n) && n > 0)
+        : (agents ?? []).map((a) => a.id);
+      const labels = new Set<string>();
+      await Promise.all(ids.slice(0, 40).map(async (id) => {
+        try {
+          const cfg = await customFetch<{ taxonomy?: Record<string, string[]> }>(
+            `/api/disposition/config/${id}`,
+          );
+          for (const label of labelsFromDispositionTaxonomy(cfg.taxonomy)) labels.add(label);
+        } catch {
+          /* agent may have no disposition row */
+        }
+      }));
+      // Legacy schema choice options as fallback when taxonomy is empty.
+      if (labels.size === 0) {
+        for (const agent of agents ?? []) {
+          if (agentFilter !== "all" && String(agent.id) !== agentFilter) continue;
+          for (const label of labelsFromDispositionSchema(
+            (agent as { dispositionSchema?: Array<{ key?: string; type?: string; options?: string[] }> }).dispositionSchema,
+          )) {
+            labels.add(label);
+          }
+        }
+      }
+      return [...labels].sort((a, b) => a.localeCompare(b));
+    },
+    staleTime: 60_000,
+  });
+
   // Restore the table scroll position when returning to this list.
   const callsScrollRef = useScrollRestoration<HTMLDivElement>("calls-list", !callsLoading);
 
-  const dispositionOptions = useMemo(() => {
-    if (!calls?.length) return [] as string[];
-    const set = new Set<string>();
-    for (const c of calls) {
-      for (const v of getDispositionValues((c as any).dispositionResult)) set.add(v);
+  const dispositionOptions = dispositionConfigQ.data ?? [];
+
+  // Drop a stale disposition filter if it is not in the admin-configured list.
+  useEffect(() => {
+    if (dispositionFilter === "all") return;
+    if (!dispositionOptions.length) return;
+    if (!dispositionOptions.includes(dispositionFilter)) {
+      setDispositionFilter("all");
     }
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [calls]);
+  }, [dispositionFilter, dispositionOptions]);
 
   // Client-side search filter
   const filteredCalls = useMemo(() => {
     if (!calls) return [];
     let result = [...calls];
+
+    // Belt-and-suspenders: API should already filter status; keep UI honest if cache is stale.
+    if (statusFilter !== "all") {
+      result = result.filter((c) => c.status === statusFilter);
+    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -393,7 +442,10 @@ export default function CallsList() {
 
     if (dispositionFilter !== "all") {
       result = result.filter((c) =>
-        getDispositionValues((c as any).dispositionResult).includes(dispositionFilter),
+        callMatchesDispositionLabel(
+          (c as { dispositionResult?: Record<string, string | number | boolean | null> }).dispositionResult,
+          dispositionFilter,
+        ),
       );
     }
 
@@ -433,7 +485,7 @@ export default function CallsList() {
     }
 
     return result;
-  }, [calls, searchQuery, dispositionFilter, dateFrom, dateTo, sortBy]);
+  }, [calls, statusFilter, searchQuery, dispositionFilter, dateFrom, dateTo, sortBy]);
 
   // Reset to page 1 whenever any filter/search/sort changes — but NOT on the
   // initial mount, so a page restored from the URL survives.

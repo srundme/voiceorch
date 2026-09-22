@@ -43,6 +43,8 @@ export function buildCompactGreetingPrompt(
     agentLanguage?: string | null;
     languageAutoDetect?: boolean;
     squadHandoffTakeover?: boolean;
+    /** free_text agents: persona Call script only — no company/Identity stages. */
+    scriptMode?: "free_text" | "structured" | string | null;
   },
 ): string {
   const memoryMatch = fullSystemPrompt.match(
@@ -76,12 +78,21 @@ export function buildCompactGreetingPrompt(
   const langName = LANG_DISPLAY_NAMES[language] ?? language;
   const languageInstruction = `[LANGUAGE] Respond in ${langName}.`;
   const outbound = opts?.callDirection === "outbound";
-  const firstContactRule = outbound
-    ? "[FIRST-CONTACT UX] This is a phone call, not a demo. The caller must understand who is calling before hearing a pitch. " +
-      "Speak ONE short sentence only: your name/company exactly as scripted, a very brief reason for the call, and ask permission to continue. " +
-      "Target 18 words or fewer when natural in this language. Do NOT list features, benefits, prices, or multiple questions. Then stop and listen."
-    : "[FIRST-CONTACT UX] Speak ONE short sentence only: greet briefly, identify the company exactly as scripted when available, and ask how you can help. " +
-      "Target 18 words or fewer when natural in this language. Do NOT list features or ask multiple questions. Then stop and listen.";
+  const freeText = opts?.scriptMode === "free_text";
+  const firstContactRule = freeText
+    ? outbound
+      ? "[FIRST-CONTACT UX] This is a phone call. Speak ONE short sentence only from the persona/opening in the script: " +
+        "who you are and ask if they are free to talk (or how they are). " +
+        "Do NOT invent a company, business, recruitment, verification, or sales reason. " +
+        "Target 18 words or fewer when natural in this language. Then stop and listen."
+      : "[FIRST-CONTACT UX] Speak ONE short sentence only from the persona/opening in the script. " +
+        "Do NOT invent a company or business purpose. Then stop and listen."
+    : outbound
+      ? "[FIRST-CONTACT UX] This is a phone call, not a demo. The caller must understand who is calling before hearing a pitch. " +
+        "Speak ONE short sentence only: your name/company exactly as scripted, a very brief reason for the call ONLY if that reason is written in the script, and ask permission to continue. " +
+        "Target 18 words or fewer when natural in this language. Do NOT list features, benefits, prices, or multiple questions. Then stop and listen."
+      : "[FIRST-CONTACT UX] Speak ONE short sentence only: greet briefly, identify the company exactly as scripted when available, and ask how you can help. " +
+        "Target 18 words or fewer when natural in this language. Do NOT list features or ask multiple questions. Then stop and listen.";
   const handoffTakeover = opts?.squadHandoffTakeover === true;
   const isReturningCaller = !resumeDropped && !handoffTakeover && isReturningCallerMemoryBlock(memoryBlock);
   const squadHandoffMatch = fullSystemPrompt.match(
@@ -105,16 +116,18 @@ export function buildCompactGreetingPrompt(
         "Speak 1 short sentence only: greet the caller (by name only if CALLER MEMORY has a real person name) " +
         "and ask if it is a good time to talk. Then wait. Do not recap the previous call."
     : scriptBlock
-      ? "[OPENING] Use the GREETING / opening from CALL FLOW / FLOW above only as source material for the short first-contact line. " +
+      ? "[OPENING] Use the GREETING / opening from CALL FLOW / FLOW / Call script above only as source material for the short first-contact line. " +
         "Use the caller's company/contact name when present. Do not deliver the full pitch yet."
       : "[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.";
   // Call 7943: agent display name "voiceathon new agent" leaked into spoken opener
   // as "Thanks for calling voiceathon" even though the prompt never named that brand.
   const agentLabel = (opts?.agentName ?? "").trim();
   const antiInventionRule =
-    "[NEVER INVENT] Use ONLY the company name, brand names, and facts written in the scripted instructions above " +
-    "(IDENTITY / CALL FLOW / GREETING). " +
+    "[NEVER INVENT] Use ONLY names, brands, and reasons written in the scripted instructions above " +
+    "(IDENTITY / CALL FLOW / GREETING / Call script). " +
     "If no company name is given there, greet WITHOUT naming any company — NEVER make up a company, product, or service. " +
+    "NEVER invent verifying company/business details, நிறுவன விவரங்கள் சரிபார்த்தல், KYC, recruitment screening, " +
+    "Quebec, or any BPO-style purpose that is not in the script (call 28926). " +
     "The agent/workspace display name is an internal label, NOT a company brand — never say " +
     `"thanks for calling <agent name>"` +
     (agentLabel ? ` (do not say "${agentLabel}" or a shortened form of it as the company).` : ".");
@@ -153,4 +166,39 @@ export function buildCompactGreetingPrompt(
     antiInventionRule,
   ].filter(Boolean);
   return parts.join("\n\n");
+}
+
+/**
+ * Call 28926: greeting LLM invented "உங்கள் நிறுவனத்தின் விவரங்களை சரிபார்க்க…"
+ * when the script never asked for company verification. Keep the identity/ask
+ * clauses; drop the hallucinated BPO reason.
+ */
+const HALLUCINATED_COMPANY_VERIFY_RE =
+  /(?:உங்கள்|உங்க)\s*நிறுவன(?:த்தின்)?\s*விவர(?:ங்களை)?\s*சரிபா|நிறுவன(?:த்தின்)?\s*விவர(?:ங்களை)?\s*சரிபார்க்க\s*அழை|verify(?:ing)?\s+(?:your\s+)?(?:company|business)\s+details|calling\s+to\s+(?:verify|confirm)\s+(?:your\s+)?(?:company|business)/iu;
+
+export function scriptMentionsCompanyVerification(script: string): boolean {
+  return HALLUCINATED_COMPANY_VERIFY_RE.test(script)
+    || /\b(?:company\s+details|business\s+details|kyc|verify\s+the\s+company)\b/i.test(script);
+}
+
+export function stripHallucinatedCompanyVerifyGreeting(
+  greeting: string,
+  fullSystemPrompt: string,
+): string {
+  const text = greeting.trim();
+  if (!text || scriptMentionsCompanyVerification(fullSystemPrompt)) return text;
+  if (!HALLUCINATED_COMPANY_VERIFY_RE.test(text)) return text;
+
+  // Keep clauses that do not look like company-verify; prefer the first identity line.
+  const clauses = text
+    .split(/(?<=[.?!\u0964\u0965])\s+|(?<=[.?!\u0964\u0965])(?=\S)/u)
+    .map((c) => c.trim())
+    .filter(Boolean);
+  const kept = clauses.filter((c) => !HALLUCINATED_COMPANY_VERIFY_RE.test(c));
+  if (kept.length > 0) return kept.join(" ").trim();
+
+  // Whole greeting was the hallucination — fall back to first short clause before it.
+  const cut = text.search(HALLUCINATED_COMPANY_VERIFY_RE);
+  if (cut > 8) return text.slice(0, cut).replace(/[,.\s]+$/u, "").trim();
+  return text;
 }

@@ -574,9 +574,13 @@ router.get("/calls", requireAuth, clientContext, async (req, res): Promise<void>
   // Workspace: owner + teammates share one History list. Legacy rows with
   // null userId still match if the agent belongs to someone in the workspace.
   const ownership = workspaceCallsWhere(scope.userIds);
-  const where = query.data.agentId != null
-    ? and(ownership, eq(callsTable.agentId, query.data.agentId))
-    : ownership;
+  const statusFilter = (query.data.status ?? "").trim();
+  const where = and(
+    ownership,
+    query.data.agentId != null ? eq(callsTable.agentId, query.data.agentId) : undefined,
+    // History status dropdown was ignored — busy/completed/etc. all returned the same set.
+    statusFilter ? eq(callsTable.status, statusFilter) : undefined,
+  );
 
   const calls = await db
     .select({

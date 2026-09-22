@@ -30,8 +30,10 @@ export const SELF_ECHO_MIN_WORDS = 4;
  * agent line. Echo comes back degraded — dropped articles, merged words, wrong
  * inflections — so an exact substring match misses most of it, while a high
  * overlap bar keeps genuine caller turns out of the filter.
+ * 0.72 catches QA 28437-style mangled greeting echoes without swallowing
+ * partial caller reuse of script words.
  */
-export const SELF_ECHO_MIN_OVERLAP = 0.8;
+export const SELF_ECHO_MIN_OVERLAP = 0.72;
 
 /**
  * Latin STT of Indic TTS is often a 4–7 word hallucination with zero lexical
@@ -141,13 +143,22 @@ export function isSelfEcho(check: SelfEchoCheck): boolean {
   if (check.tokens.length === 0) return false;
   const hit = maxOverlap(check.tokens, check.recentAgentSpeech);
   if (check.tokens.length >= SELF_ECHO_MIN_WORDS && hit >= SELF_ECHO_MIN_OVERLAP) return true;
+  // Greeting / short agent line echoed early (QA 28437): 3+ words, high
+  // overlap, TTS still on the wire — treat as echo even under the word floor.
+  if (
+    check.ttsOnWire
+    && check.tokens.length >= 3
+    && check.tokens.length < SELF_ECHO_MIN_WORDS
+    && hit >= SELF_ECHO_MIN_OVERLAP
+  ) return true;
   // Sidetone STT is often a short junk fragment with none of our words
-  // (call 25295: "Camera", "Downward", "Meeting பைங்கா"). Real short answers
-  // reuse the script ("yes", "voice process") and stay caller.
+  // (call 25295: "Camera", "Downward"). Cap at 2 words so a 3-word city/name
+  // answer is not swallowed while TTS finishes.
   if (
     !check.protectedShortIntent
     && check.ttsOnWire
-    && check.tokens.length < SELF_ECHO_MIN_WORDS
+    && check.tokens.length > 0
+    && check.tokens.length <= 2
     && hit === 0
   ) return true;
   // Call 26668: five Latin words, zero overlap, Tamil TTS still playing.

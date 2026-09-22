@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { getDispositionValues } from "./disposition-display";
+import {
+  getDispositionValues,
+  labelsFromDispositionTaxonomy,
+  labelsFromDispositionSchema,
+  callMatchesDispositionLabel,
+  isDispositionDataCollectionKey,
+} from "./disposition-display";
 
 describe("getDispositionValues", () => {
   it("reads dynamic taxonomy key", () => {
@@ -32,5 +38,51 @@ describe("getDispositionValues", () => {
         ["whatsapp_number"],
       ),
     ).toEqual(["demo_booked"]);
+  });
+
+  it("drops common data-collection keys without an explicit exclude list", () => {
+    expect(
+      getDispositionValues({
+        "Lead Status": "Hot Lead",
+        email: "a@b.com",
+        phone: "999",
+        primary: "Lead Status",
+        sub: "Hot Lead",
+      }),
+    ).toEqual(["Hot Lead"]);
+  });
+});
+
+describe("labelsFromDispositionTaxonomy", () => {
+  it("returns admin sub-labels only", () => {
+    expect(labelsFromDispositionTaxonomy({
+      "Lead Status": ["Hot Lead", "Not Interested"],
+      "Next Action": ["Call Back Tomorrow"],
+    })).toEqual(["Call Back Tomorrow", "Hot Lead", "Not Interested"]);
+  });
+});
+
+describe("labelsFromDispositionSchema", () => {
+  it("keeps choice options and skips text fields", () => {
+    expect(labelsFromDispositionSchema([
+      { key: "outcome", type: "choice", options: ["Interested", "Busy"] },
+      { key: "email", type: "text" },
+    ])).toEqual(["Busy", "Interested"]);
+  });
+});
+
+describe("callMatchesDispositionLabel", () => {
+  it("matches case-insensitively", () => {
+    expect(callMatchesDispositionLabel(
+      { "Lead Status": "Hot Lead", sub: "Hot Lead" },
+      "hot lead",
+    )).toBe(true);
+  });
+});
+
+describe("isDispositionDataCollectionKey", () => {
+  it("flags email/phone", () => {
+    expect(isDispositionDataCollectionKey("email")).toBe(true);
+    expect(isDispositionDataCollectionKey("Lead Status")).toBe(false);
   });
 });

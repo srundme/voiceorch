@@ -747,9 +747,9 @@ function envInt(name: string, def: number): number {
  *  Default 0 — trust provider finals. Override with env FORCE_FINALIZE_MS. */
 export const FORCE_FINALIZE_MS = envInt("FORCE_FINALIZE_MS", 0);
 /** Loose backstop: no usable transcript at all since we entered "Listening…" →
- *  recovery reprompt. Default 0 — no SnapServe “I didn’t catch that”.
- *  Override with env STALL_BACKSTOP_MS. */
-export const STALL_BACKSTOP_MS = envInt("STALL_BACKSTOP_MS", 0);
+ *  recovery reprompt. Default 8s so quiet user-finals don't leave dead air (QA 28104/28375).
+ *  Set env STALL_BACKSTOP_MS=0 to disable. */
+export const STALL_BACKSTOP_MS = envInt("STALL_BACKSTOP_MS", 8000);
 /** Shorter stall window after greeting on outbound calls (caller may need a beat to respond).
  *  Kept closer to inbound so we don't rush "can't hear" / hangup after a stub opener. */
 export const OUTBOUND_POST_GREETING_STALL_MS = envInt("OUTBOUND_POST_GREETING_STALL_MS", 0);

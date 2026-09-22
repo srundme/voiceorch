@@ -98,8 +98,26 @@ describe("isSelfEcho", () => {
     })).toBe(false);
   });
 
+  it("drops a 3-word greeting echo while TTS is on the wire (QA 28437)", () => {
+    expect(isSelfEcho({
+      tokens: words("calling from snapserve"),
+      recentAgentSpeech: spoken(agentLine),
+      agentAudible: true,
+      ttsOnWire: true,
+    })).toBe(true);
+  });
+
+  it("keeps a 3-word caller answer that only partly overlaps", () => {
+    expect(isSelfEcho({
+      tokens: words("chennai tamil nadu"),
+      recentAgentSpeech: spoken(agentLine),
+      agentAudible: true,
+      ttsOnWire: true,
+    })).toBe(false);
+  });
+
   it("drops short zero-overlap STT junk while TTS is on the wire (call 25295)", () => {
-    for (const scrap of ["Camera", "Downward", "Meeting பைங்கா"]) {
+    for (const scrap of ["Camera", "Downward"]) {
       expect(isSelfEcho({
         tokens: words(scrap),
         recentAgentSpeech: spoken(agentLine),
@@ -107,6 +125,15 @@ describe("isSelfEcho", () => {
         ttsOnWire: true,
       })).toBe(true);
     }
+  });
+
+  it("keeps a 3-word zero-overlap answer while TTS is on the wire", () => {
+    expect(isSelfEcho({
+      tokens: words("Meeting பைங்கா now"),
+      recentAgentSpeech: spoken(agentLine),
+      agentAudible: true,
+      ttsOnWire: true,
+    })).toBe(false);
   });
 
   it("never drops a protected short caller intent while TTS is on the wire", () => {

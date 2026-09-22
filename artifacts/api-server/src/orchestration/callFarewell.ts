@@ -93,6 +93,7 @@ export function isCallerFarewellUtterance(transcript: string): boolean {
  */
 export function isCallerClosingUtterance(transcript: string): boolean {
   if (isCallerFarewellUtterance(transcript)) return true;
+  if (isCallerNotInterestedUtterance(transcript)) return true;
   const t = transcript
     .toLowerCase()
     .replace(/[^\u0B80-\u0BFF\u0900-\u097Fa-z\s]/g, "")
@@ -109,6 +110,31 @@ export function isCallerClosingUtterance(transcript: string): boolean {
   if (/அவ்ளோ|அவ்வளவு|அவ்ளோதான்|அவ்வளவுதான்/.test(t)) return true;
   if (/\billa\b/.test(t) && /\bthank\s*you\b/.test(t)) return true;
   if (/இல்ல/.test(t) && /நன்றி/.test(t)) return true;
+  return false;
+}
+
+/**
+ * Clear decline of the offer / pitch (QA 28393, 28123: kept asking about funding).
+ * Short utterances only — long turns that mention interest mid-sentence stay with the LLM.
+ */
+export function isCallerNotInterestedUtterance(transcript: string): boolean {
+  const raw = transcript.trim();
+  if (!raw || raw.length > 100) return false;
+  const t = raw
+    .toLowerCase()
+    .replace(/[^\u0B80-\u0BFF\u0900-\u097Fa-z\s']/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (/\b(not interested|no interest|don'?t want|do not want|no thanks|no thank you)\b/.test(t)) {
+    return true;
+  }
+  if (/\b(remove me|stop calling|don'?t call|do not call|never call)\b/.test(t)) return true;
+  // Tamil / romanised
+  if (/ஆசையில்லை|வேண்டாம்|தேவையில்லை|போதும்|இன்டரஸ்ட்\s*இல்ல|interest\s*இல்ல/.test(raw)) return true;
+  if (/\b(vendam|vendaam|thevayilla|aasai illa|interested? illa|interest illa)\b/.test(t)) return true;
+  // Hindi / Hinglish
+  if (/दिलचस्पी\s*नहीं|रुचि\s*नहीं|मत\s*कॉल/.test(raw)) return true;
+  if (/\b(interested nahi|nahi chahiye|mat call)\b/.test(t)) return true;
   return false;
 }
 

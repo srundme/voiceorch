@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isCallerFarewellUtterance, isCallerClosingUtterance, transcriptHasFarewellEnding } from "./callFarewell.js";
+import {
+  isCallerFarewellUtterance,
+  isCallerClosingUtterance,
+  isCallerNotInterestedUtterance,
+  transcriptHasFarewellEnding,
+} from "./callFarewell.js";
 
 describe("isCallerFarewellUtterance", () => {
   it("matches Latin bye variants", () => {
@@ -39,6 +44,23 @@ describe("isCallerFarewellUtterance", () => {
   it("rejects long non-farewell turns", () => {
     expect(isCallerFarewellUtterance("ஓகே மேடம், அது எப்படி ஏர்ன் பண்றது சொல்லுங்கள்")).toBe(false);
     expect(isCallerFarewellUtterance("thank you, now tell me about the discount")).toBe(false);
+  });
+});
+
+describe("isCallerNotInterestedUtterance", () => {
+  it("matches English not-interested (QA funding re-ask)", () => {
+    expect(isCallerNotInterestedUtterance("Not interested")).toBe(true);
+    expect(isCallerNotInterestedUtterance("I'm not interested, thanks")).toBe(true);
+    expect(isCallerNotInterestedUtterance("no interest")).toBe(true);
+  });
+
+  it("matches Tamil / romanised rejection", () => {
+    expect(isCallerNotInterestedUtterance("எனக்கு interest இல்ல")).toBe(true);
+    expect(isCallerNotInterestedUtterance("vendam")).toBe(true);
+  });
+
+  it("rejects soft maybe / ask-later", () => {
+    expect(isCallerNotInterestedUtterance("call me later about funding")).toBe(false);
   });
 });
 

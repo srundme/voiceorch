@@ -19,6 +19,7 @@ import { buildAntiRepeatNudge, extractRecentAgentQuestions, isBareAcknowledgemen
 import {
   isCallerFarewellUtterance as isCallerFarewellUtteranceShared,
   isCallerClosingUtterance,
+  isCallerNotInterestedUtterance,
   transcriptHasFarewellEnding,
 } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
@@ -187,7 +188,8 @@ import {
 } from "./intake-tools.js";
 import { recordIntakeEnglishTurn } from "../lib/intake-service.js";
 import { logger } from "../lib/logger.js";
-import { buildCompactGreetingPrompt } from "./compact-greeting-prompt.js";
+import { isHumanShortUtterancePause, isLikelyRingBurstPattern } from "./amd-confirm.js";
+import { buildCompactGreetingPrompt, stripHallucinatedCompanyVerifyGreeting } from "./compact-greeting-prompt.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
 import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable, platformSettingsTable } from "@workspace/db";
@@ -537,7 +539,7 @@ const BARGE_RECOVERY_MS = 800;
 const BARGE_RECOVERY_MAX_WAIT_MS = 8000;
 const TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 0;
 // Heard-text window for interruption hints (not self-echo detection).
-const SELF_ECHO_TAIL_MS       = 2000;
+const SELF_ECHO_TAIL_MS       = 2800;
 const CARRIER_ECHO_LATENCY_MS = 1500;  // margin added to the greeting echo-hold to cover the
                                         // round-trip carrier echo latency (observed ~777 ms)
 // Tail drain duration comes from agentConfig.telephonyTailDrainMs (Latency Tuning UI).
@@ -563,14 +565,14 @@ const AMD_CONFIRM_WINDOW_MS =                                       // quiet →
   Number(process.env["AMD_CONFIRM_WINDOW_MS"]) || 1200;
 const AMD_CONFIRM_HARD_CAP_MS =                                     // absolute ceiling while speech is ongoing
   Number(process.env["AMD_CONFIRM_HARD_CAP_MS"]) || 3500;
+const AMD_NO_SPEECH_HUMAN_MS =                                      // quiet after answer → human (was 1200; ringback false-human)
+  Number(process.env["AMD_NO_SPEECH_HUMAN_MS"]) || 2500;
 const AMD_CONTINUOUS_GREETING_MS =                                  // continuous monologue that CONFIRMS a machine
-  Number(process.env["AMD_CONTINUOUS_GREETING_MS"]) || 2000;
+  Number(process.env["AMD_CONTINUOUS_GREETING_MS"]) || 1600;
 const AMD_SPEECH_GAP_MS =                                           // silence gap that ends a continuous speech run
   Number(process.env["AMD_SPEECH_GAP_MS"]) || 400;
 const AMD_HUMAN_PAUSE_MS =                                          // pause after a SHORT utterance ("hello?") → human
   Number(process.env["AMD_HUMAN_PAUSE_MS"]) || 500;
-const AMD_NO_SPEECH_HUMAN_MS =                                      // quiet after answer → human (fast greet)
-  Number(process.env["AMD_NO_SPEECH_HUMAN_MS"]) || 1200;
 const AMD_CONFIRM_ENERGY_THRESHOLD =                               // RMS bar for "someone is speaking" during confirm
   Number(process.env["AMD_CONFIRM_ENERGY_THRESHOLD"]) || VOICEMAIL_GREETING_ENERGY_THRESHOLD;
 const AMD_NEAR_MACHINE_MS = Math.floor(AMD_CONTINUOUS_GREETING_MS * 0.75);
@@ -1129,6 +1131,8 @@ export class OrchestrationPipeline implements VoiceSession {
   private amdRunStartAt = 0;       // start (ms) of the current continuous speech run; 0 = in silence
   private amdLastSpeechAt = 0;     // ms timestamp of the last energetic frame during confirm
   private amdMaxContinuousMs = 0;  // longest continuous speech run observed during confirm
+  /** Completed energy bursts in the AMD window (ring = many short; hello = one). */
+  private amdSpeechBurstCount = 0;
   private amdBeepHeard = false;    // true once a VM record-beep tone is confirmed
   private readonly amdBeepDetector = new VoicemailBeepDetector();
   private readonly vmBeepDetector = new VoicemailBeepDetector();
@@ -4140,6 +4144,33 @@ export class OrchestrationPipeline implements VoiceSession {
         }
         detected = resolved.lang;
         if (detected) {
+          // QA 28200/28512: don't passively jump to an unrelated Indic language
+          // (e.g. kn/hi) when the agent primary is another Indic (ta) unless the
+          // caller explicitly requested it.
+          const agentPrimary = (this.agent.language || this.agent.sttConfig.language || "")
+            .toLowerCase()
+            .slice(0, 2);
+          const detPri = detected.toLowerCase().slice(0, 2);
+          const explicit = !!this.requestedLangLatch;
+          if (
+            !explicit
+            && agentPrimary
+            && agentPrimary !== "en"
+            && detPri !== "en"
+            && detPri !== agentPrimary
+            && this.turnIndex < 3
+          ) {
+            logger.info(
+              {
+                callId: this.config.callId,
+                agentPrimary,
+                detected,
+                text: transcript.slice(0, 60),
+              },
+              "Auto-detect: ignoring early cross-Indic LID drift",
+            );
+            detected = this.currentLang || `${agentPrimary}-IN`;
+          }
           this._pendingLangConfirm = "";
           this._pendingLangConfirmCount = 0;
           if (detected !== this.currentLang) {
@@ -4823,6 +4854,7 @@ export class OrchestrationPipeline implements VoiceSession {
         this.amdMaxContinuousMs = Math.max(this.amdMaxContinuousMs, now - this.amdRunStartAt);
       } else if (this.amdRunStartAt !== 0 && (now - this.amdLastSpeechAt) >= AMD_SPEECH_GAP_MS) {
         // Silence gap long enough to end the current continuous speech run.
+        this.amdSpeechBurstCount++;
         this.amdRunStartAt = 0;
       }
       return;
@@ -5689,6 +5721,7 @@ export class OrchestrationPipeline implements VoiceSession {
                 agentLanguage: greetLang,
                 languageAutoDetect: this.agent.languageAutoDetect === true,
                 squadHandoffTakeover: this.config.isSquadHandoffTakeover === true,
+                scriptMode: this.agent.scriptMode ?? null,
               },
             ),
             this.salutationFor(null),
@@ -5731,6 +5764,7 @@ export class OrchestrationPipeline implements VoiceSession {
           if (!firstSentenceSent && greeting.trim()) {
             onFirstSentence?.(pickStreamedGreetingHead(greeting, this.ttsExtractOpts()) || greeting.trim());
           }
+          greeting = stripHallucinatedCompanyVerifyGreeting(greeting, this.agent.systemPrompt);
           const greetingLlmMs = Date.now() - _greetLlmStartAt;
           logger.info(
             { callId: this.config.callId, greetingLlmMs, promptChars: greetingSystemPrompt.length },
@@ -6321,6 +6355,11 @@ export class OrchestrationPipeline implements VoiceSession {
     this.amdConfirming = true;
     this.amdBeepHeard = false;
     this.amdBeepDetector.reset();
+    this.amdSpeechBurstCount = 0;
+    this.amdHeardSpeech = false;
+    this.amdRunStartAt = 0;
+    this.amdLastSpeechAt = 0;
+    this.amdMaxContinuousMs = 0;
     // This loop is now the SOLE frame sender — silence the keepalive watchdog
     // so two pumps never interleave on the same socket (helicopter chop).
     this.amdVmManualPumpActive = true;
@@ -6372,27 +6411,51 @@ export class OrchestrationPipeline implements VoiceSession {
           ? "continuous-greeting+external-machine" : "continuous-greeting";
         break;
       }
-      // Human: short "hello?" then a pause.
+      // Human: short "hello?" then a pause — NOT ring cadence (multi short bursts).
       if (this.amdExternalVerdict !== "machine"
-          && this.amdHeardSpeech && this.amdRunStartAt === 0
-          && this.amdMaxContinuousMs < continuousBarMs
-          && sinceSpeech >= AMD_HUMAN_PAUSE_MS) {
+          && isHumanShortUtterancePause({
+            heardSpeech: this.amdHeardSpeech,
+            currentlyInSpeechRun: this.amdRunStartAt !== 0,
+            speechBurstCount: this.amdSpeechBurstCount,
+            maxContinuousMs: this.amdMaxContinuousMs,
+            continuousBarMs: continuousBarMs,
+            sinceSpeechMs: sinceSpeech,
+            humanPauseMs: AMD_HUMAN_PAUSE_MS,
+          })) {
         verdict = "human"; signal = "short-utterance-pause"; break;
       }
-      // Human: quiet shortly after answer — greet fast (do not park ~8s).
+      // Still ringing: multi short energy bursts — wait for beep / monologue / hard cap.
       if (this.amdExternalVerdict !== "machine"
+          && isLikelyRingBurstPattern({
+            speechBurstCount: this.amdSpeechBurstCount,
+            maxContinuousMs: this.amdMaxContinuousMs,
+          })
+          && elapsed < AMD_CONFIRM_HARD_CAP_MS) {
+        // keep listening
+      } else if (this.amdExternalVerdict !== "machine"
           && !this.amdHeardSpeech && elapsed >= AMD_NO_SPEECH_HUMAN_MS) {
+        // Human: quiet shortly after answer — greet (longer than before to avoid ring air).
         verdict = "human"; signal = "no-speech"; break;
       }
       // Absolute ceiling while a monologue is still running.
       if (elapsed >= AMD_CONFIRM_HARD_CAP_MS) {
         if (this.amdBeepHeard
             || this.amdMaxContinuousMs >= AMD_NEAR_MACHINE_MS
-            || this.amdExternalVerdict === "machine") {
+            || this.amdExternalVerdict === "machine"
+            || isLikelyRingBurstPattern({
+              speechBurstCount: this.amdSpeechBurstCount,
+              maxContinuousMs: this.amdMaxContinuousMs,
+            })) {
+          // Ring never answered → treat as machine (hangup / leave message), not greet.
           verdict = "machine";
           signal = this.amdBeepHeard ? "hard-cap+beep"
             : this.amdExternalVerdict === "machine" ? "hard-cap+external-machine"
-            : "hard-cap-near-continuous";
+            : isLikelyRingBurstPattern({
+              speechBurstCount: this.amdSpeechBurstCount,
+              maxContinuousMs: this.amdMaxContinuousMs,
+            })
+              ? "hard-cap-ring-pattern"
+              : "hard-cap-near-continuous";
         } else {
           verdict = "human";
           signal = "hard-cap";
@@ -6400,19 +6463,28 @@ export class OrchestrationPipeline implements VoiceSession {
         break;
       }
       // Soft window while quiet → human (or machine if we already heard a long run / beep).
+      // Do not greet into ringback: multi short bursts keep listening until hard cap.
       if (elapsed >= windowMs && this.amdRunStartAt === 0) {
-        if (this.amdBeepHeard
+        if (isLikelyRingBurstPattern({
+          speechBurstCount: this.amdSpeechBurstCount,
+          maxContinuousMs: this.amdMaxContinuousMs,
+        })) {
+          // keep listening for beep / monologue / hard cap
+        } else if (!this.amdHeardSpeech && elapsed < AMD_NO_SPEECH_HUMAN_MS) {
+          // Soft window alone used to greet at 1.2s into quiet ring air — wait.
+        } else if (this.amdBeepHeard
             || this.amdMaxContinuousMs >= AMD_NEAR_MACHINE_MS
             || this.amdExternalVerdict === "machine") {
           verdict = "machine";
           signal = this.amdBeepHeard ? "window-elapsed+beep"
             : this.amdExternalVerdict === "machine" ? "window-elapsed+external-machine"
             : "window-elapsed-near-continuous";
+          break;
         } else {
           verdict = "human";
           signal = windowExtended ? "window-elapsed-extended" : "window-elapsed";
+          break;
         }
-        break;
       }
       const delay = Math.max(0, nextTick - now);
       nextTick += FRAME_MS;
@@ -6576,7 +6648,7 @@ export class OrchestrationPipeline implements VoiceSession {
   private async maybeHandleTranscriptVoicemail(transcript: string): Promise<boolean> {
     if (this.transcriptVoicemailHandled || this.closed) return false;
     if (this.config.callDirection !== "outbound") return false;
-    if (this.turnIndex > 4) return false;
+    if (this.turnIndex > 6) return false;
     if (!looksLikeVoicemailGreeting(transcript)) return false;
 
     const policy = this.voicemailPolicy
@@ -6586,30 +6658,38 @@ export class OrchestrationPipeline implements VoiceSession {
             message: this.voicemailDelivery.message,
             leadInSeconds: this.voicemailDelivery.leadInSeconds,
           }
-        : null);
-    if (!policy || policy.action === "continue") return false;
+        : { action: "hangup" as const, message: "" });
+    // Never keep pitching into a mailbox (QA: agent chats to voicemail).
+    if (policy.action === "continue") {
+      logger.info(
+        { callId: this.config.callId, turnIndex: this.turnIndex },
+        "Transcript voicemail detected but action=continue — hanging up instead of pitching",
+      );
+    }
+    const action = policy.action === "leave_message" && policy.message?.trim()
+      ? "leave_message"
+      : "hangup";
 
     this.transcriptVoicemailHandled = true;
     logger.info(
       {
         callId: this.config.callId,
-        action: policy.action,
+        action,
         turnIndex: this.turnIndex,
         transcriptPreview: transcript.slice(0, 120),
       },
-      "Transcript voicemail detected mid-call — enacting configured After-the-call action",
+      "Transcript voicemail detected mid-call — enacting After-the-call action",
     );
     this.logExec("Tool", "system", {
       status: "info",
       turnNumber: this._activeTurnIndex,
       metadata: {
         event: "Transcript Voicemail Detected",
-        action: policy.action,
+        action,
         transcriptPreview: transcript.slice(0, 160),
       },
     });
 
-    // Stop any in-flight greeting / sales TTS before leaving the VM message.
     for (const ac of this.activeTtsAborts) {
       try { ac.abort(); } catch { /* noop */ }
     }
@@ -6617,8 +6697,7 @@ export class OrchestrationPipeline implements VoiceSession {
     try { this.llm.cancelInFlight?.(); } catch { /* best-effort */ }
     this.bargeInRequested = true;
 
-    if (policy.action === "leave_message") {
-      // Prefer the After-the-call message; keep any prior lead-in / wait tunables.
+    if (action === "leave_message") {
       this.voicemailDelivery = {
         message: policy.message,
         ...(this.voicemailDelivery?.postSilenceMarginMs !== undefined
@@ -6631,8 +6710,6 @@ export class OrchestrationPipeline implements VoiceSession {
           ? { leadInSeconds: policy.leadInSeconds ?? this.voicemailDelivery?.leadInSeconds }
           : {}),
       };
-      // Greeting was already heard (that's how we got the transcript). Seed
-      // energy so deliverVoicemail waits for silence/beep instead of max-wait.
       this.vmHeardSpeech = true;
       this.vmLastSpeechAt = Date.now();
       try { this.config.onAmdResult?.("machine"); } catch { /* best-effort */ }
@@ -6640,7 +6717,6 @@ export class OrchestrationPipeline implements VoiceSession {
       return true;
     }
 
-    // hangup
     try { this.config.onAmdResult?.("machine"); } catch { /* best-effort */ }
     try { this.config.onVoicemailAction?.(); } catch { /* best-effort */ }
     this.config.onCallEnd();
@@ -8932,6 +9008,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // EACH OTHER — never auto-leave the meeting on a farewell phrase.
     const callerWantsOut =
       isCallerClosingUtterance(transcript) || isCallerFarewellUtteranceShared(transcript);
+    const callerNotInterested = isCallerNotInterestedUtterance(transcript);
     const postCallbackAck =
       this._scheduledCallbackThisCall
       && (
@@ -8946,7 +9023,8 @@ export class OrchestrationPipeline implements VoiceSession {
     if (
       !this.isMeetingMode
       && (
-        (this.turnIndex >= 3 && callerWantsOut)
+        (this.turnIndex >= 1 && callerNotInterested)
+        || (this.turnIndex >= 3 && callerWantsOut)
         || postCallbackAck
         || postCallbackRepeatClose
       )
@@ -8954,17 +9032,27 @@ export class OrchestrationPipeline implements VoiceSession {
       const endCallTool = this.agent.tools.find((t) => t.type === "end_call");
       if (endCallTool) {
         logger.info(
-          { callId: this.config.callId, transcript, turnIndex: this.turnIndex, postCallbackAck, postCallbackRepeatClose },
-          "Pipeline: caller farewell detected — auto-triggering end_call (skipping LLM)",
+          {
+            callId: this.config.callId,
+            transcript,
+            turnIndex: this.turnIndex,
+            postCallbackAck,
+            postCallbackRepeatClose,
+            callerNotInterested,
+          },
+          callerNotInterested
+            ? "Pipeline: caller not-interested — ending call (skip funding re-ask)"
+            : "Pipeline: caller farewell detected — auto-triggering end_call (skipping LLM)",
         );
         this.logExec("Agent", "system", {
           status: "info",
           metadata: {
-            event: "Caller Farewell Auto-End",
+            event: callerNotInterested ? "Caller Not Interested Auto-End" : "Caller Farewell Auto-End",
             transcript,
             turnNumber: this._activeTurnIndex,
           },
         });
+        // Soft close for decline: prefer configured goodbye / skip pitch.
         await this.executeEndCall(endCallTool as AgentTool & { type: "end_call" });
         await this.drainPlaybackTail();
         return;

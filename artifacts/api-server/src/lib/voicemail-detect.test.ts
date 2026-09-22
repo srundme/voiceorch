@@ -8,6 +8,11 @@ describe("looksLikeVoicemailGreeting", () => {
     )).toBe(true);
   });
 
+  it("detects mailbox-full and Indic cues", () => {
+    expect(looksLikeVoicemailGreeting("Your mailbox is full. Please try again later.")).toBe(true);
+    expect(looksLikeVoicemailGreeting("कृपया संदेश छोड़ें टोन के बाद")).toBe(true);
+  });
+
   it("ignores normal caller speech", () => {
     expect(looksLikeVoicemailGreeting("Hello, who is this?")).toBe(false);
   });

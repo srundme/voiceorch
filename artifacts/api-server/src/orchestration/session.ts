@@ -636,6 +636,7 @@ export async function createSession(params: {
     ttsModel: agent.ttsModel,
     telephonyProvider: agent.telephonyProvider,
     greetingMessage: agent.greetingMessage ?? null,
+    scriptMode: agentCfg["scriptMode"] === "free_text" ? "free_text" : "structured",
     firstSpeaker: agent.firstSpeaker === "user" ? "user" : "assistant",
     endCallPhrases,
     // Fall back to a default so idle/dead-air calls self-terminate instead of
