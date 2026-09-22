@@ -4,8 +4,14 @@ import { Input } from "@/components/ui/input";
 import { TablePagination } from "@/components/table-pagination";
 import { EmptyState } from "@/components/empty-state";
 import { LeadFilterChips, LeadReportingTable } from "@/components/campaign-ops/lead-table";
-import { ContactOutcomeHero, DispositionHero } from "@/components/campaign-ops/disposition-hero";
+import {
+  ContactOutcomeHero,
+  DispositionHero,
+  ResultsFunnel,
+  hasConfiguredOutcomes,
+} from "@/components/campaign-ops/disposition-hero";
 import { CallInspectorPanel } from "@/components/campaign-ops/call-inspector";
+import { LiveFloor } from "@/components/campaign-ops/live-floor";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -77,11 +83,12 @@ export function CampaignLeadsWorkspace({
   });
   const summary = useQuery({
     queryKey: ["campaign-lead-reporting", campaignId, lockedBatchId ?? "all"],
-    queryFn: () => customFetch<CampaignReportingPayload>(
-      lockedBatchId
-        ? `/api/campaigns/${campaignId}/batches/${lockedBatchId}/lead-reporting`
-        : `/api/campaigns/${campaignId}/lead-reporting`,
-    ),
+    queryFn: () =>
+      customFetch<CampaignReportingPayload>(
+        lockedBatchId
+          ? `/api/campaigns/${campaignId}/batches/${lockedBatchId}/lead-reporting`
+          : `/api/campaigns/${campaignId}/lead-reporting`,
+      ),
     enabled: campaignId > 0,
   });
 
@@ -107,16 +114,26 @@ export function CampaignLeadsWorkspace({
       sp.delete("tab");
       sp.delete("batchId");
     } else {
-      sp.set("tab", "leads");
+      // Results is the default home — keep filter params, drop legacy tab=leads
+      sp.delete("tab");
     }
     const keys = [
-      "view", "disposition", "dispositionBucket", "operationalOutcome", "answeredEver",
-      "lifecycleStatus", "lastAttemptStatus", "retryPending", "batchId", "source", "search",
+      "view",
+      "disposition",
+      "dispositionBucket",
+      "operationalOutcome",
+      "answeredEver",
+      "lifecycleStatus",
+      "lastAttemptStatus",
+      "retryPending",
+      "batchId",
+      "source",
+      "search",
     ] as const;
     for (const key of keys) {
       if (lockedBatchId && key === "batchId") continue;
       const val = merged[key];
-      if (val == null || val === "" || val === false && key !== "answeredEver" && key !== "retryPending") {
+      if (val == null || val === "" || (val === false && key !== "answeredEver" && key !== "retryPending")) {
         if (key === "answeredEver" && merged.answeredEver === false) sp.set(key, "false");
         else if (key === "retryPending" && merged.retryPending === false) sp.set(key, "false");
         else sp.delete(key);
@@ -140,7 +157,9 @@ export function CampaignLeadsWorkspace({
 
   async function cancelRetry(leadId: number) {
     try {
-      await customFetch(`/api/campaigns/${campaignId}/leads/${leadId}/retries/cancel`, { method: "POST" });
+      await customFetch(`/api/campaigns/${campaignId}/leads/${leadId}/retries/cancel`, {
+        method: "POST",
+      });
       toast({ title: "Retry cancelled" });
       await qc.invalidateQueries({ queryKey: ["campaign-lead-reporting-leads", campaignId] });
     } catch {
@@ -155,27 +174,38 @@ export function CampaignLeadsWorkspace({
     }
   }
 
-  const funnel = summary.data?.funnel;
-  const rates = summary.data?.rates;
+  const showOutcomes = hasConfiguredOutcomes(summary.data?.dispositions);
+  const liveBusy =
+    ((summary.data?.liveFloor.queued ?? 0) +
+      (summary.data?.liveFloor.calling ?? 0) +
+      (summary.data?.liveFloor.talking ?? 0) +
+      (summary.data?.workTechnical.retryPending ?? 0)) >
+    0;
+  const campaignRunning =
+    (summary.data?.liveFloor.calling ?? 0) + (summary.data?.liveFloor.talking ?? 0) > 0 ||
+    (summary.data?.batches?.some((b) => b.status === "running") ?? false);
+
   const listLabel = filter.disposition
-    ? humanizeSnakeLabel(summary.data?.dispositions?.find((item) => item.key === filter.disposition)?.label ?? filter.disposition)
+    ? humanizeSnakeLabel(
+        summary.data?.dispositions?.find((item) => item.key === filter.disposition)?.label ??
+          filter.disposition,
+      )
     : filter.dispositionBucket
-    ? displayDispositionLabel(filter.dispositionBucket)
-    : filter.view
-      ? (CONTACT_OUTCOME_VIEWS.find((v) => v.id === filter.view)?.label
-        ?? WORK_LEAD_VIEWS.find((v) => v.id === filter.view)?.label
-        ?? filter.view)
-      : "Calls";
+      ? displayDispositionLabel(filter.dispositionBucket)
+      : filter.view
+        ? (CONTACT_OUTCOME_VIEWS.find((v) => v.id === filter.view)?.label ??
+          WORK_LEAD_VIEWS.find((v) => v.id === filter.view)?.label ??
+          filter.view)
+        : "leads";
 
   return (
     <div className="flex flex-col gap-3 min-h-0 flex-1 h-full max-w-full overflow-hidden">
-      <div className="shrink-0 space-y-2.5">
-        {funnel && (
-          <p className="text-xs text-muted-foreground tabular-nums">
-            {funnel.imported} imported · {funnel.answered} answered
-            {rates ? ` · ${rates.answerRatePct}% answer rate` : ""}
-          </p>
-        )}
+      <div className="shrink-0 space-y-3">
+        <ResultsFunnel
+          loading={summary.isLoading}
+          reporting={summary.data}
+          showOutcomes={showOutcomes}
+        />
         <ContactOutcomeHero
           loading={summary.isLoading}
           reporting={summary.data}
@@ -187,12 +217,33 @@ export function CampaignLeadsWorkspace({
           loading={summary.isLoading}
           items={summary.data?.dispositions}
           active={filter.disposition ?? filter.dispositionBucket ?? null}
-          onSelect={(key) => patchFilter({
-            disposition: key && key !== "needs_classification" ? key : null,
-            dispositionBucket: key === "needs_classification" ? key : null,
-            view: null,
-          })}
+          onSelect={(key) =>
+            patchFilter({
+              disposition: key && key !== "needs_classification" ? key : null,
+              dispositionBucket: key === "needs_classification" ? key : null,
+              view: null,
+            })
+          }
         />
+        {(summary.isLoading || liveBusy || campaignRunning) && !lockedBatchId && (
+          <LiveFloor
+            loading={summary.isLoading}
+            data={
+              summary.data
+                ? {
+                    ...summary.data.liveFloor,
+                    retryPending: summary.data.workTechnical.retryPending,
+                  }
+                : undefined
+            }
+            onSelect={(key) => {
+              if (key === "retry") patchFilter({ view: "retry", disposition: null, dispositionBucket: null });
+              else if (key === "talking" || key === "calling") {
+                patchFilter({ view: "answered", disposition: null, dispositionBucket: null });
+              }
+            }}
+          />
+        )}
       </div>
 
       {query.isError && !query.data ? (
@@ -212,11 +263,13 @@ export function CampaignLeadsWorkspace({
               <LeadFilterChips
                 views={WORK_LEAD_VIEWS}
                 active={filter.view ?? null}
-                onSelect={(id) => patchFilter({
-                  view: id === "all" ? null : id,
-                  disposition: null,
-                  dispositionBucket: null,
-                })}
+                onSelect={(id) =>
+                  patchFilter({
+                    view: id === "all" ? null : id,
+                    disposition: null,
+                    dispositionBucket: null,
+                  })
+                }
               />
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -264,7 +317,7 @@ export function CampaignLeadsWorkspace({
 
       <Sheet open={mobileInspector} onOpenChange={setMobileInspector}>
         <SheetContent side="right" className="w-[min(100vw,420px)] sm:max-w-none p-0">
-          <SheetTitle className="sr-only">Call transcript</SheetTitle>
+          <SheetTitle className="sr-only">Call transcript and recording</SheetTitle>
           <div className="h-full p-3">
             <CallInspectorPanel campaignId={campaignId} lead={selectedLead} />
           </div>

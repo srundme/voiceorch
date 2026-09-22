@@ -156,6 +156,7 @@ router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
     queuedRows,
     callingRows,
     completedRows,
+    answeredRows,
     bookedTodayRows,
     batchCountRows,
   ] = await Promise.all([
@@ -214,6 +215,17 @@ router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
       noLeads,
     ),
 
+    runSafe("answeredLeads", () =>
+      db.select({ campaignId: campaignLeadsTable.campaignId, n: count() })
+        .from(campaignLeadsTable)
+        .where(and(
+          inArray(campaignLeadsTable.campaignId, ids),
+          eq(campaignLeadsTable.answeredEver, true),
+        ))
+        .groupBy(campaignLeadsTable.campaignId) as Promise<LeadRow[]>,
+      noLeads,
+    ),
+
     runSafe("bookedToday", () =>
       db.select({ campaignId: callBookingsTable.campaignId, n: count() })
         .from(callBookingsTable)
@@ -237,6 +249,7 @@ router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
   const queuedMap    = new Map(queuedRows.map(r => [r.campaignId, Number(r.n)]));
   const callingMap   = new Map(callingRows.map(r => [r.campaignId, Number(r.n)]));
   const completedMap = new Map(completedRows.map(r => [r.campaignId, Number(r.n)]));
+  const answeredMap  = new Map(answeredRows.map(r => [r.campaignId, Number(r.n)]));
   const bookedMap    = new Map(bookedTodayRows.map(r => [r.campaignId, Number(r.n)]));
   const batchCountMap = new Map(batchCountRows.map(r => [r.campaignId, Number(r.n)]));
 
@@ -257,6 +270,7 @@ router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
     const queued    = queuedMap.get(c.id) ?? 0;
     const calling   = callingMap.get(c.id) ?? 0;
     const completed = completedMap.get(c.id) ?? 0;
+    const answered  = answeredMap.get(c.id) ?? 0;
     const booked    = bookedMap.get(c.id) ?? 0;
     const batchCount = batchCountMap.get(c.id) ?? 0;
     const health    = computeHealth(c, now);
@@ -278,6 +292,7 @@ router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
       queuedLeads:    queued,
       callingLeads:   calling,
       completedLeads: completed,
+      answeredLeads:  answered,
       bookedToday:    booked,
       batchCount,
       campaignHealth: health,

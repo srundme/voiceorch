@@ -46,43 +46,43 @@ function lead(partial: Partial<CampaignReportingLead>): CampaignReportingLead {
 }
 
 describe("campaign tab IA", () => {
-  it("collapses legacy eight tabs into four workspaces", () => {
+  it("collapses legacy tabs into Results / Analytics / Settings", () => {
     expect(resolveCampaignTab("live-queue")).toEqual({ tab: "overview" });
-    expect(resolveCampaignTab("callbacks")).toEqual({ tab: "leads", view: "callback" });
-    expect(resolveCampaignTab("transfers")).toEqual({ tab: "leads", operationalOutcome: "transfer_completed" });
-    expect(resolveCampaignTab("bookings")).toEqual({ tab: "leads", operationalOutcome: "booking_created" });
+    expect(resolveCampaignTab("callbacks")).toEqual({ tab: "overview", view: "callback" });
+    expect(resolveCampaignTab("transfers")).toEqual({ tab: "overview", operationalOutcome: "transfer_completed" });
+    expect(resolveCampaignTab("bookings")).toEqual({ tab: "overview", operationalOutcome: "booking_created" });
     expect(resolveCampaignTab("config")).toEqual({ tab: "settings" });
-    expect(resolveCampaignTab("incoming")).toEqual({ tab: "leads" });
-    expect(resolveCampaignTab("leads")).toEqual({ tab: "leads" });
+    expect(resolveCampaignTab("incoming")).toEqual({ tab: "overview" });
+    expect(resolveCampaignTab("leads")).toEqual({ tab: "overview" });
   });
 });
 
 describe("leads URL filters are linkable", () => {
-  it("round-trips view=interested", () => {
+  it("round-trips view=interested on Results home", () => {
     const href = campaignLeadsHref(449, { view: "interested" });
-    expect(href).toBe("/app/campaigns/449?tab=leads&view=interested");
-    expect(parseLeadsSearch("tab=leads&view=interested").view).toBe("interested");
+    expect(href).toBe("/app/campaigns/449?view=interested");
+    expect(parseLeadsSearch("view=interested").view).toBe("interested");
   });
 
   it("maps every Overview outcome card to the same view= filter", () => {
     for (const card of OUTCOME_CARDS) {
       const href = campaignLeadsHref(449, { view: card.view });
-      expect(href).toBe(`/app/campaigns/449?tab=leads&view=${card.view}`);
+      expect(href).toBe(`/app/campaigns/449?view=${card.view}`);
       expect(parseLeadsSearch(href.split("?")[1] ?? "").view).toBe(card.view);
     }
   });
 
   it("keeps campaign filters campaign-level and batch filters batch-scoped", () => {
-    expect(campaignLeadsHref(449, { view: "busy" })).toBe("/app/campaigns/449?tab=leads&view=busy");
+    expect(campaignLeadsHref(449, { view: "busy" })).toBe("/app/campaigns/449?view=busy");
     expect(campaignLeadsHref(449, { view: "busy" })).not.toContain("batchId=");
     const batchHref = batchLeadsHref(449, 412, { view: "busy" });
     expect(batchHref).toBe("/app/campaigns/449/batches/412?view=busy");
-    expect(batchHref).not.toContain("tab=leads");
+    expect(batchHref).not.toContain("tab=");
   });
 
   it("round-trips the needs-classification business filter", () => {
     const href = campaignLeadsHref(449, { dispositionBucket: "needs_classification" });
-    expect(href).toBe("/app/campaigns/449?tab=leads&dispositionBucket=needs_classification");
+    expect(href).toBe("/app/campaigns/449?dispositionBucket=needs_classification");
     expect(parseLeadsSearch(href.split("?")[1] ?? "").dispositionBucket).toBe("needs_classification");
   });
 
@@ -107,10 +107,10 @@ describe("leads URL filters are linkable", () => {
   });
   it("maps Failed chip to technical_failed and Retry to retry", () => {
     expect(campaignLeadsHref(449, { view: "technical_failed" })).toBe(
-      "/app/campaigns/449?tab=leads&view=technical_failed",
+      "/app/campaigns/449?view=technical_failed",
     );
     expect(campaignLeadsHref(449, { view: "retry" })).toBe(
-      "/app/campaigns/449?tab=leads&view=retry",
+      "/app/campaigns/449?view=retry",
     );
     expect(parseLeadsSearch("view=technical_failed").view).toBe("technical_failed");
     expect(batchLeadsHref(449, 412, { view: "technical_failed" })).toContain("view=technical_failed");

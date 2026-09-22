@@ -117,6 +117,7 @@ type DashboardCampaign = Campaign & {
   queuedLeads:    number;
   callingLeads:   number;
   completedLeads: number;
+  answeredLeads?: number;
   bookedToday:    number;
   batchCount:     number;
   campaignHealth: CampaignHealth;
@@ -176,6 +177,10 @@ const SOURCE_ICON: Record<string, React.ReactNode> = {
   crm:      <BrandLogo brand="zoho" size={14} />,
 };
 
+const SOURCE_LABEL: Record<string, string> = {
+  csv: "CSV", webhook: "Website", meta_ads: "Meta", crm: "Zoho CRM", sheets: "Sheets",
+};
+
 // ── Campaign Row ───────────────────────────────────────────────────────────
 
 function CampaignMobileCard({
@@ -191,8 +196,9 @@ function CampaignMobileCard({
 }) {
   const [, navigate] = useLocation();
   const totalCallable = campaign.totalLeads;
-  const completed = campaign.completedLeads;
-  const pct = totalCallable > 0 ? Math.round((completed / totalCallable) * 100) : 0;
+  const answered = campaign.answeredLeads ?? 0;
+  const answerPct = totalCallable > 0 ? Math.round((answered / totalCallable) * 100) : 0;
+  const sourceKey = (campaign as unknown as Record<string, string>)["leadSource"] ?? "csv";
 
   return (
     <div
@@ -202,11 +208,11 @@ function CampaignMobileCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="shrink-0">{SOURCE_ICON[(campaign as unknown as Record<string, string>)["leadSource"] ?? "csv"] ?? <Megaphone className="h-3.5 w-3.5 text-muted-foreground/40" />}</span>
+            <span className="shrink-0">{SOURCE_ICON[sourceKey] ?? <Megaphone className="h-3.5 w-3.5 text-muted-foreground/40" />}</span>
             <span className="text-sm font-medium text-foreground truncate">{campaign.name}</span>
           </div>
-          <p className="text-[10px] text-muted-foreground/40 mt-0.5">
-            {formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })}
+          <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+            {SOURCE_LABEL[sourceKey] ?? sourceKey}
             {campaign.agentName ? ` · ${campaign.agentName}` : ""}
           </p>
         </div>
@@ -214,15 +220,14 @@ function CampaignMobileCard({
       </div>
       <div className="mt-2.5 flex items-center gap-3 text-xs tabular-nums">
         {campaign.callingLeads > 0 && (
-          <span className="text-emerald-500 font-semibold">{campaign.callingLeads} live</span>
+          <span className="text-emerald-600 font-semibold">{campaign.callingLeads} live</span>
         )}
-        {campaign.queuedLeads > 0 && (
-          <span className="text-amber-500 font-semibold">{campaign.queuedLeads} queued</span>
+        {totalCallable > 0 && (
+          <span className="text-emerald-700 dark:text-emerald-400 font-semibold">{answerPct}% answered</span>
         )}
-        <span className="text-muted-foreground/50 ml-auto">{completed}/{totalCallable} · {pct}%</span>
-      </div>
-      <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
-        <div className="h-full bg-foreground/25 rounded-full transition-all" style={{ width: `${pct}%` }} />
+        {campaign.bookedToday > 0 && (
+          <span className="text-foreground font-semibold">{campaign.bookedToday} booked</span>
+        )}
       </div>
       <div className="mt-2.5 flex items-center gap-1.5 justify-end" onClick={e => e.stopPropagation()}>
         <Button
@@ -291,21 +296,15 @@ function CampaignRow({
 }) {
   const [, navigate] = useLocation();
   const totalCallable = campaign.totalLeads;
-  const completed     = campaign.completedLeads;
-  const pct           = totalCallable > 0 ? Math.round((completed / totalCallable) * 100) : 0;
-  const healthCfg     = HEALTH_CFG[campaign.campaignHealth];
-  const healthDotCls  = campaign.campaignHealth === "healthy"
-    ? "bg-emerald-500"
-    : campaign.campaignHealth === "outside_hours"
-      ? "bg-muted-foreground/40"
-      : campaign.campaignHealth === "validation_error" || campaign.campaignHealth === "webhook_offline"
-        ? "bg-red-500"
-        : "bg-amber-500";
+  const answered = campaign.answeredLeads ?? 0;
+  const answerPct = totalCallable > 0 ? Math.round((answered / totalCallable) * 100) : 0;
+  const sourceKey = (campaign as unknown as Record<string, string>)["leadSource"] ?? "csv";
+  const sourceText = SOURCE_LABEL[sourceKey] ?? sourceKey.replace(/_/g, " ");
 
   return (
     <div
       className="group hidden md:grid items-center gap-3 border-b border-border/40 px-4 py-3 last:border-0 cursor-pointer transition-colors duration-200 hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-      style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 70px 100px 56px 80px 100px" }}
+      style={{ gridTemplateColumns: "2.2fr 1fr 0.9fr 70px 90px 70px 100px" }}
       role="link"
       tabIndex={0}
       onClick={() => navigate(`${BASE}/app/campaigns/${campaign.id}`)}
@@ -316,94 +315,56 @@ function CampaignRow({
         }
       }}
     >
-      {/* Campaign name + source */}
       <div className="min-w-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span
-            className={cn("h-1.5 w-1.5 rounded-full shrink-0", healthDotCls)}
-            title={healthCfg.label}
-          />
-          <span className="shrink-0">{SOURCE_ICON[(campaign as unknown as Record<string,string>)["leadSource"] ?? "csv"] ?? <Megaphone className="h-3.5 w-3.5 text-muted-foreground/40" />}</span>
+          <span className="shrink-0">{SOURCE_ICON[sourceKey] ?? <Megaphone className="h-3.5 w-3.5 text-muted-foreground/40" />}</span>
           <span className="text-sm font-medium text-foreground truncate">{campaign.name}</span>
           {((campaign as unknown as Record<string,string>)["triggerMode"] === "instant") && (
             <Zap className="h-2.5 w-2.5 text-emerald-500 shrink-0" />
           )}
         </div>
-        <p className="text-[10px] text-muted-foreground/40 mt-0.5 truncate ml-6.5">
-          {formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })}
+        <p className="text-[10px] text-muted-foreground/50 mt-0.5 truncate ml-6">
+          {campaign.agentName ? campaign.agentName : "No agent"}
+          {campaign.fromNumber ? ` · ${campaign.fromNumber}` : ""}
         </p>
       </div>
 
-      {/* Status */}
       <div><CampaignStatusBadge status={campaign.status} /></div>
 
-      {/* Agent + number */}
       <div className="min-w-0">
-        {campaign.agentName ? (
-          <>
-            <p className="text-xs font-medium text-foreground truncate">{campaign.agentName}</p>
-            {campaign.fromNumber && (
-              <p className="text-[10px] text-muted-foreground/40 font-mono truncate">{campaign.fromNumber}</p>
-            )}
-          </>
-        ) : (
-          <span className="text-[10px] text-muted-foreground/30 italic">None</span>
-        )}
+        <p className="text-xs text-foreground truncate">{sourceText}</p>
       </div>
 
-      {/* Live calls */}
       <div className="text-center">
         {campaign.callingLeads > 0 ? (
-          <p className="text-sm font-semibold tabular-nums text-emerald-500 flex items-center justify-center gap-1">
+          <p className="text-sm font-semibold tabular-nums text-emerald-600 flex items-center justify-center gap-1">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             {campaign.callingLeads}
           </p>
         ) : (
-          <p className="text-xs text-muted-foreground/25">—</p>
+          <p className="text-xs text-muted-foreground/30">—</p>
         )}
       </div>
 
-      {/* Batch count */}
       <div className="text-center">
-        <p className="text-sm font-semibold tabular-nums text-foreground">{campaign.batchCount}</p>
-      </div>
-
-      {/* Call progress */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] text-muted-foreground/50 tabular-nums">{completed}/{totalCallable}</span>
-          <span className="text-[10px] font-mono text-muted-foreground/40">{pct}%</span>
-        </div>
-        <div className="h-1 bg-muted rounded-full overflow-hidden">
-          <div
-            className="h-full bg-foreground/25 rounded-full transition-all duration-500"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Queued */}
-      <div className="text-center">
-        {campaign.queuedLeads > 0 ? (
+        {totalCallable > 0 ? (
           <>
-            <p className="text-sm font-semibold tabular-nums text-amber-500">{campaign.queuedLeads}</p>
-            <p className="text-[9px] text-muted-foreground/40">Queued</p>
+            <p className="text-sm font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">{answerPct}%</p>
+            <p className="text-[9px] text-muted-foreground/50 tabular-nums">{answered}/{totalCallable}</p>
           </>
         ) : (
-          <p className="text-xs text-muted-foreground/25">—</p>
+          <p className="text-xs text-muted-foreground/30">—</p>
         )}
       </div>
 
-      {/* Booked today */}
       <div className="text-center">
         {campaign.bookedToday > 0 ? (
-          <p className="text-sm font-semibold tabular-nums text-violet-500">{campaign.bookedToday}</p>
+          <p className="text-sm font-semibold tabular-nums text-foreground">{campaign.bookedToday}</p>
         ) : (
-          <p className="text-xs text-muted-foreground/25">—</p>
+          <p className="text-xs text-muted-foreground/30">—</p>
         )}
       </div>
 
-      {/* Actions */}
       <div className="flex items-center gap-1.5 justify-end" onClick={e => e.stopPropagation()}>
         <Button
           size="sm"
@@ -460,12 +421,12 @@ function CampaignRow({
 
 // ── Campaign Creation Wizard ──────────────────────────────────────────────
 
-const WIZARD_STEPS = ["info", "source", "crm_mode", "agent", "transfer", "settings", "review"] as const;
+const WIZARD_STEPS = ["source", "info", "crm_mode", "agent", "transfer", "settings", "review"] as const;
 type WizardStep = (typeof WIZARD_STEPS)[number];
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  info: "Details",
   source: "Source",
+  info: "Details",
   crm_mode: "CRM Mode",
   agent: "Agent",
   transfer: "Transfer",
@@ -552,7 +513,7 @@ function CampaignWizard({
   const CAMPAIGN_CONCURRENCY_CEILING = 10;
   const maxConcurrency = Math.min(accountInfo?.concurrentLimit ?? 10, CAMPAIGN_CONCURRENCY_CEILING);
 
-  const [step, setStep] = useState<WizardStep>("info");
+  const [step, setStep] = useState<WizardStep>(() => (initialSource ? "info" : "source"));
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [leadSource, setLeadSource] = useState<CampaignLeadSource>(lockedSource ?? "webhook");
@@ -623,7 +584,7 @@ function CampaignWizard({
 
   function reset() {
     const src = lockedSource ?? "webhook";
-    setStep("info"); setName(""); setDesc("");
+    setStep(lockedSource ? "info" : "source"); setName(""); setDesc("");
     setLeadSource(src);
     setTriggerMode(SOURCE_OPTIONS.find(o => o.value === src)?.defaultTrigger ?? "instant");
     setAgentId(null); setSquadId(null); setConcurrentCallLimit(null);
@@ -1369,14 +1330,13 @@ function TableHeader({ listLabel = "Campaign" }: { listLabel?: string }) {
   return (
     <div
       className="hidden md:grid items-center gap-3 px-4 py-2.5 border-b border-border/60 bg-muted/30"
-      style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 70px 100px 56px 80px 100px" }}
+      style={{ gridTemplateColumns: "2.2fr 1fr 0.9fr 70px 90px 70px 100px" }}
     >
       {[
-        listLabel, "Status", "Agent / Number",
-        "Live", "Batches", "Progress",
-        "Queued", "Booked", "",
+        listLabel, "Status", "Source",
+        "Live", "Answered", "Booked", "",
       ].map((h, i) => (
-        <span key={i} className={cn("text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/40", i >= 3 && i <= 7 ? "text-center" : "")}>
+        <span key={i} className={cn("text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/40", i >= 3 && i <= 5 ? "text-center" : "")}>
           {h}
         </span>
       ))}
@@ -1385,10 +1345,6 @@ function TableHeader({ listLabel = "Campaign" }: { listLabel?: string }) {
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────
-
-const SOURCE_LABEL: Record<string, string> = {
-  csv: "CSV", webhook: "Website", meta_ads: "Meta", crm: "Zoho CRM",
-};
 
 type StartSourceId = "meta_ads" | "webhook" | "sheets" | "csv" | "crm";
 
@@ -1597,7 +1553,7 @@ export default function CampaignsPage() {
           </div>
           {!hasCampaigns && (
             <p className="mt-2 text-[12px] text-muted-foreground">
-              Pick a source, attach an agent, then dial. Each channel has its own setup.
+              Pick a lead source first, attach an agent, then dial.
             </p>
           )}
         </div>

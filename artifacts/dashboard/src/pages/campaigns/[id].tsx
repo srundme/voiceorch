@@ -43,7 +43,6 @@ import { RecampaignDialog } from "./recampaign-dialog";
 import { format, formatDistanceToNow } from "date-fns";
 import { BATCH_STATUS_MAP, CAMPAIGN_STATUS_MAP } from "@/lib/campaign-status";
 import CampaignAnalyticsTab from "./campaign-analytics-tab";
-import { CampaignOverviewPanel } from "@/components/campaign-ops/overview";
 import { CampaignFunnel } from "@/components/campaign-ops/funnel";
 import { CampaignLeadsWorkspace } from "@/components/campaign-ops/leads-workspace";
 import { CampaignExecutionStrip } from "@/components/campaign-ops/campaign-header";
@@ -69,10 +68,9 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 type CampaignTab = PrimaryCampaignTab;
 
 const CAMPAIGN_TABS: { id: CampaignTab; label: string }[] = [
-  { id: "overview",  label: "Overview" },
-  { id: "leads",     label: "Leads" },
+  { id: "overview", label: "Results" },
   { id: "analytics", label: "Analytics" },
-  { id: "settings",  label: "Settings" },
+  { id: "settings", label: "Settings" },
 ];
 
 // ── Business hours helpers ────────────────────────────────────────────────────
@@ -758,8 +756,11 @@ export default function CampaignDetailPage() {
     const sp = new URLSearchParams(search);
     if (id === "overview") sp.delete("tab");
     else sp.set("tab", id);
-    if (id !== "leads") {
+    // Leaving Results clears list filters (view / disposition stay on Results URLs only)
+    if (id !== "overview") {
       sp.delete("view");
+      sp.delete("disposition");
+      sp.delete("dispositionBucket");
     }
     const qs = sp.toString();
     setLocation(`/app/campaigns/${campaignId}${qs ? `?${qs}` : ""}`);
@@ -768,7 +769,9 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     const sp = new URLSearchParams(search);
     const raw = sp.get("tab");
-    if (!isLegacyCampaignTab(raw)) return;
+    if (!raw) return;
+    // Rewrite legacy + old Leads tab onto Results (overview) while keeping filters
+    if (!isLegacyCampaignTab(raw) && raw !== "leads") return;
     const resolved = resolveCampaignTab(raw);
     if (resolved.tab === "overview") sp.delete("tab");
     else sp.set("tab", resolved.tab);
@@ -1006,14 +1009,14 @@ export default function CampaignDetailPage() {
                 className="h-8 text-xs gap-1.5"
                 onClick={() => setRecampaignOpen(true)}
               >
-                <Layers className="h-3.5 w-3.5" /> Re-campaign
+                <Layers className="h-3.5 w-3.5" /> Call this list again
               </Button>
             )}
             {/* CSV campaigns: Create Batch button + dropdown controls */}
             {(!isContinuous || campaign.status === "draft") && (
               <Button size="sm" className="h-8 text-xs gap-1.5"
                 onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                <Plus className="h-3.5 w-3.5" /> Create Batch
+                <Plus className="h-3.5 w-3.5" /> Upload more leads
               </Button>
             )}
             {/* Stopped continuous campaign → Activate button */}
@@ -1071,23 +1074,13 @@ export default function CampaignDetailPage() {
         <div
           className={cn(
             "px-4 sm:px-6 py-4 min-w-0 flex-1 min-h-0",
-            activeTab === "leads"
+            activeTab === "overview"
               ? "overflow-hidden flex flex-col"
               : "overflow-y-auto overflow-x-hidden space-y-5",
           )}
         >
 
           {activeTab === "overview" && (
-            <CampaignOverviewPanel
-              campaignId={campaignId}
-              reporting={reporting}
-              loading={reportingQuery.isLoading}
-              error={reportingQuery.isError}
-              onRetry={() => void reportingQuery.refetch()}
-            />
-          )}
-
-          {activeTab === "leads" && (
             <CampaignLeadsWorkspace campaignId={campaignId} />
           )}
 
@@ -1313,7 +1306,7 @@ export default function CampaignDetailPage() {
                 <section className="space-y-2">
                   <h2 className="text-sm font-semibold">Telephony / technical</h2>
                   <p className="text-xs text-muted-foreground">
-                    Busy {reporting?.workTechnical.busy ?? 0} · No pickup {reporting?.workTechnical.noPickup ?? 0} · Voicemail {reporting?.workTechnical.voicemail ?? 0} · Technical failed {reporting?.workTechnical.technicalFailed ?? 0}
+                    Busy {reporting?.workTechnical.busy ?? 0} · No answer {reporting?.workTechnical.noPickup ?? 0} · Voicemail {reporting?.workTechnical.voicemail ?? 0} · Couldn’t reach {reporting?.workTechnical.technicalFailed ?? 0}
                   </p>
                   {reporting?.rates && (
                     <p className="text-[11px] text-muted-foreground/70">

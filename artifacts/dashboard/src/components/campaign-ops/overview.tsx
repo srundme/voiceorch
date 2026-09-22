@@ -46,7 +46,7 @@ export function CampaignOverviewPanel({
       return;
     }
     if (next.dispositionBucket) {
-      navigate(`/app/campaigns/${campaignId}?tab=leads&dispositionBucket=${encodeURIComponent(next.dispositionBucket)}`);
+      navigate(`/app/campaigns/${campaignId}?dispositionBucket=${encodeURIComponent(next.dispositionBucket)}`);
       return;
     }
     if (next.view) {
@@ -70,7 +70,7 @@ export function CampaignOverviewPanel({
         loading={loading}
         reporting={reporting}
         onSelect={(view) => {
-          if (!view) navigate(`/app/campaigns/${campaignId}?tab=leads`);
+          if (!view) navigate(`/app/campaigns/${campaignId}`);
           else openLeads({ view });
         }}
       />
@@ -78,7 +78,7 @@ export function CampaignOverviewPanel({
         loading={loading}
         items={reporting?.dispositions}
         onSelect={(key) => {
-          if (!key) navigate(`/app/campaigns/${campaignId}?tab=leads`);
+          if (!key) navigate(`/app/campaigns/${campaignId}`);
           else if (key === "needs_classification") openLeads({ dispositionBucket: key });
           else openLeads({ disposition: key });
         }}
@@ -90,7 +90,7 @@ export function CampaignOverviewPanel({
           onSelect={(key) => {
             if (key === "retry") openLeads({ view: "retry" });
             else if (key === "talking" || key === "calling") openLeads({ view: "answered" });
-            else navigate(`/app/campaigns/${campaignId}?tab=leads`);
+            else navigate(`/app/campaigns/${campaignId}`);
           }}
         />
       )}

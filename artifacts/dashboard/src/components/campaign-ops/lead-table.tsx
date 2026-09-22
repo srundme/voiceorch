@@ -18,7 +18,7 @@ import {
   OUTCOME_CARDS,
 } from "@/lib/campaign-lead-reporting";
 import { cn } from "@/lib/utils";
-import { MoreHorizontal, Phone, StickyNote } from "lucide-react";
+import { MoreHorizontal, Phone, StickyNote, Headphones } from "lucide-react";
 import { useState } from "react";
 import { DispositionBadge } from "@/components/campaign-ops/badges";
 
@@ -133,6 +133,17 @@ export function LeadReportingTable({
               <p className="text-xs tabular-nums text-muted-foreground shrink-0 w-10 text-right">
                 {formatDuration(lead.latestAnsweredDuration)}
               </p>
+              {(lead.latestCallId != null || lead.latestAnsweredCallId != null) && (
+                <span
+                  className={cn(
+                    "shrink-0 text-muted-foreground",
+                    selected ? "text-foreground" : "opacity-60",
+                  )}
+                  title="Transcript & recording"
+                >
+                  <Headphones className="h-3.5 w-3.5" />
+                </span>
+              )}
               <div onClick={(e) => e.stopPropagation()}>
                 <RowMenu
                   lead={lead}
@@ -182,11 +193,11 @@ function RowMenu({
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={onOpen}>Open lead</DropdownMenuItem>
         {onInspect && (
-          <DropdownMenuItem onClick={onInspect}>Quick inspect</DropdownMenuItem>
+          <DropdownMenuItem onClick={onInspect}>Listen & transcript</DropdownMenuItem>
         )}
         {(lead.latestCallId != null || lead.latestAnsweredCallId != null) && (
           <DropdownMenuItem onClick={onCall} className="gap-2">
-            <Phone className="h-3.5 w-3.5" /> Full recording
+            <Phone className="h-3.5 w-3.5" /> Full call drawer
           </DropdownMenuItem>
         )}
         <DropdownMenuItem onClick={onOpen} className="gap-2">

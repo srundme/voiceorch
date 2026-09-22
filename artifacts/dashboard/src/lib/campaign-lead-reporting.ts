@@ -144,34 +144,34 @@ export const PRIMARY_LEAD_VIEWS: { id: CampaignReportingView | "all"; label: str
   { id: "callback", label: "Callback" },
   { id: "answered", label: "Answered" },
   { id: "voicemail", label: "Voicemail" },
-  { id: "no_pickup", label: "No Pickup" },
+  { id: "no_pickup", label: "No answer" },
   { id: "busy", label: "Busy" },
-  { id: "retry", label: "Retry" },
-  { id: "technical_failed", label: "Technical Failed" },
+  { id: "retry", label: "Retrying" },
+  { id: "technical_failed", label: "Couldn’t reach" },
 ];
 
 /** Compact list filters that are not already a disposition chip. */
 export const WORK_LEAD_VIEWS: { id: CampaignReportingView; label: string }[] = [
-  { id: "retry", label: "Retry" },
+  { id: "retry", label: "Retrying" },
 ];
 
 export const CONTACT_OUTCOME_VIEWS: { id: CampaignReportingView | "all"; label: string }[] = [
   { id: "all", label: "All" },
   { id: "answered", label: "Answered" },
   { id: "busy", label: "Busy" },
-  { id: "no_pickup", label: "No Pickup" },
+  { id: "no_pickup", label: "No answer" },
   { id: "voicemail", label: "Voicemail" },
-  { id: "technical_failed", label: "Failed" },
+  { id: "technical_failed", label: "Couldn’t reach" },
 ];
 
 export const OUTCOME_CARDS: { view: CampaignReportingView; label: string; empty: string }[] = [
   { view: "interested", label: "Interested", empty: "No leads have been marked interested yet." },
   { view: "callback", label: "Callback", empty: "No callback requests yet." },
-  { view: "retry", label: "Retry", empty: "There are no scheduled retries." },
-  { view: "no_pickup", label: "No Pickup", empty: "No never-answered no-pickup leads." },
+  { view: "retry", label: "Retrying", empty: "There are no scheduled retries." },
+  { view: "no_pickup", label: "No answer", empty: "No never-answered no-answer leads." },
   { view: "busy", label: "Busy", empty: "No never-answered busy leads." },
   { view: "voicemail", label: "Voicemail", empty: "No voicemail attempts." },
-  { view: "technical_failed", label: "Technical Failed", empty: "No never-answered technical failures." },
+  { view: "technical_failed", label: "Couldn’t reach", empty: "No never-answered reach failures." },
 ];
 
 export const PRIMARY_CAMPAIGN_TABS = ["overview", "leads", "analytics", "settings"] as const;
@@ -179,10 +179,12 @@ export type PrimaryCampaignTab = (typeof PRIMARY_CAMPAIGN_TABS)[number];
 
 const LEGACY_TAB_REDIRECT: Record<string, { tab: PrimaryCampaignTab; view?: CampaignReportingView; operationalOutcome?: string }> = {
   "live-queue": { tab: "overview" },
-  incoming: { tab: "leads" },
-  callbacks: { tab: "leads", view: "callback" },
-  transfers: { tab: "leads", operationalOutcome: "transfer_completed" },
-  bookings: { tab: "leads", operationalOutcome: "booking_created" },
+  /** Pre-Results "Leads" tab — same home as Results */
+  leads: { tab: "overview" },
+  incoming: { tab: "overview" },
+  callbacks: { tab: "overview", view: "callback" },
+  transfers: { tab: "overview", operationalOutcome: "transfer_completed" },
+  bookings: { tab: "overview", operationalOutcome: "booking_created" },
   config: { tab: "settings" },
 };
 
@@ -196,6 +198,8 @@ export function resolveCampaignTab(raw: string | null): {
   operationalOutcome?: string;
 } {
   if (!raw || raw === "overview") return { tab: "overview" };
+  // Results home consolidates Overview + Leads
+  if (raw === "leads") return { tab: "overview" };
   if ((PRIMARY_CAMPAIGN_TABS as readonly string[]).includes(raw)) {
     return { tab: raw as PrimaryCampaignTab };
   }
@@ -232,7 +236,8 @@ export function parseLeadsSearch(search: string): CampaignReportingFilter {
   };
 }
 
-export function leadsSearchFromFilter(filter: CampaignReportingFilter, tab = "leads"): string {
+/** Results is the campaign home (overview). Omit tab unless targeting another primary tab. */
+export function leadsSearchFromFilter(filter: CampaignReportingFilter, tab = "overview"): string {
   const sp = new URLSearchParams();
   if (tab && tab !== "overview") sp.set("tab", tab);
   if (filter.view) sp.set("view", filter.view);
@@ -321,11 +326,11 @@ export function attemptStatusLabel(status: string | null | undefined): string {
     caller_hangup: "Caller Hangup",
     agent_end: "Completed",
     busy: "Busy",
-    no_pickup: "No Pickup",
+    no_pickup: "No answer",
     voicemail: "Voicemail",
     dropped: "Dropped",
     dial_error: "Dial Error",
-    failed: "Failed",
+    failed: "Couldn’t reach",
     transferred: "Transferred",
     stuck_calling: "Stuck Calling",
   };
