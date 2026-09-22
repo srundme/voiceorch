@@ -46,6 +46,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { StripePage } from "@/components/stripe-page";
+import { PageHero, SnapBarsVisual } from "@/components/page-hero";
 import { StatusDot } from "@/components/workspace/workspace";
 import { MetricCard, MetricStrip } from "@/components/metric-strip";
 import { useChartTheme } from "@/hooks/use-chart-theme";
@@ -291,13 +292,21 @@ export default function HomePage() {
     );
   }
 
+  const nextAction = !hasAgent
+    ? { title: "Create your first agent", description: "Build the voice agent, then connect a number and dial.", primary: { label: "Create agent", href: "/app/agents?create=1" }, secondary: !isManagedWorkspace ? { label: "Build with AI", href: "/app/vibe" } : undefined }
+    : !hasChannels
+      ? { title: "Take your agent live", description: "Assign a phone number so inbound rings and outbound has a caller ID.", primary: { label: "Phone numbers", href: "/app/phone-numbers" }, secondary: { label: "Open agent", href: firstAgentId != null ? `/app/agents/${firstAgentId}` : "/app/agents" } }
+      : !hasLeads
+        ? { title: "Start dialing", description: "Create a campaign from a lead source and put your agent to work.", primary: { label: "New campaign", href: "/app/campaigns" }, secondary: { label: "Open agent", href: firstAgentId != null ? `/app/agents/${firstAgentId}` : "/app/agents" } }
+        : { title: "You’re set up", description: "Review Results on a campaign or jump into an agent.", primary: { label: "Campaigns", href: "/app/campaigns" }, secondary: { label: "Call logs", href: "/app/history" } };
+
   const stats = statsQ.data;
   const avgDur = stats?.avgDurationSeconds;
 
   return (
     <StripePage
       title="Home"
-      description="Call volume, success, and what to dial next."
+      description="What to do next, then a quick look at volume."
       actions={
         <div className="flex items-center gap-2">
           <Button
@@ -318,6 +327,42 @@ export default function HomePage() {
       contentClassName="!pt-4"
     >
       <div className="space-y-5">
+        <PageHero
+          title={nextAction.title}
+          description={nextAction.description}
+          primary={nextAction.primary}
+          secondary={nextAction.secondary}
+          visual={<SnapBarsVisual />}
+        />
+
+        {/* Recents */}
+        {(agents.length > 0 || recentReach.length > 0) && (
+          <section className="rounded-xl border border-border bg-card overflow-hidden">
+            <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+              <h3 className="text-sm font-semibold">Recents</h3>
+              <Link href="/app/agents" className="text-[11px] text-muted-foreground hover:text-foreground">
+                All agents →
+              </Link>
+            </div>
+            <ul className="divide-y divide-border">
+              {agents.slice(0, 5).map((a: any) => (
+                <li key={a.id}>
+                  <Link
+                    href={`/app/agents/${a.id}`}
+                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40 transition-colors"
+                  >
+                    <Bot className="size-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-medium truncate flex-1">{a.name ?? `Agent #${a.id}`}</span>
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                      {relativeTime(a.updatedAt ?? a.createdAt)}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         <MetricStrip cols={4}>
           <MetricCard
             label="Calls today"

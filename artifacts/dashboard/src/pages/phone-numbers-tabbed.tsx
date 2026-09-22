@@ -6,6 +6,7 @@
 import { useLocation, useSearch } from "wouter";
 import { Plus } from "lucide-react";
 import { StripePage } from "@/components/stripe-page";
+import { PageHero, SnapBarsVisual } from "@/components/page-hero";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
@@ -24,7 +25,6 @@ export default function PhoneNumbersTabPage() {
   const tabs = isManagedWorkspace ? null : OWNER_TABS;
 
   const rawTab = new URLSearchParams(search).get("tab") ?? "my-numbers";
-  // Legacy ?tab=buy-number → open purchase on the list page
   const buyIntent = !isManagedWorkspace && rawTab === "buy-number";
   const activeKey = buyIntent ? "my-numbers" : rawTab;
   const active = tabs?.some((t) => t.key === activeKey) ? activeKey : "my-numbers";
@@ -43,7 +43,7 @@ export default function PhoneNumbersTabPage() {
       description={
         isManagedWorkspace
           ? "Assign provider numbers to your agents, move them between agents, or remove a line."
-          : "Buy a number, assign it to an agent for inbound + caller ID, reassign or release anytime."
+          : "Get a number or bring your own — then assign it on the agent Calling tab."
       }
       back={{ href: "/app/home", label: "Home" }}
       actions={
@@ -81,7 +81,7 @@ export default function PhoneNumbersTabPage() {
               >
                 {tab.label}
                 {active === tab.key && (
-                  <span className="absolute inset-x-1 bottom-0 h-0.5 rounded-full bg-foreground" />
+                  <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-foreground" />
                 )}
               </button>
             ))}
@@ -89,6 +89,26 @@ export default function PhoneNumbersTabPage() {
         ) : undefined
       }
     >
+      {!isManagedWorkspace && active === "my-numbers" && !buyIntent && (
+        <div className="px-5 pt-4 sm:px-6">
+          <PageHero
+            title="Take your agent live"
+            description="Get a SnapServe number or bring your own. Assign it on the agent’s Calling tab for inbound and outbound."
+            primary={{
+              label: "Get number",
+              onClick: () => {
+                const sp = new URLSearchParams(search);
+                sp.set("tab", "buy-number");
+                navigate(`${window.location.pathname}?${sp.toString()}`);
+              },
+              icon: <Plus className="h-3.5 w-3.5" />,
+            }}
+            secondary={{ label: "Open agents", href: "/app/agents" }}
+            visual={<SnapBarsVisual />}
+            className="mb-4"
+          />
+        </div>
+      )}
       {(active === "my-numbers" || buyIntent) && (
         <PhoneNumbersPage
           autoOpenBuy={buyIntent}

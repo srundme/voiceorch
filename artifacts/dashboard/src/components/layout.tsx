@@ -115,64 +115,85 @@ interface NavGroup {
 }
 
 /**
- * Primary: Home · Campaigns · Agents · Phone numbers · Connections · History · Analytics
+ * Primary IA: Build → Deploy → Monitor (Sarvam-inspired lifecycle).
+ * Developers lives in settings footer (promoted mentally; still one click).
  */
 const NAV_GROUPS: NavGroup[] = [
   {
     items: [
-      { name: "Home",          href: "/app/home",           icon: HomeIcon },
-      { name: "Campaigns",     href: "/app/campaigns",      icon: CampaignsIcon },
-      { name: "Agents",        href: "/app/agents",         icon: AgentIcon },
-      { name: "Phone numbers", href: "/app/phone-numbers",  icon: PhoneIcon },
-      { name: "Connections",   href: "/app/connections",    icon: ConnectionsIcon },
-      { name: "History",       href: "/app/history",        icon: HistoryIcon, callbackBadge: true },
-      { name: "Analytics",     href: "/app/analytics",      icon: AnalyticsIcon },
+      { name: "Home", href: "/app/home", icon: HomeIcon },
     ],
   },
   {
-    group: "MORE",
+    group: "BUILD",
     items: [
+      { name: "Agents", href: "/app/agents", icon: AgentIcon },
       { name: "Knowledge", href: "/app/knowledge-bases", icon: KnowledgeIcon },
-      { name: "Memory",    href: "/app/memory",          icon: MemoryIcon },
-      { name: "Squads",    href: "/app/squads",          icon: SquadsIcon },
-      { name: "Bookings",  href: "/app/scheduling",      icon: BookingsIcon },
+      { name: "Memory", href: "/app/memory", icon: MemoryIcon },
+      { name: "Squads", href: "/app/squads", icon: SquadsIcon },
+    ],
+  },
+  {
+    group: "DEPLOY",
+    items: [
+      { name: "Phone numbers", href: "/app/phone-numbers", icon: PhoneIcon },
+      { name: "Campaigns", href: "/app/campaigns", icon: CampaignsIcon },
+      { name: "Connections", href: "/app/connections", icon: ConnectionsIcon },
+      { name: "Bookings", href: "/app/scheduling", icon: BookingsIcon },
+    ],
+  },
+  {
+    group: "MONITOR",
+    items: [
+      { name: "Call logs", href: "/app/history", icon: HistoryIcon, callbackBadge: true },
+      { name: "Analytics", href: "/app/analytics", icon: AnalyticsIcon },
     ],
   },
 ];
 
 const NAV_SETTINGS: NavItem[] = [
-  { name: "Workspace",  href: "/app/settings",  icon: WorkspaceIcon },
-  { name: "Providers",  href: "/app/providers?tab=provider-keys", icon: ProvidersIcon },
-  { name: "Developers", href: "/app/api-keys",  icon: DevelopersIcon },
-  { name: "Billing",    href: "/app/wallet",    icon: BillingIcon },
+  { name: "Developers", href: "/app/api-keys", icon: DevelopersIcon },
+  { name: "Workspace", href: "/app/settings", icon: WorkspaceIcon },
+  { name: "Providers", href: "/app/providers?tab=provider-keys", icon: ProvidersIcon },
+  { name: "Billing", href: "/app/wallet", icon: BillingIcon },
 ];
 
-/** Partner clients: product + developers (API keys / webhooks); no BYOP/docs/platform pages. */
+/** Partner clients: product + developers; no BYOP/docs/platform pages. */
 const MANAGED_NAV_GROUPS: NavGroup[] = [
   {
     items: [
-      { name: "Home",          href: "/app/home",           icon: HomeIcon },
-      { name: "Campaigns",     href: "/app/campaigns",      icon: CampaignsIcon },
-      { name: "Agents",        href: "/app/agents",         icon: AgentIcon },
-      { name: "Phone numbers", href: "/app/phone-numbers",  icon: PhoneIcon },
-      { name: "Connections",   href: "/app/connections",    icon: ConnectionsIcon },
-      { name: "History",       href: "/app/history",        icon: HistoryIcon, callbackBadge: true },
-      { name: "Analytics",     href: "/app/analytics",      icon: AnalyticsIcon },
+      { name: "Home", href: "/app/home", icon: HomeIcon },
     ],
   },
   {
-    group: "MORE",
+    group: "BUILD",
     items: [
+      { name: "Agents", href: "/app/agents", icon: AgentIcon },
       { name: "Knowledge", href: "/app/knowledge-bases", icon: KnowledgeIcon },
-      { name: "Bookings",  href: "/app/scheduling",      icon: BookingsIcon },
+    ],
+  },
+  {
+    group: "DEPLOY",
+    items: [
+      { name: "Phone numbers", href: "/app/phone-numbers", icon: PhoneIcon },
+      { name: "Campaigns", href: "/app/campaigns", icon: CampaignsIcon },
+      { name: "Connections", href: "/app/connections", icon: ConnectionsIcon },
+      { name: "Bookings", href: "/app/scheduling", icon: BookingsIcon },
+    ],
+  },
+  {
+    group: "MONITOR",
+    items: [
+      { name: "Call logs", href: "/app/history", icon: HistoryIcon, callbackBadge: true },
+      { name: "Analytics", href: "/app/analytics", icon: AnalyticsIcon },
     ],
   },
 ];
 
 const MANAGED_NAV_SETTINGS: NavItem[] = [
-  { name: "Workspace",  href: "/app/settings", icon: WorkspaceIcon },
   { name: "Developers", href: "/app/api-keys", icon: DevelopersIcon },
-  { name: "Billing",    href: "/app/wallet",   icon: BillingIcon },
+  { name: "Workspace", href: "/app/settings", icon: WorkspaceIcon },
+  { name: "Billing", href: "/app/wallet", icon: BillingIcon },
 ];
 
 const SETTINGS_HREFS = NAV_SETTINGS.map(s => s.href.split("?")[0]);
@@ -675,7 +696,7 @@ const MOBILE_BOTTOM_NAV_ITEMS = [
   { name: "Campaigns", href: "/app/campaigns",  icon: CampaignsIcon },
   { name: "Create",    href: null,              icon: CreateIcon }, // opens modal
   { name: "Agents",    href: "/app/agents",     icon: AgentIcon },
-  { name: "History",   href: "/app/history",    icon: HistoryIcon },
+  { name: "Call logs", href: "/app/history",    icon: HistoryIcon },
 ] as const;
 
 function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {

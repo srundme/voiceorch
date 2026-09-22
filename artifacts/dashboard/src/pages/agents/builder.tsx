@@ -145,26 +145,30 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "outcomes" | "analytics" | "voicemail" | "settings" | "versions";
+type TabId = "overview" | "prompt" | "voice" | "calling" | "tools" | "outcomes" | "analytics" | "voicemail" | "settings" | "versions" | "more";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
+/** Primary builder nav — same features, Bolna-clean IA. Legacy ids still resolve via sectionFromSearch. */
 const TABS: TabDef[] = [
-  { id: "overview",  label: "Overview",  icon: <Bot className="h-3.5 w-3.5" /> },
-  { id: "prompt",    label: "Script",    icon: <FileText className="h-3.5 w-3.5" /> },
-  { id: "voice",     label: "Sound",     icon: <Mic className="h-3.5 w-3.5" /> },
-  { id: "tools",     label: "Actions",   icon: <Wrench className="h-3.5 w-3.5" /> },
-  { id: "outcomes",  label: "After the call", icon: <Tag className="h-3.5 w-3.5" /> },
-  { id: "analytics", label: "Activity",  icon: <BarChart3 className="h-3.5 w-3.5" /> },
-  { id: "settings",  label: "Settings",  icon: <Settings className="h-3.5 w-3.5" /> },
-  { id: "versions",  label: "Versions",  icon: <History className="h-3.5 w-3.5" /> },
+  { id: "prompt",   label: "Agent",      icon: <FileText className="h-3.5 w-3.5" /> },
+  { id: "voice",    label: "Voice",      icon: <Mic className="h-3.5 w-3.5" /> },
+  { id: "calling",  label: "Calling",    icon: <Phone className="h-3.5 w-3.5" /> },
+  { id: "tools",    label: "Tools",      icon: <Wrench className="h-3.5 w-3.5" /> },
+  { id: "outcomes", label: "After call", icon: <Tag className="h-3.5 w-3.5" /> },
+  { id: "more",     label: "More",       icon: <MoreHorizontal className="h-3.5 w-3.5" /> },
+];
+
+const MORE_SUBTABS: { id: TabId; label: string }[] = [
+  { id: "analytics", label: "Activity" },
+  { id: "settings", label: "Settings" },
+  { id: "versions", label: "Versions" },
 ];
 
 const BUILDER_SEGMENTS: WorkspaceNavItem<TabId>[] = TABS.map((tab) => ({
   id: tab.id,
   label: tab.label,
-  // Build (overview → after the call) | Review (activity, settings, versions)
-  dividerBefore: tab.id === "analytics",
+  dividerBefore: tab.id === "more",
 }));
 
 /** One left edge for header, tabs, and every builder page. */
@@ -220,8 +224,8 @@ function BuilderPipelineStatus({ form }: { form: any }) {
   const voiceOk = isGeminiLive || Boolean(ttsVoice && ttsVoice !== "__custom__");
   return (
     <div className="hidden min-w-0 items-center gap-1 lg:flex" aria-label="Builder readiness">
-      <BuilderStatusChip ok={greetOk && promptOk} label="Script" />
-      <BuilderStatusChip ok={voiceOk} label="Sound" />
+      <BuilderStatusChip ok={greetOk && promptOk} label="Agent" />
+      <BuilderStatusChip ok={voiceOk} label="Voice" />
     </div>
   );
 }
@@ -229,19 +233,28 @@ function BuilderPipelineStatus({ form }: { form: any }) {
 /** Map legacy ?section= values onto current tabs. */
 function sectionFromSearch(search: string): TabId {
   const requested = new URLSearchParams(search).get("section");
-  if (requested === "advanced") return "settings";
-  // Channels removed — messaging/booking live under Actions.
+  if (!requested || requested === "overview") return "prompt";
+  if (requested === "script" || requested === "agent") return "prompt";
+  if (requested === "sound") return "voice";
+  if (requested === "actions") return "tools";
+  if (requested === "advanced") return "more";
   if (requested === "channels") return "tools";
-  // Voicemail now sits on After the call.
   if (requested === "voicemail") return "outcomes";
-  // Disposition used to nest under Settings → Analytics.
-  if (requested === "disposition" || requested === "dispositions") {
-    return "outcomes";
+  if (requested === "disposition" || requested === "dispositions") return "outcomes";
+  if (requested === "integrations" || requested === "website" || requested === "embed") return "more";
+  if (requested === "analytics" || requested === "settings" || requested === "versions") return "more";
+  if (requested === "calling" || requested === "phone") return "calling";
+  return TABS.some((tab) => tab.id === requested) ? (requested as TabId) : "prompt";
+}
+
+function moreContentFromSearch(search: string): TabId {
+  const requested = new URLSearchParams(search).get("section");
+  if (requested === "versions") return "versions";
+  if (requested === "analytics" || requested === "activity") return "analytics";
+  if (requested === "settings" || requested === "advanced" || requested === "integrations" || requested === "website" || requested === "embed") {
+    return "settings";
   }
-  // Old Settings → Analytics was webhooks; real agent analytics is its own tab now.
-  if (requested === "integrations") return "settings";
-  if (requested === "website" || requested === "embed") return "settings";
-  return TABS.some((tab) => tab.id === requested) ? requested as TabId : "overview";
+  return "settings";
 }
 
 /* ── Small helpers ──────────────────────────────────────────────────────────── */
@@ -516,6 +529,79 @@ function WebhookParamsEditor({ control, toolIndex }: { control: any; toolIndex: 
           <button type="button" onClick={() => remove(pIdx)} className="text-muted-foreground hover:text-destructive"><X className="h-3 w-3" /></button>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ── Tab: Calling (inbound assigned + outbound from-number) ───────────────── */
+
+function CallingTab({
+  form,
+  agent,
+}: {
+  form: ReturnType<typeof useForm<any>>;
+  agent: { id: number; name?: string | null } | null | undefined;
+}) {
+  return (
+    <div className="space-y-5">
+      <BuilderTabHeader
+        title="Calling"
+        description="Inbound numbers assigned to this agent and outbound caller ID. Campaign dialing stays on Campaigns."
+        actions={
+          <Link href="/app/phone-numbers" className="text-[12px] font-medium text-muted-foreground hover:text-foreground">
+            All numbers →
+          </Link>
+        }
+      />
+      {agent?.id != null ? (
+        <BuilderPanel title="Inbound & outbound numbers" icon={<PhoneForwarded />}>
+          <AgentInboundPanel
+            agentId={agent.id}
+            preferredManagedNumber={form.watch("preferredManagedNumber")}
+            telephonyProvider={form.watch("telephonyProvider")}
+            bare
+          />
+        </BuilderPanel>
+      ) : (
+        <p className="text-sm text-muted-foreground">Save the agent first to assign numbers.</p>
+      )}
+      <BuilderPanel
+        title="Telephony"
+        icon={<Phone />}
+        description="Carrier used when this agent places or receives calls."
+      >
+        <FormField
+          control={form.control}
+          name="telephonyProvider"
+          render={({ field }) => (
+            <FormItem className="max-w-xs space-y-1.5">
+              <FormLabel className="text-xs">Provider</FormLabel>
+              <Select value={field.value ?? "vobiz"} onValueChange={field.onChange}>
+                <FormControl>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="vobiz" className="text-xs">Vobiz</SelectItem>
+                  <SelectItem value="plivo" className="text-xs">Plivo</SelectItem>
+                  <SelectItem value="twilio" className="text-xs">Twilio</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormDescription className="text-[11px]">
+                Most workspaces use Vobiz. Change only if you bring your own carrier keys.
+              </FormDescription>
+            </FormItem>
+          )}
+        />
+      </BuilderPanel>
+      <p className="text-[12px] text-muted-foreground">
+        Reply speed and barge-in live on <span className="font-medium text-foreground">Voice</span>
+        {" · "}
+        AMD / voicemail message on <span className="font-medium text-foreground">After call</span>
+        {" · "}
+        Redial limits under <span className="font-medium text-foreground">More → Settings</span>.
+      </p>
     </div>
   );
 }
@@ -1768,11 +1854,11 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
   return (
     <div className={cn("relative flex min-h-full flex-col gap-6", BUILDER_TAB_PAD)}>
       <BuilderTabHeader
-        title="Script"
+        title="Agent"
         description={
           freeText
-            ? "Free text — paste the full call script. No Identity / Flow stages."
-            : "Identity, purpose, and flow stay small. Product facts go in Knowledge — not this prompt."
+            ? "Greeting and full call script — what the agent says."
+            : "Greeting, identity, and flow. Product facts go in Knowledge — not this prompt."
         }
       />
 
@@ -2397,8 +2483,8 @@ function VoiceTab({ form }: { form: any }) {
   return (
     <div className={cn("relative flex min-h-full flex-col gap-6", BUILDER_TAB_PAD)}>
       <BuilderTabHeader
-        title="Sound"
-        description="Voice, language, and how quickly the agent takes a turn after the caller pauses."
+        title="Voice"
+        description="How the agent sounds — voice, reply speed, and listening."
       />
 
       <BuilderPanel
@@ -3166,8 +3252,8 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       {/* ── Platform Tools ─── */}
       <div>
         <BuilderTabHeader
-          title="Actions"
-          description="Turn on an action, then pick the calendar, WhatsApp template, or email already connected. Plug-in itself is under Connections."
+          title="Tools"
+          description="Turn on a tool, then pick the calendar, WhatsApp template, or email already connected. Connections themselves live under Deploy → Connections."
         />
 
         <div className="mt-5 space-y-4">
@@ -7140,12 +7226,15 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   const { isManagedWorkspace } = usePartnerManagedWorkspace();
   const search = useSearch();
   const [activeTab, setActiveTab] = useState<TabId>(() => sectionFromSearch(search));
+  const [moreSubTab, setMoreSubTab] = useState<TabId>(() => moreContentFromSearch(search));
   const tabContentRef = useRef<HTMLDivElement>(null);
   const scrollPositions = useRef<Partial<Record<TabId, number>>>({});
   const agentResetSigRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setActiveTab(sectionFromSearch(search));
+    const next = sectionFromSearch(search);
+    setActiveTab(next);
+    if (next === "more") setMoreSubTab(moreContentFromSearch(search));
   }, [agentId, search]);
 
   const handleTabClick = (tabId: TabId) => {
@@ -7154,7 +7243,18 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
     }
     setActiveTab(tabId);
     const next = new URL(window.location.href);
-    next.searchParams.set("section", tabId);
+    if (tabId === "more") {
+      next.searchParams.set("section", moreSubTab === "analytics" || moreSubTab === "versions" ? moreSubTab : "settings");
+    } else {
+      next.searchParams.set("section", tabId);
+    }
+    window.history.replaceState(window.history.state, "", `${next.pathname}${next.search}${next.hash}`);
+  };
+
+  const handleMoreSubClick = (sub: TabId) => {
+    setMoreSubTab(sub);
+    const next = new URL(window.location.href);
+    next.searchParams.set("section", sub);
     window.history.replaceState(window.history.state, "", `${next.pathname}${next.search}${next.hash}`);
   };
 
@@ -7909,17 +8009,13 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
                   activeTab === "prompt" && "lg:max-w-[calc(100%-296px)]",
                 )}
               >
-                {activeTab === "overview"  && (
-                  <OverviewTab
-                    form={form}
-                    agent={agent}
-                    rateMap={rateMap}
-                    onGoToPrompt={() => handleTabClick("prompt")}
-                    onGoToAnalytics={() => handleTabClick("analytics")}
-                  />
-                )}
                 {activeTab === "prompt"    && <PromptTab form={form} agentId={agentId} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
+                {activeTab === "calling"   && (
+                  <div className={cn("flex flex-col gap-6", BUILDER_TAB_PAD)}>
+                    <CallingTab form={form} agent={agent} />
+                  </div>
+                )}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
                 {activeTab === "outcomes"  && (
                   <div className={cn("flex flex-col gap-6", BUILDER_TAB_PAD)}>
@@ -7930,6 +8026,46 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
                     <DispositionSettingsPanel agentId={agent?.id ?? 0} />
                     <VoicemailTab form={form} embedded />
                   </div>
+                )}
+                {activeTab === "more" && (
+                  <div className={cn("flex flex-col gap-4", BUILDER_TAB_PAD)}>
+                    <BuilderTabHeader
+                      title="More"
+                      description="Activity, advanced settings, and versions — same features, out of the day-to-day path."
+                    />
+                    <div className="flex flex-wrap gap-1.5">
+                      {MORE_SUBTABS.map((sub) => (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => handleMoreSubClick(sub.id)}
+                          className={cn(
+                            "rounded-full border px-3 py-1 text-[12px] font-medium transition-colors",
+                            moreSubTab === sub.id
+                              ? "border-foreground bg-foreground text-background"
+                              : "border-border bg-background text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {sub.label}
+                        </button>
+                      ))}
+                    </div>
+                    {moreSubTab === "analytics" && (
+                      <AgentAnalyticsPanel agentId={agent?.id ?? 0} embedded />
+                    )}
+                    {moreSubTab === "settings" && <AdvancedTab form={form} agent={agent} />}
+                    {moreSubTab === "versions" && <VersionsTab agentId={agent.id} />}
+                  </div>
+                )}
+                {/* Legacy direct section renders if URL somehow still targets them */}
+                {activeTab === "overview"  && (
+                  <OverviewTab
+                    form={form}
+                    agent={agent}
+                    rateMap={rateMap}
+                    onGoToPrompt={() => handleTabClick("prompt")}
+                    onGoToAnalytics={() => { setMoreSubTab("analytics"); handleTabClick("more"); }}
+                  />
                 )}
                 {activeTab === "analytics" && (
                   <AgentAnalyticsPanel agentId={agent?.id ?? 0} embedded />
@@ -7946,39 +8082,51 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
             </div>
           </div>
 
-          {/* Mobile-only sticky actions */}
-          <div className="shrink-0 border-t border-border/70 bg-background/95 px-5 py-2 pb-safe backdrop-blur-md sm:hidden">
-            <div className="grid grid-cols-3 gap-1.5">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 gap-1.5 text-xs font-medium"
-                onClick={() => setCallDialog(true)}
-              >
-                <Phone className="h-4 w-4 shrink-0" />
-                Phone
-              </Button>
-              <Button
-                type="button"
-                variant={showWebcall ? "default" : "outline"}
-                className="h-10 gap-1.5 text-xs font-medium"
-                onClick={() => setShowWebcall((v) => !v)}
-              >
-                <Mic className="h-4 w-4 shrink-0" />
-                {showWebcall ? "Close" : "Web"}
-              </Button>
-              <Button
-                type="button"
-                className={cn("relative h-10 gap-1.5 text-xs font-medium", savedFlash && "bg-emerald-600 hover:bg-emerald-600")}
-                onClick={onSave}
-                disabled={updateAgent.isPending}
-              >
-                {savedFlash ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-                {updateAgent.isPending ? "…" : savedFlash ? "Saved" : "Save now"}
-                {isDirty && !updateAgent.isPending && !savedFlash && (
-                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-400" />
-                )}
-              </Button>
+          {/* Sticky Save + Test — always visible (Bolna-style chrome, our actions) */}
+          <div className="shrink-0 border-t border-border bg-background/95 px-5 py-2.5 pb-safe backdrop-blur-md sm:px-8">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="hidden text-[11px] text-muted-foreground sm:block">
+                {isDirty
+                  ? (autoSaveStatus === "saving" ? "Saving changes…" : "Unsaved changes — Save now or wait for auto-save")
+                  : autoSaveStatus === "saved"
+                    ? "All changes saved"
+                    : "Ready"}
+              </p>
+              <div className="ml-auto flex flex-wrap items-center gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-9 gap-1.5 text-xs"
+                  onClick={() => setCallDialog(true)}
+                >
+                  <Phone className="h-3.5 w-3.5" />
+                  Get a call
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={showWebcall ? "default" : "outline"}
+                  className="h-9 gap-1.5 text-xs"
+                  onClick={() => setShowWebcall((v) => !v)}
+                >
+                  <Play className="h-3.5 w-3.5" />
+                  {showWebcall ? "Close test" : "Live test"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className={cn("relative h-9 gap-1.5 px-4 text-xs font-medium", savedFlash && "bg-emerald-600 hover:bg-emerald-600")}
+                  onClick={onSave}
+                  disabled={updateAgent.isPending}
+                >
+                  {savedFlash ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+                  {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save agent"}
+                  {isDirty && !updateAgent.isPending && !savedFlash && (
+                    <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-400" />
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
