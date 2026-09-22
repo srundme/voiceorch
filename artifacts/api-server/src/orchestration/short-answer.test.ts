@@ -30,7 +30,13 @@ describe("isClosedQuestion", () => {
   it("detects yes/no and confirmation prompts", () => {
     expect(isClosedQuestion("Are you comfortable with the night shift?")).toBe(true);
     expect(isClosedQuestion("Okay?")).toBe(true);
+    expect(isClosedQuestion("Is there anything else I can help you with?")).toBe(true);
     expect(isClosedQuestion("Tell me about your experience.")).toBe(false);
+  });
+
+  it("does not treat which-slot choice questions as yes/no", () => {
+    expect(isClosedQuestion("Which one works better for you?")).toBe(false);
+    expect(isClosedQuestion("I can offer you two slots — 11 AM or 4 PM. Which one works better for you?")).toBe(false);
   });
 });
 

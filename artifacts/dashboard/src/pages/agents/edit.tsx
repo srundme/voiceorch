@@ -1246,7 +1246,6 @@ export default function AgentEdit() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium leading-none">Noise Cancellation</p>
-                          <p className="text-xs text-muted-foreground mt-1">ai-coustics Quail Voice Focus — isolates the primary speaker and suppresses background noise/voices before STT. Not acoustic echo cancellation. Requires AIC_SDK_LICENSE on the server.</p>
                         </div>
                         <FormField control={form.control} name="noiseCancellationEnabled" render={({ field }) => (
                           <FormItem>

@@ -15,11 +15,18 @@ const SHORT_ANSWER_RE =
   /^(yes|yeah|yep|yup|ok|okay|sure|correct|right|no|nope|nah|haan|han|ji|nahi|nahin|theek|accha|acha|aama|aam|illa|illai|seri|sari|vendaam|vendam|ஆம்|ஆமா|சரி|சரிங்க|இல்ல|இல்லை|வேண்டாம்|வேண்டா|हां|हाँ|जी|नहीं|नही|ठीक|अच्छा)([\s,.!]+(madam|ma'?am|sir|miss|mam|ji|jee|சார்|மேடம்|जी))?[\s,.!]*$/iu;
 
 const CLOSED_QUESTION_RE =
-  /[?？]\s*$|^(?:are you|do you|can you|will you|would you|is that|is it|okay\b|ok\b|right\b|correct\b)|(?:right|correct|okay|ok)\s*\?\s*$|கிடைக்குமா|சரியா|ஆமா\s*\?|comfortable|interested|agree|confirm/i;
+  /^(?:are you|do you|can you|will you|would you|is that|is it|is there|shall we|okay\b|ok\b|right\b|correct\b)|(?:\bright\b|\bcorrect\b|\bokay\b|\bok\b)\s*\?\s*$|(?:\bcomfortable\b|\binterested\b|\bagree\b|\bconfirm(?:ing)?\b|\banything else\b)|கிடைக்குமா|சரியா|ஆமா\s*\?/i;
+
+/** Choice / which-slot questions — not yes/no; leave as open for turn-acceptance. */
+const CHOICE_QUESTION_RE =
+  /\b(which\s+one|which\s+(slot|time|option)|what\s+time|11\s*(am)?\s*or|or\s+\d+\s*(am|pm)|works?\s+better)\b/i;
 
 export function isClosedQuestion(agentText: string): boolean {
   const t = agentText.trim();
   if (!t) return false;
+  // "Which one works better for you?" must NOT be treated as yes/no — that caused
+  // call 28055 to IGNORE "Anything works for me?" under TURN_ACCEPTANCE_GATE=enforce.
+  if (CHOICE_QUESTION_RE.test(t)) return false;
   return CLOSED_QUESTION_RE.test(t);
 }
 

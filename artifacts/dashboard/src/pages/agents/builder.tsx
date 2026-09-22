@@ -2623,7 +2623,6 @@ function VoiceTab({ form }: { form: any }) {
             <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
               <div>
                 <FormLabel className="text-sm">Noise Cancellation</FormLabel>
-                <FormDescription className="text-[10px]">ai-coustics Quail Voice Focus — isolates the primary speaker and cuts background noise/voices before STT. Not echo cancellation. Requires AIC_SDK_LICENSE on the server.</FormDescription>
               </div>
               <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>

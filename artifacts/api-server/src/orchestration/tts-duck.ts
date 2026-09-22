@@ -27,16 +27,22 @@ export function preferSoftDuckBeforeBarge(opts: {
 }): SoftDuckDecision {
   if (opts.hardInterrupt) return "hard_barge";
   if (opts.shortAnswerAccepted) return "hard_barge";
+  // STT partials always soft-duck first. BG/TV often hallucinates multi-word
+  // text that used to hard-barge immediately (call 28055). Promote only if
+  // Silero/AEC still shows speech after TTS_DUCK_MS.
+  if (opts.trigger === "stt_partial" || opts.trigger === "vad_speech_start") {
+    return "soft_duck";
+  }
   const text = (opts.text ?? "").trim();
   const words = text.split(/\s+/).filter(Boolean);
-  // Usable multi-word STT — treat as real barge immediately.
+  // Usable multi-word finals / word_count — treat as real barge immediately.
   if (
-    (opts.trigger === "stt_partial" || opts.trigger === "word_count" || opts.trigger === "queued_final")
+    (opts.trigger === "word_count" || opts.trigger === "queued_final")
     && (words.length >= 2 || text.length >= 12)
   ) {
     return "hard_barge";
   }
-  // Single-word / VAD / energy — duck first.
+  // Single-word / energy — duck first.
   return "soft_duck";
 }
 

@@ -573,11 +573,18 @@ export function clarificationPromptForSlot(
   langHint?: string | null,
 ): string {
   const ta = (langHint ?? "").toLowerCase().startsWith("ta");
+  const clipped = lastAgentText.trim().replace(/\s+/g, " ").slice(0, 140);
   switch (slot) {
     case "yes_no":
-      return ta
-        ? "மன்னிக்கவும், இரவு ஷிப்ட் சரிதானா? மீண்டும் சொல்லுங்கள்."
-        : "Sorry, are you comfortable with the night shift? Could you say that again?";
+      // NEVER invent a different question (old hard-coded "night shift" derailed call 28055).
+      if (ta) {
+        return clipped
+          ? `மன்னிக்கவும், கேள்வியை மீண்டும் — ${clipped}`
+          : "மன்னிக்கவும், ஆம் அல்லது இல்லை என்று மீண்டும் சொல்லுங்கள்.";
+      }
+      return clipped
+        ? `Sorry, I didn't catch that. ${clipped}`
+        : "Sorry, I didn't catch that. Could you say yes or no again?";
     case "duration":
       return ta
         ? "மன்னிக்கவும், எத்தனை வருட அனுபவம்? மீண்டும் சொல்லுங்கள்."
@@ -604,7 +611,6 @@ export function clarificationPromptForSlot(
         ? "மன்னிக்கவும், எண்ணை மீண்டும் சொல்லுங்கள்."
         : "Sorry, could you repeat that number?";
     default: {
-      const clipped = lastAgentText.trim().replace(/\s+/g, " ").slice(0, 120);
       return clipped
         ? `Sorry, I didn't catch that. ${clipped}`
         : "Sorry, I didn't catch that. Could you say that again?";

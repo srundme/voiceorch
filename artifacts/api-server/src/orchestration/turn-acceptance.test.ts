@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clarificationPromptForSlot,
   evaluateTurnAcceptance,
   inferExpectedSlot,
   matchGlobalIntent,
@@ -198,5 +199,29 @@ describe("evaluateTurnAcceptance — corrected policy", () => {
     expect(inferExpectedSlot("Are you comfortable with the night shift?")).toBe("yes_no");
     expect(inferExpectedSlot("Are you currently working?")).toBe("duration");
     expect(inferExpectedSlot("May I know your name?")).toBe("person_name");
+    expect(inferExpectedSlot("Which one works better for you?")).toBe("open");
+  });
+
+  it("call 28055: choice question accepts 'Anything works for me' (fail-open)", () => {
+    const r = evaluateTurnAcceptance(
+      base({
+        lastAgentText: "I can offer you two slots — 11 AM or 4 PM. Which one works better for you?",
+        transcript: "Anything works for me?",
+        ...strongAcoustic,
+      }),
+    );
+    expect(r.expectedSlot).toBe("open");
+    expect(r.decision).toBe("accept");
+    expect(shouldEnforceTurnDecision("enforce", r.decision, r.expectedSlot)).toBe(false);
+  });
+
+  it("yes_no clarification re-asks the real agent question, not night shift", () => {
+    const prompt = clarificationPromptForSlot(
+      "yes_no",
+      "Is there anything else I can help you with?",
+      "en-IN",
+    );
+    expect(prompt.toLowerCase()).not.toContain("night shift");
+    expect(prompt).toContain("anything else");
   });
 });

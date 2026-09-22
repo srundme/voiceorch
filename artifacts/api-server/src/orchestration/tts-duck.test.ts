@@ -8,10 +8,16 @@ import {
 } from "./tts-duck.js";
 
 describe("preferSoftDuckBeforeBarge", () => {
-  it("hard-barges clear multi-word STT", () => {
+  it("soft-ducks STT partials even when multi-word (BG noise can hallucinate)", () => {
     expect(
       preferSoftDuckBeforeBarge({ trigger: "stt_partial", text: "How many members" }),
-    ).toBe("hard_barge");
+    ).toBe("soft_duck");
+    expect(
+      preferSoftDuckBeforeBarge({
+        trigger: "stt_partial",
+        text: "Yes, yes, today through your luck came",
+      }),
+    ).toBe("soft_duck");
   });
 
   it("hard-barges contextual short answers and hard interrupts", () => {
@@ -24,6 +30,15 @@ describe("preferSoftDuckBeforeBarge", () => {
     ).toBe("hard_barge");
     expect(
       preferSoftDuckBeforeBarge({ trigger: "stt_partial", text: "stop", hardInterrupt: true }),
+    ).toBe("hard_barge");
+  });
+
+  it("hard-barges multi-word word_count / queued_final", () => {
+    expect(
+      preferSoftDuckBeforeBarge({ trigger: "word_count", text: "I have a question" }),
+    ).toBe("hard_barge");
+    expect(
+      preferSoftDuckBeforeBarge({ trigger: "queued_final", text: "Maybe 5 PM works" }),
     ).toBe("hard_barge");
   });
 
