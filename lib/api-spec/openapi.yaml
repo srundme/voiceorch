@@ -9395,6 +9395,10 @@ components:
         agentId:
           type: integer
           nullable: true
+        agentName:
+          type: string
+          nullable: true
+          description: "Resolved agent display name (GET /campaigns/:id)"
         status:
           type: string
           enum: [draft, active, paused, stopped, completed]

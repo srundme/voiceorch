@@ -382,7 +382,16 @@ router.get("/campaigns/:id", async (req, res): Promise<void> => {
     ));
   const queuedLeadsCount = Number(queuedRow?.c ?? 0);
 
-  res.json({ ...toCampaign(row), queuedLeadsCount });
+  let agentName: string | null = null;
+  if (row.agentId != null) {
+    const [agent] = await db.select({ name: agentsTable.name })
+      .from(agentsTable)
+      .where(eq(agentsTable.id, row.agentId))
+      .limit(1);
+    agentName = agent?.name ?? null;
+  }
+
+  res.json({ ...toCampaign(row), queuedLeadsCount, agentName });
 });
 
 // ── PATCH /campaigns/:id ───────────────────────────────────────────────────

@@ -105,6 +105,16 @@ describe("leads URL filters are linkable", () => {
     const parsed = parseLeadsSearch("view=retry&batchId=412&answeredEver=true");
     expect(parsed).toMatchObject({ view: "retry", batchId: 412, answeredEver: true });
   });
+  it("maps Failed chip to technical_failed and Retry to retry", () => {
+    expect(campaignLeadsHref(449, { view: "technical_failed" })).toBe(
+      "/app/campaigns/449?tab=leads&view=technical_failed",
+    );
+    expect(campaignLeadsHref(449, { view: "retry" })).toBe(
+      "/app/campaigns/449?tab=leads&view=retry",
+    );
+    expect(parseLeadsSearch("view=technical_failed").view).toBe("technical_failed");
+    expect(batchLeadsHref(449, 412, { view: "technical_failed" })).toContain("view=technical_failed");
+  });
 });
 
 describe("historical answered+failed presentation", () => {

@@ -807,14 +807,12 @@ export function parseCampaignReportingFilter(query: Record<string, unknown>): Ca
 }
 
 export const LEGACY_CAMPAIGN_KPI_SURFACES = [
-  "GET /campaigns/:id/analytics (campaignLeadFunnelSelect)",
+  "GET /campaigns/:id/analytics (campaignLeadFunnelSelect) — failed field now = technicalFailed",
   "GET /campaigns/:id/batches/:batchId/workspace/kpis",
   "GET /campaigns/:id/batches/:batchId/workspace/funnel",
   "GET /campaigns/:id/batches/:batchId/workspace/leads (status=connected includes completed/transferred)",
   "GET /campaigns/:id/batches/:batchId/analytics",
   "GET /campaigns/:id/live-queue (failed tab = call_status failed)",
   "GET /campaigns command-center",
-  "dashboard campaign overview tiles (resolveCampaignOverviewMetrics)",
-  "dashboard batch workspace KPI cards",
   "platform-analytics.ts (separate operational_outcome vocabulary)",
 ] as const;

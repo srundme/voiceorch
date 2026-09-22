@@ -19,9 +19,12 @@ import { logger } from "../lib/logger.js";
  * Cap the worker pool. Railway (and other hosts) often report a large shared
  * CPU count; spawning cpus()-1 workers at boot can OOM the container right
  * after "Server listening", so /api/healthz never stays up.
- * Override with AUDIO_POOL_SIZE when you intentionally want a larger pool.
+ *
+ * Default max is high enough for ~campaign concurrent floors on a dedicated
+ * API box; override with AUDIO_POOL_SIZE when you need more (or fewer) workers
+ * under live call load. Soft ceiling for the override is 64.
  */
-const AUDIO_POOL_MAX = 8;
+const AUDIO_POOL_MAX = 16;
 export function resolveAudioPoolSize(
   env: NodeJS.ProcessEnv = process.env,
   cpuCount: number = cpus().length,

@@ -4,7 +4,7 @@ import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { scheduleRetry, scheduleRetryResult, processRetries, resolveRetryConfig } from "./retryEngine.js";
 import { isCampaignDialable } from "./campaign-dialable.js";
-import { isCampaignLeadStateV2Writer, v2ParkStuckAnswered } from "./campaign-lead-state-v2.js";
+import { isCampaignLeadStateV2Writer, stuckLeadLooksAnswered, v2ParkStuckAnswered } from "./campaign-lead-state-v2.js";
 import { logger } from "../lib/logger.js";
 import { startMeetingBotAutoDispatcher } from "./meet-auto-dispatch.js";
 
@@ -656,7 +656,7 @@ async function sweepStuckCallingLeads(): Promise<void> {
     for (const lead of stuck) {
       try {
         const v2Writer = isCampaignLeadStateV2Writer(lead.campaignId);
-        const answeredEver = lead.answeredEver === true;
+        const answeredEver = stuckLeadLooksAnswered(lead);
         let retryOk = false;
         const [campaign] = await db.select().from(campaignsTable)
           .where(eq(campaignsTable.id, lead.campaignId));
@@ -684,6 +684,7 @@ async function sweepStuckCallingLeads(): Promise<void> {
           await db.update(campaignLeadsTable)
             .set({
               callStatus: parked,
+              answeredEver: true,
               notes: `Stuck in ${lead.callStatus} — no terminal webhook received; auto-parked by scheduler`,
               lastAttemptStatus: "stuck_calling",
             })

@@ -9,10 +9,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
-import { AttemptStatusBadge, DispositionBadge } from "@/components/campaign-ops/badges";
 import {
   formatDuration,
   formatRetryAt,
+  attemptStatusLabel,
   type CampaignReportingLead,
   type CampaignReportingView,
   OUTCOME_CARDS,
@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { MoreHorizontal, Phone, StickyNote } from "lucide-react";
 import { useState } from "react";
+import { DispositionBadge } from "@/components/campaign-ops/badges";
 
 export function LeadReportingTable({
   campaignId,
@@ -99,11 +100,11 @@ export function LeadReportingTable({
                 "flex items-center gap-3 px-3 py-2.5 cursor-pointer",
                 selected ? "bg-muted" : "hover:bg-muted/40",
               )}
-              onClick={() => onSelectLead?.(lead)}
+              onClick={() => navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  onSelectLead?.(lead);
+                  navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`);
                 }
               }}
               role="link"
@@ -115,7 +116,6 @@ export function LeadReportingTable({
                   <p className="font-medium truncate">
                     {showName ? name : lead.phone || "Unknown"}
                   </p>
-                  <AttemptStatusBadge status={lead.lastAttemptStatus} answeredEver={lead.answeredEver} />
                   <DispositionBadge
                     bucket={lead.dispositionBucket}
                     label={lead.disposition}
@@ -126,6 +126,7 @@ export function LeadReportingTable({
                   {showName ? lead.phone : null}
                   {showName && lead.phone ? " · " : ""}
                   {lead.contactState === "answered" ? "Answered call" : "Contact attempt"}
+                  {lead.lastAttemptStatus ? ` · ${attemptStatusLabel(lead.lastAttemptStatus)}` : ""}
                   {showRetryQueue ? ` · ${formatRetryAt(lead.retryScheduledAt) ?? "retry"}` : ""}
                 </p>
               </div>
@@ -137,6 +138,7 @@ export function LeadReportingTable({
                   lead={lead}
                   campaignId={campaignId}
                   onOpen={() => navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`)}
+                  onInspect={() => onSelectLead?.(lead)}
                   onCall={() => openCall(lead)}
                   onRetry={onRetry}
                   onCancelRetry={onCancelRetry}
@@ -156,6 +158,7 @@ function RowMenu({
   lead,
   campaignId,
   onOpen,
+  onInspect,
   onCall,
   onRetry,
   onCancelRetry,
@@ -163,6 +166,7 @@ function RowMenu({
   lead: CampaignReportingLead;
   campaignId: number;
   onOpen: () => void;
+  onInspect?: () => void;
   onCall: () => void;
   onRetry?: (leadId: number) => void;
   onCancelRetry?: (leadId: number) => void;
@@ -177,6 +181,9 @@ function RowMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={onOpen}>Open lead</DropdownMenuItem>
+        {onInspect && (
+          <DropdownMenuItem onClick={onInspect}>Quick inspect</DropdownMenuItem>
+        )}
         {(lead.latestCallId != null || lead.latestAnsweredCallId != null) && (
           <DropdownMenuItem onClick={onCall} className="gap-2">
             <Phone className="h-3.5 w-3.5" /> Full recording

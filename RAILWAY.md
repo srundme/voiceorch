@@ -83,6 +83,7 @@ Set your Google OAuth callback URL to:
 | `VOICE_CANARY_AUDIO` | When `1`, dump raw / post-AEC / post-Quail PCM snippets (~200 ms base64) on failed-call events. **Canary-only** — may contain personal speech. Cleared after dump; TTL via `VOICE_CANARY_AUDIO_TTL_MS` (default 60s, max 5 min). Off by default. |
 | `VOICE_CANARY_AUDIO_TTL_MS` | Max age of held stage PCM before auto-drop (default `60000`). |
 | `TURN_ACCEPTANCE_GATE` | Turn Acceptance Gate between STT and `processTurn`. `shadow` (default) = log `voice_canary_turn_acceptance` only; `enforce` = IGNORE/CLARIFY on **structured** slots only (`yes_no`/`duration`/`money`/`place`/`person_name`/`email`/`phone`/`digits`); `open` stays fail-open; `off` = disable. Coherence alone never ACCEPTs. |
+| `AUDIO_POOL_SIZE` | In-process audio worker threads (AEC/Quail/VAD). Default auto-cap **16**. Raise (e.g. `20`–`24`) if logs show `Audio worker pool skew` / overloaded under concurrent calls; use a larger Railway instance first so boot does not OOM. Soft max **64**. |
 | `RAZORPAY_KEY_ID` | Razorpay payments |
 | `RAZORPAY_KEY_SECRET` | Razorpay payments |
 | `BREVO_API_KEY` | Email transactional |

@@ -84,21 +84,24 @@ export function ContactOutcomeHero({
   loading?: boolean;
 }) {
   if (loading) return <Skeleton className="h-20 w-full rounded-xl" />;
-  const cards: Array<{ id: CampaignReportingView | "all"; label: string; count: number }> = [
+  const cards: Array<{ id: CampaignReportingView | "all"; label: string; count: number; hint?: string }> = [
     { id: "all", label: "All leads", count: reporting?.funnel.imported ?? 0 },
-    { id: "answered", label: "Answered", count: reporting?.funnel.answered ?? 0 },
+    { id: "answered", label: "Answered", count: reporting?.funnel.answered ?? 0, hint: "Ever answered" },
+    { id: "retry", label: "Retry", count: reporting?.workTechnical.retryPending ?? 0, hint: "Queued" },
     { id: "busy", label: "Busy", count: reporting?.workTechnical.busy ?? 0 },
     { id: "no_pickup", label: "No Pickup", count: reporting?.workTechnical.noPickup ?? 0 },
     { id: "voicemail", label: "Voicemail", count: reporting?.workTechnical.voicemail ?? 0 },
-    { id: "technical_failed", label: "Failed", count: reporting?.workTechnical.technicalFailed ?? 0 },
+    { id: "technical_failed", label: "Failed", count: reporting?.workTechnical.technicalFailed ?? 0, hint: "Never answered" },
   ];
   return (
     <section className="space-y-2 min-w-0 shrink-0">
       <div>
         <h2 className="text-sm font-semibold">Contact outcomes</h2>
-        <p className="text-[11px] text-muted-foreground">Sticky answer history plus terminal telephony outcomes.</p>
+        <p className="text-[11px] text-muted-foreground">
+          Answered-ever, retry queue, and never-answered technical outcomes. Failed ≠ mid-call hangup.
+        </p>
       </div>
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-1.5">
         {cards.map((card) => {
           const selected = card.id === "all" ? (allSelected ?? !active) : active === card.id;
           return (
@@ -114,6 +117,11 @@ export function ContactOutcomeHero({
               )}
             >
               <p className={cn("text-[11px] truncate", selected ? "text-background/70" : "text-muted-foreground")}>{card.label}</p>
+              {card.hint && (
+                <p className={cn("text-[10px] truncate", selected ? "text-background/55" : "text-muted-foreground/70")}>
+                  {card.hint}
+                </p>
+              )}
               <p className="text-xl font-semibold tabular-nums leading-tight">{card.count}</p>
             </button>
           );

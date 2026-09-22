@@ -33,6 +33,8 @@ export function CampaignOverviewPanel({
     + (reporting?.liveFloor.calling ?? 0)
     + (reporting?.liveFloor.talking ?? 0)
     + (reporting?.workTechnical.retryPending ?? 0)) > 0;
+  const campaignRunning = (reporting?.liveFloor.calling ?? 0) + (reporting?.liveFloor.talking ?? 0) > 0
+    || (reporting?.batches?.some((b) => b.status === "running") ?? false);
 
   function openLeads(next: {
     view?: CampaignReportingView;
@@ -81,7 +83,7 @@ export function CampaignOverviewPanel({
           else openLeads({ disposition: key });
         }}
       />
-      {(loading || liveBusy) && (
+      {(loading || liveBusy || campaignRunning) && (
         <LiveFloor
           loading={loading}
           data={reporting ? { ...reporting.liveFloor, retryPending: reporting.workTechnical.retryPending } : undefined}

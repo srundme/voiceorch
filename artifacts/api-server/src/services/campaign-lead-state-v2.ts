@@ -547,7 +547,23 @@ export function shouldDeferCarrierTerminalOnAnsweredLead(opts: {
   answeredEver: boolean;
   callStatus: string;
 }): boolean {
-  return opts.v2 && opts.answeredEver && opts.callStatus === "connected";
+  // Once a lead has answered (sticky) and is live-connected, endSession owns
+  // call_status. Defer even when the V2 env flag is off — writing carrier
+  // failed onto an answered connected lead is always wrong.
+  void opts.v2;
+  return opts.answeredEver && opts.callStatus === "connected";
+}
+
+/** Stuck sweep: treat connected / call_id as answered even if sticky write lagged. */
+export function stuckLeadLooksAnswered(lead: {
+  answeredEver?: boolean | null;
+  callStatus?: string | null;
+  callId?: number | null;
+}): boolean {
+  if (lead.answeredEver === true) return true;
+  if (lead.callStatus === "connected") return true;
+  if (lead.callId != null) return true;
+  return false;
 }
 
 export function isProtectedBusinessDisposition(disposition: string | null | undefined): boolean {

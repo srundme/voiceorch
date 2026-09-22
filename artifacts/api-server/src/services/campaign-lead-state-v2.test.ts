@@ -23,6 +23,7 @@ import {
   shouldLogCampaignLeadStateV2Canary,
   shouldLogCampaignLeadStateV2Shadow,
   shouldPreserveBusinessDisposition,
+  stuckLeadLooksAnswered,
   v2ParkNeverAnsweredFailed,
   v2ParkStuckAnswered,
   type ClassifyCampaignCallEndInput,
@@ -405,7 +406,7 @@ describe("invariants under V2 proposed park", () => {
     ).toBe(true);
   });
 
-  it("connected carrier-failed race does not clobber answered state under V2", () => {
+  it("defers carrier terminal on answered connected leads (flag-independent)", () => {
     expect(
       shouldDeferCarrierTerminalOnAnsweredLead({
         v2: true,
@@ -422,14 +423,38 @@ describe("invariants under V2 proposed park", () => {
     expect(afterRace.callStatus).toBe("connected");
   });
 
-  it("does not defer the carrier terminal while V2 is off", () => {
+  it("still defers answered+connected when V2 writer flag is off", () => {
     expect(
       shouldDeferCarrierTerminalOnAnsweredLead({
         v2: false,
         answeredEver: true,
         callStatus: "connected",
       }),
+    ).toBe(true);
+  });
+
+  it("does not defer when not answered or not connected", () => {
+    expect(
+      shouldDeferCarrierTerminalOnAnsweredLead({
+        v2: true,
+        answeredEver: false,
+        callStatus: "connected",
+      }),
     ).toBe(false);
+    expect(
+      shouldDeferCarrierTerminalOnAnsweredLead({
+        v2: true,
+        answeredEver: true,
+        callStatus: "calling",
+      }),
+    ).toBe(false);
+  });
+
+  it("stuckLeadLooksAnswered treats connected/call_id as answered", () => {
+    expect(stuckLeadLooksAnswered({ answeredEver: true })).toBe(true);
+    expect(stuckLeadLooksAnswered({ callStatus: "connected" })).toBe(true);
+    expect(stuckLeadLooksAnswered({ callId: 99 })).toBe(true);
+    expect(stuckLeadLooksAnswered({ callStatus: "calling", callId: null })).toBe(false);
   });
 
   it("concurrency semantics remain calling | connected", () => {
@@ -703,11 +728,12 @@ describe("V2 answered hangup parking", () => {
       }).oldLeadStatus,
     ).toBe("failed");
     expect(isCampaignLeadStateV2Writer(449, { CAMPAIGN_LEAD_STATE_V2: "off" })).toBe(false);
+    // Answered+connected defer is always on (carrier must not clobber live sessions).
     expect(shouldDeferCarrierTerminalOnAnsweredLead({
       v2: false,
       answeredEver: true,
       callStatus: "connected",
-    })).toBe(false);
+    })).toBe(true);
     expect(v2ParkStuckAnswered({ answeredEver: false, retryOk: true })).toBe("failed");
   });
 });

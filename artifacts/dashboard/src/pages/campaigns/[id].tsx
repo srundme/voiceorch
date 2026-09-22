@@ -2,13 +2,13 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRoute, useLocation, useSearch, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches,
-  useDeleteCampaign, useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
+  useDeleteCampaign, useGetCampaignAnalytics, useUpdateCampaign,
   getListCampaignBatchesQueryKey, getGetCampaignQueryKey, getGetCampaignAnalyticsQueryKey,
   getGetBatchAnalyticsQueryOptions,
   useListCrmConnections, useUpdateCrmConnection, getListCrmConnectionsQueryKey,
   customFetch,
 } from "@workspace/api-client-react";
-import type { CampaignBatch, CrmConnection } from "@workspace/api-client-react";
+import type { CrmConnection } from "@workspace/api-client-react";
 import { CrmImportDialog } from "../connections";
 import { useQueryClient, useQueries, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -19,16 +19,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getIrdaiBlockedError } from "@/lib/irdai-block";
-import { resolveCampaignOverviewMetrics } from "@/lib/campaign-overview-metrics";
 import {
   ArrowLeft, Copy, Check, Megaphone, Upload, FileText, Layers,
   ChevronRight, ChevronDown, Calendar, Trash2, Users, Clock, AlertCircle,
@@ -678,11 +673,9 @@ export default function CampaignDetailPage() {
 
   const [, setLocation] = useLocation();
   const search = useSearch();
-  const [deletingBatch,    setDeletingBatch]    = useState<CampaignBatch | null>(null);
   const [showDeleteCamp,   setShowDeleteCamp]   = useState(false);
   const [deleteNameInput,  setDeleteNameInput]  = useState("");
   const [deletingCamp,     setDeletingCamp]     = useState(false);
-  const deleteBatch    = useDeleteCampaignBatch();
   const deleteCampaign = useDeleteCampaign();
   const update = useUpdateCampaign();
 
@@ -830,13 +823,12 @@ export default function CampaignDetailPage() {
     : "";
 
   const fm = campaign?.fieldMappings as Record<string, string> | undefined;
-  const overviewMetrics = resolveCampaignOverviewMetrics({
-    analytics,
-    campaign,
-  });
-  const { failed } = overviewMetrics;
+  const technicalFailed = reporting?.workTechnical.technicalFailed ?? 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isContinuous = ["webhook", "meta_ads", "crm", "google_sheets"].includes((campaign as any)?.leadSource ?? "");
+  const agentLabel =
+    (campaign as { agentName?: string | null } | undefined)?.agentName?.trim()
+    || (campaign?.agentId != null ? `Agent #${campaign.agentId}` : "—");
 
   // ── Campaign-level summary metrics ────────────────────────────────────────
   const totalBatches     = batches?.length ?? 0;
@@ -873,18 +865,6 @@ export default function CampaignDetailPage() {
   );
   const campaignFinished =
     preFinished && allAnalyticsLoaded && pendingRetriesTotal === 0;
-
-  async function handleDeleteBatch() {
-    if (!deletingBatch) return;
-    try {
-      await deleteBatch.mutateAsync({ id: campaignId, batchId: deletingBatch.id });
-      await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
-      toast({ title: "Batch deleted" });
-    } catch {
-      toast({ title: "Error", description: "Failed to delete batch", variant: "destructive" });
-    }
-    setDeletingBatch(null);
-  }
 
   async function handleDeleteCampaign() {
     if (deleteNameInput.trim() !== campaign?.name) return;
@@ -956,7 +936,7 @@ export default function CampaignDetailPage() {
             </div>
             <div className="flex items-center gap-3 mt-1 flex-wrap">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Users className="h-3 w-3" /> Agent #{campaign.agentId ?? "—"}
+                <Users className="h-3 w-3" /> {agentLabel}
               </span>
               {campaign.fromNumber && (
                 <span className="text-xs text-muted-foreground font-mono flex items-center gap-1">
@@ -970,7 +950,10 @@ export default function CampaignDetailPage() {
                 {totalBatches} batch{totalBatches === 1 ? "" : "es"}
               </span>
             </div>
-            {((reporting?.liveFloor.calling ?? 0) > 0 || (reporting?.liveFloor.talking ?? 0) > 0) && (
+            {((reporting?.liveFloor.calling ?? 0) > 0
+              || (reporting?.liveFloor.talking ?? 0) > 0
+              || (reporting?.workTechnical.retryPending ?? 0) > 0
+              || batches?.some(b => b.status === "running")) && (
               <CampaignExecutionStrip
                 calling={reporting?.liveFloor.calling ?? 0}
                 talking={reporting?.liveFloor.talking ?? 0}
@@ -1016,7 +999,7 @@ export default function CampaignDetailPage() {
               </>
             )}
             {/* Also offer re-campaign whenever there is outcome data to dial again */}
-            {!isContinuous && !campaignFinished && ((analytics?.dispositions?.length ?? 0) > 0 || failed > 0) && (
+            {!isContinuous && !campaignFinished && ((analytics?.dispositions?.length ?? 0) > 0 || technicalFailed > 0) && (
               <Button
                 size="sm"
                 variant="outline"
@@ -1114,7 +1097,7 @@ export default function CampaignDetailPage() {
           <section className="space-y-1">
             <h2 className="text-sm font-semibold">General</h2>
             <p className="text-xs text-muted-foreground">
-              Agent #{campaign.agentId ?? "—"}
+              {agentLabel}
               {campaign.fromNumber ? ` · ${campaign.fromNumber}` : ""}
               {" · "}
               {(campaign as { leadSource?: string }).leadSource?.replace(/_/g, " ") || "source"}
@@ -1364,22 +1347,6 @@ export default function CampaignDetailPage() {
         dispositions={analytics?.dispositions ?? []}
         statusBreakdown={(analytics as { statusBreakdown?: Record<string, number> } | undefined)?.statusBreakdown}
       />
-
-      <AlertDialog open={!!deletingBatch} onOpenChange={v => { if (!v) setDeletingBatch(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete batch?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete <strong>{deletingBatch?.name}</strong> and all its leads.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => void handleDeleteBatch()}>Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* ── Delete Campaign dialog ─────────────────────────────────────── */}
       <Dialog open={showDeleteCamp} onOpenChange={v => { if (!v) setShowDeleteCamp(false); }}>

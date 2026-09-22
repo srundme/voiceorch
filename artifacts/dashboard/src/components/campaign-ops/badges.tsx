@@ -50,11 +50,24 @@ export function AttemptStatusBadge({
   answeredEver?: boolean;
 }) {
   const label = attemptStatusLabel(status);
-  const failedish = status === "failed" || status === "dropped" || status === "dial_error" || status === "stuck_calling";
-  if (failedish && !answeredEver) {
-    return chip("border-destructive/40 bg-destructive/10 text-destructive", label);
+  // Quiet telephony meta — never compete with Disposition. Destructive fill only
+  // for never-answered technical failures (row accent still carries attention).
+  if (answeredEver) {
+    return (
+      <span className="text-[11px] text-muted-foreground/80 truncate">
+        {label}
+      </span>
+    );
   }
-  return chip("border-border bg-muted/40 text-muted-foreground", label);
+  const failedish = status === "failed" || status === "dropped" || status === "dial_error" || status === "stuck_calling";
+  if (failedish) {
+    return chip("border-destructive/30 bg-transparent text-muted-foreground", label);
+  }
+  return (
+    <span className="text-[11px] text-muted-foreground/80 truncate">
+      {label}
+    </span>
+  );
 }
 
 export function DispositionBadge({

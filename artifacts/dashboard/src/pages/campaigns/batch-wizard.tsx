@@ -335,7 +335,7 @@ function Step1({
         ) : (
           <>
             <DetailRow icon={<Zap className="w-3.5 h-3.5" />} label="Campaign" value={campaign?.name ?? "—"} />
-            <DetailRow icon={<User className="w-3.5 h-3.5" />} label="Agent" value={campaign?.agentId ? `Agent #${campaign.agentId}` : "—"} />
+            <DetailRow icon={<User className="w-3.5 h-3.5" />} label="Agent" value={(campaign as { agentName?: string | null } | undefined)?.agentName?.trim() || (campaign?.agentId ? `Agent #${campaign.agentId}` : "—")} />
             <DetailRow icon={<Phone className="w-3.5 h-3.5" />} label="Phone" value={campaign?.fromNumber ?? "—"} />
           </>
         )}
