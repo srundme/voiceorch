@@ -402,26 +402,27 @@ export default function CampaignAnalyticsTab({
   }
 
   const snap = rendered?.snapshot ?? insights;
+  const hasDeepInsights = (snap?.analysed ?? 0) > 0;
   const tabs = [
-    { id: "results" as const, label: "Results", icon: BarChart3 },
+    { id: "results" as const, label: "Insights", icon: BarChart3 },
     { id: "ask" as const, label: "Ask", icon: HelpCircle },
     { id: "reports" as const, label: "Reports", icon: FileText },
   ];
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-foreground">
-            {batchId != null ? "Batch insights" : "Campaign analytics"}
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
+        <div className="min-w-0 max-w-xl">
+          <p className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">
+            {batchId != null ? "Batch insights" : "Deep call analysis"}
           </p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            Deep sentiment, willingness to pay, AI call quality — powered by Sarvam 105B.
+          <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+            Sentiment, purchase intent, objections, and agent quality — Sarvam 105B.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <select
-            className="h-7 rounded-md border border-border bg-background px-2 text-xs"
+            className="h-8 rounded-md border border-border bg-background px-2 text-xs"
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
           >
@@ -430,25 +431,25 @@ export default function CampaignAnalyticsTab({
             <option value={30}>30 days</option>
             <option value={60}>60 days</option>
           </select>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" disabled={backfilling}
+          <Button size="sm" className="h-8 gap-1.5 text-xs" disabled={backfilling}
             onClick={() => void handleBackfill()}>
-            {backfilling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+            {backfilling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
             Analyse calls
           </Button>
         </div>
       </div>
 
-      <div className="flex gap-1 border-b border-border">
+      <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card p-1">
         {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
             className={cn(
-              "inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors",
+              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11.5px] font-medium transition-colors",
               tab === t.id
-                ? "border-foreground text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
             <t.icon className="h-3.5 w-3.5" />
@@ -457,34 +458,54 @@ export default function CampaignAnalyticsTab({
         ))}
       </div>
 
-      {tab === "results" && snap && (
+      {tab === "results" && !hasDeepInsights && (
+        <div className="rounded-xl border border-border bg-card px-6 py-12 text-center">
+          <div className="mx-auto mb-4 flex size-10 items-center justify-center rounded-lg border border-border bg-muted/40">
+            <Sparkles className="size-4 text-muted-foreground" />
+          </div>
+          <h3 className="text-[16px] font-semibold tracking-[-0.03em]">No analysed calls yet</h3>
+          <p className="mx-auto mt-1.5 max-w-sm text-[13px] leading-relaxed text-muted-foreground">
+            Run Analyse calls after answered dials land. You’ll get sentiment, purchase intent, objections, and agent scores here — not empty cards.
+          </p>
+          <Button
+            className="mt-5 h-9 gap-1.5 rounded-full px-5 text-[13px]"
+            disabled={backfilling}
+            onClick={() => void handleBackfill()}
+          >
+            {backfilling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            Analyse calls
+          </Button>
+        </div>
+      )}
+
+      {tab === "results" && snap && hasDeepInsights && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <StatChip label="Analysed" value={snap.analysed} />
             <StatChip label="Answered (analysed)" value={snap.connected} />
             <StatChip label="High purchase intent" value={snap.purchaseIntent?.high ?? 0} />
             <StatChip label="Avg purchase score" value={snap.purchaseIntent?.avg ?? "—"} />
           </div>
 
-          <div className="grid md:grid-cols-2 gap-3">
-            <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-3 rounded-xl border border-border bg-card p-4">
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
-                <p className="text-xs font-semibold uppercase tracking-wider text-foreground/70">Sentiment</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Sentiment</p>
               </div>
               {(snap.sentimentTrend?.length ?? 0) > 0 ? (
                 <SentimentSparkline trend={snap.sentimentTrend} />
               ) : (
-                <p className="text-xs text-muted-foreground">No analysed calls yet.</p>
+                <p className="text-[12px] text-muted-foreground">Trend appears after multiple analysed days.</p>
               )}
               <p className="text-[11px] text-muted-foreground">
                 Emotion: {(snap.emotion ?? []).map((e) => `${e.label} ${e.count}`).join(" · ") || "—"}
               </p>
             </div>
 
-            <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-foreground/70">Willingness to pay</p>
-              <ul className="text-sm space-y-1.5">
+            <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Willingness to pay</p>
+              <ul className="space-y-1.5 text-[13px]">
                 <li className="flex justify-between"><span>High (≥70)</span><strong className="tabular-nums">{snap.purchaseIntent?.high ?? 0}</strong></li>
                 <li className="flex justify-between"><span>Medium (40–69)</span><strong className="tabular-nums">{snap.purchaseIntent?.medium ?? 0}</strong></li>
                 <li className="flex justify-between"><span>Low (1–39)</span><strong className="tabular-nums">{snap.purchaseIntent?.low ?? 0}</strong></li>
@@ -493,13 +514,13 @@ export default function CampaignAnalyticsTab({
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-3">
-            <div className="bg-card border border-border rounded-xl p-4 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-foreground/70">Objections</p>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-2 rounded-xl border border-border bg-card p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Objections</p>
               {(snap.topObjections ?? []).length === 0 ? (
-                <p className="text-xs text-muted-foreground">None captured yet — run Analyse calls.</p>
+                <p className="text-[12px] text-muted-foreground">None captured in this window.</p>
               ) : (
-                <ul className="text-sm space-y-1">
+                <ul className="space-y-1 text-[13px]">
                   {snap.topObjections.slice(0, 8).map((o) => (
                     <li key={o.label} className="flex justify-between gap-2">
                       <span className="truncate">{o.label}</span>
@@ -509,10 +530,10 @@ export default function CampaignAnalyticsTab({
                 </ul>
               )}
             </div>
-            <div className="bg-card border border-border rounded-xl p-4 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-foreground/70">AI agent performance</p>
+            <div className="space-y-2 rounded-xl border border-border bg-card p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">AI agent performance</p>
               {snap.agentPerformance?.sampleSize ? (
-                <ul className="text-sm space-y-1">
+                <ul className="space-y-1 text-[13px]">
                   {([
                     ["Talk / listen", snap.agentPerformance.talkListenBalance],
                     ["Empathy", snap.agentPerformance.empathy],
@@ -527,18 +548,18 @@ export default function CampaignAnalyticsTab({
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs text-muted-foreground">No agent scores yet.</p>
+                <p className="text-[12px] text-muted-foreground">Scores appear after enough analysed answered calls.</p>
               )}
             </div>
           </div>
 
           {(snap.questionScorecard?.length ?? 0) > 0 && (
-            <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-foreground/70">Research questions</p>
+            <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Research questions</p>
               {snap.questionScorecard.map((q) => (
                 <div key={q.id}>
-                  <p className="text-sm font-medium">{q.label} <span className="text-muted-foreground font-normal">({q.answered})</span></p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                  <p className="text-[13px] font-medium">{q.label} <span className="font-normal text-muted-foreground">({q.answered})</span></p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
                     {q.breakdown.slice(0, 6).map((b) => `${b.value}: ${b.count}`).join(" · ") || "No answers"}
                   </p>
                 </div>
@@ -546,27 +567,27 @@ export default function CampaignAnalyticsTab({
             </div>
           )}
 
-          <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+          <div className="space-y-3 rounded-xl border border-border bg-card p-4">
             <div className="flex items-center gap-2">
               <Flame className="h-3.5 w-3.5 text-orange-500" />
-              <p className="text-xs font-semibold uppercase tracking-wider text-foreground/70">Hot leads</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Hot leads</p>
             </div>
             {(snap.hotLeads ?? []).length === 0 ? (
-              <p className="text-xs text-muted-foreground">No hot leads yet.</p>
+              <p className="text-[12px] text-muted-foreground">No hot leads in this window.</p>
             ) : (
               <div className="divide-y divide-border">
                 {snap.hotLeads.slice(0, 12).map((h) => (
                   <Link
                     key={`${h.leadId}-${h.callId}`}
                     href={`/app/campaigns/${h.campaignId ?? campaignId}/leads/${h.leadId}`}
-                    className="flex items-start justify-between gap-3 py-2.5 hover:bg-muted/30 -mx-1 px-1 rounded"
+                    className="-mx-1 flex items-start justify-between gap-3 rounded px-1 py-2.5 hover:bg-muted/30"
                   >
                     <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{h.name || h.phone}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">{h.summary || h.intent || "—"}</p>
+                      <p className="truncate text-[13px] font-medium">{h.name || h.phone}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">{h.summary || h.intent || "—"}</p>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-semibold tabular-nums">{h.purchaseIntentScore ?? "—"}</p>
+                    <div className="shrink-0 text-right">
+                      <p className="text-[13px] font-semibold tabular-nums">{h.purchaseIntentScore ?? "—"}</p>
                       <p className="text-[10px] text-muted-foreground">{h.emotion || h.sentiment}</p>
                     </div>
                   </Link>
@@ -576,15 +597,15 @@ export default function CampaignAnalyticsTab({
           </div>
 
           {rendered && (
-            <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-foreground/70">
+            <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Rendered report · {rendered.name}
               </p>
               {rendered.blocks.map((b, i) => (
                 <div key={i} className="border-t border-border pt-3 first:border-0 first:pt-0">
-                  <p className="text-sm font-medium mb-1">{b.title}</p>
+                  <p className="mb-1 text-[13px] font-medium">{b.title}</p>
                   {b.type === "nl_insight" || b.type === "narrative" ? (
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                    <p className="whitespace-pre-wrap text-[13px] text-muted-foreground">
                       {String((b as { answer?: string; text?: string }).answer ?? (b as { text?: string }).text ?? "")}
                     </p>
                   ) : (

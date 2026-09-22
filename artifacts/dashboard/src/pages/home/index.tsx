@@ -308,34 +308,6 @@ export default function HomePage() {
           />
         ) : null}
 
-        {/* Recents */}
-        {(agents.length > 0 || recentReach.length > 0) && (
-          <section className="rounded-xl border border-border bg-card overflow-hidden">
-            <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-              <h3 className="text-sm font-semibold">Recents</h3>
-              <Link href="/app/agents" className="text-[11px] text-muted-foreground hover:text-foreground">
-                All agents →
-              </Link>
-            </div>
-            <ul className="divide-y divide-border">
-              {agents.slice(0, 5).map((a: any) => (
-                <li key={a.id}>
-                  <Link
-                    href={`/app/agents/${a.id}`}
-                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40 transition-colors"
-                  >
-                    <Bot className="size-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-sm font-medium truncate flex-1">{a.name ?? `Agent #${a.id}`}</span>
-                    <span className="text-[11px] text-muted-foreground tabular-nums">
-                      {relativeTime(a.updatedAt ?? a.createdAt)}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
         <MetricStrip cols={4}>
           <MetricCard
             label="Calls today"
@@ -384,103 +356,105 @@ export default function HomePage() {
           />
         </MetricStrip>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="min-w-0 space-y-5">
-            <section className="overflow-hidden rounded-lg border border-border bg-card">
-              <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
-                <div className="min-w-0">
-                  <h2 className="text-[13px] font-semibold">Call volume</h2>
-                  <p className="text-[10px] text-muted-foreground">Last 7 days · completed vs failed</p>
-                </div>
-                <Link
-                  href="/app/analytics"
-                  className="text-[11px] text-muted-foreground hover:text-foreground shrink-0 rounded-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  View analytics
-                </Link>
-              </div>
-              <div className="px-2 pt-3 pb-2 sm:px-3">
-                <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={chartData} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
-                    <defs>
-                      <linearGradient id="homeCompleted" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={ct.palette.completed} stopOpacity={0.28} />
-                        <stop offset="95%" stopColor={ct.palette.completed} stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="homeFailed" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={ct.palette.failed} stopOpacity={0.22} />
-                        <stop offset="95%" stopColor={ct.palette.failed} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid stroke={ct.gridColor} strokeDasharray="3 3" vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      tick={{ fontSize: 10, fill: ct.tickColor }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 10, fill: ct.tickColor }}
-                      tickLine={false}
-                      axisLine={false}
-                      allowDecimals={false}
-                      width={28}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: ct.tooltipBg,
-                        border: `1px solid ${ct.tooltipBorder}`,
-                        borderRadius: 6,
-                        fontSize: 11,
-                        color: ct.tooltipText,
-                        boxShadow: ct.tooltipShadow,
-                      }}
-                      labelFormatter={(_, payload) => {
-                        const date = payload?.[0]?.payload?.date as string | undefined;
-                        if (!date) return "";
-                        try {
-                          return format(parseISO(date), "MMM d, yyyy");
-                        } catch {
-                          return date;
-                        }
-                      }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11, color: ct.tickColor }} />
-                    <Area
-                      type="monotone"
-                      dataKey="completed"
-                      name="Completed"
-                      stroke={ct.palette.completed}
-                      fill="url(#homeCompleted)"
-                      strokeWidth={1.75}
-                      dot={false}
-                      activeDot={{ r: 3 }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="failed"
-                      name="Failed"
-                      stroke={ct.palette.failed}
-                      fill="url(#homeFailed)"
-                      strokeWidth={1.5}
-                      dot={false}
-                      activeDot={{ r: 3 }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-                {weekTotal === 0 && !volumeQ.isLoading && (
-                  <p className="px-2 pb-3 text-center text-[11px] text-muted-foreground">
-                    Your first dials fill this chart — start a campaign to upload leads and call.
-                  </p>
-                )}
-              </div>
-            </section>
+        {/* Full-width chart — no short stub next to a tall rail */}
+        <section className="overflow-hidden rounded-lg border border-border bg-card">
+          <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
+            <div className="min-w-0">
+              <h2 className="text-[13px] font-semibold">Call volume</h2>
+              <p className="text-[10px] text-muted-foreground">Last 7 days · completed vs failed</p>
+            </div>
+            <Link
+              href="/app/analytics"
+              className="shrink-0 rounded-sm text-[11px] text-muted-foreground transition-colors duration-200 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              View analytics
+            </Link>
+          </div>
+          <div className="px-2 pb-2 pt-3 sm:px-3">
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={chartData} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+                <defs>
+                  <linearGradient id="homeCompleted" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={ct.palette.completed} stopOpacity={0.28} />
+                    <stop offset="95%" stopColor={ct.palette.completed} stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="homeFailed" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={ct.palette.failed} stopOpacity={0.22} />
+                    <stop offset="95%" stopColor={ct.palette.failed} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke={ct.gridColor} strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 10, fill: ct.tickColor }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: ct.tickColor }}
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                  width={28}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: ct.tooltipBg,
+                    border: `1px solid ${ct.tooltipBorder}`,
+                    borderRadius: 6,
+                    fontSize: 11,
+                    color: ct.tooltipText,
+                    boxShadow: ct.tooltipShadow,
+                  }}
+                  labelFormatter={(_, payload) => {
+                    const date = payload?.[0]?.payload?.date as string | undefined;
+                    if (!date) return "";
+                    try {
+                      return format(parseISO(date), "MMM d, yyyy");
+                    } catch {
+                      return date;
+                    }
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11, color: ct.tickColor }} />
+                <Area
+                  type="monotone"
+                  dataKey="completed"
+                  name="Completed"
+                  stroke={ct.palette.completed}
+                  fill="url(#homeCompleted)"
+                  strokeWidth={1.75}
+                  dot={false}
+                  activeDot={{ r: 3 }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="failed"
+                  name="Failed"
+                  stroke={ct.palette.failed}
+                  fill="url(#homeFailed)"
+                  strokeWidth={1.5}
+                  dot={false}
+                  activeDot={{ r: 3 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+            {weekTotal === 0 && !volumeQ.isLoading && (
+              <p className="px-2 pb-3 text-center text-[11px] text-muted-foreground">
+                Your first dials fill this chart — start a campaign to upload leads and call.
+              </p>
+            )}
+          </div>
+        </section>
 
-            <div className="min-w-0 overflow-hidden rounded-lg border border-border">
+        {/* Equal columns — items-start so short lists don’t leave a void */}
+        <div className="grid items-start gap-5 lg:grid-cols-2">
+          <div className="min-w-0 space-y-5">
+            <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card">
               <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
                 <h2 className="text-[13px] font-semibold">What’s running</h2>
-                <Link href="/app/history" className="text-[11px] text-muted-foreground hover:text-foreground">
-                  History
+                <Link href="/app/campaigns" className="text-[11px] text-muted-foreground hover:text-foreground">
+                  Campaigns
                 </Link>
               </div>
               {recentReach.length === 0 ? (
@@ -488,7 +462,7 @@ export default function HomePage() {
                   variant="inline"
                   icon={<PhoneCall />}
                   title="Nothing in the queue yet"
-                  description="Create a campaign, upload leads, and start dialing — your volume chart updates live."
+                  description="Create a campaign, upload leads, and start dialing."
                   action={{
                     label: "New campaign",
                     icon: <Plus className="size-3.5" />,
@@ -524,10 +498,69 @@ export default function HomePage() {
                 </div>
               )}
             </div>
+
+            {calls.slice(0, 6).length > 0 ? (
+              <section className="overflow-hidden rounded-lg border border-border bg-card">
+                <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
+                  <h2 className="text-[13px] font-semibold">Recent calls</h2>
+                  <Link href="/app/history" className="text-[11px] text-muted-foreground hover:text-foreground">
+                    All
+                  </Link>
+                </div>
+                <div className="divide-y divide-border/70">
+                  {calls.slice(0, 6).map((call: any) => (
+                    <Link
+                      key={call.id}
+                      href={`/app/history/${call.id}`}
+                      className="flex min-h-11 cursor-pointer items-center gap-2.5 px-3.5 transition-colors duration-200 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    >
+                      <Phone className="size-3.5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-medium">
+                          {call.toNumber || call.fromNumber || `Call ${call.id}`}
+                        </p>
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {relativeTime(call.startedAt ?? call.createdAt)} · {durationLabel(call.durationSeconds)}
+                        </p>
+                      </div>
+                      <StatusDot tone={statusTone(String(call.status ?? ""))} />
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            {issues.length > 0 ? (
+              <section className="rounded-lg border border-border bg-card">
+                <div className="border-b border-border px-3.5 py-3">
+                  <h2 className="text-[13px] font-semibold">Needs attention</h2>
+                </div>
+                <div className="divide-y divide-border/70">
+                  {issues.map((issue) => (
+                    <Link
+                      key={issue.title}
+                      href={issue.href}
+                      className="flex min-h-11 cursor-pointer items-start gap-2 px-3.5 py-2.5 transition-colors duration-200 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    >
+                      <CircleAlert
+                        className={cn(
+                          "mt-0.5 size-3.5 shrink-0",
+                          issue.tone === "danger" ? "text-destructive" : "text-amber-500",
+                        )}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-medium">{issue.title}</p>
+                        <p className="text-[11px] text-muted-foreground">{issue.detail}</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            ) : null}
           </div>
 
-          <aside className="space-y-5">
-            <div className="min-w-0 overflow-hidden rounded-lg border border-border">
+          <aside className="min-w-0 space-y-5">
+            <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card">
               <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
                 <h2 className="text-[13px] font-semibold">Agents</h2>
                 <Link href="/app/agents" className="text-[11px] text-muted-foreground hover:text-foreground">
@@ -535,7 +568,7 @@ export default function HomePage() {
                 </Link>
               </div>
               <div className="divide-y divide-border/70">
-                {agents.slice(0, 5).map((agent: any) => (
+                {agents.slice(0, 6).map((agent: any) => (
                   <Link
                     key={agent.id}
                     href={`/app/agents/${agent.id}`}
@@ -548,7 +581,7 @@ export default function HomePage() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <p className="truncate text-[13px] font-medium">{agent.name ?? `Agent ${agent.id}`}</p>
-                          <span className="shrink-0 rounded bg-muted/80 px-1 py-0.5 text-[9px] font-mono font-medium text-muted-foreground">#{agent.id}</span>
+                          <span className="shrink-0 rounded bg-muted/80 px-1 py-0.5 font-mono text-[9px] font-medium text-muted-foreground">#{agent.id}</span>
                         </div>
                         <p className="mt-0.5 truncate text-[11px] capitalize text-muted-foreground">
                           {agent.status ?? "draft"}
@@ -561,18 +594,18 @@ export default function HomePage() {
               </div>
             </div>
 
-            {!setupDone && (
+            {!setupDone ? (
               <section className="rounded-lg border border-border bg-card">
                 <div className="border-b border-border px-3.5 py-3">
-                  <h2 className="text-[11px] font-semibold">Finish setup</h2>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">Agent → Campaign → dial.</p>
+                  <h2 className="text-[13px] font-semibold">Finish setup</h2>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">Agent → Campaign → dial.</p>
                 </div>
                 <div className="p-2">
                   {setup.map((item, index) => (
                     <Link
                       key={item.label}
                       href={item.href}
-                      className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-[11px] transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-[12px] transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                     >
                       <span
                         className={cn(
@@ -592,45 +625,17 @@ export default function HomePage() {
                   ))}
                 </div>
               </section>
-            )}
+            ) : null}
 
-            {issues.length > 0 && (
-              <section className="rounded-lg border border-border bg-card">
-                <div className="border-b border-border px-3.5 py-3">
-                  <h2 className="text-[11px] font-semibold">Needs attention</h2>
-                </div>
-                <div className="divide-y divide-border/70">
-                  {issues.map((issue) => (
-                    <Link
-                      key={issue.title}
-                      href={issue.href}
-                      className="flex min-h-11 cursor-pointer items-start gap-2 px-3.5 py-2.5 transition-colors duration-200 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                    >
-                      <CircleAlert
-                        className={cn(
-                          "mt-0.5 size-3.5 shrink-0",
-                          issue.tone === "danger" ? "text-destructive" : "text-amber-500",
-                        )}
-                      />
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-medium">{issue.title}</p>
-                        <p className="text-[10px] text-muted-foreground">{issue.detail}</p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {balanceCents != null && (
+            {balanceCents != null ? (
               <Link
                 href="/app/wallet"
-                className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border px-3.5 py-3 transition-colors duration-200 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 py-3 transition-colors duration-200 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Wallet className="size-3.5 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-medium">Wallet</p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-[12px] font-medium">Wallet</p>
+                  <p className="text-[11px] text-muted-foreground">
                     ₹{(balanceCents / 100).toFixed(0)}
                     {availableMinutes != null ? ` · ~${availableMinutes} min` : ""}
                     {isManagedWorkspace ? " · partner-funded" : ""}
@@ -638,38 +643,7 @@ export default function HomePage() {
                 </div>
                 <ArrowRight className="size-3 text-muted-foreground/40" />
               </Link>
-            )}
-
-            {calls.slice(0, 4).length > 0 && (
-              <section className="rounded-lg border border-border bg-card">
-                <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
-                  <h2 className="text-[11px] font-semibold">Recent calls</h2>
-                  <Link href="/app/history" className="text-[10px] text-muted-foreground hover:text-foreground">
-                    All
-                  </Link>
-                </div>
-                <div className="divide-y divide-border/70">
-                  {calls.slice(0, 4).map((call: any) => (
-                    <Link
-                      key={call.id}
-                      href={`/app/history/${call.id}`}
-                      className="flex min-h-10 cursor-pointer items-center gap-2 px-3.5 transition-colors duration-200 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                    >
-                      <Phone className="size-3 shrink-0 text-muted-foreground" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[11px] font-medium">
-                          {call.toNumber || call.fromNumber || `Call ${call.id}`}
-                        </p>
-                        <p className="truncate text-[10px] text-muted-foreground">
-                          {relativeTime(call.startedAt ?? call.createdAt)} · {durationLabel(call.durationSeconds)}
-                        </p>
-                      </div>
-                      <StatusDot tone={statusTone(String(call.status ?? ""))} />
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            )}
+            ) : null}
           </aside>
         </div>
       </div>

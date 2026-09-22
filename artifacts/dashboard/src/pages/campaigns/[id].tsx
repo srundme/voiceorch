@@ -1298,23 +1298,20 @@ export default function CampaignDetailPage() {
                 rates={reporting?.rates}
                 loading={reportingQuery.isLoading}
               />
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <section className="space-y-2">
-                  <h2 className="text-sm font-semibold">Business analytics</h2>
-                  <p className="text-xs text-muted-foreground">Interest, bookings, transfers, and dispositions. These are not telephony statuses.</p>
-                </section>
-                <section className="space-y-2">
-                  <h2 className="text-sm font-semibold">Telephony / technical</h2>
-                  <p className="text-xs text-muted-foreground">
-                    Busy {reporting?.workTechnical.busy ?? 0} · No answer {reporting?.workTechnical.noPickup ?? 0} · Voicemail {reporting?.workTechnical.voicemail ?? 0} · Couldn’t reach {reporting?.workTechnical.technicalFailed ?? 0}
-                  </p>
-                  {reporting?.rates && (
-                    <p className="text-[11px] text-muted-foreground/70">
-                      Legacy success rate {reporting.rates.legacySuccessRate}% is kept for compatibility and is not a primary KPI.
-                    </p>
-                  )}
-                </section>
-              </div>
+              {(reporting?.workTechnical || reporting?.rates) && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border bg-card px-3.5 py-2.5 text-[12px] text-muted-foreground">
+                  <span className="font-medium text-foreground">Telephony</span>
+                  <span>Busy {reporting?.workTechnical?.busy ?? 0}</span>
+                  <span>No answer {reporting?.workTechnical?.noPickup ?? 0}</span>
+                  <span>Voicemail {reporting?.workTechnical?.voicemail ?? 0}</span>
+                  <span>Couldn’t reach {reporting?.workTechnical?.technicalFailed ?? 0}</span>
+                  {reporting?.rates ? (
+                    <span className="text-[11px] text-muted-foreground/80">
+                      Legacy success {reporting.rates.legacySuccessRate}%
+                    </span>
+                  ) : null}
+                </div>
+              )}
               <CampaignAnalyticsTab
                 campaignId={campaignId}
                 onAnalysed={() => {

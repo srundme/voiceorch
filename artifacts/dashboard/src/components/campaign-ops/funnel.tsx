@@ -23,15 +23,15 @@ export function CampaignFunnel({
   if (!data) return null;
   return (
     <section className="rounded-xl border border-border bg-card px-5 py-4 space-y-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-semibold">Results</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold">Funnel</h2>
         {rates && (
-          <p className="text-xs text-muted-foreground tabular-nums">
-            Answer Rate {rates.answerRatePct}% · Interest Rate {rates.interestRatePct}% · Conversion Rate {rates.conversionRatePct}%
+          <p className="text-[12px] text-muted-foreground tabular-nums">
+            Answer {rates.answerRatePct}% · Interest {rates.interestRatePct}% · Conversion {rates.conversionRatePct}%
           </p>
         )}
       </div>
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
+      <div className="grid grid-cols-3 gap-3 sm:grid-cols-6 sm:gap-4">
         <Step label="Imported" value={data.imported} />
         <Step label="Attempted" value={data.attempted} />
         <Step label="Answered" value={data.answered} />
