@@ -1048,8 +1048,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto min-h-0 overscroll-y-contain">
+        {/* Scrollable content — flex so h-full / lockScroll pages can fill; overflow so long pages scroll */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain">
           <ErrorBoundary location={location}>
             {children}
           </ErrorBoundary>
