@@ -1,10 +1,55 @@
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import type {
-  CampaignBusinessDisposition,
-  CampaignReportingPayload,
-  CampaignReportingView,
+import {
+  humanizeSnakeLabel,
+  type CampaignBusinessDisposition,
+  type CampaignReportingPayload,
+  type CampaignReportingView,
 } from "@/lib/campaign-lead-reporting";
+
+function FilterPill({
+  label,
+  count,
+  hint,
+  selected,
+  muted,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  hint?: string;
+  selected?: boolean;
+  muted?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-left transition-colors cursor-pointer shrink-0",
+        selected
+          ? "border-foreground bg-foreground text-background"
+          : "border-border bg-background hover:bg-muted/50",
+        muted && !selected && "opacity-45",
+      )}
+    >
+      <span className="min-w-0">
+        <span className={cn("block text-xs font-medium leading-tight truncate max-w-[10rem]", selected ? "text-background" : "text-foreground")}>
+          {label}
+        </span>
+        {hint ? (
+          <span className={cn("block text-[10px] leading-tight truncate max-w-[10rem]", selected ? "text-background/65" : "text-muted-foreground")}>
+            {hint}
+          </span>
+        ) : null}
+      </span>
+      <span className={cn("text-sm font-semibold tabular-nums", selected ? "text-background" : "text-foreground")}>
+        {count}
+      </span>
+    </button>
+  );
+}
 
 export function DispositionHero({
   items,
@@ -17,55 +62,40 @@ export function DispositionHero({
   onSelect: (key: string | null) => void;
   loading?: boolean;
 }) {
-  if (loading) return <Skeleton className="h-20 w-full rounded-xl" />;
+  if (loading) return <Skeleton className="h-10 w-full rounded-full" />;
   const chips = items ?? [];
+  if (chips.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground px-0.5">
+        No business dispositions yet on answered calls.
+      </p>
+    );
+  }
 
   return (
-    <section className="space-y-2 min-w-0 shrink-0">
-      <div>
-        <h2 className="text-sm font-semibold">Business dispositions</h2>
-        <p className="text-[11px] text-muted-foreground">Answered conversations only. Carrier outcomes are shown separately.</p>
-      </div>
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1.5">
+    <section className="min-w-0 shrink-0 space-y-1.5">
+      <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide px-0.5">
+        Dispositions
+      </p>
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-thin">
         {chips.map((chip) => {
           const selected = active === chip.key;
+          const label = chip.key === "needs_classification"
+            ? "Needs classification"
+            : humanizeSnakeLabel(chip.label || chip.key);
           return (
-            <button
+            <FilterPill
               key={chip.key}
-              type="button"
+              label={label}
+              count={chip.count}
+              hint={chip.sub ? humanizeSnakeLabel(chip.primary) : undefined}
+              selected={selected}
+              muted={chip.count === 0}
               onClick={() => onSelect(selected ? null : chip.key)}
-              className={cn(
-                "rounded-xl border px-3 py-2.5 text-left transition-colors cursor-pointer min-w-0",
-                selected
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border bg-card hover:bg-muted/40",
-                chip.count === 0 && "opacity-50",
-              )}
-            >
-              <p className={cn(
-                "text-[11px] truncate",
-                selected ? "text-background/70" : "text-muted-foreground",
-              )}>
-                {chip.label}
-              </p>
-              {chip.sub && (
-                <p className={cn(
-                  "text-[10px] truncate",
-                  selected ? "text-background/55" : "text-muted-foreground/70",
-                )}>
-                  {chip.primary}
-                </p>
-              )}
-              <p className="text-xl font-semibold tabular-nums leading-tight">{chip.count}</p>
-            </button>
+            />
           );
         })}
       </div>
-      {chips.length === 0 && (
-        <p className="rounded-xl border border-dashed px-3 py-4 text-xs text-muted-foreground">
-          No answered conversations have a business disposition yet.
-        </p>
-      )}
     </section>
   );
 }
@@ -83,47 +113,33 @@ export function ContactOutcomeHero({
   onSelect: (view: CampaignReportingView | null) => void;
   loading?: boolean;
 }) {
-  if (loading) return <Skeleton className="h-20 w-full rounded-xl" />;
+  if (loading) return <Skeleton className="h-10 w-full rounded-full" />;
   const cards: Array<{ id: CampaignReportingView | "all"; label: string; count: number; hint?: string }> = [
-    { id: "all", label: "All leads", count: reporting?.funnel.imported ?? 0 },
-    { id: "answered", label: "Answered", count: reporting?.funnel.answered ?? 0, hint: "Ever answered" },
-    { id: "retry", label: "Retry", count: reporting?.workTechnical.retryPending ?? 0, hint: "Queued" },
+    { id: "all", label: "All", count: reporting?.funnel.imported ?? 0 },
+    { id: "answered", label: "Answered", count: reporting?.funnel.answered ?? 0 },
+    { id: "retry", label: "Retry", count: reporting?.workTechnical.retryPending ?? 0 },
     { id: "busy", label: "Busy", count: reporting?.workTechnical.busy ?? 0 },
-    { id: "no_pickup", label: "No Pickup", count: reporting?.workTechnical.noPickup ?? 0 },
+    { id: "no_pickup", label: "No pickup", count: reporting?.workTechnical.noPickup ?? 0 },
     { id: "voicemail", label: "Voicemail", count: reporting?.workTechnical.voicemail ?? 0 },
     { id: "technical_failed", label: "Failed", count: reporting?.workTechnical.technicalFailed ?? 0, hint: "Never answered" },
   ];
   return (
-    <section className="space-y-2 min-w-0 shrink-0">
-      <div>
-        <h2 className="text-sm font-semibold">Contact outcomes</h2>
-        <p className="text-[11px] text-muted-foreground">
-          Answered-ever, retry queue, and never-answered technical outcomes. Failed ≠ mid-call hangup.
-        </p>
-      </div>
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-1.5">
+    <section className="min-w-0 shrink-0 space-y-1.5">
+      <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide px-0.5">
+        Contact
+      </p>
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5">
         {cards.map((card) => {
           const selected = card.id === "all" ? (allSelected ?? !active) : active === card.id;
           return (
-            <button
+            <FilterPill
               key={card.id}
-              type="button"
+              label={card.label}
+              count={card.count}
+              hint={card.hint}
+              selected={selected}
               onClick={() => onSelect(card.id === "all" || selected ? null : card.id)}
-              className={cn(
-                "rounded-xl border px-3 py-2.5 text-left transition-colors cursor-pointer min-w-0",
-                selected
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border bg-card hover:bg-muted/40",
-              )}
-            >
-              <p className={cn("text-[11px] truncate", selected ? "text-background/70" : "text-muted-foreground")}>{card.label}</p>
-              {card.hint && (
-                <p className={cn("text-[10px] truncate", selected ? "text-background/55" : "text-muted-foreground/70")}>
-                  {card.hint}
-                </p>
-              )}
-              <p className="text-xl font-semibold tabular-nums leading-tight">{card.count}</p>
-            </button>
+            />
           );
         })}
       </div>

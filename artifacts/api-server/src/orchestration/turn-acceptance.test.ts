@@ -40,6 +40,16 @@ describe("resolveTurnAcceptanceMode", () => {
   it("defaults to shadow", () => {
     expect(resolveTurnAcceptanceMode({})).toBe("shadow");
   });
+
+  it("maps enforce/on to shadow (enforce retired)", () => {
+    expect(resolveTurnAcceptanceMode({ TURN_ACCEPTANCE_GATE: "enforce" })).toBe("shadow");
+    expect(resolveTurnAcceptanceMode({ TURN_ACCEPTANCE_GATE: "on" })).toBe("shadow");
+    expect(resolveTurnAcceptanceMode({ TURN_ACCEPTANCE_GATE: "1" })).toBe("shadow");
+  });
+
+  it("still allows off", () => {
+    expect(resolveTurnAcceptanceMode({ TURN_ACCEPTANCE_GATE: "off" })).toBe("off");
+  });
 });
 
 describe("evaluateTurnAcceptance — corrected policy", () => {

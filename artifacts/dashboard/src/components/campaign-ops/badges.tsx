@@ -4,6 +4,7 @@ import {
   businessOutcomeLabel,
   contactStateLabel,
   displayDispositionLabel,
+  humanizeSnakeLabel,
   primaryLeadTone,
   type CampaignContactState,
   type CampaignDispositionState,
@@ -87,7 +88,7 @@ export function DispositionBadge({
   }
   const shown = bucket && bucket !== "unlabeled"
     ? displayDispositionLabel(bucket)
-    : (label && label.trim() ? label : "Needs classification");
+    : (label && label.trim() ? humanizeSnakeLabel(label) : "Needs classification");
   if (bucket === "voicemail") {
     return chip("border-border bg-foreground text-background", shown);
   }

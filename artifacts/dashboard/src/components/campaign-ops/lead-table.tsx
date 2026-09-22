@@ -100,20 +100,20 @@ export function LeadReportingTable({
                 "flex items-center gap-3 px-3 py-2.5 cursor-pointer",
                 selected ? "bg-muted" : "hover:bg-muted/40",
               )}
-              onClick={() => navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`)}
+              onClick={() => onSelectLead?.(lead)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`);
+                  onSelectLead?.(lead);
                 }
               }}
-              role="link"
+              role="button"
               tabIndex={0}
             >
-              <div className={cn("w-0.5 self-stretch rounded-full shrink-0", selected ? "bg-foreground" : "bg-transparent")} />
-              <div className="min-w-0 flex-1">
+              <div className={cn("w-1 self-stretch rounded-full shrink-0", selected ? "bg-foreground" : "bg-transparent")} />
+              <div className="min-w-0 flex-1 py-0.5">
                 <div className="flex items-center gap-2 min-w-0">
-                  <p className="font-medium truncate">
+                  <p className="text-sm font-medium truncate tabular-nums">
                     {showName ? name : lead.phone || "Unknown"}
                   </p>
                   <DispositionBadge
@@ -123,14 +123,14 @@ export function LeadReportingTable({
                   />
                 </div>
                 <p className="mt-0.5 text-[11px] text-muted-foreground truncate">
-                  {showName ? lead.phone : null}
+                  {showName ? <span className="font-mono">{lead.phone}</span> : null}
                   {showName && lead.phone ? " · " : ""}
-                  {lead.contactState === "answered" ? "Answered call" : "Contact attempt"}
+                  {lead.contactState === "answered" ? "Answered" : "Attempt"}
                   {lead.lastAttemptStatus ? ` · ${attemptStatusLabel(lead.lastAttemptStatus)}` : ""}
                   {showRetryQueue ? ` · ${formatRetryAt(lead.retryScheduledAt) ?? "retry"}` : ""}
                 </p>
               </div>
-              <p className="text-xs tabular-nums text-muted-foreground shrink-0">
+              <p className="text-xs tabular-nums text-muted-foreground shrink-0 w-10 text-right">
                 {formatDuration(lead.latestAnsweredDuration)}
               </p>
               <div onClick={(e) => e.stopPropagation()}>

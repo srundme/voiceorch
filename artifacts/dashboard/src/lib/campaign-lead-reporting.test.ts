@@ -115,6 +115,10 @@ describe("leads URL filters are linkable", () => {
     expect(parseLeadsSearch("view=technical_failed").view).toBe("technical_failed");
     expect(batchLeadsHref(449, 412, { view: "technical_failed" })).toContain("view=technical_failed");
   });
+  it("humanizes snake_case disposition labels", () => {
+    expect(displayDispositionLabel("nature_of_business")).toBe("Nature Of Business");
+    expect(displayDispositionLabel("needs_classification")).toBe("Needs classification");
+  });
 });
 
 describe("historical answered+failed presentation", () => {

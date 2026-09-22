@@ -12,6 +12,7 @@ import {
   WORK_LEAD_VIEWS,
   CONTACT_OUTCOME_VIEWS,
   displayDispositionLabel,
+  humanizeSnakeLabel,
   parseLeadsSearch,
   reportingLeadsQuery,
   type CampaignReportingFilter,
@@ -65,7 +66,6 @@ export function CampaignLeadsWorkspace({
       patchFilter({ search: next });
     }, 250);
     return () => window.clearTimeout(handle);
-    // patchFilter is stable enough for debounce; listing it retriggers the timer on every keystroke anyway.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchDraft]);
 
@@ -158,7 +158,7 @@ export function CampaignLeadsWorkspace({
   const funnel = summary.data?.funnel;
   const rates = summary.data?.rates;
   const listLabel = filter.disposition
-    ? (summary.data?.dispositions?.find((item) => item.key === filter.disposition)?.label ?? filter.disposition)
+    ? humanizeSnakeLabel(summary.data?.dispositions?.find((item) => item.key === filter.disposition)?.label ?? filter.disposition)
     : filter.dispositionBucket
     ? displayDispositionLabel(filter.dispositionBucket)
     : filter.view
@@ -168,32 +168,32 @@ export function CampaignLeadsWorkspace({
       : "Calls";
 
   return (
-    <div className="flex flex-col gap-3 min-h-0 flex-1 max-w-full">
-      {funnel && (
-        <p className="text-xs text-muted-foreground tabular-nums shrink-0">
-          {funnel.imported} imported · {funnel.answered} answered
-          {rates ? ` · ${rates.answerRatePct}% answer rate` : ""}
-        </p>
-      )}
-
-      <ContactOutcomeHero
-        loading={summary.isLoading}
-        reporting={summary.data}
-        active={filter.view ?? null}
-        allSelected={!filter.view && !filter.disposition && !filter.dispositionBucket}
-        onSelect={(view) => patchFilter({ view, disposition: null, dispositionBucket: null })}
-      />
-
-      <DispositionHero
-        loading={summary.isLoading}
-        items={summary.data?.dispositions}
-        active={filter.disposition ?? filter.dispositionBucket ?? null}
-        onSelect={(key) => patchFilter({
-          disposition: key && key !== "needs_classification" ? key : null,
-          dispositionBucket: key === "needs_classification" ? key : null,
-          view: null,
-        })}
-      />
+    <div className="flex flex-col gap-3 min-h-0 flex-1 h-full max-w-full overflow-hidden">
+      <div className="shrink-0 space-y-2.5">
+        {funnel && (
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {funnel.imported} imported · {funnel.answered} answered
+            {rates ? ` · ${rates.answerRatePct}% answer rate` : ""}
+          </p>
+        )}
+        <ContactOutcomeHero
+          loading={summary.isLoading}
+          reporting={summary.data}
+          active={filter.view ?? null}
+          allSelected={!filter.view && !filter.disposition && !filter.dispositionBucket}
+          onSelect={(view) => patchFilter({ view, disposition: null, dispositionBucket: null })}
+        />
+        <DispositionHero
+          loading={summary.isLoading}
+          items={summary.data?.dispositions}
+          active={filter.disposition ?? filter.dispositionBucket ?? null}
+          onSelect={(key) => patchFilter({
+            disposition: key && key !== "needs_classification" ? key : null,
+            dispositionBucket: key === "needs_classification" ? key : null,
+            view: null,
+          })}
+        />
+      </div>
 
       {query.isError && !query.data ? (
         <EmptyState
@@ -202,11 +202,12 @@ export function CampaignLeadsWorkspace({
           action={{ label: "Retry", onClick: () => void query.refetch() }}
         />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(300px,400px)] gap-3 min-h-0 flex-1">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] gap-3 min-h-0 flex-1 overflow-hidden">
           <div className="min-w-0 min-h-0 flex flex-col rounded-xl border border-border bg-card overflow-hidden">
             <div className="shrink-0 px-3 py-2 border-b border-border flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-medium tabular-nums mr-auto">
-                {query.data?.total ?? 0} {listLabel.toLowerCase()}
+              <p className="text-sm font-semibold tabular-nums mr-auto">
+                {query.data?.total ?? 0}{" "}
+                <span className="font-normal text-muted-foreground">{listLabel.toLowerCase()}</span>
               </p>
               <LeadFilterChips
                 views={WORK_LEAD_VIEWS}
@@ -222,8 +223,8 @@ export function CampaignLeadsWorkspace({
                 <Input
                   value={searchDraft}
                   onChange={(e) => setSearchDraft(e.target.value)}
-                  placeholder="Phone"
-                  className="h-8 w-36 pl-7 text-xs"
+                  placeholder="Search phone"
+                  className="h-8 w-40 pl-7 text-xs"
                 />
               </div>
             </div>
@@ -243,7 +244,7 @@ export function CampaignLeadsWorkspace({
               />
             </div>
             {(query.data?.total ?? 0) > 50 && (
-              <div className="shrink-0 border-t border-border px-2 py-1">
+              <div className="shrink-0 border-t border-border px-3 py-2 overflow-x-auto">
                 <TablePagination
                   page={page + 1}
                   totalPages={Math.max(1, Math.ceil((query.data?.total ?? 0) / 50))}
@@ -255,7 +256,7 @@ export function CampaignLeadsWorkspace({
               </div>
             )}
           </div>
-          <div className="hidden lg:block min-h-0 h-full">
+          <div className="hidden lg:flex min-h-0 h-full flex-col overflow-hidden">
             <CallInspectorPanel campaignId={campaignId} lead={selectedLead} />
           </div>
         </div>

@@ -495,7 +495,7 @@ export default function BatchWorkspacePage() {
         />
       )}
 
-      <div className="flex-1 overflow-hidden min-h-0 min-w-0 px-4 sm:px-6 py-3 flex flex-col">
+      <div className="flex-1 overflow-hidden min-h-0 min-w-0 px-4 sm:px-6 py-3 flex flex-col h-full">
         <CampaignLeadsWorkspace campaignId={campaignId} lockedBatchId={batchId} />
       </div>
 

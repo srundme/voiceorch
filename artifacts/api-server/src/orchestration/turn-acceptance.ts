@@ -3,12 +3,13 @@
  * turn before processTurn / LLM / CRM / tools.
  *
  * Decisions: ACCEPT | CLARIFY | IGNORE
- * Mode (TURN_ACCEPTANCE_GATE): shadow (default, log only) | enforce | off
+ * Mode (TURN_ACCEPTANCE_GATE): shadow (default, log only) | off
+ * `enforce` / on / true are retired (call 28491 Tamil silence) — resolved as shadow.
  *
  * semanticRelevance = max(slotMatchScore, globalIntentScore, trustedTopicChangeScore)
  * utteranceCoherence is diagnostic only — never independently causes ACCEPT.
  *
- * First enforcement canary: structured slots only. expectedSlot=open is fail-open.
+ * Structured-slot enforce helper remains for tests only; live path never gets mode=enforce.
  */
 
 import { isClosedQuestion, isShortAnswerVocabulary } from "./short-answer.js";
@@ -132,8 +133,19 @@ export function resolveTurnAcceptanceMode(
   env: NodeJS.ProcessEnv = process.env,
 ): TurnAcceptanceMode {
   const raw = (env["TURN_ACCEPTANCE_GATE"] ?? "shadow").trim().toLowerCase();
-  if (raw === "enforce" || raw === "on" || raw === "1" || raw === "true") return "enforce";
   if (raw === "off" || raw === "0" || raw === "false") return "off";
+  // enforce retired — accuracy too low on openers / post-barge Tamil (calls 28055, 28491).
+  // Keep logging via shadow even when Railway still has TURN_ACCEPTANCE_GATE=enforce.
+  if (
+    raw === "enforce"
+    || raw === "on"
+    || raw === "1"
+    || raw === "true"
+    || raw === "shadow"
+    || raw === ""
+  ) {
+    return "shadow";
+  }
   return "shadow";
 }
 

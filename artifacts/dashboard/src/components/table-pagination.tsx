@@ -67,15 +67,17 @@ export function TablePagination({
         </Button>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">Go to</span>
         <Input
-          type="number" min={1} max={totalPages} placeholder="Go to"
-          className="h-7 w-16 text-xs"
+          type="number" min={1} max={totalPages} placeholder="#"
+          className="h-7 w-14 text-xs"
           value={jumpInput}
           onChange={e => setJumpInput(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleJump(); } }}
+          aria-label="Go to page"
         />
-        <Button variant="outline" size="sm" className="h-7 text-xs px-2" onClick={handleJump}>Go</Button>
+        <Button variant="outline" size="sm" className="h-7 text-xs px-2.5" onClick={handleJump}>Go</Button>
       </div>
 
       {totalItems !== undefined && (

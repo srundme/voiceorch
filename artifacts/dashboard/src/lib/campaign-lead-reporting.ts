@@ -299,7 +299,15 @@ export function businessOutcomeLabel(outcome: string | null | undefined): string
 
 export function displayDispositionLabel(bucket: string | null | undefined): string {
   if (!bucket || bucket === "unlabeled" || bucket === "needs_classification") return "Needs classification";
-  return bucket.replace(/\b\w/g, (c) => c.toUpperCase());
+  return humanizeSnakeLabel(bucket);
+}
+
+/** Turn snake_case / slug labels into Title Case for chips and badges. */
+export function humanizeSnakeLabel(value: string | null | undefined): string {
+  if (!value) return "—";
+  const cleaned = String(value).trim().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+  if (!cleaned) return "—";
+  return cleaned.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function attemptStatusLabel(status: string | null | undefined): string {
