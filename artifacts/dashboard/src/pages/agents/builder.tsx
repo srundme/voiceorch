@@ -47,7 +47,6 @@ import {
   hasPromptCore,
   promptCoreToForm,
 } from "@workspace/db/prompt-core";
-import { AgentWebsiteEmbedPanel } from "./website-embed";
 import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
@@ -1153,16 +1152,6 @@ function OverviewTab({
           {agent?.id != null && (
             <BuilderPanel title="Team" icon={<Users />}>
               <AgentTeamStrip agentId={agent.id} compact />
-            </BuilderPanel>
-          )}
-
-          {agent?.id != null && (
-            <BuilderPanel
-              title="Website embed"
-              icon={<Globe />}
-              description="Copy this onto your site so visitors can webcall this agent in the browser"
-            >
-              <AgentWebsiteEmbedPanel agentId={agent.id} agentName={agent.name ?? ""} />
             </BuilderPanel>
           )}
 
@@ -3928,8 +3917,34 @@ function VoicemailTab({ form, embedded = false }: { form: any; embedded?: boolea
 
 /* ── Tab: Advanced ──────────────────────────────────────────────────────────── */
 
-type AdvSection = "engine" | "limits" | "website" | "integrations" | "compliance";
+type AdvSection = "engine" | "limits" | "integrations" | "compliance";
 
+/** Dense settings row: label + control aligned, hint under label — Swiss / Sarvam-tight. */
+function AdvToggle({ form, name, label, hint, defaultOn = false }: {
+  form: any; name: string; label: string; hint?: string; defaultOn?: boolean;
+}) {
+  return (
+    <FormField control={form.control} name={name} render={({ field }) => (
+      <FormItem className="flex items-center justify-between gap-4 space-y-0">
+        <div className="min-w-0 flex-1">
+          <FormLabel className="text-[13px] font-medium leading-none text-foreground">{label}</FormLabel>
+          {hint ? (
+            <p className="mt-1 text-[12px] leading-snug text-muted-foreground">{hint}</p>
+          ) : null}
+        </div>
+        <FormControl>
+          <Switch
+            checked={field.value ?? defaultOn}
+            onCheckedChange={field.onChange}
+            className="shrink-0"
+          />
+        </FormControl>
+      </FormItem>
+    )} />
+  );
+}
+
+/** Settings-row slider: label + value, hint, track with thumb — no orphan bars. */
 function AdvSlider({ form, name, label, hint, min, max, step, fmt, onValueChange, disabled }: {
   form: any; name: string; label: string; hint?: string;
   min: number; max: number; step: number; fmt: (v: number) => string;
@@ -3938,33 +3953,50 @@ function AdvSlider({ form, name, label, hint, min, max, step, fmt, onValueChange
 }) {
   return (
     <FormField control={form.control} name={name} render={({ field }) => {
-      const val = field.value ?? min;
-      const pct = ((val - min) / (max - min)) * 100;
+      const val = typeof field.value === "number" ? field.value : min;
+      const pct = max === min ? 0 : ((val - min) / (max - min)) * 100;
       return (
-        <FormItem className={disabled ? "space-y-0 opacity-50 pointer-events-none" : "space-y-0"}>
-          <div className="flex items-center justify-between mb-1.5">
-            <FormLabel className="text-[12px] font-medium text-foreground/90">{label}</FormLabel>
-            <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
+        <FormItem className={cn("space-y-2.5", disabled && "opacity-50 pointer-events-none")}>
+          <div className="flex items-baseline justify-between gap-3">
+            <FormLabel className="text-[13px] font-medium text-foreground">{label}</FormLabel>
+            <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium tabular-nums text-foreground">
               {fmt(val)}
             </span>
           </div>
           <FormControl>
-            <div className="relative h-5 flex items-center">
-              <div className="absolute inset-x-0 h-1.5 rounded-full bg-border/60" />
-              <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${pct}%` }} />
+            <div className="relative flex h-7 items-center">
+              <div className="pointer-events-none absolute inset-x-0 h-1 rounded-full bg-border" />
+              <div
+                className="pointer-events-none absolute left-0 h-1 rounded-full bg-foreground"
+                style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+              />
               <input
-                type="range" min={min} max={max} step={step} value={val}
+                type="range"
+                min={min}
+                max={max}
+                step={step}
+                value={val}
                 disabled={disabled}
-                onChange={e => {
-                  const next = step % 1 !== 0 ? parseFloat(e.target.value) : parseInt(e.target.value);
+                aria-label={label}
+                onChange={(e) => {
+                  const next = step % 1 !== 0 ? parseFloat(e.target.value) : parseInt(e.target.value, 10);
                   field.onChange(next);
                   onValueChange?.(next);
                 }}
-                className={disabled ? "absolute inset-x-0 w-full opacity-0 h-5 cursor-not-allowed" : "absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer"}
+                className={cn(
+                  "relative z-[1] h-7 w-full appearance-none bg-transparent",
+                  "[&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:bg-transparent",
+                  "[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-foreground [&::-webkit-slider-thumb]:bg-background",
+                  "[&::-moz-range-track]:h-1 [&::-moz-range-track]:bg-transparent",
+                  "[&::-moz-range-thumb]:size-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-foreground [&::-moz-range-thumb]:bg-background",
+                  disabled ? "cursor-not-allowed" : "cursor-pointer",
+                )}
               />
             </div>
           </FormControl>
-          {hint && <p className="text-[10px] text-muted-foreground/70 mt-1 leading-relaxed">{hint}</p>}
+          {hint ? (
+            <p className="text-[12px] leading-snug text-muted-foreground">{hint}</p>
+          ) : null}
         </FormItem>
       );
     }} />
@@ -4001,7 +4033,9 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   const search = useSearch();
   const requested = new URLSearchParams(search).get("section");
   const [section, setSection] = useState<AdvSection>(
-    requested === "website" || requested === "embed" ? "website" : "engine",
+    requested === "integrations" ? "integrations"
+      : requested === "compliance" ? "compliance"
+      : "engine",
   );
   const [traiConfirmOpen, setTraiConfirmOpen] = useState(false);
   const [dpdpConfirmOpen, setDpdpConfirmOpen] = useState(false);
@@ -4020,7 +4054,6 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
     { id: "engine",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"     },
     { id: "limits",       icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"     },
-    { id: "website",      icon: <Globe className="h-3.5 w-3.5" />,       label: "Website"    },
     // Post-call notify for this agent — not Developers event subscriptions or campaign form intake.
     { id: "integrations", icon: <Webhook className="h-3.5 w-3.5" />,     label: "Post-call notify" },
     { id: "compliance",   icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance" },
@@ -4030,7 +4063,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
     <div className={cn("flex flex-col gap-5", BUILDER_TAB_PAD)}>
       <BuilderTabHeader
         title="Settings"
-        description="Call limits, barge-in, hang-up, website embed, post-call notify URL, and compliance. How fast the agent replies is on Sound."
+        description="Barge-in, call limits, post-call notify URL, and compliance. Reply speed lives on Voice → Phone feel."
       />
       <div className="inline-flex flex-wrap items-center gap-1 self-start rounded-lg border border-border bg-card p-1">
         {nav.map(n => (
@@ -4058,113 +4091,109 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
           <BuilderPanel
             title="Call Engine"
             icon={<Timer />}
-            description="Barge-in, extra pause, and silence hang-up"
+            description="Barge-in, pause, and silence hang-up"
+            bodyClassName="p-0"
           >
-            <div className="space-y-5">
-              <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
-                <FormItem className="flex items-center justify-between space-y-0 pb-1">
-                  <div>
-                    <FormLabel className="text-[12px] font-medium text-foreground/90">Allow barge-in</FormLabel>
-                    <p className="text-[10px] text-muted-foreground/70 mt-0.5">Caller can interrupt the agent while it speaks</p>
-                  </div>
-                  <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
-                </FormItem>
-              )} />
-
-              {bargeIn && (
-                <AdvSlider
+            <div className="divide-y divide-border">
+              <div className="px-4 py-3.5">
+                <AdvToggle
                   form={form}
-                  name="stopSpeakingNumWords"
-                  label="Words before interrupt"
-                  hint="Agent ignores interruptions until this many words are spoken (Stop / Wait / Hold on still cut immediately). Default 3."
-                  min={1}
-                  max={6}
-                  step={1}
-                  fmt={(v) => `${v}w`}
-                  onValueChange={(v) => {
-                    form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(v), { shouldDirty: true });
-                  }}
+                  name="bargeInEnabled"
+                  label="Allow barge-in"
+                  hint="Caller can interrupt the agent while it speaks."
+                  defaultOn
                 />
-              )}
+              </div>
 
-              <AdvSlider
-                form={form}
-                name="linearDelayMs"
-                label="Extra pause before speaking"
-                hint="Add a beat after the caller finishes. Off by default."
-                min={0}
-                max={1500}
-                step={50}
-                fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
-              />
-
-              <details className="group pt-1">
-                <summary className="cursor-pointer list-none text-[11.5px] font-medium text-muted-foreground hover:text-foreground transition-colors select-none">
-                  <span className="inline-block transition-transform group-open:rotate-90 mr-1">›</span>
-                  Advanced timing — rarely needed
-                </summary>
-                <div className="space-y-5 pt-4">
+              {bargeIn ? (
+                <div className="px-4 py-3.5">
                   <AdvSlider
                     form={form}
-                    name="fragmentCoalesceListeningMs"
-                    label="Fragment hold (listening)"
-                    hint="Hold short STT fragments while agent is silent. 0 = off (default — trust STT VAD)."
-                    min={0}
-                    max={2000}
-                    step={50}
-                    fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
-                  />
-
-                  <AdvSlider
-                    form={form}
-                    name="fragmentCoalescePlayingMs"
-                    label="Fragment hold (playing)"
-                    hint="Hold short acks while agent is speaking. 0 = off (default — trust STT VAD)."
-                    min={0}
-                    max={3000}
-                    step={50}
-                    fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
-                  />
-
-                  <AdvSlider
-                    form={form}
-                    name="telephonyTailDrainMs"
-                    label="Tail drain"
-                    hint="Silence after last TTS so carriers don't clip goodbye. Default 400ms."
-                    min={0}
-                    max={2000}
-                    step={50}
-                    fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+                    name="stopSpeakingNumWords"
+                    label="Words before interrupt"
+                    hint="Ignore interruptions until this many words. Stop / Wait / Hold on still cut immediately. Default 3."
+                    min={1}
+                    max={6}
+                    step={1}
+                    fmt={(v) => `${v}w`}
+                    onValueChange={(v) => {
+                      form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(v), { shouldDirty: true });
+                    }}
                   />
                 </div>
-              </details>
+              ) : null}
 
-              <FormField control={form.control} name="silenceTimeoutSeconds" render={({ field }) => {
-                const val = field.value ?? 30;
-                const pct = ((val - 5) / (120 - 5)) * 100;
-                return (
-                  <FormItem className="space-y-0">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div>
-                        <FormLabel className="text-[12px] font-medium text-foreground/90">Silence check-in</FormLabel>
-                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                          After each turn: if they stay quiet this long, ask “are you there?” Stay silent another window and the call ends. How fast the agent replies is Fast / Balanced / Patient on Sound.
-                        </p>
-                      </div>
-                      <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{val}s</span>
-                    </div>
-                    <FormControl>
-                      <div className="relative h-5 flex items-center">
-                        <div className="absolute inset-x-0 h-1.5 rounded-full bg-border/60" />
-                        <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
-                        <input type="range" min={5} max={120} step={5} value={val}
-                          onChange={e => field.onChange(parseInt(e.target.value))}
-                          className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer" />
-                      </div>
-                    </FormControl>
-                  </FormItem>
-                );
-              }} />
+              <div className="px-4 py-3.5">
+                <AdvSlider
+                  form={form}
+                  name="linearDelayMs"
+                  label="Extra pause before speaking"
+                  hint="Add a beat after the caller finishes. Off by default."
+                  min={0}
+                  max={1500}
+                  step={50}
+                  fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+                />
+              </div>
+
+              <div className="px-4 py-3.5">
+                <AdvSlider
+                  form={form}
+                  name="silenceTimeoutSeconds"
+                  label="Silence check-in"
+                  hint="If they stay quiet this long after a turn, ask “are you there?” Then hang up after another window. Reply speed is on Voice → Phone feel."
+                  min={5}
+                  max={120}
+                  step={5}
+                  fmt={(v) => `${v}s`}
+                />
+              </div>
+
+              <details className="group">
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
+                  Advanced timing
+                  <span className="font-normal text-muted-foreground/70">— rarely needed</span>
+                </summary>
+                <div className="divide-y divide-border border-t border-border bg-muted/15">
+                  <div className="px-4 py-3.5">
+                    <AdvSlider
+                      form={form}
+                      name="fragmentCoalesceListeningMs"
+                      label="Fragment hold (listening)"
+                      hint="Hold short STT fragments while the agent is silent. 0 = off."
+                      min={0}
+                      max={2000}
+                      step={50}
+                      fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+                    />
+                  </div>
+                  <div className="px-4 py-3.5">
+                    <AdvSlider
+                      form={form}
+                      name="fragmentCoalescePlayingMs"
+                      label="Fragment hold (playing)"
+                      hint="Hold short acks while the agent is speaking. 0 = off."
+                      min={0}
+                      max={3000}
+                      step={50}
+                      fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+                    />
+                  </div>
+                  <div className="px-4 py-3.5">
+                    <AdvSlider
+                      form={form}
+                      name="telephonyTailDrainMs"
+                      label="Tail drain"
+                      hint="Silence after last TTS so carriers don’t clip goodbye. Default 400ms."
+                      min={0}
+                      max={2000}
+                      step={50}
+                      fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+                    />
+                  </div>
+                </div>
+              </details>
             </div>
           </BuilderPanel>
         )}
@@ -4172,103 +4201,76 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
         {/* ── LIMITS ── */}
         {section === "limits" && (
           <div className="flex flex-col gap-4">
-            {/* ── Auto-Redial on Drop ── */}
             <BuilderPanel
               title="Auto-Redial on Drop"
               icon={<PhoneForwarded />}
               description="Call back after an unexpected disconnect"
+              bodyClassName="p-0"
             >
-            <div className="space-y-4">
-              <FormField control={form.control} name="autoRedialEnabled" render={({ field }) => (
-                <FormItem className="flex items-center justify-between space-y-0">
-                  <div>
-                    <FormLabel className="text-[12px] font-medium text-foreground/90">Enable Auto-Redial</FormLabel>
-                    <p className="text-[10px] text-muted-foreground/70 mt-0.5">Call back automatically after any unexpected disconnect</p>
-                  </div>
-                  <FormControl>
-                    <Switch checked={!!field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="autoRedialMaxAttempts" render={({ field }) => {
-                const val = field.value ?? 3;
-                return (
-                  <FormItem className="space-y-0">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div>
-                        <FormLabel className="text-[12px] font-medium text-foreground/90">Max Attempts per Day</FormLabel>
-                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">Stop retrying after this many attempts in a single day</p>
-                      </div>
-                      <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{val}×</span>
-                    </div>
-                    <FormControl>
-                      <div className="relative h-5 flex items-center">
-                        <div className="absolute inset-x-0 h-1.5 rounded-full bg-border/60" />
-                        <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${((val - 1) / (10 - 1)) * 100}%` }} />
-                        <input type="range" min={1} max={10} step={1} value={val}
-                          onChange={e => field.onChange(parseInt(e.target.value))}
-                          className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer" />
-                      </div>
-                    </FormControl>
-                    <div className="flex justify-between mt-1">
-                      <span className="text-[9px] text-muted-foreground/50">1</span>
-                      <span className="text-[9px] text-muted-foreground/50">10</span>
-                    </div>
-                  </FormItem>
-                );
-              }} />
-            </div>
+              <div className="divide-y divide-border">
+                <div className="px-4 py-3.5">
+                  <AdvToggle
+                    form={form}
+                    name="autoRedialEnabled"
+                    label="Enable auto-redial"
+                    hint="Call back automatically after any unexpected disconnect."
+                  />
+                </div>
+                <div className="px-4 py-3.5">
+                  <AdvSlider
+                    form={form}
+                    name="autoRedialMaxAttempts"
+                    label="Max attempts per day"
+                    hint="Stop retrying after this many attempts in a single day."
+                    min={1}
+                    max={10}
+                    step={1}
+                    fmt={(v) => `${v}×`}
+                  />
+                </div>
+              </div>
             </BuilderPanel>
 
             <BuilderPanel
               title="Call Limits"
               icon={<Gauge />}
               description="Hard cut-off for call duration"
+              bodyClassName="p-0"
             >
-            <div className="space-y-5">
-              <FormField control={form.control} name="maxDuration" render={({ field }) => {
-                const val = field.value ?? 300;
-                const mins = Math.floor(val / 60);
-                const secs = val % 60;
-                const pct = ((val - 10) / (3600 - 10)) * 100;
-                return (
-                  <FormItem className="space-y-0">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div>
-                        <FormLabel className="text-[12px] font-medium text-foreground/90">Max Call Duration</FormLabel>
-                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">Hard cut-off — call is ended after this time</p>
-                      </div>
-                      <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{mins}m {secs > 0 ? `${secs}s` : ""}</span>
-                    </div>
-                    <FormControl>
-                      <div className="relative h-5 flex items-center">
-                        <div className="absolute inset-x-0 h-1.5 rounded-full bg-border/60" />
-                        <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${pct}%` }} />
-                        <input type="range" min={10} max={3600} step={30} value={val}
-                          onChange={e => field.onChange(parseInt(e.target.value))}
-                          className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer" />
-                      </div>
-                    </FormControl>
-                    <div className="flex justify-between mt-1">
-                      <span className="text-[9px] text-muted-foreground/50">10s</span>
-                      <span className="text-[9px] text-muted-foreground/50">60min</span>
-                    </div>
-                  </FormItem>
-                );
-              }} />
-              <FormField control={form.control} name="telephonyProvider" render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel className="text-[12px] font-medium text-foreground/90">Telephony Provider</FormLabel>
-                  <p className="text-[10px] text-muted-foreground/70">Which carrier this agent dials and receives calls on. Plivo/Twilio use your own account key from Settings → Voices and Providers (₹1/min cheaper).</p>
-                  <SmallSelect value={field.value ?? "vobiz"} onChange={field.onChange}
-                    options={[
-                      { value: "vobiz", label: "VoBiz (platform / own number)" },
-                      { value: "plivo", label: "Plivo — your own account" },
-                      { value: "twilio", label: "Twilio — your own account" },
-                    ]} />
-                </FormItem>
-              )} />
-            </div>
+              <div className="divide-y divide-border">
+                <div className="px-4 py-3.5">
+                  <AdvSlider
+                    form={form}
+                    name="maxDuration"
+                    label="Max call duration"
+                    hint="Hard cut-off — the call ends after this time."
+                    min={10}
+                    max={3600}
+                    step={30}
+                    fmt={(v) => {
+                      const mins = Math.floor(v / 60);
+                      const secs = v % 60;
+                      return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+                    }}
+                  />
+                </div>
+                <div className="px-4 py-3.5">
+                  <FormField control={form.control} name="telephonyProvider" render={({ field }) => (
+                    <FormItem className="space-y-2">
+                      <FormLabel className="text-[13px] font-medium text-foreground">Telephony provider</FormLabel>
+                      <p className="text-[12px] leading-snug text-muted-foreground">
+                        Which carrier this agent dials and receives on. Plivo/Twilio use your account key from Settings → Voices and Providers.
+                      </p>
+                      <SmallSelect value={field.value ?? "vobiz"} onChange={field.onChange}
+                        options={[
+                          { value: "vobiz", label: "VoBiz (platform / own number)" },
+                          { value: "plivo", label: "Plivo — your own account" },
+                          { value: "twilio", label: "Twilio — your own account" },
+                        ]} />
+                    </FormItem>
+                  )} />
+                </div>
+              </div>
             </BuilderPanel>
           </div>
         )}
@@ -4427,21 +4429,6 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
             </AlertDialog>
 
             <IrdaiComplianceBanner enabled={!!form.watch("complianceIrdai")} agent={agent} />
-          </BuilderPanel>
-        )}
-
-        {/* ── WEBSITE EMBED ── */}
-        {section === "website" && (
-          <BuilderPanel
-            title="Website webcall"
-            icon={<Globe />}
-            description="Embed this agent on your own site"
-          >
-            {agent?.id ? (
-              <AgentWebsiteEmbedPanel agentId={agent.id} agentName={agent.name ?? ""} />
-            ) : (
-              <p className="text-[12px] text-muted-foreground">Save the agent first, then generate embed code.</p>
-            )}
           </BuilderPanel>
         )}
 
@@ -8219,7 +8206,7 @@ function PromptReadinessAside({
     ...(canAttendMeetings
       ? [{ label: "Meeting prompt", ready: meetingPrompt.length > 0, detail: meetingPrompt ? `${meetingPrompt.length.toLocaleString()} chars` : "Uses call prompt", optional: true as const }]
       : []),
-    { label: "Sound", ready: voiceOk, detail: voiceOk ? "Set" : "Missing" },
+    { label: "Voice", ready: voiceOk, detail: voiceOk ? "Set" : "Missing" },
   ];
 
   return (
@@ -8574,71 +8561,78 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     }
   };
 
+  const stepIndex = step === "compose" ? 0 : step === "surfaces" ? 1 : 2;
   const stepTitle =
-    step === "compose" ? "Who is this for?"
-      : step === "surfaces" ? "Where will they talk?"
-        : composition === "team" ? "Name your team"
-          : "Name your agent";
+    step === "compose" ? "New agent"
+      : step === "surfaces" ? "Where they talk"
+        : composition === "team" ? "Name the team"
+          : "Name the agent";
   const stepDesc =
-    step === "compose" ? "Start with one agent, or create two that hand off mid-call."
-      : step === "surfaces" ? "Phone only (calendar bookings + Meet links for humans; AI never joins), or phone + meetings (AI can join Meet)."
+    step === "compose" ? "One voice, or two agents that hand off mid-call."
+      : step === "surfaces" ? "Phone only, or phone plus meetings the AI can join."
         : composition === "team"
-          ? "We’ll create both agents and wire handoffs automatically."
+          ? "We'll create both agents and wire handoffs."
           : "You can edit prompts, tools, and settings anytime.";
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
-      <DialogContent className={cn("sm:max-w-md", composition === "team" && step === "name" && "sm:max-w-lg")}>
-        <DialogHeader>
-          <DialogTitle>{stepTitle}</DialogTitle>
-          <DialogDescription>{stepDesc}</DialogDescription>
-        </DialogHeader>
+      <DialogContent className={cn("gap-0 overflow-hidden p-0 sm:max-w-md", composition === "team" && step === "name" && "sm:max-w-lg")}>
+        <div className="border-b border-border px-6 pb-4 pt-6">
+          <DialogHeader className="space-y-1.5 text-left">
+            <DialogTitle className="text-[17px] font-semibold tracking-[-0.03em]">{stepTitle}</DialogTitle>
+            <DialogDescription className="text-[13px] leading-relaxed">{stepDesc}</DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 flex items-center gap-1.5" aria-label={`Step ${stepIndex + 1} of 3`}>
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className={cn(
+                  "h-1 flex-1 rounded-full transition-colors",
+                  i <= stepIndex ? "bg-foreground" : "bg-border",
+                )}
+              />
+            ))}
+          </div>
+        </div>
 
+        <div className="px-6 py-5">
         {step === "compose" && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
+          <div className="space-y-2">
             <button
               type="button"
               onClick={() => { setComposition("single"); setStep("surfaces"); }}
-              className={cn(
-                "group flex flex-col items-center gap-2 rounded-xl border p-5 text-center transition-colors",
-                composition === "single"
-                  ? "border-primary/40 bg-primary/5 hover:border-primary"
-                  : "border-border/60 bg-card hover:border-primary/50 hover:bg-primary/5",
-              )}
+              className="flex w-full items-start gap-3 rounded-lg border border-border bg-card px-3.5 py-3 text-left transition-colors hover:border-foreground/25 hover:bg-muted/30"
             >
-              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <User2 className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold">One agent</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Single voice personality</p>
-              </div>
+              <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
+                <User2 className="size-4 text-foreground" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-semibold text-foreground">One agent</span>
+                <span className="mt-0.5 block text-[12px] text-muted-foreground">Single voice personality</span>
+              </span>
+              <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" />
             </button>
             <button
               type="button"
               onClick={() => { setComposition("team"); setStep("surfaces"); }}
-              className={cn(
-                "group flex flex-col items-center gap-2 rounded-xl border p-5 text-center transition-colors",
-                composition === "team"
-                  ? "border-primary/40 bg-primary/5 hover:border-primary"
-                  : "border-border/60 bg-card hover:border-primary/50 hover:bg-primary/5",
-              )}
+              className="flex w-full items-start gap-3 rounded-lg border border-border bg-card px-3.5 py-3 text-left transition-colors hover:border-foreground/25 hover:bg-muted/30"
             >
-              <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center group-hover:bg-muted/80">
-                <Users className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold">Team</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Create two agents that hand off mid-call</p>
-              </div>
+              <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
+                <Users className="size-4 text-foreground" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-semibold text-foreground">Team</span>
+                <span className="mt-0.5 block text-[12px] text-muted-foreground">Two agents that hand off mid-call</span>
+              </span>
+              <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" />
             </button>
             {!isManagedWorkspace && (
             <button
               type="button"
               onClick={() => { handleClose(); navigate("/app/vibe"); }}
-              className="sm:col-span-2 flex items-center justify-center gap-2 rounded-lg border border-dashed border-border/60 px-3 py-2.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
+              className="flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-[12px] text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
             >
-              <Sparkles className="h-3.5 w-3.5" />
+              <Sparkles className="size-3.5" />
               Or build with AI (guided)
             </button>
             )}
@@ -8646,45 +8640,49 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         )}
 
         {step === "surfaces" && (
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-4">
+            <div className="space-y-2">
               <button
                 type="button"
                 onClick={() => setSurfaces("phone")}
                 className={cn(
-                  "flex flex-col items-start gap-1.5 rounded-xl border p-4 text-left transition-colors",
+                  "flex w-full items-start gap-3 rounded-lg border px-3.5 py-3 text-left transition-colors",
                   surfaces === "phone"
-                    ? "border-primary/40 bg-primary/5"
-                    : "border-border/60 hover:border-primary/40 hover:bg-primary/5",
+                    ? "border-foreground bg-muted/40"
+                    : "border-border hover:border-foreground/25 hover:bg-muted/30",
                 )}
               >
-                <Phone className="h-4 w-4 text-primary" />
-                <p className="text-sm font-semibold">Phone</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">
-                  Voice calls. Can book calendar — does not join Meet.
-                </p>
+                <Phone className="mt-0.5 size-4 shrink-0 text-foreground" />
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-semibold">Phone</span>
+                  <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground">
+                    Voice calls. Can book calendar — does not join Meet.
+                  </span>
+                </span>
               </button>
               <button
                 type="button"
                 onClick={() => setSurfaces("phone_and_meet")}
                 className={cn(
-                  "flex flex-col items-start gap-1.5 rounded-xl border p-4 text-left transition-colors",
+                  "flex w-full items-start gap-3 rounded-lg border px-3.5 py-3 text-left transition-colors",
                   surfaces === "phone_and_meet"
-                    ? "border-primary/40 bg-primary/5"
-                    : "border-border/60 hover:border-primary/40 hover:bg-primary/5",
+                    ? "border-foreground bg-muted/40"
+                    : "border-border hover:border-foreground/25 hover:bg-muted/30",
                 )}
               >
-                <div className="flex items-center gap-1.5">
-                  <Phone className="h-4 w-4 text-primary" />
-                  <Video className="h-4 w-4 text-primary" />
-                </div>
-                <p className="text-sm font-semibold">Phone + meetings</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">
-                  Voice calls, plus join Meet/Zoom/Teams from Meeting bots. Booking a slot is separate.
-                </p>
+                <span className="mt-0.5 flex shrink-0 items-center gap-1">
+                  <Phone className="size-4 text-foreground" />
+                  <Video className="size-4 text-foreground" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-semibold">Phone + meetings</span>
+                  <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground">
+                    Voice calls, plus join Meet / Zoom / Teams from Meeting bots.
+                  </span>
+                </span>
               </button>
             </div>
-            <DialogFooter>
+            <DialogFooter className="gap-2 sm:justify-between">
               <Button variant="ghost" onClick={() => setStep("compose")}>Back</Button>
               <Button onClick={() => setStep("name")}>Continue</Button>
             </DialogFooter>
@@ -8692,7 +8690,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         )}
 
         {step === "name" && composition === "single" && (
-          <div className="space-y-4 py-2">
+          <div className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="scratch-name">Agent name</Label>
               <Input
@@ -8702,15 +8700,16 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                 onChange={e => setAgentName(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && void handleCreate()}
                 autoFocus
+                className="h-10"
               />
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[12px] text-muted-foreground">
               One agent
               {" · "}
               {surfaces === "phone" ? "Phone" : "Phone + meetings"}
             </p>
             {createError && <p className="text-xs text-destructive">{createError}</p>}
-            <DialogFooter>
+            <DialogFooter className="gap-2 sm:justify-between">
               <Button variant="ghost" onClick={() => setStep("surfaces")} disabled={creating}>Back</Button>
               <Button onClick={() => void handleCreate()} disabled={creating}>
                 {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create agent"}
@@ -8720,7 +8719,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         )}
 
         {step === "name" && composition === "team" && (
-          <div className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
+          <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
             <div className="space-y-1.5">
               <Label htmlFor="team-name">Team name</Label>
               <Input
@@ -8729,11 +8728,12 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                 value={teamName}
                 onChange={e => setTeamName(e.target.value)}
                 autoFocus
+                className="h-10"
               />
             </div>
-            <div className="rounded-lg border border-border/60 p-3 space-y-2">
+            <div className="space-y-2 rounded-lg border border-border p-3">
               <p className="text-xs font-medium text-muted-foreground">Agent 1</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label htmlFor="agent1-name" className="text-[11px]">Name</Label>
                   <Input
@@ -8753,11 +8753,11 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                   />
                 </div>
               </div>
-              <div className="space-y-1.5 pt-1 border-t border-border/50">
+              <div className="space-y-1.5 border-t border-border pt-2">
                 <Label htmlFor="handoff-message" className="text-[11px]">Handoff announcement</Label>
                 <Textarea
                   id="handoff-message"
-                  className="min-h-[60px] text-xs resize-none"
+                  className="min-h-[60px] resize-none text-xs"
                   value={handoffMessage}
                   onChange={e => setHandoffMessage(e.target.value)}
                   placeholder="Optional. Leave empty to stay silent."
@@ -8767,9 +8767,9 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                 </p>
               </div>
             </div>
-            <div className="rounded-lg border border-border/60 p-3 space-y-2">
+            <div className="space-y-2 rounded-lg border border-border p-3">
               <p className="text-xs font-medium text-muted-foreground">Agent 2</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label htmlFor="agent2-name" className="text-[11px]">Name</Label>
                   <Input
@@ -8789,11 +8789,11 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                   />
                 </div>
               </div>
-              <div className="space-y-1.5 pt-1 border-t border-border/50">
+              <div className="space-y-1.5 border-t border-border pt-2">
                 <Label htmlFor="handoff-greeting" className="text-[11px]">Receiving agent greeting</Label>
                 <Textarea
                   id="handoff-greeting"
-                  className="min-h-[60px] text-xs resize-none"
+                  className="min-h-[60px] resize-none text-xs"
                   value={handoffGreeting}
                   onChange={e => setHandoffGreeting(e.target.value)}
                   placeholder="Optional. Leave empty — they continue from their prompt."
@@ -8803,11 +8803,11 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                 </p>
               </div>
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[12px] text-muted-foreground">
               Two agents · {surfaces === "phone" ? "Phone" : "Phone + meetings"} · handoffs wired automatically
             </p>
             {createError && <p className="text-xs text-destructive">{createError}</p>}
-            <DialogFooter>
+            <DialogFooter className="gap-2 sm:justify-between">
               <Button variant="ghost" onClick={() => setStep("surfaces")} disabled={creating}>Back</Button>
               <Button onClick={() => void handleCreate()} disabled={creating}>
                 {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create team"}
@@ -8815,6 +8815,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
             </DialogFooter>
           </div>
         )}
+        </div>
       </DialogContent>
     </Dialog>
   );
