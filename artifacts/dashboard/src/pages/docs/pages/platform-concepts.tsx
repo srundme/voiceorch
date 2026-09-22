@@ -120,10 +120,10 @@ export default function PlatformConceptsPage() {
         meeting on the agent.
       </p>
 
-      <h2 id="knowledge">Knowledge base</h2>
+      <h2 id="knowledge">Contextual Knowledge</h2>
       <p>
-        Documents the agent can search during a call (RAG).{" "}
-        <Link href="/docs/knowledge-base">Knowledge base</Link>.
+        Your packs on the call — looked up when the caller asks, and kept on topic for follow-ups.{" "}
+        <Link href="/docs/knowledge-base">Contextual Knowledge</Link>.
       </p>
 
       <h2 id="webhooks">Event subscriptions &amp; related URLs</h2>

@@ -123,11 +123,11 @@ export const DOCS_NAV: DocsNavGroup[] = [
         description: "Per-call placeholders in prompts and tools.",
       },
       {
-        title: "Knowledge base",
+        title: "Contextual Knowledge",
         slug: "knowledge-base",
         icon: Database,
-        search: "RAG documents attach agent upload FAQ website",
-        description: "Ground answers on your files, FAQs, and sites.",
+        search: "contextual knowledge documents attach agent upload FAQ website packs follow-up",
+        description: "Ground answers on your files, FAQs, and sites — at the right moment on a call.",
       },
       {
         title: "Caller memory",

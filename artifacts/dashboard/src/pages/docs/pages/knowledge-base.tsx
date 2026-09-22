@@ -6,8 +6,8 @@ export default function KnowledgeBasePage() {
     <div>
       <PageHeader
         breadcrumb="Product guides"
-        title="Knowledge base"
-        description="Attach packs so the agent answers product and policy questions from your content on live calls — with Smart Knowledge (meaning match, ask-only retrieve, follow-up context)."
+        title="Contextual Knowledge"
+        description="Attach packs so the agent answers product and policy questions from your content on live calls — at the right moment, and still on topic for follow-ups."
       />
 
       <h2 id="dashboard">In the dashboard</h2>
@@ -21,19 +21,21 @@ export default function KnowledgeBasePage() {
         </li>
         <li>Create a pack (text, FAQ, file, or website).</li>
         <li>Attach it to one or more agents in the agent builder.</li>
-        <li>Place a test call — factual questions should pull from your pack; “okay” / “thanks” should not.</li>
+        <li>
+          Place a test call — factual questions should use your pack; “okay” / “thanks” should not trigger a lookup.
+        </li>
       </ol>
 
-      <h2 id="smart">What Smart Knowledge does on a call</h2>
+      <h2 id="contextual">What Contextual Knowledge does on a call</h2>
       <ul>
         <li>
-          <strong>Meaning + keywords</strong> — hybrid search (semantic and full-text), not keyword-only.
+          <strong>Right facts</strong> — finds answers in your packs even when the caller doesn’t use the exact wording.
         </li>
         <li>
-          <strong>Ask-only retrieve</strong> — skips small talk and farewells; searches when the caller asks a fact.
+          <strong>Right moment</strong> — looks up only when the caller asks something real, not on small talk.
         </li>
         <li>
-          <strong>Follow-up context</strong> — keeps the product/topic so “what about transport?” stays on the right offering.
+          <strong>Right thread</strong> — stays on the same product or topic for follow-ups like “what about transport?”
         </li>
       </ul>
 

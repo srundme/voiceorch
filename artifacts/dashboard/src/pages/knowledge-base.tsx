@@ -88,26 +88,26 @@ function sourceStatusMeta(source: KnowledgeSourceView) {
   return STATUS_META[source.status] ?? STATUS_META["ready"]!;
 }
 
-/** Live call path — gate + contextual query + hybrid retrieval (production). */
-function SmartKbHowItWorks() {
+/** Live call path — contextual retrieve (production). */
+function ContextualKnowledgeHowItWorks() {
   return (
     <div className="rounded-xl border border-border bg-card/60 px-4 py-3.5 space-y-2.5">
       <div className="flex items-center gap-2">
         <Brain className="w-4 h-4 text-foreground shrink-0" />
-        <p className="text-sm font-medium text-foreground">Smart Knowledge is live on calls</p>
+        <p className="text-sm font-medium text-foreground">Contextual Knowledge on calls</p>
       </div>
       <ul className="grid gap-1.5 sm:grid-cols-3 text-[11px] leading-snug text-muted-foreground">
         <li className="flex gap-1.5">
           <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
-          <span>Matches meaning and keywords together</span>
+          <span>Finds the right facts from your packs — not just exact keywords</span>
         </li>
         <li className="flex gap-1.5">
           <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
-          <span>Skips small talk — retrieves only when the caller asks a fact</span>
+          <span>Looks up only when the caller asks something real — not on “okay” or “thanks”</span>
         </li>
         <li className="flex gap-1.5">
           <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
-          <span>Keeps the product/topic in mind for follow-ups (“what about transport?”)</span>
+          <span>Stays on the same product/topic for follow-ups (“what about transport?”)</span>
         </li>
       </ul>
     </div>
@@ -757,7 +757,7 @@ function TestPanel({ sourceId }: { sourceId: number }) {
         <div>
           <h3 className="font-semibold text-sm">Test search</h3>
           <p className="text-[11px] text-muted-foreground">
-            Same hybrid search as live calls (gate + context apply on the phone)
+            Same lookup your agent uses on the phone
           </p>
         </div>
       </div>
@@ -947,7 +947,7 @@ function DetailView({ sourceId, onBack }: { sourceId: number; onBack: () => void
       {source.indexing && (
         <div className="flex items-center gap-3 bg-muted/50 border border-border rounded-lg px-4 py-3 text-sm text-foreground">
           <Loader2 className="w-4 h-4 animate-spin shrink-0 text-muted-foreground" />
-          Building smart match index… Agents can already use this pack on calls.
+          Building Contextual Knowledge index… Agents can already use this pack on calls.
         </div>
       )}
       {(source.needsAttention || source.status === "partial") && source.status !== "crawling" && (
@@ -1051,7 +1051,7 @@ export default function KnowledgeBasePage() {
   return (
     <StripePage
       title="Knowledge"
-      description="Smart Knowledge on live calls: meaning match, ask-only retrieve, and follow-up context. Attach a pack on the agent."
+      description="Contextual Knowledge on live calls — your packs, the right moment, the right follow-up. Attach a pack on the agent."
       actions={
         <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
           <Plus className="w-3.5 h-3.5" />
@@ -1060,7 +1060,7 @@ export default function KnowledgeBasePage() {
       }
     >
       <div className="mb-5">
-        <SmartKbHowItWorks />
+        <ContextualKnowledgeHowItWorks />
       </div>
 
       {/* Source grid */}
@@ -1073,7 +1073,7 @@ export default function KnowledgeBasePage() {
           variant="hero"
           icon={<BookOpen />}
           title="No knowledge yet"
-          description="Paste text, upload a document, or import a website — Smart Knowledge will answer caller facts from it on the call."
+          description="Paste text, upload a document, or import a website — Contextual Knowledge answers caller questions from it on the call."
           action={{
             label: "Add your first pack",
             onClick: () => setCreateOpen(true),
@@ -1106,7 +1106,7 @@ export default function KnowledgeBasePage() {
           </span>
           <span className="flex items-center gap-1.5">
             <Brain className="w-3.5 h-3.5 text-muted-foreground" />
-            Smart match · ask-only · follow-up context
+            Contextual · ask when needed · stay on topic
           </span>
         </div>
       )}
