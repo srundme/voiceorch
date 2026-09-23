@@ -275,12 +275,13 @@ export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): Intak
   const alternatives = scored.slice(1, 4).map((s) => s.job);
 
   if (!proposed) {
+    const why = explainEmptyLineup({ row, english, shift, needWeekend, wfhOnly });
     return {
       proposed: null,
       alternatives: [],
-      speakScript: "I do not have a Bangalore international-voice opening that matches what we captured. I will check with my supervisor and call you back if something opens.",
+      speakScript: why.speakScript,
       talkingPoints: [],
-      note: "No JD survived the filters.",
+      note: why.note,
       blocked: false,
     };
   }
@@ -293,6 +294,53 @@ export function matchIntakeJobs(row: CandidateIntake, extra: IntakeExtra): Intak
     note: null,
     blocked: false,
   };
+}
+
+const ENGLISH_SPOKEN: Record<IntakeJobEnglish, string> = {
+  POOR: "poor",
+  AVERAGE: "average",
+  GOOD: "good",
+  VERY_GOOD: "very good",
+  EXCELLENT: "excellent",
+};
+
+/** A sentence the recruiter can say when every opening was filtered out. */
+function explainEmptyLineup(opts: {
+  row: CandidateIntake;
+  english: IntakeJobEnglish;
+  shift: string | null;
+  needWeekend: boolean;
+  wfhOnly: boolean;
+}): { speakScript: string; note: string } {
+  const pool = INTAKE_JOBS.filter((job) => {
+    if (opts.row.workStatus && job.workStatus !== "ANY" && job.workStatus !== opts.row.workStatus) return false;
+    if (opts.row.qualification === "GRADUATE" && job.qualification === "POST_GRADUATE") return false;
+    return true;
+  });
+  const englishLabel = ENGLISH_SPOKEN[opts.english];
+  const englishBlocked = pool.filter((job) => (ENGLISH_RANK[opts.english] ?? 0) < ENGLISH_RANK[job.minEnglish]);
+  if (pool.length > 0 && englishBlocked.length === pool.length) {
+    const lowest = pool.reduce((min, job) =>
+      ENGLISH_RANK[job.minEnglish] < ENGLISH_RANK[min] ? job.minEnglish : min, pool[0]!.minEnglish);
+    const need = ENGLISH_SPOKEN[lowest];
+    const speakScript = `I don't have an opening for you right now. Your English on this call came through as ${englishLabel}, and the voice processes we have need at least ${need} English. I'll have the team review your profile and call you back.`;
+    return { speakScript, note: `English is ${englishLabel}; openings need at least ${need}.` };
+  }
+  const shiftBlocked = pool.filter((job) => !shiftFits(opts.shift, job));
+  if (pool.length > 0 && shiftBlocked.length === pool.length) {
+    const speakScript = `I don't have an opening on the shift you can do. These processes are US or night shift, from the office in Bangalore. I'll have the team review your profile and call you back.`;
+    return { speakScript, note: `Shift ${opts.shift ?? "unset"} does not match the openings.` };
+  }
+  if (opts.wfhOnly) {
+    const speakScript = "I don't have a work-from-home opening that fits. The roles we have are from the office in Bangalore. I'll have the team review your profile and call you back.";
+    return { speakScript, note: "Needs work from home; no WFH opening matched." };
+  }
+  if (opts.needWeekend) {
+    const speakScript = "I don't have an opening with a fixed Saturday-Sunday off that fits the rest of what we captured. I'll have the team review your profile and call you back.";
+    return { speakScript, note: "Needs weekend off; no matching opening." };
+  }
+  const speakScript = "I don't have a Bangalore voice opening that matches what we captured. I'll have the team review your profile and call you back.";
+  return { speakScript, note: "No opening matched the captured profile." };
 }
 
 const SHIFT_WORDS: Record<IntakeJobShift, string> = {

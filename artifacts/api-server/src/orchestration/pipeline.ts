@@ -1527,6 +1527,8 @@ export class OrchestrationPipeline implements VoiceSession {
   // processTurn()'s historyForLlm so the LLM knows what the caller already heard and
   // can continue naturally without repeating already-delivered content.
   private _currentTurnPlayedSentences: string[] = [];
+  /** Spoken when finish_intake finds no JD. Played on end_call if this turn never said it. */
+  private _intakeUnspokenClose: string | null = null;
   private _interruptionHint: string | null = null;
   /** Text of the sentence currently draining via playJob — used when barge-in cuts mid-sentence. */
   private _activePlaybackText: string | null = null;
@@ -8214,7 +8216,12 @@ export class OrchestrationPipeline implements VoiceSession {
     } else if (tool.type === "intake_disposition") {
       return await executeIntakeDisposition(this.intakeToolContext(), args);
     } else if (tool.type === "intake_submit") {
-      return await executeIntakeSubmit(this.intakeToolContext());
+      const submitted = await executeIntakeSubmit(this.intakeToolContext());
+      const marker = "SAY_BEFORE_HANGUP: ";
+      if (submitted.startsWith(marker)) {
+        this._intakeUnspokenClose = submitted.slice(marker.length).split("\n")[0]?.trim() || null;
+      }
+      return submitted;
     } else if (tool.type === "webhook") {
       return await this.executeWebhookTool(tool, args);
     } else if (tool.type === "send_sms") {
@@ -8388,9 +8395,14 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private async speakEndCallFarewellIfNeeded(configured: string | undefined): Promise<void> {
     if (this.isIntakeAgent) {
-      const alreadySpoke = this._currentTurnPlayedSentences.some((s) => s.trim().length > 0);
-      if (alreadySpoke) return;
-      const goodbye = defaultGoodbyeMessage(this.agent.language ?? this.currentLang);
+      const alreadySpoke = this._currentTurnPlayedSentences.some((s) => isSubstantiveIntakeSpeech(s));
+      if (alreadySpoke) {
+        this._intakeUnspokenClose = null;
+        return;
+      }
+      const goodbye = this._intakeUnspokenClose
+        ?? "I don't have an opening that matches what we captured. The team will review your profile and call you back. Thank you for your time.";
+      this._intakeUnspokenClose = null;
       this.conversationHistory.appendAssistant(goodbye);
       this.config.onTranscript("agent", goodbye);
       await this.speakRaw(goodbye);
@@ -11057,10 +11069,17 @@ export class OrchestrationPipeline implements VoiceSession {
       );
     }
 
-    // Form writes are persisted in the background; do not skip TTS for them.
+    // A form write that also has a spoken reply saves in the background so TTS
+    // is not held. A write with no spoken reply used to end the turn on the
+    // backchannel ("Okay.") and wait for the caller to nudge (call 29080).
     if (triggeredToolName && isBackgroundIntakeTool(triggeredToolName)) {
-      triggeredToolName = null;
-      triggeredToolArgs = {};
+      const besideTool = stripFunctionTags(stripReasoningBlocks(llmResponse))
+        .replace(/\[calling tool:[^\]]*\]/gi, "")
+        .trim();
+      if (besideTool) {
+        triggeredToolName = null;
+        triggeredToolArgs = {};
+      }
     }
 
     if (triggeredToolName === "finish_intake" || triggeredToolName === "end_call") {
@@ -12908,6 +12927,14 @@ function guardrailTokenize(text: string): Set<string> {
  * from the token stream before text reaches TTS.  Returns a per-turn closure so
  * each turn (and continueWithToolResult) has independent state.
  */
+/** Backchannel and one-word acks are not a close. Call 29080 hung up after "Okay." */
+function isSubstantiveIntakeSpeech(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/[.!?,]+$/g, "").trim();
+  if (!t) return false;
+  if (/^(okay|ok|hmm|hm|yeah|yes|right|sure|alright|uh|um|hello|hi)$/.test(t)) return false;
+  return t.length > 12;
+}
+
 /**
  * Strips `<function=NAME ...>...</function>` (and self-closing/dangling variants) from text.
  * Used for post-processing the full LLM response before storing in history / transcript.

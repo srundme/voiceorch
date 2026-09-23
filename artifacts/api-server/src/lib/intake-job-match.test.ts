@@ -62,6 +62,23 @@ describe("matchIntakeJobs", () => {
     expect(match.talkingPoints[0]).toMatch(/Concentrix|Startek|Teleperformance|customer|voice|US/i);
   });
 
+  it("says why a fresher with average English has no opening", () => {
+    const match = matchIntakeJobs(candidate({
+      workStatus: "FRESHER",
+      totalCompanies: 0,
+      englishCommunication: "AVERAGE",
+      dateOfBirth: "2000-06-12",
+    }), {
+      dispositionIds: [],
+      answers: {},
+      english: { rating: "Average", confidence: 0.8, evidence: ["very short answers"], samples: 10 },
+    });
+    expect(match.proposed).toBeNull();
+    expect(match.speakScript).toMatch(/average/i);
+    expect(match.speakScript).toMatch(/English/i);
+    expect(match.note).toMatch(/English/i);
+  });
+
   it("does not pitch when the candidate is not interested", () => {
     const match = matchIntakeJobs(candidate(), { dispositionIds: ["not_interested"], answers: {} });
     expect(match.proposed).toBeNull();

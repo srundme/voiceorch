@@ -208,9 +208,11 @@ export async function executeIntakeSubmit(ctx: IntakeToolContext): Promise<strin
     : [];
 
   if (!closed.pitchAllowed || points.length === 0) {
-    return note
-      ? `No matching opening for this candidate. ${note} Tell them the team will review their profile and call back, then end the call.`
-      : "No matching opening for this candidate. Tell them the team will review their profile and call back, then end the call.";
+    const say = (typeof match["speakScript"] === "string" && match["speakScript"].trim())
+      || (note
+        ? `${note} The team will review the profile and call back.`
+        : "I don't have an opening that matches what we captured. The team will review the profile and call back.");
+    return `SAY_BEFORE_HANGUP: ${say}\nSpeak that reason out loud now, in your own words. Do not call end_call until the candidate has heard why there is no opening.`;
   }
 
   // Recruiter facts, not labeled form rows. The first item is the opening hook
