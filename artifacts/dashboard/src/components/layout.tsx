@@ -1,5 +1,4 @@
 import React, { useState, useEffect, Component } from "react";
-import { ClipboardList } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useTheme } from "@/components/theme-provider";
 import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch";
@@ -129,7 +128,6 @@ const NAV_GROUPS: NavGroup[] = [
     group: "BUILD",
     items: [
       { name: "Agents", href: "/app/agents", icon: AgentIcon },
-      { name: "Intake", href: "/app/intake", icon: ClipboardList },
       { name: "Knowledge", href: "/app/knowledge-bases", icon: KnowledgeIcon },
       { name: "Memory", href: "/app/memory", icon: MemoryIcon },
       { name: "Squads", href: "/app/squads", icon: SquadsIcon },
@@ -171,7 +169,6 @@ const MANAGED_NAV_GROUPS: NavGroup[] = [
     group: "BUILD",
     items: [
       { name: "Agents", href: "/app/agents", icon: AgentIcon },
-      { name: "Intake", href: "/app/intake", icon: ClipboardList },
       { name: "Knowledge", href: "/app/knowledge-bases", icon: KnowledgeIcon },
     ],
   },

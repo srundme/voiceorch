@@ -62,7 +62,6 @@ import SchedulingBookingDetailPage from "@/pages/scheduling/Bookings";
 import SchedulingConferencingPage  from "@/pages/scheduling/Conferencing";
 import PublicBookingPage    from "@/pages/book/[slug]";
 import WebcallJoinPage      from "@/pages/join/[token]";
-import IntakeListPage       from "@/pages/intake/index";
 import IntakeFormPage       from "@/pages/intake/[token]";
 import PartnerPage          from "@/pages/partner";
 import PartnerClientPage    from "@/pages/partner-client";
@@ -630,9 +629,6 @@ function AppRoutes() {
         <Route path="/app/api-keys" component={ApiKeysTabPage} />
 
         <Route path="/app/test-simulator" component={TestSimulatorPage} />
-
-        {/* ── Candidate intake (live form filled by the agent on a call) ── */}
-        <Route path="/app/intake" component={IntakeListPage} />
 
         <Route component={NotFound} />
       </Switch>
