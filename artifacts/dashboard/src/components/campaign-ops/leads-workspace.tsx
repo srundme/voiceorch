@@ -3,16 +3,14 @@ import { customFetch } from "@workspace/api-client-react";
 import { Input } from "@/components/ui/input";
 import { TablePagination } from "@/components/table-pagination";
 import { EmptyState } from "@/components/empty-state";
-import { LeadFilterChips, LeadReportingTable } from "@/components/campaign-ops/lead-table";
+import { LeadReportingTable } from "@/components/campaign-ops/lead-table";
 import {
   ContactOutcomeHero,
   DispositionHero,
   ResultsFunnel,
   hasConfiguredOutcomes,
 } from "@/components/campaign-ops/disposition-hero";
-import { CallInspectorPanel } from "@/components/campaign-ops/call-inspector";
 import { LiveFloor } from "@/components/campaign-ops/live-floor";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import {
   WORK_LEAD_VIEWS,
@@ -49,8 +47,6 @@ export function CampaignLeadsWorkspace({
   const { toast } = useToast();
   const qc = useQueryClient();
   const [page, setPage] = useState(0);
-  const [selectedLead, setSelectedLead] = useState<CampaignReportingLead | null>(null);
-  const [mobileInspector, setMobileInspector] = useState(false);
   const filter = useMemo(() => {
     const parsed = parseLeadsSearch(search);
     return lockedBatchId ? { ...parsed, batchId: lockedBatchId } : parsed;
@@ -91,17 +87,6 @@ export function CampaignLeadsWorkspace({
       ),
     enabled: campaignId > 0,
   });
-
-  useEffect(() => {
-    const items = query.data?.items ?? [];
-    if (items.length === 0) {
-      setSelectedLead(null);
-      return;
-    }
-    if (!selectedLead || !items.some((l) => l.leadId === selectedLead.leadId)) {
-      setSelectedLead(items[0] ?? null);
-    }
-  }, [query.data, selectedLead]);
 
   function patchFilter(next: Partial<CampaignReportingFilter>, resetView?: boolean) {
     const merged: CampaignReportingFilter = {
@@ -164,13 +149,6 @@ export function CampaignLeadsWorkspace({
       await qc.invalidateQueries({ queryKey: ["campaign-lead-reporting-leads", campaignId] });
     } catch {
       toast({ title: "Could not cancel retry", variant: "destructive" });
-    }
-  }
-
-  function inspectLead(lead: CampaignReportingLead) {
-    setSelectedLead(lead);
-    if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1024px)").matches) {
-      setMobileInspector(true);
     }
   }
 
@@ -253,76 +231,49 @@ export function CampaignLeadsWorkspace({
           action={{ label: "Retry", onClick: () => void query.refetch() }}
         />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] gap-3 min-h-0 flex-1 overflow-hidden">
-          <div className="min-w-0 min-h-0 flex flex-col rounded-xl border border-border bg-card overflow-hidden">
-            <div className="shrink-0 px-3 py-2 border-b border-border flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-semibold tabular-nums mr-auto">
-                {query.data?.total ?? 0}{" "}
-                <span className="font-normal text-muted-foreground">{listLabel.toLowerCase()}</span>
-              </p>
-              <LeadFilterChips
-                views={WORK_LEAD_VIEWS}
-                active={filter.view ?? null}
-                onSelect={(id) =>
-                  patchFilter({
-                    view: id === "all" ? null : id,
-                    disposition: null,
-                    dispositionBucket: null,
-                  })
-                }
-              />
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input
-                  value={searchDraft}
-                  onChange={(e) => setSearchDraft(e.target.value)}
-                  placeholder="Search phone"
-                  className="h-8 w-40 pl-7 text-xs"
-                />
-              </div>
-            </div>
-            <div className="min-h-0 flex-1 overflow-auto">
-              <LeadReportingTable
-                campaignId={campaignId}
-                items={query.data?.items ?? []}
-                total={query.data?.total ?? 0}
-                loading={query.isLoading}
-                error={query.isError ? "The reporting API could not be reached." : null}
-                emptyView={filter.view}
-                selectedLeadId={selectedLead?.leadId}
-                onSelectLead={inspectLead}
-                onRetry={retryLead}
-                onCancelRetry={cancelRetry}
-                onRefresh={() => void query.refetch()}
+        <div className="min-w-0 min-h-0 flex-1 flex flex-col rounded-xl border border-border bg-card overflow-hidden">
+          <div className="shrink-0 px-3 py-2 border-b border-border flex items-center gap-2">
+            <p className="text-sm font-semibold tabular-nums mr-auto">
+              {query.data?.total ?? 0}{" "}
+              <span className="font-normal text-muted-foreground">{listLabel.toLowerCase()}</span>
+            </p>
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={searchDraft}
+                onChange={(e) => setSearchDraft(e.target.value)}
+                placeholder="Search phone"
+                className="h-8 w-44 pl-7 text-xs"
               />
             </div>
-            {(query.data?.total ?? 0) > 50 && (
-              <div className="shrink-0 border-t border-border px-3 py-2 overflow-x-auto">
-                <TablePagination
-                  page={page + 1}
-                  totalPages={Math.max(1, Math.ceil((query.data?.total ?? 0) / 50))}
-                  pageSize={50}
-                  totalItems={query.data?.total ?? 0}
-                  onPageChange={(p) => setPage(Math.max(0, p - 1))}
-                  onPageSizeChange={() => undefined}
-                />
-              </div>
-            )}
           </div>
-          <div className="hidden lg:flex min-h-0 h-full flex-col overflow-hidden">
-            <CallInspectorPanel campaignId={campaignId} lead={selectedLead} />
+          <div className="min-h-0 flex-1 overflow-auto">
+            <LeadReportingTable
+              campaignId={campaignId}
+              items={query.data?.items ?? []}
+              total={query.data?.total ?? 0}
+              loading={query.isLoading}
+              error={query.isError ? "The reporting API could not be reached." : null}
+              emptyView={filter.view}
+              onRetry={retryLead}
+              onCancelRetry={cancelRetry}
+              onRefresh={() => void query.refetch()}
+            />
           </div>
+          {(query.data?.total ?? 0) > 50 && (
+            <div className="shrink-0 border-t border-border px-3 py-2 overflow-x-auto">
+              <TablePagination
+                page={page + 1}
+                totalPages={Math.max(1, Math.ceil((query.data?.total ?? 0) / 50))}
+                pageSize={50}
+                totalItems={query.data?.total ?? 0}
+                onPageChange={(p) => setPage(Math.max(0, p - 1))}
+                onPageSizeChange={() => undefined}
+              />
+            </div>
+          )}
         </div>
       )}
-
-      <Sheet open={mobileInspector} onOpenChange={setMobileInspector}>
-        <SheetContent side="right" className="w-[min(100vw,420px)] sm:max-w-none p-0">
-          <SheetTitle className="sr-only">Call transcript and recording</SheetTitle>
-          <div className="h-full p-3">
-            <CallInspectorPanel campaignId={campaignId} lead={selectedLead} />
-          </div>
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }

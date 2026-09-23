@@ -18,7 +18,6 @@ function FilterPill({
   hint,
   selected,
   muted,
-  tone,
   onClick,
 }: {
   label: string;
@@ -26,28 +25,19 @@ function FilterPill({
   hint?: string;
   selected?: boolean;
   muted?: boolean;
-  /** Color hierarchy for call-status chips */
   tone?: "neutral" | "good" | "warn" | "bad";
   onClick: () => void;
 }) {
-  const toneIdle =
-    tone === "good"
-      ? "border-emerald-500/40 text-emerald-800 dark:text-emerald-300"
-      : tone === "warn"
-        ? "border-amber-500/40 text-amber-900 dark:text-amber-200"
-        : tone === "bad"
-          ? "border-rose-500/40 text-rose-900 dark:text-rose-200"
-          : "";
   return (
     <button
       type="button"
       data-on={selected ? "true" : "false"}
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-left transition-colors cursor-pointer shrink-0",
+        "inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors cursor-pointer shrink-0",
         selected
           ? "border-foreground bg-foreground text-background"
-          : cn("border-border bg-background hover:bg-muted/50", toneIdle),
+          : "border-border bg-background text-foreground hover:bg-muted/50",
         muted && !selected && "opacity-45",
       )}
     >
@@ -103,7 +93,6 @@ export function ResultsFunnel({
     {
       label: "Answered",
       value: f.answered,
-      accent: "text-emerald-700 dark:text-emerald-400",
       sub: rates ? `${rates.answerRatePct}%` : undefined,
     },
   ];
@@ -111,7 +100,6 @@ export function ResultsFunnel({
     steps.push({
       label: "Interested",
       value: f.interested,
-      accent: "text-emerald-700 dark:text-emerald-400",
       sub: rates ? `${rates.interestRatePct}%` : undefined,
     });
     steps.push({

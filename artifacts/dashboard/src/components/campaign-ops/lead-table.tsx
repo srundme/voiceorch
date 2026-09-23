@@ -18,7 +18,7 @@ import {
   OUTCOME_CARDS,
 } from "@/lib/campaign-lead-reporting";
 import { cn } from "@/lib/utils";
-import { MoreHorizontal, Phone, StickyNote, Headphones } from "lucide-react";
+import { MoreHorizontal, Phone, StickyNote } from "lucide-react";
 import { useState } from "react";
 import { DispositionBadge } from "@/components/campaign-ops/badges";
 
@@ -88,77 +88,88 @@ export function LeadReportingTable({
 
   return (
     <>
-      <div className="divide-y divide-border">
-        {items.map((lead) => {
-          const selected = selectedLeadId === lead.leadId;
-          const name = (lead.name || "").trim();
-          const showName = name && name.toLowerCase() !== "unknown";
-          return (
-            <div
-              key={lead.leadId}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 cursor-pointer",
-                selected ? "bg-muted" : "hover:bg-muted/40",
-              )}
-              onClick={() => onSelectLead?.(lead)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onSelectLead?.(lead);
-                }
-              }}
-              role="button"
-              tabIndex={0}
-            >
-              <div className={cn("w-1 self-stretch rounded-full shrink-0", selected ? "bg-foreground" : "bg-transparent")} />
-              <div className="min-w-0 flex-1 py-0.5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <p className="text-sm font-medium truncate tabular-nums">
-                    {showName ? name : lead.phone || "Unknown"}
-                  </p>
+      <table className="w-full text-sm border-collapse">
+        <thead className="sticky top-0 z-10 bg-card">
+          <tr className="border-b border-border text-left text-[11px] font-medium text-muted-foreground">
+            <th className="px-3 py-2 font-medium">Phone</th>
+            <th className="px-3 py-2 font-medium">Name</th>
+            <th className="px-3 py-2 font-medium">Status</th>
+            <th className="px-3 py-2 font-medium">Outcome</th>
+            <th className="px-3 py-2 font-medium text-right">Attempts</th>
+            <th className="px-3 py-2 font-medium">Retry</th>
+            <th className="px-2 py-2 w-10"><span className="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((lead) => {
+            const name = (lead.name || "").trim();
+            const showName = name && name.toLowerCase() !== "unknown";
+            const open = () => navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`);
+            return (
+              <tr
+                key={lead.leadId}
+                className={cn(
+                  "border-b border-border cursor-pointer",
+                  selectedLeadId === lead.leadId ? "bg-muted/60" : "hover:bg-muted/40",
+                )}
+                onClick={open}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    open();
+                  }
+                }}
+                tabIndex={0}
+              >
+                <td className="px-3 py-2.5 font-mono text-[13px] tabular-nums whitespace-nowrap">
+                  {lead.phone || "—"}
+                </td>
+                <td className="px-3 py-2.5 max-w-[12rem] truncate">
+                  {showName ? name : <span className="text-muted-foreground">—</span>}
+                </td>
+                <td className="px-3 py-2.5 whitespace-nowrap">
+                  <span className="text-foreground">
+                    {lead.contactState === "answered" ? "Answered" : "Not answered"}
+                  </span>
+                  {lead.lastAttemptStatus ? (
+                    <span className="text-muted-foreground"> · {attemptStatusLabel(lead.lastAttemptStatus)}</span>
+                  ) : null}
+                </td>
+                <td className="px-3 py-2.5">
                   <DispositionBadge
                     bucket={lead.dispositionBucket}
                     label={lead.disposition}
                     state={lead.dispositionState}
                   />
-                </div>
-                <p className="mt-0.5 text-[11px] text-muted-foreground truncate">
-                  {showName ? <span className="font-mono">{lead.phone}</span> : null}
-                  {showName && lead.phone ? " · " : ""}
-                  {lead.contactState === "answered" ? "Answered" : "Attempt"}
-                  {lead.lastAttemptStatus ? ` · ${attemptStatusLabel(lead.lastAttemptStatus)}` : ""}
-                  {showRetryQueue ? ` · ${formatRetryAt(lead.retryScheduledAt) ?? "retry"}` : ""}
-                </p>
-              </div>
-              <p className="text-xs tabular-nums text-muted-foreground shrink-0 w-10 text-right">
-                {formatDuration(lead.latestAnsweredDuration)}
-              </p>
-              {(lead.latestCallId != null || lead.latestAnsweredCallId != null) && (
-                <span
-                  className={cn(
-                    "shrink-0 text-muted-foreground",
-                    selected ? "text-foreground" : "opacity-60",
-                  )}
-                  title="Transcript & recording"
-                >
-                  <Headphones className="h-3.5 w-3.5" />
-                </span>
-              )}
-              <div onClick={(e) => e.stopPropagation()}>
-                <RowMenu
-                  lead={lead}
-                  campaignId={campaignId}
-                  onOpen={() => navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`)}
-                  onInspect={() => onSelectLead?.(lead)}
-                  onCall={() => openCall(lead)}
-                  onRetry={onRetry}
-                  onCancelRetry={onCancelRetry}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                  {lead.callAttempts}
+                  {lead.latestAnsweredDuration ? (
+                    <span className="text-muted-foreground/70"> · {formatDuration(lead.latestAnsweredDuration)}</span>
+                  ) : null}
+                </td>
+                <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">
+                  {lead.retryPending
+                    ? (formatRetryAt(lead.retryScheduledAt) ?? "Queued")
+                    : showRetryQueue
+                      ? "—"
+                      : ""}
+                </td>
+                <td className="px-1 py-1" onClick={(e) => e.stopPropagation()}>
+                  <RowMenu
+                    lead={lead}
+                    campaignId={campaignId}
+                    onOpen={open}
+                    onCall={() => openCall(lead)}
+                    onRetry={onRetry}
+                    onCancelRetry={onCancelRetry}
+                  />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
       <p className="sr-only">{total} leads</p>
       <CallDetailDrawer callId={callId} open={callId != null} onClose={() => setCallId(null)} />
     </>
@@ -169,7 +180,6 @@ function RowMenu({
   lead,
   campaignId,
   onOpen,
-  onInspect,
   onCall,
   onRetry,
   onCancelRetry,
@@ -177,7 +187,6 @@ function RowMenu({
   lead: CampaignReportingLead;
   campaignId: number;
   onOpen: () => void;
-  onInspect?: () => void;
   onCall: () => void;
   onRetry?: (leadId: number) => void;
   onCancelRetry?: (leadId: number) => void;
@@ -192,9 +201,6 @@ function RowMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={onOpen}>Open lead</DropdownMenuItem>
-        {onInspect && (
-          <DropdownMenuItem onClick={onInspect}>Listen & transcript</DropdownMenuItem>
-        )}
         {(lead.latestCallId != null || lead.latestAnsweredCallId != null) && (
           <DropdownMenuItem onClick={onCall} className="gap-2">
             <Phone className="h-3.5 w-3.5" /> Full call drawer
