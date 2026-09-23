@@ -30,6 +30,9 @@ describe("buildCompactGreetingPrompt", () => {
     const out = buildCompactGreetingPrompt(`${RETURNING_MEMORY}\n\n${SCRIPT}`, "ta-IN");
     expect(out).toContain("OPENING — RETURNING CALLER");
     expect(out).toContain("Skip the first-time welcome");
+    const named = buildCompactGreetingPrompt(`${RETURNING_MEMORY}\n\n${SCRIPT}`, "en-IN", false, { agentName: "Malar" });
+    expect(named).toContain("Never greet or address the caller as Malar");
+    expect(named).toContain("never add Madam");
     expect(out).not.toContain("Speak the GREETING / opening from CALL FLOW");
   });
 

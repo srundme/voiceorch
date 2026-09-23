@@ -131,13 +131,17 @@ export function buildCompactGreetingPrompt(
     "The agent/workspace display name is an internal label, NOT a company brand — never say " +
     `"thanks for calling <agent name>"` +
     (agentLabel ? ` (do not say "${agentLabel}" or a shortened form of it as the company).` : ".");
+  const ownNameRule = agentLabel
+    ? ` Your name is ${agentLabel}. Never greet or address the caller as ${agentLabel}, and never add Madam, Sir, or Ma'am because of your own name.`
+    : "";
   const returningCallerRule = isReturningCaller
     ? "[RETURNING CALLER] Skip the first-time welcome even if GREETING / FLOW tells you to speak it. " +
       "If CALLER MEMORY has a real person name, greet with that name in ONE short clause. " +
       "Otherwise greet briefly without introducing the company. " +
       "Do NOT recap previous bookings, slots, times, or call summaries in the opener — wait for them to speak. " +
       "Never use a relative-time word as a name (நாளைக்கு, tomorrow, today, yesterday). " +
-      "Reference ONLY facts explicitly written in the memory — never invent or infer details."
+      "Reference ONLY facts explicitly written in the memory — never invent or infer details." +
+      ownNameRule
     : "";
   if (fullSystemPrompt.length <= GREETING_FULL_PROMPT_MAX_CHARS) {
     // Full-prompt greeting: the model sees exactly what it sees on every

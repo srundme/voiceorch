@@ -772,7 +772,7 @@ const STALE_DAYS = 90;  // facts older than this get a stale marker
 export function injectEnhancedMemory(
   systemPrompt: string,
   ctx: CallerContext,
-  opts?: { suppressGenderFact?: boolean },
+  opts?: { suppressGenderFact?: boolean; agentName?: string | null },
 ): string {
   const { profile, facts, recentCalls } = ctx;
   // Persona whiplash guard: when the agent was repurposed since this caller's
@@ -784,7 +784,10 @@ export function injectEnhancedMemory(
 
   const lines: string[] = ["=== CALLER MEMORY ==="];
 
-  const namePart   = profile?.name ?? facts.find(f => f.key === "name")?.value ?? "unknown";
+  const rawName = profile?.name ?? facts.find(f => f.key === "name")?.value ?? "unknown";
+  const agentName = (opts?.agentName ?? "").trim();
+  const nameIsAgent = callerNameCollidesWithAgent(rawName, agentName);
+  const namePart = nameIsAgent ? "unknown" : rawName;
   const callCount  = profile?.callCount ?? 0;
 
   const headerParts: string[] = [`Name: ${namePart}`];
@@ -941,6 +944,12 @@ export function injectEnhancedMemory(
     "and use it exclusively for the rest of the call. The caller's self-stated name takes absolute " +
     "priority over the stored name shown above, which may belong to a previous caller on the same number.",
   );
+  if (agentName) {
+    lines.push(
+      `⚠️ YOUR NAME IS ${agentName}. That name is you, not the caller. Never greet or address the caller as ${agentName}. ` +
+      `Never add Madam, Sir, or Ma'am because of your own name.`,
+    );
+  }
   if (resumeDrop) {
     lines.push(
       "⚠️ IMPORTANT — RESUME, DO NOT RESTART: Your previous call with this caller ended abruptly (it dropped). " +
@@ -1541,6 +1550,8 @@ export async function updateCallerProfile(opts: {
    * multilingual (languageAutoDetect) agents; null/undefined = no-op.
    */
   explicitLanguageRequest?: string | null;
+  /** Agent display name. A stored or extracted caller name equal to this is discarded. */
+  agentName?: string | null;
 }): Promise<void> {
   const { agentId, history, llm, existing, callId, wasDropped = false, durationSeconds, callerNameInCall, callerNameLatchTier, personaHash, finalLanguage, explicitLanguageRequest } = opts;
   // Defense-in-depth: write under the SAME canonical key the read path uses.
@@ -1775,6 +1786,13 @@ export async function updateCallerProfile(opts: {
   // (e.g. caller says "I want the managed plan" → LLM mistakes "managed plan"
   // for their name). Applies the same structural check used for the real-time
   // regex latch so both paths agree on what counts as a plausible name.
+  if (extracted.name && callerNameCollidesWithAgent(extracted.name, opts.agentName)) {
+    logger.warn(
+      { agentId, phoneNumber, callId, rejectedName: extracted.name, agentName: opts.agentName },
+      "Caller memory: LLM-extracted name is the agent's own name — discarding",
+    );
+    extracted.name = null;
+  }
   if (extracted.name && !isPlausibleName(extracted.name)) {
     logger.warn(
       { agentId, phoneNumber, callId, rejectedName: extracted.name },
@@ -1981,7 +1999,14 @@ export async function updateCallerProfile(opts: {
       );
     }
   }
-  const newName    = extracted.name    || existing?.name    || null;
+  let newName    = extracted.name    || existing?.name    || null;
+  if (callerNameCollidesWithAgent(newName, opts.agentName)) {
+    logger.warn(
+      { agentId, phoneNumber, callId, rejectedName: newName, agentName: opts.agentName },
+      "Caller memory: stored name matches the agent name — clearing it",
+    );
+    newName = null;
+  }
   const newSummary = extracted.summary || (personaSwapped ? null : existing?.summary) || null;
 
   try {
@@ -2141,6 +2166,25 @@ const normalizeNameWord = (w: string): string =>
   w.toLowerCase().replace(/[^\p{L}\p{M}]/gu, "");
 
 /**
+ * True when a stored "caller" name is actually the agent's own name
+ * ("Malar" saved from "I am Malar", then greeted back as "Malar madam").
+ */
+export function callerNameCollidesWithAgent(
+  name: string | null | undefined,
+  agentName: string | null | undefined,
+): boolean {
+  const n = stripNameHonorifics(name ?? "").trim().toLowerCase();
+  const a = stripNameHonorifics(agentName ?? "").trim().toLowerCase();
+  if (!n || !a || n === "unknown") return false;
+  if (n === a) return true;
+  const aFirst = a.split(/\s+/)[0] ?? "";
+  const nFirst = n.split(/\s+/)[0] ?? "";
+  if (aFirst.length >= 3 && n === aFirst) return true;
+  if (nFirst.length >= 3 && a === nFirst) return true;
+  return false;
+}
+
+/**
  * Strips leading/trailing honorifics from a detected caller name
  * ("Karthik Madam" → "Karthik", "சார் கார்த்திக்" → "கார்த்திக்").
  * Returns "" when the candidate was ONLY honorifics (e.g. bare "Madam"),
@@ -2219,12 +2263,14 @@ export async function latchCallerName(opts: {
   transcript: string;
   existingName: string | null;
   callId: number;
+  agentName?: string | null;
 }): Promise<{ name: string; tier: NameLatchTier } | null> {
   const { agentId, transcript, existingName, callId } = opts;
   const phoneNumber = canonicalizeCallerKey(opts.phoneNumber) ?? opts.phoneNumber;
 
   const detected = detectNameLatch(transcript);
   if (!detected) return null;
+  if (callerNameCollidesWithAgent(detected.name, opts.agentName)) return null;
   if (detected.name.toLowerCase() === existingName?.toLowerCase()) return null;
 
   try {

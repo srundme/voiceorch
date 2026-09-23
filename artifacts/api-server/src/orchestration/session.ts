@@ -131,6 +131,7 @@ import {
   computeAgentPersonaHash,
   updateCallerProfile,
   latchCallerName,
+  callerNameCollidesWithAgent,
   latchCallerFact,
   detectCallbackRequest,
   type CallerProfile,
@@ -1127,6 +1128,7 @@ export async function createSession(params: {
     ) {
       agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtxResult, {
         suppressGenderFact: !agentConfig.genderDetectionEnabled,
+        agentName: agent.name,
       });
       {
         const _LNAMES: Record<string, string> = {
@@ -2625,7 +2627,9 @@ export async function createSession(params: {
     onVoicemailAction: () => { voicemailActionExecuted = true; },
     // Returning caller (>=1 prior completed call) → instant name opener (no greeting LLM).
     isReturningCaller: (callerProfileSnapshot?.callCount ?? 0) >= 1,
-    returningCallerName: callerProfileSnapshot?.name ?? null,
+    returningCallerName: callerNameCollidesWithAgent(callerProfileSnapshot?.name, agent.name)
+      ? null
+      : (callerProfileSnapshot?.name ?? null),
     callerMemoryLanguage:
       latchedFactsMap.get("language_pref")
       ?? callerProfileSnapshot?.preferredLanguage
@@ -2647,6 +2651,7 @@ export async function createSession(params: {
           transcript:   text,
           existingName: callerProfileSnapshot?.name ?? null,
           callId:       callRecord.id,
+          agentName:    agent.name,
         }).then((latched) => {
           if (latched && callerProfileSnapshot) {
             callerProfileSnapshot = { ...callerProfileSnapshot, name: latched.name };
@@ -4494,6 +4499,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   durationSeconds,
                   callerNameInCall:  session.callerNameLatchedThisCall,
                   callerNameLatchTier: session.callerNameLatchTier,
+                  agentName: ag?.name ?? null,
                   // Persona-swap invalidation only for solo agents — with a
                   // squad-shared owner record, member prompt hashes differ and
                   // would false-fire the swap wipe on every alternation.

@@ -23,6 +23,7 @@ import {
   NAME_PATTERNS,
   shouldLatchOverrideExtraction,
   injectEnhancedMemory,
+  callerNameCollidesWithAgent,
   isAbruptEnd,
   demoteResumeMemoryAfterOpening,
   type CallerProfile,
@@ -202,6 +203,36 @@ describe("injectEnhancedMemory — returning-caller opener (call 14351)", () => 
     });
     expect(out).not.toMatch(/naturally reference what you already know/);
     expect(out).toMatch(/Do NOT recap previous bookings/);
+  });
+
+  it("does not greet a returning caller by the agent's own name", () => {
+    expect(callerNameCollidesWithAgent("Malar", "Malar")).toBe(true);
+    expect(callerNameCollidesWithAgent("Malar Madam", "Malar")).toBe(true);
+    expect(callerNameCollidesWithAgent("Karthik", "Malar")).toBe(false);
+    const profile = {
+      id: 1,
+      agentId: 67,
+      phoneNumber: "917971543255",
+      name: "Malar",
+      summary: null,
+      callCount: 4,
+      lastCalledAt: new Date("2026-09-22"),
+      lastCallDropped: false,
+      lastCallDroppedAt: null,
+      predictedIntent: null,
+      riskScore: null,
+      sentimentTrend: null,
+      preferredLanguage: "en-IN",
+    } satisfies CallerProfile;
+    const out = injectEnhancedMemory("base prompt", {
+      profile,
+      facts: [],
+      recentCalls: [],
+    }, { agentName: "Malar" });
+    expect(out).toContain("Name: unknown");
+    expect(out).not.toContain("by name (Malar)");
+    expect(out).toContain("YOUR NAME IS Malar");
+    expect(out).toContain("Never add Madam");
   });
 });
 
