@@ -68,7 +68,7 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 type CampaignTab = PrimaryCampaignTab;
 
 const CAMPAIGN_TABS: { id: CampaignTab; label: string }[] = [
-  { id: "overview", label: "Results" },
+  { id: "overview", label: "Leads" },
   { id: "analytics", label: "Analytics" },
   { id: "settings", label: "Settings" },
 ];
