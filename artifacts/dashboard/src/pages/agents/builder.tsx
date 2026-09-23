@@ -2712,6 +2712,59 @@ function VoiceTab({ form }: { form: any }) {
       </BuilderPanel>
 
       <BuilderPanel
+        title="Model"
+        icon={<Brain />}
+        description="The language model that writes the reply"
+        bodyClassName="gap-3"
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <FormField control={form.control} name="llmProvider" render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel className="text-xs text-muted-foreground">Provider</FormLabel>
+              <Select value={field.value} onValueChange={(v) => {
+                field.onChange(v);
+                form.setValue("llmModel", "", { shouldDirty: true });
+                form.setValue("voiceStack", "classic", { shouldDirty: true });
+              }}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Select provider" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  {LLM_PROVIDERS.map(p => (
+                    <SelectItem key={p.value} value={p.value} className="text-sm">{p.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="llmModel" render={({ field }) => {
+            const provider = (form.watch("llmProvider") as string) ?? "";
+            const options = llmModelsForPicker(provider, field.value);
+            const modelVal = field.value ?? "";
+            const modelSafe = modelVal && options.some((m) => m.value === modelVal) ? modelVal : undefined;
+            return (
+              <FormItem className="space-y-1">
+                <FormLabel className="text-xs text-muted-foreground">Model</FormLabel>
+                <Select value={modelSafe} onValueChange={(v) => {
+                  field.onChange(v);
+                  form.setValue("voiceStack", voiceStackForLlmModel(v), { shouldDirty: true });
+                }}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select model" />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    {options.map((m) => (
+                      <SelectItem key={m.value} value={m.value} className="text-sm">{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            );
+          }} />
+        </div>
+      </BuilderPanel>
+
+      <BuilderPanel
         title="Speaking"
         icon={<Volume2 />}
         description="Provider, voice, speed, and model"
