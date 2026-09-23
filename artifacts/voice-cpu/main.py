@@ -77,7 +77,7 @@ def _load_moonshine() -> None:
                 wanted_model_arch=ModelArch.TINY_STREAMING,
             )
             path = str(got_path)
-            arch = str(int(got_arch))
+            arch = got_arch
         except Exception as exc:
             _state["moonshine_error"] = f"moonshine download failed: {exc}"
             print(_state["moonshine_error"], flush=True)
@@ -87,12 +87,13 @@ def _load_moonshine() -> None:
         print(_state["moonshine_error"], flush=True)
         return
     try:
+        arch_enum = arch if isinstance(arch, ModelArch) else ModelArch(int(arch))
         _state["moonshine"] = {
             "factory": Transcriber,
             "path": path,
-            "arch": int(arch),
+            "arch": arch_enum,
         }
-        print(f"moonshine ready arch={arch} path={path}", flush=True)
+        print(f"moonshine ready arch={int(arch_enum)} path={path}", flush=True)
     except Exception as exc:
         _state["moonshine_error"] = str(exc)
         print(f"moonshine failed: {exc}", flush=True)
@@ -194,7 +195,13 @@ async def stt_socket(ws: WebSocket):
         await ws.send_json({"error": _state["moonshine_error"] or "moonshine not loaded"})
         await ws.close()
         return
-    transcriber = spec["factory"](model_path=spec["path"], model_arch=spec["arch"])
+    try:
+        transcriber = spec["factory"](model_path=spec["path"], model_arch=spec["arch"])
+    except Exception as exc:
+        print(f"moonshine transcriber failed: {exc}", flush=True)
+        await ws.send_json({"error": str(exc)})
+        await ws.close()
+        return
     lines: list[dict] = []
 
     class Listener:
