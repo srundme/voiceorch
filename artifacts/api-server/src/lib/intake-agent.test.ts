@@ -284,12 +284,12 @@ describe("intake prompt", () => {
     expect(spoken).toContain("schedule_callback");
   });
 
-  it("redials on a drop and locks Call Engine Patient turn-taking", () => {
+  it("redials on a drop and locks Call Engine Balanced turn-taking", () => {
     expect(INTAKE_LOCKED_AGENT_CONFIG.autoRedial.enabled).toBe(true);
-    expect(INTAKE_LOCKED_AGENT_CONFIG.wordsForInterruption).toBe(4);
-    expect(INTAKE_LOCKED_AGENT_CONFIG.sarvamHighVadSensitivity).toBe(false);
-    expect(INTAKE_LOCKED_AGENT_CONFIG.sarvamEndOfSpeechSilenceMs).toBe(700);
-    expect(INTAKE_LOCKED_AGENT_CONFIG.semanticTurnStopMs).toBe(1800);
+    expect(INTAKE_LOCKED_AGENT_CONFIG.wordsForInterruption).toBe(2);
+    expect(INTAKE_LOCKED_AGENT_CONFIG.sarvamHighVadSensitivity).toBe(true);
+    expect(INTAKE_LOCKED_AGENT_CONFIG.sarvamEndOfSpeechSilenceMs).toBe(400);
+    expect(INTAKE_LOCKED_AGENT_CONFIG.semanticTurnStopMs).toBe(1200);
   });
 
   it("covers reply latency with a single Okay backchannel", () => {

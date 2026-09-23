@@ -171,6 +171,8 @@ export async function executeIntakeDisposition(
     parts.push(
       `Still open: ${questions.join("; ")}. Work these into the conversation one at a time in your own words, then send them back through set_disposition using the dotted key.`,
     );
+  } else if (current.status === "completed") {
+    parts.push("The opening was already pitched. Do not call finish_intake again and do not say there is no opening. Confirm the next step, say goodbye, then end_call.");
   } else {
     const cue = cueFor(current);
     parts.push(`Every outcome question is answered. ${speakNext(cue.instruction)}`);
@@ -192,6 +194,15 @@ export async function executeIntakeSubmit(ctx: IntakeToolContext): Promise<strin
   if (!form) return "The form is not available right now. Keep talking to the candidate and try again.";
 
   const fresh = (await loadIntakeByToken(form.publicToken)) ?? form;
+  if (fresh.status === "completed") {
+    const prior = intakeExtraOf(fresh).match ?? {};
+    const priorPoints = Array.isArray(prior["talkingPoints"])
+      ? prior["talkingPoints"].filter((p: unknown): p is string => typeof p === "string" && p.trim().length > 0)
+      : [];
+    if (priorPoints.length > 0) {
+      return "ALREADY_PITCHED: The opening was already pitched on this call. Do not pitch it again and do not say there is no opening. Confirm the next step, say goodbye, then end_call.";
+    }
+  }
   const cue = cueFor(fresh);
   if (!cue.canFinish) {
     return `Not ready to close. Screening is not complete. ${speakNext(cue.instruction)}`;

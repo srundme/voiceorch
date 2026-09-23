@@ -202,7 +202,7 @@ router.get("/admin/intake-agents/options", requireAdmin, async (_req, res): Prom
         language: INTAKE_LOCKED_STACK.asrLanguage,
         telephonyProvider: INTAKE_LOCKED_STACK.telephonyProvider,
         wordsForInterruption: INTAKE_LOCKED_AGENT_CONFIG.wordsForInterruption,
-        callFeel: "patient",
+        callFeel: "balanced",
         backchannel: INTAKE_LOCKED_STACK.backchannelPhrases,
       },
       phoneNumbers: numbers.map((n) => ({

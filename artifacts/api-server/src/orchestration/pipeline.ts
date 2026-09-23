@@ -1529,6 +1529,8 @@ export class OrchestrationPipeline implements VoiceSession {
   private _currentTurnPlayedSentences: string[] = [];
   /** Spoken when finish_intake finds no JD. Played on end_call if this turn never said it. */
   private _intakeUnspokenClose: string | null = null;
+  /** A JD was already pitched on this call. Hangup must not say there is no opening. */
+  private _intakeMatchedThisCall = false;
   private _interruptionHint: string | null = null;
   /** Text of the sentence currently draining via playJob — used when barge-in cuts mid-sentence. */
   private _activePlaybackText: string | null = null;
@@ -8218,7 +8220,10 @@ export class OrchestrationPipeline implements VoiceSession {
     } else if (tool.type === "intake_submit") {
       const submitted = await executeIntakeSubmit(this.intakeToolContext());
       const marker = "SAY_BEFORE_HANGUP: ";
-      if (submitted.startsWith(marker)) {
+      if (submitted.startsWith("Form closed.") || submitted.startsWith("ALREADY_PITCHED:")) {
+        this._intakeMatchedThisCall = true;
+        this._intakeUnspokenClose = null;
+      } else if (submitted.startsWith(marker) && !this._intakeMatchedThisCall) {
         this._intakeUnspokenClose = submitted.slice(marker.length).split("\n")[0]?.trim() || null;
       }
       return submitted;
@@ -8401,7 +8406,9 @@ export class OrchestrationPipeline implements VoiceSession {
         return;
       }
       const goodbye = this._intakeUnspokenClose
-        ?? "I don't have an opening that matches what we captured. The team will review your profile and call you back. Thank you for your time.";
+        ?? (this._intakeMatchedThisCall
+          ? "Alright, the team will call you about that opening. Thank you for your time."
+          : defaultGoodbyeMessage(this.agent.language ?? this.currentLang));
       this._intakeUnspokenClose = null;
       this.conversationHistory.appendAssistant(goodbye);
       this.config.onTranscript("agent", goodbye);

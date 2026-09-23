@@ -188,22 +188,22 @@ export const INTAKE_LOCKED_STACK = {
 export const INTAKE_BACKCHANNEL_FILLERS = ["Okay."] as const;
 
 /**
- * Call Engine **Patient** (dashboard Sound tab). Intake collects spelled
- * pincodes and Gmail IDs — Fast/3-word barge cuts those mid-utterance
- * (calls 25241 / 25244). Session overlays this on every intake call so a
- * stale DB row cannot keep the snappy knobs.
+ * Call Engine **Balanced**. Patient (700ms end-of-speech, 1.8s turn stop,
+ * 4-word barge) made intake replies feel late. Balanced still waits a beat
+ * for a pincode or a spelled email without the Patient pause.
  */
 export const INTAKE_LOCKED_AGENT_CONFIG = {
-  wordsForInterruption: 4,
-  asrEndpointingSilenceMs: 500,
-  sarvamHighVadSensitivity: false,
-  sarvamEndOfSpeechSilenceMs: 700,
-  sarvamFirstTurnMinSpeechMs: 350,
-  sarvamVadThreshold: 0.35,
+  wordsForInterruption: 2,
+  asrEndpointingSilenceMs: 250,
+  linearDelayMs: 0,
+  sarvamHighVadSensitivity: true,
+  sarvamEndOfSpeechSilenceMs: 400,
+  sarvamFirstTurnMinSpeechMs: 250,
+  sarvamVadThreshold: 0.3,
   sarvamSpeechEndFlushMs: 0,
   sarvamIncompleteHoldMs: 0,
-  semanticTurnStopMs: 1800,
-  stopSpeakingPlan: { numWords: 4, voiceSeconds: 0.6, backOffSeconds: 1 },
+  semanticTurnStopMs: 1200,
+  stopSpeakingPlan: { numWords: 2, voiceSeconds: 0.3, backOffSeconds: 1 },
   autoSwitchToEnglish: false,
   isMultilingual: false,
   summarizationEnabled: true,
