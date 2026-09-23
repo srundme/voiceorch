@@ -304,19 +304,31 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
         socket.destroy();
         return;
       }
-      // Owner connects directly. A managing partner may also Live-Test a
-      // managed client's agent — the call then runs on the CLIENT's account
-      // (billing + call logs), mirroring the share-link guest path.
+      // Owner connects directly. A teammate with write access on the same
+      // workspace can Live-Test too — the builder already lets them edit the
+      // agent. A managing partner may test a managed client's agent. In both
+      // cases the call is billed to the agent owner.
       let effectiveUserId: string | null = null;
       if (agentRow?.userId === payload.sub) {
         effectiveUserId = payload.sub;
       } else if (agentRow?.userId) {
         try {
-          const { getManagingPartner } = await import("./middlewares/clientContext.js");
-          const mp = await getManagingPartner(agentRow.userId);
-          if (mp && mp.partnerUserId === payload.sub) effectiveUserId = agentRow.userId;
+          const { resolveWorkspaceScope } = await import("./services/workspace-scope.js");
+          const scope = await resolveWorkspaceScope(payload.sub);
+          if (scope.canWrite && scope.userIds.includes(agentRow.userId)) {
+            effectiveUserId = agentRow.userId;
+          }
         } catch (err) {
-          logger.error({ err, agentId }, "Webcall upgrade — managing-partner lookup failed");
+          logger.error({ err, agentId }, "Webcall upgrade — workspace lookup failed");
+        }
+        if (!effectiveUserId) {
+          try {
+            const { getManagingPartner } = await import("./middlewares/clientContext.js");
+            const mp = await getManagingPartner(agentRow.userId);
+            if (mp && mp.partnerUserId === payload.sub) effectiveUserId = agentRow.userId;
+          } catch (err) {
+            logger.error({ err, agentId }, "Webcall upgrade — managing-partner lookup failed");
+          }
         }
       }
       if (!agentRow || !effectiveUserId) {
