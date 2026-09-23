@@ -160,7 +160,7 @@ def _load_tts() -> None:
         _state["voice"] = voice
         _state["tts_rate"] = rate
         _state["tts_error"] = note
-        print(f"pocket tts ready voice={voice_name} rate={rate}", flush=True)
+        print(f"pocket tts ready voice={voice_name} rate={rate} stream={hasattr(model, 'generate_audio_stream')}", flush=True)
     except Exception as exc:
         _state["tts_error"] = str(exc)
         print(f"pocket tts failed: {exc}", flush=True)
@@ -291,6 +291,15 @@ async def chat(body: dict):
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
+def _tts_chunks(model, voice, text):
+    """Yield waveform pieces as Pocket generates them."""
+    stream = getattr(model, "generate_audio_stream", None)
+    if stream is None:
+        yield model.generate_audio(voice, text)
+        return
+    yield from stream(voice, text, copy_state=True)
+
+
 @app.post("/tts")
 async def tts(body: dict):
     model = _state["tts"]
@@ -302,12 +311,17 @@ async def tts(body: dict):
         return JSONResponse({"error": "text required"}, status_code=400)
 
     def generate():
-        with _lock:
-            audio = model.generate_audio(voice, text)
-        pcm = _to_pcm16_16k(np.asarray(audio), int(_state["tts_rate"]))
+        pending = bytearray()
         frame = 640  # 20 ms at 16 kHz, 16-bit mono
-        for i in range(0, len(pcm), frame):
-            yield pcm[i : i + frame]
+        rate = int(_state["tts_rate"])
+        with _lock:
+            for chunk in _tts_chunks(model, voice, text):
+                pending.extend(_to_pcm16_16k(np.asarray(chunk), rate))
+                while len(pending) >= frame:
+                    yield bytes(pending[:frame])
+                    del pending[:frame]
+        if pending:
+            yield bytes(pending)
 
     return StreamingResponse(generate(), media_type="application/octet-stream")
 
