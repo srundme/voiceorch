@@ -46,6 +46,11 @@ describe("normalizeIntakeField", () => {
     expect(normalizeIntakeField("dateOfBirth", "20 July 2000")).toEqual({ ok: true, value: "2000-07-20" });
     expect(normalizeIntakeField("dateOfBirth", "20th Jul 2000")).toEqual({ ok: true, value: "2000-07-20" });
     expect(normalizeIntakeField("dateOfBirth", "July 20, 2000")).toEqual({ ok: true, value: "2000-07-20" });
+    expect(normalizeIntakeField("dateOfBirth", "20 July two thousand")).toEqual({ ok: true, value: "2000-07-20" });
+    expect(normalizeIntakeField("dateOfBirth", "July twentieth, nineteen ninety eight")).toEqual({
+      ok: true,
+      value: "1998-07-20",
+    });
     expect(normalizeIntakeField("dateOfBirth", "31/02/2000")).toMatchObject({ ok: false });
     expect(normalizeIntakeField("dateOfBirth", "20/07/2099")).toMatchObject({ ok: false });
   });
@@ -53,6 +58,8 @@ describe("normalizeIntakeField", () => {
   it("accepts either work status spelling", () => {
     expect(normalizeIntakeField("workStatus", "fresher")).toEqual({ ok: true, value: "FRESHER" });
     expect(normalizeIntakeField("workStatus", "Experienced")).toEqual({ ok: true, value: "EXPERIENCED" });
+    expect(normalizeIntakeField("workStatus", "I am a fresher")).toEqual({ ok: true, value: "FRESHER" });
+    expect(normalizeIntakeField("workStatus", "I have experience")).toEqual({ ok: true, value: "EXPERIENCED" });
     expect(normalizeIntakeField("workStatus", "maybe")).toMatchObject({ ok: false });
   });
 
@@ -66,6 +73,7 @@ describe("normalizeIntakeField", () => {
 
   it("upper-cases city names the way the client's form shows them", () => {
     expect(normalizeIntakeField("city", "bengaluru")).toEqual({ ok: true, value: "BENGALURU" });
+    expect(normalizeIntakeField("city", "I live in Bangalore")).toEqual({ ok: true, value: "BANGALORE" });
     expect(normalizeIntakeField("jobCity", " Hyderabad ")).toEqual({ ok: true, value: "HYDERABAD" });
   });
 
@@ -97,7 +105,9 @@ describe("normalizeIntakeField", () => {
       value: "POST_GRADUATE",
     });
     expect(normalizeIntakeField("qualification", "pg")).toEqual({ ok: true, value: "POST_GRADUATE" });
+    expect(normalizeIntakeField("qualification", "I'm a graduate")).toEqual({ ok: true, value: "GRADUATE" });
     expect(normalizeIntakeField("shiftBase", "US Shift")).toEqual({ ok: true, value: "US" });
+    expect(normalizeIntakeField("shiftBase", "I can do the US shift")).toEqual({ ok: true, value: "US" });
     expect(normalizeIntakeField("shiftBase", "any shift")).toEqual({ ok: true, value: "ANY" });
     expect(normalizeIntakeField("shiftBase", "night shift only")).toEqual({ ok: true, value: "NIGHT_ONLY" });
     expect(normalizeIntakeField("shiftBase", "rotational")).toEqual({ ok: true, value: "ROTATIONAL" });

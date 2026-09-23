@@ -47,6 +47,7 @@ import {
   INTAKE_LOCKED_AGENT_CONFIG,
   buildIntakeSttPrompt,
   buildIntakeSystemPrompt,
+  intakeAgentTools,
   intakeCartesiaVoiceId,
 } from "../lib/intake-agent.js";
 import {
@@ -406,8 +407,25 @@ export async function createSession(params: {
     ? agent.endCallPhrases.split(",").map(s => s.trim()).filter(Boolean)
     : [];
 
+  // A renamed or stripped Irfan row still has to run the intake form.
+  if (agent.agentType !== INTAKE_AGENT_TYPE && /^irfan\b/i.test(agent.name ?? "")) {
+    agent.agentType = INTAKE_AGENT_TYPE;
+    void db.update(agentsTable).set({ agentType: INTAKE_AGENT_TYPE }).where(eq(agentsTable.id, agent.id)).catch((err) => {
+      logger.warn({ err, agentId: agent.id }, "intake: could not restore agent type");
+    });
+  }
+
   // Parse tools JSON column (null-safe, type-cast to AgentTool[])
   let tools = Array.isArray(agent.tools) ? (agent.tools as unknown as AgentTool[]) : [];
+  if (agent.agentType === INTAKE_AGENT_TYPE && !tools.some((tool) => tool.type.startsWith("intake_"))) {
+    tools = intakeAgentTools();
+    void db.update(agentsTable).set({
+      tools: intakeAgentTools() as unknown as Record<string, unknown>[],
+      systemPrompt: buildIntakeSystemPrompt(agent.name),
+    }).where(eq(agentsTable.id, agent.id)).catch((err) => {
+      logger.warn({ err, agentId: agent.id }, "intake: could not restore intake tools");
+    });
+  }
 
   // Read agentConfig JSONB for advanced settings — normalize legacy snappy Sarvam/engine
   // defaults so existing agents get patient STT without requiring a one-off DB migrate.

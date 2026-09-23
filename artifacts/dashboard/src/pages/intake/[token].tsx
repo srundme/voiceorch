@@ -32,6 +32,20 @@ import {
 } from "./intake-contract";
 import { useIntakeLive } from "./use-intake-live";
 
+const REQUIREMENT_ROWS: ReadonlyArray<{
+  key: "servingNotice" | "wantsWfh" | "needsWeekendOff" | "hasCareerGap" | "otherDomain" | "missingEduDocs" | "missingExpDocs";
+  label: string;
+  when: "always" | "experienced";
+}> = [
+  { key: "servingNotice", label: "Serving notice?", when: "experienced" },
+  { key: "hasCareerGap", label: "Career gap?", when: "experienced" },
+  { key: "otherDomain", label: "Experience outside voice / BPO?", when: "experienced" },
+  { key: "missingExpDocs", label: "Missing experience letters?", when: "experienced" },
+  { key: "missingEduDocs", label: "Missing education documents?", when: "always" },
+  { key: "wantsWfh", label: "Needs work from home?", when: "always" },
+  { key: "needsWeekendOff", label: "Must have Saturday–Sunday off?", when: "always" },
+];
+
 const PROFILE_ROWS: ReadonlyArray<[label: string, key: string]> = [
   ["Name", "name"],
   ["Mobile", "phone"],
@@ -924,6 +938,52 @@ export default function IntakeFormPage() {
 
         <SectionCard
           icon={<ClipboardList className="h-4 w-4 text-indigo-700" />}
+          title="Requirements"
+          subtitle="These have to be answered before the job description is pitched"
+        >
+          <div className="grid grid-cols-1 gap-x-6 gap-y-5 px-4 py-6 md:grid-cols-2 md:px-5">
+            {REQUIREMENT_ROWS.filter((row) => row.when === "always" || intake.fields.workStatus === "EXPERIENCED").map((row) => {
+              const current = intake.screen?.[row.key] ?? null;
+              return (
+                <div key={row.key} className="flex flex-col gap-1.5">
+                  <p className="text-[12.5px] font-medium text-slate-700">{row.label}</p>
+                  <div className="flex gap-2">
+                    {(["yes", "no"] as const).map((choice) => {
+                      const on = current === choice;
+                      return (
+                        <button
+                          key={choice}
+                          type="button"
+                          disabled={Boolean(saving[row.key]) || isCompleted}
+                          onClick={() => void writeExtra(row.key, choice)}
+                          className={cn(
+                            "rounded-full border px-3 py-1.5 text-[12.5px] font-medium capitalize transition disabled:opacity-60",
+                            on
+                              ? "border-indigo-500 bg-indigo-600 text-white"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300",
+                          )}
+                        >
+                          {choice}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {fieldErrors[row.key] ? (
+                    <p className="text-[11.5px] font-medium text-red-600">{fieldErrors[row.key]}</p>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+          <p className="border-t border-slate-100 px-4 py-3 text-[12.5px] text-slate-600 md:px-5">
+            {intake.pitchReady
+              ? "Requirements are in. Close the form to pitch the matched job description."
+              : `Still required: ${(intake.waitingOn ?? []).join(", ") || "the fields marked above"}`}
+          </p>
+        </SectionCard>
+
+        <SectionCard
+          icon={<ClipboardList className="h-4 w-4 text-indigo-700" />}
           title="Dispositions"
           subtitle="A candidate can have more than one — tick every outcome that applies"
         >
@@ -1063,9 +1123,9 @@ export default function IntakeFormPage() {
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-[11.5px] text-slate-400">
-            {intake.missingFields.length === 0 && (intake.missingDispositionFields?.length ?? 0) === 0
-              ? "All call fields captured."
-              : `Still to capture: ${intake.missingFields.length + (intake.missingDispositionFields?.length ?? 0)}`}
+            {intake.pitchReady
+              ? "Ready to pitch the job description."
+              : `Still required: ${(intake.waitingOn ?? []).length}`}
           </p>
           <div className="flex items-center gap-3">
             {closeError ? <span className="text-[11.5px] text-red-600">{closeError}</span> : null}
@@ -1076,7 +1136,7 @@ export default function IntakeFormPage() {
               className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700"
             >
               {closing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isCompleted ? "Form closed" : "Close form"}
+              {isCompleted ? "Form closed" : intake.pitchReady ? "Close and pitch JD" : "Close form"}
             </Button>
           </div>
         </div>

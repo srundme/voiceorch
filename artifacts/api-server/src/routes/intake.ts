@@ -18,6 +18,7 @@ import {
   type IntakeExtra,
 } from "../lib/intake-dispositions.js";
 import { INTAKE_JOBS } from "../lib/intake-jobs.js";
+import { evaluateIntakeScreen } from "../lib/intake-screen.js";
 import {
   applyIntakeWrite,
   completeIntakeSession,
@@ -25,6 +26,7 @@ import {
   intakeExtraOf,
   intakeFormUrl,
   loadIntakeByToken,
+  resolveUserIntakeAgent,
 } from "../lib/intake-service.js";
 
 /**
@@ -89,6 +91,20 @@ export interface IntakeDto {
   pincode: string | null;
   lastCompany: string | null;
   tenure: string | null;
+  /** Parent yes/no answers that have to be in before a JD can be pitched. */
+  screen: {
+    servingNotice: "yes" | "no" | null;
+    wantsWfh: "yes" | "no" | null;
+    needsWeekendOff: "yes" | "no" | null;
+    hasCareerGap: "yes" | "no" | null;
+    otherDomain: "yes" | "no" | null;
+    missingEduDocs: "yes" | "no" | null;
+    missingExpDocs: "yes" | "no" | null;
+  };
+  /** Labels still blocking finish_intake. Empty means the requirements are in. */
+  waitingOn: string[];
+  /** True when the requirements are in and a JD may be pitched. */
+  pitchReady: boolean;
   updatedAt: string;
   createdAt: string;
 }
@@ -102,6 +118,8 @@ function toDto(row: CandidateIntake): IntakeDto {
     INTAKE_FIELD_KEYS.map((key) => [key, row[key] ?? null]),
   ) as Record<IntakeFieldKey, string | number | null>;
   const extra = extraOf(row);
+  const cue = evaluateIntakeScreen(row, extra);
+  const screen = extra.screen ?? {};
   return {
     token: row.publicToken,
     status: row.status,
@@ -132,6 +150,17 @@ function toDto(row: CandidateIntake): IntakeDto {
         : null),
     lastCompany: extra.screen?.lastCompany ?? null,
     tenure: extra.screen?.tenure ?? null,
+    screen: {
+      servingNotice: screen.servingNotice ?? null,
+      wantsWfh: screen.wantsWfh ?? null,
+      needsWeekendOff: screen.needsWeekendOff ?? null,
+      hasCareerGap: screen.hasCareerGap ?? null,
+      otherDomain: screen.otherDomain ?? null,
+      missingEduDocs: screen.missingEduDocs ?? null,
+      missingExpDocs: screen.missingExpDocs ?? null,
+    },
+    waitingOn: cue.waitingOn,
+    pitchReady: cue.pitchAllowed,
     updatedAt: row.updatedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
   };
@@ -150,9 +179,17 @@ router.post("/intake/sessions", requireAuth, async (req, res): Promise<void> => 
     return;
   }
   try {
+    const intakeAgent = await resolveUserIntakeAgent(userId!);
+    if (!intakeAgent) {
+      res.status(409).json({
+        error: "No Irfan intake agent on this workspace. Create one from Admin → Demos → Candidate Intake.",
+      });
+      return;
+    }
+    const agentId = intakeAgent.id;
     const row = await createIntakeSession({
       userId: userId!,
-      agentId: parsed.data.agentId ?? null,
+      agentId,
       callId: parsed.data.callId ?? null,
       phone: parsed.data.phone ?? null,
       jobCity: parsed.data.jobCity ?? null,
@@ -333,6 +370,19 @@ router.post("/intake/:token/complete", async (req, res): Promise<void> => {
     return;
   }
   try {
+    const existing = await loadByToken(token.data);
+    if (!existing) {
+      res.status(404).json({ error: "Intake form not found" });
+      return;
+    }
+    const cue = evaluateIntakeScreen(existing, extraOf(existing));
+    if (!cue.canFinish) {
+      res.status(409).json({
+        error: `Still required before the JD can be pitched: ${cue.waitingOn.join(", ")}`,
+        waitingOn: cue.waitingOn,
+      });
+      return;
+    }
     const result = await completeIntakeSession(token.data, parsed.data.englishCommunication);
     if (!result.row) {
       if (result.errors.length > 0) {

@@ -169,16 +169,66 @@ export function livesInBangalore(city: string | null | undefined, extra: IntakeE
   return isBangalorePlace(city);
 }
 
-export function parseScreenYesNo(raw: unknown): ScreenYesNo | null {
+function strictYesNo(raw: unknown): ScreenYesNo | null {
   const key = String(raw ?? "").toLowerCase().replace(/[^a-z]/g, "");
   if (!key) return null;
   if (/^(yes|y|true|yeah|yep|haan|ha|ok|okay|sure)$/.test(key)) return "yes";
   if (/^(no|n|false|nah|nope)$/.test(key)) return "no";
+  return null;
+}
+
+export function parseScreenYesNo(raw: unknown): ScreenYesNo | null {
+  const strict = strictYesNo(raw);
+  if (strict) return strict;
+  const key = String(raw ?? "").toLowerCase().replace(/[^a-z]/g, "");
+  if (!key) return null;
   if (key.includes("not") && key.includes("notice")) return "no";
   if (key.includes("serving") || key.includes("notice")) return "yes";
   if (key.includes("office") && !key.includes("home")) return "no";
   if (key.includes("wfh") || key.includes("fromhome") || key.includes("workfromhome")) return "yes";
   return null;
+}
+
+/**
+ * Yes/no for one screening question. Bare yes/no always wins. A spoken
+ * sentence is read for that question only, so "I can come to office" does
+ * not get stored as serving notice.
+ */
+export function parseScreenFlag(key: ScreenFlagKey, raw: unknown): ScreenYesNo | null {
+  const strict = strictYesNo(raw);
+  if (strict) return strict;
+  const text = String(raw ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (!text) return null;
+
+  switch (key) {
+    case "wantsWfh":
+      if (/\b(wfh|work from home|from home)\b/.test(text) && !/\b(not|no|don't|dont)\b/.test(text)) return "yes";
+      if (/\boffice\b/.test(text) && !/\bhome\b/.test(text)) return "no";
+      return null;
+    case "needsWeekendOff":
+      if (/rotat|flexible week|any week/.test(text)) return "no";
+      if (/\b(saturday|sunday|weekend off|fixed weekend)\b/.test(text) && !/\b(no|not|don't|dont)\b/.test(text)) return "yes";
+      return null;
+    case "servingNotice":
+      if (/not serving|not on notice|no notice|haven't started|have not started/.test(text)) return "no";
+      if (/serving notice|on notice|notice period/.test(text)) return "yes";
+      return null;
+    case "hasCareerGap":
+      if (/no gap|no career gap|without a gap|continuous/.test(text)) return "no";
+      if (/career gap|gap of|took a gap|had a gap/.test(text)) return "yes";
+      return null;
+    case "otherDomain":
+      if (/other domain|non[- ]?voice|not voice|not bpo|not a bpo/.test(text)) return "yes";
+      if (/\b(voice|bpo|call cent(?:er|re))\b/.test(text)) return "no";
+      return null;
+    case "missingEduDocs":
+    case "missingExpDocs":
+      if (/can share|i have|have the|have my|available|will provide/.test(text)) return "no";
+      if (/cannot|can't|cant |don't have|dont have|do not have|missing|no document|no letter|no certificate/.test(text)) return "yes";
+      return null;
+    default:
+      return null;
+  }
 }
 
 function filled(v: unknown): boolean {

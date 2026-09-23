@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IntakeExtra } from "./intake-dispositions.js";
-import { evaluateIntakeScreen, isBangalorePlace, isBangalorePincode, nonHiringAreaForPincode, parseLastCompany, parsePincode, parseScreenYesNo, parseTenure } from "./intake-screen.js";
+import { evaluateIntakeScreen, isBangalorePlace, isBangalorePincode, nonHiringAreaForPincode, parseLastCompany, parsePincode, parseScreenFlag, parseScreenYesNo, parseTenure } from "./intake-screen.js";
 
 const emptyExtra = (): IntakeExtra => ({ dispositionIds: [], answers: {} });
 
@@ -106,6 +106,16 @@ describe("parseScreenYesNo", () => {
     expect(parseScreenYesNo("nope")).toBe("no");
     expect(parseScreenYesNo("work from office")).toBe("no");
     expect(parseScreenYesNo("I need WFH")).toBe("yes");
+  });
+
+  it("reads a spoken answer for that question only", () => {
+    expect(parseScreenFlag("wantsWfh", "I can come to the office")).toBe("no");
+    expect(parseScreenFlag("wantsWfh", "I need work from home")).toBe("yes");
+    expect(parseScreenFlag("servingNotice", "I am not serving notice")).toBe("no");
+    expect(parseScreenFlag("servingNotice", "I can come to the office")).toBeNull();
+    expect(parseScreenFlag("needsWeekendOff", "rotational week offs are fine")).toBe("no");
+    expect(parseScreenFlag("missingEduDocs", "I can share my certificates")).toBe("no");
+    expect(parseScreenFlag("otherDomain", "I have voice process experience")).toBe("no");
   });
 });
 

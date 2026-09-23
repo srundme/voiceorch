@@ -69,6 +69,17 @@ export interface IntakeDto {
   pincode: string | null;
   lastCompany: string | null;
   tenure: string | null;
+  screen: {
+    servingNotice: "yes" | "no" | null;
+    wantsWfh: "yes" | "no" | null;
+    needsWeekendOff: "yes" | "no" | null;
+    hasCareerGap: "yes" | "no" | null;
+    otherDomain: "yes" | "no" | null;
+    missingEduDocs: "yes" | "no" | null;
+    missingExpDocs: "yes" | "no" | null;
+  };
+  waitingOn: string[];
+  pitchReady: boolean;
   updatedAt: string;
   createdAt: string;
 }

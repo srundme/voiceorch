@@ -24,6 +24,15 @@ export type IntakeFlash = Record<string, number>;
 const FLASH_MS = 2_200;
 
 const EXTRA_SCREEN_KEYS = ["pincode", "lastCompany", "tenure"] as const;
+const SCREEN_FLAG_KEYS = [
+  "servingNotice",
+  "wantsWfh",
+  "needsWeekendOff",
+  "hasCareerGap",
+  "otherDomain",
+  "missingEduDocs",
+  "missingExpDocs",
+] as const;
 type ExtraScreenKey = (typeof EXTRA_SCREEN_KEYS)[number];
 
 function isExtraScreenKey(key: string): key is ExtraScreenKey {
@@ -218,6 +227,13 @@ export function useIntakeLive(token: string): UseIntakeLive {
           const next = value == null || value === "" ? null : String(value);
           lastExtraRef.current[key] = next;
           return { ...current, [key]: next };
+        }
+        if ((SCREEN_FLAG_KEYS as readonly string[]).includes(key)) {
+          const next = value === "yes" || value === "no" ? value : null;
+          return {
+            ...current,
+            screen: { ...current.screen, [key]: next },
+          };
         }
         if (key === "disposition") {
           // The whole outcome list arrives at once; answers for outcomes that

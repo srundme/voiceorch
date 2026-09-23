@@ -4,7 +4,7 @@
  * spoken to the agent are normalized, versioned and broadcast identically.
  */
 import crypto from "node:crypto";
-import { and, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { db, agentsTable, candidateIntakesTable, scheduledCallbacksTable, type CandidateIntake } from "@workspace/db";
 import { logger } from "./logger.js";
 import { getSelfBaseUrl } from "./app-domain.js";
@@ -21,6 +21,11 @@ import {
   type IntakeExtra,
 } from "./intake-dispositions.js";
 import { buildIntakeProfile, matchIntakeJobs } from "./intake-job-match.js";
+import {
+  INTAKE_AGENT_TYPE,
+  buildIntakeSystemPrompt,
+  intakeAgentTools,
+} from "./intake-agent.js";
 import { inferGenderFromName } from "./intake-gender.js";
 import {
   mergeRecruiterProfile,
@@ -38,7 +43,7 @@ import {
   nonHiringAreaForPincode,
   parseLastCompany,
   parsePincode,
-  parseScreenYesNo,
+  parseScreenFlag,
   parseTenure,
   type ScreenFlagKey,
 } from "./intake-screen.js";
@@ -92,6 +97,66 @@ export interface CreateIntakeInput {
   callId?: number | null;
   phone?: string | null;
   jobCity?: string | null;
+}
+
+function isIrfanName(name: string | null | undefined): boolean {
+  return /^irfan\b/i.test(name ?? "");
+}
+
+function toolsIncludeIntake(tools: unknown): boolean {
+  return Array.isArray(tools) && tools.some((tool) => {
+    if (!tool || typeof tool !== "object") return false;
+    const type = (tool as { type?: unknown }).type;
+    return typeof type === "string" && type.startsWith("intake_");
+  });
+}
+
+/**
+ * Irfan (or the workspace intake agent) must keep the fixed intake tool set.
+ * A save that drops those tools makes the form look created while the call
+ * never writes to it.
+ */
+async function persistIntakeStack(row: {
+  id: number;
+  name: string;
+  agentType: string | null;
+  tools: unknown;
+}): Promise<void> {
+  const typeOk = row.agentType === INTAKE_AGENT_TYPE;
+  const toolsOk = toolsIncludeIntake(row.tools);
+  if (typeOk && toolsOk) return;
+  await db
+    .update(agentsTable)
+    .set({
+      agentType: INTAKE_AGENT_TYPE,
+      tools: intakeAgentTools() as unknown as Record<string, unknown>[],
+      systemPrompt: buildIntakeSystemPrompt(row.name),
+    })
+    .where(eq(agentsTable.id, row.id));
+}
+
+/**
+ * The intake agent this workspace should open forms against.
+ * Prefers an agent named Irfan, then any intake agent, then a renamed Irfan
+ * whose type was cleared. Restores the intake stack when it was stripped.
+ */
+export async function resolveUserIntakeAgent(userId: string): Promise<{ id: number; name: string } | null> {
+  const rows = await db
+    .select({
+      id: agentsTable.id,
+      name: agentsTable.name,
+      agentType: agentsTable.agentType,
+      tools: agentsTable.tools,
+    })
+    .from(agentsTable)
+    .where(eq(agentsTable.userId, userId));
+
+  const pick = rows.find((row) => isIrfanName(row.name))
+    ?? rows.find((row) => row.agentType === INTAKE_AGENT_TYPE)
+    ?? null;
+  if (!pick) return null;
+  await persistIntakeStack(pick);
+  return { id: pick.id, name: pick.name };
 }
 
 export async function createIntakeSession(input: CreateIntakeInput): Promise<CandidateIntake | null> {
@@ -194,6 +259,10 @@ export async function ensureIntakeForCall(params: {
       eq(candidateIntakesTable.status, "in_progress"),
       isNull(candidateIntakesTable.callId),
       gt(candidateIntakesTable.createdAt, since),
+      or(
+        eq(candidateIntakesTable.agentId, params.agentId),
+        isNull(candidateIntakesTable.agentId),
+      ),
     ))
     .orderBy(desc(candidateIntakesTable.id))
     .limit(1);
@@ -290,6 +359,7 @@ export async function applyIntakeWrite(
   let tenureTouched = false;
   let tenureValue: string | null = null;
   let tenureError: string | null = null;
+  const screenErrors: FieldError[] = [];
   const restExtra: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(extraInput)) {
     if (key === "pincode" || key === "pinCode" || key === "pin") {
@@ -322,8 +392,11 @@ export async function applyIntakeWrite(
       continue;
     }
     if ((SCREEN_FLAG_KEYS as readonly string[]).includes(key)) {
-      const parsed = parseScreenYesNo(raw);
+      const parsed = parseScreenFlag(key as ScreenFlagKey, raw);
       if (parsed) screenPatch[key as ScreenFlagKey] = parsed;
+      else if (String(raw ?? "").trim()) {
+        screenErrors.push({ field: key, message: `${key} must be yes or no` });
+      }
       continue;
     }
     restExtra[key] = raw;
@@ -423,7 +496,7 @@ export async function applyIntakeWrite(
     }
   }
 
-  const errors = [...typedErrors, ...extraResult.errors];
+  const errors = [...typedErrors, ...screenErrors, ...extraResult.errors];
   const written = [...(Object.keys(values) as IntakeFieldKey[]), ...extraResult.written];
   if (written.length === 0) return { row: null, written: [], errors };
 

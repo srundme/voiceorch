@@ -160,8 +160,42 @@ function isoDate(year: number, month: number, day: number): string | null {
   return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+const SMALL_NUMBERS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9,
+};
+const TENS_NUMBERS: Record<string, number> = {
+  twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90,
+};
+const DAY_WORDS: Record<string, number> = {
+  first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9,
+  tenth: 10, eleventh: 11, twelfth: 12, thirteenth: 13, fourteenth: 14, fifteenth: 15,
+  sixteenth: 16, seventeenth: 17, eighteenth: 18, nineteenth: 19, twentieth: 20, thirtieth: 30,
+};
+
+/** "twentieth July two thousand" → "20 July 2000" so the date parsers can read it. */
+function expandSpokenDate(text: string): string {
+  let t = text.toLowerCase();
+  t = t.replace(/\b(twenty|thirty)\s+(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth)\b/g, (_, ten: string, one: string) => {
+    const base = ten === "twenty" ? 20 : 30;
+    return String(base + (SMALL_NUMBERS[one] ?? 0));
+  });
+  t = t.replace(/\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|thirtieth)\b/g, (word) => String(DAY_WORDS[word] ?? word));
+  t = t.replace(/\btwo thousand(?:\s+and)?(?:\s+(twenty|thirty))?(?:\s+(one|two|three|four|five|six|seven|eight|nine))?\b/g, (_, ten: string | undefined, one: string | undefined) => {
+    let year = 2000;
+    if (ten && TENS_NUMBERS[ten]) year += TENS_NUMBERS[ten];
+    if (one && SMALL_NUMBERS[one]) year += SMALL_NUMBERS[one];
+    return String(year);
+  });
+  t = t.replace(/\bnineteen\s+(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:\s+(one|two|three|four|five|six|seven|eight|nine))?\b/g, (_, ten: string, one: string | undefined) => {
+    let year = 1900 + (TENS_NUMBERS[ten] ?? 0);
+    if (one && SMALL_NUMBERS[one]) year += SMALL_NUMBERS[one];
+    return String(year);
+  });
+  return t;
+}
+
 function dateOfBirth(raw: unknown): IntakeFieldResult {
-  const text = collapse(raw).replace(/(\d+)(st|nd|rd|th)\b/gi, "$1");
+  const text = expandSpokenDate(collapse(raw)).replace(/(\d+)(st|nd|rd|th)\b/gi, "$1");
   let out: string | null = null;
 
   const ymd = text.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
@@ -195,6 +229,12 @@ function workStatus(raw: unknown): IntakeFieldResult {
   if (/^(experienced|experience|exp|working|working professional)$/.test(text)) {
     return ok("EXPERIENCED" satisfies IntakeWorkStatus);
   }
+  if (/\b(fresher|freshers)\b/.test(text) || /\bno experience\b/.test(text)) {
+    return ok("FRESHER" satisfies IntakeWorkStatus);
+  }
+  if (/\b(experienced|experience)\b/.test(text) || /\bworking professional\b/.test(text)) {
+    return ok("EXPERIENCED" satisfies IntakeWorkStatus);
+  }
   return bad("Work status must be Fresher or Experienced");
 }
 
@@ -212,9 +252,17 @@ function totalCompanies(raw: unknown): IntakeFieldResult {
   return ok(n);
 }
 
+const CITY_FILLER = new Set([
+  "i", "im", "am", "live", "living", "lives", "stay", "staying", "stays", "in", "at", "the",
+  "from", "city", "currently", "now", "a", "my", "home", "is", "its", "want", "to", "work",
+  "working", "based", "near",
+]);
+
 /** The client's form shows cities upper-cased (BENGALURU), so store them that way. */
 function cityName(raw: unknown, label: string): IntakeFieldResult {
-  const text = collapse(raw);
+  const spoken = collapse(raw);
+  const kept = spoken.split(" ").filter((word) => !CITY_FILLER.has(word.toLowerCase().replace(/[^a-z]/g, "")));
+  const text = kept.length > 0 ? kept.join(" ") : spoken;
   if (text.length > 80) return bad(`${label} is too long`);
   if (/[0-9]/.test(text)) return bad(`${label} cannot contain digits`);
   return ok(text.toUpperCase());
@@ -259,11 +307,12 @@ function lockedField(key: IntakeLockedKey, raw: unknown): IntakeFieldResult {
 }
 
 function qualification(raw: unknown): IntakeFieldResult {
-  const text = collapse(raw).toLowerCase().replace(/[^a-z]/g, "");
-  if (/^(postgraduate|postgraduation|pg|masters|master|mba|mtech)$/.test(text)) {
+  const spoken = collapse(raw).toLowerCase();
+  const text = spoken.replace(/[^a-z]/g, "");
+  if (/^(postgraduate|postgraduation|pg|masters|master|mba|mtech)$/.test(text) || /post\s*graduat/.test(spoken) || /\b(mba|masters?|mtech)\b/.test(spoken)) {
     return ok("POST_GRADUATE" satisfies IntakeQualification);
   }
-  if (/^(graduate|graduation|ug|bachelors|bachelor|degree)$/.test(text)) {
+  if (/^(graduate|graduation|ug|bachelors|bachelor|degree)$/.test(text) || /graduat|bachelor|\bdegree\b|\bug\b/.test(spoken)) {
     return ok("GRADUATE" satisfies IntakeQualification);
   }
   return bad("Qualification must be Graduate or Post Graduation");
@@ -293,12 +342,19 @@ const SHIFT_WORDS: Record<string, IntakeShiftBase> = {
 };
 
 function shiftBase(raw: unknown): IntakeFieldResult {
-  const key = collapse(raw).toLowerCase().replace(/[^a-z]/g, "");
+  const spoken = collapse(raw).toLowerCase();
+  const key = spoken.replace(/[^a-z]/g, "");
   const mapped = SHIFT_WORDS[key];
-  if (!mapped) {
-    return bad("Shift must be Any, Day, Night, UK, US, AUS, Domestic or Rotational");
-  }
-  return ok(mapped);
+  if (mapped) return ok(mapped);
+  if (/\b(us|u\.s\.|american)\b/.test(spoken) || spoken.includes("united states")) return ok("US");
+  if (/\b(uk|u\.k\.)\b/.test(spoken) || spoken.includes("united kingdom")) return ok("UK");
+  if (/\baus\b/.test(spoken) || spoken.includes("australia")) return ok("AUS");
+  if (/rotat/.test(spoken)) return ok("ROTATIONAL");
+  if (/domestic/.test(spoken)) return ok("DOMESTIC");
+  if (/night/.test(spoken)) return ok("NIGHT_ONLY");
+  if (/\bday\b/.test(spoken)) return ok("DAY_ONLY");
+  if (/\bany\b/.test(spoken)) return ok("ANY");
+  return bad("Shift must be Any, Day, Night, UK, US, AUS, Domestic or Rotational");
 }
 
 function dnd(raw: unknown): IntakeFieldResult {
