@@ -61,30 +61,30 @@ def _to_pcm16_16k(audio: np.ndarray, src_rate: int) -> bytes:
 
 def _load_moonshine() -> None:
     try:
-        from moonshine_voice import Transcriber
+        from moonshine_voice import ModelArch, Transcriber, get_model_for_language
     except Exception as exc:  # pragma: no cover
         _state["moonshine_error"] = f"moonshine-voice import failed: {exc}"
+        print(_state["moonshine_error"], flush=True)
         return
     path = (os.environ.get("MOONSHINE_MODEL_PATH") or "").strip()
     arch = (os.environ.get("MOONSHINE_MODEL_ARCH") or "").strip()
     if not path or not arch:
         try:
-            proc = subprocess.run(
-                ["python3", "-m", "moonshine_voice.download", "--language", "en"],
-                check=True,
-                capture_output=True,
-                text=True,
+            # Tiny streaming is the live-call model. The default download is the
+            # largest English model and is the wrong one for this CPU service.
+            got_path, got_arch = get_model_for_language(
+                "en",
+                wanted_model_arch=ModelArch.TINY_STREAMING,
             )
-            for line in (proc.stdout + "\n" + proc.stderr).splitlines():
-                if line.startswith("Model arch:"):
-                    arch = line.split(":", 1)[1].strip()
-                if line.startswith("Downloaded model path:"):
-                    path = line.split(":", 1)[1].strip()
+            path = str(got_path)
+            arch = str(int(got_arch))
         except Exception as exc:
             _state["moonshine_error"] = f"moonshine download failed: {exc}"
+            print(_state["moonshine_error"], flush=True)
             return
     if not path or not arch:
         _state["moonshine_error"] = "moonshine model path or arch missing"
+        print(_state["moonshine_error"], flush=True)
         return
     try:
         _state["moonshine"] = {
@@ -92,8 +92,10 @@ def _load_moonshine() -> None:
             "path": path,
             "arch": int(arch),
         }
+        print(f"moonshine ready arch={arch} path={path}", flush=True)
     except Exception as exc:
         _state["moonshine_error"] = str(exc)
+        print(f"moonshine failed: {exc}", flush=True)
 
 
 def _load_llm() -> None:
@@ -260,14 +262,23 @@ async def chat(body: dict):
 
     def generate():
         with _lock:
-            stream = llm.create_chat_completion(
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stream=True,
-                chat_template_kwargs={"enable_thinking": False},
-                **({"tools": tools, "tool_choice": tool_choice} if tools else {}),
-            )
+            kwargs = {
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "stream": True,
+                "chat_template_kwargs": {"enable_thinking": False},
+            }
+            if tools:
+                kwargs["tools"] = tools
+                kwargs["tool_choice"] = tool_choice
+            try:
+                stream = llm.create_chat_completion(**kwargs)
+            except TypeError as exc:
+                if "chat_template_kwargs" not in str(exc):
+                    raise
+                kwargs.pop("chat_template_kwargs", None)
+                stream = llm.create_chat_completion(**kwargs)
             for chunk in stream:
                 choice = (chunk.get("choices") or [{}])[0]
                 delta = choice.get("delta") or {}
