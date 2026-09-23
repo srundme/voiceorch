@@ -8,7 +8,9 @@ Env:
   PORT                 default 8090
   MOONSHINE_MODEL_PATH / MOONSHINE_MODEL_ARCH
   QWEN_GGUF_PATH or QWEN_GGUF_URL
-  POCKET_VOICE_WAV     6–10s Indian English clip. Precomputed on boot.
+  POCKET_VOICE         catalog voice, default alba (no Hugging Face login)
+  POCKET_VOICE_WAV     optional clip. Voice cloning needs a Hugging Face
+                       login on kyutai/pocket-tts; otherwise alba is used.
   QWEN_THREADS         llama.cpp threads (default 8)
 """
 
@@ -138,20 +140,28 @@ def _load_tts() -> None:
         return
     try:
         model = TTSModel.load_model(language="english")
+        voice_name = (os.environ.get("POCKET_VOICE") or "alba").strip() or "alba"
         wav = (os.environ.get("POCKET_VOICE_WAV") or "").strip()
+        voice = None
+        note = None
+        # A wav uses the gated voice-cloning weights. The catalog name does not.
         if wav and Path(wav).exists():
-            voice = model.get_state_for_audio_prompt(wav)
-        else:
-            voice = model.get_state_for_audio_prompt(
-                "hf://kyutai/tts-voices/alba-mackenna/casual.wav"
-            )
-            _state["tts_error"] = "POCKET_VOICE_WAV missing; using built-in English voice"
+            try:
+                voice = model.get_state_for_audio_prompt(wav)
+            except Exception as exc:
+                note = f"voice clip failed ({exc}); using catalog voice {voice_name}"
+                print(note, flush=True)
+        if voice is None:
+            voice = model.get_state_for_audio_prompt(voice_name)
         rate = int(getattr(model, "sample_rate", 24000) or 24000)
         _state["tts"] = model
         _state["voice"] = voice
         _state["tts_rate"] = rate
+        _state["tts_error"] = note
+        print(f"pocket tts ready voice={voice_name} rate={rate}", flush=True)
     except Exception as exc:
         _state["tts_error"] = str(exc)
+        print(f"pocket tts failed: {exc}", flush=True)
 
 
 @app.on_event("startup")
