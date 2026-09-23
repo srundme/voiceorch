@@ -387,6 +387,48 @@ const KB_TYPE_META: Record<string, { label: string; icon: React.ReactNode; color
   file:    { label: "File",    icon: <FileText className="w-3 h-3" />, color: "bg-amber-500/15 text-amber-400 border-amber-500/20" },
 };
 
+function AgentKnowledgePanel({ form }: { form: any }) {
+  const knowledgeIds = (form.watch("knowledgeSourceIds") ?? []) as number[];
+  return (
+    <BuilderPanel
+      title="Knowledge"
+      icon={<BookOpen />}
+      hint={
+        <span className="text-[10px] text-muted-foreground">
+          {knowledgeIds.length > 0
+            ? `${knowledgeIds.length} source${knowledgeIds.length === 1 ? "" : "s"}`
+            : "Optional"}
+        </span>
+      }
+      action={
+        <Link href="/app/knowledge-bases" className="text-[11px] font-medium text-muted-foreground hover:text-foreground">
+          Library →
+        </Link>
+      }
+    >
+      <p className="text-[12px] leading-relaxed text-muted-foreground">
+        Attach sources the agent looks up on live calls. Facts stay here, not in the call script.
+      </p>
+      <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
+        <FormItem className="mt-3 space-y-0">
+          <FormControl>
+            <KnowledgeSourceMultiSelect
+              value={(field.value ?? []) as number[]}
+              onChange={field.onChange}
+            />
+          </FormControl>
+          <FormMessage className="text-[10px]" />
+        </FormItem>
+      )} />
+      {knowledgeIds.length === 0 ? (
+        <p className="mt-auto pt-4 text-[11px] leading-relaxed text-muted-foreground">
+          Empty is fine. Attach a source when this agent should answer from your documents.
+        </p>
+      ) : null}
+    </BuilderPanel>
+  );
+}
+
 function KnowledgeSourceMultiSelect({ value, onChange }: {
   value: number[];
   onChange: (v: number[]) => void;
@@ -984,7 +1026,6 @@ function OverviewTab({
 
   const greetingMessage = String(form.watch("greetingMessage") ?? "").trim();
   const systemPrompt = String(form.watch("systemPrompt") ?? "").trim();
-  const knowledgeIds = (form.watch("knowledgeSourceIds") ?? []) as number[];
   const voiceReady = isGeminiLive
     ? true
     : Boolean(ttsVoice && ttsVoice !== "__custom__");
@@ -1116,37 +1157,7 @@ function OverviewTab({
                 />
               </BuilderPanel>
             )}
-            <BuilderPanel
-              title="Knowledge"
-              icon={<BookOpen />}
-              hint={
-                <span className="text-[10px] text-muted-foreground">
-                  {knowledgeIds.length > 0
-                    ? `${knowledgeIds.length} source${knowledgeIds.length === 1 ? "" : "s"}`
-                    : "Optional"}
-                </span>
-              }
-            >
-              <p className="text-[12px] leading-relaxed text-muted-foreground">
-                Contextual Knowledge on live calls — looks up facts when needed and stays on topic for follow-ups.
-              </p>
-              <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
-                <FormItem className="mt-3 space-y-0">
-                  <FormControl>
-                    <KnowledgeSourceMultiSelect
-                      value={(field.value ?? []) as number[]}
-                      onChange={field.onChange}
-                    />
-                  </FormControl>
-                  <FormMessage className="text-[10px]" />
-                </FormItem>
-              )} />
-              {knowledgeIds.length === 0 ? (
-                <p className="mt-auto pt-4 text-[11px] leading-relaxed text-muted-foreground">
-                  Empty is fine. Attach a source only if this agent should look things up on the call.
-                </p>
-              ) : null}
-            </BuilderPanel>
+            <AgentKnowledgePanel form={form} />
           </section>
 
           {agent?.id != null && (
@@ -1878,6 +1889,8 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
             : "Best for recruiting / sales flows with numbered stages. Your essay becomes Additional script."}
         </p>
       </BuilderPanel>
+
+      <AgentKnowledgePanel form={form} />
 
       <GeneratePromptSheet
         open={generateOpen}
