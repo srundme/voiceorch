@@ -5,6 +5,7 @@ import { SarvamTTS } from "./sarvam.js";
 import { OpenAITTS } from "./openai.js";
 import { AzureTTS } from "./azure.js";
 import { DeepgramTTS } from "./deepgram.js";
+import { PocketTTS } from "./pocket.js";
 import { STUB_PROVIDERS_ENABLED, createStubTTS } from "../stubs.js";
 
 export function createTTSAdapter(
@@ -34,6 +35,8 @@ export function createTTSAdapter(
     case "deepgram":
     case "deepgram_aura":
       return new DeepgramTTS(apiKey, voice);
+    case "pocket":
+      return new PocketTTS();
     default:
       throw new Error(`Unknown TTS provider: ${provider}`);
   }

@@ -12,6 +12,7 @@ import { UltravoxLLM } from "./ultravox.js";
 import { OpenRouterLLM } from "./openrouter.js";
 import { TogetherLLM } from "./together.js";
 import { KrutrimLLM } from "./krutrim.js";
+import { LocalCpuLLM } from "./local-cpu.js";
 import { STUB_PROVIDERS_ENABLED, createStubLLM } from "../stubs.js";
 
 export function createLLMAdapter(
@@ -53,6 +54,8 @@ export function createLLMAdapter(
       return new TogetherLLM(apiKey, model, genParams);
     case "krutrim":
       return new KrutrimLLM(apiKey, model, genParams);
+    case "qwen_cpu":
+      return new LocalCpuLLM(model, genParams);
     case "ultravox":
       // Ultravox is a multimodal speech-language model; its OpenAI-compatible
       // endpoint does not document a comparable text-generation temperature
