@@ -47,6 +47,20 @@ export function normalizePhone(raw: string, defaultCountryCode = "91"): string {
 }
 
 /**
+ * Number sent to the carrier. Sheet and CSV cells are often 10 digits with no
+ * country code — those become +91… India does not need +91 typed in the sheet.
+ * An already-correct +91… value is left as-is.
+ */
+export function toDialNumber(
+  stored: string | null | undefined,
+  raw: string | null | undefined,
+): string {
+  const candidate = (stored?.trim() || raw?.trim() || "");
+  if (!candidate) return "";
+  return normalizePhone(candidate);
+}
+
+/**
  * Extract the first name from a full name string.
  * "John Abraham Doe" → "john"
  */

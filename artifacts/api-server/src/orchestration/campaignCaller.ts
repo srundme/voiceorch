@@ -14,7 +14,7 @@ import { eq, and, sql, inArray } from "drizzle-orm";
 import { dialTwilio, dialPlivo, dialVobiz, resolveAmdConfig } from "./telephony/dial.js";
 import { decryptKey } from "../lib/crypto.js";
 import { logger } from "../lib/logger.js";
-import { normalizePhone } from "../lib/phone-normalize.js";
+import { toDialNumber } from "../lib/phone-normalize.js";
 import { isOnDnc } from "../lib/dnc-check.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
 import { scheduleRetry, scheduleRetryResult, resolveRetryConfig } from "../services/retryEngine.js";
@@ -106,9 +106,10 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
     return;
   }
 
-  // Normalize phone if not already done
-  const normalized = lead.normalizedPhone ?? normalizePhone(lead.phone);
-  if (!lead.normalizedPhone) {
+  // Sheet cells are usually 10 digits. Always rebuild E.164 so a stored
+  // 9940053444 is dialed as +919940053444, not handed to the carrier bare.
+  const normalized = toDialNumber(lead.normalizedPhone, lead.phone);
+  if (normalized && normalized !== lead.normalizedPhone) {
     await db.update(campaignLeadsTable)
       .set({ normalizedPhone: normalized })
       .where(eq(campaignLeadsTable.id, lead.id));
