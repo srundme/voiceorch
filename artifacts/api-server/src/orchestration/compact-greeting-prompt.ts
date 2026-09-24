@@ -89,7 +89,8 @@ export function buildCompactGreetingPrompt(
         "Do NOT invent a company or business purpose. Then stop and listen."
     : outbound
       ? "[FIRST-CONTACT UX] This is a phone call, not a demo. The caller must understand who is calling before hearing a pitch. " +
-        "Speak ONE short sentence only: your name/company exactly as scripted, a very brief reason for the call ONLY if that reason is written in the script, and ask permission to continue. " +
+        "Speak ONE short sentence only: hello, your name and company exactly as scripted, and ask permission to continue. " +
+        "Do NOT mention the product, funding, loan, price, or process in this first line. " +
         "Target 18 words or fewer when natural in this language. Do NOT list features, benefits, prices, or multiple questions. Then stop and listen."
       : "[FIRST-CONTACT UX] Speak ONE short sentence only: greet briefly, identify the company exactly as scripted when available, and ask how you can help. " +
         "Target 18 words or fewer when natural in this language. Do NOT list features or ask multiple questions. Then stop and listen.";

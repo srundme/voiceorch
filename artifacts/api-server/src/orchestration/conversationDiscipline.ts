@@ -31,7 +31,7 @@ export const CONVERSATION_DISCIPLINE_BLOCK =
 - NEVER REPEAT: Do not repeat a step, point, or benefit you have already delivered earlier in this conversation. Keep track of what you have already covered and only move forward. If the caller already answered (even briefly: "B2B", "start कर रहे हैं", "CRM integrations"), treat it as answered — do not re-ask the same qualification more than once.
 - COMPOUND TERMS: Treat "CRM integration(s)" as ONE requirement, not CRM plus a separate integration product. Confirm the combined term, then ask the next unanswered question.
 - EITHER/OR YES: If you asked B2B or B2C (or any two-option question) and the caller only says "हां"/"yes", re-ask ONLY those two options in one short sentence. Do not add a third choice.
-- AFTER INTERRUPTION: If your speech was cut off, resume from the unfinished sentence — never restart the opening, consent, or pitch from the top, and never ask whether the caller can hear you unless they said absolutely nothing.
+- AFTER INTERRUPTION: If your speech was cut off and the caller only made a sound, finish that point in different words — never restart the opening, consent, or pitch, and never ask whether they can hear you unless they said absolutely nothing. If they asked a question or stated a fact, answer that latest point in one new sentence. Do not start the cut sentence again from the words they already heard.
 - NO FALSE "CUT OFF": After you have already opened this call, NEVER say that you got cut off, that the previous call dropped, or that you lost the connection — unless the caller themselves says the line dropped just now. If the caller asks you to explain or clarify something (even with a mangled product name), answer that question directly; do not restart the pitch with an apology about a cut-off.
 - CLARIFY ≠ RESTART: Phrases like "what was that about", "about the …", "explain again", "tell me more" mean explain the last topic you covered — answer in 1–2 short sentences, then ask if that helps. Do not replay the full scripted intro.
 - CALLBACK TIME: If the caller said "tomorrow", "today", or a clock time, confirm with THAT wording ("okay, I'll call you tomorrow"). Never read a calendar date, month, or year unless they asked which date.
@@ -249,13 +249,35 @@ export function isBareAcknowledgement(text: string): boolean {
  *  - anything else → neutral do-not-repeat (respond to what was said).
  * `escalated` = a verbatim repeat was already detected this call.
  */
-export function buildAntiRepeatNudge(_opts: {
+/** True when two spoken lines are the same reply, including a barge-cut prefix. */
+export function isRepeatedAgentLine(current: string, previous: string): boolean {
+  const a = current.toLowerCase().replace(/[.,!?;:।…"'“”]/g, "").replace(/\s+/g, " ").trim();
+  const b = previous.toLowerCase().replace(/[.,!?;:।…"'“”]/g, "").replace(/\s+/g, " ").trim();
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length <= b.length ? b : a;
+  if (shorter.length >= 12 && longer.startsWith(shorter)) return true;
+  const left = a.split(" ").filter((w) => w.length > 1);
+  const right = new Set(b.split(" ").filter((w) => w.length > 1));
+  if (left.length < 3) return false;
+  const hit = left.filter((w) => right.has(w)).length;
+  return hit >= 3 && hit / left.length >= 0.6;
+}
+
+export function buildAntiRepeatNudge(opts: {
   lastUserText: string;
   prevLine: string;
   escalated: boolean;
   alreadyAsked?: string[];
 }): string {
-  return "";
+  if (!opts.escalated) return "";
+  const prev = opts.prevLine.trim().slice(0, 180);
+  if (!prev) return "";
+  if (isQuestionUtterance(opts.lastUserText)) {
+    return `[DO NOT REPEAT] You already said: "${prev}". The caller asked a question. Answer that question in one new sentence. Do not say those words again.`;
+  }
+  return `[DO NOT REPEAT] You already said: "${prev}". The caller heard it and spoke again. Answer what they just said in one new sentence. Do not say those words again.`;
 }
 
 /** Recent agent questions so the model cannot replay qualification (call 20113). */

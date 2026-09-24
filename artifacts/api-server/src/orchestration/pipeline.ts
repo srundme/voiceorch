@@ -15,7 +15,8 @@ import { buildScheduleCallbackSpeakInstruction } from "./spokenCallbackConfirm.j
 import { demoteResumeMemoryAfterOpening } from "./callerMemory.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
-import { buildAntiRepeatNudge, extractRecentAgentQuestions, isBareAcknowledgement, isQuestionUtterance } from "./conversationDiscipline.js";
+import { buildAntiRepeatNudge, extractRecentAgentQuestions, isBareAcknowledgement, isQuestionUtterance, isRepeatedAgentLine, makeFlowStepGuard } from "./conversationDiscipline.js";
+import { buildOpeningHandshakeNudge, humanizeOutboundOpener, OPENING_HANDSHAKE_MS } from "./opening-handshake.js";
 import {
   isCallerFarewellUtterance as isCallerFarewellUtteranceShared,
   isCallerClosingUtterance,
@@ -1068,6 +1069,11 @@ export class OrchestrationPipeline implements VoiceSession {
   private greetingPlaybackActive = false;
   /** First greeting clip only — leftover pitch is interruptible (call 20275). */
   private greetingFirstClipActive = false;
+  /**
+   * Outbound calls: until this timestamp, hello / சரி is not permission to
+   * start the script. 0 = handshake closed.
+   */
+  private openingHandshakeUntil = 0;
   /** After the opener: drop one stale final captured while Hello was on the wire. */
   private _discardInboundGreetingOverlapFinal = false;
   /** 600 ms echo grace from the first clip of this agent turn, not every sentence. */
@@ -1581,13 +1587,11 @@ export class OrchestrationPipeline implements VoiceSession {
   private normalizeForRepeat = (s: string): string =>
     s.toLowerCase().replace(/[.,!?;:।…]/g, "").replace(/\s+/g, " ").trim();
 
-  /** Update the repetition guard after the agent speaks. A verbatim (normalized)
-   *  match against the previous reply increments consecutiveRepeats so the next
-   *  turn's nudge escalates; anything new resets it. Always records the raw line. */
+  /** Update the repetition guard after the agent speaks. A verbatim line or a
+   *  barge-cut prefix of the previous line increments consecutiveRepeats so the
+   *  next turn's nudge escalates; anything new resets it. */
   private trackRepeat(spoken: string): void {
-    const norm     = this.normalizeForRepeat(spoken);
-    const prevNorm = this.normalizeForRepeat(this.lastAssistantSpokenRaw);
-    if (norm && norm === prevNorm) {
+    if (isRepeatedAgentLine(spoken, this.lastAssistantSpokenRaw)) {
       this.consecutiveRepeats++;
       logger.warn(
         { callId: this.config.callId, consecutiveRepeats: this.consecutiveRepeats, line: spoken.slice(0, 80) },
@@ -6070,6 +6074,14 @@ export class OrchestrationPipeline implements VoiceSession {
         let streamedHead = "";
         if (!this._greetingPrewarmReady && this._greetingFirstSentence) {
           streamedHead = (await this._greetingFirstSentence).trim();
+          if (
+            streamedHead
+            && this.callDirection === "outbound"
+            && !resumeDropped
+            && !handoffTakeover
+          ) {
+            streamedHead = humanizeOutboundOpener(streamedHead);
+          }
           if (streamedHead && isStubGreeting(streamedHead)) streamedHead = "";
           if (streamedHead && !this.closed && !this.bargeInRequested) {
             this.beginOpeningGreetingPlayback(streamedHead.length);
@@ -6196,6 +6208,21 @@ export class OrchestrationPipeline implements VoiceSession {
       }
 
       if (!welcomeAlreadySpoken && (this.closed || !greeting.trim())) return;
+      if (this.callDirection === "outbound" && !resumeDropped && !handoffTakeover) {
+        if (greeting.trim()) {
+          const shaped = humanizeOutboundOpener(greeting, { dropPitchOnly: welcomeAlreadySpoken });
+          if (shaped !== greeting) {
+            logger.info(
+              { callId: this.config.callId, before: greeting.slice(0, 100), after: shaped.slice(0, 100) },
+              "Pipeline: outbound opener held to a human hello",
+            );
+          }
+          greeting = shaped;
+        }
+        if (greeting.trim() || welcomeAlreadySpoken) {
+          this.openingHandshakeUntil = Date.now() + OPENING_HANDSHAKE_MS;
+        }
+      }
       this.beginOpeningGreetingPlayback((greeting.trim() || typedWelcome).length);
       logger.info({ callId: this.config.callId, greeting: (greeting || typedWelcome).slice(0, 80) }, "Sending greeting");
       try {
@@ -9259,10 +9286,11 @@ export class OrchestrationPipeline implements VoiceSession {
     let llmResponse = "";
     let pendingText  = "";
     const cartesiaTurn = new CartesiaTurnStream();
-    // One-step output guard: suppresses any second question (and everything)
-    // after it) so a turn that runs through multiple flow steps is truncated at
-    // the first natural yield point. Mirrored into stored history below.
-    const stepGuard = { push: (sentence: string) => sentence, truncated: () => false };
+    // Opening handshake: one spoken sentence so a pickup "hello" cannot dump
+    // the script. Later turns keep the no-op guard.
+    const stepGuard = this.callDirection === "outbound" && Date.now() < this.openingHandshakeUntil
+      ? makeFlowStepGuard({ maxSentences: 1 })
+      : { push: (sentence: string) => sentence, truncated: () => false };
     let allEnqueued  = false;
     // Leading-ack suppression: when a dead-air or backchannel filler was already
     // spoken this turn, the first LLM sentence is checked and dropped if it is a
@@ -10245,10 +10273,10 @@ export class OrchestrationPipeline implements VoiceSession {
         const heard = this._interruptionHint.slice(0, 300);
         const hint =
           `[INTERRUPTED — DO NOT RESTART] Your previous reply was cut mid-delivery. ` +
-          `The caller already heard (possibly partial): "${heard}". ` +
-          `Do NOT restart recording consent, greeting, self-intro, welcome, or sales pitch from the top. ` +
-          `Do NOT say your name or company again. Do NOT re-ask a discovery question you already asked. ` +
-          `Answer what they just said, then continue from the interrupted step. ` +
+          `The caller already heard: "${heard}". ` +
+          `Do NOT start that sentence again, and do NOT repeat those words. ` +
+          `Do NOT restart recording consent, greeting, self-intro, welcome, or sales pitch. ` +
+          `If they asked a question or stated a fact, answer that in one new sentence and stop. ` +
           `Never ask "can you hear me" / "கேக்குதா" unless the caller explicitly said nothing at all.`;
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
@@ -10308,6 +10336,9 @@ export class OrchestrationPipeline implements VoiceSession {
               alreadyAsked: asked,
             })
           : "";
+        const openingNudge = this.callDirection === "outbound" && Date.now() < this.openingHandshakeUntil
+          ? buildOpeningHandshakeNudge(lastTurn.content, prevLine)
+          : "";
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
           {
@@ -10315,6 +10346,7 @@ export class OrchestrationPipeline implements VoiceSession {
             content: [
               lastTurn.content,
               THIS_TURN_INSTRUCTION,
+              openingNudge,
               nudge,
               buildTurnClockBlock(this.agent.timezone),
             ].filter(Boolean).join("\n\n"),

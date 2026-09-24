@@ -7,6 +7,7 @@ import {
   isQuestionUtterance,
   isBareAcknowledgement,
   buildAntiRepeatNudge,
+  isRepeatedAgentLine,
   extractRecentAgentQuestions,
 } from "./conversationDiscipline.js";
 
@@ -169,9 +170,10 @@ describe("caller-utterance intent gating (call 1915)", () => {
       expect(buildAntiRepeatNudge({ lastUserText: "wait, I'm installing it", prevLine, escalated: false })).toBe("");
       expect(buildAntiRepeatNudge({ lastUserText: "claim எப்படி பண்றது", prevLine, escalated: false })).toBe("");
       expect(buildAntiRepeatNudge({ lastUserText: "okay", prevLine, escalated: false })).toBe("");
-      expect(buildAntiRepeatNudge({ lastUserText: "hmm", prevLine, escalated: true })).toBe("");
+      expect(buildAntiRepeatNudge({ lastUserText: "hmm", prevLine, escalated: true })).toContain("Do not say those words again");
       expect(buildAntiRepeatNudge({ lastUserText: "I already have a policy with another company", prevLine, escalated: false })).toBe("");
-      expect(buildAntiRepeatNudge({ lastUserText: "one minute please", prevLine, escalated: true })).toBe("");
+      expect(buildAntiRepeatNudge({ lastUserText: "one minute please", prevLine, escalated: true })).toContain("Do not say those words again");
+      expect(buildAntiRepeatNudge({ lastUserText: "உங்களுக்கு என்ன வேணும்", prevLine, escalated: true })).toContain("Answer that question");
       expect(buildAntiRepeatNudge({
         lastUserText: "हां जी सही है",
         prevLine,
@@ -179,6 +181,26 @@ describe("caller-utterance intent gating (call 1915)", () => {
         alreadyAsked: ["क्या आपको फ़्लाइट और होटल बुकिंग की सुविधा चाहिए?"],
       })).toBe("");
     });
+  });
+});
+
+describe("isRepeatedAgentLine", () => {
+  it("counts a barge-cut prefix as the same line", () => {
+    expect(isRepeatedAgentLine(
+      "கவலை படாதீங்க,",
+      "கவலை படாதீங்க, இது",
+    )).toBe(true);
+    expect(isRepeatedAgentLine(
+      "நாங்க advance-உம் வாங்க மாட்டோம், OTP-யும்",
+      "நாங்க எந்த advance-உம் வாங்க மாட்டோம், OTP-யும் கேட்க மாட்டோம்",
+    )).toBe(true);
+  });
+
+  it("does not treat a new point as a repeat", () => {
+    expect(isRepeatedAgentLine(
+      "இல்ல, இது personal",
+      "நாங்க எந்த advance-உம் வாங்க மாட்டோம்",
+    )).toBe(false);
   });
 });
 

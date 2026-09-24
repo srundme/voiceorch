@@ -45,8 +45,9 @@ describe("buildCompactGreetingPrompt", () => {
   it("turns an outbound first greeting into a short identity-first permission opener", () => {
     const out = buildCompactGreetingPrompt(SCRIPT, "en-IN", false, { callDirection: "outbound" });
     expect(out).toContain("This is a phone call, not a demo");
-    expect(out).toContain("your name/company exactly as scripted");
+    expect(out).toContain("your name and company exactly as scripted");
     expect(out).toContain("ask permission to continue");
+    expect(out).toContain("Do NOT mention the product, funding, loan");
     expect(out).toContain("18 words or fewer");
     expect(out).toContain("Do not deliver the full pitch yet");
     expect(out).toContain("NEVER invent verifying company/business details");
