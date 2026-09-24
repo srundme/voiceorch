@@ -137,11 +137,14 @@ def _load_llm() -> None:
             model_path=path,
             n_ctx=2048,
             n_threads=threads,
-            n_batch=128,
+            n_threads_batch=threads,
+            n_batch=512,
             verbose=False,
         )
+        print(f"qwen ready threads={threads} batch=512", flush=True)
     except Exception as exc:
         _state["llm_error"] = str(exc)
+        print(f"qwen load failed: {exc}", flush=True)
 
 
 def _download_script(url: str, path: str) -> str:
@@ -321,45 +324,69 @@ async def chat(body: dict):
     if llm is None:
         return JSONResponse({"error": _state["llm_error"] or "llm not loaded"}, status_code=503)
     messages = _messages_for_qwen(body.get("messages") or [])
-    max_tokens = int(body.get("max_tokens") or 80)
+    max_tokens = int(body.get("max_tokens") or 60)
     temperature = float(body.get("temperature") or 0.3)
-    tools = body.get("tools")
-    tool_choice = body.get("tool_choice") or ("auto" if tools else None)
+    # This 0.8B model does not call tools on a live call. Passing them makes
+    # llama.cpp wait on a tool grammar, so the caller hears nothing.
+    if body.get("tools"):
+        print("qwen ignoring tools", flush=True)
 
     def generate():
-        with _lock:
-            kwargs = {
-                "messages": messages,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "stream": True,
-            }
-            if tools:
-                kwargs["tools"] = tools
-                kwargs["tool_choice"] = tool_choice
-            try:
+        started = time.perf_counter()
+        first_ms = -1
+        spoken_chars = 0
+        kwargs = {
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": True,
+        }
+        try:
+            with _lock:
                 stream = llm.create_chat_completion(**kwargs)
+                iterator = iter(stream)
+        except Exception as exc:
+            print(f"qwen chat failed: {exc}", flush=True)
+            raise
+        pending = {"buf": "", "skip": False}
+        while True:
+            try:
+                with _lock:
+                    chunk = next(iterator)
+            except StopIteration:
+                break
             except Exception as exc:
                 print(f"qwen chat failed: {exc}", flush=True)
                 raise
-            pending = {"buf": "", "skip": False}
-            for chunk in stream:
-                choice = (chunk.get("choices") or [{}])[0]
-                delta = choice.get("delta") or {}
-                content = delta.get("content")
-                if content:
-                    spoken = _spoken_delta(pending, content)
-                    if spoken:
-                        delta = {**delta, "content": spoken}
-                    else:
-                        delta = {k: v for k, v in delta.items() if k != "content"}
-                if not delta.get("content") and not delta.get("tool_calls"):
-                    continue
-                payload = {"choices": [{"delta": delta}]}
-                yield f"data: {json.dumps(payload)}\n\n"
-            tail = _spoken_delta(pending, "")
-            if tail:
-                yield f"data: {json.dumps({'choices': [{'delta': {'content': tail}}]})}\n\n"
+            choice = (chunk.get("choices") or [{}])[0]
+            delta = choice.get("delta") or {}
+            content = delta.get("content")
+            spoken = ""
+            if content:
+                spoken = _spoken_delta(pending, content)
+            if not spoken:
+                continue
+            if first_ms < 0:
+                first_ms = int((time.perf_counter() - started) * 1000)
+                print(f"qwen first token ms={first_ms}", flush=True)
+            spoken_chars += len(spoken)
+            # Lock is free here so Pocket can speak this sentence while the
+            # rest of the reply is still being written.
+            yield f"data: {json.dumps({'choices': [{'delta': {'content': spoken}}]})}\n\n"
+        tail = _spoken_delta(pending, "")
+        if tail:
+            if first_ms < 0:
+                first_ms = int((time.perf_counter() - started) * 1000)
+                print(f"qwen first token ms={first_ms}", flush=True)
+            spoken_chars += len(tail)
+            yield f"data: {json.dumps({'choices': [{'delta': {'content': tail}}]})}\n\n"
+        if spoken_chars == 0:
+            print("qwen empty reply", flush=True)
+            yield f"data: {json.dumps({'choices': [{'delta': {'content': 'Sorry, please say that once more.'}}]})}\n\n"
+        print(
+            f"qwen done chars={spoken_chars} total_ms={int((time.perf_counter() - started) * 1000)}",
+            flush=True,
+        )
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

@@ -1,8 +1,8 @@
 import OpenAI from "openai";
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, ToolDefinition } from "../../types.js";
+import { logger } from "../../../lib/logger.js";
 import { toOpenAIMessages } from "./openai-messages.js";
 import { drainOpenAICompatibleStream } from "./openai-compat.js";
-import { toOpenAiToolChoice } from "./tool-choice.js";
 
 function voiceCpuUrl(): string {
   return (process.env["VOICE_CPU_URL"] || "http://127.0.0.1:8090").replace(/\/$/, "");
@@ -49,13 +49,14 @@ export class LocalCpuLLM implements LLMAdapter {
   ): Promise<void> {
     this.abortController?.abort();
     this.abortController = new AbortController();
-    const tools = options?.tools?.length
-      ? options.tools.map((t) => ({
-          type: "function" as const,
-          function: { name: t.name, description: t.description, parameters: t.parameters },
-        }))
-      : undefined;
-    const toolChoice = tools ? toOpenAiToolChoice(options?.toolChoice, options?.tools) : undefined;
+    // Qwen 0.8B on CPU speaks the next line. Tool schemas make that process
+    // wait on a grammar, so the caller hears silence (call 31864).
+    if (options?.tools?.length) {
+      logger.warn(
+        { model: this.model, toolCount: options.tools.length },
+        "Qwen CPU: tools stripped so the reply is spoken",
+      );
+    }
     try {
       const stream = await this.client.chat.completions.create(
         {
@@ -67,7 +68,6 @@ export class LocalCpuLLM implements LLMAdapter {
             { role: "system", content: systemPrompt },
             ...toOpenAIMessages(messages),
           ] as OpenAI.Chat.ChatCompletionMessageParam[],
-          ...(tools ? { tools, tool_choice: toolChoice } : {}),
         },
         { signal: this.abortController.signal },
       );
