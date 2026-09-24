@@ -20,6 +20,7 @@ import json
 import os
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +30,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 app = FastAPI()
 _lock = threading.Lock()
+_pcm_cache: dict[str, bytes] = {}
 _state: dict = {
     "moonshine": None,
     "moonshine_error": None,
@@ -57,6 +59,20 @@ def _to_pcm16_16k(audio: np.ndarray, src_rate: int) -> bytes:
         x = np.interp(np.linspace(0, x.size - 1, n), np.arange(x.size), x).astype(np.float32)
     x = np.clip(x, -1.0, 1.0)
     return (x * 32767.0).astype(np.int16).tobytes()
+
+
+def _cache_key(text: str) -> str:
+    return " ".join(text.strip().lower().split())
+
+
+def _set_torch_threads() -> None:
+    try:
+        import torch
+        n = int(os.environ.get("TORCH_THREADS") or "8")
+        torch.set_num_threads(max(1, n))
+        print(f"torch threads={n}", flush=True)
+    except Exception as exc:
+        print(f"torch threads skipped: {exc}", flush=True)
 
 
 def _load_moonshine() -> None:
@@ -167,11 +183,49 @@ def _load_tts() -> None:
         print(f"pocket tts failed: {exc}", flush=True)
 
 
+def _render_pcm(model, voice, text: str) -> bytes:
+    rate = int(_state["tts_rate"])
+    parts: list[bytes] = []
+    started = time.perf_counter()
+    first_ms = -1
+    for chunk in _tts_chunks(model, voice, text):
+        if first_ms < 0:
+            first_ms = int((time.perf_counter() - started) * 1000)
+        audio = chunk.detach().float().cpu().numpy() if hasattr(chunk, "detach") else np.asarray(chunk)
+        parts.append(_to_pcm16_16k(audio, rate))
+    pcm = b"".join(parts)
+    total_ms = int((time.perf_counter() - started) * 1000)
+    print(
+        f"pocket render chars={len(text)} bytes={len(pcm)} first_ms={first_ms} total_ms={total_ms}",
+        flush=True,
+    )
+    return pcm
+
+
+def _warmup_tts() -> None:
+    model = _state["tts"]
+    voice = _state["voice"]
+    if model is None or voice is None:
+        return
+    for phrase in ("Hello", "Hello, how can I help you today?"):
+        try:
+            with _lock:
+                pcm = _render_pcm(model, voice, phrase)
+                if pcm:
+                    _pcm_cache[_cache_key(phrase)] = pcm
+            if pcm:
+                print(f"pocket cached {phrase!r}", flush=True)
+        except Exception as exc:
+            print(f"pocket cache failed {phrase!r}: {exc}", flush=True)
+
+
 @app.on_event("startup")
 def startup() -> None:
+    _set_torch_threads()
     _load_moonshine()
     _load_llm()
     _load_tts()
+    threading.Thread(target=_warmup_tts, name="pocket-warmup", daemon=True).start()
 
 
 @app.get("/health")
@@ -398,15 +452,46 @@ async def tts(body: dict):
         return JSONResponse({"error": "text required"}, status_code=400)
 
     def generate():
-        pending = bytearray()
         frame = 640  # 20 ms at 16 kHz, 16-bit mono
+        key = _cache_key(text)
+        cached = _pcm_cache.get(key)
+        if cached:
+            print(f"pocket cache hit chars={len(text)} bytes={len(cached)}", flush=True)
+            for i in range(0, len(cached), frame):
+                yield cached[i : i + frame]
+            return
+
+        pending = bytearray()
+        rendered = bytearray()
         rate = int(_state["tts_rate"])
+        ready: bytes | None = None
         with _lock:
-            for chunk in _tts_chunks(model, voice, text):
-                pending.extend(_to_pcm16_16k(np.asarray(chunk), rate))
-                while len(pending) >= frame:
-                    yield bytes(pending[:frame])
-                    del pending[:frame]
+            ready = _pcm_cache.get(key)
+            if ready is None:
+                started = time.perf_counter()
+                first_ms = -1
+                for chunk in _tts_chunks(model, voice, text):
+                    if first_ms < 0:
+                        first_ms = int((time.perf_counter() - started) * 1000)
+                        print(f"pocket first byte chars={len(text)} first_ms={first_ms}", flush=True)
+                    audio = chunk.detach().float().cpu().numpy() if hasattr(chunk, "detach") else np.asarray(chunk)
+                    piece = _to_pcm16_16k(audio, rate)
+                    rendered.extend(piece)
+                    pending.extend(piece)
+                    while len(pending) >= frame:
+                        yield bytes(pending[:frame])
+                        del pending[:frame]
+                if rendered:
+                    _pcm_cache[key] = bytes(rendered)
+                print(
+                    f"pocket render chars={len(text)} bytes={len(rendered)} total_ms={int((time.perf_counter() - started) * 1000)}",
+                    flush=True,
+                )
+        if ready:
+            print(f"pocket cache hit chars={len(text)} bytes={len(ready)}", flush=True)
+            for i in range(0, len(ready), frame):
+                yield ready[i : i + frame]
+            return
         if pending:
             yield bytes(pending)
 
