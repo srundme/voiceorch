@@ -250,7 +250,11 @@ async def stt_socket(ws: WebSocket):
         await ws.close()
         return
     try:
-        transcriber = spec["factory"](model_path=spec["path"], model_arch=spec["arch"])
+        transcriber = spec["factory"](
+            model_path=spec["path"],
+            model_arch=spec["arch"],
+            update_interval=0.3,
+        )
     except Exception as exc:
         print(f"moonshine transcriber failed: {exc}", flush=True)
         await ws.send_json({"error": str(exc)})
@@ -258,25 +262,26 @@ async def stt_socket(ws: WebSocket):
         return
     lines: list[dict] = []
 
-    class Listener:
-        def on_line_started(self, event):
-            lines.append({"text": event.line.text, "final": False})
+    from moonshine_voice import TranscriptEventListener
 
+    class Listener(TranscriptEventListener):
+        # Methods must live on this subclass. Putting TranscriptEventListener
+        # first in a second base class hides these and the call never gets text.
         def on_line_text_changed(self, event):
-            lines.append({"text": event.line.text, "final": False})
+            text = (event.line.text or "").strip()
+            if text:
+                lines.append({"text": text, "final": False})
 
         def on_line_completed(self, event):
-            lines.append({"text": event.line.text, "final": True})
+            text = (event.line.text or "").strip()
+            if text:
+                lines.append({"text": text, "final": True})
+                print(f"moonshine final chars={len(text)}", flush=True)
 
-    try:
-        from moonshine_voice import TranscriptEventListener
+        def on_error(self, event):
+            print(f"moonshine listener error: {event.error}", flush=True)
 
-        class Bound(TranscriptEventListener, Listener):
-            pass
-
-        transcriber.add_listener(Bound())
-    except Exception:
-        transcriber.add_listener(Listener())
+    transcriber.add_listener(Listener())
     transcriber.start()
     sample_rate = 16000
     try:
