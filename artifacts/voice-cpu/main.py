@@ -261,7 +261,7 @@ async def chat(body: dict):
     llm = _state["llm"]
     if llm is None:
         return JSONResponse({"error": _state["llm_error"] or "llm not loaded"}, status_code=503)
-    messages = body.get("messages") or []
+    messages = _messages_for_qwen(body.get("messages") or [])
     max_tokens = int(body.get("max_tokens") or 80)
     temperature = float(body.get("temperature") or 0.3)
     tools = body.get("tools")
@@ -274,28 +274,108 @@ async def chat(body: dict):
                 "max_tokens": max_tokens,
                 "temperature": temperature,
                 "stream": True,
-                "chat_template_kwargs": {"enable_thinking": False},
             }
             if tools:
                 kwargs["tools"] = tools
                 kwargs["tool_choice"] = tool_choice
             try:
                 stream = llm.create_chat_completion(**kwargs)
-            except TypeError as exc:
-                if "chat_template_kwargs" not in str(exc):
-                    raise
-                kwargs.pop("chat_template_kwargs", None)
-                stream = llm.create_chat_completion(**kwargs)
+            except Exception as exc:
+                print(f"qwen chat failed: {exc}", flush=True)
+                raise
+            pending = {"buf": "", "skip": False}
             for chunk in stream:
                 choice = (chunk.get("choices") or [{}])[0]
                 delta = choice.get("delta") or {}
+                content = delta.get("content")
+                if content:
+                    spoken = _spoken_delta(pending, content)
+                    if spoken:
+                        delta = {**delta, "content": spoken}
+                    else:
+                        delta = {k: v for k, v in delta.items() if k != "content"}
                 if not delta.get("content") and not delta.get("tool_calls"):
                     continue
                 payload = {"choices": [{"delta": delta}]}
                 yield f"data: {json.dumps(payload)}\n\n"
+            tail = _spoken_delta(pending, "")
+            if tail:
+                yield f"data: {json.dumps({'choices': [{'delta': {'content': tail}}]})}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+def _messages_for_qwen(messages: list) -> list:
+    """This llama.cpp build has no thinking switch, and the Qwen template
+    refuses to run unless there is a user message."""
+    cleaned: list[dict] = []
+    for raw in messages:
+        if not isinstance(raw, dict):
+            continue
+        role = raw.get("role") or "user"
+        content = raw.get("content")
+        if isinstance(content, list):
+            content = " ".join(
+                (part.get("text") if isinstance(part, dict) else str(part)) or ""
+                for part in content
+            )
+        text = str(content or "").strip()
+        if not text and role == "system":
+            continue
+        item = dict(raw)
+        item["role"] = role
+        item["content"] = text
+        cleaned.append(item)
+    if not any(m["role"] == "user" and m["content"] for m in cleaned):
+        cleaned.append({
+            "role": "user",
+            "content": "The caller just joined. Greet them in one short spoken sentence. /no_think",
+        })
+    else:
+        for i in range(len(cleaned) - 1, -1, -1):
+            if cleaned[i]["role"] == "user" and "/no_think" not in cleaned[i]["content"]:
+                cleaned[i]["content"] = cleaned[i]["content"] + " /no_think"
+                break
+    return cleaned
+
+
+def _spoken_delta(pending: dict, text: str) -> str:
+    """Drop a Qwen think block so only the spoken line is returned."""
+    if text == "":
+        if pending.get("skip"):
+            pending["buf"] = ""
+            pending["skip"] = False
+            return ""
+        leftover = pending.get("buf", "")
+        pending["buf"] = ""
+        return leftover
+    buf = pending.get("buf", "") + text
+    out: list[str] = []
+    while buf:
+        if pending.get("skip"):
+            end = buf.find("</think>")
+            if end < 0:
+                pending["buf"] = buf
+                return "".join(out)
+            buf = buf[end + len("</think>"):]
+            pending["skip"] = False
+            continue
+        start = buf.find("<think>")
+        if start < 0:
+            cut = buf.rfind("<")
+            if cut >= 0 and cut > len(buf) - 8:
+                out.append(buf[:cut])
+                pending["buf"] = buf[cut:]
+            else:
+                out.append(buf)
+                pending["buf"] = ""
+            return "".join(out)
+        out.append(buf[:start])
+        buf = buf[start + len("<think>"):]
+        pending["skip"] = True
+    pending["buf"] = ""
+    return "".join(out)
 
 
 def _tts_chunks(model, voice, text):
