@@ -1096,13 +1096,7 @@ export async function createSession(params: {
     // Override STT language from caller memory language_pref fact — only when the
     // agent is in auto-detect mode. Strict fixed-language agents must not inherit
     // a remembered preference from a prior multilingual call.
-    // Moonshine, Qwen 0.8B, and Pocket only speak English. A remembered
-    // Tamil preference must not throw away the English greeting.
-    const asrName = (agent.asrProvider ?? "").toLowerCase();
-    const llmName = (agent.llmProvider ?? "").toLowerCase();
-    const ttsName = (agent.ttsProvider ?? "").toLowerCase();
-    const englishOnlyStack = asrName === "moonshine" || llmName === "qwen_cpu" || ttsName === "pocket";
-    if (agentConfig.languageAutoDetect && !englishOnlyStack) {
+    if (agentConfig.languageAutoDetect) {
       const langPrefRaw = latchedFactsMap.get("language_pref");
       const mappedSttLang = mapLanguagePrefToBcp47(langPrefRaw);
       if (mappedSttLang && mappedSttLang !== agentConfig.sttConfig.language) {

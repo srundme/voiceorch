@@ -3426,24 +3426,17 @@ export class OrchestrationPipeline implements VoiceSession {
 
     const keys = config.providerKeys;
 
-    const localVoice = new Set(["moonshine", "pocket", "qwen_cpu"]);
     const sttKey =
-      localVoice.has(this.agent.asrProvider.toLowerCase())
-        ? "local"
-        : keys.get(this.agent.asrProvider) ||
+      keys.get(this.agent.asrProvider) ||
           (["gemini_audio", "google", "gemini"].includes(this.agent.asrProvider.toLowerCase())
             ? keys.get("google") || process.env["GEMINI_API_KEY"] || process.env["GOOGLE_API_KEY"]
             : undefined);
     if (!sttKey) throw new Error(`No API key found for STT provider: ${this.agent.asrProvider}`);
 
-    const llmKey = localVoice.has(this.agent.llmProvider.toLowerCase())
-      ? "local"
-      : keys.get(this.agent.llmProvider);
+    const llmKey = keys.get(this.agent.llmProvider);
     if (!llmKey) throw new Error(`No API key found for LLM provider: ${this.agent.llmProvider}`);
 
-    const ttsKey = localVoice.has(this.agent.ttsProvider.toLowerCase())
-      ? "local"
-      : keys.get(this.agent.ttsProvider);
+    const ttsKey = keys.get(this.agent.ttsProvider);
     if (!ttsKey) throw new Error(`No API key found for TTS provider: ${this.agent.ttsProvider}`);
 
     // Sarvam telephony calls: stream/send native 8kHz PSTN audio instead of the
@@ -5715,8 +5708,7 @@ export class OrchestrationPipeline implements VoiceSession {
   private spokenGreetingFallback(greetLang: string): string {
     let fallback = (this.agent.greetingMessage ?? "").trim();
     if (this.callDirection === "outbound" && isStubGreeting(fallback)) fallback = "";
-    const cpuEnglish = (this.agent.llmProvider ?? "").toLowerCase() === "qwen_cpu";
-    return fallback || neutralGreeting(cpuEnglish ? "en" : greetLang);
+    return fallback || neutralGreeting(greetLang);
   }
 
   private async generateGreetingLlmText(
@@ -5726,18 +5718,6 @@ export class OrchestrationPipeline implements VoiceSession {
   ): Promise<string> {
     let greeting = "";
         const greetingTrigger: import("./types.js").ConversationTurn[] = [];
-        if ((this.agent.llmProvider ?? "").toLowerCase() === "qwen_cpu") {
-          const line = this.spokenGreetingFallback(greetLang);
-          onFirstSentence?.(line);
-          this.logExec("LLM", "response", {
-            provider: this.agent.llmProvider,
-            status: "success",
-            turnNumber: 0,
-            latencyMs: 0,
-            responsePayload: { purpose: "greeting", text: line.slice(0, 200) },
-          });
-          return line;
-        }
         try {
           const greetingSystemPrompt = this.substituteSalutation(
             buildCompactGreetingPrompt(

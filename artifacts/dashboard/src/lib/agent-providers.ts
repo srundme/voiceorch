@@ -1,6 +1,5 @@
 export const ASR_PROVIDERS = [
   { value: "sarvam", label: "Sarvam AI (Real-time Streaming)" },
-  { value: "moonshine", label: "Moonshine (CPU, on your Railway voice service)" },
 ];
 
 export const LLM_PROVIDERS = [
@@ -9,13 +8,11 @@ export const LLM_PROVIDERS = [
   { value: "openai",   label: "OpenAI" },
   { value: "groq",     label: "Groq" },
   { value: "krutrim",  label: "Krutrim Cloud (India-hosted)" },
-  { value: "qwen_cpu", label: "Qwen 0.8B (CPU, on your Railway voice service)" },
 ];
 
 export const TTS_PROVIDERS = [
   { value: "sarvam",   label: "Sarvam (Bulbul) — recommended" },
   { value: "cartesia", label: "Cartesia (Sonic)" },
-  { value: "pocket", label: "Pocket TTS (CPU, Indian English clip)" },
 ];
 
 export const TELEPHONY_PROVIDERS = [
@@ -27,10 +24,6 @@ export const TELEPHONY_PROVIDERS = [
 
 /** Full catalog for validation / existing agents. The builder picker is `asrModelsForPicker`. */
 export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
-  moonshine: [
-    { value: "tiny", label: "Moonshine v2 Tiny (speed)" },
-    { value: "small", label: "Moonshine v2 Small (check names and numbers)" },
-  ],
   sarvam: [
     { value: "saaras:v3",          label: "Saaras v3" },
     { value: "saaras:v3-realtime", label: "Saaras v3 (legacy id)" },
@@ -97,9 +90,6 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "gpt-oss-20b",  label: "GPT-OSS 20B — fast, tool-capable (recommended)" },
     { value: "gpt-oss-120b", label: "GPT-OSS 120B — highest quality, tool-capable" },
   ],
-  qwen_cpu: [
-    { value: "qwen3.5-0.8b", label: "Qwen 3.5 0.8B — recruiter, thinking off" },
-  ],
 };
 
 /** Google ids Google still serves for voice. 2.5 Flash 404s — not in the picker. */
@@ -146,9 +136,6 @@ export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "sonic-3",     label: "Sonic 3" },
     { value: "sonic-2",     label: "Sonic 2 (stable)" },
     { value: "sonic-turbo", label: "Sonic Turbo (fast, low-latency)" },
-  ],
-  pocket: [
-    { value: "pocket", label: "Pocket TTS — voice comes from POCKET_VOICE_WAV" },
   ],
   sarvam: [
     { value: "bulbul:v3",      label: "Bulbul v3 — 38 voices, Indian languages (recommended)" },
@@ -234,9 +221,6 @@ export const DEFAULT_CARTESIA_VOICE_ID = "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee";
 export const DEFAULT_CARTESIA_VOICE_NAME = "Gayathri";
 
 export const TTS_VOICES: Record<string, { value: string; label: string }[] | null> = {
-  pocket: [
-    { value: "indian-english", label: "Indian English clip on the voice service" },
-  ],
   cartesia: [
     { value: DEFAULT_CARTESIA_VOICE_ID, label: DEFAULT_CARTESIA_VOICE_NAME },
     { value: "a0e99841-438c-4a64-b679-ae501e7d6091", label: "Barbershop Man" },

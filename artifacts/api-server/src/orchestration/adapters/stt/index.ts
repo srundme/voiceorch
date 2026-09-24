@@ -8,7 +8,6 @@ import { CartesiaSTT } from "./cartesia.js";
 import { DeepgramSTT } from "./deepgram.js";
 import { GeminiSTT } from "./gemini.js";
 import { GoogleSpeechSTT } from "./google-speech.js";
-import { MoonshineSTT } from "./moonshine.js";
 import { STUB_PROVIDERS_ENABLED, createStubSTT } from "../stubs.js";
 
 export function createSTTAdapter(
@@ -33,8 +32,6 @@ export function createSTTAdapter(
       return new CartesiaSTT(apiKey, model, cfg);
     case "deepgram":
       return new DeepgramSTT(apiKey, model, cfg);
-    case "moonshine":
-      return new MoonshineSTT();
     case "google_speech":
     case "google_stt":
       return new GoogleSpeechSTT(apiKey, model, cfg);
