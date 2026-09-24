@@ -5711,6 +5711,14 @@ export class OrchestrationPipeline implements VoiceSession {
    * Cold-caller LLM opener, extracted from greet() so the AMD confirmation
    * window can prewarm it in parallel. Never throws — falls back internally.
    */
+  /** Saved greeting, or a short English hello when the model returns nothing. */
+  private spokenGreetingFallback(greetLang: string): string {
+    let fallback = (this.agent.greetingMessage ?? "").trim();
+    if (this.callDirection === "outbound" && isStubGreeting(fallback)) fallback = "";
+    const cpuEnglish = (this.agent.llmProvider ?? "").toLowerCase() === "qwen_cpu";
+    return fallback || neutralGreeting(cpuEnglish ? "en" : greetLang);
+  }
+
   private async generateGreetingLlmText(
     resumeDropped: boolean,
     greetLang: string,
@@ -5718,6 +5726,18 @@ export class OrchestrationPipeline implements VoiceSession {
   ): Promise<string> {
     let greeting = "";
         const greetingTrigger: import("./types.js").ConversationTurn[] = [];
+        if ((this.agent.llmProvider ?? "").toLowerCase() === "qwen_cpu") {
+          const line = this.spokenGreetingFallback(greetLang);
+          onFirstSentence?.(line);
+          this.logExec("LLM", "response", {
+            provider: this.agent.llmProvider,
+            status: "success",
+            turnNumber: 0,
+            latencyMs: 0,
+            responsePayload: { purpose: "greeting", text: line.slice(0, 200) },
+          });
+          return line;
+        }
         try {
           const greetingSystemPrompt = this.substituteSalutation(
             buildCompactGreetingPrompt(
@@ -5813,6 +5833,10 @@ export class OrchestrationPipeline implements VoiceSession {
           greeting = fallback;
           onFirstSentence?.(fallback);
         }
+    if (!greeting.trim()) {
+      greeting = this.spokenGreetingFallback(greetLang);
+      onFirstSentence?.(greeting);
+    }
     return greeting;
   }
 
