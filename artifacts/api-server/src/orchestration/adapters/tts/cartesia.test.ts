@@ -278,6 +278,9 @@ describe("isCartesiaContextClosedError", () => {
       new Error("Context has closed and is no longer accepting new inputs, use a new context ID."),
     )).toBe(true);
     expect(isCartesiaContextClosedError(new Error("invalid voice controls"))).toBe(false);
+    expect(isCartesiaContextClosedError(
+      new Error("Invalid context ID — The requested context ID does not exist or may have already been cancelled."),
+    )).toBe(true);
   });
 });
 

@@ -171,7 +171,7 @@ export function joinContinuationTranscript(_previous: string, next: string): str
 
 export function isCartesiaContextClosedError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
-  return /context has closed|no longer accepting new inputs|use a new context id/i.test(msg);
+  return /context has closed|no longer accepting new inputs|use a new context id|invalid context id|already been cancelled/i.test(msg);
 }
 
 const WORD_BREAK = /[\s.,;:!?…।॥]/u;
@@ -638,7 +638,16 @@ export class CartesiaTTS implements TTSAdapter {
     // language on sonic-2, rejected flush, etc.) must not abort Talk —
     // fillers already use REST, so the caller would only hear hmm/okay.
     if (isCartesiaContextClosedError(err)) {
-      if (ctx.closed) ctx.settleOwner?.();
+      ctx.dead = true;
+      ctx.awaitingDone = false;
+      // A cancel for a context Cartesia already closed must not start a
+      // second copy of the same line on top of audio that is still playing.
+      if (!ctx.cancelled && !ctx.gotAudio && isSpeakableCartesiaTranscript(ctx.full)) {
+        ctx.restFallback = true;
+        void this.speakDetached(CartesiaTTS.padCartesiaUtterance(ctx.full), ctx);
+        return;
+      }
+      ctx.settleOwner?.();
       return;
     }
     ctx.restFallback = true;
@@ -748,8 +757,10 @@ export class CartesiaTTS implements TTSAdapter {
       const onAbort = (): void => {
         ctx.cancelled = true;
         ctx.dead = true;
-        // Only worth cancelling if Cartesia is already generating for this turn.
-        if (ctx.sentAny) this.send({ context_id: turnContextId, cancel: true });
+        // Only cancel a generation that is still open. Cancelling after `done`
+        // makes Cartesia reject the context, and that rejection used to start
+        // the same sentence again over the clip the caller was already hearing.
+        if (ctx.sentAny && ctx.awaitingDone) this.send({ context_id: turnContextId, cancel: true });
         finish(abortError());
       };
       ctx.settleOwner = finish;
