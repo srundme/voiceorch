@@ -62,6 +62,7 @@ import { validateBookableEmail } from "./booking-email-validate.js";
 import { bookingAsksCallerForEmail, resolveBookingAttendeeEmail } from "./booking-email-policy.js";
 import { looksLikeVoicemailGreeting } from "../lib/voicemail-detect.js";
 import { groundIntakeWrite } from "../lib/candidate-intake-fields.js";
+import { groundDispositionWrite } from "../lib/intake-dispositions.js";
 import {
   applyBookingEmailToBookArgs,
   applyBookingEmailToSendArgs,
@@ -8082,6 +8083,19 @@ export class OrchestrationPipeline implements VoiceSession {
         return skipped;
       }
       args = grounded;
+    }
+    if (toolName === "set_disposition") {
+      const reason = groundDispositionWrite(args, this.intakeSpeechContext().caller);
+      if (reason) {
+        this.logExec("Tool", "system", {
+          status: "info",
+          turnNumber: this._activeTurnIndex,
+          metadata: { event: "Outcome Dropped", reason, args },
+        });
+        return reason === "unclear_speech"
+          ? "No outcome was saved — their last line was not clear English. Ask them to repeat it in English."
+          : "No outcome was saved — they did not say that. Keep going with the next question.";
+      }
     }
     const _toolStart = Date.now();
     this.logExec("Tool", "request", {

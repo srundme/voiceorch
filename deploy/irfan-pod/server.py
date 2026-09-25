@@ -39,6 +39,11 @@ SPEECH_RMS = 0.01
 SILENCE_MS = 450
 MIN_SPEECH_MS = 250
 PARTIAL_EVERY_MS = 600
+EAR_CONTEXT = (
+    "Phone call in Indian English with a recruiter. Write in English letters only. "
+    "voice process, international voice process, Jobshop, Irfan, "
+    "work from home, BPO, call center, pincode, email, at the rate, gmail dot com"
+)
 
 http: aiohttp.ClientSession | None = None
 
@@ -71,6 +76,7 @@ async def transcribe(pcm: bytes) -> str:
     form.add_field("file", to_wav(pcm), filename="audio.wav", content_type="audio/wav")
     form.add_field("model", "irfan-ear")
     form.add_field("language", "en")
+    form.add_field("prompt", EAR_CONTEXT)
     async with http.post(f"{EAR_URL}/v1/audio/transcriptions", data=form) as resp:
         if resp.status != 200:
             log(f"ear HTTP {resp.status}: {(await resp.text())[:200]}")

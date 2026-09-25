@@ -5,6 +5,7 @@ import {
   applyDispositionPatch,
   expandDispositionToolArgs,
   getIntakeDisposition,
+  groundDispositionWrite,
   missingDispositionFields,
   parseIntakeExtra,
   primaryDispositionId,
@@ -326,5 +327,35 @@ describe("parseIntakeExtra", () => {
       wants_bpo: true,
       city: "Bangalore",
     });
+  });
+});
+
+describe("groundDispositionWrite", () => {
+  const notInterested = {
+    disposition: "not_interested",
+    "not_interested.reason": "Not Interested in Job",
+  };
+
+  it("drops Not Interested from the Devanagari misfire in call 35617", () => {
+    expect(groundDispositionWrite(notInterested, "ऐसा ऐ वो team for boys start तो")).toBe("unclear_speech");
+  });
+
+  it("drops Not Interested when the caller never refused", () => {
+    expect(groundDispositionWrite(notInterested, "So I thought you will give me some job.")).toBe("not_said");
+  });
+
+  it("keeps Not Interested when the caller said it", () => {
+    expect(groundDispositionWrite(notInterested, "Sorry, I'm not interested right now.")).toBeNull();
+    expect(groundDispositionWrite(notInterested, "I don’t want this job.")).toBeNull();
+    expect(groundDispositionWrite(notInterested, "I am already placed.")).toBeNull();
+  });
+
+  it("allows poor communication on a line that was not English", () => {
+    expect(groundDispositionWrite({ disposition: "poor_communication" }, "मुझे अंग्रेज़ी नहीं आती")).toBeNull();
+  });
+
+  it("leaves outcomes the system judges alone", () => {
+    expect(groundDispositionWrite({ disposition: "no_company" }, "Why?")).toBeNull();
+    expect(groundDispositionWrite({ reason: "x" }, "hello")).toBeNull();
   });
 });

@@ -767,6 +767,43 @@ export function expandDispositionToolArgs(input: Record<string, unknown>): Recor
   return out;
 }
 
+const NON_LATIN_LETTER = /(?![\p{Script=Latin}])\p{L}/u;
+const REFUSAL_CUE = /\b(not interested|no interest|don'?t want|do not want|not looking|no need|don'?t need|do not need|not required|no thanks|already (?:placed|working|joined|got))\b/;
+
+/** Outcomes about how the line sounded, so a garbled line is their evidence. */
+const JUDGED_ON_SPEECH = new Set(["poor_communication", "call_disconnected", "voice_mail"]);
+
+/** Outcomes that only the candidate's own words can justify. */
+const CALLER_STATED: Record<string, RegExp> = {
+  not_interested: REFUSAL_CUE,
+};
+
+/**
+ * Refuse outcomes the caller did not give. Call 35617 saved Not Interested
+ * from an ear misfire in Devanagari, and every later turn read "no opening".
+ * Returns null when the write may go ahead, otherwise why it was dropped.
+ */
+export function groundDispositionWrite(
+  args: Record<string, unknown>,
+  callerText: string,
+): string | null {
+  const patch = expandDispositionToolArgs(args ?? {});
+  const raw = patch["disposition"] ?? patch["dispositionId"] ?? patch["dispositions"];
+  if (raw == null) return null;
+  const ids = (Array.isArray(raw) ? raw : [raw])
+    .map((entry) => resolveDisposition(entry)?.id)
+    .filter((id): id is string => Boolean(id));
+  if (ids.length === 0) return null;
+
+  if (NON_LATIN_LETTER.test(callerText) && ids.some((id) => !JUDGED_ON_SPEECH.has(id))) return "unclear_speech";
+  const heard = callerText.toLowerCase().replace(/[’`]/g, "'");
+  for (const id of ids) {
+    const cue = CALLER_STATED[id];
+    if (cue && !cue.test(heard)) return "not_said";
+  }
+  return null;
+}
+
 function parseDispositionAnswerObject(raw: unknown): Record<string, unknown> | null {
   if (isRecord(raw)) return raw;
   if (typeof raw !== "string") return null;
