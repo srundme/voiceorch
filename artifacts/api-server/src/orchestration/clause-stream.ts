@@ -49,11 +49,11 @@ export type ExtractSentencesOpts = {
   earlyClause?: boolean;
 };
 
-/** Sarvam flushes each job independently. Keep natural clauses intact instead
- * of cutting at arbitrary word counts. Cartesia's non-token paths do likewise. */
+/** Sarvam and Cartesia flush each job independently. The GPU voice does too:
+ * a word-boundary cut is a new clone, which is slow and drifts off the speaker. */
 export function ttsSentenceOptions(provider: string): { earlyClause: boolean } {
   const name = provider.toLowerCase();
-  return { earlyClause: name !== "cartesia" && name !== "sarvam" };
+  return { earlyClause: name !== "cartesia" && name !== "sarvam" && name !== "irfan_pod" };
 }
 
 export function pickStreamedGreetingHead(pending: string, opts?: ExtractSentencesOpts): string {

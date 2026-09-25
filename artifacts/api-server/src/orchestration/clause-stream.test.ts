@@ -24,7 +24,7 @@ describe("tiny lead fragments", () => {
 });
 
 describe("provider-aware sentence buffering", () => {
-  it.each(["sarvam", "Sarvam", "cartesia"])("keeps %s mid-phrase Hindi tokens in one synthesis job", (provider) => {
+  it.each(["sarvam", "Sarvam", "cartesia", "irfan_pod"])("keeps %s mid-phrase Hindi tokens in one synthesis job", (provider) => {
     const opts = ttsSentenceOptions(provider);
     let pending = "";
     const spoken: string[] = [];

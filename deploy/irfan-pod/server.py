@@ -10,12 +10,14 @@ The three models stay loaded. SnapServe calls:
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import os
 import queue
 import re
 import threading
 import time
+import wave
 from typing import Any
 
 import numpy as np
@@ -36,7 +38,8 @@ SAMPLE_RATE = 16000
 SPEECH_RMS = 0.01
 SILENCE_MS = 450
 MIN_SPEECH_MS = 250
-PARTIAL_EVERY_MS = 900
+PARTIAL_EVERY_MS = 2500
+REF_SECONDS = 6
 
 INFER = threading.Lock()
 asr = None
@@ -87,16 +90,31 @@ def transcribe(pcm: bytes) -> str:
     return (text or "").strip()
 
 
+def short_reference_wav() -> str:
+    """A few seconds of the clone clip. The full 45s reference drifts to another speaker."""
+    dest = "/workspace/voices/irfan-ref-6s.wav"
+    with wave.open(REF_WAV) as src:
+        frames = src.readframes(min(src.getnframes(), int(src.getframerate() * REF_SECONDS)))
+        params = src.getparams()
+    with wave.open(dest, "w") as out:
+        out.setparams(params)
+        out.writeframes(frames)
+    return dest
+
+
 def speak(text: str) -> bytes:
     cleaned = " ".join(text.split())
     if not cleaned:
         return b""
     max_tokens = min(400, max(48, len(cleaned) * 3))
+    # Copy so one utterance cannot rewrite the speaker embedding for the next.
+    prompt = copy.deepcopy(voice_prompt)
     with INFER:
         wavs, sr = tts.generate_voice_clone(
             text=cleaned,
             language="English",
-            voice_clone_prompt=voice_prompt,
+            voice_clone_prompt=prompt,
+            non_streaming_mode=True,
             max_new_tokens=max_tokens,
         )
     return float_to_pcm16(to_16k(np.asarray(wavs[0], dtype=np.float32), int(sr)))
@@ -118,12 +136,14 @@ def load_models() -> None:
         dtype=torch.bfloat16,
         device_map="cuda:0",
     )
-    ref_text = open(REF_TXT, encoding="utf-8").read().strip()
+    ref_wav = short_reference_wav()
     log("clone prompt")
+    # Speaker embedding only. Matching a 45s transcript on every short line
+    # ("Okay.", "Karthik!") let the voice fall back to the model's female default.
     voice_prompt = tts.create_voice_clone_prompt(
-        ref_audio=REF_WAV,
-        ref_text=ref_text,
-        x_vector_only_mode=False,
+        ref_audio=ref_wav,
+        ref_text=None,
+        x_vector_only_mode=True,
     )
     log("load llm")
     tok = AutoTokenizer.from_pretrained(LLM_DIR, local_files_only=True)
