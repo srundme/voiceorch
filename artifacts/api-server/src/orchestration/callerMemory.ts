@@ -839,6 +839,10 @@ export function injectEnhancedMemory(
         "new value for the rest of the call, and do NOT argue, repeat the old value back, or ask " +
         "the caller to choose between the stored value and what they just told you.",
     );
+    lines.push(
+      "[NOT SAID ON THIS CALL] Do not speak or save a surname, email, pincode, date of birth, " +
+        "or degree from this memory unless the caller says it again on this call.",
+    );
   }
 
   // ── Previous call summary (single line — most recent call only) ───────────

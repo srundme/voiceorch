@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  groundIntakeWrite,
   missingIntakeFields,
   normalizeIntakeField,
   normalizeIntakePatch,
@@ -169,5 +170,50 @@ describe("missingIntakeFields", () => {
 
   it("does not treat zero companies as unanswered", () => {
     expect(missingIntakeFields({ totalCompanies: 0 })).not.toContain("totalCompanies");
+  });
+});
+
+describe("groundIntakeWrite", () => {
+  it("drops the invented form from call 35614", () => {
+    expect(groundIntakeWrite({
+      firstName: "Karthik",
+      lastName: "Logan Agan",
+      email: "karthik@gmail.com",
+      dateOfBirth: "2000-06-12",
+      workStatus: "FRESHER",
+      totalCompanies: "0",
+      city: "JAYANAGAR",
+      jobCity: "BANGALORE",
+      pincode: "560011",
+      qualification: "GRADUATE",
+      shiftBase: "US",
+    }, "I am in Jaipur Nagar.", "Which part of Bangalore are you in?")).toEqual({});
+  });
+
+  it("keeps a name they said and a yes to the shift question", () => {
+    expect(groundIntakeWrite(
+      { firstName: "Karthik", lastName: "Logan Agan" },
+      "My name is Karthik, sir.",
+      "Shall I start with your name?",
+    )).toEqual({ firstName: "Karthik" });
+
+    expect(groundIntakeWrite(
+      { shiftBase: "US", pincode: "560011", email: "karthik@gmail.com" },
+      "Yes, yes, I am comfortable.",
+      "Could you confirm if you're comfortable working in the US shift?",
+    )).toEqual({ shiftBase: "US" });
+  });
+
+  it("keeps a pincode only when the digits were spoken", () => {
+    expect(groundIntakeWrite(
+      { pincode: "560011" },
+      "Sir, I don't know my pincode, sir.",
+      "Could you share the 6-digit pincode?",
+    )).toEqual({});
+    expect(groundIntakeWrite(
+      { pincode: "560011" },
+      "It is 560011.",
+      "Could you share the 6-digit pincode?",
+    )).toEqual({ pincode: "560011" });
   });
 });

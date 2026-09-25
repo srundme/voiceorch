@@ -118,17 +118,25 @@ def speak(text: str) -> bytes:
     if cached is not None:
         return cached
     max_tokens = min(240, max(32, len(cleaned) * 2))
-    started = time.monotonic()
+    waited_at = time.monotonic()
     with INFER:
+        wait_s = time.monotonic() - waited_at
+        started = time.monotonic()
+        # The HTTP body is the full line. Simulating streamed text input
+        # (non_streaming_mode=False) only adds decode steps.
         wavs, sr = tts.generate_voice_clone(
             text=cleaned,
             language="English",
             voice_clone_prompt=voice_prompt,
-            non_streaming_mode=False,
+            non_streaming_mode=True,
             max_new_tokens=max_tokens,
         )
+        gen_s = time.monotonic() - started
     pcm = float_to_pcm16(to_16k(np.asarray(wavs[0], dtype=np.float32), int(sr)))
-    log(f"speak {len(cleaned)} chars in {time.monotonic() - started:.2f}s audio_s={len(pcm) / 2 / SAMPLE_RATE:.2f}")
+    log(
+        f"speak {len(cleaned)} chars gen={gen_s:.2f}s wait={wait_s:.2f}s "
+        f"audio_s={len(pcm) / 2 / SAMPLE_RATE:.2f}"
+    )
     return pcm
 
 

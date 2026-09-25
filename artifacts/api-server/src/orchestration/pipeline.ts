@@ -61,6 +61,7 @@ import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
 import { validateBookableEmail } from "./booking-email-validate.js";
 import { bookingAsksCallerForEmail, resolveBookingAttendeeEmail } from "./booking-email-policy.js";
 import { looksLikeVoicemailGreeting } from "../lib/voicemail-detect.js";
+import { groundIntakeWrite } from "../lib/candidate-intake-fields.js";
 import {
   applyBookingEmailToBookArgs,
   applyBookingEmailToSendArgs,
@@ -7090,6 +7091,12 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   private extractSpeakable(text: string) {
+    // The GPU voice cannot overlap sentences. Splitting "Karthik. I'll need
+    // details. Shall I start?" into three jobs made each one wait 8–16s
+    // (call 35614). Hold the whole reply for one synthesis.
+    if (this.agent.ttsProvider === "irfan_pod") {
+      return { sentences: [] as string[], remainder: text };
+    }
     return extractSentences(text, this.agent.ttsMinSentenceChars, this.ttsExtractOpts());
   }
 
@@ -8054,7 +8061,34 @@ export class OrchestrationPipeline implements VoiceSession {
    * (mirrors the web-call path). Errors are logged with their real reason, then
    * returned as an `error:` string so the LLM can keep talking instead of dead air.
    */
+  private intakeSpeechContext(): { caller: string; agent: string } {
+    const messages = this.conversationHistory.messages;
+    let caller = "";
+    let agent = "";
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const turn = messages[i]!;
+      if (!caller && turn.role === "user" && !turn.content.startsWith("[Background")) caller = turn.content;
+      if (!agent && turn.role === "assistant") agent = turn.content;
+      if (caller && agent) break;
+    }
+    return { caller, agent };
+  }
+
   private async handleToolCall(toolName: string, args: Record<string, unknown>): Promise<string | undefined> {
+    if (toolName === "save_candidate_details") {
+      const heard = this.intakeSpeechContext();
+      const grounded = groundIntakeWrite(args, heard.caller, heard.agent);
+      if (Object.keys(grounded).length === 0) {
+        const skipped = "Nothing from what they just said was saved. Ask the next missing question. Do not invent a surname, email, or pincode.";
+        this.logExec("Tool", "system", {
+          status: "info",
+          turnNumber: this._activeTurnIndex,
+          metadata: { event: "Save Dropped", reason: "not_said", fields: Object.keys(args) },
+        });
+        return skipped;
+      }
+      args = grounded;
+    }
     const _toolStart = Date.now();
     this.logExec("Tool", "request", {
       status: "info",

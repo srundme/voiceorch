@@ -435,6 +435,101 @@ export const INTAKE_REQUIRED_ON_CALL: readonly IntakeFieldKey[] = [
   "qualification", "shiftBase",
 ];
 
+function foldSpeech(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9@.\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function compactSpeech(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function callerSaid(caller: string, word: string): boolean {
+  const needle = compactSpeech(word);
+  if (needle.length < 3) return false;
+  return compactSpeech(caller).includes(needle);
+}
+
+function callerAffirmed(caller: string): boolean {
+  return /\b(yes|yeah|yep|yup|sure|okay|ok|fine|comfortable|can do)\b/.test(foldSpeech(caller));
+}
+
+/**
+ * Drop intake fields the caller did not actually say. A small model will fill
+ * the whole form from memory (call 35614 invented a surname, a Gmail address,
+ * and a pincode after "I don't know my pincode").
+ */
+export function groundIntakeWrite(
+  args: Record<string, unknown>,
+  callerText: string,
+  lastAgentText = "",
+): Record<string, unknown> {
+  const caller = foldSpeech(callerText);
+  const agent = foldSpeech(lastAgentText);
+  const kept: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(args)) {
+    if (raw == null || String(raw).trim() === "") continue;
+    if (intakeValueWasSaid(key, raw, caller, agent)) kept[key] = raw;
+  }
+  return kept;
+}
+
+function intakeValueWasSaid(
+  key: string,
+  raw: unknown,
+  caller: string,
+  agent: string,
+): boolean {
+  const value = String(raw).trim();
+  const pinKey = key === "pincode" || key === "pinCode" || key === "pin";
+  if (pinKey) {
+    const digits = value.replace(/\D/g, "");
+    return digits.length === 6 && caller.replace(/\D/g, "").includes(digits);
+  }
+  if (key === "email") {
+    const local = value.split("@")[0] ?? "";
+    return /\b(gmail|email|mail|@|dot com|dot in)\b/.test(caller) && callerSaid(caller, local);
+  }
+  if (key === "firstName" || key === "lastName" || key === "city" || key === "jobCity") {
+    return value.split(/\s+/).every((word) => callerSaid(caller, word));
+  }
+  if (key === "dateOfBirth") {
+    const year = value.match(/\d{4}/)?.[0];
+    return year != null && caller.includes(year);
+  }
+  if (key === "phone") {
+    const digits = value.replace(/\D/g, "").slice(-10);
+    return digits.length === 10 && caller.replace(/\D/g, "").includes(digits);
+  }
+  if (key === "workStatus") {
+    const fresher = /fresher|freshers|no experience/.test(value.toLowerCase());
+    return fresher ? /\bfresher\b/.test(caller) : /\bexperienced\b/.test(caller);
+  }
+  if (key === "qualification") {
+    return /post/.test(value.toLowerCase())
+      ? /post\s*graduate/.test(caller)
+      : /\b(graduate|graduation|degree)\b/.test(caller);
+  }
+  if (key === "totalCompanies") {
+    return /\b(zero|one|two|three|four|five|companies|company|fresher)\b/.test(caller)
+      || /\d/.test(caller);
+  }
+  if (key === "shiftBase") {
+    if (/\b(us|u\.s|night|rotational|rotating|day shift|domestic)\b/.test(caller)) return true;
+    return callerAffirmed(caller) && /\b(shift|night)\b/.test(agent);
+  }
+  if (/^(servingNotice|wantsWfh|needsWeekendOff|hasCareerGap|otherDomain|missingEduDocs|missingExpDocs)$/.test(key)) {
+    if (!callerAffirmed(caller) && !/\b(no|nope|not|don't|dont|cannot|can't)\b/.test(caller)) return false;
+    const topic = key === "wantsWfh" ? "home|wfh|office"
+      : key === "needsWeekendOff" ? "weekend|saturday"
+      : key === "servingNotice" ? "notice"
+      : key === "hasCareerGap" ? "gap"
+      : key === "otherDomain" ? "domain|bpo"
+      : "document";
+    return new RegExp(topic).test(agent) || new RegExp(topic).test(caller);
+  }
+  return callerSaid(caller, value);
+}
+
 /** Field keys still empty — what the agent should ask next. */
 export function missingIntakeFields(
   row: Partial<Record<IntakeFieldKey, unknown>>,
