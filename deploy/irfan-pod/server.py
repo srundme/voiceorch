@@ -10,7 +10,6 @@ The three models stay loaded. SnapServe calls:
 from __future__ import annotations
 
 import asyncio
-import copy
 import json
 import os
 import queue
@@ -42,11 +41,16 @@ PARTIAL_EVERY_MS = 2500
 REF_SECONDS = 6
 
 INFER = threading.Lock()
+ASR_CONTEXT = (
+    "voice process, international voice process, Jobshop, Irfan, "
+    "work from home, BPO, call center, pincode"
+)
 asr = None
 tts = None
 voice_prompt = None
 llm = None
 tok = None
+filler_pcm: dict[str, bytes] = {}
 
 
 def log(msg: str) -> None:
@@ -85,7 +89,11 @@ def transcribe(pcm: bytes) -> str:
     if len(audio) < SAMPLE_RATE // 5:
         return ""
     with INFER:
-        result = asr.transcribe((audio, SAMPLE_RATE), language="English")
+        result = asr.transcribe(
+            (audio, SAMPLE_RATE),
+            language="English",
+            context=ASR_CONTEXT,
+        )
     text = getattr(result[0], "text", "") if result else ""
     return (text or "").strip()
 
@@ -106,18 +114,22 @@ def speak(text: str) -> bytes:
     cleaned = " ".join(text.split())
     if not cleaned:
         return b""
-    max_tokens = min(400, max(48, len(cleaned) * 3))
-    # Copy so one utterance cannot rewrite the speaker embedding for the next.
-    prompt = copy.deepcopy(voice_prompt)
+    cached = filler_pcm.get(cleaned.casefold())
+    if cached is not None:
+        return cached
+    max_tokens = min(240, max(32, len(cleaned) * 2))
+    started = time.monotonic()
     with INFER:
         wavs, sr = tts.generate_voice_clone(
             text=cleaned,
             language="English",
-            voice_clone_prompt=prompt,
-            non_streaming_mode=True,
+            voice_clone_prompt=voice_prompt,
+            non_streaming_mode=False,
             max_new_tokens=max_tokens,
         )
-    return float_to_pcm16(to_16k(np.asarray(wavs[0], dtype=np.float32), int(sr)))
+    pcm = float_to_pcm16(to_16k(np.asarray(wavs[0], dtype=np.float32), int(sr)))
+    log(f"speak {len(cleaned)} chars in {time.monotonic() - started:.2f}s audio_s={len(pcm) / 2 / SAMPLE_RATE:.2f}")
+    return pcm
 
 
 def load_models() -> None:
@@ -154,6 +166,9 @@ def load_models() -> None:
         local_files_only=True,
     )
     log("models ready")
+    # The intake cover word is spoken on every turn. Keep it off the GPU.
+    filler_pcm["okay."] = speak("Okay.")
+    log("filler cached")
 
 
 class Utterance:
