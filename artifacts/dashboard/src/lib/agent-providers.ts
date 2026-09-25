@@ -28,19 +28,32 @@ export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "saaras:v3",          label: "Saaras v3" },
     { value: "saaras:v3-realtime", label: "Saaras v3 (legacy id)" },
     { value: "saarika:v2.5",       label: "Saarika v2.5 (legacy)" },
-    { value: "saaras:v4",          label: "Saaras v4 (not for live calls)" },
+    { value: "saaras:v4",          label: "Saaras v4" },
   ],
 };
 
 export const SARVAM_PRODUCT_ASR_MODEL = "saaras:v3";
 
-/** Product picker: only Saaras v3. A non-product saved model stays visible so the agent can be migrated. */
+/** Models offered in the agent builder. v3 stays the default for new agents. */
+export const SARVAM_BUILDER_ASR_MODELS: { value: string; label: string }[] = [
+  { value: "saaras:v3", label: "Saaras v3" },
+  { value: "saaras:v4", label: "Saaras v4" },
+];
+
+/** True for Saarika and any other id that is not a builder choice. */
+export function isLegacySarvamAsr(model: string | null | undefined): boolean {
+  const m = (model ?? "").trim();
+  if (!m) return false;
+  return !SARVAM_BUILDER_ASR_MODELS.some((item) => item.value === m);
+}
+
+/** Product picker: Saaras v3 and v4. A saved legacy model stays visible so the agent can be migrated. */
 export function asrModelsForPicker(
   provider: string,
   current?: string | null,
 ): { value: string; label: string }[] {
   const product = provider === "sarvam"
-    ? [{ value: SARVAM_PRODUCT_ASR_MODEL, label: "Saaras v3" }]
+    ? [...SARVAM_BUILDER_ASR_MODELS]
     : (ASR_MODELS[provider] ?? []);
   const cur = (current ?? "").trim();
   if (cur && !product.some((m) => m.value === cur)) {

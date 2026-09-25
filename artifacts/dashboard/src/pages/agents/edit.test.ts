@@ -641,6 +641,7 @@ describe("Sarvam realtime builder catalog", () => {
     const { isSarvamRealtimeAsr } = await import("@/lib/agent-providers");
     expect(isSarvamRealtimeAsr("saaras:v3")).toBe(true);
     expect(isSarvamRealtimeAsr("saaras:v3-realtime")).toBe(true);
+    expect(isSarvamRealtimeAsr("saaras:v4")).toBe(true);
     expect(isSarvamRealtimeAsr("saarika:v2.5")).toBe(false);
   });
 
@@ -652,13 +653,16 @@ describe("Sarvam realtime builder catalog", () => {
     expect(hydrateSarvamRealtimeVad({ sarvamEndOfSpeechSilenceMs: 400, asrEndpointingSilenceMs: 150 }).silence).toBe(400);
   });
 
-  it("product ASR picker is only Saaras v3", async () => {
-    const { asrModelsForPicker, SARVAM_PRODUCT_ASR_MODEL } = await import("@/lib/agent-providers");
-    expect(asrModelsForPicker("sarvam").map((m) => m.value)).toEqual([SARVAM_PRODUCT_ASR_MODEL]);
+  it("product ASR picker offers Saaras v3 and v4", async () => {
+    const { asrModelsForPicker, isLegacySarvamAsr } = await import("@/lib/agent-providers");
+    expect(asrModelsForPicker("sarvam").map((m) => m.value)).toEqual(["saaras:v3", "saaras:v4"]);
     expect(asrModelsForPicker("sarvam", "saarika:v2.5").map((m) => m.value)).toEqual([
-      SARVAM_PRODUCT_ASR_MODEL,
+      "saaras:v3",
+      "saaras:v4",
       "saarika:v2.5",
     ]);
+    expect(isLegacySarvamAsr("saaras:v4")).toBe(false);
+    expect(isLegacySarvamAsr("saarika:v2.5")).toBe(true);
   });
 
   it("Google LLM picker hides retired 2.5 Flash unless it is already saved", async () => {

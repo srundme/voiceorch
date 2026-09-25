@@ -106,7 +106,7 @@ import { findBySchedulingId, normalizeSchedulingId } from "@/lib/scheduling-setu
 import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import {
   LLM_PROVIDERS, TTS_PROVIDERS, ASR_PROVIDERS,
-  LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, asrModelsForPicker, SARVAM_PRODUCT_ASR_MODEL,
+  LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, asrModelsForPicker, SARVAM_PRODUCT_ASR_MODEL, isLegacySarvamAsr,
   llmModelsForPicker, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   DEFAULT_CARTESIA_VOICE_ID, DEFAULT_CARTESIA_VOICE_NAME,
   orderVoicesByLanguage, isVoiceCompatibleWithLanguage, shouldClearVoiceForLanguage,
@@ -1202,7 +1202,7 @@ function OverviewTab({
                 </FormItem>
                 );
               }} />
-              {!isGeminiLive && asrProvider === "sarvam" && asrModel && asrModel !== SARVAM_PRODUCT_ASR_MODEL && (
+              {!isGeminiLive && asrProvider === "sarvam" && isLegacySarvamAsr(asrModel) && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 space-y-2">
                   <p className="text-[11px] text-foreground/80 leading-snug">
                     This agent is on a legacy transcriber. Switch to Saaras v3 for live calls.
@@ -2540,7 +2540,7 @@ function VoiceTab({ form }: { form: any }) {
                 </FormItem>
               )} />
 
-              {asrProvider === "sarvam" && asrModel && asrModel !== SARVAM_PRODUCT_ASR_MODEL ? (
+              {asrProvider === "sarvam" && isLegacySarvamAsr(asrModel) ? (
                 <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2">
                   <p className="text-[12px] leading-snug text-foreground/80">
                     This agent is on a legacy transcriber. Switch to Saaras v3 for live calls.
