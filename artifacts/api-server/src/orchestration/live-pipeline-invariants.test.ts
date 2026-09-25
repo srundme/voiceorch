@@ -282,7 +282,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(methodBody("handleToolCallInner")).not.toContain("toLocaleString(\"en-IN\"");
     expect(methodBody("handleToolCallInner")).not.toContain("Confirm THIS exact time");
     expect(methodBody("handleToolCallInner")).not.toContain("Do NOT call end_call automatically");
-    expect(pipelineSrc).toContain("outbound stub Welcome is not a complete opener");
+    expect(pipelineSrc).toContain("stub Welcome is the whole opener — waiting for the caller");
   });
 
   it("barge recovery waits out an open VAD instead of answering a fragment (call 21628)", () => {

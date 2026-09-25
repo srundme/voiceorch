@@ -5990,6 +5990,7 @@ export class OrchestrationPipeline implements VoiceSession {
         !handoffTakeover &&
         !useInstantReturning &&
         greeting.trim() &&
+        !isStubGreeting(greeting) &&
         !greetLang.toLowerCase().startsWith("en") &&
         !/[\u0900-\u0DFF]/.test(greeting)
         && !(
@@ -6005,20 +6006,19 @@ export class OrchestrationPipeline implements VoiceSession {
         greeting = "";
       }
 
-      // Call 26692: typed Welcome "Hello" was spoken as the complete opener
-      // (greetingLen=5), then CALL FLOW dumped on the caller's "Hi".
+      // A Welcome of only "Hello" is the whole first turn. The caller answers,
+      // then CALL FLOW introduces the agent. Replacing Hello with the intro
+      // (call 34240) meant they never got a turn to say hello back.
       if (
-        this.callDirection === "outbound"
-        && !handoffTakeover
+        !handoffTakeover
         && !useInstantReturning
         && greeting.trim()
         && isStubGreeting(greeting)
       ) {
         logger.info(
           { callId: this.config.callId, greetLang, stub: greeting.slice(0, 40) },
-          "Pipeline: outbound stub Welcome is not a complete opener — generating a full greeting",
+          "Pipeline: stub Welcome is the whole opener — waiting for the caller",
         );
-        greeting = "";
       }
 
       let greetingEmotions: string[] | undefined;
