@@ -36,8 +36,8 @@ describe("validateIntakeControls", () => {
     expect(controls).toMatchObject({ llmProvider: "groq", ttsProvider: "sarvam" });
   });
 
-  it("only offers Groq and Sarvam for the LLM", () => {
-    expect(Object.keys(INTAKE_LLM_CATALOG).sort()).toEqual(["groq", "sarvam"]);
+  it("offers the GPU pod plus Groq and Sarvam for the LLM", () => {
+    expect(Object.keys(INTAKE_LLM_CATALOG).sort()).toEqual(["groq", "irfan_pod", "sarvam"]);
     const { controls, errors } = validateIntakeControls({ ...base, llmProvider: "openai" });
     expect(controls).toBeNull();
     expect(errors.join(" ")).toContain("groq, sarvam");
@@ -58,8 +58,8 @@ describe("validateIntakeControls", () => {
     expect(controls?.llmModel).toBe("sarvam-105b-conversations");
   });
 
-  it("only offers Cartesia and Sarvam for TTS", () => {
-    expect(INTAKE_TTS_CATALOG.map((p) => p.value).sort()).toEqual(["cartesia", "sarvam"]);
+  it("offers the GPU pod, Cartesia, and Sarvam for TTS", () => {
+    expect(INTAKE_TTS_CATALOG.map((p) => p.value).sort()).toEqual(["cartesia", "irfan_pod", "sarvam"]);
     expect(INTAKE_TTS_CATALOG.find((p) => p.value === "cartesia")?.model).toBe("sonic-3.6");
   });
 

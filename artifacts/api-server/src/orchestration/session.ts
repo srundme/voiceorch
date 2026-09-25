@@ -45,6 +45,8 @@ import {
   INTAKE_AGENT_TYPE,
   INTAKE_BACKCHANNEL_FILLERS,
   INTAKE_LOCKED_AGENT_CONFIG,
+  applyIntakePodVoice,
+  intakeUsesPod,
   buildIntakeSttPrompt,
   buildIntakeSystemPrompt,
   intakeAgentTools,
@@ -436,6 +438,7 @@ export async function createSession(params: {
   // Overlay after normalize so a stale intake row cannot keep Fast barge / VAD.
   if (agent.agentType === INTAKE_AGENT_TYPE) {
     Object.assign(agentCfg, INTAKE_LOCKED_AGENT_CONFIG);
+    if (intakeUsesPod()) applyIntakePodVoice(agent);
     if (agent.ttsProvider === "cartesia") {
       agent.ttsVoice = intakeCartesiaVoiceId(agent.ttsVoice);
     }
@@ -1680,6 +1683,18 @@ export async function createSession(params: {
         "Non-catalog Sarvam speaker without owner API key — TTS will fail until Providers → Sarvam key is added",
       );
     }
+  }
+
+  // The pod has no third-party key. A placeholder satisfies the pipeline check.
+  if (
+    intakeUsesPod()
+    && (
+      agent.asrProvider?.toLowerCase() === "irfan_pod"
+      || agent.llmProvider?.toLowerCase() === "irfan_pod"
+      || agent.ttsProvider?.toLowerCase() === "irfan_pod"
+    )
+  ) {
+    providerKeys.set("irfan_pod", "pod");
   }
 
   // Provider key alias normalization (e.g. "google" key serves "gemini_audio" and "gemini")

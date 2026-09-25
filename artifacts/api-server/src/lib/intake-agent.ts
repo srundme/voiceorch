@@ -3,7 +3,7 @@
  *
  * Everything an operator is allowed to change lives in `IntakeAgentControls`:
  * name, LLM, TTS provider/voice/speed, and the inbound number. The rest of the
- * stack (Sarvam STT in English, the prompt, the intake tools) is fixed here so
+ * stack (English STT, the prompt, the intake tools) is fixed here so
  * every call behaves the same way regardless of who clicked create.
  */
 import { DISPOSITION_MEANINGS, INTAKE_COMPANIES, INTAKE_DISPOSITIONS } from "./intake-dispositions.js";
@@ -22,10 +22,43 @@ export interface IntakeModelChoice {
 }
 
 /**
- * Groq and Sarvam only. Both are fast enough to keep a form-filling turn under
- * a second, and both handle the tool-call-per-answer pattern the prompt needs.
+ * The GPU pod is the live intake brain when IRFAN_POD_URL is set. Groq and
+ * Sarvam stay available for a call that is not pinned to the pod.
  */
+export const IRFAN_POD_PROVIDER = "irfan_pod";
+export const IRFAN_POD_LLM_MODEL = "qwen2.5-14b-instruct";
+export const IRFAN_POD_ASR_MODEL = "qwen3-asr-1.7b";
+export const IRFAN_POD_TTS_MODEL = "qwen3-tts-12hz-1.7b-base";
+export const IRFAN_POD_VOICE = "irfan";
+
+/** True when the API process has the GPU pod address. Intake calls then use it. */
+export function intakeUsesPod(): boolean {
+  return (process.env["IRFAN_POD_URL"] ?? "").trim().length > 0;
+}
+
+/** Pin an intake agent onto the loaded Qwen ear, brain, and cloned voice. */
+export function applyIntakePodVoice(agent: {
+  asrProvider: string;
+  asrModel: string | null;
+  llmProvider: string;
+  llmModel: string | null;
+  ttsProvider: string;
+  ttsVoice: string | null;
+  ttsModel: string | null;
+}): void {
+  agent.asrProvider = IRFAN_POD_PROVIDER;
+  agent.asrModel = IRFAN_POD_ASR_MODEL;
+  agent.llmProvider = IRFAN_POD_PROVIDER;
+  agent.llmModel = IRFAN_POD_LLM_MODEL;
+  agent.ttsProvider = IRFAN_POD_PROVIDER;
+  agent.ttsVoice = IRFAN_POD_VOICE;
+  agent.ttsModel = IRFAN_POD_TTS_MODEL;
+}
+
 export const INTAKE_LLM_CATALOG: Record<string, IntakeModelChoice[]> = {
+  irfan_pod: [
+    { value: IRFAN_POD_LLM_MODEL, label: "Qwen 2.5 14B on the GPU pod" },
+  ],
   groq: [
     { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B — best tool accuracy" },
     { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B — fastest" },
@@ -105,6 +138,13 @@ export interface IntakeTtsProviderSpec {
 }
 
 export const INTAKE_TTS_CATALOG: IntakeTtsProviderSpec[] = [
+  {
+    value: IRFAN_POD_PROVIDER,
+    label: "Irfan voice on the GPU pod",
+    model: IRFAN_POD_TTS_MODEL,
+    voices: [{ value: IRFAN_POD_VOICE, label: "Irfan (cloned)" }],
+    allowCustomVoice: false,
+  },
   {
     value: "sarvam",
     label: "Sarvam (Bulbul v3)",
