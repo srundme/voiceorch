@@ -17,6 +17,7 @@ import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
 import { buildAntiRepeatNudge, extractRecentAgentQuestions, isBareAcknowledgement, isQuestionUtterance, isRepeatedAgentLine, makeFlowStepGuard } from "./conversationDiscipline.js";
 import { buildOpeningHandshakeNudge, humanizeOutboundOpener, OPENING_HANDSHAKE_MS } from "./opening-handshake.js";
+import { buildWhereFromNudge, trimWhereFromSpeech } from "./spoken-place.js";
 import {
   isCallerFarewellUtterance as isCallerFarewellUtteranceShared,
   isCallerClosingUtterance,
@@ -9338,6 +9339,8 @@ export class OrchestrationPipeline implements VoiceSession {
     let wakePlayer: (() => void) | null = null;
 
     const enqueue = (text: string, sequenceId: number = this.activeAgentSequenceId): void => {
+      text = trimWhereFromSpeech(transcript, text);
+      if (!text.trim()) return;
       if (this.bargeInRequested) return;
       if (
         !this.schedulingActionConfirmed
@@ -10339,6 +10342,7 @@ export class OrchestrationPipeline implements VoiceSession {
         const openingNudge = this.callDirection === "outbound" && Date.now() < this.openingHandshakeUntil
           ? buildOpeningHandshakeNudge(lastTurn.content, prevLine)
           : "";
+        const whereFromNudge = buildWhereFromNudge(lastTurn.content);
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
           {
@@ -10346,6 +10350,7 @@ export class OrchestrationPipeline implements VoiceSession {
             content: [
               lastTurn.content,
               THIS_TURN_INSTRUCTION,
+              whereFromNudge,
               openingNudge,
               nudge,
               buildTurnClockBlock(this.agent.timezone),

@@ -1513,7 +1513,7 @@ export async function createSession(params: {
     !agentConfig.systemPrompt.includes("[KB_TRUST]")
   ) {
     agentConfig.systemPrompt +=
-      "\n\n[KB_TRUST] When relevant information is provided in your context from the knowledge base, use it directly and precisely. Do not guess or invent product details, pricing, policies, or facts that are not present in what you have been given.";
+      "\n\n[KB_TRUST] When relevant information is provided in your context from the knowledge base, answer from those facts. Speak like a person on a phone: one short sentence, not a readout of the whole entry. Do not guess or invent product details, pricing, policies, or facts that are not present. If they ask where you are calling from, say the company and the city or area only. Do not read the street, landmark, pincode, phone, email, or office hours unless they ask for that exact detail.";
   }
 
   // Scope provider keys to this agent's owner (fetched in parallel above).
