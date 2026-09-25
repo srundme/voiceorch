@@ -22,36 +22,16 @@ const TAMIL_LISTENING_FILLERS = [
   "ஹ்ம்.",
 ];
 
-/**
- * Soft engage — only when the caller turn is not a question / risk turn.
- * Avoid language acks the LLM already opens with (Tamil "சரி").
- */
-const ENGLISH_SOFT_ACK_FILLERS = [
-  "Okay.",
-  "Got it.",
-  "I see.",
-  "Right.",
-  "Alright.",
-  "Mhm.",
-  "Mm-hmm.",
+// Tamil and English covers stay listening sounds. "Got it", "perfect", "right"
+// read as agreement and the LLM already says those. Hindi keeps a short ack.
+const HINDI_LISTENING_FILLERS = [
+  "हम्म.",
+  "म्म.",
 ];
 
-const ENGLISH_STORY_FILLERS = [
-  "I see.",
-  "Got it.",
-  "Right.",
-  "Mhm.",
-  "Mm-hmm.",
+const HINDI_ACK_FILLERS = [
   "Okay.",
-  "Uh-huh.",
-];
-
-const ENGLISH_NUMERIC_FILLERS = [
-  "Okay.",
-  "Got it.",
-  "Mhm.",
-  "Right.",
-  "Mm-hmm.",
+  "अच्छा.",
 ];
 
 // Tamil LLMs already open with "சரி," / "seri" — keep soft covers as listen sounds.
@@ -160,7 +140,9 @@ export function getBackchannelFillers(
   }
 
   if (!language) return [];
-  const isTamil = !opts?.englishStrictAck && language.toLowerCase().split("-")[0] === "ta";
+  const lang = language.toLowerCase().split("-")[0];
+  const isTamil = !opts?.englishStrictAck && lang === "ta";
+  const isHindi = !opts?.englishStrictAck && lang === "hi";
   const context = classifyBackchannelContext(opts?.callerTranscript);
 
   if (isTamil) {
@@ -168,16 +150,12 @@ export function getBackchannelFillers(
     return [...TAMIL_SOFT_ACK_FILLERS];
   }
 
-  switch (context) {
-    case "risky":
-      return [...ENGLISH_LISTENING_FILLERS];
-    case "story":
-      return [...ENGLISH_STORY_FILLERS];
-    case "numeric":
-      return [...ENGLISH_NUMERIC_FILLERS];
-    default:
-      return [...ENGLISH_SOFT_ACK_FILLERS];
+  if (isHindi) {
+    if (context === "risky") return [...HINDI_LISTENING_FILLERS];
+    return [...HINDI_ACK_FILLERS];
   }
+
+  return [...ENGLISH_LISTENING_FILLERS];
 }
 
 function nextRandom(opts?: BackchannelFillerOptions): number {
