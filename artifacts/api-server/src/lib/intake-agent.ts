@@ -26,7 +26,7 @@ export interface IntakeModelChoice {
  * Sarvam stay available for a call that is not pinned to the pod.
  */
 export const IRFAN_POD_PROVIDER = "irfan_pod";
-export const IRFAN_POD_LLM_MODEL = "qwen2.5-14b-instruct";
+export const IRFAN_POD_LLM_MODEL = "qwen3-32b-awq";
 export const IRFAN_POD_ASR_MODEL = "qwen3-asr-1.7b";
 export const IRFAN_POD_TTS_MODEL = "qwen3-tts-12hz-1.7b-base";
 export const IRFAN_POD_VOICE = "irfan";
@@ -57,7 +57,7 @@ export function applyIntakePodVoice(agent: {
 
 export const INTAKE_LLM_CATALOG: Record<string, IntakeModelChoice[]> = {
   irfan_pod: [
-    { value: IRFAN_POD_LLM_MODEL, label: "Qwen 2.5 14B on the GPU pod" },
+    { value: IRFAN_POD_LLM_MODEL, label: "Qwen3 32B on the GPU pod" },
   ],
   groq: [
     { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B — best tool accuracy" },

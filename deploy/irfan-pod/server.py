@@ -1,182 +1,164 @@
-"""One process for Irfan's ear, brain, and cloned voice.
+"""Irfan's front door on the GPU pod. No models load here.
 
-The three models stay loaded. SnapServe calls:
+Ear, brain and voice each run in their own vLLM server:
+  ear    Qwen3-ASR-1.7B        :8001  (start-ear.sh)
+  brain  Qwen3-32B-AWQ         :8000  (start-brain.sh)
+  voice  Qwen3-TTS Base clone  :8091  (start-tts.sh)
+
+SnapServe calls:
   GET  /health
-  WS   /v1/stt                 PCM16 mono 16 kHz in, JSON transcripts out
-  POST /v1/chat/completions    OpenAI-style streaming chat, including tool calls
-  POST /v1/audio/speech        JSON {"input": "..."} -> PCM16 mono 16 kHz
+  WS   /v1/stt                    PCM16 mono 16 kHz in, JSON transcripts out
+  POST /v1/audio/transcriptions   PCM16 mono 16 kHz body -> {"text": ...}
+  POST /v1/chat/completions       OpenAI streaming chat, including tool calls
+  POST /v1/audio/speech           JSON {"input": "..."} -> chunked PCM16 mono 16 kHz
 """
 
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import os
-import queue
-import re
-import threading
 import time
 import wave
-from typing import Any
 
+import aiohttp
 import numpy as np
-import torch
+import soxr
 from aiohttp import WSMsgType, web
-from qwen_asr import Qwen3ASRModel
-from qwen_tts import Qwen3TTSModel
-from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
-ASR_DIR = os.environ.get("IRFAN_ASR_DIR", "/workspace/models/Qwen3-ASR-1.7B")
-TTS_DIR = os.environ.get("IRFAN_TTS_DIR", "/workspace/models/Qwen3-TTS-12Hz-1.7B-Base")
-LLM_DIR = os.environ.get("IRFAN_LLM_DIR", "/workspace/models/Qwen2.5-14B-Instruct")
-REF_WAV = os.environ.get("IRFAN_REF_WAV", "/workspace/voices/irfan-ref.wav")
-REF_TXT = os.environ.get("IRFAN_REF_TXT", "/workspace/voices/irfan-ref.txt")
+EAR_URL = os.environ.get("IRFAN_EAR_URL", "http://127.0.0.1:8001")
+BRAIN_URL = os.environ.get("IRFAN_BRAIN_URL", "http://127.0.0.1:8000")
+VOICE_URL = os.environ.get("IRFAN_VOICE_URL", "http://127.0.0.1:8091")
+VOICE_NAME = os.environ.get("IRFAN_VOICE_NAME", "irfan")
 PORT = int(os.environ.get("IRFAN_POD_PORT", "8787"))
 
 SAMPLE_RATE = 16000
+VOICE_RATE = 24000
 SPEECH_RMS = 0.01
 SILENCE_MS = 450
 MIN_SPEECH_MS = 250
-PARTIAL_EVERY_MS = 2500
-REF_SECONDS = 6
+PARTIAL_EVERY_MS = 600
 
-INFER = threading.Lock()
-ASR_CONTEXT = (
-    "voice process, international voice process, Jobshop, Irfan, "
-    "work from home, BPO, call center, pincode"
-)
-asr = None
-tts = None
-voice_prompt = None
-llm = None
-tok = None
-filler_pcm: dict[str, bytes] = {}
+http: aiohttp.ClientSession | None = None
 
 
 def log(msg: str) -> None:
     print(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + " " + msg, flush=True)
 
 
-def pcm16_to_float(pcm: bytes) -> np.ndarray:
-    if not pcm:
-        return np.zeros(0, dtype=np.float32)
-    audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-    return np.ascontiguousarray(audio)
-
-
-def float_to_pcm16(wav: np.ndarray) -> bytes:
-    clipped = np.clip(wav, -1.0, 1.0)
-    return (clipped * 32767.0).astype(np.int16).tobytes()
-
-
-def to_16k(wav: np.ndarray, sr: int) -> np.ndarray:
-    if sr == SAMPLE_RATE or len(wav) == 0:
-        return wav.astype(np.float32)
-    n = max(1, int(len(wav) * SAMPLE_RATE / sr))
-    x = np.linspace(0, len(wav) - 1, n)
-    return np.interp(x, np.arange(len(wav)), wav).astype(np.float32)
-
-
 def rms(pcm: bytes) -> float:
-    audio = pcm16_to_float(pcm)
+    audio = np.frombuffer(pcm[: len(pcm) // 2 * 2], dtype=np.int16).astype(np.float32) / 32768.0
     if len(audio) == 0:
         return 0.0
     return float(np.sqrt(np.mean(np.square(audio))))
 
 
-def transcribe(pcm: bytes) -> str:
-    audio = pcm16_to_float(pcm)
-    if len(audio) < SAMPLE_RATE // 5:
+def to_wav(pcm: bytes) -> bytes:
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SAMPLE_RATE)
+        w.writeframes(pcm)
+    return buf.getvalue()
+
+
+async def transcribe(pcm: bytes) -> str:
+    if len(pcm) < SAMPLE_RATE // 5 * 2:
         return ""
-    with INFER:
-        result = asr.transcribe(
-            (audio, SAMPLE_RATE),
-            language="English",
-            context=ASR_CONTEXT,
-        )
-    text = getattr(result[0], "text", "") if result else ""
-    return (text or "").strip()
+    form = aiohttp.FormData()
+    form.add_field("file", to_wav(pcm), filename="audio.wav", content_type="audio/wav")
+    form.add_field("model", "irfan-ear")
+    form.add_field("language", "en")
+    async with http.post(f"{EAR_URL}/v1/audio/transcriptions", data=form) as resp:
+        if resp.status != 200:
+            log(f"ear HTTP {resp.status}: {(await resp.text())[:200]}")
+            return ""
+        return str((await resp.json()).get("text") or "").strip()
 
 
-def short_reference_wav() -> str:
-    """A few seconds of the clone clip. The full 45s reference drifts to another speaker."""
-    dest = "/workspace/voices/irfan-ref-6s.wav"
-    with wave.open(REF_WAV) as src:
-        frames = src.readframes(min(src.getnframes(), int(src.getframerate() * REF_SECONDS)))
-        params = src.getparams()
-    with wave.open(dest, "w") as out:
-        out.setparams(params)
-        out.writeframes(frames)
-    return dest
+async def upstream_ok(url: str) -> bool:
+    try:
+        async with http.get(f"{url}/health", timeout=aiohttp.ClientTimeout(total=3)) as resp:
+            return resp.status == 200
+    except (aiohttp.ClientError, asyncio.TimeoutError):
+        return False
 
 
-def speak(text: str) -> bytes:
-    cleaned = " ".join(text.split())
-    if not cleaned:
-        return b""
-    cached = filler_pcm.get(cleaned.casefold())
-    if cached is not None:
-        return cached
-    max_tokens = min(240, max(32, len(cleaned) * 2))
-    waited_at = time.monotonic()
-    with INFER:
-        wait_s = time.monotonic() - waited_at
-        started = time.monotonic()
-        # The HTTP body is the full line. Simulating streamed text input
-        # (non_streaming_mode=False) only adds decode steps.
-        wavs, sr = tts.generate_voice_clone(
-            text=cleaned,
-            language="English",
-            voice_clone_prompt=voice_prompt,
-            non_streaming_mode=True,
-            max_new_tokens=max_tokens,
-        )
-        gen_s = time.monotonic() - started
-    pcm = float_to_pcm16(to_16k(np.asarray(wavs[0], dtype=np.float32), int(sr)))
-    log(
-        f"speak {len(cleaned)} chars gen={gen_s:.2f}s wait={wait_s:.2f}s "
-        f"audio_s={len(pcm) / 2 / SAMPLE_RATE:.2f}"
+async def health(_request: web.Request) -> web.Response:
+    ear, brain, voice = await asyncio.gather(upstream_ok(EAR_URL), upstream_ok(BRAIN_URL), upstream_ok(VOICE_URL))
+    return web.json_response({"ok": ear and brain and voice, "ear": ear, "brain": brain, "voice": voice})
+
+
+async def transcribe_http(request: web.Request) -> web.Response:
+    return web.json_response({"text": await transcribe(await request.read())})
+
+
+async def speech(request: web.Request) -> web.StreamResponse:
+    body = await request.json()
+    text = str(body.get("input") or body.get("text") or "").strip()
+    payload = {
+        "input": text,
+        "voice": VOICE_NAME,
+        "language": "English",
+        "stream": True,
+        "stream_format": "audio",
+        "response_format": "pcm",
+    }
+    started = time.monotonic()
+    first = None
+    out = web.StreamResponse(status=200, headers={"Content-Type": "audio/L16"})
+    resampler = soxr.ResampleStream(VOICE_RATE, SAMPLE_RATE, 1, dtype="int16", quality="HQ")
+    carry = b""
+    async with http.post(f"{VOICE_URL}/v1/audio/speech", json=payload) as upstream:
+        if upstream.status != 200:
+            detail = (await upstream.text())[:200]
+            log(f"voice HTTP {upstream.status}: {detail}")
+            return web.Response(status=502, text=f"voice HTTP {upstream.status}")
+        await out.prepare(request)
+        try:
+            async for chunk in upstream.content.iter_any():
+                data = carry + chunk
+                even = len(data) // 2 * 2
+                carry = data[even:]
+                if not even:
+                    continue
+                pcm = resampler.resample_chunk(np.frombuffer(data[:even], dtype=np.int16))
+                if len(pcm):
+                    if first is None:
+                        first = time.monotonic() - started
+                    await out.write(pcm.tobytes())
+            tail = resampler.resample_chunk(np.zeros(0, dtype=np.int16), last=True)
+            if len(tail):
+                await out.write(tail.tobytes())
+        except ConnectionResetError:
+            return out
+    log(f"speak {len(text)} chars first={first or 0:.2f}s total={time.monotonic() - started:.2f}s")
+    await out.write_eof()
+    return out
+
+
+async def chat(request: web.Request) -> web.StreamResponse:
+    body = await request.json()
+    body["model"] = "irfan-brain"
+    out = web.StreamResponse(
+        status=200,
+        headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
-    return pcm
-
-
-def load_models() -> None:
-    global asr, tts, voice_prompt, llm, tok
-    log("load asr")
-    asr = Qwen3ASRModel.from_pretrained(
-        ASR_DIR,
-        dtype=torch.bfloat16,
-        device_map="cuda:0",
-        max_inference_batch_size=1,
-        max_new_tokens=256,
-    )
-    log("load tts")
-    tts = Qwen3TTSModel.from_pretrained(
-        TTS_DIR,
-        dtype=torch.bfloat16,
-        device_map="cuda:0",
-    )
-    ref_wav = short_reference_wav()
-    log("clone prompt")
-    # Speaker embedding only. Matching a 45s transcript on every short line
-    # ("Okay.", "Karthik!") let the voice fall back to the model's female default.
-    voice_prompt = tts.create_voice_clone_prompt(
-        ref_audio=ref_wav,
-        ref_text=None,
-        x_vector_only_mode=True,
-    )
-    log("load llm")
-    tok = AutoTokenizer.from_pretrained(LLM_DIR, local_files_only=True)
-    llm = AutoModelForCausalLM.from_pretrained(
-        LLM_DIR,
-        torch_dtype=torch.bfloat16,
-        device_map="cuda:0",
-        local_files_only=True,
-    )
-    log("models ready")
-    # The intake cover word is spoken on every turn. Keep it off the GPU.
-    filler_pcm["okay."] = speak("Okay.")
-    log("filler cached")
+    async with http.post(f"{BRAIN_URL}/v1/chat/completions", json=body) as upstream:
+        if upstream.status != 200:
+            detail = await upstream.text()
+            log(f"brain HTTP {upstream.status}: {detail[:300]}")
+            return web.Response(status=upstream.status, text=detail, content_type="application/json")
+        await out.prepare(request)
+        try:
+            async for chunk in upstream.content.iter_any():
+                await out.write(chunk)
+        except ConnectionResetError:
+            return out
+    await out.write_eof()
+    return out
 
 
 class Utterance:
@@ -189,158 +171,7 @@ class Utterance:
         self.last_text = ""
 
     def reset(self) -> None:
-        self.buf.clear()
-        self.speech_ms = 0.0
-        self.silence_ms = 0.0
-        self.in_speech = False
-        self.last_partial_at = 0.0
-        self.last_text = ""
-
-
-async def health(_request: web.Request) -> web.Response:
-    return web.json_response({"ok": asr is not None and tts is not None and llm is not None})
-
-
-async def transcribe_http(request: web.Request) -> web.Response:
-    pcm = await request.read()
-    text = await asyncio.to_thread(transcribe, pcm)
-    return web.json_response({"text": text})
-
-
-async def speech(request: web.Request) -> web.Response:
-    body = await request.json()
-    text = str(body.get("input") or body.get("text") or "")
-    pcm = await asyncio.to_thread(speak, text)
-    return web.Response(body=pcm, content_type="audio/L16")
-
-
-def parse_tool_call(text: str) -> tuple[str, str] | None:
-    start = text.find("<tool_call>")
-    end = text.find("</tool_call>")
-    if start < 0 or end < start:
-        return None
-    raw = text[start + len("<tool_call>") : end].strip()
-    try:
-        obj = json.loads(raw)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", raw, re.S)
-        if not match:
-            return None
-        obj = json.loads(match.group(0))
-    name = str(obj.get("name") or "").strip()
-    args = obj.get("arguments", {})
-    if not name:
-        return None
-    if not isinstance(args, str):
-        args = json.dumps(args)
-    return name, args
-
-
-def generate_reply(body: dict[str, Any], out: queue.Queue[str | None]) -> None:
-    messages = body.get("messages") or []
-    tools = body.get("tools") or None
-    max_new = int(body.get("max_tokens") or 220)
-    max_new = max(16, min(max_new, 512))
-    prompt = tok.apply_chat_template(
-        messages,
-        tools=tools,
-        add_generation_prompt=True,
-        tokenize=False,
-    )
-    inputs = tok(prompt, return_tensors="pt").to("cuda")
-    streamer = TextIteratorStreamer(tok, skip_prompt=True, skip_special_tokens=True)
-    error: list[str] = []
-
-    def _run() -> None:
-        try:
-            with INFER:
-                with torch.inference_mode():
-                    llm.generate(
-                        **inputs,
-                        streamer=streamer,
-                        max_new_tokens=max_new,
-                        do_sample=False,
-                    )
-        except Exception as exc:
-            error.append(str(exc))
-            streamer.end()
-
-    def _read() -> None:
-        try:
-            for piece in streamer:
-                out.put(piece)
-        finally:
-            if error:
-                out.put("\n__IRFAN_ERROR__" + error[0])
-            out.put(None)
-
-    threading.Thread(target=_run, daemon=True).start()
-    threading.Thread(target=_read, daemon=True).start()
-
-
-async def chat(request: web.Request) -> web.Response:
-    body = await request.json()
-    out: queue.Queue[str | None] = queue.Queue()
-    await asyncio.to_thread(generate_reply, body, out)
-
-    response = web.StreamResponse(
-        status=200,
-        headers={
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        },
-    )
-    await response.prepare(request)
-    full = ""
-    spoken_sent = 0
-    tool_mode = False
-    marker = "<tool_call>"
-
-    async def emit(delta: dict[str, Any]) -> None:
-        payload = {"choices": [{"index": 0, "delta": delta}]}
-        await response.write(f"data: {json.dumps(payload)}\n\n".encode())
-
-    def safe_end(text: str) -> int:
-        limit = min(len(marker) - 1, len(text))
-        for n in range(limit, 0, -1):
-            if marker.startswith(text[-n:]):
-                return len(text) - n
-        return len(text)
-
-    while True:
-        piece = await asyncio.to_thread(out.get)
-        if piece is None:
-            break
-        if piece.startswith("\n__IRFAN_ERROR__"):
-            log("llm " + piece)
-            break
-        full += piece
-        if not tool_mode and "<tool_call" in full:
-            tool_mode = True
-            head = full.split("<tool_call", 1)[0]
-            extra = head[spoken_sent:]
-            if extra:
-                await emit({"content": extra})
-            spoken_sent = len(head)
-            continue
-        if not tool_mode:
-            end = safe_end(full)
-            extra = full[spoken_sent:end]
-            if extra:
-                await emit({"content": extra})
-            spoken_sent = end
-
-    if not tool_mode and spoken_sent < len(full):
-        await emit({"content": full[spoken_sent:]})
-
-    parsed = parse_tool_call(full) if tool_mode else None
-    if parsed:
-        name, args = parsed
-        await emit({"tool_calls": [{"index": 0, "function": {"name": name, "arguments": args}}]})
-    await response.write(b"data: [DONE]\n\n")
-    await response.write_eof()
-    return response
+        self.__init__()
 
 
 async def stt_socket(request: web.Request) -> web.WebSocketResponse:
@@ -350,37 +181,34 @@ async def stt_socket(request: web.Request) -> web.WebSocketResponse:
     infer_lock = asyncio.Lock()
 
     async def send(text: str, final: bool) -> None:
-        if ws.closed:
-            return
-        await ws.send_str(json.dumps({"text": text, "is_final": final}))
+        if not ws.closed:
+            await ws.send_str(json.dumps({"text": text, "is_final": final}))
 
     async def run_asr(final: bool) -> None:
         if infer_lock.locked() and not final:
             return
         async with infer_lock:
             pcm = bytes(utter.buf)
-            text = await asyncio.to_thread(transcribe, pcm)
-            if not text:
-                return
+            started = time.monotonic()
+            text = await transcribe(pcm)
             if final:
-                await send(text, True)
+                log(f"hear final {len(pcm) / 2 / SAMPLE_RATE:.1f}s audio in {time.monotonic() - started:.2f}s: {text[:80]}")
                 utter.reset()
+                if text:
+                    await send(text, True)
                 return
-            if text != utter.last_text:
+            if text and text != utter.last_text:
                 utter.last_text = text
                 await send(text, False)
 
     async for msg in ws:
         if msg.type == WSMsgType.ERROR:
             break
-        if msg.type != WSMsgType.BINARY:
+        if msg.type != WSMsgType.BINARY or not msg.data:
             continue
         pcm = msg.data
-        if not isinstance(pcm, (bytes, bytearray)) or not pcm:
-            continue
         frame_ms = (len(pcm) / 2) / SAMPLE_RATE * 1000
-        level = rms(pcm)
-        if level >= SPEECH_RMS:
+        if rms(pcm) >= SPEECH_RMS:
             if not utter.in_speech:
                 utter.in_speech = True
                 utter.buf.clear()
@@ -406,10 +234,18 @@ async def stt_socket(request: web.Request) -> web.WebSocketResponse:
 
 
 def main() -> None:
-    os.environ.setdefault("HF_HUB_OFFLINE", "1")
-    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-    load_models()
     app = web.Application()
+
+    async def open_http(_app: web.Application) -> None:
+        global http
+        http = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=120))
+
+    async def close_http(_app: web.Application) -> None:
+        if http is not None:
+            await http.close()
+
+    app.on_startup.append(open_http)
+    app.on_cleanup.append(close_http)
     app.router.add_get("/health", health)
     app.router.add_post("/v1/audio/transcriptions", transcribe_http)
     app.router.add_post("/v1/audio/speech", speech)

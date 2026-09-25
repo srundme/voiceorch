@@ -6,7 +6,7 @@ import { toOpenAiToolChoice } from "./tool-choice.js";
 import { irfanPodBaseUrl } from "../irfan-pod-url.js";
 
 /**
- * Qwen2.5-14B on the GPU pod. The pod speaks the OpenAI chat stream,
+ * Qwen3-32B on the GPU pod (vLLM). The pod speaks the OpenAI chat stream,
  * including tool_calls, so intake can keep saving the form.
  */
 export class IrfanPodLLM implements LLMAdapter {
@@ -21,7 +21,7 @@ export class IrfanPodLLM implements LLMAdapter {
       apiKey: apiKey || "pod",
       baseURL: `${irfanPodBaseUrl()}/v1`,
     });
-    this.model = (model ?? "").trim() || "qwen2.5-14b-instruct";
+    this.model = (model ?? "").trim() || "qwen3-32b-awq";
     this.maxTokens = genParams?.maxTokens ?? undefined;
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;

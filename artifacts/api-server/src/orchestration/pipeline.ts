@@ -7091,12 +7091,6 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   private extractSpeakable(text: string) {
-    // The GPU voice cannot overlap sentences. Splitting "Karthik. I'll need
-    // details. Shall I start?" into three jobs made each one wait 8–16s
-    // (call 35614). Hold the whole reply for one synthesis.
-    if (this.agent.ttsProvider === "irfan_pod") {
-      return { sentences: [] as string[], remainder: text };
-    }
     return extractSentences(text, this.agent.ttsMinSentenceChars, this.ttsExtractOpts());
   }
 

@@ -1,0 +1,21 @@
+#!/bin/bash
+# Irfan voice: Qwen3-TTS Base (voice clone) on vLLM-Omni, port 8091, log /workspace/tts.log
+ENV=/workspace/envs/tts
+export LD_LIBRARY_PATH=/workspace/cuda-compat-12.9:$LD_LIBRARY_PATH
+export HF_HOME=/workspace/hf-home HF_HUB_OFFLINE=1 CUDA_HOME=$ENV PATH=$ENV/bin:$PATH
+pid=$(ps -eo pid,args | awk '/vllm serve \/workspace\/models\/Qwen3-TTS/ && $0 !~ /awk/ {print $1}')
+if [ -n "$pid" ]; then
+  kill $pid
+  sleep 5
+fi
+SRC=$("$ENV/bin/python" -c "import vllm_omni,os;print(os.path.dirname(vllm_omni.__file__))" 2>/dev/null | tail -1)/deploy/qwen3_tts.yaml
+CFG=/workspace/irfan-pod/qwen3_tts_irfan.yaml
+sed -e 's/gpu_memory_utilization: 0.3/gpu_memory_utilization: 0.1/' \
+    -e 's/max_num_seqs: 64/max_num_seqs: 8/' "$SRC" > "$CFG"
+# talker only: every request reuses the same Irfan reference prompt
+awk 'BEGIN{n=0} /enable_prefix_caching: false/{n++; if(n==1){sub("false","true")}} {print}' "$CFG" > "$CFG.tmp" && mv "$CFG.tmp" "$CFG"
+: > /workspace/tts.log
+nohup "$ENV/bin/vllm" serve /workspace/models/Qwen3-TTS-1.7B-Base \
+  --deploy-config "$CFG" --omni --port 8091 --trust-remote-code \
+  > /workspace/tts.log 2>&1 < /dev/null &
+echo $!
