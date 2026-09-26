@@ -27,7 +27,7 @@ export interface IntakeModelChoice {
  */
 export const IRFAN_POD_PROVIDER = "irfan_pod";
 export const IRFAN_POD_LLM_MODEL = "qwen3-32b-awq";
-export const IRFAN_POD_ASR_MODEL = "qwen3-asr-1.7b";
+export const IRFAN_POD_ASR_MODEL = "whisper-large-v3-turbo";
 export const IRFAN_POD_TTS_MODEL = "qwen3-tts-12hz-1.7b-customvoice";
 export const IRFAN_POD_VOICE = "ryan";
 

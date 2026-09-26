@@ -1,26 +1,24 @@
-"""Irfan's ear: NVIDIA Parakeet CTC 1.1B.
+"""Irfan's ear: Whisper large-v3-turbo.
 
-Phone-call English (Fisher and Switchboard are in its training set), served on
-the same port the front door already calls. A turn is the growing clip the
-front door sends, so each partial and the final are one forward pass.
+English letters only. The front door already decided the end of the turn,
+so this server does not run its own voice-activity gate.
 """
 from __future__ import annotations
 
 import io
+import os
 import time
 import wave
 
 import numpy as np
-import torch
 from aiohttp import web
-from transformers import AutoProcessor, ParakeetForCTC
+from faster_whisper import WhisperModel
 
-MODEL = "/workspace/models/parakeet-ctc-1.1b"
+MODEL = os.environ.get("IRFAN_EAR_MODEL", "/workspace/models/whisper-large-v3-turbo")
 PORT = 8001
 SAMPLE_RATE = 16000
 
-processor = AutoProcessor.from_pretrained(MODEL)
-model = ParakeetForCTC.from_pretrained(MODEL, dtype=torch.float16).to("cuda").eval()
+model = WhisperModel(MODEL, device="cuda", compute_type="float16")
 
 
 def log(msg: str) -> None:
@@ -51,41 +49,50 @@ def trim(audio: np.ndarray) -> np.ndarray:
     return audio[start:end]
 
 
-def transcribe(audio: np.ndarray) -> str:
+def transcribe(audio: np.ndarray, prompt: str) -> str:
     audio = trim(audio)
     if len(audio) < SAMPLE_RATE // 5:
         return ""
-    inputs = processor(audio, sampling_rate=SAMPLE_RATE, return_tensors="pt")
-    features = inputs["input_features"].to(device="cuda", dtype=torch.float16)
-    mask = inputs.get("attention_mask")
-    if mask is not None:
-        mask = mask.to("cuda")
-    ids = model.generate(input_features=features, attention_mask=mask)
-    return processor.batch_decode(ids, skip_special_tokens=True)[0].strip()
+    segments, _info = model.transcribe(
+        audio,
+        language="en",
+        task="transcribe",
+        beam_size=1,
+        best_of=1,
+        temperature=0.0,
+        vad_filter=False,
+        without_timestamps=True,
+        condition_on_previous_text=False,
+        initial_prompt=prompt or None,
+    )
+    return " ".join(segment.text.strip() for segment in segments).strip()
 
 
 async def health(_request: web.Request) -> web.Response:
-    return web.json_response({"ok": True, "model": "parakeet-ctc-1.1b"})
+    return web.json_response({"ok": True, "model": "whisper-large-v3-turbo"})
 
 
 async def transcriptions(request: web.Request) -> web.Response:
+    prompt = ""
     if request.content_type.startswith("multipart/"):
         form = await request.post()
         field = form.get("file")
         data = field.file.read() if hasattr(field, "file") else bytes(field)
+        raw_prompt = form.get("prompt")
+        if isinstance(raw_prompt, str):
+            prompt = raw_prompt.strip()
     else:
         data = await request.read()
     started = time.monotonic()
-    text = transcribe(to_audio(data))
+    text = transcribe(to_audio(data), prompt)
     log(f"ear {len(data)} bytes in {time.monotonic() - started:.2f}s: {text[:80]}")
     return web.json_response({"text": text})
 
 
 def main() -> None:
-    # First pass at each length pays for the GPU kernels. Later calls stay near 0.07s.
     rng = np.random.default_rng(0)
-    for seconds in (2, 4, 8, 16):
-        transcribe(rng.normal(0, 0.01, SAMPLE_RATE * seconds).astype(np.float32))
+    for seconds in (2, 4, 8):
+        transcribe(rng.normal(0, 0.01, SAMPLE_RATE * seconds).astype(np.float32), "")
     log(f"listen 0.0.0.0:{PORT}")
     app = web.Application(client_max_size=20 * 1024 * 1024)
     app.router.add_get("/health", health)

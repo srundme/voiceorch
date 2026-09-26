@@ -1,7 +1,7 @@
 """Irfan's front door on the GPU pod. Only the small Silero VAD loads here.
 
 Ear, brain and voice each run in their own vLLM server:
-  ear    Parakeet CTC 1.1B     :8001  (start-ear.sh)
+  ear    Whisper large-v3-turbo :8001  (start-ear.sh)
   brain  Qwen3-32B-AWQ         :8000  (start-brain.sh)
   voice  Qwen3-TTS CustomVoice :8091  (start-tts.sh, speaker Ryan)
 
