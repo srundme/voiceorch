@@ -201,6 +201,8 @@ describe("intake prompt", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("Ask what kind of job they are looking for");
     expect(INTAKE_SYSTEM_PROMPT).toContain("international voice, domestic voice, or non-voice");
     expect(INTAKE_SYSTEM_PROMPT).toContain("face to face in Bangalore");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("6-digit pincode");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("A finished sentence is the end of a normal answer");
     expect(INTAKE_SYSTEM_PROMPT).not.toContain("Hiring zone is decided from the pincode");
   });
 

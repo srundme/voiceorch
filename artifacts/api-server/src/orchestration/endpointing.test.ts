@@ -16,6 +16,7 @@ import {
   isCallerOfferingEmail,
   resolveCollectionKind,
   resolveCollectionVadSilenceMs,
+  irfanListenSilenceMs,
   collectionHoldMsForTranscript,
   resolveIncompleteHoldMs,
   resolveStreamingTurnHold,
@@ -324,6 +325,15 @@ describe("resolveIncompleteHoldMs", () => {
       collectionKind: "digit",
       trailingFragment: true,
     })).toBe(1600);
+  });
+});
+
+describe("irfanListenSilenceMs", () => {
+  it("keeps the semantic window for a normal answer and stretches only a pincode or an email", () => {
+    expect(irfanListenSilenceMs("none", 450)).toBe(450);
+    expect(irfanListenSilenceMs("none", 1100)).toBe(1100);
+    expect(irfanListenSilenceMs("digit", 450)).toBe(2600);
+    expect(irfanListenSilenceMs("email", 450)).toBe(3000);
   });
 });
 

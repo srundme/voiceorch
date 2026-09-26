@@ -119,6 +119,7 @@ import {
   collectionHoldMsForTranscript,
   resolveCollectionKind,
   resolveCollectionVadSilenceMs,
+  irfanListenSilenceMs,
   TurnSafetyNet,
   SilenceWatchdog,
   recoveryReprompt,
@@ -12902,17 +12903,21 @@ export class OrchestrationPipeline implements VoiceSession {
     const lastUserText = this.conversationHistory.findLast((t) => t.role === "user")?.content ?? "";
     const pending = this.streamSTT?.getPendingTranscript?.()?.trim() ?? "";
     const collectionKind = kind ?? resolveCollectionKind(lastAgentText, lastUserText);
-    if (collectionKind !== "none") {
-      setter.call(this.streamSTT, resolveCollectionVadSilenceMs(base, collectionKind));
-      return;
-    }
-    const { ms } = computeEndpointMs({
+    const endpoint = computeEndpointMs({
       lastAgentText,
       partialTranscript: pending,
       audioBufferMs: 0,
       baseSilenceMs: base,
     });
-    setter.call(this.streamSTT, ms);
+    if (this.agent.asrProvider?.toLowerCase() === "irfan_pod") {
+      setter.call(this.streamSTT, irfanListenSilenceMs(collectionKind, endpoint.ms));
+      return;
+    }
+    if (collectionKind !== "none") {
+      setter.call(this.streamSTT, resolveCollectionVadSilenceMs(base, collectionKind));
+      return;
+    }
+    setter.call(this.streamSTT, endpoint.ms);
   }
 
   /**

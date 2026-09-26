@@ -42,10 +42,25 @@ export class IrfanPodSTT implements STTAdapter {
     const wsUrl = `${http.replace(/^http/, "ws")}/v1/stt?rate=${this.sampleRate()}`;
     const pending: Buffer[] = [];
     let opened = false;
+    let silenceMs = 600;
+    let pendingControl: string | null = null;
     const ws = new WebSocket(wsUrl);
+
+    const sendSilence = (ms: number) => {
+      const next = Math.max(400, Math.min(3200, Math.round(ms)));
+      if (next === silenceMs && pendingControl === null) return;
+      silenceMs = next;
+      const payload = JSON.stringify({ silence_ms: next });
+      if (opened && ws.readyState === WebSocket.OPEN) ws.send(payload);
+      else pendingControl = payload;
+    };
 
     ws.on("open", () => {
       opened = true;
+      if (pendingControl) {
+        ws.send(pendingControl);
+        pendingControl = null;
+      }
       for (const chunk of pending.splice(0)) ws.send(chunk);
     });
     ws.on("message", (data) => {
@@ -70,6 +85,9 @@ export class IrfanPodSTT implements STTAdapter {
           return;
         }
         ws.send(chunk);
+      },
+      setSilenceDurationMs(ms: number) {
+        sendSilence(ms);
       },
       close() {
         ws.close();

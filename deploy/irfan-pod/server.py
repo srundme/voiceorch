@@ -51,10 +51,12 @@ SPEECH_KEEP = 0.35
 START_WINDOWS = 2
 PREROLL_MS = 300
 MIN_SPEECH_MS = 250
-# Silence the voice detector needs before it treats the turn as over.
-# No added hold after that. The ear runs once, then the brain.
-END_MS = 192
-MAX_UTTER_MS = 20000
+# Starting silence only. Each turn, SnapServe replaces this from the
+# semantic endpoint: a short answer stays short, an unfinished thought
+# waits longer, and only a pincode or an email keeps a long hold.
+END_MS = 600
+MAX_SILENCE_MS = 3200
+MAX_UTTER_MS = 60000
 # A word list, not a sentence. A sentence gets read back as if the caller said it.
 EAR_CONTEXT = (
     "Jobshop, Irfan, voice process, international voice process, "
@@ -250,15 +252,18 @@ async def chat(request: web.Request) -> web.StreamResponse:
 class Utterance:
     def __init__(self) -> None:
         self.generation = 0
+        self.end_ms = float(END_MS)
         self.reset()
 
     def reset(self) -> None:
+        end_ms = self.end_ms
         self.generation += 1
         self.buf = bytearray()
         self.preroll: collections.deque[bytes] = collections.deque(maxlen=int(PREROLL_MS / WINDOW_MS))
         self.start_windows = 0
         self.speech_ms = 0.0
         self.silence_ms = 0.0
+        self.end_ms = end_ms
         self.in_speech = False
         self.last_partial_at = 0.0
         self.last_text = ""
@@ -308,18 +313,18 @@ async def stt_socket(request: web.Request) -> web.WebSocketResponse:
         else:
             utter.silence_ms += WINDOW_MS
 
-        if utter.silence_ms >= END_MS and utter.speech_ms < MIN_SPEECH_MS:
+        if utter.silence_ms >= utter.end_ms and utter.speech_ms < MIN_SPEECH_MS:
             utter.reset()
             return
-        if utter.silence_ms < END_MS and len(utter.buf) / 2 / SAMPLE_RATE * 1000 < MAX_UTTER_MS:
+        if utter.silence_ms < utter.end_ms and len(utter.buf) / 2 / SAMPLE_RATE * 1000 < MAX_UTTER_MS:
             return
-        why = "max length" if utter.silence_ms < END_MS else ""
+        why = "max length" if utter.silence_ms < utter.end_ms else ""
         async with infer_lock:
-            if utter.silence_ms < END_MS and why != "max length":
+            if utter.silence_ms < utter.end_ms and why != "max length":
                 return
             started = time.monotonic()
             text = await transcribe(bytes(utter.buf))
-            if utter.silence_ms < END_MS and why != "max length":
+            if utter.silence_ms < utter.end_ms and why != "max length":
                 return
             elapsed = time.monotonic() - started
             await finish(text, why or f"ear {elapsed:.2f}s")
@@ -327,6 +332,15 @@ async def stt_socket(request: web.Request) -> web.WebSocketResponse:
     async for msg in ws:
         if msg.type == WSMsgType.ERROR:
             break
+        if msg.type == WSMsgType.TEXT:
+            try:
+                data = json.loads(msg.data)
+                raw = int(data.get("silence_ms", 0))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            utter.end_ms = float(max(400, min(MAX_SILENCE_MS, raw)))
+            log(f"listen silence {int(utter.end_ms)}ms")
+            continue
         if msg.type != WSMsgType.BINARY or not msg.data:
             continue
         chunk = msg.data
