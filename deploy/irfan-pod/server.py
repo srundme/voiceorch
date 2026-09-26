@@ -51,15 +51,9 @@ SPEECH_KEEP = 0.35
 START_WINDOWS = 2
 PREROLL_MS = 300
 MIN_SPEECH_MS = 250
-PARTIAL_EVERY_MS = 600
-# A finished sentence ends after END_MS of silence. One that trails off on a
-# word like "on", "the" or "twenty" is held up to HOLD_MS, because Indian
-# callers pause mid-date and mid-pincode ("I'm born on twenty ... July ...").
-END_MS = 700
-HOLD_MS = 1500
-# A date trails off as "two thousand" and the year arrives a beat later.
-# Call 35632 saved 20 July 2000 because the hold gave up before the rest.
-DATE_HOLD_MS = 2800
+# Silence the voice detector needs before it treats the turn as over.
+# No added hold after that. The ear runs once, then the brain.
+END_MS = 192
 MAX_UTTER_MS = 20000
 # A word list, not a sentence. A sentence gets read back as if the caller said it.
 EAR_CONTEXT = (
@@ -84,15 +78,6 @@ HEARD_AS = (
     (re.compile(r"\bjob shops\b", re.I), "Jobshop"),
     (re.compile(r"\b(?:drop|job)\s*shop\b", re.I), "Jobshop"),
 )
-UNFINISHED = set(
-    "a an the to on in at of for from with and or but so because like is am are was were "
-    "my your his her our their i i'm im it's its this that there um uh er hmm "
-    "zero oh one two three four five six seven eight nine ten eleven twelve thirteen fourteen "
-    "fifteen sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy "
-    "eighty ninety hundred thousand double triple "
-    "january february march april may june july august september october november december "
-    "born dot at-the-rate rate".split()
-)
 
 http: aiohttp.ClientSession | None = None
 vad_session = None
@@ -101,49 +86,6 @@ listeners = 0
 
 def log(msg: str) -> None:
     print(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + " " + msg, flush=True)
-
-
-SPOKEN_DIGITS = set("zero oh one two three four five six seven eight nine".split())
-
-
-def trailing_digit_count(words: list[str]) -> int:
-    count = 0
-    for i in range(len(words) - 1, -1, -1):
-        word = words[i]
-        if word.isdigit():
-            count += len(word)
-        elif word in SPOKEN_DIGITS:
-            count += 1
-            if i > 0 and words[i - 1] in ("double", "triple"):
-                count += 1 if words[i - 1] == "double" else 2
-        elif word not in ("double", "triple"):
-            break
-    return count
-
-
-FILLERS = set("hmm um uh ah er okay ok yeah yes yep nope nah right hello hi".split())
-
-
-def content_words(text: str) -> list[str]:
-    return [w for w in (re.sub(r"[^a-z0-9'-]", "", word) for word in text.strip().lower().split()) if w]
-
-
-def sounds_unfinished(text: str) -> bool:
-    if text.rstrip().endswith((",", "...", "-")):
-        return True
-    words = content_words(text)
-    if not words or all(word in FILLERS for word in words):
-        return False
-    if trailing_digit_count(words) in (6, 10):
-        return False
-    return words[-1] in UNFINISHED
-
-
-def hold_limit_ms(text: str) -> float:
-    words = content_words(text)
-    if words and words[-1] in ("thousand", "hundred", "july", "born") or "birth" in words or "born" in words:
-        return DATE_HOLD_MS
-    return HOLD_MS
 
 
 def clean_transcript(text: str) -> str:
@@ -340,17 +282,6 @@ async def stt_socket(request: web.Request) -> web.WebSocketResponse:
         if not ws.closed:
             await ws.send_str(json.dumps({"text": text, "is_final": final}))
 
-    async def partial() -> None:
-        if infer_lock.locked():
-            return
-        async with infer_lock:
-            generation = utter.generation
-            text = await transcribe(bytes(utter.buf))
-            if generation != utter.generation or not text or text == utter.last_text:
-                return
-            utter.last_text = text
-            await send(text, False)
-
     async def finish(text: str, why: str) -> None:
         seconds = len(utter.buf) / 2 / SAMPLE_RATE
         utter.reset()
@@ -374,37 +305,24 @@ async def stt_socket(request: web.Request) -> web.WebSocketResponse:
         if p >= SPEECH_KEEP:
             utter.speech_ms += WINDOW_MS
             utter.silence_ms = 0.0
-            utter.tentative = None
-            if (
-                utter.speech_ms >= MIN_SPEECH_MS
-                and (time.monotonic() - utter.last_partial_at) * 1000 >= PARTIAL_EVERY_MS
-            ):
-                utter.last_partial_at = time.monotonic()
-                asyncio.create_task(partial())
         else:
             utter.silence_ms += WINDOW_MS
 
         if utter.silence_ms >= END_MS and utter.speech_ms < MIN_SPEECH_MS:
             utter.reset()
             return
-        if len(utter.buf) / 2 / SAMPLE_RATE * 1000 >= MAX_UTTER_MS:
-            async with infer_lock:
-                await finish(await transcribe(bytes(utter.buf)), "max length")
+        if utter.silence_ms < END_MS and len(utter.buf) / 2 / SAMPLE_RATE * 1000 < MAX_UTTER_MS:
             return
-        if utter.silence_ms >= END_MS and utter.tentative is None:
-            async with infer_lock:
-                started = time.monotonic()
-                text = await transcribe(bytes(utter.buf))
-            if not sounds_unfinished(text):
-                await finish(text, f"ear {time.monotonic() - started:.2f}s")
+        why = "max length" if utter.silence_ms < END_MS else ""
+        async with infer_lock:
+            if utter.silence_ms < END_MS and why != "max length":
                 return
-            utter.tentative = text
-            if text != utter.last_text:
-                utter.last_text = text
-                await send(text, False)
-            return
-        if utter.tentative is not None and utter.silence_ms >= hold_limit_ms(utter.tentative):
-            await finish(utter.tentative, "held for more")
+            started = time.monotonic()
+            text = await transcribe(bytes(utter.buf))
+            if utter.silence_ms < END_MS and why != "max length":
+                return
+            elapsed = time.monotonic() - started
+            await finish(text, why or f"ear {elapsed:.2f}s")
 
     async for msg in ws:
         if msg.type == WSMsgType.ERROR:

@@ -4,6 +4,7 @@ import { toOpenAIMessages } from "./openai-messages.js";
 import { drainOpenAICompatibleStream } from "./openai-compat.js";
 import { toOpenAiToolChoice } from "./tool-choice.js";
 import { irfanPodBaseUrl } from "../irfan-pod-url.js";
+import { logger } from "../../../lib/logger.js";
 
 /**
  * Qwen3-32B on the GPU pod (vLLM). The pod speaks the OpenAI chat stream,
@@ -15,6 +16,8 @@ export class IrfanPodLLM implements LLMAdapter {
   private maxTokens: number | undefined;
   private temperature: number | undefined;
   private abortController: AbortController | null = null;
+  /** In-flight read of the system prompt, started while the greeting plays. */
+  private warmInflight: Promise<void> | null = null;
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.client = new OpenAI({
@@ -32,6 +35,36 @@ export class IrfanPodLLM implements LLMAdapter {
     this.abortController = null;
   }
 
+  /**
+   * Read the call prompt into the brain while the greeting plays, so the
+   * caller's first answer does not pay that cost. The real turn sends the
+   * same prompt with their words after it, and vLLM reuses the read.
+   */
+  warmContextCache(base: string, tools?: ToolDefinition[]): void {
+    if (!base.trim() || this.warmInflight) return;
+    const openaiTools = this.openAiTools(tools);
+    this.warmInflight = (async () => {
+      // Let the greeting take the GPU first. The caller is still listening.
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      await this.client.chat.completions.create({
+        model: this.model,
+        max_tokens: 1,
+        temperature: 0,
+        messages: [
+          { role: "system", content: this.effectiveSystem(base, openaiTools != null) },
+          { role: "user", content: "ok" },
+        ],
+        ...(openaiTools ? { tools: openaiTools, tool_choice: "auto" as const } : {}),
+      });
+    })().then(() => {
+      logger.info("Irfan prompt is in memory before the first caller turn");
+    }).catch((err) => {
+      logger.warn({ err }, "Irfan prompt warm failed");
+    }).finally(() => {
+      this.warmInflight = null;
+    });
+  }
+
   async chat(
     messages: ConversationTurn[],
     systemPrompt: string,
@@ -44,19 +77,10 @@ export class IrfanPodLLM implements LLMAdapter {
       onUsage?: (usage: LLMUsage) => void;
     },
   ): Promise<void> {
-    const tools = options?.tools?.length
-      ? options.tools.map((t) => ({
-          type: "function" as const,
-          function: { name: t.name, description: t.description, parameters: t.parameters },
-        }))
-      : undefined;
+    const callerHasSpoken = messages.some((m) => m.role === "user");
+    if (callerHasSpoken && this.warmInflight) await this.warmInflight;
+    const tools = this.openAiTools(options?.tools);
     const toolChoice = tools ? toOpenAiToolChoice(options?.toolChoice, options?.tools) : undefined;
-    const effectiveSystemPrompt = tools
-      ? `[TOOL CALLING RULES — FOLLOW EXACTLY]
-When you want to call a tool, use the tool-call format. Do not describe the call in spoken text.
-
-${systemPrompt}`
-      : systemPrompt;
 
     this.abortController?.abort();
     const abortController = new AbortController();
@@ -68,7 +92,7 @@ ${systemPrompt}`
         ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
         ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
         messages: [
-          { role: "system", content: effectiveSystemPrompt },
+          { role: "system", content: this.effectiveSystem(systemPrompt, tools != null) },
           ...toOpenAIMessages(messages),
         ] as any,
         ...(tools ? { tools, tool_choice: toolChoice } : {}),
@@ -83,5 +107,21 @@ ${systemPrompt}`
     } finally {
       if (this.abortController === abortController) this.abortController = null;
     }
+  }
+
+  private openAiTools(tools?: ToolDefinition[]) {
+    if (!tools?.length) return undefined;
+    return tools.map((t) => ({
+      type: "function" as const,
+      function: { name: t.name, description: t.description, parameters: t.parameters },
+    }));
+  }
+
+  private effectiveSystem(systemPrompt: string, hasTools: boolean): string {
+    if (!hasTools) return systemPrompt;
+    return `[TOOL CALLING RULES — FOLLOW EXACTLY]
+When you want to call a tool, use the tool-call format. Do not describe the call in spoken text.
+
+${systemPrompt}`;
   }
 }

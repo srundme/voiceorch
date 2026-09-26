@@ -5938,15 +5938,19 @@ export class OrchestrationPipeline implements VoiceSession {
     // prompt is REPLACED, so the warmed base would never match a turn prefix
     // (wasted create). A base/lang mismatch is harmless: the turn's own
     // ensureCache re-warms and only turn 1 misses.
+    const warmProvider = this.agent.llmProvider?.toLowerCase();
     if (
-      this.agent.llmProvider === "google" &&
+      (warmProvider === "google" || warmProvider === "irfan_pod") &&
       typeof this.llm.warmContextCache === "function" &&
       !(this.agent.stagedPromptEnabled && this.agent.stagedPromptStages.length > 0)
     ) {
       try {
-        void this.llm.warmContextCache(this.buildCacheBase(null), this.buildVoiceToolDefs());
+        const warmTools = warmProvider === "irfan_pod"
+          ? withoutBackgroundIntakeTools(this.buildVoiceToolDefs())
+          : this.buildVoiceToolDefs();
+        void this.llm.warmContextCache(this.buildCacheBase(null), warmTools);
       } catch (err) {
-        logger.debug({ callId: this.config.callId, err }, "Gemini cache warm (greeting) skipped");
+        logger.debug({ callId: this.config.callId, err }, "Prompt warm (greeting) skipped");
       }
     }
     // "User speaks first" — stay silent on connect; the session listens for
