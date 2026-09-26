@@ -544,6 +544,7 @@ const BARGE_RECOVERY_MAX_WAIT_MS = 8000;
 const TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 0;
 // Heard-text window for interruption hints (not self-echo detection).
 const SELF_ECHO_TAIL_MS       = 2800;
+const HELD_CALLER_WORDS_MS    = 10_000;
 const CARRIER_ECHO_LATENCY_MS = 1500;  // margin added to the greeting echo-hold to cover the
                                         // round-trip carrier echo latency (observed ~777 ms)
 // Tail drain duration comes from agentConfig.telephonyTailDrainMs (Latency Tuning UI).
@@ -1016,6 +1017,8 @@ export class OrchestrationPipeline implements VoiceSession {
   /** Unheard remainder of a reply cut by barge-in — resumed if the "interruption" turns out to be a scrap (call 4839 dead-air). */
   private _bargedReplyRemainder: string | null = null;
   private _bargedReplyAt = 0;
+  /** Caller words that arrived over agent playback, joined to their next turn. */
+  private _heldCallerWords: { text: string; at: number } | null = null;
   /**
    * True only while playSentence() is actively sending TTS bytes to the carrier.
    * Distinct from isPlaying (which stays true for the entire turn, including the
@@ -3261,7 +3264,7 @@ export class OrchestrationPipeline implements VoiceSession {
       false_interruption: "Bolna is_false_interruption — short talk-over while TTS is playing is chatter, not a later turn",
       stutter_loop: "STT looped the same short phrase — not a caller turn",
       queued_duplicate_user_turn: "Bolna is_duplicate_user — queued STT final duplicates the user turn we already answered",
-      agent_still_speaking: "final arrived during greeting/system playback and did not barge-in",
+      agent_still_speaking: "final arrived during agent playback and did not barge-in — held and joined to the caller's next turn",
       inbound_greeting_hold: "inbound greeting still playing — wait for caller after Welcome",
       inbound_greeting_overlap: "STT captured during inbound greeting — wait for a new caller turn",
       room_crosstalk: "room / meeting talk aimed at someone else — not a caller turn",
@@ -4041,6 +4044,15 @@ export class OrchestrationPipeline implements VoiceSession {
       && !isHardInterruptTranscript(transcript)
       && !this.shouldInterruptFromCallerTranscript(transcript)
     ) {
+      // Call 35621: "July." and "On." were the caller finishing their own
+      // date of birth over the agent. Too short to cut the agent off, but
+      // they belong to the caller's next turn.
+      if (this.isIntakeAgent && !isBareAcknowledgement(transcript)) {
+        const prior = this._heldCallerWords && Date.now() - this._heldCallerWords.at < HELD_CALLER_WORDS_MS
+          ? `${this._heldCallerWords.text} `
+          : "";
+        this._heldCallerWords = { text: `${prior}${transcript}`.trim(), at: Date.now() };
+      }
       this.logDiscardedTranscript(transcript, "agent_still_speaking");
       return;
     }
@@ -4556,6 +4568,13 @@ export class OrchestrationPipeline implements VoiceSession {
         );
         return;
       }
+    }
+
+    if (this._heldCallerWords) {
+      if (Date.now() - this._heldCallerWords.at < HELD_CALLER_WORDS_MS) {
+        transcript = `${this._heldCallerWords.text} ${transcript}`;
+      }
+      this._heldCallerWords = null;
     }
 
     this.isProcessing = true;
@@ -8056,17 +8075,22 @@ export class OrchestrationPipeline implements VoiceSession {
    * (mirrors the web-call path). Errors are logged with their real reason, then
    * returned as an `error:` string so the LLM can keep talking instead of dead air.
    */
-  private intakeSpeechContext(): { caller: string; agent: string } {
+  private intakeSpeechContext(): { caller: string; latest: string; agent: string } {
     const messages = this.conversationHistory.messages;
-    let caller = "";
+    // A date of birth or pincode often arrives over several short finals
+    // ("I'm born on twenty." / "July." / "Two thousand seven."), so ground on
+    // the last few caller lines, not only the newest one.
+    const callerLines: string[] = [];
     let agent = "";
     for (let i = messages.length - 1; i >= 0; i--) {
       const turn = messages[i]!;
-      if (!caller && turn.role === "user" && !turn.content.startsWith("[Background")) caller = turn.content;
+      if (callerLines.length < 3 && turn.role === "user" && !turn.content.startsWith("[")) {
+        callerLines.unshift(turn.content);
+      }
       if (!agent && turn.role === "assistant") agent = turn.content;
-      if (caller && agent) break;
+      if (callerLines.length >= 3 && agent) break;
     }
-    return { caller, agent };
+    return { caller: callerLines.join(" "), latest: callerLines.at(-1) ?? "", agent };
   }
 
   private async handleToolCall(toolName: string, args: Record<string, unknown>): Promise<string | undefined> {
@@ -8085,7 +8109,7 @@ export class OrchestrationPipeline implements VoiceSession {
       args = grounded;
     }
     if (toolName === "set_disposition") {
-      const reason = groundDispositionWrite(args, this.intakeSpeechContext().caller);
+      const reason = groundDispositionWrite(args, this.intakeSpeechContext().latest);
       if (reason) {
         this.logExec("Tool", "system", {
           status: "info",

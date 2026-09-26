@@ -4,6 +4,7 @@ import {
   missingIntakeFields,
   normalizeIntakeField,
   normalizeIntakePatch,
+  spokenNumbersToDigits,
 } from "./candidate-intake-fields.js";
 
 describe("normalizeIntakeField", () => {
@@ -173,6 +174,20 @@ describe("missingIntakeFields", () => {
   });
 });
 
+describe("spokenNumbersToDigits", () => {
+  it.each([
+    ["five six zero one double zero", "560100"],
+    ["twenty zero seven", "2007"],
+    ["two thousand seven", "2007"],
+    ["two thousand and twenty", "2020"],
+    ["nineteen ninety eight", "1998"],
+    ["i am born on 20 july 2007", "i am born on 20 july 2007"],
+    ["oh oh no", "oh oh no"],
+  ])("%s → %s", (spoken, digits) => {
+    expect(spokenNumbersToDigits(spoken)).toBe(digits);
+  });
+});
+
 describe("groundIntakeWrite", () => {
   it("drops the invented form from call 35614", () => {
     expect(groundIntakeWrite({
@@ -202,6 +217,24 @@ describe("groundIntakeWrite", () => {
       "Yes, yes, I am comfortable.",
       "Could you confirm if you're comfortable working in the US shift?",
     )).toEqual({ shiftBase: "US" });
+  });
+
+  it("matches numbers the ear wrote as words in call 35621", () => {
+    expect(groundIntakeWrite(
+      { pincode: "560100" },
+      "Five six zero one double zero.",
+      "Could you share the 6-digit pincode?",
+    )).toEqual({ pincode: "560100" });
+    expect(groundIntakeWrite(
+      { dateOfBirth: "2007-07-20" },
+      "I'm born on twenty. July. Two thousand seven.",
+      "What's your date of birth?",
+    )).toEqual({ dateOfBirth: "2007-07-20" });
+    expect(groundIntakeWrite(
+      { dateOfBirth: "2020-07-20" },
+      "I'm born on twenty. July. Two thousand.",
+      "What's your date of birth?",
+    )).toEqual({});
   });
 
   it("keeps a pincode only when the digits were spoken", () => {

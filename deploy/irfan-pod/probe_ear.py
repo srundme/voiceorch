@@ -1,4 +1,4 @@
-"""Play a WAV into /v1/stt in real time and time the transcripts against the end of speech.
+"""Play a WAV into /v1/stt in real time and print every transcript, timed against the end of speech.
 
 /workspace/envs/tts/bin/python probe_ear.py WAV [WS_URL]
 """
@@ -33,8 +33,6 @@ async def main() -> None:
                 ref = speech_end or time.monotonic()
                 kind = "FINAL  " if data["is_final"] else "partial"
                 print(f"{kind} {time.monotonic() - ref:+.2f}s after speech end | {data['text']}")
-                if data["is_final"]:
-                    return
 
         reader = asyncio.create_task(read())
         speech_samples = len(audio) - 16000 * 2
@@ -44,6 +42,8 @@ async def main() -> None:
                 speech_end = time.monotonic()
             await ws.send_bytes(audio[i : i + FRAME].tobytes())
             await asyncio.sleep(max(0.0, start + (i + FRAME) / 16000 - time.monotonic()))
+        await asyncio.sleep(1)
+        await ws.close()
         await asyncio.wait_for(reader, timeout=5)
 
 

@@ -1,4 +1,4 @@
-"""Irfan's front door on the GPU pod. No models load here.
+"""Irfan's front door on the GPU pod. Only the small Silero VAD loads here.
 
 Ear, brain and voice each run in their own vLLM server:
   ear    Qwen3-ASR-1.7B        :8001  (start-ear.sh)
@@ -16,14 +16,17 @@ SnapServe calls:
 from __future__ import annotations
 
 import asyncio
+import collections
 import io
 import json
 import os
+import re
 import time
 import wave
 
 import aiohttp
 import numpy as np
+import onnxruntime as ort
 import soxr
 from aiohttp import WSMsgType, web
 
@@ -35,28 +38,84 @@ PORT = int(os.environ.get("IRFAN_POD_PORT", "8787"))
 
 SAMPLE_RATE = 16000
 VOICE_RATE = 24000
-SPEECH_RMS = 0.01
-SILENCE_MS = 450
+VAD_MODEL = os.environ.get("IRFAN_VAD_MODEL", "/workspace/models/silero_vad.onnx")
+VAD_WINDOW = 512
+VAD_CONTEXT = 64
+WINDOW_MS = VAD_WINDOW / SAMPLE_RATE * 1000
+SPEECH_START = 0.5
+SPEECH_KEEP = 0.35
+START_WINDOWS = 2
+PREROLL_MS = 300
 MIN_SPEECH_MS = 250
 PARTIAL_EVERY_MS = 600
-EAR_CONTEXT = (
-    "Phone call in Indian English with a recruiter. Write in English letters only. "
-    "voice process, international voice process, Jobshop, Irfan, "
-    "work from home, BPO, call center, pincode, email, at the rate, gmail dot com"
+# A finished sentence ends after END_MS of silence. One that trails off on a
+# word like "on", "the" or "twenty" is held up to HOLD_MS, because Indian
+# callers pause mid-date and mid-pincode ("I'm born on twenty ... July ...").
+END_MS = 700
+HOLD_MS = 1500
+MAX_UTTER_MS = 20000
+UNFINISHED = set(
+    "a an the to on in at of for from with and or but so because like is am are was were "
+    "my your his her our their i i'm im it's its this that there um uh er hmm "
+    "zero oh one two three four five six seven eight nine ten eleven twelve thirteen fourteen "
+    "fifteen sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy "
+    "eighty ninety hundred thousand double triple "
+    "january february march april may june july august september october november december "
+    "born dot at-the-rate rate".split()
 )
 
 http: aiohttp.ClientSession | None = None
+vad_session = None
 
 
 def log(msg: str) -> None:
     print(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + " " + msg, flush=True)
 
 
-def rms(pcm: bytes) -> float:
-    audio = np.frombuffer(pcm[: len(pcm) // 2 * 2], dtype=np.int16).astype(np.float32) / 32768.0
-    if len(audio) == 0:
-        return 0.0
-    return float(np.sqrt(np.mean(np.square(audio))))
+SPOKEN_DIGITS = set("zero oh one two three four five six seven eight nine".split())
+
+
+def trailing_digit_count(words: list[str]) -> int:
+    count = 0
+    for i in range(len(words) - 1, -1, -1):
+        word = words[i]
+        if word.isdigit():
+            count += len(word)
+        elif word in SPOKEN_DIGITS:
+            count += 1
+            if i > 0 and words[i - 1] in ("double", "triple"):
+                count += 1 if words[i - 1] == "double" else 2
+        elif word not in ("double", "triple"):
+            break
+    return count
+
+
+def sounds_unfinished(text: str) -> bool:
+    if text.rstrip().endswith((",", "...", "-")):
+        return True
+    words = [re.sub(r"[^a-z0-9'-]", "", w) for w in text.strip().lower().split()]
+    words = [w for w in words if w]
+    if not words:
+        return False
+    if trailing_digit_count(words) in (6, 10):
+        return False
+    return words[-1] in UNFINISHED
+
+
+class Vad:
+    """Silero v5 on 32 ms windows, with its recurrent state kept per caller."""
+
+    def __init__(self) -> None:
+        self.state = np.zeros((2, 1, 128), dtype=np.float32)
+        self.context = np.zeros(VAD_CONTEXT, dtype=np.float32)
+        self.sr = np.array(SAMPLE_RATE, dtype=np.int64)
+
+    def prob(self, window: bytes) -> float:
+        chunk = np.frombuffer(window, dtype=np.int16).astype(np.float32) / 32768.0
+        x = np.concatenate([self.context, chunk])[None, :]
+        out, self.state = vad_session.run(None, {"input": x, "state": self.state, "sr": self.sr})
+        self.context = chunk[-VAD_CONTEXT:]
+        return float(out[0][0])
 
 
 def to_wav(pcm: bytes) -> bytes:
@@ -76,7 +135,6 @@ async def transcribe(pcm: bytes) -> str:
     form.add_field("file", to_wav(pcm), filename="audio.wav", content_type="audio/wav")
     form.add_field("model", "irfan-ear")
     form.add_field("language", "en")
-    form.add_field("prompt", EAR_CONTEXT)
     async with http.post(f"{EAR_URL}/v1/audio/transcriptions", data=form) as resp:
         if resp.status != 200:
             log(f"ear HTTP {resp.status}: {(await resp.text())[:200]}")
@@ -169,77 +227,121 @@ async def chat(request: web.Request) -> web.StreamResponse:
 
 class Utterance:
     def __init__(self) -> None:
+        self.generation = 0
+        self.reset()
+
+    def reset(self) -> None:
+        self.generation += 1
         self.buf = bytearray()
+        self.preroll: collections.deque[bytes] = collections.deque(maxlen=int(PREROLL_MS / WINDOW_MS))
+        self.start_windows = 0
         self.speech_ms = 0.0
         self.silence_ms = 0.0
         self.in_speech = False
         self.last_partial_at = 0.0
         self.last_text = ""
-
-    def reset(self) -> None:
-        self.__init__()
+        self.tentative: str | None = None
 
 
 async def stt_socket(request: web.Request) -> web.WebSocketResponse:
     ws = web.WebSocketResponse()
     await ws.prepare(request)
     utter = Utterance()
+    vad = Vad()
+    pending = bytearray()
     infer_lock = asyncio.Lock()
+    window_bytes = VAD_WINDOW * 2
 
     async def send(text: str, final: bool) -> None:
         if not ws.closed:
             await ws.send_str(json.dumps({"text": text, "is_final": final}))
 
-    async def run_asr(final: bool) -> None:
-        if infer_lock.locked() and not final:
+    async def partial() -> None:
+        if infer_lock.locked():
             return
         async with infer_lock:
-            pcm = bytes(utter.buf)
-            started = time.monotonic()
-            text = await transcribe(pcm)
-            if final:
-                log(f"hear final {len(pcm) / 2 / SAMPLE_RATE:.1f}s audio in {time.monotonic() - started:.2f}s: {text[:80]}")
-                utter.reset()
-                if text:
-                    await send(text, True)
+            generation = utter.generation
+            text = await transcribe(bytes(utter.buf))
+            if generation != utter.generation or not text or text == utter.last_text:
                 return
-            if text and text != utter.last_text:
+            utter.last_text = text
+            await send(text, False)
+
+    async def finish(text: str, why: str) -> None:
+        seconds = len(utter.buf) / 2 / SAMPLE_RATE
+        utter.reset()
+        log(f"hear final {seconds:.1f}s audio ({why}): {text[:80]}")
+        if text:
+            await send(text, True)
+
+    async def on_window(window: bytes) -> None:
+        p = vad.prob(window)
+        if not utter.in_speech:
+            utter.preroll.append(window)
+            utter.start_windows = utter.start_windows + 1 if p >= SPEECH_START else 0
+            if utter.start_windows >= START_WINDOWS:
+                utter.in_speech = True
+                utter.buf = bytearray(b"".join(utter.preroll))
+                utter.speech_ms = utter.start_windows * WINDOW_MS
+                utter.silence_ms = 0.0
+            return
+
+        utter.buf.extend(window)
+        if p >= SPEECH_KEEP:
+            utter.speech_ms += WINDOW_MS
+            utter.silence_ms = 0.0
+            utter.tentative = None
+            if (
+                utter.speech_ms >= MIN_SPEECH_MS
+                and (time.monotonic() - utter.last_partial_at) * 1000 >= PARTIAL_EVERY_MS
+            ):
+                utter.last_partial_at = time.monotonic()
+                asyncio.create_task(partial())
+        else:
+            utter.silence_ms += WINDOW_MS
+
+        if utter.silence_ms >= END_MS and utter.speech_ms < MIN_SPEECH_MS:
+            utter.reset()
+            return
+        if len(utter.buf) / 2 / SAMPLE_RATE * 1000 >= MAX_UTTER_MS:
+            async with infer_lock:
+                await finish(await transcribe(bytes(utter.buf)), "max length")
+            return
+        if utter.silence_ms >= END_MS and utter.tentative is None:
+            async with infer_lock:
+                started = time.monotonic()
+                text = await transcribe(bytes(utter.buf))
+            if not sounds_unfinished(text):
+                await finish(text, f"ear {time.monotonic() - started:.2f}s")
+                return
+            utter.tentative = text
+            if text != utter.last_text:
                 utter.last_text = text
                 await send(text, False)
+            return
+        if utter.tentative is not None and utter.silence_ms >= HOLD_MS:
+            await finish(utter.tentative, "held for more")
 
     async for msg in ws:
         if msg.type == WSMsgType.ERROR:
             break
         if msg.type != WSMsgType.BINARY or not msg.data:
             continue
-        pcm = msg.data
-        frame_ms = (len(pcm) / 2) / SAMPLE_RATE * 1000
-        if rms(pcm) >= SPEECH_RMS:
-            if not utter.in_speech:
-                utter.in_speech = True
-                utter.buf.clear()
-                utter.speech_ms = 0.0
-            utter.buf.extend(pcm)
-            utter.speech_ms += frame_ms
-            utter.silence_ms = 0.0
-            if (
-                utter.speech_ms >= MIN_SPEECH_MS
-                and (time.monotonic() - utter.last_partial_at) * 1000 >= PARTIAL_EVERY_MS
-            ):
-                utter.last_partial_at = time.monotonic()
-                asyncio.create_task(run_asr(False))
-            continue
-        if not utter.in_speech:
-            continue
-        utter.buf.extend(pcm)
-        utter.silence_ms += frame_ms
-        if utter.silence_ms >= SILENCE_MS and utter.speech_ms >= MIN_SPEECH_MS:
-            await run_asr(True)
+        pending.extend(msg.data)
+        while len(pending) >= window_bytes:
+            window = bytes(pending[:window_bytes])
+            del pending[:window_bytes]
+            await on_window(window)
 
     return ws
 
 
 def main() -> None:
+    global vad_session
+    options = ort.SessionOptions()
+    options.intra_op_num_threads = 1
+    options.inter_op_num_threads = 1
+    vad_session = ort.InferenceSession(VAD_MODEL, options, providers=["CPUExecutionProvider"])
     app = web.Application()
 
     async def open_http(_app: web.Application) -> None:

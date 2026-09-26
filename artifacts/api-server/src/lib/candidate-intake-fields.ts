@@ -439,6 +439,85 @@ function foldSpeech(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9@.\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+const DIGIT_WORDS: Record<string, number> = {
+  zero: 0, oh: 0, o: 0, one: 1, two: 2, three: 3, four: 4, five: 5,
+  six: 6, seven: 7, eight: 8, nine: 9,
+};
+const TEEN_WORDS: Record<string, number> = {
+  ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15,
+  sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19,
+};
+const TENS_WORDS: Record<string, number> = {
+  twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90,
+};
+
+/**
+ * The ear writes numbers the way Indian callers say them — "five six zero one
+ * double zero", "twenty zero seven", "two thousand seven". Rewrite each run
+ * of number words as digits so a spoken pincode or year can be matched.
+ */
+export function spokenNumbersToDigits(text: string): string {
+  const words = text.split(" ").map((w) => w.replace(/\.$/, ""));
+  const out: string[] = [];
+  let run = "";
+  const flush = () => {
+    if (run) out.push(run);
+    run = "";
+  };
+  const digit = (w: string | undefined): number | undefined =>
+    w !== undefined && w in DIGIT_WORDS && ((w !== "oh" && w !== "o") || run !== "") ? DIGIT_WORDS[w] : undefined;
+
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i]!;
+    const next = words[i + 1];
+    if (/^\d+$/.test(w)) {
+      run += w;
+    } else if ((w === "double" || w === "triple") && next !== undefined && next in DIGIT_WORDS) {
+      run += String(DIGIT_WORDS[next]).repeat(w === "double" ? 2 : 3);
+      i++;
+    } else if (w in TENS_WORDS) {
+      const unit = digit(next);
+      if (unit) {
+        run += String(TENS_WORDS[w]! + unit);
+        i++;
+      } else {
+        run += String(TENS_WORDS[w]);
+      }
+    } else if (w in TEEN_WORDS) {
+      run += String(TEEN_WORDS[w]);
+    } else if (w === "thousand" && /[1-9]$/.test(run)) {
+      let j = i + 1;
+      if (words[j] === "and") j++;
+      let tail = 0;
+      const a = words[j];
+      if (a !== undefined && a in TENS_WORDS) {
+        tail = TENS_WORDS[a]!;
+        j++;
+        const unit = DIGIT_WORDS[words[j] ?? ""];
+        if (unit) {
+          tail += unit;
+          j++;
+        }
+      } else if (a !== undefined && a in TEEN_WORDS) {
+        tail = TEEN_WORDS[a]!;
+        j++;
+      } else if (a !== undefined && a in DIGIT_WORDS && a !== "oh" && a !== "o") {
+        tail = DIGIT_WORDS[a]!;
+        j++;
+      }
+      run = run.slice(0, -1) + String(Number(run.slice(-1)) * 1000 + tail);
+      i = j - 1;
+    } else if (digit(w) !== undefined) {
+      run += String(digit(w));
+    } else {
+      flush();
+      out.push(w);
+    }
+  }
+  flush();
+  return out.join(" ");
+}
+
 function compactSpeech(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -463,7 +542,7 @@ export function groundIntakeWrite(
   callerText: string,
   lastAgentText = "",
 ): Record<string, unknown> {
-  const caller = foldSpeech(callerText);
+  const caller = spokenNumbersToDigits(foldSpeech(callerText));
   const agent = foldSpeech(lastAgentText);
   const kept: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(args)) {

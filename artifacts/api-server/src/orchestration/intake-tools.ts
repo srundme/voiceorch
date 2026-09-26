@@ -41,6 +41,9 @@ const HIDDEN_FIELDS = new Set<IntakeFieldKey>([
   "phone",
 ]);
 
+/** Call 35621 silently swapped a 2007 birth year for 2020 from a clipped "twenty". */
+const CONFIRM_ON_CHANGE: readonly IntakeFieldKey[] = ["dateOfBirth", "email"];
+
 const FIELD_LABELS: Record<string, string> = {
   firstName: "first name",
   lastName: "last name",
@@ -109,6 +112,15 @@ export async function executeIntakeWrite(
   const parts: string[] = [];
   const savedLabels = written.filter((k) => !HIDDEN_FIELDS.has(k as IntakeFieldKey)).map(labelFor);
   if (savedLabels.length > 0) parts.push(`Saved ${savedLabels.join(", ")}.`);
+  for (const key of CONFIRM_ON_CHANGE) {
+    const before = form[key];
+    const after = row[key];
+    if (written.includes(key) && before != null && String(before) !== "" && String(before) !== String(after)) {
+      parts.push(
+        `${labelFor(key)} changed from ${String(before)} to ${String(after)}. Read both back and ask which one is right before moving on.`,
+      );
+    }
+  }
   if (errors.length > 0) {
     parts.push(`Rejected ${errors.map((e) => `${labelFor(e.field)} (${e.message})`).join("; ")} — ask for it again.`);
   }
