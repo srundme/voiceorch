@@ -11,6 +11,13 @@ head -c 32000 /dev/zero > "$SILENCE"
 stamp() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 while true; do
+  # A live call already keeps the models hot. A warm-up prompt on the shared
+  # GPU is what slowed the brain mid-call (call 35632).
+  if curl -sf -m 5 "$FRONT/health" | grep -q '"busy": true'; then
+    echo "$(stamp) busy, models left alone"
+    sleep "$EVERY"
+    continue
+  fi
   brain=$(curl -s -o /dev/null -w "%{http_code} %{time_total}" -m 30 "$FRONT/v1/chat/completions" \
     -H "Content-Type: application/json" \
     -d '{"model":"irfan-brain","messages":[{"role":"user","content":"Say okay."}],"max_tokens":2}')

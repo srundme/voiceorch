@@ -155,7 +155,7 @@ function toRow(
     ttsProvider: intakeUsesPod() ? IRFAN_POD_PROVIDER : agent.ttsProvider,
     ttsVoice: intakeUsesPod() ? IRFAN_POD_VOICE : agent.ttsVoice,
     ttsVoiceLabel: intakeUsesPod()
-      ? "Irfan (cloned)"
+      ? "Ryan (emotion control)"
       : (agent.ttsVoiceName || intakeVoiceLabel(agent.ttsProvider, agent.ttsVoice ?? "")),
     ttsModel: intakeUsesPod() ? IRFAN_POD_TTS_MODEL : agent.ttsModel,
     ttsSpeed: config.ttsSpeed ?? INTAKE_SPEED.default,

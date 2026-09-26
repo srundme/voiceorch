@@ -28,8 +28,8 @@ export interface IntakeModelChoice {
 export const IRFAN_POD_PROVIDER = "irfan_pod";
 export const IRFAN_POD_LLM_MODEL = "qwen3-32b-awq";
 export const IRFAN_POD_ASR_MODEL = "qwen3-asr-1.7b";
-export const IRFAN_POD_TTS_MODEL = "qwen3-tts-12hz-1.7b-base";
-export const IRFAN_POD_VOICE = "irfan";
+export const IRFAN_POD_TTS_MODEL = "qwen3-tts-12hz-1.7b-customvoice";
+export const IRFAN_POD_VOICE = "ryan";
 
 /** True when the API process has the GPU pod address. Intake calls then use it. */
 export function intakeUsesPod(): boolean {
@@ -140,9 +140,9 @@ export interface IntakeTtsProviderSpec {
 export const INTAKE_TTS_CATALOG: IntakeTtsProviderSpec[] = [
   {
     value: IRFAN_POD_PROVIDER,
-    label: "Irfan voice on the GPU pod",
+    label: "Ryan on the GPU pod",
     model: IRFAN_POD_TTS_MODEL,
-    voices: [{ value: IRFAN_POD_VOICE, label: "Irfan (cloned)" }],
+    voices: [{ value: IRFAN_POD_VOICE, label: "Ryan (emotion control)" }],
     allowCustomVoice: false,
   },
   {
@@ -467,7 +467,7 @@ This is a conversation with a stranger who just rang a number. Listen first. Do 
 
 - You have not predicted why they called. Do not open with openings, a company name, "I help with international voice-process jobs", or anything that sounds like you already have an offer for them.
 - First understand what they want and why they rang. If they have not said, ask — "what brought you through to us?" is enough. An ad, a referral, "I need a job", a question about night shift: all of those are answers. React to the one they actually gave.
-- Callers looking for work mean a voice process (BPO / call-center), not a vice-president job. If the transcript says VP, vice president, or vice-president, they said "voice process". Confirm once — "you mean a voice-process role, right?" — then continue that way. Never pitch a VP or senior-management opening.
+- Callers looking for work mean a voice process (BPO / call-center), not a vice-president job. If the transcript says VP, vice president, vice-president, vice process, or wise process, they said "voice process". Confirm once — "you mean a voice-process role, right?" — then continue that way. Never pitch a VP or senior-management opening.
 - Talk like a person. A short reaction, a small joke if they set it up, a "yeah that happens". One joke is enough. Never force comedy and never laugh at them.
 - Acknowledge before you ask. If they say they just graduated, "Oh nice, congratulations" then continue. If they live in Whitefield, "That's convenient, a lot of our processes are around there." If they are already working nights, "Perfect, that helps."
 - You are building rapport, not running a questionnaire. After you know they want help finding work, then take details — still in the same human tone.

@@ -1,0 +1,97 @@
+"""Irfan's ear: NVIDIA Parakeet CTC 1.1B.
+
+Phone-call English (Fisher and Switchboard are in its training set), served on
+the same port the front door already calls. A turn is the growing clip the
+front door sends, so each partial and the final are one forward pass.
+"""
+from __future__ import annotations
+
+import io
+import time
+import wave
+
+import numpy as np
+import torch
+from aiohttp import web
+from transformers import AutoProcessor, ParakeetForCTC
+
+MODEL = "/workspace/models/parakeet-ctc-1.1b"
+PORT = 8001
+SAMPLE_RATE = 16000
+
+processor = AutoProcessor.from_pretrained(MODEL)
+model = ParakeetForCTC.from_pretrained(MODEL, dtype=torch.float16).to("cuda").eval()
+
+
+def log(msg: str) -> None:
+    print(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + " " + msg, flush=True)
+
+
+def to_audio(data: bytes) -> np.ndarray:
+    if data[:4] == b"RIFF":
+        with wave.open(io.BytesIO(data)) as handle:
+            rate = handle.getframerate()
+            pcm = np.frombuffer(handle.readframes(handle.getnframes()), dtype=np.int16)
+    else:
+        rate = SAMPLE_RATE
+        pcm = np.frombuffer(data, dtype=np.int16)
+    audio = pcm.astype(np.float32) / 32768.0
+    if rate != SAMPLE_RATE and len(audio):
+        import soxr
+        audio = soxr.resample(audio, rate, SAMPLE_RATE).astype(np.float32)
+    return audio
+
+
+def trim(audio: np.ndarray) -> np.ndarray:
+    loud = np.flatnonzero(np.abs(audio) > 0.01)
+    if len(loud) == 0:
+        return audio[: SAMPLE_RATE // 5]
+    start = max(0, int(loud[0]) - SAMPLE_RATE // 20)
+    end = min(len(audio), int(loud[-1]) + SAMPLE_RATE // 10)
+    return audio[start:end]
+
+
+def transcribe(audio: np.ndarray) -> str:
+    audio = trim(audio)
+    if len(audio) < SAMPLE_RATE // 5:
+        return ""
+    inputs = processor(audio, sampling_rate=SAMPLE_RATE, return_tensors="pt")
+    features = inputs["input_features"].to(device="cuda", dtype=torch.float16)
+    mask = inputs.get("attention_mask")
+    if mask is not None:
+        mask = mask.to("cuda")
+    ids = model.generate(input_features=features, attention_mask=mask)
+    return processor.batch_decode(ids, skip_special_tokens=True)[0].strip()
+
+
+async def health(_request: web.Request) -> web.Response:
+    return web.json_response({"ok": True, "model": "parakeet-ctc-1.1b"})
+
+
+async def transcriptions(request: web.Request) -> web.Response:
+    if request.content_type.startswith("multipart/"):
+        form = await request.post()
+        field = form.get("file")
+        data = field.file.read() if hasattr(field, "file") else bytes(field)
+    else:
+        data = await request.read()
+    started = time.monotonic()
+    text = transcribe(to_audio(data))
+    log(f"ear {len(data)} bytes in {time.monotonic() - started:.2f}s: {text[:80]}")
+    return web.json_response({"text": text})
+
+
+def main() -> None:
+    # First pass at each length pays for the GPU kernels. Later calls stay near 0.07s.
+    rng = np.random.default_rng(0)
+    for seconds in (2, 4, 8, 16):
+        transcribe(rng.normal(0, 0.01, SAMPLE_RATE * seconds).astype(np.float32))
+    log(f"listen 0.0.0.0:{PORT}")
+    app = web.Application(client_max_size=20 * 1024 * 1024)
+    app.router.add_get("/health", health)
+    app.router.add_post("/v1/audio/transcriptions", transcriptions)
+    web.run_app(app, host="0.0.0.0", port=PORT, print=None)
+
+
+if __name__ == "__main__":
+    main()

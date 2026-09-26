@@ -1,9 +1,9 @@
 """Irfan's front door on the GPU pod. Only the small Silero VAD loads here.
 
 Ear, brain and voice each run in their own vLLM server:
-  ear    Qwen3-ASR-1.7B        :8001  (start-ear.sh)
+  ear    Parakeet CTC 1.1B     :8001  (start-ear.sh)
   brain  Qwen3-32B-AWQ         :8000  (start-brain.sh)
-  voice  Qwen3-TTS Base clone  :8091  (start-tts.sh)
+  voice  Qwen3-TTS CustomVoice :8091  (start-tts.sh, speaker Ryan)
 
 SnapServe calls:
   GET  /health
@@ -33,7 +33,11 @@ from aiohttp import WSMsgType, web
 EAR_URL = os.environ.get("IRFAN_EAR_URL", "http://127.0.0.1:8001")
 BRAIN_URL = os.environ.get("IRFAN_BRAIN_URL", "http://127.0.0.1:8000")
 VOICE_URL = os.environ.get("IRFAN_VOICE_URL", "http://127.0.0.1:8091")
-VOICE_NAME = os.environ.get("IRFAN_VOICE_NAME", "irfan")
+VOICE_NAME = os.environ.get("IRFAN_VOICE_NAME", "ryan")
+VOICE_INSTRUCT = os.environ.get(
+    "IRFAN_VOICE_INSTRUCT",
+    "Speak warmly and clearly, like a friendly recruiter on a phone call.",
+)
 PORT = int(os.environ.get("IRFAN_POD_PORT", "8787"))
 
 SAMPLE_RATE = 16000
@@ -53,7 +57,23 @@ PARTIAL_EVERY_MS = 600
 # callers pause mid-date and mid-pincode ("I'm born on twenty ... July ...").
 END_MS = 700
 HOLD_MS = 1500
+# A date trails off as "two thousand" and the year arrives a beat later.
+# Call 35632 saved 20 July 2000 because the hold gave up before the rest.
+DATE_HOLD_MS = 2800
 MAX_UTTER_MS = 20000
+# A word list, not a sentence. A sentence gets read back as if the caller said it.
+EAR_CONTEXT = (
+    "Jobshop, Irfan, voice process, international voice process, "
+    "BPO, call center, Bangalore, Gmail, at the rate, dot com, pincode"
+)
+HEARD_AS = (
+    (re.compile(r"\bwise process\b", re.I), "voice process"),
+    (re.compile(r"\bvoice processors?\b", re.I), "voice process"),
+    (re.compile(r"\bvice process\b", re.I), "voice process"),
+    (re.compile(r"\bvice[- ]president\b", re.I), "voice process"),
+    (re.compile(r"\b(?:drop|job)\s*shop\b", re.I), "Jobshop"),
+    (re.compile(r"\biPhone, how are you\b"), "Hi Irfan, how are you"),
+)
 UNFINISHED = set(
     "a an the to on in at of for from with and or but so because like is am are was were "
     "my your his her our their i i'm im it's its this that there um uh er hmm "
@@ -66,6 +86,7 @@ UNFINISHED = set(
 
 http: aiohttp.ClientSession | None = None
 vad_session = None
+listeners = 0
 
 
 def log(msg: str) -> None:
@@ -90,16 +111,42 @@ def trailing_digit_count(words: list[str]) -> int:
     return count
 
 
+FILLERS = set("hmm um uh ah er okay ok yeah yes yep nope nah right hello hi".split())
+
+
+def content_words(text: str) -> list[str]:
+    return [w for w in (re.sub(r"[^a-z0-9'-]", "", word) for word in text.strip().lower().split()) if w]
+
+
 def sounds_unfinished(text: str) -> bool:
     if text.rstrip().endswith((",", "...", "-")):
         return True
-    words = [re.sub(r"[^a-z0-9'-]", "", w) for w in text.strip().lower().split()]
-    words = [w for w in words if w]
-    if not words:
+    words = content_words(text)
+    if not words or all(word in FILLERS for word in words):
         return False
     if trailing_digit_count(words) in (6, 10):
         return False
     return words[-1] in UNFINISHED
+
+
+def hold_limit_ms(text: str) -> float:
+    words = content_words(text)
+    if words and words[-1] in ("thousand", "hundred", "july", "born") or "birth" in words or "born" in words:
+        return DATE_HOLD_MS
+    return HOLD_MS
+
+
+def clean_transcript(text: str) -> str:
+    folded = re.sub(r"\s+", " ", text).strip()
+    if not folded:
+        return ""
+    hint = set(re.findall(r"[a-z]+", EAR_CONTEXT.lower()))
+    words = re.findall(r"[a-z']+", folded.lower())
+    if len(words) >= 4 and sum(word in hint for word in words) / len(words) > 0.8:
+        return ""
+    for pattern, replacement in HEARD_AS:
+        folded = pattern.sub(replacement, folded)
+    return folded
 
 
 class Vad:
@@ -135,11 +182,12 @@ async def transcribe(pcm: bytes) -> str:
     form.add_field("file", to_wav(pcm), filename="audio.wav", content_type="audio/wav")
     form.add_field("model", "irfan-ear")
     form.add_field("language", "en")
+    form.add_field("prompt", EAR_CONTEXT)
     async with http.post(f"{EAR_URL}/v1/audio/transcriptions", data=form) as resp:
         if resp.status != 200:
             log(f"ear HTTP {resp.status}: {(await resp.text())[:200]}")
             return ""
-        return str((await resp.json()).get("text") or "").strip()
+        return clean_transcript(str((await resp.json()).get("text") or ""))
 
 
 async def upstream_ok(url: str) -> bool:
@@ -152,7 +200,13 @@ async def upstream_ok(url: str) -> bool:
 
 async def health(_request: web.Request) -> web.Response:
     ear, brain, voice = await asyncio.gather(upstream_ok(EAR_URL), upstream_ok(BRAIN_URL), upstream_ok(VOICE_URL))
-    return web.json_response({"ok": ear and brain and voice, "ear": ear, "brain": brain, "voice": voice})
+    return web.json_response({
+        "ok": ear and brain and voice,
+        "ear": ear,
+        "brain": brain,
+        "voice": voice,
+        "busy": listeners > 0,
+    })
 
 
 async def transcribe_http(request: web.Request) -> web.Response:
@@ -162,10 +216,13 @@ async def transcribe_http(request: web.Request) -> web.Response:
 async def speech(request: web.Request) -> web.StreamResponse:
     body = await request.json()
     text = str(body.get("input") or body.get("text") or "").strip()
+    instruct = str(body.get("instructions") or body.get("instruct") or VOICE_INSTRUCT).strip()
     payload = {
         "input": text,
         "voice": VOICE_NAME,
         "language": "English",
+        "task_type": "CustomVoice",
+        "instructions": instruct,
         "stream": True,
         "stream_format": "audio",
         "response_format": "pcm",
@@ -244,8 +301,10 @@ class Utterance:
 
 
 async def stt_socket(request: web.Request) -> web.WebSocketResponse:
+    global listeners
     ws = web.WebSocketResponse()
     await ws.prepare(request)
+    listeners += 1
     utter = Utterance()
     vad = Vad()
     pending = bytearray()
@@ -319,7 +378,7 @@ async def stt_socket(request: web.Request) -> web.WebSocketResponse:
                 utter.last_text = text
                 await send(text, False)
             return
-        if utter.tentative is not None and utter.silence_ms >= HOLD_MS:
+        if utter.tentative is not None and utter.silence_ms >= hold_limit_ms(utter.tentative):
             await finish(utter.tentative, "held for more")
 
     async for msg in ws:
@@ -333,6 +392,7 @@ async def stt_socket(request: web.Request) -> web.WebSocketResponse:
             del pending[:window_bytes]
             await on_window(window)
 
+    listeners -= 1
     return ws
 
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Bring up Irfan on the pod: voice, brain, ear (vLLM), then the front door on 8787.
+# Bring up Irfan on the pod: voice, brain, ear, then the front door on 8787.
 cd /workspace/irfan-pod
 wait_up() {
   for _ in $(seq 1 60); do
@@ -10,8 +10,8 @@ wait_up() {
   return 1
 }
 bash start-tts.sh && wait_up 8091 || exit 1
-# Uploaded voices are restored from disk on restart; register only if missing.
-if ! curl -s localhost:8091/v1/audio/voices | grep -q '"irfan"'; then
+# The clone checkpoint is the only one that takes an uploaded clip.
+if [ "${IRFAN_VOICE_NAME:-ryan}" = "irfan" ] && ! curl -s localhost:8091/v1/audio/voices | grep -q '"irfan"'; then
   curl -s -X POST localhost:8091/v1/audio/voices -F "audio_sample=@/workspace/voices/irfan-clone.wav" \
     -F "consent=owner-approved-irfan" -F "name=irfan" -F "ref_text=$(cat /workspace/voices/irfan-clone.txt)" > /dev/null
 fi

@@ -9889,6 +9889,7 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     if (
       this.agent.backchannelingEnabled
+      && this.agent.ttsProvider?.toLowerCase() !== "irfan_pod"
       && !this.closed
       && !this.bargeInRequested
       && !skipFillerForBackchannelAck
