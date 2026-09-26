@@ -3,7 +3,7 @@
 Ear, brain and voice each run in their own vLLM server:
   ear    Whisper large-v3-turbo :8001  (start-ear.sh)
   brain  Qwen3-32B-AWQ         :8000  (start-brain.sh)
-  voice  Qwen3-TTS CustomVoice :8091  (start-tts.sh, speaker Ryan)
+  voice  Qwen3-TTS Base         :8091  (start-tts.sh, cloned speaker Irfan)
 
 SnapServe calls:
   GET  /health
@@ -33,7 +33,7 @@ from aiohttp import WSMsgType, web
 EAR_URL = os.environ.get("IRFAN_EAR_URL", "http://127.0.0.1:8001")
 BRAIN_URL = os.environ.get("IRFAN_BRAIN_URL", "http://127.0.0.1:8000")
 VOICE_URL = os.environ.get("IRFAN_VOICE_URL", "http://127.0.0.1:8091")
-VOICE_NAME = os.environ.get("IRFAN_VOICE_NAME", "ryan")
+VOICE_NAME = os.environ.get("IRFAN_VOICE_NAME", "irfan")
 VOICE_INSTRUCT = os.environ.get(
     "IRFAN_VOICE_INSTRUCT",
     "Speak warmly and clearly, like a friendly recruiter on a phone call.",
