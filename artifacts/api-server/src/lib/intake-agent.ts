@@ -29,7 +29,7 @@ export const IRFAN_POD_PROVIDER = "irfan_pod";
 export const IRFAN_POD_LLM_MODEL = "qwen3-32b-awq";
 export const IRFAN_POD_ASR_MODEL = "whisper-large-v3-turbo";
 export const IRFAN_POD_TTS_MODEL = "qwen3-tts-12hz-1.7b-customvoice";
-export const IRFAN_POD_VOICE = "irfan";
+export const IRFAN_POD_VOICE = "sruthi";
 
 /** True when the API process has the GPU pod address. Intake calls then use it. */
 export function intakeUsesPod(): boolean {
@@ -142,7 +142,7 @@ export const INTAKE_TTS_CATALOG: IntakeTtsProviderSpec[] = [
     value: IRFAN_POD_PROVIDER,
     label: "Ryan on the GPU pod",
     model: IRFAN_POD_TTS_MODEL,
-    voices: [{ value: IRFAN_POD_VOICE, label: "Irfan (cloned voice)" }],
+    voices: [{ value: IRFAN_POD_VOICE, label: "Sruthi (trained voice)" }],
     allowCustomVoice: false,
   },
   {
