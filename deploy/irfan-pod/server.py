@@ -59,8 +59,11 @@ MAX_SILENCE_MS = 3200
 MAX_UTTER_MS = 60000
 # A word list, not a sentence. A sentence gets read back as if the caller said it.
 EAR_CONTEXT = (
-    "Jobshop, Irfan, voice process, international voice process, "
-    "BPO, call center, Bangalore, Gmail, at the rate, dot com, pincode"
+    "Jobshop, Irfan, voice process, international voice process, domestic voice process, non-voice, "
+    "BPO, call center, Bangalore, Bengaluru, Manyata, Whitefield, Bellandur, Electronic City, Koramangala, "
+    "Nagavara, Hebbal, Sarjapur, HSR Layout, BTM Layout, Kadubeesanahalli, "
+    "Concentrix, Startek, Teleperformance, Globiiva, Teligent, Azuga, LivSpace, KGISL, Ackoo, "
+    "Gmail, at the rate, dot com, pincode, mother tongue, Tamil, Hindi, Telugu, Kannada, Malayalam"
 )
 HEARD_AS = (
     # Call 26 Sep: "wice process", "hi fan", "atate", "male lady", "my cd".
@@ -79,6 +82,7 @@ HEARD_AS = (
     (re.compile(r"\bmy cd\b", re.I), "my city"),
     (re.compile(r"\bjob shops\b", re.I), "Jobshop"),
     (re.compile(r"\b(?:drop|job)\s*shop\b", re.I), "Jobshop"),
+    (re.compile(r"\bstar\s*tech\b", re.I), "Startek"),
 )
 
 http: aiohttp.ClientSession | None = None
@@ -183,17 +187,21 @@ async def transcribe_http(request: web.Request) -> web.Response:
 async def speech(request: web.Request) -> web.StreamResponse:
     body = await request.json()
     text = str(body.get("input") or body.get("text") or "").strip()
-    instruct = str(body.get("instructions") or body.get("instruct") or VOICE_INSTRUCT).strip()
+    # The clone already carries Irfan's voice. A style line pulls it off the recording.
+    instruct = "" if VOICE_NAME == "irfan" else str(
+        body.get("instructions") or body.get("instruct") or VOICE_INSTRUCT
+    ).strip()
     payload = {
         "input": text,
         "voice": VOICE_NAME,
         "language": "English",
         "task_type": "CustomVoice",
-        "instructions": instruct,
         "stream": True,
         "stream_format": "audio",
         "response_format": "pcm",
     }
+    if instruct:
+        payload["instructions"] = instruct
     started = time.monotonic()
     first = None
     out = web.StreamResponse(status=200, headers={"Content-Type": "audio/L16"})
