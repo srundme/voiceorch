@@ -3,7 +3,7 @@
 Ear, brain and voice each run in their own vLLM server:
   ear    Whisper large-v3-turbo :8001  (start-ear.sh)
   brain  Qwen3-32B-AWQ         :8000  (start-brain.sh)
-  voice  Qwen3-TTS Sruthi       :8091  (start-tts.sh, trained speaker Sruthi)
+  voice  Qwen3-TTS Base         :8091  (start-tts.sh, Sruthi recording)
 
 SnapServe calls:
   GET  /health
@@ -187,7 +187,7 @@ async def transcribe_http(request: web.Request) -> web.Response:
 async def speech(request: web.Request) -> web.StreamResponse:
     body = await request.json()
     text = str(body.get("input") or body.get("text") or "").strip()
-    # The trained speaker already carries Sruthi's voice. A style line pulls it off the recording.
+    # The recording already carries Sruthi's voice. A style line pulls it off the clip.
     instruct = "" if VOICE_NAME in {"irfan", "sruthi"} else str(
         body.get("instructions") or body.get("instruct") or VOICE_INSTRUCT
     ).strip()
@@ -202,9 +202,6 @@ async def speech(request: web.Request) -> web.StreamResponse:
     }
     if instruct:
         payload["instructions"] = instruct
-    if VOICE_NAME == "sruthi":
-        # This checkpoint does not emit an end token, so the length has to be set from the text.
-        payload["max_new_tokens"] = max(24, min(400, int(len(text) * 12 / 14) + 16))
     started = time.monotonic()
     first = None
     out = web.StreamResponse(status=200, headers={"Content-Type": "audio/L16"})

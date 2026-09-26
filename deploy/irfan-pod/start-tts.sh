@@ -1,7 +1,7 @@
 #!/bin/bash
-# Voice: trained Sruthi speaker. Port 8091.
+# Voice: Qwen3-TTS Base so the uploaded Sruthi recording can speak. Port 8091.
 ENV=/workspace/envs/tts
-MODEL=${IRFAN_TTS_MODEL:-/workspace/voices/sruthi-ft/output/checkpoint-epoch-2}
+MODEL=${IRFAN_TTS_MODEL:-/workspace/models/Qwen3-TTS-1.7B-Base}
 export LD_LIBRARY_PATH=/workspace/cuda-compat-12.9:$LD_LIBRARY_PATH
 export HF_HOME=/workspace/hf-home HF_HUB_OFFLINE=1 CUDA_HOME=$ENV PATH=$ENV/bin:$PATH
 pid=$(ps -eo pid,args | awk '/vllm serve/ && /--port 8091/ && $0 !~ /awk/ {print $1}')

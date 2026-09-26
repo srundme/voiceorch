@@ -142,7 +142,7 @@ export const INTAKE_TTS_CATALOG: IntakeTtsProviderSpec[] = [
     value: IRFAN_POD_PROVIDER,
     label: "Ryan on the GPU pod",
     model: IRFAN_POD_TTS_MODEL,
-    voices: [{ value: IRFAN_POD_VOICE, label: "Sruthi (trained voice)" }],
+    voices: [{ value: IRFAN_POD_VOICE, label: "Sruthi (recorded voice)" }],
     allowCustomVoice: false,
   },
   {
