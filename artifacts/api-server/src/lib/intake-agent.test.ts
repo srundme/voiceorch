@@ -321,7 +321,7 @@ describe("intake prompt", () => {
   });
 
   it("treats VP in the transcript as voice process, not a vice-president job", () => {
-    expect(INTAKE_SYSTEM_PROMPT).toContain("If the transcript says VP, vice president, vice-president, vice process, or wise process, they said \"voice process\"");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("If the transcript says VP, vice president, vice-president, vice process, wise process, or wice process, they said \"voice process\"");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Never pitch a VP or senior-management opening");
   });
 });

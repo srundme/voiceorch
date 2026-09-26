@@ -5,8 +5,8 @@ import { logger } from "../../../lib/logger.js";
 import { irfanPodBaseUrl } from "../irfan-pod-url.js";
 
 /**
- * Streams 16 kHz PCM to the GPU pod. The pod decides when an utterance ends
- * and sends partials plus one final.
+ * Streams phone audio to the GPU pod. Telephony is 8 kHz and the pod
+ * resamples it. The pod decides when an utterance ends.
  */
 export class IrfanPodSTT implements STTAdapter {
   constructor(
@@ -15,10 +15,16 @@ export class IrfanPodSTT implements STTAdapter {
     private readonly _cfg: STTConfig,
   ) {}
 
-  async transcribe(audioBuffer: Buffer, _sampleRate = 16000): Promise<string> {
+  private sampleRate(given?: number): 8000 | 16000 {
+    if (given === 8000 || given === 16000) return given;
+    return this._cfg.nativeSampleRate === 8000 ? 8000 : 16000;
+  }
+
+  async transcribe(audioBuffer: Buffer, sampleRate?: number): Promise<string> {
+    const rate = this.sampleRate(sampleRate);
     const resp = await fetch(`${irfanPodBaseUrl()}/v1/audio/transcriptions`, {
       method: "POST",
-      headers: { "Content-Type": "audio/L16" },
+      headers: { "Content-Type": "audio/L16", "X-Sample-Rate": String(rate) },
       body: audioBuffer,
     });
     if (!resp.ok) {
@@ -33,7 +39,7 @@ export class IrfanPodSTT implements STTAdapter {
     onClose?: () => void,
   ): StreamSTT {
     const http = irfanPodBaseUrl();
-    const wsUrl = `${http.replace(/^http/, "ws")}/v1/stt`;
+    const wsUrl = `${http.replace(/^http/, "ws")}/v1/stt?rate=${this.sampleRate()}`;
     const pending: Buffer[] = [];
     let opened = false;
     const ws = new WebSocket(wsUrl);

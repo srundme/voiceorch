@@ -3449,13 +3449,16 @@ export class OrchestrationPipeline implements VoiceSession {
     const ttsKey = keys.get(this.agent.ttsProvider);
     if (!ttsKey) throw new Error(`No API key found for TTS provider: ${this.agent.ttsProvider}`);
 
-    // Sarvam telephony calls: stream/send native 8kHz PSTN audio instead of the
-    // naive linear-interpolation upsample to 16000 (see STTConfig.nativeSampleRate).
-    // Webcall's native mic rate is already 16kHz, so it keeps the default.
-    const isTelephonySarvam =
-      this.agent.asrProvider.toLowerCase() === "sarvam" && config.telephonyProvider !== "webcall";
-    this.sttSampleRate = isTelephonySarvam ? 8000 : 16000;
-    const sttCfg: STTConfig = isTelephonySarvam
+    // Phone audio is 8 kHz. Sarvam accepts that natively. The pod ear resamples
+    // it with a band-limited filter. Linear interpolation to 16 kHz invents
+    // high frequencies and is what the ear was hearing on Vobiz calls.
+    // Webcall's native mic rate is already 16 kHz, so it keeps the default.
+    const telephonyNative8k =
+      config.telephonyProvider !== "webcall"
+      && (this.agent.asrProvider.toLowerCase() === "sarvam"
+        || this.agent.asrProvider.toLowerCase() === "irfan_pod");
+    this.sttSampleRate = telephonyNative8k ? 8000 : 16000;
+    const sttCfg: STTConfig = telephonyNative8k
       ? { ...this.agent.sttConfig, nativeSampleRate: 8000 }
       : this.agent.sttConfig;
 

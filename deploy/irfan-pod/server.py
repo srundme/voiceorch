@@ -67,12 +67,22 @@ EAR_CONTEXT = (
     "BPO, call center, Bangalore, Gmail, at the rate, dot com, pincode"
 )
 HEARD_AS = (
+    # Call 26 Sep: "wice process", "hi fan", "atate", "male lady", "my cd".
+    (re.compile(r"\bwice process\b", re.I), "voice process"),
     (re.compile(r"\bwise process\b", re.I), "voice process"),
     (re.compile(r"\bvoice processors?\b", re.I), "voice process"),
     (re.compile(r"\bvice process\b", re.I), "voice process"),
     (re.compile(r"\bvice[- ]president\b", re.I), "voice process"),
-    (re.compile(r"\b(?:drop|job)\s*shop\b", re.I), "Jobshop"),
+    (re.compile(r"\b(?:the )?higher fund\b", re.I), "Hi Irfan"),
+    (re.compile(r"\bhi fan\b", re.I), "Hi Irfan"),
     (re.compile(r"\biPhone, how are you\b"), "Hi Irfan, how are you"),
+    (re.compile(r"\batate\b", re.I), "at the rate"),
+    (re.compile(r"\bat the red\b", re.I), "at the rate"),
+    (re.compile(r"\balternate (?:male|mail) lady\b", re.I), "alternate mail id"),
+    (re.compile(r"\b(?:male|mail) lady\b", re.I), "mail id"),
+    (re.compile(r"\bmy cd\b", re.I), "my city"),
+    (re.compile(r"\bjob shops\b", re.I), "Jobshop"),
+    (re.compile(r"\b(?:drop|job)\s*shop\b", re.I), "Jobshop"),
 )
 UNFINISHED = set(
     "a an the to on in at of for from with and or but so because like is am are was were "
@@ -209,8 +219,21 @@ async def health(_request: web.Request) -> web.Response:
     })
 
 
+def to_16k(pcm: bytes, rate: int) -> bytes:
+    """Phone audio is 8 kHz. A proper resample keeps the bandlimit. Averaging
+    neighbouring samples invents highs, and that is what turns "voice" into "wice"."""
+    if rate == SAMPLE_RATE or len(pcm) < 2:
+        return pcm
+    audio = np.frombuffer(pcm[: len(pcm) // 2 * 2], dtype=np.int16)
+    return soxr.resample(audio, rate, SAMPLE_RATE).astype(np.int16).tobytes()
+
+
 async def transcribe_http(request: web.Request) -> web.Response:
-    return web.json_response({"text": await transcribe(await request.read())})
+    data = await request.read()
+    if data[:4] != b"RIFF":
+        rate = int(request.headers.get("X-Sample-Rate", request.query.get("rate", "16000")))
+        data = to_16k(data, rate)
+    return web.json_response({"text": await transcribe(data)})
 
 
 async def speech(request: web.Request) -> web.StreamResponse:
@@ -310,6 +333,8 @@ async def stt_socket(request: web.Request) -> web.WebSocketResponse:
     pending = bytearray()
     infer_lock = asyncio.Lock()
     window_bytes = VAD_WINDOW * 2
+    rate = int(request.query.get("rate", "16000"))
+    resampler = soxr.ResampleStream(rate, SAMPLE_RATE, 1, dtype="int16", quality="HQ") if rate != SAMPLE_RATE else None
 
     async def send(text: str, final: bool) -> None:
         if not ws.closed:
@@ -386,7 +411,11 @@ async def stt_socket(request: web.Request) -> web.WebSocketResponse:
             break
         if msg.type != WSMsgType.BINARY or not msg.data:
             continue
-        pending.extend(msg.data)
+        chunk = msg.data
+        if resampler is not None:
+            samples = np.frombuffer(chunk[: len(chunk) // 2 * 2], dtype=np.int16)
+            chunk = resampler.resample_chunk(samples).tobytes()
+        pending.extend(chunk)
         while len(pending) >= window_bytes:
             window = bytes(pending[:window_bytes])
             del pending[:window_bytes]
