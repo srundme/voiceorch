@@ -191,6 +191,7 @@ import {
   type IntakeToolContext,
 } from "./intake-tools.js";
 import { recordIntakeEnglishTurn } from "../lib/intake-service.js";
+import { emptyJobshopProfile, matchJobshopProfile, type JobshopProfile } from "../lib/jobshop-match.js";
 import { logger } from "../lib/logger.js";
 import { isHumanShortUtterancePause, isLikelyRingBurstPattern } from "./amd-confirm.js";
 import { buildCompactGreetingPrompt, stripHallucinatedCompanyVerifyGreeting } from "./compact-greeting-prompt.js";
@@ -1543,6 +1544,8 @@ export class OrchestrationPipeline implements VoiceSession {
   private _intakeUnspokenClose: string | null = null;
   /** A JD was already pitched on this call. Hangup must not say there is no opening. */
   private _intakeMatchedThisCall = false;
+  /** Answers collected on this call, scored against the dummy jobs. */
+  private _jobshopProfile: JobshopProfile = emptyJobshopProfile();
   private _interruptionHint: string | null = null;
   /** Text of the sentence currently draining via playJob — used when barge-in cuts mid-sentence. */
   private _activePlaybackText: string | null = null;
@@ -8339,6 +8342,11 @@ export class OrchestrationPipeline implements VoiceSession {
         this._intakeUnspokenClose = submitted.slice(marker.length).split("\n")[0]?.trim() || null;
       }
       return submitted;
+    } else if (tool.type === "match_jobs") {
+      const matched = matchJobshopProfile(this._jobshopProfile, args);
+      this._jobshopProfile = matched.profile;
+      if (matched.matches.length > 0) this._intakeMatchedThisCall = true;
+      return matched.speech;
     } else if (tool.type === "webhook") {
       return await this.executeWebhookTool(tool, args);
     } else if (tool.type === "send_sms") {

@@ -54,6 +54,12 @@ export interface SendWhatsappTool {
   description: string;
 }
 
+export interface MatchJobsTool {
+  type: "match_jobs";
+  name: string;
+  description: string;
+}
+
 export interface EndCallTool {
   type: "end_call";
   name: string;
@@ -243,7 +249,7 @@ export interface SquadFollowupTool {
   description: string;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendEmailTool | SendWhatsappTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool | IntakeWriteTool | IntakeDispositionTool | IntakeSubmitTool;
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendEmailTool | SendWhatsappTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool | IntakeWriteTool | IntakeDispositionTool | IntakeSubmitTool | MatchJobsTool;
 
 /** One JSON-schema property on a tool argument object. */
 export interface ToolPropertySchema {

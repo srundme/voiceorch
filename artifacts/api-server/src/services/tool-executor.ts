@@ -23,6 +23,7 @@ import {
   INTAKE_SUBMIT_SCHEMA,
   INTAKE_WRITE_SCHEMA,
 } from "../lib/intake-tool-schemas.js";
+import { MATCH_JOBS_PARAMETERS } from "../lib/jobshop-match.js";
 import { parseRelativeDateTime, type PartOfDay } from "./scheduling/relative-datetime.js";
 import { parseCallbackDateTime } from "../lib/tz-datetime.js";
 import { buildSlotLockKey } from "./scheduling/lock.js";
@@ -477,6 +478,9 @@ export function buildToolDefs(
       }
       if (t.type === "intake_submit") {
         return { name: t.name, description: t.description, parameters: INTAKE_SUBMIT_SCHEMA };
+      }
+      if (t.type === "match_jobs") {
+        return { name: t.name, description: t.description, parameters: MATCH_JOBS_PARAMETERS };
       }
       // Webhook: use caller-defined parameters if provided
       if (t.type === "webhook" && t.parameters) {

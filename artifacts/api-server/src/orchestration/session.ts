@@ -40,7 +40,7 @@ import {
 import { compilePromptCore, hasPromptCore } from "@workspace/db/prompt-core";
 import { withDbRetry } from "./db-retry.js";
 import { transcriptHasFarewellEnding } from "./callFarewell.js";
-import { applyIntakeWrite, attachIntakeCallArtifacts } from "../lib/intake-service.js";
+import { attachIntakeCallArtifacts } from "../lib/intake-service.js";
 import {
   INTAKE_AGENT_TYPE,
   INTAKE_BACKCHANNEL_FILLERS,
@@ -53,10 +53,8 @@ import {
   intakeCartesiaVoiceId,
 } from "../lib/intake-agent.js";
 import {
-  buildIntakeReturnBlock,
   findIntakeForCaller,
   intakeCallerName,
-  nextIntakeAsk,
   renderIntakeGreeting,
   resolveIntakeOpenKind,
 } from "../lib/intake-call-context.js";
@@ -418,16 +416,19 @@ export async function createSession(params: {
     });
   }
 
-  // Parse tools JSON column (null-safe, type-cast to AgentTool[])
+  // Irfan talks. He does not fill a form. Drop any saved intake tools on the row.
   let tools = Array.isArray(agent.tools) ? (agent.tools as unknown as AgentTool[]) : [];
-  if (agent.agentType === INTAKE_AGENT_TYPE && !tools.some((tool) => tool.type.startsWith("intake_"))) {
+  if (agent.agentType === INTAKE_AGENT_TYPE) {
+    const hadForm = tools.some((tool) => tool.type.startsWith("intake_"));
     tools = intakeAgentTools();
-    void db.update(agentsTable).set({
-      tools: intakeAgentTools() as unknown as Record<string, unknown>[],
-      systemPrompt: buildIntakeSystemPrompt(agent.name),
-    }).where(eq(agentsTable.id, agent.id)).catch((err) => {
-      logger.warn({ err, agentId: agent.id }, "intake: could not restore intake tools");
-    });
+    if (hadForm) {
+      void db.update(agentsTable).set({
+        tools: intakeAgentTools() as unknown as Record<string, unknown>[],
+        systemPrompt: buildIntakeSystemPrompt(agent.name),
+      }).where(eq(agentsTable.id, agent.id)).catch((err) => {
+        logger.warn({ err, agentId: agent.id }, "intake: could not drop form tools");
+      });
+    }
   }
 
   // Read agentConfig JSONB for advanced settings — normalize legacy snappy Sarvam/engine
@@ -1443,17 +1444,7 @@ export async function createSession(params: {
       kind,
       agentName: agent.name,
       callerName,
-      nextAsk: prior ? nextIntakeAsk(prior) : null,
     });
-    if (prior) {
-      agentConfig.systemPrompt = `${agentConfig.systemPrompt}\n\n${buildIntakeReturnBlock(prior)}`;
-      if (!prior.phone && callerPhone) {
-        void applyIntakeWrite(prior.publicToken, { phone: callerPhone }, "agent").catch((err) => {
-          logger.warn({ err, token: prior.publicToken }, "intake: could not stamp caller ID onto form");
-        });
-      }
-    }
-    agentConfig.systemPrompt = `${agentConfig.systemPrompt}\n\nThe candidate's mobile is already on the form from this call's caller ID. Never ask for their phone number.`;
     logger.info(
       {
         agentId: params.agentId,

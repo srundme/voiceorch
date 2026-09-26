@@ -25,7 +25,7 @@ import {
   INTAKE_DISPOSITION_SCHEMA,
   INTAKE_WRITE_SCHEMA,
 } from "./intake-tool-schemas.js";
-import { DISPOSITION_MEANINGS, INTAKE_DISPOSITIONS } from "./intake-dispositions.js";
+import { INTAKE_DISPOSITIONS } from "./intake-dispositions.js";
 
 const base = defaultIntakeControls();
 
@@ -140,13 +140,8 @@ describe("validateIntakeControls", () => {
 });
 
 describe("intake agent tool set", () => {
-  it("ships the three intake tools plus end_call", () => {
-    expect(intakeAgentTools().map((t) => t.type)).toEqual([
-      "intake_write",
-      "intake_disposition",
-      "intake_submit",
-      "end_call",
-    ]);
+  it("ships match_jobs and end_call — no form tools", () => {
+    expect(intakeAgentTools().map((t) => t.type)).toEqual(["match_jobs", "end_call"]);
     const endCall = intakeAgentTools().find((t) => t.type === "end_call");
     expect(endCall).toMatchObject({ type: "end_call" });
     expect(endCall && "goodbyeMessage" in endCall ? endCall.goodbyeMessage : undefined).toBeUndefined();
@@ -192,82 +187,81 @@ describe("intake agent tool set", () => {
 });
 
 describe("intake prompt", () => {
-  it("pins the call to English and names the tools it must use", () => {
+  it("pins the call to English and does not save a form", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("Speak only English");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("save_candidate_details");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("set_disposition");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("finish_intake");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("I am filling a form");
+    expect(INTAKE_SYSTEM_PROMPT).not.toContain("save_candidate_details");
+    expect(INTAKE_SYSTEM_PROMPT).not.toContain("set_disposition");
+    expect(INTAKE_SYSTEM_PROMPT).not.toContain("finish_intake");
   });
 
-  it("tells the agent to converse, not interrogate", () => {
-    expect(INTAKE_SYSTEM_PROMPT).toContain("This is a conversation");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Do not recite the list in a fixed order");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Hiring zone is decided from the pincode");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("building rapport");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Be patient when they read a 6-digit pincode");
-    expect(INTAKE_SYSTEM_PROMPT).not.toContain("Keep every reply under 25 words");
-    expect(INTAKE_SYSTEM_PROMPT).not.toContain("that is the only question you may ask");
+  it("screens like a Jobshop recruiter, one question at a time", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("India's largest BPO recruitment company");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("applied for a BPO job on Naukri");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Ask what kind of job they are looking for");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("international voice, domestic voice, or non-voice");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("face to face in Bangalore");
+    expect(INTAKE_SYSTEM_PROMPT).not.toContain("Hiring zone is decided from the pincode");
   });
 
-  it("discovers why they called before collecting the name", () => {
-    expect(INTAKE_SYSTEM_PROMPT).toContain("You do not know why this person rang");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Do not collect name, city, pincode or email in this stage unless they volunteered it");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("shall I start with your name?");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Skip the name ask if they already gave it");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Never open as if you already know they want a job");
-    expect(INTAKE_SYSTEM_PROMPT).not.toContain("after they answer, get their name");
-    expect(INTAKE_SYSTEM_PROMPT).not.toContain("people looking for international voice-process jobs");
+  it("closes non-BPO and outstation calls instead of keeping them", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("If they still do not want BPO, close politely and end_call");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("If they will not, close politely and end_call");
+  });
+
+  it("handles repeat calls and a block request", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Suma, Arbaz, or Riyaz");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("9964080000");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Book my Appointment");
   });
 
   it("bans the per-turn stall that made the agent sound like a machine", () => {
     expect(INTAKE_SYSTEM_PROMPT).toContain("one moment please");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Never stall");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("let me note that down");
   });
 
-  it("stops the agent asking for gender, phone, or an English self-rating", () => {
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Never ask their gender");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Never ask for their phone number");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Never ask them to rate their English");
-  });
-
-  it("stops the agent inventing a returning call or an interview slot", () => {
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Do not say you have their details from before");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Never invent an interview date or time");
+  it("stops the agent inventing a job", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Never invent a company, a salary, a kilometre figure, or an interview time");
     expect(INTAKE_SYSTEM_PROMPT).toContain("Say their name the way they said it");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("call match_jobs");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Speak only those jobs");
   });
 
-  it("says outcomes are mandatory and can stack", () => {
-    expect(INTAKE_SYSTEM_PROMPT).toContain("A candidate can have more than one outcome");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("A call with no outcome is a failed call");
-  });
-
-  it("explains when each outcome applies, not just its name", () => {
-    for (const d of INTAKE_DISPOSITIONS) {
-      const meaning = DISPOSITION_MEANINGS[d.id]!;
-      expect(INTAKE_SYSTEM_PROMPT).toContain(meaning);
-    }
-  });
-
-  it("frames the opening as facts to talk through rather than a script", () => {
-    expect(INTAKE_SYSTEM_PROMPT).toContain("They are facts, not a script");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Two or three facts per turn");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Never pitch only the company name");
-    expect(INTAKE_SYSTEM_PROMPT).toContain("save lastCompany and tenure");
+  it("does not require an outcome or a saved screen", () => {
+    expect(INTAKE_SYSTEM_PROMPT).not.toContain("A call with no outcome is a failed call");
+    expect(INTAKE_SYSTEM_PROMPT).not.toContain("save lastCompany and tenure");
   });
 
   it("closes in words that match this call, not a fixed farewell", () => {
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Speak a close that matches THIS call");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("say a short close that matches this call");
     expect(INTAKE_SYSTEM_PROMPT).not.toContain("tell them the team will call back with next steps, thank them");
   });
 
-  it("forbids inventing a job or a salary", () => {
-    expect(INTAKE_SYSTEM_PROMPT).toContain("Never state a job, company or salary that the matching tool did not return");
+  it("does not ask gender or an English self-rating", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Never ask their gender");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Decide it from the first name");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Never ask them to rate their English");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Judge it from how they speak on this call");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("the outcome is Poor Communication");
   });
 
-  it("lists every disposition the form supports", () => {
-    for (const d of INTAKE_DISPOSITIONS) {
-      expect(INTAKE_SYSTEM_PROMPT).toContain(d.id);
-    }
+  it("reads an education gap from the year of birth", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("age at an exam = passing year minus birth year");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Someone born in 2000 finishes 10th in 2015 at 15, in 2016 at 16, or in 2017 at 17");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("A 10th year of 2018 or later is a gap");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Born in 2000, that is 2017, 2018, or 2019");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Born in 2000, that is 2020, 2021, or 2022");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("12th is two years after 10th");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("A diploma is two years after 12th, or three years after 10th");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("A degree is three years after 12th");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("A postgraduate is two years after the degree");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Age Limit applies only when a job description itself states an age range");
+  });
+
+  it("covers shift, salary, notice, and cooling without fake numbers", () => {
+    expect(INTAKE_SYSTEM_PROMPT).toContain("five thirty, six thirty, seven thirty, eight thirty");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("Never quote a salary you were not given");
+    expect(INTAKE_SYSTEM_PROMPT).toContain("thirty-day or ninety-day cooling period");
   });
 
   it("uses the agent name, never a hardcoded Meera", () => {
@@ -281,7 +275,7 @@ describe("intake prompt", () => {
     const spoken = buildIntakeSystemPrompt("Irfan");
     expect(spoken).toContain("You are Irfan");
     expect(spoken).not.toContain("{{agent_name}}");
-    expect(spoken).toContain("schedule_callback");
+    expect(spoken).not.toContain("schedule_callback");
   });
 
   it("redials on a drop and locks Call Engine Balanced turn-taking", () => {
