@@ -80,8 +80,8 @@ function MetricCard({
     <div
       className={cn(
         "bg-card border border-border/80 rounded-xl p-3.5 flex items-center gap-3.5 transition-all text-left w-full h-[84px] shadow-sm",
-        onClick && "cursor-pointer hover:border-blue-500/40 hover:bg-muted/20",
-        active && "border-blue-600/50 bg-blue-50/10 ring-1 ring-blue-600/30",
+        onClick && "cursor-pointer hover:border-foreground/20 hover:bg-muted/20",
+        active && "border-foreground/30 bg-foreground/[0.05] ring-1 ring-foreground/20 shadow-xs",
       )}
     >
       <div className="h-9 w-9 rounded-lg border border-border/70 bg-muted/40 text-foreground/80 flex items-center justify-center shrink-0">
