@@ -213,6 +213,7 @@ export function LeadReportingTable({
             const open = () => navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`);
             const outcome = outcomePresentation(lead);
             const statusLabel = callResultLabel(lead);
+            const statusLower = statusLabel.toLowerCase();
             return (
               <tr
                 key={lead.leadId}
