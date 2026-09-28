@@ -1,3 +1,4 @@
+// Build trigger: 2026-09-28T11:38:00Z
 import { useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useScrollRestoration } from "@/lib/use-scroll-restoration";
