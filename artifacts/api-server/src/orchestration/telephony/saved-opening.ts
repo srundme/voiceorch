@@ -5,7 +5,7 @@
  * The clip is one take of INTAKE_GREETING with the name Sruthi. Any other
  * greeting keeps the live voice path.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
@@ -18,9 +18,21 @@ export { SAVED_OPENING_TEXT, savedOpeningTextFor };
 const FRAME_BYTES = 320; // 20 ms at 8 kHz, 16-bit mono
 const FRAME_MS = 20;
 
-const OPENING_PCM = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "sruthi-opening.pcm"),
-);
+function loadOpeningPcm(): Buffer {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    join(here, "sruthi-opening.pcm"),
+    join(here, "orchestration", "telephony", "sruthi-opening.pcm"),
+    join(here, "telephony", "sruthi-opening.pcm"),
+  ];
+  for (const path of candidates) {
+    if (existsSync(path)) return readFileSync(path);
+  }
+  logger.warn({ tried: candidates }, "Saved opening clip is not in this build");
+  return Buffer.alloc(0);
+}
+
+const OPENING_PCM = loadOpeningPcm();
 
 export interface PreplayedOpening {
   text: string;
@@ -107,7 +119,7 @@ export function startSavedOpening(opts: {
         }
         const row = rows[0];
         const text = row ? savedOpeningTextFor(row.name, row.greetingMessage) : null;
-        if (!text) {
+        if (!text || OPENING_PCM.length === 0) {
           resolveReady(null);
           finish();
           return;

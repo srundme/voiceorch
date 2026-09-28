@@ -156,6 +156,8 @@ async function copyAssets(distDir) {
   const fillersSrc = path.resolve(artifactDir, "src/orchestration/fillers");
   const fillersDest = path.resolve(distDir, "orchestration", "fillers");
   await cp(fillersSrc, fillersDest, { recursive: true });
+  const openingSrc = path.resolve(artifactDir, "src/orchestration/telephony/sruthi-opening.pcm");
+  await cp(openingSrc, path.resolve(distDir, "sruthi-opening.pcm"));
 }
 
 buildAll().catch((err) => {
