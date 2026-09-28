@@ -326,7 +326,9 @@ function CampaignRow({
           <span className="shrink-0">{SOURCE_ICON[sourceKey] ?? <Megaphone className="h-4 w-4 text-muted-foreground" />}</span>
           <span className="text-[13px] font-semibold text-foreground tracking-tight truncate">{campaign.name}</span>
           {((campaign as unknown as Record<string, string>)["triggerMode"] === "instant") && (
-            <Zap className="h-3 w-3 text-blue-500 shrink-0" title="Instant Trigger" />
+            <span title="Instant Trigger" className="inline-flex">
+              <Zap className="h-3 w-3 text-blue-500 shrink-0" />
+            </span>
           )}
         </div>
         <p className="text-[11px] text-muted-foreground mt-0.5 truncate ml-6">
