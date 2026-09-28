@@ -427,9 +427,9 @@ export function CampaignLeadsWorkspace({
         )}
       >
         {/* Table Toolbar */}
-        <div className="px-4 py-3 border-b border-border flex flex-wrap items-center justify-between gap-3 bg-card/60">
+        <div className="px-4 border-b border-border flex items-center justify-between gap-4 bg-card/60 min-h-[48px]">
           {/* Status Tabs: All, Voicemail, Busy */}
-          <div className="flex items-center gap-4 overflow-x-auto">
+          <div className="flex items-center gap-6 overflow-x-auto self-stretch -mb-[1px]">
             {statusTabs.map((tab) => {
               const selected =
                 tab.id === "all"
@@ -447,19 +447,19 @@ export function CampaignLeadsWorkspace({
                     })
                   }
                   className={cn(
-                    "shrink-0 pb-1 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5",
+                    "shrink-0 py-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 relative",
                     selected
                       ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
                       : "border-transparent text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {tab.label}
+                  <span>{tab.label}</span>
                   <span
                     className={cn(
-                      "px-1.5 py-0.5 rounded-full text-[11px] font-medium tabular-nums",
+                      "px-2 py-0.5 rounded-full text-[11px] font-semibold tabular-nums leading-none",
                       selected
-                        ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
-                        : "bg-muted text-muted-foreground",
+                        ? "bg-blue-50 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60"
+                        : "bg-muted/70 text-muted-foreground border border-border/40",
                     )}
                   >
                     {tab.count.toLocaleString()}
@@ -470,7 +470,7 @@ export function CampaignLeadsWorkspace({
           </div>
 
           {/* Right Action Tools */}
-          <div className="flex items-center gap-2 ml-auto flex-wrap">
+          <div className="flex items-center gap-2 ml-auto py-2">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
