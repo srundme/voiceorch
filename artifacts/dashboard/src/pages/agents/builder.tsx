@@ -8357,53 +8357,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
             </div>
           </div>
 
-          {/* Sticky Save + Test — always visible (Bolna-style chrome, our actions) */}
-          <div className="shrink-0 border-t border-border bg-background/95 px-5 py-2.5 pb-safe backdrop-blur-md sm:px-8">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="hidden text-[11px] text-muted-foreground sm:block">
-                {isDirty
-                  ? (autoSaveStatus === "saving" ? "Saving changes…" : "Unsaved changes — Save now or wait for auto-save")
-                  : autoSaveStatus === "saved"
-                    ? "All changes saved"
-                    : "Ready"}
-              </p>
-              <div className="ml-auto flex flex-wrap items-center gap-1.5">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-9 gap-1.5 text-xs"
-                  onClick={() => setCallDialog(true)}
-                >
-                  <Phone className="h-3.5 w-3.5" />
-                  Get a call
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={showWebcall ? "default" : "outline"}
-                  className="h-9 gap-1.5 text-xs"
-                  onClick={() => setShowWebcall((v) => !v)}
-                >
-                  <Play className="h-3.5 w-3.5" />
-                  {showWebcall ? "Close test" : "Live test"}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  className={cn("relative h-9 gap-1.5 px-4 text-xs font-medium", savedFlash && "bg-emerald-600 hover:bg-emerald-600")}
-                  onClick={onSave}
-                  disabled={updateAgent.isPending}
-                >
-                  {savedFlash ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-                  {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save agent"}
-                  {isDirty && !updateAgent.isPending && !savedFlash && (
-                    <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-400" />
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
+
         </div>
       </Form>
 
