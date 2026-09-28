@@ -927,10 +927,31 @@ export default function CampaignDetailPage() {
                 </Button>
               </Link>
               <h2 className="text-xl font-bold tracking-tight text-foreground">{campaign.name}</h2>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                <span className="h-2 w-2 rounded-full bg-blue-600 dark:bg-blue-400" />
-                {batches?.some(b => b.status === "running") ? "Active" : campaign.status === "active" ? "Active" : campaign.status}
-              </span>
+              {(() => {
+                const isActive = batches?.some(b => b.status === "running") || campaign.status === "active";
+                const isPaused = campaign.status === "paused";
+                const label = isActive ? "Active" : isPaused ? "Paused" : campaign.status;
+                return (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border",
+                      isActive && "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
+                      isPaused && "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800",
+                      !isActive && !isPaused && "bg-slate-50 text-slate-700 dark:bg-slate-900 dark:text-slate-300 border-slate-200 dark:border-slate-800",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "h-2 w-2 rounded-full",
+                        isActive && "bg-emerald-500",
+                        isPaused && "bg-amber-500",
+                        !isActive && !isPaused && "bg-slate-400",
+                      )}
+                    />
+                    {label}
+                  </span>
+                );
+              })()}
             </div>
 
             {/* Metadata Line */}
