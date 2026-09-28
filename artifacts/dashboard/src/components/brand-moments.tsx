@@ -28,7 +28,7 @@ export function GhostBars({
   );
 }
 
-/** Soft listening/speaking bars for live or “ready” moments. */
+/** Soft listening/speaking bars for live or “ready” moments with official SnapServe mark. */
 export function PulseBars({
   className,
   active = false,
@@ -39,19 +39,18 @@ export function PulseBars({
   return (
     <div
       className={cn(
-        "flex h-14 w-14 flex-col justify-center gap-1.5 rounded-2xl border border-border/60 bg-card/80 p-3",
+        "flex h-14 w-14 items-center justify-center rounded-2xl border border-border/60 bg-card/80 p-2.5",
         className,
       )}
       aria-hidden
     >
-      <span
+      <SnapServeIcon
+        size={36}
         className={cn(
-          "h-1.5 w-full rounded-full bg-foreground transition-opacity",
+          "text-foreground transition-opacity",
           active && "animate-pulse",
         )}
       />
-      <span className="h-1.5 w-[70%] rounded-full bg-foreground/55" />
-      <span className="h-1.5 w-[40%] rounded-full bg-foreground/30" />
     </div>
   );
 }

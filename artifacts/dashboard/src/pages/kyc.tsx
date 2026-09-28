@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import {
   useGetKycStatus,
   useStartKyc,
@@ -305,13 +306,19 @@ export default function KycPage() {
         <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
 
           {/* Section intro — parent StripePage owns the page title */}
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center justify-center gap-2 text-center">
             <p className="text-sm text-muted-foreground">
               One-time identity verification required to activate telephony features on your account.
             </p>
-            <Button variant="ghost" size="icon" onClick={handleRefresh} title="Refresh status" className="shrink-0">
-              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-            </Button>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              title="Refresh status"
+              disabled={isLoading}
+              className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={cn("size-3.5", isLoading && "animate-spin")} />
+            </button>
           </div>
 
           {/* Step indicator */}

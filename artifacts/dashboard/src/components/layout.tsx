@@ -248,9 +248,13 @@ function WalletChip({ compact = false }: { compact?: boolean }) {
   const pct = cents === null ? 0 : Math.min(100, (cents / 100_000) * 100);
 
   return (
-    <Link href="/app/wallet">
-      <div className={`flex items-center gap-1.5 px-2.5 py-[7px] rounded-lg border ${ring} bg-elevated/40 cursor-pointer hover:bg-elevated transition-colors w-full`}>
-        <WalletIcon className={`size-3.5 shrink-0 ${text}`} />
+    <Link href="/app/wallet" title={compact ? (cents !== null ? `₹${(cents / 100).toFixed(2)}` : "Wallet") : undefined}>
+      <div className={cn(
+        "flex items-center rounded-lg border bg-elevated/40 cursor-pointer hover:bg-elevated transition-colors w-full",
+        compact ? "h-9 justify-center px-0 py-0" : "gap-1.5 px-2.5 py-[7px]",
+        ring,
+      )}>
+        <WalletIcon className={`size-4 shrink-0 ${text}`} />
         {!compact && (
           <div className="flex flex-col gap-[3px] flex-1 min-w-0">
             {cents !== null ? (
@@ -299,7 +303,11 @@ function SidebarUser({ collapsed }: { collapsed: boolean }) {
     <div className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg hover:bg-accent transition-colors"
+        title={collapsed ? name : undefined}
+        className={cn(
+          "flex items-center rounded-lg hover:bg-accent transition-colors w-full",
+          collapsed ? "h-9 justify-center px-0 py-0" : "gap-2 px-2.5 py-2",
+        )}
       >
         <div className="size-7 rounded-md bg-elevated border border-border flex items-center justify-center shrink-0">
           <span className="text-[11px] font-semibold text-foreground">{initials}</span>
@@ -404,20 +412,25 @@ function NavItemEl({
     <Link
       href={item.href}
       onClick={onClick}
+      title={collapsed ? item.name : undefined}
       aria-current={isActive ? "page" : undefined}
       className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
       <div
-        className={[
-          "relative flex h-9 items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-200 cursor-pointer select-none",
-          indent ? "pl-2" : "",
+        className={cn(
+          "relative flex h-9 items-center rounded-md text-[13px] transition-colors duration-200 cursor-pointer select-none",
+          collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
+          indent && !collapsed ? "pl-2" : "",
           isActive
             ? "bg-foreground/[0.08] text-foreground font-medium"
             : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
-        ].join(" ")}
+        )}
       >
         <item.icon
-          className={`size-4 shrink-0 ${isActive ? "text-foreground" : "text-muted-foreground"}`}
+          className={cn(
+            "size-4 shrink-0",
+            isActive ? "text-foreground" : "text-muted-foreground",
+          )}
         />
         {!collapsed && (
           <>
@@ -430,7 +443,7 @@ function NavItemEl({
           </>
         )}
         {collapsed && badge > 0 && (
-          <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" />
+          <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-amber-500" />
         )}
       </div>
     </Link>
@@ -490,64 +503,75 @@ function SidebarContent({
     <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar">
       {/* Workspace identity */}
       <div className={cn(
-        "flex h-12 shrink-0 items-center gap-1.5 border-b border-sidebar-border px-2.5",
-        collapsed && "justify-center px-1.5",
+        "flex h-12 shrink-0 items-center border-b border-sidebar-border",
+        collapsed ? "justify-center px-1" : "justify-between gap-1.5 px-2.5",
       )}>
-        <Link href="/app" onClick={onNavClick} className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-          {partnerCtx?.branding ? (
-            /* White-label: partner-linked clients see their partner's brand here. */
-            <>
-              {partnerCtx.branding.logoUrl ? (
-                <img
-                  src={partnerCtx.branding.logoUrl}
-                  alt={partnerCtx.branding.companyName}
-                className="size-6 shrink-0 rounded-md bg-elevated object-contain"
-                />
-              ) : (
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-background text-[11px] font-semibold">
-                  {partnerCtx.branding.companyName.charAt(0).toUpperCase()}
-                </span>
-              )}
-              {!collapsed && (
-                <span
-                    className="truncate text-[13px] font-semibold leading-none text-foreground"
-                  style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
-                >
-                  {partnerCtx.branding.companyName}
-                </span>
-              )}
-            </>
-          ) : (
-            <>
-              <SnapServeIcon size={24} className="shrink-0 self-center text-foreground" />
-              {!collapsed && (
-                <span className="flex min-w-0 flex-col gap-0.5 py-0.5">
-                  <span
-                    className="whitespace-nowrap text-[15px] leading-none text-foreground"
-                    style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
-                    aria-label="SnapServe"
-                  >
-                    <span style={{ fontWeight: 700 }}>Snap</span>
-                    <span style={{ fontWeight: 400, opacity: 0.72 }}>Serve</span>
-                  </span>
-                </span>
-              )}
-              {!collapsed && partnerCtx?.isPartner && (
-                <span className="shrink-0 self-center rounded border border-emerald-500/25 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider leading-none text-emerald-600">
-                  Partner
-                </span>
-              )}
-            </>
-          )}
-        </Link>
-        {onToggleCollapse && (
+        {collapsed ? (
           <button
             onClick={onToggleCollapse}
-            className="shrink-0 rounded-md p-1 text-muted-foreground/55 transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
-            title={collapsed ? "Expand" : "Collapse"}
+            className="flex size-9 items-center justify-center rounded-lg text-foreground/85 hover:bg-foreground/[0.06] hover:text-foreground transition-colors group relative"
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
           >
-            {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+            <SnapServeIcon size={22} className="shrink-0" />
+            <span className="absolute -bottom-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-background border border-border shadow-xs opacity-0 group-hover:opacity-100 transition-opacity">
+              <ChevronRight className="size-2.5 text-muted-foreground" />
+            </span>
           </button>
+        ) : (
+          <>
+            <Link href="/app" onClick={onNavClick} className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
+              {partnerCtx?.branding ? (
+                <>
+                  {partnerCtx.branding.logoUrl ? (
+                    <img
+                      src={partnerCtx.branding.logoUrl}
+                      alt={partnerCtx.branding.companyName}
+                      className="size-6 shrink-0 rounded-md bg-elevated object-contain"
+                    />
+                  ) : (
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-background text-[11px] font-semibold">
+                      {partnerCtx.branding.companyName.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <span
+                    className="truncate text-[13px] font-semibold leading-none text-foreground"
+                    style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
+                  >
+                    {partnerCtx.branding.companyName}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <SnapServeIcon size={24} className="shrink-0 self-center text-foreground" />
+                  <span className="flex min-w-0 flex-col gap-0.5 py-0.5">
+                    <span
+                      className="whitespace-nowrap text-[15px] leading-none text-foreground"
+                      style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
+                      aria-label="SnapServe"
+                    >
+                      <span style={{ fontWeight: 700 }}>Snap</span>
+                      <span style={{ fontWeight: 400, opacity: 0.72 }}>Serve</span>
+                    </span>
+                  </span>
+                  {partnerCtx?.isPartner && (
+                    <span className="shrink-0 self-center rounded border border-emerald-500/25 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider leading-none text-emerald-600">
+                      Partner
+                    </span>
+                  )}
+                </>
+              )}
+            </Link>
+            {onToggleCollapse && (
+              <button
+                onClick={onToggleCollapse}
+                className="shrink-0 rounded-md p-1 text-muted-foreground/55 transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+                title="Collapse sidebar"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -555,7 +579,11 @@ function SidebarContent({
       <div className="shrink-0 px-2 pt-2 pb-1">
         <button
           onClick={onSearchOpen}
-          className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
+          title={collapsed ? "Search (⌘K)" : undefined}
+          className={cn(
+            "flex h-9 w-full items-center rounded-md text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground",
+            collapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
+          )}
         >
           <Search className="size-4 shrink-0 text-muted-foreground" />
           {!collapsed && (
@@ -567,14 +595,15 @@ function SidebarContent({
         </button>
       </div>
 
-      {/* + New agent CTA — available to all workspaces including partner-managed clients */}
+      {/* + New agent CTA */}
       <div className="shrink-0 px-2 pb-2">
         <button
           type="button"
           onClick={() => { onNavClick?.(); onNewAgent?.(); }}
+          title={collapsed ? "New agent" : undefined}
           className={cn(
-            "flex h-9 w-full cursor-pointer select-none items-center gap-2.5 rounded-md bg-primary px-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/90",
-            collapsed ? "justify-center" : ""
+            "flex h-9 w-full cursor-pointer select-none items-center rounded-md bg-primary text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/90",
+            collapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
           )}
         >
           <Plus className="size-4 shrink-0" />
@@ -582,11 +611,11 @@ function SidebarContent({
         </button>
       </div>
 
-      {/* Primary nav */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
+      {/* Primary nav — scrollbar hidden for sleek collapsed icons */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1 scrollbar-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {navGroups.map((group, gi) => (
           <div key={gi}>
-            {gi > 0 && <div className="h-3" />}
+            {gi > 0 && <div className={collapsed ? "h-1.5" : "h-3"} />}
 
             {/* Group label */}
             {group.group && !collapsed && (
@@ -610,17 +639,19 @@ function SidebarContent({
         ))}
 
         {/* Settings divider */}
-        <div className="h-3" />
+        <div className={collapsed ? "h-1.5" : "h-3"} />
 
         {/* Settings toggle */}
         <button
           onClick={toggleSettings}
-          className={[
-            "flex h-9 w-full cursor-pointer select-none items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-100",
+          title={collapsed ? "Settings" : undefined}
+          className={cn(
+            "flex h-9 w-full cursor-pointer select-none items-center rounded-md text-[13px] transition-colors duration-100",
+            collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
             isInSettings
               ? "bg-foreground/[0.08] text-foreground font-medium"
               : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
-          ].join(" ")}
+          )}
         >
           <SettingsIcon className={`size-4 shrink-0 ${isInSettings ? "text-foreground" : "text-muted-foreground"}`} />
           {!collapsed && (
@@ -650,7 +681,7 @@ function SidebarContent({
 
       {/* Quiet account footer */}
       <div className="shrink-0 border-t border-sidebar-border px-2 pt-1">
-        {/* Partner white-label: company name only in the sidebar. */}
+        {/* Partner white-label */}
         {partnerCtx?.branding && (
           <div className="pt-1.5 flex items-center gap-2 px-2.5">
             {partnerCtx.branding.logoUrl && (
@@ -668,7 +699,11 @@ function SidebarContent({
             <Link
               href="/docs"
               onClick={onNavClick}
-              className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
+              title={collapsed ? "Documentation" : undefined}
+              className={cn(
+                "flex h-9 w-full items-center rounded-md text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground",
+                collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
+              )}
             >
               <KnowledgeIcon className="size-4 shrink-0 text-muted-foreground" />
               {!collapsed && <span>Documentation</span>}
@@ -954,7 +989,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const sidebarW = collapsed ? "w-[52px]" : "w-[216px]";
+  const sidebarW = collapsed ? "w-[58px]" : "w-[216px]";
   const openNewAgent = () => setNewAgentOpen(true);
 
   return (
