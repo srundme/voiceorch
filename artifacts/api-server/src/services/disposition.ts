@@ -133,7 +133,7 @@ export async function disposeCall(input: DisposeCallInput): Promise<DispositionR
           rawOut = await Promise.race([
             client.extract(systemPrompt, schema, transcript),
             new Promise<never>((_, reject) => {
-              setTimeout(() => reject(new Error("disposition extract timed out after 15000ms")), 15_000);
+              setTimeout(() => reject(new Error("disposition extract timed out after 30000ms")), 30_000);
             }),
           ]);
           if (i > 0) logger.info({ agentId, callId, provider }, "disposition: succeeded on fallback provider");
@@ -290,7 +290,7 @@ export async function extractFlatDispositionSchema(opts: {
       rawOut = await Promise.race([
         client.extract(system, jsonSchema, transcript.slice(0, 8000)),
         new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error("disposition schema extract timed out after 15000ms")), 15_000);
+          setTimeout(() => reject(new Error("disposition schema extract timed out after 30000ms")), 30_000);
         }),
       ]);
       break;

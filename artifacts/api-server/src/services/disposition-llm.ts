@@ -127,7 +127,7 @@ class SarvamDispositionLLM implements DispositionLLM {
       baseURL: openSource ? "https://api.sarvam.ai/v2" : "https://api.sarvam.ai/v1",
       // Docs require api-subscription-key; SDK also sends Authorization: Bearer.
       defaultHeaders: { "api-subscription-key": apiKey },
-      timeout: 15_000,
+      timeout: 30_000,
     });
     this.model = model;
   }
@@ -138,9 +138,8 @@ class SarvamDispositionLLM implements DispositionLLM {
     transcript: string,
   ): Promise<Record<string, unknown>> {
     // Sarvam json_object mode does not enforce a schema, so embed it in the prompt.
-    // gemma4 never reasons — omit reasoning_effort. Native /v1 defaults thinking
-    // ON at "medium"; for per-call structured JSON keep "low" so the budget
-    // goes to content (null disables; omitting leaves medium on).
+    // Disable native /v1 thinking (reasoning_effort: null) so disposition responses return
+    // in 2-3 seconds without eating token limits or timing out.
     const openSource = isSarvamOpenSourceModel(this.model);
     const response = await this.client.chat.completions.create({
       model: this.model,
@@ -150,7 +149,7 @@ class SarvamDispositionLLM implements DispositionLLM {
         { role: "system", content: withSchemaInstruction(systemPrompt, schema) },
         { role: "user", content: `TRANSCRIPT:\n${transcript}` },
       ],
-      ...(!openSource ? ({ reasoning_effort: "low" } as object) : {}),
+      ...(!openSource ? ({ reasoning_effort: null } as object) : {}),
     });
     const msg = response.choices[0]?.message as
       | { content?: string | null; reasoning_content?: string | null }
