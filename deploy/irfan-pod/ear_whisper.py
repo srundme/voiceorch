@@ -5,8 +5,10 @@ so this server does not run its own voice-activity gate.
 """
 from __future__ import annotations
 
+import inspect
 import io
 import os
+import re
 import time
 import wave
 
@@ -19,6 +21,7 @@ PORT = 8001
 SAMPLE_RATE = 16000
 
 model = WhisperModel(MODEL, device="cuda", compute_type="float16")
+_HAS_HOTWORDS = "hotwords" in inspect.signature(model.transcribe).parameters
 
 
 def log(msg: str) -> None:
@@ -49,23 +52,35 @@ def trim(audio: np.ndarray) -> np.ndarray:
     return audio[start:end]
 
 
+def cut_repeat(text: str) -> str:
+    """Drop a letter loop. Spelling was coming back as K-O-K-O until the turn ended."""
+    match = re.search(r"((?:[A-Za-z][- ]){1,6}?)\1{3,}", text)
+    if not match:
+        return text
+    return text[:match.start()].rstrip(" -,")
+
+
 def transcribe(audio: np.ndarray, prompt: str) -> str:
     audio = trim(audio)
     if len(audio) < SAMPLE_RATE // 5:
         return ""
-    segments, _info = model.transcribe(
-        audio,
-        language="en",
-        task="transcribe",
-        beam_size=5,
-        best_of=5,
-        temperature=0.0,
-        vad_filter=False,
-        without_timestamps=True,
-        condition_on_previous_text=False,
-        initial_prompt=prompt or None,
-    )
-    return " ".join(segment.text.strip() for segment in segments).strip()
+    kwargs = {
+        "language": "en",
+        "task": "transcribe",
+        "beam_size": 5,
+        "best_of": 5,
+        "temperature": 0.0,
+        "vad_filter": False,
+        "without_timestamps": True,
+        "condition_on_previous_text": False,
+    }
+    # A word list passed as initial_prompt is previous text, so the model
+    # continues it. Hotwords only bias the vocabulary.
+    if prompt and _HAS_HOTWORDS:
+        kwargs["hotwords"] = prompt
+    segments, _info = model.transcribe(audio, **kwargs)
+    text = " ".join(segment.text.strip() for segment in segments).strip()
+    return cut_repeat(text)
 
 
 async def health(_request: web.Request) -> web.Response:

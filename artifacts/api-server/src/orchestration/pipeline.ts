@@ -5966,6 +5966,7 @@ export class OrchestrationPipeline implements VoiceSession {
       return;
     }
     this.isProcessing = true;
+    const preplayedOpening = await (this.config.preplayedOpening ?? Promise.resolve(null));
     try {
       // IVR pre-filter: play menu, collect a digit, then fall through to normal greeting
       if (this.agent.ivrEnabled && this.agent.ivrGreeting) {
@@ -6255,6 +6256,41 @@ export class OrchestrationPipeline implements VoiceSession {
         if (greeting.trim() || welcomeAlreadySpoken) {
           this.openingHandshakeUntil = Date.now() + OPENING_HANDSHAKE_MS;
         }
+      }
+      if (
+        preplayedOpening
+        && greeting.trim() === preplayedOpening.text
+        && !this.closed
+        && !this.bargeInRequested
+      ) {
+        this.beginOpeningGreetingPlayback(greeting.length);
+        this.firstAudioSentAt = preplayedOpening.startedAt;
+        this.answerGapLogged = true;
+        this.greetingEchoHoldUntil = preplayedOpening.startedAt + preplayedOpening.durationMs + CARRIER_ECHO_LATENCY_MS;
+        if (this.answeredAtMs) {
+          this.logExec("Agent", "system", {
+            status: "info",
+            turnNumber: 0,
+            metadata: {
+              event: "Answer → First Audio breakdown",
+              answerToFirstAudioMs: preplayedOpening.startedAt - this.answeredAtMs,
+              setupMs: Math.max(0, preplayedOpening.startedAt - this.answeredAtMs),
+              pipelineMs: 0,
+              savedOpening: true,
+            },
+          });
+        }
+        logger.info({ callId: this.config.callId, greeting: greeting.slice(0, 80) }, "Opening is the saved clip");
+        await preplayedOpening.done;
+        if (!this.closed && !this.bargeInRequested) {
+          this.conversationHistory.appendAssistant(greeting.trim());
+          this.lastAssistantSpokenRaw = greeting.trim();
+          this.config.onTranscript("agent", greeting.trim());
+          this.config.onConversationUpdate?.(this.conversationHistory.messages);
+          this.onBotStoppedSpeaking("greeting");
+          this.expectingShortReplyUntil = Math.max(this.expectingShortReplyUntil, Date.now() + 60_000);
+        }
+        return;
       }
       this.beginOpeningGreetingPlayback((greeting.trim() || typedWelcome).length);
       logger.info({ callId: this.config.callId, greeting: (greeting || typedWelcome).slice(0, 80) }, "Sending greeting");

@@ -45,6 +45,7 @@ import {
   INTAKE_AGENT_TYPE,
   INTAKE_BACKCHANNEL_FILLERS,
   INTAKE_LOCKED_AGENT_CONFIG,
+  applyAdminHostedStack,
   applyIntakePodVoice,
   intakeUsesPod,
   buildIntakeSttPrompt,
@@ -258,6 +259,8 @@ export async function createSession(params: {
    *  in the recording. Omitted for webcall (no carrier answer gap) — falls back
    *  to session-creation time. */
   answeredAt?: number;
+  /** Saved opener already playing on the phone socket. See SessionConfig.preplayedOpening. */
+  preplayedOpening?: SessionConfig["preplayedOpening"];
   /** Opaque per-call correlation token minted at outbound dial time (calls.ts) and
    *  threaded through the answer webhook → WS handler. When set, the pre-created
    *  outbound exec_* call record is matched by `metadata.corrToken` and updated in
@@ -437,9 +440,26 @@ export async function createSession(params: {
     (agent.agentConfig ?? {}) as Record<string, unknown>,
   ).config;
   // Overlay after normalize so a stale intake row cannot keep Fast barge / VAD.
+  // A call placed from admin stays on Sarvam + Cartesia. Other intake calls
+  // still use the GPU pod when that address is configured.
+  let adminHostedCall = false;
+  if (agent.agentType === INTAKE_AGENT_TYPE && params.corrToken) {
+    try {
+      const [dial] = await db
+        .select({ metadata: callsTable.metadata })
+        .from(callsTable)
+        .where(sql`${callsTable.metadata}::jsonb->>'corrToken' = ${params.corrToken}`)
+        .limit(1);
+      const meta = dial?.metadata ? JSON.parse(dial.metadata) as { source?: string } : {};
+      adminHostedCall = meta.source === "admin_intake_outbound";
+    } catch (err) {
+      logger.warn({ err, agentId: agent.id }, "intake: could not read admin dial metadata");
+    }
+  }
   if (agent.agentType === INTAKE_AGENT_TYPE) {
     Object.assign(agentCfg, INTAKE_LOCKED_AGENT_CONFIG);
-    if (intakeUsesPod()) applyIntakePodVoice(agent);
+    if (adminHostedCall) applyAdminHostedStack(agent);
+    else if (intakeUsesPod()) applyIntakePodVoice(agent);
     if (agent.ttsProvider === "cartesia") {
       agent.ttsVoice = intakeCartesiaVoiceId(agent.ttsVoice);
     }
@@ -2644,6 +2664,7 @@ export async function createSession(params: {
     isResumeDroppedCall: resumeDroppedCall,
     // Carrier answer time — anchors the recording clock (see SessionConfig).
     answeredAt: params.answeredAt,
+    preplayedOpening: params.preplayedOpening,
     onTranscript: (speaker, text) => {
       logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
       // Forward to the transport (browser webcall renders a live transcript).

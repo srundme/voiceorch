@@ -63,7 +63,8 @@ EAR_CONTEXT = (
     "BPO, call center, Bangalore, Bengaluru, Manyata, Whitefield, Bellandur, Electronic City, Koramangala, "
     "Nagavara, Hebbal, Sarjapur, HSR Layout, BTM Layout, Kadubeesanahalli, "
     "Concentrix, Startek, Teleperformance, Globiiva, Teligent, Azuga, LivSpace, KGISL, Ackoo, "
-    "Gmail, at the rate, dot com, pincode, mother tongue, Tamil, Hindi, Telugu, Kannada, Malayalam"
+    "Gmail, at the rate, dot com, pincode, mother tongue, Tamil, Hindi, Telugu, Kannada, Malayalam, "
+    "ma'am, fresher, Karthik, Karthikeyan, Sruthi"
 )
 HEARD_AS = (
     # Call 26 Sep: "wice process", "hi fan", "atate", "male lady", "my cd".
@@ -98,6 +99,11 @@ def clean_transcript(text: str) -> str:
     folded = re.sub(r"\s+", " ", text).strip()
     if not folded:
         return ""
+    loop = re.search(r"((?:[A-Za-z][- ]){1,6}?)\1{3,}", folded)
+    if loop:
+        folded = folded[:loop.start()].rstrip(" -,")
+        if not folded:
+            return ""
     hint = set(re.findall(r"[a-z]+", EAR_CONTEXT.lower()))
     words = re.findall(r"[a-z']+", folded.lower())
     if len(words) >= 4 and sum(word in hint for word in words) / len(words) > 0.8:

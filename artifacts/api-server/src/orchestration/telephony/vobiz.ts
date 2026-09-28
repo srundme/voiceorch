@@ -6,6 +6,7 @@ import { logger } from "../../lib/logger.js";
 import { db, scheduledCallbacksTable, callsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { startEarlyAmbientKeepalive } from "./early-ambient.js";
+import { startSavedOpening } from "./saved-opening.js";
 import { decideVobizDuplicateStart, vobizDuplicateLegKey } from "./vobiz-duplicate-stream.js";
 
 /** Serializes createSession for a VoBiz CallUUID so two answer-webhook retries
@@ -138,6 +139,7 @@ export async function handleVobizWebSocket(
     ws.send(JSON.stringify({ event: "checkpoint", streamId, name }));
   });
   let sessionStarting = false;
+  let openingStop: (() => void) | null = null;
   function ownsMedia(): boolean {
     if (!sessionId) return true;
     const sess = getSession(sessionId);
@@ -190,6 +192,7 @@ export async function handleVobizWebSocket(
    */
   function sendBargeIn(): void {
     if (!ownsMedia()) return;
+    openingStop?.();
     playback.clear();
     if (!streamId || ws.readyState !== ws.OPEN) return;
     ws.send(JSON.stringify({ event: "clearAudio", streamId }));
@@ -289,6 +292,16 @@ export async function handleVobizWebSocket(
           },
         });
         const stopSilence = (): void => { earlyAmbient.stop(); };
+        const sendOpening = (chunk: Buffer): void => {
+          if (ws.readyState === ws.OPEN) sendAudioToVobiz(chunk);
+        };
+        const opening = startSavedOpening({
+          agentId,
+          enabled: !amdMachineHint && !amdArmed && !voicemailDelivery,
+          send: sendOpening,
+          onBegin: stopSilence,
+        });
+        openingStop = opening.stop;
 
         // Load resumeContext and callback reason from the originating call if this is a callback
         let priorResumeContext: Parameters<typeof createSession>[0]["resumeContext"] | undefined;
@@ -332,10 +345,13 @@ export async function handleVobizWebSocket(
             answeredAt: urlAnsweredAt,
             onAudioOut: (audio: Buffer) => {
               stopSilence();            // first real audio → drop silence immediately
+              opening.stop();
               sendAudioToVobiz(audio);
             },
+            preplayedOpening: opening.ready,
             onCallEnd: () => {
               stopSilence();
+              opening.stop();
               // Do NOT close the WS if the call was transferred — VoBiz has
               // already closed the AI stream (sent "stop") and is in the process
               // of redirecting the call leg to the human agent via the Transfer API.
@@ -351,6 +367,7 @@ export async function handleVobizWebSocket(
             onBargeIn: sendBargeIn,
           });
           stopSilence();
+          opening.release();
           sessionId = sid;
           myEpoch = getSession(sid)?.mediaEpoch ?? 1;
           if (sessionEndedBeforeReady) {
@@ -371,6 +388,7 @@ export async function handleVobizWebSocket(
           }
         } catch (err) {
           stopSilence();
+          opening.stop();
           logger.error(
             { err, agentId, externalCallId: callId, streamId, provider: "vobiz", reason: toReadableError(err, "Vobiz session setup failed") },
             "Failed to create Vobiz session — closing socket before greeting",

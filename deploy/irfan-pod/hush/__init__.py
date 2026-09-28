@@ -1,0 +1,1 @@
+"""Hush speaker isolation. Apache-2.0. See LICENSE."""

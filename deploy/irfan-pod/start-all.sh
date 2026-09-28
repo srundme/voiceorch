@@ -1,5 +1,5 @@
 #!/bin/bash
-# Bring up Irfan on the pod: voice, brain, ear, then the front door on 8787.
+# Bring up Sruthi on the pod: voice, brain, ear, then the front door on 8787.
 cd /workspace/irfan-pod
 wait_up() {
   for _ in $(seq 1 60); do

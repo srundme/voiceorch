@@ -15,6 +15,7 @@ const {
   buildIntakeSttPrompt,
   buildIntakeSystemPrompt,
   defaultIntakeControls,
+  applyAdminHostedStack,
   intakeAgentTools,
   intakeCartesiaVoiceId,
   intakeVoiceLabel,
@@ -28,6 +29,30 @@ import {
 import { INTAKE_DISPOSITIONS } from "./intake-dispositions.js";
 
 const base = defaultIntakeControls();
+
+describe("applyAdminHostedStack", () => {
+  it("uses Sarvam for speech and the brain, and Cartesia for the voice", () => {
+    const agent = {
+      asrProvider: "irfan_pod",
+      asrModel: "whisper-large-v3-turbo",
+      llmProvider: "irfan_pod",
+      llmModel: "qwen3-32b-awq",
+      ttsProvider: "irfan_pod",
+      ttsVoice: "sruthi",
+      ttsModel: "qwen3-tts-12hz-1.7b-customvoice",
+    };
+    applyAdminHostedStack(agent);
+    expect(agent).toMatchObject({
+      asrProvider: "sarvam",
+      asrModel: "saaras:v3",
+      llmProvider: "sarvam",
+      llmModel: "sarvam-105b-conversations",
+      ttsProvider: "cartesia",
+      ttsModel: "sonic-3.6",
+      ttsVoice: INTAKE_CARTESIA_INDIAN_VOICE_ID,
+    });
+  });
+});
 
 describe("validateIntakeControls", () => {
   it("accepts the default selection", () => {

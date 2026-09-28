@@ -920,6 +920,16 @@ export interface SessionConfig {
   answeredAt?: number;
   /** Epoch ms when createSession was invoked — used to record per-call boot latency. */
   sessionCreatedAtMs?: number;
+  /**
+   * The phone socket is already playing this exact opener. greet() waits for
+   * it to finish and does not synthesize it again.
+   */
+  preplayedOpening?: Promise<{
+    text: string;
+    startedAt: number;
+    durationMs: number;
+    done: Promise<void>;
+  } | null>;
   /** When set, the session does NOT run the conversation pipeline. Instead it waits for
    *  the answering machine's outgoing greeting to end — detected acoustically via inbound
    *  VAD (sustained silence after speech ≈ the record beep) — then speaks `message` once

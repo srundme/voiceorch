@@ -14,7 +14,7 @@ if [ -n "$pid" ]; then
   sleep 2
 fi
 : > /workspace/ear.log
-export IRFAN_EAR_MODEL="${IRFAN_EAR_MODEL:-/workspace/models/whisper-large-v3-turbo-jobshop}"
+export IRFAN_EAR_MODEL="${IRFAN_EAR_MODEL:-/workspace/models/whisper-cv-india-2026-09-27-ct2}"
 nohup "$ENV/bin/python" -u /workspace/irfan-pod/ear_whisper.py \
   > /workspace/ear.log 2>&1 < /dev/null &
 echo $!
