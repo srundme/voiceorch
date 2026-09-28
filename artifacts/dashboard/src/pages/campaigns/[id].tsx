@@ -1067,20 +1067,23 @@ export default function CampaignDetailPage() {
         </div>
 
         {/* Tab bar */}
-        <div className="flex items-center px-0 border-b border-border/60 overflow-x-auto scrollbar-hide gap-4">
-          {CAMPAIGN_TABS.map(tab => (
+        <div className="flex items-center border-b border-border/60 overflow-x-auto scrollbar-hide gap-0 -mx-1">
+          {CAMPAIGN_TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "flex items-center gap-1.5 pb-2.5 text-xs font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
+                "relative px-3 pb-2.5 text-[13px] font-medium transition-colors whitespace-nowrap shrink-0",
                 activeTab === tab.id
-                  ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  ? "text-foreground font-semibold"
+                  : "text-muted-foreground hover:text-foreground/80"
               )}
             >
               {tab.label}
+              {activeTab === tab.id && (
+                <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-foreground" />
+              )}
             </button>
           ))}
         </div>
