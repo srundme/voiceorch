@@ -56,7 +56,7 @@ function DevelopersRecipes() {
   const showDocs = isDirectSnapServeHost();
 
   return (
-    <div className="space-y-5 pb-2">
+    <div className="p-6 max-w-6xl mx-auto space-y-8 pb-16">
       <PageHero
         title={`Build with ${product} APIs`}
         description="Generate a key, then place calls or subscribe to events. Docs stay one click away."
@@ -64,23 +64,27 @@ function DevelopersRecipes() {
         secondary={showDocs ? { label: "Read docs", href: "/docs/quick-start" } : undefined}
         visual={<SnapBarsVisual />}
       />
-      <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
-        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">API base</p>
-        <code className="mt-1 block text-xs font-mono text-foreground break-all">{apiBase}</code>
+      <div className="rounded-2xl border border-border bg-muted/30 px-5 py-4">
+        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">API base</p>
+        <code className="mt-1.5 block text-xs font-mono text-foreground break-all">{apiBase}</code>
       </div>
-      <div>
-        <h3 className="text-sm font-semibold mb-3">Recipes</h3>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="space-y-4">
+        <h3 className="text-sm font-semibold tracking-tight text-foreground">Recipes</h3>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {RECIPES.map((r) => {
             const Icon = r.icon;
             const internal = r.href.startsWith("?") || r.href.startsWith("/app");
             const docsHref = r.href.startsWith("/docs") && !showDocs ? undefined : r.href;
             if (!docsHref && r.href.startsWith("/docs")) {
               return (
-                <div key={r.title} className="rounded-xl border border-border bg-card p-4 opacity-60">
-                  <Icon className="h-4 w-4 text-muted-foreground mb-2" />
-                  <p className="text-sm font-medium">{r.title}</p>
-                  <p className="mt-1 text-[12px] text-muted-foreground leading-relaxed">{r.description}</p>
+                <div key={r.title} className="rounded-2xl border border-border bg-card p-5 opacity-60 flex flex-col justify-between">
+                  <div>
+                    <div className="h-9 w-9 rounded-xl bg-muted/60 border border-border/50 flex items-center justify-center mb-3">
+                      <Icon className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <p className="text-sm font-semibold text-foreground">{r.title}</p>
+                    <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">{r.description}</p>
+                  </div>
                 </div>
               );
             }
@@ -88,14 +92,18 @@ function DevelopersRecipes() {
               <Link
                 key={r.title}
                 href={docsHref!}
-                className="rounded-xl border border-border bg-card p-4 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="group rounded-2xl border border-border bg-card p-5 transition-all hover:bg-muted/30 hover:border-border/90 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex flex-col justify-between min-h-[140px]"
               >
-                <Icon className="h-4 w-4 text-muted-foreground mb-2" />
-                <p className="text-sm font-medium">{r.title}</p>
-                <p className="mt-1 text-[12px] text-muted-foreground leading-relaxed">{r.description}</p>
+                <div>
+                  <div className="h-9 w-9 rounded-xl bg-muted/60 border border-border/50 flex items-center justify-center mb-3 group-hover:bg-primary/10 group-hover:border-primary/20 transition-colors">
+                    <Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  </div>
+                  <p className="text-sm font-semibold text-foreground group-hover:text-foreground/90">{r.title}</p>
+                  <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">{r.description}</p>
+                </div>
                 {!internal && showDocs ? (
-                  <span className="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                    <BookOpen className="h-3 w-3" /> Docs
+                  <span className="mt-4 inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/80 group-hover:text-primary transition-colors">
+                    <BookOpen className="h-3 w-3" /> Docs →
                   </span>
                 ) : null}
               </Link>
@@ -103,7 +111,7 @@ function DevelopersRecipes() {
           })}
         </div>
       </div>
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-2">
         <Button asChild variant="outline" size="sm" className="h-8 text-xs gap-1.5">
           <Link href="?tab=api-keys">
             <Key className="h-3.5 w-3.5" />
