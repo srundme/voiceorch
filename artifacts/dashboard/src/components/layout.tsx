@@ -422,14 +422,14 @@ function NavItemEl({
           collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
           indent && !collapsed ? "pl-2" : "",
           isActive
-            ? "bg-foreground/[0.08] text-foreground font-medium"
+            ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium"
             : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
         )}
       >
         <item.icon
           className={cn(
             "size-4 shrink-0",
-            isActive ? "text-foreground" : "text-muted-foreground",
+            isActive ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground",
           )}
         />
         {!collapsed && (
