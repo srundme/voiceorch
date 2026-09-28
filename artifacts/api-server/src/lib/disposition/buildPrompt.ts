@@ -1,5 +1,39 @@
 import type { DispositionConfig } from "./types.js";
 
+/**
+ * Spoken-call reminder. The builder stores outcomes and data fields for the
+ * post-call pass only; without this the live agent never asks for them.
+ */
+export function formatLiveAfterCallBlock(
+  cfg: Pick<DispositionConfig, "taxonomy" | "domainFields">,
+): string | null {
+  const categories = Object.entries(cfg.taxonomy).filter(
+    ([name, subs]) => name.trim() && (subs?.length ?? 0) > 0,
+  );
+  const fields = (cfg.domainFields ?? []).filter((field) => field.key?.trim());
+  if (categories.length === 0 && fields.length === 0) return null;
+
+  const lines = [
+    "[AFTER THIS CALL]",
+    "This is for the call record. Do not read the list out loud.",
+  ];
+  if (categories.length > 0) {
+    lines.push("Outcome — make the customer's result one of these before you hang up:");
+    for (const [name, subs] of categories) {
+      lines.push(`- ${name}: ${subs.join(", ")}`);
+    }
+  }
+  if (fields.length > 0) {
+    lines.push("Data to collect — ask for each of these during the call, one at a time, in your own words:");
+    for (const field of fields) {
+      const label = field.label?.trim() || field.key;
+      const choices = field.enum?.length ? ` (${field.enum.join(" | ")})` : "";
+      lines.push(`- ${label}${choices}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 /** Formats a date as e.g. "Friday, 31 July 2026, 14:05 IST" (Asia/Kolkata). */
 function formatIST(d: Date): string {
   const datePart = new Intl.DateTimeFormat("en-IN", {

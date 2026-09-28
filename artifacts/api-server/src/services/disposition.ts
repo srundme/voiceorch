@@ -4,6 +4,7 @@ import { logger } from "../lib/logger.js";
 import {
   buildSchema,
   buildPrompt,
+  formatLiveAfterCallBlock,
   rulePrefilter,
   validate,
   extractUnavailableFallback,
@@ -58,6 +59,13 @@ async function loadConfig(agentId: number): Promise<DispositionConfig | null> {
 
   configCache.set(agentId, { cfg, expiresAt: Date.now() + CACHE_TTL_MS });
   return cfg;
+}
+
+/** Live-call reminder of the builder's outcomes and data fields. Null when unset. */
+export async function afterCallInstructionForAgent(agentId: number): Promise<string | null> {
+  const cfg = await loadConfig(agentId);
+  if (!cfg) return null;
+  return formatLiveAfterCallBlock(cfg);
 }
 
 /** Evict the cache for an agent (called after PUT /disposition/config/:agentId) */
@@ -204,7 +212,9 @@ async function persistResult(
     }
   }
 
-  const hasOutcome = !result.error && !!result.primary && !!result.sub;
+  const hardFail = (result.flags ?? []).includes("no_llm_available")
+    || (result.flags ?? []).includes("llm_error");
+  const hasOutcome = !hardFail && !!result.primary && !!result.sub;
   const hasDomain = Object.keys(domainEntries).length > 0;
   if (!hasOutcome && !hasDomain) return;
 

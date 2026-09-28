@@ -94,10 +94,16 @@ export function validate(
   const flags = buildFlags(primary, sub, stats);
   if (taxonomyError) flags.push(taxonomyError);
 
+  const nested = out["domainFields"];
+  const bag: Record<string, unknown> = { ...out };
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    Object.assign(bag, nested as Record<string, unknown>);
+  }
+
   const domainFields: Record<string, unknown> = {};
   for (const field of cfg.domainFields) {
-    if (out[field.key] === undefined) continue;
-    const raw = out[field.key];
+    if (bag[field.key] === undefined) continue;
+    const raw = bag[field.key];
     if (isPhoneLikeDispositionField(field.key, field.label, field.type)) {
       domainFields[field.key] = extractBarePhone(raw);
     } else if (field.type === "string") {

@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { db, platformSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
+import { parseDispositionModelJson } from "../lib/disposition/parse-model-json.js";
 
 /**
  * Minimal interface for disposition LLM extraction.
@@ -154,10 +155,22 @@ class SarvamDispositionLLM implements DispositionLLM {
     const msg = response.choices[0]?.message as
       | { content?: string | null; reasoning_content?: string | null }
       | undefined;
-    const content = msg?.content ?? msg?.reasoning_content ?? "{}";
-    return JSON.parse(content) as Record<string, unknown>;
+    const pieces = [msg?.content, msg?.reasoning_content].filter(
+      (part): part is string => typeof part === "string" && part.trim().length > 0,
+    );
+    if (pieces.length === 0) throw new Error("disposition json parse failed");
+    let last: unknown = null;
+    for (const piece of pieces) {
+      try {
+        return parseDispositionModelJson(piece);
+      } catch (err) {
+        last = err;
+      }
+    }
+    throw last instanceof Error ? last : new Error("disposition json parse failed");
   }
 }
+
 
 /** Resolve a managed key for a provider, falling back to env where applicable. */
 async function resolveManagedKey(provider: string): Promise<string | null> {
@@ -244,7 +257,7 @@ export async function getDispositionLLMChain(
 export function isRetryableProviderError(err: unknown): boolean {
   const status = (err as { status?: number })?.status;
   if (typeof status === "number") {
-    return status === 401 || status === 403 || status === 429 || status >= 500;
+    return status === 400 || status === 401 || status === 403 || status === 429 || status >= 500;
   }
   const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
   return (
@@ -257,6 +270,7 @@ export function isRetryableProviderError(err: unknown): boolean {
     msg.includes("unavailable") ||
     msg.includes("overload") ||
     msg.includes("timed out") ||
-    msg.includes("timeout")
+    msg.includes("timeout") ||
+    msg.includes("json parse failed")
   );
 }

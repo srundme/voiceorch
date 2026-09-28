@@ -183,7 +183,9 @@ export function flatDispositionFromTaxonomy(result: {
     }
   }
 
-  const hasOutcome = !result.error && !!result.primary && !!result.sub;
+  const hardFail = (result.flags ?? []).includes("no_llm_available")
+    || (result.flags ?? []).includes("llm_error");
+  const hasOutcome = !hardFail && !!result.primary && !!result.sub;
   const hasDomain = Object.keys(domainFlat).length > 0;
   // Allow domain-only flats (e.g. WhatsApp recovered from transcript after LLM error).
   if (!hasOutcome && !hasDomain) return null;

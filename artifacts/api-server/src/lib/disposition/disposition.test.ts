@@ -242,6 +242,20 @@ describe("validate", () => {
     expect(result.flags).not.toContain("callback_without_consent");
   });
 
+  it("reads data fields nested under domainFields", () => {
+    const out = {
+      primary: "INTERESTED",
+      sub: "needs_quote",
+      confidence: 0.9,
+      evidence: "e",
+      summary: "s",
+      domainFields: { product_type: "health", premium_quoted: 1200 },
+    };
+    const result = validate(cfgWithDomain, out, []);
+    expect(result.domainFields?.["product_type"]).toBe("health");
+    expect(result.domainFields?.["premium_quoted"]).toBe(1200);
+  });
+
   it("needsReview when confidence < 0.7", () => {
     const out = { primary: "NOT_INTERESTED", sub: "no_need", confidence: 0.6, evidence: "e", summary: "s" };
     const result = validate(cfg, out, []);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPrompt } from "./buildPrompt.js";
+import { buildPrompt, formatLiveAfterCallBlock } from "./buildPrompt.js";
 
 describe("buildPrompt", () => {
   it("injects business outcome guides for the classifier", () => {
@@ -19,5 +19,21 @@ describe("buildPrompt", () => {
     expect(prompt).toContain('"interested": Asked for pricing or agreed to a site visit this week.');
     expect(prompt).toContain("DIGITS ONLY");
     expect(prompt).toContain("spoken as words");
+  });
+});
+
+describe("formatLiveAfterCallBlock", () => {
+  it("tells the live agent the outcomes and the fields to ask for", () => {
+    const block = formatLiveAfterCallBlock({
+      taxonomy: { outcome: ["interested", "callback"] },
+      domainFields: [{ key: "city", type: "string", label: "City" }],
+    });
+    expect(block).toContain("interested, callback");
+    expect(block).toContain("City");
+    expect(block).toContain("Do not read the list out loud");
+  });
+
+  it("is empty when the agent has no after-call config", () => {
+    expect(formatLiveAfterCallBlock({ taxonomy: {}, domainFields: [] })).toBeNull();
   });
 });

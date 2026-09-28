@@ -81,7 +81,7 @@ import {
   removeSession,
 } from "./sessionStore.js";
 import { destroyAudioSession, resetAecSession } from "./audioPool.js";
-import { disposeCall, extractFlatDispositionSchema } from "../services/disposition.js";
+import { afterCallInstructionForAgent, disposeCall, extractFlatDispositionSchema } from "../services/disposition.js";
 import { schemaFieldsNeedFill } from "../lib/disposition/normalize-fields.js";
 import {
   buildCallEndedWebhookPayload,
@@ -1001,6 +1001,7 @@ export async function createSession(params: {
     upcomingBookingsResult,
     inboundSheetLookupResult,
     priorIntakeResult,
+    afterCallInstruction,
   ] = await Promise.all([
     // 1. Caller memory (3-layer: profile + facts + archive)
     callerPhone
@@ -1109,6 +1110,13 @@ export async function createSession(params: {
           return null;
         })
       : Promise.resolve(null),
+
+    agent.agentType === INTAKE_AGENT_TYPE
+      ? Promise.resolve(null)
+      : afterCallInstructionForAgent(agent.id).catch((err) => {
+          logger.warn({ agentId: agent.id, err }, "after-call instruction lookup failed");
+          return null;
+        }),
   ]);
 
   // Apply caller memory to system prompt
@@ -1528,6 +1536,10 @@ export async function createSession(params: {
   ) {
     agentConfig.systemPrompt +=
       "\n\n[KB_TRUST] When relevant information is provided in your context from the knowledge base, answer from those facts. Speak like a person on a phone: one short sentence, not a readout of the whole entry. Do not guess or invent product details, pricing, policies, or facts that are not present. If they ask where you are calling from, say the company and the city or area only. Do not read the street, landmark, pincode, phone, email, or office hours unless they ask for that exact detail.";
+  }
+
+  if (afterCallInstruction) {
+    agentConfig.systemPrompt += `\n\n${afterCallInstruction}`;
   }
 
   // Scope provider keys to this agent's owner (fetched in parallel above).
