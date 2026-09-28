@@ -87,23 +87,23 @@ function sourceStatusMeta(source: KnowledgeSourceView) {
 /** Live call path — contextual retrieve (production). */
 function ContextualKnowledgeHowItWorks() {
   return (
-    <div className="rounded-xl border border-border bg-card/60 px-4 py-3.5 space-y-2.5">
+    <div className="rounded-xl border border-border bg-card/60 p-4 space-y-3">
       <div className="flex items-center gap-2">
         <Brain className="w-4 h-4 text-foreground shrink-0" />
         <p className="text-sm font-medium text-foreground">Contextual Knowledge on calls</p>
       </div>
-      <ul className="grid gap-1.5 sm:grid-cols-3 text-[11px] leading-snug text-muted-foreground">
-        <li className="flex gap-1.5">
-          <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
-          <span>Finds the right facts from your packs — not just exact keywords</span>
+      <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-6 text-xs text-muted-foreground">
+        <li className="flex items-start gap-2">
+          <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-[2px] text-muted-foreground" />
+          <span className="min-w-0 flex-1 leading-normal">Finds the right facts from your packs — not just exact keywords</span>
         </li>
-        <li className="flex gap-1.5">
-          <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
-          <span>Looks up only when the caller asks something real — not on “okay” or “thanks”</span>
+        <li className="flex items-start gap-2">
+          <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-[2px] text-muted-foreground" />
+          <span className="min-w-0 flex-1 leading-normal">Looks up only when the caller asks something real — not on “okay” or “thanks”</span>
         </li>
-        <li className="flex gap-1.5">
-          <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
-          <span>Stays on the same product/topic for follow-ups (“what about transport?”)</span>
+        <li className="flex items-start gap-2">
+          <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-[2px] text-muted-foreground" />
+          <span className="min-w-0 flex-1 leading-normal">Stays on the same product/topic for follow-ups (“what about transport?”)</span>
         </li>
       </ul>
     </div>
