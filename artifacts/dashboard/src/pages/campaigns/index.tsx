@@ -1554,17 +1554,7 @@ export default function CampaignsPage() {
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto bg-background">
       <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
         
-        {/* 1. Page Header */}
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-            Campaigns
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Start a campaign from Meta, Website, Google Sheets, CSV, or Zoho CRM.
-          </p>
-        </div>
-
-        {/* 2. Create Campaign & Source Actions */}
+        {/* Create Campaign & Source Actions */}
         <div className="flex flex-wrap items-center gap-2.5">
           <Button
             size="default"
