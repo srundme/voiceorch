@@ -45,7 +45,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { StripePage } from "@/components/stripe-page";
-import { PageHero } from "@/components/page-hero";
 import { GhostEmpty, MomentCard } from "@/components/brand-moments";
 import { StatusDot } from "@/components/workspace/workspace";
 import { MetricCard, MetricStrip } from "@/components/metric-strip";
@@ -256,21 +255,13 @@ export default function HomePage() {
     );
   }
 
-  const nextAction = !hasAgent
-    ? { title: "Create your first agent", description: "Build the voice agent, then connect a number and dial.", primary: { label: "Create agent", href: "/app/agents?create=1" }, secondary: !isManagedWorkspace ? { label: "Build with AI", href: "/app/vibe" } : undefined }
-    : !hasChannels
-      ? { title: "Take your agent live", description: "Assign a phone number so inbound rings and outbound has a caller ID.", primary: { label: "Phone numbers", href: "/app/phone-numbers" }, secondary: { label: "Open agent", href: firstAgentId != null ? `/app/agents/${firstAgentId}` : "/app/agents" } }
-      : !hasLeads
-        ? { title: "Start dialing", description: "Create a campaign from a lead source and put your agent to work.", primary: { label: "New campaign", href: "/app/campaigns" }, secondary: { label: "Open agent", href: firstAgentId != null ? `/app/agents/${firstAgentId}` : "/app/agents" } }
-        : { title: "You’re set up", description: "Review Results on a campaign or jump into an agent.", primary: { label: "Campaigns", href: "/app/campaigns" }, secondary: { label: "Call logs", href: "/app/history" } };
-
   const stats = statsQ.data;
   const avgDur = stats?.avgDurationSeconds;
 
   return (
     <StripePage
       title="Home"
-      description="What to do next, then a quick look at volume."
+      description="Overview of your call volume, metrics, and activity."
       actions={
         <div className="flex items-center gap-2">
           <Button
@@ -291,13 +282,6 @@ export default function HomePage() {
       contentClassName="!pt-4"
     >
       <div className="space-y-5">
-        <PageHero
-          variant="stage"
-          title={nextAction.title}
-          description={nextAction.description}
-          primary={nextAction.primary}
-          secondary={nextAction.secondary}
-        />
 
         {!isManagedWorkspace && lowBalance ? (
           <MomentCard
