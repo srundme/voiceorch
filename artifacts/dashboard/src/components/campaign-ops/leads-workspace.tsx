@@ -79,7 +79,7 @@ function MetricCard({
   const content = (
     <div
       className={cn(
-        "bg-card border border-border/80 rounded-xl p-3.5 flex items-center gap-3.5 transition-all text-left w-full shadow-sm",
+        "bg-card border border-border/80 rounded-xl p-3.5 flex items-center gap-3.5 transition-all text-left w-full h-[84px] shadow-sm",
         onClick && "cursor-pointer hover:border-blue-500/40 hover:bg-muted/20",
         active && "border-blue-600/50 bg-blue-50/10 ring-1 ring-blue-600/30",
       )}
@@ -87,32 +87,34 @@ function MetricCard({
       <div className="h-9 w-9 rounded-lg border border-border/70 bg-muted/40 text-foreground/80 flex items-center justify-center shrink-0">
         <Icon className="h-4.5 w-4.5" />
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 flex flex-col justify-center">
         <p className="text-xs font-normal text-muted-foreground truncate">{label}</p>
         <p className="text-xl font-bold tabular-nums tracking-tight text-foreground leading-tight mt-0.5">
           {typeof value === "number" ? value.toLocaleString() : value}
         </p>
-        {hint ? (
-          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{hint}</p>
-        ) : hintAction ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              hintAction.onClick?.();
-            }}
-            className="text-[11px] font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 inline-block mt-0.5"
-          >
-            {hintAction.label}
-          </button>
-        ) : null}
+        <div className="min-h-[16px] flex items-center mt-0.5">
+          {hint ? (
+            <p className="text-[11px] text-muted-foreground truncate leading-tight">{hint}</p>
+          ) : hintAction ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                hintAction.onClick?.();
+              }}
+              className="text-[11px] font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 inline-block leading-tight"
+            >
+              {hintAction.label}
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
 
   if (!onClick) return content;
   return (
-    <button type="button" onClick={onClick} className="w-full text-left">
+    <button type="button" onClick={onClick} className="w-full h-full text-left flex flex-col">
       {content}
     </button>
   );
