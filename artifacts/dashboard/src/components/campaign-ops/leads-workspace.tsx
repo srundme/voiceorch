@@ -327,7 +327,7 @@ export function CampaignLeadsWorkspace({
   const totalPages = Math.max(1, Math.ceil((query.data?.total ?? 0) / 50));
 
   return (
-    <div className="flex flex-col min-h-0 flex-1 h-full overflow-y-auto space-y-6 pb-6">
+    <div className="flex flex-col min-h-0 flex-1 space-y-6 pb-6">
       {/* ── Section 1: Live status ────────────────────────────────────────── */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold tracking-tight text-foreground">Live status</h3>

@@ -1066,15 +1066,7 @@ export default function CampaignDetailPage() {
       </div>
 
         {/* Content */}
-        <div
-          className={cn(
-            "px-4 sm:px-6 py-4 min-w-0 flex-1 min-h-0",
-            activeTab === "overview"
-              ? "overflow-hidden flex flex-col"
-              : "overflow-y-auto overflow-x-hidden space-y-5",
-          )}
-        >
-
+        <div className="px-4 sm:px-6 py-4 min-w-0 flex-1 min-h-0 overflow-y-auto space-y-5">
           {activeTab === "overview" && (
             <CampaignLeadsWorkspace campaignId={campaignId} />
           )}
