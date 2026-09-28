@@ -1003,6 +1003,10 @@ async def place_call(request: web.Request) -> web.Response:
 
 
 async def vobiz_socket(request: web.Request) -> web.WebSocketResponse:
+    if os.environ.get("IRFAN_STACK") == "personaplex":
+        from personaplex_phone import personaplex_socket
+
+        return await personaplex_socket(request)
     ws = web.WebSocketResponse()
     await ws.prepare(request)
     call = Call(
@@ -1057,7 +1061,8 @@ def main() -> None:
     app.on_cleanup.append(close_http)
     app.router.add_get("/health", lambda _r: web.json_response({
         "ok": True,
-        "orchestration": "irfan",
+        "orchestration": "personaplex" if os.environ.get("IRFAN_STACK") == "personaplex" else "irfan",
+        "voice": "sruthi",
         "hosted_apis": [],
         "phone": bool(
             os.environ.get("VOBIZ_AUTH_ID")
