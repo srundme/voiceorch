@@ -42,6 +42,7 @@ export type CampaignBusinessDisposition = {
 };
 
 export const CAMPAIGN_REPORTING_VIEWS = [
+  "attempted",
   "interested",
   "callback",
   "retry",
@@ -380,6 +381,7 @@ export function isLegacyFailed(lead: CampaignReportingLeadInput): boolean {
 }
 
 const VIEW_PREDICATE: Record<CampaignReportingView, (lead: CampaignReportingLeadInput) => boolean> = {
+  attempted: isAttempted,
   interested: isInterested,
   callback: isCallback,
   retry: isRetryPending,
@@ -611,6 +613,7 @@ export function campaignDispositionHeroSql(): SQL<string> {
 }
 
 const VIEW_SQL: Record<CampaignReportingView, SQL> = {
+  attempted: campaignReportingSql.attempted,
   interested: campaignReportingSql.interested,
   callback: campaignReportingSql.callbacks,
   retry: campaignReportingSql.retryPending,

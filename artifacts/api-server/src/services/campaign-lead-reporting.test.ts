@@ -492,6 +492,7 @@ describe("filter contract", () => {
 
 describe("SQL fragments stay on the four-layer model", () => {
   it("view SQL is the same object as the KPI predicate SQL", () => {
+    expect(campaignReportingViewSql("attempted")).toBe(campaignReportingSql.attempted);
     expect(campaignReportingViewSql("answered")).toBe(campaignReportingSql.answered);
     expect(campaignReportingViewSql("interested")).toBe(campaignReportingSql.interested);
     expect(campaignReportingViewSql("callback")).toBe(campaignReportingSql.callbacks);
@@ -504,7 +505,7 @@ describe("SQL fragments stay on the four-layer model", () => {
 
   it("filter SQL for each view is the same object as the KPI/view predicate", () => {
     for (const view of [
-      "interested", "callback", "retry", "answered", "no_pickup", "busy", "voicemail", "technical_failed",
+      "attempted", "interested", "callback", "retry", "answered", "no_pickup", "busy", "voicemail", "technical_failed",
     ] as const) {
       expect(campaignReportingFilterSql({ view })[0]).toBe(campaignReportingViewSql(view));
     }

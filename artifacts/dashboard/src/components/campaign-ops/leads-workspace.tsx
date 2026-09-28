@@ -291,7 +291,8 @@ export function CampaignLeadsWorkspace({
   const outcomeActive = filter.disposition ?? (filter.dispositionBucket === "needs_classification" ? "needs_classification" : null);
 
   const filterLabel =
-    view === "answered" ? "Human answered"
+    view === "attempted" ? "Completed calls"
+    : view === "answered" ? "Human answered"
     : view === "voicemail" ? "Voicemail"
     : view === "busy" ? "Busy"
     : view === "no_pickup" ? "No answer"
@@ -371,11 +372,13 @@ export function CampaignLeadsWorkspace({
           active={!view && !outcomeActive}
           onClick={() => patchFilter({ view: null, disposition: null, dispositionBucket: null })}
         />
-          <MetricCard
-            icon={PhoneForwarded}
-            label="Completed calls"
-            value={called}
-          />
+        <MetricCard
+          icon={PhoneForwarded}
+          label="Completed calls"
+          value={called}
+          active={view === "attempted" && !outcomeActive}
+          onClick={() => patchFilter({ view: view === "attempted" ? null : "attempted", disposition: null, dispositionBucket: null })}
+        />
           <MetricCard
             icon={UserCheck}
             label="Human answered"

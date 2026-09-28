@@ -36,7 +36,15 @@ export const DEFAULT_LEAD_COLUMNS: LeadTableColumns = {
 };
 
 function displayPhone(phone: string | null | undefined): string {
-  return phone?.trim() || "—";
+  if (!phone) return "—";
+  const clean = phone.replace(/\D/g, "");
+  if (clean.length === 10) {
+    return `+91 ${clean.slice(0, 5)} ${clean.slice(5)}`;
+  }
+  if (clean.length === 12 && clean.startsWith("91")) {
+    return `+91 ${clean.slice(2, 7)} ${clean.slice(7)}`;
+  }
+  return phone.trim();
 }
 
 function clockDuration(seconds: number | null | undefined): string {
@@ -238,7 +246,7 @@ export function LeadReportingTable({
                   {rowIndex}
                 </td>
                 <td className="px-3.5 py-3.5">
-                  <span className="font-medium text-foreground text-sm leading-tight block">
+                  <span className="font-mono text-[13px] font-medium text-foreground/90 tracking-tight block">
                     {displayPhone(lead.phone)}
                   </span>
                   {showName ? (

@@ -4,6 +4,7 @@
  */
 
 export const CAMPAIGN_REPORTING_VIEWS = [
+  "attempted",
   "interested",
   "callback",
   "retry",
