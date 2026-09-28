@@ -1,19 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="SnapServe">
-  <style>
-    :root {
-      --bar1: #0F172A;
-      --bar2: #64748B;
-      --bar3: #94A3B8;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bar1: #FFFFFF;
-        --bar2: #A1A1AA;
-        --bar3: #71717A;
-      }
-    }
-  </style>
-  <rect x="14" y="22" width="52" height="13" rx="6.5" fill="var(--bar1)"/>
-  <rect x="26" y="43.5" width="52" height="13" rx="6.5" fill="var(--bar2)"/>
-  <rect x="38" y="65" width="52" height="13" rx="6.5" fill="var(--bar3)"/>
+  <!-- Top bar: Black, Middle: Grey, Bottom: Mild Grey -->
+  <rect x="14" y="22" width="52" height="13" rx="6.5" fill="#0F172A"/>
+  <rect x="26" y="43.5" width="52" height="13" rx="6.5" fill="#6B7280"/>
+  <rect x="38" y="65" width="52" height="13" rx="6.5" fill="#9CA3AF"/>
 </svg>
