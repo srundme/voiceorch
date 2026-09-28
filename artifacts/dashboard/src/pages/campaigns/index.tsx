@@ -55,6 +55,7 @@ import {
   canStopCampaign,
   type CampaignLifecycleStatus,
 } from "@/lib/campaign-lifecycle";
+import { TablePagination } from "@/components/table-pagination";
 import {
   EMPTY_LEAD_TRANSFER,
   LeadTransferSettings,
