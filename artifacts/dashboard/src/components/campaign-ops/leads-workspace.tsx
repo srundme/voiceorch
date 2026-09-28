@@ -427,9 +427,9 @@ export function CampaignLeadsWorkspace({
         )}
       >
         {/* Table Toolbar */}
-        <div className="px-4 border-b border-border flex items-center justify-between gap-4 bg-card/60 min-h-[48px]">
-          {/* Status Tabs: All, Voicemail, Busy */}
-          <div className="flex items-center gap-6 overflow-x-auto self-stretch -mb-[1px]">
+        <div className="px-4 py-3 border-b border-border/80 flex items-center justify-between gap-4 bg-muted/20 flex-wrap">
+          {/* Status Segmented Tabs: All, Voicemail, Busy */}
+          <div className="inline-flex items-center gap-1 p-1 bg-muted/70 rounded-xl border border-border/60">
             {statusTabs.map((tab) => {
               const selected =
                 tab.id === "all"
@@ -447,19 +447,19 @@ export function CampaignLeadsWorkspace({
                     })
                   }
                   className={cn(
-                    "shrink-0 py-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 relative",
+                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
                     selected
-                      ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
-                      : "border-transparent text-muted-foreground hover:text-foreground",
+                      ? "bg-card text-foreground shadow-xs font-semibold border border-border/80"
+                      : "text-muted-foreground hover:text-foreground hover:bg-card/50",
                   )}
                 >
                   <span>{tab.label}</span>
                   <span
                     className={cn(
-                      "px-2 py-0.5 rounded-full text-[11px] font-semibold tabular-nums leading-none",
+                      "px-1.5 py-0.5 rounded-md text-[10px] font-bold tabular-nums leading-none",
                       selected
-                        ? "bg-blue-50 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60"
-                        : "bg-muted/70 text-muted-foreground border border-border/40",
+                        ? "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                        : "bg-muted text-muted-foreground",
                     )}
                   >
                     {tab.count.toLocaleString()}
@@ -470,7 +470,7 @@ export function CampaignLeadsWorkspace({
           </div>
 
           {/* Right Action Tools */}
-          <div className="flex items-center gap-2 ml-auto py-2">
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
