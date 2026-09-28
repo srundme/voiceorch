@@ -1084,7 +1084,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Scrollable content — flex so h-full / lockScroll pages can fill; overflow so long pages scroll */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain">
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col overscroll-y-contain",
+            (location.startsWith("/app/agents/") && location !== "/app/agents") || location.startsWith("/app/vibe")
+              ? "overflow-hidden h-full"
+              : "overflow-y-auto",
+          )}
+        >
           <ErrorBoundary location={location}>
             {children}
           </ErrorBoundary>

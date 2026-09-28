@@ -8075,7 +8075,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   if (!agent) return null;
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
       {/* Single toolbar — agent identity + actions */}
       <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-5 sm:h-16 sm:px-8">
         <div className="flex min-w-0 items-center gap-2.5">
@@ -8268,7 +8268,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
 
       {/* Focused single-column editor */}
       <Form {...form}>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <WorkspaceSegmentNav
             items={BUILDER_SEGMENTS}
             activeId={activeTab}
@@ -8350,7 +8350,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
               </form>
 
               {activeTab === "prompt" && (
-                <div className="sticky top-0 hidden h-[calc(100vh-7.5rem)] shrink-0 self-start lg:block">
+                <div className="sticky top-0 hidden max-h-full shrink-0 self-start lg:block">
                   <PromptReadinessAside form={form} agent={agent} onLiveTest={() => setShowWebcall(true)} />
                 </div>
               )}
