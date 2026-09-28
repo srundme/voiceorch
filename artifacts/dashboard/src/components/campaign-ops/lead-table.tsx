@@ -213,20 +213,6 @@ export function LeadReportingTable({
             const open = () => navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`);
             const outcome = outcomePresentation(lead);
             const statusLabel = callResultLabel(lead);
-            const statusLower = statusLabel.toLowerCase();
-
-            // Status dot color mapping (strictly blue or neutral gray)
-            const dotColor =
-              statusLower === "human answered" || statusLower === "answered"
-                ? "bg-blue-600"
-                : statusLower === "busy"
-                ? "bg-blue-500"
-                : statusLower === "voicemail"
-                ? "bg-slate-400"
-                : statusLower === "talking" || statusLower === "ringing"
-                ? "bg-blue-600 animate-pulse"
-                : "bg-slate-400 dark:bg-slate-500";
-
             return (
               <tr
                 key={lead.leadId}
@@ -256,8 +242,7 @@ export function LeadReportingTable({
                   ) : null}
                 </td>
                 <td className="px-3.5 py-3.5 whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
-                    <span className={cn("h-2 w-2 rounded-full shrink-0", dotColor)} />
+                  <span className="text-xs font-medium text-foreground">
                     {statusLabel}
                   </span>
                 </td>

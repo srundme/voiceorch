@@ -102,7 +102,7 @@ function MetricCard({
                 e.stopPropagation();
                 hintAction.onClick?.();
               }}
-              className="text-[11px] font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 inline-block leading-tight"
+              className="text-[11px] font-medium text-orange-600 hover:text-orange-700 dark:text-orange-400 inline-block leading-tight"
             >
               {hintAction.label}
             </button>
