@@ -1551,8 +1551,8 @@ export default function CampaignsPage() {
   }, [filtered, page, pageSize]);
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto bg-background">
-      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background">
+      <div className="w-full px-5 py-5 sm:px-6 space-y-5">
         
         {/* Create Campaign & Source Actions */}
         <div className="flex flex-wrap items-center gap-2.5">
