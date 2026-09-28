@@ -195,11 +195,13 @@ function buildClient(provider: string, key: string): DispositionLLM {
   return new QwenDispositionLLM(key);
 }
 
-const FALLBACK_ORDER = ["sarvam", "openai", "qwen"] as const;
+/** Qwen/Groq removed from chain — model access 404s at call time. */
+const FALLBACK_ORDER = ["sarvam", "openai"] as const;
 
 function normalizeProvider(preferred: string): string {
-  if (preferred === "groq" || preferred === "qwen") return "qwen";
-  // Legacy gemini/google overrides map to Sarvam Gemma — Gemini is no longer used.
+  // Remap groq/qwen to sarvam — Qwen/Groq model access was unreliable (404).
+  if (preferred === "groq" || preferred === "qwen") return "sarvam";
+  // Legacy gemini/google overrides map to Sarvam — Gemini is no longer used.
   if (preferred === "google" || preferred === "gemini") return "sarvam";
   return preferred;
 }
@@ -207,8 +209,8 @@ function normalizeProvider(preferred: string): string {
 /**
  * Returns the appropriate DispositionLLM instance.
  * Provider selection: agentCfgOverride > DISPOSITION_LLM env > "sarvam" default
- * (sarvam-105b via DISPOSITION_MODEL / managed Sarvam key). Gemini is not in the chain.
- * Falls back to OpenAI / Groq when Sarvam is unavailable.
+ * (sarvam-105b via DISPOSITION_MODEL / managed Sarvam key). Gemini and Qwen/Groq
+ * are not in the chain. Falls back to OpenAI gpt-4o-mini when Sarvam is unavailable.
  */
 export async function getDispositionLLM(
   agentCfgOverride?: string | null,
