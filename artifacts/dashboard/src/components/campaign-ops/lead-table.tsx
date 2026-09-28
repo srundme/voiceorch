@@ -112,6 +112,8 @@ export function LeadReportingTable({
   emptyView,
   columns,
   selectedIds,
+  page = 0,
+  pageSize = 50,
   onToggle,
   onTogglePage,
   onRetry,
@@ -126,6 +128,8 @@ export function LeadReportingTable({
   emptyView?: CampaignReportingView | null;
   columns: LeadTableColumns;
   selectedIds: Set<number>;
+  page?: number;
+  pageSize?: number;
   onToggle: (leadId: number) => void;
   onTogglePage: (leadIds: number[], on: boolean) => void;
   onRetry?: (leadId: number) => void;
@@ -140,8 +144,10 @@ export function LeadReportingTable({
 
   if (loading) {
     return (
-      <div className="space-y-1 p-3">
-        {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-md" />)}
+      <div className="space-y-1.5 p-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-11 w-full rounded-lg" />
+        ))}
       </div>
     );
   }
@@ -170,124 +176,154 @@ export function LeadReportingTable({
   return (
     <>
       <table className="w-full text-sm border-collapse">
-        <thead className="sticky top-0 z-10 bg-background">
-          <tr className="border-b border-border text-left text-[12px] font-medium text-muted-foreground">
-            <th className="w-10 px-3 py-2.5">
+        <thead className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border">
+          <tr className="text-left text-[12px] font-medium text-muted-foreground">
+            <th className="w-10 px-3.5 py-3">
               <input
                 type="checkbox"
                 aria-label="Select leads on this page"
                 checked={allOn}
                 onChange={(e) => onTogglePage(pageIds, e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-border accent-foreground"
+                className="h-4 w-4 rounded border-border text-primary accent-primary focus:ring-1 focus:ring-primary"
               />
             </th>
-            <th className="px-3 py-2.5 font-medium">Lead</th>
-            <th className="px-3 py-2.5 font-medium">Call result</th>
-            {columns.outcome && <th className="px-3 py-2.5 font-medium">Outcome</th>}
-            {columns.duration && <th className="px-3 py-2.5 font-medium">Duration</th>}
-            {columns.attempts && <th className="px-3 py-2.5 font-medium">Attempts</th>}
-            {columns.next && <th className="px-3 py-2.5 font-medium">Next action</th>}
-            <th className="w-16 px-2 py-2.5"><span className="sr-only">Open</span></th>
+            <th className="w-10 px-2 py-3 font-medium text-muted-foreground/70">#</th>
+            <th className="px-3.5 py-3 font-medium">Lead</th>
+            <th className="px-3.5 py-3 font-medium">Call result</th>
+            {columns.outcome && <th className="px-3.5 py-3 font-medium">Outcome</th>}
+            {columns.duration && <th className="px-3.5 py-3 font-medium">Duration</th>}
+            {columns.attempts && <th className="px-3.5 py-3 font-medium">Attempts</th>}
+            {columns.next && <th className="px-3.5 py-3 font-medium">Next action</th>}
+            <th className="w-12 px-2 py-3"><span className="sr-only">Actions</span></th>
           </tr>
         </thead>
-        <tbody>
-          {items.map((lead) => {
+        <tbody className="divide-y divide-border/60">
+          {items.map((lead, idx) => {
+            const rowIndex = page * pageSize + idx + 1;
             const name = (lead.name || "").trim();
             const showName = !!name && name.toLowerCase() !== "unknown";
             const open = () => navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`);
             const outcome = outcomePresentation(lead);
-            const needsReview = lead.dispositionState === "needs_classification";
-            const when = whenLabel(lead.retryScheduledAt);
+            const statusLabel = callResultLabel(lead);
+            const statusLower = statusLabel.toLowerCase();
+
+            // Status dot color mapping (strictly blue or neutral gray)
+            const dotColor =
+              statusLower === "human answered" || statusLower === "answered"
+                ? "bg-blue-600"
+                : statusLower === "busy"
+                ? "bg-blue-500"
+                : statusLower === "voicemail"
+                ? "bg-slate-400"
+                : statusLower === "talking" || statusLower === "ringing"
+                ? "bg-blue-600 animate-pulse"
+                : "bg-slate-400 dark:bg-slate-500";
+
             return (
               <tr
                 key={lead.leadId}
-                className="border-b border-border/80 hover:bg-muted/40 cursor-pointer"
+                className="hover:bg-muted/30 transition-colors cursor-pointer group"
                 onClick={open}
               >
-                <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                <td className="px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"
                     aria-label={`Select ${showName ? name : lead.phone ?? "lead"}`}
                     checked={selectedIds.has(lead.leadId)}
                     onChange={() => onToggle(lead.leadId)}
-                    className="h-3.5 w-3.5 rounded border-border accent-foreground"
+                    className="h-4 w-4 rounded border-border text-primary accent-primary"
                   />
                 </td>
-                <td className="px-3 py-3">
-                  <p className="font-medium text-foreground leading-tight">
-                    {showName ? name : displayPhone(lead.phone)}
-                  </p>
+                <td className="px-2 py-3.5 text-xs text-muted-foreground/60 tabular-nums">
+                  {rowIndex}
+                </td>
+                <td className="px-3.5 py-3.5">
+                  <span className="font-medium text-foreground text-sm leading-tight block">
+                    {displayPhone(lead.phone)}
+                  </span>
                   {showName ? (
-                    <p className="mt-0.5 text-[12px] text-muted-foreground font-mono tracking-tight">
-                      {displayPhone(lead.phone)}
-                    </p>
+                    <span className="text-[12px] text-muted-foreground block mt-0.5">
+                      {name}
+                    </span>
                   ) : null}
                 </td>
-                <td className="px-3 py-3 text-foreground whitespace-nowrap">{callResultLabel(lead)}</td>
+                <td className="px-3.5 py-3.5 whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
+                    <span className={cn("h-2 w-2 rounded-full shrink-0", dotColor)} />
+                    {statusLabel}
+                  </span>
+                </td>
                 {columns.outcome && (
-                  <td className="px-3 py-3">
+                  <td className="px-3.5 py-3.5 text-xs">
                     {outcome ? (
                       <span
                         className={cn(
-                          "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[12px] font-medium",
+                          "font-medium",
                           outcome.review
-                            ? "border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300"
-                            : "border-border bg-muted/50 text-foreground",
+                            ? "text-orange-600 dark:text-orange-400"
+                            : "text-foreground"
                         )}
                       >
                         {outcome.text}
                       </span>
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <span className="text-muted-foreground/40">—</span>
                     )}
                   </td>
                 )}
                 {columns.duration && (
-                  <td className="px-3 py-3 tabular-nums text-muted-foreground whitespace-nowrap">
+                  <td className="px-3.5 py-3.5 text-xs tabular-nums text-muted-foreground whitespace-nowrap">
                     {clockDuration(lead.latestAnsweredDuration)}
                   </td>
                 )}
                 {columns.attempts && (
-                  <td className="px-3 py-3 tabular-nums text-foreground">{lead.callAttempts}</td>
+                  <td className="px-3.5 py-3.5 text-xs tabular-nums text-foreground">
+                    {lead.callAttempts}
+                  </td>
                 )}
                 {columns.next && (
-                  <td className="px-3 py-3 whitespace-nowrap">
-                    {needsReview ? (
-                      <span className="inline-flex items-center text-[13px] font-medium text-orange-700 dark:text-orange-300">
-                        Review call
-                        <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
-                      </span>
-                    ) : when ? (
-                      <span className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground">
-                        <Clock className="h-3.5 w-3.5" />
-                        {when}
-                      </span>
+                  <td className="px-3.5 py-3.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    {lead.callAttempts > 0 && (statusLower === "busy" || statusLower === "voicemail" || statusLower === "no answer" || lead.retryPending) ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2.5 text-[11px] font-medium gap-1 rounded-md border-border/80 hover:bg-muted"
+                        onClick={() => onRetry?.(lead.leadId)}
+                      >
+                        <Phone className="h-3 w-3 text-muted-foreground" />
+                        Retry
+                      </Button>
+                    ) : (lead.latestCallId != null || lead.latestAnsweredCallId != null) ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2.5 text-[11px] font-medium gap-1 rounded-md border-border/80 hover:bg-muted"
+                        onClick={() => {
+                          const id = lead.latestCallId ?? lead.latestAnsweredCallId;
+                          if (id != null) setCallId(id);
+                        }}
+                      >
+                        <StickyNote className="h-3 w-3 text-muted-foreground" />
+                        View call
+                      </Button>
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <span className="text-muted-foreground/40 text-xs">—</span>
                     )}
                   </td>
                 )}
-                <td className="px-2 py-2 text-right" onClick={(e) => e.stopPropagation()}>
-                  <div className="inline-flex items-center">
-                    <RowMenu
-                      lead={lead}
-                      onOpen={open}
-                      onCall={() => {
-                        const id = lead.latestCallId ?? lead.latestAnsweredCallId;
-                        if (id != null) setCallId(id);
-                      }}
-                      onRetry={onRetry}
-                      onCancelRetry={onCancelRetry}
-                    />
-                    <button
-                      type="button"
-                      aria-label="Open lead"
-                      onClick={open}
-                      className="h-8 w-8 inline-flex items-center justify-center text-muted-foreground hover:text-foreground"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
+                <td className="px-2 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                  <RowMenu
+                    lead={lead}
+                    onOpen={open}
+                    onCall={() => {
+                      const id = lead.latestCallId ?? lead.latestAnsweredCallId;
+                      if (id != null) setCallId(id);
+                    }}
+                    onRetry={onRetry}
+                    onCancelRetry={onCancelRetry}
+                  />
                 </td>
               </tr>
             );

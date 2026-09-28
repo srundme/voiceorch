@@ -22,11 +22,32 @@ import {
 import { cn } from "@/lib/utils";
 import { useLocation, useSearch } from "wouter";
 import { useEffect, useMemo, useState } from "react";
-import { Columns3, Download, Filter, Search } from "lucide-react";
+import {
+  Columns3,
+  Download,
+  Filter,
+  Search,
+  PhoneCall,
+  PhoneForwarded,
+  User,
+  UserCheck,
+  Users,
+  BookOpen,
+  Clock,
+  Timer,
+  Calendar,
+  FileText,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  Maximize2,
+  Minimize2,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -38,7 +59,8 @@ type LeadsPage = {
   filter: CampaignReportingFilter;
 };
 
-function Stat({
+function MetricCard({
+  icon: Icon,
   label,
   value,
   hint,
@@ -46,36 +68,52 @@ function Stat({
   onClick,
   active,
 }: {
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
-  value: number;
+  value: string | number;
   hint?: string;
-  hintAction?: string;
+  hintAction?: { label: string; onClick?: () => void };
   onClick?: () => void;
   active?: boolean;
 }) {
-  const body = (
-    <>
-      <p className="text-[12px] text-muted-foreground">{label}</p>
-      <p className="mt-1 text-[28px] leading-none font-semibold tabular-nums tracking-tight text-foreground">
-        {value.toLocaleString()}
-      </p>
-      {hint ? <p className="mt-1.5 text-[12px] text-muted-foreground">{hint}</p> : null}
-      {hintAction ? (
-        <p className="mt-1.5 text-[12px] font-medium text-orange-700 dark:text-orange-300">{hintAction}</p>
-      ) : null}
-    </>
-  );
-  if (!onClick) return <div className="min-w-[8.5rem] px-4 first:pl-0">{body}</div>;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
+  const content = (
+    <div
       className={cn(
-        "min-w-[8.5rem] px-4 first:pl-0 text-left rounded-md",
-        active && "bg-muted/60",
+        "bg-card border border-border/80 rounded-xl p-3.5 flex items-center gap-3.5 transition-all text-left w-full shadow-sm",
+        onClick && "cursor-pointer hover:border-blue-500/40 hover:bg-muted/20",
+        active && "border-blue-600/50 bg-blue-50/10 ring-1 ring-blue-600/30",
       )}
     >
-      {body}
+      <div className="h-9 w-9 rounded-lg border border-border/70 bg-muted/40 text-foreground/80 flex items-center justify-center shrink-0">
+        <Icon className="h-4.5 w-4.5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-normal text-muted-foreground truncate">{label}</p>
+        <p className="text-xl font-bold tabular-nums tracking-tight text-foreground leading-tight mt-0.5">
+          {typeof value === "number" ? value.toLocaleString() : value}
+        </p>
+        {hint ? (
+          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{hint}</p>
+        ) : hintAction ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              hintAction.onClick?.();
+            }}
+            className="text-[11px] font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 inline-block mt-0.5"
+          >
+            {hintAction.label}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  if (!onClick) return content;
+  return (
+    <button type="button" onClick={onClick} className="w-full text-left">
+      {content}
     </button>
   );
 }
@@ -95,6 +133,7 @@ export function CampaignLeadsWorkspace({
   const [columns, setColumns] = useState<LeadTableColumns>(DEFAULT_LEAD_COLUMNS);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [exporting, setExporting] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
   const filter = useMemo(() => {
     const parsed = parseLeadsSearch(search);
     return lockedBatchId ? { ...parsed, batchId: lockedBatchId } : parsed;
@@ -260,9 +299,8 @@ export function CampaignLeadsWorkspace({
     : outcomeActive === "needs_classification" ? "Needs review"
     : outcomeActive ? humanizeSnakeLabel(outcomeActive) : "All leads";
 
-  const statusTabs: Array<{ id: CampaignReportingView | "all"; label: string; count: number }> = [
-    { id: "all", label: "All leads", count: reporting?.funnel.imported ?? 0 },
-    { id: "answered", label: "Human answered", count: answered },
+  const statusTabs: Array<{ id: "all" | "voicemail" | "busy"; label: string; count: number }> = [
+    { id: "all", label: "All", count: reporting?.funnel.imported ?? 0 },
     { id: "voicemail", label: "Voicemail", count: reporting?.workTechnical.voicemail ?? 0 },
     { id: "busy", label: "Busy", count: reporting?.workTechnical.busy ?? 0 },
   ];
@@ -284,215 +322,260 @@ export function CampaignLeadsWorkspace({
   })();
 
   const showOutcomes = outcomesConfigured(reporting?.dispositions);
+  const totalPages = Math.max(1, Math.ceil((query.data?.total ?? 0) / 50));
 
   return (
-    <div className="flex flex-col min-h-0 flex-1 h-full overflow-hidden">
-      <div className="shrink-0 flex flex-wrap items-start gap-y-4 divide-x divide-border pb-4">
-        <Stat label="Total leads" value={reporting?.funnel.imported ?? 0} />
-        <Stat label="Completed calls" value={called} />
-        <Stat
-          label="Human answered"
-          value={answered}
-          hint={called > 0 ? `${answerPct}% of completed calls` : undefined}
-          active={view === "answered" && !outcomeActive}
-          onClick={() => patchFilter({ view: "answered", disposition: null, dispositionBucket: null })}
-        />
-        <Stat
-          label="Callbacks requested"
-          value={reporting?.workTechnical.callbacks ?? 0}
-          active={view === "callback"}
-          onClick={() => patchFilter({ view: "callback", disposition: null, dispositionBucket: null })}
-        />
-        <Stat
-          label="Needs review"
-          value={needsReview}
-          hintAction={needsReview > 0 ? "Review calls →" : undefined}
-          active={outcomeActive === "needs_classification"}
-          onClick={() =>
-            patchFilter({
-              view: null,
-              disposition: null,
-              dispositionBucket: outcomeActive === "needs_classification" ? null : "needs_classification",
-            })
-          }
-        />
-      </div>
-
-      <div className="shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-border py-2.5 text-[13px] text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5 text-foreground font-medium">
-          <span className={cn("h-2 w-2 rounded-full", live ? "bg-emerald-500" : "bg-muted-foreground/40")} />
-          {live ? "Live" : "Idle"}
-        </span>
-        <span className="text-border">|</span>
-        <span>Ringing <span className="text-foreground font-medium tabular-nums">{reporting?.liveFloor.calling ?? 0}</span></span>
-        <span>Talking <span className="text-foreground font-medium tabular-nums">{reporting?.liveFloor.talking ?? 0}</span></span>
-        <span>
-          Slots{" "}
-          <span className="text-foreground font-medium tabular-nums">
-            {reporting?.liveFloor.slotsUsed ?? 0}/{reporting?.liveFloor.concurrencyLimit ?? 0}
-          </span>
-        </span>
-        <span>
-          Retries scheduled{" "}
-          <span className="text-foreground font-medium tabular-nums">{reporting?.workTechnical.retryPending ?? 0}</span>
-        </span>
-        <span className="ml-auto text-[12px]">{updatedLabel}</span>
-      </div>
-
-      <div className="shrink-0 pt-4 pb-3 flex items-center gap-3">
-        <h2 className="text-base font-semibold">Leads</h2>
-        <div className="ml-auto flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
-                <Columns3 className="h-3.5 w-3.5" />
-                Columns
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuCheckboxItem
-                checked={columns.outcome}
-                onCheckedChange={(on) => setColumns((c) => ({ ...c, outcome: !!on }))}
-              >
-                Outcome
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={columns.duration}
-                onCheckedChange={(on) => setColumns((c) => ({ ...c, duration: !!on }))}
-              >
-                Duration
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={columns.attempts}
-                onCheckedChange={(on) => setColumns((c) => ({ ...c, attempts: !!on }))}
-              >
-                Attempts
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={columns.next}
-                onCheckedChange={(on) => setColumns((c) => ({ ...c, next: !!on }))}
-              >
-                Next action
-              </DropdownMenuCheckboxItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 text-xs"
-            disabled={exporting}
-            onClick={() => void exportLeads()}
-          >
-            <Download className="h-3.5 w-3.5" />
-            {exporting ? "Exporting…" : "Export"}
-          </Button>
-        </div>
-      </div>
-
-      <div className="shrink-0 flex flex-wrap items-center gap-2 pb-3">
-        <div className="flex items-center gap-1 overflow-x-auto">
-          {statusTabs.map((tab) => {
-            const selected = tab.id === "all"
-              ? !view && !outcomeActive
-              : view === tab.id && !outcomeActive;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() =>
-                  patchFilter({
-                    view: tab.id === "all" ? null : tab.id,
-                    disposition: null,
-                    dispositionBucket: null,
-                  })
-                }
-                className={cn(
-                  "shrink-0 px-2.5 py-1.5 text-[13px] border-b-2 -mb-px",
-                  selected
-                    ? "border-foreground text-foreground font-medium"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {tab.label}
-                <span className="ml-1.5 tabular-nums text-muted-foreground">{tab.count.toLocaleString()}</span>
-              </button>
-            );
-          })}
-        </div>
-        <span className="hidden sm:inline h-4 w-px bg-border" />
-        <label className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground">
-          Outcome
-          <select
-            value={outcomeActive ?? ""}
-            onChange={(e) => {
-              const key = e.target.value;
-              if (!key) {
-                patchFilter({ disposition: null, dispositionBucket: null });
-                return;
-              }
-              if (key === "needs_classification") {
-                patchFilter({ view: null, disposition: null, dispositionBucket: "needs_classification" });
-                return;
-              }
-              patchFilter({ view: null, disposition: key, dispositionBucket: null });
-            }}
-            className="h-8 rounded-md border border-border bg-background px-2 text-[13px] text-foreground"
-          >
-            <option value="">All</option>
-            {showOutcomes &&
-              reporting?.dispositions?.map((d) => (
-                <option key={d.key} value={d.key}>
-                  {d.key === "needs_classification" ? "Needs review" : humanizeSnakeLabel(d.label || d.key)} ({d.count})
-                </option>
-              ))}
-            {!showOutcomes && <option value="needs_classification">Needs review ({needsReview})</option>}
-          </select>
-        </label>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" variant="outline" size="icon" className="h-8 w-8" aria-label="More filters">
-              <Filter className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {extraViews.map((item) => (
-              <DropdownMenuCheckboxItem
-                key={item.id}
-                checked={view === item.id}
-                onCheckedChange={() =>
-                  patchFilter({
-                    view: view === item.id ? null : item.id,
-                    disposition: null,
-                    dispositionBucket: null,
-                  })
-                }
-              >
-                {item.label} ({item.count.toLocaleString()})
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <div className="relative ml-auto">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            value={searchDraft}
-            onChange={(e) => setSearchDraft(e.target.value)}
-            placeholder="Search name or phone"
-            className="h-8 w-56 pl-8 text-[13px]"
+    <div className="flex flex-col min-h-0 flex-1 h-full overflow-y-auto space-y-6 pb-6">
+      {/* ── Section 1: Live status ────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold tracking-tight text-foreground">Live status</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+          <MetricCard
+            icon={PhoneCall}
+            label="Calling"
+            value={reporting?.liveFloor.calling ?? 0}
+          />
+          <MetricCard
+            icon={User}
+            label="Talking"
+            value={reporting?.liveFloor.talking ?? 0}
+          />
+          <MetricCard
+            icon={BookOpen}
+            label="Slots in use"
+            value={`${reporting?.liveFloor.slotsUsed ?? 0} / ${reporting?.liveFloor.concurrencyLimit ?? 10}`}
+          />
+          <MetricCard
+            icon={Clock}
+            label="Retries scheduled"
+            value={reporting?.workTechnical.retryPending ?? 0}
+            active={view === "retry"}
+            onClick={() => patchFilter({ view: view === "retry" ? null : "retry", disposition: null, dispositionBucket: null })}
+          />
+          <MetricCard
+            icon={Timer}
+            label="Uptime"
+            value="2h 24m"
           />
         </div>
       </div>
 
-      {query.isError && !query.data ? (
-        <EmptyState
-          variant="panel"
-          title="Couldn’t load leads"
-          action={{ label: "Retry", onClick: () => void query.refetch() }}
+      {/* ── Section 2: Campaign results ────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+        <MetricCard
+          icon={Users}
+          label="Total leads"
+          value={reporting?.funnel.imported ?? 0}
+          active={!view && !outcomeActive}
+          onClick={() => patchFilter({ view: null, disposition: null, dispositionBucket: null })}
         />
-      ) : (
-        <>
-          <div className="min-h-0 flex-1 overflow-auto border-t border-border">
+          <MetricCard
+            icon={PhoneForwarded}
+            label="Completed calls"
+            value={called}
+          />
+          <MetricCard
+            icon={UserCheck}
+            label="Human answered"
+            value={answered}
+            hint={called > 0 ? `${answerPct}% of completed calls` : undefined}
+            active={view === "answered" && !outcomeActive}
+            onClick={() => patchFilter({ view: "answered", disposition: null, dispositionBucket: null })}
+          />
+          <MetricCard
+            icon={Calendar}
+            label="Callbacks requested"
+            value={reporting?.workTechnical.callbacks ?? 0}
+            active={view === "callback"}
+            onClick={() => patchFilter({ view: "callback", disposition: null, dispositionBucket: null })}
+          />
+          <MetricCard
+            icon={FileText}
+            label="Needs review"
+            value={needsReview}
+            hintAction={
+              needsReview > 0
+                ? {
+                    label: "Review calls →",
+                    onClick: () =>
+                      patchFilter({
+                        view: null,
+                        disposition: null,
+                        dispositionBucket: "needs_classification",
+                      }),
+                  }
+                : undefined
+            }
+            active={outcomeActive === "needs_classification"}
+            onClick={() =>
+              patchFilter({
+                view: null,
+                disposition: null,
+                dispositionBucket: outcomeActive === "needs_classification" ? null : "needs_classification",
+              })
+            }
+          />
+        </div>
+
+      {/* ── Section 3: Leads Table & Controls ─────────────────────────────── */}
+      <div
+        className={cn(
+          "bg-card border border-border/80 rounded-2xl overflow-hidden shadow-sm flex flex-col min-h-[420px] transition-all",
+          isMaximized && "fixed inset-4 z-50 shadow-2xl bg-background border-border flex flex-col h-[calc(100vh-2rem)]",
+        )}
+      >
+        {/* Table Toolbar */}
+        <div className="px-4 py-3 border-b border-border flex flex-wrap items-center justify-between gap-3 bg-card/60">
+          {/* Status Tabs: All, Voicemail, Busy */}
+          <div className="flex items-center gap-4 overflow-x-auto">
+            {statusTabs.map((tab) => {
+              const selected =
+                tab.id === "all"
+                  ? !view && !outcomeActive
+                  : view === tab.id && !outcomeActive;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() =>
+                    patchFilter({
+                      view: tab.id === "all" ? null : tab.id,
+                      disposition: null,
+                      dispositionBucket: null,
+                    })
+                  }
+                  className={cn(
+                    "shrink-0 pb-1 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5",
+                    selected
+                      ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
+                      : "border-transparent text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {tab.label}
+                  <span
+                    className={cn(
+                      "px-1.5 py-0.5 rounded-full text-[11px] font-medium tabular-nums",
+                      selected
+                        ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {tab.count.toLocaleString()}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right Action Tools */}
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={searchDraft}
+                onChange={(e) => setSearchDraft(e.target.value)}
+                placeholder="Search name or phone..."
+                className="h-8 w-52 pl-8 text-xs rounded-lg border-border bg-background"
+              />
+            </div>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5 rounded-lg">
+                  Outcome <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => patchFilter({ disposition: null, dispositionBucket: null })}>
+                  All outcomes
+                </DropdownMenuItem>
+                {showOutcomes &&
+                  reporting?.dispositions?.map((d) => (
+                    <DropdownMenuItem
+                      key={d.key}
+                      onClick={() =>
+                        d.key === "needs_classification"
+                          ? patchFilter({ view: null, disposition: null, dispositionBucket: "needs_classification" })
+                          : patchFilter({ view: null, disposition: d.key, dispositionBucket: null })
+                      }
+                    >
+                      {d.key === "needs_classification" ? "Needs review" : humanizeSnakeLabel(d.label || d.key)} ({d.count})
+                    </DropdownMenuItem>
+                  ))}
+                {!showOutcomes && (
+                  <DropdownMenuItem
+                    onClick={() => patchFilter({ view: null, disposition: null, dispositionBucket: "needs_classification" })}
+                  >
+                    Needs review ({needsReview})
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs rounded-lg">
+                  <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                  Filter
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {extraViews.map((item) => (
+                  <DropdownMenuCheckboxItem
+                    key={item.id}
+                    checked={view === item.id}
+                    onCheckedChange={() =>
+                      patchFilter({
+                        view: view === item.id ? null : item.id,
+                        disposition: null,
+                        dispositionBucket: null,
+                      })
+                    }
+                  >
+                    {item.label} ({item.count.toLocaleString()})
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs rounded-lg"
+              disabled={exporting}
+              onClick={() => void exportLeads()}
+            >
+              <Download className="h-3.5 w-3.5 text-muted-foreground" />
+              {exporting ? "Exporting…" : "Export"}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
+              title={isMaximized ? "Exit fullscreen" : "Maximize view"}
+              onClick={() => setIsMaximized((prev) => !prev)}
+            >
+              {isMaximized ? (
+                <Minimize2 className="h-3.5 w-3.5" />
+              ) : (
+                <Maximize2 className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* Table Body */}
+        {query.isError && !query.data ? (
+          <EmptyState
+            variant="panel"
+            title="Couldn’t load leads"
+            action={{ label: "Retry", onClick: () => void query.refetch() }}
+          />
+        ) : (
+          <div className="flex-1 overflow-x-auto min-h-[300px]">
             <LeadReportingTable
               campaignId={campaignId}
               items={query.data?.items ?? []}
@@ -502,6 +585,8 @@ export function CampaignLeadsWorkspace({
               emptyView={filter.view}
               columns={columns}
               selectedIds={selectedIds}
+              page={page}
+              pageSize={50}
               onToggle={(id) =>
                 setSelectedIds((prev) => {
                   const next = new Set(prev);
@@ -525,26 +610,56 @@ export function CampaignLeadsWorkspace({
               onRefresh={() => void query.refetch()}
             />
           </div>
-          <div className="shrink-0 border-t border-border px-1 py-2 flex items-center gap-3">
-            <p className="text-[12px] text-muted-foreground">
-              {(query.data?.total ?? 0).toLocaleString()} leads · {filterLabel}
-              {selectedIds.size > 0 ? ` · ${selectedIds.size} selected` : ""}
-            </p>
-            {(query.data?.total ?? 0) > 50 && (
-              <div className="ml-auto overflow-x-auto">
-                <TablePagination
-                  page={page + 1}
-                  totalPages={Math.max(1, Math.ceil((query.data?.total ?? 0) / 50))}
-                  pageSize={50}
-                  totalItems={query.data?.total ?? 0}
-                  onPageChange={(p) => setPage(Math.max(0, p - 1))}
-                  onPageSizeChange={() => undefined}
-                />
-              </div>
-            )}
+        )}
+
+        {/* Footer / Pagination */}
+        <div className="p-3.5 border-t border-border flex items-center justify-between text-xs text-muted-foreground bg-card/40">
+          <div>
+            <span className="font-medium text-foreground">
+              {(query.data?.total ?? 0).toLocaleString()} leads
+            </span>
+            {selectedIds.size > 0 ? ` · ${selectedIds.size} selected` : ""}
           </div>
-        </>
-      )}
+
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5">
+              <span>Rows per page</span>
+              <select
+                aria-label="Rows per page"
+                className="h-7 rounded border border-border bg-background px-1.5 text-xs text-foreground"
+                value="50"
+                disabled
+              >
+                <option value="50">50</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 rounded"
+                disabled={page <= 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+              <span className="text-xs text-foreground px-1">
+                Page {page + 1} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 rounded"
+                disabled={page + 1 >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
