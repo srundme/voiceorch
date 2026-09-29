@@ -7561,6 +7561,8 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   const { isManagedWorkspace } = usePartnerManagedWorkspace();
   const search = useSearch();
   const [activeTab, setActiveTab] = useState<TabId>(() => sectionFromSearch(search));
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
   const [moreSubTab, setMoreSubTab] = useState<TabId>(() => moreContentFromSearch(search));
   const tabContentRef = useRef<HTMLDivElement>(null);
   const scrollPositions = useRef<Partial<Record<TabId, number>>>({});
@@ -8028,13 +8030,35 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
     };
     const subscription = form.watch((value, { name }) => {
       if (suppressAutoSaveRef.current) return;
-      // Do not auto-save for conversation flow, prompt core, greeting message, or system prompt.
-      // Wait for user to finish typing and explicitly click Save.
-      if (
-        name?.startsWith("promptCore") ||
+      const curTab = activeTabRef.current;
+      // Do not auto-save for agent prompt & script configuration:
+      // Script mode, Knowledge sources, Welcome (greeting & first speaker),
+      // Identity, Call purpose, Conversation flow, Instructions,
+      // Additional / Call script, Call behaviour (timezone, end-call phrases),
+      // and Prompt variables.
+      // Wait for user to finish editing and explicitly click "Save now".
+      const isManualSaveField =
+        !name ||
+        curTab === "prompt" ||
+        curTab === "overview" ||
+        name.startsWith("promptCore") ||
+        name.startsWith("promptVariables") ||
+        name.startsWith("knowledgeSourceIds") ||
+        name.startsWith("kbDocumentIds") ||
+        name.startsWith("stagedPrompt") ||
+        name.startsWith("systemPrompt") ||
+        name.startsWith("meetingPrompt") ||
+        name === "scriptMode" ||
+        name === "firstSpeaker" ||
         name === "greetingMessage" ||
-        name === "systemPrompt"
-      ) {
+        name === "timezone" ||
+        name === "endCallPhrases" ||
+        name === "silenceTimeoutSeconds" ||
+        name === "kbBakedOnly" ||
+        name === "name" ||
+        name === "description";
+
+      if (isManualSaveField) {
         if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
         setAutoSaveStatus("idle");
         return;
