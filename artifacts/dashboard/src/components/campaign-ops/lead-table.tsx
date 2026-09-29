@@ -9,7 +9,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
-import { LeadDetailDrawer } from "@/components/lead-detail-drawer";
 import {
   attemptStatusLabel,
   displayDispositionLabel,
@@ -19,7 +18,7 @@ import {
   OUTCOME_CARDS,
 } from "@/lib/campaign-lead-reporting";
 import { cn } from "@/lib/utils";
-import { ChevronRight, Clock, MoreHorizontal, Phone, StickyNote } from "lucide-react";
+import { Clock, MoreHorizontal, Phone, StickyNote } from "lucide-react";
 import { useState } from "react";
 
 export type LeadTableColumns = {
@@ -53,22 +52,6 @@ function clockDuration(seconds: number | null | undefined): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function whenLabel(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  const now = new Date();
-  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startTarget = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const dayDiff = Math.round((startTarget.getTime() - startToday.getTime()) / 86_400_000);
-  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  if (dayDiff === 0) return `Today, ${time}`;
-  if (dayDiff === 1) return `Tomorrow, ${time}`;
-  if (dayDiff === -1) return `Yesterday, ${time}`;
-  const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return `${date}, ${time}`;
 }
 
 export function callResultLabel(lead: CampaignReportingLead): string {
@@ -146,8 +129,13 @@ export function LeadReportingTable({
   onRefresh?: () => void;
 }) {
   const [, navigate] = useLocation();
-  const [callId, setCallId] = useState<number | null>(null);
-  const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
+  const [activeCallDrawer, setActiveCallDrawer] = useState<{
+    callId: number | null;
+    leadName?: string | null;
+    leadPhone?: string | null;
+    leadId?: number;
+  } | null>(null);
+
   const emptyCopy = OUTCOME_CARDS.find((c) => c.view === emptyView);
   const pageIds = items.map((l) => l.leadId);
   const allOn = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
@@ -212,15 +200,27 @@ export function LeadReportingTable({
             const rowIndex = page * pageSize + idx + 1;
             const name = (lead.name || "").trim();
             const showName = !!name && name.toLowerCase() !== "unknown";
-            const open = () => setSelectedLeadId(lead.leadId);
             const outcome = outcomePresentation(lead);
             const statusLabel = callResultLabel(lead);
             const statusLower = statusLabel.toLowerCase();
+            const hasCall = lead.latestCallId != null || lead.latestAnsweredCallId != null;
+            const callId = lead.latestCallId ?? lead.latestAnsweredCallId ?? null;
+
+            // Clicking entire row opens Call Details popup from right side
+            const openCall = () => {
+              setActiveCallDrawer({
+                callId,
+                leadName: showName ? name : null,
+                leadPhone: displayPhone(lead.phone),
+                leadId: lead.leadId,
+              });
+            };
+
             return (
               <tr
                 key={lead.leadId}
                 className="hover:bg-muted/30 transition-colors cursor-pointer group"
-                onClick={open}
+                onClick={openCall}
               >
                 <td className="px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
                   <input
@@ -263,7 +263,7 @@ export function LeadReportingTable({
                         {outcome.text}
                       </span>
                     ) : (
-                      <span className="text-muted-foreground/40">—</span>
+                      <span className="text-muted-foreground/40" title="No call attempts recorded yet">—</span>
                     )}
                   </td>
                 )}
@@ -290,16 +290,13 @@ export function LeadReportingTable({
                         <Phone className="h-3 w-3 text-muted-foreground" />
                         Retry
                       </Button>
-                    ) : (lead.latestCallId != null || lead.latestAnsweredCallId != null) ? (
+                    ) : hasCall ? (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         className="h-7 px-2.5 text-[11px] font-medium gap-1 rounded-md border-border/80 hover:bg-muted"
-                        onClick={() => {
-                          const id = lead.latestCallId ?? lead.latestAnsweredCallId;
-                          if (id != null) setCallId(id);
-                        }}
+                        onClick={openCall}
                       >
                         <StickyNote className="h-3 w-3 text-muted-foreground" />
                         View call
@@ -312,11 +309,8 @@ export function LeadReportingTable({
                 <td className="px-2 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                   <RowMenu
                     lead={lead}
-                    onOpen={open}
-                    onCall={() => {
-                      const id = lead.latestCallId ?? lead.latestAnsweredCallId;
-                      if (id != null) setCallId(id);
-                    }}
+                    onOpen={openCall}
+                    onCall={openCall}
                     onRetry={onRetry}
                     onCancelRetry={onCancelRetry}
                   />
@@ -327,8 +321,21 @@ export function LeadReportingTable({
         </tbody>
       </table>
       <p className="sr-only">{total} leads</p>
-      <CallDetailDrawer callId={callId} open={callId != null} onClose={() => setCallId(null)} />
-      <LeadDetailDrawer campaignId={campaignId} leadId={selectedLeadId} open={selectedLeadId != null} onClose={() => setSelectedLeadId(null)} />
+      <CallDetailDrawer
+        callId={activeCallDrawer?.callId ?? null}
+        open={activeCallDrawer != null}
+        onClose={() => setActiveCallDrawer(null)}
+        leadName={activeCallDrawer?.leadName}
+        leadPhone={activeCallDrawer?.leadPhone}
+        onRetry={
+          activeCallDrawer?.leadId != null && onRetry
+            ? () => {
+                onRetry(activeCallDrawer.leadId!);
+                setActiveCallDrawer(null);
+              }
+            : undefined
+        }
+      />
     </>
   );
 }
@@ -346,63 +353,37 @@ function RowMenu({
   onRetry?: (leadId: number) => void;
   onCancelRetry?: (leadId: number) => void;
 }) {
+  const hasCall = lead.latestCallId != null || lead.latestAnsweredCallId != null;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground">
-          <MoreHorizontal className="h-4 w-4" />
+        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+          <MoreHorizontal className="h-3.5 w-3.5" />
+          <span className="sr-only">Row actions</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onOpen}>Open lead</DropdownMenuItem>
-        {(lead.latestCallId != null || lead.latestAnsweredCallId != null) && (
-          <DropdownMenuItem onClick={onCall} className="gap-2">
-            <Phone className="h-3.5 w-3.5" /> Call recording
-          </DropdownMenuItem>
-        )}
+      <DropdownMenuContent align="end" className="w-44 text-xs">
         <DropdownMenuItem onClick={onOpen} className="gap-2">
-          <StickyNote className="h-3.5 w-3.5" /> Add note
+          <StickyNote className="h-3.5 w-3.5 text-muted-foreground" />
+          <span>{hasCall ? "View call details" : "View lead status"}</span>
         </DropdownMenuItem>
         {onRetry && (
-          <DropdownMenuItem onClick={() => onRetry(lead.leadId)}>Call again</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onRetry(lead.leadId)} className="gap-2">
+            <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>Call lead now</span>
+          </DropdownMenuItem>
         )}
         {lead.retryPending && onCancelRetry && (
-          <DropdownMenuItem onClick={() => onCancelRetry(lead.leadId)}>Cancel retry</DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => onCancelRetry(lead.leadId)}
+            className="gap-2 text-destructive focus:text-destructive"
+          >
+            <Clock className="h-3.5 w-3.5" />
+            <span>Cancel retry</span>
+          </DropdownMenuItem>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-export function LeadFilterChips({
-  views,
-  active,
-  onSelect,
-}: {
-  views: { id: string; label: string }[];
-  active: string | null | undefined;
-  onSelect: (id: "all" | CampaignReportingView) => void;
-}) {
-  return (
-    <div className="flex gap-1 min-w-0">
-      {views.map((v) => {
-        const selected = active === v.id;
-        return (
-          <button
-            key={v.id}
-            type="button"
-            onClick={() => onSelect(selected ? "all" : v.id as CampaignReportingView)}
-            className={cn(
-              "shrink-0 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
-              selected
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
-            )}
-          >
-            {v.label}
-          </button>
-        );
-      })}
-    </div>
   );
 }
