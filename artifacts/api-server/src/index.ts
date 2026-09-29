@@ -432,6 +432,15 @@ async function migrateCallEngineConfigs(): Promise<void> {
   }
 }
 
+async function runDuplicateSpecificCampaigns(): Promise<void> {
+  try {
+    const { duplicateSpecificCampaigns } = await import("./migrations/duplicateSpecificCampaigns.js");
+    await duplicateSpecificCampaigns();
+  } catch (err) {
+    logger.warn({ err }, "Specific campaign duplication task failed (non-fatal)");
+  }
+}
+
 async function seedManagedKeyFromEnv(dbKey: string, envVar: string): Promise<void> {
   const envKey = (process.env[envVar] ?? "").trim();
   if (!envKey) return;
@@ -610,6 +619,7 @@ server.listen(port, () => {
       void seedManagedKeyFromEnv("recall_api_key_fallback","RECALL_API_KEY_FALLBACK");
       void migrateSaarikaToSaaras();
       void migrateCallEngineConfigs();
+      void runDuplicateSpecificCampaigns();
       startCallbackPoller();
       startSpikeChecker();
       startAlertSweep();
