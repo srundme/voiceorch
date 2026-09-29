@@ -7923,10 +7923,23 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
           agentResetSigRef.current = `${agentId}:${(saved as any).updatedAt}`;
         }
         const currentScroll = tabContentRef.current?.scrollTop;
+        const activeEl = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
+        const isInputActive = activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA");
+        const selStart = isInputActive ? (activeEl as HTMLInputElement).selectionStart : null;
+        const selEnd = isInputActive ? (activeEl as HTMLInputElement).selectionEnd : null;
+
         if (!hasNewerEdits) {
           form.reset(form.getValues(), { keepErrors: true });
           if (tabContentRef.current && currentScroll != null) {
             tabContentRef.current.scrollTop = currentScroll;
+          }
+          if (isInputActive && activeEl && document.body.contains(activeEl)) {
+            try {
+              activeEl.focus();
+              if (selStart != null && selEnd != null) {
+                (activeEl as HTMLInputElement).setSelectionRange(selStart, selEnd);
+              }
+            } catch {}
           }
           queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
         }
@@ -8030,35 +8043,13 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
     };
     const subscription = form.watch((value, { name }) => {
       if (suppressAutoSaveRef.current) return;
-      const curTab = activeTabRef.current;
-      // Do not auto-save for agent prompt & script configuration:
-      // Script mode, Knowledge sources, Welcome (greeting & first speaker),
-      // Identity, Call purpose, Conversation flow, Instructions,
-      // Additional / Call script, Call behaviour (timezone, end-call phrases),
-      // and Prompt variables.
-      // Wait for user to finish editing and explicitly click "Save now".
-      const isManualSaveField =
-        !name ||
-        curTab === "prompt" ||
-        curTab === "overview" ||
-        name.startsWith("promptCore") ||
-        name.startsWith("promptVariables") ||
-        name.startsWith("knowledgeSourceIds") ||
-        name.startsWith("kbDocumentIds") ||
-        name.startsWith("stagedPrompt") ||
-        name.startsWith("systemPrompt") ||
-        name.startsWith("meetingPrompt") ||
-        name === "scriptMode" ||
-        name === "firstSpeaker" ||
-        name === "greetingMessage" ||
-        name === "timezone" ||
-        name === "endCallPhrases" ||
-        name === "silenceTimeoutSeconds" ||
-        name === "kbBakedOnly" ||
-        name === "name" ||
-        name === "description";
+      // Do not auto-save for Conversation Flow:
+      // Wait for user to finish editing/reordering flow steps and explicitly click "Save now".
+      const isFlowField =
+        name === "promptCore.flow" ||
+        Boolean(name?.startsWith("promptCore.flow.") || name?.startsWith("promptCore.flow["));
 
-      if (isManualSaveField) {
+      if (isFlowField) {
         if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
         setAutoSaveStatus("idle");
         return;
