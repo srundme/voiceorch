@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
+import { LeadDetailDrawer } from "@/components/lead-detail-drawer";
 import {
   attemptStatusLabel,
   displayDispositionLabel,
@@ -146,6 +147,7 @@ export function LeadReportingTable({
 }) {
   const [, navigate] = useLocation();
   const [callId, setCallId] = useState<number | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
   const emptyCopy = OUTCOME_CARDS.find((c) => c.view === emptyView);
   const pageIds = items.map((l) => l.leadId);
   const allOn = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
@@ -210,7 +212,7 @@ export function LeadReportingTable({
             const rowIndex = page * pageSize + idx + 1;
             const name = (lead.name || "").trim();
             const showName = !!name && name.toLowerCase() !== "unknown";
-            const open = () => navigate(`/app/campaigns/${campaignId}/leads/${lead.leadId}`);
+            const open = () => setSelectedLeadId(lead.leadId);
             const outcome = outcomePresentation(lead);
             const statusLabel = callResultLabel(lead);
             const statusLower = statusLabel.toLowerCase();
@@ -326,6 +328,7 @@ export function LeadReportingTable({
       </table>
       <p className="sr-only">{total} leads</p>
       <CallDetailDrawer callId={callId} open={callId != null} onClose={() => setCallId(null)} />
+      <LeadDetailDrawer campaignId={campaignId} leadId={selectedLeadId} open={selectedLeadId != null} onClose={() => setSelectedLeadId(null)} />
     </>
   );
 }

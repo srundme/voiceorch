@@ -1025,16 +1025,23 @@ function ScoreEditor({ campaignId, leadId, initial, onSaved }: {
 
 type CrmTab = "overview" | "interactions" | "timeline" | "notes" | "memory" | "tasks";
 
-export default function LeadCrmWorkspacePage() {
-  const [, params] = useRoute("/app/campaigns/:id/leads/:leadId");
-  const campaignId = parseInt(params?.id     ?? "0", 10);
-  const leadId     = parseInt(params?.leadId ?? "0", 10);
+export interface LeadCrmWorkspaceContentProps {
+  campaignId: number;
+  leadId: number;
+  drawerMode?: boolean;
+  onClose?: () => void;
+}
 
+export function LeadCrmWorkspaceContent({
+  campaignId,
+  leadId,
+  drawerMode = false,
+  onClose,
+}: LeadCrmWorkspaceContentProps) {
   const [activeTab, setActiveTab] = useState<CrmTab>("overview");
   const [score, setScore] = useState<number | null>(null);
   const [scoreInit, setScoreInit] = useState(false);
   const { toast } = useToast();
-  const qc = useQueryClient();
   const [, navigate] = useLocation();
 
   const updateCallback = useUpdateLeadCallback();
@@ -1046,6 +1053,7 @@ export default function LeadCrmWorkspacePage() {
     queryKey: workspaceKey,
     queryFn: () => apiFetch<LeadWorkspace>(`${BASE}/api/campaigns/${campaignId}/leads/${leadId}/workspace`),
     refetchInterval: 30000,
+    enabled: campaignId > 0 && leadId > 0,
   });
 
   useEffect(() => {
@@ -1086,9 +1094,17 @@ export default function LeadCrmWorkspacePage() {
   // ── Loading skeleton ──────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        <div className="px-6 py-5 border-b border-border space-y-3">
-          <Skeleton className="h-4 w-48" /><Skeleton className="h-8 w-64" />
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
+        <div className="px-6 py-5 border-b border-border space-y-3 flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-8 w-64" />
+          </div>
+          {drawerMode && onClose && (
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </div>
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 p-5 space-y-4">
@@ -1106,7 +1122,7 @@ export default function LeadCrmWorkspacePage() {
 
   if (!lead || !campaign) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center h-full text-center gap-3">
+      <div className="flex-1 flex flex-col items-center justify-center h-full text-center gap-3 p-6 bg-background">
         <AlertCircle className="h-10 w-10 text-muted-foreground/30" />
         <p className="text-sm text-muted-foreground">Lead not found</p>
         {error ? (
@@ -1114,10 +1130,16 @@ export default function LeadCrmWorkspacePage() {
             {error instanceof Error ? error.message : String(error)}
           </p>
         ) : null}
-        <Button variant="outline" size="sm" className="gap-1.5"
-          onClick={() => navigate(`/app/campaigns/${campaignId}`)}>
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to Campaign
-        </Button>
+        {drawerMode && onClose ? (
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Close
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm" className="gap-1.5"
+            onClick={() => navigate(`/app/campaigns/${campaignId}`)}>
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to Campaign
+          </Button>
+        )}
       </div>
     );
   }
@@ -1127,40 +1149,42 @@ export default function LeadCrmWorkspacePage() {
     : "never_attempted" as const;
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
 
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="px-6 pt-4 pb-4 border-b border-border/40 shrink-0">
-        {/* Breadcrumb */}
-        <DetailNav
-          className="mb-3"
-          backTo={ws?.batch ? `/app/campaigns/${campaignId}/batches/${ws.batch.id}` : `/app/campaigns/${campaignId}`}
-          backLabel="Back"
-          crumbs={[
-            { label: "Campaigns", href: "/app/campaigns" },
-            { label: campaign.name, href: `/app/campaigns/${campaignId}` },
-            ...(ws?.batch
-              ? [{ label: ws.batch.name, href: `/app/campaigns/${campaignId}/batches/${ws.batch.id}` }]
-              : []),
-            { label: lead.name ?? lead.phone },
-          ]}
-        />
+        {/* Breadcrumb (full page only) */}
+        {!drawerMode && (
+          <DetailNav
+            className="mb-3"
+            backTo={ws?.batch ? `/app/campaigns/${campaignId}/batches/${ws.batch.id}` : `/app/campaigns/${campaignId}`}
+            backLabel="Back"
+            crumbs={[
+              { label: "Campaigns", href: "/app/campaigns" },
+              { label: campaign.name, href: `/app/campaigns/${campaignId}` },
+              ...(ws?.batch
+                ? [{ label: ws.batch.name, href: `/app/campaigns/${campaignId}/batches/${ws.batch.id}` }]
+                : []),
+              { label: lead.name ?? lead.phone },
+            ]}
+          />
+        )}
 
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3.5">
+          <div className="flex items-start gap-3.5 min-w-0">
             {/* Avatar */}
-            <div className="h-11 w-11 rounded-full bg-muted border border-border flex items-center justify-center shrink-0">
+            <div className="h-10 w-10 rounded-full bg-muted border border-border flex items-center justify-center shrink-0">
               <User className="h-5 w-5 text-muted-foreground" />
             </div>
 
             {/* Identity */}
-            <div>
-              <div className="flex items-center gap-2.5 flex-wrap mb-1">
-                <h1 className="text-xl font-semibold leading-tight">{lead.name ?? "Unknown Lead"}</h1>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <h1 className="text-lg font-semibold leading-tight truncate">{lead.name ?? "Unknown Lead"}</h1>
                 <ContactStateBadge state={contactState} />
                 <BusinessOutcomeBadge outcome={lead.operationalOutcome} />
                 {lead.disposition && (
-                  <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-md border border-border bg-muted/50">
+                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md border border-border bg-muted/50">
                     <Tag className="h-2.5 w-2.5" />{lead.disposition}
                   </span>
                 )}
@@ -1170,19 +1194,19 @@ export default function LeadCrmWorkspacePage() {
                 />
               </div>
 
-              <div className="flex items-center gap-4 flex-wrap">
-                <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+              <div className="flex items-center gap-3.5 flex-wrap">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
                   <Phone className="h-3.5 w-3.5 shrink-0" />
                   <span className="font-mono">{lead.phone}</span>
                 </span>
                 {lead.email && (
-                  <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <Mail className="h-3.5 w-3.5 shrink-0" />{lead.email}
                   </span>
                 )}
-                {campaign.agentName && (
-                  <span className="text-[11px] text-muted-foreground/50 flex items-center gap-1">
-                    <User className="h-2.5 w-2.5" />{campaign.agentName}
+                {campaign.name && (
+                  <span className="text-[11px] text-muted-foreground/70 flex items-center gap-1">
+                    <span className="font-medium text-foreground/80">{campaign.name}</span>
                   </span>
                 )}
                 <span className="text-[11px] text-muted-foreground/40">
@@ -1195,14 +1219,26 @@ export default function LeadCrmWorkspacePage() {
           {/* Actions */}
           <div className="flex items-center gap-2 shrink-0">
             <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5"
-              onClick={() => navigate(`/app/campaigns/${campaignId}`)}>
-              <ArrowLeft className="h-3.5 w-3.5" /> Campaign
-            </Button>
-            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5"
               disabled={lead.callStatus === "calling" || retry.isPending}
               onClick={handleRetry}>
               <RotateCcw className={cn("h-3.5 w-3.5", retry.isPending && "animate-spin")} /> Retry
             </Button>
+            {drawerMode ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
+                onClick={onClose}
+                title="Close drawer"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5"
+                onClick={() => navigate(`/app/campaigns/${campaignId}`)}>
+                <ArrowLeft className="h-3.5 w-3.5" /> Campaign
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -1213,7 +1249,7 @@ export default function LeadCrmWorkspacePage() {
         {/* Center panel */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* Tab bar */}
-          <div className="flex items-center gap-0.5 px-5 py-2 border-b border-border/20 shrink-0">
+          <div className="flex items-center gap-0.5 px-5 py-2 border-b border-border/20 shrink-0 bg-muted/20">
             {TABS.map(t => (
               <button key={t.key} onClick={() => setActiveTab(t.key)}
                 className={cn(
@@ -1232,7 +1268,7 @@ export default function LeadCrmWorkspacePage() {
           </div>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-auto min-h-0">
+          <div className="flex-1 overflow-auto min-h-0 p-4">
             {activeTab === "overview"     && ws && (
               <OverviewTab ws={ws} campaignId={campaignId} leadId={leadId} onRefresh={() => void refetch()} />
             )}
@@ -1264,4 +1300,12 @@ export default function LeadCrmWorkspacePage() {
 
     </div>
   );
+}
+
+export default function LeadCrmWorkspacePage() {
+  const [, params] = useRoute("/app/campaigns/:id/leads/:leadId");
+  const campaignId = parseInt(params?.id     ?? "0", 10);
+  const leadId     = parseInt(params?.leadId ?? "0", 10);
+
+  return <LeadCrmWorkspaceContent campaignId={campaignId} leadId={leadId} />;
 }
