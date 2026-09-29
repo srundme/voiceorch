@@ -11,7 +11,7 @@ import {
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
   Upload, Archive, Info, AlertCircle, Calendar, Star, BadgeCheck, Video, ExternalLink,
-  Target, ListChecks,
+  Target, ListChecks, GripVertical,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -1637,7 +1637,9 @@ function OverviewTab({
 /* ── Structured prompt core (Identity / purpose / flow / instructions) ──── */
 
 function PromptCorePanels({ form }: { form: any }) {
-  const { fields, append, remove, replace } = useFieldArray({ control: form.control, name: "promptCore.flow" });
+  const { fields, append, remove, replace, move } = useFieldArray({ control: form.control, name: "promptCore.flow" });
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const flowEmpty = fields.length === 0;
   return (
     <>
@@ -1758,8 +1760,66 @@ function PromptCorePanels({ form }: { form: any }) {
         ) : (
           <div className="divide-y divide-border">
             {fields.map((f, i) => (
-              <div key={f.id} className="flex gap-2 px-4 py-3">
-                <span className="w-5 shrink-0 pt-2 text-[11px] font-mono text-muted-foreground">{i + 1}.</span>
+              <div
+                key={f.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("text/plain", String(i));
+                  e.dataTransfer.effectAllowed = "move";
+                  setDraggedIndex(i);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (dragOverIndex !== i) setDragOverIndex(i);
+                }}
+                onDragLeave={() => {
+                  if (dragOverIndex === i) setDragOverIndex(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const from = draggedIndex ?? parseInt(e.dataTransfer.getData("text/plain"), 10);
+                  if (!Number.isNaN(from) && from !== i) {
+                    move(from, i);
+                  }
+                  setDraggedIndex(null);
+                  setDragOverIndex(null);
+                }}
+                className={cn(
+                  "group relative flex items-start gap-2.5 px-4 py-3 transition-colors",
+                  draggedIndex === i && "opacity-40 bg-muted/40",
+                  dragOverIndex === i && draggedIndex !== i && "bg-primary/5 border-t-2 border-primary",
+                )}
+              >
+                <div className="flex flex-col items-center gap-0.5 shrink-0 pt-1.5 select-none">
+                  <div
+                    className="flex items-center gap-1 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-0.5 rounded hover:bg-muted"
+                    title="Drag to reorder step"
+                  >
+                    <GripVertical className="size-3.5" />
+                    <span className="w-5 text-[11px] font-mono font-medium">{i + 1}.</span>
+                  </div>
+                  <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      disabled={i === 0}
+                      onClick={() => move(i, i - 1)}
+                      className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:cursor-not-allowed"
+                      title="Move up"
+                    >
+                      <ChevronUp className="size-3" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={i === fields.length - 1}
+                      onClick={() => move(i, i + 1)}
+                      className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:cursor-not-allowed"
+                      title="Move down"
+                    >
+                      <ChevronDown className="size-3" />
+                    </button>
+                  </div>
+                </div>
                 <div className="min-w-0 flex-1 space-y-2">
                   <FormField control={form.control} name={`promptCore.flow.${i}.title`} render={({ field }) => (
                     <FormItem className="space-y-0">
@@ -7681,6 +7741,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
     // render → re-render → loop (React #185 "Maximum update depth exceeded").
     const resetSig = `${agent.id}:${(agent as any).updatedAt ?? ""}`;
     if (agentResetSigRef.current === resetSig) return;
+    if (form.formState.isDirty) return;
     agentResetSigRef.current = resetSig;
     const sarvamVad = hydrateSarvamRealtimeVad((agent as any).agentConfig ?? {});
     form.reset({
@@ -7856,8 +7917,15 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         if (savedCal != null) form.setValue("schedulingCalendarId", savedCal, { shouldDirty: false });
         if (savedEt != null) form.setValue("schedulingEventTypeId", savedEt, { shouldDirty: false });
         const hasNewerEdits = editRevisionRef.current !== revisionAtStart;
+        if ((saved as any)?.updatedAt) {
+          agentResetSigRef.current = `${agentId}:${(saved as any).updatedAt}`;
+        }
+        const currentScroll = tabContentRef.current?.scrollTop;
         if (!hasNewerEdits) {
           form.reset(form.getValues(), { keepErrors: true });
+          if (tabContentRef.current && currentScroll != null) {
+            tabContentRef.current.scrollTop = currentScroll;
+          }
           queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
         }
         suppressAutoSaveRef.current = false;
@@ -7958,8 +8026,19 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       }
       await autoSaveHandlerRef.current?.();
     };
-    const subscription = form.watch(() => {
+    const subscription = form.watch((value, { name }) => {
       if (suppressAutoSaveRef.current) return;
+      // Do not auto-save for conversation flow, prompt core, greeting message, or system prompt.
+      // Wait for user to finish typing and explicitly click Save.
+      if (
+        name?.startsWith("promptCore") ||
+        name === "greetingMessage" ||
+        name === "systemPrompt"
+      ) {
+        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+        setAutoSaveStatus("idle");
+        return;
+      }
       queueMicrotask(() => {
         if (!form.formState.isDirty) return;
         editRevisionRef.current += 1;
