@@ -9,51 +9,48 @@ import {
 } from "./backchannel.js";
 
 describe("backchannel fillers — contextual human covers", () => {
-  it("uses listening-only for questions (no soft ack, no language acks)", () => {
+  it("uses listening-only Okay and Ok for questions", () => {
     const pool = getBackchannelFillers("ta-IN", {
       callerTranscript: "என்ன விலை?",
     });
-    expect(pool).toEqual(["ம்.", "ஹ்ம்ம்.", "ம்ம்.", "ஹ்ம்."]);
-    expect(pool).not.toContain("Okay.");
+    expect(pool).toEqual(["Okay.", "Ok."]);
+    expect(pool).not.toContain("ம்.");
     expect(pool).not.toContain("சரி.");
     expect(pool).not.toContain("I see.");
   });
 
-  it("uses listening-only for refusal / cancel turns", () => {
+  it("uses listening-only Okay and Ok for refusal / cancel turns", () => {
     const pool = getBackchannelFillers("ta-IN", {
       callerTranscript: "I don't want this, cancel it",
     });
-    expect(pool).toEqual(["ம்.", "ஹ்ம்ம்.", "ம்ம்.", "ஹ்ம்."]);
+    expect(pool).toEqual(["Okay.", "Ok."]);
     expect(pool).not.toContain("சரி.");
-    expect(pool).not.toContain("Okay.");
+    expect(pool).not.toContain("ம்.");
   });
 
-  it("does not inject சரி on Tamil statements — the LLM already says it", () => {
+  it("only provides Okay and Ok across statements", () => {
     const pool = getBackchannelFillers("ta-IN", {
       callerTranscript: "நான் சென்னையில இருக்கேன்",
     });
-    expect(pool).toContain("ம்.");
-    expect(pool).toContain("ஓ.");
+    expect(pool).toEqual(["Okay.", "Ok."]);
+    expect(pool).not.toContain("ம்.");
     expect(pool).not.toContain("சரி.");
-    expect(pool).not.toContain("Okay.");
     expect(pool).not.toContain("Got it.");
-    expect(pool).not.toContain("अच्छा");
   });
 
-  it("keeps English and Tamil on listening sounds, without got-it or perfect", () => {
+  it("keeps English and Tamil on Okay and Ok", () => {
     const english = getBackchannelFillers("en-IN", { callerTranscript: "I live in Chennai" });
-    expect(english).toEqual(["Hmm.", "Mmm.", "Mhmm.", "Mm-hmm.", "Uh-huh."]);
-    expect(english.join(" ")).not.toMatch(/got it|perfect|okay|right|alright|i see/i);
+    expect(english).toEqual(["Okay.", "Ok."]);
 
     const tamil = getBackchannelFillers("ta-IN", { callerTranscript: "நான் சென்னையில இருக்கேன்" });
-    expect(tamil.join(" ")).not.toMatch(/got it|perfect|okay|अच्छा/i);
+    expect(tamil).toEqual(["Okay.", "Ok."]);
   });
 
-  it("uses Okay and acha on Hindi statements, and a listen sound on questions", () => {
+  it("uses Okay and Ok on Hindi statements and questions", () => {
     expect(getBackchannelFillers("hi-IN", { callerTranscript: "मैं दिल्ली में रहता हूँ" }))
-      .toEqual(["Okay.", "अच्छा."]);
+      .toEqual(["Okay.", "Ok."]);
     expect(getBackchannelFillers("hi-IN", { callerTranscript: "क्या आप मदद कर सकते हैं?" }))
-      .toEqual(["हम्म.", "म्म."]);
+      .toEqual(["Okay.", "Ok."]);
   });
 
   it("still classifies story and numeric turns", () => {
@@ -63,7 +60,7 @@ describe("backchannel fillers — contextual human covers", () => {
     expect(classifyBackchannelContext("My salary is 45000 rupees")).toBe("numeric");
     expect(getBackchannelFillers("en-IN", {
       callerTranscript: "My salary is 45000 rupees",
-    })).toEqual(["Hmm.", "Mmm.", "Mhmm.", "Mm-hmm.", "Uh-huh."]);
+    })).toEqual(["Okay.", "Ok."]);
   });
 
   it("keeps English listening fillers when explicitly locked to English", () => {
@@ -71,32 +68,25 @@ describe("backchannel fillers — contextual human covers", () => {
       englishStrictAck: true,
       callerTranscript: "I live in Chennai",
     });
-    expect(pool).toEqual(["Hmm.", "Mmm.", "Mhmm.", "Mm-hmm.", "Uh-huh."]);
+    expect(pool).toEqual(["Okay.", "Ok."]);
     expect(pool).not.toContain("ம்.");
     expect(pool).not.toContain("Got it.");
   });
 
   it("avoids recent fillers when picking", () => {
-    const picks = new Set<string>();
-    for (let n = 0; n < 20; n++) {
-      picks.add(pickBackchannelFiller("en-IN", ["Hmm.", "Mmm.", "Mhmm."], {
-        callerTranscript: "I live in Chennai",
-        rng: () => (n * 0.17) % 1,
-      })!);
-    }
-    expect(picks.has("Hmm.")).toBe(false);
-    expect(picks.has("Mmm.")).toBe(false);
-    expect(picks.has("Mhmm.")).toBe(false);
-    expect(picks.size).toBeGreaterThan(0);
+    const picked = pickBackchannelFiller("en-IN", ["Okay."], {
+      callerTranscript: "I live in Chennai",
+      rng: () => 0,
+    });
+    expect(picked).toBe("Ok.");
   });
 
-  it("never says Okay or acha on an English question", () => {
+  it("picks Okay or Ok on an English question", () => {
     const picked = pickBackchannelFiller("en-IN", [], {
       callerTranscript: "Can you help?",
       rng: () => 0,
     });
-    expect(picked).not.toBe("Okay.");
-    expect(picked).not.toBe("अच्छा.");
+    expect(["Okay.", "Ok."]).toContain(picked);
   });
 
   it("honors a custom Okay-only pool", () => {

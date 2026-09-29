@@ -6,41 +6,30 @@
 
 export type BackchannelContext = "risky" | "story" | "numeric" | "neutral";
 
-/** Pure listening — safe before any answer polarity. */
+/** Pure listening / backchannel fillers — only Okay. and Ok. */
 const ENGLISH_LISTENING_FILLERS = [
-  "Hmm.",
-  "Mmm.",
-  "Mhmm.",
-  "Mm-hmm.",
-  "Uh-huh.",
+  "Okay.",
+  "Ok.",
 ];
 
 const TAMIL_LISTENING_FILLERS = [
-  "ம்.",
-  "ஹ்ம்ம்.",
-  "ம்ம்.",
-  "ஹ்ம்.",
+  "Okay.",
+  "Ok.",
 ];
 
-// Tamil and English covers stay listening sounds. "Got it", "perfect", "right"
-// read as agreement and the LLM already says those. Hindi keeps a short ack.
 const HINDI_LISTENING_FILLERS = [
-  "हम्म.",
-  "म्म.",
+  "Okay.",
+  "Ok.",
 ];
 
 const HINDI_ACK_FILLERS = [
   "Okay.",
-  "अच्छा.",
+  "Ok.",
 ];
 
-// Tamil LLMs already open with "சரி," / "seri" — keep soft covers as listen sounds.
 const TAMIL_SOFT_ACK_FILLERS = [
-  "ம்.",
-  "ஹ்ம்ம்.",
-  "ம்ம்.",
-  "ஹ்ம்.",
-  "ஓ.",
+  "Okay.",
+  "Ok.",
 ];
 
 /** @deprecated Prefer uniform pick + recent-avoid; kept for callers that still import it. */
