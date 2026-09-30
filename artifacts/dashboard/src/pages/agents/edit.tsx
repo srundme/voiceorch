@@ -152,7 +152,11 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   }
   if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
   if (micSensitivity != null) agentConfig["micSensitivity"] = micSensitivity;
-  agentConfig["timezone"] = (timezone && timezone !== "__unset__") ? timezone : null;
+  if (timezone && timezone !== "__unset__") {
+    agentConfig["timezone"] = timezone;
+  } else if (timezone === "__unset__") {
+    agentConfig["timezone"] = null;
+  }
   agentConfig["autoSwitchToEnglish"] = !!autoSwitchToEnglish;
   agentConfig["languageAutoDetect"] = !!languageAutoDetect;
   {

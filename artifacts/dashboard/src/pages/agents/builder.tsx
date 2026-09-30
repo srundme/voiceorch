@@ -281,7 +281,7 @@ function SmallSelect({ value, onChange, options, placeholder }: {
   // Radix Select crashes if `value` is "" in SelectItem. We map empty string to an internal sentinel.
   const UNSET = "__unset__";
   const safeOptions = options.map((o) => (o.value === "" ? { ...o, value: UNSET } : o));
-  const normalizedValue = (!value || value === "") ? UNSET : value;
+  const normalizedValue = (!value || value === "" || value === UNSET) ? UNSET : value;
   const safeValue =
     safeOptions.some((o) => o.value === normalizedValue) ? normalizedValue : UNSET;
   const selectedOption = safeOptions.find((o) => o.value === safeValue);
@@ -2145,8 +2145,9 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
                 <SmallSelect
                   value={field.value ?? ""}
                   onChange={(v) => {
-                    field.onChange(v);
-                    form.setValue("timezone", v, { shouldDirty: true, shouldTouch: true });
+                    const nextVal = v === "" ? "__unset__" : v;
+                    field.onChange(nextVal);
+                    form.setValue("timezone", nextVal, { shouldDirty: true, shouldTouch: true });
                   }}
                   options={[{ value: "", label: "Not set" }, ...AGENT_TIMEZONES]}
                   placeholder="Not set"
@@ -3428,7 +3429,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       return calName.includes(normalized) || normalized.includes(calName);
     });
     if (matches.length === 1) {
-      form.setValue("schedulingCalendarId", matches[0].id, { shouldDirty: true });
+      form.setValue("schedulingCalendarId", matches[0].id, { shouldDirty: false });
     }
   }, [agentId, agentNameForAutoLink, calendarsData, schedulingCalendarId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -3490,7 +3491,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     // Empty list is loading/error — do not wipe a saved meeting type.
     if (eventTypes.length === 0) return;
     form.setValue("schedulingEventTypeId", eventTypes[0].id, {
-      shouldDirty: true,
+      shouldDirty: false,
       shouldValidate: true,
     });
   }, [
@@ -7576,10 +7577,12 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   const scrollPositions = useRef<Partial<Record<TabId, number>>>({});
   const agentResetSigRef = useRef<string | null>(null);
   const hasHydratedAgentRef = useRef(false);
+  const suppressAutoSaveRef = useRef(true);
 
   useEffect(() => {
     hasHydratedAgentRef.current = false;
     agentResetSigRef.current = null;
+    suppressAutoSaveRef.current = true;
   }, [agentId]);
 
   useEffect(() => {
@@ -7644,7 +7647,6 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   const autoSaveHandlerRef = useRef<(() => Promise<void>) | null>(null);
   const autoSaveRequestRef = useRef(false);
   const saveInFlightRef = useRef(false);
-  const suppressAutoSaveRef = useRef(false);
   const hydrateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editRevisionRef = useRef(0);
 
