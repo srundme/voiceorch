@@ -127,9 +127,10 @@ export const agentFormSchema = z.object({
   ttsSpeed: z.number().min(0.7).max(1.5).optional(),
   kbBakedOnly: z.boolean().optional(),
 
-  voiceStack: z.enum(["classic", "gemini_live"]).optional(),
+  voiceStack: z.enum(["classic", "gemini_live", "openai_realtime"]).optional(),
   geminiLiveVoiceName: z.string().optional(),
   geminiLiveThinkingLevel: z.enum(["minimal", "low", "medium", "high"]).optional(),
+  openaiRealtimeVoiceName: z.string().optional(),
 
   /** Create-time: one agent vs team entry. */
   agentComposition: z.enum(["single", "team"]).optional(),

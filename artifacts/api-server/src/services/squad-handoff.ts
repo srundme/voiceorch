@@ -9,12 +9,17 @@ import { decryptKey } from "../lib/crypto.js";
 import { logger } from "../lib/logger.js";
 import { OrchestrationPipeline } from "../orchestration/pipeline.js";
 import { GeminiLivePipeline } from "../orchestration/adapters/live/gemini-live-pipeline.js";
+import { OpenAIRealtimePipeline } from "../orchestration/adapters/live/openai-realtime-pipeline.js";
 import {
   resolveGeminiLiveModel,
   resolveGeminiLiveThinkingLevel,
   resolveGeminiLiveVoice,
   resolveVoiceStack,
 } from "../orchestration/adapters/live/gemini-live-voices.js";
+import {
+  resolveOpenAIRealtimeModel,
+  resolveOpenAIRealtimeVoice,
+} from "../orchestration/adapters/live/openai-realtime-voices.js";
 import { resolveSarvamSttMode } from "../orchestration/adapters/stt/sarvam-mode.js";
 import { resolveRealtimeStreamType } from "../orchestration/adapters/stt/sarvam-realtime.js";
 import {
@@ -361,6 +366,16 @@ async function buildTargetAgentConfig(
           ),
         }
       : null,
+    openaiRealtime: voiceStack === "openai_realtime"
+      ? {
+          model: resolveOpenAIRealtimeModel(
+            (agentCfg["openaiRealtime"] as Record<string, unknown> | undefined)?.["model"] as string | undefined,
+          ),
+          voiceName: resolveOpenAIRealtimeVoice(
+            (agentCfg["openaiRealtime"] as Record<string, unknown> | undefined)?.["voiceName"] as string | undefined,
+          ),
+        }
+      : null,
   };
   agentConfig.sttConfig.endpointingSilenceMs = agentConfig.asrEndpointingSilenceMs;
 
@@ -472,8 +487,9 @@ export async function performSquadAgentHandoff(opts: {
 
   let newPipeline: VoiceSession;
   try {
-    newPipeline = agentConfig.voiceStack === "gemini_live"
-      ? new GeminiLivePipeline({
+    const LivePipeline = agentConfig.voiceStack === "openai_realtime" ? OpenAIRealtimePipeline : GeminiLivePipeline;
+    newPipeline = agentConfig.voiceStack === "gemini_live" || agentConfig.voiceStack === "openai_realtime"
+      ? new LivePipeline({
           callId: hooks.callId,
           agentConfig,
           providerKeys,

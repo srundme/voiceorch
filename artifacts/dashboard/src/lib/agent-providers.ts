@@ -66,12 +66,16 @@ export function asrModelsForPicker(
 /** LLM model id that routes calls through Gemini Live native audio. */
 export const GEMINI_LIVE_LLM_MODEL = "gemini-3.1-flash-live-preview" as const;
 
+/** LLM model id that routes calls through OpenAI Realtime native audio. */
+export const OPENAI_REALTIME_LLM_MODEL = "gpt-realtime" as const;
+
 export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   openai: [
     { value: "gpt-5.1-mini", label: "GPT-5.1 Mini (Fastest — ~140ms Voice Latency)" },
     { value: "gpt-5.1",      label: "GPT-5.1 (Flagship — Advanced Reasoning & Tools)" },
     { value: "gpt-4.1-mini", label: "GPT-4.1 Mini (Low Cost — Fast Voice)" },
     { value: "gpt-4o-mini",  label: "GPT-4o Mini" },
+    { value: OPENAI_REALTIME_LLM_MODEL, label: "GPT Realtime (Native Realtime Bidirectional Voice)" },
   ],
   google: [
     { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash (recommended)" },
@@ -673,26 +677,60 @@ export function geminiLiveModelLabel(): string {
     ?? "Gemini 3.1 Flash Live";
 }
 
-/** Sync voiceStack when the user picks a model in the Model dialog. */
-export function voiceStackForLlmModel(model: string): "classic" | "gemini_live" {
-  return isGeminiLiveLlmModel(model) ? "gemini_live" : "classic";
+export function isOpenAIRealtimeLlmModel(model: string | undefined | null): boolean {
+  return model === OPENAI_REALTIME_LLM_MODEL;
 }
 
-/** Voice stack: classic STT+LLM+TTS vs Gemini native audio Live. */
+/** True when the agent uses OpenAI Realtime (model selection or saved voice stack). */
+export function isOpenAIRealtimeAgent(opts: {
+  llmModel?: string | null;
+  voiceStack?: string | null;
+}): boolean {
+  if (opts.voiceStack === "gemini_live") return false;
+  return isOpenAIRealtimeLlmModel(opts.llmModel) || opts.voiceStack === "openai_realtime";
+}
+
+export function openaiRealtimeModelLabel(): string {
+  return "GPT Realtime";
+}
+
+export type VoiceStackValue = "classic" | "gemini_live" | "openai_realtime";
+
+export function toVoiceStackValue(raw: string | null | undefined): VoiceStackValue {
+  return raw === "gemini_live" || raw === "openai_realtime" ? raw : "classic";
+}
+
+/** Sync voiceStack when the user picks a model in the Model dialog. */
+export function voiceStackForLlmModel(model: string): VoiceStackValue {
+  if (isGeminiLiveLlmModel(model)) return "gemini_live";
+  if (isOpenAIRealtimeLlmModel(model)) return "openai_realtime";
+  return "classic";
+}
+
+/** Voice stack: classic STT+LLM+TTS vs native-audio realtime models. */
 export const VOICE_STACK_OPTIONS = [
   { value: "classic", label: "Classic (STT + LLM + TTS)" },
   { value: "gemini_live", label: "Gemini Live 3.1" },
+  { value: "openai_realtime", label: "OpenAI GPT Realtime" },
 ] as const;
 
 /** Provider + model to persist when the user picks a voice stack in the UI. */
 export function llmFieldsForVoiceStack(
-  stack: "classic" | "gemini_live",
+  stack: VoiceStackValue,
   current: { llmProvider?: string | null; llmModel?: string | null },
 ): { llmProvider: string; llmModel: string } {
   if (stack === "gemini_live") {
     return { llmProvider: "google", llmModel: GEMINI_LIVE_LLM_MODEL };
   }
-  if (isGeminiLiveLlmModel(current.llmModel) || current.llmProvider === "google" || current.llmProvider === "gemini") {
+  if (stack === "openai_realtime") {
+    return { llmProvider: "openai", llmModel: OPENAI_REALTIME_LLM_MODEL };
+  }
+  if (
+    isGeminiLiveLlmModel(current.llmModel)
+    || isOpenAIRealtimeLlmModel(current.llmModel)
+    || current.llmProvider === "google"
+    || current.llmProvider === "gemini"
+  ) {
     return { llmProvider: DEFAULT_NONTAMIL_LLM_PROVIDER, llmModel: defaultSarvamModel() };
   }
   return {
@@ -737,9 +775,9 @@ export function isGeminiLiveLanguage(code: string | null | undefined): boolean {
  */
 export const GEMINI_LIVE_LANGUAGES = LANGUAGES.filter((l) => isGeminiLiveLanguage(l.value));
 
-/** Language picker options for classic vs Gemini Live agents. */
-export function languagesForAgent(isGeminiLive: boolean): typeof LANGUAGES {
-  return isGeminiLive ? GEMINI_LIVE_LANGUAGES : SARVAM_STT_LANGUAGES;
+/** Language picker options for classic vs native-audio (Gemini Live / GPT Realtime) agents. */
+export function languagesForAgent(isNativeAudio: boolean): typeof LANGUAGES {
+  return isNativeAudio ? GEMINI_LIVE_LANGUAGES : SARVAM_STT_LANGUAGES;
 }
 
 /** Static fallback; runtime UI may fetch GET /api/gemini-live/voices. */
@@ -755,3 +793,9 @@ export const GEMINI_LIVE_VOICES = [
   { name: "Achird", style: "Friendly" }, { name: "Zubenelgenubi", style: "Casual" }, { name: "Vindemiatrix", style: "Gentle" },
   { name: "Sadachbia", style: "Lively" }, { name: "Sadaltager", style: "Knowledgeable" }, { name: "Sulafat", style: "Warm" },
 ] as const;
+
+/** Static fallback; runtime UI may fetch GET /api/openai-realtime/voices. */
+export const OPENAI_REALTIME_VOICES: readonly string[] = [
+  "marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse",
+];
+export const DEFAULT_OPENAI_REALTIME_VOICE = "marin";

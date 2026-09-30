@@ -18,6 +18,7 @@ import { parseBackchannelPhrases } from "./backchannel.js";
 import { clampSemanticTurnStopMs, resolveSemanticTurnEnabled } from "./semantic-turn-gate.js";
 import type { VoiceSession } from "./voice-session.js";
 import { GeminiLivePipeline } from "./adapters/live/gemini-live-pipeline.js";
+import { OpenAIRealtimePipeline } from "./adapters/live/openai-realtime-pipeline.js";
 import {
   DEFAULT_GEMINI_LIVE_MODEL,
   resolveGeminiLiveModel,
@@ -25,6 +26,10 @@ import {
   resolveGeminiLiveVoice,
   resolveVoiceStack,
 } from "./adapters/live/gemini-live-voices.js";
+import {
+  resolveOpenAIRealtimeModel,
+  resolveOpenAIRealtimeVoice,
+} from "./adapters/live/openai-realtime-voices.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { resolveRealtimeStreamType } from "./adapters/stt/sarvam-realtime.js";
 import { isSarvamCatalogSpeaker } from "./adapters/tts/sarvam.js";
@@ -869,6 +874,16 @@ export async function createSession(params: {
           ),
         }
       : null,
+    openaiRealtime: voiceStack === "openai_realtime"
+      ? {
+          model: resolveOpenAIRealtimeModel(
+            (agentCfg["openaiRealtime"] as Record<string, unknown> | undefined)?.["model"] as string | undefined,
+          ),
+          voiceName: resolveOpenAIRealtimeVoice(
+            (agentCfg["openaiRealtime"] as Record<string, unknown> | undefined)?.["voiceName"] as string | undefined,
+          ),
+        }
+      : null,
   };
   // Propagate endpointing silence into STTConfig so Azure adapter picks it up
   agentConfig.sttConfig.endpointingSilenceMs = agentConfig.asrEndpointingSilenceMs;
@@ -1589,6 +1604,7 @@ export async function createSession(params: {
     agent.llmProvider?.toLowerCase(),
     agent.ttsProvider?.toLowerCase(),
     ...(agentConfig.voiceStack === "gemini_live" ? ["google"] : []),
+    ...(agentConfig.voiceStack === "openai_realtime" ? ["openai"] : []),
   ].filter((p): p is string => !!p);
 
   // Null / missing agentMode must behave as managed (DB default). Only explicit
@@ -1988,6 +2004,16 @@ export async function createSession(params: {
         provider: "gemini_live",
         model: agentConfig.geminiLive?.model ?? DEFAULT_GEMINI_LIVE_MODEL,
         voice: agentConfig.geminiLive?.voiceName ?? null,
+      },
+    });
+  } else if (agentConfig.voiceStack === "openai_realtime") {
+    logExec(EXEC_COMPONENTS.Agent, "system", {
+      status: "info",
+      metadata: {
+        event: "Provider Initialized",
+        provider: "openai_realtime",
+        model: agentConfig.openaiRealtime?.model ?? resolveOpenAIRealtimeModel(null),
+        voice: agentConfig.openaiRealtime?.voiceName ?? null,
       },
     });
   } else {
@@ -2530,8 +2556,9 @@ export async function createSession(params: {
     params.onCallEnd();
   };
 
-  const pipeline: VoiceSession = agentConfig.voiceStack === "gemini_live"
-    ? new GeminiLivePipeline({
+  const LivePipeline = agentConfig.voiceStack === "openai_realtime" ? OpenAIRealtimePipeline : GeminiLivePipeline;
+  const pipeline: VoiceSession = agentConfig.voiceStack === "gemini_live" || agentConfig.voiceStack === "openai_realtime"
+    ? new LivePipeline({
         callId: callRecord.id,
         agentConfig,
         providerKeys,
@@ -3783,40 +3810,77 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         const inputTokens = llmUsage?.llmInputTokens ?? Math.max(turns, 1) * 200;
         const outputTokens = llmUsage?.llmOutputTokens ?? Math.max(turns, 1) * 60;
 
-        void recordUsage({
-          service: "stt",
-          provider: ag.asrProvider,
-          model: ag.asrModel,
-          userId: ag.userId ?? null,
-          callId: call.id,
-          audioSeconds: safeDuration,
-          latencyMs: avgSttMs,
-          success,
-          errorMessage,
-        });
-        void recordUsage({
-          service: "llm",
-          provider: ag.llmProvider,
-          model: ag.llmModel,
-          userId: ag.userId ?? null,
-          callId: call.id,
-          inputTokens,
-          outputTokens,
-          latencyMs: avgLlmMs,
-          success,
-          errorMessage,
-        });
-        void recordUsage({
-          service: "tts",
-          provider: ag.ttsProvider,
-          model: ag.ttsModel,
-          userId: ag.userId ?? null,
-          callId: call.id,
-          characters: ttsChars,
-          latencyMs: avgTtsMs,
-          success,
-          errorMessage,
-        });
+        if (session.pipeline instanceof OpenAIRealtimePipeline) {
+          // Speech-to-speech: one model bills audio+text tokens, plus the
+          // caller-transcription model. No separate STT/TTS provider exists.
+          const rt = session.pipeline.getRealtimeUsage();
+          void recordUsage({
+            service: "llm",
+            provider: "openai_realtime",
+            model: rt.model,
+            userId: ag.userId ?? null,
+            callId: call.id,
+            inputTokens: rt.inputTokens,
+            outputTokens: rt.outputTokens,
+            success,
+            errorMessage,
+            metadata: {
+              callSeconds: safeDuration,
+              inputAudioTokens: rt.inputAudioTokens,
+              inputTextTokens: rt.inputTextTokens,
+              inputCachedTokens: rt.inputCachedTokens,
+              outputAudioTokens: rt.outputAudioTokens,
+              outputTextTokens: rt.outputTextTokens,
+              responses: rt.responses,
+            },
+          });
+          void recordUsage({
+            service: "stt",
+            provider: "openai",
+            model: rt.transcribeModel,
+            userId: ag.userId ?? null,
+            callId: call.id,
+            inputTokens: rt.transcribeInputTokens,
+            outputTokens: rt.transcribeOutputTokens,
+            success,
+            errorMessage,
+          });
+        } else {
+          void recordUsage({
+            service: "stt",
+            provider: ag.asrProvider,
+            model: ag.asrModel,
+            userId: ag.userId ?? null,
+            callId: call.id,
+            audioSeconds: safeDuration,
+            latencyMs: avgSttMs,
+            success,
+            errorMessage,
+          });
+          void recordUsage({
+            service: "llm",
+            provider: ag.llmProvider,
+            model: ag.llmModel,
+            userId: ag.userId ?? null,
+            callId: call.id,
+            inputTokens,
+            outputTokens,
+            latencyMs: avgLlmMs,
+            success,
+            errorMessage,
+          });
+          void recordUsage({
+            service: "tts",
+            provider: ag.ttsProvider,
+            model: ag.ttsModel,
+            userId: ag.userId ?? null,
+            callId: call.id,
+            characters: ttsChars,
+            latencyMs: avgTtsMs,
+            success,
+            errorMessage,
+          });
+        }
       }
       if (ag) {
         const prevCount    = ag.successfulCalls;

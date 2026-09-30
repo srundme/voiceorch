@@ -30,7 +30,7 @@ export const MANAGED_KEY_CATALOG: Array<{
   { key: "managed_groq_key", label: "Groq", service: "llm", provider: "groq", affects: ["LLM", "Summaries", "Managed fallback"], testable: true },
   { key: "managed_jina_key", label: "Jina", service: "llm", provider: "jina", affects: ["KB embeddings"], testable: true },
   { key: "managed_gemini_key", label: "Gemini", service: "llm", provider: "gemini", affects: ["Gemini Live", "Key pool rotation"], testable: false },
-  { key: "managed_openai_key", label: "OpenAI", service: "llm", provider: "openai", affects: ["LLM", "OpenAI TTS"], testable: true },
+  { key: "managed_openai_key", label: "OpenAI", service: "llm", provider: "openai", affects: ["LLM", "OpenAI TTS", "OpenAI Realtime"], testable: true },
   { key: "managed_anthropic_key", label: "Anthropic", service: "llm", provider: "anthropic", affects: ["LLM"], testable: false },
   { key: "managed_mistral_key", label: "Mistral", service: "llm", provider: "mistral", affects: ["LLM"], testable: false },
   { key: "managed_cohere_key", label: "Cohere", service: "llm", provider: "cohere", affects: ["LLM"], testable: false },

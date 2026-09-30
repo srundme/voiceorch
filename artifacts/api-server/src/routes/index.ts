@@ -84,6 +84,7 @@ import billingRouter from "./billing.js";
 import utilsRouter from "./utils.js";
 import voicesRouter from "./voices.js";
 import geminiLiveRouter from "./gemini-live.js";
+import openaiRealtimeRouter from "./openai-realtime.js";
 import testToolRouter from "./test-tool.js";
 import authRouter from "./auth.js";
 import dispositionRouter from "./disposition.js";
@@ -177,6 +178,7 @@ router.use(authRouter);
 // Public utility routes — no auth required
 router.use(voicesRouter);
 router.use(geminiLiveRouter);
+router.use(openaiRealtimeRouter);
 router.use(utilsRouter);
 
 // Public book progress routes — anonymous per-device, no session required

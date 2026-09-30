@@ -95,6 +95,23 @@ describe("buildUpdateAgentPayload", () => {
     expect((payload.agentConfig as Record<string, unknown>)["voiceStack"]).toBe("gemini_live");
   });
 
+  it("gpt realtime — voice stack + voice saved in agentConfig", () => {
+    const data: AgentFormValues = {
+      ...BASE,
+      llmProvider: "openai",
+      llmModel: "gpt-realtime",
+      voiceStack: "openai_realtime",
+      openaiRealtimeVoiceName: "cedar",
+    };
+    const payload = buildUpdateAgentPayload(data);
+    const cfg = payload.agentConfig as Record<string, unknown>;
+    expect(payload.llmProvider).toBe("openai");
+    expect(payload.llmModel).toBe("gpt-realtime");
+    expect(cfg["voiceStack"]).toBe("openai_realtime");
+    expect(cfg["openaiRealtime"]).toEqual({ model: "gpt-realtime", voiceName: "cedar" });
+    expect(cfg["geminiLive"]).toBeUndefined();
+  });
+
   it("minimal update — parses against UpdateAgentBody", () => {
     const payload = buildUpdateAgentPayload(BASE);
     const result = UpdateAgentBody.safeParse(payload);

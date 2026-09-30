@@ -75,6 +75,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
 import { GeminiLiveVoicePicker } from "@/components/gemini-live-voice-picker";
+import { OpenAIRealtimeVoicePicker } from "@/components/openai-realtime-voice-picker";
 import { Mic, Brain, Volume2, Globe } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors } from "@/lib/format-api-error";
@@ -91,11 +92,17 @@ import {
   TTS_VOICES,
   GEMINI_LIVE_LLM_MODEL,
   GEMINI_LIVE_THINKING_LEVELS,
+  OPENAI_REALTIME_LLM_MODEL,
+  DEFAULT_OPENAI_REALTIME_VOICE,
   VOICE_STACK_OPTIONS,
   geminiLiveModelLabel,
+  openaiRealtimeModelLabel,
   getModelError,
   isGeminiLiveAgent,
   isGeminiLiveLlmModel,
+  isOpenAIRealtimeAgent,
+  isOpenAIRealtimeLlmModel,
+  toVoiceStackValue,
   llmFieldsForVoiceStack,
   voiceStackForLlmModel,
   languagesForAgent,
@@ -124,7 +131,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     sarvamHighVadSensitivity, sarvamSpeechEndFlushMs, sarvamIncompleteHoldMs,
     sarvamEndOfSpeechSilenceMs, sarvamFirstTurnMinSpeechMs, sarvamVadThreshold,
     semanticTurnStopMs,
-    voiceStack, geminiLiveVoiceName, geminiLiveThinkingLevel,
+    voiceStack, geminiLiveVoiceName, geminiLiveThinkingLevel, openaiRealtimeVoiceName,
     agentComposition, agentSurfaces, promptCore, scriptMode,
     meetingPrompt,
     meetingMaxDurationSeconds, meetingSilenceTimeoutSeconds, meetingSilenceHangupEnabled,
@@ -259,6 +266,12 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     agentConfig["geminiLive"] = {
       voiceName: geminiLiveVoiceName || "Kore",
       thinkingLevel: geminiLiveThinkingLevel ?? "minimal",
+    };
+  } else if (isOpenAIRealtimeLlmModel(rest.llmModel) || voiceStack === "openai_realtime") {
+    agentConfig["voiceStack"] = "openai_realtime";
+    agentConfig["openaiRealtime"] = {
+      model: OPENAI_REALTIME_LLM_MODEL,
+      voiceName: openaiRealtimeVoiceName || DEFAULT_OPENAI_REALTIME_VOICE,
     };
   } else if (voiceStack === "classic") {
     agentConfig["voiceStack"] = "classic";
@@ -546,6 +559,7 @@ export default function AgentEdit() {
       voiceStack: "classic",
       geminiLiveVoiceName: "Kore",
       geminiLiveThinkingLevel: "minimal",
+      openaiRealtimeVoiceName: DEFAULT_OPENAI_REALTIME_VOICE,
       agentComposition: "single",
       agentSurfaces: "phone",
       meetingPrompt: "",
@@ -759,7 +773,8 @@ export default function AgentEdit() {
     formInitialized.current = true;
     const liveOnLoad =
       (agent as any).agentConfig?.voiceStack === "gemini_live"
-      || agent.llmModel === GEMINI_LIVE_LLM_MODEL;
+      || agent.llmModel === GEMINI_LIVE_LLM_MODEL
+      || (agent as any).agentConfig?.voiceStack === "openai_realtime";
     // Classic Google Gemini text models are retired — remap to Sarvam Gemma 4 on load.
     // Gemini Live keeps provider=google internally (voice stack path).
     const migratedLlm =
@@ -875,9 +890,10 @@ export default function AgentEdit() {
       autoRedialMaxAttempts:  ((agent as any).agentConfig?.autoRedial?.maxAttempts as number | undefined) ?? 3,
       schedulingCalendarId:   normalizeSchedulingId((agent as any).agentConfig?.calendarCapability?.defaultCalendarId),
       schedulingEventTypeId:  normalizeSchedulingId((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId),
-      voiceStack:               (((agent as any).agentConfig?.voiceStack as string | undefined) === "gemini_live" ? "gemini_live" : "classic") as AgentFormValues["voiceStack"],
+      voiceStack:               toVoiceStackValue((agent as any).agentConfig?.voiceStack as string | undefined),
       geminiLiveVoiceName:      ((agent as any).agentConfig?.geminiLive?.voiceName as string | undefined) ?? "Kore",
       geminiLiveThinkingLevel:  ((agent as any).agentConfig?.geminiLive?.thinkingLevel as AgentFormValues["geminiLiveThinkingLevel"] | undefined) ?? "minimal",
+      openaiRealtimeVoiceName:  ((agent as any).agentConfig?.openaiRealtime?.voiceName as string | undefined) ?? DEFAULT_OPENAI_REALTIME_VOICE,
       agentComposition: "single",
       agentSurfaces: ((agent as any).agentConfig?.meetings?.enabled === true ? "phone_and_meet" : "phone") as AgentFormValues["agentSurfaces"],
       meetingPrompt: typeof (agent as any).agentConfig?.meetings?.meetingPrompt === "string"
@@ -898,6 +914,9 @@ export default function AgentEdit() {
     if (cfg?.voiceStack === "gemini_live") {
       form.setValue("llmProvider", "google");
       form.setValue("llmModel", GEMINI_LIVE_LLM_MODEL);
+    } else if (cfg?.voiceStack === "openai_realtime") {
+      form.setValue("llmProvider", "openai");
+      form.setValue("llmModel", OPENAI_REALTIME_LLM_MODEL);
     }
   }, [agent]);
 
@@ -908,7 +927,10 @@ export default function AgentEdit() {
   const ttsProvider = useWatch({ control: form.control, name: "ttsProvider" });
   const voiceStack = useWatch({ control: form.control, name: "voiceStack" });
   const geminiLiveVoiceName = useWatch({ control: form.control, name: "geminiLiveVoiceName" });
+  const openaiRealtimeVoiceName = useWatch({ control: form.control, name: "openaiRealtimeVoiceName" });
   const isGeminiLive = isGeminiLiveAgent({ llmModel, voiceStack });
+  const isOpenAIRealtime = isOpenAIRealtimeAgent({ llmModel, voiceStack });
+  const isNativeAudio = isGeminiLive || isOpenAIRealtime;
   // "Paste custom Voice ID" UI mode — selecting the option must NOT erase an
   // already-saved voice ID; the value only changes when the user types into
   // the custom input or picks a different curated voice.
@@ -926,7 +948,7 @@ export default function AgentEdit() {
   const SECTION_FIELDS: Record<PipelineSection, (keyof AgentFormValues)[]> = {
     transcriber: ["language", "asrProvider", "asrModel", "languageAutoDetect"],
     model: ["voiceStack", "llmProvider", "llmModel", "temperature"],
-    voice: ["ttsProvider", "ttsModel", "ttsVoice", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
+    voice: ["ttsProvider", "ttsModel", "ttsVoice", "geminiLiveVoiceName", "geminiLiveThinkingLevel", "openaiRealtimeVoiceName"],
   };
   const [openSection, setOpenSection] = useState<PipelineSection | null>(null);
   const [confirmDiscardSection, setConfirmDiscardSection] = useState<PipelineSection | null>(null);
@@ -1200,7 +1222,7 @@ export default function AgentEdit() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <FormField control={form.control} name="language" render={({ field }) => {
-                        const langOpts = languagesForAgent(isGeminiLive);
+                        const langOpts = languagesForAgent(isNativeAudio);
                         const current = field.value ?? "";
                         const inList = langOpts.some(l => l.value === current);
                         const options = (!current || inList)
@@ -1220,8 +1242,8 @@ export default function AgentEdit() {
                             </SelectContent>
                           </Select>
                           <FormDescription>
-                            {isGeminiLive
-                              ? "Gemini Live speaks and listens in this language."
+                            {isNativeAudio
+                              ? `${isOpenAIRealtime ? "GPT Realtime" : "Gemini Live"} speaks and listens in this language.`
                               : "Passed to ASR + TTS."}
                           </FormDescription>
                           <FormMessage />
@@ -1377,15 +1399,17 @@ export default function AgentEdit() {
             <div className="md:col-span-2 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <AgentConfigCard
-                  icon={isGeminiLive ? <Globe /> : <Mic />}
-                  label={isGeminiLive ? "Language" : "Transcriber"}
+                  icon={isNativeAudio ? <Globe /> : <Mic />}
+                  label={isNativeAudio ? "Language" : "Transcriber"}
                   value={
-                    isGeminiLive
+                    isNativeAudio
                       ? (LANGUAGES.find(l => l.value === form.watch("language"))?.label ?? form.watch("language") ?? "Select language")
                       : (ASR_PROVIDERS.find(p => p.value === asrProvider)?.label ?? asrProvider)
                   }
                   subtext={
-                    isGeminiLive
+                    isOpenAIRealtime
+                      ? "GPT Realtime conversation language"
+                      : isGeminiLive
                       ? "Gemini Live conversation language"
                       : (form.watch("asrModel") || "Default model")
                   }
@@ -1394,20 +1418,30 @@ export default function AgentEdit() {
                 <AgentConfigCard
                   icon={<Brain />}
                   label="Model"
-                  value={isGeminiLive ? geminiLiveModelLabel() : (LLM_PROVIDERS.find(p => p.value === llmProvider)?.label ?? llmProvider)}
-                  subtext={isGeminiLive ? "Native realtime audio" : (llmModel || "Default model")}
+                  value={
+                    isOpenAIRealtime
+                      ? openaiRealtimeModelLabel()
+                      : isGeminiLive
+                      ? geminiLiveModelLabel()
+                      : (LLM_PROVIDERS.find(p => p.value === llmProvider)?.label ?? llmProvider)
+                  }
+                  subtext={isNativeAudio ? "Native realtime audio" : (llmModel || "Default model")}
                   onClick={() => openPipelineDialog("model")}
                 />
                 <AgentConfigCard
                   icon={<Volume2 />}
                   label="Voice"
                   value={
-                    isGeminiLive
+                    isOpenAIRealtime
+                      ? (openaiRealtimeVoiceName || DEFAULT_OPENAI_REALTIME_VOICE)
+                      : isGeminiLive
                       ? (geminiLiveVoiceName || "Kore")
                       : (TTS_PROVIDERS.find(p => p.value === ttsProvider)?.label ?? ttsProvider)
                   }
                   subtext={
-                    isGeminiLive
+                    isOpenAIRealtime
+                      ? "GPT Realtime preset voice"
+                      : isGeminiLive
                       ? "Gemini Live preset voice"
                       : (form.watch("ttsModel") || form.watch("ttsVoice") || "Default voice")
                   }
@@ -1450,18 +1484,20 @@ export default function AgentEdit() {
             open={openSection === "transcriber"}
             onRequestClose={requestClosePipelineDialog}
             onSave={savePipelineDialog}
-            icon={isGeminiLive ? <Globe /> : <Mic />}
-            title={isGeminiLive ? "Language" : "Transcriber"}
+            icon={isNativeAudio ? <Globe /> : <Mic />}
+            title={isNativeAudio ? "Language" : "Transcriber"}
             description={
-              isGeminiLive
-                ? "Choose the conversation language for Gemini Live. Native audio has no separate STT — language is enforced via system instructions."
+              isNativeAudio
+                ? `Choose the conversation language for ${isOpenAIRealtime ? "GPT Realtime" : "Gemini Live"}. Native audio has no separate STT — language is enforced via system instructions.`
                 : "Choose the speech-to-text provider and model used to transcribe caller audio."
             }
           >
-            {isGeminiLive ? (
+            {isNativeAudio ? (
               <>
                 <p className="text-[11px] text-muted-foreground rounded-md border border-border/60 bg-muted/30 px-3 py-2 mb-2">
-                  Gemini Live supports ~97 languages. Pick the primary language callers should hear and speak.
+                  {isOpenAIRealtime
+                    ? "Pick the primary language callers should hear and speak."
+                    : "Gemini Live supports ~97 languages. Pick the primary language callers should hear and speak."}
                 </p>
                 <FormField control={form.control} name="language" render={({ field }) => {
                   const langOpts = languagesForAgent(true);
@@ -1478,7 +1514,7 @@ export default function AgentEdit() {
                         {options.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <FormDescription>Gemini Live speaks and listens in this language.</FormDescription>
+                    <FormDescription>{isOpenAIRealtime ? "GPT Realtime" : "Gemini Live"} speaks and listens in this language.</FormDescription>
                     <FormMessage />
                   </FormItem>
                   );
@@ -1517,8 +1553,8 @@ export default function AgentEdit() {
               <div>
                 <p className="text-xs font-medium">Multilingual</p>
                 <p className="text-[11px] text-muted-foreground">
-                  {isGeminiLive
-                    ? "Allow Gemini Live to follow the caller when they switch languages mid-call."
+                  {isNativeAudio
+                    ? `Allow ${isOpenAIRealtime ? "GPT Realtime" : "Gemini Live"} to follow the caller when they switch languages mid-call.`
                     : "Automatically detects and switches between supported languages during the conversation."}
                 </p>
               </div>
@@ -1538,14 +1574,14 @@ export default function AgentEdit() {
             onSave={savePipelineDialog}
             icon={<Brain />}
             title="Model"
-            description="Choose Classic STT+LLM+TTS, or Gemini Live native speech-to-speech."
+            description="Choose Classic STT+LLM+TTS, or native speech-to-speech (Gemini Live / GPT Realtime)."
           >
             <FormField control={form.control} name="voiceStack" render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-xs">Voice stack</FormLabel>
                 <Select
                   onValueChange={(v) => {
-                    const stack = v === "gemini_live" ? "gemini_live" : "classic";
+                    const stack = toVoiceStackValue(v);
                     field.onChange(stack);
                     const next = llmFieldsForVoiceStack(stack, {
                       llmProvider: form.getValues("llmProvider"),
@@ -1554,7 +1590,7 @@ export default function AgentEdit() {
                     form.setValue("llmProvider", next.llmProvider, { shouldDirty: true });
                     form.setValue("llmModel", next.llmModel, { shouldDirty: true });
                   }}
-                  value={isGeminiLive ? "gemini_live" : (field.value ?? "classic")}
+                  value={isGeminiLive ? "gemini_live" : isOpenAIRealtime ? "openai_realtime" : (field.value ?? "classic")}
                 >
                   <FormControl><SelectTrigger><SelectValue placeholder="Select stack" /></SelectTrigger></FormControl>
                   <SelectContent>
@@ -1566,9 +1602,9 @@ export default function AgentEdit() {
                 <FormMessage />
               </FormItem>
             )} />
-            {isGeminiLive && (
+            {isNativeAudio && (
               <p className="text-[11px] text-muted-foreground rounded-md border border-border/60 bg-muted/30 px-3 py-2">
-                Gemini Live uses native speech-to-speech. Classic STT/TTS are skipped — set language in the Language card and pick a preset voice in Voice.
+                {isOpenAIRealtime ? "GPT Realtime" : "Gemini Live"} uses native speech-to-speech. Classic STT/TTS are skipped — set language in the Language card and pick a preset voice in Voice.
               </p>
             )}
             <FormField control={form.control} name="llmProvider" render={({ field }) => (
@@ -1608,7 +1644,7 @@ export default function AgentEdit() {
                 <FormMessage />
               </FormItem>
             )} />
-            {!isGeminiLive && (
+            {!isNativeAudio && (
             <FormField control={form.control} name="temperature" render={({ field }) => (
               <FormItem>
                 <div className="flex justify-between items-center mb-2">
@@ -1632,9 +1668,25 @@ export default function AgentEdit() {
             onSave={savePipelineDialog}
             icon={<Volume2 />}
             title="Voice"
-            description={isGeminiLive ? "Choose a Gemini Live preset voice for this agent." : "Choose the TTS provider and voice for spoken responses."}
+            description={
+              isOpenAIRealtime
+                ? "Choose a GPT Realtime preset voice for this agent."
+                : isGeminiLive
+                ? "Choose a Gemini Live preset voice for this agent."
+                : "Choose the TTS provider and voice for spoken responses."
+            }
           >
-            {isGeminiLive ? (
+            {isOpenAIRealtime ? (
+              <FormField control={form.control} name="openaiRealtimeVoiceName" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Voice</FormLabel>
+                  <FormControl>
+                    <OpenAIRealtimeVoicePicker value={field.value ?? DEFAULT_OPENAI_REALTIME_VOICE} onChange={field.onChange} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            ) : isGeminiLive ? (
               <>
                 <FormField control={form.control} name="geminiLiveVoiceName" render={({ field }) => (
                   <FormItem>

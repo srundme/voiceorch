@@ -574,13 +574,18 @@ export interface AgentConfig {
    */
   kbBakedOnly: boolean;
 
-  /** Classic STT→LLM→TTS (default) or Gemini Live. */
-  voiceStack: "classic" | "gemini_live";
+  /** Classic STT→LLM→TTS (default), Gemini Live, or OpenAI Realtime. */
+  voiceStack: "classic" | "gemini_live" | "openai_realtime";
   /** Resolved Live settings when voiceStack === "gemini_live". */
   geminiLive: {
     model: string;
     voiceName: string;
     thinkingLevel: "minimal" | "low" | "medium" | "high";
+  } | null;
+  /** Resolved Realtime settings when voiceStack === "openai_realtime". */
+  openaiRealtime?: {
+    model: string;
+    voiceName: string;
   } | null;
 }
 

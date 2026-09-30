@@ -159,13 +159,18 @@ export type AgentConfig = {
       cancel: boolean;
     };
   };
-  /** Classic STT→LLM→TTS (default) or Gemini Live. */
-  voiceStack?: "classic" | "gemini_live";
+  /** Classic STT→LLM→TTS (default), Gemini Live, or OpenAI Realtime. */
+  voiceStack?: "classic" | "gemini_live" | "openai_realtime";
   /** Settings for voiceStack === "gemini_live" — voice is NOT stored in ttsVoice. */
   geminiLive?: {
     model?: string;
     voiceName?: string;
     thinkingLevel?: "minimal" | "low" | "medium" | "high";
+  };
+  /** Settings for voiceStack === "openai_realtime" — voice is NOT stored in ttsVoice. */
+  openaiRealtime?: {
+    model?: string;
+    voiceName?: string;
   };
   /** Meet/Zoom/Teams channel — meeting prompt + who joins + meeting timing. */
   meetings?: {

@@ -77,8 +77,9 @@ export function resolveGeminiLiveThinkingLevel(
   return "minimal";
 }
 
-export type VoiceStackId = "classic" | "gemini_live";
+export type VoiceStackId = "classic" | "gemini_live" | "openai_realtime";
 
 export function resolveVoiceStack(raw: string | undefined | null): VoiceStackId {
-  return raw === "gemini_live" ? "gemini_live" : "classic";
+  if (raw === "gemini_live" || raw === "openai_realtime") return raw;
+  return "classic";
 }
