@@ -338,6 +338,7 @@ describe("answered_ever is monotonic", () => {
   it("throws if a writer tries to set answered_ever false", () => {
     expect(() => campaignLeadWritePatch({ answeredEver: false })).toThrow(/monotonic/);
     expect(() =>
+      // @ts-expect-error writers are typed to forbid answeredEver: false
       applyAnsweredEverTransition({ answeredEver: true, callStatus: "connected" }, { answeredEver: false }),
     ).toThrow(/monotonic/);
   });

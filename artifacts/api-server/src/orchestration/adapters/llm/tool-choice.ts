@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "../types.js";
+import type { ToolDefinition } from "../../types.js";
 
 /** Map pipeline toolChoice into OpenAI chat-completions tool_choice. */
 export function toOpenAiToolChoice(

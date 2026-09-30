@@ -75,6 +75,7 @@ export class KrutrimLLM implements LLMAdapter {
     onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
+      toolChoice?: "auto" | "required" | { name: string };
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
       onToolDetected?: (info: { format: "structured" | "json" | "bracket" | "function_tag" }) => void;
       onToolParsed?: (info: { name: string; format: "structured" | "json" | "bracket" | "function_tag"; args: Record<string, unknown> }) => void;

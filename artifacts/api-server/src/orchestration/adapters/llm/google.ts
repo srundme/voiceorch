@@ -1,5 +1,5 @@
 import { GoogleGenAI, FunctionCallingConfigMode } from "@google/genai";
-import type { Content, GenerateContentConfig, CachedContent, GenerateContentResponseUsageMetadata } from "@google/genai";
+import type { Content, GenerateContentConfig, CachedContent, GenerateContentResponseUsageMetadata, Tool } from "@google/genai";
 import { logger } from "../../../lib/logger.js";
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toGeminiLiveTools } from "../live/gemini-tools.js";

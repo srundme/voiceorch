@@ -33,7 +33,7 @@ export function appendAlignedPcm8k(leftover: Buffer, incoming: Buffer): {
 }
 
 export class SileroStream {
-  private leftover8k = Buffer.alloc(0);
+  private leftover8k: Buffer = Buffer.alloc(0);
   private readonly vad: SileroVAD;
   private readonly hysteresis: HysteresisVad;
   private readonly onFrame: SileroFrameHandler;

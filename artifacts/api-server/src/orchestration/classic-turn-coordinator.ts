@@ -151,7 +151,7 @@ export class ClassicTurnCoordinator {
         return result;
       };
     });
-    const out = run?.();
+    const out = (run as (() => void | Promise<void>) | null)?.();
     return Promise.resolve(out);
   }
 

@@ -313,6 +313,9 @@ router.post("/campaigns/:id/leads/:leadId/notes", async (req, res): Promise<void
   const campaign = await requireCampaign(campaignId, userId);
   if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
 
+  const lead = await requireLead(leadId, campaignId);
+  if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
+
   const { body } = req.body as { body?: string };
   if (!body?.trim()) { res.status(400).json({ error: "Note body required" }); return; }
 

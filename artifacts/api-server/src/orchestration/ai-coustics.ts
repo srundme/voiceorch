@@ -152,8 +152,12 @@ export class AiCousticsCallEnhancer {
       this.processor.initialize(cachedSampleRate, cachedBlockSize, true);
       const ctx = this.processor.getContext();
       const level = enhancementLevel(this.env);
-      ctx.setParameter(sdk.ProcessorParameter.EnhancementLevel, level);
-      ctx.setParameter(sdk.ProcessorParameter.Bypass, 0);
+      // SDK types ProcessorParameter as an ambient const enum (unreadable under isolatedModules);
+      // the runtime export is a real object.
+      type Param = Parameters<typeof ctx.setParameter>[0];
+      const params = (sdk as unknown as { ProcessorParameter: Record<"EnhancementLevel" | "Bypass", Param> }).ProcessorParameter;
+      ctx.setParameter(params.EnhancementLevel, level);
+      ctx.setParameter(params.Bypass, 0);
       this.ready = true;
       return true;
     } catch {

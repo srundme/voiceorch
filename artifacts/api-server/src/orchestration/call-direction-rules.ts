@@ -65,7 +65,7 @@ const OPENING_HI: Record<string, string> = {
 };
 
 /** One-word hello in the opening language — no purpose-of-call script. */
-export function openingHello(langKey: string): string {
+export function openingHello(langKey: string | null | undefined): string {
   return OPENING_HI[resolveOpeningLanguageKey(langKey)] ?? "Hi";
 }
 

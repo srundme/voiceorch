@@ -578,7 +578,7 @@ export default function AgentEdit() {
   const schedulingCalendarId = form.watch("schedulingCalendarId");
   const schedulingEventTypeId = form.watch("schedulingEventTypeId");
   const agentCalendar = schedulingCalendarId != null
-    ? findBySchedulingId(calendarsData as Array<{ id: number }>, schedulingCalendarId)
+    ? findBySchedulingId(calendarsData as Array<{ id: number; name?: string }>, schedulingCalendarId)
     : id
       ? ((calendarsData ?? []).find((cal: any) => cal.agentId === id) ?? (calendarsData ?? [])[0])
       : (calendarsData ?? [])[0];

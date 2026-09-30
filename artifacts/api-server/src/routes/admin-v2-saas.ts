@@ -59,12 +59,12 @@ router.get("/admin/analytics/users", async (req, res): Promise<void> => {
 
     const [
       [signups],
-      [activated],
+      activated,
       [active],
       [paying],
-      [returning],
-      [churned],
-      [dormant],
+      returning,
+      churned,
+      dormant,
       signupSeries,
       lifecycleSeries,
     ] = await Promise.all([
@@ -195,8 +195,8 @@ router.get("/admin/analytics/users", async (req, res): Promise<void> => {
       kpis: {
         newSignups,
         activated: activatedCount,
-        active: Number(active[0]?.c ?? 0),
-        paying: Number(paying[0]?.c ?? 0),
+        active: Number(active?.c ?? 0),
+        paying: Number(paying?.c ?? 0),
         returning: returningCount,
         churned: churnedCount,
         dormant: dormantCount,
@@ -212,8 +212,8 @@ router.get("/admin/analytics/users", async (req, res): Promise<void> => {
       funnel: [
         { stage: "Signups", users: newSignups },
         { stage: "Activated", users: activatedCount },
-        { stage: "Active", users: Number(active[0]?.c ?? 0) },
-        { stage: "Paying", users: Number(paying[0]?.c ?? 0) },
+        { stage: "Active", users: Number(active?.c ?? 0) },
+        { stage: "Paying", users: Number(paying?.c ?? 0) },
       ],
     });
   } catch (err) {
@@ -425,7 +425,7 @@ router.get("/admin/analytics/agents", async (req, res): Promise<void> => {
     const fx = await usdToInrRate();
     const limit = Math.min(100, Math.max(10, Number(req.query.limit ?? 50)));
 
-    const [[totals], top] = await Promise.all([
+    const [totals, top] = await Promise.all([
       db.execute(sql`
         select
           (select count(*) from agents) as total_agents,

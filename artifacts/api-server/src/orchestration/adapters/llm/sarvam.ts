@@ -441,6 +441,7 @@ export class SarvamLLM implements LLMAdapter {
     onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
+      toolChoice?: "auto" | "required" | { name: string };
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
       onToolDetected?: (info: { format: ToolEnvelopeFormat }) => void;
       onToolParsed?: (info: { name: string; format: ToolEnvelopeFormat; args: Record<string, unknown> }) => void;

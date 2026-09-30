@@ -33,6 +33,7 @@ export class MistralLLM implements LLMAdapter {
     onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
+      toolChoice?: "auto" | "required" | { name: string };
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
       onUsage?: (usage: LLMUsage) => void;
     }

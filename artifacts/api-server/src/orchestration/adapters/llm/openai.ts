@@ -104,6 +104,7 @@ export class OpenAILLM implements LLMAdapter {
     onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
+      toolChoice?: "auto" | "required" | { name: string };
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
       onUsage?: (usage: LLMUsage) => void;
       speculative?: boolean;
@@ -147,6 +148,7 @@ export class OpenAILLM implements LLMAdapter {
     onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
+      toolChoice?: "auto" | "required" | { name: string };
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
       onUsage?: (usage: LLMUsage) => void;
     },
@@ -334,6 +336,7 @@ export class OpenAILLM implements LLMAdapter {
     onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
+      toolChoice?: "auto" | "required" | { name: string };
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
       onUsage?: (usage: LLMUsage) => void;
     },

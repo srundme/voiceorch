@@ -15,7 +15,7 @@ describe("appendAlignedPcm8k", () => {
   });
 
   it("emits exact 256-sample frames across misaligned chunks and keeps remainder", () => {
-    let leftover = Buffer.alloc(0);
+    let leftover: Buffer = Buffer.alloc(0);
     const frames: Buffer[] = [];
     for (const samples of [80, 90, 200, 33]) {
       const next = appendAlignedPcm8k(leftover, pcm(samples));

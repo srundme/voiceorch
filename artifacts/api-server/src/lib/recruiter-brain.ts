@@ -128,11 +128,11 @@ export function parseRecruiterProfile(raw: unknown): RecruiterProfile {
   if (isRecruiterState(rec.previous_state)) next.previous_state = rec.previous_state;
   const str = (k: keyof RecruiterProfile) => {
     const v = rec[k as string];
-    if (typeof v === "string" && v.trim()) (next as Record<string, unknown>)[k] = v.trim();
+    if (typeof v === "string" && v.trim()) (next as unknown as Record<string, unknown>)[k] = v.trim();
   };
   const bool = (k: keyof RecruiterProfile) => {
     const v = rec[k as string];
-    if (typeof v === "boolean") (next as Record<string, unknown>)[k] = v;
+    if (typeof v === "boolean") (next as unknown as Record<string, unknown>)[k] = v;
   };
   str("job_preference");
   bool("wants_bpo");
@@ -270,7 +270,6 @@ function known(profile: RecruiterProfile, key: keyof RecruiterProfile): boolean 
 function nextUnasked(profile: RecruiterProfile): RecruiterState {
   if (profile.wants_bpo === false) return "DISQUALIFIED";
   if (!known(profile, "wants_bpo") && !known(profile, "job_preference")) return "JOB_PREFERENCE";
-  if (profile.wants_bpo === false) return "DISQUALIFIED";
   if (profile.in_bangalore == null && !known(profile, "city")) return "CITY";
   if (profile.in_bangalore === false && profile.will_relocate == null) return "RELOCATION";
   if (profile.in_bangalore === false && profile.will_relocate === false) return "DISQUALIFIED";
@@ -381,8 +380,8 @@ function skipReason(previous: RecruiterState, next: RecruiterState, profile: Rec
   if (next === "CITY") return "city unknown";
   if (next === "RELOCATION") return "outside Bangalore — ask relocate";
   if (next === "DISQUALIFIED") return profile.disqualify_reason ?? "disqualified";
-  if (previous === "JOB_PREFERENCE" && next !== "JOB_PREFERENCE") return "job preference known — skip re-ask";
-  if (previous === "CITY" && next !== "CITY") return "city known — skip re-ask";
+  if (previous === "JOB_PREFERENCE") return "job preference known — skip re-ask";
+  if (previous === "CITY") return "city known — skip re-ask";
   return `advance ${previous} → ${next}`;
 }
 

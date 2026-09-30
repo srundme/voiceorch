@@ -116,7 +116,7 @@ router.delete("/callbacks/:id", requireAuth, clientContext, async (req, res): Pr
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-  const id = parseInt(req.params["id"]!, 10);
+  const id = parseInt(String(req.params["id"]), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [cb] = await db
@@ -152,7 +152,7 @@ router.patch("/callbacks/:id", requireAuth, clientContext, async (req, res): Pro
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-  const id = parseInt(req.params["id"]!, 10);
+  const id = parseInt(String(req.params["id"]), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const { scheduledAt } = req.body as { scheduledAt?: string };

@@ -45,7 +45,9 @@ describe("computeBookingSetupReadiness", () => {
   const cal: SchedulingCalendarInfo = {
     id: 1,
     name: "Clinic",
+    description: null,
     hostEmail: "doc@clinic.com",
+    additionalHosts: null,
     connectedGoogleEmail: "doc@clinic.com",
     timezone: "Asia/Kolkata",
   };
