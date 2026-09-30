@@ -7751,10 +7751,20 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
     // not on every render. `agent` from useGetAgent can be a fresh object
     // reference across renders; a bare `[agent]` dep made form.reset() run every
     // render → re-render → loop (React #185 "Maximum update depth exceeded").
-    const resetSig = `${agent.id}:${(agent as any).updatedAt ?? ""}`;
+    const agentUpdated = (agent as any).updatedAt instanceof Date
+      ? (agent as any).updatedAt.toISOString()
+      : String((agent as any).updatedAt ?? "");
+    const resetSig = `${agent.id}:${agentUpdated}`;
     if (agentResetSigRef.current === resetSig) return;
     if (hasHydratedAgentRef.current && form.formState.isDirty) return;
-    hasHydratedAgentRef.current = true;
+
+    suppressAutoSaveRef.current = true;
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    setAutoSaveStatus("idle");
+
     agentResetSigRef.current = resetSig;
     const sarvamVad = hydrateSarvamRealtimeVad((agent as any).agentConfig ?? {});
     form.reset({
@@ -7902,6 +7912,11 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         message: "This URL must be updated to https:// before saving.",
       });
     }
+    const timer = setTimeout(() => {
+      hasHydratedAgentRef.current = true;
+      suppressAutoSaveRef.current = false;
+    }, 600);
+    return () => clearTimeout(timer);
   }, [agent]);
 
   const onSave = form.handleSubmit(
@@ -7934,7 +7949,10 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         queryClient.setQueryData(getGetAgentQueryKey(agentId), saved);
         const hasNewerEdits = editRevisionRef.current !== revisionAtStart;
         if ((saved as any)?.updatedAt) {
-          agentResetSigRef.current = `${agentId}:${(saved as any).updatedAt}`;
+          const savedUpdated = (saved as any).updatedAt instanceof Date
+            ? (saved as any).updatedAt.toISOString()
+            : String((saved as any).updatedAt);
+          agentResetSigRef.current = `${agentId}:${savedUpdated}`;
         }
         const currentScroll = tabContentRef.current?.scrollTop;
         const activeEl = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
@@ -8049,6 +8067,10 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
 
   useEffect(() => {
     const runAutoSave = async () => {
+      if (suppressAutoSaveRef.current || !hasHydratedAgentRef.current || !form.formState.isDirty) {
+        setAutoSaveStatus("idle");
+        return;
+      }
       if (saveInFlightRef.current) {
         autoSaveTimerRef.current = setTimeout(runAutoSave, 300);
         return;
