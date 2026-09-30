@@ -284,10 +284,14 @@ function SmallSelect({ value, onChange, options, placeholder }: {
   const normalizedValue = (!value || value === "") ? UNSET : value;
   const safeValue =
     safeOptions.some((o) => o.value === normalizedValue) ? normalizedValue : UNSET;
+  const selectedOption = safeOptions.find((o) => o.value === safeValue);
+  const displayLabel = safeValue !== UNSET && selectedOption ? selectedOption.label : (placeholder ?? "Select…");
   return (
     <Select value={safeValue} onValueChange={(val) => onChange(val === UNSET ? "" : val)}>
       <SelectTrigger className="h-8 text-xs bg-background/50">
-        <SelectValue placeholder={placeholder ?? "Select…"} />
+        <SelectValue placeholder={placeholder ?? "Select…"}>
+          {displayLabel}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent position="popper" className="max-h-[280px] overflow-y-auto">
         {safeOptions.map((o) => (
@@ -7641,6 +7645,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   const autoSaveRequestRef = useRef(false);
   const saveInFlightRef = useRef(false);
   const suppressAutoSaveRef = useRef(false);
+  const hydrateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editRevisionRef = useRef(0);
 
   const form = useForm<AgentFormValues>({
@@ -7755,7 +7760,11 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       ? (agent as any).updatedAt.toISOString()
       : String((agent as any).updatedAt ?? "");
     const resetSig = `${agent.id}:${agentUpdated}`;
-    if (agentResetSigRef.current === resetSig) return;
+    if (agentResetSigRef.current === resetSig) {
+      hasHydratedAgentRef.current = true;
+      suppressAutoSaveRef.current = false;
+      return;
+    }
     if (hasHydratedAgentRef.current && form.formState.isDirty) return;
 
     suppressAutoSaveRef.current = true;
@@ -7766,7 +7775,8 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
     setAutoSaveStatus("idle");
 
     agentResetSigRef.current = resetSig;
-    const sarvamVad = hydrateSarvamRealtimeVad((agent as any).agentConfig ?? {});
+    const rawCfg = (agent as any).agentConfig ?? (agent as any).agent_config ?? {};
+    const sarvamVad = hydrateSarvamRealtimeVad(rawCfg);
     form.reset({
       name:                     agent.name,
       description:              agent.description ?? "",
@@ -7811,8 +7821,8 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       bargeInEnabled:           (agent as any).agentConfig?.bargeInEnabled ?? true,
       bargeInEnergyThreshold:   clampBargeInEnergyThreshold((agent as any).agentConfig?.bargeInEnergyThreshold ?? 1800),
       bargeInMinFrames:         (agent as any).agentConfig?.bargeInMinFrames ?? 4,
-      micSensitivity:           ((agent as any).agentConfig?.micSensitivity ?? "low") as AgentFormValues["micSensitivity"],
-      timezone:                 (agent as any).agentConfig?.timezone ?? "",
+      micSensitivity:           ((agent as any).agentConfig?.micSensitivity ?? (agent as any).agent_config?.micSensitivity ?? "low") as AgentFormValues["micSensitivity"],
+      timezone:                 (agent as any).agentConfig?.timezone ?? (agent as any).agent_config?.timezone ?? "",
       machineDetectionMode:     ((agent as any).agentConfig?.machineDetectionMode ?? "disabled") as AgentFormValues["machineDetectionMode"],
       voicemailAction:          ((agent as any).agentConfig?.voicemailAction ?? "hangup") as AgentFormValues["voicemailAction"],
       voicemailMessage:         (agent as any).agentConfig?.voicemailMessage ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
@@ -7912,11 +7922,11 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         message: "This URL must be updated to https:// before saving.",
       });
     }
-    const timer = setTimeout(() => {
+    if (hydrateTimerRef.current) clearTimeout(hydrateTimerRef.current);
+    hydrateTimerRef.current = setTimeout(() => {
       hasHydratedAgentRef.current = true;
       suppressAutoSaveRef.current = false;
-    }, 600);
-    return () => clearTimeout(timer);
+    }, 500);
   }, [agent]);
 
   const onSave = form.handleSubmit(
@@ -7938,7 +7948,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
           { shouldDirty: false },
         );
         form.setValue("sarvamIndicNumbers", (saved as any)?.agentConfig?.sarvamIndicNumbers !== false, { shouldDirty: false });
-        const savedTz = (saved as any)?.agentConfig?.timezone;
+        const savedTz = (saved as any)?.agentConfig?.timezone ?? (saved as any)?.agent_config?.timezone;
         form.setValue("timezone", (typeof savedTz === "string" && savedTz) ? savedTz : "", { shouldDirty: false });
         // Sync scheduling fields immediately from the save response so the event-type
         // Select is not shown as "Any event type" while the background refetch is in-flight.
