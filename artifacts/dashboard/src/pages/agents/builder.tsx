@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useMemo, useRef } from "react";
 import { diffWords, diffWordsWithSpace } from "diff";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useLocation, useParams, useSearch, Link } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
@@ -281,9 +281,9 @@ function SmallSelect({ value, onChange, options, placeholder }: {
   // Radix Select crashes if `value` is "" in SelectItem. We map empty string to an internal sentinel.
   const UNSET = "__unset__";
   const safeOptions = options.map((o) => (o.value === "" ? { ...o, value: UNSET } : o));
-  const normalizedValue = value === "" ? UNSET : value;
+  const normalizedValue = (!value || value === "") ? UNSET : value;
   const safeValue =
-    normalizedValue && safeOptions.some((o) => o.value === normalizedValue) ? normalizedValue : undefined;
+    safeOptions.some((o) => o.value === normalizedValue) ? normalizedValue : UNSET;
   return (
     <Select value={safeValue} onValueChange={(val) => onChange(val === UNSET ? "" : val)}>
       <SelectTrigger className="h-8 text-xs bg-background/50">
@@ -2140,7 +2140,10 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
               <FormItem className="space-y-0">
                 <SmallSelect
                   value={field.value ?? ""}
-                  onChange={field.onChange}
+                  onChange={(v) => {
+                    field.onChange(v);
+                    form.setValue("timezone", v, { shouldDirty: true, shouldTouch: true });
+                  }}
                   options={[{ value: "", label: "Not set" }, ...AGENT_TIMEZONES]}
                   placeholder="Not set"
                 />
@@ -7913,12 +7916,15 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
           { shouldDirty: false },
         );
         form.setValue("sarvamIndicNumbers", (saved as any)?.agentConfig?.sarvamIndicNumbers !== false, { shouldDirty: false });
+        const savedTz = (saved as any)?.agentConfig?.timezone;
+        form.setValue("timezone", (typeof savedTz === "string" && savedTz) ? savedTz : "", { shouldDirty: false });
         // Sync scheduling fields immediately from the save response so the event-type
         // Select is not shown as "Any event type" while the background refetch is in-flight.
         const savedCal = normalizeSchedulingId((saved as any)?.agentConfig?.calendarCapability?.defaultCalendarId);
         const savedEt = normalizeSchedulingId((saved as any)?.agentConfig?.calendarCapability?.defaultEventTypeId);
         if (savedCal != null) form.setValue("schedulingCalendarId", savedCal, { shouldDirty: false });
         if (savedEt != null) form.setValue("schedulingEventTypeId", savedEt, { shouldDirty: false });
+        queryClient.setQueryData(getGetAgentQueryKey(agentId), saved);
         const hasNewerEdits = editRevisionRef.current !== revisionAtStart;
         if ((saved as any)?.updatedAt) {
           agentResetSigRef.current = `${agentId}:${(saved as any).updatedAt}`;
