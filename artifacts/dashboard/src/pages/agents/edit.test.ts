@@ -457,6 +457,24 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     expect(cfg.semanticTurnStopMs).toBe(800);
   });
 
+  it("persists timezone in agentConfig when set", () => {
+    const payload = buildUpdateAgentPayload({
+      ...VALID_BASE,
+      timezone: "Asia/Kolkata",
+    } as AgentFormValues);
+    const cfg = payload.agentConfig as any;
+    expect(cfg.timezone).toBe("Asia/Kolkata");
+  });
+
+  it("sets timezone to null when unset or empty", () => {
+    const payload = buildUpdateAgentPayload({
+      ...VALID_BASE,
+      timezone: "",
+    } as AgentFormValues);
+    const cfg = payload.agentConfig as any;
+    expect(cfg.timezone).toBeNull();
+  });
+
   it("omits Sarvam EOS silence when unset so Saaras VAD stands alone", () => {
     const payload = buildUpdateAgentPayload({
       ...VALID_BASE,

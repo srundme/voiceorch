@@ -278,13 +278,14 @@ function SmallSelect({ value, onChange, options, placeholder }: {
   options: { value: string; label: string; recommended?: boolean }[];
   placeholder?: string;
 }) {
-  // Radix Select crashes if `value` is "" or not present in SelectItem list.
-  // Normalize to undefined so the placeholder shows instead of throwing.
-  const safeOptions = options.filter((o) => o.value !== "");
+  // Radix Select crashes if `value` is "" in SelectItem. We map empty string to an internal sentinel.
+  const UNSET = "__unset__";
+  const safeOptions = options.map((o) => (o.value === "" ? { ...o, value: UNSET } : o));
+  const normalizedValue = value === "" ? UNSET : value;
   const safeValue =
-    value && safeOptions.some((o) => o.value === value) ? value : undefined;
+    normalizedValue && safeOptions.some((o) => o.value === normalizedValue) ? normalizedValue : undefined;
   return (
-    <Select value={safeValue} onValueChange={onChange}>
+    <Select value={safeValue} onValueChange={(val) => onChange(val === UNSET ? "" : val)}>
       <SelectTrigger className="h-8 text-xs bg-background/50">
         <SelectValue placeholder={placeholder ?? "Select…"} />
       </SelectTrigger>
