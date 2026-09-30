@@ -7571,6 +7571,12 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   const tabContentRef = useRef<HTMLDivElement>(null);
   const scrollPositions = useRef<Partial<Record<TabId, number>>>({});
   const agentResetSigRef = useRef<string | null>(null);
+  const hasHydratedAgentRef = useRef(false);
+
+  useEffect(() => {
+    hasHydratedAgentRef.current = false;
+    agentResetSigRef.current = null;
+  }, [agentId]);
 
   useEffect(() => {
     const next = sectionFromSearch(search);
@@ -7747,7 +7753,8 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
     // render → re-render → loop (React #185 "Maximum update depth exceeded").
     const resetSig = `${agent.id}:${(agent as any).updatedAt ?? ""}`;
     if (agentResetSigRef.current === resetSig) return;
-    if (form.formState.isDirty) return;
+    if (hasHydratedAgentRef.current && form.formState.isDirty) return;
+    hasHydratedAgentRef.current = true;
     agentResetSigRef.current = resetSig;
     const sarvamVad = hydrateSarvamRealtimeVad((agent as any).agentConfig ?? {});
     form.reset({
@@ -8049,7 +8056,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       await autoSaveHandlerRef.current?.();
     };
     const subscription = form.watch((value, { name }) => {
-      if (suppressAutoSaveRef.current) return;
+      if (suppressAutoSaveRef.current || !hasHydratedAgentRef.current) return;
       // Do not auto-save for Conversation Flow:
       // Wait for user to finish editing/reordering flow steps and explicitly click "Save now".
       const isFlowField =
