@@ -152,6 +152,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   }
   if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
   if (micSensitivity != null) agentConfig["micSensitivity"] = micSensitivity;
+  // Preserve timezone unless explicitly set to __unset__
   if (timezone && timezone !== "__unset__") {
     agentConfig["timezone"] = timezone;
   } else if (timezone === "__unset__") {
