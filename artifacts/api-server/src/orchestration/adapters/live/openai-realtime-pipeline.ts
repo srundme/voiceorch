@@ -587,6 +587,11 @@ export class OpenAIRealtimePipeline implements VoiceSession {
       // the chain must never delay clearing the carrier or playing speech.
       if (evt.type === "input_audio_buffer.speech_started") this.handleInterrupted();
       else if (evt.type === "response.output_audio.delta") this.ingestOutboundAudio(evt);
+      else if (evt.type === "error") {
+        // OpenAI closes the socket right after a fatal error; handle it before the close event.
+        this.onErrorEvent(evt["error"] as Record<string, unknown> | undefined);
+        return;
+      }
       this.msgChain = this.msgChain
         .then(() => this.onServerEvent(evt))
         .catch((err) => logger.error({ callId: this.config.callId, err }, "OpenAI Realtime event handler error"));
@@ -709,9 +714,6 @@ export class OpenAIRealtimePipeline implements VoiceSession {
       case "response.done":
         await this.onResponseDone(evt["response"] as Record<string, unknown> | undefined);
         return;
-      case "error":
-        this.onErrorEvent(evt["error"] as Record<string, unknown> | undefined);
-        return;
       default:
         return;
     }
@@ -741,15 +743,24 @@ export class OpenAIRealtimePipeline implements VoiceSession {
 
   private onErrorEvent(error: Record<string, unknown> | undefined): void {
     const code = typeof error?.["code"] === "string" ? error["code"] : "";
+    const type = typeof error?.["type"] === "string" ? error["type"] : "";
     const message = typeof error?.["message"] === "string" ? error["message"] : "unknown";
     if (code === "conversation_already_has_active_response") {
       this.responsePending = true;
       return;
     }
     if (code === "response_cancel_not_active") return;
-    logger.error({ callId: this.config.callId, code, message, error }, "OpenAI Realtime error event");
-    if (code === "invalid_api_key" || code === "insufficient_quota" || code === "model_not_found") {
-      this.config.onFatalError?.(message);
+    logger.error({ callId: this.config.callId, code, type, message, error }, "OpenAI Realtime error event");
+    // Out of credits arrives as code "credit_balance_exhausted" with type "insufficient_quota".
+    const fatal =
+      type === "insufficient_quota"
+      || code === "insufficient_quota"
+      || code === "credit_balance_exhausted"
+      || code === "invalid_api_key"
+      || code === "model_not_found";
+    if (fatal) {
+      this.endReasonHint = code || type;
+      this.config.onFatalError?.(`OpenAI Realtime: ${message}`);
     }
   }
 
