@@ -290,7 +290,7 @@ export class OpenAIRealtimePipeline implements VoiceSession {
 
     this.audioInChain = this.audioInChain.then(async () => {
       if (this.closed) return;
-      let clean8k = pcm8kCopy;
+      let clean8k: Buffer = pcm8kCopy;
       if (gateOn) {
         const result = await processRawPcm8kIn(
           callId,
