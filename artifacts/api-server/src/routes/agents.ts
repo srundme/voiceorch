@@ -481,7 +481,6 @@ router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promis
       .from(agentsTable)
       .where(and(eq(agentsTable.id, params.data.id), (await workspaceOwned(clerkId)).owned));
     if (existing) {
-      // Deep-merge incoming agentConfig with existing agentConfig
       const merged: AgentConfig = {
         ...(existing.agentConfig as AgentConfig ?? {}),
         ...(updateData.agentConfig as AgentConfig),

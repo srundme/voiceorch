@@ -1,5 +1,5 @@
-import { diffWords, diffWordsWithSpace } from "diff";
 import React, { useEffect, useState, useMemo, useRef } from "react";
+import { diffWords, diffWordsWithSpace } from "diff";
 import { useLocation, useParams, useSearch, Link } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
@@ -278,20 +278,15 @@ function SmallSelect({ value, onChange, options, placeholder }: {
   options: { value: string; label: string; recommended?: boolean }[];
   placeholder?: string;
 }) {
-  // Radix Select crashes if `value` is "" in SelectItem. We map empty string to an internal sentinel.
-  const UNSET = "__unset__";
-  const safeOptions = options.map((o) => (o.value === "" ? { ...o, value: UNSET } : o));
-  const normalizedValue = (!value || value === "" || value === UNSET) ? UNSET : value;
+  // Radix Select crashes if `value` is "" or not present in SelectItem list.
+  // Normalize to undefined so the placeholder shows instead of throwing.
+  const safeOptions = options.filter((o) => o.value !== "");
   const safeValue =
-    safeOptions.some((o) => o.value === normalizedValue) ? normalizedValue : UNSET;
-  const selectedOption = safeOptions.find((o) => o.value === safeValue);
-  const displayLabel = safeValue !== UNSET && selectedOption ? selectedOption.label : (placeholder ?? "Select…");
+    value && safeOptions.some((o) => o.value === value) ? value : undefined;
   return (
-    <Select value={safeValue} onValueChange={(val) => onChange(val === UNSET ? "" : val)}>
+    <Select value={safeValue} onValueChange={onChange}>
       <SelectTrigger className="h-8 text-xs bg-background/50">
-        <SelectValue placeholder={placeholder ?? "Select…"}>
-          {displayLabel}
-        </SelectValue>
+        <SelectValue placeholder={placeholder ?? "Select…"} />
       </SelectTrigger>
       <SelectContent position="popper" className="max-h-[280px] overflow-y-auto">
         {safeOptions.map((o) => (
@@ -2144,11 +2139,7 @@ function PromptTab({ form, agentId }: { form: any; agentId: number | undefined }
               <FormItem className="space-y-0">
                 <SmallSelect
                   value={field.value ?? ""}
-                  onChange={(v) => {
-                    const nextVal = v === "" ? "__unset__" : v;
-                    field.onChange(nextVal);
-                    form.setValue("timezone", nextVal, { shouldDirty: true, shouldTouch: true });
-                  }}
+                  onChange={field.onChange}
                   options={[{ value: "", label: "Not set" }, ...AGENT_TIMEZONES]}
                   placeholder="Not set"
                 />
@@ -3429,7 +3420,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       return calName.includes(normalized) || normalized.includes(calName);
     });
     if (matches.length === 1) {
-      form.setValue("schedulingCalendarId", matches[0].id, { shouldDirty: false });
+      form.setValue("schedulingCalendarId", matches[0].id, { shouldDirty: true });
     }
   }, [agentId, agentNameForAutoLink, calendarsData, schedulingCalendarId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -3491,7 +3482,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     // Empty list is loading/error — do not wipe a saved meeting type.
     if (eventTypes.length === 0) return;
     form.setValue("schedulingEventTypeId", eventTypes[0].id, {
-      shouldDirty: false,
+      shouldDirty: true,
       shouldValidate: true,
     });
   }, [
@@ -7576,14 +7567,6 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   const tabContentRef = useRef<HTMLDivElement>(null);
   const scrollPositions = useRef<Partial<Record<TabId, number>>>({});
   const agentResetSigRef = useRef<string | null>(null);
-  const hasHydratedAgentRef = useRef(false);
-  const suppressAutoSaveRef = useRef(true);
-
-  useEffect(() => {
-    hasHydratedAgentRef.current = false;
-    agentResetSigRef.current = null;
-    suppressAutoSaveRef.current = true;
-  }, [agentId]);
 
   useEffect(() => {
     const next = sectionFromSearch(search);
@@ -7647,7 +7630,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   const autoSaveHandlerRef = useRef<(() => Promise<void>) | null>(null);
   const autoSaveRequestRef = useRef(false);
   const saveInFlightRef = useRef(false);
-  const hydrateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressAutoSaveRef = useRef(false);
   const editRevisionRef = useRef(0);
 
   const form = useForm<AgentFormValues>({
@@ -7758,27 +7741,11 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
     // not on every render. `agent` from useGetAgent can be a fresh object
     // reference across renders; a bare `[agent]` dep made form.reset() run every
     // render → re-render → loop (React #185 "Maximum update depth exceeded").
-    const agentUpdated = (agent as any).updatedAt instanceof Date
-      ? (agent as any).updatedAt.toISOString()
-      : String((agent as any).updatedAt ?? "");
-    const resetSig = `${agent.id}:${agentUpdated}`;
-    if (agentResetSigRef.current === resetSig) {
-      hasHydratedAgentRef.current = true;
-      suppressAutoSaveRef.current = false;
-      return;
-    }
-    if (hasHydratedAgentRef.current && form.formState.isDirty) return;
-
-    suppressAutoSaveRef.current = true;
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current);
-      autoSaveTimerRef.current = null;
-    }
-    setAutoSaveStatus("idle");
-
+    const resetSig = `${agent.id}:${(agent as any).updatedAt ?? ""}`;
+    if (agentResetSigRef.current === resetSig) return;
+    if (form.formState.isDirty) return;
     agentResetSigRef.current = resetSig;
-    const rawCfg = (agent as any).agentConfig ?? (agent as any).agent_config ?? {};
-    const sarvamVad = hydrateSarvamRealtimeVad(rawCfg);
+    const sarvamVad = hydrateSarvamRealtimeVad((agent as any).agentConfig ?? {});
     form.reset({
       name:                     agent.name,
       description:              agent.description ?? "",
@@ -7823,8 +7790,8 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       bargeInEnabled:           (agent as any).agentConfig?.bargeInEnabled ?? true,
       bargeInEnergyThreshold:   clampBargeInEnergyThreshold((agent as any).agentConfig?.bargeInEnergyThreshold ?? 1800),
       bargeInMinFrames:         (agent as any).agentConfig?.bargeInMinFrames ?? 4,
-      micSensitivity:           ((agent as any).agentConfig?.micSensitivity ?? (agent as any).agent_config?.micSensitivity ?? "low") as AgentFormValues["micSensitivity"],
-      timezone:                 (agent as any).agentConfig?.timezone ?? (agent as any).agent_config?.timezone ?? "",
+      micSensitivity:           ((agent as any).agentConfig?.micSensitivity ?? "low") as AgentFormValues["micSensitivity"],
+      timezone:                 (agent as any).agentConfig?.timezone ?? "",
       machineDetectionMode:     ((agent as any).agentConfig?.machineDetectionMode ?? "disabled") as AgentFormValues["machineDetectionMode"],
       voicemailAction:          ((agent as any).agentConfig?.voicemailAction ?? "hangup") as AgentFormValues["voicemailAction"],
       voicemailMessage:         (agent as any).agentConfig?.voicemailMessage ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
@@ -7924,11 +7891,6 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         message: "This URL must be updated to https:// before saving.",
       });
     }
-    if (hydrateTimerRef.current) clearTimeout(hydrateTimerRef.current);
-    hydrateTimerRef.current = setTimeout(() => {
-      hasHydratedAgentRef.current = true;
-      suppressAutoSaveRef.current = false;
-    }, 500);
   }, [agent]);
 
   const onSave = form.handleSubmit(
@@ -7950,21 +7912,15 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
           { shouldDirty: false },
         );
         form.setValue("sarvamIndicNumbers", (saved as any)?.agentConfig?.sarvamIndicNumbers !== false, { shouldDirty: false });
-        const savedTz = (saved as any)?.agentConfig?.timezone ?? (saved as any)?.agent_config?.timezone;
-        form.setValue("timezone", (typeof savedTz === "string" && savedTz) ? savedTz : "", { shouldDirty: false });
         // Sync scheduling fields immediately from the save response so the event-type
         // Select is not shown as "Any event type" while the background refetch is in-flight.
         const savedCal = normalizeSchedulingId((saved as any)?.agentConfig?.calendarCapability?.defaultCalendarId);
         const savedEt = normalizeSchedulingId((saved as any)?.agentConfig?.calendarCapability?.defaultEventTypeId);
         if (savedCal != null) form.setValue("schedulingCalendarId", savedCal, { shouldDirty: false });
         if (savedEt != null) form.setValue("schedulingEventTypeId", savedEt, { shouldDirty: false });
-        queryClient.setQueryData(getGetAgentQueryKey(agentId), saved);
         const hasNewerEdits = editRevisionRef.current !== revisionAtStart;
         if ((saved as any)?.updatedAt) {
-          const savedUpdated = (saved as any).updatedAt instanceof Date
-            ? (saved as any).updatedAt.toISOString()
-            : String((saved as any).updatedAt);
-          agentResetSigRef.current = `${agentId}:${savedUpdated}`;
+          agentResetSigRef.current = `${agentId}:${(saved as any).updatedAt}`;
         }
         const currentScroll = tabContentRef.current?.scrollTop;
         const activeEl = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
@@ -8079,10 +8035,6 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
 
   useEffect(() => {
     const runAutoSave = async () => {
-      if (suppressAutoSaveRef.current || !hasHydratedAgentRef.current || !form.formState.isDirty) {
-        setAutoSaveStatus("idle");
-        return;
-      }
       if (saveInFlightRef.current) {
         autoSaveTimerRef.current = setTimeout(runAutoSave, 300);
         return;
@@ -8090,7 +8042,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       await autoSaveHandlerRef.current?.();
     };
     const subscription = form.watch((value, { name }) => {
-      if (suppressAutoSaveRef.current || !hasHydratedAgentRef.current) return;
+      if (suppressAutoSaveRef.current) return;
       // Do not auto-save for Conversation Flow:
       // Wait for user to finish editing/reordering flow steps and explicitly click "Save now".
       const isFlowField =
