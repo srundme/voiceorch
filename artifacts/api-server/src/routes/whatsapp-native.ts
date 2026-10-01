@@ -1506,6 +1506,19 @@ async function handleInboundEvent(data: Record<string, any>): Promise<void> {
     metaMessageId,
   });
 
+  // Flows: wake "wait for reply" steps, then start "WhatsApp reply" flows.
+  try {
+    const { onInboundWhatsappForFlows } = await import("../services/flow-triggers.js");
+    await onInboundWhatsappForFlows({
+      userId: channel.userId,
+      phone,
+      text: textBody,
+      buttonId: buttonId != null ? String(buttonId) : null,
+    });
+  } catch (err) {
+    logger.warn({ err, phone, channelId: channel.id }, "whatsapp-native: flow hooks crashed");
+  }
+
   // Request-a-call intent → dial the configured agent.
   const wantsCall = (buttonId && REQUEST_CALL_BUTTONS.has(String(buttonId).toLowerCase().trim()))
     || REQUEST_CALL_RE.test(textBody);

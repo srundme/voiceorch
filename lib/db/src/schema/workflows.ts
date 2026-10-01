@@ -14,7 +14,21 @@ export type WorkflowStatus = "draft" | "active" | "paused";
 export type WorkflowTriggerType =
   | "form_lead"        // website / embedded form lead (public token)
   | "instagram_lead"   // Meta/Instagram lead ad (public token, HMAC)
-  | "manual";          // fired from the dashboard / API
+  | "manual"           // fired from the dashboard / API
+  | "call_ended"       // an inbound call to the flow's agent ended
+  | "whatsapp_reply"   // a WhatsApp message arrived from a person
+  | "schedule";        // runs the saved people source at a set time
+
+export interface WorkflowSchedule {
+  /** Local time "HH:MM" (24h). */
+  time: string;
+  /** Days of week, 0 = Sunday. */
+  days: number[];
+  /** IANA timezone (default Asia/Kolkata). */
+  timezone?: string;
+  /** Re-run people who already went through the flow. */
+  reincludePeople?: boolean;
+}
 
 export interface WorkflowTrigger {
   type: WorkflowTriggerType;
@@ -33,6 +47,12 @@ export interface WorkflowTrigger {
   entryStepId?: string | null;
   /** Canvas position of the trigger node (builder only). */
   position?: { x: number; y: number };
+  /** call_ended: only when the caller hung up without speaking. */
+  missedOnly?: boolean;
+  /** whatsapp_reply: comma-separated words; empty = any message. */
+  keyword?: string;
+  /** schedule: when to run the saved people source. */
+  schedule?: WorkflowSchedule;
 }
 
 export type ConditionOp = "eq" | "neq" | "contains" | "exists" | "gt" | "lt";
@@ -52,6 +72,8 @@ export type WorkflowStepType =
   | "condition"
   /** Graph mode only — first matching case wins, else `next`. */
   | "branch"
+  /** Graph mode only — park until the person replies on WhatsApp (onTrue) or `delaySeconds` passes (onFalse). */
+  | "wait_for_reply"
   | "delay"
   | "send_webhook"
   | "schedule_callback"
@@ -70,9 +92,9 @@ export interface WorkflowStep {
   // ── graph mode (trigger.entryStepId set) ────────────────────────────────────
   /** Following step; null/unset = end the run. For condition/branch: the false / otherwise path. */
   next?: string | null;
-  /** condition: step when true. */
+  /** condition: step when true. wait_for_reply: step when they replied. */
   onTrue?: string | null;
-  /** condition: step when false. */
+  /** condition: step when false. wait_for_reply: step when the wait timed out. */
   onFalse?: string | null;
   /** branch: ordered cases. */
   cases?: WorkflowBranchCase[];
@@ -159,8 +181,8 @@ export const workflowsTable = pgTable("workflows", {
   /** Optional HMAC secret for verifying instagram_lead payloads. */
   hmacSecret: text("hmac_secret"),
 
-  /** Mutable checkpoint for trigger polling / cursors. */
-  triggerState: jsonb("trigger_state").$type<Record<string, unknown>>().default({}),
+  /** Version snapshots (see WorkflowVersionState). */
+  triggerState: jsonb("trigger_state").$type<WorkflowVersionState>().default({}),
 
   totalRuns: integer("total_runs").notNull().default(0),
   lastRunAt: timestamp("last_run_at", { withTimezone: true }),
@@ -177,8 +199,21 @@ export type WorkflowRunStatus =
   | "running"
   | "waiting_call"
   | "waiting_delay"
+  /** Parked on wait_for_reply until a reply or resumeAt (timeout). */
+  | "waiting_event"
   | "completed"
-  | "failed";
+  | "failed"
+  /** Removed from the flow by the user (person action or Stop all). */
+  | "stopped";
+
+/** Run statuses that are still in progress. */
+export const ACTIVE_RUN_STATUSES = ["running", "pending", "waiting_call", "waiting_delay", "waiting_event"] as const;
+
+/** Snapshots of past step lists so in-flight runs finish on the version they started on. */
+export interface WorkflowVersionState {
+  flowVersion?: number;
+  versions?: Record<string, { steps: WorkflowStep[]; trigger: WorkflowTrigger; savedAt: string }>;
+}
 
 export const workflowRunsTable = pgTable("workflow_runs", {
   id: serial("id").primaryKey(),

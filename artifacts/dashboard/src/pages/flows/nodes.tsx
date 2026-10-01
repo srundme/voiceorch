@@ -6,6 +6,7 @@ import {
   GitFork,
   Mail,
   MessageCircle,
+  MessageSquareReply,
   Phone,
   Sheet,
   Split,
@@ -27,6 +28,7 @@ export const STEP_META: Record<StepType, { label: string; hint: string; icon: Lu
   schedule_callback: { label: "Schedule callback", hint: "Auto-dial again later", icon: CalendarClock, tone: "text-amber-600 bg-amber-500/10", group: "action" },
   join_meeting: { label: "Join meeting", hint: "Send an agent into Meet/Zoom", icon: Video, tone: "text-indigo-600 bg-indigo-500/10", group: "action" },
   delay: { label: "Wait", hint: "Pause before the next step", icon: Timer, tone: "text-slate-600 bg-slate-500/10", group: "logic" },
+  wait_for_reply: { label: "Wait for reply", hint: "WhatsApp reply, or time runs out", icon: MessageSquareReply, tone: "text-teal-600 bg-teal-500/10", group: "logic" },
   condition: { label: "Yes / No", hint: "Check one thing, two paths", icon: Split, tone: "text-pink-600 bg-pink-500/10", group: "logic" },
   branch: { label: "Branch", hint: "Several paths, first match wins", icon: GitFork, tone: "text-fuchsia-600 bg-fuchsia-500/10", group: "logic" },
 };
@@ -35,7 +37,24 @@ export const TRIGGER_LABEL: Record<FlowTrigger["type"], string> = {
   manual: "Manual / people list",
   form_lead: "Website form / API",
   instagram_lead: "Instagram / Meta lead ad",
+  call_ended: "Inbound / missed call",
+  whatsapp_reply: "WhatsApp message received",
+  schedule: "On a schedule",
 };
+
+const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export function triggerSummary(t: FlowTrigger): string | null {
+  if (t.type === "call_ended") return t.missedOnly ? "Only when the caller hung up without talking" : "After every inbound call";
+  if (t.type === "whatsapp_reply") return t.keyword?.trim() ? `Message contains: ${t.keyword}` : "Any message";
+  if (t.type === "schedule") {
+    const s = t.schedule;
+    if (!s?.time || !s.days?.length) return "Set a time and days";
+    const days = s.days.length === 7 ? "Every day" : [...s.days].sort().map((d) => DAY_SHORT[d]).join(", ");
+    return `${days} at ${s.time}`;
+  }
+  return null;
+}
 
 export function formatDelay(secs: number | undefined): string {
   const s = Number(secs) || 0;
@@ -63,6 +82,7 @@ export function stepSummary(step: FlowStep, agentName: (id?: number) => string):
     case "make_call": return step.agentId ? `with ${agentName(step.agentId)}` : "Pick an agent";
     case "schedule_callback": return `in ${step.callbackDelayDays ?? 0} day(s)`;
     case "delay": return formatDelay(step.delaySeconds);
+    case "wait_for_reply": return `up to ${formatDelay(step.delaySeconds)}`;
     case "send_webhook": return step.url ? step.url.replace(/^https?:\/\//, "").slice(0, 32) : "Add URL";
     case "send_whatsapp": return step.whatsappTemplate?.name || (step.whatsappHint ?? "call_summary").replace(/_/g, " ");
     case "send_email": return step.emailSubject || "Default follow-up";
@@ -131,6 +151,11 @@ export const StepNode = memo(function StepNode({ data, selected }: NodeProps<Nod
           { id: "yes", label: "Yes", tone: "text-emerald-600" },
           { id: "no", label: "No", tone: "text-red-600" },
         ]
+      : step.type === "wait_for_reply"
+        ? [
+            { id: "yes", label: "Replied", tone: "text-emerald-600" },
+            { id: "no", label: "No reply", tone: "text-red-600" },
+          ]
       : step.type === "branch"
         ? [
             ...(step.cases ?? []).map((c) => ({ id: `case:${c.id}`, label: c.label || "Path" })),
@@ -189,6 +214,9 @@ export const TriggerNode = memo(function TriggerNode({ data, selected }: NodePro
           <p className="truncate text-[13px] font-semibold">{TRIGGER_LABEL[data.trigger.type] ?? data.trigger.type}</p>
         </div>
       </div>
+      {triggerSummary(data.trigger) && (
+        <p className="mt-1 truncate text-[11px] text-muted-foreground">{triggerSummary(data.trigger)}</p>
+      )}
       {!data.connected && <p className="mt-1.5 text-[11px] text-amber-600">Drag from the dot below to the first step</p>}
       <Handle type="source" position={Position.Bottom} id="out" className={handleCls} />
     </div>

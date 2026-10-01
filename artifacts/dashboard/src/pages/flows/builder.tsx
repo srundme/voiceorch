@@ -14,8 +14,18 @@ import {
   type NodeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { ChevronLeft, LayoutGrid, Loader2, Pause, Play, Rocket, Save, Users } from "lucide-react";
+import { ChevronLeft, History, LayoutGrid, Loader2, OctagonX, Pause, Play, Rocket, Save, Users } from "lucide-react";
 import { useListAgents, getListAgentsQueryKey } from "@workspace/api-client-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme-provider";
@@ -25,7 +35,7 @@ import { errorMessage, flowsApi, newStepId, type Flow, type FlowSettings, type F
 import { STEP_META, nodeTypes, stepSummary, type StepNodeData, type TriggerNodeData } from "./nodes";
 import { TRIGGER_NODE_ID, autoLayout, buildEdges, needsLayout, pointersOf, removeStep, setPointer } from "./graph";
 import { FlowSettingsPanel, StepInspector, TriggerInspector } from "./inspector";
-import { RunOnPeopleDialog, RunsSheet, TestRunDialog } from "./run-panels";
+import { RunOnPeopleDialog, RunsSheet, TestRunDialog, VersionsDialog } from "./run-panels";
 
 type Draft = {
   name: string;
@@ -39,7 +49,7 @@ type Selection = { kind: "trigger" } | { kind: "step"; id: string } | null;
 
 const PALETTE: StepType[] = [
   "make_call", "send_whatsapp", "send_email", "send_webhook", "update_sheet", "schedule_callback", "join_meeting",
-  "delay", "condition", "branch",
+  "delay", "wait_for_reply", "condition", "branch",
 ];
 
 function draftFromFlow(f: Flow): Draft {
@@ -52,6 +62,7 @@ function defaultStep(type: StepType, agentId: number): FlowStep {
   switch (type) {
     case "make_call": return { ...base, agentId, phoneField: "phone" };
     case "delay": return { ...base, delaySeconds: 86400 };
+    case "wait_for_reply": return { ...base, delaySeconds: 86400, onTrue: null, onFalse: null };
     case "condition": return { ...base, field: "call.connected", op: "eq", value: "true", onTrue: null, onFalse: null };
     case "branch": return { ...base, cases: [] };
     case "schedule_callback": return { ...base, agentId, phoneField: "phone", callbackDelayDays: 1 };
@@ -95,6 +106,8 @@ function Builder({ flowId }: { flowId: number }) {
   const [testOpen, setTestOpen] = useState(false);
   const [runOpen, setRunOpen] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [stopOpen, setStopOpen] = useState(false);
 
   // Seed the draft once per load; later refetches must not clobber edits.
   const seededFor = useRef<string | null>(null);
@@ -281,6 +294,21 @@ function Builder({ flowId }: { flowId: number }) {
     },
   });
 
+  const stopAll = useMutation({
+    mutationFn: () => flowsApi.stopAll(flowId),
+    onSuccess: (r) => {
+      qc.setQueryData(["flow", flowId], r.journey);
+      void qc.invalidateQueries({ queryKey: ["flows"] });
+      void qc.invalidateQueries({ queryKey: ["flow-runs", flowId] });
+      void statsQ.refetch();
+      toast({
+        title: `Stopped ${r.runs} ${r.runs === 1 ? "person" : "people"}`,
+        description: r.queuedCalls ? `${r.queuedCalls} queued call(s) cancelled. Flow paused.` : "Flow paused.",
+      });
+    },
+    onError: (err) => toast({ title: "Couldn't stop", description: errorMessage(err), variant: "destructive" }),
+  });
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
@@ -340,6 +368,18 @@ function Builder({ flowId }: { flowId: number }) {
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setRunsOpen(true)}>
             <Users className="size-3.5" /> People
+          </Button>
+          <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setHistoryOpen(true)}>
+            <History className="size-3.5" /> History
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 text-xs text-destructive hover:text-destructive"
+            disabled={stopAll.isPending}
+            onClick={() => setStopOpen(true)}
+          >
+            {stopAll.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <OctagonX className="size-3.5" />} Stop all
           </Button>
           <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => void ensureSavedThen(() => setTestOpen(true))}>
             <Play className="size-3.5" /> Test
@@ -454,7 +494,10 @@ function Builder({ flowId }: { flowId: number }) {
             <TriggerInspector
               trigger={draft.trigger}
               hookUrl={flow?.hookUrl ?? null}
+              settings={draft.settings}
+              agentName={agentName(draft.agentId)}
               onChange={(t) => edit((d) => ({ ...d, trigger: t }))}
+              onSettings={(patch) => edit((d) => ({ ...d, settings: { ...d.settings, ...patch } }))}
             />
           ) : (
             <FlowSettingsPanel
@@ -465,6 +508,7 @@ function Builder({ flowId }: { flowId: number }) {
               issues={dirty ? [] : flow?.validation.issues ?? []}
               errors={dirty ? [] : flow?.validation.errors ?? []}
               steps={draft.steps}
+              spentTodayPaise={statsQ.data?.spentTodayPaise}
               onChange={(p) => edit((d) => ({ ...d, ...p }))}
               onSelectStep={(id) => setSelection({ kind: "step", id })}
             />
@@ -492,7 +536,44 @@ function Builder({ flowId }: { flowId: number }) {
           void statsQ.refetch();
         }}
       />
-      <RunsSheet open={runsOpen} onOpenChange={setRunsOpen} flowId={flowId} steps={flow?.steps ?? []} />
+      <RunsSheet
+        open={runsOpen}
+        onOpenChange={setRunsOpen}
+        flowId={flowId}
+        steps={flow?.steps ?? []}
+        onChanged={() => void statsQ.refetch()}
+      />
+      <VersionsDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        flowId={flowId}
+        dirty={dirty}
+        onRestored={(f) => {
+          qc.setQueryData(["flow", flowId], f);
+          setDraft(draftFromFlow(f));
+          setDirty(false);
+          setSelection(null);
+        }}
+      />
+      <AlertDialog open={stopOpen} onOpenChange={setStopOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Stop everyone in this flow?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Pauses the flow, stops every person still in it and cancels their queued calls. Calls already ringing or connected finish normally. You can retry people one by one later from the People panel.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => stopAll.mutate()}
+            >
+              Stop all
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

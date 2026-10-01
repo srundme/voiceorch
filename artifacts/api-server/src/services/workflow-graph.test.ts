@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { WorkflowStep, WorkflowTrigger } from "@workspace/db";
 import {
+  behaviourKey,
+  stepsForVersion,
   evalCondition,
   indexOfStep,
   isGraphFlow,
@@ -193,5 +195,61 @@ describe("validateFlow", () => {
       { id: "wait", type: "delay", delaySeconds: 86400, next: "call" },
     ]);
     expect(v).toEqual({ errors: [], issues: [] });
+  });
+
+  it("wait_for_reply: both outputs are reachable arrows and a timeout is required", () => {
+    const ok = validateFlow({ type: "manual", entryStepId: "wa" }, [
+      { id: "wa", type: "send_whatsapp", next: "reply" },
+      { id: "reply", type: "wait_for_reply", delaySeconds: 86400, onTrue: "mail", onFalse: "call" },
+      { id: "mail", type: "send_email" },
+      { id: "call", type: "make_call", agentId: 1 },
+    ]);
+    expect(ok).toEqual({ errors: [], issues: [] });
+
+    const broken = validateFlow({ type: "manual", entryStepId: "reply" }, [
+      { id: "reply", type: "wait_for_reply", delaySeconds: 60, onTrue: "ghost" },
+    ]);
+    expect(broken.errors.some((e) => e.includes("ghost"))).toBe(true);
+
+    const noTimeout = validateFlow({ type: "manual", entryStepId: "reply" }, [
+      { id: "reply", type: "wait_for_reply", onTrue: null, onFalse: null },
+    ]);
+    expect(noTimeout.errors).toEqual([]);
+    expect(noTimeout.issues.map((i) => i.stepId)).toEqual(["reply"]);
+  });
+
+  it("schedule trigger needs a time and days", () => {
+    const steps: WorkflowStep[] = [{ id: "a", type: "send_email" }];
+    const v = validateFlow({ type: "schedule", entryStepId: "a", schedule: { time: "9:00", days: [] } }, steps);
+    expect(v.issues.map((i) => i.message)).toEqual(["Set the schedule time", "Pick at least one day for the schedule"]);
+    const ok = validateFlow({ type: "schedule", entryStepId: "a", schedule: { time: "09:00", days: [1] } }, steps);
+    expect(ok.issues).toEqual([]);
+  });
+});
+
+describe("versions", () => {
+  const v1: WorkflowStep[] = [{ id: "a", type: "send_email" }];
+  const v2: WorkflowStep[] = [{ id: "b", type: "make_call", agentId: 1 }, ...v1];
+  const state = {
+    flowVersion: 2,
+    versions: {
+      "1": { steps: v1, trigger: { type: "manual" as const }, savedAt: "x" },
+      "2": { steps: v2, trigger: { type: "manual" as const }, savedAt: "y" },
+    },
+  };
+
+  it("runs use the snapshot of the version they started on", () => {
+    expect(stepsForVersion(v2, state, 1)).toBe(v1);
+    expect(stepsForVersion(v2, state, undefined)).toBe(v1);
+    expect(stepsForVersion(v2, state, 2)).toBe(v2);
+    expect(stepsForVersion(v2, state, 9)).toBe(v2);
+    expect(stepsForVersion(v2, null, 1)).toBe(v2);
+  });
+
+  it("canvas moves and label edits are not behaviour changes", () => {
+    const t: WorkflowTrigger = { type: "manual", entryStepId: "a" };
+    const moved = behaviourKey({ ...t, position: { x: 5, y: 5 } }, [{ ...v1[0]!, position: { x: 1, y: 2 } }]);
+    expect(moved).toBe(behaviourKey(t, v1));
+    expect(behaviourKey(t, [{ ...v1[0]!, emailSubject: "Hi" }])).not.toBe(behaviourKey(t, v1));
   });
 });

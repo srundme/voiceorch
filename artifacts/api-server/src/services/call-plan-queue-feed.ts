@@ -11,6 +11,7 @@ import {
   workflowRunsTable,
   campaignsTable,
   campaignLeadsTable,
+  ACTIVE_RUN_STATUSES,
   type Journey,
   type JourneySettings,
 } from "@workspace/db";
@@ -44,12 +45,13 @@ async function countPipelineRuns(workflowId: number, userId: string): Promise<nu
     .where(and(
       eq(workflowRunsTable.workflowId, workflowId),
       eq(workflowRunsTable.userId, userId),
-      inArray(workflowRunsTable.status, ["running", "pending", "waiting_call", "waiting_delay"]),
+      inArray(workflowRunsTable.status, [...ACTIVE_RUN_STATUSES]),
     ));
   return Number(row?.c ?? 0);
 }
 
-async function loadBusyPhones(workflowId: number, userId: string): Promise<Set<string>> {
+/** Phones that already have a run (or, with `activeOnly`, a run still in progress). */
+async function loadBusyPhones(workflowId: number, userId: string, activeOnly = false): Promise<Set<string>> {
   const prior = await db.select({
     context: workflowRunsTable.context,
     status: workflowRunsTable.status,
@@ -57,12 +59,13 @@ async function loadBusyPhones(workflowId: number, userId: string): Promise<Set<s
     .where(and(
       eq(workflowRunsTable.workflowId, workflowId),
       eq(workflowRunsTable.userId, userId),
+      ...(activeOnly ? [inArray(workflowRunsTable.status, [...ACTIVE_RUN_STATUSES])] : []),
     ))
     .limit(5000);
 
   const busy = new Set<string>();
   for (const r of prior) {
-    if (r.status === "failed") continue;
+    if (r.status === "failed" || r.status === "stopped") continue;
     const phone = typeof r.context?.["phone"] === "string" ? r.context["phone"] : "";
     const norm = normalizePhone(phone);
     if (norm) busy.add(norm);
@@ -158,8 +161,10 @@ export async function startRunsForPeople(opts: {
   people: FeedPerson[];
   triggeredBy: string;
   force?: boolean;
+  /** With force: still skip people who are mid-flow right now. */
+  skipActive?: boolean;
 }): Promise<{ runIds: number[]; skippedDup: number }> {
-  const { journey, workflowId, people, triggeredBy, force } = opts;
+  const { journey, workflowId, people, triggeredBy, force, skipActive } = opts;
   const settings = (journey.settings ?? {}) as JourneySettings;
   const sheetPipelineId = (settings.sheetPipelineId ?? "").trim() || null;
 
@@ -170,8 +175,8 @@ export async function startRunsForPeople(opts: {
 
   let skippedDup = 0;
   let toStart = people;
-  if (!force && people.length > 0) {
-    const busy = await loadBusyPhones(workflowId, journey.userId);
+  if ((!force || skipActive) && people.length > 0) {
+    const busy = await loadBusyPhones(workflowId, journey.userId, force === true);
     toStart = [];
     for (const p of people) {
       const norm = normalizePhone(p.phone) || p.phone.trim();
@@ -220,6 +225,7 @@ export async function startRunsForPeople(opts: {
  */
 export async function feedCallPlanQueue(journey: Journey, opts?: {
   force?: boolean;
+  skipActive?: boolean;
   /** Override feed size (Start click uses buffer; tick uses deficit). */
   limit?: number;
 }): Promise<{
@@ -290,6 +296,7 @@ export async function feedCallPlanQueue(journey: Journey, opts?: {
     people,
     triggeredBy: "call_plan_queue",
     force: opts?.force === true,
+    skipActive: opts?.skipActive === true,
   });
 
   const nextOffset = offset + scanned;
@@ -337,7 +344,7 @@ export async function tickCallPlanAutoFeed(): Promise<void> {
     if (!journey.workflowId) continue;
 
     try {
-      const result = await feedCallPlanQueue(journey);
+      const result = await feedCallPlanQueue(journey, { force: settings.feedForce === true, skipActive: true });
       usersToRefill.add(journey.userId);
       if (result.started > 0) {
         logger.info(

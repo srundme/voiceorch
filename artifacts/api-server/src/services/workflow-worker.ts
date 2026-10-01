@@ -8,9 +8,10 @@
  */
 
 import { logger } from "../lib/logger.js";
-import { resumeWaitingCallRuns, resumeDelayedRuns } from "./workflow-engine.js";
+import { resumeWaitingCallRuns, resumeDelayedRuns, resumeTimedOutEventRuns } from "./workflow-engine.js";
 import { tickLiveCallPlans } from "./call-plan-sheet-live.js";
 import { tickCallPlanAutoFeed } from "./call-plan-queue-feed.js";
+import { tickScheduledFlows } from "./flow-triggers.js";
 
 const TICK_MS = 15_000;
 let started = false;
@@ -27,6 +28,8 @@ export function startWorkflowWorker(): void {
 async function tick(): Promise<void> {
   try { await resumeWaitingCallRuns(); } catch (err) { logger.warn({ err }, "workflow-worker: resume calls failed"); }
   try { await resumeDelayedRuns(); } catch (err) { logger.warn({ err }, "workflow-worker: resume delays failed"); }
+  try { await resumeTimedOutEventRuns(); } catch (err) { logger.warn({ err }, "workflow-worker: reply-wait timeouts failed"); }
+  try { await tickScheduledFlows(); } catch (err) { logger.warn({ err }, "workflow-worker: scheduled flows failed"); }
   try { await tickLiveCallPlans(); } catch (err) { logger.warn({ err }, "workflow-worker: call-plan live failed"); }
   try { await tickCallPlanAutoFeed(); } catch (err) { logger.warn({ err }, "workflow-worker: call-plan auto-feed failed"); }
 }

@@ -82,6 +82,12 @@ export interface JourneySettings {
   businessHoursEnd?: number | null;
   /** IANA timezone for the window (default Asia/Kolkata when unset). */
   timezone?: string | null;
+  /** Daily call spend cap in ₹ (calendar day in `timezone`). Calls wait until tomorrow once reached. */
+  dailyBudgetInr?: number | null;
+  /** schedule trigger: local date (YYYY-MM-DD) it last fired. */
+  scheduleLastFiredOn?: string | null;
+  /** Auto-feed re-includes people who already went through the flow. */
+  feedForce?: boolean;
 }
 
 export const journeysTable = pgTable("journeys", {

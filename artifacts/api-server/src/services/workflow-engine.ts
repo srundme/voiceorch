@@ -21,9 +21,10 @@ import {
   campaignBatchesTable,
   callsTable, agentsTable, phoneNumbersTable, journeysTable,
   sheetAutoCallPipelinesTable,
-  type Workflow, type WorkflowRun, type WorkflowStep,
+  ACTIVE_RUN_STATUSES,
+  type Workflow, type WorkflowRun, type WorkflowStep, type JourneySettings,
 } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { logger } from "../lib/logger.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
@@ -47,7 +48,8 @@ import { interpolateTemplate } from "./template-vars.js";
 import { launchMeetingBotForAgent } from "./meeting-bot-launch.js";
 import { updateSheetRowByIndex } from "./google-sheets.js";
 import { sheetKeysForLead } from "./sheets-writeback.js";
-import { evalCondition, getPath, indexOfStep, isGraphFlow } from "./workflow-graph.js";
+import { evalCondition, getPath, indexOfStep, isGraphFlow, stepsForVersion } from "./workflow-graph.js";
+import { DEFAULT_FLOW_TZ, nextLocalMidnight, startOfLocalDay } from "./flow-time.js";
 
 const CALL_TIMEOUT_MS = 20 * 60 * 1000; // give up waiting on a call after 20 min
 /** Graph mode: inline steps allowed in one advance before a loop is assumed. */
@@ -65,6 +67,8 @@ type StepAuditEntry = {
   reason?: string;
   at: string;
   stepIndex?: number;
+  /** Stable across versions/edits (indices are not). */
+  stepId?: string;
 };
 
 /** Append a per-step outcome onto run context for Activity / call-plan transparency. */
@@ -73,11 +77,13 @@ function recordStepAudit(
   entry: Omit<StepAuditEntry, "at"> & { at?: string },
 ): void {
   const prev = Array.isArray(context["steps"]) ? (context["steps"] as StepAuditEntry[]) : [];
+  const stepId = entry.stepId ?? (typeof context["__currentStepId"] === "string" ? context["__currentStepId"] : undefined);
   const next: StepAuditEntry = {
     type: entry.type,
     status: entry.status,
     ...(entry.reason ? { reason: entry.reason } : {}),
     ...(typeof entry.stepIndex === "number" ? { stepIndex: entry.stepIndex } : {}),
+    ...(stepId ? { stepId } : {}),
     at: entry.at ?? new Date().toISOString(),
   };
   context["steps"] = [...prev, next];
@@ -192,7 +198,7 @@ export async function startWorkflowRun(opts: {
     workflowId: workflow.id,
     userId: workflow.userId,
     status: "running",
-    context,
+    context: { ...context, __v: workflow.triggerState?.flowVersion ?? 1 },
     currentStepIndex: isGraphFlow(workflow.trigger)
       ? indexOfStep(workflow.steps ?? [], workflow.trigger.entryStepId)
       : 0,
@@ -209,6 +215,10 @@ export async function startWorkflowRun(opts: {
 
   void advanceRun(run!.id);
   return run!.id;
+}
+
+function runSteps(run: WorkflowRun, workflow: Workflow): WorkflowStep[] {
+  return stepsForVersion(workflow.steps ?? [], workflow.triggerState, run.context?.["__v"]);
 }
 
 async function loadRun(runId: number): Promise<{ run: WorkflowRun; workflow: Workflow } | null> {
@@ -233,13 +243,13 @@ export async function advanceRun(runId: number): Promise<void> {
   const loaded = await loadRun(runId);
   if (!loaded) return;
   const { run, workflow } = loaded;
-  if (run.status === "completed" || run.status === "failed") return;
+  if (run.status === "completed" || run.status === "failed" || run.status === "stopped") return;
   if (isGraphFlow(workflow.trigger)) {
     await advanceGraphRun(run, workflow);
     return;
   }
 
-  const steps = workflow.steps ?? [];
+  const steps = runSteps(run, workflow);
   const context: Ctx = { ...(run.context ?? {}) };
   let idx = run.currentStepIndex;
 
@@ -255,9 +265,10 @@ export async function advanceRun(runId: number): Promise<void> {
     }
 
     const step = steps[idx]!;
+    context["__currentStepId"] = step.id;
     try {
       if (step.type === "make_call") {
-        await beginCall(run.id, workflow.userId, step, context, idx);
+        await beginCall(run.id, workflow.id, workflow.userId, step, context, idx);
         return;
       }
       if (step.type === "delay") {
@@ -392,7 +403,7 @@ async function failStep(runId: number, step: WorkflowStep, context: Ctx, idx: nu
  * `context.__visits[stepId]` counts executions so retry loops can cap attempts.
  */
 async function advanceGraphRun(run: WorkflowRun, workflow: Workflow): Promise<void> {
-  const steps = workflow.steps ?? [];
+  const steps = runSteps(run, workflow);
   const context: Ctx = { ...(run.context ?? {}) };
   let idx = run.currentStepIndex;
 
@@ -418,14 +429,19 @@ async function advanceGraphRun(run: WorkflowRun, workflow: Workflow): Promise<vo
       : {};
     visits[step.id] = (Number(visits[step.id]) || 0) + 1;
     context["__visits"] = visits;
+    context["__currentStepId"] = step.id;
 
     try {
       if (step.type === "make_call") {
-        await beginCall(run.id, workflow.userId, step, context, idx, indexOfStep(steps, step.next));
+        await beginCall(run.id, workflow.id, workflow.userId, step, context, idx, indexOfStep(steps, step.next));
         return;
       }
       if (step.type === "delay") {
         await beginDelay(run.id, step, context, idx, indexOfStep(steps, step.next));
+        return;
+      }
+      if (step.type === "wait_for_reply") {
+        await beginWaitForReply(run.id, step, context, idx);
         return;
       }
       if (step.type === "condition") {
@@ -463,8 +479,33 @@ async function advanceGraphRun(run: WorkflowRun, workflow: Workflow): Promise<vo
 
 // ── make_call ─────────────────────────────────────────────────────────────────
 
+/** Journey settings for this run: by context.callPlanId, else the journey backed by the workflow. */
+async function loadFlowSettings(userId: string, workflowId: number, context: Ctx): Promise<JourneySettings | null> {
+  const planIdRaw = context["callPlanId"];
+  const planId = typeof planIdRaw === "number" ? planIdRaw : Number(planIdRaw);
+  const where = Number.isFinite(planId) && planId > 0
+    ? and(eq(journeysTable.id, planId), eq(journeysTable.userId, userId))
+    : and(eq(journeysTable.workflowId, workflowId), eq(journeysTable.userId, userId));
+  const [plan] = await db.select({ settings: journeysTable.settings }).from(journeysTable).where(where).limit(1);
+  return (plan?.settings as JourneySettings | undefined) ?? null;
+}
+
+/** Call spend (paise) today, in `tz`, for calls placed by this flow's runs. */
+export async function flowSpendTodayPaise(workflowId: number, tz?: string | null, now = new Date()): Promise<number> {
+  const since = startOfLocalDay(now, tz || DEFAULT_FLOW_TZ);
+  const res = await db.execute(sql`
+    SELECT COALESCE(SUM(c.cost_cents), 0)::bigint AS paise
+    FROM calls c
+    JOIN campaign_leads l ON l.call_id = c.id
+    JOIN workflow_runs r ON r.id::text = (l.lead_data ->> '__workflowRunId')
+    WHERE r.workflow_id = ${workflowId} AND c.created_at >= ${since.toISOString()}
+  `);
+  return Number((res.rows[0] as { paise?: unknown } | undefined)?.paise ?? 0);
+}
+
 async function beginCall(
   runId: number,
+  workflowId: number,
   userId: string,
   step: WorkflowStep,
   context: Ctx,
@@ -475,39 +516,41 @@ async function beginCall(
   const phoneRaw = toStr(getPath(context, step.phoneField ?? "phone") || context["phone"]);
   if (!phoneRaw.trim()) throw new Error("make_call: no phone number in context");
 
+  const settings = await loadFlowSettings(userId, workflowId, context);
+  const capInr = Number(settings?.dailyBudgetInr ?? 0);
+  if (capInr > 0) {
+    const tz = settings?.timezone || DEFAULT_FLOW_TZ;
+    const spent = await flowSpendTodayPaise(workflowId, tz);
+    if (spent >= capInr * 100) {
+      const visits = context["__visits"] as Record<string, number> | undefined;
+      if (visits?.[step.id]) visits[step.id] = visits[step.id]! - 1;
+      recordStepAudit(context, {
+        type: "make_call",
+        status: "skipped",
+        reason: "Daily budget reached — waiting until tomorrow",
+        stepIndex: idx,
+      });
+      context["__parkedStepIndex"] = idx;
+      await db.update(workflowRunsTable)
+        .set({ status: "waiting_delay", resumeAt: nextLocalMidnight(new Date(), tz), currentStepIndex: idx, context, updatedAt: new Date() })
+        .where(eq(workflowRunsTable.id, runId));
+      return;
+    }
+  }
+
   const squadId =
     typeof step.squadId === "number" && Number.isInteger(step.squadId) && step.squadId > 0
       ? step.squadId
       : null;
   let campaign = await getOrCreateWorkflowCampaign(userId, step.agentId, squadId);
-  let hours: {
-    isCallingHoursEnabled?: boolean;
-    businessHoursStart?: number | null;
-    businessHoursEnd?: number | null;
-    timezone?: string | null;
-  } | null = null;
-  const planIdRaw = context["callPlanId"];
-  const planId = typeof planIdRaw === "number" ? planIdRaw : Number(planIdRaw);
-  if (Number.isFinite(planId) && planId > 0) {
-    const [plan] = await db.select({ settings: journeysTable.settings })
-      .from(journeysTable)
-      .where(and(eq(journeysTable.id, planId), eq(journeysTable.userId, userId)))
-      .limit(1);
-    if (plan?.settings) {
-      const s = plan.settings as {
-        isCallingHoursEnabled?: boolean;
-        businessHoursStart?: number | null;
-        businessHoursEnd?: number | null;
-        timezone?: string | null;
-      };
-      hours = {
-        isCallingHoursEnabled: s.isCallingHoursEnabled,
-        businessHoursStart: s.businessHoursStart,
-        businessHoursEnd: s.businessHoursEnd,
-        timezone: s.timezone,
-      };
-    }
-  }
+  const hours = settings
+    ? {
+        isCallingHoursEnabled: settings.isCallingHoursEnabled,
+        businessHoursStart: settings.businessHoursStart,
+        businessHoursEnd: settings.businessHoursEnd,
+        timezone: settings.timezone,
+      }
+    : null;
   campaign = await syncWorkflowCampaignConcurrency(campaign, userId, hours);
   const batch = await getOrCreateWorkflowRunningBatch(campaign.id);
   const leadData = flattenPrimitives(context);
@@ -661,6 +704,201 @@ export async function resumeDelayedRuns(): Promise<void> {
   for (const run of runs) {
     if (await claimRun(run.id, "waiting_delay")) {
       await advanceRun(run.id);
+    }
+  }
+}
+
+// ── wait_for_reply ───────────────────────────────────────────────────────────
+
+/** Park until the person replies on WhatsApp (→ onTrue) or `delaySeconds` passes (→ onFalse). */
+async function beginWaitForReply(runId: number, step: WorkflowStep, context: Ctx, idx: number): Promise<void> {
+  const phoneRaw = toStr(getPath(context, step.phoneField ?? "phone") || context["phone"]);
+  if (!phoneRaw.trim()) throw new Error("wait_for_reply: no phone number in context");
+  const secs = Math.max(60, Number(step.delaySeconds ?? 0));
+  recordStepAudit(context, { type: "wait_for_reply", status: "ok", reason: "Waiting for reply", stepIndex: idx });
+  context["__waitPhone"] = normalizePhone(phoneRaw);
+  context["__parkedStepIndex"] = idx;
+  await db.update(workflowRunsTable)
+    .set({
+      status: "waiting_event",
+      resumeAt: new Date(Date.now() + secs * 1000),
+      currentStepIndex: idx,
+      context,
+      updatedAt: new Date(),
+    })
+    .where(eq(workflowRunsTable.id, runId));
+}
+
+async function resumeEventRun(run: WorkflowRun, reply: { received: boolean; text?: string; buttonId?: string }): Promise<void> {
+  if (!(await claimRun(run.id, "waiting_event"))) return;
+  const loaded = await loadRun(run.id);
+  if (!loaded) return;
+  const steps = runSteps(loaded.run, loaded.workflow);
+  const context: Ctx = { ...(loaded.run.context ?? {}) };
+  const idx = loaded.run.currentStepIndex;
+  const step = steps[idx];
+  delete context["__waitPhone"];
+  delete context["__parkedStepIndex"];
+  context["reply"] = { received: reply.received, text: reply.text ?? "", buttonId: reply.buttonId ?? "" };
+  if (step) context["__currentStepId"] = step.id;
+  recordStepAudit(context, {
+    type: "wait_for_reply",
+    status: reply.received ? "ok" : "skipped",
+    reason: reply.received ? "Replied" : "No reply",
+    stepIndex: idx,
+  });
+  const nextIdx = step?.type === "wait_for_reply"
+    ? indexOfStep(steps, reply.received ? step.onTrue : step.onFalse)
+    : idx + 1;
+  await db.update(workflowRunsTable)
+    .set({ context, currentStepIndex: nextIdx, resumeAt: null, updatedAt: new Date() })
+    .where(eq(workflowRunsTable.id, run.id));
+  await advanceRun(run.id);
+}
+
+/** Inbound WhatsApp from `phone`: wake every run of this user waiting for that person's reply. */
+export async function resumeWaitingReplyRuns(
+  userId: string,
+  phone: string,
+  reply: { text?: string; buttonId?: string },
+): Promise<number> {
+  const norm = normalizePhone(phone);
+  if (!norm) return 0;
+  const runs = await db.select().from(workflowRunsTable)
+    .where(and(
+      eq(workflowRunsTable.userId, userId),
+      eq(workflowRunsTable.status, "waiting_event"),
+      sql`${workflowRunsTable.context} ->> '__waitPhone' = ${norm}`,
+    ))
+    .limit(50);
+  for (const run of runs) {
+    try {
+      await resumeEventRun(run, { received: true, ...reply });
+    } catch (err) {
+      logger.warn({ runId: run.id, err }, "workflow: reply resume failed");
+    }
+  }
+  return runs.length;
+}
+
+/** Poller: reply waits whose timeout passed take the "No reply" path. */
+export async function resumeTimedOutEventRuns(): Promise<void> {
+  const runs = await db.select().from(workflowRunsTable)
+    .where(and(eq(workflowRunsTable.status, "waiting_event"), sql`${workflowRunsTable.resumeAt} <= now()`))
+    .limit(50);
+  for (const run of runs) {
+    try {
+      await resumeEventRun(run, { received: false });
+    } catch (err) {
+      logger.warn({ runId: run.id, err }, "workflow: event timeout resume failed");
+    }
+  }
+}
+
+// ── controls: kill switch + per-person actions ──────────────────────────────
+
+/** Cancel queued dials for these runs (pending leads only — live calls finish). */
+async function skipPendingLeads(runIds: number[]): Promise<number> {
+  if (runIds.length === 0) return 0;
+  const ids = runIds.map(String);
+  const res = await db.execute(sql`
+    UPDATE campaign_leads SET call_status = 'skipped', notes = 'Stopped from Flow'
+    WHERE call_status = 'pending'
+      AND (lead_data ->> '__workflowRunId') IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+    RETURNING id
+  `);
+  return res.rows.length;
+}
+
+/** Kill switch: stop every active run of the flow and drop their queued calls. */
+export async function stopAllRuns(workflowId: number, userId: string): Promise<{ runs: number; queuedCalls: number }> {
+  const stopped = await db.update(workflowRunsTable)
+    .set({ status: "stopped", error: "Stopped by user (stop all)", resumeAt: null, updatedAt: new Date() })
+    .where(and(
+      eq(workflowRunsTable.workflowId, workflowId),
+      eq(workflowRunsTable.userId, userId),
+      inArray(workflowRunsTable.status, [...ACTIVE_RUN_STATUSES]),
+    ))
+    .returning({ id: workflowRunsTable.id });
+  const ids = stopped.map((r) => r.id);
+  const queuedCalls = await skipPendingLeads(ids);
+  return { runs: ids.length, queuedCalls };
+}
+
+export type RunPersonAction = "stop" | "retry" | "skip_wait" | "move" | "complete";
+
+/** Per-person control from the runs panel. Returns an error message, or null on success. */
+export async function runPersonAction(
+  runId: number,
+  userId: string,
+  action: RunPersonAction,
+  stepId?: string | null,
+): Promise<string | null> {
+  const loaded = await loadRun(runId);
+  if (!loaded || loaded.run.userId !== userId) return "Run not found";
+  const { run, workflow } = loaded;
+  const steps = runSteps(run, workflow);
+  const active = (ACTIVE_RUN_STATUSES as readonly string[]).includes(run.status);
+  const context: Ctx = { ...(run.context ?? {}) };
+  const note = (reason: string) => recordStepAudit(context, { type: "control", status: "ok", reason, stepId: "-" });
+
+  switch (action) {
+    case "stop":
+    case "complete": {
+      if (!active) return "This person is not in progress";
+      await skipPendingLeads([run.id]);
+      note(action === "stop" ? "Stopped by user" : "Marked done by user");
+      await db.update(workflowRunsTable)
+        .set({
+          status: action === "stop" ? "stopped" : "completed",
+          error: action === "stop" ? "Stopped by user" : null,
+          resumeAt: null,
+          context,
+          updatedAt: new Date(),
+        })
+        .where(eq(workflowRunsTable.id, run.id));
+      return null;
+    }
+    case "retry": {
+      if (run.status !== "failed" && run.status !== "stopped") return "Only failed or stopped people can be retried";
+      const parked = Number(context["__parkedStepIndex"]);
+      const idx = Number.isInteger(parked) ? parked : run.currentStepIndex;
+      delete context["__parkedStepIndex"];
+      delete context["__waitPhone"];
+      note("Retried by user");
+      await db.update(workflowRunsTable)
+        .set({ status: "running", error: null, resumeAt: null, currentStepIndex: Math.min(idx, steps.length), context, updatedAt: new Date() })
+        .where(eq(workflowRunsTable.id, run.id));
+      void advanceRun(run.id);
+      return null;
+    }
+    case "skip_wait": {
+      if (run.status === "waiting_delay") {
+        if (await claimRun(run.id, "waiting_delay")) await advanceRun(run.id);
+        return null;
+      }
+      if (run.status === "waiting_event") {
+        await resumeEventRun(run, { received: false });
+        return null;
+      }
+      return "This person is not waiting";
+    }
+    case "move": {
+      // The target comes from the current canvas, so the person moves onto the latest version.
+      const latest = workflow.steps ?? [];
+      const idx = indexOfStep(latest, stepId ?? null);
+      if (!stepId || idx >= latest.length) return "Pick a step to move to";
+      if (run.status === "running") return "This person is mid-step — try again in a moment";
+      await skipPendingLeads([run.id]);
+      delete context["__parkedStepIndex"];
+      delete context["__waitPhone"];
+      context["__v"] = workflow.triggerState?.flowVersion ?? 1;
+      note(`Moved by user to step ${latest[idx]!.id}`);
+      await db.update(workflowRunsTable)
+        .set({ status: "running", error: null, resumeAt: null, leadId: null, currentStepIndex: idx, context, updatedAt: new Date() })
+        .where(eq(workflowRunsTable.id, run.id));
+      void advanceRun(run.id);
+      return null;
     }
   }
 }

@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { errorMessage, flowsApi, type FlowSettings, type FlowStep } from "./api";
+import { errorMessage, flowsApi, type Flow, type FlowRun, type FlowSettings, type FlowStep, type PersonAction } from "./api";
 import { STEP_META } from "./nodes";
 
 // ── Test on one number ───────────────────────────────────────────────────────
@@ -213,15 +213,63 @@ const RUN_STATUS: Record<string, { label: string; cls: string }> = {
   pending: { label: "Queued", cls: "text-muted-foreground" },
   waiting_call: { label: "On call / queued", cls: "text-sky-700 dark:text-sky-300" },
   waiting_delay: { label: "Waiting", cls: "text-amber-700 dark:text-amber-300" },
+  waiting_event: { label: "Waiting for reply", cls: "text-teal-700 dark:text-teal-300" },
   completed: { label: "Done", cls: "text-emerald-700 dark:text-emerald-300" },
   failed: { label: "Failed", cls: "text-red-700 dark:text-red-300" },
+  stopped: { label: "Stopped", cls: "text-muted-foreground" },
 };
 
-export function RunsSheet({ open, onOpenChange, flowId, steps }: {
+const ACTIVE = new Set(["running", "pending", "waiting_call", "waiting_delay", "waiting_event"]);
+
+function PersonActions({ flowId, run, steps, onDone }: {
+  flowId: number;
+  run: FlowRun;
+  steps: FlowStep[];
+  onDone: () => void;
+}) {
+  const { toast } = useToast();
+  const act = useMutation({
+    mutationFn: ({ action, stepId }: { action: PersonAction; stepId?: string }) =>
+      flowsApi.personAction(flowId, run.id, action, stepId),
+    onSuccess: () => onDone(),
+    onError: (err) => toast({ title: "Couldn't update", description: errorMessage(err), variant: "destructive" }),
+  });
+  const active = ACTIVE.has(run.status);
+  const waiting = run.status === "waiting_delay" || run.status === "waiting_event";
+  const btn = "h-6 px-2 text-[11px]";
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+      {waiting && <Button variant="outline" size="sm" className={btn} disabled={act.isPending} onClick={() => act.mutate({ action: "skip_wait" })}>Skip wait</Button>}
+      {(run.status === "failed" || run.status === "stopped") && (
+        <Button variant="outline" size="sm" className={btn} disabled={act.isPending} onClick={() => act.mutate({ action: "retry" })}>Retry</Button>
+      )}
+      {active && <Button variant="outline" size="sm" className={btn} disabled={act.isPending} onClick={() => act.mutate({ action: "complete" })}>Mark done</Button>}
+      {active && (
+        <Button variant="outline" size="sm" className={cn(btn, "text-destructive hover:text-destructive")} disabled={act.isPending} onClick={() => act.mutate({ action: "stop" })}>
+          Stop
+        </Button>
+      )}
+      {run.status !== "running" && steps.length > 0 && (
+        <Select value="" onValueChange={(stepId) => act.mutate({ action: "move", stepId })}>
+          <SelectTrigger className="h-6 w-[130px] text-[11px]"><SelectValue placeholder="Move to step…" /></SelectTrigger>
+          <SelectContent>
+            {steps.map((s) => (
+              <SelectItem key={s.id} value={s.id} className="text-xs">{s.label || STEP_META[s.type]?.label || s.type}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      {act.isPending && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+    </div>
+  );
+}
+
+export function RunsSheet({ open, onOpenChange, flowId, steps, onChanged }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   flowId: number;
   steps: FlowStep[];
+  onChanged?: () => void;
 }) {
   const runsQ = useQuery({
     queryKey: ["flow-runs", flowId],
@@ -230,9 +278,10 @@ export function RunsSheet({ open, onOpenChange, flowId, steps }: {
     refetchInterval: open ? 4000 : false,
   });
   const [expanded, setExpanded] = useState<number | null>(null);
-  const stepLabel = (idx?: number, type?: string) => {
-    const s = idx != null ? steps[idx] : undefined;
-    if (s) return s.label || STEP_META[s.type]?.label || s.type;
+  const stepLabel = (idx?: number, type?: string, stepId?: string) => {
+    if (type === "control") return "You";
+    const s = (stepId ? steps.find((x) => x.id === stepId) : undefined) ?? (idx != null ? steps[idx] : undefined);
+    if (s && (!stepId || s.id === stepId)) return s.label || STEP_META[s.type]?.label || s.type;
     return type ? (STEP_META[type as keyof typeof STEP_META]?.label ?? type.replace(/_/g, " ")) : "Step";
   };
 
@@ -266,7 +315,7 @@ export function RunsSheet({ open, onOpenChange, flowId, steps }: {
                       <div key={i} className="flex items-start gap-2 text-[11px]">
                         <Badge variant="outline" className="h-4 shrink-0 px-1 text-[9px] uppercase">{s.status ?? "—"}</Badge>
                         <div className="min-w-0 flex-1">
-                          <span className="font-medium">{stepLabel(s.stepIndex, s.type)}</span>
+                          <span className="font-medium">{stepLabel(s.stepIndex, s.type, s.stepId)}</span>
                           {s.reason && <span className="text-muted-foreground"> · {s.reason}</span>}
                         </div>
                         {s.at && <span className="shrink-0 text-muted-foreground">{new Date(s.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
@@ -277,6 +326,12 @@ export function RunsSheet({ open, onOpenChange, flowId, steps }: {
                         Open call
                       </Link>
                     )}
+                    <PersonActions
+                      flowId={flowId}
+                      run={r}
+                      steps={steps}
+                      onDone={() => { void runsQ.refetch(); onChanged?.(); }}
+                    />
                   </div>
                 )}
               </div>
@@ -285,5 +340,78 @@ export function RunsSheet({ open, onOpenChange, flowId, steps }: {
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+// ── Versions ─────────────────────────────────────────────────────────────────
+
+export function VersionsDialog({ open, onOpenChange, flowId, dirty, onRestored }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  flowId: number;
+  dirty: boolean;
+  onRestored: (f: Flow) => void;
+}) {
+  const { toast } = useToast();
+  const versionsQ = useQuery({
+    queryKey: ["flow-versions", flowId],
+    queryFn: () => flowsApi.versions(flowId),
+    enabled: open,
+  });
+  const restore = useMutation({
+    mutationFn: (v: { steps: FlowStep[]; trigger: Flow["trigger"] }) => flowsApi.update(flowId, { steps: v.steps, trigger: v.trigger }),
+    onSuccess: (f) => {
+      onRestored(f);
+      void versionsQ.refetch();
+      toast({ title: "Version restored", description: "Saved as the newest version. People already in the flow keep their version." });
+      onOpenChange(false);
+    },
+    onError: (err) => toast({ title: "Couldn't restore", description: errorMessage(err), variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Version history</DialogTitle>
+          <DialogDescription>
+            Every save that changes what the flow does creates a version. People keep running the version they started on.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[50vh] space-y-2 overflow-y-auto">
+          {versionsQ.isLoading && <Loader2 className="mx-auto size-5 animate-spin text-muted-foreground" />}
+          {versionsQ.data?.versions.length === 0 && <p className="text-sm text-muted-foreground">No versions yet — save the flow first.</p>}
+          {versionsQ.data?.versions.map((v) => {
+            const isCurrent = v.version === versionsQ.data?.current;
+            return (
+              <div key={v.version} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-medium">
+                    Version {v.version}
+                    {isCurrent && <Badge variant="outline" className="ml-2 h-4 px-1 text-[9px]">Current</Badge>}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {new Date(v.savedAt).toLocaleString()} · {v.stepCount} step{v.stepCount === 1 ? "" : "s"}
+                    {v.activePeople > 0 ? ` · ${v.activePeople} in progress` : ""}
+                  </p>
+                </div>
+                {!isCurrent && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={restore.isPending}
+                    onClick={() => restore.mutate({ steps: v.steps, trigger: v.trigger })}
+                  >
+                    Restore
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {dirty && <p className="text-[11px] text-amber-700 dark:text-amber-300">Restoring discards your unsaved changes.</p>}
+      </DialogContent>
+    </Dialog>
   );
 }

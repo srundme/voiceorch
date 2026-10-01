@@ -4467,6 +4467,37 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }).catch((err) => logger.warn({ sessionId, err }, "After-call webhook branches failed"));
           }).catch(() => {});
 
+          // ── Flows: "inbound / missed call" trigger ──────────────────────────
+          if (
+            !session.campaignLeadId &&
+            ag.userId &&
+            call.fromNumber &&
+            !call.fromNumber.startsWith("webcall") &&
+            !call.toNumber.startsWith("webcall")
+          ) {
+            let flowDir = "inbound";
+            try {
+              const md = call.metadata ? JSON.parse(call.metadata) as Record<string, unknown> : {};
+              if (typeof md["direction"] === "string") flowDir = md["direction"];
+            } catch { /* ignore */ }
+            if (flowDir === "inbound") {
+              import("../services/flow-triggers.js").then(({ fireCallEndedFlows }) => {
+                fireCallEndedFlows({
+                  userId: ag.userId!,
+                  agentId: ag.id,
+                  callId: session.callId,
+                  phone: call.fromNumber!,
+                  missed: metricsAcc.count === 0,
+                  status: callStatus,
+                  durationSeconds,
+                  summary: callSummary || "",
+                  disposition: dispositionResult ?? {},
+                  transcript: transcript || "",
+                }).catch((err) => logger.warn({ sessionId, err }, "Flow call-ended trigger failed"));
+              }).catch(() => {});
+            }
+          }
+
           // ── Zelto call monitoring (fire-and-forget) ─────────────────────────
           // Placed inside this IIFE so callSummary, dispositionResult, avgSttMs
           // etc. are all in scope. No-ops when no Zelto key is configured.

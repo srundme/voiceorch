@@ -8,7 +8,8 @@
  * indices are preserved so parked runs keep resuming at the same index.
  */
 
-import type { ConditionOp, WorkflowStep, WorkflowTrigger } from "@workspace/db";
+import type { ConditionOp, WorkflowStep, WorkflowTrigger, WorkflowVersionState } from "@workspace/db";
+import { isValidHhmm } from "./flow-time.js";
 
 type Ctx = Record<string, unknown>;
 
@@ -67,6 +68,25 @@ export function resolveNextStepId(step: WorkflowStep, context: Ctx): string | nu
     return step.next ?? null;
   }
   return step.next ?? null;
+}
+
+/** Steps a run executes: the snapshot of the version it started on, else the current steps. */
+export function stepsForVersion(
+  current: WorkflowStep[],
+  state: WorkflowVersionState | null | undefined,
+  version: unknown,
+): WorkflowStep[] {
+  const v = Number(version ?? 1);
+  return state?.versions?.[String(v)]?.steps ?? current;
+}
+
+/** Fields that change behaviour (canvas position / label edits don't create a version). */
+export function behaviourKey(trigger: WorkflowTrigger, steps: WorkflowStep[]): string {
+  const { position: _p, ...t } = trigger;
+  return JSON.stringify({
+    t,
+    s: steps.map(({ position: _pos, label: _label, ...rest }: WorkflowStep & { label?: string }) => rest),
+  });
 }
 
 /** Array index for a step id; `steps.length` (= finish) when null / unknown. */
@@ -160,7 +180,7 @@ export interface FlowValidation {
 }
 
 function targetsOf(step: WorkflowStep): Array<string | null | undefined> {
-  if (step.type === "condition") return [step.onTrue, step.onFalse];
+  if (step.type === "condition" || step.type === "wait_for_reply") return [step.onTrue, step.onFalse];
   if (step.type === "branch") return [...(step.cases ?? []).map((c) => c.next), step.next];
   return [step.next];
 }
@@ -188,6 +208,10 @@ export function validateFlow(trigger: WorkflowTrigger, steps: WorkflowStep[]): F
   const entry = trigger.entryStepId;
   if (entry && !ids.has(entry)) errors.push("The trigger is not connected to a step that exists");
   if (!entry) issues.push({ stepId: null, message: "Connect the trigger to the first step" });
+  if (trigger.type === "schedule") {
+    if (!isValidHhmm(trigger.schedule?.time)) issues.push({ stepId: null, message: "Set the schedule time" });
+    if (!trigger.schedule?.days?.length) issues.push({ stepId: null, message: "Pick at least one day for the schedule" });
+  }
 
   for (const s of steps) {
     for (const t of targetsOf(s)) {
@@ -216,6 +240,9 @@ export function validateFlow(trigger: WorkflowTrigger, steps: WorkflowStep[]): F
         break;
       case "delay":
         need(s, Number(s.delaySeconds) > 0, "Set how long to wait");
+        break;
+      case "wait_for_reply":
+        need(s, Number(s.delaySeconds) > 0, "Set how long to wait for a reply");
         break;
       case "send_webhook":
         need(s, !!s.url?.trim(), "Add the webhook URL");

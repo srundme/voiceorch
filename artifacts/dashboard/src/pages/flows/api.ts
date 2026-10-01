@@ -6,6 +6,7 @@ export type StepType =
   | "make_call"
   | "condition"
   | "branch"
+  | "wait_for_reply"
   | "delay"
   | "send_webhook"
   | "schedule_callback"
@@ -54,7 +55,14 @@ export interface FlowStep {
   sheetStatusValue?: string;
 }
 
-export type TriggerType = "form_lead" | "instagram_lead" | "manual";
+export type TriggerType = "form_lead" | "instagram_lead" | "manual" | "call_ended" | "whatsapp_reply" | "schedule";
+
+export interface FlowSchedule {
+  time: string;
+  days: number[];
+  timezone?: string;
+  reincludePeople?: boolean;
+}
 
 export interface FlowTrigger {
   type: TriggerType;
@@ -62,6 +70,9 @@ export interface FlowTrigger {
   entryStepId?: string | null;
   /** Canvas position of the trigger node (builder only). */
   position?: { x: number; y: number };
+  missedOnly?: boolean;
+  keyword?: string;
+  schedule?: FlowSchedule;
 }
 
 export interface FlowSettings {
@@ -69,10 +80,12 @@ export interface FlowSettings {
   businessHoursStart?: number | null;
   businessHoursEnd?: number | null;
   timezone?: string | null;
+  peopleSource?: "campaign" | "manual" | "sheet";
   campaignId?: number | null;
   sheetPipelineId?: string | null;
   runMode?: "once" | "live";
   autoFeed?: boolean;
+  dailyBudgetInr?: number | null;
   [key: string]: unknown;
 }
 
@@ -128,7 +141,27 @@ export interface FlowRun {
   triggeredBy: string | null;
   updatedAt: string;
   call: { callId?: number; connected?: boolean; status?: string; duration?: number; summary?: string } | null;
-  stepTrail: Array<{ type?: string; status?: string; reason?: string; at?: string; stepIndex?: number }>;
+  version: number;
+  currentStepId: string | null;
+  stepTrail: Array<{ type?: string; status?: string; reason?: string; at?: string; stepIndex?: number; stepId?: string }>;
+}
+
+export type PersonAction = "stop" | "retry" | "skip_wait" | "move" | "complete";
+
+export interface FlowVersion {
+  version: number;
+  savedAt: string;
+  stepCount: number;
+  steps: FlowStep[];
+  trigger: FlowTrigger;
+  activePeople: number;
+  totalPeople: number;
+}
+
+export interface StepStatsResponse {
+  steps: Record<string, StepCounts>;
+  dailyBudgetInr: number | null;
+  spentTodayPaise: number;
 }
 
 const API = "/api";
@@ -155,9 +188,14 @@ export const flowsApi = {
       `${API}/journeys/${id}/start`,
       json(body),
     ),
-  stepStats: (id: number) => customFetch<{ steps: Record<string, StepCounts> }>(`${API}/journeys/${id}/step-stats`),
+  stepStats: (id: number) => customFetch<StepStatsResponse>(`${API}/journeys/${id}/step-stats`),
   runs: (id: number, limit = 50) =>
     customFetch<{ runs: FlowRun[]; total: number }>(`${API}/journeys/${id}/runs?limit=${limit}`),
+  versions: (id: number) => customFetch<{ current: number; versions: FlowVersion[] }>(`${API}/journeys/${id}/versions`),
+  stopAll: (id: number) =>
+    customFetch<{ runs: number; queuedCalls: number; journey: Flow }>(`${API}/journeys/${id}/stop-all`, json({})),
+  personAction: (id: number, runId: number, action: PersonAction, stepId?: string) =>
+    customFetch<{ ok: true }>(`${API}/journeys/${id}/runs/${runId}/action`, json({ action, stepId })),
 };
 
 /** Server error message from a customFetch rejection. */

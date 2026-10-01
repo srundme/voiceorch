@@ -23,17 +23,25 @@ import {
   type JourneySettings,
   type JourneyStep,
   type WorkflowTrigger,
+  type WorkflowVersionState,
+  ACTIVE_RUN_STATUSES,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
-import { startWorkflowRun } from "../services/workflow-engine.js";
+import {
+  flowSpendTodayPaise,
+  runPersonAction,
+  startWorkflowRun,
+  stopAllRuns,
+  type RunPersonAction,
+} from "../services/workflow-engine.js";
 import { getSarvamManagedKey, platformChatText } from "../services/platform-chat-llm.js";
 import {
   buildJourneyPreset,
   listJourneyPresets,
 } from "../services/journey-presets.js";
 import { draftCallPlanFromPrompt } from "../services/call-plan-vibe.js";
-import { isGraphFlow, toGraphFlow, validateFlow } from "../services/workflow-graph.js";
+import { behaviourKey, isGraphFlow, toGraphFlow, validateFlow } from "../services/workflow-graph.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
 
 const router: IRouter = Router();
@@ -76,6 +84,38 @@ function toWorkflowSteps(steps: JourneyStep[]) {
   return (steps ?? []).map(({ label: _label, ...rest }) => rest);
 }
 
+const KEEP_VERSIONS = 5;
+
+/**
+ * Behaviour changes get a new version; runs keep executing the version they
+ * started on (their step indices point into that snapshot).
+ */
+async function nextVersionState(
+  existing: typeof workflowsTable.$inferSelect,
+  trigger: WorkflowTrigger,
+  steps: JourneyStep[],
+): Promise<WorkflowVersionState | null> {
+  if (behaviourKey(existing.trigger, existing.steps ?? []) === behaviourKey(trigger, steps)) return null;
+  const now = new Date().toISOString();
+  const prev = existing.triggerState ?? {};
+  const versions = { ...(prev.versions ?? {}) };
+  let current = prev.flowVersion ?? 1;
+  if (!versions[String(current)]) {
+    versions[String(current)] = { steps: existing.steps ?? [], trigger: existing.trigger, savedAt: existing.updatedAt?.toISOString?.() ?? now };
+  }
+  current += 1;
+  versions[String(current)] = { steps, trigger, savedAt: now };
+
+  const inUse = await db.execute<{ v: string | null }>(sql`
+    SELECT DISTINCT coalesce(context->>'__v', '1') AS v FROM workflow_runs
+    WHERE workflow_id = ${existing.id} AND status IN (${sql.join(ACTIVE_RUN_STATUSES.map((s) => sql`${s}`), sql`, `)})
+  `);
+  const keep = new Set<string>([String(current), ...inUse.rows.map((r) => String(r.v ?? "1"))]);
+  Object.keys(versions).map(Number).sort((a, b) => b - a).slice(0, KEEP_VERSIONS).forEach((v) => keep.add(String(v)));
+  for (const k of Object.keys(versions)) if (!keep.has(k)) delete versions[k];
+  return { ...prev, flowVersion: current, versions };
+}
+
 async function syncBackingWorkflow(journey: Journey): Promise<number> {
   const steps = toWorkflowSteps(journey.steps ?? []);
   const trigger = journey.trigger;
@@ -87,6 +127,7 @@ async function syncBackingWorkflow(journey: Journey): Promise<number> {
       .where(and(eq(workflowsTable.id, journey.workflowId), eq(workflowsTable.userId, journey.userId)))
       .limit(1);
     if (existing) {
+      const versionState = await nextVersionState(existing, trigger, journey.steps ?? []);
       await db.update(workflowsTable).set({
         name: `__journey_${journey.id}_${journey.name}`.slice(0, 120),
         description: journey.description ?? `Journey #${journey.id}`,
@@ -94,6 +135,7 @@ async function syncBackingWorkflow(journey: Journey): Promise<number> {
         trigger,
         steps,
         publicToken: token ?? existing.publicToken,
+        ...(versionState ? { triggerState: versionState } : {}),
       }).where(eq(workflowsTable.id, existing.id));
 
       if (token && journey.publicToken !== token) {
@@ -111,6 +153,10 @@ async function syncBackingWorkflow(journey: Journey): Promise<number> {
     trigger,
     steps,
     publicToken: token,
+    triggerState: {
+      flowVersion: 1,
+      versions: { "1": { steps: journey.steps ?? [], trigger, savedAt: new Date().toISOString() } },
+    },
   }).returning();
 
   await db.update(journeysTable).set({
@@ -132,6 +178,10 @@ function rejectBrokenFlow(res: import("express").Response, trigger: WorkflowTrig
 /** Block activate / start while the flow still has config issues. */
 function rejectIncompleteFlow(res: import("express").Response, j: Journey): boolean {
   const { errors, issues } = validateFlow(j.trigger, j.steps ?? []);
+  const s = (j.settings ?? {}) as JourneySettings;
+  if (j.trigger.type === "schedule" && !s.campaignId && !(s.sheetPipelineId ?? "").trim()) {
+    issues.push({ stepId: null, message: "Pick the people list (campaign or Google Sheet) the schedule runs" });
+  }
   if (errors.length === 0 && issues.length === 0) return false;
   res.status(400).json({ error: errors[0] ?? issues[0]!.message, errors, issues });
   return true;
@@ -680,6 +730,7 @@ router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> 
     ...settings,
     runMode: "once",
     autoFeed: true,
+    feedForce: force,
     startOffset: offset,
     ...(hasCampaign
       ? { peopleSource: "campaign" as const, campaignId, sheetPipelineId: null, manualPhones: undefined }
@@ -782,7 +833,7 @@ router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> 
   const [afterStart] = await db.select().from(journeysTable).where(eq(journeysTable.id, id)).limit(1);
   let fed = { started: 0, skipped: 0, nextOffset, hasMore, sourceTotal: slice.sourceTotal, concurrentLimit, bufferTarget };
   if (afterStart && ((afterStart.settings as JourneySettings)?.autoFeed || runIds.length === 0)) {
-    fed = await feedCallPlanQueue(afterStart, { force });
+    fed = await feedCallPlanQueue(afterStart, { force, skipActive: true });
   }
 
   const started = runIds.length + fed.started;
@@ -945,17 +996,15 @@ router.post("/journeys/:id/stop-live", requireAuth, async (req, res): Promise<vo
 
 // ── Runs (via backing workflow) ──────────────────────────────────────────────
 
-type RunStatusFilter = "all" | "in_progress" | "waiting" | "completed" | "failed" | "with_call";
+type RunStatusFilter = "all" | "in_progress" | "waiting" | "completed" | "failed" | "stopped" | "with_call";
 
-const IN_PROGRESS_STATUSES = ["running", "pending"] as const;
-const WAITING_STATUSES = ["waiting_call", "waiting_delay"] as const;
-const ACTIVE_STATUSES = [...IN_PROGRESS_STATUSES, ...WAITING_STATUSES] as const;
+const WAITING_STATUSES = ["waiting_call", "waiting_delay", "waiting_event"] as const;
 
 function parseRunStatusFilter(raw: unknown): RunStatusFilter {
   const v = String(raw ?? "all");
   if (
     v === "in_progress" || v === "waiting" || v === "completed"
-    || v === "failed" || v === "with_call" || v === "all"
+    || v === "failed" || v === "stopped" || v === "with_call" || v === "all"
   ) return v;
   return "all";
 }
@@ -970,13 +1019,15 @@ function runsBaseWhere(workflowId: number, clerkId: string): SQL {
 function runsFilterWhere(status: RunStatusFilter, q: string): SQL | undefined {
   const parts: SQL[] = [];
   if (status === "in_progress") {
-    parts.push(inArray(workflowRunsTable.status, [...ACTIVE_STATUSES]));
+    parts.push(inArray(workflowRunsTable.status, [...ACTIVE_RUN_STATUSES]));
   } else if (status === "waiting") {
     parts.push(inArray(workflowRunsTable.status, [...WAITING_STATUSES]));
   } else if (status === "completed") {
     parts.push(eq(workflowRunsTable.status, "completed"));
   } else if (status === "failed") {
     parts.push(eq(workflowRunsTable.status, "failed"));
+  } else if (status === "stopped") {
+    parts.push(eq(workflowRunsTable.status, "stopped"));
   } else if (status === "with_call") {
     parts.push(or(
       isNotNull(workflowRunsTable.callId),
@@ -1002,6 +1053,7 @@ type StepAuditLean = {
   reason?: string;
   at?: string;
   stepIndex?: number;
+  stepId?: string;
 };
 
 function leanCallFromContext(ctx: Record<string, unknown> | null) {
@@ -1055,6 +1107,7 @@ function leanStepTrail(ctx: Record<string, unknown> | null): StepAuditLean[] {
       reason: typeof s.reason === "string" ? s.reason.slice(0, 200) : undefined,
       at: s.at,
       stepIndex: s.stepIndex,
+      stepId: s.stepId,
     }));
 }
 
@@ -1077,6 +1130,8 @@ function serializeLeanRun(r: typeof workflowRunsTable.$inferSelect) {
     name,
     phone,
     call,
+    version: Number(ctx?.["__v"] ?? 1),
+    currentStepId: typeof ctx?.["__currentStepId"] === "string" ? ctx["__currentStepId"] : null,
     lastStep: leanLastStep(ctx),
     stepTrail: leanStepTrail(ctx),
     /** @deprecated use lean fields — kept empty for old clients that expect context */
@@ -1126,10 +1181,11 @@ router.get("/journeys/:id/runs/stats", requireAuth, async (req, res): Promise<vo
   const [agg] = await db
     .select({
       started: count(),
-      inProgress: sql<number>`count(*) filter (where ${workflowRunsTable.status} in ('running', 'pending', 'waiting_call', 'waiting_delay'))::int`,
-      waiting: sql<number>`count(*) filter (where ${workflowRunsTable.status} in ('waiting_call', 'waiting_delay'))::int`,
+      inProgress: sql<number>`count(*) filter (where ${workflowRunsTable.status} in ('running', 'pending', 'waiting_call', 'waiting_delay', 'waiting_event'))::int`,
+      waiting: sql<number>`count(*) filter (where ${workflowRunsTable.status} in ('waiting_call', 'waiting_delay', 'waiting_event'))::int`,
       completed: sql<number>`count(*) filter (where ${workflowRunsTable.status} = 'completed')::int`,
       failed: sql<number>`count(*) filter (where ${workflowRunsTable.status} = 'failed')::int`,
+      stopped: sql<number>`count(*) filter (where ${workflowRunsTable.status} = 'stopped')::int`,
       withCall: sql<number>`count(*) filter (where ${workflowRunsTable.callId} is not null or coalesce((${workflowRunsTable.context}->'call'->>'callId')::int, 0) > 0)::int`,
       connected: sql<number>`count(*) filter (where (${workflowRunsTable.context}->'call'->>'connected') = 'true')::int`,
       avgDurationSec: sql<number | null>`avg(nullif((${workflowRunsTable.context}->'call'->>'duration')::float, 0)) filter (where ${workflowRunsTable.callId} is not null or coalesce((${workflowRunsTable.context}->'call'->>'callId')::int, 0) > 0)`,
@@ -1207,6 +1263,7 @@ router.get("/journeys/:id/runs/stats", requireAuth, async (req, res): Promise<vo
     dialing,
     completed: Number(agg?.completed ?? 0),
     failed: Number(agg?.failed ?? 0),
+    stopped: Number(agg?.stopped ?? 0),
     withCall,
     connected,
     connectRate: withCall > 0 ? Math.round((connected / withCall) * 1000) / 10 : null,
@@ -1243,27 +1300,40 @@ router.get("/journeys/:id/step-stats", requireAuth, async (req, res): Promise<vo
   for (const s of steps) {
     out[s.id] = { ran: 0, ok: 0, sent: 0, skipped: 0, failed: 0, waiting: 0, connected: 0, paths: {} };
   }
-  if (!journey.workflowId || steps.length === 0) { res.json({ steps: out }); return; }
+  const settings = (journey.settings ?? {}) as JourneySettings;
+  const budget = {
+    dailyBudgetInr: Number(settings.dailyBudgetInr ?? 0) || null,
+    spentTodayPaise: journey.workflowId ? await flowSpendTodayPaise(journey.workflowId, settings.timezone) : 0,
+  };
+  if (!journey.workflowId || steps.length === 0) { res.json({ steps: out, ...budget }); return; }
 
-  const audit = await db.execute<{ step_index: number; status: string; reason: string | null; people: number }>(sql`
-    SELECT (s->>'stepIndex')::int AS step_index, s->>'status' AS status, s->>'reason' AS reason,
-           count(DISTINCT r.id)::int AS people
+  const byId = new Map(steps.map((s) => [s.id, s]));
+  // Audit entries carry stepId (stable); older ones only a stepIndex into the steps of their time.
+  const stepFor = (stepId: string | null, stepIndex: number | null) =>
+    stepId ? byId.get(stepId) : stepIndex != null ? steps[stepIndex] : undefined;
+  const auditSource = sql`
     FROM workflow_runs r
     CROSS JOIN LATERAL jsonb_array_elements(
       CASE WHEN jsonb_typeof(r.context->'steps') = 'array' THEN r.context->'steps' ELSE '[]'::jsonb END
     ) AS s
     WHERE r.workflow_id = ${journey.workflowId} AND r.user_id = ${clerkId}
-      AND s ? 'stepIndex'
-    GROUP BY 1, 2, 3
+      AND (s ? 'stepIndex' OR s ? 'stepId')
+  `;
+
+  const audit = await db.execute<{ step_id: string | null; step_index: number | null; status: string; reason: string | null; people: number }>(sql`
+    SELECT s->>'stepId' AS step_id, (s->>'stepIndex')::int AS step_index, s->>'status' AS status, s->>'reason' AS reason,
+           count(DISTINCT r.id)::int AS people
+    ${auditSource}
+    GROUP BY 1, 2, 3, 4
   `);
-  const ranByIndex = new Map<number, number>();
   for (const row of audit.rows) {
-    const step = steps[Number(row.step_index)];
+    const step = stepFor(row.step_id, row.step_index);
     if (!step) continue;
     const c = out[step.id]!;
     const n = Number(row.people);
     if (step.type === "make_call" && row.reason === "Queued for dial") continue;
-    if ((step.type === "condition" || step.type === "branch") && row.reason) {
+    if (step.type === "wait_for_reply" && row.reason === "Waiting for reply") continue;
+    if ((step.type === "condition" || step.type === "branch" || step.type === "wait_for_reply") && row.reason) {
       c.paths[row.reason] = (c.paths[row.reason] ?? 0) + n;
     }
     if (row.status === "ok" || row.status === "joined") c.ok += n;
@@ -1273,36 +1343,107 @@ router.get("/journeys/:id/step-stats", requireAuth, async (req, res): Promise<vo
     if (step.type === "make_call" && row.reason === "Connected") c.connected += n;
   }
   // "ran" = distinct people with any audit entry on the step.
-  const ran = await db.execute<{ step_index: number; people: number }>(sql`
-    SELECT (s->>'stepIndex')::int AS step_index, count(DISTINCT r.id)::int AS people
-    FROM workflow_runs r
-    CROSS JOIN LATERAL jsonb_array_elements(
-      CASE WHEN jsonb_typeof(r.context->'steps') = 'array' THEN r.context->'steps' ELSE '[]'::jsonb END
-    ) AS s
-    WHERE r.workflow_id = ${journey.workflowId} AND r.user_id = ${clerkId}
-      AND s ? 'stepIndex'
-    GROUP BY 1
+  const ran = await db.execute<{ step_id: string | null; step_index: number | null; people: number }>(sql`
+    SELECT s->>'stepId' AS step_id, (s->>'stepIndex')::int AS step_index, count(DISTINCT r.id)::int AS people
+    ${auditSource}
+    GROUP BY 1, 2
   `);
-  for (const row of ran.rows) ranByIndex.set(Number(row.step_index), Number(row.people));
-  for (const [idx, n] of ranByIndex) {
-    const step = steps[idx];
-    if (step) out[step.id]!.ran = n;
+  for (const row of ran.rows) {
+    const step = stepFor(row.step_id, row.step_index);
+    if (step) out[step.id]!.ran += Number(row.people);
   }
 
-  const waiting = await db.execute<{ step_index: number; people: number }>(sql`
-    SELECT (context->>'__parkedStepIndex')::int AS step_index, count(*)::int AS people
+  const waiting = await db.execute<{ step_id: string | null; step_index: number | null; people: number }>(sql`
+    SELECT context->>'__currentStepId' AS step_id, (context->>'__parkedStepIndex')::int AS step_index, count(*)::int AS people
     FROM workflow_runs
     WHERE workflow_id = ${journey.workflowId} AND user_id = ${clerkId}
-      AND status IN ('waiting_call', 'waiting_delay')
+      AND status IN ('waiting_call', 'waiting_delay', 'waiting_event')
       AND context ? '__parkedStepIndex'
-    GROUP BY 1
+    GROUP BY 1, 2
   `);
   for (const row of waiting.rows) {
-    const step = steps[Number(row.step_index)];
-    if (step) out[step.id]!.waiting = Number(row.people);
+    const step = stepFor(row.step_id, row.step_index);
+    if (step) out[step.id]!.waiting += Number(row.people);
   }
 
-  res.json({ steps: out });
+  res.json({ steps: out, ...budget });
+});
+
+// ── Controls: versions, kill switch, per-person actions ─────────────────────
+
+router.get("/journeys/:id/versions", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"]), 10);
+  const journey = await loadOwnedJourney(clerkId, id);
+  if (!journey) { res.status(404).json({ error: "Journey not found" }); return; }
+  if (!journey.workflowId) { res.json({ current: 1, versions: [] }); return; }
+
+  const [wf] = await db.select({ triggerState: workflowsTable.triggerState }).from(workflowsTable)
+    .where(and(eq(workflowsTable.id, journey.workflowId), eq(workflowsTable.userId, clerkId))).limit(1);
+  const state = wf?.triggerState ?? {};
+  const people = await db.execute<{ v: string; active: number; total: number }>(sql`
+    SELECT coalesce(context->>'__v', '1') AS v,
+           count(*) FILTER (WHERE status IN (${sql.join(ACTIVE_RUN_STATUSES.map((s) => sql`${s}`), sql`, `)}))::int AS active,
+           count(*)::int AS total
+    FROM workflow_runs WHERE workflow_id = ${journey.workflowId} AND user_id = ${clerkId}
+    GROUP BY 1
+  `);
+  const counts = new Map(people.rows.map((r) => [String(r.v), r]));
+  const versions = Object.entries(state.versions ?? {})
+    .map(([v, snap]) => ({
+      version: Number(v),
+      savedAt: snap.savedAt,
+      stepCount: snap.steps.length,
+      steps: snap.steps,
+      trigger: snap.trigger,
+      activePeople: Number(counts.get(v)?.active ?? 0),
+      totalPeople: Number(counts.get(v)?.total ?? 0),
+    }))
+    .sort((a, b) => b.version - a.version);
+  res.json({ current: state.flowVersion ?? 1, versions });
+});
+
+router.post("/journeys/:id/stop-all", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"]), 10);
+  const journey = await loadOwnedJourney(clerkId, id);
+  if (!journey) { res.status(404).json({ error: "Journey not found" }); return; }
+
+  const settings = { ...(journey.settings ?? {}), autoFeed: false } as JourneySettings;
+  const [j] = await db.update(journeysTable).set({ status: "paused", settings })
+    .where(and(eq(journeysTable.id, id), eq(journeysTable.userId, clerkId)))
+    .returning();
+  await syncBackingWorkflow(j!);
+  const result = journey.workflowId ? await stopAllRuns(journey.workflowId, clerkId) : { runs: 0, queuedCalls: 0 };
+  logger.info({ journeyId: id, ...result }, "journey: stop all");
+  const [fresh] = await db.select().from(journeysTable).where(eq(journeysTable.id, id)).limit(1);
+  res.json({ ok: true, ...result, journey: serializeJourney(fresh!) });
+});
+
+const PERSON_ACTIONS: RunPersonAction[] = ["stop", "retry", "skip_wait", "move", "complete"];
+
+router.post("/journeys/:id/runs/:runId/action", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"]), 10);
+  const runId = parseInt(String(req.params["runId"]), 10);
+  const journey = await loadOwnedJourney(clerkId, id);
+  if (!journey?.workflowId) { res.status(404).json({ error: "Journey not found" }); return; }
+  const body = (req.body ?? {}) as { action?: string; stepId?: string };
+  const action = body.action as RunPersonAction;
+  if (!PERSON_ACTIONS.includes(action)) { res.status(400).json({ error: "Unknown action" }); return; }
+
+  const [run] = await db.select({ id: workflowRunsTable.id }).from(workflowRunsTable)
+    .where(and(
+      eq(workflowRunsTable.id, runId),
+      eq(workflowRunsTable.workflowId, journey.workflowId),
+      eq(workflowRunsTable.userId, clerkId),
+    )).limit(1);
+  if (!run) { res.status(404).json({ error: "Person not found in this flow" }); return; }
+
+  const error = await runPersonAction(runId, clerkId, action, body.stepId ?? null);
+  if (error) { res.status(400).json({ error }); return; }
+  const [fresh] = await db.select().from(workflowRunsTable).where(eq(workflowRunsTable.id, runId)).limit(1);
+  res.json({ ok: true, run: fresh ? serializeLeanRun(fresh) : null });
 });
 
 router.get("/journeys/:id/runs/export", requireAuth, async (req, res): Promise<void> => {

@@ -15,6 +15,12 @@ export function pointersOf(step: FlowStep): Pointer[] {
       { handle: "no", target: step.onFalse, label: "No", reason: "No" },
     ];
   }
+  if (step.type === "wait_for_reply") {
+    return [
+      { handle: "yes", target: step.onTrue, label: "Replied", reason: "Replied" },
+      { handle: "no", target: step.onFalse, label: "No reply", reason: "No reply" },
+    ];
+  }
   if (step.type === "branch") {
     return [
       ...(step.cases ?? []).map((c) => ({
@@ -31,7 +37,7 @@ export function pointersOf(step: FlowStep): Pointer[] {
 
 /** Set the arrow leaving `handle` on `step` (null removes it). */
 export function setPointer(step: FlowStep, handle: string, target: string | null): FlowStep {
-  if (step.type === "condition") {
+  if (step.type === "condition" || step.type === "wait_for_reply") {
     if (handle === "yes") return { ...step, onTrue: target };
     if (handle === "no") return { ...step, onFalse: target };
   }
