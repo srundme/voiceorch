@@ -10,13 +10,13 @@ import { applyPendingPartnerPromotion } from "../services/partner-promotion.js";
 function generateApiKey() { return `vok_${randomBytes(24).toString("hex")}`; }
 function generateOrgKey() { return `voo_${randomBytes(24).toString("hex")}`; }
 
-const FREE_CREDIT_CENTS = SIGNUP_CREDIT_PAISE; // Rs.500
+const FREE_CREDIT_CENTS = SIGNUP_CREDIT_PAISE; // Rs.75 (15 free minutes)
 
 /**
  * Provision (or heal) the local user record for the authenticated Google
  * account. Identity comes from the verified session payload set by
  * `attachSession`; `users.clerk_id` stores the Google account subject id.
- * First-time users get API keys and a ₹500 welcome credit.
+ * First-time users get API keys and a ₹75 (15 minute) welcome credit.
  */
 export async function provisionUser(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const session = (req as unknown as { sessionPayload?: SessionPayload }).sessionPayload;

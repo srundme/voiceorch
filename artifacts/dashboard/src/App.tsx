@@ -328,7 +328,7 @@ function SignInPage() {
 
         {!isPartnerGateway && (
           <div className="inline-flex items-center gap-1.5 mb-6 px-3 py-1 rounded-full border border-purple-400/20 bg-purple-400/10 text-[0.7rem] font-medium tracking-wide text-purple-200">
-            <Gift size={12} /> ₹500 free credit · ~100 minutes on us
+            <Gift size={12} /> 15 free minutes on us
           </div>
         )}
 

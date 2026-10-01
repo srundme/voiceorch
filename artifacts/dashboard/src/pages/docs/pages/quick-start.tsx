@@ -28,7 +28,7 @@ curl -X POST https://app.snapserve.ai/api/calls/outbound \\
           Never put it in a browser.
         </li>
         <li>
-          Wallet balance (₹500 welcome credit). Empty wallet → <code>402</code>.
+          Wallet balance (15 free minutes as welcome credit). Empty wallet → <code>402</code>.
         </li>
         <li>
           A from-number on the agent (SnapServe DID or your Twilio/Plivo/Vobiz creds). India DIDs
@@ -72,7 +72,7 @@ curl https://app.snapserve.ai/api/agents \\
   -H "Authorization: Bearer $SNAPSERVE_API_KEY"`}
       />
       <p>
-        <code>balanceCents</code> is paise. <code>50000</code> = ₹500 ≈ 100 minutes at ₹5/min.{" "}
+        <code>balanceCents</code> is paise. <code>7500</code> = ₹75 = 15 minutes at ₹5/min.{" "}
         <Link href="/docs/pricing">Pricing</Link>.
       </p>
 

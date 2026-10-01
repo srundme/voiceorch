@@ -215,7 +215,7 @@ router.post("/account/delete-workspace", requireAuth, clientContext, denyManaged
         suspendedReason: "User requested workspace deletion",
         apiKey: null,
         orgKey: null,
-        // Strip remaining balance so a same-ID return cannot keep ₹500 / ~100 min welcome credit.
+        // Strip remaining balance so a same-ID return cannot keep the welcome credit.
         walletBalanceCents: 0,
         freeCreditsGranted: true,
       })

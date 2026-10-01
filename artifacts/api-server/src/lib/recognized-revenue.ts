@@ -54,7 +54,7 @@ export function cashInEventRaw(alias = ""): string {
   return `(${successfulTopupRaw(alias)}) or (${cardPaidDidDebitRaw(alias)})`;
 }
 
-/** Credits that hit the wallet but are not Razorpay top-ups (signup ₹500, admin, partner). */
+/** Credits that hit the wallet but are not Razorpay top-ups (signup credit, admin, partner). */
 export function promoAdminCreditRaw(alias = ""): string {
   const p = alias ? `${alias}.` : "";
   return `${p}type in ('free_credit','admin_credit','partner_transfer_in','credit')

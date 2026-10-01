@@ -218,7 +218,7 @@ export default function LandingPage() {
             </a>
           </div>
 
-          <p className="hero-note" style={{ fontSize: 12, color: "#333", letterSpacing: "0.02em" }}>₹500 free credit · No card required</p>
+          <p className="hero-note" style={{ fontSize: 12, color: "#333", letterSpacing: "0.02em" }}>15 free minutes · No card required</p>
         </div>
 
         {/* Bottom gradient fade */}
@@ -496,7 +496,7 @@ export default function LandingPage() {
               Your callers deserve an<br />agent that remembers them.
             </h2>
             <p style={{ color: "#444", fontSize: "0.95rem", marginBottom: 36, position: "relative" }}>
-              ₹500 free credit. Pay by card. Takes 2 minutes.
+              15 free minutes. Pay by card. Takes 2 minutes.
             </p>
             <Link href="/sign-up" className="btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#a855f7", color: "#fff", fontSize: 15, fontWeight: 700, padding: "15px 36px", borderRadius: 10, textDecoration: "none", transition: "opacity .2s, box-shadow .2s", letterSpacing: "-0.2px", position: "relative", boxShadow: "0 0 40px rgba(168,85,247,0.3)" }}>
               Start building free →

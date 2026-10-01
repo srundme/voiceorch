@@ -66,7 +66,7 @@ registerTransientKey({ prefix: OTP_RATE_LIMIT_PREFIX, windowMs: OTP_RATE_LIMIT_W
 const router: IRouter = Router();
 const scryptAsync = promisify(scrypt);
 
-const FREE_CREDIT_CENTS = SIGNUP_CREDIT_PAISE; // Rs.500 welcome credit
+const FREE_CREDIT_CENTS = SIGNUP_CREDIT_PAISE; // Rs.75 welcome credit (15 free minutes)
 
 async function hashOtp(otp: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");
@@ -163,7 +163,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     let reactivated = false;
     if (existing) {
       reactivated = true;
-      // Returning after self-delete: no second ₹500 / ~100 min welcome credit.
+      // Returning after self-delete: no second welcome credit.
       [user] = await db
         .update(usersTable)
         .set({
@@ -908,7 +908,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       }
     } else if (user.status === "deleted") {
       // Soft-deleted account — reactivate the same row, but never re-grant
-      // ₹500 / ~100 min welcome credit (freeCreditsGranted stays true, wallet = 0).
+      // welcome credit (freeCreditsGranted stays true, wallet = 0).
       const [reactivatedRow] = await db
         .update(usersTable)
         .set({

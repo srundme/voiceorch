@@ -8,8 +8,14 @@
 export const GST_RATE = 0.18;
 export const CURRENCY_INR = "INR" as const;
 
-/** ₹500 signup free credit */
-export const SIGNUP_CREDIT_PAISE = 50_000;
+/** Flat ₹5 / minute platform fee */
+export const RATE_PAISE_PER_MIN = 500;
+
+/** Free minutes for new signups */
+export const SIGNUP_FREE_MINUTES = 15;
+
+/** ₹75 signup free credit (15 minutes at ₹5/min) */
+export const SIGNUP_CREDIT_PAISE = SIGNUP_FREE_MINUTES * RATE_PAISE_PER_MIN;
 
 /** ₹800 phone number base for first purchase (₹700 rental + ₹100 setup before GST).
  *  NOTE: voice DIDs now use prefix-tiered pricing (phoneMonthlyBasePaise below);
@@ -42,9 +48,6 @@ export function phoneMonthlyBasePaise(number: string): number {
 export function phonePurchaseBasePaise(number: string): number {
   return phoneMonthlyBasePaise(number) + PHONE_SETUP_PAISE;
 }
-
-/** Flat ₹5 / minute platform fee */
-export const RATE_PAISE_PER_MIN = 500;
 
 /** Minimum wallet top-up credit (₹100) — regular accounts */
 export const MIN_TOPUP_PAISE = 10_000;

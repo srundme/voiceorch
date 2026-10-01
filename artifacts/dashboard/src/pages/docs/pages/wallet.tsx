@@ -29,14 +29,14 @@ GET https://app.snapserve.ai/api/wallet/transactions?limit=50`}
         <CodeBlock
           language="json"
           code={`{
-  "balanceCents": 50000,
-  "balanceInr": 500,
+  "balanceCents": 7500,
+  "balanceInr": 75,
   "currency": "INR",
   "freeCreditsGranted": true
 }`}
         />
         <p>
-          <code>50000</code> paise = <strong>₹500.00</strong> (~100 minutes at ₹5/min).
+          <code>7500</code> paise = <strong>₹75.00</strong> (15 minutes at ₹5/min, the welcome credit).
         </p>
       </Endpoint>
 

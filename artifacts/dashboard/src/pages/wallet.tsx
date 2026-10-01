@@ -335,7 +335,7 @@ export default function WalletPage() {
                   {wallet?.freeCreditsGranted && (
                     <span className="text-foreground mr-2 inline-flex items-center gap-1">
                       <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />
-                      ₹500 free credit applied
+                      Welcome credit applied
                     </span>
                   )}
                   Approx. {minsRemaining} minutes remaining at ₹{rateInr}/min

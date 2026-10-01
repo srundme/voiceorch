@@ -43,7 +43,7 @@ export default function PricingPage() {
 Own telephony: ₹1 / min off
 WhatsApp (own Vobiz channel): templates ₹0.40–₹1.20 · free-form ₹0.25 · calling ₹1.50 / min
 Phone DID: ₹599–₹699 / 30 days + ₹100 setup + 18% GST
-Welcome credit: ₹500`}
+Welcome credit: ₹75 (15 free minutes)`}
       />
 
       <Callout variant="info" title="Live rates">
@@ -54,14 +54,14 @@ Welcome credit: ₹500`}
       <h2 id="voice">Voice (phone &amp; webcall)</h2>
       <RateTable
         rows={[
-          { item: "Welcome credit (new accounts)", price: "₹500", notes: "No GST on the grant" },
+          { item: "Welcome credit (new accounts)", price: "₹75 (15 min)", notes: "No GST on the grant" },
           { item: "Orchestration (managed or BYOP LLM/STT/TTS)", price: "₹5.00 / min", notes: "Answered minutes, pro-rata" },
           { item: "Own telephony discount", price: "− ₹1.00 / min", notes: "Your Twilio / Plivo / Vobiz creds + fromNumber" },
           { item: "Partner-managed client", price: "Partner-set", notes: "Partner wallet; client does not pick SnapServe list price" },
         ]}
       />
       <p>
-        ₹500 ≈ <strong>100 minutes</strong> at ₹5/min. A ₹1,000 top-up: you pay ₹1,180 (18% GST);
+        New accounts get <strong>15 free minutes</strong> (₹75 at ₹5/min). A ₹1,000 top-up: you pay ₹1,180 (18% GST);
         wallet gains ₹1,000 ≈ 200 minutes. Failed / no-pickup legs that never connect are not
         charged as answered minutes.
       </p>
