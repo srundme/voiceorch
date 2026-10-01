@@ -1,13 +1,30 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { db, agentDispositionsTable, callDispositionsTable } from "@workspace/db";
+import { db, agentDispositionsTable, agentsTable, callDispositionsTable, callsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
+import { getAuth } from "../lib/auth-compat.js";
 import { evictDispositionCache } from "../services/disposition.js";
 import { normalizeAfterCallMessagesInput } from "../services/agent-after-call-messages.js";
+import { canAccessWorkspaceCall, resolveWorkspaceScope } from "../services/workspace-scope.js";
 
 const router = Router();
+
+async function workspaceAgentAccess(
+  clerkId: string | null | undefined,
+  agentId: number,
+): Promise<{ found: boolean; canWrite: boolean }> {
+  if (!clerkId) return { found: false, canWrite: false };
+  const [agent] = await db
+    .select({ userId: agentsTable.userId })
+    .from(agentsTable)
+    .where(eq(agentsTable.id, agentId));
+  if (!agent?.userId) return { found: false, canWrite: false };
+  const scope = await resolveWorkspaceScope(clerkId);
+  if (!scope.userIds.includes(agent.userId)) return { found: false, canWrite: false };
+  return { found: true, canWrite: scope.canWrite };
+}
 
 const TaxonomyMapSchema = z.record(z.string(), z.array(z.string()));
 
@@ -47,14 +64,14 @@ const UpsertConfigBody = z.object({
     type:  z.enum(["string", "number", "boolean"]),
     label: z.string().max(120).optional(),
     enum:  z.array(z.string()).optional(),
-  })).optional().default([]),
+  })).optional(),
   rules: z.array(z.object({
     when:       z.string(),
     value:      z.unknown().optional(),
     primary:    z.string(),
     sub:        z.string(),
     confidence: z.number().min(0).max(1),
-  })).optional().default([]),
+  })).optional(),
   meaningMap: MeaningMapSchema,
   afterCallMessages: AfterCallMessagesSchema,
   /** Business definition per outcome value (e.g. interested → "asked for demo…"). */
@@ -66,6 +83,10 @@ router.get("/disposition/config/:agentId", requireAuth, clientContext, async (re
   const agentId = parseInt(String(req.params["agentId"] ?? ""), 10);
   if (!agentId || isNaN(agentId)) {
     res.status(400).json({ error: "Invalid agentId" });
+    return;
+  }
+  if (!(await workspaceAgentAccess(getAuth(req).userId, agentId)).found) {
+    res.status(404).json({ error: "Agent not found" });
     return;
   }
 
@@ -100,6 +121,15 @@ router.put("/disposition/config/:agentId", requireAuth, clientContext, async (re
   const agentId = parseInt(String(req.params["agentId"] ?? ""), 10);
   if (!agentId || isNaN(agentId)) {
     res.status(400).json({ error: "Invalid agentId" });
+    return;
+  }
+  const access = await workspaceAgentAccess(getAuth(req).userId, agentId);
+  if (!access.found) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
+  if (!access.canWrite) {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
 
@@ -141,8 +171,8 @@ router.put("/disposition/config/:agentId", requireAuth, clientContext, async (re
     .values({
       agentId,
       taxonomy:     taxonomy as Record<string, string[]>,
-      domainFields: domainFields as any,
-      rules:        rules as any,
+      domainFields: (domainFields ?? []) as any,
+      rules:        (rules ?? []) as any,
       ...(meaning !== undefined ? { meaningMap: meaning } : {}),
       ...(afterMsgs !== undefined ? { afterCallMessages: afterMsgs } : {}),
       ...(guides !== undefined ? { outcomeGuides: guides } : {}),
@@ -151,8 +181,8 @@ router.put("/disposition/config/:agentId", requireAuth, clientContext, async (re
       target: agentDispositionsTable.agentId,
       set: {
         taxonomy:     taxonomy as Record<string, string[]>,
-        domainFields: domainFields as any,
-        rules:        rules as any,
+        ...(domainFields !== undefined ? { domainFields: domainFields as any } : {}),
+        ...(rules !== undefined ? { rules: rules as any } : {}),
         ...(meaning !== undefined ? { meaningMap: meaning } : {}),
         ...(afterMsgs !== undefined ? { afterCallMessages: afterMsgs } : {}),
         ...(guides !== undefined ? { outcomeGuides: guides } : {}),
@@ -169,6 +199,15 @@ router.get("/disposition/result/:callId", requireAuth, clientContext, async (req
   const callId = parseInt(String(req.params["callId"] ?? ""), 10);
   if (!callId || isNaN(callId)) {
     res.status(400).json({ error: "Invalid callId" });
+    return;
+  }
+  const { userId } = getAuth(req);
+  const [call] = await db
+    .select({ userId: callsTable.userId, agentId: callsTable.agentId })
+    .from(callsTable)
+    .where(eq(callsTable.id, callId));
+  if (!call || !userId || !(await canAccessWorkspaceCall(userId, call))) {
+    res.status(404).json({ error: "No disposition result for this call" });
     return;
   }
 

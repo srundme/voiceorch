@@ -7,6 +7,7 @@ import { Router, type IRouter, type Request, type Response, type NextFunction } 
 import { randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createSnapServeMcpServer } from "@snapserve/mcp";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { logger } from "../lib/logger.js";
@@ -14,6 +15,7 @@ import { describeApiKeyShapeError } from "../services/mcp-oauth-helpers.js";
 import {
   checkClientRedirect,
   exchangeAuthorizationCode,
+  exchangeRefreshToken,
   issueAuthorizationCode,
   mcpResourceUrl,
   oauthAuthorizationServerMetadata,
@@ -30,10 +32,29 @@ const router: IRouter = Router();
 
 type SessionEntry = {
   transport: StreamableHTTPServerTransport;
+  server: McpServer;
   apiKey: string;
+  lastSeenAt: number;
 };
 
 const sessions = new Map<string, SessionEntry>();
+const SESSION_IDLE_MS = 60 * 60 * 1000;
+
+function closeSession(sid: string): void {
+  const entry = sessions.get(sid);
+  if (!entry) return;
+  sessions.delete(sid);
+  void entry.transport.close().catch(() => {});
+  void entry.server.close().catch(() => {});
+}
+
+const sessionSweep = setInterval(() => {
+  const cutoff = Date.now() - SESSION_IDLE_MS;
+  for (const [sid, entry] of sessions) {
+    if (entry.lastSeenAt < cutoff) closeSession(sid);
+  }
+}, 5 * 60 * 1000);
+sessionSweep.unref?.();
 
 function resourceMetadataUrl(): string {
   return `${getSelfBaseUrl()}/.well-known/oauth-protected-resource`;
@@ -229,6 +250,10 @@ router.get("/mcp/oauth/authorize", async (req, res): Promise<void> => {
     res.status(400).send("Only response_type=code is supported");
     return;
   }
+  if (codeChallengeMethod !== "S256") {
+    res.status(400).send("Only S256 PKCE is supported");
+    return;
+  }
 
   const clientCheck = await checkClientRedirect(clientId, redirectUri);
   if (clientCheck !== "ok") {
@@ -316,7 +341,7 @@ router.post("/mcp/oauth/token", async (req, res): Promise<void> => {
   try {
     const body = req.body as Record<string, string | undefined>;
     const grantType = body["grant_type"];
-    if (grantType !== "authorization_code") {
+    if (grantType !== "authorization_code" && grantType !== "refresh_token") {
       res.status(400).json({ error: "unsupported_grant_type" });
       return;
     }
@@ -331,13 +356,20 @@ router.post("/mcp/oauth/token", async (req, res): Promise<void> => {
       if (secret) clientSecret = secret;
     }
 
-    const tokens = await exchangeAuthorizationCode({
-      clientId,
-      clientSecret,
-      code: String(body["code"] ?? ""),
-      redirectUri: String(body["redirect_uri"] ?? ""),
-      codeVerifier: String(body["code_verifier"] ?? ""),
-    });
+    const tokens = grantType === "refresh_token"
+      ? await exchangeRefreshToken({
+          clientId,
+          clientSecret,
+          refreshToken: String(body["refresh_token"] ?? ""),
+        })
+      : await exchangeAuthorizationCode({
+          clientId,
+          clientSecret,
+          code: String(body["code"] ?? ""),
+          redirectUri: String(body["redirect_uri"] ?? ""),
+          codeVerifier: String(body["code_verifier"] ?? ""),
+        });
+    res.setHeader("Cache-Control", "no-store");
     res.json(tokens);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -371,24 +403,28 @@ async function handleMcpPost(req: Request, res: Response): Promise<void> {
         });
         return;
       }
+      entry.lastSeenAt = Date.now();
       transport = entry.transport;
       await transport.handleRequest(req, res, req.body);
       return;
     }
 
     if (!sessionId && isInitializeRequest(req.body)) {
+      const server = createSnapServeMcpServer({ apiKey, baseUrl: apiBaseUrl() });
       transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sid) => {
-          sessions.set(sid, { transport, apiKey });
+          sessions.set(sid, { transport, server, apiKey, lastSeenAt: Date.now() });
         },
       });
       transport.onclose = () => {
         const sid = transport.sessionId;
-        if (sid) sessions.delete(sid);
+        if (sid && sessions.has(sid)) {
+          sessions.delete(sid);
+          void server.close().catch(() => {});
+        }
       };
 
-      const server = createSnapServeMcpServer({ apiKey, baseUrl: apiBaseUrl() });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
       return;
@@ -407,9 +443,10 @@ async function handleMcpPost(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    res.status(400).json({
+    // Unknown session (e.g. after a redeploy): 404 tells the client to re-initialize.
+    res.status(404).json({
       jsonrpc: "2.0",
-      error: { code: -32000, message: "Bad Request: No valid session ID provided" },
+      error: { code: -32001, message: "Session not found — re-initialize" },
       id: null,
     });
   } catch (err) {
@@ -426,8 +463,12 @@ async function handleMcpPost(req: Request, res: Response): Promise<void> {
 
 async function handleMcpGet(req: Request, res: Response): Promise<void> {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
-  if (!sessionId || !sessions.has(sessionId)) {
-    res.status(400).send("Invalid or missing session ID");
+  if (!sessionId) {
+    res.status(400).send("Missing session ID");
+    return;
+  }
+  if (!sessions.has(sessionId)) {
+    res.status(404).send("Session not found");
     return;
   }
   const entry = sessions.get(sessionId)!;
@@ -446,8 +487,11 @@ async function handleMcpDelete(req: Request, res: Response): Promise<void> {
     return;
   }
   const entry = sessions.get(sessionId)!;
-  sessions.delete(sessionId);
-  await entry.transport.close();
+  if (entry.apiKey !== (req as any).mcpApiKey) {
+    res.status(403).send("Session belongs to a different credential");
+    return;
+  }
+  closeSession(sessionId);
   res.status(200).end();
 }
 
@@ -472,11 +516,12 @@ router.get("/mcp/info", (_req, res): void => {
     },
     docs: "https://app.snapserve.ai/docs/sdks#mcp",
     tools: [
-      "agents", "calls", "campaigns", "journeys", "whatsapp", "email",
-      "sheets_automatic_calls", "knowledge", "squads", "webcall",
+      "agents", "calls", "campaigns", "batches", "journeys", "whatsapp", "email",
+      "sheets_automatic_calls", "knowledge", "dispositions", "squads", "webcall",
       "phone_numbers", "providers", "webhooks", "wallet", "analytics",
       "snapserve_api",
     ],
+    auth_refresh: "OAuth refresh_token grant supported",
   });
 });
 

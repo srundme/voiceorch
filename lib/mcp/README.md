@@ -48,15 +48,17 @@ Optional: set `SNAPSERVE_BASE_URL` for self-hosted/staging deployments (default 
 | Area | Tools |
 |---|---|
 | Agents | `list_agents`, `get_agent`, `create_agent`, `update_agent`, `toggle_agent`, `delete_agent`, versions |
-| Calls | `list_calls`, `get_call`, `get_call_logs`, `outbound_call` / `create_outbound_call`, `end_call`, `transfer_call` |
-| Campaigns | `list_campaigns`, `create_campaign`, `update_campaign`, batches, leads |
+| Calls | `list_calls`, `get_call`, `get_call_logs`, `outbound_call`, `end_call`, `transfer_call` |
+| Campaigns | `list_campaigns`, `get_campaign`, `create_campaign`, `update_campaign`, `create_campaign_batch`, batches, leads |
 | Journeys | presets, create, activate, pause |
 | WhatsApp / email | channel status, BYO connections, Brevo |
 | Sheets | Automatic Calls list / create / start / pause |
-| Knowledge / squads / webcall | attach KB, squads, webcall links |
+| Knowledge / squads / webcall | create + attach KB, squads, browser call links |
 | Numbers / providers / webhooks | list, assign, BYO keys, outbound webhooks |
 | Wallet / analytics | `get_wallet`, dashboard, per-agent stats |
-| Escape hatch | `snapserve_api` / `snapserve_api_request` |
+| Escape hatch | `snapserve_api` |
+
+Full list: see `lib/snapserve-mcp/README.md`.
 
 Example prompts once connected:
 

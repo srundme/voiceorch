@@ -2,7 +2,7 @@
  * Minimal MCP OAuth for Claude custom connectors.
  * Authorize by pasting a SnapServe API key (sk_live_…); issue opaque mcp_at_ tokens.
  */
-import { createHash, randomBytes, createHmac } from "node:crypto";
+import { createHash, randomBytes, createHmac, timingSafeEqual } from "node:crypto";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import {
   db,
@@ -16,7 +16,17 @@ import { hashKey } from "../routes/user-api-keys.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 
 const CODE_TTL_MS = 10 * 60 * 1000;
-const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const REFRESH_TTL_MS = 180 * 24 * 60 * 60 * 1000;
+const AUTHORIZE_STATE_TTL_MS = 30 * 60 * 1000;
+
+export type McpTokenResponse = {
+  access_token: string;
+  token_type: "Bearer";
+  expires_in: number;
+  refresh_token: string;
+  scope: string;
+};
 
 function sha256Hex(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -43,7 +53,7 @@ export function oauthAuthorizationServerMetadata() {
     registration_endpoint: `${issuer}/api/mcp/oauth/register`,
     revocation_endpoint: `${issuer}/api/mcp/oauth/revoke`,
     response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
     scopes_supported: ["mcp:tools"],
@@ -104,7 +114,7 @@ export async function registerOauthClient(input: {
     client_id_issued_at: Math.floor(Date.now() / 1000),
     client_name: input.client_name,
     redirect_uris: redirectUris,
-    grant_types: ["authorization_code"],
+    grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
     token_endpoint_auth_method: authMethod,
   };
@@ -192,16 +202,8 @@ export async function exchangeAuthorizationCode(opts: {
   code: string;
   redirectUri: string;
   codeVerifier: string;
-}): Promise<{ access_token: string; token_type: "Bearer"; expires_in: number; scope: string }> {
-  const client = await getClient(opts.clientId);
-  if (!client) throw new Error("Invalid client");
-  // Public clients (Claude DCR with auth_method=none) often omit client_secret
-  // and rely on PKCE. If a secret is supplied, it must match.
-  if (opts.clientSecret && client.clientSecret) {
-    if (sha256Hex(opts.clientSecret) !== client.clientSecret) {
-      throw new Error("Invalid client credentials");
-    }
-  }
+}): Promise<McpTokenResponse> {
+  await verifyClient(opts.clientId, opts.clientSecret);
 
   const [row] = await db
     .select()
@@ -221,32 +223,98 @@ export async function exchangeAuthorizationCode(opts: {
   const expected = base64UrlSha256(opts.codeVerifier);
   if (expected !== row.codeChallenge) throw new Error("PKCE verification failed");
 
-  await db
+  const claimed = await db
     .update(mcpOauthCodesTable)
     .set({ usedAt: new Date() })
-    .where(eq(mcpOauthCodesTable.id, row.id));
+    .where(and(eq(mcpOauthCodesTable.id, row.id), isNull(mcpOauthCodesTable.usedAt)))
+    .returning({ id: mcpOauthCodesTable.id });
+  if (claimed.length === 0) throw new Error("Invalid or expired authorization code");
 
+  return issueTokenPair(opts.clientId, row.userId, row.apiKeyCiphertext);
+}
+
+/** Rotate a refresh token: the old one is revoked and a new access + refresh pair is issued. */
+export async function exchangeRefreshToken(opts: {
+  clientId: string;
+  clientSecret?: string;
+  refreshToken: string;
+}): Promise<McpTokenResponse> {
+  await verifyClient(opts.clientId, opts.clientSecret);
+  const raw = opts.refreshToken.trim();
+  if (!raw.startsWith("mcp_rt_")) throw new Error("Invalid refresh token");
+
+  const [row] = await db
+    .update(mcpOauthTokensTable)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(
+        eq(mcpOauthTokensTable.tokenHash, sha256Hex(raw)),
+        eq(mcpOauthTokensTable.clientId, opts.clientId),
+        isNull(mcpOauthTokensTable.revokedAt),
+        gt(mcpOauthTokensTable.expiresAt, new Date()),
+      ),
+    )
+    .returning();
+  if (!row) throw new Error("Invalid or expired refresh token");
+
+  if (!(await liveApiKeyFromCiphertext(row.apiKeyCiphertext))) {
+    throw new Error("The SnapServe API key behind this connection was revoked — reconnect with a new key");
+  }
+  return issueTokenPair(opts.clientId, row.userId, row.apiKeyCiphertext);
+}
+
+async function verifyClient(clientId: string, clientSecret: string | undefined): Promise<void> {
+  const client = await getClient(clientId);
+  if (!client) throw new Error("Invalid client");
+  // Public clients (Claude DCR with auth_method=none) often omit client_secret
+  // and rely on PKCE. If a secret is supplied, it must match.
+  if (clientSecret && client.clientSecret && sha256Hex(clientSecret) !== client.clientSecret) {
+    throw new Error("Invalid client credentials");
+  }
+}
+
+async function issueTokenPair(clientId: string, userId: string, apiKeyCiphertext: string): Promise<McpTokenResponse> {
   const accessToken = `mcp_at_${randomBytes(32).toString("hex")}`;
-  const expiresIn = Math.floor(TOKEN_TTL_MS / 1000);
-  await db.insert(mcpOauthTokensTable).values({
-    tokenHash: sha256Hex(accessToken),
-    clientId: opts.clientId,
-    userId: row.userId,
-    apiKeyCiphertext: row.apiKeyCiphertext,
-    expiresAt: new Date(Date.now() + TOKEN_TTL_MS),
-  });
-
+  const refreshToken = `mcp_rt_${randomBytes(32).toString("hex")}`;
+  const now = Date.now();
+  await db.insert(mcpOauthTokensTable).values([
+    {
+      tokenHash: sha256Hex(accessToken),
+      clientId,
+      userId,
+      apiKeyCiphertext,
+      expiresAt: new Date(now + TOKEN_TTL_MS),
+    },
+    {
+      tokenHash: sha256Hex(refreshToken),
+      clientId,
+      userId,
+      apiKeyCiphertext,
+      expiresAt: new Date(now + REFRESH_TTL_MS),
+    },
+  ]);
   return {
     access_token: accessToken,
     token_type: "Bearer",
-    expires_in: expiresIn,
+    expires_in: Math.floor(TOKEN_TTL_MS / 1000),
+    refresh_token: refreshToken,
     scope: "mcp:tools",
   };
 }
 
+async function liveApiKeyFromCiphertext(ciphertext: string): Promise<{ userId: string; apiKey: string } | null> {
+  let apiKey: string;
+  try {
+    apiKey = decryptKey(ciphertext);
+  } catch {
+    return null;
+  }
+  return validateApiKeyForOauth(apiKey);
+}
+
 export async function revokeAccessToken(token: string): Promise<void> {
   const raw = token.trim();
-  if (!raw.startsWith("mcp_at_")) return;
+  if (!raw.startsWith("mcp_at_") && !raw.startsWith("mcp_rt_")) return;
   await db
     .update(mcpOauthTokensTable)
     .set({ revokedAt: new Date() })
@@ -285,35 +353,38 @@ export async function resolveMcpApiKey(authorizationHeader: string | undefined, 
       )
       .limit(1);
     if (!row) return null;
-    try {
-      const apiKey = decryptKey(row.apiKeyCiphertext);
-      return { apiKey, userId: row.userId };
-    } catch {
-      return null;
-    }
+    // A revoked sk_live_ key must surface as a 401 here so the client re-authorizes,
+    // rather than every tool call failing downstream.
+    return liveApiKeyFromCiphertext(row.apiKeyCiphertext);
   }
 
   return null;
 }
 
+function authorizeStateSecret(): string {
+  return process.env["APP_SECRET"] ?? "snapserve-mcp";
+}
+
 /** CSRF-ish state binder for authorize form (optional hardening). */
 export function signAuthorizeState(payload: Record<string, string>): string {
-  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const sig = createHmac("sha256", process.env["APP_SECRET"] ?? "snapserve-mcp")
-    .update(body)
-    .digest("base64url");
+  const withExp = { ...payload, exp: String(Date.now() + AUTHORIZE_STATE_TTL_MS) };
+  const body = Buffer.from(JSON.stringify(withExp)).toString("base64url");
+  const sig = createHmac("sha256", authorizeStateSecret()).update(body).digest("base64url");
   return `${body}.${sig}`;
 }
 
 export function verifyAuthorizeState(token: string): Record<string, string> | null {
   const [body, sig] = token.split(".");
   if (!body || !sig) return null;
-  const expected = createHmac("sha256", process.env["APP_SECRET"] ?? "snapserve-mcp")
-    .update(body)
-    .digest("base64url");
-  if (sig !== expected) return null;
+  const expected = createHmac("sha256", authorizeStateSecret()).update(body).digest("base64url");
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
   try {
-    return JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as Record<string, string>;
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as Record<string, string>;
+    const exp = Number(payload["exp"]);
+    if (Number.isFinite(exp) && exp < Date.now()) return null;
+    return payload;
   } catch {
     return null;
   }

@@ -1,6 +1,6 @@
 {
   "name": "@snapserve/mcp",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Model Context Protocol server for SnapServe (app.snapserve.ai) — agents, campaigns, journeys, WhatsApp, Sheets, and more",
   "license": "MIT",
   "type": "module",

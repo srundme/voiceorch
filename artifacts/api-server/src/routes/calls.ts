@@ -1095,8 +1095,11 @@ router.post("/calls/:id/transfer", requireAuth, clientContext, async (req, res):
     res.status(400).json({ error: "target is required" }); return;
   }
 
+  const { userId } = getAuth(req);
   const [call] = await db.select().from(callsTable).where(eq(callsTable.id, id));
-  if (!call) { res.status(404).json({ error: "Call not found" }); return; }
+  if (!call || !userId || !(await canAccessWorkspaceCall(userId, call))) {
+    res.status(404).json({ error: "Call not found" }); return;
+  }
   if (call.status !== "in_progress" && call.status !== "ringing") {
     res.status(409).json({ error: `Call is not active (status: ${call.status})` }); return;
   }

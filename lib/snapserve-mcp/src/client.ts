@@ -40,6 +40,9 @@ export class SnapServeClient {
       query?: Record<string, string | number | boolean | undefined | null>;
     } = {},
   ): Promise<T> {
+    if (/:\/\/|\.\./.test(path)) {
+      throw new Error("path must be a relative SnapServe API path like /agents/123");
+    }
     const url = new URL(this.baseUrl + (path.startsWith("/") ? path : `/${path}`));
     for (const [key, value] of Object.entries(options.query ?? {})) {
       if (value !== undefined && value !== null && value !== "") {
@@ -74,6 +77,15 @@ export class SnapServeClient {
   /** Public website lead intake URL for a campaign webhook token. */
   websiteLeadUrl(webhookToken: string): string {
     return `${this.baseUrl}/webhooks/lead/${webhookToken}`;
+  }
+
+  /** Dashboard origin (base URL without the trailing /api). */
+  get appOrigin(): string {
+    return this.baseUrl.replace(/\/api$/, "");
+  }
+
+  webcallJoinUrl(token: string): string {
+    return `${this.appOrigin}/join/${token}`;
   }
 }
 

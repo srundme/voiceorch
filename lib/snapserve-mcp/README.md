@@ -64,13 +64,20 @@ Add to Cursor MCP settings (or `.cursor/mcp.json`):
 | Area | Tools |
 |------|--------|
 | Meta | `snapserve_help`, `snapserve_api` |
-| Agents | `list_agents`, `get_agent`, `create_agent`, `update_agent`, `toggle_agent`, `delete_agent`, versions |
+| Account | `get_account`, `get_wallet`, `list_transactions` |
+| Agents | `list_agents`, `get_agent`, `create_agent`, `update_agent`, `toggle_agent`, `delete_agent`, `list_agent_versions`, `publish_agent_version` |
 | Calls | `list_calls`, `get_call`, `get_call_logs`, `outbound_call`, `end_call`, `transfer_call` |
-| Campaigns / website | `create_campaign`, `get_website_webhook`, leads, batches |
-| Journeys | presets, create, activate, pause |
-| WhatsApp / Email | channel + connections |
-| Phone / KB / Sheets | list/assign, attach, automatic-calls |
-| Dispositions / Squads / Webcall | config + runs + links |
-| Wallet / analytics / providers / webhooks | balance, dashboard, keys, endpoints |
+| Campaigns | `list_campaigns`, `get_campaign` (website intake URL), `create_campaign`, `update_campaign`, `delete_campaign`, `create_campaign_batch`, `list_campaign_batches`, `start_campaign_batch`, `import_campaign_leads`, `list_campaign_leads` |
+| Journeys | `list_journey_presets`, `list_journeys`, `get_journey`, `create_journey`, `apply_journey_preset`, `activate_journey`, `pause_journey` |
+| Knowledge | `list_knowledge_sources`, `create_knowledge_source`, `attach_knowledge`, `search_knowledge` |
+| Phone numbers | `list_phone_numbers`, `search_available_numbers`, `assign_phone_number` |
+| WhatsApp / email | `get_whatsapp_channel`, `update_whatsapp_channel`, `list_whatsapp_connections`, `create_whatsapp_connection`, `get_email_channel`, `update_email_channel` |
+| Sheets | `list_automatic_calls`, `create_automatic_call`, `start_automatic_call`, `pause_automatic_call` |
+| Dispositions / squads | `get_disposition_config`, `set_disposition_config`, `list_squads`, `list_squad_templates`, `create_squad`, `start_squad_run` |
+| Browser calls | `create_webcall_link` (returns `joinUrl`), `list_webcall_links` |
+| Providers / webhooks | `list_providers`, `create_provider`, `list_webhook_endpoints`, `create_webhook_endpoint` |
+| Analytics | `get_analytics_dashboard`, `get_agent_analytics`, `get_calls_by_status`, `get_daily_call_volume` |
+
+Every tool carries MCP annotations (read-only / destructive / open-world) so clients can auto-approve reads and ask before calls, dialing and deletes. List tools return compact rows; credentials in responses are masked.
 
 Pair with the **snapserve** Claude skill (`.claude/skills/snapserve`) for end-to-end workflows.
