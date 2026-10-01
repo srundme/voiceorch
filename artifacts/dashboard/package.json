@@ -87,6 +87,7 @@
   },
   "dependencies": {
     "@types/diff": "^8.0.0",
+    "@xyflow/react": "^12.12.0",
     "diff": "^9.0.0",
     "three": "^0.185.1"
   }

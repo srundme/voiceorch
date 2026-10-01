@@ -33,11 +33,13 @@ import {
   listJourneyPresets,
 } from "../services/journey-presets.js";
 import { draftCallPlanFromPrompt } from "../services/call-plan-vibe.js";
+import { isGraphFlow, toGraphFlow, validateFlow } from "../services/workflow-graph.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
 
 const router: IRouter = Router();
 
 function serializeJourney(j: Journey, extras?: { hookUrl?: string | null }) {
+  const flow = toGraphFlow(j.trigger, j.steps ?? []);
   return {
     id: j.id,
     agentId: j.agentId,
@@ -48,6 +50,9 @@ function serializeJourney(j: Journey, extras?: { hookUrl?: string | null }) {
     trigger: j.trigger,
     steps: j.steps,
     settings: j.settings ?? {},
+    /** Canvas view: graph pointers (legacy linear journeys converted on the fly). */
+    flow: { trigger: flow.trigger, steps: flow.steps },
+    validation: validateFlow(j.trigger, j.steps ?? []),
     workflowId: j.workflowId,
     publicToken: j.publicToken,
     hookUrl: extras?.hookUrl ?? (j.publicToken ? `/api/workflows/hook/${j.publicToken}` : null),
@@ -114,6 +119,22 @@ async function syncBackingWorkflow(journey: Journey): Promise<number> {
   }).where(eq(journeysTable.id, journey.id));
 
   return wf!.id;
+}
+
+/** Reject structurally broken flows (bad arrows, duplicate ids) on save. */
+function rejectBrokenFlow(res: import("express").Response, trigger: WorkflowTrigger, steps: JourneyStep[]): boolean {
+  const { errors } = validateFlow(trigger, steps);
+  if (errors.length === 0) return false;
+  res.status(400).json({ error: errors[0], errors });
+  return true;
+}
+
+/** Block activate / start while the flow still has config issues. */
+function rejectIncompleteFlow(res: import("express").Response, j: Journey): boolean {
+  const { errors, issues } = validateFlow(j.trigger, j.steps ?? []);
+  if (errors.length === 0 && issues.length === 0) return false;
+  res.status(400).json({ error: errors[0] ?? issues[0]!.message, errors, issues });
+  return true;
 }
 
 async function loadOwnedJourney(clerkId: string, id: number): Promise<Journey | null> {
@@ -236,6 +257,7 @@ router.post("/journeys", requireAuth, async (req, res): Promise<void> => {
   }
 
   if (!name) { res.status(400).json({ error: "name required" }); return; }
+  if (rejectBrokenFlow(res, trigger, steps)) return;
 
   const publicToken = needsPublicToken(trigger) ? newPublicToken() : null;
 
@@ -281,6 +303,13 @@ router.patch("/journeys/:id", requireAuth, async (req, res): Promise<void> => {
     presetId: JourneyPresetId;
   }>;
 
+  if (
+    body.trigger !== undefined && body.steps === undefined
+    && !("entryStepId" in body.trigger) && isGraphFlow(existing.trigger)
+  ) {
+    body.trigger = { ...body.trigger, entryStepId: existing.trigger.entryStepId ?? null };
+  }
+
   const updates: Record<string, unknown> = {};
   if (body.name !== undefined) updates["name"] = body.name;
   if (body.description !== undefined) updates["description"] = body.description;
@@ -297,9 +326,17 @@ router.patch("/journeys/:id", requireAuth, async (req, res): Promise<void> => {
       updates["publicToken"] = newPublicToken();
     }
   }
-  if (body.steps !== undefined) updates["steps"] = body.steps;
+  if (body.steps !== undefined) {
+    if (!Array.isArray(body.steps)) { res.status(400).json({ error: "steps must be an array" }); return; }
+    updates["steps"] = body.steps;
+    // Hand-edited steps detach the preset so a later settings save can't rebuild over them.
+    if (body.presetId === undefined && existing.presetId !== "custom") updates["presetId"] = "custom";
+  }
   if (body.settings !== undefined) updates["settings"] = body.settings;
   if (body.presetId !== undefined) updates["presetId"] = body.presetId;
+  if (body.steps !== undefined || body.trigger !== undefined) {
+    if (rejectBrokenFlow(res, body.trigger ?? existing.trigger, body.steps ?? existing.steps ?? [])) return;
+  }
   if (body.status !== undefined && ["draft", "active", "paused"].includes(body.status)) {
     updates["status"] = body.status;
   }
@@ -365,6 +402,7 @@ router.post("/journeys/:id/activate", requireAuth, async (req, res): Promise<voi
   const id = parseInt(String(req.params["id"]), 10);
   const existing = await loadOwnedJourney(clerkId, id);
   if (!existing) { res.status(404).json({ error: "Journey not found" }); return; }
+  if (rejectIncompleteFlow(res, existing)) return;
 
   // Resume dial queue feed when source still has remaining people.
   const settings = { ...(existing.settings ?? {}) } as JourneySettings;
@@ -502,6 +540,7 @@ router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> 
   if (!Array.isArray(journey.steps) || journey.steps.length === 0) {
     res.status(400).json({ error: "Add at least one step before starting" }); return;
   }
+  if (rejectIncompleteFlow(res, journey)) return;
 
   const body = (req.body ?? {}) as {
     campaignId?: number;
@@ -1181,6 +1220,89 @@ router.get("/journeys/:id/runs/stats", requireAuth, async (req, res): Promise<vo
     startOffset: settings.startOffset ?? 0,
     startSourceTotal: settings.startSourceTotal ?? 0,
   });
+});
+
+/**
+ * Per-step counts for the canvas: how many people each step ran for (by audit
+ * status) and how many are parked on it right now (waiting on a call / wait).
+ * Keyed by step id; step indices are only stable within the current steps array.
+ */
+router.get("/journeys/:id/step-stats", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"]), 10);
+  const journey = await loadOwnedJourney(clerkId, id);
+  if (!journey) { res.status(404).json({ error: "Journey not found" }); return; }
+
+  const steps = journey.steps ?? [];
+  type StepCounts = {
+    ran: number; ok: number; sent: number; skipped: number; failed: number; waiting: number; connected: number;
+    /** condition / branch: people per path reason ("Yes", "No", "Path: …"). */
+    paths: Record<string, number>;
+  };
+  const out: Record<string, StepCounts> = {};
+  for (const s of steps) {
+    out[s.id] = { ran: 0, ok: 0, sent: 0, skipped: 0, failed: 0, waiting: 0, connected: 0, paths: {} };
+  }
+  if (!journey.workflowId || steps.length === 0) { res.json({ steps: out }); return; }
+
+  const audit = await db.execute<{ step_index: number; status: string; reason: string | null; people: number }>(sql`
+    SELECT (s->>'stepIndex')::int AS step_index, s->>'status' AS status, s->>'reason' AS reason,
+           count(DISTINCT r.id)::int AS people
+    FROM workflow_runs r
+    CROSS JOIN LATERAL jsonb_array_elements(
+      CASE WHEN jsonb_typeof(r.context->'steps') = 'array' THEN r.context->'steps' ELSE '[]'::jsonb END
+    ) AS s
+    WHERE r.workflow_id = ${journey.workflowId} AND r.user_id = ${clerkId}
+      AND s ? 'stepIndex'
+    GROUP BY 1, 2, 3
+  `);
+  const ranByIndex = new Map<number, number>();
+  for (const row of audit.rows) {
+    const step = steps[Number(row.step_index)];
+    if (!step) continue;
+    const c = out[step.id]!;
+    const n = Number(row.people);
+    if (step.type === "make_call" && row.reason === "Queued for dial") continue;
+    if ((step.type === "condition" || step.type === "branch") && row.reason) {
+      c.paths[row.reason] = (c.paths[row.reason] ?? 0) + n;
+    }
+    if (row.status === "ok" || row.status === "joined") c.ok += n;
+    else if (row.status === "sent") c.sent += n;
+    else if (row.status === "skipped") c.skipped += n;
+    else if (row.status === "failed") c.failed += n;
+    if (step.type === "make_call" && row.reason === "Connected") c.connected += n;
+  }
+  // "ran" = distinct people with any audit entry on the step.
+  const ran = await db.execute<{ step_index: number; people: number }>(sql`
+    SELECT (s->>'stepIndex')::int AS step_index, count(DISTINCT r.id)::int AS people
+    FROM workflow_runs r
+    CROSS JOIN LATERAL jsonb_array_elements(
+      CASE WHEN jsonb_typeof(r.context->'steps') = 'array' THEN r.context->'steps' ELSE '[]'::jsonb END
+    ) AS s
+    WHERE r.workflow_id = ${journey.workflowId} AND r.user_id = ${clerkId}
+      AND s ? 'stepIndex'
+    GROUP BY 1
+  `);
+  for (const row of ran.rows) ranByIndex.set(Number(row.step_index), Number(row.people));
+  for (const [idx, n] of ranByIndex) {
+    const step = steps[idx];
+    if (step) out[step.id]!.ran = n;
+  }
+
+  const waiting = await db.execute<{ step_index: number; people: number }>(sql`
+    SELECT (context->>'__parkedStepIndex')::int AS step_index, count(*)::int AS people
+    FROM workflow_runs
+    WHERE workflow_id = ${journey.workflowId} AND user_id = ${clerkId}
+      AND status IN ('waiting_call', 'waiting_delay')
+      AND context ? '__parkedStepIndex'
+    GROUP BY 1
+  `);
+  for (const row of waiting.rows) {
+    const step = steps[Number(row.step_index)];
+    if (step) out[step.id]!.waiting = Number(row.people);
+  }
+
+  res.json({ steps: out });
 });
 
 router.get("/journeys/:id/runs/export", requireAuth, async (req, res): Promise<void> => {

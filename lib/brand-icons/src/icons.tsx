@@ -150,6 +150,26 @@ export const SquadsIcon = createIcon("SquadsIcon", ({ o }) => (
   </>
 ));
 
+export const FlowsIcon = createIcon("FlowsIcon", ({ o }) => (
+  <>
+    {/* trigger */}
+    <rect x="8.8" y="2.8" width="6.4" height="5" rx="2" fill="currentColor" opacity={o.full} />
+    {/* split */}
+    <path
+      d="M12 7.8v3.4M6.4 14.2v-1.6a1.4 1.4 0 0 1 1.4-1.4h8.4a1.4 1.4 0 0 1 1.4 1.4v1.6"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+      opacity={o.soft}
+    />
+    {/* two paths */}
+    <rect x="3.2" y="14.2" width="6.4" height="6" rx="2" fill="currentColor" opacity={o.mid} />
+    <rect x="14.4" y="14.2" width="6.4" height="6" rx="2" fill="currentColor" opacity={o.full} />
+  </>
+));
+
 export const BookingsIcon = createIcon("BookingsIcon", ({ o }) => (
   <>
     <rect x="3.5" y="5.2" width="17" height="15.2" rx="3" fill="currentColor" opacity={o.mid} />

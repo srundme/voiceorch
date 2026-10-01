@@ -24,11 +24,34 @@ export interface WorkflowTrigger {
    * are still copied into context verbatim.
    */
   fieldMap?: Record<string, string>;
+  /**
+   * Graph (canvas) mode: id of the first step. When present, steps are walked by
+   * their `next` / `onTrue` / `onFalse` / `cases[].next` pointers instead of
+   * array order; null = canvas flow whose trigger isn't connected yet.
+   * Absent = legacy linear mode.
+   */
+  entryStepId?: string | null;
+  /** Canvas position of the trigger node (builder only). */
+  position?: { x: number; y: number };
+}
+
+export type ConditionOp = "eq" | "neq" | "contains" | "exists" | "gt" | "lt";
+
+export interface WorkflowBranchCase {
+  id: string;
+  label?: string;
+  field: string;
+  op: ConditionOp;
+  value?: string;
+  /** Step to go to when this case matches (null = end the run). */
+  next?: string | null;
 }
 
 export type WorkflowStepType =
   | "make_call"
   | "condition"
+  /** Graph mode only — first matching case wins, else `next`. */
+  | "branch"
   | "delay"
   | "send_webhook"
   | "schedule_callback"
@@ -43,6 +66,18 @@ export interface WorkflowStep {
   /** Stable id within the workflow (used for run bookkeeping). */
   id: string;
   type: WorkflowStepType;
+
+  // ── graph mode (trigger.entryStepId set) ────────────────────────────────────
+  /** Following step; null/unset = end the run. For condition/branch: the false / otherwise path. */
+  next?: string | null;
+  /** condition: step when true. */
+  onTrue?: string | null;
+  /** condition: step when false. */
+  onFalse?: string | null;
+  /** branch: ordered cases. */
+  cases?: WorkflowBranchCase[];
+  /** Canvas position (builder only). */
+  position?: { x: number; y: number };
 
   // ── make_call ──────────────────────────────────────────────────────────────
   agentId?: number;
@@ -59,7 +94,7 @@ export interface WorkflowStep {
   // With counts: linear if/else — then block is the next `thenStepCount` steps,
   // else block is the following `elseStepCount` steps; both rejoin after.
   field?: string;                          // context path, e.g. "call.disposition.interested"
-  op?: "eq" | "neq" | "contains" | "exists" | "gt" | "lt";
+  op?: ConditionOp;
   value?: string;
   /** Steps immediately after this condition that run when true. */
   thenStepCount?: number;

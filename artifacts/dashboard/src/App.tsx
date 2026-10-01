@@ -31,6 +31,7 @@ import WalletTabPage      from "@/pages/wallet-tabbed";
 
 // Individual / deep-link pages (unchanged)
 import SquadsPage              from "@/pages/squads/index";
+import FlowsPage               from "@/pages/flows/index";
 import MeetPage                from "@/pages/meet/index";
 import CallsList               from "@/pages/calls/index";
 import CallDetail              from "@/pages/calls/[id]";
@@ -495,8 +496,10 @@ function AppRoutes() {
           <TabRedirect to="/app/home" />
         </Route>
         <Route path="/app/call-plans">
-          <TabRedirect to="/app/home" />
+          <TabRedirect to="/app/flows" />
         </Route>
+        <Route path="/app/flows/:id" component={FlowsPage} />
+        <Route path="/app/flows" component={FlowsPage} />
         {/* Legacy People / Leads → Campaigns */}
         <Route path="/app/people">
           <TabRedirect to="/app/campaigns" />

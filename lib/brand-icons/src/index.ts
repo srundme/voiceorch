@@ -10,6 +10,7 @@ export {
   KnowledgeIcon,
   MemoryIcon,
   SquadsIcon,
+  FlowsIcon,
   BookingsIcon,
   SettingsIcon,
   WorkspaceIcon,

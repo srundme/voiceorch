@@ -47,8 +47,11 @@ import { interpolateTemplate } from "./template-vars.js";
 import { launchMeetingBotForAgent } from "./meeting-bot-launch.js";
 import { updateSheetRowByIndex } from "./google-sheets.js";
 import { sheetKeysForLead } from "./sheets-writeback.js";
+import { evalCondition, getPath, indexOfStep, isGraphFlow } from "./workflow-graph.js";
 
 const CALL_TIMEOUT_MS = 20 * 60 * 1000; // give up waiting on a call after 20 min
+/** Graph mode: inline steps allowed in one advance before a loop is assumed. */
+const MAX_INLINE_STEPS = 200;
 
 // ── Context helpers ──────────────────────────────────────────────────────────
 
@@ -79,14 +82,6 @@ function recordStepAudit(
   };
   context["steps"] = [...prev, next];
   context["lastStep"] = next;
-}
-
-function getPath(ctx: Ctx, path: string): unknown {
-  if (!path) return undefined;
-  return path.split(".").reduce<unknown>((acc, key) => {
-    if (acc && typeof acc === "object") return (acc as Record<string, unknown>)[key];
-    return undefined;
-  }, ctx);
 }
 
 function toStr(v: unknown): string {
@@ -198,7 +193,9 @@ export async function startWorkflowRun(opts: {
     userId: workflow.userId,
     status: "running",
     context,
-    currentStepIndex: 0,
+    currentStepIndex: isGraphFlow(workflow.trigger)
+      ? indexOfStep(workflow.steps ?? [], workflow.trigger.entryStepId)
+      : 0,
     triggeredBy,
   }).returning();
   await db.update(workflowsTable)
@@ -237,6 +234,10 @@ export async function advanceRun(runId: number): Promise<void> {
   if (!loaded) return;
   const { run, workflow } = loaded;
   if (run.status === "completed" || run.status === "failed") return;
+  if (isGraphFlow(workflow.trigger)) {
+    await advanceGraphRun(run, workflow);
+    return;
+  }
 
   const steps = workflow.steps ?? [];
   const context: Ctx = { ...(run.context ?? {}) };
@@ -270,7 +271,7 @@ export async function advanceRun(runId: number): Promise<void> {
           return;
         }
 
-        const ok = evalCondition(step, context);
+        const ok = evalCondition(step.field, step.op, step.value, context);
         const thenN = Math.max(0, Math.floor(Number(step.thenStepCount ?? 0)));
         const elseN = Math.max(0, Math.floor(Number(step.elseStepCount ?? 0)));
         const branched = thenN > 0 || elseN > 0;
@@ -327,58 +328,132 @@ export async function advanceRun(runId: number): Promise<void> {
         idx = idx + 1 + thenN;
         continue;
       }
-      if (step.type === "send_webhook") {
-        await doWebhook(step, context);
-        recordStepAudit(context, { type: "send_webhook", status: "ok", stepIndex: idx });
-        idx++;
-        continue;
-      }
-      if (step.type === "schedule_callback") {
-        await doScheduleCallback(workflow.userId, step, context);
-        recordStepAudit(context, { type: "schedule_callback", status: "ok", stepIndex: idx });
-        idx++;
-        continue;
-      }
-      if (step.type === "send_whatsapp") {
-        await doSendWhatsapp(workflow.userId, step, context, idx);
-        idx++;
-        continue;
-      }
-      if (step.type === "send_email") {
-        await doSendEmail(workflow.userId, step, context, idx);
-        idx++;
-        continue;
-      }
-      if (step.type === "join_meeting") {
-        await doJoinMeeting(workflow.userId, step, context, idx);
-        idx++;
-        continue;
-      }
-      if (step.type === "update_sheet") {
-        await doUpdateSheet(workflow.userId, step, context, idx);
-        idx++;
-        continue;
-      }
-      // Unknown step type — skip.
+      await runActionStep(workflow.userId, step, context, idx);
+      idx++;
+    } catch (err) {
+      await failStep(run.id, step, context, idx, err);
+      return;
+    }
+  }
+
+  await finishRun(run.id, context, "completed");
+}
+
+/** Inline (non-parking, non-branching) steps — shared by linear and graph mode. */
+async function runActionStep(userId: string, step: WorkflowStep, context: Ctx, idx: number): Promise<void> {
+  switch (step.type) {
+    case "send_webhook":
+      await doWebhook(step, context);
+      recordStepAudit(context, { type: "send_webhook", status: "ok", stepIndex: idx });
+      return;
+    case "schedule_callback":
+      await doScheduleCallback(userId, step, context);
+      recordStepAudit(context, { type: "schedule_callback", status: "ok", stepIndex: idx });
+      return;
+    case "send_whatsapp":
+      await doSendWhatsapp(userId, step, context, idx);
+      return;
+    case "send_email":
+      await doSendEmail(userId, step, context, idx);
+      return;
+    case "join_meeting":
+      await doJoinMeeting(userId, step, context, idx);
+      return;
+    case "update_sheet":
+      await doUpdateSheet(userId, step, context, idx);
+      return;
+    default:
       recordStepAudit(context, {
         type: step.type,
         status: "skipped",
         reason: "Unknown step type",
         stepIndex: idx,
       });
-      idx++;
+  }
+}
+
+async function failStep(runId: number, step: WorkflowStep, context: Ctx, idx: number, err: unknown): Promise<void> {
+  const msg = err instanceof Error ? err.message : String(err);
+  logger.error({ runId, stepIdx: idx, err }, "workflow: step failed");
+  recordStepAudit(context, {
+    type: step.type,
+    status: "failed",
+    reason: msg,
+    stepIndex: idx,
+  });
+  await db.update(workflowRunsTable)
+    .set({ status: "failed", error: `Step ${idx} (${step.type}): ${msg}`, context, currentStepIndex: idx, updatedAt: new Date() })
+    .where(eq(workflowRunsTable.id, runId));
+}
+
+/**
+ * Graph mode: follow arrows from `run.currentStepIndex`. `currentStepIndex`
+ * is still an array index (the next step to execute); `steps.length` = done.
+ * `context.__visits[stepId]` counts executions so retry loops can cap attempts.
+ */
+async function advanceGraphRun(run: WorkflowRun, workflow: Workflow): Promise<void> {
+  const steps = workflow.steps ?? [];
+  const context: Ctx = { ...(run.context ?? {}) };
+  let idx = run.currentStepIndex;
+
+  // Run parked under the linear engine before this flow became a graph.
+  const joinAt = Number(context["__branchJoinAt"]);
+  const elseCount = Math.max(0, Math.floor(Number(context["__branchElseCount"] ?? 0)));
+  if (Number.isFinite(joinAt) && idx === joinAt && elseCount > 0) idx += elseCount;
+  delete context["__branchJoinAt"];
+  delete context["__branchElseCount"];
+  delete context["__parkedStepIndex"];
+
+  let inline = 0;
+  while (idx < steps.length) {
+    const step = steps[idx]!;
+    if (++inline > MAX_INLINE_STEPS) {
+      await failStep(run.id, step, context, idx, new Error(
+        `Loop without a Wait or Call step — stopped after ${MAX_INLINE_STEPS} steps`,
+      ));
+      return;
+    }
+    const visits = (context["__visits"] && typeof context["__visits"] === "object")
+      ? { ...(context["__visits"] as Record<string, number>) }
+      : {};
+    visits[step.id] = (Number(visits[step.id]) || 0) + 1;
+    context["__visits"] = visits;
+
+    try {
+      if (step.type === "make_call") {
+        await beginCall(run.id, workflow.userId, step, context, idx, indexOfStep(steps, step.next));
+        return;
+      }
+      if (step.type === "delay") {
+        await beginDelay(run.id, step, context, idx, indexOfStep(steps, step.next));
+        return;
+      }
+      if (step.type === "condition") {
+        if (step.field === "__stop") {
+          recordStepAudit(context, { type: "stop", status: "ok", reason: "Stop", stepIndex: idx });
+          break;
+        }
+        const ok = evalCondition(step.field, step.op, step.value, context);
+        recordStepAudit(context, { type: "condition", status: "ok", reason: ok ? "Yes" : "No", stepIndex: idx });
+        idx = indexOfStep(steps, ok ? step.onTrue : step.onFalse);
+        continue;
+      }
+      if (step.type === "branch") {
+        const hit = (step.cases ?? []).find((c) => evalCondition(c.field, c.op, c.value, context));
+        recordStepAudit(context, {
+          type: "branch",
+          status: "ok",
+          reason: hit ? `Path: ${hit.label || hit.id}` : "Path: otherwise",
+          stepIndex: idx,
+        });
+        context["__lastBranchCase"] = hit?.id ?? "otherwise";
+        idx = indexOfStep(steps, hit ? hit.next : step.next);
+        continue;
+      }
+      await runActionStep(workflow.userId, step, context, idx);
+      idx = indexOfStep(steps, step.next);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.error({ runId, stepIdx: idx, err }, "workflow: step failed");
-      recordStepAudit(context, {
-        type: step.type,
-        status: "failed",
-        reason: msg,
-        stepIndex: idx,
-      });
-      await db.update(workflowRunsTable)
-        .set({ status: "failed", error: `Step ${idx} (${step.type}): ${msg}`, context, currentStepIndex: idx, updatedAt: new Date() })
-        .where(eq(workflowRunsTable.id, run.id));
+      await failStep(run.id, step, context, idx, err);
       return;
     }
   }
@@ -388,7 +463,14 @@ export async function advanceRun(runId: number): Promise<void> {
 
 // ── make_call ─────────────────────────────────────────────────────────────────
 
-async function beginCall(runId: number, userId: string, step: WorkflowStep, context: Ctx, idx: number): Promise<void> {
+async function beginCall(
+  runId: number,
+  userId: string,
+  step: WorkflowStep,
+  context: Ctx,
+  idx: number,
+  nextIdx: number = idx + 1,
+): Promise<void> {
   if (!step.agentId) throw new Error("make_call step missing agentId");
   const phoneRaw = toStr(getPath(context, step.phoneField ?? "phone") || context["phone"]);
   if (!phoneRaw.trim()) throw new Error("make_call: no phone number in context");
@@ -454,8 +536,9 @@ async function beginCall(runId: number, userId: string, step: WorkflowStep, cont
 
   // Park BEFORE dialing — campaign rolling refill claims up to concurrentLimit.
   recordStepAudit(context, { type: "make_call", status: "ok", reason: "Queued for dial", stepIndex: idx });
+  context["__parkedStepIndex"] = idx;
   await db.update(workflowRunsTable)
-    .set({ status: "waiting_call", leadId: lead!.id, currentStepIndex: idx + 1, context, updatedAt: new Date() })
+    .set({ status: "waiting_call", leadId: lead!.id, currentStepIndex: nextIdx, context, updatedAt: new Date() })
     .where(eq(workflowRunsTable.id, runId));
 
   await refillWorkflowDialSlots(userId, campaign.id);
@@ -522,11 +605,14 @@ export async function resumeWaitingCallRuns(): Promise<void> {
       if (!result) continue; // still in progress — check again next tick
 
       if (await claimRun(run.id, "waiting_call")) {
-        const context = { ...(run.context ?? {}), call: result };
+        const context: Ctx = { ...(run.context ?? {}), call: result };
+        const parked = Number(context["__parkedStepIndex"]);
+        delete context["__parkedStepIndex"];
         recordStepAudit(context, {
           type: "make_call",
           status: result.connected === true ? "ok" : "skipped",
           reason: result.connected === true ? "Connected" : "No answer / not connected",
+          ...(Number.isInteger(parked) ? { stepIndex: parked } : {}),
         });
         await db.update(workflowRunsTable)
           .set({ context, callId, updatedAt: new Date() })
@@ -546,7 +632,13 @@ function isTerminalCall(call: typeof callsTable.$inferSelect): boolean {
 
 // ── delay ─────────────────────────────────────────────────────────────────────
 
-async function beginDelay(runId: number, step: WorkflowStep, context: Ctx, idx: number): Promise<void> {
+async function beginDelay(
+  runId: number,
+  step: WorkflowStep,
+  context: Ctx,
+  idx: number,
+  nextIdx: number = idx + 1,
+): Promise<void> {
   const secs = Math.max(0, Number(step.delaySeconds ?? 0));
   const resumeAt = new Date(Date.now() + secs * 1000);
   recordStepAudit(context, {
@@ -555,8 +647,9 @@ async function beginDelay(runId: number, step: WorkflowStep, context: Ctx, idx: 
     reason: `Wait ${secs}s`,
     stepIndex: idx,
   });
+  context["__parkedStepIndex"] = idx;
   await db.update(workflowRunsTable)
-    .set({ status: "waiting_delay", resumeAt, currentStepIndex: idx + 1, context, updatedAt: new Date() })
+    .set({ status: "waiting_delay", resumeAt, currentStepIndex: nextIdx, context, updatedAt: new Date() })
     .where(eq(workflowRunsTable.id, runId));
 }
 
@@ -569,22 +662,6 @@ export async function resumeDelayedRuns(): Promise<void> {
     if (await claimRun(run.id, "waiting_delay")) {
       await advanceRun(run.id);
     }
-  }
-}
-
-// ── condition ──────────────────────────────────────────────────────────────────
-
-function evalCondition(step: WorkflowStep, context: Ctx): boolean {
-  const actual = toStr(getPath(context, step.field ?? "")).toLowerCase().trim();
-  const expected = toStr(step.value ?? "").toLowerCase().trim();
-  switch (step.op ?? "exists") {
-    case "eq": return actual === expected;
-    case "neq": return actual !== expected;
-    case "contains": return actual.includes(expected);
-    case "exists": return actual !== "";
-    case "gt": return Number(actual) > Number(expected);
-    case "lt": return Number(actual) < Number(expected);
-    default: return true;
   }
 }
 

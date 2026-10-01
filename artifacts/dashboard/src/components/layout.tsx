@@ -25,6 +25,7 @@ import {
   KnowledgeIcon,
   MemoryIcon,
   SquadsIcon,
+  FlowsIcon,
   BookingsIcon,
   WorkspaceIcon,
   ProvidersIcon,
@@ -138,6 +139,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { name: "Phone numbers", href: "/app/phone-numbers", icon: PhoneIcon },
       { name: "Campaigns", href: "/app/campaigns", icon: CampaignsIcon },
+      { name: "Flows", href: "/app/flows", icon: FlowsIcon },
       { name: "Connections", href: "/app/connections", icon: ConnectionsIcon },
       { name: "Bookings", href: "/app/scheduling", icon: BookingsIcon },
     ],
@@ -177,6 +179,7 @@ const MANAGED_NAV_GROUPS: NavGroup[] = [
     items: [
       { name: "Phone numbers", href: "/app/phone-numbers", icon: PhoneIcon },
       { name: "Campaigns", href: "/app/campaigns", icon: CampaignsIcon },
+      { name: "Flows", href: "/app/flows", icon: FlowsIcon },
       { name: "Connections", href: "/app/connections", icon: ConnectionsIcon },
       { name: "Bookings", href: "/app/scheduling", icon: BookingsIcon },
     ],
@@ -1087,7 +1090,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div
           className={cn(
             "flex min-h-0 flex-1 flex-col overscroll-y-contain",
-            (location.startsWith("/app/agents/") && location !== "/app/agents") || location.startsWith("/app/vibe")
+            (location.startsWith("/app/agents/") && location !== "/app/agents")
+              || location.startsWith("/app/vibe")
+              || location.startsWith("/app/flows/")
               ? "overflow-hidden h-full"
               : "overflow-y-auto",
           )}
