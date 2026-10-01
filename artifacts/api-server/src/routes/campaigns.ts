@@ -482,6 +482,12 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
     .returning();
 
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
+
+  if (row.status === "active") {
+    const { refillCampaignConcurrency } = await import("../services/batchScheduler.js");
+    void refillCampaignConcurrency(row.id);
+  }
+
   res.json(toCampaign(row));
 });
 

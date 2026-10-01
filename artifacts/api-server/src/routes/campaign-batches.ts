@@ -668,8 +668,10 @@ router.post("/campaigns/:id/batches/:batchId/start", async (req, res): Promise<v
   const batch = await requireBatch(batchId, campaignId);
   if (!batch) { res.status(404).json({ error: "Not found" }); return; }
 
-  // Idempotent: already running — return current state without re-queueing
+  // Idempotent: already running — top up concurrency in case initial wave was deferred
   if (batch.status === "running") {
+    await reopenCampaignIfCompleted(campaignId);
+    await fireStartBatch(batch, campaign);
     res.json(toBatch(batch));
     return;
   }

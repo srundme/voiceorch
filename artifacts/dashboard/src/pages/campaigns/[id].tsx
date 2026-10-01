@@ -928,9 +928,11 @@ export default function CampaignDetailPage() {
               </Link>
               <h2 className="text-xl font-bold tracking-tight text-foreground">{campaign.name}</h2>
               {(() => {
-                const isActive = batches?.some(b => b.status === "running") || campaign.status === "active";
+                const isNonDialable = campaign.status === "paused" || campaign.status === "stopped" || campaign.status === "completed";
                 const isPaused = campaign.status === "paused";
-                const label = isActive ? "Active" : isPaused ? "Paused" : campaign.status;
+                const isStopped = campaign.status === "stopped";
+                const isActive = !isNonDialable && (batches?.some(b => b.status === "running") || campaign.status === "active");
+                const label = isStopped ? "Stopped" : isPaused ? "Paused" : isActive ? "Active" : campaign.status;
                 return (
                   <span
                     className={cn(
