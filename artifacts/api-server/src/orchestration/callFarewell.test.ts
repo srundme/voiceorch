@@ -4,7 +4,22 @@ import {
   isCallerClosingUtterance,
   isCallerNotInterestedUtterance,
   transcriptHasFarewellEnding,
+  agentLineEndsWithGoodbye,
 } from "./callFarewell.js";
+
+describe("agentLineEndsWithGoodbye", () => {
+  it("true only when the last sentence is a goodbye", () => {
+    expect(agentLineEndsWithGoodbye("Thanks for your time. Take care, bye!")).toBe(true);
+    expect(agentLineEndsWithGoodbye("All set. Have a great day.")).toBe(true);
+  });
+
+  it("ignores mid-call phrases that merely contain farewell words", () => {
+    expect(agentLineEndsWithGoodbye("Our team will see you at the site on Saturday. Anything else?")).toBe(false);
+    expect(agentLineEndsWithGoodbye("Have a good look at the brochure, I'll share it on WhatsApp.")).toBe(false);
+    expect(agentLineEndsWithGoodbye("Bye the way, the clubhouse is ready. Shall I book a visit?")).toBe(false);
+    expect(agentLineEndsWithGoodbye("")).toBe(false);
+  });
+});
 
 describe("isCallerFarewellUtterance", () => {
   it("matches Latin bye variants", () => {

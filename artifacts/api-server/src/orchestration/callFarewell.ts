@@ -147,3 +147,12 @@ export function transcriptHasFarewellEnding(transcript: string): boolean {
   const tail = transcript.slice(-300).toLowerCase();
   return FAREWELL_PHRASES.some((phrase) => tail.includes(phrase.toLowerCase()));
 }
+
+/** Strict: the agent's last sentence itself is a goodbye ("…, take care. Bye!"). */
+export function agentLineEndsWithGoodbye(line: string): boolean {
+  const sentences = (line ?? "").trim().split(/(?<=[.!?।])\s+/).filter(Boolean);
+  const last = sentences[sentences.length - 1]?.toLowerCase() ?? "";
+  if (!last) return false;
+  return /\b(bye|goodbye|good bye|take care|have a (good|great|nice|wonderful) (day|evening|night|weekend))\b/.test(last)
+    || /(பாய்|போயிட்டு வாங்க|अलविदा|फिर मिलते)/.test(last);
+}

@@ -23,6 +23,7 @@ import {
   isCallerClosingUtterance,
   isCallerNotInterestedUtterance,
   transcriptHasFarewellEnding,
+  agentLineEndsWithGoodbye,
 } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
 import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isQueuedDuplicateUserTurn, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
@@ -1687,6 +1688,7 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private cancelSystemPlaybackForCallerSpeech(partial?: string): void {
     if (!this.systemPlaybackActive) return;
+    if (this.endCallInitiated) return;
     this.systemPlaybackActive = false;
     for (const ac of this.activeTtsAborts) {
       try { ac.abort(); } catch { /* noop */ }
@@ -1789,6 +1791,9 @@ export class OrchestrationPipeline implements VoiceSession {
     opts?: { speculative?: boolean; energyDetails?: Record<string, unknown> },
   ): void {
     if (this.bargeInRequested) return;
+    // Hangup is committed and caller speech is discarded; a barge would only
+    // cut the goodbye and leave the call ending in silence.
+    if (this.endCallInitiated) return;
     if (this.partialBargeTimer) clearTimeout(this.partialBargeTimer);
     this.partialBargeTimer = null;
     this.pendingPartialBargeText = "";
@@ -6936,6 +6941,8 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   private async playInactivityMessageAndEnd(): Promise<void> {
     this.endReasonHint ??= "silence_timeout";
+    this.endCallInitiated = true;
+    this.safetyNet?.clear();
     this.prepareSystemPlayback();
     const lang = this.currentLang || this.agent.language;
     const farewell = this.agent.inactivityMessage?.trim()
@@ -8054,7 +8061,10 @@ export class OrchestrationPipeline implements VoiceSession {
         this.endCallInitiated = true;
         this.safetyNet?.clear();
         this.prepareSystemPlayback();
-        await this.speakEndCallFarewellIfNeeded(undefined);
+        const configuredEndCall = this.agent.tools.find((t) => t.type === "end_call");
+        await this.speakEndCallFarewellIfNeeded(
+          configuredEndCall?.type === "end_call" ? configuredEndCall.goodbyeMessage : undefined,
+        );
         this.config.onCallEnd();
         return undefined;
       }
@@ -8353,11 +8363,14 @@ export class OrchestrationPipeline implements VoiceSession {
    * closed (call 28817: "Take care, bye" then "நேரம் ஒதுக்கியதுக்கு நன்றி…").
    */
   private async speakEndCallFarewellIfNeeded(configured: string | undefined): Promise<void> {
-    const recent =
-      this.lastAssistantSpokenRaw
-      || this._currentTurnPlayedSentences.join(" ")
-      || "";
-    if (recent.trim() && transcriptHasFarewellEnding(recent)) {
+    const thisTurn = this._currentTurnPlayedSentences.join(" ").trim();
+    const recent = thisTurn || this.lastAssistantSpokenRaw || "";
+    // A previous turn only counts when its last sentence is an actual goodbye —
+    // "we'll see you at the site" mid-call must not swallow the End greeting.
+    const alreadyClosed = thisTurn
+      ? transcriptHasFarewellEnding(thisTurn)
+      : agentLineEndsWithGoodbye(recent);
+    if (alreadyClosed) {
       logger.info(
         { callId: this.config.callId, preview: recent.slice(0, 120) },
         "Skipping end-call farewell — agent already closed in this call",
