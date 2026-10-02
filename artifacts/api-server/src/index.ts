@@ -48,12 +48,21 @@ import { eq, sql } from "drizzle-orm";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const workerFile = join(__dirname, "orchestration", "audioWorker.mjs");
-// Create/warm the additive lease table during boot, not the first call. The
-// upgrade handler waits on the same shared initialization promise below.
-const callAdmissionReady = initializeCallAdmission().catch(err => {
-  logger.error({ err }, "Call admission initialization failed");
-  throw err;
-});
+// Create/warm the additive lease table during boot, not the first call. Must
+// never leave a rejected promise unobserved: the vendored AEC3 WASM registers
+// an unhandledRejection handler that rethrows, so a transient boot-time DB
+// timeout would kill the process. The upgrade handler retries on demand.
+void (async () => {
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      await initializeCallAdmission();
+      return;
+    } catch (err) {
+      logger.error({ err, attempt }, "Call admission initialization failed");
+      if (attempt < 5) await new Promise(r => setTimeout(r, attempt * 2_000));
+    }
+  }
+})();
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -136,7 +145,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   const provider          = match[1] as "twilio" | "plivo" | "vobiz" | "webcall";
   const agentId           = parseInt(match[2]!, 10);
   try {
-    await callAdmissionReady;
+    await initializeCallAdmission();
   } catch {
     socket.destroy();
     return;
