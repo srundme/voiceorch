@@ -890,6 +890,27 @@
       "when": 1791600026000,
       "tag": "0126_drop_candidate_intakes",
       "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1791600027000,
+      "tag": "0127_sales_pipeline",
+      "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1791600028000,
+      "tag": "0128_sales_pipeline_2",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1791600029000,
+      "tag": "0129_sales_pipeline_3",
+      "breakpoints": true
     }
   ]
 }

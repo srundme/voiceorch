@@ -221,6 +221,10 @@ export const exemptPaths = [
   // cap only produced 429s that blanked the shared deck. Covers /present too.
   "/api/meet-bots/present",
   "/api/mcp",
+  // Internal sales pipeline: its router applies its own per-session limiter
+  // (plus stricter login and webhook limiters), so a shared office NAT is not
+  // capped at 100/min for the whole team.
+  "/api/sales/",
   // Public website embed assets — cached, but a busy origin NAT would otherwise
   // 429 /api/widget.js for every visitor.
   "/api/widget.js",

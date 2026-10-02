@@ -98,6 +98,7 @@ import voiceathonEventsRouter from "./voiceathon-events.js";
 import adminEventFeedbackRouter from "./admin-event-feedback.js";
 import adminVoiceathonRouter from "./admin-voiceathon.js";
 import adminTeamGuidesRouter from "./admin-team-guides.js";
+import salesRouter from "./sales.js";
 import workflowsRouter from "./workflows.js";
 import workflowsPublicRouter from "./workflows-public.js";
 import journeysRouter from "./journeys.js";
@@ -145,6 +146,9 @@ router.use(adminV2RevenueRouter);
 router.use(adminEventFeedbackRouter);
 router.use(adminVoiceathonRouter);
 router.use(adminTeamGuidesRouter);
+// Internal sales pipeline: own cookie session (sales_sessions), not Clerk or
+// X-Admin-Token. Only /admin/sales/bootstrap is behind requireAdmin.
+router.use(salesRouter);
 
 // Public campaign lead webhook — must be before provisionUser (no Clerk session needed)
 router.use(campaignWebhookRouter);

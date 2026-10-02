@@ -17,6 +17,12 @@ describe("isRateLimitExempt", () => {
     expect(isRateLimitExempt("/api/meet-bots/recall-events?mb=x")).toBe(true);
   });
 
+  it("exempts the sales pipeline, which applies its own per-session limiter", () => {
+    expect(isRateLimitExempt("/api/sales/today?date=2026-10-05")).toBe(true);
+    expect(isRateLimitExempt("/api/sales/webhooks/leads")).toBe(true);
+    expect(isRateLimitExempt("/api/salesforce")).toBe(false);
+  });
+
   it("does not exempt unrelated routes", () => {
     expect(isRateLimitExempt("/api/agents")).toBe(false);
     expect(isRateLimitExempt("/api/campaigns/1/analytics")).toBe(false);

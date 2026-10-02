@@ -134,6 +134,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/customers/workspaces", label: "Workspaces", icon: PlatformIcon, keywords: "accounts owners economics" },
       { href: "/all-agents", label: "Agents", icon: AgentIcon, keywords: "user agents" },
       { href: "/partners", label: "Partners", icon: PartnerIcon },
+      { href: "/sales", label: "Sales pipeline", icon: GrowthIcon, keywords: "crm leads field sales pilots proposals mrr" },
+      { href: "/sales-setup", label: "Sales setup", icon: SettingsIcon, keywords: "sales founder bootstrap invite" },
     ],
   },
   {

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -94,6 +95,10 @@ import PolicyKBPage from "@/pages/family/policy-kb";
 import FamilyAgentsPage from "@/pages/family/agents";
 import FamilyAgentNewPage from "@/pages/family/agent-new";
 import FamilyAgentDetailPage from "@/pages/family/agent-detail";
+import SalesSetupPage from "@/pages/sales-setup";
+import { SalesFullScreenLoader } from "@/components/sales/sales-protected";
+
+const SalesApp = lazy(() => import("@/pages/sales"));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -120,6 +125,13 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      {/* Sales pipeline: its own cookie session, outside the admin-token gate. */}
+      <Route path="/sales/*?">
+        <Suspense fallback={<SalesFullScreenLoader />}>
+          <SalesApp />
+        </Suspense>
+      </Route>
+      <ProtectedRoute path="/sales-setup" component={SalesSetupPage} />
       <ProtectedRoute path="/" component={Overview} />
       <ProtectedRoute path="/analytics/daily-pnl" component={DailyPnlPage} />
       <ProtectedRoute path="/analytics/unit-economics" component={UnitEconomicsPage} />

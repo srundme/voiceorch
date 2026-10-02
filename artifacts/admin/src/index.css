@@ -144,6 +144,9 @@
   * {
     @apply border-border;
   }
+  html {
+    color-scheme: dark;
+  }
   body {
     @apply bg-background text-foreground font-sans antialiased;
   }
@@ -319,5 +322,47 @@
     border-radius: 4px !important;
     padding: 1px 5px !important;
     font-size: 11px !important;
+  }
+}
+
+/* Sales pipeline — the single accent colour on top of the monochrome theme. */
+:root {
+  --sales-accent: 221 83% 48%;
+}
+.dark {
+  --sales-accent: 217 91% 64%;
+}
+
+.sales-print-only {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .sales-no-print {
+    display: none !important;
+  }
+  .sales-print-only {
+    display: block !important;
+  }
+  .sales-report {
+    color: #000 !important;
+    background: #fff !important;
+  }
+  .sales-report * {
+    color: #000 !important;
+    background: transparent !important;
+    border-color: #bbb !important;
+    box-shadow: none !important;
+  }
+  .sales-report section {
+    break-inside: avoid;
   }
 }
