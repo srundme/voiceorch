@@ -918,6 +918,13 @@
       "when": 1791600030000,
       "tag": "0130_ai_test_calls",
       "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1791600031000,
+      "tag": "0131_ai_test_call_briefs",
+      "breakpoints": true
     }
   ]
 }

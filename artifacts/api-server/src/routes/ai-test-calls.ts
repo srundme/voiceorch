@@ -11,7 +11,6 @@ import {
   db,
   agentsTable,
   callsTable,
-  kbChunksTable,
   simulationRunsTable,
   simulationTestCasesTable,
   type SimulationRun,
@@ -20,6 +19,9 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
 import { resolveWorkspaceScope } from "../services/workspace-scope.js";
 import { generatePersonaDrafts, PersonaGenerationError } from "../services/ai-test-calls/personas.js";
+import { BriefUnavailableError } from "../services/ai-test-calls/brief.js";
+import { getAgentBrief, getCachedBrief } from "../services/ai-test-calls/brief-store.js";
+import { TestLlmUnavailableError } from "../services/ai-test-calls/llm.js";
 import {
   checkRunPreconditions,
   countActiveCallSlots,
@@ -75,6 +77,17 @@ const caseInput = z.object({
   scenario: z.string().trim().max(40).nullish(),
   callerGender: z.enum(["female", "male"]).nullish(),
   maxDurationSeconds: z.number().int().positive().nullish(),
+  targets: z.array(z.object({
+    id: z.string().trim().regex(/^[A-Z]\d{1,2}$/),
+    kind: z.string().trim().max(20),
+    label: z.string().trim().max(200),
+  })).max(16).nullish(),
+  callerFacts: z.array(z.object({
+    label: z.string().trim().min(1).max(60),
+    value: z.string().trim().min(1).max(200),
+  })).max(12).nullish(),
+  expectedOutcome: z.string().trim().max(500).nullish(),
+  callerRole: z.string().trim().max(300).nullish(),
 });
 
 function caseValues(input: z.infer<typeof caseInput>) {
@@ -88,6 +101,10 @@ function caseValues(input: z.infer<typeof caseInput>) {
     scenario: input.scenario ?? null,
     callerGender: input.callerGender ?? null,
     maxDurationSeconds: clampTestMaxDuration(input.maxDurationSeconds ?? DEFAULT_TEST_MAX_DURATION_SECONDS),
+    targets: input.targets ?? [],
+    callerFacts: input.callerFacts ?? [],
+    expectedOutcome: input.expectedOutcome || null,
+    callerRole: input.callerRole || null,
   };
 }
 
@@ -136,27 +153,27 @@ router.post("/agents/:id/test-cases/generate", requireAuth, clientContext, async
   const agent = await loadTargetAgent(req, res, { write: true });
   if (!agent) return;
   const count = Math.min(MAX_TEST_CASES_PER_GENERATE, Math.max(1, Number(req.body?.count) || 5));
-  const knowledgeSnippets = agent.knowledgeBaseId
-    ? (await db.select({ content: kbChunksTable.content }).from(kbChunksTable)
-      .where(eq(kbChunksTable.knowledgeBaseId, agent.knowledgeBaseId))
-      .orderBy(kbChunksTable.chunkIndex)
-      .limit(6)).map((c) => c.content.slice(0, 600))
-    : [];
   try {
-    const drafts = await generatePersonaDrafts({
-      name: agent.name,
-      systemPrompt: agent.systemPrompt,
-      greetingMessage: agent.greetingMessage,
-      language: agent.language,
-      productDetails: agent.productDetails,
-      successCriteria: (agent.agentConfig as { successCriteria?: string } | null)?.successCriteria ?? null,
-      knowledgeSnippets,
-    }, count);
-    res.json({ drafts });
+    const { brief } = await getAgentBrief(agent, { force: req.body?.refreshBrief === true });
+    const { drafts } = await generatePersonaDrafts(brief, { count, agentName: agent.name, agentLanguage: agent.language });
+    res.json({ drafts, brief });
   } catch (err) {
+    if (err instanceof BriefUnavailableError) { res.status(422).json({ error: err.message, code: "BRIEF_EMPTY" }); return; }
+    if (err instanceof TestLlmUnavailableError) {
+      res.status(503).json({ error: "Persona generation is unavailable right now. Please try again." });
+      return;
+    }
     if (err instanceof PersonaGenerationError) { res.status(503).json({ error: err.message }); return; }
     throw err;
   }
+});
+
+/** What AI Test Calls last understood from this agent's prompt (no model call). */
+router.get("/agents/:id/test-calls/brief", requireAuth, clientContext, async (req, res): Promise<void> => {
+  const agent = await loadTargetAgent(req, res);
+  if (!agent) return;
+  const cached = await getCachedBrief(agent.id);
+  res.json({ brief: cached?.brief ?? null, updatedAt: cached?.updatedAt.toISOString() ?? null });
 });
 
 router.get("/agents/:id/test-cases", requireAuth, clientContext, async (req, res): Promise<void> => {
@@ -215,6 +232,10 @@ router.patch("/test-cases/:caseId", requireAuth, clientContext, async (req, res)
   if (d.scenario !== undefined) set.scenario = d.scenario ?? null;
   if (d.callerGender !== undefined) set.callerGender = d.callerGender ?? null;
   if (d.maxDurationSeconds !== undefined) set.maxDurationSeconds = clampTestMaxDuration(d.maxDurationSeconds);
+  if (d.targets !== undefined) set.targets = d.targets ?? [];
+  if (d.callerFacts !== undefined) set.callerFacts = d.callerFacts ?? [];
+  if (d.expectedOutcome !== undefined) set.expectedOutcome = d.expectedOutcome || null;
+  if (d.callerRole !== undefined) set.callerRole = d.callerRole || null;
   if (d.archived !== undefined) set.archived = d.archived;
   const [row] = await db.update(simulationTestCasesTable).set(set)
     .where(eq(simulationTestCasesTable.id, tc.id)).returning();

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, jsonb, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, jsonb, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { agentsTable } from "./agents";
 
 export const simulationTestCasesTable = pgTable("simulation_test_cases", {
@@ -26,9 +26,33 @@ export const simulationTestCasesTable = pgTable("simulation_test_cases", {
   archived: boolean("archived").notNull().default(false),
   /** Hidden caller agent (agents.is_test_persona) reused across runs of this case. */
   callerAgentId: integer("caller_agent_id"),
+  /** Agent-brief items this case probes: [{ id: "F2", kind: "fact", label }]. */
+  targets: jsonb("targets").$type<TestCaseTarget[]>(),
+  /** Concrete details the caller gives when asked: [{ label, value }]. */
+  callerFacts: jsonb("caller_facts").$type<TestCaseCallerFact[]>(),
+  expectedOutcome: text("expected_outcome"),
+  /** Who the caller is relative to the business, e.g. "Parent registering a child for the science fair". */
+  callerRole: text("caller_role"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
+
+export interface TestCaseTarget { id: string; kind: string; label: string }
+export interface TestCaseCallerFact { label: string; value: string }
+
+/** What AI Test Calls understood from an agent's prompt/KB; recomputed when the input hash changes. */
+export const aiTestAgentBriefsTable = pgTable("ai_test_agent_briefs", {
+  id: serial("id").primaryKey(),
+  agentId: integer("agent_id").notNull().references(() => agentsTable.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  inputHash: text("input_hash").notNull(),
+  brief: jsonb("brief").notNull(),
+  provider: text("provider"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (t) => [
+  uniqueIndex("ai_test_agent_briefs_agent_uq").on(t.agentId),
+]);
 
 export const simulationRunsTable = pgTable("simulation_runs", {
   id: serial("id").primaryKey(),
@@ -77,3 +101,4 @@ export const simulationMessagesTable = pgTable("simulation_messages", {
 
 export type SimulationTestCase = typeof simulationTestCasesTable.$inferSelect;
 export type SimulationRun = typeof simulationRunsTable.$inferSelect;
+export type AiTestAgentBrief = typeof aiTestAgentBriefsTable.$inferSelect;

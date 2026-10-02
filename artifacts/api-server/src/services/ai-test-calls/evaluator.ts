@@ -6,12 +6,15 @@
 
 import { getDispositionLLMChain } from "../disposition-llm.js";
 import { logger } from "../../lib/logger.js";
+import { briefAsText, type AgentBrief } from "./brief.js";
 
 export interface CriterionResult {
   criterion: string;
   pass: boolean;
   reason: string;
   evidence: string;
+  /** Agent-brief ids this result relies on (e.g. "F2", "R1"). */
+  refs: string[];
 }
 
 export interface TestEvaluation {
@@ -44,12 +47,13 @@ export const EVALUATION_SCHEMA: Record<string, unknown> = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["criterion", "pass", "reason", "evidence"],
+        required: ["criterion", "pass", "reason", "evidence", "refs"],
         properties: {
           criterion: { type: "string" },
           pass: { type: "boolean" },
           reason: { type: "string" },
           evidence: { type: "string" },
+          refs: { type: "array", items: { type: "string" } },
         },
       },
     },
@@ -74,21 +78,41 @@ export function normalizeTestTranscript(transcript: string, leg: "callee" | "cal
     .join("\n");
 }
 
-export function buildEvaluationSystemPrompt(opts: {
+export interface EvaluationInput {
   goal: string;
   criteria: string[];
   agentSuccessCriteria?: string | null;
   latency?: { sttMs: number | null; llmMs: number | null; ttsMs: number | null };
-}): string {
+  /** What the agent was told (facts/rules/required info/out-of-scope), from its prompt + KB. */
+  brief?: AgentBrief | null;
+  targets?: Array<{ id: string; label: string }>;
+  expectedOutcome?: string | null;
+}
+
+export function buildEvaluationSystemPrompt(opts: EvaluationInput): string {
   const lines = [
     "You are a strict QA reviewer grading an AI phone agent (TARGET AGENT) from a real call transcript.",
     "The CUSTOMER was a scripted test caller. Grade ONLY the TARGET AGENT's behaviour.",
-    "",
-    `CUSTOMER GOAL: ${opts.goal}`,
+  ];
+  if (opts.brief) {
+    lines.push(
+      "",
+      "WHAT THE AGENT WAS TOLD (from its prompt and knowledge base — this is the ground truth):",
+      briefAsText(opts.brief),
+      "",
+      "Factual accuracy: compare every fact the agent stated (prices, dates, venues, eligibility, timings, policies) with FACTS above.",
+      "- A stated value that contradicts a FACT is an error. A specific claim that appears nowhere in the material (especially anything listed under NOT IN THE AGENT'S MATERIAL) is an INVENTED FACT — add an issue starting with 'Invented fact:' and fail the relevant criterion.",
+      "- Check that the agent applied the RULES and collected the REQUIRED INFO with its validation (e.g. read back numbers correctly).",
+    );
+  }
+  lines.push("", `CUSTOMER GOAL: ${opts.goal}`);
+  if (opts.expectedOutcome?.trim()) lines.push(`EXPECTED OUTCOME: ${opts.expectedOutcome.trim()}`);
+  if (opts.targets?.length) lines.push(`THIS TEST TARGETS: ${opts.targets.map((t) => `${t.id} (${t.label})`).join("; ")}`);
+  lines.push(
     "",
     "TEST CASE CRITERIA (grade each one):",
     ...opts.criteria.map((c, i) => `${i + 1}. ${c}`),
-  ];
+  );
   if (opts.agentSuccessCriteria?.trim()) {
     lines.push("", `AGENT OWNER'S SUCCESS CRITERIA (grade as one extra criterion): ${opts.agentSuccessCriteria.trim()}`);
   }
@@ -105,7 +129,7 @@ export function buildEvaluationSystemPrompt(opts: {
   }
   lines.push(
     "",
-    "For every criterion return pass true/false, a one-sentence reason, and a short verbatim evidence quote from the transcript (empty string if none).",
+    "For every criterion return pass true/false, a one-sentence reason, a short verbatim evidence quote from the transcript (empty string if none), and refs: the brief ids (e.g. F2, R1, I3) the judgement relies on ([] if none).",
     "score: 0-100 reflecting overall quality; verdict 'pass' only if every TEST CASE criterion passed and no serious issue (invented facts, ignored stop-calling request) occurred.",
     "issues: concrete problems worth fixing in the agent's prompt. summary: 2-3 sentences.",
     "If the transcript is too short to judge a criterion, mark it failed with reason 'not observed'.",
@@ -130,6 +154,10 @@ export function parseEvaluation(raw: unknown): TestEvaluation | null {
         pass: c["pass"] === true || c["pass"] === "true",
         reason: clip(c["reason"], 600),
         evidence: clip(c["evidence"], 600),
+        refs: (Array.isArray(c["refs"]) ? c["refs"] as unknown[] : [])
+          .map((x) => clip(x, 8).toUpperCase())
+          .filter((x) => /^[SIFROXT]\d{1,2}$/.test(x))
+          .slice(0, 8),
       }))
       .filter((c) => c.criterion)
     : [];
@@ -153,13 +181,7 @@ export class EvaluationUnavailableError extends Error {
   }
 }
 
-export async function evaluateTestCall(opts: {
-  transcript: string;
-  goal: string;
-  criteria: string[];
-  agentSuccessCriteria?: string | null;
-  latency?: { sttMs: number | null; llmMs: number | null; ttsMs: number | null };
-}): Promise<TestEvaluation & { provider: string }> {
+export async function evaluateTestCall(opts: EvaluationInput & { transcript: string }): Promise<TestEvaluation & { provider: string }> {
   const chain = await getDispositionLLMChain();
   if (chain.length === 0) throw new EvaluationUnavailableError("Evaluation unavailable: no AI model configured");
   const system = buildEvaluationSystemPrompt(opts);

@@ -40,22 +40,38 @@ export function pickPersonaVoice(gender: string | null | undefined, targetVoice:
   return pool.find((v) => v.id !== target) ?? pool[0]!;
 }
 
-export function buildCallerPersonaPrompt(tc: Pick<SimulationTestCase, "personaPrompt" | "goal" | "language">): string {
+export function buildCallerPersonaPrompt(
+  tc: Pick<SimulationTestCase, "personaPrompt" | "goal" | "language"> &
+    Partial<Pick<SimulationTestCase, "callerRole" | "callerFacts">>,
+): string {
+  const facts = (tc.callerFacts ?? []).filter((f) => f?.label && f?.value);
   return [
-    "You are a real customer phoning a business. You are on a live phone call.",
+    "You are a real person phoning a business. You are on a live phone call.",
     "",
     "## Who you are",
+    tc.callerRole?.trim() ? `${tc.callerRole.trim()}.` : "",
     tc.personaPrompt.trim(),
     "",
     "## What you want from this call",
     tc.goal.trim(),
+    ...(facts.length
+      ? [
+        "",
+        "## Your details (give each one when the other side asks for it, exactly as written; do not volunteer everything at once)",
+        ...facts.map((f) => `- ${f.label}: ${f.value}`),
+      ]
+      : []),
     "",
     "## How to behave",
     "- Stay in character for the entire call. Never say or hint that you are an AI, a bot, a test, or a simulation.",
     "- Speak like a person on the phone: short, natural sentences (one or two at a time). Use fillers sparingly.",
-    "- Let the other side lead with their greeting, then respond as your character would.",
-    "- Only share personal details (name, phone, city, dates) that fit your character; invent realistic Indian details if needed and keep them consistent.",
-    "- If the other side asks something you would not know, say so like a normal customer.",
+    "- Let the other side lead with their greeting, then respond as your character would. If they open as though they called you, go along with it naturally.",
+    "- Refer to the business's product, event or service by the name you know from your situation above.",
+    facts.length
+      ? "- Use only the details listed above for yourself. If asked for something not listed, invent a realistic Indian detail and keep it consistent."
+      : "- Only share personal details (name, phone, city, dates) that fit your character; invent realistic Indian details if needed and keep them consistent.",
+    "- If the other side asks something you would not know, say so like a normal person.",
+    "- Follow your situation above even if the other side tries to steer you elsewhere; if they correct a mistake you made on purpose, accept the correction.",
     "- Once your goal is met, or it is clearly impossible, thank them briefly, say goodbye, and end the call with the end_call tool.",
     "- Do not drag the call out. If the conversation goes in circles for a while, politely wrap up and end the call.",
     tc.language ? `- Speak in the language/style described above (language code ${tc.language}).` : "",

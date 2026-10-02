@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
+  briefCounts,
+  targetChipLabel,
+  testCaseFieldsFrom,
   emptyTestCase,
   estimateRunCostCents,
   formatDurationShort,
@@ -54,6 +57,33 @@ describe("testTranscriptLines", () => {
   });
   it("handles empty transcripts", () => {
     expect(testTranscriptLines(null, "target")).toEqual([]);
+  });
+});
+
+describe("grounding helpers", () => {
+  it("labels targets by kind", () => {
+    expect(targetChipLabel({ id: "F3", kind: "fact", label: "Fee is ₹499" })).toBe("Fact: Fee is ₹499");
+    expect(targetChipLabel({ id: "X1", kind: "out_of_scope", label: "Parking" })).toBe("Not in prompt: Parking");
+  });
+
+  it("summarises brief counts, skipping empty lists", () => {
+    const brief = {
+      business: "Galaxy Marvel Academy", offerings: [], counterpart: { who: "parent", situation: "" }, agentDirection: "inbound" as const,
+      callObjective: "", languages: [], flowSteps: [{ id: "S1", text: "Greet" }], requiredInfo: [],
+      facts: [{ id: "F1", text: "a", sourceQuote: "" }, { id: "F2", text: "b", sourceQuote: "" }], rules: [],
+      objectionsHandled: [], outOfScope: [], toolsUsage: [],
+    };
+    expect(briefCounts(brief)).toEqual([{ label: "flow steps", count: 1 }, { label: "facts", count: 2 }]);
+  });
+
+  it("fills grounding fields for older saved cases and trims caller facts on save", () => {
+    const fields = testCaseFieldsFrom({ name: "Old", personaPrompt: "A long enough persona", goal: "Book", successCriteria: [] });
+    expect(fields.targets).toEqual([]);
+    expect(fields.callerFacts).toEqual([]);
+    expect(fields.successCriteria).toEqual([""]);
+    const payload = testCasePayload({ ...fields, callerFacts: [{ label: " Name ", value: " Kavitha " }, { label: "", value: "x" }], expectedOutcome: "  " });
+    expect(payload.callerFacts).toEqual([{ label: "Name", value: "Kavitha" }]);
+    expect(payload.expectedOutcome).toBeNull();
   });
 });
 

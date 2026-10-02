@@ -19,7 +19,10 @@ import {
   simulationTestCasesTable,
   type SimulationRun,
   type SimulationTestCase,
+  type TestCaseCallerFact,
+  type TestCaseTarget,
 } from "@workspace/db";
+import { getAgentBrief } from "./brief-store.js";
 import { logger } from "../../lib/logger.js";
 import { getSelfBaseUrl } from "../../lib/app-domain.js";
 import { dialOutboundAgent, OutboundDialError } from "../outbound-agent-dial.js";
@@ -53,6 +56,10 @@ export interface TestCaseSnapshot {
   scenario: string | null;
   difficulty: string | null;
   maxDurationSeconds: number;
+  callerRole?: string | null;
+  callerFacts?: TestCaseCallerFact[];
+  expectedOutcome?: string | null;
+  targets?: TestCaseTarget[];
 }
 
 export function snapshotTestCase(tc: SimulationTestCase): TestCaseSnapshot {
@@ -65,6 +72,10 @@ export function snapshotTestCase(tc: SimulationTestCase): TestCaseSnapshot {
     scenario: tc.scenario ?? null,
     difficulty: tc.difficulty ?? null,
     maxDurationSeconds: clampTestMaxDuration(tc.maxDurationSeconds),
+    callerRole: tc.callerRole ?? null,
+    callerFacts: tc.callerFacts ?? [],
+    expectedOutcome: tc.expectedOutcome ?? null,
+    targets: tc.targets ?? [],
   };
 }
 
@@ -332,6 +343,11 @@ async function monitorAndEvaluate(
     ? { sttMs: callee.sttLatencyMs, llmMs: callee.llmLatencyMs, ttsMs: callee.ttsFirstChunkMs }
     : undefined;
   const agentSuccessCriteria = (target.agentConfig as { successCriteria?: string } | null)?.successCriteria ?? null;
+  // Grade against what the agent was told at call time; grading still runs without it.
+  const brief = await getAgentBrief(target).then((b) => b.brief).catch((err: unknown) => {
+    logger.warn({ runId, err: err instanceof Error ? err.message : String(err) }, "ai-test-calls: brief unavailable for evaluation");
+    return null;
+  });
 
   try {
     const evaluation = await evaluateTestCall({
@@ -340,6 +356,9 @@ async function monitorAndEvaluate(
       criteria: snapshot.successCriteria,
       agentSuccessCriteria,
       latency,
+      brief,
+      targets: snapshot.targets ?? [],
+      expectedOutcome: snapshot.expectedOutcome ?? null,
     });
     await finishRun(runId, {
       status: evaluation.verdict === "pass" ? "passed" : "failed",

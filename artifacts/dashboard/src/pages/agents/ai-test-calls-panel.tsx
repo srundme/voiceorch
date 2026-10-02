@@ -12,7 +12,9 @@ import {
   Archive,
   Bot,
   CheckCircle2,
+  ChevronDown,
   Clock,
+  FileText,
   Loader2,
   Pencil,
   Phone,
@@ -71,7 +73,13 @@ import { cn } from "@/lib/utils";
 import {
   MAX_GENERATE,
   MAX_RUN_SELECTION,
+  briefCounts,
   emptyTestCase,
+  targetChipLabel,
+  testCaseFieldsFrom,
+  type AgentBrief,
+  type TestCaseCallerFact,
+  type TestCaseTarget,
   estimateRunCostCents,
   formatDurationShort,
   formatRupees,
@@ -106,6 +114,7 @@ const qk = {
   cases: (agentId: number) => ["ai-test-calls", agentId, "cases"] as const,
   runs: (agentId: number) => ["ai-test-calls", agentId, "runs"] as const,
   run: (runId: number) => ["ai-test-calls", "run", runId] as const,
+  brief: (agentId: number) => ["ai-test-calls", agentId, "brief"] as const,
 };
 
 export function AiTestCallsPanel({ agentId, onOpenCalling }: { agentId: number; onOpenCalling?: () => void }) {
@@ -131,7 +140,15 @@ export function AiTestCallsPanel({ agentId, onOpenCalling }: { agentId: number; 
     refetchInterval: (q) => (q.state.data?.runs.some((r) => isActiveRun(r.status)) ? 4_000 : false),
   });
 
+  const briefQ = useQuery({
+    queryKey: qk.brief(agentId),
+    queryFn: () => customFetch<{ brief: AgentBrief | null; updatedAt: string | null }>(`${DASH_API}/agents/${agentId}/test-calls/brief`),
+    enabled: agentId > 0,
+    staleTime: 60_000,
+  });
+
   const setup = setupQ.data;
+  const brief = briefQ.data?.brief ?? null;
   const testCases = casesQ.data?.testCases ?? [];
   const runs = runsQ.data?.runs ?? [];
   const hasActiveRuns = runs.some((r) => isActiveRun(r.status));
@@ -158,12 +175,13 @@ export function AiTestCallsPanel({ agentId, onOpenCalling }: { agentId: number; 
   }, [testCases]);
 
   const generate = useMutation({
-    mutationFn: (count: number) => customFetch<{ drafts: TestCaseFields[] }>(
+    mutationFn: (count: number) => customFetch<{ drafts: TestCaseFields[]; brief: AgentBrief }>(
       `${DASH_API}/agents/${agentId}/test-cases/generate`,
       { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ count }) },
     ),
     onSuccess: (data) => {
-      setDrafts((prev) => [...prev, ...data.drafts]);
+      queryClient.setQueryData(qk.brief(agentId), { brief: data.brief, updatedAt: new Date().toISOString() });
+      setDrafts((prev) => [...prev, ...data.drafts.map(testCaseFieldsFrom)]);
       if (data.drafts.length === 0) toast({ title: "No personas generated", description: "Try again, or add one manually." });
     },
     onError: (err) => toast({ title: "Couldn't generate personas", description: formatApiError(err), variant: "destructive" }),
@@ -283,7 +301,7 @@ export function AiTestCallsPanel({ agentId, onOpenCalling }: { agentId: number; 
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div>
             <h3 className="text-[14px] font-semibold text-foreground">Test cases</h3>
-            <p className="text-[12px] text-muted-foreground">Each test case is a caller persona with a goal and the checks the agent must pass.</p>
+            <p className="text-[12px] text-muted-foreground">Callers are written from this agent's prompt — each one tests specific facts, rules and steps it was given.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Select value={String(generateCount)} onValueChange={(v) => setGenerateCount(Number(v))}>
@@ -296,13 +314,15 @@ export function AiTestCallsPanel({ agentId, onOpenCalling }: { agentId: number; 
             </Select>
             <Button type="button" size="sm" variant="outline" disabled={generate.isPending} onClick={() => generate.mutate(generateCount)}>
               {generate.isPending ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <Sparkles className="mr-1.5 size-3.5" />}
-              Generate personas
+              {generate.isPending ? "Reading your prompt…" : "Generate from prompt"}
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => setDrafts((d) => [...d, emptyTestCase(setup?.defaultMaxDurationSeconds)])}>
               <Plus className="mr-1 size-3.5" /> Add manually
             </Button>
           </div>
         </div>
+
+        {brief && <BriefSummary brief={brief} defaultOpen={drafts.length > 0} />}
 
         {drafts.length > 0 && (
           <div className="border-b border-border bg-muted/20 px-4 py-4">
@@ -333,6 +353,7 @@ export function AiTestCallsPanel({ agentId, onOpenCalling }: { agentId: number; 
                       <Trash2 className="size-3.5" />
                     </Button>
                   </div>
+                  <GroundingDetails targets={d.targets} callerFacts={d.callerFacts} expectedOutcome={d.expectedOutcome} className="mb-3" />
                   <TestCaseEditor value={d} onChange={(next) => setDrafts((prev) => prev.map((x, j) => (j === i ? next : x)))} />
                   {draftErrors[i] && <p className="mt-2 text-[12px] text-destructive">{draftErrors[i]}</p>}
                 </div>
@@ -354,7 +375,7 @@ export function AiTestCallsPanel({ agentId, onOpenCalling }: { agentId: number; 
                 <Bot className="size-6 text-muted-foreground" />
                 <p className="text-[13px] font-medium text-foreground">No test cases yet</p>
                 <p className="max-w-sm text-[12px] text-muted-foreground">
-                  Generate personas from this agent's prompt and knowledge base, then edit and save the ones you want.
+                  We read this agent's prompt, tools and knowledge base, then write callers who test its actual facts, rules and steps. Edit and save the ones you want.
                 </p>
               </div>
             )
@@ -375,7 +396,8 @@ export function AiTestCallsPanel({ agentId, onOpenCalling }: { agentId: number; 
                       {tc.difficulty && <Badge variant="outline" className="text-[10px] font-normal">{tc.difficulty}</Badge>}
                       {tc.language && <Badge variant="outline" className="text-[10px] font-normal">{tc.language}</Badge>}
                     </div>
-                    <p className="mt-0.5 line-clamp-2 text-[12px] text-muted-foreground">{tc.goal}</p>
+                    <p className="mt-0.5 line-clamp-2 text-[12px] text-muted-foreground">{tc.callerRole ? `${tc.callerRole} — ` : ""}{tc.goal}</p>
+                    <GroundingDetails targets={tc.targets ?? []} callerFacts={tc.callerFacts ?? []} expectedOutcome={tc.expectedOutcome} compact className="mt-1.5" />
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
                       {tc.successCriteria.length} check{tc.successCriteria.length === 1 ? "" : "s"} · up to {formatDurationShort(tc.maxDurationSeconds)}
                       {setup && <> · max {formatRupees(estimateRunCostCents(tc.maxDurationSeconds, setup))}</>}
@@ -603,6 +625,122 @@ function ScoreBadge({ score, status }: { score: number | null; status: string })
   );
 }
 
+/* ── Grounding (what the tests are based on) ──────────────────────────────── */
+
+function BriefSummary({ brief, defaultOpen }: { brief: AgentBrief; defaultOpen: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => { if (defaultOpen) setOpen(true); }, [defaultOpen]);
+  const counts = briefCounts(brief);
+  return (
+    <div className="border-b border-border px-4 py-3">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 text-left" aria-expanded={open}>
+        <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="text-[12px] font-medium text-foreground">What we understood from your prompt</span>
+        <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+          {counts.map((c) => `${c.count} ${c.label}`).join(" · ")}
+        </span>
+        <ChevronDown className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="mt-3 grid gap-3 text-[12px] sm:grid-cols-2">
+          <BriefBlock title="Business">{brief.business || "—"}</BriefBlock>
+          <BriefBlock title="Offering">{brief.offerings.length ? brief.offerings.join(", ") : "—"}</BriefBlock>
+          <BriefBlock title="Who the agent talks to">
+            {brief.counterpart.who || "—"}{brief.counterpart.situation ? ` — ${brief.counterpart.situation}` : ""}
+            {brief.agentDirection !== "unknown" && (
+              <span className="text-muted-foreground"> ({brief.agentDirection === "outbound" ? "agent calls them" : brief.agentDirection === "inbound" ? "they call the agent" : "both directions"})</span>
+            )}
+          </BriefBlock>
+          <BriefBlock title="Goal of the call">{brief.callObjective || "—"}</BriefBlock>
+          {brief.flowSteps.length > 0 && (
+            <BriefBlock title="Flow steps">
+              <ol className="list-decimal space-y-0.5 pl-4">{brief.flowSteps.map((s) => <li key={s.id}>{s.text}</li>)}</ol>
+            </BriefBlock>
+          )}
+          {brief.requiredInfo.length > 0 && (
+            <BriefBlock title="Information to collect">
+              <ul className="space-y-0.5">
+                {brief.requiredInfo.map((f) => (
+                  <li key={f.id}>{f.field}{f.validation && <span className="text-muted-foreground"> — {f.validation}</span>}</li>
+                ))}
+              </ul>
+            </BriefBlock>
+          )}
+          {brief.facts.length > 0 && (
+            <BriefBlock title={`Facts (${brief.facts.length})`}>
+              <ul className="list-disc space-y-0.5 pl-4">{brief.facts.slice(0, 8).map((f) => <li key={f.id}>{f.text}</li>)}</ul>
+              {brief.facts.length > 8 && <p className="mt-0.5 text-muted-foreground">+{brief.facts.length - 8} more</p>}
+            </BriefBlock>
+          )}
+          {brief.rules.length > 0 && (
+            <BriefBlock title={`Rules (${brief.rules.length})`}>
+              <ul className="list-disc space-y-0.5 pl-4">{brief.rules.slice(0, 8).map((r) => <li key={r.id}>{r.text}</li>)}</ul>
+              {brief.rules.length > 8 && <p className="mt-0.5 text-muted-foreground">+{brief.rules.length - 8} more</p>}
+            </BriefBlock>
+          )}
+          {brief.outOfScope.length > 0 && (
+            <BriefBlock title="Not covered by your prompt">
+              <p className="text-muted-foreground">{brief.outOfScope.map((x) => x.text).join(" · ")}</p>
+            </BriefBlock>
+          )}
+          <p className="text-[11px] text-muted-foreground sm:col-span-2">
+            Looks wrong? Update the agent's prompt — this is re-read automatically next time you generate.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BriefBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+      <div className="text-foreground">{children}</div>
+    </div>
+  );
+}
+
+function GroundingDetails({ targets, callerFacts, expectedOutcome, compact, className }: {
+  targets: TestCaseTarget[];
+  callerFacts: TestCaseCallerFact[];
+  expectedOutcome: string | null;
+  compact?: boolean;
+  className?: string;
+}) {
+  if (targets.length === 0 && callerFacts.length === 0 && !expectedOutcome) return null;
+  const shownTargets = compact ? targets.slice(0, 3) : targets;
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      {targets.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Tests from your prompt</span>
+          {shownTargets.map((t) => (
+            <span key={t.id} title={t.label} className="max-w-[260px] truncate rounded-md border border-sky-500/25 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:text-sky-300">
+              {targetChipLabel(t)}
+            </span>
+          ))}
+          {compact && targets.length > 3 && <span className="text-[10px] text-muted-foreground">+{targets.length - 3}</span>}
+        </div>
+      )}
+      {!compact && callerFacts.length > 0 && (
+        <div className="text-[11px] text-muted-foreground">
+          <span className="font-semibold uppercase tracking-wide text-[10px]">Caller will say </span>
+          {callerFacts.map((f, i) => (
+            <span key={i}>{i > 0 && " · "}<span className="text-foreground">{f.label}:</span> {f.value}</span>
+          ))}
+        </div>
+      )}
+      {!compact && expectedOutcome && (
+        <p className="text-[11px] text-muted-foreground">
+          <span className="font-semibold uppercase tracking-wide text-[10px]">Expected outcome </span>
+          <span className="text-foreground">{expectedOutcome}</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
 /* ── Test case editor ─────────────────────────────────────────────────────── */
 
 function TestCaseEditor({ value, onChange }: { value: TestCaseFields; onChange: (next: TestCaseFields) => void }) {
@@ -612,6 +750,11 @@ function TestCaseEditor({ value, onChange }: { value: TestCaseFields; onChange: 
       <div className="space-y-1 sm:col-span-2">
         <Label className="text-[11px] text-muted-foreground">Name</Label>
         <Input className="h-8 text-[13px]" value={value.name} maxLength={120} onChange={(e) => set("name", e.target.value)} />
+      </div>
+      <div className="space-y-1 sm:col-span-2">
+        <Label className="text-[11px] text-muted-foreground">Caller's role (relative to this business)</Label>
+        <Input className="h-8 text-[13px]" placeholder="e.g. Parent registering a 9-year-old for the science fair" value={value.callerRole ?? ""} maxLength={300}
+          onChange={(e) => set("callerRole", e.target.value || null)} />
       </div>
       <div className="space-y-1 sm:col-span-2">
         <Label className="text-[11px] text-muted-foreground">Who is calling (persona)</Label>
@@ -642,6 +785,32 @@ function TestCaseEditor({ value, onChange }: { value: TestCaseFields; onChange: 
           <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px]"
             onClick={() => set("successCriteria", [...value.successCriteria, ""])}>
             <Plus className="mr-1 size-3" /> Add criterion
+          </Button>
+        )}
+      </div>
+      <div className="space-y-1 sm:col-span-2">
+        <Label className="text-[11px] text-muted-foreground">Expected outcome</Label>
+        <Input className="h-8 text-[13px]" placeholder="e.g. Registration captured with name, age and mobile" value={value.expectedOutcome ?? ""} maxLength={500}
+          onChange={(e) => set("expectedOutcome", e.target.value || null)} />
+      </div>
+      <div className="space-y-1.5 sm:col-span-2">
+        <Label className="text-[11px] text-muted-foreground">Caller will say (details given when asked)</Label>
+        {value.callerFacts.map((f, i) => (
+          <div key={i} className="flex gap-1.5">
+            <Input className="h-8 w-[38%] text-[13px]" placeholder="Detail" value={f.label} maxLength={60}
+              onChange={(e) => set("callerFacts", value.callerFacts.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
+            <Input className="h-8 text-[13px]" placeholder="What they say" value={f.value} maxLength={200}
+              onChange={(e) => set("callerFacts", value.callerFacts.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} />
+            <Button type="button" size="icon" variant="ghost" className="size-8 shrink-0" aria-label="Remove detail"
+              onClick={() => set("callerFacts", value.callerFacts.filter((_, j) => j !== i))}>
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
+        ))}
+        {value.callerFacts.length < 12 && (
+          <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px]"
+            onClick={() => set("callerFacts", [...value.callerFacts, { label: "", value: "" }])}>
+            <Plus className="mr-1 size-3" /> Add detail
           </Button>
         )}
       </div>
@@ -697,18 +866,7 @@ function EditTestCaseDialog({ testCase, saving, onClose, onSave }: {
 }) {
   const [draft, setDraft] = useState<TestCaseFields | null>(null);
   useEffect(() => {
-    if (!testCase) { setDraft(null); return; }
-    setDraft({
-      name: testCase.name,
-      personaPrompt: testCase.personaPrompt,
-      goal: testCase.goal,
-      successCriteria: testCase.successCriteria.length ? [...testCase.successCriteria] : [""],
-      language: testCase.language,
-      difficulty: testCase.difficulty,
-      scenario: testCase.scenario,
-      callerGender: testCase.callerGender,
-      maxDurationSeconds: testCase.maxDurationSeconds,
-    });
+    setDraft(testCase ? testCaseFieldsFrom(testCase) : null);
   }, [testCase]);
   const error = draft ? validateTestCase(draft) : null;
   return (
@@ -718,6 +876,7 @@ function EditTestCaseDialog({ testCase, saving, onClose, onSave }: {
           <DialogTitle>Edit test case</DialogTitle>
           <DialogDescription>Changes apply to future runs. Past runs keep the version they used.</DialogDescription>
         </DialogHeader>
+        {draft && <GroundingDetails targets={draft.targets} callerFacts={[]} expectedOutcome={null} />}
         {draft && <TestCaseEditor value={draft} onChange={setDraft} />}
         {error && <p className="text-[12px] text-destructive">{error}</p>}
         <DialogFooter>
@@ -822,6 +981,18 @@ function RunDetailSheet({ runId, onClose, onCancel, cancelling }: {
                           <p className="text-[13px] font-medium text-foreground">{c.criterion}</p>
                           {c.reason && <p className="mt-0.5 text-[12px] text-muted-foreground">{c.reason}</p>}
                           {c.evidence && <p className="mt-1 border-l-2 border-border pl-2 text-[12px] italic text-muted-foreground">“{c.evidence}”</p>}
+                          {c.refs && c.refs.length > 0 && (
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              {c.refs.map((ref) => {
+                                const target = run.testCase?.targets?.find((t) => t.id === ref);
+                                return (
+                                  <span key={ref} title={target?.label} className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                    {target ? targetChipLabel(target) : `From prompt · ${ref}`}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </li>
@@ -876,7 +1047,10 @@ function RunDetailSheet({ runId, onClose, onCancel, cancelling }: {
               <div>
                 <SectionTitle>Test case used</SectionTitle>
                 <div className="space-y-1.5 rounded-lg border border-border p-3 text-[12px] text-muted-foreground">
+                  {run.testCase.callerRole && <p><span className="font-medium text-foreground">Caller:</span> {run.testCase.callerRole}</p>}
                   {run.testCase.personaPrompt && <p><span className="font-medium text-foreground">Persona:</span> {run.testCase.personaPrompt}</p>}
+                  {run.testCase.expectedOutcome && <p><span className="font-medium text-foreground">Expected outcome:</span> {run.testCase.expectedOutcome}</p>}
+                  {(run.testCase.targets?.length ?? 0) > 0 && <GroundingDetails targets={run.testCase.targets ?? []} callerFacts={run.testCase.callerFacts ?? []} expectedOutcome={null} />}
                   {run.testCase.goal && <p><span className="font-medium text-foreground">Goal:</span> {run.testCase.goal}</p>}
                   {run.callerFromNumber && <p><span className="font-medium text-foreground">Called from:</span> {run.callerFromNumber} → {run.targetNumber}</p>}
                 </div>

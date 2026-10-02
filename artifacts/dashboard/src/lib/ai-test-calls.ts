@@ -16,6 +16,9 @@ export interface TestCallsSetup {
   estimatedCostCentsDefault: number;
 }
 
+export interface TestCaseTarget { id: string; kind: string; label: string }
+export interface TestCaseCallerFact { label: string; value: string }
+
 export interface TestCaseFields {
   name: string;
   personaPrompt: string;
@@ -26,6 +29,53 @@ export interface TestCaseFields {
   scenario: string | null;
   callerGender: "female" | "male" | null;
   maxDurationSeconds: number;
+  callerRole: string | null;
+  callerFacts: TestCaseCallerFact[];
+  expectedOutcome: string | null;
+  targets: TestCaseTarget[];
+}
+
+/** What AI Test Calls understood from the agent's prompt, knowledge base and tools. */
+export interface AgentBrief {
+  business: string;
+  offerings: string[];
+  counterpart: { who: string; situation: string };
+  agentDirection: "inbound" | "outbound" | "both" | "unknown";
+  callObjective: string;
+  languages: string[];
+  flowSteps: Array<{ id: string; text: string }>;
+  requiredInfo: Array<{ id: string; field: string; validation: string }>;
+  facts: Array<{ id: string; text: string; sourceQuote: string }>;
+  rules: Array<{ id: string; text: string; sourceQuote: string }>;
+  objectionsHandled: Array<{ id: string; text: string }>;
+  outOfScope: Array<{ id: string; text: string }>;
+  toolsUsage: Array<{ id: string; tool: string; when: string }>;
+}
+
+export const TARGET_KIND_LABEL: Record<string, string> = {
+  step: "Step",
+  field: "Field",
+  fact: "Fact",
+  rule: "Rule",
+  objection: "Objection",
+  out_of_scope: "Not in prompt",
+  tool: "Tool",
+};
+
+export function targetChipLabel(t: TestCaseTarget): string {
+  return `${TARGET_KIND_LABEL[t.kind] ?? "Item"}: ${t.label}`;
+}
+
+/** Short counts for the brief summary header. */
+export function briefCounts(b: AgentBrief): Array<{ label: string; count: number }> {
+  return [
+    { label: "flow steps", count: b.flowSteps.length },
+    { label: "fields to collect", count: b.requiredInfo.length },
+    { label: "facts", count: b.facts.length },
+    { label: "rules", count: b.rules.length },
+    { label: "objections", count: b.objectionsHandled.length },
+    { label: "not in prompt", count: b.outOfScope.length },
+  ].filter((c) => c.count > 0);
 }
 
 export interface TestCase extends TestCaseFields {
@@ -69,7 +119,7 @@ export interface TestRunLeg {
 export interface TestEvaluation {
   score: number;
   verdict: "pass" | "fail";
-  criteria: Array<{ criterion: string; pass: boolean; reason: string; evidence: string }>;
+  criteria: Array<{ criterion: string; pass: boolean; reason: string; evidence: string; refs?: string[] }>;
   issues: string[];
   summary: string;
 }
@@ -167,6 +217,27 @@ export function emptyTestCase(defaultMaxDurationSeconds = 300): TestCaseFields {
     scenario: "happy_path",
     callerGender: "female",
     maxDurationSeconds: defaultMaxDurationSeconds,
+    callerRole: null,
+    callerFacts: [],
+    expectedOutcome: null,
+    targets: [],
+  };
+}
+
+/** Saved rows from before grounding (or API nulls) → editable fields. */
+export function testCaseFieldsFrom(tc: Partial<TestCaseFields> & Pick<TestCaseFields, "name" | "personaPrompt" | "goal">): TestCaseFields {
+  return {
+    ...emptyTestCase(tc.maxDurationSeconds ?? 300),
+    ...tc,
+    successCriteria: tc.successCriteria?.length ? [...tc.successCriteria] : [""],
+    callerFacts: tc.callerFacts ?? [],
+    targets: tc.targets ?? [],
+    callerRole: tc.callerRole ?? null,
+    expectedOutcome: tc.expectedOutcome ?? null,
+    language: tc.language ?? null,
+    difficulty: tc.difficulty ?? "medium",
+    scenario: tc.scenario ?? null,
+    callerGender: tc.callerGender ?? "female",
   };
 }
 
@@ -189,5 +260,10 @@ export function testCasePayload(tc: TestCaseFields): TestCaseFields {
     personaPrompt: tc.personaPrompt.trim(),
     goal: tc.goal.trim(),
     successCriteria: tc.successCriteria.map((c) => c.trim()).filter(Boolean),
+    callerFacts: tc.callerFacts
+      .map((f) => ({ label: f.label.trim(), value: f.value.trim() }))
+      .filter((f) => f.label && f.value),
+    callerRole: tc.callerRole?.trim() || null,
+    expectedOutcome: tc.expectedOutcome?.trim() || null,
   };
 }

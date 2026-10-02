@@ -13,6 +13,7 @@ import {
   normalizeTestTranscript,
   parseEvaluation,
 } from "./evaluator.js";
+import { eventBrief } from "./test-fixtures.js";
 
 const valid = {
   score: 82,
@@ -61,6 +62,32 @@ describe("buildEvaluationSystemPrompt", () => {
     expect(p).toContain("1. Confirms the date");
     expect(p).toContain("Booking made");
     expect(p).toContain("LLM 900");
+    expect(p).not.toContain("WHAT THE AGENT WAS TOLD");
+  });
+
+  it("includes the brief as ground truth, targets and expected outcome", () => {
+    const p = buildEvaluationSystemPrompt({
+      goal: "Register child",
+      criteria: ["Agent states the fee is ₹499 (F3)"],
+      brief: eventBrief(),
+      targets: [{ id: "F3", label: "Registration fee is ₹499 per child" }],
+      expectedOutcome: "Registration captured",
+    });
+    expect(p).toContain("WHAT THE AGENT WAS TOLD");
+    expect(p).toContain("F3: Registration fee is ₹499 per child");
+    expect(p).toContain("X1: Parking at the venue");
+    expect(p).toContain("Invented fact:");
+    expect(p).toContain("THIS TEST TARGETS: F3 (Registration fee is ₹499 per child)");
+    expect(p).toContain("EXPECTED OUTCOME: Registration captured");
+    expect(p).toContain("refs");
+  });
+});
+
+describe("parseEvaluation refs", () => {
+  it("keeps valid brief ids cited by the judge", () => {
+    const out = parseEvaluation({ ...valid, criteria: [{ ...valid.criteria[0], refs: ["f3", "R1", "bogus", 7] }] });
+    expect(out!.criteria[0]!.refs).toEqual(["F3", "R1"]);
+    expect(parseEvaluation(valid)!.criteria[0]!.refs).toEqual([]);
   });
 });
 
@@ -74,6 +101,15 @@ describe("evaluateTestCall", () => {
     chainMock.mockResolvedValue([{ provider: "sarvam", client: bad }, { provider: "openai", client: ok }]);
     const out = await evaluateTestCall(input);
     expect(out).toMatchObject({ score: 82, provider: "openai" });
+  });
+
+  it("sends the brief to the judge model", async () => {
+    const ok = { extract: vi.fn().mockResolvedValue(valid) };
+    chainMock.mockResolvedValue([{ provider: "sarvam", client: ok }]);
+    await evaluateTestCall({ ...input, brief: eventBrief() });
+    const [system, schema] = ok.extract.mock.calls[0]!;
+    expect(system).toContain("F3: Registration fee is ₹499 per child");
+    expect(JSON.stringify(schema)).toContain("refs");
   });
 
   it("throws EvaluationUnavailable when no model is configured", async () => {
