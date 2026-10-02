@@ -15,6 +15,9 @@ import { resolveWorkspaceScope, workspaceCallsWhere } from "../services/workspac
 
 const router: IRouter = Router();
 
+/** AI Test Call legs are billed but kept out of call analytics. */
+const realCalls = eq(callsTable.isTest, false);
+
 router.get("/analytics/dashboard", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const scope = await resolveWorkspaceScope(clerkId);
@@ -26,7 +29,7 @@ router.get("/analytics/dashboard", requireAuth, clientContext, async (req, res):
       active: sql<number>`count(*) filter (where status = 'active')::int`,
     })
     .from(agentsTable)
-    .where(inArray(agentsTable.userId, scope.userIds));
+    .where(and(inArray(agentsTable.userId, scope.userIds), eq(agentsTable.isTestPersona, false)));
 
   const [callStats] = await db
     .select({
@@ -35,21 +38,21 @@ router.get("/analytics/dashboard", requireAuth, clientContext, async (req, res):
       avgDuration: sql<number>`avg(duration_seconds) filter (where duration_seconds is not null)::int`,
     })
     .from(callsTable)
-    .where(callWhere);
+    .where(and(callWhere, realCalls));
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const [todayCalls] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(callsTable)
-    .where(and(callWhere, gte(callsTable.createdAt, todayStart)));
+    .where(and(callWhere, realCalls, gte(callsTable.createdAt, todayStart)));
 
   const weekStart = new Date();
   weekStart.setDate(weekStart.getDate() - 7);
   const [weekCalls] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(callsTable)
-    .where(and(callWhere, gte(callsTable.createdAt, weekStart)));
+    .where(and(callWhere, realCalls, gte(callsTable.createdAt, weekStart)));
 
   const [providerCount] = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -96,7 +99,7 @@ router.get("/analytics/calls/recent", requireAuth, clientContext, async (req, re
     })
     .from(callsTable)
     .leftJoin(agentsTable, eq(callsTable.agentId, agentsTable.id))
-    .where(workspaceCallsWhere(scope.userIds))
+    .where(and(workspaceCallsWhere(scope.userIds), realCalls))
     .orderBy(desc(callsTable.createdAt))
     .limit(20);
 
@@ -120,7 +123,7 @@ router.get("/analytics/calls/by-status", requireAuth, clientContext, async (req,
       count: sql<number>`count(*)::int`,
     })
     .from(callsTable)
-    .where(workspaceCallsWhere(scope.userIds))
+    .where(and(workspaceCallsWhere(scope.userIds), realCalls))
     .groupBy(callsTable.status);
 
   res.json(GetCallsByStatusResponse.parse(rows));
@@ -142,7 +145,7 @@ router.get("/analytics/calls/daily", requireAuth, clientContext, async (req, res
       failed: sql<number>`count(*) filter (where status = 'failed')::int`,
     })
     .from(callsTable)
-    .where(and(workspaceCallsWhere(scope.userIds), gte(callsTable.createdAt, sevenDaysAgo)))
+    .where(and(workspaceCallsWhere(scope.userIds), realCalls, gte(callsTable.createdAt, sevenDaysAgo)))
     .groupBy(sql`to_char(created_at at time zone 'UTC', 'YYYY-MM-DD')`)
     .orderBy(sql`to_char(created_at at time zone 'UTC', 'YYYY-MM-DD')`);
 
@@ -171,18 +174,22 @@ router.get("/analytics/agents/:id", requireAuth, clientContext, async (req, res)
     avgStt:         sql<number>`avg(stt_latency_ms) filter (where stt_latency_ms is not null)::int`,
     avgLlm:         sql<number>`avg(llm_latency_ms) filter (where llm_latency_ms is not null)::int`,
     avgTts:         sql<number>`avg(tts_first_chunk_ms) filter (where tts_first_chunk_ms is not null)::int`,
-    totalSpend:     sql<number>`coalesce(sum(cost_cents), 0)::int`,
+  }).from(callsTable).where(and(eq(callsTable.agentId, agentId), realCalls));
+
+  // Spend includes test-call legs — they are real wallet debits.
+  const [spendRow] = await db.select({
+    totalSpend: sql<number>`coalesce(sum(cost_cents), 0)::int`,
   }).from(callsTable).where(eq(callsTable.agentId, agentId));
 
   const weekStart = new Date();
   weekStart.setDate(weekStart.getDate() - 7);
   const [{ weekCount }] = await db.select({ weekCount: sql<number>`count(*)::int` })
-    .from(callsTable).where(and(eq(callsTable.agentId, agentId), gte(callsTable.createdAt, weekStart)));
+    .from(callsTable).where(and(eq(callsTable.agentId, agentId), realCalls, gte(callsTable.createdAt, weekStart)));
 
   const monthStart = new Date();
   monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
   const [{ monthCount }] = await db.select({ monthCount: sql<number>`count(*)::int` })
-    .from(callsTable).where(and(eq(callsTable.agentId, agentId), gte(callsTable.createdAt, monthStart)));
+    .from(callsTable).where(and(eq(callsTable.agentId, agentId), realCalls, gte(callsTable.createdAt, monthStart)));
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
@@ -193,14 +200,14 @@ router.get("/analytics/agents/:id", requireAuth, clientContext, async (req, res)
     completed: sql<number>`count(*) filter (where status = 'completed')::int`,
     failed:    sql<number>`count(*) filter (where status = 'failed')::int`,
   }).from(callsTable)
-    .where(and(eq(callsTable.agentId, agentId), gte(callsTable.createdAt, thirtyDaysAgo)))
+    .where(and(eq(callsTable.agentId, agentId), realCalls, gte(callsTable.createdAt, thirtyDaysAgo)))
     .groupBy(sql`to_char(created_at at time zone 'UTC', 'YYYY-MM-DD')`)
     .orderBy(sql`to_char(created_at at time zone 'UTC', 'YYYY-MM-DD')`);
 
   const [aiEvalRow] = await db.select({
     aiPass:      sql<number>`count(*) filter (where success_evaluation ilike 'PASS%')::int`,
     aiEvaluated: sql<number>`count(*) filter (where success_evaluation is not null)::int`,
-  }).from(callsTable).where(eq(callsTable.agentId, agentId));
+  }).from(callsTable).where(and(eq(callsTable.agentId, agentId), realCalls));
 
   const total = totals?.totalCalls ?? 0;
   const successful = totals?.successfulCalls ?? 0;
@@ -224,7 +231,7 @@ router.get("/analytics/agents/:id", requireAuth, clientContext, async (req, res)
     avgTtsFirstChunkMs: totals?.avgTts ?? null,
     callsThisWeek: weekCount ?? 0,
     callsThisMonth: monthCount ?? 0,
-    totalSpendCents: totals?.totalSpend ?? 0,
+    totalSpendCents: spendRow?.totalSpend ?? 0,
     dailyVolume: daily,
   }));
 });

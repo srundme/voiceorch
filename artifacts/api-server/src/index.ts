@@ -619,6 +619,9 @@ server.listen(port, () => {
       void seedManagedKeyFromEnv("recall_api_key_fallback","RECALL_API_KEY_FALLBACK");
       void migrateSaarikaToSaaras();
       void migrateCallEngineConfigs();
+      void import("./services/ai-test-calls/runner.js")
+        .then(({ recoverTestRuns }) => recoverTestRuns())
+        .catch((err) => logger.warn({ err }, "AI test call run recovery failed (non-fatal)"));
       startCallbackPoller();
       startSpikeChecker();
       startAlertSweep();

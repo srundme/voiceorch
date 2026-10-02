@@ -24,6 +24,12 @@ import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE } from "./
 import { traiPreDialCheck, logPreDialDecision } from "./trai/index.js";
 import { isOnDnc } from "../lib/dnc-check.js";
 import { logger } from "../lib/logger.js";
+import {
+  pickCallerLine,
+  samePhone,
+  testRunBypassesDestinationGates,
+  type TestRunDialOption,
+} from "./ai-test-calls/policy.js";
 
 export class OutboundDialError extends Error {
   constructor(
@@ -44,12 +50,22 @@ export async function dialOutboundAgent(opts: {
   metadata?: Record<string, unknown>;
   /** Admin test dials skip destination OTP (owner KYC / wallet still apply). */
   skipDestinationOtp?: boolean;
+  /**
+   * AI Test Call: destination is the user's own verified inbound number, so DNC
+   * and destination OTP are skipped. Wallet > 0 still applies. The call row is
+   * flagged is_test and linked to the run.
+   */
+  testRun?: TestRunDialOption;
 }): Promise<{ callId: number; executionId: string }> {
   const { userId, agentId, toNumber, webhookBaseUrl } = opts;
   const extraMeta = opts.metadata ?? {};
-  const skipDestinationOtp = opts.skipDestinationOtp === true;
+  const testRun = testRunBypassesDestinationGates(opts.testRun, toNumber) ? opts.testRun! : undefined;
+  if (opts.testRun && !testRun) {
+    throw new OutboundDialError("Test call destination is not the verified test number", "TEST_DESTINATION_MISMATCH", 400);
+  }
+  const skipDestinationOtp = opts.skipDestinationOtp === true || !!testRun;
 
-  if (await isOnDnc(userId, toNumber)) {
+  if (!testRun && await isOnDnc(userId, toNumber)) {
     throw new OutboundDialError("Number is on Do Not Call list", "DNC_BLOCKED", 403);
   }
 
@@ -126,6 +142,17 @@ export async function dialOutboundAgent(opts: {
   let vobizCorrToken: string | null = null;
   let effectiveFromNumber = "outbound";
   const amd = resolveAmdConfig((agent.agentConfig ?? {}) as Record<string, unknown>);
+  const beforeDial = async (fromNumber: string): Promise<void> => {
+    if (!testRun) return;
+    if (samePhone(fromNumber, toNumber)) {
+      throw new OutboundDialError(
+        "The test caller line is the same as the agent's inbound number. Add a second number or use the shared line for test calls.",
+        "TEST_SAME_NUMBER",
+        400,
+      );
+    }
+    await testRun.onBeforeDial?.(fromNumber);
+  };
 
   try {
     if (provider === "twilio") {
@@ -134,6 +161,7 @@ export async function dialOutboundAgent(opts: {
         throw new OutboundDialError("Twilio provider is missing accountSid/fromNumber", "TWILIO_CONFIG", 400);
       }
       effectiveFromNumber = agentOutboundNumber || cfg["fromNumber"]!;
+      await beforeDial(effectiveFromNumber);
       providerCallId = await dialTwilio({
         accountSid: cfg["accountSid"]!, authToken: decryptKey(providerRow!.apiKey),
         fromNumber: effectiveFromNumber, toNumber,
@@ -148,6 +176,7 @@ export async function dialOutboundAgent(opts: {
         throw new OutboundDialError("Plivo provider is missing authId/fromNumber", "PLIVO_CONFIG", 400);
       }
       effectiveFromNumber = agentOutboundNumber || cfg["fromNumber"]!;
+      await beforeDial(effectiveFromNumber);
       providerCallId = await dialPlivo({
         authId: cfg["authId"]!, authToken: decryptKey(providerRow!.apiKey),
         fromNumber: effectiveFromNumber, toNumber,
@@ -171,6 +200,7 @@ export async function dialOutboundAgent(opts: {
           }
         }
         effectiveFromNumber = agentOutboundNumber || cfg["fromNumber"]!;
+        await beforeDial(effectiveFromNumber);
         vobizCorrToken = randomBytes(8).toString("hex");
         const dialRes = await dialVobiz({
           authId: cfg["authId"]!, authToken: decryptKey(providerRow!.apiKey),
@@ -225,7 +255,12 @@ export async function dialOutboundAgent(opts: {
         }
 
         let fromNumber: string;
-        if (agentOutboundNumber) {
+        if (testRun) {
+          const picked = pickCallerLine(numbers, toNumber, agentOutboundNumber);
+          fromNumber = agentOutboundNumber && !samePhone(agentOutboundNumber, toNumber)
+            ? agentOutboundNumber
+            : picked ?? toNumber;
+        } else if (agentOutboundNumber) {
           fromNumber = agentOutboundNumber;
         } else {
           const preferred = (agentCfg2["preferredManagedNumber"] as string | undefined) ?? null;
@@ -234,6 +269,7 @@ export async function dialOutboundAgent(opts: {
             : numbers[Math.floor(Math.random() * numbers.length)]!;
         }
         effectiveFromNumber = fromNumber;
+        await beforeDial(effectiveFromNumber);
         vobizCorrToken = randomBytes(8).toString("hex");
         const dialRes = await dialVobiz({
           authId: managedAuthId, authToken: managedAuthToken,
@@ -264,6 +300,7 @@ export async function dialOutboundAgent(opts: {
     status: "ringing",
     userId: agent.userId ?? null,
     executionId,
+    ...(testRun ? { isTest: true, testRunId: testRun.runId } : {}),
     metadata: JSON.stringify({
       ...(providerCallId ? { providerCallId } : {}),
       provider,

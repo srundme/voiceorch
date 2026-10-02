@@ -126,6 +126,7 @@ import { RecentNumbersList } from "@/components/recent-numbers-list";
 import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 import { GeneratePromptSheet } from "./generate-prompt-sheet";
 import { AgentInboundPanel } from "./agent-inbound-panel";
+import { AiTestCallsPanel } from "./ai-test-calls-panel";
 import {
   useAgentTeamMap,
   sortAgentsByTeam,
@@ -147,7 +148,7 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "calling" | "tools" | "outcomes" | "analytics" | "voicemail" | "settings" | "versions" | "more";
+type TabId = "overview" | "prompt" | "voice" | "calling" | "tools" | "outcomes" | "tests" | "analytics" | "voicemail" | "settings" | "versions" | "more";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
@@ -158,6 +159,7 @@ const TABS: TabDef[] = [
   { id: "calling",  label: "Calling",    icon: <Phone className="h-3.5 w-3.5" /> },
   { id: "tools",    label: "Tools",      icon: <Wrench className="h-3.5 w-3.5" /> },
   { id: "outcomes", label: "After call", icon: <Tag className="h-3.5 w-3.5" /> },
+  { id: "tests",    label: "AI Test Calls", icon: <TestTube2 className="h-3.5 w-3.5" /> },
   { id: "more",     label: "More",       icon: <MoreHorizontal className="h-3.5 w-3.5" /> },
 ];
 
@@ -247,6 +249,7 @@ function sectionFromSearch(search: string): TabId {
   if (requested === "integrations" || requested === "website" || requested === "embed") return "more";
   if (requested === "analytics" || requested === "settings" || requested === "versions") return "more";
   if (requested === "calling" || requested === "phone") return "calling";
+  if (requested === "test-calls" || requested === "testing") return "tests";
   return TABS.some((tab) => tab.id === requested) ? (requested as TabId) : "prompt";
 }
 
@@ -8440,6 +8443,15 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
                     />
                     <DispositionSettingsPanel agentId={agent?.id ?? 0} />
                     <VoicemailTab form={form} embedded />
+                  </div>
+                )}
+                {activeTab === "tests" && (
+                  <div className={cn("flex flex-col gap-6", BUILDER_TAB_PAD)}>
+                    <BuilderTabHeader
+                      title="AI Test Calls"
+                      description="An AI caller phones this agent's inbound number with a scripted persona, then the call is graded against your checks."
+                    />
+                    <AiTestCallsPanel agentId={agent?.id ?? 0} onOpenCalling={() => handleTabClick("calling")} />
                   </div>
                 )}
                 {activeTab === "more" && (

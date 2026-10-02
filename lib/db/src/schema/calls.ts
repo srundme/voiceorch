@@ -57,9 +57,12 @@ export const callsTable = pgTable("calls", {
     lastCustomerMessage: string;
     toolResults: string[];
   }>(),
+  /** Leg of an AI Test Call (caller persona or target agent) — billed, but kept out of analytics and side effects. */
+  isTest: boolean("is_test").notNull().default(false),
+  testRunId: integer("test_run_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   endedAt: timestamp("ended_at", { withTimezone: true }),
-});
+}, (t) => [index("calls_test_run_id_idx").on(t.testRunId)]);
 
 export const insertCallSchema = createInsertSchema(callsTable).omit({ id: true, createdAt: true });
 export type InsertCall = z.infer<typeof insertCallSchema>;

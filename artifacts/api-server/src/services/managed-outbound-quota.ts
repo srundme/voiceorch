@@ -154,6 +154,7 @@ export async function getManagedOutboundQuota(userId: string): Promise<ManagedOu
       eq(callsTable.userId, userId),
       gte(callsTable.createdAt, dayStart),
       inArray(callsTable.fromNumber, pool),
+      eq(callsTable.isTest, false),
     ));
 
   const used = Number(agg?.count ?? 0);

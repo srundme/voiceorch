@@ -153,7 +153,7 @@ router.get("/agents", requireAuth, clientContext, async (req, res): Promise<void
   const agents = await db
     .select()
     .from(agentsTable)
-    .where((await workspaceOwned(clerkId)).owned)
+    .where(and((await workspaceOwned(clerkId)).owned, eq(agentsTable.isTestPersona, false)))
     .orderBy(agentsTable.createdAt);
   const sourceIdMap = await getKnowledgeSourceIdsByAgent(agents);
   const valid = [];

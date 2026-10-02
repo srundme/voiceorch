@@ -101,6 +101,8 @@ import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
 import { appendGuardrails, redactTranscriptPII } from "../services/guardrails.js";
 import { phonesMatch } from "../services/google-sheets-helpers.js";
 import { resolveBillableDurationSeconds } from "./billable-duration.js";
+import { claimInboundTestLeg } from "../services/ai-test-calls/correlation.js";
+import { endSessionSideEffects } from "../services/ai-test-calls/policy.js";
 import { scheduleNetworkDropCallback } from "../services/autoRedial.js";
 import { refillCampaignForLead } from "../services/batchScheduler.js";
 import { resolveRetryConfig } from "../services/retryEngine.js";
@@ -1716,6 +1718,24 @@ export async function createSession(params: {
     if (!inserted) throw new Error("Failed to create call record");
     return inserted;
   })();
+
+  // AI Test Calls: an inbound leg dialed by a hidden persona agent is linked to its run.
+  if (callDirection === "inbound" && !isWebcall && !isMeetBotSession) {
+    try {
+      const testRunId = await claimInboundTestLeg({
+        callId: callRecord.id,
+        agentId: params.agentId,
+        fromNumber: params.fromNumber,
+        toNumber: params.toNumber,
+      });
+      if (testRunId != null) {
+        callRecord.isTest = true;
+        callRecord.testRunId = testRunId;
+      }
+    } catch (err) {
+      logger.warn({ err, callId: callRecord.id }, "ai-test-calls: inbound leg correlation failed");
+    }
+  }
 
   // ── Inject Agent Task brief into system prompt (from dial-time metadata) ────
   try {
@@ -3471,12 +3491,14 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
     const [call] = await db.select().from(callsTable).where(eq(callsTable.id, session.callId));
     if (call) {
       const [ag] = await db.select().from(agentsTable).where(eq(agentsTable.id, call.agentId));
+      // AI Test Call legs: billed and recorded normally, but no customer-facing side effects.
+      const effects = endSessionSideEffects(call.isTest === true);
 
       // ── TRAI post-call opt-out scan (fire-and-forget) ────────────────────────
       // When TRAI is enabled on the agent, detect caller opt-out phrases in the
       // finalized transcript and suppress the number for future calls.
       const traiEnabled = !!((ag?.agentConfig as { compliance?: { trai?: boolean } } | null)?.compliance?.trai);
-      if (traiEnabled) {
+      if (traiEnabled && effects.traiOptOutScan) {
         void scanForOptOut(call.agentId, session.callId, call.toNumber, transcript)
           .catch((scanErr) => {
             logger.warn({ sessionId, scanErr }, "TRAI post-call opt-out scan failed");
@@ -3500,7 +3522,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       // context is stored and ready if a network-drop callback fires.
       // Campaign calls are excluded — they manage their own retry context.
       const isCampaignCall  = !!session.campaignLeadId;
-      if (ag && transcript && transcript.length > 100 && !isCampaignCall) {
+      if (ag && transcript && transcript.length > 100 && !isCampaignCall && effects.resumeContext) {
         void (async () => {
           try {
             const ctxLlmProvs = await db.select().from(providersTable).where(
@@ -3615,7 +3637,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       const isNetworkDropRetry = session.sourceCallbackReason === "network_drop";
       const hasFarewellEnding = transcriptHasFarewellEnding(transcript);
       const hasConversationContent = metricsAcc.count > 0;
-      if (ag && autoRedialCfg?.enabled && wasUnexpectedDrop && !hasFarewellEnding && hasConversationContent && isRealPhoneCall && !isCampaignCall && !isNetworkDropRetry) {
+      if (ag && effects.autoRedial && autoRedialCfg?.enabled && wasUnexpectedDrop && !hasFarewellEnding && hasConversationContent && isRealPhoneCall && !isCampaignCall && !isNetworkDropRetry) {
         void scheduleNetworkDropCallback({
           agentId:  ag.id,
           toNumber: session.callerPhone!,
@@ -3747,13 +3769,15 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           return Math.round((oldVal * prevCount + newVal) / newSuccessful);
         };
 
-        await db.update(agentsTable).set({
-          successfulCalls:    newSuccessful,
-          avgDurationSeconds: newAvg,
-          avgSttLatencyMs:    rollingLatency(ag.avgSttLatencyMs,     avgSttMs),
-          avgLlmLatencyMs:    rollingLatency(ag.avgLlmLatencyMs,     avgLlmMs),
-          avgTtsFirstChunkMs: rollingLatency(ag.avgTtsFirstChunkMs,  avgTtsMs),
-        }).where(eq(agentsTable.id, ag.id));
+        if (effects.rollingAgentStats) {
+          await db.update(agentsTable).set({
+            successfulCalls:    newSuccessful,
+            avgDurationSeconds: newAvg,
+            avgSttLatencyMs:    rollingLatency(ag.avgSttLatencyMs,     avgSttMs),
+            avgLlmLatencyMs:    rollingLatency(ag.avgLlmLatencyMs,     avgLlmMs),
+            avgTtsFirstChunkMs: rollingLatency(ag.avgTtsFirstChunkMs,  avgTtsMs),
+          }).where(eq(agentsTable.id, ag.id));
+        }
 
         // ── Billing: compute costCents and debit wallet (telephony path) ──────────
         // The HTTP PATCH /calls/:id/end route handles billing for calls ended via
@@ -4095,7 +4119,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           // Universal signals for the campaign analytics board — runs after
           // disposition so we can pass dispositionResult as a hint. Non-campaign
           // calls are skipped inside analyzeCallIntelligence.
-          if (session.campaignLeadId && transcript && transcript.trim().length >= 20) {
+          if (effects.campaignHooks && session.campaignLeadId && transcript && transcript.trim().length >= 20) {
             void import("../services/analyze-call-intelligence.js").then(({ analyzeCallIntelligence }) =>
               analyzeCallIntelligence({
                 callId: session.callId,
@@ -4113,6 +4137,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           // Campaign dials carry campaignLeadId; anything else inbound from a
           // known lead number gets linked into the campaign Incoming tab.
           if (
+            effects.inboundCampaignMatch &&
             !session.campaignLeadId &&
             ag.userId &&
             call.fromNumber &&
@@ -4220,7 +4245,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           });
 
           // 4. Agent webhook URL (Settings → Post-call notify) — default or custom JSON
-          if (ag.webhookUrl) {
+          if (ag.webhookUrl && effects.webhooks) {
             const serialized = serializeAgentWebhookBody(
               readWebhookPayloadTemplate(agCfgForWebhook),
               webhookPayload,
@@ -4239,10 +4264,17 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
 
           // Workspace webhook endpoints (/app/webhooks) — same full payload
           const webhookUserId = ag.userId ?? call.userId ?? null;
-          if (webhookUserId) {
+          if (webhookUserId && effects.webhooks) {
             dispatchWebhooks(webhookUserId, "call.completed", webhookPayload).catch((err) => {
               logger.warn({ sessionId, err }, "Workspace webhook dispatch failed");
             });
+          }
+
+          // Everything below pushes to campaigns, CRMs, sheets, messaging, flows or
+          // external monitors — never for an AI Test Call leg.
+          if (!effects.campaignHooks) {
+            logger.info({ sessionId, callId: session.callId }, "AI test call leg — skipping post-call pushes");
+            return;
           }
 
           // ── Stamp lead disposition + meaning-map operational outcome ────────
@@ -4410,7 +4442,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         })();
 
         // ── Post-call caller memory update + callback detection (fire-and-forget) ──
-        if (session.callerPhone && transcript && transcript.length > 50) {
+        if (effects.callerMemory && session.callerPhone && transcript && transcript.length > 50) {
           const endHint = session.pipeline.endReasonHint;
           // Only treat true mid-conversation dropouts as resume-cut (call 2626
           // greeter “கால் கட் ஆயிடுச்சு” after a long hangup-after-question).

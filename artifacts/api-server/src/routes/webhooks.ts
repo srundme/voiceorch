@@ -1532,7 +1532,7 @@ async function loadMergeTransfer(transferId: number, token: string) {
   return row;
 }
 
-async function resolveVobizCredsForUser(userId: string): Promise<{ authId: string; authToken: string } | null> {
+export async function resolveVobizCredsForUser(userId: string): Promise<{ authId: string; authToken: string } | null> {
   const [prov] = await db
     .select()
     .from(providersTable)

@@ -320,6 +320,9 @@ export const agentsTable = pgTable("agents", {
   avgSttLatencyMs: integer("avg_stt_latency_ms"),
   avgLlmLatencyMs: integer("avg_llm_latency_ms"),
   avgTtsFirstChunkMs: integer("avg_tts_first_chunk_ms"),
+
+  /** Hidden caller persona used by AI Test Calls — never listed, counted, or picked. */
+  isTestPersona: boolean("is_test_persona").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
