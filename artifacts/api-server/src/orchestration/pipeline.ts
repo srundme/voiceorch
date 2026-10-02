@@ -40,7 +40,7 @@ import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { extractEmotionTag, makeMarkupTagFilter, stripMarkupTags } from "./emotion-tag.js";
 import { normalizeTtsNonverbals } from "./tts-nonverbal.js";
-import { isBackgroundIntakeTool, languagePrefix, resolveToolFillerPhrase, withoutBackgroundIntakeTools } from "./tool-fillers.js";
+import { languagePrefix, resolveToolFillerPhrase } from "./tool-fillers.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { parseRealtimeDetectedLang, shouldBargeOnRealtimePartial, shouldBargeOnRealtimeVadStart } from "./adapters/stt/sarvam-realtime.js";
@@ -61,8 +61,6 @@ import { looksLikeBookingConfirmationEmail } from "./booking-email-guard.js";
 import { validateBookableEmail } from "./booking-email-validate.js";
 import { bookingAsksCallerForEmail, resolveBookingAttendeeEmail } from "./booking-email-policy.js";
 import { looksLikeVoicemailGreeting } from "../lib/voicemail-detect.js";
-import { groundIntakeWrite } from "../lib/candidate-intake-fields.js";
-import { groundDispositionWrite } from "../lib/intake-dispositions.js";
 import {
   applyBookingEmailToBookArgs,
   applyBookingEmailToSendArgs,
@@ -87,7 +85,7 @@ import { processAudioIn, processRawPcm8kIn, destroyAudioSession, feedFarEndRende
 import { aec3Enabled } from "./aec3.js";
 import { RecordingBuffer, WEBCALL_GAP_RESYNC_MS } from "./recorder.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMAdapter, LLMUsage, SessionConfig, StreamSTT, STTConfig, ToolDefinition } from "./types.js";
-import { defaultGoodbyeMessage, resolveGoodbyeMessage } from "./types.js";
+import { resolveGoodbyeMessage } from "./types.js";
 import type { VoiceSession } from "./voice-session.js";
 import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, isPureNonLatinQuery, listKbOfferingTitles, type KbRetrievalResult } from "./kb-retrieval.js";
 import {
@@ -119,7 +117,6 @@ import {
   collectionHoldMsForTranscript,
   resolveCollectionKind,
   resolveCollectionVadSilenceMs,
-  irfanListenSilenceMs,
   TurnSafetyNet,
   SilenceWatchdog,
   recoveryReprompt,
@@ -185,14 +182,6 @@ import {
 } from "./turn-acceptance.js";
 import { SileroStream } from "./silero-stream.js";
 import type { AecFrameDiagnostics } from "./audioPool.js";
-import {
-  executeIntakeDisposition,
-  executeIntakeSubmit,
-  executeIntakeWrite,
-  type IntakeToolContext,
-} from "./intake-tools.js";
-import { recordIntakeEnglishTurn } from "../lib/intake-service.js";
-import { emptyJobshopProfile, matchJobshopProfile, type JobshopProfile } from "../lib/jobshop-match.js";
 import { logger } from "../lib/logger.js";
 import { isHumanShortUtterancePause, isLikelyRingBurstPattern } from "./amd-confirm.js";
 import { buildCompactGreetingPrompt, stripHallucinatedCompanyVerifyGreeting } from "./compact-greeting-prompt.js";
@@ -546,7 +535,6 @@ const BARGE_RECOVERY_MAX_WAIT_MS = 8000;
 const TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 0;
 // Heard-text window for interruption hints (not self-echo detection).
 const SELF_ECHO_TAIL_MS       = 2800;
-const HELD_CALLER_WORDS_MS    = 10_000;
 const CARRIER_ECHO_LATENCY_MS = 1500;  // margin added to the greeting echo-hold to cover the
                                         // round-trip carrier echo latency (observed ~777 ms)
 // Tail drain duration comes from agentConfig.telephonyTailDrainMs (Latency Tuning UI).
@@ -1019,8 +1007,6 @@ export class OrchestrationPipeline implements VoiceSession {
   /** Unheard remainder of a reply cut by barge-in — resumed if the "interruption" turns out to be a scrap (call 4839 dead-air). */
   private _bargedReplyRemainder: string | null = null;
   private _bargedReplyAt = 0;
-  /** Caller words that arrived over agent playback, joined to their next turn. */
-  private _heldCallerWords: { text: string; at: number } | null = null;
   /**
    * True only while playSentence() is actively sending TTS bytes to the carrier.
    * Distinct from isPlaying (which stays true for the entire turn, including the
@@ -1541,12 +1527,6 @@ export class OrchestrationPipeline implements VoiceSession {
   // processTurn()'s historyForLlm so the LLM knows what the caller already heard and
   // can continue naturally without repeating already-delivered content.
   private _currentTurnPlayedSentences: string[] = [];
-  /** Spoken when finish_intake finds no JD. Played on end_call if this turn never said it. */
-  private _intakeUnspokenClose: string | null = null;
-  /** A JD was already pitched on this call. Hangup must not say there is no opening. */
-  private _intakeMatchedThisCall = false;
-  /** Answers collected on this call, scored against the dummy jobs. */
-  private _jobshopProfile: JobshopProfile = emptyJobshopProfile();
   private _interruptionHint: string | null = null;
   /** Text of the sentence currently draining via playJob — used when barge-in cuts mid-sentence. */
   private _activePlaybackText: string | null = null;
@@ -3453,14 +3433,12 @@ export class OrchestrationPipeline implements VoiceSession {
     const ttsKey = keys.get(this.agent.ttsProvider);
     if (!ttsKey) throw new Error(`No API key found for TTS provider: ${this.agent.ttsProvider}`);
 
-    // Phone audio is 8 kHz. Sarvam accepts that natively. The pod ear resamples
-    // it with a band-limited filter. Linear interpolation to 16 kHz invents
-    // high frequencies and is what the ear was hearing on Vobiz calls.
+    // Phone audio is 8 kHz. Sarvam accepts that natively. Linear interpolation
+    // to 16 kHz invents high frequencies that Sarvam then mis-hears.
     // Webcall's native mic rate is already 16 kHz, so it keeps the default.
     const telephonyNative8k =
       config.telephonyProvider !== "webcall"
-      && (this.agent.asrProvider.toLowerCase() === "sarvam"
-        || this.agent.asrProvider.toLowerCase() === "irfan_pod");
+      && this.agent.asrProvider.toLowerCase() === "sarvam";
     this.sttSampleRate = telephonyNative8k ? 8000 : 16000;
     const sttCfg: STTConfig = telephonyNative8k
       ? { ...this.agent.sttConfig, nativeSampleRate: 8000 }
@@ -4051,15 +4029,6 @@ export class OrchestrationPipeline implements VoiceSession {
       && !isHardInterruptTranscript(transcript)
       && !this.shouldInterruptFromCallerTranscript(transcript)
     ) {
-      // Call 35621: "July." and "On." were the caller finishing their own
-      // date of birth over the agent. Too short to cut the agent off, but
-      // they belong to the caller's next turn.
-      if (this.isIntakeAgent && !isBareAcknowledgement(transcript)) {
-        const prior = this._heldCallerWords && Date.now() - this._heldCallerWords.at < HELD_CALLER_WORDS_MS
-          ? `${this._heldCallerWords.text} `
-          : "";
-        this._heldCallerWords = { text: `${prior}${transcript}`.trim(), at: Date.now() };
-      }
       this.logDiscardedTranscript(transcript, "agent_still_speaking");
       return;
     }
@@ -4427,17 +4396,6 @@ export class OrchestrationPipeline implements VoiceSession {
     this.clearEagerPartialTimer();
     this.interruptionMgr.onUserSpeechEnd();
 
-    // Grade the caller's English off their own speech. Hooked here, after the
-    // echo and quality guards, so the agent's own voice and STT scraps never
-    // count as candidate speech. Fire-and-forget — never blocks the turn.
-    if (this.isIntakeAgent) {
-      void recordIntakeEnglishTurn(this.config.callId, {
-        text: transcript,
-        confidence: this._pendingSttMeta?.languageConfidence ?? null,
-        detectedLanguage: this._pendingSttLang,
-      });
-    }
-
     // BARGE-IN FIX: If a barge-in was triggered (TTS stopped, clearAudio sent),
     // the transcript MUST process immediately — not queue. Queueing causes the
     // "unrealistic call flow" where the user interrupts but their speech is only
@@ -4575,13 +4533,6 @@ export class OrchestrationPipeline implements VoiceSession {
         );
         return;
       }
-    }
-
-    if (this._heldCallerWords) {
-      if (Date.now() - this._heldCallerWords.at < HELD_CALLER_WORDS_MS) {
-        transcript = `${this._heldCallerWords.text} ${transcript}`;
-      }
-      this._heldCallerWords = null;
     }
 
     this.isProcessing = true;
@@ -5858,7 +5809,7 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.agent.firstSpeaker === "user") return false;
     if (this.config.isReturningCaller === true && !this.isResumeDroppedCall && this.callDirection !== "outbound") return false;
     const greetLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
-    let greeting = this.isResumeDroppedCall && !this.isIntakeAgent ? "" : (this.agent.greetingMessage ?? "");
+    let greeting = this.isResumeDroppedCall ? "" : (this.agent.greetingMessage ?? "");
     if (
       this.callDirection === "outbound"
       && !this.isResumeDroppedCall
@@ -5944,15 +5895,12 @@ export class OrchestrationPipeline implements VoiceSession {
     // ensureCache re-warms and only turn 1 misses.
     const warmProvider = this.agent.llmProvider?.toLowerCase();
     if (
-      (warmProvider === "google" || warmProvider === "irfan_pod") &&
+      warmProvider === "google" &&
       typeof this.llm.warmContextCache === "function" &&
       !(this.agent.stagedPromptEnabled && this.agent.stagedPromptStages.length > 0)
     ) {
       try {
-        const warmTools = warmProvider === "irfan_pod"
-          ? withoutBackgroundIntakeTools(this.buildVoiceToolDefs())
-          : this.buildVoiceToolDefs();
-        void this.llm.warmContextCache(this.buildCacheBase(null), warmTools);
+        void this.llm.warmContextCache(this.buildCacheBase(null), this.buildVoiceToolDefs());
       } catch (err) {
         logger.debug({ callId: this.config.callId, err }, "Prompt warm (greeting) skipped");
       }
@@ -5966,7 +5914,6 @@ export class OrchestrationPipeline implements VoiceSession {
       return;
     }
     this.isProcessing = true;
-    const preplayedOpening = await (this.config.preplayedOpening ?? Promise.resolve(null));
     try {
       // IVR pre-filter: play menu, collect a digit, then fall through to normal greeting
       if (this.agent.ivrEnabled && this.agent.ivrGreeting) {
@@ -6003,7 +5950,7 @@ export class OrchestrationPipeline implements VoiceSession {
         && !typedWelcome;
       let greeting = useInstantReturning
         ? buildInstantReturningGreeting(this.config.returningCallerName, greetLang)
-        : (resumeDropped && !this.isIntakeAgent ? "" : typedWelcome);
+        : (resumeDropped ? "" : typedWelcome);
 
       // Outbound typed Welcome (including "Hello!") is what they hear first.
       // Do not empty a stub and let the greeting LLM speak Talk/CALL FLOW —
@@ -6256,41 +6203,6 @@ export class OrchestrationPipeline implements VoiceSession {
         if (greeting.trim() || welcomeAlreadySpoken) {
           this.openingHandshakeUntil = Date.now() + OPENING_HANDSHAKE_MS;
         }
-      }
-      if (
-        preplayedOpening
-        && greeting.trim() === preplayedOpening.text
-        && !this.closed
-        && !this.bargeInRequested
-      ) {
-        this.beginOpeningGreetingPlayback(greeting.length);
-        this.firstAudioSentAt = preplayedOpening.startedAt;
-        this.answerGapLogged = true;
-        this.greetingEchoHoldUntil = preplayedOpening.startedAt + preplayedOpening.durationMs + CARRIER_ECHO_LATENCY_MS;
-        if (this.answeredAtMs) {
-          this.logExec("Agent", "system", {
-            status: "info",
-            turnNumber: 0,
-            metadata: {
-              event: "Answer → First Audio breakdown",
-              answerToFirstAudioMs: preplayedOpening.startedAt - this.answeredAtMs,
-              setupMs: Math.max(0, preplayedOpening.startedAt - this.answeredAtMs),
-              pipelineMs: 0,
-              savedOpening: true,
-            },
-          });
-        }
-        logger.info({ callId: this.config.callId, greeting: greeting.slice(0, 80) }, "Opening is the saved clip");
-        await preplayedOpening.done;
-        if (!this.closed && !this.bargeInRequested) {
-          this.conversationHistory.appendAssistant(greeting.trim());
-          this.lastAssistantSpokenRaw = greeting.trim();
-          this.config.onTranscript("agent", greeting.trim());
-          this.config.onConversationUpdate?.(this.conversationHistory.messages);
-          this.onBotStoppedSpeaking("greeting");
-          this.expectingShortReplyUntil = Math.max(this.expectingShortReplyUntil, Date.now() + 60_000);
-        }
-        return;
       }
       this.beginOpeningGreetingPlayback((greeting.trim() || typedWelcome).length);
       logger.info({ callId: this.config.callId, greeting: (greeting || typedWelcome).slice(0, 80) }, "Sending greeting");
@@ -8066,108 +7978,12 @@ export class OrchestrationPipeline implements VoiceSession {
   // ── Tool execution ───────────────────────────────────────────────────────────
 
   /**
-   * Call 25223: saving the form used a silent tool-only LLM turn, then a second
-   * LLM to speak. Persist after the spoken turn's LLM has finished so TTS and
-   * the write overlap, without a second adapter chat racing cancelInFlight.
-   */
-  private async persistIntakeFromTurn(transcript: string): Promise<void> {
-    if (this.closed) return;
-    const persistTools = this.buildVoiceToolDefs().filter((t) => isBackgroundIntakeTool(t.name));
-    if (persistTools.length === 0) return;
-    const text = transcript.trim();
-    if (!text) return;
-
-    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
-    const persistPrompt = [
-      this.agent.systemPrompt,
-      "",
-      "[BACKGROUND SAVE]",
-      `The candidate just said: "${text.slice(0, 500)}"`,
-      "Call save_candidate_details and/or set_disposition with only the fields they just gave.",
-      "If they named a workplace or how long they have worked, save lastCompany and tenure.",
-      "Do not speak. Do not call finish_intake or end_call.",
-    ].join("\n");
-
-    try {
-      await this.llm.chat(
-        this.conversationHistory.sanitizeToolMessages(),
-        persistPrompt,
-        () => {},
-        () => {},
-        {
-          tools: persistTools,
-          onToolCall: (name, args) => {
-            if (isBackgroundIntakeTool(name)) calls.push({ name, args });
-          },
-        },
-      );
-    } catch (err) {
-      logger.warn({ callId: this.config.callId, err }, "Background intake persist LLM failed");
-      return;
-    }
-    if (this.closed || calls.length === 0) return;
-
-    for (const call of calls) {
-      const result = await this.handleToolCall(call.name, call.args);
-      if (result) {
-        this.conversationHistory.appendUser(`[Background save for ${call.name}]: ${result}`);
-      }
-    }
-    this.config.onConversationUpdate?.(this.conversationHistory.messages);
-  }
-
-  /**
    * Public tool dispatcher: writes Tool request/response execution-log rows
    * around the actual dispatch so the Call Log timeline shows every tool call
    * (mirrors the web-call path). Errors are logged with their real reason, then
    * returned as an `error:` string so the LLM can keep talking instead of dead air.
    */
-  private intakeSpeechContext(): { caller: string; latest: string; agent: string } {
-    const messages = this.conversationHistory.messages;
-    // A date of birth or pincode often arrives over several short finals
-    // ("I'm born on twenty." / "July." / "Two thousand seven."), so ground on
-    // the last few caller lines, not only the newest one.
-    const callerLines: string[] = [];
-    let agent = "";
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const turn = messages[i]!;
-      if (callerLines.length < 3 && turn.role === "user" && !turn.content.startsWith("[")) {
-        callerLines.unshift(turn.content);
-      }
-      if (!agent && turn.role === "assistant") agent = turn.content;
-      if (callerLines.length >= 3 && agent) break;
-    }
-    return { caller: callerLines.join(" "), latest: callerLines.at(-1) ?? "", agent };
-  }
-
   private async handleToolCall(toolName: string, args: Record<string, unknown>): Promise<string | undefined> {
-    if (toolName === "save_candidate_details") {
-      const heard = this.intakeSpeechContext();
-      const grounded = groundIntakeWrite(args, heard.caller, heard.agent);
-      if (Object.keys(grounded).length === 0) {
-        const skipped = "Nothing from what they just said was saved. Ask the next missing question. Do not invent a surname, email, or pincode.";
-        this.logExec("Tool", "system", {
-          status: "info",
-          turnNumber: this._activeTurnIndex,
-          metadata: { event: "Save Dropped", reason: "not_said", fields: Object.keys(args) },
-        });
-        return skipped;
-      }
-      args = grounded;
-    }
-    if (toolName === "set_disposition") {
-      const reason = groundDispositionWrite(args, this.intakeSpeechContext().latest);
-      if (reason) {
-        this.logExec("Tool", "system", {
-          status: "info",
-          turnNumber: this._activeTurnIndex,
-          metadata: { event: "Outcome Dropped", reason, args },
-        });
-        return reason === "unclear_speech"
-          ? "No outcome was saved — their last line was not clear English. Ask them to repeat it in English."
-          : "No outcome was saved — they did not say that. Keep going with the next question.";
-      }
-    }
     const _toolStart = Date.now();
     this.logExec("Tool", "request", {
       status: "info",
@@ -8365,25 +8181,6 @@ export class OrchestrationPipeline implements VoiceSession {
       return await this.executeTransferAgent(tool, args);
     } else if (tool.type === "squad_followup") {
       return await this.executeSquadFollowup(args);
-    } else if (tool.type === "intake_write") {
-      return await executeIntakeWrite(this.intakeToolContext(), args);
-    } else if (tool.type === "intake_disposition") {
-      return await executeIntakeDisposition(this.intakeToolContext(), args);
-    } else if (tool.type === "intake_submit") {
-      const submitted = await executeIntakeSubmit(this.intakeToolContext());
-      const marker = "SAY_BEFORE_HANGUP: ";
-      if (submitted.startsWith("Form closed.") || submitted.startsWith("ALREADY_PITCHED:")) {
-        this._intakeMatchedThisCall = true;
-        this._intakeUnspokenClose = null;
-      } else if (submitted.startsWith(marker) && !this._intakeMatchedThisCall) {
-        this._intakeUnspokenClose = submitted.slice(marker.length).split("\n")[0]?.trim() || null;
-      }
-      return submitted;
-    } else if (tool.type === "match_jobs") {
-      const matched = matchJobshopProfile(this._jobshopProfile, args);
-      this._jobshopProfile = matched.profile;
-      if (matched.matches.length > 0) this._intakeMatchedThisCall = true;
-      return matched.speech;
     } else if (tool.type === "webhook") {
       return await this.executeWebhookTool(tool, args);
     } else if (tool.type === "send_sms") {
@@ -8556,22 +8353,6 @@ export class OrchestrationPipeline implements VoiceSession {
    * closed (call 28817: "Take care, bye" then "நேரம் ஒதுக்கியதுக்கு நன்றி…").
    */
   private async speakEndCallFarewellIfNeeded(configured: string | undefined): Promise<void> {
-    if (this.isIntakeAgent) {
-      const alreadySpoke = this._currentTurnPlayedSentences.some((s) => isSubstantiveIntakeSpeech(s));
-      if (alreadySpoke) {
-        this._intakeUnspokenClose = null;
-        return;
-      }
-      const goodbye = this._intakeUnspokenClose
-        ?? (this._intakeMatchedThisCall
-          ? "Alright, the team will call you about that opening. Thank you for your time."
-          : defaultGoodbyeMessage(this.agent.language ?? this.currentLang));
-      this._intakeUnspokenClose = null;
-      this.conversationHistory.appendAssistant(goodbye);
-      this.config.onTranscript("agent", goodbye);
-      await this.speakRaw(goodbye);
-      return;
-    }
     const recent =
       this.lastAssistantSpokenRaw
       || this._currentTurnPlayedSentences.join(" ")
@@ -8950,27 +8731,6 @@ export class OrchestrationPipeline implements VoiceSession {
     return undefined;
   }
 
-  /**
-   * The intake form is keyed by call, so the tools resolve (or open) it
-   * themselves and nothing has to be threaded through the session.
-   */
-  private intakeToolContext(): IntakeToolContext {
-    return {
-      callId: this.config.callId,
-      agentId: this.agent.id,
-      callerPhone: this.config.callerPhone ?? null,
-    };
-  }
-
-  /**
-   * True when this agent runs the candidate intake form. Detected from the
-   * tool set rather than an agent-type flag, because the tools are what make
-   * the form exist for this call.
-   */
-  private get isIntakeAgent(): boolean {
-    return (this.agent.tools ?? []).some((t) => t.type.startsWith("intake_"));
-  }
-
   private async executeSquadFollowup(args: Record<string, unknown>): Promise<string> {
     const targetAgentId = parseInt(String(args["targetAgentId"] ?? ""), 10);
     const note = String(args["note"] ?? "").trim();
@@ -9259,8 +9019,6 @@ export class OrchestrationPipeline implements VoiceSession {
 
     // ── Build tool definitions from agent config ──
     const toolDefs = this.buildVoiceToolDefs();
-    // Speak without waiting on form writes (call 25223). Save runs during TTS.
-    const speakToolDefs = withoutBackgroundIntakeTools(toolDefs);
 
     // Hard booking enforce: when slot + confirmed email + name are ready, book
     // in code (do not rely on the LLM remembering tool_choice).
@@ -9941,7 +9699,6 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     if (
       this.agent.backchannelingEnabled
-      && this.agent.ttsProvider?.toLowerCase() !== "irfan_pod"
       && !this.closed
       && !this.bargeInRequested
       && !skipFillerForBackchannelAck
@@ -10913,9 +10670,9 @@ export class OrchestrationPipeline implements VoiceSession {
           pendingText = remainder;
         },
         (fullText) => { llmResponse = fullText; },
-        speakToolDefs.length > 0
+        toolDefs.length > 0
           ? {
-              tools: speakToolDefs,
+              tools: toolDefs,
               toolChoice: forcedToolChoice,
               onToolDetected: (info) => {
                 this.logExec("Tool", "system", {
@@ -11243,23 +11000,6 @@ export class OrchestrationPipeline implements VoiceSession {
       );
     }
 
-    // A form write that also has a spoken reply saves in the background so TTS
-    // is not held. A write with no spoken reply used to end the turn on the
-    // backchannel ("Okay.") and wait for the caller to nudge (call 29080).
-    if (triggeredToolName && isBackgroundIntakeTool(triggeredToolName)) {
-      const besideTool = stripFunctionTags(stripReasoningBlocks(llmResponse))
-        .replace(/\[calling tool:[^\]]*\]/gi, "")
-        .trim();
-      if (besideTool) {
-        triggeredToolName = null;
-        triggeredToolArgs = {};
-      }
-    }
-
-    if (triggeredToolName === "finish_intake" || triggeredToolName === "end_call") {
-      await this.persistIntakeFromTurn(transcript);
-    }
-
     // ── If LLM called a tool, execute it and skip TTS ──
     if (triggeredToolName) {
       // Push the assistant's tool-invocation turn with proper tool_calls metadata.
@@ -11448,11 +11188,7 @@ export class OrchestrationPipeline implements VoiceSession {
       "LLM complete"
     );
 
-    const persistDuringSpeech = this.persistIntakeFromTurn(transcript);
-    persistDuringSpeech.catch((err) => {
-      logger.warn({ callId: this.config.callId, err }, "Background intake persist failed");
-    });
-    await Promise.all([playPromise, persistDuringSpeech]);
+    await playPromise;
 
     // Bolna parity: store only what the caller actually heard (defer until playback ends).
     // Capture the cut tail BEFORE clearing bargeInRequested — otherwise
@@ -12077,7 +11813,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // single user turn (e.g. check_availability → book_appointment → end_call).
     // A depth cap forces a final tools-detached narration to prevent runaway loops.
     const MAX_TOOL_DEPTH = 5;
-    const toolDefs = withoutBackgroundIntakeTools(this.buildVoiceToolDefs());
+    const toolDefs = this.buildVoiceToolDefs();
     const fatalSchedulingConfig =
       this.schedulingConfigurationFailed && result.includes("\"no_event_type\"");
     // A missing event type cannot be recovered by another tool call. Detach all
@@ -12945,10 +12681,6 @@ export class OrchestrationPipeline implements VoiceSession {
       audioBufferMs: 0,
       baseSilenceMs: base,
     });
-    if (this.agent.asrProvider?.toLowerCase() === "irfan_pod") {
-      setter.call(this.streamSTT, irfanListenSilenceMs(collectionKind, endpoint.ms));
-      return;
-    }
     if (collectionKind !== "none") {
       setter.call(this.streamSTT, resolveCollectionVadSilenceMs(base, collectionKind));
       return;
@@ -13105,13 +12837,6 @@ function guardrailTokenize(text: string): Set<string> {
  * from the token stream before text reaches TTS.  Returns a per-turn closure so
  * each turn (and continueWithToolResult) has independent state.
  */
-/** Backchannel and one-word acks are not a close. Call 29080 hung up after "Okay." */
-function isSubstantiveIntakeSpeech(text: string): boolean {
-  const t = text.trim().toLowerCase().replace(/[.!?,]+$/g, "").trim();
-  if (!t) return false;
-  if (/^(okay|ok|hmm|hm|yeah|yes|right|sure|alright|uh|um|hello|hi)$/.test(t)) return false;
-  return t.length > 12;
-}
 
 /**
  * Strips `<function=NAME ...>...</function>` (and self-closing/dangling variants) from text.

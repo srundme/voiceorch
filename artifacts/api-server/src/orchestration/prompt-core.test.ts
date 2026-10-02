@@ -18,10 +18,10 @@ describe("prompt core compiler", () => {
 
   it("compiles identity, purpose, flow, and behaviour", () => {
     const compiled = compilePromptCore({
-      agentName: "Irfan",
+      agentName: "Meera",
       agentLanguage: "en-IN",
       core: {
-        identity: { role: "Recruitment consultant", company: "XYZ Staffing", persona: "Warm, concise" },
+        identity: { role: "Sales consultant", company: "XYZ Staffing", persona: "Warm, concise" },
         callContext: {
           direction: "inbound",
           primaryObjective: "Collect profile and recommend openings.",
@@ -38,8 +38,8 @@ describe("prompt core compiler", () => {
       fallbackPrompt: "",
     });
     expect(compiled).toContain("IDENTITY");
-    expect(compiled).toContain("Name: Irfan");
-    expect(compiled).toContain("Role: Recruitment consultant");
+    expect(compiled).toContain("Name: Meera");
+    expect(compiled).toContain("Role: Sales consultant");
     expect(compiled).toContain("CALL PURPOSE");
     expect(compiled).toContain("CALL FLOW");
     expect(compiled).toContain("inbound");
@@ -86,18 +86,18 @@ describe("prompt core compiler", () => {
 
   it("round-trips form hydration", () => {
     const form = promptCoreToForm({
-      identity: { name: "Irfan" },
+      identity: { name: "Meera" },
       instructions: { behavioural: ["Handle interruptions naturally."] },
     });
-    expect(form.identity?.name).toBe("Irfan");
+    expect(form.identity?.name).toBe("Meera");
     expect(form.behavioural).toBe("Handle interruptions naturally.");
-    expect(compactPromptCore(form)?.identity?.name).toBe("Irfan");
+    expect(compactPromptCore(form)?.identity?.name).toBe("Meera");
   });
 
   it("compiles form-shaped instructions without an instructions object", () => {
     const compiled = compilePromptCore({
       core: {
-        identity: { name: "Irfan" },
+        identity: { name: "Meera" },
         mustDo: "Ask one question at a time.",
         behavioural: "Handle interruptions naturally.",
       },

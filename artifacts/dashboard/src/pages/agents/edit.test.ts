@@ -122,7 +122,7 @@ describe("buildUpdateAgentPayload", () => {
     const filled = buildUpdateAgentPayload({
       ...BASE,
       promptCore: {
-        identity: { name: "Irfan", role: "Recruitment consultant" },
+        identity: { name: "Meera", role: "Sales consultant" },
         callContext: { direction: "inbound", primaryObjective: "Collect profile." },
         flow: [{ title: "GREETING", objective: "Identify yourself." }],
         mustDo: "Ask one question at a time.",
@@ -131,7 +131,7 @@ describe("buildUpdateAgentPayload", () => {
     });
     const cfg = filled.agentConfig as Record<string, unknown>;
     expect(cfg["promptCore"]).toEqual({
-      identity: { name: "Irfan", role: "Recruitment consultant" },
+      identity: { name: "Meera", role: "Sales consultant" },
       callContext: { direction: "inbound", primaryObjective: "Collect profile." },
       flow: [{ title: "GREETING", objective: "Identify yourself." }],
       instructions: {
@@ -152,7 +152,7 @@ describe("buildUpdateAgentPayload", () => {
       stagedPromptEnabled: true,
       stagedPromptStages: [{ name: "Open", content: "Hi" }],
       promptCore: {
-        identity: { role: "Recruitment consultant", company: "XYZ Staffing" },
+        identity: { role: "Sales consultant", company: "XYZ Staffing" },
         flow: [{ title: "PROFILE", objective: "Collect experience" }],
       },
     });

@@ -31,7 +31,7 @@ Status: describes the code as of 1 Oct 2026. Where something exists in code but 
 | Surface | Where | Who | Theme |
 |---|---|---|---|
 | Customer dashboard | `app.snapserve.ai/app/*` | Customers, team members, partner clients | Light by default, dark available |
-| Public pages | `/`, `/sign-in`, `/book/*`, `/events/*`, `/workshop/*`, `/join/*`, `/intake/*`, `/privacy`, `/terms` | Anyone | Mixed (see each page) |
+| Public pages | `/`, `/sign-in`, `/book/*`, `/events/*`, `/workshop/*`, `/join/*`, `/privacy`, `/terms` | Anyone | Mixed (see each page) |
 | Docs and API reference | `/docs/*` | Developers (SnapServe host only) | Always light, slate |
 | Admin app | separate app (`artifacts/admin`) | SnapServe staff | Dark by default |
 | White-label portals | partner custom domains | Partner clients | Partner logo and name over the same dashboard |
@@ -311,7 +311,7 @@ Router: wouter (`artifacts/dashboard/src/App.tsx`).
 ├─ /app/partner, /app/partner/clients/:clerkId
 ├─ /app/partner-join, /app/join   (invite acceptance)
 └─ /app/test-simulator
-Public: /book/:slug, /book/cancel, /book/reschedule, /join/:token, /intake/:token,
+Public: /book/:slug, /book/cancel, /book/reschedule, /join/:token,
         /workshop/:slug, /events/:slug, /events/judge/:token,
         /events/certificates/:code/verify, /docs/*, /privacy, /terms, /impersonate
 ```
@@ -742,7 +742,6 @@ Back to Partner Hub; tiles for balance, rate, this month's usage, spend and call
 | Cancel booking | `/book/cancel?token=` | Confirm "Yes, cancel this appointment" or "Keep appointment"; states for missing, invalid, already cancelled |
 | Reschedule | `/book/reschedule?token=` | Pick a new slot; success shows new time and Meet link |
 | Web call join | `/join/:token` | Browser call with an agent |
-| Live intake form | `/intake/:token` | Form a caller fills during a live call |
 | Event registration | `/events/:slug` | About, eligibility, rules, prizes, leaderboard, FAQ; registration (team, institution, city, leader with mobile OTP "Send OTP"/"Verify", "Add teammate", **Register team**); success with reference code |
 | Judge portal | `/events/judge/:token` | Assignments list; rubric scores, private feedback; Save draft, Finalize score |
 | Certificate check | `/events/certificates/:code/verify` | Valid/invalid with recipient, team, type, event, date |
@@ -823,7 +822,7 @@ Sections: fixed nav (Features, vs Bolna, Pricing, Sign in, Get started) → hero
 | Voice operations | Live calls, Failures, Call quality, Call 360 |
 | Product and infrastructure | Managed keys (LLM, STT, TTS, telephony, integrations: test, rotate), Managed numbers and trial limits, Providers, Voices, Prompt templates, System prompts, Ambient sounds, Integrations and Google Calendar connections, Scheduling |
 | Operations | Alerts, Health, Deployments, Emails, Audit logs |
-| Demos and programmes | Intake agent demo, Voice-a-thon (events, teams, judges, leaderboard, certificates), Events, Intern bookings, Landing leads, Team guides, Family module (companies, policies, agents) |
+| Demos and programmes | Voice-a-thon (events, teams, judges, leaderboard, certificates), Events, Intern bookings, Landing leads, Team guides, Family module (companies, policies, agents) |
 | Settings | Platform settings, Admin alert channels, DPDP erasure |
 
 ---
@@ -834,7 +833,7 @@ Found while mapping the code; worth deciding on:
 
 1. **Landing page is not live.** `landing.tsx` is built but has no route; signed-out visitors land on the sign-in card. Its footer links are `#` placeholders.
 2. **Bell icon does nothing.** The top-bar bell has no notifications behind it.
-3. **Unreachable pages:** in-app Events list and Event team portal (all `/app/events*` redirect to Home), the operator intake console (`intake/index.tsx`), Activity log (redirects to History).
+3. **Unreachable pages:** in-app Events list and Event team portal (all `/app/events*` redirect to Home), Activity log (redirects to History).
 4. **Two visual languages for marketing.** The landing page uses inline purple/cyan styles, while the dashboard tokens define saffron/teal/indigo as the marketing colours.
 5. **All dashboard pages load up front.** `App.tsx` imports every page eagerly; only the API reference and the embedded agent editor are lazy, so the first load is heavy.
 6. **Older header components remain** (`app-page-header.tsx`, `operate-shell.tsx` alongside `StripePage`); a few pages still use their own headers.

@@ -92,7 +92,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
 
   it("keeps typed Welcome on resume-drop so first audio is not blocked on the greeting LLM (call 18112)", () => {
     expect(pipelineSrc).not.toContain('const typedWelcome = resumeDropped ? ""');
-    expect(pipelineSrc).toMatch(/resumeDropped && !this\.isIntakeAgent \? "" : typedWelcome/);
+    expect(pipelineSrc).toMatch(/resumeDropped \? "" : typedWelcome/);
     expect(pipelineSrc).toContain("playing welcome before greeting LLM");
   });
 
@@ -304,13 +304,7 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
   });
 });
 
-describe("intake persist + VoBiz hangup (call 25223)", () => {
-  it("saves the form during TTS instead of a silent tool-only turn", () => {
-    expect(methodBody("processTurn")).toContain("persistIntakeFromTurn");
-    expect(methodBody("processTurn")).toContain("withoutBackgroundIntakeTools");
-    expect(pipelineSrc).toContain("persistDuringSpeech");
-  });
-
+describe("VoBiz hangup (call 25223)", () => {
   it("issues a VoBiz REST hangup because keepCallAlive leaves the PSTN up", () => {
     const sessionSrc = readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), "session.ts"),

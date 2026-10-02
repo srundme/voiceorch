@@ -883,6 +883,13 @@
       "when": 1791600025000,
       "tag": "0125_campaign_lead_state_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1791600026000,
+      "tag": "0126_drop_candidate_intakes",
+      "breakpoints": true
     }
   ]
 }

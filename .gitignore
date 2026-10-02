@@ -78,10 +78,5 @@ brag-output-*
 
 # Never push user-attached call logs (contain caller PII/transcripts)
 attached_assets/call-*logs*.json
-# Irfan caller memory is phone numbers and transcripts. It lives on the pod.
-deploy/irfan-pod/memory/
-deploy/irfan-pod/desk.json
-# Caller audio saved to compare the ear against the audio path. Stays on the pod.
-deploy/irfan-pod/stt-compare/
 # Pasted chat attachments are conversation ephemera, not source
 attached_assets/Pasted-*

@@ -61,26 +61,7 @@ const INSTANT_TOOL_FILLER_SKIP = new Set([
   "mute_meeting",
   "unmute_meeting",
   "leave_meeting",
-  // Intake writes finish in ~10ms. Speaking "One moment…" on every save is
-  // the stall the recruiter prompt already forbids.
-  "save_candidate_details",
-  "set_disposition",
-  "finish_intake",
 ]);
-
-/** Form writes that must not block the spoken reply (call 25223). */
-export const BACKGROUND_INTAKE_TOOLS = new Set([
-  "save_candidate_details",
-  "set_disposition",
-]);
-
-export function isBackgroundIntakeTool(name: string): boolean {
-  return BACKGROUND_INTAKE_TOOLS.has(name);
-}
-
-export function withoutBackgroundIntakeTools<T extends { name: string }>(tools: T[]): T[] {
-  return tools.filter((t) => !BACKGROUND_INTAKE_TOOLS.has(t.name));
-}
 
 export function languagePrefix(language: string | null | undefined): string {
   return (language ?? "en").split("-")[0] || "en";

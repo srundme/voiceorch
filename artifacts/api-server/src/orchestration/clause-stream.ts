@@ -49,11 +49,10 @@ export type ExtractSentencesOpts = {
   earlyClause?: boolean;
 };
 
-/** Sarvam and Cartesia flush each job independently. The GPU voice does too:
- * a word-boundary cut is a new clone, which is slow and drifts off the speaker. */
+/** Sarvam and Cartesia flush each job independently. */
 export function ttsSentenceOptions(provider: string): { earlyClause: boolean } {
   const name = provider.toLowerCase();
-  return { earlyClause: name !== "cartesia" && name !== "sarvam" && name !== "irfan_pod" };
+  return { earlyClause: name !== "cartesia" && name !== "sarvam" };
 }
 
 export function pickStreamedGreetingHead(pending: string, opts?: ExtractSentencesOpts): string {

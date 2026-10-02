@@ -28,7 +28,7 @@ describe("resolveGoodbyeMessage", () => {
     expect(resolveGoodbyeMessage("bye", [], "en")).toBe("bye");
   });
 
-  it("still exposes language defaults for intake-only silent fallback", () => {
+  it("still exposes language defaults for silent fallback", () => {
     expect(defaultGoodbyeMessage("ta")).toContain("நன்றி");
     expect(defaultGoodbyeMessage("en")).toBe(DEFAULT_GOODBYE_MESSAGE);
   });

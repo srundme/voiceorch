@@ -45,25 +45,6 @@ import {
 import { compilePromptCore, hasPromptCore } from "@workspace/db/prompt-core";
 import { withDbRetry } from "./db-retry.js";
 import { transcriptHasFarewellEnding } from "./callFarewell.js";
-import { attachIntakeCallArtifacts } from "../lib/intake-service.js";
-import {
-  INTAKE_AGENT_TYPE,
-  INTAKE_BACKCHANNEL_FILLERS,
-  INTAKE_LOCKED_AGENT_CONFIG,
-  applyAdminHostedStack,
-  applyIntakePodVoice,
-  intakeUsesPod,
-  buildIntakeSttPrompt,
-  buildIntakeSystemPrompt,
-  intakeAgentTools,
-  intakeCartesiaVoiceId,
-} from "../lib/intake-agent.js";
-import {
-  findIntakeForCaller,
-  intakeCallerName,
-  renderIntakeGreeting,
-  resolveIntakeOpenKind,
-} from "../lib/intake-call-context.js";
 import { shouldMarkCallVoicemail } from "../lib/voicemail-detect.js";
 import { looksLikeVoicemailOutcome } from "../services/sheet-auto-calls-helpers.js";
 import { capHandoffTranscript, mergeHandoffTranscript } from "./squad-transcript.js";
@@ -264,8 +245,6 @@ export async function createSession(params: {
    *  in the recording. Omitted for webcall (no carrier answer gap) — falls back
    *  to session-creation time. */
   answeredAt?: number;
-  /** Saved opener already playing on the phone socket. See SessionConfig.preplayedOpening. */
-  preplayedOpening?: SessionConfig["preplayedOpening"];
   /** Opaque per-call correlation token minted at outbound dial time (calls.ts) and
    *  threaded through the answer webhook → WS handler. When set, the pre-created
    *  outbound exec_* call record is matched by `metadata.corrToken` and updated in
@@ -416,59 +395,13 @@ export async function createSession(params: {
     ? agent.endCallPhrases.split(",").map(s => s.trim()).filter(Boolean)
     : [];
 
-  // A renamed or stripped Irfan row still has to run the intake form.
-  if (agent.agentType !== INTAKE_AGENT_TYPE && /^irfan\b/i.test(agent.name ?? "")) {
-    agent.agentType = INTAKE_AGENT_TYPE;
-    void db.update(agentsTable).set({ agentType: INTAKE_AGENT_TYPE }).where(eq(agentsTable.id, agent.id)).catch((err) => {
-      logger.warn({ err, agentId: agent.id }, "intake: could not restore agent type");
-    });
-  }
-
-  // Irfan talks. He does not fill a form. Drop any saved intake tools on the row.
   let tools = Array.isArray(agent.tools) ? (agent.tools as unknown as AgentTool[]) : [];
-  if (agent.agentType === INTAKE_AGENT_TYPE) {
-    const hadForm = tools.some((tool) => tool.type.startsWith("intake_"));
-    tools = intakeAgentTools();
-    if (hadForm) {
-      void db.update(agentsTable).set({
-        tools: intakeAgentTools() as unknown as Record<string, unknown>[],
-        systemPrompt: buildIntakeSystemPrompt(agent.name),
-      }).where(eq(agentsTable.id, agent.id)).catch((err) => {
-        logger.warn({ err, agentId: agent.id }, "intake: could not drop form tools");
-      });
-    }
-  }
 
   // Read agentConfig JSONB for advanced settings — normalize legacy snappy Sarvam/engine
   // defaults so existing agents get patient STT without requiring a one-off DB migrate.
   const agentCfg = normalizeCallEngineAgentConfig(
     (agent.agentConfig ?? {}) as Record<string, unknown>,
   ).config;
-  // Overlay after normalize so a stale intake row cannot keep Fast barge / VAD.
-  // A call placed from admin stays on Sarvam + Cartesia. Other intake calls
-  // still use the GPU pod when that address is configured.
-  let adminHostedCall = false;
-  if (agent.agentType === INTAKE_AGENT_TYPE && params.corrToken) {
-    try {
-      const [dial] = await db
-        .select({ metadata: callsTable.metadata })
-        .from(callsTable)
-        .where(sql`${callsTable.metadata}::jsonb->>'corrToken' = ${params.corrToken}`)
-        .limit(1);
-      const meta = dial?.metadata ? JSON.parse(dial.metadata) as { source?: string } : {};
-      adminHostedCall = meta.source === "admin_intake_outbound";
-    } catch (err) {
-      logger.warn({ err, agentId: agent.id }, "intake: could not read admin dial metadata");
-    }
-  }
-  if (agent.agentType === INTAKE_AGENT_TYPE) {
-    Object.assign(agentCfg, INTAKE_LOCKED_AGENT_CONFIG);
-    if (adminHostedCall) applyAdminHostedStack(agent);
-    else if (intakeUsesPod()) applyIntakePodVoice(agent);
-    if (agent.ttsProvider === "cartesia") {
-      agent.ttsVoice = intakeCartesiaVoiceId(agent.ttsVoice);
-    }
-  }
 
   // AMD (voicemail) config — read once, used by both the voicemail-delivery config
   // and the acoustic-confirmation config below. Default action is "hangup" (never
@@ -494,7 +427,6 @@ export async function createSession(params: {
   // Free-text agents: ignore Identity / Flow / stages — Call script only (call 28884).
   if (
     scriptMode !== "free_text"
-    && agent.agentType !== INTAKE_AGENT_TYPE
     && hasPromptCore(agentCfg["promptCore"])
   ) {
     effectiveSystemPrompt = compilePromptCore({
@@ -509,12 +441,6 @@ export async function createSession(params: {
     );
   } else if (scriptMode === "free_text") {
     logger.info({ agentId: params.agentId }, "Using free-text call script (prompt core skipped)");
-  }
-  if (agent.agentType === INTAKE_AGENT_TYPE) {
-    // Rebuild from the live template so a rename (Irfan vs Meera) is spoken on
-    // the next call without waiting for a save, and so existing agents pick up
-    // the returning-call / callback instructions.
-    effectiveSystemPrompt = buildIntakeSystemPrompt(agent.name);
   }
   // Meeting bots: meeting prompt replaces the call prompt when set.
   // Date/time + memory/context blocks still append below.
@@ -700,17 +626,11 @@ export async function createSession(params: {
     language: effectiveAgentLang,
     languageAutoDetect: isMultilingual,
     autoSwitchToEnglish: agentCfg["autoSwitchToEnglish"] === true,
-    backchannelingEnabled: agent.agentType === INTAKE_AGENT_TYPE
-      || agent.backchannelingEnabled !== false,
-    backchannelingFrequency: agent.agentType === INTAKE_AGENT_TYPE
-      ? 1
-      : (agent.backchannelingFrequency ?? null),
-    backchannelFillers: agent.agentType === INTAKE_AGENT_TYPE
-      ? [...INTAKE_BACKCHANNEL_FILLERS]
-      : parseBackchannelPhrases(agent.backchannelPhrases),
+    backchannelingEnabled: agent.backchannelingEnabled !== false,
+    backchannelingFrequency: agent.backchannelingFrequency ?? null,
+    backchannelFillers: parseBackchannelPhrases(agent.backchannelPhrases),
     webhookUrl: agent.webhookUrl ?? null,
-    noiseCancellationEnabled: agent.agentType === INTAKE_AGENT_TYPE
-      || agent.noiseCancellationEnabled === true,
+    noiseCancellationEnabled: agent.noiseCancellationEnabled === true,
     forceSoftwareNoiseGate: agentCfg[FORCE_SOFTWARE_NOISE_GATE_KEY] === true,
     ambientNoiseEnabled: (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false,
     ambientNoiseTrack: (agentCfg["ambientNoiseTrack"] as string | undefined) ?? null,
@@ -844,11 +764,9 @@ export async function createSession(params: {
         )
       : ((agentCfg["sarvamSttMode"] as string | undefined) ?? null),
     sarvamSttStreamType: resolveRealtimeStreamType(agentCfg["sarvamSttStreamType"]),
-    sarvamSttPrompt: agent.agentType === INTAKE_AGENT_TYPE
-      ? buildIntakeSttPrompt()
-      : (typeof agentCfg["sarvamSttPrompt"] === "string"
-        ? (agentCfg["sarvamSttPrompt"] as string)
-        : null),
+    sarvamSttPrompt: typeof agentCfg["sarvamSttPrompt"] === "string"
+      ? (agentCfg["sarvamSttPrompt"] as string)
+      : null,
     sarvamHighVadSensitivity: resolveSarvamHighVadSensitivity(agentCfg["sarvamHighVadSensitivity"]),
     sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs(agentCfg["sarvamSpeechEndFlushMs"] as number | undefined),
     sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs(agentCfg["sarvamIncompleteHoldMs"] as number | undefined),
@@ -1015,7 +933,6 @@ export async function createSession(params: {
     providerRowsResult,
     upcomingBookingsResult,
     inboundSheetLookupResult,
-    priorIntakeResult,
     afterCallInstruction,
   ] = await Promise.all([
     // 1. Caller memory (3-layer: profile + facts + archive)
@@ -1118,20 +1035,10 @@ export async function createSession(params: {
         ])
       : Promise.resolve(null),
 
-    // 7. Prior candidate intake for this number — returning-call opener + form resume
-    agent.agentType === INTAKE_AGENT_TYPE && callerPhone
-      ? findIntakeForCaller({ agentId: params.agentId, phone: callerPhone }).catch((err) => {
-          logger.warn({ agentId: params.agentId, err }, "intake: prior-form lookup failed");
-          return null;
-        })
-      : Promise.resolve(null),
-
-    agent.agentType === INTAKE_AGENT_TYPE
-      ? Promise.resolve(null)
-      : afterCallInstructionForAgent(agent.id).catch((err) => {
-          logger.warn({ agentId: agent.id, err }, "after-call instruction lookup failed");
-          return null;
-        }),
+    afterCallInstructionForAgent(agent.id).catch((err) => {
+      logger.warn({ agentId: agent.id, err }, "after-call instruction lookup failed");
+      return null;
+    }),
   ]);
 
   // Apply caller memory to system prompt
@@ -1169,10 +1076,7 @@ export async function createSession(params: {
       }
     }
 
-    if (
-      agent.agentType !== INTAKE_AGENT_TYPE
-      && (callerProfileSnapshot || callerCtxResult.facts.length > 0 || callerCtxResult.recentCalls.length > 0)
-    ) {
+    if (callerProfileSnapshot || callerCtxResult.facts.length > 0 || callerCtxResult.recentCalls.length > 0) {
       agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtxResult, {
         suppressGenderFact: !agentConfig.genderDetectionEnabled,
         agentName: agent.name,
@@ -1473,33 +1377,6 @@ export async function createSession(params: {
     agentConfig.greetingMessage = resolvePromptVariables(agentConfig.greetingMessage, dynVars);
   }
 
-  if (agent.agentType === INTAKE_AGENT_TYPE) {
-    const prior = priorIntakeResult;
-    const kind = resolveIntakeOpenKind({
-      hasPriorIntake: Boolean(prior),
-      sourceCallbackReason: params.sourceCallbackReason,
-      isResumeDroppedCall: resumeDroppedCall || params.sourceCallbackReason === "network_drop",
-    });
-    const callerName = prior
-      ? intakeCallerName(prior)
-      : (callerProfileSnapshot?.name ?? dynVars["caller_name"] ?? dynVars["name"] ?? null);
-    agentConfig.greetingMessage = renderIntakeGreeting({
-      kind,
-      agentName: agent.name,
-      callerName,
-    });
-    logger.info(
-      {
-        agentId: params.agentId,
-        kind,
-        callerName,
-        priorToken: prior?.publicToken ?? null,
-        spokenName: agent.name,
-      },
-      "intake: opening line chosen for this call",
-    );
-  }
-
   // Apply knowledge base (appended AFTER the system prompt so agent-specific
   // instructions keep positional precedence — reference material must never
   // read as if it overrides the agent's configured behavior above it).
@@ -1608,10 +1485,9 @@ export async function createSession(params: {
   ].filter((p): p is string => !!p);
 
   // Null / missing agentMode must behave as managed (DB default). Only explicit
-  // "byop" uses the owner's provider rows. Intake demos always pin platform Sarvam
-  // so Admin → Managed Keys actually reaches the live call.
+  // "byop" uses the owner's provider rows.
   const isManaged = (agent.agentMode ?? "managed") !== "byop";
-  const pinPlatformSarvam = isManaged || agent.agentType === INTAKE_AGENT_TYPE;
+  const pinPlatformSarvam = isManaged;
 
   // ── Bulk platform_settings fetch (one DB round-trip instead of N sequential) ─
   // Collect every settings key needed, then do a single IN query.
@@ -1722,18 +1598,6 @@ export async function createSession(params: {
         "Non-catalog Sarvam speaker without owner API key — TTS will fail until Providers → Sarvam key is added",
       );
     }
-  }
-
-  // The pod has no third-party key. A placeholder satisfies the pipeline check.
-  if (
-    intakeUsesPod()
-    && (
-      agent.asrProvider?.toLowerCase() === "irfan_pod"
-      || agent.llmProvider?.toLowerCase() === "irfan_pod"
-      || agent.ttsProvider?.toLowerCase() === "irfan_pod"
-    )
-  ) {
-    providerKeys.set("irfan_pod", "pod");
   }
 
   // Provider key alias normalization (e.g. "google" key serves "gemini_audio" and "gemini")
@@ -1951,8 +1815,7 @@ export async function createSession(params: {
       telephonyProvider: params.telephonyProvider,
       setupElapsedMs: Date.now() - createSessionStartMs,
       deployedCommit: process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT_SHA ?? null,
-      backchannelingEnabled: agent.agentType === INTAKE_AGENT_TYPE
-        || agent.backchannelingEnabled !== false,
+      backchannelingEnabled: agent.backchannelingEnabled !== false,
     },
   });
 
@@ -2703,7 +2566,6 @@ export async function createSession(params: {
     isResumeDroppedCall: resumeDroppedCall,
     // Carrier answer time — anchors the recording clock (see SessionConfig).
     answeredAt: params.answeredAt,
-    preplayedOpening: params.preplayedOpening,
     onTranscript: (speaker, text) => {
       logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
       // Forward to the transport (browser webcall renders a live transcript).
@@ -3286,16 +3148,6 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       ...transferMetaPatch,
     }).where(eq(callsTable.id, session.callId));
 
-    // Top up the candidate profile with the recording and transcript. Both only
-    // exist now, so the profile written mid-call carries nulls for them. No-op
-    // for every agent that is not running an intake form.
-    void attachIntakeCallArtifacts({
-      callId: session.callId,
-      recordingUrl,
-      transcript: transcript || null,
-      durationSeconds,
-    });
-
     // ── Mark campaign lead terminal (drains the active Connected count) ──────────
     if (session.campaignLeadId) {
       const leadId = session.campaignLeadId;
@@ -3757,12 +3609,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       // FAREWELL / COMPLETED GUARD: suppress auto-redial when the caller said
       // goodbye (incl. Tamil பாய்), the agent already delivered a closing line,
       // or naturalEnd/end_call fired — those are successful ends, not drops.
-      const storedRedial = (ag?.agentConfig as { autoRedial?: { enabled?: boolean; delayMinutes?: number; maxAttempts?: number } } | null)?.autoRedial;
-      const autoRedialCfg = storedRedial?.enabled
-        ? storedRedial
-        : ag?.agentType === INTAKE_AGENT_TYPE
-          ? { enabled: true, maxAttempts: 3, delayMinutes: 2 }
-          : storedRedial;
+      const autoRedialCfg = (ag?.agentConfig as { autoRedial?: { enabled?: boolean; delayMinutes?: number; maxAttempts?: number } } | null)?.autoRedial;
       const wasUnexpectedDrop = !session.naturalEndTriggered && !session.wasTransferred && !conversationCompleted;
       const isRealPhoneCall = session.callerPhone && !session.callerPhone.startsWith("webcall:");
       const isNetworkDropRetry = session.sourceCallbackReason === "network_drop";

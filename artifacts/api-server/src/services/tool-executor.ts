@@ -18,12 +18,6 @@ import { eq, and, or, sql, desc, ne } from "drizzle-orm";
 import { getAvailableSlots } from "./scheduling/slot-engine.js";
 import { findExactAvailableSlot, parsePreferredInstant, extractIsoDateTime } from "./scheduling/slot-match.js";
 import { pickTimeSlotBySpokenClock } from "../orchestration/booking-flow-enforce.js";
-import {
-  INTAKE_DISPOSITION_SCHEMA,
-  INTAKE_SUBMIT_SCHEMA,
-  INTAKE_WRITE_SCHEMA,
-} from "../lib/intake-tool-schemas.js";
-import { MATCH_JOBS_PARAMETERS } from "../lib/jobshop-match.js";
 import { parseRelativeDateTime, type PartOfDay } from "./scheduling/relative-datetime.js";
 import { parseCallbackDateTime } from "../lib/tz-datetime.js";
 import { buildSlotLockKey } from "./scheduling/lock.js";
@@ -469,18 +463,6 @@ export function buildToolDefs(
       // dropped, leaving the LLM with no way to hang up.
       if (t.type === "end_call") {
         return { ...END_CALL_TOOL_DEF };
-      }
-      if (t.type === "intake_write") {
-        return { name: t.name, description: t.description, parameters: INTAKE_WRITE_SCHEMA };
-      }
-      if (t.type === "intake_disposition") {
-        return { name: t.name, description: t.description, parameters: INTAKE_DISPOSITION_SCHEMA };
-      }
-      if (t.type === "intake_submit") {
-        return { name: t.name, description: t.description, parameters: INTAKE_SUBMIT_SCHEMA };
-      }
-      if (t.type === "match_jobs") {
-        return { name: t.name, description: t.description, parameters: MATCH_JOBS_PARAMETERS };
       }
       // Webhook: use caller-defined parameters if provided
       if (t.type === "webhook" && t.parameters) {

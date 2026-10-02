@@ -15,13 +15,6 @@ vi.mock("../session.js", () => ({
   failSession: vi.fn(),
 }));
 vi.mock("./early-ambient.js", () => ({ startEarlyAmbientKeepalive: () => ({ stop: vi.fn() }) }));
-vi.mock("./saved-opening.js", () => ({
-  startSavedOpening: () => ({
-    ready: Promise.resolve(null),
-    release: vi.fn(),
-    stop: vi.fn(),
-  }),
-}));
 import { handleVobizWebSocket } from "./vobiz.js";
 
 class Socket extends EventEmitter {

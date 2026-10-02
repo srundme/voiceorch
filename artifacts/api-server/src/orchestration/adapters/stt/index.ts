@@ -8,7 +8,6 @@ import { CartesiaSTT } from "./cartesia.js";
 import { DeepgramSTT } from "./deepgram.js";
 import { GeminiSTT } from "./gemini.js";
 import { GoogleSpeechSTT } from "./google-speech.js";
-import { IrfanPodSTT } from "./irfan-pod.js";
 import { STUB_PROVIDERS_ENABLED, createStubSTT } from "../stubs.js";
 
 export function createSTTAdapter(
@@ -40,8 +39,6 @@ export function createSTTAdapter(
     case "gemini_audio":
     case "google":
       return new GeminiSTT(apiKey, model, cfg);
-    case "irfan_pod":
-      return new IrfanPodSTT(apiKey, model, cfg);
     default:
       throw new Error(`Unknown STT provider: ${provider}`);
   }

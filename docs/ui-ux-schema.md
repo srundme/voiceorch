@@ -14,7 +14,7 @@ This file is the product map: surfaces, chrome, tokens, alignment rules, every r
 |---|---|---|---|
 | Customer dashboard | `app.snapserve.ai` | Operators, partners, managed clients | Left sidebar + Stripe page |
 | Sign-in / sign-up | same origin `/sign-in`, `/sign-up` | Unauth | Centered dark card, no sidebar |
-| Public booking / join / intake | `/book`, `/join`, `/intake` | Callers, no login | Standalone `PageHeader` |
+| Public booking / join | `/book`, `/join` | Callers, no login | Standalone `PageHeader` |
 | Docs | `/docs` | SnapServe host only | Docs sidebar |
 | Admin | separate admin app | Internal (token) | Left sidebar, dark default |
 | Partner white-label | custom host | Partner clients | Same dashboard, branded login + trimmed nav |
@@ -328,10 +328,6 @@ Calls: filters status / agent / disposition / q / date; table; open `/app/histor
 **Populated header right:** **Open agent** (outline) · **New campaign** (primary).  
 Body: 4-up MetricStrip, volume chart, What’s running, Agents rail. Empty queue copy: Nothing in the queue yet.
 
-### Intake (operator list) — `/app/intake`
-
-Custom `justify-between` header: title left, **New intake form** right. Rows: Copy link, Open. Public filler: `/intake/:token`.
-
 ### Knowledge — `/app/knowledge-bases`
 
 **Add knowledge** right. Packs: FAQ / text / file / website. Delete dialog. Empty: No knowledge yet.
@@ -437,7 +433,6 @@ WABA / templates / chatbot / calling. Entry from Connections.
 | `/book/:slug` | PageHeader | Public slot picker, confirm CTA |
 | `/book/cancel`, `/book/reschedule` | PageHeader | Manage booking |
 | `/join/:token` | Standalone | Webcall join (no login) |
-| `/intake/:token` | Standalone | Live candidate form on a call |
 | `/workshop/:slug` | Standalone | Workshop form |
 | `/events/:slug` | Public event | |
 | `/events/judge/:token` | Judge portal | |
@@ -483,7 +478,6 @@ Auth: `localStorage.adminToken`. No RBAC in UI. Default theme **dark**. Sidebar 
 | Voice Operations | no | Live Calls, Call Analytics, Quality, Failures, Provider Performance |
 | Product & Infrastructure | no | Overview, Managed Keys/Numbers, Providers, Voices, Prompts, System Prompts, Ambient, Integrations, Scheduling |
 | Operations | no | Alerts, Health, Deployments, Emails, Email Reports, Audit |
-| Demos | yes | Candidate Intake |
 | Programs | no | Voiceathon, Events, Team Guides, Partner inquiries |
 | Settings | no | Platform, Admin Settings, DPDP, Control Hub, Money Hub |
 
@@ -527,7 +521,6 @@ Auth: `localStorage.adminToken`. No RBAC in UI. Default theme **dark**. Sidebar 
 | `/settings` | Platform toggles | Test notify |
 | `/settings/admin` | Slack/email channels | Save |
 | `/dpdp` | Data erasure | Erase (confirm) |
-| `/demos/intake-agent` | Recruiter intake demo | New agent |
 | `/events`, `/events/:id` | Workshop feedback | New event, Export |
 | `/voiceathon*` | Competition | Create event, judges, results |
 | `/landing-leads` | Partner-with-us form | Search |

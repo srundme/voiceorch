@@ -48,7 +48,6 @@ import { checkIrdaiCompliance } from "../services/irdai/index.js";
 import { callEngineInsertDefaults } from "@workspace/db/call-engine-defaults";
 import { resolveWorkspaceScope } from "../services/workspace-scope.js";
 import { unsupportedAgentModel } from "../services/agent-model-validation.js";
-import { INTAKE_AGENT_TYPE } from "../lib/intake-agent.js";
 import { applyAsrSmartEndpointing, normalizeAsrSmartEndpointing } from "../lib/agent-response.js";
 
 const router: IRouter = Router();
@@ -423,22 +422,6 @@ router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promis
       error: "Phone assignments cannot be changed through agent updates. Use the Phone Numbers assignment endpoint.",
     });
     return;
-  }
-  // The intake agent's prompt and tools are generated, and the generic builder
-  // has no UI for the intake tool types — saving from there would strip them
-  // and leave an agent that answers but never fills the form.
-  {
-    const [kind] = await db
-      .select({ agentType: agentsTable.agentType })
-      .from(agentsTable)
-      .where(and(eq(agentsTable.id, params.data.id), (await workspaceOwned(clerkId)).owned))
-      .limit(1);
-    if (kind?.agentType === INTAKE_AGENT_TYPE) {
-      res.status(409).json({
-        error: "This is a candidate intake agent. Edit it from Admin → Demos → Candidate Intake.",
-      });
-      return;
-    }
   }
   if (parsed.data.llmProvider !== undefined || parsed.data.llmModel !== undefined) {
     const [currentModel] = await db
@@ -1080,23 +1063,13 @@ router.delete("/agents/:id/caller-memory/:phone", requireAuth, clientContext, as
   const rawPhone = decodeURIComponent(String(req.params["phone"] ?? ""));
   if (isNaN(agentId) || !rawPhone) { res.status(400).json({ error: "Invalid params" }); return; }
 
-  const [agent] = await db.select({ id: agentsTable.id, agentType: agentsTable.agentType })
+  const [agent] = await db.select({ id: agentsTable.id })
     .from(agentsTable)
     .where(and(eq(agentsTable.id, agentId), (await workspaceOwned(clerkId)).owned));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
-  if (agent.agentType === INTAKE_AGENT_TYPE) {
-    const { forgetIntakeCaller } = await import("../lib/intake-service.js");
-    try {
-      await forgetIntakeCaller({ agentId, phone: rawPhone, clerkId });
-    } catch (err) {
-      res.status(400).json({ error: err instanceof Error ? err.message : "Could not forget caller" });
-      return;
-    }
-  } else {
-    const { wipeCallerMemoryForPhone } = await import("../orchestration/caller-memory-wipe.js");
-    await wipeCallerMemoryForPhone({ agentId, phone: rawPhone, clerkId });
-  }
+  const { wipeCallerMemoryForPhone } = await import("../orchestration/caller-memory-wipe.js");
+  await wipeCallerMemoryForPhone({ agentId, phone: rawPhone, clerkId });
 
   res.status(204).end();
 });

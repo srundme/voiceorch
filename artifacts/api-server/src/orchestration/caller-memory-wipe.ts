@@ -16,7 +16,12 @@ import {
   canonicalizeCallerKey,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
-import { lastTenDigits } from "../lib/intake-call-context.js";
+
+function lastTenDigits(phone: string | null | undefined): string | null {
+  const digits = String(phone ?? "").replace(/\D/g, "");
+  if (digits.length < 7) return null;
+  return digits.slice(-10);
+}
 
 function lastTenEq(column: unknown, tail: string) {
   return sql`right(regexp_replace(coalesce(${column as never}, ''), '[^0-9]', '', 'g'), 10) = ${tail}`;

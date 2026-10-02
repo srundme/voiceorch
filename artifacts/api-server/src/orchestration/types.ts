@@ -54,12 +54,6 @@ export interface SendWhatsappTool {
   description: string;
 }
 
-export interface MatchJobsTool {
-  type: "match_jobs";
-  name: string;
-  description: string;
-}
-
 export interface EndCallTool {
   type: "end_call";
   name: string;
@@ -68,33 +62,10 @@ export interface EndCallTool {
 }
 
 /**
- * Candidate intake tools. Their arguments are generated from the intake field
- * and disposition catalogues at call setup, so the LLM schema can never drift
- * from what the form actually accepts.
- */
-export interface IntakeWriteTool {
-  type: "intake_write";
-  name: string;
-  description: string;
-}
-
-export interface IntakeDispositionTool {
-  type: "intake_disposition";
-  name: string;
-  description: string;
-}
-
-export interface IntakeSubmitTool {
-  type: "intake_submit";
-  name: string;
-  description: string;
-}
-
-/**
  * Sensible default farewell spoken when a call is ended by the AI (built-in
  * end_call tool or an end-call phrase) and the agent has no custom
  * `goodbyeMessage` configured. Prefer skipping when the LLM already closed.
- * Kept for intake / silent-turn fallback only — not forced on every hangup.
+ * Kept for silent-turn fallback only — not forced on every hangup.
  */
 export const DEFAULT_GOODBYE_MESSAGE = "Thank you for calling. Have a great day. Goodbye!";
 
@@ -249,7 +220,7 @@ export interface SquadFollowupTool {
   description: string;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendEmailTool | SendWhatsappTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool | IntakeWriteTool | IntakeDispositionTool | IntakeSubmitTool | MatchJobsTool;
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendEmailTool | SendWhatsappTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
 
 /** One JSON-schema property on a tool argument object. */
 export interface ToolPropertySchema {
@@ -925,16 +896,6 @@ export interface SessionConfig {
   answeredAt?: number;
   /** Epoch ms when createSession was invoked — used to record per-call boot latency. */
   sessionCreatedAtMs?: number;
-  /**
-   * The phone socket is already playing this exact opener. greet() waits for
-   * it to finish and does not synthesize it again.
-   */
-  preplayedOpening?: Promise<{
-    text: string;
-    startedAt: number;
-    durationMs: number;
-    done: Promise<void>;
-  } | null>;
   /** When set, the session does NOT run the conversation pipeline. Instead it waits for
    *  the answering machine's outgoing greeting to end — detected acoustically via inbound
    *  VAD (sustained silence after speech ≈ the record beep) — then speaks `message` once

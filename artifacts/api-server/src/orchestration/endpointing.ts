@@ -609,23 +609,6 @@ export const COLLECTION_VAD_SILENCE_MAX_MS = 1500;
 export const COLLECTION_VAD_DIGIT_FLOOR_MS = 1200;
 export const COLLECTION_VAD_EMAIL_FLOOR_MS = 1400;
 
-/** Pincode and other digit readouts. A pause between digits is not the end. */
-export const IRFAN_DIGIT_SILENCE_MS = 2600;
-/** Spelled email. Slower than digits. */
-export const IRFAN_EMAIL_SILENCE_MS = 3000;
-
-/**
- * Silence the Irfan ear waits before it flushes.
- * A normal answer uses the semantic endpoint window for this turn.
- * Only a pincode or an email keeps a longer hold, and only while that is the question.
- */
-export function irfanListenSilenceMs(kind: CollectionKind, endpointMs: number): number {
-  if (kind === "email") return IRFAN_EMAIL_SILENCE_MS;
-  if (kind === "digit") return IRFAN_DIGIT_SILENCE_MS;
-  const ms = Number.isFinite(endpointMs) ? Math.round(endpointMs) : 600;
-  return Math.max(350, Math.min(1200, ms));
-}
-
 export function resolveCollectionVadSilenceMs(baseMs: number, kind: CollectionKind): number {
   const raw = Number.isFinite(baseMs) ? Math.round(baseMs) : 300;
   const base = Math.max(

@@ -63,7 +63,6 @@ import SchedulingBookingDetailPage from "@/pages/scheduling/Bookings";
 import SchedulingConferencingPage  from "@/pages/scheduling/Conferencing";
 import PublicBookingPage    from "@/pages/book/[slug]";
 import WebcallJoinPage      from "@/pages/join/[token]";
-import IntakeFormPage       from "@/pages/intake/[token]";
 import PartnerPage          from "@/pages/partner";
 import PartnerClientPage    from "@/pages/partner-client";
 import PartnerJoinPage      from "@/pages/partner-join";
@@ -733,8 +732,6 @@ function Router() {
           <Route path="/book/reschedule" component={RescheduleBookingPage} />
           <Route path="/book/:slug" component={PublicBookingPage} />
           <Route path="/join/:token" component={WebcallJoinPage} />
-          {/* Live intake form — opened on a screen during a call, no login. */}
-          <Route path="/intake/:token" component={IntakeFormPage} />
           <Route path="/workshop/:slug" component={WorkshopFormPage} />
           <Route path="/events/judge/:token" component={JudgePortalPage} />
           <Route path="/events/certificates/:code/verify" component={CertificateVerifyPage} />
