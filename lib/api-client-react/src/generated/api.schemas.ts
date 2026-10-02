@@ -723,6 +723,11 @@ export interface Agent {
      */
   backchannelingFrequency?: number | null;
   /**
+     * Custom filler words (comma or newline separated). Empty = platform default.
+     * @nullable
+     */
+  backchannelPhrases?: string | null;
+  /**
      * URL to POST a call summary JSON to when the call ends
      * @nullable
      */
@@ -941,6 +946,8 @@ export interface AgentInput {
   language?: string;
   backchannelingEnabled?: boolean;
   backchannelingFrequency?: number;
+  /** @nullable */
+  backchannelPhrases?: string | null;
   webhookUrl?: string;
   noiseCancellationEnabled?: boolean;
   inactivityMessage?: string;
@@ -1064,6 +1071,8 @@ export interface AgentUpdate {
   language?: string;
   backchannelingEnabled?: boolean;
   backchannelingFrequency?: number;
+  /** @nullable */
+  backchannelPhrases?: string | null;
   webhookUrl?: string;
   noiseCancellationEnabled?: boolean;
   inactivityMessage?: string;

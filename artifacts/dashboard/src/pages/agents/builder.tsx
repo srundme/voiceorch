@@ -3158,11 +3158,24 @@ function VoiceTab({ form }: { form: any }) {
             <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
               <div>
                 <FormLabel className="text-sm">Backchanneling</FormLabel>
-                <FormDescription className="text-[10px]">Agent says &quot;okay&quot;, &quot;hmm&quot;, or &quot;mmm&quot; while listening</FormDescription>
+                <FormDescription className="text-[10px]">Short filler while the agent prepares its reply</FormDescription>
               </div>
               <FormControl><Switch checked={field.value ?? false} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
           )} />
+          {form.watch("backchannelingEnabled") && (
+            <FormField control={form.control} name="backchannelPhrases" render={({ field }) => (
+              <FormItem className="space-y-1 rounded-lg border border-dashed border-border/50 bg-muted/10 px-3 py-2.5">
+                <FormLabel className="text-xs">Filler words</FormLabel>
+                <FormControl>
+                  <Input className="h-8 text-xs" placeholder="Okay, Hmm, Ahh, Achha" {...field} value={field.value ?? ""} />
+                </FormControl>
+                <FormDescription className="text-[10px]">
+                  Comma-separated. One is picked at random, avoiding recent repeats. Leave empty for the default (Okay). Avoid words that sound like agreement (Sure, Great) — fillers play before the reply is known.
+                </FormDescription>
+              </FormItem>
+            )} />
+          )}
           <FormField control={form.control} name="ambientNoiseEnabled" render={({ field }) => (
             <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
               <div>
@@ -7688,7 +7701,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       scriptMode: "free_text" as const,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-IN", asrLanguage: "", backchannelingEnabled: true,
-      backchannelingFrequency: 0.5, webhookUrl: "",
+      backchannelingFrequency: 0.5, backchannelPhrases: "", webhookUrl: "",
       webhookSecret: "", webhookPayloadTemplate: "", noiseCancellationEnabled: false,
       forceSoftwareNoiseGate: false,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0, promptVariables: [],
@@ -7820,6 +7833,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       asrLanguage:              agent.asrLanguage ?? "",
       backchannelingEnabled:    agent.backchannelingEnabled ?? true,
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
+      backchannelPhrases:       (agent as any).backchannelPhrases ?? "",
       webhookUrl:               (agent.webhookUrl && agent.webhookUrl.startsWith("https://")) ? agent.webhookUrl : "",
       webhookSecret:            (agent as any).agentConfig?.webhookSecret ?? "",
       webhookPayloadTemplate:   typeof (agent as any).agentConfig?.webhookPayloadTemplate === "string"

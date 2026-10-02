@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CreateAgentBody, UpdateAgentBody } from "@workspace/api-zod";
 import {
   classifyBackchannelContext,
   getBackchannelFillers,
@@ -105,6 +106,31 @@ describe("backchannel fillers — contextual human covers", () => {
     expect(parseBackchannelPhrases("Okay., Hmm.")).toEqual(["Okay.", "Hmm."]);
     expect(parseBackchannelPhrases("  ")).toBeNull();
     expect(parseBackchannelPhrases(null)).toBeNull();
+  });
+
+  it("Create/UpdateAgentBody keep backchannelPhrases; empty means default fillers", () => {
+    const update = UpdateAgentBody.safeParse({ backchannelPhrases: "Okay.\nHmm." });
+    expect(update.success).toBe(true);
+    if (!update.success) return;
+    expect(parseBackchannelPhrases(update.data.backchannelPhrases)).toEqual(["Okay.", "Hmm."]);
+
+    const cleared = UpdateAgentBody.safeParse({ backchannelPhrases: "" });
+    expect(cleared.success).toBe(true);
+    if (!cleared.success) return;
+    expect(parseBackchannelPhrases(cleared.data.backchannelPhrases)).toBeNull();
+
+    expect(UpdateAgentBody.safeParse({ backchannelPhrases: null }).success).toBe(true);
+    const create = CreateAgentBody.safeParse({
+      name: "x",
+      systemPrompt: "p",
+      asrProvider: "sarvam",
+      llmProvider: "groq",
+      ttsProvider: "sarvam",
+      telephonyProvider: "vobiz",
+      backchannelPhrases: "Okay.",
+    });
+    expect(create.success, JSON.stringify(create)).toBe(true);
+    if (create.success) expect(create.data.backchannelPhrases).toBe("Okay.");
   });
 
   it("rememberFillerPhrase keeps a ring of 5", () => {

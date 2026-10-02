@@ -7630,6 +7630,9 @@ components:
         backchannelingFrequency:
           type: ["number", "null"]
           description: Probability (0–1) of backchanneling on each turn
+        backchannelPhrases:
+          type: ["string", "null"]
+          description: Custom filler words (comma or newline separated). Empty = platform default.
         webhookUrl:
           type: ["string", "null"]
           description: URL to POST a call summary JSON to when the call ends
@@ -7818,6 +7821,8 @@ components:
           type: boolean
         backchannelingFrequency:
           type: number
+        backchannelPhrases:
+          type: ["string", "null"]
         webhookUrl:
           type: string
         noiseCancellationEnabled:
@@ -7965,6 +7970,8 @@ components:
           type: boolean
         backchannelingFrequency:
           type: number
+        backchannelPhrases:
+          type: ["string", "null"]
         webhookUrl:
           type: string
         noiseCancellationEnabled:

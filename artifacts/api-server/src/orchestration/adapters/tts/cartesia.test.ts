@@ -10,6 +10,7 @@ import {
   isCartesiaContextClosedError,
   takeCartesiaWordChunks,
   takeCompleteCartesiaSentences,
+  pickCartesiaAccent,
 } from "./cartesia.js";
 
 describe("CartesiaTTS emotion voice-control fallback", () => {
@@ -254,6 +255,72 @@ describe("Cartesia language vs locale", () => {
     await new CartesiaTTS("k", null, "sonic-3.6", "en-IN").synthesize("வணக்கம், நான் உங்களுக்கு உதவி செய்கிறேன்.");
     expect(bodies[0]).toMatchObject({ locale: "ta-IN" });
     expect(bodies[0]!.language).toBeUndefined();
+  });
+});
+
+describe("Cartesia Indian accent pinning", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const american = { accent: "general-american", locale: "en-US" };
+  const hindi = { accent: "hindi", locale: "hi-IN" };
+  const indianEnglish = { accent: "indian-english", locale: "en-IN" };
+
+  it("leaves accent to locale when the voice already has that Indian locale", () => {
+    expect(pickCartesiaAccent("en-IN", [american, indianEnglish])).toBeNull();
+  });
+
+  it("borrows the voice's Hindi accent for en-IN on an American voice", () => {
+    expect(pickCartesiaAccent("en-IN", [american, hindi])).toBe("hindi");
+  });
+
+  it("borrows Indian English for an Indic locale the voice lacks", () => {
+    expect(pickCartesiaAccent("kn-IN", [american, indianEnglish])).toBe("indian-english");
+  });
+
+  it("does nothing when the voice has no Indian accent or the tag is not Indian", () => {
+    expect(pickCartesiaAccent("en-IN", [american])).toBeNull();
+    expect(pickCartesiaAccent("en-US", [american, hindi])).toBeNull();
+    expect(pickCartesiaAccent("en-IN", null)).toBeNull();
+  });
+
+  it("warmup loads voice accents and pins one on synthesis; drops it if Cartesia rejects it", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    let rejectAccent = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        if (String(url).includes("/voices/")) {
+          return { ok: true, status: 200, json: async () => ({ accents: [american, hindi] }) } as unknown as Response;
+        }
+        const body = JSON.parse(init.body as string) as Record<string, unknown>;
+        bodies.push(body);
+        if (rejectAccent && body.accent) {
+          return { ok: false, status: 400, text: async () => "this voice does not support accent 'hindi'" } as unknown as Response;
+        }
+        return {
+          ok: true,
+          status: 200,
+          body: new ReadableStream({ start(c) { c.enqueue(new Uint8Array([1])); c.close(); } }),
+        } as unknown as Response;
+      }),
+    );
+    vi.stubGlobal("WebSocket", class { addEventListener() {} close() {} } as unknown as typeof WebSocket);
+    const tts = new CartesiaTTS("k", "accent-voice-1", "sonic-3.6", "en-IN");
+    tts.warmup();
+    await tts.synthesize("Hello");
+    expect(bodies[0]).toMatchObject({ locale: "en-IN", accent: "hindi" });
+
+    rejectAccent = true;
+    const tts2 = new CartesiaTTS("k", "accent-voice-1", "sonic-3.6", "en-IN");
+    tts2.warmup();
+    await tts2.synthesize("Hello");
+    expect(bodies[1]!.accent).toBe("hindi");
+    expect(bodies[2]!.accent).toBeUndefined();
+    tts.close();
+    tts2.close();
   });
 });
 

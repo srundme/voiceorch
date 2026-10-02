@@ -136,6 +136,36 @@ export function cartesiaLangFields(
   return { language: tag, normalization: tag };
 }
 
+export interface CartesiaVoiceAccent {
+  accent: string;
+  locale: string;
+}
+
+/**
+ * `locale: en-IN` only selects an Indian accent when the voice lists one;
+ * otherwise Sonic falls back to the voice's native accent (usually American).
+ * `accent` overrides that, but Cartesia 400s on an accent the voice lacks, so
+ * borrow an Indian accent from the voice's own list. Null = leave to locale.
+ */
+export function pickCartesiaAccent(
+  tag: string | null,
+  accents: CartesiaVoiceAccent[] | null,
+): string | null {
+  const want = (tag ?? "").toLowerCase();
+  if (!want.endsWith("-in") || !accents?.length) return null;
+  if (accents.some((a) => a.locale.toLowerCase() === want)) return null;
+  const lang = want.split("-")[0];
+  const indian = accents.filter((a) => a.locale.toLowerCase().endsWith("-in"));
+  const preferred = lang === "en"
+    ? indian.find((a) => a.locale.toLowerCase() === "hi-in")
+    : indian.find((a) => a.locale.toLowerCase() === "en-in");
+  return (preferred ?? indian[0])?.accent ?? null;
+}
+
+const VOICE_ACCENT_CACHE_TTL_MS = 30 * 60_000;
+const VOICE_ACCENT_WAIT_MS = 800;
+const voiceAccentCache = new Map<string, { accents: CartesiaVoiceAccent[]; at: number }>();
+
 /**
  * Sonic reads the transcript in the requested locale. Tamil script tagged
  * `en-IN` is spoken as English phonemes (garble / blabber). Indic script in
@@ -331,6 +361,9 @@ export class CartesiaTTS implements TTSAdapter {
   }>();
   private readonly contextSettings = new Map<string, Record<string, unknown>>();
   private readonly wordTimings = new Map<string, Array<{ word: string; end: number }>>();
+  private voiceAccents: CartesiaVoiceAccent[] | null = null;
+  private accentsLoad: Promise<void> | null = null;
+  private accentDisabled = false;
 
   constructor(
     apiKey: string,
@@ -366,6 +399,70 @@ export class CartesiaTTS implements TTSAdapter {
 
   warmup(): void {
     void this.getOrOpenWs().catch(() => undefined);
+    void this.loadVoiceAccents();
+  }
+
+  private loadVoiceAccents(): Promise<void> {
+    if (this.accentsLoad) return this.accentsLoad;
+    if (!cartesiaUsesLocaleField(this.modelId)) {
+      this.accentsLoad = Promise.resolve();
+      return this.accentsLoad;
+    }
+    const cached = voiceAccentCache.get(this.voiceId);
+    if (cached && Date.now() - cached.at < VOICE_ACCENT_CACHE_TTL_MS) {
+      this.voiceAccents = cached.accents;
+      this.accentsLoad = Promise.resolve();
+      return this.accentsLoad;
+    }
+    this.accentsLoad = (async () => {
+      try {
+        const resp = await fetch(`${CARTESIA_BASE_URL}/voices/${encodeURIComponent(this.voiceId)}`, {
+          headers: this.restHeaders,
+          signal: AbortSignal.timeout(2_500),
+        });
+        if (!resp.ok) {
+          logger.warn({ evt: "cartesia_voice_accents", voiceId: this.voiceId, status: resp.status }, "CartesiaTTS: voice lookup failed — accent left to locale");
+          return;
+        }
+        const body = await resp.json() as { name?: unknown; accents?: unknown };
+        const accents: CartesiaVoiceAccent[] = Array.isArray(body.accents)
+          ? body.accents.flatMap((a: unknown) => {
+              const r = a as { accent?: unknown; locale?: unknown };
+              return typeof r.accent === "string" && typeof r.locale === "string"
+                ? [{ accent: r.accent, locale: r.locale }]
+                : [];
+            })
+          : [];
+        this.voiceAccents = accents;
+        voiceAccentCache.set(this.voiceId, { accents, at: Date.now() });
+        const tag = cartesiaWireLanguage(this.language, this.locale);
+        const hasIndian = accents.some((a) => a.locale.toUpperCase().endsWith("-IN"));
+        logger[hasIndian || !tag?.toUpperCase().endsWith("-IN") ? "info" : "warn"](
+          {
+            evt: "cartesia_voice_accents",
+            voiceId: this.voiceId,
+            voiceName: typeof body.name === "string" ? body.name : undefined,
+            accents: accents.map((a) => `${a.locale}:${a.accent}`),
+            pinnedAccent: pickCartesiaAccent(tag, accents),
+          },
+          hasIndian
+            ? "CartesiaTTS: voice accents loaded"
+            : "CartesiaTTS: voice has no Indian accent — it will speak with its native accent; pick an Indian voice",
+        );
+      } catch (err) {
+        logger.warn({ evt: "cartesia_voice_accents", voiceId: this.voiceId, err: errMsg(err) }, "CartesiaTTS: voice lookup failed — accent left to locale");
+      }
+    })();
+    return this.accentsLoad;
+  }
+
+  /** First utterance of a call waits briefly so the greeting gets the accent too. */
+  private async accentsReady(): Promise<void> {
+    if (!this.accentsLoad || this.voiceAccents) return;
+    await Promise.race([
+      this.accentsLoad,
+      new Promise<void>((r) => setTimeout(r, VOICE_ACCENT_WAIT_MS)),
+    ]);
   }
 
   /** Words whose audio has already been played, for interrupted-turn history. */
@@ -402,6 +499,10 @@ export class CartesiaTTS implements TTSAdapter {
       : fallback;
     const parsed = parseCartesiaLang(tag);
     Object.assign(msg, cartesiaLangFields(parsed.language, parsed.locale, this.modelId));
+    if (!this.accentDisabled && cartesiaUsesLocaleField(this.modelId)) {
+      const accent = pickCartesiaAccent(cartesiaWireLanguage(parsed.language, parsed.locale), this.voiceAccents);
+      if (accent) msg.accent = accent;
+    }
   }
 
   /**
@@ -619,6 +720,7 @@ export class CartesiaTTS implements TTSAdapter {
       `CartesiaTTS: WebSocket error — ${detail.slice(0, 240)}`,
     );
     const err = new Error(`Cartesia WS synthesis error: ${detail || "unknown"}`);
+    if (/accent/i.test(detail)) this.accentDisabled = true;
 
     if (!contextId) {
       this.failAllInFlight(err);
@@ -850,6 +952,7 @@ export class CartesiaTTS implements TTSAdapter {
     }
 
     const closing = CartesiaTTS.padCartesiaUtterance(pending);
+    await this.accentsReady();
     // A short turn can reach the close before any write needed the socket.
     if (!ctx.dead && !ctx.restFallback && !this.ws) {
       await this.getOrOpenWs().catch((err: unknown) => { this.onWsUnusable(ctx, err); });
@@ -920,6 +1023,7 @@ export class CartesiaTTS implements TTSAdapter {
       onDone(0);
       return;
     }
+    await this.accentsReady();
     const ws = await this.getOrOpenWs();
     const safeText = CartesiaTTS.padCartesiaUtterance(text);
     const contextId = crypto.randomUUID();
@@ -967,6 +1071,7 @@ export class CartesiaTTS implements TTSAdapter {
     emotions?: string[],
   ): Promise<void> {
     const safeText = CartesiaTTS.padCartesiaUtterance(text);
+    await this.accentsReady();
     const body: Record<string, unknown> = {
       transcript: safeText,
       model_id: this.modelId,
@@ -977,12 +1082,22 @@ export class CartesiaTTS implements TTSAdapter {
     if (gc) body.generation_config = gc;
     this.applyLang(body, safeText);
 
-    const resp = await fetchWithRetry(`${CARTESIA_BASE_URL}/tts/bytes`, {
+    const post = (): Promise<Response> => fetchWithRetry(`${CARTESIA_BASE_URL}/tts/bytes`, {
       method: "POST",
       headers: this.restHeaders,
       body: JSON.stringify(body),
       signal,
     });
+    let resp = await post();
+    if (!resp.ok && body.accent) {
+      const detail = await resp.text();
+      if (!/accent/i.test(detail)) {
+        throw new Error(`Cartesia TTS stream error ${resp.status}: ${detail}`);
+      }
+      this.accentDisabled = true;
+      delete body.accent;
+      resp = await post();
+    }
     if (!resp.ok) {
       throw new Error(`Cartesia TTS stream error ${resp.status}: ${await resp.text()}`);
     }
