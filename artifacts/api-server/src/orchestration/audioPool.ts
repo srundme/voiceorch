@@ -53,6 +53,8 @@ export interface AudioProcessResult {
   rawRms: number;
   /** Always-on AEC frame diagnostics (soft duck / canary). */
   aec?: AecFrameDiagnostics;
+  /** ai-coustics outcome for this frame; absent when the NC toggle is off. */
+  aic?: AiCousticsRuntime;
   /** Optional canary stage PCM (VOICE_CANARY_AUDIO=1). */
   canary?: {
     rawPcm8k: Buffer;
@@ -76,6 +78,7 @@ interface WorkerResponse {
   aecDoubleTalk?: boolean;
   aecAdaptiveDelay?: boolean;
   hasAecDiag?: boolean;
+  aic?: AiCousticsRuntime;
   error?: string;
 }
 
@@ -122,6 +125,7 @@ export class AudioWorkerThread {
         hasSpeech: msg.hasSpeech ?? false,
         rawRms: msg.rawRms ?? 0,
         aec,
+        aic: msg.aic,
         canary: msg.canaryRaw && msg.canaryPostAec && msg.canaryPostQuail
           ? {
               rawPcm8k: Buffer.from(msg.canaryRaw),
@@ -373,6 +377,7 @@ import {
 import {
   aiCousticsConfigured,
   AiCousticsCallEnhancer,
+  type AiCousticsRuntime,
 } from "./ai-coustics.js";
 import { aec3Enabled, Aec3CallCanceller } from "./aec3.js";
 import { voiceCanaryAudioDumpEnabled } from "./voice-canary.js";
@@ -431,6 +436,7 @@ async function processInline(
   } else if (rawCopy) {
     postAecCopy = Buffer.from(pcm8k);
   }
+  let aic: AiCousticsRuntime | undefined;
   if (noiseCancel && aiCousticsConfigured()) {
     let enh = fallbackAic.get(callId);
     if (!enh) {
@@ -440,6 +446,9 @@ async function processInline(
     }
     const ok = await (fallbackAicInit.get(callId) ?? Promise.resolve(false));
     if (ok) pcm8k = enh.processPcm8k(pcm8k);
+    aic = enh.runtime();
+  } else if (noiseCancel) {
+    aic = { state: "bypassed", reason: "AIC_SDK_LICENSE unset", errors: 0 };
   }
   const pcm16k = upsample8to16(pcm8k);
   const diag = aec?.getDiagnostics();
@@ -457,6 +466,7 @@ async function processInline(
     hasSpeech: pcm8k.length >= 2 && hasSpeechEnergy(pcm8k, vadThreshold),
     rawRms,
     aec: aecDiag,
+    aic,
     canary: rawCopy && postAecCopy
       ? {
           rawPcm8k: rawCopy,

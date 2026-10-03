@@ -29,6 +29,7 @@ import {
 import {
   aiCousticsConfigured,
   AiCousticsCallEnhancer,
+  type AiCousticsRuntime,
 } from "./ai-coustics.js";
 import { aec3Enabled, Aec3CallCanceller } from "./aec3.js";
 import { voiceCanaryAudioDumpEnabled } from "./voice-canary.js";
@@ -90,10 +91,14 @@ const aicInit = new Map<string, Promise<boolean>>();
 const aecCancellers = new Map<string, Aec3CallCanceller>();
 const aecInit = new Map<string, Promise<boolean>>();
 const callChains = new Map<string, Promise<void>>();
-const aicMissingLogged = new Set<string>();
+/** Bypass reason for calls whose enhancer failed to initialise. */
+const aicBypassReason = new Map<string, string>();
 
 async function getAiEnhancer(callId: string): Promise<AiCousticsCallEnhancer | null> {
-  if (!aiCousticsConfigured()) return null;
+  if (!aiCousticsConfigured()) {
+    aicBypassReason.set(callId, "AIC_SDK_LICENSE unset");
+    return null;
+  }
   let enh = aicEnhancers.get(callId);
   if (!enh) {
     enh = new AiCousticsCallEnhancer(callId);
@@ -103,6 +108,7 @@ async function getAiEnhancer(callId: string): Promise<AiCousticsCallEnhancer | n
   if (!pending) {
     pending = enh.init().then((ok) => {
       if (!ok) {
+        aicBypassReason.set(callId, enh.runtime().reason ?? "init failed");
         aicEnhancers.delete(callId);
         enh.dispose();
       }
@@ -161,18 +167,26 @@ async function processChunk(msg: ProcessMulaw | ProcessPcm8k): Promise<void> {
   const rawRms = frameRms(pcm8k);
   const rawCopy = dump ? Buffer.from(pcm8k) : null;
 
+  const rawPcm8k = pcm8k;
   const aec = await getAec(callId);
-  if (aec) pcm8k = aec.processPcm8k(pcm8k);
+  if (aec) {
+    try {
+      pcm8k = aec.processPcm8k(pcm8k);
+    } catch {
+      pcm8k = rawPcm8k;
+    }
+  }
   const postAecCopy = dump ? Buffer.from(pcm8k) : null;
   const diag = aec?.getDiagnostics();
 
+  let aicRuntime: AiCousticsRuntime | undefined;
   if (noiseCancel) {
     const aic = await getAiEnhancer(callId);
     if (aic) {
       pcm8k = aic.processPcm8k(pcm8k);
-    } else if (!aicMissingLogged.has(callId)) {
-      aicMissingLogged.add(callId);
-      // NC toggle on but no AIC_SDK_LICENSE / model failed — pass audio through.
+      aicRuntime = aic.runtime();
+    } else {
+      aicRuntime = { state: "bypassed", reason: aicBypassReason.get(callId) ?? "unavailable", errors: 0 };
     }
   }
 
@@ -196,6 +210,7 @@ async function processChunk(msg: ProcessMulaw | ProcessPcm8k): Promise<void> {
     payload.aecDoubleTalk = diag.doubleTalk;
     payload.aecAdaptiveDelay = diag.adaptiveDelay;
   }
+  if (aicRuntime) payload.aic = aicRuntime;
   if (rawCopy && postAecCopy) {
     const canaryRaw = toTransferable(rawCopy);
     const canaryPostAec = toTransferable(postAecCopy);
@@ -216,7 +231,7 @@ function destroyCall(callId: string): void {
     aicEnhancers.delete(callId);
   }
   aicInit.delete(callId);
-  aicMissingLogged.delete(callId);
+  aicBypassReason.delete(callId);
   const aec = aecCancellers.get(callId);
   if (aec) {
     aec.dispose();

@@ -15,11 +15,24 @@
 
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { upsample8to16, downsample16to8 } from "./audio.js";
+import {
+  StreamingUpsampler8to16,
+  createDownsampler16to8,
+  type StreamingDecimator,
+} from "./audio.js";
 
 export type AiCousticsStatus =
   | { ok: true; modelId: string; sampleRate: number; blockSize: number }
   | { ok: false; reason: string };
+
+/** Per-call outcome reported to the pipeline for the call log. */
+export interface AiCousticsRuntime {
+  state: "active" | "bypassed";
+  /** Why NC is bypassed, or the last processing error while active. */
+  reason?: string;
+  /** Frames that failed to process and were passed through raw. */
+  errors: number;
+}
 
 function licenseKey(env: NodeJS.ProcessEnv = process.env): string {
   return (env["AIC_SDK_LICENSE"] ?? "").trim();
@@ -117,6 +130,10 @@ function float32ToPcm16(samples: Float32Array): Buffer {
   return out;
 }
 
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /**
  * Per-call enhancer. Sticky to one audio worker (same callId → same worker).
  * Uses variable block size so each 20 ms telephony frame can process immediately.
@@ -125,6 +142,13 @@ export class AiCousticsCallEnhancer {
   private processor: AicProcessor | null = null;
   private ready = false;
   private failed = false;
+  private failReason: string | null = null;
+  private errorCount = 0;
+  private lastError: string | null = null;
+  // Resampler state must persist across 20 ms frames: per-chunk one-shot
+  // resampling damages every chunk edge (a 50 Hz buzz in what STT hears).
+  private readonly upsampler = new StreamingUpsampler8to16();
+  private readonly downsampler: StreamingDecimator = createDownsampler16to8();
 
   constructor(
     private readonly callId: string,
@@ -137,12 +161,14 @@ export class AiCousticsCallEnhancer {
     const status = await ensureAiCousticsModel(this.env);
     if (!status.ok) {
       this.failed = true;
+      this.failReason = status.reason;
       return false;
     }
     const sdk = await loadSdk();
     const model = await modelPromise;
     if (!sdk || !model) {
       this.failed = true;
+      this.failReason = loadError ?? "sdk or model unavailable";
       return false;
     }
     try {
@@ -160,32 +186,50 @@ export class AiCousticsCallEnhancer {
       ctx.setParameter(params.Bypass, 0);
       this.ready = true;
       return true;
-    } catch {
+    } catch (err) {
       this.failed = true;
+      this.failReason = `processor init failed: ${errMessage(err)}`;
       this.processor = null;
       return false;
     }
   }
 
-  /** Enhance one 8 kHz LINEAR16 chunk in place of the identity NoiseCanceller. */
+  runtime(): AiCousticsRuntime {
+    if (this.ready) {
+      return {
+        state: "active",
+        errors: this.errorCount,
+        ...(this.lastError ? { reason: this.lastError } : {}),
+      };
+    }
+    return { state: "bypassed", reason: this.failReason ?? "not initialised", errors: 0 };
+  }
+
+  /**
+   * Enhance one 8 kHz LINEAR16 chunk. On a processing error the raw chunk is
+   * returned: dropping it would delete caller speech before STT.
+   */
   processPcm8k(pcm8k: Buffer): Buffer {
     if (!this.ready || !this.processor || pcm8k.length < 2) return pcm8k;
-
-    const pcm16 = upsample8to16(pcm8k);
-    const samples = pcm16ToFloat32(pcm16);
-    if (samples.length === 0) return pcm8k;
-    if (samples.length > cachedBlockSize) {
+    try {
+      const samples = pcm16ToFloat32(this.upsampler.process(pcm8k));
+      if (samples.length === 0) return pcm8k;
+      if (samples.length <= cachedBlockSize) {
+        this.processor.process(samples);
+        return this.downsampler.process(float32ToPcm16(samples));
+      }
       const parts: Buffer[] = [];
       for (let i = 0; i < samples.length; i += cachedBlockSize) {
-        const slice = samples.subarray(i, Math.min(i + cachedBlockSize, samples.length));
-        const block = new Float32Array(slice);
+        const block = new Float32Array(samples.subarray(i, Math.min(i + cachedBlockSize, samples.length)));
         this.processor.process(block);
         parts.push(float32ToPcm16(block));
       }
-      return downsample16to8(Buffer.concat(parts));
+      return this.downsampler.process(Buffer.concat(parts));
+    } catch (err) {
+      this.errorCount++;
+      this.lastError = errMessage(err);
+      return pcm8k;
     }
-    this.processor.process(samples);
-    return downsample16to8(float32ToPcm16(samples));
   }
 
   dispose(): void {

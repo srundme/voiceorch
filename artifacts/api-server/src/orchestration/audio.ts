@@ -221,6 +221,33 @@ export class StreamingDecimator {
   }
 }
 
+/**
+ * Streaming 8 kHz → 16 kHz linear interpolator. The one-shot upsample8to16
+ * repeats the last sample of every chunk (no next sample to blend with), a
+ * 50 Hz discontinuity on 20 ms frames; this carries it into the next chunk
+ * at the cost of a half-sample (62.5 µs) delay.
+ */
+export class StreamingUpsampler8to16 {
+  private prev: number | null = null;
+
+  reset(): void {
+    this.prev = null;
+  }
+
+  process(buf8k: Buffer): Buffer {
+    const samples = Math.floor(buf8k.length / 2);
+    const out = Buffer.allocUnsafe(samples * 4);
+    for (let i = 0; i < samples; i++) {
+      const s = buf8k.readInt16LE(i * 2);
+      const p = this.prev ?? s;
+      out.writeInt16LE(Math.round((p + s) / 2), i * 4);
+      out.writeInt16LE(s, i * 4 + 2);
+      this.prev = s;
+    }
+    return out;
+  }
+}
+
 /** Streaming 16 kHz → 8 kHz decimator (TTS wire output, webcall mic). */
 export function createDownsampler16to8(): StreamingDecimator {
   return new StreamingDecimator(K16TO8, 2, 0);

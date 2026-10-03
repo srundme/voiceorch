@@ -6,6 +6,7 @@ import {
   downsample24to8,
   enqueueExactFrames,
   padWireFrame,
+  StreamingUpsampler8to16,
 } from "./audio.js";
 
 /** Speech-like tone stack (200 Hz fundamental + harmonics through the voice band). */
@@ -135,6 +136,25 @@ describe("StreamingDecimator (24→8)", () => {
     };
 
     expect(err(stateful, LAG)).toBeLessThan(err(stateless, 0) / 5);
+  });
+});
+
+describe("StreamingUpsampler8to16", () => {
+  it("is continuous across 20 ms chunks (no repeated last sample per block)", () => {
+    const input = speech(8000, 8000);
+    const up = new StreamingUpsampler8to16();
+    const streamed = toSamples(chunked(input, 320, (b) => up.process(b)));
+    const whole = toSamples(new StreamingUpsampler8to16().process(input));
+    expect(streamed).toEqual(whole);
+    expect(streamed.length).toBe(16000);
+  });
+
+  it("interpolates between the previous chunk's last sample and the next sample", () => {
+    const up = new StreamingUpsampler8to16();
+    const a = Buffer.alloc(2); a.writeInt16LE(1000, 0);
+    const b = Buffer.alloc(2); b.writeInt16LE(3000, 0);
+    up.process(a);
+    expect(toSamples(up.process(b))).toEqual([2000, 3000]);
   });
 });
 

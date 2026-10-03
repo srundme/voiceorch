@@ -183,6 +183,7 @@ import {
 } from "./turn-acceptance.js";
 import { SileroStream } from "./silero-stream.js";
 import type { AecFrameDiagnostics } from "./audioPool.js";
+import type { AiCousticsRuntime } from "./ai-coustics.js";
 import { logger } from "../lib/logger.js";
 import { isHumanShortUtterancePause, isLikelyRingBurstPattern } from "./amd-confirm.js";
 import { buildCompactGreetingPrompt, stripHallucinatedCompanyVerifyGreeting } from "./compact-greeting-prompt.js";
@@ -1254,6 +1255,8 @@ export class OrchestrationPipeline implements VoiceSession {
   private _canaryStages: CanaryAudioStages | null = null;
   /** Latest AEC frame diagnostics (always-on; soft duck / canary). */
   private _aecDiag: AecFrameDiagnostics | null = null;
+  /** Last ai-coustics outcome written to the call log ("active" | "bypassed" | "errors"). */
+  private _aicLoggedState: string | null = null;
   /** Soft TTS duck window — attenuate outbound until hard barge or resolve. */
   private _ttsDuckUntil = 0;
   private _ttsDuckAt: number | null = null;
@@ -4955,8 +4958,33 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /** Handles pre-processed audio returned by the audio worker pool. */
-  private handleProcessedAudio({ pcm8k, pcm16k, hasSpeech, rawRms = 0, canary, aec }: AudioProcessResult): void {
+  /**
+   * The startup "Noise Cancellation" line only proves the license is set.
+   * This records what Quail actually did on the first processed frame, and
+   * again if frames start failing (those pass through raw).
+   */
+  private logAiCousticsRuntime(aic: AiCousticsRuntime): void {
+    const state = aic.state === "active" && aic.errors > 0 ? "errors" : aic.state;
+    if (state === this._aicLoggedState || this._aicLoggedState === "errors") return;
+    this._aicLoggedState = state;
+    const metadata = {
+      event: "Noise Cancellation Runtime",
+      backend: "ai-coustics",
+      state,
+      ...(aic.reason ? { reason: aic.reason.slice(0, 200) } : {}),
+      ...(aic.errors > 0 ? { failedFrames: aic.errors } : {}),
+    };
+    if (state === "active") {
+      this.logExec("Pipeline", "system", { status: "info", metadata });
+    } else {
+      logger.warn({ callId: this.config.callId, ...metadata }, "ai-coustics not enhancing caller audio");
+      this.logExec("Pipeline", "system", { status: "info", warningFlags: ["noise_cancellation_degraded"], metadata });
+    }
+  }
+
+  private handleProcessedAudio({ pcm8k, pcm16k, hasSpeech, rawRms = 0, canary, aec, aic }: AudioProcessResult): void {
     if (this.closed) return;
+    if (aic) this.logAiCousticsRuntime(aic);
     if (aec) {
       this._aecDiag = aec;
       if (this._canaryStages) this._canaryStages = { ...this._canaryStages, aec };
