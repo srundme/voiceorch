@@ -379,7 +379,11 @@ export function extractDateOfBirthFactValue(raw: string): string | null {
 /** India-first E.164 from digits or spoken digit words. */
 export function extractPhoneFactValue(raw: string): string | null {
   const expanded = expandSpokenDigits(String(raw ?? ""));
-  const picked = preferIndianPhone(expanded) ?? preferIndianPhone(expanded.replace(/\D/g, ""));
+  // "916383653279" is 91 + a mobile; preferIndianPhone would score the first
+  // ten digits ("9163836532") as the mobile instead.
+  const compact = expanded.replace(/\D/g, "");
+  if (/^91[6-9]\d{9}$/.test(compact)) return normalizePhone(compact.slice(2));
+  const picked = preferIndianPhone(expanded) ?? preferIndianPhone(compact);
   if (!picked) return null;
   const digits = picked.replace(/\D/g, "");
   const ten = digits.length === 12 && digits.startsWith("91")
@@ -560,6 +564,39 @@ export function validateFactCandidate(opts: {
   };
 }
 
+const lastTenDigits = (s: string): string => s.replace(/\D/g, "").slice(-10);
+
+/**
+ * A cited caller line must actually contain the value. Citation ids alone let
+ * the extractor cite "same number" and invent the digits (call 42507 stored
+ * +919198765432 and the next call read it back to the caller).
+ * Phones: the digits must be in the cited lines, or be the caller's own line.
+ * Products/companies: one name token must be in the cited lines (Latin text only
+ * — native-script lines are transliterated by the extractor, so not comparable).
+ */
+export function isFactValueGrounded(opts: {
+  key: DurableFactKey;
+  value: string;
+  citedText: string;
+  callerOwnPhone?: string | null;
+}): boolean {
+  const { key, value, citedText } = opts;
+  if (key === "phone_number" || key === "whatsapp_number") {
+    const ten = lastTenDigits(value);
+    if (ten.length !== 10) return false;
+    const own = opts.callerOwnPhone ? lastTenDigits(opts.callerOwnPhone) : "";
+    if (own && own === ten) return true;
+    return expandSpokenDigits(citedText).replace(/\D/g, "").includes(ten);
+  }
+  if (key === "existing_product" || key === "company_name") {
+    if (/[^\x00-\x7F]/.test(citedText.replace(/[\u2010-\u201F\u2026]/g, ""))) return true;
+    const said = citedText.toLowerCase();
+    const tokens = value.toLowerCase().split(/[^a-z0-9&]+/).filter((t) => t.length >= 3);
+    return tokens.length === 0 || tokens.some((t) => said.includes(t));
+  }
+  return true;
+}
+
 /**
  * Whether a new validated fact should supersede the current DB value (design §5).
  * Same normalized value → no-op. Lower confidence than current (and < 0.8) → discard.
@@ -616,8 +653,8 @@ export function durableFactsPromptBlock(): string {
     `- company_name: employer / company they work for\n` +
     `- email: email address if stated (including spoken "name at gmail dot com")\n` +
     `- date_of_birth: date of birth as YYYY-MM-DD if they stated day+month+year\n` +
-    `- phone_number: a phone/mobile they stated (E.164, e.g. +919876543210) — not the agent's number\n` +
-    `- whatsapp_number: WhatsApp number they stated (E.164). If they said "same as my phone", copy phone_number\n` +
+    `- phone_number: a phone/mobile whose digits the caller actually spoke (E.164) — not the agent's number. Never invent, pad or guess digits\n` +
+    `- whatsapp_number: WhatsApp number whose digits they spoke (E.164). If they said "same number" / "this number", use the caller's own number given above — never make one up\n` +
     `- language_pref: preferred spoken language (hi/en/ta/te/kn/ml/mr/bn/gu/pa)\n` +
     `- preferred_contact_method: call | sms | whatsapp | email if stated\n` +
     `- existing_product: named policy/product the CALLER said they already have (e.g. "Galaxy Marvel")\n\n` +
@@ -628,7 +665,9 @@ export function durableFactsPromptBlock(): string {
     `Episode summary (2-4 sentences) MUST include:\n` +
     `- The affirmed caller name (after any denial), city, job, company, email, DOB, phone, WhatsApp if they stated them\n` +
     `- Any existing_product they confirmed they already hold\n` +
-    `- What they asked or needed, and how the call ended (completed / dropped / callback)\n` +
+    `- What they asked or needed, and the preferences/answers they gave (e.g. product type, budget, timeline)\n` +
+    `- Anything agreed: bookings, visits, demos or callbacks WITH the day/date and time, and what was sent or promised\n` +
+    `- How the call ended (completed / dropped / callback) and what is still pending for the next call\n` +
     `- Do NOT write agent pitches as if the caller said them\n\n` +
     `Multilingual / code-switch:\n` +
     `- Transcripts may be Tamil, Hindi, English, or mixed (e.g. "என்னோட பேரு Murali", "मेरा नाम Ravi").\n` +

@@ -253,7 +253,7 @@ function isInvalidVoiceControlsError(err: unknown): boolean {
   return /invalid voice controls|invalid emotion|generation_config/i.test(msg);
 }
 
-const CARTESIA_EMOTIONS = new Set([
+export const CARTESIA_EMOTIONS: ReadonlySet<string> = new Set([
   "neutral", "happy", "excited", "enthusiastic", "elated", "euphoric",
   "triumphant", "amazed", "surprised", "flirtatious", "curious", "content",
   "peaceful", "serene", "calm", "grateful", "affectionate", "trust",

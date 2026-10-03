@@ -4,6 +4,8 @@
  * must never reach TTS.
  */
 
+import { CARTESIA_EMOTIONS } from "./adapters/tts/cartesia.js";
+
 export function stripMarkupTags(text: string, trim = true): string {
   const stripped = text
     .replace(/<\/?emotion\b[^>]*>/gi, "")
@@ -25,8 +27,19 @@ export function extractEmotionTag(
   opts?: { trim?: boolean },
 ): { emotion: string | null; text: string } {
   const match = /^\s*<emotion\s+(?:value|type)=["']([^"']+)["']\s*\/?>/i.exec(text);
-  const emotion = match ? match[1]!.toLowerCase() : null;
-  return { emotion, text: stripMarkupTags(text, opts?.trim !== false) };
+  if (match) {
+    return { emotion: match[1]!.toLowerCase(), text: stripMarkupTags(text, opts?.trim !== false) };
+  }
+  // Call 42507: the model sometimes drops the tag syntax and writes the bare
+  // value ("curious Achha, …", "[calm] Five crore …"), which Sonic read aloud.
+  // Lowercase only, and only before a capital / non-Latin word, so ordinary
+  // sentences ("Happy to help", "calm down") are untouched.
+  const bare = /^(\s*)\[?([a-z]+)\]?\s+(?=[A-Z]|[^\x00-\x7F])/.exec(text);
+  if (bare && CARTESIA_EMOTIONS.has(bare[2]!)) {
+    const rest = bare[1]! + text.slice(bare[0].length);
+    return { emotion: bare[2]!, text: stripMarkupTags(rest, opts?.trim !== false) };
+  }
+  return { emotion: null, text: stripMarkupTags(text, opts?.trim !== false) };
 }
 
 /**

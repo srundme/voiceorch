@@ -234,6 +234,32 @@ describe("injectEnhancedMemory — returning-caller opener (call 14351)", () => 
     expect(out).toContain("YOUR NAME IS Malar");
     expect(out).toContain("Never add Madam");
   });
+
+  it("outbound follow-up continues from the previous call instead of restarting (call 42507)", () => {
+    const profile = {
+      id: 1,
+      agentId: 1394,
+      phoneNumber: "916383653279",
+      name: null,
+      summary: "Wants 3 BHK for investment, budget 5 crore. Site visit booked Saturday 11 AM.",
+      callCount: 1,
+      lastCalledAt: new Date("2026-10-03"),
+      lastCallDropped: false,
+      lastCallDroppedAt: null,
+      predictedIntent: null,
+      riskScore: null,
+      sentimentTrend: null,
+      preferredLanguage: "en-IN",
+    } satisfies CallerProfile;
+    const out = injectEnhancedMemory("base prompt", { profile, facts: [], recentCalls: [] }, {
+      direction: "outbound",
+      callerPhone: "916383653279",
+    });
+    expect(out).toContain("FOLLOW-UP CALL");
+    expect(out).toContain("do NOT restart your script");
+    expect(out).not.toMatch(/Do NOT recap previous bookings/);
+    expect(out).toContain("CALLER'S CURRENT LINE: +916383653279");
+  });
 });
 
 describe("isAbruptEnd — completed call must not keep resume-drop (call 21824)", () => {

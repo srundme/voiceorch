@@ -55,6 +55,7 @@ import {
   durableFactsPromptBlock,
   isDurableFactKey,
   validateFactCandidate,
+  isFactValueGrounded,
   shouldSupersedeFact,
   canonicalizeFactKey,
   extractDateOfBirthFactValue,
@@ -772,7 +773,13 @@ const STALE_DAYS = 90;  // facts older than this get a stale marker
 export function injectEnhancedMemory(
   systemPrompt: string,
   ctx: CallerContext,
-  opts?: { suppressGenderFact?: boolean; agentName?: string | null },
+  opts?: {
+    suppressGenderFact?: boolean;
+    agentName?: string | null;
+    direction?: "inbound" | "outbound";
+    /** Canonical number of the person on this call (the line they are on now). */
+    callerPhone?: string | null;
+  },
 ): string {
   const { profile, facts, recentCalls } = ctx;
   // Persona whiplash guard: when the agent was repurposed since this caller's
@@ -893,6 +900,15 @@ export function injectEnhancedMemory(
     if (!isDurableFactKey(f.key)) return false;
     return true;
   });
+  const currentLine = opts?.callerPhone ? extractPhoneFactValue(opts.callerPhone) : null;
+  if (currentLine) {
+    lines.push("");
+    lines.push(
+      `CALLER'S CURRENT LINE: ${currentLine} — the number they are on right now. When they say ` +
+        `"same number" / "this number", this is the number. Only read a different number back if ` +
+        `the caller spoke it on this call.`,
+    );
+  }
   if (displayFacts.length > 0) {
     lines.push("");
     lines.push("KNOWN DETAILS ABOUT THIS CALLER (stable identity — do not re-ask):");
@@ -969,6 +985,20 @@ export function injectEnhancedMemory(
         ? "On the opening only, pick up where those exchanges left off."
         : "On the opening only, continue naturally from the prior context above."),
     );
+  } else if (!suppressDomain && callCount >= 1 && opts?.direction === "outbound") {
+    // Call 42507: the "wait for them to speak" opener below made an outbound
+    // follow-up re-pitch from step 1 — re-asking BHK, budget and timeline right
+    // after the previous call had booked a site visit. On outbound WE called,
+    // so the opener has to say why, tied to the last call.
+    const namePhrase = namePart !== "unknown" ? ` by name (${namePart})` : "";
+    lines.push(
+      `⚠️ IMPORTANT — THIS IS A FOLLOW-UP CALL TO SOMEONE YOU ALREADY SPOKE WITH (call #${callCount + 1}). ` +
+      `Do NOT introduce yourself or your company as if meeting for the first time, and do NOT restart your script from the first step. ` +
+      `Open by greeting them${namePhrase} and, in one short clause, say you are following up on your last conversation ` +
+      `(refer to what was agreed or pending in the Previous call summary, e.g. the booked visit or the brochure), then ask if it is a good time. ` +
+      `After that, continue from where the previous call ended: treat every step already answered or agreed in the Previous call summary ` +
+      `(requirement, budget, timeline, booking) as done — confirm or update it only if needed, and move to what is still pending.`,
+    );
   } else if (!suppressDomain && callCount >= 1) {
     const namePhrase = namePart !== "unknown" ? ` by name (${namePart})` : " by name if known";
     lines.push(
@@ -990,7 +1020,8 @@ export function injectEnhancedMemory(
     lines.push(
       "⚠️ DO NOT RE-ASK KNOWN INFORMATION: The base instructions below may include scripted " +
       "questions (e.g. asking for the caller's name, what they're calling about, or other " +
-      "details) written as if this were a brand-new caller. If the answer to any such question " +
+      "details, requirement, budget, timeline, or a booking) written as if this were a brand-new caller. " +
+      "If the answer to any such question " +
       "is already present above (Name, Previous call summary, or Known details), treat it as " +
       "already answered — do NOT ask that question again. Use the known fact and move forward. " +
       "Do not ask permission to continue or recap the prior call. Only ask a scripted question " +
@@ -1318,6 +1349,7 @@ async function runLLMExtraction(opts: {
   annotatedTranscript: string;
   priorContext: string;
   priorFacts: CallerFact[];
+  callerPhone?: string | null;
 }): Promise<ExtractedLLMResult> {
   const { llm, annotatedTranscript, priorContext, priorFacts } = opts;
 
@@ -1325,21 +1357,25 @@ async function runLLMExtraction(opts: {
   const priorFactsStr = durablePrior.length > 0
     ? `\nAlready known durable facts (update only if the caller stated a clear change):\n${durablePrior.map(f => `  ${f.key}: ${f.value}`).join("\n")}\n`
     : "";
+  const ownPhone = opts.callerPhone ? extractPhoneFactValue(opts.callerPhone) : null;
+  const ownPhoneStr = ownPhone
+    ? `The caller's own phone number on this call is ${ownPhone}.\n`
+    : "";
 
   let raw = "";
   await llm.chat(
     [{
       role: "user",
       content:
-        `${priorContext}${priorFactsStr}` +
+        `${priorContext}${priorFactsStr}${ownPhoneStr}` +
         `Analyze this call transcript and extract:\n` +
-        `1. A 2-4 sentence episode summary of THIS call (see summary rules below)\n` +
+        `1. A 2-4 sentence episode summary of THIS call (see "Episode summary" rules below)\n` +
         `2. The caller's emotional sentiment for THIS call\n` +
         `3. IMPORTANT durable facts the CALLER stated (see allowed keys)\n\n` +
         `Return ONLY valid JSON with exactly these fields:\n` +
         `{\n` +
         `  "name": "caller's first name if stated, otherwise null",\n` +
-        `  "summary": "1-3 sentence summary",\n` +
+        `  "summary": "2-4 sentence summary",\n` +
         `  "sentiment": "one of: positive | neutral | negative | frustrated | resolved",\n` +
         `  "facts": [\n` +
         `    { "key": "allowed_durable_key", "value": "the value", "confidence": 0.0-1.0, "sentence_ids": [123] }\n` +
@@ -1664,6 +1700,11 @@ export async function updateCallerProfile(opts: {
       .map((s, i) => (s.speaker === "caller" ? sentenceIds[i] : undefined))
       .filter((id): id is number => typeof id === "number"),
   );
+  const sentenceTextById = new Map<number, string>();
+  parsedSentences.forEach((s, i) => {
+    const id = sentenceIds[i];
+    if (typeof id === "number") sentenceTextById.set(id, s.text);
+  });
 
   // ── Phase 3: LLM extraction (best-effort) ─────────────────────────────────
   // Mutable: the persona-swap block below clears it so the new persona's first
@@ -1765,6 +1806,7 @@ export async function updateCallerProfile(opts: {
         annotatedTranscript: annotatedTranscript || transcript,
         priorContext,
         priorFacts,
+        callerPhone: phoneNumber,
       });
       llmSucceeded = true;
       break;
@@ -1862,6 +1904,15 @@ export async function updateCallerProfile(opts: {
       });
       if (!result.ok || !result.fact) {
         rejectReasons.push(`${f.key}:${result.reason ?? "rejected"}`);
+        return null;
+      }
+      if (requireCitation && !isFactValueGrounded({
+        key: result.fact.key,
+        value: result.fact.value,
+        citedText: result.fact.sentenceIds.map((id) => sentenceTextById.get(id) ?? "").join(" "),
+        callerOwnPhone: phoneNumber,
+      })) {
+        rejectReasons.push(`${f.key}:ungrounded_value`);
         return null;
       }
       return result.fact;

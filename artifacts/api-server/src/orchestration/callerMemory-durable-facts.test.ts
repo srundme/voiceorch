@@ -22,6 +22,7 @@ import {
   normalizeDurableFact,
   normalizeFactValue,
   validateFactCandidate,
+  isFactValueGrounded,
 } from "./callerMemory-durable-facts.js";
 import {
   speakerTurns,
@@ -30,6 +31,57 @@ import {
   buildFallbackEpisodeSummary,
 } from "./callerMemory.js";
 import type { ConversationTurn } from "./types.js";
+
+describe("isFactValueGrounded — call 42507 invented phone", () => {
+  it("normalizes a 91-prefixed 12-digit number without shifting digits", () => {
+    expect(normalizeFactValue("phone_number", "916383653279")).toBe("+916383653279");
+    expect(normalizeFactValue("phone_number", "+91 63836 53279")).toBe("+916383653279");
+  });
+
+  it("rejects a phone the caller never spoke when they only said 'same number'", () => {
+    expect(isFactValueGrounded({
+      key: "phone_number",
+      value: "+919198765432",
+      citedText: "Same number pe bhej do",
+      callerOwnPhone: "916383653279",
+    })).toBe(false);
+  });
+
+  it("accepts the caller's own line for 'same number'", () => {
+    expect(isFactValueGrounded({
+      key: "whatsapp_number",
+      value: "+916383653279",
+      citedText: "same number",
+      callerOwnPhone: "916383653279",
+    })).toBe(true);
+  });
+
+  it("accepts digits the caller spoke, in digits or words", () => {
+    expect(isFactValueGrounded({
+      key: "phone_number",
+      value: "+919845012345",
+      citedText: "my number is 98450 12345",
+    })).toBe(true);
+    expect(isFactValueGrounded({
+      key: "phone_number",
+      value: "+919845012345",
+      citedText: "nine eight four five zero one two three four five",
+    })).toBe(true);
+  });
+
+  it("rejects a product name the caller never said", () => {
+    expect(isFactValueGrounded({
+      key: "existing_product",
+      value: "L&T Thanisandra",
+      citedText: "investment",
+    })).toBe(false);
+    expect(isFactValueGrounded({
+      key: "existing_product",
+      value: "Galaxy Marvel",
+      citedText: "I already have the Galaxy Marvel policy",
+    })).toBe(true);
+  });
+});
 
 describe("durable fact keys", () => {
   it("maps synonyms onto canonical durable keys", () => {

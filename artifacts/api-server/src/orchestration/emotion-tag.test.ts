@@ -19,6 +19,24 @@ describe("extractEmotionTag", () => {
     expect(extractEmotionTag('<emotion value="curious"')).toEqual({ emotion: null, text: "" });
   });
 
+  it("turns a bare leading emotion word into the emotion instead of speech (call 42507)", () => {
+    expect(extractEmotionTag("curious Achha, investment ke liye.")).toEqual({
+      emotion: "curious",
+      text: "Achha, investment ke liye.",
+    });
+    expect(extractEmotionTag("[calm] Five crore budget hai.")).toEqual({
+      emotion: "calm",
+      text: "Five crore budget hai.",
+    });
+    expect(extractEmotionTag("calm நீங்க")).toEqual({ emotion: "calm", text: "நீங்க" });
+  });
+
+  it("leaves ordinary sentences that start with an emotion word alone", () => {
+    expect(extractEmotionTag("Happy to help you.")).toEqual({ emotion: null, text: "Happy to help you." });
+    expect(extractEmotionTag("calm down please")).toEqual({ emotion: null, text: "calm down please" });
+    expect(extractEmotionTag("okay Sir")).toEqual({ emotion: null, text: "okay Sir" });
+  });
+
   it("keeps LLM whitespace for Cartesia continuations (call 24489)", () => {
     expect(extractEmotionTag(" நீங்க", { trim: false })).toEqual({ emotion: null, text: " நீங்க" });
     expect(extractEmotionTag(" ", { trim: false })).toEqual({ emotion: null, text: " " });

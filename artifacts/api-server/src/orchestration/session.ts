@@ -1082,6 +1082,8 @@ export async function createSession(params: {
       agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtxResult, {
         suppressGenderFact: !agentConfig.genderDetectionEnabled,
         agentName: agent.name,
+        direction: isWebcall ? "inbound" : callDirection,
+        callerPhone: isWebcall || isMeetBotSession ? null : callerPhone,
       });
       {
         const _LNAMES: Record<string, string> = {
@@ -1359,7 +1361,7 @@ export async function createSession(params: {
     to_number:     params.toNumber,
     from_number:   params.fromNumber,
     agent_name:    agent.name,
-    caller_number: params.fromNumber,
+    caller_number: callDirection === "outbound" && !isWebcall ? params.toNumber : params.fromNumber,
     date: now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
     ...Object.fromEntries(agentConfig.promptVariables.map(v => [v.key, v.defaultValue])),
     ...campaignLeadVars,
