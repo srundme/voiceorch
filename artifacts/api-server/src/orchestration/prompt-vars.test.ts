@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildLeadContextBlock, buildCallContextBlock, normalizeCallVariables, resolvePromptVariables } from "./prompt-vars.js";
+import { buildLeadContextBlock, buildCallContextBlock, markUnresolvedPromptVariables, normalizeCallVariables, resolvePromptVariables } from "./prompt-vars.js";
+
+describe("markUnresolvedPromptVariables — call 42526", () => {
+  it("marks unfilled placeholders as missing but keeps caller_salutation", () => {
+    expect(markUnresolvedPromptVariables("Budget around {{budget}}, hi {{caller_salutation}}"))
+      .toBe("Budget around (not provided), hi {{caller_salutation}}");
+  });
+});
 
 describe("buildLeadContextBlock", () => {
   it("includes a do-not-re-ask directive when name is known", () => {

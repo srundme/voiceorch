@@ -183,6 +183,16 @@ export function buildCallContextBlock(vars: Record<string, string>): string {
   return parts.join("\n");
 }
 
+/**
+ * Final pass on the system prompt, after every variable source has resolved:
+ * a `{{home_type}}` with no value reads to the model as data, so it confirmed
+ * "your home type as {{home_type}}" aloud (call 42526). Mark it as missing so
+ * "skip empty values" instructions work. `caller_salutation` resolves mid-call.
+ */
+export function markUnresolvedPromptVariables(text: string): string {
+  return text.replace(/\{\{(\w+)\}\}/g, (m, k: string) => (k === "caller_salutation" ? m : "(not provided)"));
+}
+
 export function resolvePromptVariables(
   text: string,
   vars: Record<string, string>,

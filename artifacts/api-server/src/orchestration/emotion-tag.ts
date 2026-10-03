@@ -9,6 +9,7 @@ import { CARTESIA_EMOTIONS } from "./adapters/tts/cartesia.js";
 export function stripMarkupTags(text: string, trim = true): string {
   const stripped = text
     .replace(/<\/?emotion\b[^>]*>/gi, "")
+    .replace(/\[\/?emotion\b[^\]]*\]/gi, "")
     .replace(/<break\b[^>]*\/?>/gi, "")
     // Mid-tag leftovers have no `>`, so the complete-tag regex misses them.
     .replace(/<\/?(?:emotion|break)\b[^>]*$/gi, "")
@@ -26,7 +27,8 @@ export function extractEmotionTag(
   text: string,
   opts?: { trim?: boolean },
 ): { emotion: string | null; text: string } {
-  const match = /^\s*<emotion\s+(?:value|type)=["']([^"']+)["']\s*\/?>/i.exec(text);
+  // Square-bracket form too: call 42526 sent `[emotion value="calm"]` to TTS as text.
+  const match = /^\s*[<[]emotion\s+(?:value|type)=["']([^"']+)["']\s*\/?[>\]]/i.exec(text);
   if (match) {
     return { emotion: match[1]!.toLowerCase(), text: stripMarkupTags(text, opts?.trim !== false) };
   }

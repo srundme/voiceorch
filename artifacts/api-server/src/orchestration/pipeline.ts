@@ -10272,6 +10272,14 @@ export class OrchestrationPipeline implements VoiceSession {
           ? buildOpeningHandshakeNudge(lastTurn.content, prevLine)
           : "";
         const whereFromNudge = buildWhereFromNudge(lastTurn.content);
+        // User-turn tail like the clock: in the system-prompt tail Sarvam-105b
+        // ignored even the REQUIRED note (call 42526: 10 turns, no laugh).
+        const laughterNote = laughterNudge({
+          ttsProvider: this.agent.ttsProvider,
+          systemPrompt: this.agent.systemPrompt,
+          laughedAlready: this.laughterUsedThisCall,
+          turnIndex: this.turnIndex,
+        });
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
           {
@@ -10282,6 +10290,7 @@ export class OrchestrationPipeline implements VoiceSession {
               whereFromNudge,
               openingNudge,
               nudge,
+              laughterNote,
               buildTurnClockBlock(this.agent.timezone),
             ].filter(Boolean).join("\n\n"),
           },
@@ -10363,15 +10372,6 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.pendingMeetingNotes.length) {
       const notes = this.pendingMeetingNotes.splice(0, this.pendingMeetingNotes.length);
       systemPromptForTurn += `\n\n[MEETING UPDATE] ${notes.join(" ")} Acknowledge only if natural — do not interrupt the current topic.`;
-    }
-    {
-      const laughterNote = laughterNudge({
-        ttsProvider: this.agent.ttsProvider,
-        systemPrompt: this.agent.systemPrompt,
-        laughedAlready: this.laughterUsedThisCall,
-        turnIndex: this.turnIndex,
-      });
-      if (laughterNote) systemPromptForTurn += `\n\n${laughterNote}`;
     }
     // ── [CURRENT DATE & TIME] — appended LAST for prompt-cache stability ──────
     // This is the only element that changes on every single turn (down to the

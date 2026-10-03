@@ -31,6 +31,14 @@ describe("extractEmotionTag", () => {
     expect(extractEmotionTag("calm நீங்க")).toEqual({ emotion: "calm", text: "நீங்க" });
   });
 
+  it("reads the square-bracket tag form as the emotion (call 42526)", () => {
+    expect(extractEmotionTag('[emotion value="calm"]I hear you, but I need the numbers.')).toEqual({
+      emotion: "calm",
+      text: "I hear you, but I need the numbers.",
+    });
+    expect(stripMarkupTags('Okay. [emotion value="calm"] Three months.')).toBe("Okay. Three months.");
+  });
+
   it("leaves ordinary sentences that start with an emotion word alone", () => {
     expect(extractEmotionTag("Happy to help you.")).toEqual({ emotion: null, text: "Happy to help you." });
     expect(extractEmotionTag("calm down please")).toEqual({ emotion: null, text: "calm down please" });
