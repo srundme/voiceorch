@@ -7624,6 +7624,8 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   const tabContentRef = useRef<HTMLDivElement>(null);
   const scrollPositions = useRef<Partial<Record<TabId, number>>>({});
   const agentResetSigRef = useRef<string | null>(null);
+  /** Agent whose data is in the form. A save must never write it to another id. */
+  const loadedAgentIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     const next = sectionFromSearch(search);
@@ -7801,8 +7803,9 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
     // render → re-render → loop (React #185 "Maximum update depth exceeded").
     const resetSig = `${agent.id}:${(agent as any).updatedAt ?? ""}`;
     if (agentResetSigRef.current === resetSig) return;
-    if (form.formState.isDirty) return;
+    if (form.formState.isDirty && loadedAgentIdRef.current === agent.id) return;
     agentResetSigRef.current = resetSig;
+    loadedAgentIdRef.current = agent.id;
     const sarvamVad = hydrateSarvamRealtimeVad((agent as any).agentConfig ?? {});
     form.reset({
       name:                     agent.name,
@@ -7959,6 +7962,10 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   const onSave = form.handleSubmit(
     async (data) => {
       const isAutoSave = autoSaveRequestRef.current;
+      if (loadedAgentIdRef.current !== agentId) {
+        if (isAutoSave) setAutoSaveStatus("idle");
+        return;
+      }
       const revisionAtStart = editRevisionRef.current;
       saveInFlightRef.current = true;
       if (isAutoSave) setAutoSaveStatus("saving");
@@ -8127,7 +8134,12 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
     });
     return () => {
       subscription.unsubscribe();
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+        // Switching agents remounts the editor; flush to THIS agent's id.
+        void autoSaveHandlerRef.current?.();
+      }
     };
   }, [form]);
 
@@ -9351,7 +9363,7 @@ export default function AgentBuilder() {
         </SheetContent>
       </Sheet>
       {selectedId != null ? (
-        <AgentEditorPanel agentId={selectedId} onOpenAgents={() => setAgentsSheetOpen(true)} />
+        <AgentEditorPanel key={selectedId} agentId={selectedId} onOpenAgents={() => setAgentsSheetOpen(true)} />
       ) : (
         <StudioEmptyCanvas onCreate={handleCreate} />
       )}

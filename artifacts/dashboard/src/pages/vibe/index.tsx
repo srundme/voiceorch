@@ -1880,7 +1880,7 @@ export default function VibePage() {
           {studio === "agent" && studioAgentId != null && (
             <div className="relative z-10 flex min-h-0 flex-1 flex-col bg-background">
               <Suspense fallback={<StudioPaneFallback label="Loading agent editor…" />}>
-                <AgentEditorPanel agentId={studioAgentId} embedded />
+                <AgentEditorPanel key={studioAgentId} agentId={studioAgentId} embedded />
               </Suspense>
             </div>
           )}
