@@ -178,8 +178,7 @@ export function buildLanguageLockNote(
   }
   if (name === "English") {
     return (
-      `[LANGUAGE LOCK: ENGLISH] Reply ONLY in plain English. No Hindi or Hinglish words at all — ` +
-      `not "aap", "hai", "hain", "na", "toh", "bataiye", "kitna", "pe", "kar loon", "bhej doon", "achha", "ji". ` +
+      `[LANGUAGE LOCK: ENGLISH] Reply ONLY in plain English. No Hindi or Hinglish words or fillers at all. ` +
       `Ignore Hindi/Hinglish examples in your script; say the same thing in English. ` +
       `Do not mention the language or say "we can continue in English" again. ` +
       `Stay in English until the caller explicitly asks for another language.`

@@ -10023,7 +10023,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // WITHOUT producing a self-contradictory apology that references a gender it
     // never actually used (the backwards "Sorry, I thought you were male, I'll
     // call you that" bug).
-    const CORRECTION_EXCEPTION = ` EXCEPTION — caller corrections override everything: if the caller objects to or corrects how they are being addressed (in ANY language, including postfix-negation forms like "ma'am illa" / "sir nahi" and self-descriptions like "I'm a man" / "I'm a woman"), immediately switch to the salutation they ask for and use ONLY that for every remaining reply. Apologize briefly and naturally for the mix-up (e.g. a short "sorry about that") WITHOUT stating or guessing which gender you previously assumed — never say things like "I thought you were …", and do not argue about or explain your earlier assumption.`;
+    const CORRECTION_EXCEPTION = ` EXCEPTION — caller corrections override everything: if the caller objects to or corrects how they are being addressed (in ANY language, including a negation word after the salutation and self-descriptions like "I'm a man" / "I'm a woman"), immediately switch to the salutation they ask for and use ONLY that for every remaining reply. Apologize briefly and naturally for the mix-up (e.g. a short "sorry about that") WITHOUT stating or guessing which gender you previously assumed — never say things like "I thought you were …", and do not argue about or explain your earlier assumption.`;
     // When a correction has actually been captured this call, the directive
     // below already names the corrected salutation; tell the model to
     // acknowledge the switch once, cleanly, with no reference to the prior wrong
