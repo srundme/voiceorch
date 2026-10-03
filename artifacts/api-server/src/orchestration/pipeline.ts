@@ -534,6 +534,8 @@ const BARGE_RECOVERY_MS = 800;
 /** Ceiling for waiting out an open VAD before the backstop commits anyway. */
 const BARGE_RECOVERY_MAX_WAIT_MS = 8000;
 const TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 0;
+/** Upper bound for the closing turn + goodbye once end_call is committed early. */
+const END_CALL_COMMIT_WATCHDOG_MS = 45_000;
 // Heard-text window for interruption hints (not self-echo detection).
 const SELF_ECHO_TAIL_MS       = 2800;
 const CARRIER_ECHO_LATENCY_MS = 1500;  // margin added to the greeting echo-hold to cover the
@@ -8348,6 +8350,30 @@ export class OrchestrationPipeline implements VoiceSession {
     });
   }
 
+  /**
+   * end_call is executed only after the turn's audio drains, so the closing line
+   * ("…site visit book ho gayi. Thank you, have a good day!") used to stay
+   * bargeable: a late "theek" from the caller cut it at 0.26 s and the call then
+   * hung up in silence (call 42492). Commit the hangup as soon as the model
+   * emits end_call so the closing plays out.
+   */
+  private markEndCallPendingIfTerminal(toolName: string): void {
+    const isEndCall = toolName === "end_call"
+      || matchToolByName(this.agent.tools, toolName)?.type === "end_call";
+    if (!isEndCall || this.endCallInitiated) return;
+    // A barged turn may return before running the tool; committing then would
+    // discard every later transcript on a call that never hangs up.
+    if (this.bargeInRequested || this.interruptReplyArmed) return;
+    this.endCallInitiated = true;
+    this.safetyNet?.clear();
+    const watchdog = setTimeout(() => {
+      if (this.closed) return;
+      logger.warn({ callId: this.config.callId }, "end_call committed but call still open — forcing hangup");
+      this.config.onCallEnd();
+    }, END_CALL_COMMIT_WATCHDOG_MS);
+    watchdog.unref?.();
+  }
+
   private async executeEndCall(tool: AgentTool & { type: "end_call" }): Promise<void> {
     logger.info({ callId: this.config.callId }, "End Call tool invoked by LLM");
     this.endCallInitiated = true;
@@ -8375,6 +8401,7 @@ export class OrchestrationPipeline implements VoiceSession {
         { callId: this.config.callId, preview: recent.slice(0, 120) },
         "Skipping end-call farewell — agent already closed in this call",
       );
+      this.logEndGreetingSkipped("agent_already_said_goodbye", recent.slice(-120));
       return;
     }
     const goodbye = resolveGoodbyeMessage(
@@ -8387,11 +8414,20 @@ export class OrchestrationPipeline implements VoiceSession {
         { callId: this.config.callId },
         "Skipping end-call farewell — no End greeting configured (no hardcoded default)",
       );
+      this.logEndGreetingSkipped("no_end_greeting_configured");
       return;
     }
     this.conversationHistory.appendAssistant(goodbye);
     this.config.onTranscript("agent", goodbye);
     await this.speakRaw(goodbye);
+  }
+
+  private logEndGreetingSkipped(reason: string, heardTail?: string): void {
+    this.logExec("Tool", "system", {
+      status: "info",
+      turnNumber: this._activeTurnIndex,
+      metadata: { event: "End Greeting Skipped", reason, ...(heardTail ? { heardTail } : {}) },
+    });
   }
 
   private async executeCalCom(tool: AgentTool & { type: "cal_com" }, args: Record<string, unknown>): Promise<string> {
@@ -10704,6 +10740,7 @@ export class OrchestrationPipeline implements VoiceSession {
               onToolCall: (name, args) => {
                 triggeredToolName = name;
                 triggeredToolArgs = args;
+                this.markEndCallPendingIfTerminal(name);
                 this.logExec("Tool", "system", {
                   status: "info",
                   turnNumber: _currentTurnIndex,
@@ -12101,6 +12138,7 @@ export class OrchestrationPipeline implements VoiceSession {
               onToolCall: (name, args) => {
                 triggeredToolName = name;
                 triggeredToolArgs = args;
+                this.markEndCallPendingIfTerminal(name);
                 this.logExec("Tool", "system", {
                   status: "info",
                   turnNumber: this._activeTurnIndex,

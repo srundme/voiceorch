@@ -27,4 +27,11 @@ describe("normalizeTtsNonverbals", () => {
     expect(normalizeTtsNonverbals("Funny. [laughter] Next.", "sarvam"))
       .toBe("Funny.  Next.");
   });
+
+  it("speaks a spaced slash between words as 'or' but leaves dates alone", () => {
+    expect(normalizeTtsNonverbals("Thanisandra / North Bangalore works for you?", "cartesia"))
+      .toBe("Thanisandra or North Bangalore works for you?");
+    expect(normalizeTtsNonverbals("Visit on 14/08 at 11.", "cartesia"))
+      .toBe("Visit on 14/08 at 11.");
+  });
 });

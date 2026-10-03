@@ -13,5 +13,7 @@ export function normalizeTtsNonverbals(text: string, provider: string | null | u
     .replace(/\s*\{\{\s*\w+\s*\}\}/g, "")
     .replace(/\[([a-zA-Z0-9_\-\s]+)\]/g, (_match, label: string) =>
       cartesia && label.trim().toLowerCase() === "laughter" ? "[laughter]" : "")
-    .replace(/\*+[a-zA-Z0-9_\-\s]+\*+|\([a-zA-Z0-9_\-\s]+\)/gi, "");
+    .replace(/\*+[a-zA-Z0-9_\-\s]+\*+|\([a-zA-Z0-9_\-\s]+\)/gi, "")
+    // "Thanisandra / North Bangalore" is read as "slash"; dates like 14/08 have no spaces.
+    .replace(/(\p{L})\s+\/\s+(?=\p{L})/gu, "$1 or ");
 }
