@@ -78,14 +78,17 @@ export interface SelfEchoCheck {
   readonly protectedShortIntent?: boolean;
 }
 
-/** Fraction of `tokens` present in `spoken`. */
+/** Fraction of distinct `tokens` present in `spoken`. Distinct, because callers
+ *  repeat themselves and echo does not: "ठीक रहेगा Madam ठीक रहेगा" answering
+ *  "…ठीक रहेगा क्या?" scored 4/5 and was dropped as echo (call 42585). */
 function overlap(tokens: readonly string[], spoken: ReadonlySet<string>): number {
-  if (tokens.length === 0) return 0;
+  const distinct = new Set(tokens);
+  if (distinct.size === 0) return 0;
   let hits = 0;
-  for (const token of tokens) {
+  for (const token of distinct) {
     if (spoken.has(token)) hits++;
   }
-  return hits / tokens.length;
+  return hits / distinct.size;
 }
 
 function maxOverlap(tokens: readonly string[], lines: readonly RecentAgentLine[]): number {

@@ -7221,15 +7221,19 @@ export class OrchestrationPipeline implements VoiceSession {
       // Accumulate fully-played sentences for the interruption hint. Only count
       // sentences that completed — a mid-sentence barge-in means the caller may
       // not have heard the whole thing, so we conservatively exclude that one.
+      // Fillers stay out of the turn's heard text: in history they taught the
+      // model to open every reply with "okay"/"hmm" (call 42585/42586).
       if (_pbEvent === "Playback Completed" && !noAudioSent) {
         this.recentAgentSpeech.push({ text: job.text,
           tokens: new Set(this.normalizeForRepeat(job.text).split(" ").filter(Boolean)), estEndAt: Date.now() });
         this.recentAgentSpeech = this.recentAgentSpeech.slice(-12);
-        this._currentTurnPlayedSentences.push(job.text);
+        if (!isFiller) this._currentTurnPlayedSentences.push(stripMarkupTags(job.text));
+      } else if (isFiller) {
+        // not part of what the agent "said"
       } else if (job.confirmedText) {
-        this._currentTurnPlayedSentences.push(job.confirmedText);
+        this._currentTurnPlayedSentences.push(stripMarkupTags(job.confirmedText));
       } else if (!noAudioSent && playbackText) {
-        const prefix = estimateHeardPrefix(playbackText, Date.now() - _pbStart);
+        const prefix = estimateHeardPrefix(stripMarkupTags(playbackText), Date.now() - _pbStart);
         if (prefix) this._currentTurnPlayedSentences.push(prefix);
       }
       this.activeConfirmedPlaybackText = "";

@@ -127,6 +127,14 @@ describe("isSelfEcho", () => {
     }
   });
 
+  it("keeps a caller who repeats the agent's words back as an answer (call 42585)", () => {
+    expect(isSelfEcho({
+      tokens: words("ठीक रहेगा madam ठीक रहेगा"),
+      recentAgentSpeech: spoken("तो saturday सुबह ग्यारह बजे site visit ठीक रहेगा"),
+      agentAudible: true,
+    })).toBe(false);
+  });
+
   it("keeps a 3-word zero-overlap answer while TTS is on the wire", () => {
     expect(isSelfEcho({
       tokens: words("Meeting பைங்கா now"),

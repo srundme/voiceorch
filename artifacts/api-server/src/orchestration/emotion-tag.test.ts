@@ -1,6 +1,45 @@
 import { describe, it, expect } from "vitest";
 import { extractEmotionTag, makeMarkupTagFilter, stripMarkupTags } from "./emotion-tag.js";
 
+describe("short-form emotion tags (call 42586)", () => {
+  it("reads <neutral> as the emotion and never speaks the tags", () => {
+    expect(extractEmotionTag("<neutral>I heard you. Were you still looking?</neutral>")).toEqual({
+      emotion: "neutral",
+      text: "I heard you. Were you still looking?",
+    });
+  });
+
+  it("drops a bare emotion word in front of the tag", () => {
+    expect(extractEmotionTag("curious <neutral>Alright. Does Thanisandra work?</neutral>")).toEqual({
+      emotion: "neutral",
+      text: "Alright. Does Thanisandra work?",
+    });
+  });
+
+  it("keeps ordinary leading words but removes the tag", () => {
+    expect(extractEmotionTag("good choice <enthusiastic>4 BHK is five crore.")).toEqual({
+      emotion: "enthusiastic",
+      text: "good choice 4 BHK is five crore.",
+    });
+  });
+
+  it("strips short tags from history text", () => {
+    expect(stripMarkupTags("okay <neutral>Sure, this number. Shall I?</neutral>")).toBe("okay Sure, this number. Shall I?");
+    expect(stripMarkupTags("</neutral> [laughter]")).toBe("[laughter]");
+  });
+
+  it("stream filter rewrites <neutral> and drops </neutral>, even split across tokens", () => {
+    const f = makeMarkupTagFilter();
+    const out = ["<neu", "tral>No problem.", " Which BHK?</", "neutral>"].map(f).join("");
+    expect(out).toBe('<emotion value="neutral"/>No problem. Which BHK?');
+  });
+
+  it("stream filter leaves non-emotion angle text alone", () => {
+    const f = makeMarkupTagFilter();
+    expect(["Price < 5", " crore"].map(f).join("")).toBe("Price < 5 crore");
+  });
+});
+
 describe("extractEmotionTag", () => {
   it("forwards a complete leading tag and keeps speakable text", () => {
     expect(extractEmotionTag('<emotion value="curious"/> How much do you need?')).toEqual({
