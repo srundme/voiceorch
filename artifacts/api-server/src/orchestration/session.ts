@@ -1096,7 +1096,9 @@ export async function createSession(params: {
           "ar-EG": "Arabic", "ru-RU": "Russian",
         };
         const _agentLang = agent.asrLanguage ?? agent.language;
-        const _prefLang  = callerProfileSnapshot?.preferredLanguage ?? null;
+        const _prefLang  = mapLanguagePrefToBcp47(latchedFactsMap.get("language_pref"))
+          ?? callerProfileSnapshot?.preferredLanguage
+          ?? null;
 
         if (agentConfig.languageAutoDetect && _prefLang) {
           // Auto-detect ON + caller has a remembered language preference:

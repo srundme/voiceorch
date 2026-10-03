@@ -149,3 +149,45 @@ export function detectExplicitLanguageRequest(rawText: string): string | null {
   }
   return null;
 }
+
+const LOCK_LANG_NAMES: Record<string, string> = {
+  "en-IN": "English", "en-US": "English", "hi-IN": "Hindi", "ta-IN": "Tamil",
+  "te-IN": "Telugu", "kn-IN": "Kannada", "ml-IN": "Malayalam", "mr-IN": "Marathi",
+  "bn-IN": "Bengali", "gu-IN": "Gujarati", "pa-IN": "Punjabi", "or-IN": "Odia",
+  "ur-IN": "Urdu",
+};
+
+/**
+ * Per-turn reminder of the latched caller language. Must ride on the last user
+ * turn: Sarvam-105b ignores system-prompt rules once a Hinglish-heavy script
+ * pulls it back (call 42570: agreed to English 4 times, reverted every turn).
+ */
+export function buildLanguageLockNote(
+  lang: string | null | undefined,
+  explicit = true,
+): string {
+  if (!lang) return "";
+  const name = LOCK_LANG_NAMES[lang];
+  if (!name) return "";
+  if (!explicit) {
+    const notHinglish = name === "English" ? " — plain English, not Hindi/Hinglish" : "";
+    return (
+      `[LANGUAGE] The caller is speaking ${name}. Reply in ${name}${notHinglish}. ` +
+      `If the caller clearly switches language, follow them.`
+    );
+  }
+  if (name === "English") {
+    return (
+      `[LANGUAGE LOCK: ENGLISH] Reply ONLY in plain English. No Hindi or Hinglish words at all — ` +
+      `not "aap", "hai", "hain", "na", "toh", "bataiye", "kitna", "pe", "kar loon", "bhej doon", "achha", "ji". ` +
+      `Ignore Hindi/Hinglish examples in your script; say the same thing in English. ` +
+      `Do not mention the language or say "we can continue in English" again. ` +
+      `Stay in English until the caller explicitly asks for another language.`
+    );
+  }
+  return (
+    `[LANGUAGE LOCK: ${name.toUpperCase()}] Reply ONLY in ${name}. Keep using ${name} even if the caller ` +
+    `uses a few English words. Do not mention the language again. ` +
+    `Stay in ${name} until the caller explicitly asks for another language.`
+  );
+}

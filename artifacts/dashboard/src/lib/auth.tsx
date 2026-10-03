@@ -154,6 +154,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
+  // Back after sign-out restores this page from the bfcache with the old
+  // signed-in state and data — no reload, no /auth/me. Re-check the session.
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (!e.persisted || isImpersonatePath()) return;
+      void fetchMe().then((me) => {
+        if (me) {
+          setUser(me);
+          return;
+        }
+        setUser(null);
+        window.location.replace(`${basePath}/sign-in`);
+      });
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
   const getToken = useCallback(async (): Promise<string | null> => {
     // Cookie carries the session; customFetch sends credentials: "include".
     return null;
@@ -184,13 +202,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback((reason?: SignOutReason) => {
     try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
     setUser(null);
-    void fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
-    if (reason) {
-      sessionStorage.setItem(SIGNOUT_REASON_KEY, reason);
-      window.location.href = `${basePath}/sign-in`;
-    } else {
-      window.location.href = `${basePath}/`;
-    }
+    if (reason) sessionStorage.setItem(SIGNOUT_REASON_KEY, reason);
+    const target = reason ? `${basePath}/sign-in` : `${basePath}/`;
+    // Wait for the cookie to be cleared: navigating straight away can abort the
+    // request and leave the session alive for Back. replace() also drops the
+    // dashboard from history.
+    void fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+      keepalive: true,
+      signal: AbortSignal.timeout(4000),
+    })
+      .catch(() => {})
+      .finally(() => window.location.replace(target));
   }, []);
 
   const value: AuthState = {

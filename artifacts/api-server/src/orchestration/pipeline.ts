@@ -14,7 +14,7 @@ import { buildDatetimeInjection, buildTurnClockBlock, THIS_TURN_INSTRUCTION } fr
 import { buildScheduleCallbackSpeakInstruction } from "./spokenCallbackConfirm.js";
 import { demoteResumeMemoryAfterOpening } from "./callerMemory.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
-import { detectExplicitLanguageRequest } from "./explicit-language-request.js";
+import { buildLanguageLockNote, detectExplicitLanguageRequest } from "./explicit-language-request.js";
 import { buildAntiRepeatNudge, extractRecentAgentQuestions, isBareAcknowledgement, isQuestionUtterance, isRepeatedAgentLine, makeFlowStepGuard } from "./conversationDiscipline.js";
 import { buildOpeningHandshakeNudge, humanizeOutboundOpener, OPENING_HANDSHAKE_MS } from "./opening-handshake.js";
 import { buildWhereFromNudge, trimWhereFromSpeech } from "./spoken-place.js";
@@ -1509,6 +1509,9 @@ export class OrchestrationPipeline implements VoiceSession {
    *  utterance can't silently drag the agent back to its default language; only
    *  another explicit request changes it. null = follow script auto-detection. */
   private requestedLangLatch: string | null = null;
+  /** True only when the caller asked for requestedLangLatch on THIS call. A
+   *  latch seeded from memory / squad handoff is a starting point, not a lock. */
+  private explicitLangThisCall = false;
   /** Language the live streaming-STT session was last switched to via an
    *  explicit caller request (loop guard for switchStreamSTTLanguage). */
   private streamSTTLang: string | null = null;
@@ -4117,6 +4120,7 @@ export class OrchestrationPipeline implements VoiceSession {
             );
           }
           this.requestedLangLatch = requested;
+          this.explicitLangThisCall = true;
           this._pendingLangConfirm = "";
           this._pendingLangConfirmCount = 0;
           // Explicit requests (including English) hot-swap STT immediately so
@@ -4131,7 +4135,7 @@ export class OrchestrationPipeline implements VoiceSession {
         // English (no non-English currentLang yet) passes through unchanged.
         const resolved = resolveAutoDetectLanguage({
           detected,
-          latchedLang: this.requestedLangLatch,
+          latchedLang: this.explicitLangThisCall ? this.requestedLangLatch : null,
           currentLang: this.currentLang,
           text: transcript,
           agentLang: this.agent.language || this.agent.sttConfig.language || null,
@@ -4198,15 +4202,15 @@ export class OrchestrationPipeline implements VoiceSession {
             if (!detected.startsWith("en-")) {
               this.lastNonEnglishLang = detected;
               // Non-English STT switch (immediate on turn 1 so old script doesn't mangled new language).
-              if (!this.requestedLangLatch?.startsWith("en-")) {
+              const explicitEn = this.explicitLangThisCall && !!this.requestedLangLatch?.startsWith("en-");
+              if (!explicitEn) {
                 this.maybeSwitchStreamingSttLang(detected, true);
               }
             } else {
               // English STT hot-swap: keep ASR aligned when caller converses in English.
-              const enTarget = this.requestedLangLatch?.startsWith("en-")
-                ? this.requestedLangLatch
-                : detected;
-              if (this.requestedLangLatch?.startsWith("en-")) {
+              const explicitEn = this.explicitLangThisCall && !!this.requestedLangLatch?.startsWith("en-");
+              const enTarget = explicitEn ? this.requestedLangLatch! : detected;
+              if (explicitEn) {
                 this.maybeSwitchStreamingSttLang(enTarget, true);
               } else if (this.agent.autoSwitchToEnglish) {
                 this.maybeSwitchStreamingSttLang(enTarget);
@@ -4232,6 +4236,7 @@ export class OrchestrationPipeline implements VoiceSession {
             );
           }
           this.requestedLangLatch = requested;
+          this.explicitLangThisCall = true;
           this._pendingLangConfirm = "";
           this._pendingLangConfirmCount = 0;
           this.currentLang = requested;
@@ -10255,9 +10260,11 @@ export class OrchestrationPipeline implements VoiceSession {
     // Clock last on the user turn (highest recency). System-prompt [CURRENT DATE
     // & TIME] sits at the end of a 12k-token prompt and Sarvam-105b ignores it
     // (call 13980 still pitched a 25 August deadline on 27 August).
+    let turnClockOnUserTurn = false;
     if (historyForLlm.length > 0) {
       const lastTurn = historyForLlm[historyForLlm.length - 1]!;
       if (lastTurn.role === "user") {
+        turnClockOnUserTurn = true;
         const prevLine = this.lastAssistantSpokenRaw.trim();
         const asked = extractRecentAgentQuestions(historyForLlm);
         const nudge = prevLine
@@ -10291,6 +10298,11 @@ export class OrchestrationPipeline implements VoiceSession {
               openingNudge,
               nudge,
               laughterNote,
+              this.explicitLangThisCall
+                ? buildLanguageLockNote(this.requestedLangLatch, true)
+                : this.agent.languageAutoDetect
+                  ? buildLanguageLockNote(this.currentLang, false)
+                  : "",
               buildTurnClockBlock(this.agent.timezone),
             ].filter(Boolean).join("\n\n"),
           },
@@ -10382,7 +10394,8 @@ export class OrchestrationPipeline implements VoiceSession {
     // instructions + tool guides) from cache instead of reprocessing it every
     // turn. It sits at the tail of the system message, immediately before the
     // conversation history that llm.chat() appends after it.
-    systemPromptForTurn += `\n\n${dtInjection}`;
+    // Skipped when the same clock already rides on the last user turn.
+    if (!turnClockOnUserTurn) systemPromptForTurn += `\n\n${dtInjection}`;
 
     // Layer 1: Anthropic KV Cache flag (honoured by AnthropicLLM adapter)
     const useKvCache = tokenOptEnabled && this.agent.llmProvider === "anthropic";
@@ -11521,7 +11534,8 @@ export class OrchestrationPipeline implements VoiceSession {
    *  doesn't wipe out their Tamil/Hindi preference), falling back to
    *  currentLang only when the caller spoke nothing but English all call. */
   getPreferredCallerLang(): string {
-    return this.requestedLangLatch || this.lastNonEnglishLang || this.currentLang;
+    if (this.explicitLangThisCall && this.requestedLangLatch) return this.requestedLangLatch;
+    return this.lastNonEnglishLang || this.currentLang || this.requestedLangLatch || "";
   }
 
   /**
@@ -11546,7 +11560,7 @@ export class OrchestrationPipeline implements VoiceSession {
    *  escape latch is a this-call-only override and must NOT leak into memory
    *  (it would flip the next call's STT language for a fixed-language agent). */
   getExplicitLangRequestForMemory(): string | null {
-    return this.agent.languageAutoDetect ? this.requestedLangLatch : null;
+    return this.agent.languageAutoDetect && this.explicitLangThisCall ? this.requestedLangLatch : null;
   }
 
   /**
@@ -11615,7 +11629,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // Example: Caller says "जी, हिंदी से बोलना" → latch hi-IN. On subsequent
     // turns, even if STT mis-detects Kannada or English, do NOT switch the socket.
     // Only another explicit request (immediate=true) can change the locked language.
-    if (this.requestedLangLatch && !this.requestedLangLatch.startsWith("en-") && !immediate) {
+    if (this.explicitLangThisCall && this.requestedLangLatch && !this.requestedLangLatch.startsWith("en-") && !immediate) {
       // Non-English language explicitly requested and locked — do not drift to other languages.
       if (targetLang !== this.requestedLangLatch) {
         logger.info(
