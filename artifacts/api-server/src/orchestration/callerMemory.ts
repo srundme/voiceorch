@@ -905,8 +905,8 @@ export function injectEnhancedMemory(
     lines.push("");
     lines.push(
       `CALLER'S CURRENT LINE: ${currentLine} — the number they are on right now. When they say ` +
-        `"same number" / "this number", this is the number. Only read a different number back if ` +
-        `the caller spoke it on this call.`,
+        `"same number" / "this number", this is the number. Never say these digits out loud — ` +
+        `just say "this number". Only read back a number the caller dictated on this call.`,
     );
   }
   if (displayFacts.length > 0) {

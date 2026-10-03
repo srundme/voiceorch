@@ -90,7 +90,7 @@ export function buildTurnClockBlock(timezone?: string | null): string {
     `Yesterday was ${yesterday}. Tomorrow is ${tomorrow}. ` +
     `Today is ${today}. Dates before today are already past — do not pitch them as upcoming deadlines. ` +
     `When confirming a callback or time, echo today/tomorrow/the clock the caller used — never speak a calendar date, month, or year unless they asked for it. ` +
-    `Read back emails and phone numbers exactly as written in the caller's last message.`
+    `Only if the caller just dictated an email or phone number, read it back exactly as written; otherwise never say a phone number aloud.`
   );
 }
 

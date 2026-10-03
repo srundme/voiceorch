@@ -259,6 +259,7 @@ describe("injectEnhancedMemory — returning-caller opener (call 14351)", () => 
     expect(out).toContain("do NOT restart your script");
     expect(out).not.toMatch(/Do NOT recap previous bookings/);
     expect(out).toContain("CALLER'S CURRENT LINE: +916383653279");
+    expect(out).toContain("Never say these digits out loud");
   });
 });
 
