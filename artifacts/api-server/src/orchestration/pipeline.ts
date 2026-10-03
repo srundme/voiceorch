@@ -40,7 +40,7 @@ import { isSmartTurnReady, predictSmartTurn, warmSmartTurn } from "./smart-turn.
 import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { extractEmotionTag, makeMarkupTagFilter, stripMarkupTags } from "./emotion-tag.js";
-import { laughterNudge, normalizeTtsNonverbals } from "./tts-nonverbal.js";
+import { normalizeTtsNonverbals } from "./tts-nonverbal.js";
 import { languagePrefix, resolveToolFillerPhrase } from "./tool-fillers.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
@@ -1229,9 +1229,6 @@ export class OrchestrationPipeline implements VoiceSession {
   private get lastFillerPhrase(): string | null {
     return this.recentFillerPhrases[this.recentFillerPhrases.length - 1] ?? null;
   }
-
-  /** A `[laughter]` token reached Cartesia this call (drives laughterNudge). */
-  private laughterUsedThisCall = false;
 
   // ── Per-turn latency instrumentation (monotonic via performance.now()) ─────
   private turnIndex = 0;
@@ -7298,7 +7295,6 @@ export class OrchestrationPipeline implements VoiceSession {
     // Preserve that exact token for Cartesia while stripping unsupported stage
     // directions (and all such tags for providers that would read them aloud).
     text = normalizeTtsNonverbals(text, this.agent.ttsProvider);
-    if (!this.laughterUsedThisCall && text.includes("[laughter]")) this.laughterUsedThisCall = true;
 
     // Meter characters at request-dispatch time — TTS providers charge for the
     // text submitted when the HTTP request is sent, not when audio delivery
@@ -10311,14 +10307,6 @@ export class OrchestrationPipeline implements VoiceSession {
           ? buildOpeningHandshakeNudge(lastTurn.content, prevLine)
           : "";
         const whereFromNudge = buildWhereFromNudge(lastTurn.content);
-        // User-turn tail like the clock: in the system-prompt tail Sarvam-105b
-        // ignored even the REQUIRED note (call 42526: 10 turns, no laugh).
-        const laughterNote = laughterNudge({
-          ttsProvider: this.agent.ttsProvider,
-          systemPrompt: this.agent.systemPrompt,
-          laughedAlready: this.laughterUsedThisCall,
-          turnIndex: this.turnIndex,
-        });
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
           {
@@ -10329,7 +10317,6 @@ export class OrchestrationPipeline implements VoiceSession {
               whereFromNudge,
               openingNudge,
               nudge,
-              laughterNote,
               this.explicitLangThisCall
                 ? buildLanguageLockNote(this.requestedLangLatch, true)
                 : this.agent.languageAutoDetect

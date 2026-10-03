@@ -1,28 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { laughterNudge, normalizeTtsNonverbals } from "./tts-nonverbal.js";
-
-describe("laughterNudge", () => {
-  const base = {
-    ttsProvider: "cartesia",
-    systemPrompt: "Use [laughter] at least once in the call.",
-    laughedAlready: false,
-  };
-
-  it("stays quiet on the opening turn, then soft, then required", () => {
-    expect(laughterNudge({ ...base, turnIndex: 1 })).toBeNull();
-    expect(laughterNudge({ ...base, turnIndex: 3 })).toMatch(/^\[LAUGHTER\] /);
-    expect(laughterNudge({ ...base, turnIndex: 5 })).toMatch(/REQUIRED IN THIS REPLY/);
-  });
-
-  it("stops once the agent has laughed", () => {
-    expect(laughterNudge({ ...base, laughedAlready: true, turnIndex: 6 })).toBeNull();
-  });
-
-  it("only applies to Cartesia agents whose prompt asks for laughter", () => {
-    expect(laughterNudge({ ...base, ttsProvider: "sarvam", turnIndex: 6 })).toBeNull();
-    expect(laughterNudge({ ...base, systemPrompt: "Be warm.", turnIndex: 6 })).toBeNull();
-  });
-});
+import { normalizeTtsNonverbals } from "./tts-nonverbal.js";
 
 describe("normalizeTtsNonverbals", () => {
   it("preserves Cartesia's inline laughter token", () => {
