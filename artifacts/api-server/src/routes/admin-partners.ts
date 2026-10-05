@@ -13,6 +13,7 @@ import {
   usersTable,
   partnersTable,
   partnerInvitesTable,
+  partnerReferralsTable,
   partnerPendingPromotionsTable,
   walletTransactionsTable,
   adminAuditLogsTable,
@@ -77,6 +78,7 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
         status: partnersTable.status,
         baseRateCentsPerMin: partnersTable.baseRateCentsPerMin,
         defaultClientRateCentsPerMin: partnersTable.defaultClientRateCentsPerMin,
+        referralCode: partnersTable.referralCode,
         slug: partnersTable.slug,
         customDomain: partnersTable.customDomain,
         customDomainStatus: partnersTable.customDomainStatus,
@@ -100,6 +102,16 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
       if (c.partnerId != null) countMap.set(c.partnerId, Number(c.n));
     }
 
+    // Referral counts per partner
+    const referralCounts = await db
+      .select({ partnerId: partnerReferralsTable.partnerId, n: count() })
+      .from(partnerReferralsTable)
+      .groupBy(partnerReferralsTable.partnerId);
+    const referralCountMap = new Map<number, number>();
+    for (const rc of referralCounts) {
+      if (rc.partnerId != null) referralCountMap.set(rc.partnerId, Number(rc.n));
+    }
+
     // Admin-created partner setups still waiting to be applied. Google
     // signups consume these automatically (verified email); password signups
     // can't prove email ownership, so they wait for explicit admin approval —
@@ -121,6 +133,7 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
       partners: partners.map(p => ({
         ...p,
         clientCount: countMap.get(p.id) ?? 0,
+        referredCount: referralCountMap.get(p.id) ?? 0,
         portalUrl: partnerPortalUrl(p),
       })),
       pending: pendingRows.map(p => ({ ...p, hasAccount: accountEmails.has(p.email) })),
@@ -133,17 +146,23 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
 
 router.post("/admin/partners", async (req, res): Promise<void> => {
   try {
-    const { email, companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, clerkId } = (req.body ?? {}) as {
+    const { email, companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, referralCode, clerkId } = (req.body ?? {}) as {
       email?: string;
       companyName?: string;
       baseRateCentsPerMin?: number;
       defaultClientRateCentsPerMin?: number;
+      referralCode?: string;
       /** When set (e.g. from user detail), promote this exact account — not another row with the same email. */
       clerkId?: string;
     };
 
     const cleanEmail = String(email ?? "").trim().toLowerCase();
     const cleanCompany = String(companyName ?? "").trim().slice(0, 80);
+    const cleanRefCode = referralCode ? String(referralCode).trim().toUpperCase() : null;
+    if (cleanRefCode && !/^[A-Z0-9_-]{2,30}$/.test(cleanRefCode)) {
+      res.status(400).json({ error: "Referral code must be 2-30 alphanumeric characters" });
+      return;
+    }
     if (!cleanEmail || !cleanEmail.includes("@")) {
       res.status(400).json({ error: "Valid user email is required" });
       return;
@@ -161,6 +180,18 @@ router.post("/admin/partners", async (req, res): Promise<void> => {
     if (!Number.isInteger(defaultRate) || defaultRate < baseRate || defaultRate > MAX_RATE_CENTS_PER_MIN) {
       res.status(400).json({ error: "defaultClientRateCentsPerMin must be an integer >= baseRateCentsPerMin" });
       return;
+    }
+
+    if (cleanRefCode) {
+      const [existingCode] = await db
+        .select({ id: partnersTable.id })
+        .from(partnersTable)
+        .where(sql`upper(${partnersTable.referralCode}) = ${cleanRefCode}`)
+        .limit(1);
+      if (existingCode) {
+        res.status(409).json({ error: "Referral code is already taken by another partner" });
+        return;
+      }
     }
 
     // Case-insensitive: admin edits can store mixed-case emails, and missing
@@ -194,11 +225,12 @@ router.post("/admin/partners", async (req, res): Promise<void> => {
           companyName: cleanCompany,
           baseRateCentsPerMin: baseRate,
           defaultClientRateCentsPerMin: defaultRate,
+          referralCode: cleanRefCode,
         })
         .returning();
       await logAdminAction(req, {
         action: "partner_pending_create",
-        afterValue: { email: cleanEmail, companyName: cleanCompany, baseRate, defaultRate },
+        afterValue: { email: cleanEmail, companyName: cleanCompany, baseRate, defaultRate, referralCode: cleanRefCode },
       });
 
       // Race close: the user may have signed up between the lookup above and
@@ -212,7 +244,7 @@ router.post("/admin/partners", async (req, res): Promise<void> => {
           await logAdminAction(req, {
             targetUserId: lateUser.clerkId,
             action: "partner_create",
-            afterValue: { partnerId: applied.partner!.id, companyName: cleanCompany, baseRate, defaultRate, viaPendingRace: true },
+            afterValue: { partnerId: applied.partner!.id, companyName: cleanCompany, baseRate, defaultRate, referralCode: cleanRefCode, viaPendingRace: true },
           });
           res.status(201).json({ partner: applied.partner });
           return;
@@ -269,6 +301,7 @@ router.post("/admin/partners", async (req, res): Promise<void> => {
         companyName: cleanCompany,
         baseRateCentsPerMin: baseRate,
         defaultClientRateCentsPerMin: defaultRate,
+        referralCode: cleanRefCode,
       })
       .returning();
 
@@ -278,7 +311,7 @@ router.post("/admin/partners", async (req, res): Promise<void> => {
     await logAdminAction(req, {
       targetUserId: user.clerkId,
       action: "partner_create",
-      afterValue: { partnerId: partner!.id, companyName: cleanCompany, baseRate, defaultRate },
+      afterValue: { partnerId: partner!.id, companyName: cleanCompany, baseRate, defaultRate, referralCode: cleanRefCode },
     });
     res.status(201).json({ partner });
   } catch (err) {
@@ -362,6 +395,7 @@ router.post("/admin/partners/pending/:id/apply", async (req, res): Promise<void>
         companyName: pending.companyName,
         baseRate: pending.baseRateCentsPerMin,
         defaultRate: pending.defaultClientRateCentsPerMin,
+        referralCode: pending.referralCode,
         viaPendingApproval: true,
       },
     });
@@ -385,10 +419,11 @@ router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
       return;
     }
 
-    const { companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, status } = (req.body ?? {}) as {
+    const { companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, referralCode, status } = (req.body ?? {}) as {
       companyName?: string;
       baseRateCentsPerMin?: number;
       defaultClientRateCentsPerMin?: number;
+      referralCode?: string | null;
       status?: string;
     };
 
@@ -400,6 +435,25 @@ router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
         return;
       }
       set["companyName"] = clean;
+    }
+    if (referralCode !== undefined) {
+      const cleanRef = referralCode ? String(referralCode).trim().toUpperCase() : null;
+      if (cleanRef) {
+        if (!/^[A-Z0-9_-]{2,30}$/.test(cleanRef)) {
+          res.status(400).json({ error: "Referral code must be 2-30 alphanumeric characters" });
+          return;
+        }
+        const [conflict] = await db
+          .select({ id: partnersTable.id })
+          .from(partnersTable)
+          .where(and(sql`upper(${partnersTable.referralCode}) = ${cleanRef}`, sql`${partnersTable.id} != ${id}`))
+          .limit(1);
+        if (conflict) {
+          res.status(409).json({ error: "Referral code is already in use" });
+          return;
+        }
+      }
+      set["referralCode"] = cleanRef;
     }
     let nextBase = partner.baseRateCentsPerMin;
     if (baseRateCentsPerMin !== undefined) {
@@ -441,6 +495,7 @@ router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
         companyName: partner.companyName,
         baseRateCentsPerMin: partner.baseRateCentsPerMin,
         defaultClientRateCentsPerMin: partner.defaultClientRateCentsPerMin,
+        referralCode: partner.referralCode,
         status: partner.status,
       },
       afterValue: set,
@@ -473,6 +528,8 @@ router.get("/admin/partners/:id/clients", async (req, res): Promise<void> => {
         status: usersTable.status,
         walletBalanceCents: usersTable.walletBalanceCents,
         rateCentsPerMin: usersTable.partnerRateCentsPerMin,
+        referredByCode: usersTable.referredByCode,
+        signupSource: usersTable.signupSource,
         createdAt: usersTable.createdAt,
       })
       .from(usersTable)
@@ -511,12 +568,20 @@ router.get("/admin/partners/:id/clients", async (req, res): Promise<void> => {
       .orderBy(desc(partnerInvitesTable.invitedAt))
       .limit(100);
 
+    const referrals = await db
+      .select()
+      .from(partnerReferralsTable)
+      .where(eq(partnerReferralsTable.partnerId, id))
+      .orderBy(desc(partnerReferralsTable.createdAt))
+      .limit(100);
+
     res.json({
       clients: clients.map(c => ({
         ...c,
         rateCentsPerMin: c.rateCentsPerMin ?? partner.defaultClientRateCentsPerMin,
       })),
       invites,
+      referrals,
       monthEarningsCents,
     });
   } catch (err) {

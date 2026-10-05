@@ -37,6 +37,7 @@ import {
   usersTable,
   partnersTable,
   partnerInvitesTable,
+  partnerReferralsTable,
   walletTransactionsTable,
   callsTable,
   agentsTable,
@@ -293,6 +294,11 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       .from(partnerInvitesTable)
       .where(and(eq(partnerInvitesTable.partnerId, partner.id), eq(partnerInvitesTable.status, "pending")));
 
+    const [referralsCountRow] = await db
+      .select({ n: count() })
+      .from(partnerReferralsTable)
+      .where(eq(partnerReferralsTable.partnerId, partner.id));
+
     const [partnerUser] = await db
       .select({ id: usersTable.id, walletBalanceCents: usersTable.walletBalanceCents })
       .from(usersTable)
@@ -333,6 +339,9 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       monthClientCalls = Number(usage?.calls ?? 0);
     }
 
+    const appBaseUrl = (process.env["APP_BASE_URL"]?.replace(/\/$/, "") || getSelfBaseUrl());
+    const effectiveCode = partner.referralCode || null;
+
     res.json({
       companyName: partner.companyName,
       status: partner.status,
@@ -342,6 +351,9 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       loginTitle: partner.loginTitle ?? null,
       loginSubtitle: partner.loginSubtitle ?? null,
       loginUrl: `${partnerLoginBaseUrl(partner)}/sign-in`,
+      referralCode: effectiveCode,
+      referralLink: effectiveCode ? `${appBaseUrl}/signup?ref=${encodeURIComponent(effectiveCode)}` : null,
+      referredUsersCount: Number(referralsCountRow?.n ?? 0),
       slug: partner.slug ?? null,
       subdomainHost: partner.slug ? subdomainHostForSlug(partner.slug) : null,
       subdomainRoot: getPartnerSubdomainRoot(),
@@ -374,6 +386,80 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
     });
   } catch (err) {
     req.log.error({ err }, "partner/me GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/* ─── Referral / Affiliate Management ──────────────────────────────────────── */
+
+router.put("/partner/referral-code", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+
+    const raw = String((req.body as { referralCode?: string })?.referralCode ?? "").trim();
+    if (!raw) {
+      // Clear referral code
+      await db.update(partnersTable).set({ referralCode: null }).where(eq(partnersTable.id, partner.id));
+      res.json({ referralCode: null, referralLink: null });
+      return;
+    }
+
+    const code = raw.toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+    if (code.length < 2 || code.length > 32) {
+      res.status(400).json({ error: "Referral code must be 2-32 letters/numbers" });
+      return;
+    }
+
+    const [taken] = await db
+      .select({ id: partnersTable.id })
+      .from(partnersTable)
+      .where(and(eq(sql`lower(${partnersTable.referralCode})`, code.toLowerCase()), ne(partnersTable.id, partner.id)))
+      .limit(1);
+    if (taken) {
+      res.status(409).json({ error: "That referral code is already in use by another partner" });
+      return;
+    }
+
+    const [updated] = await db
+      .update(partnersTable)
+      .set({ referralCode: code })
+      .where(eq(partnersTable.id, partner.id))
+      .returning({ referralCode: partnersTable.referralCode });
+
+    const appBaseUrl = (process.env["APP_BASE_URL"]?.replace(/\/$/, "") || getSelfBaseUrl());
+    res.json({
+      referralCode: updated!.referralCode,
+      referralLink: `${appBaseUrl}/signup?ref=${encodeURIComponent(updated!.referralCode!)}`,
+    });
+  } catch (err) {
+    req.log.error({ err }, "partner/referral-code PUT failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/partner/referrals", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+
+    const referrals = await db
+      .select({
+        id: partnerReferralsTable.id,
+        referralCode: partnerReferralsTable.referralCode,
+        userId: partnerReferralsTable.userId,
+        userEmail: partnerReferralsTable.userEmail,
+        userName: partnerReferralsTable.userName,
+        status: partnerReferralsTable.status,
+        createdAt: partnerReferralsTable.createdAt,
+      })
+      .from(partnerReferralsTable)
+      .where(eq(partnerReferralsTable.partnerId, partner.id))
+      .orderBy(desc(partnerReferralsTable.createdAt));
+
+    res.json({ referrals });
+  } catch (err) {
+    req.log.error({ err }, "partner/referrals GET failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

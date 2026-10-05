@@ -111,6 +111,17 @@ if (_storedTimeout !== null) {
   setDefaultTimeoutMs(Number(_storedTimeout));
 }
 
+// Capture referral / affiliate code from query params (?ref=SANJAY or ?referral=SANJAY)
+try {
+  const _params = new URLSearchParams(window.location.search);
+  const _ref = _params.get("ref") || _params.get("referral");
+  if (_ref) {
+    localStorage.setItem("snapserve_ref_code", _ref.trim().toUpperCase());
+  }
+} catch {
+  // Ignore in SSR / iframe restrictions
+}
+
 void initMetaPixel();
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");

@@ -24,6 +24,9 @@ interface PartnerMe {
   status: string;
   baseRateCentsPerMin: number;
   defaultClientRateCentsPerMin: number;
+  referralCode: string | null;
+  referralLink: string;
+  referredUsersCount: number;
   logoUrl: string | null;
   loginTitle: string | null;
   loginSubtitle: string | null;
@@ -56,6 +59,16 @@ interface PartnerMe {
   monthEarningsCents: number;
   monthClientSeconds: number;
   monthClientCalls: number;
+}
+
+interface PartnerReferral {
+  id: number;
+  referralCode: string;
+  userId: string;
+  userEmail: string | null;
+  userName: string | null;
+  status: string;
+  createdAt: string;
 }
 
 interface PartnerClient {
@@ -349,6 +362,7 @@ export default function PartnerPage() {
 
 function OverviewTab({ me }: { me: PartnerMe }) {
   const { getToken } = useAuth();
+  const { toast } = useToast();
   const { data } = useQuery<{ entries: EarningEntry[] }>({
     queryKey: ["partner-earnings"],
     queryFn: () => partnerFetch<{ entries: EarningEntry[] }>(getToken, "/api/partner/earnings"),
@@ -360,8 +374,65 @@ function OverviewTab({ me }: { me: PartnerMe }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={<TrendingUp className="w-3.5 h-3.5" />} label="Earnings this month" value={inr(me.monthEarningsCents)} sub="Spread over your base rate" />
         <StatCard icon={<Users className="w-3.5 h-3.5" />} label="Clients" value={String(me.clientCount)} sub={me.pendingInvites > 0 ? `${me.pendingInvites} invite${me.pendingInvites > 1 ? "s" : ""} pending` : undefined} />
-        <StatCard icon={<Clock className="w-3.5 h-3.5" />} label="Client minutes this month" value={String(toMins(me.monthClientSeconds))} sub={`${me.monthClientCalls} calls`} />
+        <StatCard icon={<UserPlus className="w-3.5 h-3.5" />} label="Referral signups" value={String(me.referredUsersCount ?? 0)} sub={me.referralCode ? `Code: ${me.referralCode}` : "Affiliate walk-ins"} />
         <StatCard icon={<Wallet className="w-3.5 h-3.5" />} label="Your wallet" value={inr(me.walletBalanceCents)} sub="Earnings land here" />
+      </div>
+
+      {/* Referral & Affiliate Share Card */}
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <UserPlus className="w-4 h-4 text-primary" />
+            <h2 className="text-sm font-medium">Your Affiliate / Referral Link</h2>
+          </div>
+          {me.referralCode && (
+            <Badge variant="outline" className="font-mono text-xs uppercase px-2 py-0.5">
+              Code: {me.referralCode}
+            </Badge>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Share your referral link or code with prospective clients. When they sign up on SnapServe, they are automatically tracked as your referred users.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Input
+            readOnly
+            value={me.referralLink}
+            className="font-mono text-xs bg-muted/30"
+          />
+          <div className="flex gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(me.referralLink);
+                  toast({ title: "Referral link copied!", description: me.referralLink });
+                } catch {
+                  toast({ title: "Failed to copy link" });
+                }
+              }}
+            >
+              <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
+            </Button>
+            {me.referralCode && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(me.referralCode!);
+                    toast({ title: "Referral code copied!", description: me.referralCode! });
+                  } catch {
+                    toast({ title: "Failed to copy code" });
+                  }
+                }}
+              >
+                Copy Code
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="rounded-xl border border-border bg-card">
@@ -732,6 +803,12 @@ function InvitesTab({ me }: { me: PartnerMe }) {
   });
   const invites = data?.invites ?? [];
 
+  const { data: refData, isLoading: refLoading } = useQuery<{ referrals: PartnerReferral[] }>({
+    queryKey: ["partner-referrals"],
+    queryFn: () => partnerFetch<{ referrals: PartnerReferral[] }>(getToken, "/api/partner/referrals"),
+  });
+  const referrals = refData?.referrals ?? [];
+
   const inviteMutation = useMutation({
     mutationFn: async () => {
       const paise = parseRupees(rateText);
@@ -771,44 +848,117 @@ function InvitesTab({ me }: { me: PartnerMe }) {
   const ratePaise = parseRupees(rateText);
 
   return (
-    <div className="rounded-xl border border-border bg-card">
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-        <h2 className="text-sm font-medium">Client invitations</h2>
-        <Button size="sm" onClick={() => setOpen(true)}>
-          <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Invite client
-        </Button>
+    <div className="space-y-5">
+      {/* Referral Link Quick Banner */}
+      <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <UserPlus className="w-4 h-4 text-primary" />
+            <h2 className="text-sm font-medium">Walk-in Referral Link</h2>
+          </div>
+          {me.referralCode && (
+            <Badge variant="outline" className="font-mono text-xs uppercase px-2 py-0.5">
+              Code: {me.referralCode}
+            </Badge>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Clients who sign up via your link or enter your referral code will appear below under Referral Signups.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Input readOnly value={me.referralLink} className="font-mono text-xs bg-muted/30" />
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(me.referralLink);
+                toast({ title: "Referral link copied!" });
+              } catch {
+                toast({ title: "Failed to copy link" });
+              }
+            }}
+          >
+            <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
+          </Button>
+        </div>
       </div>
-      {isLoading ? (
-        <div className="p-4 space-y-2 animate-pulse">{[0, 1].map(i => <div key={i} className="h-10 rounded bg-muted" />)}</div>
-      ) : invites.length === 0 ? (
-        <div className="px-4 py-10 text-center">
-          <Mail className="w-8 h-8 text-muted-foreground/40 mx-auto" />
-          <p className="text-sm text-muted-foreground mt-2">No invitations yet. Invite your first client to get started.</p>
+
+      {/* Direct Invitations */}
+      <div className="rounded-xl border border-border bg-card">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-medium">Direct Invitations</h2>
+            <p className="text-[11px] text-muted-foreground">Email invitations sent directly to specific clients</p>
+          </div>
+          <Button size="sm" onClick={() => setOpen(true)}>
+            <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Invite client
+          </Button>
         </div>
-      ) : (
-        <div className="divide-y divide-border">
-          {invites.map(inv => (
-            <div key={inv.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
-              <div className="min-w-0">
-                <p className="text-sm truncate">{inv.name ? `${inv.name} — ${inv.email}` : inv.email}</p>
-                <p className="text-[11px] text-muted-foreground">
-                  Invited {fmtDate(inv.invitedAt)}
-                  {inv.rateCentsPerMin != null && <> · {inr(inv.rateCentsPerMin)}/min</>}
-                </p>
+        {isLoading ? (
+          <div className="p-4 space-y-2 animate-pulse">{[0, 1].map(i => <div key={i} className="h-10 rounded bg-muted" />)}</div>
+        ) : invites.length === 0 ? (
+          <div className="px-4 py-10 text-center">
+            <Mail className="w-8 h-8 text-muted-foreground/40 mx-auto" />
+            <p className="text-sm text-muted-foreground mt-2">No direct invitations yet.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {invites.map(inv => (
+              <div key={inv.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm truncate">{inv.name ? `${inv.name} — ${inv.email}` : inv.email}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Invited {fmtDate(inv.invitedAt)}
+                    {inv.rateCentsPerMin != null && <> · {inr(inv.rateCentsPerMin)}/min</>}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {statusBadge(inv.status)}
+                  {inv.status === "pending" && (
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400"
+                      onClick={() => revokeMutation.mutate(inv.id)} title="Revoke invite">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {statusBadge(inv.status)}
-                {inv.status === "pending" && (
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400"
-                    onClick={() => revokeMutation.mutate(inv.id)} title="Revoke invite">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Referral / Walk-in Signups */}
+      <div className="rounded-xl border border-border bg-card">
+        <div className="px-4 py-3 border-b border-border">
+          <h2 className="text-sm font-medium">Referral Signups (Walk-ins)</h2>
+          <p className="text-[11px] text-muted-foreground">Users who signed up using your link or referral code</p>
         </div>
-      )}
+        {refLoading ? (
+          <div className="p-4 space-y-2 animate-pulse">{[0, 1].map(i => <div key={i} className="h-10 rounded bg-muted" />)}</div>
+        ) : referrals.length === 0 ? (
+          <div className="px-4 py-8 text-center">
+            <p className="text-sm text-muted-foreground">No referral walk-in signups yet. Share your code to get started.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {referrals.map(r => (
+              <div key={r.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{r.userName || r.userEmail || "Signed up user"}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {r.userEmail && `${r.userEmail} · `}Signed up {fmtDate(r.createdAt)} via code <span className="font-mono font-semibold">{r.referralCode}</span>
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-xs text-emerald-500 border-emerald-500/30">
+                  {r.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-sm">
@@ -859,6 +1009,7 @@ function SettingsTab({ me }: { me: PartnerMe }) {
   const [loginTitle, setLoginTitle] = useState(me.loginTitle ?? "");
   const [loginSubtitle, setLoginSubtitle] = useState(me.loginSubtitle ?? "");
   const [defaultRateText, setDefaultRateText] = useState((me.defaultClientRateCentsPerMin / 100).toFixed(2));
+  const [referralCodeDraft, setReferralCodeDraft] = useState(me.referralCode ?? "");
   const [uploading, setUploading] = useState(false);
   const [slugDraft, setSlugDraft] = useState(me.slug ?? "");
   const [customDraft, setCustomDraft] = useState(me.customDomain ?? "");
@@ -874,6 +1025,19 @@ function SettingsTab({ me }: { me: PartnerMe }) {
     queryClient.invalidateQueries({ queryKey: ["partner-me"] });
     queryClient.invalidateQueries({ queryKey: ["partner-context"] });
   };
+
+  const referralCodeMutation = useMutation({
+    mutationFn: () =>
+      partnerFetch<{ referralCode: string; referralLink: string }>(getToken, "/api/partner/referral-code", {
+        method: "PUT",
+        body: JSON.stringify({ referralCode: referralCodeDraft.trim().toUpperCase() }),
+      }),
+    onSuccess: (data) => {
+      toast({ title: "Referral code saved", description: `Your referral code is ${data.referralCode}` });
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not save referral code", description: err.message, variant: "destructive" }),
+  });
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -1073,6 +1237,44 @@ function SettingsTab({ me }: { me: PartnerMe }) {
             )}
           </div>
           <p className="text-[11px] text-muted-foreground">PNG, JPEG or WebP, up to 512KB.</p>
+        </div>
+      </div>
+
+      {/* Referral & Affiliate Code */}
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <UserPlus className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-medium">Referral &amp; Affiliate Code</h2>
+        </div>
+        <p className="text-[11px] text-muted-foreground -mt-1">
+          Set your custom referral code (e.g. <span className="font-mono text-foreground font-semibold">SANJAY</span>). Clients who sign up with your code or link will be attributed to your account.
+        </p>
+        <div className="space-y-1.5">
+          <Label htmlFor="referral-code">Your Referral Code</Label>
+          <div className="flex gap-2">
+            <Input
+              id="referral-code"
+              placeholder="SANJAY"
+              value={referralCodeDraft}
+              onChange={e => setReferralCodeDraft(e.target.value.toUpperCase())}
+              className="font-mono text-sm uppercase"
+            />
+            <Button
+              size="sm"
+              className="shrink-0"
+              disabled={referralCodeMutation.isPending || referralCodeDraft.trim().length < 2}
+              onClick={() => referralCodeMutation.mutate()}
+            >
+              {referralCodeMutation.isPending ? "Saving…" : "Save Code"}
+            </Button>
+          </div>
+          {me.referralLink && (
+            <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 pt-1">
+              <Link2 className="h-3 w-3" />
+              Referral Link:{" "}
+              <span className="font-mono select-all text-foreground">{me.referralLink}</span>
+            </p>
+          )}
         </div>
       </div>
 

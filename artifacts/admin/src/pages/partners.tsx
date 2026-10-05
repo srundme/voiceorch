@@ -22,6 +22,8 @@ interface AdminPartner {
   status: string;
   baseRateCentsPerMin: number;
   defaultClientRateCentsPerMin: number;
+  referralCode?: string | null;
+  referredCount?: number;
   createdAt: string;
   userName: string | null;
   userEmail: string | null;
@@ -41,6 +43,8 @@ interface PartnerClientRow {
   status: string;
   walletBalanceCents: number;
   rateCentsPerMin: number;
+  referredByCode?: string | null;
+  signupSource?: string | null;
   createdAt: string;
 }
 
@@ -51,6 +55,16 @@ interface PartnerInviteRow {
   invitedAt: string;
 }
 
+interface PartnerReferralRow {
+  id: number;
+  referralCode: string;
+  userId: string;
+  userEmail?: string | null;
+  userName?: string | null;
+  status: string;
+  createdAt: string;
+}
+
 /** Admin-created partner setup for an email that hasn't signed up yet. */
 interface PendingPromotion {
   id: number;
@@ -58,6 +72,7 @@ interface PendingPromotion {
   companyName: string;
   baseRateCentsPerMin: number;
   defaultClientRateCentsPerMin: number;
+  referralCode?: string | null;
   createdAt: string;
   /** Email now has an account (password signup) — needs explicit approval. */
   hasAccount?: boolean;
@@ -66,6 +81,7 @@ interface PendingPromotion {
 interface PartnerDetail {
   clients: PartnerClientRow[];
   invites: PartnerInviteRow[];
+  referrals?: PartnerReferralRow[];
   monthEarningsCents: number;
 }
 
@@ -106,10 +122,12 @@ export default function PartnersPage() {
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");
   const [baseRateText, setBaseRateText] = useState("5.00");
+  const [referralCode, setReferralCode] = useState("");
 
   // Edit form state
   const [editCompany, setEditCompany] = useState("");
   const [editBaseText, setEditBaseText] = useState("");
+  const [editReferralCode, setEditReferralCode] = useState("");
   const [editStatus, setEditStatus] = useState("active");
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin", "partners"] });
@@ -122,6 +140,7 @@ export default function PartnersPage() {
           email: email.trim(),
           companyName: company.trim(),
           baseRateCentsPerMin: rupeesToPaise(baseRateText),
+          referralCode: referralCode.trim() ? referralCode.trim().toUpperCase() : undefined,
           // Client pricing is the partner's own setting (their panel);
           // the server starts it at max(base, ₹5) until they change it.
         }),
@@ -136,7 +155,7 @@ export default function PartnersPage() {
         toast({ title: "Partner created" });
       }
       setCreateOpen(false);
-      setEmail(""); setCompany("");
+      setEmail(""); setCompany(""); setReferralCode("");
       invalidate();
     },
     onError: (err) => toast({ title: "Could not create partner", description: formatAdminError(err), variant: "destructive" }),
@@ -167,8 +186,7 @@ export default function PartnersPage() {
         body: JSON.stringify({
           companyName: editCompany.trim(),
           baseRateCentsPerMin: rupeesToPaise(editBaseText),
-          // Default client rate is partner-managed; server auto-raises it
-          // only if a base-rate increase would otherwise exceed it.
+          referralCode: editReferralCode.trim() ? editReferralCode.trim().toUpperCase() : null,
           status: editStatus,
         }),
       }),
@@ -184,6 +202,7 @@ export default function PartnersPage() {
     setEditTarget(p);
     setEditCompany(p.companyName);
     setEditBaseText(paiseToRupeesText(p.baseRateCentsPerMin));
+    setEditReferralCode(p.referralCode ?? "");
     setEditStatus(p.status);
   };
 
@@ -262,12 +281,14 @@ export default function PartnersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Company</TableHead>
+                  <TableHead>Referral Code</TableHead>
                   <TableHead>Portal URL</TableHead>
                   <TableHead>User</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Base rate</TableHead>
                   <TableHead className="text-right">Default rate</TableHead>
                   <TableHead className="text-right">Clients</TableHead>
+                  <TableHead className="text-right">Referred</TableHead>
                   <TableHead className="text-right">Wallet</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -276,6 +297,15 @@ export default function PartnersPage() {
                 {partners.map(p => (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.companyName}</TableCell>
+                    <TableCell>
+                      {p.referralCode ? (
+                        <Badge variant="outline" className="font-mono text-xs uppercase px-2 py-0.5">
+                          {p.referralCode}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="max-w-[220px]">
                       {p.portalUrl ? (
                         <a
@@ -302,6 +332,7 @@ export default function PartnersPage() {
                     <TableCell className="text-right tabular-nums">{formatCentsToDollars(p.baseRateCentsPerMin)}/min</TableCell>
                     <TableCell className="text-right tabular-nums">{formatCentsToDollars(p.defaultClientRateCentsPerMin)}/min</TableCell>
                     <TableCell className="text-right tabular-nums">{p.clientCount}</TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold">{p.referredCount ?? 0}</TableCell>
                     <TableCell className="text-right tabular-nums">{p.walletBalanceCents != null ? formatCentsToDollars(p.walletBalanceCents) : "—"}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1.5">
@@ -338,6 +369,18 @@ export default function PartnersPage() {
             <div className="space-y-1.5">
               <Label>Company name</Label>
               <Input value={company} onChange={e => setCompany(e.target.value)} placeholder="Acme Communications" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Referral code (optional)</Label>
+              <Input
+                value={referralCode}
+                onChange={e => setReferralCode(e.target.value.toUpperCase())}
+                placeholder="SANJAY"
+                className="font-mono text-sm uppercase"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Affiliate code for walk-in signups without direct invites.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Base rate (₹/min)</Label>
@@ -379,6 +422,15 @@ export default function PartnersPage() {
             <div className="space-y-1.5">
               <Label>Company name</Label>
               <Input value={editCompany} onChange={e => setEditCompany(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Referral code</Label>
+              <Input
+                value={editReferralCode}
+                onChange={e => setEditReferralCode(e.target.value.toUpperCase())}
+                placeholder="SANJAY"
+                className="font-mono text-sm uppercase"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Base rate (₹/min)</Label>
@@ -429,7 +481,7 @@ function PartnerDetailDialog({ partner, onClose }: { partner: AdminPartner | nul
     <Dialog open={!!partner} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{partner?.companyName} — clients</DialogTitle>
+          <DialogTitle>{partner?.companyName} — clients & referrals</DialogTitle>
           <DialogDescription>
             {data ? <>Earnings this month: {formatCentsToDollars(data.monthEarningsCents)}</> : "…"}
           </DialogDescription>
@@ -447,6 +499,7 @@ function PartnerDetailDialog({ partner, onClose }: { partner: AdminPartner | nul
                   <TableHeader>
                     <TableRow>
                       <TableHead>Client</TableHead>
+                      <TableHead>Source / Ref</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Rate</TableHead>
                       <TableHead className="text-right">Wallet</TableHead>
@@ -459,6 +512,15 @@ function PartnerDetailDialog({ partner, onClose }: { partner: AdminPartner | nul
                         <TableCell>
                           <p className="leading-tight">{c.name ?? "—"}</p>
                           <p className="text-xs text-muted-foreground">{c.email}</p>
+                        </TableCell>
+                        <TableCell>
+                          {c.referredByCode ? (
+                            <Badge variant="outline" className="font-mono text-[10px]">
+                              {c.referredByCode}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">{c.signupSource ?? "direct"}</span>
+                          )}
                         </TableCell>
                         <TableCell>{statusBadge(c.status)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatCentsToDollars(c.rateCentsPerMin)}/min</TableCell>
@@ -474,7 +536,7 @@ function PartnerDetailDialog({ partner, onClose }: { partner: AdminPartner | nul
             </div>
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5" /> Invites ({data?.invites.length ?? 0})
+                <Mail className="w-3.5 h-3.5" /> Direct Invites ({data?.invites.length ?? 0})
               </h3>
               {data?.invites.length ? (
                 <div className="space-y-1">
@@ -488,9 +550,31 @@ function PartnerDetailDialog({ partner, onClose }: { partner: AdminPartner | nul
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No invites.</p>
+                <p className="text-sm text-muted-foreground">No direct invites.</p>
               )}
             </div>
+
+            {/* Referrals table */}
+            {data?.referrals && data.referrals.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5" /> Walk-in Referral Signups ({data.referrals.length})
+                </h3>
+                <div className="space-y-1">
+                  {data.referrals.map(r => (
+                    <div key={r.id} className="flex items-center justify-between text-sm border border-border rounded-md px-3 py-1.5">
+                      <div>
+                        <p className="font-medium text-xs">{r.userName || r.userEmail || "Signed up user"}</p>
+                        <p className="text-[11px] text-muted-foreground">Code: <span className="font-mono">{r.referralCode}</span></p>
+                      </div>
+                      <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {fmtDate(r.createdAt)} {statusBadge(r.status)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </DialogContent>

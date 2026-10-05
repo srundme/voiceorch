@@ -52,6 +52,7 @@ export async function claimPendingAndPromote(
         companyName: claimed.companyName,
         baseRateCentsPerMin: claimed.baseRateCentsPerMin,
         defaultClientRateCentsPerMin: claimed.defaultClientRateCentsPerMin,
+        referralCode: claimed.referralCode,
       })
       .returning();
     return { status: "promoted" as const, partner };

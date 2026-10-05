@@ -34,6 +34,10 @@ export const usersTable = pgTable("users", {
   suspendedReason: text("suspended_reason"),
   // Partner (reseller) linkage — set when this user is a client onboarded by a partner.
   partnerId: integer("partner_id").references(() => partnersTable.id, { onDelete: "set null" }),
+  /** Code entered or clicked at signup (e.g. "SANJAY"). */
+  referredByCode: text("referred_by_code"),
+  /** Original signup source attribution (e.g. "referral:SANJAY", "linkedin", "google"). */
+  signupSource: text("signup_source"),
   /** Per-minute rate (paise) this client is billed at, set by their partner; null → partner default. */
   partnerRateCentsPerMin: integer("partner_rate_cents_per_min"),
   /**
@@ -51,6 +55,7 @@ export const usersTable = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [
   index("users_partner_id_idx").on(t.partnerId),
+  index("users_referred_by_code_idx").on(t.referredByCode),
   index("users_portal_login_locked_at_idx").on(t.portalLoginLockedAt),
 ]);
 
