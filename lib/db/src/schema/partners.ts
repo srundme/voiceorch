@@ -29,6 +29,11 @@ export const partnersTable = pgTable("partners", {
   baseRateCentsPerMin: integer("base_rate_cents_per_min").notNull().default(500),
   /** Pre-filled rate for newly linked clients (paise / min). */
   defaultClientRateCentsPerMin: integer("default_client_rate_cents_per_min").notNull().default(500),
+  /**
+   * Maximum concurrent active calls allowed across all client accounts of this partner.
+   * Admin sets this capacity ceiling (e.g. 50, 100).
+   */
+  concurrentLimit: integer("concurrent_limit").notNull().default(10),
   /** Optional white-label logo shown on the partner's clients' dashboards. */
   logoData: bytea("logo_data"),
   logoMime: text("logo_mime"),
@@ -135,6 +140,7 @@ export const partnerPendingPromotionsTable = pgTable("partner_pending_promotions
   companyName: text("company_name").notNull(),
   baseRateCentsPerMin: integer("base_rate_cents_per_min").notNull().default(500),
   defaultClientRateCentsPerMin: integer("default_client_rate_cents_per_min").notNull().default(500),
+  concurrentLimit: integer("concurrent_limit").notNull().default(10),
   referralCode: text("referral_code"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

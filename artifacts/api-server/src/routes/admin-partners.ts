@@ -78,6 +78,7 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
         status: partnersTable.status,
         baseRateCentsPerMin: partnersTable.baseRateCentsPerMin,
         defaultClientRateCentsPerMin: partnersTable.defaultClientRateCentsPerMin,
+        concurrentLimit: partnersTable.concurrentLimit,
         referralCode: partnersTable.referralCode,
         slug: partnersTable.slug,
         customDomain: partnersTable.customDomain,
@@ -100,6 +101,17 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
     const countMap = new Map<number, number>();
     for (const c of counts) {
       if (c.partnerId != null) countMap.set(c.partnerId, Number(c.n));
+    }
+
+    // Concurrency allocated across clients per partner
+    const allocatedConcurrencies = await db
+      .select({ partnerId: usersTable.partnerId, total: sql<number>`coalesce(sum(${usersTable.concurrentLimit}), 0)` })
+      .from(usersTable)
+      .where(sql`${usersTable.partnerId} is not null`)
+      .groupBy(usersTable.partnerId);
+    const allocatedConcurrencyMap = new Map<number, number>();
+    for (const ac of allocatedConcurrencies) {
+      if (ac.partnerId != null) allocatedConcurrencyMap.set(ac.partnerId, Number(ac.total));
     }
 
     // Referral counts per partner
@@ -132,6 +144,8 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
     res.json({
       partners: partners.map(p => ({
         ...p,
+        concurrentLimit: p.concurrentLimit ?? 10,
+        allocatedConcurrency: allocatedConcurrencyMap.get(p.id) ?? 0,
         clientCount: countMap.get(p.id) ?? 0,
         referredCount: referralCountMap.get(p.id) ?? 0,
         portalUrl: partnerPortalUrl(p),
@@ -146,7 +160,7 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
 
 router.post("/admin/partners", async (req, res): Promise<void> => {
   try {
-    const { email, companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, referralCode, clerkId } = (req.body ?? {}) as {
+    const { email, companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, referralCode, clerkId, concurrentLimit } = (req.body ?? {}) as {
       email?: string;
       companyName?: string;
       baseRateCentsPerMin?: number;
@@ -154,11 +168,17 @@ router.post("/admin/partners", async (req, res): Promise<void> => {
       referralCode?: string;
       /** When set (e.g. from user detail), promote this exact account — not another row with the same email. */
       clerkId?: string;
+      concurrentLimit?: number;
     };
 
     const cleanEmail = String(email ?? "").trim().toLowerCase();
     const cleanCompany = String(companyName ?? "").trim().slice(0, 80);
     const cleanRefCode = referralCode ? String(referralCode).trim().toUpperCase() : null;
+    const cleanConcurrency = concurrentLimit === undefined ? 10 : Number(concurrentLimit);
+    if (!Number.isInteger(cleanConcurrency) || cleanConcurrency < 1 || cleanConcurrency > 10000) {
+      res.status(400).json({ error: "concurrentLimit must be an integer between 1 and 10000" });
+      return;
+    }
     if (cleanRefCode && !/^[A-Z0-9_-]{2,30}$/.test(cleanRefCode)) {
       res.status(400).json({ error: "Referral code must be 2-30 alphanumeric characters" });
       return;
@@ -225,12 +245,13 @@ router.post("/admin/partners", async (req, res): Promise<void> => {
           companyName: cleanCompany,
           baseRateCentsPerMin: baseRate,
           defaultClientRateCentsPerMin: defaultRate,
+          concurrentLimit: cleanConcurrency,
           referralCode: cleanRefCode,
         })
         .returning();
       await logAdminAction(req, {
         action: "partner_pending_create",
-        afterValue: { email: cleanEmail, companyName: cleanCompany, baseRate, defaultRate, referralCode: cleanRefCode },
+        afterValue: { email: cleanEmail, companyName: cleanCompany, baseRate, defaultRate, concurrentLimit: cleanConcurrency, referralCode: cleanRefCode },
       });
 
       // Race close: the user may have signed up between the lookup above and
@@ -301,6 +322,7 @@ router.post("/admin/partners", async (req, res): Promise<void> => {
         companyName: cleanCompany,
         baseRateCentsPerMin: baseRate,
         defaultClientRateCentsPerMin: defaultRate,
+        concurrentLimit: cleanConcurrency,
         referralCode: cleanRefCode,
       })
       .returning();
@@ -311,7 +333,7 @@ router.post("/admin/partners", async (req, res): Promise<void> => {
     await logAdminAction(req, {
       targetUserId: user.clerkId,
       action: "partner_create",
-      afterValue: { partnerId: partner!.id, companyName: cleanCompany, baseRate, defaultRate, referralCode: cleanRefCode },
+      afterValue: { partnerId: partner!.id, companyName: cleanCompany, baseRate, defaultRate, concurrentLimit: cleanConcurrency, referralCode: cleanRefCode },
     });
     res.status(201).json({ partner });
   } catch (err) {
@@ -419,12 +441,13 @@ router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
       return;
     }
 
-    const { companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, referralCode, status } = (req.body ?? {}) as {
+    const { companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, referralCode, status, concurrentLimit } = (req.body ?? {}) as {
       companyName?: string;
       baseRateCentsPerMin?: number;
       defaultClientRateCentsPerMin?: number;
       referralCode?: string | null;
       status?: string;
+      concurrentLimit?: number;
     };
 
     const set: Record<string, unknown> = {};
@@ -454,6 +477,14 @@ router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
         }
       }
       set["referralCode"] = cleanRef;
+    }
+    if (concurrentLimit !== undefined) {
+      const n = Number(concurrentLimit);
+      if (!Number.isInteger(n) || n < 1 || n > 10000) {
+        res.status(400).json({ error: "concurrentLimit must be an integer between 1 and 10000" });
+        return;
+      }
+      set["concurrentLimit"] = n;
     }
     let nextBase = partner.baseRateCentsPerMin;
     if (baseRateCentsPerMin !== undefined) {

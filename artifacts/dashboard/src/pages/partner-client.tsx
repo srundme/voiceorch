@@ -20,7 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, ArrowRightLeft, Bot, IndianRupee, LogIn, Wallet, Send, ChevronRight,
-  Key, Plus, Copy, Trash2, CheckCircle2,
+  Key, Plus, Copy, Trash2, CheckCircle2, PhoneCall,
 } from "lucide-react";
 import { getListAgentsQueryKey, getListPhoneNumbersQueryKey } from "@workspace/api-client-react";
 
@@ -31,6 +31,7 @@ interface PartnerClient {
   status: string;
   walletBalanceCents: number;
   rateCentsPerMin: number;
+  concurrentLimit?: number;
   allowAgentEdit?: boolean;
   loginLocked?: boolean;
   portalLoginLockedAt?: string | null;
@@ -110,11 +111,12 @@ export default function PartnerClientPage() {
 
   const [rateText, setRateText] = useState("");
   const [amountText, setAmountText] = useState("");
+  const [concurrencyText, setConcurrencyText] = useState("");
   const [sendAgentId, setSendAgentId] = useState<string>("");
   const [apiKeyName, setApiKeyName] = useState("Client SDK");
   const [revealApiKey, setRevealApiKey] = useState<string | null>(null);
 
-  const clientsQ = useQuery<{ clients: PartnerClient[]; baseRateCentsPerMin: number }>({
+  const clientsQ = useQuery<{ clients: PartnerClient[]; baseRateCentsPerMin: number; partnerConcurrentLimit?: number }>({
     queryKey: ["partner-clients"],
     queryFn: () => partnerFetch(getToken, "/api/partner/clients"),
     enabled: !!clerkId,
@@ -157,6 +159,15 @@ export default function PartnerClientPage() {
     navigate(path);
   };
 
+  const partnerPool = clientsQ.data?.partnerConcurrentLimit ?? 10;
+  const otherClientsTotal = useMemo(() => {
+    if (!clientsQ.data?.clients) return 0;
+    return clientsQ.data.clients
+      .filter((c) => c.clerkId !== clerkId)
+      .reduce((sum, c) => sum + (c.concurrentLimit ?? 10), 0);
+  }, [clientsQ.data?.clients, clerkId]);
+  const maxAvailableConcurrency = Math.max(1, partnerPool - otherClientsTotal);
+
   const rateMutation = useMutation({
     mutationFn: (rateCentsPerMin: number) =>
       partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(clerkId)}`, {
@@ -170,6 +181,21 @@ export default function PartnerClientPage() {
     },
     onError: (err: Error) =>
       toast({ title: "Could not update rate", description: err.message, variant: "destructive" }),
+  });
+
+  const concurrencyMutation = useMutation({
+    mutationFn: (concurrentLimit: number) =>
+      partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(clerkId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ concurrentLimit }),
+      }),
+    onSuccess: () => {
+      toast({ title: "Client concurrency limit updated" });
+      void qc.invalidateQueries({ queryKey: ["partner-clients"] });
+      void qc.invalidateQueries({ queryKey: ["partner-me"] });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Could not update concurrency", description: err.message, variant: "destructive" }),
   });
 
   const transferMutation = useMutation({
@@ -350,9 +376,10 @@ export default function PartnerClientPage() {
         Optional: open their account (amber bar) if you need to help in-product.
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Stat label="Wallet" value={inr(client.walletBalanceCents)} />
         <Stat label="Rate" value={`${inr(client.rateCentsPerMin)}/min`} sub={`Base ${inr(baseRate)}/min`} />
+        <Stat label="Concurrency" value={`${client.concurrentLimit ?? 10} lines`} sub={`Max ${maxAvailableConcurrency} available`} />
         <Stat label="This month" value={`${toMins(client.monthSeconds)} min`} sub={`${client.monthCalls} calls`} />
         <Stat label="Spend" value={inr(client.monthSpendCents)} sub="Client wallet this month" />
       </div>
@@ -575,6 +602,53 @@ export default function PartnerClientPage() {
                 }}
               >
                 Save rate
+              </Button>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <PhoneCall className="size-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">Concurrent call lines</h2>
+            </div>
+            <p className="text-[12px] text-muted-foreground">
+              Maximum simultaneous live calls this client can run (campaigns, queue dispatch, inbound/outbound).
+              Your partner pool total is {partnerPool} lines ({otherClientsTotal} allocated to other clients).
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="flex-1 space-y-1.5">
+                <Label className="text-xs">Line cap (Max {maxAvailableConcurrency} available)</Label>
+                <Input
+                  className="h-9 text-xs"
+                  type="number"
+                  min="1"
+                  max={maxAvailableConcurrency}
+                  placeholder={String(client.concurrentLimit ?? 10)}
+                  value={concurrencyText}
+                  onChange={(e) => setConcurrencyText(e.target.value)}
+                  onFocus={() => {
+                    if (!concurrencyText) setConcurrencyText(String(client.concurrentLimit ?? 10));
+                  }}
+                />
+              </div>
+              <Button
+                size="sm"
+                className="h-9 text-xs"
+                disabled={concurrencyMutation.isPending}
+                onClick={() => {
+                  const limit = Number.parseInt(concurrencyText || String(client.concurrentLimit ?? 10), 10);
+                  if (!Number.isFinite(limit) || limit < 1) {
+                    toast({ title: "Enter a valid line limit (≥ 1)", variant: "destructive" });
+                    return;
+                  }
+                  if (limit > maxAvailableConcurrency) {
+                    toast({ title: `Limit exceeds available pool (Max ${maxAvailableConcurrency})`, variant: "destructive" });
+                    return;
+                  }
+                  concurrencyMutation.mutate(limit);
+                }}
+              >
+                Save lines
               </Button>
             </div>
           </section>

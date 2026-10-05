@@ -339,6 +339,13 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       monthClientCalls = Number(usage?.calls ?? 0);
     }
 
+    // Concurrency allocated across clients
+    const [allocatedRow] = await db
+      .select({ total: sql<number>`coalesce(sum(${usersTable.concurrentLimit}), 0)` })
+      .from(usersTable)
+      .where(eq(usersTable.partnerId, partner.id));
+    const allocatedConcurrency = Number(allocatedRow?.total ?? 0);
+
     const appBaseUrl = (process.env["APP_BASE_URL"]?.replace(/\/$/, "") || getSelfBaseUrl());
     const effectiveCode = partner.referralCode || null;
 
@@ -347,6 +354,8 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       status: partner.status,
       baseRateCentsPerMin: partner.baseRateCentsPerMin,
       defaultClientRateCentsPerMin: partner.defaultClientRateCentsPerMin,
+      concurrentLimit: partner.concurrentLimit ?? 10,
+      allocatedConcurrency,
       logoUrl: logoPathFor(partner),
       loginTitle: partner.loginTitle ?? null,
       loginSubtitle: partner.loginSubtitle ?? null,
@@ -923,11 +932,12 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
     const partner = await requireActivePartner(req, res);
     if (!partner) return;
 
-    const { email, password, name, rateCentsPerMin, sendCredentials } = (req.body ?? {}) as {
+    const { email, password, name, rateCentsPerMin, concurrentLimit, sendCredentials } = (req.body ?? {}) as {
       email?: string;
       password?: string;
       name?: string;
       rateCentsPerMin?: number;
+      concurrentLimit?: number;
       sendCredentials?: boolean;
     };
 
@@ -951,6 +961,30 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
         });
         return;
       }
+    }
+
+    const [allocatedRow] = await db
+      .select({ total: sql<number>`coalesce(sum(${usersTable.concurrentLimit}), 0)` })
+      .from(usersTable)
+      .where(eq(usersTable.partnerId, partner.id));
+    const totalAllocated = Number(allocatedRow?.total ?? 0);
+    const partnerPool = partner.concurrentLimit ?? 10;
+    const availablePool = Math.max(0, partnerPool - totalAllocated);
+
+    let initialConcurrentLimit = Math.min(5, availablePool > 0 ? availablePool : 1);
+    if (concurrentLimit !== undefined && concurrentLimit !== null) {
+      const cl = Number(concurrentLimit);
+      if (!Number.isInteger(cl) || cl < 1 || cl > 1000) {
+        res.status(400).json({ error: "Concurrent call limit must be an integer between 1 and 1000" });
+        return;
+      }
+      if (totalAllocated + cl > partnerPool) {
+        res.status(400).json({
+          error: `Cannot allocate ${cl} lines. Your total pool is ${partnerPool} lines, and existing clients use ${totalAllocated}. Maximum available is ${availablePool}.`,
+        });
+        return;
+      }
+      initialConcurrentLimit = cl;
     }
 
     const sub = `email:${cleanEmail}`;
@@ -1011,6 +1045,7 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
           partnerId: partner.id,
           partnerRateCentsPerMin: rate,
           partnerAllowAgentEdit: true,
+          concurrentLimit: initialConcurrentLimit,
           walletBalanceCents: 0,
           freeCreditsGranted: true,
           onboardingCompleted: true,
@@ -1032,6 +1067,7 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
           partnerId: partner.id,
           partnerRateCentsPerMin: rate,
           partnerAllowAgentEdit: true,
+          concurrentLimit: initialConcurrentLimit,
           onboardingCompleted: true,
         })
         .returning();
@@ -1093,6 +1129,7 @@ router.get("/partner/clients", requireAuth, async (req, res): Promise<void> => {
         allowAgentEdit: usersTable.partnerAllowAgentEdit,
         portalLoginLockedAt: usersTable.portalLoginLockedAt,
         portalLoginFailedAttempts: usersTable.portalLoginFailedAttempts,
+        concurrentLimit: usersTable.concurrentLimit,
         createdAt: usersTable.createdAt,
       })
       .from(usersTable)
@@ -1135,6 +1172,7 @@ router.get("/partner/clients", requireAuth, async (req, res): Promise<void> => {
         walletBalanceCents: c.walletBalanceCents,
         rateCentsPerMin: c.rateCentsPerMin ?? partner.defaultClientRateCentsPerMin,
         allowAgentEdit: c.allowAgentEdit === true,
+        concurrentLimit: c.concurrentLimit ?? 10,
         loginLocked: !!c.portalLoginLockedAt,
         portalLoginFailedAttempts: c.portalLoginFailedAttempts ?? 0,
         portalLoginLockedAt: c.portalLoginLockedAt,
@@ -1144,6 +1182,7 @@ router.get("/partner/clients", requireAuth, async (req, res): Promise<void> => {
         monthCalls: usageByUser.get(c.clerkId)?.calls ?? 0,
       })),
       baseRateCentsPerMin: partner.baseRateCentsPerMin,
+      partnerConcurrentLimit: partner.concurrentLimit ?? 10,
     });
   } catch (err) {
     req.log.error({ err }, "partner/clients GET failed");
@@ -1170,10 +1209,11 @@ router.patch("/partner/clients/:clerkId", requireAuth, async (req, res): Promise
       return;
     }
 
-    const body = (req.body ?? {}) as { rateCentsPerMin?: unknown; allowAgentEdit?: unknown };
+    const body = (req.body ?? {}) as { rateCentsPerMin?: unknown; allowAgentEdit?: unknown; concurrentLimit?: unknown };
     const updates: {
       partnerRateCentsPerMin?: number;
       partnerAllowAgentEdit?: boolean;
+      concurrentLimit?: number;
     } = {};
 
     if (body.rateCentsPerMin !== undefined && body.rateCentsPerMin !== null) {
@@ -1187,13 +1227,40 @@ router.patch("/partner/clients/:clerkId", requireAuth, async (req, res): Promise
       updates.partnerRateCentsPerMin = rate;
     }
 
+    if (body.concurrentLimit !== undefined && body.concurrentLimit !== null) {
+      const limit = Number(body.concurrentLimit);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 1000) {
+        res.status(400).json({ error: "Concurrent call limit must be an integer between 1 and 1000" });
+        return;
+      }
+
+      // Check sum of concurrentLimit of other clients under this partner
+      const [otherClientsSum] = await db
+        .select({ total: sql<number>`coalesce(sum(${usersTable.concurrentLimit}), 0)` })
+        .from(usersTable)
+        .where(and(
+          eq(usersTable.partnerId, partner.id),
+          ne(usersTable.id, client.id)
+        ));
+      const totalOther = Number(otherClientsSum?.total ?? 0);
+      const partnerPool = partner.concurrentLimit ?? 10;
+      if (totalOther + limit > partnerPool) {
+        const available = Math.max(0, partnerPool - totalOther);
+        res.status(400).json({
+          error: `Cannot allocate ${limit} lines. Your total pool is ${partnerPool} lines, and other clients are using ${totalOther}. Maximum available to allocate is ${available}.`,
+        });
+        return;
+      }
+      updates.concurrentLimit = limit;
+    }
+
     // allowAgentEdit is deprecated — managed clients always have a full workspace.
     if (typeof body.allowAgentEdit === "boolean") {
       updates.partnerAllowAgentEdit = true;
     }
 
     if (Object.keys(updates).length === 0) {
-      res.status(400).json({ error: "Provide rateCentsPerMin" });
+      res.status(400).json({ error: "Provide rateCentsPerMin or concurrentLimit" });
       return;
     }
 
@@ -1207,6 +1274,7 @@ router.patch("/partner/clients/:clerkId", requireAuth, async (req, res): Promise
       rateCentsPerMin: updates.partnerRateCentsPerMin
         ?? client.partnerRateCentsPerMin
         ?? partner.defaultClientRateCentsPerMin,
+      concurrentLimit: updates.concurrentLimit ?? client.concurrentLimit ?? 10,
       allowAgentEdit: true,
     });
   } catch (err) {

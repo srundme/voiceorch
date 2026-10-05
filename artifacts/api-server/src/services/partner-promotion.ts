@@ -52,6 +52,7 @@ export async function claimPendingAndPromote(
         companyName: claimed.companyName,
         baseRateCentsPerMin: claimed.baseRateCentsPerMin,
         defaultClientRateCentsPerMin: claimed.defaultClientRateCentsPerMin,
+        concurrentLimit: claimed.concurrentLimit,
         referralCode: claimed.referralCode,
       })
       .returning();

@@ -13,7 +13,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Handshake, Users, UserPlus, Wallet, TrendingUp, Clock, Mail,
-  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2, Globe, Link2, CheckCircle2, Copy, LifeBuoy,
+  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2, Globe, Link2, CheckCircle2, Copy, LifeBuoy, PhoneCall,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -24,6 +24,8 @@ interface PartnerMe {
   status: string;
   baseRateCentsPerMin: number;
   defaultClientRateCentsPerMin: number;
+  concurrentLimit?: number;
+  allocatedConcurrency?: number;
   referralCode: string | null;
   referralLink: string;
   referredUsersCount: number;
@@ -78,6 +80,7 @@ interface PartnerClient {
   status: string;
   walletBalanceCents: number;
   rateCentsPerMin: number;
+  concurrentLimit?: number;
   allowAgentEdit?: boolean;
   loginLocked?: boolean;
   portalLoginFailedAttempts?: number;
@@ -371,9 +374,10 @@ function OverviewTab({ me }: { me: PartnerMe }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard icon={<TrendingUp className="w-3.5 h-3.5" />} label="Earnings this month" value={inr(me.monthEarningsCents)} sub="Spread over your base rate" />
         <StatCard icon={<Users className="w-3.5 h-3.5" />} label="Clients" value={String(me.clientCount)} sub={me.pendingInvites > 0 ? `${me.pendingInvites} invite${me.pendingInvites > 1 ? "s" : ""} pending` : undefined} />
+        <StatCard icon={<PhoneCall className="w-3.5 h-3.5" />} label="Concurrency pool" value={`${me.allocatedConcurrency ?? 0} / ${me.concurrentLimit ?? 10}`} sub={`${Math.max(0, (me.concurrentLimit ?? 10) - (me.allocatedConcurrency ?? 0))} lines free`} />
         <StatCard icon={<UserPlus className="w-3.5 h-3.5" />} label="Referral signups" value={String(me.referredUsersCount ?? 0)} sub={me.referralCode ? `Code: ${me.referralCode}` : "Affiliate walk-ins"} />
         <StatCard icon={<Wallet className="w-3.5 h-3.5" />} label="Your wallet" value={inr(me.walletBalanceCents)} sub="Earnings land here" />
       </div>
@@ -472,14 +476,17 @@ function ClientsTab({ me }: { me: PartnerMe }) {
   const [, navigate] = useLocation();
   const [rateClient, setRateClient] = useState<PartnerClient | null>(null);
   const [transferClient, setTransferClient] = useState<PartnerClient | null>(null);
+  const [concurrencyClient, setConcurrencyClient] = useState<PartnerClient | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createEmail, setCreateEmail] = useState("");
   const [createName, setCreateName] = useState("");
   const [createPassword, setCreatePassword] = useState("");
   const [createRateText, setCreateRateText] = useState((me.defaultClientRateCentsPerMin / 100).toFixed(2));
+  const [createConcurrencyText, setCreateConcurrencyText] = useState("5");
   const [sendCredentials, setSendCredentials] = useState(true);
   const [rateText, setRateText] = useState("");
   const [amountText, setAmountText] = useState("");
+  const [concurrencyText, setConcurrencyText] = useState("");
 
   const { data, isLoading } = useQuery<{ clients: PartnerClient[]; baseRateCentsPerMin: number }>({
     queryKey: ["partner-clients"],
@@ -496,6 +503,7 @@ function ClientsTab({ me }: { me: PartnerMe }) {
   const createMutation = useMutation({
     mutationFn: async () => {
       const ratePaise = parseRupees(createRateText);
+      const concurrency = Number.parseInt(createConcurrencyText, 10);
       return partnerFetch<{
         client: { clerkId: string; email: string | null };
         loginUrl: string;
@@ -507,6 +515,7 @@ function ClientsTab({ me }: { me: PartnerMe }) {
           password: createPassword,
           name: createName.trim() || undefined,
           ...(ratePaise !== null ? { rateCentsPerMin: ratePaise } : {}),
+          ...(Number.isFinite(concurrency) && concurrency > 0 ? { concurrentLimit: concurrency } : {}),
           sendCredentials,
         }),
       });
@@ -523,9 +532,24 @@ function ClientsTab({ me }: { me: PartnerMe }) {
       setCreateName("");
       setCreatePassword("");
       setCreateRateText((me.defaultClientRateCentsPerMin / 100).toFixed(2));
+      setCreateConcurrencyText("5");
       invalidate();
     },
     onError: (err: Error) => toast({ title: "Could not create client", description: err.message, variant: "destructive" }),
+  });
+
+  const concurrencyMutation = useMutation({
+    mutationFn: async ({ clerkId, concurrentLimit }: { clerkId: string; concurrentLimit: number }) =>
+      partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(clerkId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ concurrentLimit }),
+      }),
+    onSuccess: () => {
+      toast({ title: "Concurrency limit updated" });
+      setConcurrencyClient(null);
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not update concurrency", description: err.message, variant: "destructive" }),
   });
 
   const rateMutation = useMutation({
@@ -579,9 +603,21 @@ function ClientsTab({ me }: { me: PartnerMe }) {
             Create accounts with email + password. Clients sign in on your branded login page (no Google).
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="text-right hidden sm:block">
+            <span className="text-[11px] text-muted-foreground block">
+              Pool: <span className="font-semibold text-foreground">{me.allocatedConcurrency ?? 0}</span> / {me.concurrentLimit ?? 10} lines allocated
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {Math.max(0, (me.concurrentLimit ?? 10) - (me.allocatedConcurrency ?? 0))} lines available
+            </span>
+          </div>
           <span className="text-[11px] text-muted-foreground">Base {inr(baseRate)}/min</span>
-          <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
+          <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => {
+            const available = Math.max(1, (me.concurrentLimit ?? 10) - (me.allocatedConcurrency ?? 0));
+            setCreateConcurrencyText(String(Math.min(5, available)));
+            setCreateOpen(true);
+          }}>
             <UserPlus className="w-3.5 h-3.5" /> Create client
           </Button>
         </div>
@@ -604,6 +640,7 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                 <th className="px-4 py-2 font-medium">Client</th>
                 <th className="px-3 py-2 font-medium">Balance</th>
                 <th className="px-3 py-2 font-medium">Rate</th>
+                <th className="px-3 py-2 font-medium">Concurrency</th>
                 <th className="px-3 py-2 font-medium">This month</th>
                 <th className="px-3 py-2 font-medium text-right">Actions</th>
               </tr>
@@ -624,6 +661,10 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                   </td>
                   <td className="px-3 py-2.5 tabular-nums">{inr(c.walletBalanceCents)}</td>
                   <td className="px-3 py-2.5 tabular-nums">{inr(c.rateCentsPerMin)}/min</td>
+                  <td className="px-3 py-2.5 tabular-nums">
+                    <span className="font-medium">{c.concurrentLimit ?? 10}</span>
+                    <span className="text-muted-foreground text-[11px] ml-1">lines</span>
+                  </td>
                   <td className="px-3 py-2.5">
                     <span className="tabular-nums">{toMins(c.monthSeconds)} min</span>
                     <span className="text-muted-foreground text-[11px]"> · {c.monthCalls} calls · {inr(c.monthSpendCents)}</span>
@@ -652,6 +693,11 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                       <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
                         onClick={() => { setRateClient(c); setRateText((c.rateCentsPerMin / 100).toFixed(2)); }}>
                         <IndianRupee className="w-3 h-3 mr-1" /> Rate
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
+                        title="Set concurrent call lines for this client"
+                        onClick={() => { setConcurrencyClient(c); setConcurrencyText(String(c.concurrentLimit ?? 10)); }}>
+                        <PhoneCall className="w-3 h-3 mr-1" /> Lines
                       </Button>
                       <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
                         onClick={() => { setTransferClient(c); setAmountText(""); }}>
@@ -728,6 +774,68 @@ function ClientsTab({ me }: { me: PartnerMe }) {
         </DialogContent>
       </Dialog>
 
+      {/* Set concurrency dialog */}
+      <Dialog open={!!concurrencyClient} onOpenChange={(o) => !o && setConcurrencyClient(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Set client concurrency</DialogTitle>
+            <DialogDescription>
+              {concurrencyClient?.name || concurrencyClient?.email} — max concurrent calls this client can run simultaneously.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-2.5 text-xs space-y-1">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Partner Total Pool:</span>
+                <span className="font-semibold text-foreground">{me.concurrentLimit ?? 10} lines</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Used by Other Clients:</span>
+                <span className="font-semibold text-foreground">
+                  {Math.max(0, (me.allocatedConcurrency ?? 0) - (concurrencyClient?.concurrentLimit ?? 10))} lines
+                </span>
+              </div>
+              <div className="flex justify-between text-emerald-500 font-medium pt-1 border-t border-border/40">
+                <span>Max Available for this Client:</span>
+                <span>
+                  {Math.max(1, (me.concurrentLimit ?? 10) - Math.max(0, (me.allocatedConcurrency ?? 0) - (concurrencyClient?.concurrentLimit ?? 10)))} lines
+                </span>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="concurrency">Concurrent Call Lines</Label>
+              <Input
+                id="concurrency"
+                type="number"
+                min="1"
+                max={Math.max(1, (me.concurrentLimit ?? 10) - Math.max(0, (me.allocatedConcurrency ?? 0) - (concurrencyClient?.concurrentLimit ?? 10)))}
+                value={concurrencyText}
+                onChange={e => setConcurrencyText(e.target.value)}
+                placeholder="10"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConcurrencyClient(null)}>Cancel</Button>
+            <Button
+              disabled={
+                concurrencyMutation.isPending ||
+                !Number.parseInt(concurrencyText, 10) ||
+                Number.parseInt(concurrencyText, 10) < 1 ||
+                Number.parseInt(concurrencyText, 10) > Math.max(1, (me.concurrentLimit ?? 10) - Math.max(0, (me.allocatedConcurrency ?? 0) - (concurrencyClient?.concurrentLimit ?? 10)))
+              }
+              onClick={() => {
+                const limit = Number.parseInt(concurrencyText, 10);
+                if (concurrencyClient && limit > 0) {
+                  concurrencyMutation.mutate({ clerkId: concurrencyClient.clerkId, concurrentLimit: limit });
+                }
+              }}>
+              {concurrencyMutation.isPending ? "Saving…" : "Save lines"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -759,6 +867,21 @@ function ClientsTab({ me }: { me: PartnerMe }) {
               ) : (
                 <p className="text-[11px] text-amber-500">Must be at least {inr(me.baseRateCentsPerMin)}/min.</p>
               )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="create-concurrency">Concurrent call lines</Label>
+              <Input
+                id="create-concurrency"
+                type="number"
+                min="1"
+                max={Math.max(1, (me.concurrentLimit ?? 10) - (me.allocatedConcurrency ?? 0))}
+                value={createConcurrencyText}
+                onChange={e => setCreateConcurrencyText(e.target.value)}
+                placeholder="5"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Available in your pool: {Math.max(0, (me.concurrentLimit ?? 10) - (me.allocatedConcurrency ?? 0))} lines
+              </p>
             </div>
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input type="checkbox" checked={sendCredentials} onChange={e => setSendCredentials(e.target.checked)} className="rounded border-border" />

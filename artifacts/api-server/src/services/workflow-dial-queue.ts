@@ -12,6 +12,7 @@
 import {
   db,
   usersTable,
+  partnersTable,
   campaignsTable,
   campaignBatchesTable,
   campaignLeadsTable,
@@ -26,6 +27,17 @@ const DEFAULT_CONCURRENT_LIMIT = 10;
 const WORKFLOW_BATCH_NAME = "__call_plan_queue";
 
 export async function getUserConcurrentLimit(clerkUserId: string): Promise<number> {
+  const [partnerOwner] = await db
+    .select({ concurrentLimit: partnersTable.concurrentLimit })
+    .from(partnersTable)
+    .where(eq(partnersTable.userId, clerkUserId))
+    .limit(1);
+
+  if (partnerOwner) {
+    const pLimit = partnerOwner.concurrentLimit;
+    return Number.isFinite(pLimit) && pLimit > 0 ? Math.floor(pLimit) : DEFAULT_CONCURRENT_LIMIT;
+  }
+
   const [user] = await db
     .select({ concurrentLimit: usersTable.concurrentLimit })
     .from(usersTable)

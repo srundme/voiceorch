@@ -22,6 +22,8 @@ interface AdminPartner {
   status: string;
   baseRateCentsPerMin: number;
   defaultClientRateCentsPerMin: number;
+  concurrentLimit?: number;
+  allocatedConcurrency?: number;
   referralCode?: string | null;
   referredCount?: number;
   createdAt: string;
@@ -122,11 +124,13 @@ export default function PartnersPage() {
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");
   const [baseRateText, setBaseRateText] = useState("5.00");
+  const [concurrency, setConcurrency] = useState("10");
   const [referralCode, setReferralCode] = useState("");
 
   // Edit form state
   const [editCompany, setEditCompany] = useState("");
   const [editBaseText, setEditBaseText] = useState("");
+  const [editConcurrency, setEditConcurrency] = useState("10");
   const [editReferralCode, setEditReferralCode] = useState("");
   const [editStatus, setEditStatus] = useState("active");
 
@@ -140,6 +144,7 @@ export default function PartnersPage() {
           email: email.trim(),
           companyName: company.trim(),
           baseRateCentsPerMin: rupeesToPaise(baseRateText),
+          concurrentLimit: parseInt(concurrency, 10) || 10,
           referralCode: referralCode.trim() ? referralCode.trim().toUpperCase() : undefined,
           // Client pricing is the partner's own setting (their panel);
           // the server starts it at max(base, ₹5) until they change it.
@@ -155,7 +160,7 @@ export default function PartnersPage() {
         toast({ title: "Partner created" });
       }
       setCreateOpen(false);
-      setEmail(""); setCompany(""); setReferralCode("");
+      setEmail(""); setCompany(""); setReferralCode(""); setConcurrency("10");
       invalidate();
     },
     onError: (err) => toast({ title: "Could not create partner", description: formatAdminError(err), variant: "destructive" }),
@@ -186,6 +191,7 @@ export default function PartnersPage() {
         body: JSON.stringify({
           companyName: editCompany.trim(),
           baseRateCentsPerMin: rupeesToPaise(editBaseText),
+          concurrentLimit: parseInt(editConcurrency, 10) || 10,
           referralCode: editReferralCode.trim() ? editReferralCode.trim().toUpperCase() : null,
           status: editStatus,
         }),
@@ -202,6 +208,7 @@ export default function PartnersPage() {
     setEditTarget(p);
     setEditCompany(p.companyName);
     setEditBaseText(paiseToRupeesText(p.baseRateCentsPerMin));
+    setEditConcurrency(String(p.concurrentLimit ?? 10));
     setEditReferralCode(p.referralCode ?? "");
     setEditStatus(p.status);
   };
@@ -287,6 +294,7 @@ export default function PartnersPage() {
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Base rate</TableHead>
                   <TableHead className="text-right">Default rate</TableHead>
+                  <TableHead className="text-right">Concurrency</TableHead>
                   <TableHead className="text-right">Clients</TableHead>
                   <TableHead className="text-right">Referred</TableHead>
                   <TableHead className="text-right">Wallet</TableHead>
@@ -331,6 +339,12 @@ export default function PartnersPage() {
                     <TableCell>{statusBadge(p.status)}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatCentsToDollars(p.baseRateCentsPerMin)}/min</TableCell>
                     <TableCell className="text-right tabular-nums">{formatCentsToDollars(p.defaultClientRateCentsPerMin)}/min</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      <div className="font-semibold">{p.concurrentLimit ?? 10} lines</div>
+                      {p.allocatedConcurrency != null && p.allocatedConcurrency > 0 ? (
+                        <div className="text-[11px] text-muted-foreground">{p.allocatedConcurrency} allocated</div>
+                      ) : null}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{p.clientCount}</TableCell>
                     <TableCell className="text-right tabular-nums font-semibold">{p.referredCount ?? 0}</TableCell>
                     <TableCell className="text-right tabular-nums">{p.walletBalanceCents != null ? formatCentsToDollars(p.walletBalanceCents) : "—"}</TableCell>
@@ -383,6 +397,20 @@ export default function PartnersPage() {
               </p>
             </div>
             <div className="space-y-1.5">
+              <Label>Concurrent Call Limit (Pool)</Label>
+              <Input
+                type="number"
+                min="1"
+                max="10000"
+                value={concurrency}
+                onChange={e => setConcurrency(e.target.value)}
+                placeholder="10"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Total simultaneous active calls allowed across all client accounts of this partner.
+              </p>
+            </div>
+            <div className="space-y-1.5">
               <Label>Base rate (₹/min)</Label>
               <Input inputMode="decimal" value={baseRateText} onChange={e => setBaseRateText(e.target.value)} />
               <p className="text-[11px] text-muted-foreground">
@@ -431,6 +459,20 @@ export default function PartnersPage() {
                 placeholder="SANJAY"
                 className="font-mono text-sm uppercase"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Concurrent Call Limit (Pool)</Label>
+              <Input
+                type="number"
+                min="1"
+                max="10000"
+                value={editConcurrency}
+                onChange={e => setEditConcurrency(e.target.value)}
+                placeholder="10"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Total simultaneous active calls allowed across all client accounts of this partner.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Base rate (₹/min)</Label>
