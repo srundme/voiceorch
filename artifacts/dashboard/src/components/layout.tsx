@@ -839,70 +839,7 @@ function NewAgentModal({ open, onClose }: { open: boolean; onClose: () => void }
   );
 }
 
-/* ─── Voice-a-thon Top Notification Banner ───────────────────────────────── */
-function VoiceathonTopBanner() {
-  const { data: partnerCtx } = usePartnerContext();
-  const actingAs = loadActingAs();
-  const [dismissed, setDismissed] = useState(() => {
-    try {
-      return localStorage.getItem("voiceathon_banner_dismissed") === "true";
-    } catch {
-      return false;
-    }
-  });
 
-  useEffect(() => {
-    // Hide SnapServe promo on white-label / partner-client / acting-as workspaces.
-    if (partnerCtx?.branding || partnerCtx?.isManagedClient || actingAs) return;
-    const scriptId = "luma-checkout";
-    if (!document.getElementById(scriptId)) {
-      const script = document.createElement("script");
-      script.id = scriptId;
-      script.src = "https://embed.lu.ma/checkout-button.js";
-      script.async = true;
-      document.body.appendChild(script);
-    }
-  }, [partnerCtx?.branding, partnerCtx?.isManagedClient, actingAs?.clientId]);
-
-  // Hide SnapServe promo on white-label / partner-client / acting-as workspaces.
-  if (partnerCtx?.branding || partnerCtx?.isManagedClient || actingAs || dismissed) return null;
-
-  const handleDismiss = () => {
-    setDismissed(true);
-    try { localStorage.setItem("voiceathon_banner_dismissed", "true"); } catch {}
-  };
-
-  return (
-    <div className="relative z-40 bg-gradient-to-r from-amber-500/20 via-purple-600/20 to-blue-600/20 border-b border-amber-500/30 px-3 py-2 text-xs md:text-sm text-foreground flex items-center justify-between gap-3 backdrop-blur-md shadow-sm shrink-0">
-      <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-semibold text-[11px] uppercase tracking-wider shrink-0 border border-amber-500/30">
-          🎙️ Live Event
-        </span>
-        <span className="truncate font-medium text-foreground/90">
-          India's biggest Voice-a-thon powered by <strong className="text-amber-400 font-semibold">VoBiz</strong> & organized by <strong className="text-purple-400 font-semibold">SnapServe</strong> — Please register now!
-        </span>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <a
-          href="https://luma.com/event/evt-rA5tJIW6SmKBcGQ"
-          className="luma-checkout--button inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs transition-colors shadow-sm cursor-pointer"
-          data-luma-action="checkout"
-          data-luma-event-id="evt-rA5tJIW6SmKBcGQ"
-        >
-          Register for Event
-        </a>
-        <button
-          onClick={handleDismiss}
-          className="p-1 rounded-md hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
-          title="Dismiss notification"
-          aria-label="Dismiss notification"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
-  );
-}
 
 /* ─── Mobile topbar user (only for mobile header) ────────────────────────── */
 function MobileTopbarUser() {
@@ -1076,8 +1013,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Voice-a-thon top notification */}
-        <VoiceathonTopBanner />
+
 
         {/* Utility strip — desktop only; hide on full-bleed vibe surface */}
         {!location.startsWith("/app/vibe") && (
