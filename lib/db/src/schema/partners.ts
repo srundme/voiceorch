@@ -42,6 +42,15 @@ export const partnersTable = pgTable("partners", {
    * White-label subdomain slug → `{slug}.{PARTNER_SUBDOMAIN_ROOT}`
    * e.g. slug "acme" → acme.snapserve.ai
    */
+  /**
+   * Custom referral / affiliate code for word-of-mouth client signups (e.g. "SANJAY").
+   * Unique, case-insensitive lookup.
+   */
+  referralCode: text("referral_code").unique("partners_referral_code_unique"),
+  /**
+   * White-label subdomain slug → `{slug}.{PARTNER_SUBDOMAIN_ROOT}`
+   * e.g. slug "acme" → acme.snapserve.ai
+   */
   slug: text("slug").unique("partners_slug_unique"),
   /** Partner-owned hostname (e.g. app.acme.com). */
   customDomain: text("custom_domain").unique("partners_custom_domain_unique"),
@@ -98,6 +107,23 @@ export const partnerInvitesTable = pgTable("partner_invites", {
 ]);
 
 /**
+ * Walk-in signups who entered or clicked a partner's affiliate referral code (e.g. SANJAY).
+ */
+export const partnerReferralsTable = pgTable("partner_referrals", {
+  id: serial("id").primaryKey(),
+  partnerId: integer("partner_id").notNull().references(() => partnersTable.id, { onDelete: "cascade" }),
+  referralCode: text("referral_code").notNull(),
+  userId: text("user_id").notNull(), // clerk id of user
+  userEmail: text("user_email"),
+  userName: text("user_name"),
+  status: text("status").notNull().default("signed_up"), // signed_up | onboarded | active
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("partner_referrals_partner_id_idx").on(t.partnerId),
+  index("partner_referrals_code_idx").on(t.referralCode),
+]);
+
+/**
  * Admin-created partner setups for emails that have NO account yet.
  * Applied automatically at signup (services/partner-promotion.ts): the new
  * user immediately becomes a partner with these settings and the row is
@@ -109,6 +135,7 @@ export const partnerPendingPromotionsTable = pgTable("partner_pending_promotions
   companyName: text("company_name").notNull(),
   baseRateCentsPerMin: integer("base_rate_cents_per_min").notNull().default(500),
   defaultClientRateCentsPerMin: integer("default_client_rate_cents_per_min").notNull().default(500),
+  referralCode: text("referral_code"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -116,4 +143,6 @@ export type Partner = typeof partnersTable.$inferSelect;
 export type InsertPartner = typeof partnersTable.$inferInsert;
 export type PartnerInvite = typeof partnerInvitesTable.$inferSelect;
 export type InsertPartnerInvite = typeof partnerInvitesTable.$inferInsert;
+export type PartnerReferral = typeof partnerReferralsTable.$inferSelect;
+export type InsertPartnerReferral = typeof partnerReferralsTable.$inferInsert;
 export type PartnerPendingPromotion = typeof partnerPendingPromotionsTable.$inferSelect;

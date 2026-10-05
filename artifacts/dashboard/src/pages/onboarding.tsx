@@ -17,6 +17,7 @@ interface Answers {
   name: string;
   role: Role | null;
   referralSource: ReferralSource | null;
+  referralCode?: string;
   usedVoiceAgents: boolean | null;
   priorPlatforms: PriorPlatform[];
 }
@@ -190,29 +191,42 @@ function RoleStep({
   );
 }
 
-/* Referral step — auto-advances on click */
+/* Referral step — auto-advances on click, allows referral code entry */
 function ReferralStep({
   value,
+  referralCode,
   onSelect,
+  onReferralCodeChange,
   onNext,
 }: {
   value: ReferralSource | null;
+  referralCode: string;
   onSelect: (v: ReferralSource) => void;
+  onReferralCodeChange: (code: string) => void;
   onNext: () => void;
 }) {
   const options: { id: ReferralSource; label: string }[] = [
     { id: "instagram",  label: "Instagram" },
     { id: "youtube",    label: "YouTube" },
-    { id: "reference",  label: "Someone referred me" },
+    { id: "reference",  label: "Someone referred me (Partner / Friend)" },
     { id: "google",     label: "Google Search" },
     { id: "ai_search",  label: "AI Search Results" },
   ];
+
+  const [showCodeInput, setShowCodeInput] = useState(value === "reference" || !!referralCode);
+
+  useEffect(() => {
+    if (value === "reference") {
+      setShowCodeInput(true);
+    }
+  }, [value]);
 
   useEffect(() => {
     const keys: Record<string, ReferralSource> = {
       "1": "instagram", "2": "youtube", "3": "reference", "4": "google", "5": "ai_search",
     };
     const handler = (e: KeyboardEvent) => {
+      if (document.activeElement?.tagName === "INPUT") return;
       if (keys[e.key]) onSelect(keys[e.key]!);
       if (e.key === "Enter" && value) onNext();
     };
@@ -226,14 +240,21 @@ function ReferralStep({
       <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight mb-2">
         How did you hear about us?
       </h2>
-      <p className="text-muted-foreground text-base mb-8">So we know where our community is growing.</p>
+      <p className="text-muted-foreground text-base mb-6">So we know where our community is growing.</p>
       <div className="flex flex-col gap-2.5">
         {options.map((opt, idx) => (
           <motion.button
             key={opt.id}
             whileHover={{ x: 4 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => onSelect(opt.id)}
+            onClick={() => {
+              onSelect(opt.id);
+              if (opt.id === "reference") {
+                setShowCodeInput(true);
+              } else {
+                setShowCodeInput(false);
+              }
+            }}
             className={`
               flex items-center gap-3.5 px-4 py-3.5 rounded-xl border-2 text-left transition-all duration-150 cursor-pointer
               ${value === opt.id
@@ -250,6 +271,32 @@ function ReferralStep({
           </motion.button>
         ))}
       </div>
+
+      {showCodeInput && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-6 p-4 rounded-xl border border-border bg-card/50"
+        >
+          <label className="block text-xs font-semibold text-foreground uppercase tracking-wider mb-2">
+            Referral Code (Optional)
+          </label>
+          <input
+            type="text"
+            value={referralCode}
+            onChange={(e) => onReferralCodeChange(e.target.value.toUpperCase())}
+            placeholder="e.g. SANJAY"
+            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground font-mono text-sm uppercase focus:outline-none focus:ring-1 focus:ring-black"
+          />
+          <p className="text-xs text-muted-foreground mt-1.5">
+            If a SnapServe partner gave you a code or link, enter it here.
+          </p>
+        </motion.div>
+      )}
+
+      {value && (
+        <ContinueButton onClick={onNext} disabled={!value} />
+      )}
     </div>
   );
 }
@@ -390,10 +437,12 @@ export default function OnboardingPage() {
   const { mutate: complete, isPending } = useCompleteOnboarding();
 
   const [step, setStep] = useState(0);   // 0 = loading, 1–5 = questions, 6 = done
+  const initialRefCode = typeof window !== "undefined" ? (localStorage.getItem("snapserve_ref_code") || "") : "";
   const [answers, setAnswers] = useState<Answers>({
     name: "",
     role: null,
-    referralSource: null,
+    referralSource: initialRefCode ? "reference" : null,
+    referralCode: initialRefCode,
     usedVoiceAgents: null,
     priorPlatforms: [],
   });
@@ -422,6 +471,7 @@ export default function OnboardingPage() {
         if (finalAnswers.name.trim()) {
           sessionStorage.setItem("vibe:welcomeName", finalAnswers.name.trim());
         }
+        localStorage.removeItem("snapserve_ref_code");
       } catch { /* ignore */ }
       setLocation("/app/home");
     };
@@ -431,9 +481,10 @@ export default function OnboardingPage() {
           name:            finalAnswers.name || undefined,
           role:            finalAnswers.role ?? undefined,
           referralSource:  finalAnswers.referralSource ?? undefined,
+          referralCode:    finalAnswers.referralCode?.trim() || undefined,
           usedVoiceAgents: finalAnswers.usedVoiceAgents ?? undefined,
           priorPlatforms:  finalAnswers.priorPlatforms.length > 0 ? finalAnswers.priorPlatforms : undefined,
-        },
+        } as any,
       },
       {
         onSuccess: (result) => {
@@ -498,9 +549,13 @@ export default function OnboardingPage() {
             <motion.div key="q3" {...SLIDE_IN} className="w-full flex justify-center">
               <ReferralStep
                 value={answers.referralSource}
+                referralCode={answers.referralCode ?? ""}
+                onReferralCodeChange={(code) => setAnswers(a => ({ ...a, referralCode: code }))}
                 onSelect={(v) => {
                   setAnswers(a => ({ ...a, referralSource: v }));
-                  setTimeout(() => setStep(4), 180);
+                  if (v !== "reference" && !answers.referralCode) {
+                    setTimeout(() => setStep(4), 180);
+                  }
                 }}
                 onNext={() => { if (answers.referralSource) setStep(4); }}
               />

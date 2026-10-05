@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
+import { db, usersTable, partnersTable, partnerReferralsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router: IRouter = Router();
@@ -15,7 +15,8 @@ const VALID_PLATFORMS = ["vapi", "retell", "bolna", "other"] as const;
 type OnboardingData = {
   name?: string;
   role?: typeof VALID_ROLES[number];
-  referralSource?: typeof VALID_REFERRALS[number];
+  referralSource?: string;
+  referralCode?: string;
   usedVoiceAgents?: boolean;
   priorPlatforms?: Array<typeof VALID_PLATFORMS[number]>;
 };
@@ -34,9 +35,15 @@ function parseOnboardingData(body: unknown): { ok: true; data: OnboardingData } 
     if (!(VALID_ROLES as readonly string[]).includes(b["role"] as string)) return { ok: false, error: "Invalid role" };
     data.role = b["role"] as typeof VALID_ROLES[number];
   }
-  if (b["referralSource"] !== undefined) {
-    if (!(VALID_REFERRALS as readonly string[]).includes(b["referralSource"] as string)) return { ok: false, error: "Invalid referralSource" };
-    data.referralSource = b["referralSource"] as typeof VALID_REFERRALS[number];
+  if (b["referralSource"] !== undefined && b["referralSource"] !== null) {
+    data.referralSource = String(b["referralSource"]).trim().slice(0, 100);
+  }
+  if (b["referralCode"] !== undefined && b["referralCode"] !== null) {
+    const cleanCode = String(b["referralCode"]).trim().toUpperCase().slice(0, 50);
+    if (cleanCode) {
+      data.referralCode = cleanCode;
+      if (!data.referralSource) data.referralSource = `referral:${cleanCode}`;
+    }
   }
   if (b["usedVoiceAgents"] !== undefined) {
     if (typeof b["usedVoiceAgents"] !== "boolean") return { ok: false, error: "usedVoiceAgents must be boolean" };
@@ -79,20 +86,58 @@ router.post("/onboarding/complete", requireAuth, async (req, res): Promise<void>
     return;
   }
 
+  const code = parsed.data.referralCode?.trim() || "";
+  let matchedPartnerId: number | null = null;
+  let finalReferredCode: string | null = code || null;
+
+  if (code) {
+    // Check if code matches an active partner referral code or slug
+    const [partner] = await db
+      .select({ id: partnersTable.id, referralCode: partnersTable.referralCode })
+      .from(partnersTable)
+      .where(
+        sql`lower(${partnersTable.referralCode}) = ${code.toLowerCase()} OR lower(${partnersTable.slug}) = ${code.toLowerCase()}`
+      )
+      .limit(1);
+
+    if (partner) {
+      matchedPartnerId = partner.id;
+      finalReferredCode = partner.referralCode || code;
+    }
+  }
+
   const [user] = await db
     .update(usersTable)
     .set({
       onboardingCompleted: true,
       onboardingData: parsed.data,
-      // Backfill name from onboarding if the user record has no name yet
       ...(parsed.data.name ? { name: parsed.data.name } : {}),
+      ...(finalReferredCode ? { referredByCode: finalReferredCode } : {}),
+      ...(parsed.data.referralSource ? { signupSource: parsed.data.referralSource } : {}),
+      ...(matchedPartnerId && !parsed.data.name ? {} : matchedPartnerId ? { partnerId: matchedPartnerId } : {}),
     })
     .where(eq(usersTable.clerkId, clerkId))
     .returning();
 
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-  req.log.info({ clerkId }, "Onboarding completed");
+  // Record into partnerReferralsTable if partner matched
+  if (matchedPartnerId && finalReferredCode) {
+    try {
+      await db.insert(partnerReferralsTable).values({
+        partnerId: matchedPartnerId,
+        referralCode: finalReferredCode,
+        userId: clerkId,
+        userEmail: user.email ?? null,
+        userName: user.name ?? parsed.data.name ?? null,
+        status: "onboarded",
+      });
+    } catch (e) {
+      req.log.warn({ err: e }, "partnerReferralsTable insert ignored/duplicate");
+    }
+  }
+
+  req.log.info({ clerkId, referralCode: finalReferredCode, partnerId: matchedPartnerId }, "Onboarding completed");
   res.json({
     completed: user.onboardingCompleted,
     data: user.onboardingData ?? null,

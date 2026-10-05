@@ -62,12 +62,15 @@ function buildHaystack(user: any): string {
     user?.email,
     emailLocalPart,
     user?.clerkId,
+    user?.referredByCode,
+    user?.signupSource,
     onboarding.name,
     onboarding.fullName,
     onboarding.company,
     onboarding.companyName,
     onboarding.role,
     onboarding.referralSource,
+    onboarding.referralCode,
   ]
     .map(normalize)
     .filter(Boolean)
@@ -278,7 +281,14 @@ export default function UsersList() {
                         {displayName(user)}
                       </div>
                       <div className="text-xs text-muted-foreground truncate max-w-[220px]">{user.email || "No email"}</div>
-                      <div className="text-[10px] text-muted-foreground font-mono mt-1 opacity-50 group-hover:opacity-100">{user.clerkId}</div>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="text-[10px] text-muted-foreground font-mono opacity-50 group-hover:opacity-100">{user.clerkId}</span>
+                        {user.referredByCode && (
+                          <Badge variant="outline" className="font-mono text-[9px] px-1 py-0 bg-primary/10 text-primary border-primary/20">
+                            Ref: {user.referredByCode}
+                          </Badge>
+                        )}
+                      </div>
                     </Link>
                   </TableCell>
                   <TableCell><LifecycleBadge lifecycle={user.lifecycle} /></TableCell>
