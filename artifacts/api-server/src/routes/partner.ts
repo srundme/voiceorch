@@ -971,11 +971,11 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
     const partnerPool = partner.concurrentLimit ?? 10;
     const availablePool = Math.max(0, partnerPool - totalAllocated);
 
-    let initialConcurrentLimit = Math.min(5, availablePool > 0 ? availablePool : 1);
+    let initialConcurrentLimit = availablePool > 0 ? Math.min(5, availablePool) : 0;
     if (concurrentLimit !== undefined && concurrentLimit !== null) {
       const cl = Number(concurrentLimit);
-      if (!Number.isInteger(cl) || cl < 1 || cl > 1000) {
-        res.status(400).json({ error: "Concurrent call limit must be an integer between 1 and 1000" });
+      if (!Number.isInteger(cl) || cl < 0 || cl > 1000) {
+        res.status(400).json({ error: "Concurrent call limit must be an integer between 0 and 1000" });
         return;
       }
       if (totalAllocated + cl > partnerPool) {
@@ -1229,8 +1229,8 @@ router.patch("/partner/clients/:clerkId", requireAuth, async (req, res): Promise
 
     if (body.concurrentLimit !== undefined && body.concurrentLimit !== null) {
       const limit = Number(body.concurrentLimit);
-      if (!Number.isInteger(limit) || limit < 1 || limit > 1000) {
-        res.status(400).json({ error: "Concurrent call limit must be an integer between 1 and 1000" });
+      if (!Number.isInteger(limit) || limit < 0 || limit > 1000) {
+        res.status(400).json({ error: "Concurrent call limit must be an integer between 0 and 1000" });
         return;
       }
 
