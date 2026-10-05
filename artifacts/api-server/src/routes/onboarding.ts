@@ -114,7 +114,6 @@ router.post("/onboarding/complete", requireAuth, async (req, res): Promise<void>
       ...(parsed.data.name ? { name: parsed.data.name } : {}),
       ...(finalReferredCode ? { referredByCode: finalReferredCode } : {}),
       ...(parsed.data.referralSource ? { signupSource: parsed.data.referralSource } : {}),
-      ...(matchedPartnerId && !parsed.data.name ? {} : matchedPartnerId ? { partnerId: matchedPartnerId } : {}),
     })
     .where(eq(usersTable.clerkId, clerkId))
     .returning();

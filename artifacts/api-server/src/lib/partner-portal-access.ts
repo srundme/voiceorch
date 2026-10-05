@@ -91,6 +91,14 @@ export async function assertLoginHostAllowed(
     return assertUserMayAccessPartnerPortal(clerkId, partnerBrand);
   }
 
+  // Partner owners logging into app.snapserve.ai are always allowed
+  const [partnerOwner] = await db
+    .select({ id: partnersTable.id })
+    .from(partnersTable)
+    .where(eq(partnersTable.userId, clerkId))
+    .limit(1);
+  if (partnerOwner) return { ok: true };
+
   const [user] = await db
     .select({ partnerId: usersTable.partnerId })
     .from(usersTable)
@@ -109,6 +117,12 @@ export async function assertLoginHostAllowed(
     .from(partnersTable)
     .where(eq(partnersTable.id, user.partnerId))
     .limit(1);
+
+  // If the partner has no white-label portal (no slug and no active custom domain),
+  // they access app.snapserve.ai directly.
+  if (!partner?.slug && !(partner?.customDomain && partner?.customDomainStatus === "active")) {
+    return { ok: true };
+  }
 
   const companyName = partner?.companyName ?? "your company";
   const loginBase = partner
