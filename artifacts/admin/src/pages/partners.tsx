@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Handshake, Users, Mail, Clock, X, ExternalLink } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Pencil, Handshake, Users, Mail, Clock, X, ExternalLink, Eye, Copy, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatAdminError } from "@/lib/api";
 
@@ -45,6 +46,7 @@ interface PartnerClientRow {
   status: string;
   walletBalanceCents: number;
   rateCentsPerMin: number;
+  concurrentLimit?: number;
   referredByCode?: string | null;
   signupSource?: string | null;
   createdAt: string;
@@ -288,15 +290,11 @@ export default function PartnersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Company</TableHead>
-                  <TableHead>Referral Code</TableHead>
-                  <TableHead>Portal URL</TableHead>
                   <TableHead>User</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Base rate</TableHead>
-                  <TableHead className="text-right">Default rate</TableHead>
                   <TableHead className="text-right">Concurrency</TableHead>
                   <TableHead className="text-right">Clients</TableHead>
-                  <TableHead className="text-right">Referred</TableHead>
                   <TableHead className="text-right">Wallet</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -304,41 +302,22 @@ export default function PartnersPage() {
               <TableBody>
                 {partners.map(p => (
                   <TableRow key={p.id}>
-                    <TableCell className="font-medium">{p.companyName}</TableCell>
                     <TableCell>
+                      <div className="font-semibold text-foreground">{p.companyName}</div>
                       {p.referralCode ? (
-                        <Badge variant="outline" className="font-mono text-xs uppercase px-2 py-0.5">
+                        <Badge variant="outline" className="font-mono text-[10px] uppercase mt-0.5 px-1.5 py-0">
                           {p.referralCode}
                         </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="max-w-[220px]">
-                      {p.portalUrl ? (
-                        <a
-                          href={p.portalUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline break-all"
-                          title={p.portalUrl}
-                        >
-                          {p.portalUrl.replace(/^https:\/\//, "")}
-                          <ExternalLink className="h-3 w-3 shrink-0 opacity-70" />
-                        </a>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Not set</span>
-                      )}
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <div className="leading-tight">
-                        <p>{p.userName ?? "—"}</p>
+                        <p className="font-medium text-xs">{p.userName ?? "—"}</p>
                         <p className="text-xs text-muted-foreground">{p.userEmail ?? p.userId}</p>
                       </div>
                     </TableCell>
                     <TableCell>{statusBadge(p.status)}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatCentsToDollars(p.baseRateCentsPerMin)}/min</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCentsToDollars(p.defaultClientRateCentsPerMin)}/min</TableCell>
                     <TableCell className="text-right tabular-nums">
                       <div className="font-semibold">{p.concurrentLimit ?? 10} lines</div>
                       {p.allocatedConcurrency != null && p.allocatedConcurrency > 0 ? (
@@ -346,12 +325,11 @@ export default function PartnersPage() {
                       ) : null}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{p.clientCount}</TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold">{p.referredCount ?? 0}</TableCell>
                     <TableCell className="text-right tabular-nums">{p.walletBalanceCents != null ? formatCentsToDollars(p.walletBalanceCents) : "—"}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1.5">
-                        <Button size="sm" variant="outline" onClick={() => setDetailTarget(p)}>
-                          <Users className="w-3.5 h-3.5 mr-1" /> Clients
+                        <Button size="sm" variant="outline" onClick={() => setDetailTarget(p)} title="View partner details, portal URL, and clients">
+                          <Eye className="w-3.5 h-3.5 mr-1" /> View
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => openEdit(p)}>
                           <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
@@ -507,118 +485,287 @@ export default function PartnersPage() {
       </Dialog>
 
       {/* Detail dialog */}
-      <PartnerDetailDialog partner={detailTarget} onClose={() => setDetailTarget(null)} />
+      <PartnerDetailDialog partner={detailTarget} onClose={() => setDetailTarget(null)} onEdit={openEdit} />
     </div>
   );
 }
 
-function PartnerDetailDialog({ partner, onClose }: { partner: AdminPartner | null; onClose: () => void }) {
+function PartnerDetailDialog({
+  partner,
+  onClose,
+  onEdit,
+}: {
+  partner: AdminPartner | null;
+  onClose: () => void;
+  onEdit?: (p: AdminPartner) => void;
+}) {
+  const { toast } = useToast();
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
   const { data, isLoading } = useQuery<PartnerDetail>({
     queryKey: ["admin", "partner-detail", partner?.id],
     enabled: !!partner,
     queryFn: () => adminFetch(`/partners/${partner!.id}/clients`),
   });
 
+  const copyToClipboard = async (text: string, label: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      toast({ title: `${label} copied!`, description: text });
+      setTimeout(() => setCopiedKey(null), 2000);
+    } catch {
+      toast({ title: "Failed to copy", variant: "destructive" });
+    }
+  };
+
+  if (!partner) return null;
+
+  const appBaseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const referralLink = partner.referralCode ? `${appBaseUrl}/signup?ref=${encodeURIComponent(partner.referralCode)}` : null;
+
   return (
     <Dialog open={!!partner} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{partner?.companyName} — clients & referrals</DialogTitle>
-          <DialogDescription>
-            {data ? <>Earnings this month: {formatCentsToDollars(data.monthEarningsCents)}</> : "…"}
-          </DialogDescription>
-        </DialogHeader>
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">Loading…</p>
-        ) : (
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="border-b border-border pb-3">
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5" /> Clients ({data?.clients.length ?? 0})
-              </h3>
-              {data?.clients.length ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Client</TableHead>
-                      <TableHead>Source / Ref</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Rate</TableHead>
-                      <TableHead className="text-right">Wallet</TableHead>
-                      <TableHead className="text-right">Joined</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.clients.map(c => (
-                      <TableRow key={c.clerkId}>
-                        <TableCell>
-                          <p className="leading-tight">{c.name ?? "—"}</p>
-                          <p className="text-xs text-muted-foreground">{c.email}</p>
-                        </TableCell>
-                        <TableCell>
-                          {c.referredByCode ? (
-                            <Badge variant="outline" className="font-mono text-[10px]">
-                              {c.referredByCode}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">{c.signupSource ?? "direct"}</span>
-                          )}
-                        </TableCell>
-                        <TableCell>{statusBadge(c.status)}</TableCell>
-                        <TableCell className="text-right tabular-nums">{formatCentsToDollars(c.rateCentsPerMin)}/min</TableCell>
-                        <TableCell className="text-right tabular-nums">{formatCentsToDollars(c.walletBalanceCents)}</TableCell>
-                        <TableCell className="text-right text-xs text-muted-foreground">{fmtDate(c.createdAt)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <div className="flex items-center gap-2">
+                <DialogTitle className="text-lg font-semibold">{partner.companyName}</DialogTitle>
+                {statusBadge(partner.status)}
+              </div>
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                Partner ID #{partner.id} · Created {fmtDate(partner.createdAt)}
+              </DialogDescription>
+            </div>
+            {onEdit && (
+              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { onClose(); onEdit(partner); }}>
+                <Pencil className="w-3.5 h-3.5 mr-1" /> Edit Partner
+              </Button>
+            )}
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2 overflow-y-auto flex-1 pr-1">
+          {/* Top Info Grid: Partner credentials, portal URL, referral, concurrency */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* User Gmail & Account */}
+            <div className="rounded-lg border border-border bg-card p-3 space-y-1 text-xs">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Partner User (User Gmail)</span>
+              <p className="font-semibold text-foreground text-sm">{partner.userName || "—"}</p>
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <span className="font-mono text-xs text-muted-foreground truncate">{partner.userEmail ?? partner.userId}</span>
+                {partner.userEmail && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
+                    onClick={() => copyToClipboard(partner.userEmail!, "User Gmail", "userEmail")}
+                  >
+                    {copiedKey === "userEmail" ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                  </Button>
+                )}
+              </div>
+              <p className="text-[10px] text-muted-foreground">Clerk ID: <span className="font-mono">{partner.userId}</span></p>
+            </div>
+
+            {/* Portal URL */}
+            <div className="rounded-lg border border-border bg-card p-3 space-y-1 text-xs">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Branded Portal URL (Users URL)</span>
+              {partner.portalUrl ? (
+                <>
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <a
+                      href={partner.portalUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-mono text-xs text-primary hover:underline truncate inline-flex items-center gap-1"
+                    >
+                      {partner.portalUrl}
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                    </a>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
+                      onClick={() => copyToClipboard(partner.portalUrl!, "Portal URL", "portalUrl")}
+                    >
+                      {copiedKey === "portalUrl" ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Custom Domain: {partner.customDomain ?? "None"} · Subdomain: {partner.slug ? `${partner.slug}.snapserve.ai` : "None"}
+                  </p>
+                </>
               ) : (
-                <p className="text-sm text-muted-foreground">No clients yet.</p>
+                <p className="text-muted-foreground pt-1 italic">No branded portal URL set</p>
               )}
             </div>
-            <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5" /> Direct Invites ({data?.invites.length ?? 0})
-              </h3>
-              {data?.invites.length ? (
-                <div className="space-y-1">
-                  {data.invites.map(i => (
-                    <div key={i.id} className="flex items-center justify-between text-sm border border-border rounded-md px-3 py-1.5">
-                      <span>{i.email}</span>
-                      <span className="flex items-center gap-2 text-xs text-muted-foreground">
+
+            {/* Referral Code & Link */}
+            <div className="rounded-lg border border-border bg-card p-3 space-y-1 text-xs">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Referral Code & Link</span>
+              <div className="flex items-center gap-2 pt-0.5">
+                {partner.referralCode ? (
+                  <Badge variant="outline" className="font-mono text-xs uppercase px-2 py-0.5 font-bold">
+                    {partner.referralCode}
+                  </Badge>
+                ) : (
+                  <span className="text-muted-foreground italic">No code set</span>
+                )}
+                <span className="text-[11px] text-muted-foreground ml-auto">{partner.referredCount ?? 0} referred walk-ins</span>
+              </div>
+              {referralLink && (
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <span className="font-mono text-[11px] text-muted-foreground truncate">{referralLink}</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
+                    onClick={() => copyToClipboard(referralLink, "Referral Link", "referralLink")}
+                  >
+                    {copiedKey === "referralLink" ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Concurrency & Rates */}
+            <div className="rounded-lg border border-border bg-card p-3 space-y-1 text-xs">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Concurrency & Economics</span>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">Concurrency Pool:</span>
+                  <span className="font-semibold text-foreground">{partner.concurrentLimit ?? 10} lines</span>
+                  <span className="text-[10px] text-muted-foreground block">{partner.allocatedConcurrency ?? 0} allocated</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">Base / Default Rate:</span>
+                  <span className="font-semibold text-foreground">
+                    {formatCentsToDollars(partner.baseRateCentsPerMin)} / {formatCentsToDollars(partner.defaultClientRateCentsPerMin)}
+                  </span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center pt-1 border-t border-border/50 text-[11px]">
+                <span className="text-muted-foreground">Wallet: <span className="font-medium text-foreground">{formatCentsToDollars(partner.walletBalanceCents ?? 0)}</span></span>
+                <span className="text-muted-foreground">Month Earnings: <span className="font-medium text-emerald-500">{data ? formatCentsToDollars(data.monthEarningsCents) : "—"}</span></span>
+              </div>
+            </div>
+          </div>
+
+          {/* Sub-sections: Tabs for Clients, Invites, and Referrals */}
+          <Tabs defaultValue="clients" className="pt-2">
+            <TabsList className="h-8">
+              <TabsTrigger value="clients" className="text-xs">
+                Clients ({data?.clients.length ?? partner.clientCount})
+              </TabsTrigger>
+              <TabsTrigger value="invites" className="text-xs">
+                Invites ({data?.invites.length ?? 0})
+              </TabsTrigger>
+              <TabsTrigger value="referrals" className="text-xs">
+                Referral Walk-ins ({data?.referrals?.length ?? partner.referredCount ?? 0})
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="clients" className="mt-3">
+              {isLoading ? (
+                <p className="text-xs text-muted-foreground py-6 text-center">Loading clients…</p>
+              ) : !data?.clients.length ? (
+                <div className="p-6 text-center border border-dashed border-border rounded-lg text-xs text-muted-foreground">
+                  No sub-clients created under this partner yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-md border border-border">
+                  <Table className="text-xs">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Client Name</TableHead>
+                        <TableHead>Client Gmail</TableHead>
+                        <TableHead className="text-right">Concurrency</TableHead>
+                        <TableHead className="text-right">Rate</TableHead>
+                        <TableHead className="text-right">Wallet</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Joined</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.clients.map((c, idx) => (
+                        <TableRow key={c.clerkId}>
+                          <TableCell className="font-medium">{c.name ?? "—"}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                              <span className="font-medium text-foreground">{c.email ?? "—"}</span>
+                              {c.email && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+                                  onClick={() => copyToClipboard(c.email!, "Client Email", `clientEmail-${idx}`)}
+                                >
+                                  {copiedKey === `clientEmail-${idx}` ? <Check className="w-2.5 h-2.5 text-emerald-500" /> : <Copy className="w-2.5 h-2.5" />}
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums font-semibold">{c.concurrentLimit ?? 10} lines</TableCell>
+                          <TableCell className="text-right tabular-nums">{formatCentsToDollars(c.rateCentsPerMin)}/min</TableCell>
+                          <TableCell className="text-right tabular-nums">{formatCentsToDollars(c.walletBalanceCents)}</TableCell>
+                          <TableCell>{statusBadge(c.status)}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">{fmtDate(c.createdAt)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="invites" className="mt-3">
+              {isLoading ? (
+                <p className="text-xs text-muted-foreground py-4 text-center">Loading invites…</p>
+              ) : !data?.invites.length ? (
+                <div className="p-6 text-center border border-dashed border-border rounded-lg text-xs text-muted-foreground">
+                  No direct email invites sent.
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {data.invites.map((i) => (
+                    <div key={i.id} className="flex items-center justify-between text-xs border border-border rounded-md px-3 py-2 bg-card">
+                      <span className="font-mono">{i.email}</span>
+                      <span className="flex items-center gap-2 text-muted-foreground">
                         {fmtDate(i.invitedAt)} {statusBadge(i.status)}
                       </span>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No direct invites.</p>
               )}
-            </div>
+            </TabsContent>
 
-            {/* Referrals table */}
-            {data?.referrals && data.referrals.length > 0 && (
-              <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5" /> Walk-in Referral Signups ({data.referrals.length})
-                </h3>
-                <div className="space-y-1">
-                  {data.referrals.map(r => (
-                    <div key={r.id} className="flex items-center justify-between text-sm border border-border rounded-md px-3 py-1.5">
+            <TabsContent value="referrals" className="mt-3">
+              {isLoading ? (
+                <p className="text-xs text-muted-foreground py-4 text-center">Loading referrals…</p>
+              ) : !data?.referrals?.length ? (
+                <div className="p-6 text-center border border-dashed border-border rounded-lg text-xs text-muted-foreground">
+                  No walk-in referral signups yet.
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {data.referrals.map((r) => (
+                    <div key={r.id} className="flex items-center justify-between text-xs border border-border rounded-md px-3 py-2 bg-card">
                       <div>
-                        <p className="font-medium text-xs">{r.userName || r.userEmail || "Signed up user"}</p>
-                        <p className="text-[11px] text-muted-foreground">Code: <span className="font-mono">{r.referralCode}</span></p>
+                        <p className="font-medium">{r.userName || r.userEmail || "Signed up user"}</p>
+                        <p className="text-[11px] text-muted-foreground font-mono">{r.userEmail ?? r.userId} · Code: {r.referralCode}</p>
                       </div>
-                      <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-2 text-muted-foreground">
                         {fmtDate(r.createdAt)} {statusBadge(r.status)}
                       </span>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
       </DialogContent>
     </Dialog>
   );

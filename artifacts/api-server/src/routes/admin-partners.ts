@@ -559,6 +559,7 @@ router.get("/admin/partners/:id/clients", async (req, res): Promise<void> => {
         status: usersTable.status,
         walletBalanceCents: usersTable.walletBalanceCents,
         rateCentsPerMin: usersTable.partnerRateCentsPerMin,
+        concurrentLimit: usersTable.concurrentLimit,
         referredByCode: usersTable.referredByCode,
         signupSource: usersTable.signupSource,
         createdAt: usersTable.createdAt,
@@ -610,6 +611,7 @@ router.get("/admin/partners/:id/clients", async (req, res): Promise<void> => {
       clients: clients.map(c => ({
         ...c,
         rateCentsPerMin: c.rateCentsPerMin ?? partner.defaultClientRateCentsPerMin,
+        concurrentLimit: c.concurrentLimit ?? 10,
       })),
       invites,
       referrals,
