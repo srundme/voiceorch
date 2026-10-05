@@ -86,7 +86,10 @@ router.post("/onboarding/complete", requireAuth, async (req, res): Promise<void>
     return;
   }
 
-  const code = parsed.data.referralCode?.trim() || "";
+  const rawCode = parsed.data.referralCode?.trim() || "";
+  // Strip formatting artifacts like markdown bold asterisks, hashes, quotes, and symbols
+  const sanitizedCode = rawCode.replace(/[^a-zA-Z0-9_-]/g, "").trim();
+  const code = sanitizedCode || rawCode;
   let matchedPartnerId: number | null = null;
   let finalReferredCode: string | null = code || null;
 

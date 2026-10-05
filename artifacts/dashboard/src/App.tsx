@@ -114,9 +114,12 @@ if (_storedTimeout !== null) {
 // Capture referral / affiliate code from query params (?ref=SANJAY or ?referral=SANJAY)
 try {
   const _params = new URLSearchParams(window.location.search);
-  const _ref = _params.get("ref") || _params.get("referral");
-  if (_ref) {
-    localStorage.setItem("snapserve_ref_code", _ref.trim().toUpperCase());
+  const _rawRef = _params.get("ref") || _params.get("referral");
+  if (_rawRef) {
+    const _clean = _rawRef.replace(/[^a-zA-Z0-9_-]/g, "").trim().toUpperCase();
+    if (_clean) {
+      localStorage.setItem("snapserve_ref_code", _clean);
+    }
   }
 } catch {
   // Ignore in SSR / iframe restrictions

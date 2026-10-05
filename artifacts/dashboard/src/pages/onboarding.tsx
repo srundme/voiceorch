@@ -284,7 +284,7 @@ function ReferralStep({
           <input
             type="text"
             value={referralCode}
-            onChange={(e) => onReferralCodeChange(e.target.value.toUpperCase())}
+            onChange={(e) => onReferralCodeChange(e.target.value.replace(/[^a-zA-Z0-9_-]/g, "").toUpperCase())}
             placeholder="ENTER YOUR REFERRAL CODE"
             className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground font-mono text-sm uppercase focus:outline-none focus:ring-1 focus:ring-black"
           />
