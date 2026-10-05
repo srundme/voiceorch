@@ -25,9 +25,9 @@ interface Answers {
 /* ── Motion config ──────────────────────────────────────────────────────── */
 
 const SLIDE_IN = {
-  initial:  { opacity: 0, y: 48 },
-  animate:  { opacity: 1, y: 0, transition: { duration: 0.42, ease: [0.22, 1, 0.36, 1] as [number,number,number,number] } },
-  exit:     { opacity: 0, y: -32, transition: { duration: 0.28, ease: [0.4, 0, 1, 1] as [number,number,number,number] } },
+  initial: { opacity: 0, y: 48 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.42, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] } },
+  exit: { opacity: 0, y: -32, transition: { duration: 0.28, ease: [0.4, 0, 1, 1] as [number, number, number, number] } },
 };
 
 /* ── Helpers ────────────────────────────────────────────────────────────── */
@@ -140,8 +140,8 @@ function RoleStep({
   onNext: () => void;
 }) {
   const options: { id: Role; label: string; desc: string }[] = [
-    { id: "student",      label: "Student",      desc: "Exploring AI as part of my studies" },
-    { id: "professional", label: "Professional",  desc: "Building voice agents for work" },
+    { id: "student", label: "Student", desc: "Exploring AI as part of my studies" },
+    { id: "professional", label: "Professional", desc: "Building voice agents for work" },
   ];
 
   useEffect(() => {
@@ -171,19 +171,19 @@ function RoleStep({
             className={`
               flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all duration-150 cursor-pointer
               ${value === opt.id
-                ? "border-black bg-black text-foreground"
-                : "border-border hover:border-border text-foreground"
+                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                : "border-border hover:border-foreground/30 bg-card/50 text-foreground"
               }
             `}
           >
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold opacity-40">{idx + 1}</span>
+                <span className={`text-[11px] font-bold ${value === opt.id ? "text-primary-foreground/70" : "opacity-40"}`}>{idx + 1}</span>
                 <span className="font-semibold text-base">{opt.label}</span>
               </div>
-              <p className={`text-sm mt-0.5 ${value === opt.id ? "text-muted-foreground" : "text-muted-foreground"}`}>{opt.desc}</p>
+              <p className={`text-sm mt-0.5 ${value === opt.id ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{opt.desc}</p>
             </div>
-            {value === opt.id && <Check className="h-5 w-5 shrink-0" />}
+            {value === opt.id && <Check className="h-5 w-5 shrink-0 text-primary-foreground" />}
           </motion.button>
         ))}
       </div>
@@ -206,11 +206,11 @@ function ReferralStep({
   onNext: () => void;
 }) {
   const options: { id: ReferralSource; label: string }[] = [
-    { id: "instagram",  label: "Instagram" },
-    { id: "youtube",    label: "YouTube" },
-    { id: "reference",  label: "Someone referred me (Partner / Friend)" },
-    { id: "google",     label: "Google Search" },
-    { id: "ai_search",  label: "AI Search Results" },
+    { id: "instagram", label: "Instagram" },
+    { id: "youtube", label: "YouTube" },
+    { id: "reference", label: "Someone referred me (Partner / Friend)" },
+    { id: "google", label: "Google Search" },
+    { id: "ai_search", label: "AI Search Results" },
   ];
 
   const [showCodeInput, setShowCodeInput] = useState(value === "reference" || !!referralCode);
@@ -258,16 +258,16 @@ function ReferralStep({
             className={`
               flex items-center gap-3.5 px-4 py-3.5 rounded-xl border-2 text-left transition-all duration-150 cursor-pointer
               ${value === opt.id
-                ? "border-black bg-black text-foreground"
-                : "border-border hover:border-border text-foreground"
+                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                : "border-border hover:border-foreground/30 bg-card/50 text-foreground"
               }
             `}
           >
             <div className="flex items-center gap-2 flex-1">
-              <span className={`text-[11px] font-bold ${value === opt.id ? "text-muted-foreground" : "opacity-30"}`}>{idx + 1}</span>
+              <span className={`text-[11px] font-bold ${value === opt.id ? "text-primary-foreground/70" : "opacity-30"}`}>{idx + 1}</span>
               <span className="font-medium text-[15px]">{opt.label}</span>
             </div>
-            {value === opt.id && <Check className="h-4 w-4 shrink-0" />}
+            {value === opt.id && <Check className="h-4 w-4 shrink-0 text-primary-foreground" />}
           </motion.button>
         ))}
       </div>
@@ -285,7 +285,7 @@ function ReferralStep({
             type="text"
             value={referralCode}
             onChange={(e) => onReferralCodeChange(e.target.value.toUpperCase())}
-            placeholder="e.g. SANJAY"
+            placeholder="ENTER YOUR REFERRAL CODE"
             className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground font-mono text-sm uppercase focus:outline-none focus:ring-1 focus:ring-black"
           />
           <p className="text-xs text-muted-foreground mt-1.5">
@@ -330,8 +330,8 @@ function VoiceAgentStep({
       <p className="text-muted-foreground text-base mb-8">No wrong answer — we just want to set the right starting point.</p>
       <div className="flex gap-3">
         {[
-          { v: true,  label: "Yes", key: "Y" },
-          { v: false, label: "No",  key: "N" },
+          { v: true, label: "Yes", key: "Y" },
+          { v: false, label: "No", key: "N" },
         ].map(opt => (
           <motion.button
             key={String(opt.v)}
@@ -341,13 +341,13 @@ function VoiceAgentStep({
             className={`
               flex-1 flex flex-col items-center gap-2 py-6 rounded-2xl border-2 font-semibold text-base transition-all cursor-pointer
               ${value === opt.v
-                ? "border-black bg-black text-foreground"
-                : "border-border hover:border-border text-foreground"
+                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                : "border-border hover:border-foreground/30 bg-card/50 text-foreground"
               }
             `}
           >
             <div className="flex items-center gap-1.5">
-              <span className={`text-[11px] ${value === opt.v ? "text-muted-foreground" : "text-muted-foreground"}`}>{opt.key}</span>
+              <span className={`text-[11px] ${value === opt.v ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{opt.key}</span>
               <span>{opt.label}</span>
             </div>
           </motion.button>
@@ -364,10 +364,10 @@ function PlatformsStep({ value, onChange, onNext, loading }: {
   loading: boolean;
 }) {
   const options: { id: PriorPlatform; label: string; desc: string; color: string }[] = [
-    { id: "vapi",   label: "Vapi.ai",   desc: "Voice AI infrastructure",    color: "bg-muted border-border" },
-    { id: "retell", label: "Retell.ai",  desc: "AI calling platform",        color: "bg-muted border-border" },
-    { id: "bolna",  label: "Bolna.ai",   desc: "Open-source voice agents",   color: "bg-muted border-border" },
-    { id: "other",  label: "Other",      desc: "Something else",             color: "bg-muted border-border" },
+    { id: "vapi", label: "Vapi.ai", desc: "Voice AI infrastructure", color: "bg-muted border-border" },
+    { id: "retell", label: "Retell.ai", desc: "AI calling platform", color: "bg-muted border-border" },
+    { id: "bolna", label: "Bolna.ai", desc: "Open-source voice agents", color: "bg-muted border-border" },
+    { id: "other", label: "Other", desc: "Something else", color: "bg-muted border-border" },
   ];
 
   const toggle = (id: PriorPlatform) => {
@@ -382,7 +382,7 @@ function PlatformsStep({ value, onChange, onNext, loading }: {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, onNext]);
 
   return (
@@ -404,20 +404,20 @@ function PlatformsStep({ value, onChange, onNext, loading }: {
               className={`
                 relative flex flex-col items-start p-4 rounded-xl border-2 text-left transition-all cursor-pointer
                 ${selected
-                  ? "border-black bg-black text-foreground"
-                  : `border-border hover:border-border text-foreground ${opt.color}`
+                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                  : `border-border hover:border-foreground/30 bg-card/50 text-foreground ${opt.color}`
                 }
               `}
             >
               <div className="flex w-full items-start justify-between mb-2">
-                <span className={`text-[11px] font-bold ${selected ? "text-muted-foreground" : "text-muted-foreground"}`}>{idx + 1}</span>
+                <span className={`text-[11px] font-bold ${selected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{idx + 1}</span>
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all
-                  ${selected ? "border-white bg-card/70 backdrop-blur-lg" : "border-border"}`}>
-                  {selected && <Check className="h-3 w-3 text-black" />}
+                  ${selected ? "border-primary-foreground bg-primary-foreground text-primary" : "border-border"}`}>
+                  {selected && <Check className="h-3 w-3 text-primary" />}
                 </div>
               </div>
               <p className="font-semibold text-[15px]">{opt.label}</p>
-              <p className={`text-xs mt-0.5 ${selected ? "text-muted-foreground" : "text-muted-foreground"}`}>{opt.desc}</p>
+              <p className={`text-xs mt-0.5 ${selected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{opt.desc}</p>
             </motion.button>
           );
         })}
@@ -478,12 +478,12 @@ export default function OnboardingPage() {
     complete(
       {
         data: {
-          name:            finalAnswers.name || undefined,
-          role:            finalAnswers.role ?? undefined,
-          referralSource:  finalAnswers.referralSource ?? undefined,
-          referralCode:    finalAnswers.referralCode?.trim() || undefined,
+          name: finalAnswers.name || undefined,
+          role: finalAnswers.role ?? undefined,
+          referralSource: finalAnswers.referralSource ?? undefined,
+          referralCode: finalAnswers.referralCode?.trim() || undefined,
           usedVoiceAgents: finalAnswers.usedVoiceAgents ?? undefined,
-          priorPlatforms:  finalAnswers.priorPlatforms.length > 0 ? finalAnswers.priorPlatforms : undefined,
+          priorPlatforms: finalAnswers.priorPlatforms.length > 0 ? finalAnswers.priorPlatforms : undefined,
         } as any,
       },
       {
