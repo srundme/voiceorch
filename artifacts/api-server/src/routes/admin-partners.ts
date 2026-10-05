@@ -83,6 +83,8 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
         slug: partnersTable.slug,
         customDomain: partnersTable.customDomain,
         customDomainStatus: partnersTable.customDomainStatus,
+        maxAgents: partnersTable.maxAgents,
+        maxClients: partnersTable.maxClients,
         createdAt: partnersTable.createdAt,
         userName: usersTable.name,
         userEmail: usersTable.email,
@@ -441,13 +443,15 @@ router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
       return;
     }
 
-    const { companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, referralCode, status, concurrentLimit } = (req.body ?? {}) as {
+    const { companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, referralCode, status, concurrentLimit, maxAgents, maxClients } = (req.body ?? {}) as {
       companyName?: string;
       baseRateCentsPerMin?: number;
       defaultClientRateCentsPerMin?: number;
       referralCode?: string | null;
       status?: string;
       concurrentLimit?: number;
+      maxAgents?: number | null | "";
+      maxClients?: number | null | "";
     };
 
     const set: Record<string, unknown> = {};
@@ -513,6 +517,30 @@ router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
       }
       set["status"] = status;
     }
+    if (maxAgents !== undefined) {
+      if (maxAgents === null || maxAgents === "") {
+        set["maxAgents"] = null;
+      } else {
+        const parsed = Number(maxAgents);
+        if (!Number.isInteger(parsed) || parsed < 0) {
+          res.status(400).json({ error: "Agent limit must be a non-negative integer or empty (for unlimited)" });
+          return;
+        }
+        set["maxAgents"] = parsed;
+      }
+    }
+    if (maxClients !== undefined) {
+      if (maxClients === null || maxClients === "") {
+        set["maxClients"] = null;
+      } else {
+        const parsed = Number(maxClients);
+        if (!Number.isInteger(parsed) || parsed < 0) {
+          res.status(400).json({ error: "Client limit must be a non-negative integer or empty (for unlimited)" });
+          return;
+        }
+        set["maxClients"] = parsed;
+      }
+    }
     if (Object.keys(set).length === 0) {
       res.status(400).json({ error: "Nothing to update" });
       return;
@@ -528,6 +556,8 @@ router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
         defaultClientRateCentsPerMin: partner.defaultClientRateCentsPerMin,
         referralCode: partner.referralCode,
         status: partner.status,
+        maxAgents: partner.maxAgents,
+        maxClients: partner.maxClients,
       },
       afterValue: set,
     });

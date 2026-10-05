@@ -85,6 +85,16 @@ export const partnersTable = pgTable("partners", {
   docsUrl: text("docs_url"),
   termsUrl: text("terms_url"),
   privacyUrl: text("privacy_url"),
+  /**
+   * Max agents any single client of this partner may create.
+   * null = no limit (unlimited). Enforced at POST /agents in the API.
+   */
+  maxAgents: integer("max_agents"),
+  /**
+   * Max client accounts this partner may onboard via POST /partner/clients.
+   * null = no limit (unlimited).
+   */
+  maxClients: integer("max_clients"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

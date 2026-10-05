@@ -37,6 +37,8 @@ interface AdminPartner {
   customDomainStatus?: string | null;
   /** Client login URL (custom domain if active, else subdomain). */
   portalUrl?: string | null;
+  maxAgents?: number | null;
+  maxClients?: number | null;
 }
 
 interface PartnerClientRow {
@@ -135,6 +137,8 @@ export default function PartnersPage() {
   const [editConcurrency, setEditConcurrency] = useState("10");
   const [editReferralCode, setEditReferralCode] = useState("");
   const [editStatus, setEditStatus] = useState("active");
+  const [editMaxAgents, setEditMaxAgents] = useState("");
+  const [editMaxClients, setEditMaxClients] = useState("");
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin", "partners"] });
 
@@ -187,8 +191,10 @@ export default function PartnersPage() {
   });
 
   const editMutation = useMutation({
-    mutationFn: () =>
-      adminFetch(`/partners/${editTarget!.id}`, {
+    mutationFn: () => {
+      const parsedAgents = editMaxAgents.trim() === "" ? null : parseInt(editMaxAgents.trim(), 10);
+      const parsedClients = editMaxClients.trim() === "" ? null : parseInt(editMaxClients.trim(), 10);
+      return adminFetch(`/partners/${editTarget!.id}`, {
         method: "PATCH",
         body: JSON.stringify({
           companyName: editCompany.trim(),
@@ -196,8 +202,11 @@ export default function PartnersPage() {
           concurrentLimit: parseInt(editConcurrency, 10) || 10,
           referralCode: editReferralCode.trim() ? editReferralCode.trim().toUpperCase() : null,
           status: editStatus,
+          maxAgents: isNaN(parsedAgents as number) ? null : parsedAgents,
+          maxClients: isNaN(parsedClients as number) ? null : parsedClients,
         }),
-      }),
+      });
+    },
     onSuccess: () => {
       toast({ title: "Partner updated" });
       setEditTarget(null);
@@ -213,6 +222,8 @@ export default function PartnersPage() {
     setEditConcurrency(String(p.concurrentLimit ?? 10));
     setEditReferralCode(p.referralCode ?? "");
     setEditStatus(p.status);
+    setEditMaxAgents(p.maxAgents != null ? String(p.maxAgents) : "");
+    setEditMaxClients(p.maxClients != null ? String(p.maxClients) : "");
   };
 
   return (
@@ -324,7 +335,10 @@ export default function PartnersPage() {
                         <div className="text-[11px] text-muted-foreground">{p.allocatedConcurrency} allocated</div>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{p.clientCount}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {p.clientCount}
+                      {p.maxClients != null ? <span className="text-muted-foreground text-xs font-normal"> / {p.maxClients}</span> : null}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{p.walletBalanceCents != null ? formatCentsToDollars(p.walletBalanceCents) : "—"}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1.5">
@@ -478,6 +492,32 @@ export default function PartnersPage() {
               </Select>
               <p className="text-[11px] text-muted-foreground">
                 Suspended: clients bill at the standard platform rate and the partner earns no spread.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Agent limit (max agents)</Label>
+              <Input
+                type="number"
+                min="0"
+                value={editMaxAgents}
+                onChange={e => setEditMaxAgents(e.target.value)}
+                placeholder="Unlimited (leave blank)"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Max number of agents that can be created in that account. Leave blank for unlimited.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Client limit (max clients)</Label>
+              <Input
+                type="number"
+                min="0"
+                value={editMaxClients}
+                onChange={e => setEditMaxClients(e.target.value)}
+                placeholder="Unlimited (leave blank)"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Max number of clients that can be added in that account. Leave blank for unlimited.
               </p>
             </div>
           </div>

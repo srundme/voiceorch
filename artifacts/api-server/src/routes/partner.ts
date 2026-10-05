@@ -932,6 +932,23 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
     const partner = await requireActivePartner(req, res);
     if (!partner) return;
 
+    if (partner.maxClients != null) {
+      const [clientCountRes] = await db
+        .select({ count: count() })
+        .from(usersTable)
+        .where(and(eq(usersTable.partnerId, partner.id), ne(usersTable.status, "deleted")));
+      const currentClients = Number(clientCountRes?.count ?? 0);
+      if (currentClients >= partner.maxClients) {
+        res.status(403).json({
+          error: `Client limit reached. Your existing plan has the limit of ${partner.maxClients} clients only. Please contact your partner for further plan upgrade.`,
+          errorCode: "CLIENT_LIMIT_REACHED",
+          limit: partner.maxClients,
+          currentCount: currentClients,
+        });
+        return;
+      }
+    }
+
     const { email, password, name, rateCentsPerMin, concurrentLimit, sendCredentials } = (req.body ?? {}) as {
       email?: string;
       password?: string;
@@ -1521,6 +1538,23 @@ router.post("/partner/clients/:clerkId/agents", requireAuth, async (req, res): P
     if (!partner) return;
     const client = await getOwnedClient(partner.id, String(req.params.clerkId ?? ""));
     if (!client) { res.status(404).json({ error: "Client not found" }); return; }
+
+    if (partner.maxAgents != null) {
+      const [agentCountRes] = await db
+        .select({ count: count() })
+        .from(agentsTable)
+        .where(and(eq(agentsTable.userId, client.clerkId), eq(agentsTable.isTestPersona, false)));
+      const currentAgentCount = Number(agentCountRes?.count ?? 0);
+      if (currentAgentCount >= partner.maxAgents) {
+        res.status(403).json({
+          error: `Agent limit reached. Your existing plan has the limit of ${partner.maxAgents} agents only. Please contact your partner for further plan upgrade.`,
+          errorCode: "AGENT_LIMIT_REACHED",
+          limit: partner.maxAgents,
+          currentCount: currentAgentCount,
+        });
+        return;
+      }
+    }
     const partnerClerkId = clerkIdOf(req as { clerkUserId?: string });
 
     const sourceAgentId = Number((req.body as { sourceAgentId?: unknown } | undefined)?.sourceAgentId);
@@ -1737,6 +1771,23 @@ router.post("/partner/invites", requireAuth, async (req, res): Promise<void> => 
   try {
     const partner = await requireActivePartner(req, res);
     if (!partner) return;
+
+    if (partner.maxClients != null) {
+      const [clientCountRes] = await db
+        .select({ count: count() })
+        .from(usersTable)
+        .where(and(eq(usersTable.partnerId, partner.id), ne(usersTable.status, "deleted")));
+      const currentClients = Number(clientCountRes?.count ?? 0);
+      if (currentClients >= partner.maxClients) {
+        res.status(403).json({
+          error: `Client limit reached. Your existing plan has the limit of ${partner.maxClients} clients only. Please contact your partner for further plan upgrade.`,
+          errorCode: "CLIENT_LIMIT_REACHED",
+          limit: partner.maxClients,
+          currentCount: currentClients,
+        });
+        return;
+      }
+    }
 
     const { email, name, rateCentsPerMin } = (req.body ?? {}) as {
       email?: string; name?: string; rateCentsPerMin?: number;

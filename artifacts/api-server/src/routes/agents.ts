@@ -2,7 +2,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, count, desc, asc, isNull, inArray, max, ne, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
-import { db, agentsTable, agentVersionsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, executionLogsTable, schedulingCalendarsTable, availabilitySchedulesTable, type AgentConfig } from "@workspace/db";
+import { db, agentsTable, agentVersionsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, executionLogsTable, schedulingCalendarsTable, availabilitySchedulesTable, partnersTable, usersTable, type AgentConfig } from "@workspace/db";
 import { PERSONA_HASH_FACT_KEY } from "../orchestration/callerMemory.js";
 
 /** Internal keys (e.g. __agent_persona_hash) stay in DB for runtime, but never surface in Memory UI. */
@@ -174,7 +174,48 @@ router.get("/agents", requireAuth, clientContext, async (req, res): Promise<void
 
 router.post("/agents", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
-  if (rejectReadOnly(res, (await workspaceOwned(clerkId)).scope.canWrite)) return;
+  const { scope } = await workspaceOwned(clerkId);
+  if (rejectReadOnly(res, scope.canWrite)) return;
+
+  // Check partner agent limit if applicable
+  const [userRow] = await db
+    .select({ partnerId: usersTable.partnerId })
+    .from(usersTable)
+    .where(eq(usersTable.clerkId, clerkId));
+
+  let partnerRecord: { id: number; maxAgents: number | null } | null = null;
+  if (userRow?.partnerId) {
+    const [p] = await db
+      .select({ id: partnersTable.id, maxAgents: partnersTable.maxAgents })
+      .from(partnersTable)
+      .where(eq(partnersTable.id, userRow.partnerId));
+    if (p) partnerRecord = p;
+  }
+  if (!partnerRecord) {
+    const [p] = await db
+      .select({ id: partnersTable.id, maxAgents: partnersTable.maxAgents })
+      .from(partnersTable)
+      .where(eq(partnersTable.userId, clerkId));
+    if (p) partnerRecord = p;
+  }
+
+  if (partnerRecord?.maxAgents != null) {
+    const [countResult] = await db
+      .select({ count: count() })
+      .from(agentsTable)
+      .where(and(inArray(agentsTable.userId, scope.userIds), eq(agentsTable.isTestPersona, false)));
+    const currentAgentCount = Number(countResult?.count ?? 0);
+    if (currentAgentCount >= partnerRecord.maxAgents) {
+      res.status(403).json({
+        error: `Agent limit reached. Your existing plan has the limit of ${partnerRecord.maxAgents} agents only. Please contact your partner for further plan upgrade.`,
+        errorCode: "AGENT_LIMIT_REACHED",
+        limit: partnerRecord.maxAgents,
+        currentCount: currentAgentCount,
+      });
+      return;
+    }
+  }
+
   const parsed = CreateAgentBody.safeParse(req.body);
   if (!parsed.success) {
     const issues = parsed.error.issues;

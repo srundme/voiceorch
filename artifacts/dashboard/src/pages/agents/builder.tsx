@@ -105,6 +105,7 @@ import { GhostEmpty } from "@/components/brand-moments";
 import { hostProductName } from "@/lib/white-label";
 import { findBySchedulingId, normalizeSchedulingId } from "@/lib/scheduling-setup";
 import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
+import { PlanLimitModal } from "@/components/plan-limit-modal";
 import {
   LLM_PROVIDERS, TTS_PROVIDERS, ASR_PROVIDERS,
   LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, asrModelsForPicker, SARVAM_PRODUCT_ASR_MODEL, isLegacySarvamAsr,
@@ -8809,7 +8810,7 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
   );
 }
 
-function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function CreateAgentDialog({ open, onClose, onLimitReached }: { open: boolean; onClose: () => void; onLimitReached?: (limit: number | null) => void }) {
   const [, navigate] = useLocation();
   const { isManagedWorkspace } = usePartnerManagedWorkspace();
   const queryClient = useQueryClient();
@@ -8892,11 +8893,23 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         const role1 = agent1Role.trim() || "Lead Qualifier";
         const role2 = agent2Role.trim() || "Meeting Scheduler";
 
-        const agent1 = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildAgentBody(name1)),
-        });
+        let agent1: { id: number };
+        try {
+          agent1 = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(buildAgentBody(name1)),
+          });
+        } catch (err: any) {
+          const errorCode = err?.data?.errorCode || err?.errorCode;
+          const limitVal = err?.data?.limit ?? err?.limit;
+          if (errorCode === "AGENT_LIMIT_REACHED" || String(err?.message || "").includes("Agent limit reached")) {
+            handleClose();
+            onLimitReached?.(limitVal ?? null);
+            return;
+          }
+          throw err;
+        }
 
         let agent2: { id: number };
         try {
@@ -8906,6 +8919,13 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
             body: JSON.stringify(buildAgentBody(name2)),
           });
         } catch (err: any) {
+          const errorCode = err?.data?.errorCode || err?.errorCode;
+          const limitVal = err?.data?.limit ?? err?.limit;
+          if (errorCode === "AGENT_LIMIT_REACHED" || String(err?.message || "").includes("Agent limit reached")) {
+            handleClose();
+            onLimitReached?.(limitVal ?? null);
+            return;
+          }
           await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
           const issueMsg = Array.isArray(err?.issues) ? err.issues.map((i: any) => `${i.path.join(".")}: ${i.message}`).join(", ") : "";
           setCreateError(
@@ -8975,6 +8995,13 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
       handleClose();
       navigate(`/app/agents/${result.id}`);
     } catch (err: any) {
+      const errorCode = err?.data?.errorCode || err?.errorCode;
+      const limitVal = err?.data?.limit ?? err?.limit;
+      if (errorCode === "AGENT_LIMIT_REACHED" || String(err?.message || "").includes("Agent limit reached")) {
+        handleClose();
+        onLimitReached?.(limitVal ?? null);
+        return;
+      }
       const issueMsg = Array.isArray(err?.issues) ? err.issues.map((i: any) => `${i.path.join(".")}: ${i.message}`).join(", ") : "";
       setCreateError(issueMsg ? `Validation failed: ${issueMsg}` : (err?.message ?? "Failed to create agent. Please try again."));
     } finally {
@@ -9348,9 +9375,25 @@ export default function AgentBuilder() {
     }
   }, [isMobile, selectedId, agentsLoading, agents, showCreate]);
 
+  const [limitModalOpen, setLimitModalOpen] = useState(false);
+  const [agentLimit, setAgentLimit] = useState<number | null>(null);
+
   return (
     <div className="flex h-full overflow-hidden bg-background">
-      <CreateAgentDialog open={showCreate} onClose={() => setShowCreate(false)} />
+      <CreateAgentDialog
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onLimitReached={(limit) => {
+          setAgentLimit(limit);
+          setLimitModalOpen(true);
+        }}
+      />
+      <PlanLimitModal
+        open={limitModalOpen}
+        onClose={() => setLimitModalOpen(false)}
+        type="agent"
+        limit={agentLimit}
+      />
       <Sheet open={agentsSheetOpen} onOpenChange={setAgentsSheetOpen}>
         <SheetContent side="left" className="w-[min(100vw,300px)] p-0 [&>button]:hidden">
           <SheetTitle className="sr-only">Agents</SheetTitle>

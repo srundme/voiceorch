@@ -50,7 +50,9 @@ export async function partnerFetch<T = unknown>(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({} as Record<string, unknown>));
-    throw new Error((err as { error?: string }).error || `Request failed (${res.status})`);
+    const errorObj = new Error((err as { error?: string }).error || `Request failed (${res.status})`);
+    Object.assign(errorObj, err);
+    throw errorObj;
   }
   if (res.status === 204) return null as T;
   return res.json() as Promise<T>;

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { partnerFetch } from "@/hooks/use-partner";
+import { PlanLimitModal } from "@/components/plan-limit-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -485,8 +486,9 @@ function ClientsTab({ me }: { me: PartnerMe }) {
   const [createConcurrencyText, setCreateConcurrencyText] = useState("5");
   const [sendCredentials, setSendCredentials] = useState(true);
   const [rateText, setRateText] = useState("");
-  const [amountText, setAmountText] = useState("");
   const [concurrencyText, setConcurrencyText] = useState("");
+  const [limitModalOpen, setLimitModalOpen] = useState(false);
+  const [clientLimit, setClientLimit] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery<{ clients: PartnerClient[]; baseRateCentsPerMin: number }>({
     queryKey: ["partner-clients"],
@@ -535,7 +537,17 @@ function ClientsTab({ me }: { me: PartnerMe }) {
       setCreateConcurrencyText("5");
       invalidate();
     },
-    onError: (err: Error) => toast({ title: "Could not create client", description: err.message, variant: "destructive" }),
+    onError: (err: any) => {
+      const errorCode = err?.errorCode || err?.data?.errorCode;
+      const limitVal = err?.limit ?? err?.data?.limit;
+      if (errorCode === "CLIENT_LIMIT_REACHED" || String(err?.message || "").includes("Client limit reached")) {
+        setClientLimit(limitVal ?? null);
+        setLimitModalOpen(true);
+        setCreateOpen(false);
+        return;
+      }
+      toast({ title: "Could not create client", description: err.message, variant: "destructive" });
+    },
   });
 
   const concurrencyMutation = useMutation({
@@ -905,6 +917,13 @@ function ClientsTab({ me }: { me: PartnerMe }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <PlanLimitModal
+        open={limitModalOpen}
+        onClose={() => setLimitModalOpen(false)}
+        type="client"
+        limit={clientLimit}
+        partnerSupportEmail={me.supportEmail}
+      />
     </div>
   );
 }
@@ -919,6 +938,8 @@ function InvitesTab({ me }: { me: PartnerMe }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [rateText, setRateText] = useState((me.defaultClientRateCentsPerMin / 100).toFixed(2));
+  const [limitModalOpen, setLimitModalOpen] = useState(false);
+  const [clientLimit, setClientLimit] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery<{ invites: PartnerInvite[] }>({
     queryKey: ["partner-invites"],
@@ -956,7 +977,17 @@ function InvitesTab({ me }: { me: PartnerMe }) {
         toast({ title: "Invite created — email could not be sent", description: "The invite link was copied to your clipboard; share it directly." });
       }
     },
-    onError: (err: Error) => toast({ title: "Could not send invite", description: err.message, variant: "destructive" }),
+    onError: (err: any) => {
+      const errorCode = err?.errorCode || err?.data?.errorCode;
+      const limitVal = err?.limit ?? err?.data?.limit;
+      if (errorCode === "CLIENT_LIMIT_REACHED" || String(err?.message || "").includes("Client limit reached")) {
+        setClientLimit(limitVal ?? null);
+        setLimitModalOpen(true);
+        setOpen(false);
+        return;
+      }
+      toast({ title: "Could not send invite", description: err.message, variant: "destructive" });
+    },
   });
 
   const revokeMutation = useMutation({
@@ -1118,6 +1149,13 @@ function InvitesTab({ me }: { me: PartnerMe }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <PlanLimitModal
+        open={limitModalOpen}
+        onClose={() => setLimitModalOpen(false)}
+        type="client"
+        limit={clientLimit}
+        partnerSupportEmail={me.supportEmail}
+      />
     </div>
   );
 }
