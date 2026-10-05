@@ -179,7 +179,7 @@ function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const isSignup = location.startsWith("/sign-up");
+  const isSignup = location.startsWith("/sign-up") || location.startsWith("/signup");
   const isPartnerGateway = !isDirectSnapServeHost();
 
   useEffect(() => {
@@ -736,7 +736,9 @@ function Router() {
         <Switch>
           <Route path="/" component={HomeRedirect} />
           <Route path="/sign-in/*?" component={SignInPage} />
+          <Route path="/login/*?" component={SignInPage} />
           <Route path="/sign-up/*?" component={SignInPage} />
+          <Route path="/signup/*?" component={SignInPage} />
           <Route path="/app/*?" component={ProtectedApp} />
           <Route path="/impersonate" component={ImpersonatePage} />
           <Route path="/book/cancel" component={CancelBookingPage} />
