@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { useCompleteOnboarding, useGetOnboardingStatus, getGetOnboardingStatusQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check } from "lucide-react";
+import { Check, ArrowLeft } from "lucide-react";
 import { usePartnerContext } from "@/hooks/use-partner";
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
@@ -62,7 +62,7 @@ function ContinueButton({
   onClick,
   disabled,
   loading,
-  label = "OK",
+  label = "Enter",
 }: {
   onClick: () => void;
   disabled?: boolean;
@@ -76,7 +76,7 @@ function ContinueButton({
       onClick={onClick}
       disabled={disabled || loading}
       className={`
-        mt-8 flex items-center gap-2.5 px-6 py-3 rounded-lg font-semibold text-sm
+        mt-8 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold text-sm
         transition-all duration-150 select-none
         ${disabled
           ? "bg-muted text-muted-foreground cursor-not-allowed"
@@ -87,13 +87,7 @@ function ContinueButton({
       {loading ? (
         <span className="inline-block h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
       ) : (
-        <>
-          {label}
-          <div className="flex items-center gap-0.5 bg-card/70 backdrop-blur-lg/15 rounded px-1.5 py-0.5 text-[11px]">
-            <span>press</span>
-            <kbd className="font-bold">↵</kbd>
-          </div>
-        </>
+        <span>{label}</span>
       )}
     </motion.button>
   );
@@ -171,19 +165,19 @@ function RoleStep({
             className={`
               flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all duration-150 cursor-pointer
               ${value === opt.id
-                ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                : "border-border hover:border-foreground/30 bg-card/50 text-foreground"
+                ? "border-black bg-neutral-100 text-neutral-900 shadow-sm"
+                : "border-border hover:border-neutral-300 bg-card text-foreground"
               }
             `}
           >
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className={`text-[11px] font-bold ${value === opt.id ? "text-primary-foreground/70" : "opacity-40"}`}>{idx + 1}</span>
-                <span className="font-semibold text-base">{opt.label}</span>
+                <span className={`text-[11px] font-bold ${value === opt.id ? "text-neutral-700" : "opacity-40"}`}>{idx + 1}</span>
+                <span className="font-semibold text-base text-neutral-900">{opt.label}</span>
               </div>
-              <p className={`text-sm mt-0.5 ${value === opt.id ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{opt.desc}</p>
+              <p className={`text-sm mt-0.5 ${value === opt.id ? "text-neutral-600" : "text-muted-foreground"}`}>{opt.desc}</p>
             </div>
-            {value === opt.id && <Check className="h-5 w-5 shrink-0 text-primary-foreground" />}
+            {value === opt.id && <Check className="h-5 w-5 shrink-0 text-neutral-900" />}
           </motion.button>
         ))}
       </div>
@@ -258,16 +252,16 @@ function ReferralStep({
             className={`
               flex items-center gap-3.5 px-4 py-3.5 rounded-xl border-2 text-left transition-all duration-150 cursor-pointer
               ${value === opt.id
-                ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                : "border-border hover:border-foreground/30 bg-card/50 text-foreground"
+                ? "border-black bg-neutral-100 text-neutral-900 shadow-sm"
+                : "border-border hover:border-neutral-300 bg-card text-foreground"
               }
             `}
           >
             <div className="flex items-center gap-2 flex-1">
-              <span className={`text-[11px] font-bold ${value === opt.id ? "text-primary-foreground/70" : "opacity-30"}`}>{idx + 1}</span>
-              <span className="font-medium text-[15px]">{opt.label}</span>
+              <span className={`text-[11px] font-bold ${value === opt.id ? "text-neutral-700" : "opacity-30"}`}>{idx + 1}</span>
+              <span className="font-medium text-[15px] text-neutral-900">{opt.label}</span>
             </div>
-            {value === opt.id && <Check className="h-4 w-4 shrink-0 text-primary-foreground" />}
+            {value === opt.id && <Check className="h-4 w-4 shrink-0 text-neutral-900" />}
           </motion.button>
         ))}
       </div>
@@ -339,17 +333,24 @@ function VoiceAgentStep({
             whileTap={{ scale: 0.96 }}
             onClick={() => onSelect(opt.v)}
             className={`
-              flex-1 flex flex-col items-center gap-2 py-6 rounded-2xl border-2 font-semibold text-base transition-all cursor-pointer
+              flex-1 flex items-center justify-center gap-2.5 py-5 rounded-2xl border-2 font-semibold text-base transition-all cursor-pointer select-none
               ${value === opt.v
-                ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                : "border-border hover:border-foreground/30 bg-card/50 text-foreground"
+                ? "border-black bg-neutral-100 text-neutral-900 shadow-sm"
+                : "border-border hover:border-neutral-300 bg-card text-foreground"
               }
             `}
           >
-            <div className="flex items-center gap-1.5">
-              <span className={`text-[11px] ${value === opt.v ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{opt.key}</span>
-              <span>{opt.label}</span>
-            </div>
+            <span className="text-base font-semibold">{opt.label}</span>
+            <kbd
+              className={`text-[11px] font-mono font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                value === opt.v
+                  ? "bg-card border-neutral-300 text-neutral-800"
+                  : "bg-muted border-border text-muted-foreground"
+              }`}
+            >
+              {opt.key}
+            </kbd>
+            {value === opt.v && <Check className="h-4 w-4 shrink-0 text-neutral-900 ml-1" />}
           </motion.button>
         ))}
       </div>
@@ -404,20 +405,20 @@ function PlatformsStep({ value, onChange, onNext, loading }: {
               className={`
                 relative flex flex-col items-start p-4 rounded-xl border-2 text-left transition-all cursor-pointer
                 ${selected
-                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                  : `border-border hover:border-foreground/30 bg-card/50 text-foreground ${opt.color}`
+                  ? "border-black bg-neutral-100 text-neutral-900 shadow-sm"
+                  : `border-border hover:border-neutral-300 bg-card text-foreground ${opt.color}`
                 }
               `}
             >
               <div className="flex w-full items-start justify-between mb-2">
-                <span className={`text-[11px] font-bold ${selected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{idx + 1}</span>
+                <span className={`text-[11px] font-bold ${selected ? "text-neutral-700" : "text-muted-foreground"}`}>{idx + 1}</span>
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all
-                  ${selected ? "border-primary-foreground bg-primary-foreground text-primary" : "border-border"}`}>
-                  {selected && <Check className="h-3 w-3 text-primary" />}
+                  ${selected ? "border-black bg-black" : "border-border"}`}>
+                  {selected && <Check className="h-3 w-3 text-white" />}
                 </div>
               </div>
-              <p className="font-semibold text-[15px]">{opt.label}</p>
-              <p className={`text-xs mt-0.5 ${selected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{opt.desc}</p>
+              <p className="font-semibold text-[15px] text-neutral-900">{opt.label}</p>
+              <p className={`text-xs mt-0.5 ${selected ? "text-neutral-600" : "text-muted-foreground"}`}>{opt.desc}</p>
             </motion.button>
           );
         })}
@@ -516,7 +517,19 @@ export default function OnboardingPage() {
             <span className="inline-flex items-center gap-2">
               <HostBrandMark iconSize={22} wordmarkHeight={16} />
             </span>
-            <StepCounter current={stepNum} total={totalSteps} />
+            <div className="flex items-center gap-3">
+              {step > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setStep(s => Math.max(1, s - 1))}
+                  className="flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors px-2.5 py-1 rounded-md hover:bg-muted cursor-pointer"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <span>Back</span>
+                </button>
+              )}
+              <StepCounter current={stepNum} total={totalSteps} />
+            </div>
           </header>
         </>
       )}
@@ -598,22 +611,7 @@ export default function OnboardingPage() {
         </AnimatePresence>
       </main>
 
-      {step >= 1 && step <= totalSteps && (
-        <footer className="flex items-center justify-center gap-4 pb-6 text-[12px] text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <kbd className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[11px]">↵ Enter</kbd>
-            <span>to continue</span>
-          </span>
-          {step > 1 && (
-            <button
-              onClick={() => setStep(s => Math.max(1, s - 1))}
-              className="text-muted-foreground hover:text-muted-foreground transition-colors flex items-center gap-0.5"
-            >
-              ← back
-            </button>
-          )}
-        </footer>
-      )}
+
     </div>
   );
 }
