@@ -450,6 +450,14 @@ export default function PartnersPage() {
               />
               <p className="text-[11px] text-muted-foreground">
                 Total simultaneous active calls allowed across all client accounts of this partner.
+                {editTarget?.allocatedConcurrency != null && editTarget.allocatedConcurrency > 0 && (
+                  <span className={`block font-medium mt-0.5 ${(parseInt(editConcurrency, 10) || 0) < editTarget.allocatedConcurrency ? "text-amber-500" : "text-emerald-500"}`}>
+                    Currently allocated across clients: {editTarget.allocatedConcurrency} lines.
+                    {(parseInt(editConcurrency, 10) || 0) < editTarget.allocatedConcurrency && (
+                      <> Set to at least {editTarget.allocatedConcurrency} so the partner has pool headroom.</>
+                    )}
+                  </span>
+                )}
               </p>
             </div>
             <div className="space-y-1.5">
