@@ -423,8 +423,8 @@ export default function PartnersPage() {
 
       {/* Edit dialog */}
       <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-lg max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden shadow-2xl">
+          <DialogHeader className="p-5 pb-3 border-b shrink-0">
             <DialogTitle>Edit partner</DialogTitle>
             <DialogDescription>
               {editTarget?.userEmail}
@@ -438,20 +438,24 @@ export default function PartnersPage() {
               ) : null}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>Company name</Label>
-              <Input value={editCompany} onChange={e => setEditCompany(e.target.value)} />
+
+          <div className="p-5 overflow-y-auto space-y-4 flex-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Company name</Label>
+                <Input value={editCompany} onChange={e => setEditCompany(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Referral code</Label>
+                <Input
+                  value={editReferralCode}
+                  onChange={e => setEditReferralCode(e.target.value.toUpperCase())}
+                  placeholder="SANJAY"
+                  className="font-mono text-sm uppercase"
+                />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Referral code</Label>
-              <Input
-                value={editReferralCode}
-                onChange={e => setEditReferralCode(e.target.value.toUpperCase())}
-                placeholder="SANJAY"
-                className="font-mono text-sm uppercase"
-              />
-            </div>
+
             <div className="space-y-1.5">
               <Label>Concurrent Call Limit (Pool)</Label>
               <Input
@@ -474,54 +478,61 @@ export default function PartnersPage() {
                 )}
               </p>
             </div>
-            <div className="space-y-1.5">
-              <Label>Base rate (₹/min)</Label>
-              <Input inputMode="decimal" value={editBaseText} onChange={e => setEditBaseText(e.target.value)} />
-              <p className="text-[11px] text-muted-foreground">
-                Client pricing is managed by the partner. Raising the base rate above their current client rate lifts that rate to match.
-              </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Base rate (₹/min)</Label>
+                <Input inputMode="decimal" value={editBaseText} onChange={e => setEditBaseText(e.target.value)} />
+                <p className="text-[11px] text-muted-foreground">
+                  Client pricing base rate.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Status</Label>
+                <Select value={editStatus} onValueChange={setEditStatus}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="suspended">Suspended</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Suspended: clients bill standard rate.
+                </p>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Status</Label>
-              <Select value={editStatus} onValueChange={setEditStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="suspended">Suspended</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-muted-foreground">
-                Suspended: clients bill at the standard platform rate and the partner earns no spread.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Agent limit (max agents)</Label>
-              <Input
-                type="number"
-                min="0"
-                value={editMaxAgents}
-                onChange={e => setEditMaxAgents(e.target.value)}
-                placeholder="Unlimited (leave blank)"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Max number of agents that can be created in that account. Leave blank for unlimited.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Client limit (max clients)</Label>
-              <Input
-                type="number"
-                min="0"
-                value={editMaxClients}
-                onChange={e => setEditMaxClients(e.target.value)}
-                placeholder="Unlimited (leave blank)"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Max number of clients that can be added in that account. Leave blank for unlimited.
-              </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Agent limit (max agents)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={editMaxAgents}
+                  onChange={e => setEditMaxAgents(e.target.value)}
+                  placeholder="Unlimited (leave blank)"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Max agents per account.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Client limit (max clients)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={editMaxClients}
+                  onChange={e => setEditMaxClients(e.target.value)}
+                  placeholder="Unlimited (leave blank)"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Max clients per account.
+                </p>
+              </div>
             </div>
           </div>
-          <DialogFooter>
+
+          <DialogFooter className="p-4 border-t bg-muted/20 shrink-0">
             <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
             <Button
               disabled={editMutation.isPending || editCompany.trim().length < 2 || rupeesToPaise(editBaseText) === null}
