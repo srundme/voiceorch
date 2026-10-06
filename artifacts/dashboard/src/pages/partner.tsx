@@ -2219,63 +2219,33 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
 
       {/* ─── Gift Box Reveal Modal ────────────────────────────────────────── */}
       <Dialog open={giftModalOpen} onOpenChange={setGiftModalOpen}>
-        <DialogContent className="sm:max-w-md text-center p-6 space-y-4">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/20 via-emerald-500/20 to-primary/20 border border-amber-500/30 flex items-center justify-center shadow-lg relative">
+        <DialogContent className="sm:max-w-xs text-center p-6 space-y-4">
+          <div className="mx-auto w-20 h-20 rounded-3xl bg-gradient-to-br from-amber-500/20 via-emerald-500/20 to-primary/20 border border-amber-500/30 flex items-center justify-center shadow-lg relative">
             <div className="gift-wobble">
-              <Gift className="w-8 h-8 text-amber-500" />
+              <Gift className="w-10 h-10 text-amber-500" />
             </div>
-            <Sparkles className="w-4 h-4 text-emerald-500 absolute -top-1 -right-1 animate-pulse" />
+            <Sparkles className="w-5 h-5 text-emerald-500 absolute -top-1 -right-1 animate-pulse" />
           </div>
 
-          <div>
-            <DialogTitle className="text-lg font-bold text-foreground">
-              Milestone Reward Gift Box
+          <div className="space-y-1.5">
+            <Badge variant="outline" className="text-emerald-500 border-emerald-500/30 text-[10px] px-2.5 py-0.5">
+              Auto-credited to Wallet
+            </Badge>
+            <DialogTitle className="text-2xl font-black text-foreground tracking-tight pt-1">
+              +{rewardMinutes} Free Minutes
             </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground mt-1">
-              {cyclePercent >= 100
-                ? "Milestone completed! Your free minutes have been credited."
-                : "Earn 5,000 audience minutes to unlock this reward."}
+            <DialogDescription className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+              {inr(rewardPaise)} wallet credit
             </DialogDescription>
-          </div>
-
-          {/* Reward contents box */}
-          <div className="rounded-xl border border-border bg-muted/30 p-4 text-left space-y-2.5">
-            <div className="flex items-center justify-between pb-2 border-b border-border/60">
-              <span className="text-xs text-muted-foreground font-medium">Inside This Box</span>
-              <Badge variant="outline" className="text-emerald-500 border-emerald-500/30 text-[10px]">
-                Auto-credited to Wallet
-              </Badge>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-500 shrink-0">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-base font-bold text-foreground">+{rewardMinutes} Free Calling Minutes</p>
-                <p className="text-xs text-muted-foreground font-medium">{inr(rewardPaise)} value added directly to your wallet</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Progress overview */}
-          <div className="space-y-1.5 text-left text-xs bg-card p-3 rounded-xl border border-border">
-            <div className="flex justify-between font-medium">
-              <span className="text-muted-foreground">Cycle #{completedCycles + 1} Progress</span>
-              <span className="text-primary tabular-nums font-semibold">{currentCycleMins.toLocaleString()} / {targetMinutes.toLocaleString()} mins ({cyclePercent}%)</span>
-            </div>
-            <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-500"
-                style={{ width: `${cyclePercent}%` }}
-              />
-            </div>
-            <p className="text-[11px] text-muted-foreground pt-0.5">
-              {Math.max(0, targetMinutes - currentCycleMins).toLocaleString()} mins left to unlock this gift.
+            <p className="text-xs text-muted-foreground pt-1">
+              {cyclePercent >= 100
+                ? "Milestone completed! Your reward has been credited to your wallet."
+                : `${Math.max(0, targetMinutes - currentCycleMins).toLocaleString()} more mins needed to unlock this gift.`}
             </p>
           </div>
 
-          <DialogFooter className="sm:justify-center">
-            <Button className="w-full sm:w-auto" onClick={() => setGiftModalOpen(false)}>
+          <DialogFooter className="sm:justify-center pt-1">
+            <Button className="w-full rounded-xl" onClick={() => setGiftModalOpen(false)}>
               Got it
             </Button>
           </DialogFooter>
