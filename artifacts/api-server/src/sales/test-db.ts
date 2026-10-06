@@ -82,7 +82,9 @@ async function createPostgresDb(url: string): Promise<SalesTestDb> {
 }
 
 async function createPgliteDb(): Promise<SalesTestDb> {
+  // @ts-ignore optional peer/test dependency
   const { PGlite } = await import("@electric-sql/pglite");
+  // @ts-ignore optional peer/test dependency
   const { drizzle } = await import("drizzle-orm/pglite");
   const client = new PGlite();
   await client.exec("SET TIME ZONE 'UTC'");

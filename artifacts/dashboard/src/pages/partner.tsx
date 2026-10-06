@@ -2442,11 +2442,7 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
                       {r.isExpired ? (
                         <Badge variant="outline" className="text-[10px] text-muted-foreground">6mo Ended</Badge>
                       ) : r.rechargeCount > 0 ? (
-                        isUnlocked ? (
-                          <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/30">Credited</Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">Pending Unlock</Badge>
-                        )
+                        <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/30">Active</Badge>
                       ) : (
                         <Badge variant="outline" className="text-[10px] text-muted-foreground">Signed Up</Badge>
                       )}

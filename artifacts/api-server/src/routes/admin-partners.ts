@@ -457,7 +457,8 @@ router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
       companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, referralCode,
       status, concurrentLimit, maxAgents, maxClients,
       referralAttributionDays, referralCommissionPercent, referralCommissionMonths,
-      referralMinRechargedUsers, referralAudienceBonusPercent, referralAudienceFreeMinutes,
+      referralMinRechargedUsers, referralTargetMinutes, referralRewardMinutes,
+      referralAudienceBonusPercent, referralAudienceFreeMinutes,
     } = (req.body ?? {}) as {
       companyName?: string;
       baseRateCentsPerMin?: number;
