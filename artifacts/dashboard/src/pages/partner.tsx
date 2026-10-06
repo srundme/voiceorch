@@ -486,6 +486,7 @@ function ClientsTab({ me }: { me: PartnerMe }) {
   const [createConcurrencyText, setCreateConcurrencyText] = useState("5");
   const [sendCredentials, setSendCredentials] = useState(true);
   const [rateText, setRateText] = useState("");
+  const [amountText, setAmountText] = useState("");
   const [concurrencyText, setConcurrencyText] = useState("");
   const [limitModalOpen, setLimitModalOpen] = useState(false);
   const [clientLimit, setClientLimit] = useState<number | null>(null);
