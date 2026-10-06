@@ -6,9 +6,10 @@ import {
   availabilitySchedulesTable, eventTypesTable,
   platformListedVoicesTable, agentDispositionsTable, phoneNumbersTable,
   agentKnowledgeSourcesTable, knowledgeSourcesTable, knowledgeEntriesTable,
+  usersTable, partnersTable,
 } from "@workspace/db";
 import { callEngineInsertDefaults } from "@workspace/db/call-engine-defaults";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, sql, count } from "drizzle-orm";
 import { ingestKbTextEntries } from "../services/kb-ingest.js";
 import { logger } from "../lib/logger.js";
 import { logActivity } from "../lib/activity.js";
@@ -601,7 +602,47 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
   const vibeSystem = persona === "jarvis" ? JARVIS_VIBE_PREFIX + VIBE_SYSTEM_PROMPT : VIBE_SYSTEM_PROMPT;
 
   const isRefine = typeof refineAgentId === "number" && refineAgentId > 0;
-  if (!isRefine) void trackEvent(clerkId, "vibe_started");
+  if (!isRefine) {
+    const [userRow] = await db
+      .select({ partnerId: usersTable.partnerId })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, clerkId));
+
+    let partnerRecord: { id: number; maxAgents: number | null } | null = null;
+    if (userRow?.partnerId) {
+      const [p] = await db
+        .select({ id: partnersTable.id, maxAgents: partnersTable.maxAgents })
+        .from(partnersTable)
+        .where(eq(partnersTable.id, userRow.partnerId));
+      if (p) partnerRecord = p;
+    }
+    if (!partnerRecord) {
+      const [p] = await db
+        .select({ id: partnersTable.id, maxAgents: partnersTable.maxAgents })
+        .from(partnersTable)
+        .where(eq(partnersTable.userId, clerkId));
+      if (p) partnerRecord = p;
+    }
+
+    if (partnerRecord?.maxAgents != null) {
+      const scope = await resolveWorkspaceScope(clerkId);
+      const [countResult] = await db
+        .select({ count: count() })
+        .from(agentsTable)
+        .where(and(inArray(agentsTable.userId, scope.userIds), eq(agentsTable.isTestPersona, false)));
+      const currentAgentCount = Number(countResult?.count ?? 0);
+      if (currentAgentCount >= partnerRecord.maxAgents) {
+        res.status(403).json({
+          error: `Agent limit reached. Your existing plan has the limit of ${partnerRecord.maxAgents} agents only. Please contact your partner for further plan upgrade.`,
+          errorCode: "AGENT_LIMIT_REACHED",
+          limit: partnerRecord.maxAgents,
+          currentCount: currentAgentCount,
+        });
+        return;
+      }
+    }
+    void trackEvent(clerkId, "vibe_started");
+  }
   // Holds the text KB source created during this turn's knowledge_base phase so the
   // build step can attach it even if the build fires on the same SSE stream.
   let sessionTextKbSourceId: number | undefined;

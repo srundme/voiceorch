@@ -36,7 +36,8 @@ import {
   WalletIcon,
   SettingsIcon,
 } from "@workspace/brand-icons";
-import { usePartnerContext, usePartnerManagedWorkspace, type PartnerPermissions } from "@/hooks/use-partner";
+import { usePartnerContext, usePartnerManagedWorkspace, useAgentLimit, type PartnerPermissions } from "@/hooks/use-partner";
+import { PlanLimitModal } from "@/components/plan-limit-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -837,11 +838,28 @@ function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
 }
 
 /* ─── New-agent choice modal ─────────────────────────────────────────────── */
-function NewAgentModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function NewAgentModal({ open, onClose, onLimitReached }: { open: boolean; onClose: () => void; onLimitReached?: () => void }) {
   const [, navigate] = useLocation();
   const { isManagedWorkspace } = usePartnerManagedWorkspace();
+  const { isLimitReached } = useAgentLimit();
 
-  const goManual = () => { onClose(); navigate("/app/agents?create=1"); };
+  const goManual = () => {
+    onClose();
+    if (isLimitReached) {
+      onLimitReached?.();
+      return;
+    }
+    navigate("/app/agents?create=1");
+  };
+
+  const goVibe = () => {
+    onClose();
+    if (isLimitReached) {
+      onLimitReached?.();
+      return;
+    }
+    navigate("/app/vibe");
+  };
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
@@ -867,7 +885,7 @@ function NewAgentModal({ open, onClose }: { open: boolean; onClose: () => void }
           {/* Vibe Build */}
           <button
             type="button"
-            onClick={() => { onClose(); navigate("/app/vibe"); }}
+            onClick={goVibe}
             className="flex flex-col items-start gap-3 p-4 rounded-xl border border-border bg-card hover:border-primary/50 hover:bg-primary/5 transition-colors text-left group"
           >
             <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/15 transition-colors">
@@ -991,7 +1009,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const sidebarW = collapsed ? "w-[58px]" : "w-[216px]";
-  const openNewAgent = () => setNewAgentOpen(true);
+  const { isLimitReached: isAgentLimitReached, agentLimit, partnerSupportEmail } = useAgentLimit();
+  const [agentLimitModalOpen, setAgentLimitModalOpen] = useState(false);
+
+  const openNewAgent = () => {
+    if (isAgentLimitReached) {
+      setAgentLimitModalOpen(true);
+      return;
+    }
+    setNewAgentOpen(true);
+  };
 
   return (
     <div className="flex h-dvh h-screen w-full overflow-hidden bg-background">
@@ -1117,7 +1144,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <MobileBottomNav onNewAgent={openNewAgent} />
 
-      <NewAgentModal open={newAgentOpen} onClose={() => setNewAgentOpen(false)} />
+      <NewAgentModal
+        open={newAgentOpen}
+        onClose={() => setNewAgentOpen(false)}
+        onLimitReached={() => setAgentLimitModalOpen(true)}
+      />
+
+      <PlanLimitModal
+        open={agentLimitModalOpen}
+        onClose={() => setAgentLimitModalOpen(false)}
+        type="agent"
+        limit={agentLimit}
+        partnerSupportEmail={partnerSupportEmail}
+      />
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
