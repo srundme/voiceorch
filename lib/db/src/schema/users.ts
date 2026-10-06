@@ -51,6 +51,28 @@ export const usersTable = pgTable("users", {
   /** When set, managed-client portal login is locked until admin/partner unlocks. */
   portalLoginLockedAt: timestamp("portal_login_locked_at", { withTimezone: true }),
   portalLoginLockedReason: text("portal_login_locked_reason"),
+  /**
+   * Granular section & action permissions set by partner for managed clients.
+   * e.g. { navVisibility: { agents: true, campaigns: true, phoneNumbers: false }, mode: "full" | "read_only" }
+   */
+  partnerPermissions: jsonb("partner_permissions").$type<{
+    navVisibility?: {
+      agents?: boolean;
+      knowledge?: boolean;
+      squads?: boolean;
+      phoneNumbers?: boolean;
+      campaigns?: boolean;
+      flows?: boolean;
+      connections?: boolean;
+      bookings?: boolean;
+      callLogs?: boolean;
+      analytics?: boolean;
+      developers?: boolean;
+      settings?: boolean;
+      billing?: boolean;
+    };
+    mode?: "full" | "read_only";
+  }>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

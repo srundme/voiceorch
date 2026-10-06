@@ -2,6 +2,27 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { loadActingAs } from "@/lib/acting-as";
 
+export interface NavVisibility {
+  agents?: boolean;
+  knowledge?: boolean;
+  squads?: boolean;
+  phoneNumbers?: boolean;
+  campaigns?: boolean;
+  flows?: boolean;
+  connections?: boolean;
+  bookings?: boolean;
+  callLogs?: boolean;
+  analytics?: boolean;
+  developers?: boolean;
+  settings?: boolean;
+  billing?: boolean;
+}
+
+export interface PartnerPermissions {
+  navVisibility?: NavVisibility;
+  mode?: "full" | "read_only";
+}
+
 /** Cheap flags for the dashboard shell: partner nav gating + client branding. */
 export interface PartnerContext {
   isPartner: boolean;
@@ -24,6 +45,8 @@ export interface PartnerContext {
   isManagedClient?: boolean;
   /** Always true for managed clients (full agent edit). Kept for API compat. */
   canEditAgents?: boolean;
+  /** Granular feature & action permissions set by partner for this client. */
+  partnerPermissions?: PartnerPermissions | null;
 }
 
 /**

@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
-import { partnerFetch } from "@/hooks/use-partner";
+import { partnerFetch, type PartnerPermissions, type NavVisibility } from "@/hooks/use-partner";
 import { PlanLimitModal } from "@/components/plan-limit-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -15,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Handshake, Users, UserPlus, Wallet, TrendingUp, Clock, Mail,
   Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2, Globe, Link2, CheckCircle2, Copy, LifeBuoy, PhoneCall,
+  Shield, Eye, Lock, Sparkles, ShieldAlert,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -56,6 +58,7 @@ interface PartnerMe {
   docsUrl: string | null;
   termsUrl: string | null;
   privacyUrl: string | null;
+  defaultClientPermissions?: PartnerPermissions | null;
   walletBalanceCents: number;
   clientCount: number;
   pendingInvites: number;
@@ -83,6 +86,7 @@ interface PartnerClient {
   rateCentsPerMin: number;
   concurrentLimit?: number;
   allowAgentEdit?: boolean;
+  partnerPermissions?: PartnerPermissions | null;
   loginLocked?: boolean;
   portalLoginFailedAttempts?: number;
   portalLoginLockedAt?: string | null;
@@ -122,6 +126,217 @@ function parseRupees(text: string): number | null {
   const v = Number.parseFloat(text);
   if (!Number.isFinite(v) || v < 0) return null;
   return Math.round(v * 100);
+}
+
+/* ─── Client Feature Access & Permission Dialog ──────────────────────────── */
+
+export const DEFAULT_FULL_PERMISSIONS: PartnerPermissions = {
+  navVisibility: {
+    agents: true,
+    knowledge: true,
+    squads: true,
+    phoneNumbers: true,
+    campaigns: true,
+    flows: true,
+    connections: true,
+    bookings: true,
+    callLogs: true,
+    analytics: true,
+    developers: true,
+    settings: true,
+    billing: true,
+  },
+  mode: "full",
+};
+
+const CAMPAIGN_ONLY_NAV: NavVisibility = {
+  agents: false,
+  knowledge: false,
+  squads: false,
+  phoneNumbers: false,
+  campaigns: true,
+  flows: false,
+  connections: false,
+  bookings: false,
+  callLogs: true,
+  analytics: true,
+  developers: false,
+  settings: false,
+  billing: false,
+};
+
+const REPORTING_ONLY_NAV: NavVisibility = {
+  agents: false,
+  knowledge: false,
+  squads: false,
+  phoneNumbers: false,
+  campaigns: false,
+  flows: false,
+  connections: false,
+  bookings: false,
+  callLogs: true,
+  analytics: true,
+  developers: false,
+  settings: false,
+  billing: false,
+};
+
+interface ClientPermissionsDialogProps {
+  open: boolean;
+  clientName: string;
+  permissions: PartnerPermissions | null;
+  onClose: () => void;
+  onSave: (permissions: PartnerPermissions) => void;
+  isSaving?: boolean;
+}
+
+function ClientPermissionsDialog({
+  open, clientName, permissions, onClose, onSave, isSaving,
+}: ClientPermissionsDialogProps) {
+  const initialVis: NavVisibility = permissions?.navVisibility ?? DEFAULT_FULL_PERMISSIONS.navVisibility!;
+  const [vis, setVis] = useState<NavVisibility>(initialVis);
+  const [mode, setMode] = useState<"full" | "read_only">(permissions?.mode ?? "full");
+
+  React.useEffect(() => {
+    if (open) {
+      setVis(permissions?.navVisibility ?? DEFAULT_FULL_PERMISSIONS.navVisibility!);
+      setMode(permissions?.mode ?? "full");
+    }
+  }, [open, permissions]);
+
+  const toggleVis = (key: keyof NavVisibility) => {
+    setVis(prev => ({ ...prev, [key]: !(prev[key] !== false) }));
+  };
+
+  const applyPreset = (preset: "full" | "campaign" | "reporting" | "readonly") => {
+    if (preset === "full") {
+      setVis(DEFAULT_FULL_PERMISSIONS.navVisibility!);
+      setMode("full");
+    } else if (preset === "campaign") {
+      setVis(CAMPAIGN_ONLY_NAV);
+      setMode("full");
+    } else if (preset === "reporting") {
+      setVis(REPORTING_ONLY_NAV);
+      setMode("read_only");
+    } else if (preset === "readonly") {
+      setVis(DEFAULT_FULL_PERMISSIONS.navVisibility!);
+      setMode("read_only");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Shield className="w-5 h-5 text-primary shrink-0" />
+            Client Access & Permissions
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Configure section visibility and edit rights for <span className="font-semibold text-foreground">{clientName}</span>.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Quick Presets */}
+          <div>
+            <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
+              Quick Presets
+            </Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => applyPreset("full")}>
+                <Sparkles className="w-3.5 h-3.5 mr-1.5 text-amber-500 shrink-0" /> Full Access
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => applyPreset("campaign")}>
+                <PhoneCall className="w-3.5 h-3.5 mr-1.5 text-blue-500 shrink-0" /> Campaign Only
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => applyPreset("reporting")}>
+                <TrendingUp className="w-3.5 h-3.5 mr-1.5 text-emerald-500 shrink-0" /> Reporting Only
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => applyPreset("readonly")}>
+                <Eye className="w-3.5 h-3.5 mr-1.5 text-purple-500 shrink-0" /> Read-Only Mode
+              </Button>
+            </div>
+          </div>
+
+          {/* Access Rights Mode */}
+          <div className="rounded-lg border border-border p-3 space-y-2 bg-card">
+            <Label className="text-xs font-semibold text-foreground">Editing Permissions</Label>
+            <div className="grid grid-cols-2 gap-2 pt-0.5">
+              <button
+                type="button"
+                onClick={() => setMode("full")}
+                className={`flex items-center gap-2 p-2 rounded-md border text-left transition-colors cursor-pointer text-xs ${
+                  mode === "full" ? "border-primary bg-primary/5 font-medium text-foreground" : "border-border text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                <CheckCircle2 className={`w-4 h-4 shrink-0 ${mode === "full" ? "text-primary" : "text-muted-foreground/30"}`} />
+                <div>
+                  <p className="font-medium text-[12px]">Full Access</p>
+                  <p className="text-[10px] text-muted-foreground">Can create & edit</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMode("read_only")}
+                className={`flex items-center gap-2 p-2 rounded-md border text-left transition-colors cursor-pointer text-xs ${
+                  mode === "read_only" ? "border-primary bg-primary/5 font-medium text-foreground" : "border-border text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                <Lock className={`w-4 h-4 shrink-0 ${mode === "read_only" ? "text-primary" : "text-muted-foreground/30"}`} />
+                <div>
+                  <p className="font-medium text-[12px]">Read-Only Mode</p>
+                  <p className="text-[10px] text-muted-foreground">Can view only</p>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Section Visibility Switches */}
+          <div className="space-y-2">
+            <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
+              Section Visibility
+            </Label>
+
+            <div className="space-y-1 rounded-lg border border-border p-3 bg-card divide-y divide-border/40">
+              {[
+                { key: "agents", label: "Agents & Knowledge Base", desc: "Agent builder, prompts & knowledge files" },
+                { key: "campaigns", label: "Campaigns & Outbound Dialing", desc: "Batch campaigns and lead lists" },
+                { key: "callLogs", label: "Call Logs & Analytics", desc: "Transcripts, recordings & analytics" },
+                { key: "phoneNumbers", label: "Phone Numbers", desc: "Assigned phone numbers & caller ID" },
+                { key: "flows", label: "Flows & Connections", desc: "Multi-agent workflows & webhooks" },
+                { key: "bookings", label: "Bookings & Scheduling", desc: "Meetings & scheduling calendar" },
+                { key: "developers", label: "Developer API Keys", desc: "API keys & developer docs" },
+                { key: "settings", label: "Workspace Settings", desc: "General workspace preferences" },
+              ].map(({ key, label, desc }) => (
+                <div key={key} className="flex items-center justify-between py-2 first:pt-0 last:pb-0">
+                  <div className="pr-3">
+                    <p className="text-xs font-medium text-foreground leading-snug">{label}</p>
+                    <p className="text-[10px] text-muted-foreground leading-none mt-0.5">{desc}</p>
+                  </div>
+                  <Switch
+                    checked={vis[key as keyof NavVisibility] !== false}
+                    onCheckedChange={() => toggleVis(key as keyof NavVisibility)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
+            disabled={isSaving}
+            onClick={() => onSave({ navVisibility: vis, mode })}
+          >
+            {isSaving ? "Saving…" : "Save Access Rights"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 /** DNS panels want Host relative to the zone, not the full hostname. */
@@ -478,6 +693,7 @@ function ClientsTab({ me }: { me: PartnerMe }) {
   const [rateClient, setRateClient] = useState<PartnerClient | null>(null);
   const [transferClient, setTransferClient] = useState<PartnerClient | null>(null);
   const [concurrencyClient, setConcurrencyClient] = useState<PartnerClient | null>(null);
+  const [permissionsClient, setPermissionsClient] = useState<PartnerClient | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createEmail, setCreateEmail] = useState("");
   const [createName, setCreateName] = useState("");
@@ -605,6 +821,20 @@ function ClientsTab({ me }: { me: PartnerMe }) {
     onError: (err: Error) => toast({ title: "Unlock failed", description: err.message, variant: "destructive" }),
   });
 
+  const permissionsMutation = useMutation({
+    mutationFn: async ({ clerkId, partnerPermissions }: { clerkId: string; partnerPermissions: PartnerPermissions }) =>
+      partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(clerkId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ partnerPermissions }),
+      }),
+    onSuccess: () => {
+      toast({ title: "Feature access permissions updated" });
+      setPermissionsClient(null);
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not update permissions", description: err.message, variant: "destructive" }),
+  });
+
   const createRatePaise = parseRupees(createRateText);
 
   return (
@@ -711,6 +941,11 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                         title="Set concurrent call lines for this client"
                         onClick={() => { setConcurrencyClient(c); setConcurrencyText(String(c.concurrentLimit ?? 10)); }}>
                         <PhoneCall className="w-3 h-3 mr-1" /> Lines
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
+                        title="Configure feature access & permissions for this client"
+                        onClick={() => setPermissionsClient(c)}>
+                        <Shield className="w-3 h-3 mr-1" /> Access
                       </Button>
                       <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
                         onClick={() => { setTransferClient(c); setAmountText(""); }}>
@@ -924,6 +1159,18 @@ function ClientsTab({ me }: { me: PartnerMe }) {
         type="client"
         limit={clientLimit}
         partnerSupportEmail={me.supportEmail}
+      />
+      <ClientPermissionsDialog
+        open={!!permissionsClient}
+        clientName={permissionsClient?.name || permissionsClient?.email || "Client"}
+        permissions={permissionsClient?.partnerPermissions ?? null}
+        onClose={() => setPermissionsClient(null)}
+        isSaving={permissionsMutation.isPending}
+        onSave={(partnerPermissions) => {
+          if (permissionsClient) {
+            permissionsMutation.mutate({ clerkId: permissionsClient.clerkId, partnerPermissions });
+          }
+        }}
       />
     </div>
   );
@@ -1182,11 +1429,26 @@ function SettingsTab({ me }: { me: PartnerMe }) {
   const [docsUrl, setDocsUrl] = useState(me.docsUrl ?? "");
   const [termsUrl, setTermsUrl] = useState(me.termsUrl ?? "");
   const [privacyUrl, setPrivacyUrl] = useState(me.privacyUrl ?? "");
+  const [defaultPermsOpen, setDefaultPermsOpen] = useState(false);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["partner-me"] });
     queryClient.invalidateQueries({ queryKey: ["partner-context"] });
   };
+
+  const defaultPermsMutation = useMutation({
+    mutationFn: (defaultClientPermissions: PartnerPermissions) =>
+      partnerFetch(getToken, "/api/partner/default-permissions", {
+        method: "PUT",
+        body: JSON.stringify({ defaultClientPermissions }),
+      }),
+    onSuccess: () => {
+      toast({ title: "Default client access rights updated" });
+      setDefaultPermsOpen(false);
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not update defaults", description: err.message, variant: "destructive" }),
+  });
 
   const referralCodeMutation = useMutation({
     mutationFn: () =>
@@ -1439,6 +1701,38 @@ function SettingsTab({ me }: { me: PartnerMe }) {
           )}
         </div>
       </div>
+
+      {/* Default Client Access Permissions Template */}
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Shield className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-medium">Default Client Access Rights</h2>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => setDefaultPermsOpen(true)}
+          >
+            Configure Defaults
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground -mt-1">
+          Set the default section visibility and edit rights template automatically assigned to newly onboarded clients.
+        </p>
+      </div>
+
+      <ClientPermissionsDialog
+        open={defaultPermsOpen}
+        clientName="Default New Clients"
+        permissions={me.defaultClientPermissions ?? null}
+        onClose={() => setDefaultPermsOpen(false)}
+        isSaving={defaultPermsMutation.isPending}
+        onSave={(defaultClientPermissions) => {
+          defaultPermsMutation.mutate(defaultClientPermissions);
+        }}
+      />
 
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">
         <h2 className="text-sm font-medium">Login page</h2>

@@ -95,6 +95,25 @@ export const partnersTable = pgTable("partners", {
    * null = no limit (unlimited).
    */
   maxClients: integer("max_clients"),
+  /** Default permission template for newly onboarded clients of this partner. */
+  defaultClientPermissions: jsonb("default_client_permissions").$type<{
+    navVisibility?: {
+      agents?: boolean;
+      knowledge?: boolean;
+      squads?: boolean;
+      phoneNumbers?: boolean;
+      campaigns?: boolean;
+      flows?: boolean;
+      connections?: boolean;
+      bookings?: boolean;
+      callLogs?: boolean;
+      analytics?: boolean;
+      developers?: boolean;
+      settings?: boolean;
+      billing?: boolean;
+    };
+    mode?: "full" | "read_only";
+  }>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

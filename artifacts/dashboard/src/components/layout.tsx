@@ -5,7 +5,7 @@ import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch"
 import {
   Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, Sun, Moon,
-  Plus, X, Wand2, Wrench,
+  Plus, X, Wand2, Wrench, ShieldAlert, Lock,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -36,7 +36,7 @@ import {
   WalletIcon,
   SettingsIcon,
 } from "@workspace/brand-icons";
-import { usePartnerContext, usePartnerManagedWorkspace } from "@/hooks/use-partner";
+import { usePartnerContext, usePartnerManagedWorkspace, type PartnerPermissions } from "@/hooks/use-partner";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -453,6 +453,65 @@ function NavItemEl({
   );
 }
 
+/* ─── Permission Gating Helpers ─────────────────────────────────────────── */
+function isNavSectionVisible(name: string, vis?: PartnerPermissions["navVisibility"]): boolean {
+  if (!vis) return true;
+  switch (name) {
+    case "Home": return true;
+    case "Agents": return vis.agents !== false;
+    case "Knowledge": return vis.knowledge !== false;
+    case "Squads": return vis.squads !== false;
+    case "Phone numbers": return vis.phoneNumbers !== false;
+    case "Campaigns": return vis.campaigns !== false;
+    case "Flows": return vis.flows !== false;
+    case "Connections": return vis.connections !== false;
+    case "Bookings": return vis.bookings !== false;
+    case "Call logs": return vis.callLogs !== false;
+    case "Analytics": return vis.analytics !== false;
+    case "Developers": return vis.developers !== false;
+    case "Workspace": return vis.settings !== false;
+    case "Providers": return vis.settings !== false;
+    case "Billing": return vis.billing !== false;
+    default: return true;
+  }
+}
+
+function filterNavByPermissions(groups: NavGroup[], settings: NavItem[], permissions?: PartnerPermissions | null) {
+  const vis = permissions?.navVisibility;
+  if (!vis) return { navGroups: groups, settingsItems: settings };
+
+  const filteredGroups = groups.map(g => ({
+    ...g,
+    items: g.items.filter(item => isNavSectionVisible(item.name, vis)),
+  })).filter(g => g.items.length > 0);
+
+  const filteredSettings = settings.filter(item => isNavSectionVisible(item.name, vis));
+
+  return { navGroups: filteredGroups, settingsItems: filteredSettings };
+}
+
+export function checkIsRouteRestricted(location: string, permissions?: PartnerPermissions | null): boolean {
+  const vis = permissions?.navVisibility;
+  if (!vis) return false;
+
+  const path = location.split("?")[0];
+  if (path.startsWith("/app/agents") && vis.agents === false) return true;
+  if (path.startsWith("/app/knowledge") && vis.knowledge === false) return true;
+  if (path.startsWith("/app/squads") && vis.squads === false) return true;
+  if (path.startsWith("/app/phone-numbers") && vis.phoneNumbers === false) return true;
+  if (path.startsWith("/app/campaigns") && vis.campaigns === false) return true;
+  if (path.startsWith("/app/flows") && vis.flows === false) return true;
+  if (path.startsWith("/app/connections") && vis.connections === false) return true;
+  if (path.startsWith("/app/scheduling") && vis.bookings === false) return true;
+  if (path.startsWith("/app/history") && vis.callLogs === false) return true;
+  if (path.startsWith("/app/analytics") && vis.analytics === false) return true;
+  if (path.startsWith("/app/api-keys") && vis.developers === false) return true;
+  if (path.startsWith("/app/settings") && vis.settings === false) return true;
+  if (path.startsWith("/app/wallet") && vis.billing === false) return true;
+
+  return false;
+}
+
 /* ─── Sidebar content ────────────────────────────────────────────────────── */
 function SidebarContent({
   collapsed,
@@ -492,7 +551,7 @@ function SidebarContent({
   const { data: partnerCtx } = usePartnerContext();
   const actingAsClient = loadActingAs();
   const clientSurface = partnerCtx?.isManagedClient === true || !!actingAsClient;
-  const navGroups: NavGroup[] = clientSurface
+  const rawNavGroups: NavGroup[] = clientSurface
     ? MANAGED_NAV_GROUPS
     : partnerCtx?.isPartner
       ? [
@@ -500,7 +559,9 @@ function SidebarContent({
           { group: "PARTNER", items: [{ name: "Partner Hub", href: "/app/partner", icon: PartnerIcon }] },
         ]
       : NAV_GROUPS;
-  const settingsItems: NavItem[] = clientSurface ? MANAGED_NAV_SETTINGS : NAV_SETTINGS;
+  const rawSettingsItems: NavItem[] = clientSurface ? MANAGED_NAV_SETTINGS : NAV_SETTINGS;
+
+  const { navGroups, settingsItems } = filterNavByPermissions(rawNavGroups, rawSettingsItems, partnerCtx?.partnerPermissions);
 
   return (
     <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar">
@@ -1034,7 +1095,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
           )}
         >
           <ErrorBoundary location={location}>
-            {children}
+            {checkIsRouteRestricted(location, partnerCtx?.partnerPermissions) ? (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 space-y-4">
+                <div className="p-4 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                  <ShieldAlert className="w-10 h-10" />
+                </div>
+                <h2 className="text-xl font-semibold text-foreground">Access Restricted</h2>
+                <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
+                  Your managing partner or organization administrator has disabled access to this section for your account.
+                </p>
+                <Button onClick={() => navigate("/app/home")} variant="outline" size="sm">
+                  Return to Home
+                </Button>
+              </div>
+            ) : (
+              children
+            )}
           </ErrorBoundary>
         </div>
       </main>

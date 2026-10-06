@@ -218,7 +218,7 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
   try {
     const clerkId = clerkIdOf(req as any);
     const [me] = await db
-      .select({ partnerId: usersTable.partnerId })
+      .select({ partnerId: usersTable.partnerId, partnerPermissions: usersTable.partnerPermissions })
       .from(usersTable)
       .where(eq(usersTable.clerkId, clerkId));
 
@@ -262,14 +262,13 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
 
     const isPartner = !!ownPartner && ownPartner.status === "active";
     const isManagedClient = branding !== null && !isPartner;
+    const permissions = me?.partnerPermissions ?? null;
     res.json({
       isPartner,
       branding,
-      // Managed client = linked to an ACTIVE partner. Clients get a full
-      // workspace (agents/KB/etc.); partner owns rate, funding, and numbers.
-      // A partner linked to their own org (self-partner) is never "managed".
       isManagedClient,
-      canEditAgents: isManagedClient ? true : false,
+      partnerPermissions: permissions,
+      canEditAgents: isManagedClient ? (permissions?.mode !== "read_only") : false,
     });
   } catch (err) {
     req.log.error({ err }, "partner/context failed");
@@ -386,6 +385,7 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       docsUrl: partner.docsUrl ?? null,
       termsUrl: partner.termsUrl ?? null,
       privacyUrl: partner.privacyUrl ?? null,
+      defaultClientPermissions: partner.defaultClientPermissions ?? null,
       walletBalanceCents: partnerUser?.walletBalanceCents ?? 0,
       clientCount: Number(clientCountRow?.n ?? 0),
       pendingInvites: Number(pendingInvitesRow?.n ?? 0),
@@ -395,6 +395,23 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
     });
   } catch (err) {
     req.log.error({ err }, "partner/me GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/partner/default-permissions", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+
+    const defaultClientPermissions = req.body?.defaultClientPermissions ?? null;
+    await db.update(partnersTable)
+      .set({ defaultClientPermissions })
+      .where(eq(partnersTable.id, partner.id));
+
+    res.json({ defaultClientPermissions });
+  } catch (err) {
+    req.log.error({ err }, "partner/default-permissions PUT failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -949,12 +966,13 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
       }
     }
 
-    const { email, password, name, rateCentsPerMin, concurrentLimit, sendCredentials } = (req.body ?? {}) as {
+    const { email, password, name, rateCentsPerMin, concurrentLimit, partnerPermissions: reqPermissions, sendCredentials } = (req.body ?? {}) as {
       email?: string;
       password?: string;
       name?: string;
       rateCentsPerMin?: number;
       concurrentLimit?: number;
+      partnerPermissions?: any;
       sendCredentials?: boolean;
     };
 
@@ -1047,6 +1065,7 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
 
     const displayName = (name ?? "").trim().slice(0, 80) || cleanEmail.split("@")[0]!;
     const passwordHash = await hashPassword(pwd);
+    const clientPermissionsToSet = reqPermissions !== undefined ? reqPermissions : (partner.defaultClientPermissions ?? null);
 
     let user: typeof usersTable.$inferSelect;
     if (existing) {
@@ -1063,6 +1082,7 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
           partnerRateCentsPerMin: rate,
           partnerAllowAgentEdit: true,
           concurrentLimit: initialConcurrentLimit,
+          partnerPermissions: clientPermissionsToSet,
           walletBalanceCents: 0,
           freeCreditsGranted: true,
           onboardingCompleted: true,
@@ -1085,6 +1105,7 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
           partnerRateCentsPerMin: rate,
           partnerAllowAgentEdit: true,
           concurrentLimit: initialConcurrentLimit,
+          partnerPermissions: clientPermissionsToSet,
           onboardingCompleted: true,
         })
         .returning();
@@ -1147,6 +1168,7 @@ router.get("/partner/clients", requireAuth, async (req, res): Promise<void> => {
         portalLoginLockedAt: usersTable.portalLoginLockedAt,
         portalLoginFailedAttempts: usersTable.portalLoginFailedAttempts,
         concurrentLimit: usersTable.concurrentLimit,
+        partnerPermissions: usersTable.partnerPermissions,
         createdAt: usersTable.createdAt,
       })
       .from(usersTable)
@@ -1190,6 +1212,7 @@ router.get("/partner/clients", requireAuth, async (req, res): Promise<void> => {
         rateCentsPerMin: c.rateCentsPerMin ?? partner.defaultClientRateCentsPerMin,
         allowAgentEdit: c.allowAgentEdit === true,
         concurrentLimit: c.concurrentLimit ?? 10,
+        partnerPermissions: c.partnerPermissions ?? null,
         loginLocked: !!c.portalLoginLockedAt,
         portalLoginFailedAttempts: c.portalLoginFailedAttempts ?? 0,
         portalLoginLockedAt: c.portalLoginLockedAt,
@@ -1226,11 +1249,17 @@ router.patch("/partner/clients/:clerkId", requireAuth, async (req, res): Promise
       return;
     }
 
-    const body = (req.body ?? {}) as { rateCentsPerMin?: unknown; allowAgentEdit?: unknown; concurrentLimit?: unknown };
+    const body = (req.body ?? {}) as {
+      rateCentsPerMin?: unknown;
+      allowAgentEdit?: unknown;
+      concurrentLimit?: unknown;
+      partnerPermissions?: unknown;
+    };
     const updates: {
       partnerRateCentsPerMin?: number;
       partnerAllowAgentEdit?: boolean;
       concurrentLimit?: number;
+      partnerPermissions?: any;
     } = {};
 
     if (body.rateCentsPerMin !== undefined && body.rateCentsPerMin !== null) {
@@ -1271,13 +1300,17 @@ router.patch("/partner/clients/:clerkId", requireAuth, async (req, res): Promise
       updates.concurrentLimit = limit;
     }
 
+    if (body.partnerPermissions !== undefined) {
+      updates.partnerPermissions = body.partnerPermissions === null ? null : body.partnerPermissions;
+    }
+
     // allowAgentEdit is deprecated — managed clients always have a full workspace.
     if (typeof body.allowAgentEdit === "boolean") {
       updates.partnerAllowAgentEdit = true;
     }
 
     if (Object.keys(updates).length === 0) {
-      res.status(400).json({ error: "Provide rateCentsPerMin or concurrentLimit" });
+      res.status(400).json({ error: "Provide rateCentsPerMin, concurrentLimit, or partnerPermissions" });
       return;
     }
 
@@ -1292,6 +1325,7 @@ router.patch("/partner/clients/:clerkId", requireAuth, async (req, res): Promise
         ?? client.partnerRateCentsPerMin
         ?? partner.defaultClientRateCentsPerMin,
       concurrentLimit: updates.concurrentLimit ?? client.concurrentLimit ?? 10,
+      partnerPermissions: updates.partnerPermissions !== undefined ? updates.partnerPermissions : (client.partnerPermissions ?? null),
       allowAgentEdit: true,
     });
   } catch (err) {
