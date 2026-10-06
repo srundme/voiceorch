@@ -381,8 +381,8 @@ export default function PartnersPage() {
               <Input
                 value={referralCode}
                 onChange={e => setReferralCode(e.target.value.toUpperCase())}
-                placeholder="SANJAY"
-                className="font-mono text-sm uppercase"
+                placeholder="Create Your Referral Code"
+                className="font-mono text-sm uppercase placeholder:normal-case"
               />
               <p className="text-[11px] text-muted-foreground">
                 Affiliate code for walk-in signups without direct invites.
@@ -450,8 +450,8 @@ export default function PartnersPage() {
                 <Input
                   value={editReferralCode}
                   onChange={e => setEditReferralCode(e.target.value.toUpperCase())}
-                  placeholder="SANJAY"
-                  className="font-mono text-sm uppercase"
+                  placeholder="Create Your Referral Code"
+                  className="font-mono text-sm uppercase placeholder:normal-case"
                 />
               </div>
             </div>

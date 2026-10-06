@@ -1735,10 +1735,10 @@ function SettingsTab({ me }: { me: PartnerMe }) {
           <div className="flex gap-2">
             <Input
               id="referral-code"
-              placeholder="SANJAY"
+              placeholder="Create Your Referral Code"
               value={referralCodeDraft}
               onChange={e => setReferralCodeDraft(e.target.value.toUpperCase())}
-              className="font-mono text-sm uppercase"
+              className="font-mono text-sm uppercase placeholder:normal-case"
             />
             <Button
               size="sm"
