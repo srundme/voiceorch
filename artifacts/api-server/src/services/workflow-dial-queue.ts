@@ -28,14 +28,27 @@ const WORKFLOW_BATCH_NAME = "__call_plan_queue";
 
 export async function getUserConcurrentLimit(clerkUserId: string): Promise<number> {
   const [partnerOwner] = await db
-    .select({ concurrentLimit: partnersTable.concurrentLimit })
+    .select({
+      id: partnersTable.id,
+      concurrentLimit: partnersTable.concurrentLimit,
+    })
     .from(partnersTable)
     .where(eq(partnersTable.userId, clerkUserId))
     .limit(1);
 
   if (partnerOwner) {
     const pLimit = partnerOwner.concurrentLimit;
-    return Number.isFinite(pLimit) && pLimit > 0 ? Math.floor(pLimit) : DEFAULT_CONCURRENT_LIMIT;
+    const pool = Number.isFinite(pLimit) && pLimit > 0 ? Math.floor(pLimit) : DEFAULT_CONCURRENT_LIMIT;
+
+    // Sum all concurrent limits allocated to clients under this partner
+    const [allocatedRow] = await db
+      .select({ total: sql<number>`coalesce(sum(${usersTable.concurrentLimit}), 0)` })
+      .from(usersTable)
+      .where(eq(usersTable.partnerId, partnerOwner.id));
+    const allocated = Number(allocatedRow?.total ?? 0);
+
+    // Partner's own available dialing capacity is the unallocated portion of their pool
+    return Math.max(0, pool - allocated);
   }
 
   const [user] = await db
@@ -45,6 +58,19 @@ export async function getUserConcurrentLimit(clerkUserId: string): Promise<numbe
     .limit(1);
   const n = user?.concurrentLimit ?? DEFAULT_CONCURRENT_LIMIT;
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_CONCURRENT_LIMIT;
+}
+
+/** Active dials for this account across ALL campaigns. */
+export async function countActiveCallsForUser(clerkUserId: string): Promise<number> {
+  const [row] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(campaignLeadsTable)
+    .innerJoin(campaignsTable, eq(campaignLeadsTable.campaignId, campaignsTable.id))
+    .where(and(
+      eq(campaignsTable.userId, clerkUserId),
+      inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
+    ));
+  return Number(row?.c ?? 0);
 }
 
 /** Active dials for this account's workflow (call-plan) campaigns. */

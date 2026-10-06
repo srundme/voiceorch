@@ -301,10 +301,14 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     if (err) { res.status(400).json({ error: err, code: "DPDP_CONSENT_BASIS_REQUIRED" }); return; }
   }
 
-  // ── Hard platform ceiling on concurrent calls (max 10) ──
-  if (parsed.data.concurrentCallLimit != null && parsed.data.concurrentCallLimit > MAX_CONCURRENT_CALLS) {
+  const { getUserConcurrentLimit } = await import("../services/workflow-dial-queue.js");
+  const accountLimit = await getUserConcurrentLimit(userId);
+
+  // ── Hard platform ceiling on concurrent calls (max 10) and account limit ──
+  const effectiveMaxAllowed = Math.min(MAX_CONCURRENT_CALLS, accountLimit);
+  if (parsed.data.concurrentCallLimit != null && parsed.data.concurrentCallLimit > effectiveMaxAllowed) {
     res.status(400).json({
-      error: `Max Concurrent Calls cannot exceed ${MAX_CONCURRENT_CALLS}.`,
+      error: `Max Concurrent Calls cannot exceed your available concurrency limit of ${effectiveMaxAllowed}.`,
       code: "CONCURRENT_LIMIT_EXCEEDED",
     });
     return;
@@ -328,7 +332,7 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     agentId:             parsed.data.agentId,
     fieldMappings,
     fromNumber:          parsed.data.fromNumber,
-    concurrentCallLimit: parsed.data.concurrentCallLimit ?? MAX_CONCURRENT_CALLS,
+    concurrentCallLimit: Math.min(parsed.data.concurrentCallLimit ?? MAX_CONCURRENT_CALLS, accountLimit),
     callDelaySeconds:    parsed.data.callDelaySeconds,
     maxAttempts:         parsed.data.maxAttempts,
     retryDelayMinutes:   parsed.data.retryDelayMinutes,
@@ -404,10 +408,14 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
   const parsed = UpdateCampaignBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
-  // ── Hard platform ceiling on concurrent calls (max 10) ──
-  if (parsed.data.concurrentCallLimit != null && parsed.data.concurrentCallLimit > MAX_CONCURRENT_CALLS) {
+  const { getUserConcurrentLimit } = await import("../services/workflow-dial-queue.js");
+  const accountLimit = await getUserConcurrentLimit(userId);
+
+  // ── Hard platform ceiling on concurrent calls (max 10) and account limit ──
+  const effectiveMaxAllowed = Math.min(MAX_CONCURRENT_CALLS, accountLimit);
+  if (parsed.data.concurrentCallLimit != null && parsed.data.concurrentCallLimit > effectiveMaxAllowed) {
     res.status(400).json({
-      error: `Max Concurrent Calls cannot exceed ${MAX_CONCURRENT_CALLS}.`,
+      error: `Max Concurrent Calls cannot exceed your available concurrency limit of ${effectiveMaxAllowed}.`,
       code: "CONCURRENT_LIMIT_EXCEEDED",
     });
     return;

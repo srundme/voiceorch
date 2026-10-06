@@ -483,19 +483,26 @@ async function doRefillCampaignConcurrency(campaignId: number): Promise<void> {
       return;
     }
 
-    const isWorkflow = campaign.leadSource === "workflow";
-    let limit = campaign.concurrentCallLimit ?? 20;
-    let currentlyActive = await countCallingLeads(campaign.id);
+    const {
+      getUserConcurrentLimit,
+      countActiveCallsForUser,
+      countActiveWorkflowCallsForUser,
+    } = await import("./workflow-dial-queue.js");
 
-    // Call plans share the account concurrentLimit across all workflow campaigns.
-    if (isWorkflow) {
-      const {
-        getUserConcurrentLimit,
-        countActiveWorkflowCallsForUser,
-      } = await import("./workflow-dial-queue.js");
-      limit = await getUserConcurrentLimit(campaign.userId);
-      currentlyActive = await countActiveWorkflowCallsForUser(campaign.userId);
+    const accountLimit = await getUserConcurrentLimit(campaign.userId);
+    if (accountLimit <= 0) {
+      logger.debug(
+        { campaignId: campaign.id, userId: campaign.userId, accountLimit },
+        "Rolling refill skipped — account has 0 available concurrent lines",
+      );
+      return;
     }
+
+    const isWorkflow = campaign.leadSource === "workflow";
+    let limit = Math.min(campaign.concurrentCallLimit ?? 20, accountLimit);
+    let currentlyActive = isWorkflow
+      ? await countActiveWorkflowCallsForUser(campaign.userId)
+      : await countActiveCallsForUser(campaign.userId);
 
     let slots = Math.max(0, limit - currentlyActive);
     if (slots <= 0) return;

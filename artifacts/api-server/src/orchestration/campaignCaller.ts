@@ -175,25 +175,30 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
   const isPreClaimed = lead.callStatus === "calling";
 
   if (!isPreClaimed) {
-    // Workflow (call-plan) campaigns share the account concurrentLimit pool.
-    // Regular campaigns keep their per-campaign concurrentCallLimit.
-    let limit = campaign.concurrentCallLimit ?? 20;
-    let currentlyActive = 0;
-    if (campaign.leadSource === "workflow") {
-      const {
-        getUserConcurrentLimit,
-        countActiveWorkflowCallsForUser,
-      } = await import("../services/workflow-dial-queue.js");
-      limit = await getUserConcurrentLimit(campaign.userId);
-      currentlyActive = await countActiveWorkflowCallsForUser(campaign.userId);
-    } else {
-      currentlyActive = (await db.select({ count: sql<number>`count(*)` })
-        .from(campaignLeadsTable)
-        .where(and(
-          eq(campaignLeadsTable.campaignId, campaign.id),
-          inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
-        )))[0]?.count ?? 0;
+    const {
+      getUserConcurrentLimit,
+      countActiveCallsForUser,
+      countActiveWorkflowCallsForUser,
+    } = await import("../services/workflow-dial-queue.js");
+
+    const accountLimit = await getUserConcurrentLimit(campaign.userId);
+    if (accountLimit <= 0) {
+      logger.warn({ leadId: lead.id, campaignId: campaign.id, accountLimit }, "Account concurrent limit is 0 — skipping call");
+      await db.update(campaignLeadsTable)
+        .set({ callStatus: "pending", notes: "Queued — account has 0 available concurrent lines" })
+        .where(eq(campaignLeadsTable.id, lead.id));
+      await syncSheetAutoCallDialStatus(lead, {
+        status: "enqueued",
+        error: "Queued — account has 0 available concurrent lines",
+      });
+      return;
     }
+
+    const isWorkflow = campaign.leadSource === "workflow";
+    let limit = Math.min(campaign.concurrentCallLimit ?? 20, accountLimit);
+    let currentlyActive = isWorkflow
+      ? await countActiveWorkflowCallsForUser(campaign.userId)
+      : await countActiveCallsForUser(campaign.userId);
 
     if (currentlyActive >= limit) {
       logger.warn({ leadId: lead.id, campaignId: campaign.id, limit, currentlyActive, leadSource: campaign.leadSource }, "Campaign concurrency limit reached — skipping call");

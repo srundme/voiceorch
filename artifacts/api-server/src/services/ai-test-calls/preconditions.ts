@@ -162,11 +162,8 @@ export const defaultPreconditionDeps: PreconditionDeps = {
     return u?.walletBalanceCents ?? null;
   },
   async concurrentLimit(userId) {
-    const [u] = await db
-      .select({ concurrentLimit: usersTable.concurrentLimit })
-      .from(usersTable)
-      .where(eq(usersTable.clerkId, userId));
-    return u?.concurrentLimit ?? 10;
+    const { getUserConcurrentLimit } = await import("../workflow-dial-queue.js");
+    return getUserConcurrentLimit(userId);
   },
   activeCallSlots: countActiveCallSlots,
   rateCentsPerMin: resolveAgentRateCentsPerMin,
