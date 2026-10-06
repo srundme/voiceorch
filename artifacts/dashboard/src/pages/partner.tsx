@@ -2041,7 +2041,6 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
   const { getToken } = useAuth();
   const { toast } = useToast();
   const [copiedLink, setCopiedLink] = useState(false);
-  const [copiedCta, setCopiedCta] = useState(false);
   const [search, setSearch] = useState("");
 
   const { data, isLoading } = useQuery<PartnerReferralsData>({
@@ -2052,20 +2051,12 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
   const referralCode = data?.referralCode || me.referralCode || "YOURCODE";
   const referralLink = data?.referralLink || me.referralLink || `https://snapserve.ai/signup?ref=${encodeURIComponent(referralCode)}`;
 
-  const reelsCta = `Use code ${referralCode} to get 100 FREE AI calling minutes + 10% bonus credit on your first recharge! Link in bio: ${referralLink}`;
-
-  const copyText = async (text: string, type: "link" | "cta") => {
+  const copyLink = async () => {
     try {
-      await navigator.clipboard.writeText(text);
-      if (type === "link") {
-        setCopiedLink(true);
-        setTimeout(() => setCopiedLink(false), 2000);
-        toast({ title: "Referral link copied!", description: text });
-      } else {
-        setCopiedCta(true);
-        setTimeout(() => setCopiedCta(false), 2000);
-        toast({ title: "Reel caption copied to clipboard!", description: "Paste it straight into your Instagram Reel or YouTube description." });
-      }
+      await navigator.clipboard.writeText(referralLink);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+      toast({ title: "Referral link copied!", description: referralLink });
     } catch {
       toast({ title: "Failed to copy", variant: "destructive" });
     }
@@ -2111,7 +2102,7 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
               size="sm"
               variant="outline"
               className="h-9 gap-1.5 font-medium shadow-xs"
-              onClick={() => copyText(referralLink, "link")}
+              onClick={copyLink}
             >
               {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
               {copiedLink ? "Copied!" : "Copy Link"}
@@ -2125,28 +2116,6 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
           <span className="font-mono text-xs text-foreground truncate select-all flex-1">
             {referralLink}
           </span>
-        </div>
-
-        {/* Reels / Social CTA Copy Helper */}
-        <div className="rounded-xl border border-border bg-card/80 p-3.5 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              Copy-Paste Reels / Video Caption CTA:
-            </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs text-primary hover:text-primary gap-1"
-              onClick={() => copyText(reelsCta, "cta")}
-            >
-              {copiedCta ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-              {copiedCta ? "Copied Caption" : "Copy Caption"}
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-lg font-sans border border-border/40 select-all leading-relaxed">
-            "{reelsCta}"
-          </p>
         </div>
       </div>
 
