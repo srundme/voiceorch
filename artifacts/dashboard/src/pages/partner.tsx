@@ -21,6 +21,7 @@ import {
   Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2, Globe, Link2, CheckCircle2, Copy, LifeBuoy, PhoneCall,
   Shield, Eye, Lock, Sparkles, ShieldAlert, MoreHorizontal, Unlock, Gift, Check,
 } from "lucide-react";
+import { UniqueGiftBox } from "@/components/UniqueGiftBox";
 import { useLocation } from "wouter";
 
 /* ─── Types (mirror routes/partner.ts responses) ─────────────────────────── */
@@ -2178,15 +2179,15 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
             <button
               type="button"
               onClick={() => setGiftModalOpen(true)}
-              className="relative group p-2 rounded-xl bg-gradient-to-br from-amber-500/15 to-emerald-500/15 border border-amber-500/30 hover:border-amber-500/70 hover:scale-105 transition-all cursor-pointer shrink-0 shadow-xs"
+              className="relative group p-1.5 rounded-xl bg-gradient-to-br from-amber-500/15 via-emerald-500/10 to-emerald-500/15 border border-amber-500/30 hover:border-amber-500/70 hover:scale-110 transition-all cursor-pointer shrink-0 shadow-xs"
               title="Click to open reward gift box"
             >
               <div className="gift-wobble">
-                <Gift className="w-5 h-5 text-amber-500 group-hover:text-amber-400 transition-colors" />
+                <UniqueGiftBox className="w-6 h-6" />
               </div>
               <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
               </span>
             </button>
           </div>
@@ -2220,11 +2221,10 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
       {/* ─── Gift Box Reveal Modal ────────────────────────────────────────── */}
       <Dialog open={giftModalOpen} onOpenChange={setGiftModalOpen}>
         <DialogContent className="sm:max-w-xs text-center p-6 space-y-4">
-          <div className="mx-auto w-20 h-20 rounded-3xl bg-gradient-to-br from-amber-500/20 via-emerald-500/20 to-primary/20 border border-amber-500/30 flex items-center justify-center shadow-lg relative">
+          <div className="mx-auto w-24 h-24 rounded-3xl bg-gradient-to-br from-amber-500/15 via-emerald-500/15 to-emerald-600/15 border border-amber-500/25 flex items-center justify-center shadow-xl relative">
             <div className="gift-wobble">
-              <Gift className="w-10 h-10 text-amber-500" />
+              <UniqueGiftBox className="w-16 h-16 drop-shadow-md" />
             </div>
-            <Sparkles className="w-5 h-5 text-emerald-500 absolute -top-1 -right-1 animate-pulse" />
           </div>
 
           <div className="space-y-1.5">
