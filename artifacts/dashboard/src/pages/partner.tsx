@@ -623,7 +623,6 @@ export default function PartnerPage() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="clients">Clients</TabsTrigger>
-          <TabsTrigger value="invites">Invites</TabsTrigger>
           <TabsTrigger value="referrals">Referrals &amp; Affiliate</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
@@ -633,9 +632,6 @@ export default function PartnerPage() {
         </TabsContent>
         <TabsContent value="clients" className="mt-4">
           <ClientsTab me={me} />
-        </TabsContent>
-        <TabsContent value="invites" className="mt-4">
-          <InvitesTab me={me} />
         </TabsContent>
         <TabsContent value="referrals" className="mt-4">
           <ReferralsTab me={me} />
@@ -662,7 +658,7 @@ function OverviewTab({ me }: { me: PartnerMe }) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard icon={<TrendingUp className="w-3.5 h-3.5" />} label="Earnings this month" value={inr(me.monthEarningsCents)} sub="Spread over your base rate" />
-        <StatCard icon={<Users className="w-3.5 h-3.5" />} label="Clients" value={String(me.clientCount)} sub={me.pendingInvites > 0 ? `${me.pendingInvites} invite${me.pendingInvites > 1 ? "s" : ""} pending` : undefined} />
+        <StatCard icon={<Users className="w-3.5 h-3.5" />} label="Clients" value={String(me.clientCount)} sub="Active client accounts" />
         <StatCard icon={<PhoneCall className="w-3.5 h-3.5" />} label="Concurrency pool" value={`${me.allocatedConcurrency ?? 0} / ${me.concurrentLimit ?? 10}`} sub={`${Math.max(0, (me.concurrentLimit ?? 10) - (me.allocatedConcurrency ?? 0))} lines free`} />
         <StatCard icon={<UserPlus className="w-3.5 h-3.5" />} label="Referral signups" value={String(me.referredUsersCount ?? 0)} sub={me.referralCode ? `Code: ${me.referralCode}` : "Affiliate walk-ins"} />
         <StatCard icon={<Wallet className="w-3.5 h-3.5" />} label="Your wallet" value={inr(me.walletBalanceCents)} sub="Earnings land here" />
@@ -1196,7 +1192,7 @@ function ClientsTab({ me }: { me: PartnerMe }) {
 
 /* ─── Invites ────────────────────────────────────────────────────────────── */
 
-function InvitesTab({ me }: { me: PartnerMe }) {
+export function InvitesTab({ me }: { me: PartnerMe }) {
   const { getToken } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
