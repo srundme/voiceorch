@@ -62,6 +62,8 @@ function txTypeLabel(type: string): { label: string; color: string; icon: React.
     case "auto_topup":  return { label: "Auto Top-up",   color: "text-zinc-400",           icon: <RefreshCw    className="w-3.5 h-3.5" /> };
     case "call_debit":  return { label: "Call Usage",    color: "text-muted-foreground",   icon: <ArrowUpRight  className="w-3.5 h-3.5" /> };
     case "partner_earning":      return { label: "Partner Earning", color: "text-emerald-400",       icon: <ArrowDownLeft className="w-3.5 h-3.5" /> };
+    case "referral_earning":     return { label: "Affiliate Earning", color: "text-emerald-400",       icon: <ArrowDownLeft className="w-3.5 h-3.5" /> };
+    case "referral_bonus":       return { label: "Referral Bonus",    color: "text-emerald-400",       icon: <Zap          className="w-3.5 h-3.5" /> };
     case "partner_transfer_in":  return { label: "Partner Credit",  color: "text-emerald-400",       icon: <ArrowDownLeft className="w-3.5 h-3.5" /> };
     case "partner_transfer_out": return { label: "Client Transfer", color: "text-muted-foreground",  icon: <ArrowUpRight  className="w-3.5 h-3.5" /> };
     default:            return { label: type,             color: "text-muted-foreground",   icon: null };

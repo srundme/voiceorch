@@ -939,6 +939,20 @@
       "when": 1791600033000,
       "tag": "0133_partner_concurrency",
       "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1791600034000,
+      "tag": "0134_partner_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1791600035000,
+      "tag": "0135_referral_affiliate_program",
+      "breakpoints": true
     }
   ]
 }

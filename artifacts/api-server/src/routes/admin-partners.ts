@@ -14,6 +14,7 @@ import {
   partnersTable,
   partnerInvitesTable,
   partnerReferralsTable,
+  partnerReferralEarningsTable,
   partnerPendingPromotionsTable,
   walletTransactionsTable,
   adminAuditLogsTable,
@@ -85,6 +86,12 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
         customDomainStatus: partnersTable.customDomainStatus,
         maxAgents: partnersTable.maxAgents,
         maxClients: partnersTable.maxClients,
+        referralAttributionDays: partnersTable.referralAttributionDays,
+        referralCommissionPercent: partnersTable.referralCommissionPercent,
+        referralCommissionMonths: partnersTable.referralCommissionMonths,
+        referralMinRechargedUsers: partnersTable.referralMinRechargedUsers,
+        referralAudienceBonusPercent: partnersTable.referralAudienceBonusPercent,
+        referralAudienceFreeMinutes: partnersTable.referralAudienceFreeMinutes,
         createdAt: partnersTable.createdAt,
         userName: usersTable.name,
         userEmail: usersTable.email,
@@ -443,7 +450,12 @@ router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
       return;
     }
 
-    const { companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, referralCode, status, concurrentLimit, maxAgents, maxClients } = (req.body ?? {}) as {
+    const {
+      companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, referralCode,
+      status, concurrentLimit, maxAgents, maxClients,
+      referralAttributionDays, referralCommissionPercent, referralCommissionMonths,
+      referralMinRechargedUsers, referralAudienceBonusPercent, referralAudienceFreeMinutes,
+    } = (req.body ?? {}) as {
       companyName?: string;
       baseRateCentsPerMin?: number;
       defaultClientRateCentsPerMin?: number;
@@ -452,6 +464,12 @@ router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
       concurrentLimit?: number;
       maxAgents?: number | null | "";
       maxClients?: number | null | "";
+      referralAttributionDays?: number;
+      referralCommissionPercent?: number;
+      referralCommissionMonths?: number;
+      referralMinRechargedUsers?: number;
+      referralAudienceBonusPercent?: number;
+      referralAudienceFreeMinutes?: number;
     };
 
     const set: Record<string, unknown> = {};
@@ -540,6 +558,30 @@ router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
         }
         set["maxClients"] = parsed;
       }
+    }
+    if (referralAttributionDays !== undefined) {
+      const d = Math.max(1, Math.min(365, Number(referralAttributionDays) || 60));
+      set["referralAttributionDays"] = d;
+    }
+    if (referralCommissionPercent !== undefined) {
+      const p = Math.max(0, Math.min(100, Number(referralCommissionPercent) || 10));
+      set["referralCommissionPercent"] = p;
+    }
+    if (referralCommissionMonths !== undefined) {
+      const m = Math.max(1, Math.min(60, Number(referralCommissionMonths) || 6));
+      set["referralCommissionMonths"] = m;
+    }
+    if (referralMinRechargedUsers !== undefined) {
+      const u = Math.max(0, Math.min(1000, Number(referralMinRechargedUsers) || 10));
+      set["referralMinRechargedUsers"] = u;
+    }
+    if (referralAudienceBonusPercent !== undefined) {
+      const b = Math.max(0, Math.min(100, Number(referralAudienceBonusPercent) || 10));
+      set["referralAudienceBonusPercent"] = b;
+    }
+    if (referralAudienceFreeMinutes !== undefined) {
+      const mins = Math.max(0, Math.min(10000, Number(referralAudienceFreeMinutes) || 100));
+      set["referralAudienceFreeMinutes"] = mins;
     }
     if (Object.keys(set).length === 0) {
       res.status(400).json({ error: "Nothing to update" });
@@ -637,6 +679,32 @@ router.get("/admin/partners/:id/clients", async (req, res): Promise<void> => {
       .orderBy(desc(partnerReferralsTable.createdAt))
       .limit(100);
 
+    // Option A milestone referral calculations
+    const [payingStats] = await db
+      .select({
+        rechargedUsersCount: sql<number>`count(distinct ${partnerReferralsTable.userId})`,
+      })
+      .from(partnerReferralsTable)
+      .where(
+        and(
+          eq(partnerReferralsTable.partnerId, id),
+          sql`(${partnerReferralsTable.rechargeCount} > 0 OR ${partnerReferralsTable.firstRechargeAt} IS NOT NULL)`
+        )
+      );
+    const rechargedUsersCount = Number(payingStats?.rechargedUsersCount ?? 0);
+
+    const [pendingEarn] = await db
+      .select({ total: sql<number>`coalesce(sum(${partnerReferralEarningsTable.earnedPaise}), 0)` })
+      .from(partnerReferralEarningsTable)
+      .where(and(eq(partnerReferralEarningsTable.partnerId, id), eq(partnerReferralEarningsTable.status, "pending")));
+    const pendingEarningsCents = Number(pendingEarn?.total ?? 0);
+
+    const [unlockedEarn] = await db
+      .select({ total: sql<number>`coalesce(sum(${partnerReferralEarningsTable.earnedPaise}), 0)` })
+      .from(partnerReferralEarningsTable)
+      .where(and(eq(partnerReferralEarningsTable.partnerId, id), eq(partnerReferralEarningsTable.status, "credited")));
+    const unlockedEarningsCents = Number(unlockedEarn?.total ?? 0);
+
     res.json({
       clients: clients.map(c => ({
         ...c,
@@ -645,6 +713,9 @@ router.get("/admin/partners/:id/clients", async (req, res): Promise<void> => {
       })),
       invites,
       referrals,
+      rechargedUsersCount,
+      pendingEarningsCents,
+      unlockedEarningsCents,
       monthEarningsCents,
     });
   } catch (err) {

@@ -114,6 +114,24 @@ export const partnersTable = pgTable("partners", {
     };
     mode?: "full" | "read_only";
   }>(),
+  /**
+   * Affiliate & Referral Program Configuration
+   */
+  /** Cookie / click tracking duration (days) until signup. */
+  referralAttributionDays: integer("referral_attribution_days").notNull().default(60),
+  /** Partner commission share (%) from each wallet recharge. */
+  referralCommissionPercent: integer("referral_commission_percent").notNull().default(10),
+  /** Number of months from user signup during which recharges yield commission. */
+  referralCommissionMonths: integer("referral_commission_months").notNull().default(6),
+  /**
+   * Option A milestone: Minimum unique recharging users required before accumulated
+   * referral commissions unlock into the partner's wallet balance.
+   */
+  referralMinRechargedUsers: integer("referral_min_recharged_users").notNull().default(10),
+  /** Extra bonus credit (%) given to the referred user on their 1st recharge. */
+  referralAudienceBonusPercent: integer("referral_audience_bonus_percent").notNull().default(10),
+  /** Free call minutes gifted to referred user at signup (e.g. 100 free minutes). */
+  referralAudienceFreeMinutes: integer("referral_audience_free_minutes").notNull().default(100),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -151,10 +169,42 @@ export const partnerReferralsTable = pgTable("partner_referrals", {
   userEmail: text("user_email"),
   userName: text("user_name"),
   status: text("status").notNull().default("signed_up"), // signed_up | onboarded | active
+  /** Date of user's first completed wallet recharge. */
+  firstRechargeAt: timestamp("first_recharge_at", { withTimezone: true }),
+  /** Total count of wallet recharges made by this referred user. */
+  rechargeCount: integer("recharge_count").notNull().default(0),
+  /** Total cumulative amount (paise) recharged by this referred user. */
+  totalRechargedPaise: integer("total_recharged_paise").notNull().default(0),
+  /** Total cumulative commission (paise) earned by the partner from this user. */
+  totalEarnedPaise: integer("total_earned_paise").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("partner_referrals_partner_id_idx").on(t.partnerId),
   index("partner_referrals_code_idx").on(t.referralCode),
+  index("partner_referrals_user_id_idx").on(t.userId),
+]);
+
+/**
+ * Detailed ledger of commissions earned by a partner from referred users' wallet recharges.
+ * Supports Option A: status stays "pending" until partner reaches referralMinRechargedUsers,
+ * after which pending rows flip to "credited" and deposit into the partner's wallet.
+ */
+export const partnerReferralEarningsTable = pgTable("partner_referral_earnings", {
+  id: serial("id").primaryKey(),
+  partnerId: integer("partner_id").notNull().references(() => partnersTable.id, { onDelete: "cascade" }),
+  referralId: integer("referral_id").references(() => partnerReferralsTable.id, { onDelete: "set null" }),
+  userId: text("user_id").notNull(), // clerkId of paying referred user
+  rechargeTxnId: integer("recharge_txn_id"),
+  rechargeAmountPaise: integer("recharge_amount_paise").notNull(),
+  commissionPercent: integer("commission_percent").notNull().default(10),
+  earnedPaise: integer("earned_paise").notNull(),
+  status: text("status").notNull().default("pending"), // pending | credited
+  creditedAt: timestamp("credited_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("partner_referral_earnings_partner_id_idx").on(t.partnerId),
+  index("partner_referral_earnings_user_id_idx").on(t.userId),
+  index("partner_referral_earnings_status_idx").on(t.status),
 ]);
 
 /**
@@ -180,4 +230,6 @@ export type PartnerInvite = typeof partnerInvitesTable.$inferSelect;
 export type InsertPartnerInvite = typeof partnerInvitesTable.$inferInsert;
 export type PartnerReferral = typeof partnerReferralsTable.$inferSelect;
 export type InsertPartnerReferral = typeof partnerReferralsTable.$inferInsert;
+export type PartnerReferralEarning = typeof partnerReferralEarningsTable.$inferSelect;
+export type InsertPartnerReferralEarning = typeof partnerReferralEarningsTable.$inferInsert;
 export type PartnerPendingPromotion = typeof partnerPendingPromotionsTable.$inferSelect;

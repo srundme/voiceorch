@@ -38,12 +38,14 @@ import {
   partnersTable,
   partnerInvitesTable,
   partnerReferralsTable,
+  partnerReferralEarningsTable,
   walletTransactionsTable,
   callsTable,
   agentsTable,
   phoneNumbersTable,
   userApiKeysTable,
 } from "@workspace/db";
+import { maskEmail } from "../services/referral-reward.js";
 import { and, desc, eq, gte, inArray, isNull, ne, sql, count } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { resolveWorkspaceScope } from "../services/workspace-scope.js";
@@ -434,6 +436,12 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       monthEarningsCents,
       monthClientSeconds,
       monthClientCalls,
+      referralAttributionDays: partner.referralAttributionDays ?? 60,
+      referralCommissionPercent: partner.referralCommissionPercent ?? 10,
+      referralCommissionMonths: partner.referralCommissionMonths ?? 6,
+      referralMinRechargedUsers: partner.referralMinRechargedUsers ?? 10,
+      referralAudienceBonusPercent: partner.referralAudienceBonusPercent ?? 10,
+      referralAudienceFreeMinutes: partner.referralAudienceFreeMinutes ?? 100,
     });
   } catch (err) {
     req.log.error({ err }, "partner/me GET failed");
@@ -511,7 +519,7 @@ router.get("/partner/referrals", requireAuth, async (req, res): Promise<void> =>
     const partner = await requireActivePartner(req, res);
     if (!partner) return;
 
-    const referrals = await db
+    const rawReferrals = await db
       .select({
         id: partnerReferralsTable.id,
         referralCode: partnerReferralsTable.referralCode,
@@ -519,13 +527,88 @@ router.get("/partner/referrals", requireAuth, async (req, res): Promise<void> =>
         userEmail: partnerReferralsTable.userEmail,
         userName: partnerReferralsTable.userName,
         status: partnerReferralsTable.status,
+        firstRechargeAt: partnerReferralsTable.firstRechargeAt,
+        rechargeCount: partnerReferralsTable.rechargeCount,
+        totalRechargedPaise: partnerReferralsTable.totalRechargedPaise,
+        totalEarnedPaise: partnerReferralsTable.totalEarnedPaise,
         createdAt: partnerReferralsTable.createdAt,
       })
       .from(partnerReferralsTable)
       .where(eq(partnerReferralsTable.partnerId, partner.id))
       .orderBy(desc(partnerReferralsTable.createdAt));
 
-    res.json({ referrals });
+    // Paying users count (unique referred users with >= 1 recharge)
+    const [payingStats] = await db
+      .select({
+        rechargedUsersCount: sql<number>`count(distinct ${partnerReferralsTable.userId})`,
+      })
+      .from(partnerReferralsTable)
+      .where(
+        and(
+          eq(partnerReferralsTable.partnerId, partner.id),
+          sql`(${partnerReferralsTable.rechargeCount} > 0 OR ${partnerReferralsTable.firstRechargeAt} IS NOT NULL)`,
+        ),
+      );
+    const rechargedUsersCount = Number(payingStats?.rechargedUsersCount ?? 0);
+
+    const [pendingEarn] = await db
+      .select({ total: sql<number>`coalesce(sum(${partnerReferralEarningsTable.earnedPaise}), 0)` })
+      .from(partnerReferralEarningsTable)
+      .where(and(eq(partnerReferralEarningsTable.partnerId, partner.id), eq(partnerReferralEarningsTable.status, "pending")));
+    const pendingCreditsPaise = Number(pendingEarn?.total ?? 0);
+
+    const [creditedEarn] = await db
+      .select({ total: sql<number>`coalesce(sum(${partnerReferralEarningsTable.earnedPaise}), 0)` })
+      .from(partnerReferralEarningsTable)
+      .where(and(eq(partnerReferralEarningsTable.partnerId, partner.id), eq(partnerReferralEarningsTable.status, "credited")));
+    const creditedPaise = Number(creditedEarn?.total ?? 0);
+
+    const appBaseUrl = (process.env["APP_BASE_URL"]?.replace(/\/$/, "") || getSelfBaseUrl());
+    const effectiveCode = partner.referralCode || null;
+    const referralLink = effectiveCode ? `${appBaseUrl}/signup?ref=${encodeURIComponent(effectiveCode)}` : null;
+    const minRechargedUsers = partner.referralMinRechargedUsers ?? 10;
+    const isUnlocked = rechargedUsersCount >= minRechargedUsers;
+    const commissionMonths = partner.referralCommissionMonths ?? 6;
+
+    const referrals = rawReferrals.map((r) => {
+      const signupDate = new Date(r.createdAt);
+      const monthsSinceSignup = (Date.now() - signupDate.getTime()) / (1000 * 60 * 60 * 24 * 30.4375);
+      const monthsRemaining = Math.max(0, Math.ceil(commissionMonths - monthsSinceSignup));
+      const isExpired = monthsSinceSignup > commissionMonths;
+
+      return {
+        id: r.id,
+        referralCode: r.referralCode,
+        userEmail: maskEmail(r.userEmail),
+        userName: r.userName || "User",
+        createdAt: r.createdAt,
+        firstRechargeAt: r.firstRechargeAt,
+        rechargeCount: r.rechargeCount,
+        totalRechargedPaise: r.totalRechargedPaise,
+        totalEarnedPaise: r.totalEarnedPaise,
+        monthsRemaining,
+        isExpired,
+        hasRecharged: (r.rechargeCount > 0 || !!r.firstRechargeAt),
+        status: isExpired ? "expired" : (r.rechargeCount > 0 ? (isUnlocked ? "active" : "pending_unlock") : "signed_up"),
+      };
+    });
+
+    res.json({
+      referralCode: effectiveCode,
+      referralLink,
+      attributionDays: partner.referralAttributionDays ?? 60,
+      commissionPercent: partner.referralCommissionPercent ?? 10,
+      commissionMonths,
+      minRechargedUsers,
+      audienceBonusPercent: partner.referralAudienceBonusPercent ?? 10,
+      audienceFreeMinutes: partner.referralAudienceFreeMinutes ?? 100,
+      rechargedUsersCount,
+      isUnlocked,
+      pendingCreditsPaise,
+      creditedPaise,
+      totalEarnedPaise: pendingCreditsPaise + creditedPaise,
+      referrals,
+    });
   } catch (err) {
     req.log.error({ err }, "partner/referrals GET failed");
     res.status(500).json({ error: "Internal server error" });

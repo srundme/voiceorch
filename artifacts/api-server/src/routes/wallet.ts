@@ -12,6 +12,7 @@ import { resolvePartnerBilling } from "../services/partner-billing.js";
 import { resolveBillingRateCentsPerMin } from "../services/minute-rates.js";
 import { getAppOrigins } from "../lib/app-domain.js";
 import { issueInvoice, renderInvoiceHtml, renderInvoicePdf } from "../services/invoice.js";
+import { processReferralRecharge } from "../services/referral-reward.js";
 import {
   CURRENCY_INR,
   GST_RATE,
@@ -267,6 +268,15 @@ router.post("/wallet/verify-payment", requireAuth, clientContext, denyManagedCli
     razorpayPaymentId,
   });
 
+  // Affiliate & Referral Program: 1st recharge bonus to user + 10% commission to partner
+  void processReferralRecharge({
+    payingUserId: user.id,
+    rechargeAmountPaise: claimed.amountCents,
+    razorpayOrderId,
+    razorpayPaymentId,
+    rechargeTxnId: claimed.id,
+  });
+
   const minTopupPaise = minTopupPaiseForUser(await isActivePartnerOwner(clerkId));
   res.json(walletInfoPayload(updated, { minTopupPaise }));
 });
@@ -329,6 +339,15 @@ async function creditTopupByOrder(orderId: string, paymentId: string): Promise<v
       razorpayPaymentId: paymentId,
     });
   }
+
+  // Affiliate & Referral Program: 1st recharge bonus to user + 10% commission to partner
+  void processReferralRecharge({
+    payingUserId: txn.userId,
+    rechargeAmountPaise: txn.amountCents,
+    razorpayOrderId: orderId,
+    razorpayPaymentId: paymentId,
+    rechargeTxnId: txn.id,
+  });
 }
 
 /**

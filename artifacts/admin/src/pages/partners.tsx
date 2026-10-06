@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Pencil, Handshake, Users, Mail, Clock, X, ExternalLink, Eye, Copy, Check } from "lucide-react";
+import { Plus, Pencil, Handshake, Users, Mail, Clock, X, ExternalLink, Eye, Copy, Check, Gift, Lock, Unlock, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatAdminError } from "@/lib/api";
 
@@ -39,6 +39,12 @@ interface AdminPartner {
   portalUrl?: string | null;
   maxAgents?: number | null;
   maxClients?: number | null;
+  referralAttributionDays?: number;
+  referralCommissionPercent?: number;
+  referralCommissionMonths?: number;
+  referralMinRechargedUsers?: number;
+  referralAudienceBonusPercent?: number;
+  referralAudienceFreeMinutes?: number;
 }
 
 interface PartnerClientRow {
@@ -68,6 +74,10 @@ interface PartnerReferralRow {
   userEmail?: string | null;
   userName?: string | null;
   status: string;
+  firstRechargeAt?: string | null;
+  rechargeCount?: number;
+  totalRechargedPaise?: number;
+  totalEarnedPaise?: number;
   createdAt: string;
 }
 
@@ -88,6 +98,9 @@ interface PartnerDetail {
   clients: PartnerClientRow[];
   invites: PartnerInviteRow[];
   referrals?: PartnerReferralRow[];
+  rechargedUsersCount?: number;
+  pendingEarningsCents?: number;
+  unlockedEarningsCents?: number;
   monthEarningsCents: number;
 }
 
@@ -139,6 +152,12 @@ export default function PartnersPage() {
   const [editStatus, setEditStatus] = useState("active");
   const [editMaxAgents, setEditMaxAgents] = useState("");
   const [editMaxClients, setEditMaxClients] = useState("");
+  const [editReferralAttributionDays, setEditReferralAttributionDays] = useState("60");
+  const [editReferralCommissionPercent, setEditReferralCommissionPercent] = useState("10");
+  const [editReferralCommissionMonths, setEditReferralCommissionMonths] = useState("6");
+  const [editReferralMinRechargedUsers, setEditReferralMinRechargedUsers] = useState("10");
+  const [editReferralAudienceBonusPercent, setEditReferralAudienceBonusPercent] = useState("10");
+  const [editReferralAudienceFreeMinutes, setEditReferralAudienceFreeMinutes] = useState("100");
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin", "partners"] });
 
@@ -204,6 +223,12 @@ export default function PartnersPage() {
           status: editStatus,
           maxAgents: isNaN(parsedAgents as number) ? null : parsedAgents,
           maxClients: isNaN(parsedClients as number) ? null : parsedClients,
+          referralAttributionDays: parseInt(editReferralAttributionDays, 10) || 60,
+          referralCommissionPercent: parseInt(editReferralCommissionPercent, 10) || 10,
+          referralCommissionMonths: parseInt(editReferralCommissionMonths, 10) || 6,
+          referralMinRechargedUsers: parseInt(editReferralMinRechargedUsers, 10) || 10,
+          referralAudienceBonusPercent: parseInt(editReferralAudienceBonusPercent, 10) || 10,
+          referralAudienceFreeMinutes: parseInt(editReferralAudienceFreeMinutes, 10) || 100,
         }),
       });
     },
@@ -224,6 +249,12 @@ export default function PartnersPage() {
     setEditStatus(p.status);
     setEditMaxAgents(p.maxAgents != null ? String(p.maxAgents) : "");
     setEditMaxClients(p.maxClients != null ? String(p.maxClients) : "");
+    setEditReferralAttributionDays(String(p.referralAttributionDays ?? 60));
+    setEditReferralCommissionPercent(String(p.referralCommissionPercent ?? 10));
+    setEditReferralCommissionMonths(String(p.referralCommissionMonths ?? 6));
+    setEditReferralMinRechargedUsers(String(p.referralMinRechargedUsers ?? 10));
+    setEditReferralAudienceBonusPercent(String(p.referralAudienceBonusPercent ?? 10));
+    setEditReferralAudienceFreeMinutes(String(p.referralAudienceFreeMinutes ?? 100));
   };
 
   return (
@@ -530,6 +561,103 @@ export default function PartnersPage() {
                 </p>
               </div>
             </div>
+
+            {/* Affiliate & Referral Program Configuration */}
+            <div className="rounded-lg border border-primary/25 bg-primary/5 p-3.5 space-y-3 mt-2">
+              <div className="flex items-center gap-2">
+                <Gift className="h-4 w-4 text-primary" />
+                <span className="text-xs font-semibold text-foreground tracking-wide">
+                  Affiliate &amp; Referral Program Settings
+                </span>
+                <Badge variant="outline" className="text-[10px] ml-auto border-primary/30 text-primary">
+                  Option A: 10-User Unlock
+                </Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground -mt-1">
+                Configure commission share, click attribution window, and Option A milestone rules for this partner.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Attribution Window (Days)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={editReferralAttributionDays}
+                    onChange={e => setEditReferralAttributionDays(e.target.value)}
+                    placeholder="60"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Cookie/click validity until signup.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Commission Share (%)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={editReferralCommissionPercent}
+                    onChange={e => setEditReferralCommissionPercent(e.target.value)}
+                    placeholder="10"
+                  />
+                  <p className="text-[10px] text-muted-foreground">% of each user wallet recharge.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Earning Duration (Months)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="60"
+                    value={editReferralCommissionMonths}
+                    onChange={e => setEditReferralCommissionMonths(e.target.value)}
+                    placeholder="6"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Months from user signup to earn.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Unlock Threshold (Paying Users)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="1000"
+                    value={editReferralMinRechargedUsers}
+                    onChange={e => setEditReferralMinRechargedUsers(e.target.value)}
+                    placeholder="10"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Option A: 10 users to unlock pending credits.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-border/50 pt-2.5">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Audience Signup Free Minutes</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="1000"
+                    value={editReferralAudienceFreeMinutes}
+                    onChange={e => setEditReferralAudienceFreeMinutes(e.target.value)}
+                    placeholder="100"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Gifted calling minutes at signup.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Audience 1st Recharge Bonus (%)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={editReferralAudienceBonusPercent}
+                    onChange={e => setEditReferralAudienceBonusPercent(e.target.value)}
+                    placeholder="10"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Extra wallet credit on 1st top-up.</p>
+                </div>
+              </div>
+            </div>
           </div>
 
           <DialogFooter className="p-4 border-t bg-muted/20 shrink-0">
@@ -800,7 +928,7 @@ function PartnerDetailDialog({
               )}
             </TabsContent>
 
-            <TabsContent value="referrals" className="mt-3">
+            <TabsContent value="referrals" className="mt-3 space-y-3">
               {isLoading ? (
                 <p className="text-xs text-muted-foreground py-4 text-center">Loading referrals…</p>
               ) : !data?.referrals?.length ? (
@@ -808,19 +936,101 @@ function PartnerDetailDialog({
                   No walk-in referral signups yet.
                 </div>
               ) : (
-                <div className="space-y-1.5">
-                  {data.referrals.map((r) => (
-                    <div key={r.id} className="flex items-center justify-between text-xs border border-border rounded-md px-3 py-2 bg-card">
-                      <div>
-                        <p className="font-medium">{r.userName || r.userEmail || "Signed up user"}</p>
-                        <p className="text-[11px] text-muted-foreground font-mono">{r.userEmail ?? r.userId} · Code: {r.referralCode}</p>
-                      </div>
-                      <span className="flex items-center gap-2 text-muted-foreground">
-                        {fmtDate(r.createdAt)} {statusBadge(r.status)}
-                      </span>
+                <>
+                  {/* Option A Milestone KPI Summary */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="p-2.5 rounded-lg border border-border bg-card">
+                      <span className="text-[10px] text-muted-foreground uppercase font-medium block">Total Referrals</span>
+                      <span className="text-base font-semibold text-foreground">{data.referrals.length}</span>
+                      <span className="text-[10px] text-muted-foreground block">60d click attribution</span>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="p-2.5 rounded-lg border border-border bg-card">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground uppercase font-medium">Paying Users</span>
+                        {(data.rechargedUsersCount ?? 0) >= (partner.referralMinRechargedUsers ?? 10) ? (
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 text-emerald-500 border-emerald-500/30">
+                            <Unlock className="w-2.5 h-2.5 mr-0.5 inline" /> Unlocked
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 text-amber-500 border-amber-500/30">
+                            <Lock className="w-2.5 h-2.5 mr-0.5 inline" /> Locked
+                          </Badge>
+                        )}
+                      </div>
+                      <span className="text-base font-semibold text-foreground">
+                        {data.rechargedUsersCount ?? 0} <span className="text-xs text-muted-foreground font-normal">/ {partner.referralMinRechargedUsers ?? 10}</span>
+                      </span>
+                      <div className="w-full bg-muted rounded-full h-1 mt-1 overflow-hidden">
+                        <div
+                          className={`h-full ${(data.rechargedUsersCount ?? 0) >= (partner.referralMinRechargedUsers ?? 10) ? "bg-emerald-500" : "bg-amber-500"}`}
+                          style={{ width: `${Math.min(100, Math.round(((data.rechargedUsersCount ?? 0) / ((partner.referralMinRechargedUsers ?? 10) || 1)) * 100))}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg border border-border bg-card">
+                      <span className="text-[10px] text-muted-foreground uppercase font-medium block">Pending Credits</span>
+                      <span className="text-base font-semibold text-amber-500">
+                        {formatCentsToDollars(data.pendingEarningsCents ?? 0)}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground block">Releases at {partner.referralMinRechargedUsers ?? 10} users</span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg border border-border bg-card">
+                      <span className="text-[10px] text-muted-foreground uppercase font-medium block">Released to Wallet</span>
+                      <span className="text-base font-semibold text-emerald-500">
+                        {formatCentsToDollars(data.unlockedEarningsCents ?? 0)}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground block">Added to balance</span>
+                    </div>
+                  </div>
+
+                  {/* Referrals Breakdown Table */}
+                  <div className="overflow-x-auto rounded-md border border-border">
+                    <Table className="text-xs">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>User</TableHead>
+                          <TableHead>Code</TableHead>
+                          <TableHead className="text-right">Recharges</TableHead>
+                          <TableHead className="text-right">Total Recharged</TableHead>
+                          <TableHead className="text-right">10% Commission</TableHead>
+                          <TableHead className="text-right">Joined</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {data.referrals.map((r) => (
+                          <TableRow key={r.id}>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium text-foreground">{r.userName || "Referred user"}</p>
+                                <p className="text-[11px] font-mono text-muted-foreground">{r.userEmail ?? r.userId}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="font-mono text-[10px] uppercase">
+                                {r.referralCode}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {r.rechargeCount ?? 0}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-medium">
+                              {formatCentsToDollars(r.totalRechargedPaise ?? 0)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-semibold text-emerald-500">
+                              {formatCentsToDollars(r.totalEarnedPaise ?? 0)}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {fmtDate(r.createdAt)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
             </TabsContent>
           </Tabs>

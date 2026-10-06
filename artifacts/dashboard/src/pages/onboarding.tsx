@@ -438,7 +438,17 @@ export default function OnboardingPage() {
   const { mutate: complete, isPending } = useCompleteOnboarding();
 
   const [step, setStep] = useState(0);   // 0 = loading, 1–5 = questions, 6 = done
-  const initialRefCode = typeof window !== "undefined" ? (localStorage.getItem("snapserve_ref_code") || "") : "";
+  const initialRefCode = typeof window !== "undefined" ? (() => {
+    const code = localStorage.getItem("snapserve_ref_code") || "";
+    const time = Number(localStorage.getItem("snapserve_ref_time") || 0);
+    // 60-day attribution window (60 * 24 * 60 * 60 * 1000 = 5,184,000,000 ms)
+    if (code && time && (Date.now() - time > 60 * 24 * 60 * 60 * 1000)) {
+      localStorage.removeItem("snapserve_ref_code");
+      localStorage.removeItem("snapserve_ref_time");
+      return "";
+    }
+    return code;
+  })() : "";
   const [answers, setAnswers] = useState<Answers>({
     name: "",
     role: null,

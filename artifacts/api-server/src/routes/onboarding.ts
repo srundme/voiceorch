@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
-import { db, usersTable, partnersTable, partnerReferralsTable } from "@workspace/db";
+import { db, usersTable, partnersTable, partnerReferralsTable, walletTransactionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router: IRouter = Router();
@@ -93,10 +93,16 @@ router.post("/onboarding/complete", requireAuth, async (req, res): Promise<void>
   let matchedPartnerId: number | null = null;
   let finalReferredCode: string | null = code || null;
 
+  let matchedPartnerAudienceMinutes = 100;
+
   if (code) {
     // Check if code matches an active partner referral code or slug
     const [partner] = await db
-      .select({ id: partnersTable.id, referralCode: partnersTable.referralCode })
+      .select({
+        id: partnersTable.id,
+        referralCode: partnersTable.referralCode,
+        audienceMinutes: partnersTable.referralAudienceFreeMinutes,
+      })
       .from(partnersTable)
       .where(
         sql`lower(${partnersTable.referralCode}) = ${code.toLowerCase()} OR lower(${partnersTable.slug}) = ${code.toLowerCase()}`
@@ -106,6 +112,7 @@ router.post("/onboarding/complete", requireAuth, async (req, res): Promise<void>
     if (partner) {
       matchedPartnerId = partner.id;
       finalReferredCode = partner.referralCode || code;
+      matchedPartnerAudienceMinutes = partner.audienceMinutes || 100;
     }
   }
 
@@ -123,7 +130,7 @@ router.post("/onboarding/complete", requireAuth, async (req, res): Promise<void>
 
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-  // Record into partnerReferralsTable if partner matched
+  // Record into partnerReferralsTable if partner matched & grant audience welcome minutes
   if (matchedPartnerId && finalReferredCode) {
     try {
       await db.insert(partnerReferralsTable).values({
@@ -136,6 +143,31 @@ router.post("/onboarding/complete", requireAuth, async (req, res): Promise<void>
       });
     } catch (e) {
       req.log.warn({ err: e }, "partnerReferralsTable insert ignored/duplicate");
+    }
+
+    // Top up user's wallet to provide full audience welcome minutes (e.g. 100 minutes = Rs.500 = 50,000 paise)
+    const targetCreditPaise = matchedPartnerAudienceMinutes * 500;
+    const currentBalance = user.walletBalanceCents || 0;
+    if (currentBalance < targetCreditPaise) {
+      const topupPaise = targetCreditPaise - currentBalance;
+      try {
+        await db.transaction(async (tx) => {
+          await tx.insert(walletTransactionsTable).values({
+            userId: user.id,
+            type: "free_credit",
+            amountCents: topupPaise,
+            description: `Audience welcome credit — ${matchedPartnerAudienceMinutes} free calling minutes with code ${finalReferredCode}`,
+            status: "completed",
+          });
+          await tx
+            .update(usersTable)
+            .set({ walletBalanceCents: targetCreditPaise })
+            .where(eq(usersTable.id, user.id));
+        });
+        req.log.info({ clerkId, topupPaise, matchedPartnerAudienceMinutes }, "Audience referral welcome credit topped up");
+      } catch (err) {
+        req.log.warn({ err }, "Failed to top up audience referral welcome credit");
+      }
     }
   }
 

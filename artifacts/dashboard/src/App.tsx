@@ -119,6 +119,7 @@ try {
     const _clean = _rawRef.replace(/[^a-zA-Z0-9_-]/g, "").trim().toUpperCase();
     if (_clean) {
       localStorage.setItem("snapserve_ref_code", _clean);
+      localStorage.setItem("snapserve_ref_time", String(Date.now()));
     }
   }
 } catch {

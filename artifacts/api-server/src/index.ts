@@ -45,6 +45,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { db } from "@workspace/db";
 import { platformSettingsTable, agentsTable, usersTable, walletTransactionsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
+import { ensureReferralSchema } from "./services/referral-reward.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const workerFile = join(__dirname, "orchestration", "audioWorker.mjs");
@@ -619,6 +620,7 @@ server.listen(port, () => {
       void seedManagedKeyFromEnv("recall_api_key_fallback","RECALL_API_KEY_FALLBACK");
       void migrateSaarikaToSaaras();
       void migrateCallEngineConfigs();
+      void ensureReferralSchema();
       void import("./services/ai-test-calls/runner.js")
         .then(({ recoverTestRuns }) => recoverTestRuns())
         .catch((err) => logger.warn({ err }, "AI test call run recovery failed (non-fatal)"));

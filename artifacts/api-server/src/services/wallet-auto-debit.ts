@@ -11,6 +11,7 @@ import { usersTable, walletTransactionsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { issueInvoice } from "./invoice.js";
+import { processReferralRecharge } from "./referral-reward.js";
 import {
   CURRENCY_INR,
   GST_RATE,
@@ -145,6 +146,14 @@ export async function triggerAutoDebit(
     hsnSac: "998413",
     amountCents: basePaise,
     gstInclusive: false,
+    razorpayOrderId: order.id,
+    razorpayPaymentId: paymentId,
+  });
+
+  // Affiliate & Referral Program: 1st recharge bonus to user + 10% commission to partner
+  void processReferralRecharge({
+    payingUserId: userId,
+    rechargeAmountPaise: basePaise,
     razorpayOrderId: order.id,
     razorpayPaymentId: paymentId,
   });
