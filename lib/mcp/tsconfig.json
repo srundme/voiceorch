@@ -5,7 +5,7 @@
     "moduleResolution": "bundler",
     "strict": true,
     "paths": {
-      "@snapserve/mcp": ["../snapserve-mcp/src/server.ts"]
+      "@snapserve/mcp": ["../snapserve-mcp/dist/server.d.ts"]
     },
     "declaration": true,
     "outDir": "dist",
