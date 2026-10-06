@@ -33,6 +33,9 @@ export async function ensureReferralSchema(): Promise<void> {
       ALTER TABLE partners ADD COLUMN IF NOT EXISTS referral_commission_percent integer DEFAULT 10 NOT NULL;
       ALTER TABLE partners ADD COLUMN IF NOT EXISTS referral_commission_months integer DEFAULT 6 NOT NULL;
       ALTER TABLE partners ADD COLUMN IF NOT EXISTS referral_min_recharged_users integer DEFAULT 10 NOT NULL;
+      ALTER TABLE partners ADD COLUMN IF NOT EXISTS referral_target_minutes integer DEFAULT 5000 NOT NULL;
+      ALTER TABLE partners ADD COLUMN IF NOT EXISTS referral_reward_minutes integer DEFAULT 500 NOT NULL;
+      ALTER TABLE partners ADD COLUMN IF NOT EXISTS referral_completed_cycles integer DEFAULT 0 NOT NULL;
       ALTER TABLE partners ADD COLUMN IF NOT EXISTS referral_audience_bonus_percent integer DEFAULT 10 NOT NULL;
       ALTER TABLE partners ADD COLUMN IF NOT EXISTS referral_audience_free_minutes integer DEFAULT 100 NOT NULL;
       ALTER TABLE partner_referrals ADD COLUMN IF NOT EXISTS first_recharge_at timestamp with time zone;
@@ -48,10 +51,12 @@ export async function ensureReferralSchema(): Promise<void> {
         recharge_amount_paise integer NOT NULL,
         commission_percent integer DEFAULT 10 NOT NULL,
         earned_paise integer NOT NULL,
+        cycle_number integer DEFAULT 1,
         status text DEFAULT 'pending' NOT NULL,
         credited_at timestamp with time zone,
         created_at timestamp with time zone DEFAULT now() NOT NULL
       );
+      ALTER TABLE partner_referral_earnings ADD COLUMN IF NOT EXISTS cycle_number integer DEFAULT 1;
       CREATE INDEX IF NOT EXISTS partner_referral_earnings_partner_id_idx ON partner_referral_earnings (partner_id);
       CREATE INDEX IF NOT EXISTS partner_referral_earnings_user_id_idx ON partner_referral_earnings (user_id);
       CREATE INDEX IF NOT EXISTS partner_referral_earnings_status_idx ON partner_referral_earnings (status);
@@ -215,130 +220,103 @@ export async function processReferralRecharge(opts: {
       return;
     }
 
-    // 7. OPTION A (Accumulate & Unlock): Evaluate paying users count
-    const [stats] = await db
+    // 7. OPTION A: 5,000-Minute Recurring Milestone Cycles
+    // In SnapServe, base calling rate is e.g. ₹5.00/min (500 paise/min).
+    const baseRatePaise = partner.baseRateCentsPerMin || 500;
+    const targetMinutes = partner.referralTargetMinutes ?? 5000;
+    const rewardMinutes = partner.referralRewardMinutes ?? 500;
+    const rewardPaisePerCycle = rewardMinutes * baseRatePaise; // e.g. 500 mins * ₹5 = ₹2,500 (250,000 paise)
+
+    // Calculate cumulative paise recharged across all referrals for this partner
+    const [sumRow] = await db
       .select({
-        payingCount: sql<number>`count(distinct ${partnerReferralsTable.userId})`,
+        totalPaise: sql<number>`coalesce(sum(${partnerReferralsTable.totalRechargedPaise}), 0)`,
       })
       .from(partnerReferralsTable)
-      .where(
-        and(
-          eq(partnerReferralsTable.partnerId, partner.id),
-          sql`(${partnerReferralsTable.rechargeCount} > 0 OR ${partnerReferralsTable.firstRechargeAt} IS NOT NULL)`,
-        ),
-      );
+      .where(eq(partnerReferralsTable.partnerId, partner.id));
 
-    const payingUsersCount = Number(stats?.payingCount ?? 0);
-    const unlockThreshold = partner.referralMinRechargedUsers ?? 10;
-    const isUnlocked = payingUsersCount >= unlockThreshold;
+    const totalAudiencePaise = Number(sumRow?.totalPaise ?? 0);
+    const totalAudienceMinutes = Math.floor(totalAudiencePaise / baseRatePaise);
 
-    if (isUnlocked) {
-      // Check if there are previously locked pending earnings to release as a lump sum
-      const pendingRows = await db
-        .select()
-        .from(partnerReferralEarningsTable)
-        .where(
-          and(
-            eq(partnerReferralEarningsTable.partnerId, partner.id),
-            eq(partnerReferralEarningsTable.status, "pending"),
-          ),
-        );
+    // Calculate total cycles earned so far vs previously completed
+    const totalCyclesEarned = Math.floor(totalAudienceMinutes / targetMinutes);
+    const previouslyCompletedCycles = partner.referralCompletedCycles ?? 0;
+    const newCyclesToUnlock = Math.max(0, totalCyclesEarned - previouslyCompletedCycles);
+    const currentCycleMinutes = totalAudienceMinutes % targetMinutes;
 
-      let pendingTotalPaise = 0;
-      if (pendingRows.length > 0) {
-        pendingTotalPaise = pendingRows.reduce((acc, r) => acc + r.earnedPaise, 0);
+    if (newCyclesToUnlock > 0) {
+      // One or more 5,000-minute cycles completed! Credit 500 minutes (₹2,500) per cycle
+      for (let i = 0; i < newCyclesToUnlock; i++) {
+        const cycleNum = previouslyCompletedCycles + i + 1;
 
-        // Mark pending rows as credited
-        await db
-          .update(partnerReferralEarningsTable)
-          .set({ status: "credited", creditedAt: new Date() })
-          .where(
-            inArray(
-              partnerReferralEarningsTable.id,
-              pendingRows.map((r) => r.id),
-            ),
-          );
-
-        // Credit the accumulated lump sum to partner's wallet
-        if (pendingTotalPaise > 0) {
-          await db.transaction(async (tx) => {
-            await tx.insert(walletTransactionsTable).values({
-              userId: partnerUser.id,
-              type: "referral_earning",
-              amountCents: pendingTotalPaise,
-              description: `Unlocked accumulated referral commissions from ${payingUsersCount} referred users (${formatInr(pendingTotalPaise)})`,
-              status: "completed",
-            });
-
-            await tx
-              .update(usersTable)
-              .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${pendingTotalPaise}` })
-              .where(eq(usersTable.id, partnerUser.id));
-          });
-
-          logger.info(
-            { partnerId: partner.id, partnerUserId: partnerUser.id, pendingTotalPaise, payingUsersCount },
-            "Option A unlocked: All accumulated pending referral commissions credited to partner wallet",
-          );
-        }
-      }
-
-      // Record current recharge commission as credited & deposit to wallet
-      await db.transaction(async (tx) => {
-        const [earningRow] = await tx
-          .insert(partnerReferralEarningsTable)
-          .values({
+        await db.transaction(async (tx) => {
+          await tx.insert(partnerReferralEarningsTable).values({
             partnerId: partner.id,
             referralId: referralRow?.id ?? null,
             userId: payingUser.clerkId,
             rechargeTxnId: rechargeTxnId ?? null,
             rechargeAmountPaise,
-            commissionPercent,
-            earnedPaise,
+            commissionPercent: 10,
+            earnedPaise: rewardPaisePerCycle,
+            cycleNumber: cycleNum,
             status: "credited",
             creditedAt: new Date(),
-          })
-          .returning();
+          });
 
-        await tx.insert(walletTransactionsTable).values({
-          userId: partnerUser.id,
-          type: "referral_earning",
-          amountCents: earnedPaise,
-          description: `Affiliate commission (${commissionPercent}%) — recharge by referred user ${payingUser.email ?? payingUser.name ?? "client"}`,
-          status: "completed",
+          await tx.insert(walletTransactionsTable).values({
+            userId: partnerUser.id,
+            type: "referral_earning",
+            amountCents: rewardPaisePerCycle,
+            description: `Affiliate Milestone #${cycleNum} — ${rewardMinutes} free minutes (${formatInr(rewardPaisePerCycle)}) credited (${targetMinutes} referred minutes reached)`,
+            status: "completed",
+          });
+
+          await tx
+            .update(usersTable)
+            .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${rewardPaisePerCycle}` })
+            .where(eq(usersTable.id, partnerUser.id));
         });
 
-        await tx
-          .update(usersTable)
-          .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${earnedPaise}` })
-          .where(eq(usersTable.id, partnerUser.id));
-      });
+        logger.info(
+          {
+            partnerId: partner.id,
+            partnerUserId: partnerUser.id,
+            cycleNum,
+            rewardMinutes,
+            rewardPaisePerCycle,
+          },
+          "Milestone reached: 500 free minutes credited to partner wallet",
+        );
+      }
 
-      logger.info(
-        { partnerId: partner.id, partnerUserId: partnerUser.id, earnedPaise, payingUser: payingUser.email },
-        "Referral commission credited to partner wallet in real-time",
-      );
+      await db
+        .update(partnersTable)
+        .set({ referralCompletedCycles: totalCyclesEarned })
+        .where(eq(partnersTable.id, partner.id));
     } else {
-      // Under threshold: Record as PENDING (accumulate without depositing yet)
+      // Still accumulating towards next 5,000-minute milestone
+      const activeCycleNum = previouslyCompletedCycles + 1;
       await db.insert(partnerReferralEarningsTable).values({
         partnerId: partner.id,
         referralId: referralRow?.id ?? null,
         userId: payingUser.clerkId,
         rechargeTxnId: rechargeTxnId ?? null,
         rechargeAmountPaise,
-        commissionPercent,
+        commissionPercent: 10,
         earnedPaise,
+        cycleNumber: activeCycleNum,
         status: "pending",
       });
 
       logger.info(
         {
           partnerId: partner.id,
-          payingUsersCount,
-          unlockThreshold,
-          earnedPaise,
+          totalAudienceMinutes,
+          currentCycleMinutes,
+          targetMinutes,
+          activeCycleNum,
         },
-        "Referral commission recorded as PENDING (waiting for 10-user unlock threshold)",
+        "Referred minutes accumulated towards 5,000-minute milestone cycle",
       );
     }
   } catch (err) {
@@ -390,4 +368,47 @@ export function isAttributionValid(clickedAtTimestampMs: number, attributionDays
   const maxAgeMs = attributionDays * 24 * 60 * 60 * 1000;
   return (checkTimeMs - clickedAtTimestampMs) <= maxAgeMs;
 }
+
+/**
+ * Calculate progress in the current 5,000-minute cycle and total completed cycles.
+ */
+export function calculateMilestoneProgress(
+  totalAudienceMinutes: number,
+  targetMinutes: number = 5000,
+): {
+  currentCycleMinutes: number;
+  completedCycles: number;
+  percent: number;
+  minutesRemaining: number;
+} {
+  const safeTarget = Math.max(1, targetMinutes);
+  const safeMinutes = Math.max(0, totalAudienceMinutes);
+  const completedCycles = Math.floor(safeMinutes / safeTarget);
+  const currentCycleMinutes = safeMinutes % safeTarget;
+  const percent = Math.min(100, Math.round((currentCycleMinutes / safeTarget) * 100));
+  const minutesRemaining = safeTarget - currentCycleMinutes;
+  return {
+    currentCycleMinutes,
+    completedCycles,
+    percent,
+    minutesRemaining,
+  };
+}
+
+/**
+ * Convert recharge paise into calling minutes at the specified rate (default 500 paise = ₹5.00/min).
+ */
+export function convertPaiseToMinutes(amountPaise: number, ratePaisePerMin: number = 500): number {
+  if (amountPaise <= 0 || ratePaisePerMin <= 0) return 0;
+  return Math.floor(amountPaise / ratePaisePerMin);
+}
+
+/**
+ * Convert reward minutes into rupee credits in paise (e.g. 500 minutes * 500 paise = 250,000 paise = ₹2,500).
+ */
+export function calculateRewardCreditsPaise(rewardMinutes: number = 500, ratePaisePerMin: number = 500): number {
+  if (rewardMinutes <= 0 || ratePaisePerMin <= 0) return 0;
+  return rewardMinutes * ratePaisePerMin;
+}
+
 

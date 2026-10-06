@@ -124,8 +124,20 @@ export const partnersTable = pgTable("partners", {
   /** Number of months from user signup during which recharges yield commission. */
   referralCommissionMonths: integer("referral_commission_months").notNull().default(6),
   /**
-   * Option A milestone: Minimum unique recharging users required before accumulated
-   * referral commissions unlock into the partner's wallet balance.
+   * Option A milestone: Target minutes purchased by audience before 500 reward minutes unlock.
+   * Default: 5000 minutes.
+   */
+  referralTargetMinutes: integer("referral_target_minutes").notNull().default(5000),
+  /**
+   * Free call minutes credited to the partner wallet upon reaching the milestone (default 500 minutes = 10%).
+   */
+  referralRewardMinutes: integer("referral_reward_minutes").notNull().default(500),
+  /**
+   * Total number of 5,000-minute milestone cycles successfully completed and credited.
+   */
+  referralCompletedCycles: integer("referral_completed_cycles").notNull().default(0),
+  /**
+   * Legacy Option A milestone threshold (deprecated in favor of referralTargetMinutes).
    */
   referralMinRechargedUsers: integer("referral_min_recharged_users").notNull().default(10),
   /** Extra bonus credit (%) given to the referred user on their 1st recharge. */
@@ -198,6 +210,7 @@ export const partnerReferralEarningsTable = pgTable("partner_referral_earnings",
   rechargeAmountPaise: integer("recharge_amount_paise").notNull(),
   commissionPercent: integer("commission_percent").notNull().default(10),
   earnedPaise: integer("earned_paise").notNull(),
+  cycleNumber: integer("cycle_number").default(1),
   status: text("status").notNull().default("pending"), // pending | credited
   creditedAt: timestamp("credited_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

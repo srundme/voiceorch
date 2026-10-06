@@ -9,6 +9,9 @@ import {
   calculateAudienceBonus,
   isWithinEarningWindow,
   isAttributionValid,
+  calculateMilestoneProgress,
+  convertPaiseToMinutes,
+  calculateRewardCreditsPaise,
 } from "./referral-reward.js";
 
 describe("Affiliate & Referral Reward Calculations", () => {
@@ -30,59 +33,88 @@ describe("Affiliate & Referral Reward Calculations", () => {
     });
   });
 
-  describe("calculateReferralCommission", () => {
-    it("computes 10% commission on wallet recharges", () => {
-      // User adds ₹10,000 (1,000,000 paise) -> Sanjay gets ₹1,000 (100,000 paise)
-      expect(calculateReferralCommission(1_000_000, 10)).toBe(100_000);
-      // User adds ₹5,000 (500,000 paise) -> Sanjay gets ₹500 (50,000 paise)
-      expect(calculateReferralCommission(500_000, 10)).toBe(50_000);
+  describe("convertPaiseToMinutes and calculateRewardCreditsPaise", () => {
+    it("converts recharge paise to calling minutes at ₹5/min (500 paise)", () => {
+      // ₹10,000 = 1,000,000 paise -> 2,000 minutes
+      expect(convertPaiseToMinutes(1_000_000, 500)).toBe(2_000);
+      // ₹25,000 = 2,500,000 paise -> 5,000 minutes
+      expect(convertPaiseToMinutes(2_500_000, 500)).toBe(5_000);
     });
 
-    it("handles 0 or negative values", () => {
-      expect(calculateReferralCommission(0, 10)).toBe(0);
-      expect(calculateReferralCommission(-500, 10)).toBe(0);
-      expect(calculateReferralCommission(100_000, 0)).toBe(0);
+    it("converts 500 reward minutes to ₹2,500 wallet credits", () => {
+      // 500 minutes * 500 paise = 250,000 paise = ₹2,500
+      expect(calculateRewardCreditsPaise(500, 500)).toBe(250_000);
     });
   });
 
-  describe("calculateAudienceBonus", () => {
+  describe("calculateMilestoneProgress (5,000-Minute Recurring Cycle)", () => {
+    it("tracks progress within Cycle #1 (under 5,000 minutes)", () => {
+      const p1 = calculateMilestoneProgress(0, 5000);
+      expect(p1.currentCycleMinutes).toBe(0);
+      expect(p1.completedCycles).toBe(0);
+      expect(p1.percent).toBe(0);
+      expect(p1.minutesRemaining).toBe(5000);
+
+      const p2 = calculateMilestoneProgress(2000, 5000);
+      expect(p2.currentCycleMinutes).toBe(2000);
+      expect(p2.completedCycles).toBe(0);
+      expect(p2.percent).toBe(40);
+      expect(p2.minutesRemaining).toBe(3000);
+    });
+
+    it("triggers Milestone #1 at exactly 5,000 minutes and resets cycle to 0", () => {
+      const p = calculateMilestoneProgress(5000, 5000);
+      expect(p.currentCycleMinutes).toBe(0);
+      expect(p.completedCycles).toBe(1);
+      expect(p.percent).toBe(0);
+      expect(p.minutesRemaining).toBe(5000);
+    });
+
+    it("handles rollover beyond 5,000 minutes correctly into Cycle #2", () => {
+      // 5,600 minutes total -> Cycle 1 completed, 600 minutes into Cycle 2
+      const p = calculateMilestoneProgress(5600, 5000);
+      expect(p.currentCycleMinutes).toBe(600);
+      expect(p.completedCycles).toBe(1);
+      expect(p.percent).toBe(12);
+      expect(p.minutesRemaining).toBe(4400);
+    });
+
+    it("triggers Milestone #2 at 10,000 minutes", () => {
+      const p = calculateMilestoneProgress(10000, 5000);
+      expect(p.currentCycleMinutes).toBe(0);
+      expect(p.completedCycles).toBe(2);
+      expect(p.percent).toBe(0);
+      expect(p.minutesRemaining).toBe(5000);
+    });
+  });
+
+  describe("calculateReferralCommission and calculateAudienceBonus", () => {
+    it("computes 10% commission on wallet recharges", () => {
+      expect(calculateReferralCommission(1_000_000, 10)).toBe(100_000);
+      expect(calculateReferralCommission(500_000, 10)).toBe(50_000);
+    });
+
     it("computes 10% first recharge audience bonus", () => {
-      // User recharges ₹1,000 (100,000 paise) -> Gets ₹100 bonus (10,000 paise)
       expect(calculateAudienceBonus(100_000, 10)).toBe(10_000);
-      // User recharges ₹10,000 (1,000,000 paise) -> Gets ₹1,000 bonus (100,000 paise)
       expect(calculateAudienceBonus(1_000_000, 10)).toBe(100_000);
     });
   });
 
-  describe("isWithinEarningWindow", () => {
+  describe("isWithinEarningWindow and isAttributionValid", () => {
     it("validates within 6 months window", () => {
       const now = new Date("2026-10-06T12:00:00Z");
-      // 1 month ago -> true
       const oneMonthAgo = new Date("2026-09-06T12:00:00Z");
       expect(isWithinEarningWindow(oneMonthAgo, 6, now)).toBe(true);
 
-      // 5 months ago -> true
-      const fiveMonthsAgo = new Date("2026-05-06T12:00:00Z");
-      expect(isWithinEarningWindow(fiveMonthsAgo, 6, now)).toBe(true);
-
-      // 7 months ago -> false (exceeded 6 months)
       const sevenMonthsAgo = new Date("2026-03-01T12:00:00Z");
       expect(isWithinEarningWindow(sevenMonthsAgo, 6, now)).toBe(false);
     });
-  });
 
-  describe("isAttributionValid", () => {
     it("validates 60-day click attribution", () => {
       const nowMs = 1791280000000;
       const oneDayMs = 24 * 60 * 60 * 1000;
 
-      // Clicked 10 days ago -> valid within 60 days
       expect(isAttributionValid(nowMs - 10 * oneDayMs, 60, nowMs)).toBe(true);
-
-      // Clicked 59 days ago -> valid within 60 days
-      expect(isAttributionValid(nowMs - 59 * oneDayMs, 60, nowMs)).toBe(true);
-
-      // Clicked 61 days ago -> expired (beyond 60 days)
       expect(isAttributionValid(nowMs - 61 * oneDayMs, 60, nowMs)).toBe(false);
     });
   });

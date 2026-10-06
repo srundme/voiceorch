@@ -953,6 +953,13 @@
       "when": 1791600035000,
       "tag": "0135_referral_affiliate_program",
       "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1791600036000,
+      "tag": "0136_referral_minute_milestones",
+      "breakpoints": true
     }
   ]
 }

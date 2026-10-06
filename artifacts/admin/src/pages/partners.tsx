@@ -43,6 +43,9 @@ interface AdminPartner {
   referralCommissionPercent?: number;
   referralCommissionMonths?: number;
   referralMinRechargedUsers?: number;
+  referralTargetMinutes?: number;
+  referralRewardMinutes?: number;
+  referralCompletedCycles?: number;
   referralAudienceBonusPercent?: number;
   referralAudienceFreeMinutes?: number;
 }
@@ -78,6 +81,7 @@ interface PartnerReferralRow {
   rechargeCount?: number;
   totalRechargedPaise?: number;
   totalEarnedPaise?: number;
+  minutesPurchased?: number;
   createdAt: string;
 }
 
@@ -99,6 +103,12 @@ interface PartnerDetail {
   invites: PartnerInviteRow[];
   referrals?: PartnerReferralRow[];
   rechargedUsersCount?: number;
+  targetMinutes?: number;
+  rewardMinutes?: number;
+  completedCycles?: number;
+  totalAudienceMinutes?: number;
+  currentCycleMinutes?: number;
+  minutesRemainingInCycle?: number;
   pendingEarningsCents?: number;
   unlockedEarningsCents?: number;
   monthEarningsCents: number;
@@ -156,6 +166,8 @@ export default function PartnersPage() {
   const [editReferralCommissionPercent, setEditReferralCommissionPercent] = useState("10");
   const [editReferralCommissionMonths, setEditReferralCommissionMonths] = useState("6");
   const [editReferralMinRechargedUsers, setEditReferralMinRechargedUsers] = useState("10");
+  const [editReferralTargetMinutes, setEditReferralTargetMinutes] = useState("5000");
+  const [editReferralRewardMinutes, setEditReferralRewardMinutes] = useState("500");
   const [editReferralAudienceBonusPercent, setEditReferralAudienceBonusPercent] = useState("10");
   const [editReferralAudienceFreeMinutes, setEditReferralAudienceFreeMinutes] = useState("100");
 
@@ -227,6 +239,8 @@ export default function PartnersPage() {
           referralCommissionPercent: parseInt(editReferralCommissionPercent, 10) || 10,
           referralCommissionMonths: parseInt(editReferralCommissionMonths, 10) || 6,
           referralMinRechargedUsers: parseInt(editReferralMinRechargedUsers, 10) || 10,
+          referralTargetMinutes: parseInt(editReferralTargetMinutes, 10) || 5000,
+          referralRewardMinutes: parseInt(editReferralRewardMinutes, 10) || 500,
           referralAudienceBonusPercent: parseInt(editReferralAudienceBonusPercent, 10) || 10,
           referralAudienceFreeMinutes: parseInt(editReferralAudienceFreeMinutes, 10) || 100,
         }),
@@ -253,6 +267,8 @@ export default function PartnersPage() {
     setEditReferralCommissionPercent(String(p.referralCommissionPercent ?? 10));
     setEditReferralCommissionMonths(String(p.referralCommissionMonths ?? 6));
     setEditReferralMinRechargedUsers(String(p.referralMinRechargedUsers ?? 10));
+    setEditReferralTargetMinutes(String(p.referralTargetMinutes ?? 5000));
+    setEditReferralRewardMinutes(String(p.referralRewardMinutes ?? 500));
     setEditReferralAudienceBonusPercent(String(p.referralAudienceBonusPercent ?? 10));
     setEditReferralAudienceFreeMinutes(String(p.referralAudienceFreeMinutes ?? 100));
   };
@@ -618,7 +634,34 @@ export default function PartnersPage() {
                   <p className="text-[10px] text-muted-foreground">Months from user signup to earn.</p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Unlock Threshold (Paying Users)</Label>
+                  <Label className="text-xs">Milestone Target Minutes</Label>
+                  <Input
+                    type="number"
+                    min="100"
+                    max="1000000"
+                    value={editReferralTargetMinutes}
+                    onChange={e => setEditReferralTargetMinutes(e.target.value)}
+                    placeholder="5000"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Target minutes purchased by audience (0/5000).</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Reward Free Minutes</Label>
+                  <Input
+                    type="number"
+                    min="10"
+                    max="100000"
+                    value={editReferralRewardMinutes}
+                    onChange={e => setEditReferralRewardMinutes(e.target.value)}
+                    placeholder="500"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Free minutes credited to partner wallet per cycle.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Legacy User Threshold (Optional)</Label>
                   <Input
                     type="number"
                     min="0"
@@ -627,7 +670,7 @@ export default function PartnersPage() {
                     onChange={e => setEditReferralMinRechargedUsers(e.target.value)}
                     placeholder="10"
                   />
-                  <p className="text-[10px] text-muted-foreground">Option A: 10 users to unlock pending credits.</p>
+                  <p className="text-[10px] text-muted-foreground">Fallback user count threshold.</p>
                 </div>
               </div>
 
@@ -937,7 +980,7 @@ function PartnerDetailDialog({
                 </div>
               ) : (
                 <>
-                  {/* Option A Milestone KPI Summary */}
+                  {/* 5,000-Minute Cycle Milestone KPI Summary */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div className="p-2.5 rounded-lg border border-border bg-card">
                       <span className="text-[10px] text-muted-foreground uppercase font-medium block">Total Referrals</span>
@@ -947,42 +990,38 @@ function PartnerDetailDialog({
 
                     <div className="p-2.5 rounded-lg border border-border bg-card">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-muted-foreground uppercase font-medium">Paying Users</span>
-                        {(data.rechargedUsersCount ?? 0) >= (partner.referralMinRechargedUsers ?? 10) ? (
-                          <Badge variant="outline" className="text-[9px] px-1 py-0 text-emerald-500 border-emerald-500/30">
-                            <Unlock className="w-2.5 h-2.5 mr-0.5 inline" /> Unlocked
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[9px] px-1 py-0 text-amber-500 border-amber-500/30">
-                            <Lock className="w-2.5 h-2.5 mr-0.5 inline" /> Locked
-                          </Badge>
-                        )}
+                        <span className="text-[10px] text-muted-foreground uppercase font-medium">Cycle Progress</span>
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 text-primary border-primary/30">
+                          Cycle #{(data.completedCycles ?? 0) + 1}
+                        </Badge>
                       </div>
                       <span className="text-base font-semibold text-foreground">
-                        {data.rechargedUsersCount ?? 0} <span className="text-xs text-muted-foreground font-normal">/ {partner.referralMinRechargedUsers ?? 10}</span>
+                        {(data.currentCycleMinutes ?? 0).toLocaleString()} <span className="text-xs text-muted-foreground font-normal">/ {(data.targetMinutes ?? 5000).toLocaleString()} mins</span>
                       </span>
                       <div className="w-full bg-muted rounded-full h-1 mt-1 overflow-hidden">
                         <div
-                          className={`h-full ${(data.rechargedUsersCount ?? 0) >= (partner.referralMinRechargedUsers ?? 10) ? "bg-emerald-500" : "bg-amber-500"}`}
-                          style={{ width: `${Math.min(100, Math.round(((data.rechargedUsersCount ?? 0) / ((partner.referralMinRechargedUsers ?? 10) || 1)) * 100))}%` }}
+                          className="h-full bg-primary"
+                          style={{ width: `${Math.min(100, Math.round(((data.currentCycleMinutes ?? 0) / ((data.targetMinutes ?? 5000) || 1)) * 100))}%` }}
                         />
                       </div>
                     </div>
 
                     <div className="p-2.5 rounded-lg border border-border bg-card">
-                      <span className="text-[10px] text-muted-foreground uppercase font-medium block">Pending Credits</span>
-                      <span className="text-base font-semibold text-amber-500">
-                        {formatCentsToDollars(data.pendingEarningsCents ?? 0)}
+                      <span className="text-[10px] text-muted-foreground uppercase font-medium block">Completed Cycles</span>
+                      <span className="text-base font-semibold text-emerald-500">
+                        {data.completedCycles ?? 0} <span className="text-xs text-muted-foreground font-normal">cycles</span>
                       </span>
-                      <span className="text-[10px] text-muted-foreground block">Releases at {partner.referralMinRechargedUsers ?? 10} users</span>
+                      <span className="text-[10px] text-muted-foreground block">
+                        {(data.completedCycles ?? 0) * (data.rewardMinutes ?? 500)} mins rewarded
+                      </span>
                     </div>
 
                     <div className="p-2.5 rounded-lg border border-border bg-card">
-                      <span className="text-[10px] text-muted-foreground uppercase font-medium block">Released to Wallet</span>
+                      <span className="text-[10px] text-muted-foreground uppercase font-medium block">Total Paid Credits</span>
                       <span className="text-base font-semibold text-emerald-500">
                         {formatCentsToDollars(data.unlockedEarningsCents ?? 0)}
                       </span>
-                      <span className="text-[10px] text-muted-foreground block">Added to balance</span>
+                      <span className="text-[10px] text-muted-foreground block">Credited to wallet</span>
                     </div>
                   </div>
 
@@ -994,8 +1033,8 @@ function PartnerDetailDialog({
                           <TableHead>User</TableHead>
                           <TableHead>Code</TableHead>
                           <TableHead className="text-right">Recharges</TableHead>
+                          <TableHead className="text-right">Minutes Purchased</TableHead>
                           <TableHead className="text-right">Total Recharged</TableHead>
-                          <TableHead className="text-right">10% Commission</TableHead>
                           <TableHead className="text-right">Joined</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1016,11 +1055,11 @@ function PartnerDetailDialog({
                             <TableCell className="text-right tabular-nums">
                               {r.rechargeCount ?? 0}
                             </TableCell>
+                            <TableCell className="text-right tabular-nums font-semibold text-primary">
+                              {(r.minutesPurchased ?? 0).toLocaleString()} mins
+                            </TableCell>
                             <TableCell className="text-right tabular-nums font-medium">
                               {formatCentsToDollars(r.totalRechargedPaise ?? 0)}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums font-semibold text-emerald-500">
-                              {formatCentsToDollars(r.totalEarnedPaise ?? 0)}
                             </TableCell>
                             <TableCell className="text-right text-muted-foreground">
                               {fmtDate(r.createdAt)}

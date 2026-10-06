@@ -90,6 +90,9 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
         referralCommissionPercent: partnersTable.referralCommissionPercent,
         referralCommissionMonths: partnersTable.referralCommissionMonths,
         referralMinRechargedUsers: partnersTable.referralMinRechargedUsers,
+        referralTargetMinutes: partnersTable.referralTargetMinutes,
+        referralRewardMinutes: partnersTable.referralRewardMinutes,
+        referralCompletedCycles: partnersTable.referralCompletedCycles,
         referralAudienceBonusPercent: partnersTable.referralAudienceBonusPercent,
         referralAudienceFreeMinutes: partnersTable.referralAudienceFreeMinutes,
         createdAt: partnersTable.createdAt,
@@ -468,6 +471,8 @@ router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
       referralCommissionPercent?: number;
       referralCommissionMonths?: number;
       referralMinRechargedUsers?: number;
+      referralTargetMinutes?: number;
+      referralRewardMinutes?: number;
       referralAudienceBonusPercent?: number;
       referralAudienceFreeMinutes?: number;
     };
@@ -574,6 +579,14 @@ router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
     if (referralMinRechargedUsers !== undefined) {
       const u = Math.max(0, Math.min(1000, Number(referralMinRechargedUsers) || 10));
       set["referralMinRechargedUsers"] = u;
+    }
+    if (referralTargetMinutes !== undefined) {
+      const tm = Math.max(100, Math.min(1000000, Number(referralTargetMinutes) || 5000));
+      set["referralTargetMinutes"] = tm;
+    }
+    if (referralRewardMinutes !== undefined) {
+      const rm = Math.max(10, Math.min(100000, Number(referralRewardMinutes) || 500));
+      set["referralRewardMinutes"] = rm;
     }
     if (referralAudienceBonusPercent !== undefined) {
       const b = Math.max(0, Math.min(100, Number(referralAudienceBonusPercent) || 10));
@@ -705,6 +718,15 @@ router.get("/admin/partners/:id/clients", async (req, res): Promise<void> => {
       .where(and(eq(partnerReferralEarningsTable.partnerId, id), eq(partnerReferralEarningsTable.status, "credited")));
     const unlockedEarningsCents = Number(unlockedEarn?.total ?? 0);
 
+    const baseRatePaise = partner.baseRateCentsPerMin || 500;
+    const targetMinutes = partner.referralTargetMinutes ?? 5000;
+    const rewardMinutes = partner.referralRewardMinutes ?? 500;
+    const completedCycles = partner.referralCompletedCycles ?? 0;
+    const totalRechargedPaise = referrals.reduce((sum, r) => sum + (r.totalRechargedPaise ?? 0), 0);
+    const totalAudienceMinutes = Math.floor(totalRechargedPaise / baseRatePaise);
+    const currentCycleMinutes = totalAudienceMinutes % targetMinutes;
+    const minutesRemainingInCycle = Math.max(0, targetMinutes - currentCycleMinutes);
+
     res.json({
       clients: clients.map(c => ({
         ...c,
@@ -712,8 +734,17 @@ router.get("/admin/partners/:id/clients", async (req, res): Promise<void> => {
         concurrentLimit: c.concurrentLimit ?? 10,
       })),
       invites,
-      referrals,
+      referrals: referrals.map(r => ({
+        ...r,
+        minutesPurchased: Math.floor((r.totalRechargedPaise ?? 0) / baseRatePaise),
+      })),
       rechargedUsersCount,
+      targetMinutes,
+      rewardMinutes,
+      completedCycles,
+      totalAudienceMinutes,
+      currentCycleMinutes,
+      minutesRemainingInCycle,
       pendingEarningsCents,
       unlockedEarningsCents,
       monthEarningsCents,

@@ -440,6 +440,9 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       referralCommissionPercent: partner.referralCommissionPercent ?? 10,
       referralCommissionMonths: partner.referralCommissionMonths ?? 6,
       referralMinRechargedUsers: partner.referralMinRechargedUsers ?? 10,
+      referralTargetMinutes: partner.referralTargetMinutes ?? 5000,
+      referralRewardMinutes: partner.referralRewardMinutes ?? 500,
+      referralCompletedCycles: partner.referralCompletedCycles ?? 0,
       referralAudienceBonusPercent: partner.referralAudienceBonusPercent ?? 10,
       referralAudienceFreeMinutes: partner.referralAudienceFreeMinutes ?? 100,
     });
@@ -566,15 +569,27 @@ router.get("/partner/referrals", requireAuth, async (req, res): Promise<void> =>
     const appBaseUrl = (process.env["APP_BASE_URL"]?.replace(/\/$/, "") || getSelfBaseUrl());
     const effectiveCode = partner.referralCode || null;
     const referralLink = effectiveCode ? `${appBaseUrl}/signup?ref=${encodeURIComponent(effectiveCode)}` : null;
-    const minRechargedUsers = partner.referralMinRechargedUsers ?? 10;
-    const isUnlocked = rechargedUsersCount >= minRechargedUsers;
     const commissionMonths = partner.referralCommissionMonths ?? 6;
+
+    const baseRatePaise = partner.baseRateCentsPerMin || 500;
+    const targetMinutes = partner.referralTargetMinutes ?? 5000;
+    const rewardMinutes = partner.referralRewardMinutes ?? 500;
+    const completedCycles = partner.referralCompletedCycles ?? 0;
+    const rewardPaisePerCycle = rewardMinutes * baseRatePaise;
+
+    const totalRechargedPaise = rawReferrals.reduce((sum, r) => sum + (r.totalRechargedPaise ?? 0), 0);
+    const totalAudienceMinutes = Math.floor(totalRechargedPaise / baseRatePaise);
+    const currentCycleMinutes = totalAudienceMinutes % targetMinutes;
+    const minutesRemainingInCycle = Math.max(0, targetMinutes - currentCycleMinutes);
+    const cyclePercent = Math.min(100, Math.round((currentCycleMinutes / targetMinutes) * 100));
+    const isUnlocked = completedCycles > 0;
 
     const referrals = rawReferrals.map((r) => {
       const signupDate = new Date(r.createdAt);
       const monthsSinceSignup = (Date.now() - signupDate.getTime()) / (1000 * 60 * 60 * 24 * 30.4375);
       const monthsRemaining = Math.max(0, Math.ceil(commissionMonths - monthsSinceSignup));
       const isExpired = monthsSinceSignup > commissionMonths;
+      const minutesPurchased = Math.floor((r.totalRechargedPaise ?? 0) / baseRatePaise);
 
       return {
         id: r.id,
@@ -586,6 +601,7 @@ router.get("/partner/referrals", requireAuth, async (req, res): Promise<void> =>
         rechargeCount: r.rechargeCount,
         totalRechargedPaise: r.totalRechargedPaise,
         totalEarnedPaise: r.totalEarnedPaise,
+        minutesPurchased,
         monthsRemaining,
         isExpired,
         hasRecharged: (r.rechargeCount > 0 || !!r.firstRechargeAt),
@@ -599,7 +615,15 @@ router.get("/partner/referrals", requireAuth, async (req, res): Promise<void> =>
       attributionDays: partner.referralAttributionDays ?? 60,
       commissionPercent: partner.referralCommissionPercent ?? 10,
       commissionMonths,
-      minRechargedUsers,
+      minRechargedUsers: partner.referralMinRechargedUsers ?? 10,
+      targetMinutes,
+      rewardMinutes,
+      completedCycles,
+      totalAudienceMinutes,
+      currentCycleMinutes,
+      minutesRemainingInCycle,
+      cyclePercent,
+      rewardPaisePerCycle,
       audienceBonusPercent: partner.referralAudienceBonusPercent ?? 10,
       audienceFreeMinutes: partner.referralAudienceFreeMinutes ?? 100,
       rechargedUsersCount,

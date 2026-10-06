@@ -2070,7 +2070,7 @@ function SettingsTab({ me }: { me: PartnerMe }) {
   );
 }
 
-/* ─── Referrals & Affiliate Tab (Option A: 10-User Unlock) ───────────────── */
+/* ─── Referrals & Affiliate Tab (5,000-Minute Recurring Cycle) ──────────── */
 
 interface PartnerReferralItem {
   id: number;
@@ -2082,6 +2082,7 @@ interface PartnerReferralItem {
   rechargeCount: number;
   totalRechargedPaise: number;
   totalEarnedPaise: number;
+  minutesPurchased: number;
   monthsRemaining: number;
   isExpired: boolean;
   hasRecharged: boolean;
@@ -2095,6 +2096,14 @@ interface PartnerReferralsData {
   commissionPercent: number;
   commissionMonths: number;
   minRechargedUsers: number;
+  targetMinutes: number;
+  rewardMinutes: number;
+  completedCycles: number;
+  totalAudienceMinutes: number;
+  currentCycleMinutes: number;
+  minutesRemainingInCycle: number;
+  cyclePercent: number;
+  rewardPaisePerCycle: number;
   audienceBonusPercent: number;
   audienceFreeMinutes: number;
   rechargedUsersCount: number;
@@ -2145,10 +2154,13 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
     return r.userEmail.toLowerCase().includes(q) || r.userName.toLowerCase().includes(q) || r.referralCode.toLowerCase().includes(q);
   });
 
-  const minUsers = data?.minRechargedUsers ?? 10;
-  const paidCount = data?.rechargedUsersCount ?? 0;
-  const isUnlocked = data?.isUnlocked ?? false;
-  const progressPercent = Math.min(100, Math.round((paidCount / (minUsers || 1)) * 100));
+  const targetMinutes = data?.targetMinutes ?? 5000;
+  const rewardMinutes = data?.rewardMinutes ?? 500;
+  const currentCycleMins = data?.currentCycleMinutes ?? 0;
+  const cyclePercent = data?.cyclePercent ?? Math.min(100, Math.round((currentCycleMins / targetMinutes) * 100));
+  const completedCycles = data?.completedCycles ?? 0;
+  const rewardPaise = data?.rewardPaisePerCycle ?? 250000;
+  const totalAudienceMinutes = data?.totalAudienceMinutes ?? 0;
 
   return (
     <div className="space-y-5">
@@ -2167,7 +2179,7 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
                 </Badge>
               </h2>
               <p className="text-xs text-muted-foreground">
-                Earn {data?.commissionPercent ?? 10}% SnapServe wallet credits on every recharge for 6 months.
+                Earn 500 free minutes for every 5,000 minutes your audience purchases on SnapServe.
               </p>
             </div>
           </div>
@@ -2215,72 +2227,92 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
         </div>
       </div>
 
-      {/* ─── Option A Milestone Progress Card (The 10 Users Rule) ──────────── */}
-      <div className={`rounded-2xl border p-5 shadow-sm space-y-3.5 transition-all ${
-        isUnlocked
-          ? "border-emerald-500/30 bg-emerald-500/5"
-          : "border-amber-500/30 bg-amber-500/5"
-      }`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      {/* ─── 5,000 Minutes Recurring Milestone Cycle Card ──────────────────── */}
+      <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-card via-card to-primary/[0.04] p-5 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className={`p-2 rounded-xl ${isUnlocked ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"}`}>
-              {isUnlocked ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
+            <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500">
+              <Sparkles className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-foreground">
-                  {isUnlocked
-                    ? `🎉 Payout Milestone Unlocked (${paidCount} / ${minUsers} Paying Users)`
-                    : `Payout Unlock Goal: ${paidCount} of ${minUsers} Paying Users Reached`}
+                <h3 className="text-base font-semibold text-foreground">
+                  {targetMinutes.toLocaleString()}-Minute Milestone Cycle
                 </h3>
-                <Badge variant="outline" className={isUnlocked ? "border-emerald-500/40 text-emerald-500 text-[10px]" : "border-amber-500/40 text-amber-500 text-[10px]"}>
-                  {isUnlocked ? "Active & Crediting" : "Option A Locked"}
+                <Badge variant="outline" className="border-primary/40 text-primary font-mono text-[10px] px-2 py-0.5">
+                  Cycle #{completedCycles + 1}
                 </Badge>
+                {completedCycles > 0 && (
+                  <Badge variant="outline" className="border-emerald-500/40 text-emerald-500 text-[10px]">
+                    {completedCycles} Completed
+                  </Badge>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {isUnlocked
-                  ? "All commissions now deposit automatically into your SnapServe wallet in real time."
-                  : `${Math.max(0, minUsers - paidCount)} more referred users need to recharge to unlock your accumulated credits.`}
+                Every time your referred audience purchases a combined {targetMinutes.toLocaleString()} minutes,{" "}
+                <span className="text-foreground font-medium">{rewardMinutes} free minutes ({inr(rewardPaise)})</span>{" "}
+                are credited to your wallet and the cycle resets!
               </p>
             </div>
           </div>
-          <div className="text-right sm:self-center">
+          <div className="text-left sm:text-right sm:self-center bg-muted/30 p-2.5 rounded-xl border border-border/60">
             <span className="text-[11px] text-muted-foreground uppercase tracking-wider block font-medium">
-              {isUnlocked ? "Unlocked Credits" : "Accrued Pending Credits"}
+              Next Reward
             </span>
-            <span className={`text-xl font-bold tabular-nums ${isUnlocked ? "text-emerald-500" : "text-amber-500"}`}>
-              {inr(isUnlocked ? (data?.creditedPaise ?? 0) : (data?.pendingCreditsPaise ?? 0))}
+            <span className="text-lg font-bold text-emerald-500 tabular-nums">
+              +{rewardMinutes} Minutes <span className="text-xs font-normal text-muted-foreground">({inr(rewardPaise)})</span>
             </span>
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="space-y-1">
-          <div className="w-full bg-muted/60 rounded-full h-2.5 overflow-hidden border border-border/40">
+        {/* Milestone Progress Bar: 0 / 5,000 minutes */}
+        <div className="space-y-2 bg-card p-4 rounded-xl border border-border">
+          <div className="flex items-baseline justify-between">
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-extrabold text-foreground tabular-nums">
+                {currentCycleMins.toLocaleString()}
+              </span>
+              <span className="text-base text-muted-foreground font-normal">
+                / {targetMinutes.toLocaleString()} minutes
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="text-sm font-semibold text-primary tabular-nums">
+                {cyclePercent}% Complete
+              </span>
+              <span className="block text-[11px] text-muted-foreground">
+                {Math.max(0, targetMinutes - currentCycleMins).toLocaleString()} mins to next reward
+              </span>
+            </div>
+          </div>
+
+          <div className="w-full bg-muted rounded-full h-3 overflow-hidden border border-border/60">
             <div
-              className={`h-full transition-all duration-500 rounded-full ${isUnlocked ? "bg-emerald-500" : "bg-amber-500"}`}
-              style={{ width: `${progressPercent}%` }}
+              className="h-full transition-all duration-700 rounded-full bg-gradient-to-r from-primary to-emerald-500"
+              style={{ width: `${cyclePercent}%` }}
             />
           </div>
-          <div className="flex justify-between text-[11px] text-muted-foreground">
-            <span>0 paying users</span>
-            <span className="font-semibold text-foreground">{paidCount} / {minUsers} users ({progressPercent}%)</span>
-            <span>{minUsers} unlock goal</span>
+
+          <div className="flex justify-between text-[11px] text-muted-foreground pt-1">
+            <span>0 minutes (Cycle start)</span>
+            <span className="font-medium text-foreground">
+              {currentCycleMins} of {targetMinutes} mins reached in Cycle #{completedCycles + 1}
+            </span>
+            <span>{targetMinutes.toLocaleString()} minutes goal</span>
           </div>
         </div>
 
-        {/* Clarifying note */}
-        <div className="text-xs text-muted-foreground bg-background/60 p-3 rounded-xl border border-border/50 leading-relaxed">
-          {isUnlocked ? (
-            <p>
-              ✅ <strong>Congratulations!</strong> You reached the {minUsers}-user milestone. All past accumulated earnings have been credited to your SnapServe wallet. Every subsequent recharge your referred users make during their first 6 months will credit to your wallet automatically.
-            </p>
-          ) : (
-            <p>
-              🔒 <strong>How this works:</strong> Every time a user you referred adds funds to their wallet, 10% of that recharge is reserved for you. Once <strong>{minUsers} unique referred users</strong> make a recharge, <strong>100% of these accrued credits ({inr(data?.pendingCreditsPaise ?? 0)}+)</strong> will unlock into your SnapServe wallet as a lump sum. You can use these credits to power client calls!
-            </p>
-          )}
-        </div>
+        {/* Cycle History Footnote */}
+        {completedCycles > 0 && (
+          <div className="text-xs text-muted-foreground bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 p-3 rounded-xl border border-emerald-500/20 flex items-center justify-between">
+            <span>
+              🏆 <strong>Great job!</strong> You have successfully completed {completedCycles} milestone cycle{completedCycles > 1 ? "s" : ""}.
+            </span>
+            <span className="font-semibold tabular-nums">
+              Total Earned: {(completedCycles * rewardMinutes).toLocaleString()} mins ({inr(completedCycles * rewardPaise)})
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ─── 4 Summary KPI Cards ────────────────────────────────────────────── */}
@@ -2292,19 +2324,19 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
         </div>
 
         <div className="rounded-xl border border-border bg-card p-3.5 space-y-1">
-          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Paying Users</span>
-          <p className="text-2xl font-bold text-foreground">
-            {paidCount} <span className="text-sm font-normal text-muted-foreground">/ {minUsers}</span>
+          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Audience Minutes</span>
+          <p className="text-2xl font-bold text-foreground tabular-nums">
+            {totalAudienceMinutes.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">mins</span>
           </p>
-          <p className="text-[11px] text-muted-foreground">Made $\ge$ 1 recharge</p>
+          <p className="text-[11px] text-muted-foreground">Purchased across all time</p>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-3.5 space-y-1">
-          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Total Credits Earned</span>
+          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Milestones Achieved</span>
           <p className="text-2xl font-bold text-emerald-500 tabular-nums">
-            {inr(data?.totalEarnedPaise ?? 0)}
+            {completedCycles} <span className="text-xs font-normal text-muted-foreground">cycles ({inr(data?.creditedPaise ?? 0)})</span>
           </p>
-          <p className="text-[11px] text-muted-foreground">10% of all user top-ups</p>
+          <p className="text-[11px] text-muted-foreground">500 free mins per cycle</p>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-3.5 space-y-1">
@@ -2373,8 +2405,8 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
                 <tr>
                   <th className="py-2.5 px-3">User</th>
                   <th className="py-2.5 px-3 text-right">Recharges</th>
+                  <th className="py-2.5 px-3 text-right">Minutes Purchased</th>
                   <th className="py-2.5 px-3 text-right">Total Recharged</th>
-                  <th className="py-2.5 px-3 text-right">10% Commission</th>
                   <th className="py-2.5 px-3 text-center">6mo Window</th>
                   <th className="py-2.5 px-3 text-right">Status</th>
                 </tr>
@@ -2391,11 +2423,11 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
                     <td className="py-2.5 px-3 text-right tabular-nums">
                       {r.rechargeCount > 0 ? `${r.rechargeCount} top-ups` : "None"}
                     </td>
+                    <td className="py-2.5 px-3 text-right tabular-nums font-semibold text-primary">
+                      {r.minutesPurchased > 0 ? `${r.minutesPurchased.toLocaleString()} mins` : "0 mins"}
+                    </td>
                     <td className="py-2.5 px-3 text-right tabular-nums font-medium">
                       {inr(r.totalRechargedPaise)}
-                    </td>
-                    <td className="py-2.5 px-3 text-right tabular-nums font-semibold text-emerald-500">
-                      {inr(r.totalEarnedPaise)}
                     </td>
                     <td className="py-2.5 px-3 text-center">
                       {r.isExpired ? (
