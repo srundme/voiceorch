@@ -368,14 +368,6 @@ export default function PartnerClientPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-[12px] text-muted-foreground leading-relaxed">
-        This client has a <span className="font-medium text-foreground">full SnapServe workspace</span>.
-        You set their <span className="font-medium text-foreground">₹/min rate</span>,{" "}
-        <span className="font-medium text-foreground">fund their wallet</span>, and{" "}
-        <span className="font-medium text-foreground">assign phone numbers</span>.
-        Optional: open their account (amber bar) if you need to help in-product.
-      </div>
-
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Stat label="Wallet" value={inr(client.walletBalanceCents)} />
         <Stat label="Rate" value={`${inr(client.rateCentsPerMin)}/min`} sub={`Base ${inr(baseRate)}/min`} />

@@ -664,9 +664,6 @@ function OverviewTab({ me }: { me: PartnerMe }) {
         <StatCard icon={<Wallet className="w-3.5 h-3.5" />} label="Your wallet" value={inr(me.walletBalanceCents)} sub="Earnings land here" />
       </div>
 
-      {/* Referral & Affiliate Share Card */}
-      <ReferralLinkCard me={me} />
-
       <div className="rounded-xl border border-border bg-card">
         <div className="px-4 py-3 border-b border-border">
           <h2 className="text-sm font-medium">Recent earnings & transfers</h2>
@@ -962,54 +959,11 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                           size="sm"
                           variant="outline"
                           className="h-8 px-3 text-xs font-medium border-border/80 hover:bg-muted"
-                          title="Open client ops — rate, fund, numbers"
+                          title="Open client ops — view details, edit rates, fund wallet"
                           onClick={() => navigate(`/app/partner/clients/${encodeURIComponent(c.clerkId)}`)}
                         >
-                          Manage
+                          Edit & View
                         </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                            >
-                              <MoreHorizontal className="w-4 h-4" />
-                              <span className="sr-only">Client actions</span>
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem onClick={() => { setTransferClient(c); setAmountText(""); }}>
-                              <ArrowRightLeft className="w-3.5 h-3.5 mr-2" />
-                              Transfer funds
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { setRateClient(c); setRateText((c.rateCentsPerMin / 100).toFixed(2)); }}>
-                              <IndianRupee className="w-3.5 h-3.5 mr-2" />
-                              Edit rate
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { setConcurrencyClient(c); setConcurrencyText(String(c.concurrentLimit ?? 10)); }}>
-                              <PhoneCall className="w-3.5 h-3.5 mr-2" />
-                              Adjust lines
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setPermissionsClient(c)}>
-                              <Shield className="w-3.5 h-3.5 mr-2" />
-                              Access & features
-                            </DropdownMenuItem>
-                            {c.loginLocked && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  className="text-amber-600 focus:text-amber-600"
-                                  disabled={unlockMutation.isPending}
-                                  onClick={() => unlockMutation.mutate(c.clerkId)}
-                                >
-                                  <Lock className="w-3.5 h-3.5 mr-2" />
-                                  Unlock login
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
                       </div>
                     </td>
                   </tr>

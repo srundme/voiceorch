@@ -300,7 +300,7 @@ export default function WalletPage() {
       <div className="border-b border-border px-4 sm:px-6 py-3 flex items-center gap-2 sm:gap-3 shrink-0">
         <span className="text-xs text-muted-foreground">
           {isManagedWorkspace
-            ? `₹${rateInr} / minute · set by ${partnerName}`
+            ? `₹${rateInr} / minute`
             : `₹${rateInr} / minute · INR · GST on top-ups`}
         </span>
       </div>
@@ -345,7 +345,7 @@ export default function WalletPage() {
                 <div className="flex items-center gap-1.5 text-foreground text-xs bg-zinc-400/10 border border-zinc-400/20 rounded-lg px-3 py-1.5">
                   <AlertCircle className="w-3.5 h-3.5" />
                   {isManagedWorkspace
-                    ? `Low balance — ask ${partnerName} to add funds`
+                    ? `Low balance — please contact ${partnerName} to add credits`
                     : "Low balance — top up to continue making calls"}
                 </div>
               )}
@@ -356,12 +356,11 @@ export default function WalletPage() {
           <div className="rounded-xl border border-border bg-card p-5 space-y-3">
             <div className="flex items-center gap-2">
               <Wallet className="w-4 h-4 text-muted-foreground" />
-              <h2 className="font-medium text-foreground text-sm">Partner-funded wallet</h2>
+              <h2 className="font-medium text-foreground text-sm">Account Balance & Billing</h2>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Your call rate is <span className="font-medium text-foreground">₹{rateInr}/min</span>{" "}
-              (set by {partnerName}). Usage is deducted from this balance.
-              Self top-ups are disabled — ask {partnerName} to transfer funds from Partner Hub.
+              Your call rate is <span className="font-medium text-foreground">₹{rateInr}/min</span>. Usage is deducted from this balance.
+              To add credits or top up your account, please contact <span className="font-medium text-foreground">{partnerName}</span>.
             </p>
           </div>
           ) : (
