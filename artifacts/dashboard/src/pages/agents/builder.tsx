@@ -8434,14 +8434,6 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         </div>
       </header>
 
-      {isReadOnly && (
-        <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-800 dark:text-amber-300">
-          <Lock className="size-3.5 shrink-0" />
-          <span>
-            <strong>Read-only mode:</strong> Your managing partner has set your account to view only. Editing and auto-saving are disabled.
-          </span>
-        </div>
-      )}
 
       <AgentTeamChromeBar agentId={agentId} section={activeTab} />
 

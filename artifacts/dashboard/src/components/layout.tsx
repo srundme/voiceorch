@@ -155,8 +155,8 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 const NAV_SETTINGS: NavItem[] = [
-  { name: "Developers", href: "/app/api-keys", icon: DevelopersIcon },
   { name: "Workspace", href: "/app/settings", icon: WorkspaceIcon },
+  { name: "Developers", href: "/app/api-keys", icon: DevelopersIcon },
   { name: "Providers", href: "/app/providers?tab=provider-keys", icon: ProvidersIcon },
   { name: "Billing", href: "/app/wallet", icon: BillingIcon },
 ];
@@ -195,8 +195,8 @@ const MANAGED_NAV_GROUPS: NavGroup[] = [
 ];
 
 const MANAGED_NAV_SETTINGS: NavItem[] = [
-  { name: "Developers", href: "/app/api-keys", icon: DevelopersIcon },
   { name: "Workspace", href: "/app/settings", icon: WorkspaceIcon },
+  { name: "Developers", href: "/app/api-keys", icon: DevelopersIcon },
   { name: "Billing", href: "/app/wallet", icon: BillingIcon },
 ];
 
