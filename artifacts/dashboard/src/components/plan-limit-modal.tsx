@@ -59,9 +59,18 @@ export function PlanLimitModal({
             {isAgent ? "agents" : "clients"}.
           </p>
 
-          <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 dark:bg-amber-950/20 p-3.5 text-center">
+          <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 dark:bg-amber-950/20 p-3.5 text-center space-y-1.5">
             <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
               Please contact your partner for further plan upgrade.
+            </p>
+            <p className="text-xs text-amber-600/80 dark:text-amber-400/80">
+              Contact us at{" "}
+              <a
+                href="mailto:support@snapserve.ai?subject=Plan%20Upgrade%20Request"
+                className="underline underline-offset-2 hover:text-amber-700 dark:hover:text-amber-300 transition-colors"
+              >
+                support@snapserve.ai
+              </a>
             </p>
           </div>
         </div>
